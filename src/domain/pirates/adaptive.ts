@@ -62,8 +62,15 @@ export function recordPirateAdaptiveOutcome(
     losses:state.losses+(outcome==='loss'?1:0),
     weightedWins:state.weightedWins+weight*score,
     weightedBattles:state.weightedBattles+weight,
-    processedFlights:Object.freeze({...state.processedFlights,[flightId]:1 as const}),
+    processedFlights:Object.freeze(Object.fromEntries(trimProcessedFlights(
+      [...Object.entries(state.processedFlights),[flightId,1 as const]]))),
   });
+}
+/** Replay guard size. Oldest ids (insertion order) are dropped, never the whole record. */
+export const PIRATE_ADAPTIVE_PROCESSED_FLIGHT_LIMIT=20_000;
+function trimProcessedFlights<T>(entries:readonly T[]):T[]{
+  return entries.length>PIRATE_ADAPTIVE_PROCESSED_FLIGHT_LIMIT
+    ?entries.slice(entries.length-PIRATE_ADAPTIVE_PROCESSED_FLIGHT_LIMIT):[...entries];
 }
 export function normalizedPirateOwnerAdaptation(value:unknown):PirateOwnerAdaptation|null{
   if(!value||typeof value!=='object'||Array.isArray(value))return null;
@@ -74,8 +81,8 @@ export function normalizedPirateOwnerAdaptation(value:unknown):PirateOwnerAdapta
     ||!['wins','draws','losses'].every(key=>Number.isSafeInteger(record[key]))
     ||Number(record.weightedWins)>Number(record.weightedBattles)+1e-9
     ||!record.processedFlights||typeof record.processedFlights!=='object'||Array.isArray(record.processedFlights))return null;
-  const processed=Object.entries(record.processedFlights as Record<string,unknown>);
-  if(processed.length>20_000||processed.some(([id,flag])=>id.length>500||!id.startsWith('flight-')||flag!==1))return null;
+  const processed=trimProcessedFlights(Object.entries(record.processedFlights as Record<string,unknown>));
+  if(processed.some(([id,flag])=>id.length>500||!id.startsWith('flight-')||flag!==1))return null;
   let last: PirateOwnerAdaptation['lastRoll'];
   if(record.lastRoll!==undefined){
     const v=record.lastRoll as Record<string,unknown>;

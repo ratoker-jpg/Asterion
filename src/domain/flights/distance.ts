@@ -1,7 +1,8 @@
 import type { UniverseCoordinate } from '../universe/types.ts';
+import { UNIVERSE_POSITION_COUNT, UNIVERSE_SYSTEM_COUNT } from '../universe/grid.ts';
 
-export const FLIGHT_SYSTEM_COUNT = 40;
-export const FLIGHT_POSITION_COUNT = 24;
+export const FLIGHT_SYSTEM_COUNT = UNIVERSE_SYSTEM_COUNT;
+export const FLIGHT_POSITION_COUNT = UNIVERSE_POSITION_COUNT;
 
 export function isFlightCoordinate(value: unknown): value is UniverseCoordinate {
   if (!value || typeof value !== 'object') return false;

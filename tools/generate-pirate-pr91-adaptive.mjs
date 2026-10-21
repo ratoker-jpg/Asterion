@@ -7,6 +7,8 @@ import {DEFAULT_COMBAT_PRIORITY} from '../src/domain/combat/priority.ts';
 import {resolveCombat} from '../src/domain/combat/resolver.ts';
 import {createPirateProfile,calculatePirateEliminationPopulationBudget} from '../src/domain/pirates/profile.ts';
 import {calculatePirateForceDebris} from '../src/domain/pirates/debris.ts';
+import {battleDebrisRoll} from '../src/domain/combat/debris.ts';
+import {PR91_HANGAR_CAPACITY,PR91_POPULATIONS} from './pr91-constants.mjs';
 import {pirateDebrisRewardMultiplier} from '../src/domain/pirates/threat.ts';
 import {calculateAttackDebris} from '../src/application/attack.ts';
 import {calculateFlightFuel} from '../src/domain/flights/fuel.ts';
@@ -14,7 +16,7 @@ import {getRecyclingOutput} from '../src/domain/buildings/recycling.ts';
 import assert from 'node:assert/strict';
 
 const OUT=pathResolve('artifacts/pr91-adaptive-c');
-const HANGAR=25_112;
+const HANGAR=PR91_HANGAR_CAPACITY;
 const sum=x=>(x?.metal??0)+(x?.minerals??0)+(x?.gas??0);
 const qLevels=[0,.5,1];
 const rows=[];
@@ -58,8 +60,9 @@ function run(faction,points,population,level,q,seedIndex){
     profileId:'pr91-adaptive-C-economics',
   },{reportId:seed,missionType:'pirate-elimination'});
   const fullWin=report.winner==='attacker'&&report.defenderForce.populationAfter===0;
-  const pirateDebris=calculatePirateForceDebris(report.defenderForce,report.attackerForce,'pirate-elimination');
-  const baseDebris=calculateAttackDebris(report,faction,faction);
+  const debrisRoll=battleDebrisRoll(report.id);
+  const pirateDebris=calculatePirateForceDebris(report.defenderForce,report.attackerForce,'pirate-elimination',debrisRoll);
+  const baseDebris=calculateAttackDebris(report,faction,faction,debrisRoll);
   const mult=fullWin?pirateDebrisRewardMultiplier(attacker.population,HANGAR):
     report.winner==='draw'?.75:.5;
   const orbital=Math.max(0,baseDebris+Math.floor(pirateDebris*mult)-pirateDebris);
@@ -85,7 +88,7 @@ function run(faction,points,population,level,q,seedIndex){
 }
 for(const faction of COMBAT_FACTION_IDS)
 for(const points of [3_000_000,3_500_000])
-for(const population of [25_090,25_112])
+for(const population of PR91_POPULATIONS)
 for(const level of [0,10])
 for(const q of qLevels)
 for(let seed=0;seed<12;seed++) rows.push(run(faction,points,population,level,q,seed));

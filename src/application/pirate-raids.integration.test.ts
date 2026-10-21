@@ -15,6 +15,9 @@ import { getUniverseTimedObjectSchedule } from '../domain/universe/runtime.ts';
 import { pirateSeededDraw } from '../domain/pirates/threat.ts';
 import { normalizePirateRaidSnapshot } from '../domain/pirates/mission.ts';
 
+// Pinned wall clock so schedules and rolls do not depend on the run date (audit A4).
+const PINNED_START_MS=Date.UTC(2026,9,21,12);
+
 class MemoryStorage {
   private data=new Map<string,string>();
   getItem(k:string){return this.data.get(k)??null;}
@@ -120,7 +123,7 @@ test('Test x500 resolves a real one-shot cycle at 1.8s without speeding threat a
   assert.ok(age<=1800/3600000,'Test x500 must not age threat by 15 virtual minutes');
 });
 test('offline 8h/24h/48h multi-system rolls cannot duplicate owner-cycle ledger or battle reports',()=>{
-  const start=Date.now();
+  const start=PINNED_START_MS;
   const baseline=createInitialSaveState('production',start);
   const home=baseline.planets['helion-01']!;
   const clock=baseline.resourceClock.byPlanet?.['helion-01']!;
@@ -266,7 +269,7 @@ test('NPC pirate raid persists canonical population and commander counts after r
 });
 
 test('seven owned systems retain distinct once-only raid decisions across a short offline catch-up',()=>{
-  const start=Date.now();
+  const start=PINNED_START_MS;
   const state=createInitialSaveState('production',start);
   const home=state.planets['helion-01']!;
   const clock=state.resourceClock.byPlanet?.['helion-01']!;

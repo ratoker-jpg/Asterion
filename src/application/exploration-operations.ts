@@ -15,7 +15,7 @@ export function acceptLiveExploration(state: SaveState, id: string, nowMs: numbe
   if (!node) return null;
   const ledger = state.exploration ?? createExplorationState();
   const remembered = recordHighestExplorationScore(ledger,state.profile.playerId,selectOwnerScores(state)[state.profile.playerId]?.resourcePoints ?? 0);
-  const materialized = getOrMaterializeExplorationContact(remembered, node, explorationResourceScore(state));
+  const materialized = getOrMaterializeExplorationContact(remembered, node);
   return { ...state, exploration: acceptExplorationOperation(materialized.state, id) };
 }
 export function cancelLiveExploration(state: SaveState, id: string): SaveState {

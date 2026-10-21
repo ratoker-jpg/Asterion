@@ -96,6 +96,7 @@ export type BattleEventViewModel = {
   reportedBonus: number | null;
   matchupStatus: 'inferred' | 'not-calibrated' | null;
   criticalChance: number | null;
+  criticalDraw: number | null;
   criticalMultiplier: number | null;
   abilityChance: number | null;
   abilityDraw: number | null;
@@ -641,6 +642,9 @@ function readEvent(value: unknown, index: number, attackerFactionId: CombatFacti
   const target = readStack({ entityId: targetEntityId ?? `unknown-target-${index}`, countAfter: readCount(record.targetCount) }, index, targetFactionId, targetKind);
   const commanderAbilityId = readString(record.commanderAbilityId);
   const safeCommanderAbilityId = commanderAbilityId && isCommanderId(commanderAbilityId) ? commanderAbilityId : null;
+  // Reports saved before the fix stored an ordinary hull's critical roll in abilityDraw.
+  const legacyCriticalDraw = record.criticalDraw === undefined && record.abilityChance === undefined
+    && record.criticalChance !== undefined ? record.abilityDraw : undefined;
   const shipAbilityId = record.shipAbilityId === 'destroyer-revival' || record.shipAbilityId === 'shmel-freezing'
     || record.shipAbilityId === 'pirate-armor-piercing' || record.shipAbilityId === 'pirate-devastate'
     || record.shipAbilityId === 'pirate-artillery' || record.shipAbilityId === 'pirate-double-attack'
@@ -669,9 +673,10 @@ function readEvent(value: unknown, index: number, attackerFactionId: CombatFacti
     reportedBonus: readNumber(record.reportedBonus),
     matchupStatus: record.matchupStatus === 'inferred' || record.matchupStatus === 'not-calibrated' ? record.matchupStatus : null,
     criticalChance: readNumber(record.criticalChance),
+    criticalDraw: readNumber(record.criticalDraw ?? legacyCriticalDraw),
     criticalMultiplier: readNumber(record.criticalMultiplier),
     abilityChance: readNumber(record.abilityChance),
-    abilityDraw: readNumber(record.abilityDraw),
+    abilityDraw: legacyCriticalDraw !== undefined ? null : readNumber(record.abilityDraw),
     abilityBonus: readNumber(record.abilityBonus),
     effectiveDamage: readNumber(record.effectiveDamage),
     mitigation: readNumber(record.mitigation),

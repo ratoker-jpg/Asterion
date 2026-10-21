@@ -22,8 +22,6 @@ export const SIMULATOR_POPULATION_LIMITS = Object.freeze({
 export const SIMULATOR_MAX_ROUNDS = [5, 8, 12] as const;
 export type CombatMaxRounds = (typeof SIMULATOR_MAX_ROUNDS)[number];
 
-export const PLANET_HANGAR_CAPACITY = 25_112;
-
 export const COMBAT_ENTITY_LEVEL_LIMITS = Object.freeze({
   ship: SPACEPORT_UPGRADE_MAX_LEVEL_BY_TRACK.ships,
   commander: SPACEPORT_UPGRADE_MAX_LEVEL_BY_TRACK.commanders,

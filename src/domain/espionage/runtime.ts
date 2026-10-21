@@ -114,7 +114,7 @@ export function resolveSpyReportQuality(delta: number, roll?: number): SpyReport
   return 'basic';
 }
 
-export function hunterDetectionChancePercent(hunterLevel: number): number {
+function hunterDetectionChancePercent(hunterLevel: number): number {
   return Math.min(100, Math.max(0, Math.max(0, Math.floor(hunterLevel)) * SPY_HUNTER_RATE_PER_LEVEL_PERCENT));
 }
 

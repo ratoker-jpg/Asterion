@@ -79,7 +79,7 @@ async function capture(win, directory, name) {
 async function inspectMode(win, mode, label) {
   const expectedNpcCount = mode === 'test' ? 8 : 0;
   const expectedReports = mode === 'test' ? 3 : 0;
-  const expectedOperations = mode === 'test' ? 4 : 0;
+  const expectedOperations = 0;
   const envelope = await readEnvelope(win, mode === 'test' ? TEST_KEY : PRODUCTION_KEY);
   const modeMarker = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-runtime-mode]')?.getAttribute('data-qa-runtime-mode') || ''`);
   if (modeMarker !== mode) throw new Error(`${label}: runtime mode marker mismatch ${modeMarker}`);

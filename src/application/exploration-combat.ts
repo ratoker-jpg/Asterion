@@ -15,6 +15,7 @@ import { settleExplorationContest, type ExplorationArrival } from '../domain/exp
 import { recordBattleScoreAward } from '../domain/rating/scoring.ts';
 import { getOwnerShipUpgradeLevels, replacePlanetState, type SaveState } from './contracts.ts';
 import { calculateAttackDebris } from './attack.ts';
+import { battleDebrisRoll } from '../domain/combat/debris.ts';
 import { expeditionMiningCapacity, updateExpeditionContact } from './exploration-flight.ts';
 import { addDebris } from '../domain/flights/cargo.ts';
 
@@ -183,7 +184,7 @@ export function resolveExplorationAttackAtTarget(state: SaveState, flight: Fligh
       defender:hasSurvivingCombatants(newDefenderShips,newDefenderCommanders),
     });
   const report: BattleReport = {...raw,
-    debris:calculateAttackDebris(raw,attackerFaction,defenderFaction),
+    debris:calculateAttackDebris(raw,attackerFaction,defenderFaction,battleDebrisRoll(raw.id)),
     resources:{metal:outcome.captured.metal,minerals:outcome.captured.minerals,gas:outcome.captured.gas}};
   let next = attackerOwnerId === state.profile.playerId ? changeHomeFleet(state,flight,raw.attackerForce) : state;
   if (claimant.ownerId === state.profile.playerId) next = changeHomeFleet(next,defenderFlight,raw.defenderForce);

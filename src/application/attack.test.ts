@@ -14,6 +14,7 @@ import { createDefaultBuildingLevels } from '../domain/buildings/resource-zone.t
 import { getAvailableProductionBots, getProductionBotBonusPercent } from '../domain/buildings/production-bots.ts';
 import { getOrbitalDebrisAtCoordinate } from '../domain/espionage/orbital-debris.ts';
 import { stageOwnerRelation } from '../domain/command/test-helpers.ts';
+import { battleDebrisRoll } from '../domain/combat/debris.ts';
 import { calculateAttackDebris, calculateAttackLoot, resolveAttackAtTarget, resolveBot01IncomingAttack, technologiesFromScience, normalizeAttackRounds, createAttackLaunchSnapshot, createBot01IncomingAttackSnapshot } from './attack.ts';
 import { getFactionCombatEntity } from '../domain/combat/faction-catalog.ts';
 import { calculateBattlePoints } from '../domain/combat/battle-points.ts';
@@ -486,19 +487,48 @@ test('defeat and draw outcomes never create attacker loot', () => {
   assert.deepEqual(calculateAttackLoot(drawReport, { metal: 100, minerals: 100, gas: 100 }, 'aegis'), { metal: 0, minerals: 0, gas: 0, debris: 0 });
 });
 
-test('debris formula covers destroyed ships, defenses, and commander ships at one canonical rate', () => {
+test('debris = u x base life of destroyed ships, defenses and commanders of both sides, one roll per battle', () => {
   const ship = getFactionCombatEntity('aegis', 'scout');
   const defense = getFactionCombatEntity('aegis', 'laser-turret');
   const commander = getFactionCombatEntity('aegis', 'hunter');
   const report = {
+    id: 'debris-formula-fixture',
     missionType: 'attack',
     attackerForce: { stacks: [{ entityId: 'scout', countBefore: 2, countAfter: 0, destroyed: 2 }], defenses: [] },
     defenderForce: { stacks: [{ entityId: 'hunter', countBefore: 1, countAfter: 0, destroyed: 1 }], defenses: [{ entityId: 'laser-turret', countBefore: 3, countAfter: 0, destroyed: 3 }] },
   } as unknown as BattleReport;
-  const expected = Math.floor(ship.cost.metal * 2 * .3) + Math.floor(ship.cost.minerals * 2 * .3)
-    + Math.floor(commander.cost.metal * .3) + Math.floor(commander.cost.minerals * .3)
-    + Math.floor(defense.cost.metal * 3 * .3) + Math.floor(defense.cost.minerals * 3 * .3);
-  assert.equal(calculateAttackDebris(report, 'aegis', 'aegis'), expected);
+  const roll = battleDebrisRoll(report.id);
+  assert.ok(roll >= 0.25 && roll < 0.35);
+  const life = ship.combat.life * 2 + commander.combat.life + defense.combat.life * 3;
+  assert.equal(calculateAttackDebris(report, 'aegis', 'aegis'), Math.floor(roll * life));
+  assert.equal(calculateAttackDebris(report, 'aegis', 'aegis'), calculateAttackDebris({ ...report }, 'aegis', 'aegis'), 'same seed, same scrap');
+});
+
+test('solar satellites leave 25–35% of their 2 200 life each and repeat for the same battle id', () => {
+  for (const count of [1, 7, 5_000]) {
+    for (const id of ['sat-a', 'sat-b', 'sat-c', 'battle-attack-xyz']) {
+      const report = {
+        id, missionType: 'attack',
+        attackerForce: { stacks: [], defenses: [] },
+        defenderForce: { stacks: [{ entityId: 'solar-satellite', countBefore: count, countAfter: 0, destroyed: count }], defenses: [] },
+      } as unknown as BattleReport;
+      const debris = calculateAttackDebris(report, 'aegis', 'aegis');
+      assert.ok(debris >= Math.floor(0.25 * 2_200 * count) && debris <= Math.floor(0.35 * 2_200 * count), `${count} satellites, ${id}: ${debris}`);
+      assert.equal(calculateAttackDebris({ ...report }, 'aegis', 'aegis'), debris);
+    }
+  }
+});
+
+test('shields leave no debris; only destroyed units count, not damage to survivors', () => {
+  const report = {
+    id: 'shield-fixture', missionType: 'attack',
+    attackerForce: { stacks: [{ entityId: 'cruiser', countBefore: 10, countAfter: 10, destroyed: 0 }], defenses: [] },
+    defenderForce: { stacks: [], defenses: [
+      { entityId: 'tower-shield', countBefore: 2, countAfter: 0, destroyed: 2 },
+      { entityId: 'planetary-shield', countBefore: 1, countAfter: 0, destroyed: 1 },
+    ] },
+  } as unknown as BattleReport;
+  assert.equal(calculateAttackDebris(report, 'aegis', 'aegis'), 0);
 });
 
 test('recall before attack arrival returns without combat or report', () => {
@@ -620,8 +650,9 @@ test('Bot 01 Test Mode preserves an exact-tie Space Flight when the seeded siege
   assert.equal(initial.espionage?.bot01IncomingScenario, undefined);
   assert.equal(initial.flights.records.some((flight) => flight.ownerSide === 'bot01'), false);
   const initialBotPoints = selectOwnerScores(initial)[UNIVERSE_NPC_OWNER_ID]!.resourcePoints;
-  assert.equal(selectOwnerScores(loaded)[UNIVERSE_NPC_OWNER_ID]!.resourcePoints, 1_003_344);
-  assert.equal(initialBotPoints, 1_003_349);
+  // Ecology (science 13) was removed: Bot 01 no longer holds its 10 levels.
+  assert.equal(selectOwnerScores(loaded)[UNIVERSE_NPC_OWNER_ID]!.resourcePoints, 999_252);
+  assert.equal(initialBotPoints, 999_257);
   const productionAttempt = startBot01IncomingScenario(initial, { now: 1_000, mode: 'production' });
   assert.equal(productionAttempt.ok, false);
 

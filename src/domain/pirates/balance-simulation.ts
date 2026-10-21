@@ -187,8 +187,18 @@ function profileFor(faction: CombatFactionId, band: typeof PIRATE_BALANCE_SCORE_
     score: band,
   });
 }
+/**
+ * Same inputs as production (application/pirates.ts): a launch seed, the
+ * special-contact roll and the owner's adaptive Q (a fresh owner has Q = 0).
+ */
+export function pirateBalanceGarrisonBudget(profile: PirateProfile) {
+  return calculatePirateEliminationPopulationBudget(PIRATE_BALANCE_POPULATION, profile.shares,
+    `pirate-elimination-v2:${profile.ownerId}:${profile.contactCycleKey}:balance`,
+    { ownerId: profile.ownerId, cycleKey: profile.contactCycleKey, totalPoints: profile.score.totalPoints }, 0);
+}
+
 function pirateStacks(profile: PirateProfile): { ships: CombatStackInput[]; actualPopulation: number; absoluteError: number } {
-  const budget = calculatePirateEliminationPopulationBudget(PIRATE_BALANCE_POPULATION, profile.shares);
+  const budget = pirateBalanceGarrisonBudget(profile);
   return {
     ships: Object.entries(budget.ships).flatMap(([rawId, count]) => {
       if (!count) return [];
@@ -536,9 +546,9 @@ export function pirateCombatBalanceMarkdown(result: PirateCombatBalanceSimulatio
     '## Scope and limits',
     '',
     'This is an internal Asterion calibration. It checks pirate ship statistics, the shared six-class matchup table, population-share profile sampling, and the once-per-round Ripper ability. It does not establish Nemexia parity. It does not simulate contact frequency, travel, incoming raids, planet siege, or planet destruction; those belong to later PRs.',
-    `Each player fleet targets ${PIRATE_BALANCE_POPULATION.toLocaleString('en-US')} combat population; actual opening player-fleet population across primary matchups ranged from ${actualPlayerPopulationRange[0].toLocaleString('en-US')} to ${actualPlayerPopulationRange[1].toLocaleString('en-US')} because ships use whole counts. A pirate profile targets 90% of that amount (${Math.round(PIRATE_BALANCE_POPULATION * 0.9).toLocaleString('en-US')}) and rounds to whole ships using the profile population shares. Shares mean population percentages, not percentages of ship count. Every generated profile is built from ${PIRATE_PROFILE_SLICES} seeded population slices of 5% each; each slice first samples a tier using the existing score-based tier weights, then chooses a ship class uniformly at random within that tier. Player and pirate ship levels and pirate technology stay derived from resource points; player technology is independently checked at levels 0, 5, and 10. Main matchups and the separate Potroshitel calibration each allow up to 12 rounds per battle.`,
+    `Each player fleet targets ${PIRATE_BALANCE_POPULATION.toLocaleString('en-US')} combat population; actual opening player-fleet population across primary matchups ranged from ${actualPlayerPopulationRange[0].toLocaleString('en-US')} to ${actualPlayerPopulationRange[1].toLocaleString('en-US')} because ships use whole counts. A pirate profile targets 90–95% of that amount (${Math.round(PIRATE_BALANCE_POPULATION * 0.9).toLocaleString('en-US')}–${Math.round(PIRATE_BALANCE_POPULATION * 0.95).toLocaleString('en-US')}): the same seeded coefficient as production for a fresh owner (adaptive Q = 0). It rounds to whole ships using the profile population shares. Shares mean population percentages, not percentages of ship count. Every generated profile is built from ${PIRATE_PROFILE_SLICES} seeded population slices of 5% each; each slice first samples a tier using the existing score-based tier weights, then chooses a ship class uniformly at random within that tier. Player and pirate ship levels and pirate technology stay derived from resource points; player technology is independently checked at levels 0, 5, and 10. Main matchups and the separate Potroshitel calibration each allow up to 12 rounds per battle.`,
     `Independent sample counts: ${result.totalBattles.toLocaleString('en-US')} primary battles (${result.matchupCount} matchups × ${result.runsPerMatchup} seeds each); ${result.ripperCalibration.runs.toLocaleString('en-US')} separate Ripper calibration battles; ${result.levelStats.length} level/technology stat snapshots; ${result.catalogMedians.length * COMBAT_FACTION_IDS.length} source-faction catalog stat snapshots summarized into ${result.catalogMedians.length} pirate medians.`,
-    `Across primary matchups, the largest observed absolute error from the 90% pirate population target was ${Math.max(0, ...result.matchups.map((row) => row.piratePopulationRoundingErrorMaximum)).toLocaleString('en-US')} population points. The budget helper rounds each eligible class allocation to whole ships; the observed error is reported instead of claiming a tighter universal bound.`,
+    `Across primary matchups, the largest observed absolute error from the seeded pirate population target was ${Math.max(0, ...result.matchups.map((row) => row.piratePopulationRoundingErrorMaximum)).toLocaleString('en-US')} population points. The budget helper rounds each eligible class allocation to whole ships; the observed error is reported instead of claiming a tighter universal bound.`,
     '',
     '## Profile tier sampling',
     '',
@@ -559,7 +569,7 @@ export function pirateCombatBalanceMarkdown(result: PirateCombatBalanceSimulatio
     '',
     '## Combat outcomes',
     '',
-    '“Mirror” matches the pirate population share for each ship class. “Counter” moves each pirate class share to the faction ship class with the largest existing damage multiplier against it. “Mixed” divides player population equally across the six regular ship classes. Player fleet target is 10,000; actual per-matchup opening population is shown below. Pirate fleet target is 9,000.',
+    '“Mirror” matches the pirate population share for each ship class. “Counter” moves each pirate class share to the faction ship class with the largest existing damage multiplier against it. “Mixed” divides player population equally across the six regular ship classes. Player fleet target is 10,000; actual per-matchup opening population is shown below. Pirate fleet target is 9,000–9,500 (seeded per contact).',
     '',
     '| Faction | Score (total / resource / battle) | Player tech | Formation | Player/pirate ship level; pirate technology T (0–10) | Player start population (actual range) | Pirate start population (median [range], max target error) | Player win (95% CI) | Draw (95% CI) | Pirate win (95% CI) | Player survivors median [range] / pirate survivors median [range] |',
     '| --- | --- | ---: | --- | ---: | ---: | --- | --- | --- | --- | --- |',

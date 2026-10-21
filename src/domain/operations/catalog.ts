@@ -1,7 +1,6 @@
 import type {
   OperationArchetype,
   OperationCategory,
-  OperationInstance,
   OperationIntelLevel,
   OperationLocation,
   OperationModifier,
@@ -53,33 +52,6 @@ export const OPERATION_DEFINITIONS: Record<OperationArchetype, OperationDefiniti
     threat: 3,
     intel: 2,
     modifiers: ['sensor_interference'],
-    rewardPreview: { metal: 2100, minerals: 900, gas: 300 },
-  },
-  pirate_outpost: {
-    archetype: 'pirate_outpost',
-    category: 'combat',
-    title: 'РЕЙДЕРСКАЯ ГРУППА',
-    briefing: 'Сенсорная сеть засекла усиленный рейдерский отряд. Сигнатуры указывают на более плотное боевое построение и повышенную угрозу, но не подтверждают наличие постоянной базы.',
-    objective: { label: 'Ликвидировать усиленную рейдерскую группу' },
-    source: 'sensor_network',
-    location: { kind: 'system', galaxy: 1, system: 12 },
-    threat: 5,
-    intel: 3,
-    modifiers: ['fortified_position'],
-    rewardPreview: { metal: 4200, minerals: 2200, gas: 900 },
-  },
-  unknown_signal: {
-    archetype: 'unknown_signal',
-    category: 'discovery',
-    title: 'НЕИЗВЕСТНЫЙ СИГНАЛ',
-    briefing: '',
-    objective: { label: '' },
-    source: 'deep_scan',
-    location: { kind: 'abstract', label: 'Глубокий космос' },
-    threat: null,
-    threatRange: [2, 4],
-    intel: 0,
-    modifiers: ['unknown_contact', 'unstable_signal'],
     rewardPreview: {},
   },
   derelict_recovery: {
@@ -93,7 +65,7 @@ export const OPERATION_DEFINITIONS: Record<OperationArchetype, OperationDefiniti
     threat: 2,
     intel: 3,
     modifiers: ['unstable_signal'],
-    rewardPreview: { metal: 1400, minerals: 1600, gas: 700 },
+    rewardPreview: {},
   },
   anomaly_scan: {
     archetype: 'anomaly_scan',
@@ -106,59 +78,9 @@ export const OPERATION_DEFINITIONS: Record<OperationArchetype, OperationDefiniti
     threat: 4,
     intel: 3,
     modifiers: ['ion_storm'],
-    rewardPreview: { minerals: 1800, gas: 1200, labels: ['Исследовательские данные'] },
+    rewardPreview: {},
   },
 };
-
-function cloneLocation(location: OperationLocation): OperationLocation {
-  if (location.kind === 'system') return { ...location };
-  if (location.kind === 'coordinates') return { ...location };
-  return { ...location };
-}
-
-function cloneReward(reward: OperationRewardPreview): OperationRewardPreview {
-  return {
-    ...reward,
-    labels: reward.labels ? [...reward.labels] : undefined,
-  };
-}
-
-function instantiate(id: string, archetype: OperationArchetype): OperationInstance {
-  const definition = OPERATION_DEFINITIONS[archetype];
-  return {
-    id,
-    archetype,
-    category: definition.category,
-    title: definition.title,
-    briefing: definition.briefing,
-    state: 'available',
-    threat: definition.threat,
-    threatRange: definition.threatRange ? [...definition.threatRange] : undefined,
-    intel: definition.intel,
-    source: definition.source,
-    location: cloneLocation(definition.location),
-    objective: { ...definition.objective },
-    modifiers: [...definition.modifiers],
-    rewardPreview: cloneReward(definition.rewardPreview),
-  };
-}
-
-export function createDefaultOperationInstances(): OperationInstance[] {
-  return [
-    instantiate('op-pirate-patrol-01', 'pirate_elimination'),
-    instantiate('op-pirate-outpost-01', 'pirate_outpost'),
-    instantiate('op-signal-derelict-01', 'unknown_signal'),
-    instantiate('op-anomaly-01', 'anomaly_scan'),
-  ];
-}
-
-export function createDerelictReveal(signalId: string): OperationInstance {
-  const revealed = instantiate(signalId, 'derelict_recovery');
-  return {
-    ...revealed,
-    originSignalId: signalId,
-  };
-}
 
 export function getOperationDefinition(archetype: OperationArchetype) {
   return OPERATION_DEFINITIONS[archetype];

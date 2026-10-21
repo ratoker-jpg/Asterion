@@ -125,7 +125,8 @@ function migrateReport(value: unknown): SpyReportSnapshot | null {
     spyLevel: nonNegative(source.spyLevel),
     targetEspionageLevel: nonNegative(source.targetEspionageLevel, 10),
     delta: Number.isFinite(source.delta) ? Number(source.delta) : 0,
-    roll: nonNegative(source.roll),
+    // Canonical 0..99 integer roll (see resolveSpyReportQuality).
+    roll: Math.min(99, nonNegative(source.roll)),
     quality,
     resources: {
       metal: nonNegative(resources.metal),

@@ -1,5 +1,6 @@
 import { selectOwnerAlliance, selectOwnerMembership } from '../domain/command/selectors.ts';
 import { dispatchSunMission, getSunDebris, parseSunOperationId, sunDebrisCoordinate } from './sun-raid.ts';
+import { COMPUTER_SYSTEMS_SCIENCE_ID, getFlightSlotUsage, isFlightLimitExempt, type FlightSlotUsage } from '../domain/flights/limit.ts';
 import {
   appendAidEvent,
   creditAidDelivery,
@@ -29,7 +30,7 @@ import {
   type OwnedFleetState,
 } from '../domain/fleet/runtime.ts';
 import { calculatePlanetCapacity, calculatePlanetPopulation } from '../domain/fleet/overpopulation.ts';
-import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
+import { getStorageCapacities, type BuildingRole } from '../domain/buildings/resource-zone.ts';
 import { EXCLUDED_SHIP_UPGRADE_IDS } from '../domain/buildings/spaceport-upgrades.ts';
 import { isPlanetBlocked } from './overpopulation.ts';
 import {
@@ -187,6 +188,7 @@ export type FlightErrorCode =
   | 'insufficient-commanders'
   | 'capacity-exceeded'
   | 'target-overpopulated'
+  | 'flight-limit-reached'
   | 'invalid-command';
 
 export type FlightError = {
@@ -270,12 +272,22 @@ export type FlightReconcileResult = {
 
 const ACTIVE_FLIGHT_PHASES = new Set<FlightRecord['phase']>(['outbound', 'returning', 'arrived']);
 
+/** Storage view of a transport destination: own, allied or any other inhabited planet. */
+export type TransportTargetRuntime = {
+  name: string;
+  resources?: { metal: number; minerals: number; gas: number };
+  buildings: Partial<Record<BuildingRole, number>>;
+  recycling: { availableDebris: number };
+};
+
 export type ResolvedTransportTarget = {
   planetId: PlanetId;
   coordinate: UniverseCoordinate;
   ownerId: string;
   relation: 'self' | 'ally' | 'enemy' | 'neutral' | 'empty';
-  runtime: PlanetRuntime | null;
+  /** own: state.planets; allied: state.alliedPlanets; foreign: an espionage (NPC/player) target. */
+  storage?: 'own' | 'allied' | 'foreign';
+  runtime: TransportTargetRuntime | null;
   acceptsTransport: boolean;
 };
 function currentFlightState(state: SaveState): FlightState {
@@ -300,6 +312,11 @@ function coordinatesEqual(left: UniverseCoordinate, right: UniverseCoordinate): 
 
 function activeFlights(state: SaveState): FlightRecord[] {
   return currentFlightState(state).records.filter((flight) => ACTIVE_FLIGHT_PHASES.has(flight.phase));
+}
+
+/** «Занято X из Y»: player flights holding a slot against the Computer Systems limit. */
+export function getPlayerFlightSlotUsage(state: SaveState): FlightSlotUsage {
+  return getFlightSlotUsage(currentFlightState(state).records, state.science.levels[COMPUTER_SYSTEMS_SCIENCE_ID]);
 }
 
 function persistedPlayerPlanets(state: SaveState): UniversePersistedPlayerPlanet[] {
@@ -334,7 +351,30 @@ function isCurrentAllyOwner(state: SaveState, ownerId: string): boolean {
   return Boolean(own && selectOwnerAlliance(state.command, ownerId)?.id === own.id);
 }
 
-/** Resolves only authoritative SaveState targets; Universe paint cannot grant access. */
+function foreignTransportTarget(state: SaveState, resolved: ResolvedSpyTarget, coordinate: UniverseCoordinate): ResolvedTransportTarget {
+  const { target } = resolved;
+  return {
+    planetId: target.id,
+    coordinate,
+    ownerId: target.ownerId,
+    relation: resolved.relation === 'self' ? 'neutral' : resolved.relation,
+    storage: 'foreign',
+    runtime: {
+      name: target.name,
+      resources: { metal: target.resources.metal, minerals: target.resources.minerals, gas: target.resources.gas },
+      buildings: target.buildings as Partial<Record<BuildingRole, number>>,
+      // A foreign planet has no debris stock: debris cargo burns on delivery.
+      recycling: { availableDebris: 0 },
+    },
+    acceptsTransport: true,
+  };
+}
+
+/**
+ * Resolves only authoritative SaveState targets; Universe paint cannot grant
+ * access. Any inhabited planet accepts transport: own, allied, or any other
+ * player/NPC planet (its storage takes what fits, the rest burns).
+ */
 export function resolveTransportTarget(
   state: SaveState,
   destination?: FlightDestination,
@@ -342,33 +382,41 @@ export function resolveTransportTarget(
   if (!destination || !isFlightCoordinate(destination.coordinate)) return emptyTransportTarget(destination);
   const coordinate = destination.coordinate;
   const ownEntry = Object.entries(state.planets).find(([, planet]) => coordinatesEqual(targetCoordinateFromPlanet(planet), coordinate));
-  const allyEntry = Object.entries(state.alliedPlanets ?? {}).find(([, planet]) => coordinatesEqual(targetCoordinateFromPlanet(planet), coordinate) && isCurrentAllyOwner(state, planet.ownerId));
+  const allyEntry = Object.entries(state.alliedPlanets ?? {}).find(([, planet]) => coordinatesEqual(targetCoordinateFromPlanet(planet), coordinate));
   const byCoordinate = ownEntry ?? allyEntry;
   const byId = destination.kind === 'planet'
     ? state.planets[destination.planetId]
-      ? { id: destination.planetId, planet: state.planets[destination.planetId], relation: 'self' as const }
-      : state.alliedPlanets?.[destination.planetId] && isCurrentAllyOwner(state, state.alliedPlanets[destination.planetId].ownerId)
-        ? { id: destination.planetId, planet: state.alliedPlanets[destination.planetId], relation: 'ally' as const }
+      ? { id: destination.planetId, planet: state.planets[destination.planetId] as PlanetRuntime, own: true }
+      : state.alliedPlanets?.[destination.planetId]
+        ? { id: destination.planetId, planet: state.alliedPlanets[destination.planetId] as PlanetRuntime, own: false }
         : undefined
     : undefined;
 
+  if (!byCoordinate && !byId) {
+    const foreign = destination.kind === 'planet'
+      ? resolveSpyTarget(state, destination.planetId, { coordinate })
+      : resolveSpyTargetAtCoordinate(state, coordinate);
+    return foreign ? foreignTransportTarget(state, foreign, coordinate) : emptyTransportTarget(destination);
+  }
   if (destination.kind === 'planet' && (!byId || !coordinatesEqual(targetCoordinateFromPlanet(byId.planet), coordinate))) {
     return emptyTransportTarget(destination);
   }
-  if (!byCoordinate && !byId) return emptyTransportTarget(destination);
 
   const id = byId?.id ?? byCoordinate?.[0] ?? '';
   const planet = byId?.planet ?? byCoordinate?.[1];
   if (!planet) return emptyTransportTarget(destination);
-  const relation = byId?.relation ?? (ownEntry ? 'self' : 'ally');
-  const ownerId = relation === 'self' ? state.profile.playerId : (planet as AlliedPlanetState).ownerId;
+  const own = byId ? byId.own : Boolean(ownEntry);
+  const ownerId = own ? state.profile.playerId : (planet as AlliedPlanetState).ownerId;
+  // A planet stored as allied whose owner is no longer in our alliance is just a foreign planet.
+  const relation = own ? 'self' as const : isCurrentAllyOwner(state, ownerId) ? 'ally' as const : 'neutral' as const;
   return {
     planetId: id,
     coordinate,
     ownerId,
     relation,
+    storage: own ? 'own' : 'allied',
     runtime: planet,
-    acceptsTransport: relation === 'self' || relation === 'ally',
+    acceptsTransport: true,
   };
 }
 
@@ -404,7 +452,7 @@ function resolveDeploymentTarget(
 ): ResolvedTransportTarget | null {
   if (!destination || destination.kind !== 'planet' || destination.planetId === originPlanetId) return null;
   const target = resolveTransportTarget(state, destination);
-  if (target.relation !== 'self' || !target.runtime || !state.planets[target.planetId]) return null;
+  if (target.relation !== 'self' || target.storage !== 'own' || !state.planets[target.planetId]) return null;
   return target;
 }
 
@@ -469,9 +517,20 @@ export function getTransportCargoSummary(
     cargo,
     capacity: { used: getCargoUsed(cargo), total: capacityTotal, free: Math.max(0, capacityTotal - getCargoUsed(cargo)) },
     overflowWarning: target.acceptsTransport && target.runtime
-      ? getOverflowWarning(cargo, targetResources, target.runtime.recycling.availableDebris, targetCaps)
+      ? getTransportOverflowWarning(target, cargo, targetResources, targetCaps)
       : false,
   };
+}
+
+/** Storage overflow burns; a foreign planet also has no debris stock, so debris cargo burns there. */
+function getTransportOverflowWarning(
+  target: ResolvedTransportTarget,
+  cargo: TransportCargo,
+  targetResources: { metal: number; minerals: number; gas: number },
+  targetCaps: ReturnType<typeof getStorageCapacities> | undefined,
+): boolean {
+  return getOverflowWarning(cargo, targetResources, targetCaps)
+    || (target.storage === 'foreign' && normalizeTransportCargo(cargo).debris > 0);
 }
 
 export function getReservedShipsForPlanet(
@@ -1239,6 +1298,13 @@ export function dispatchFlight(
     if (existing) return { ok: true, state, flight: existing, created: false, notice: noticeForDispatch(existing) };
   }
   if (!requestId) return failure(state, 'invalid-command', 'Для отправки требуется requestId/commandId.');
+  if (!isFlightLimitExempt(command.missionId)) {
+    const slots = getPlayerFlightSlotUsage(state);
+    if (slots.free <= 0) {
+      return failure(state, 'flight-limit-reached',
+        `Достигнут лимит одновременных полётов: ${slots.used} из ${slots.limit}. Дождитесь возвращения флота или изучите «Компьютерные системы».`);
+    }
+  }
   if (command.missionId === 'pirate-recon' || command.missionId === 'pirate-elimination') {
     return dispatchPirateFlight(state, command, runtimeOptions);
   }
@@ -1256,7 +1322,7 @@ export function dispatchFlight(
     }, { now, mode: runtimeOptions.mode ?? 'production', testTimeScale: runtimeOptions.testTimeScale });
     return outcome.ok
       ? { ok: true, state: outcome.state, flight: outcome.flight, created: true, notice: outcome.notice }
-      : failure(state, 'target-not-available', outcome.message);
+      : failure(state, outcome.code, outcome.message);
   }
   if (command.missionId !== 'expedition' && command.missionId !== 'exploration-recon' && command.missionId !== 'colonize' && command.missionId !== 'transport' && command.missionId !== 'aid' && command.missionId !== 'espionage' && command.missionId !== 'attack' && command.missionId !== 'deployment' && command.missionId !== 'recycle' && command.missionId !== 'gas' && command.missionId !== 'space-flight') {
     return failure(state, 'mission-not-supported', 'Эта миссия пока не подключена к flight runtime.');
@@ -1567,7 +1633,7 @@ export function dispatchFlight(
     if (command.targetRelation !== undefined && command.targetRelation !== 'self') {
       return failure(state, 'target-not-available', 'Дислокация возможна только на другую вашу планету.');
     }
-    const targetPlanet = deploymentTarget.runtime;
+    const targetPlanet = state.planets[deploymentTarget.planetId];
     if (!targetPlanet) return failure(state, 'target-not-available', 'Целевая планета больше не доступна.');
     if (isPlanetBlocked(state, deploymentTarget.planetId)) {
       return failure(state, 'target-overpopulated', `Дислокация на планету ${targetPlanet.name} временно заблокирована из-за перенаселения.`);
@@ -1614,13 +1680,13 @@ export function dispatchFlight(
     }
     transportTarget = resolveTransportTarget(state, command.destination);
     if (!transportTarget.acceptsTransport || !transportTarget.runtime) {
-      return failure(state, 'target-not-available', 'Транспортировка возможна только на вашу или союзную планету.');
+      return failure(state, 'target-not-available', 'Транспортировка возможна только на обитаемую планету.');
     }
     if (transportTarget.planetId === originPlanetId) {
       return failure(state, 'target-is-origin', 'Нельзя перевозить ресурсы на планету-источник.');
     }
     if (command.targetRelation !== undefined && command.targetRelation !== transportTarget.relation) {
-      return failure(state, 'target-not-available', 'Транспортировка возможна только на вашу или союзную планету.');
+      return failure(state, 'target-not-available', 'Отношения с владельцем планеты изменились. Выберите цель заново.');
     }
     const summary = getTransportCargoSummary(state, originPlanetId, selectedShips, command.cargo, command.destination);
     transportCargo = summary.cargo;
@@ -1676,6 +1742,7 @@ export function dispatchFlight(
       ? spaceFlightCommanderLevels
       : command.missionId === 'deployment' ? deploymentCommanderLevels : undefined,
     populationReserved: command.missionId === 'colonize' ? 12 : deploymentPopulation,
+    speedCommanderLevels: { typhoon: getOwnerShipUpgradeLevel(state, 'typhoon') },
     departedAt,
     factionId: state.profile.factionId as CombatFactionId,
     science,
@@ -1768,6 +1835,11 @@ export function dispatchFlight(
   if (aidPlan && aidPlan.cargo.gas > 0 && gas.gas < flight.gasCost + aidPlan.cargo.gas) {
     return failure(state, 'insufficient-gas', 'Недостаточно газа: нужен и груз помощи, и топливо на путь.');
   }
+  // Same rule for an ordinary transport: gas cargo and fuel come from one stock.
+  if (command.missionId === 'transport' && transportCargo && transportCargo.gas > 0
+    && gas.gas < flight.gasCost + transportCargo.gas) {
+    return failure(state, 'insufficient-gas', 'Недостаточно газа: нужен и груз, и топливо на путь.');
+  }
 
   const nextFlights = domainResult.created ? updateFlight(domainResult.state, flight) : domainResult.state;
   let nextState = replacePlanetResources({ ...state, flights: nextFlights }, originPlanetId, {
@@ -1785,10 +1857,12 @@ export function dispatchFlight(
       },
     });
     const debited = getPlanetResources(nextState, originPlanetId);
+    // Cargo is clamped to the source and gas is checked against fuel above,
+    // so plain subtraction cannot go negative.
     const nextResources = {
-      metal: Math.max(0, debited.metal - transportCargo.metal),
-      minerals: Math.max(0, debited.minerals - transportCargo.minerals),
-      gas: Math.max(0, debited.gas - transportCargo.gas),
+      metal: debited.metal - transportCargo.metal,
+      minerals: debited.minerals - transportCargo.minerals,
+      gas: debited.gas - transportCargo.gas,
     };
     nextState = replacePlanetResources(nextState, originPlanetId, nextResources);
   }
@@ -1953,7 +2027,6 @@ export function dispatchNpcAidFlight(
   const overflowWarning = getOverflowWarning(
     cargo,
     targetPlanet.resources ?? getPlanetResources(state, request.planetId),
-    targetPlanet.recycling.availableDebris,
     getStorageCapacities(targetPlanet.buildings),
   );
   const domainResult = dispatchDomainFlight(flights, {
@@ -2047,10 +2120,10 @@ export function recallFlight(
     return { ok: true, created: false, state: updateExpeditionContact(state, next), flight,
       notice: 'Экспедиция готовится к возвращению 30 секунд. Добыча остановлена; в течение подготовки возможна атака.' };
   }
-  if (flight.missionId !== 'espionage' && now >= flight.arrivalAt) {
+  // A probe orbiting its target may still be recalled; anything else that has arrived may not.
+  if (now >= flight.arrivalAt && (flight.missionId !== 'espionage' || flight.phase === 'outbound')) {
     return failure(state, 'flight-already-arrived', 'Рейс уже прибыл.');
   }
-  if (now >= flight.arrivalAt && flight.phase === 'outbound') return failure(state, 'flight-already-arrived', 'Рейс уже прибыл.');
   if (flight.phase !== 'outbound') return failure(state, 'flight-not-recallable', 'Отозвать можно только исходящий рейс или зонд на орбите.');
   const nextFlights = recallDomainFlight(flights, flightId, now);
   const nextFlight = nextFlights.records.find((item) => item.id === flightId)!;
@@ -2087,7 +2160,18 @@ function updatePlanetCargoState(
   debris: number,
 ): SaveState {
   if (!target.runtime) return state;
-  if (target.relation === 'self') {
+  if (target.storage === 'foreign') {
+    // Resources join the foreign storage; debris has nowhere to go and burns.
+    const espionage = state.espionage;
+    const stored = espionage ? getEspionageTargets(espionage)[target.planetId] : undefined;
+    if (!espionage || !stored) return state;
+    const targets = { ...getEspionageTargets(espionage), [target.planetId]: {
+      ...stored,
+      resources: { ...stored.resources, metal: resources.metal, minerals: resources.minerals, gas: resources.gas },
+    } };
+    return { ...state, espionage: { ...espionage, targets, ...(espionage.bot01Planets ? { bot01Planets: targets } : {}) } };
+  }
+  if (target.storage === 'own' || (target.storage === undefined && target.relation === 'self')) {
     const withResources = replacePlanetResources(state, target.planetId, resources);
     const planet = withResources.planets[target.planetId];
     if (!planet) return withResources;
@@ -2182,13 +2266,20 @@ function aidArrivalTarget(state: SaveState, flight: FlightRecord): ResolvedTrans
   };
 }
 
+/** Return leg of a mission resolved on arrival starts at the arrival time (never in the future). */
+function arrivalReturnStart(flight: Pick<FlightRecord, 'arrivedAt' | 'arrivalAt'>, now: number): number {
+  return Math.min(now, flight.arrivedAt ?? flight.arrivalAt);
+}
+
 function beginTransportReturn(
   state: SaveState,
   flight: FlightRecord,
   now: number,
   reason: 'normal-return' | 'recalled' | 'target-unavailable',
 ): FlightRecord {
-  const returnStartedAt = flight.phase === 'arrived' ? Math.max(now, flight.arrivedAt ?? flight.arrivalAt) : now;
+  // The fleet turns back the moment it reaches the target, not when a (possibly
+  // much later, offline catch-up) reconcile notices the arrival.
+  const returnStartedAt = arrivalReturnStart(flight, now);
   const withSnapshot = updateFlight(state.flights, flight);
   const returningState = beginDomainFlightReturn(withSnapshot, flight.id, returnStartedAt, reason);
   const returning = returningState.records.find((item) => item.id === flight.id) ?? flight;
@@ -2200,7 +2291,7 @@ function completeFlight(state: SaveState, flight: FlightRecord, completed: Fligh
 }
 
 function beginDeploymentReturn(state: SaveState, flight: FlightRecord, now: number): FlightRecord {
-  const returningState = beginDomainFlightReturn(currentFlightState(state), flight.id, now, 'target-unavailable');
+  const returningState = beginDomainFlightReturn(currentFlightState(state), flight.id, arrivalReturnStart(flight, now), 'target-unavailable');
   const returning = returningState.records.find((item) => item.id === flight.id) ?? flight;
   return {
     ...returning,
@@ -2209,6 +2300,11 @@ function beginDeploymentReturn(state: SaveState, flight: FlightRecord, now: numb
   };
 }
 
+/**
+ * Free hangar capacity is checked once, at dispatch. On arrival the fleet is
+ * transferred even if parallel deployments now exceed the target hangar; the
+ * overpopulation rules then handle the excess (see the parallel-deployment test).
+ */
 function applyDeploymentArrival(
   state: SaveState,
   flight: FlightRecord,
@@ -2827,7 +2923,7 @@ export function reconcileFlights(
           aid: { ...aid, creditedUnits: accepted },
           arrivedAt: arrivalAt,
           cargoState: 'delivered',
-          deliveredAt: now,
+          deliveredAt: arrivalAt,
           cargoResolvedAt: now,
         };
         const returning = beginTransportReturn(next, delivered, now, 'normal-return');
@@ -2875,7 +2971,7 @@ export function reconcileFlights(
             ...current,
             arrivedAt: arrivalAt,
             cargoState: 'delivered',
-            deliveredAt: now,
+            deliveredAt: arrivalAt,
             cargoResolvedAt: now,
           };
           const returning = beginTransportReturn(next, delivered, now, 'normal-return');
@@ -2927,7 +3023,7 @@ export function reconcileFlights(
             cargo,
             cargoState: 'delivered',
             arrivedAt: arrivalAt,
-            deliveredAt: now,
+            deliveredAt: arrivalAt,
             cargoResolvedAt: now,
           };
           const returning = beginTransportReturn(next, delivered, now, 'normal-return');
@@ -3005,7 +3101,7 @@ export function reconcileFlights(
             cargo,
             cargoState: 'delivered',
             arrivedAt: arrivalAt,
-            deliveredAt: now,
+            deliveredAt: arrivalAt,
             cargoResolvedAt: now,
           };
           const returning = beginTransportReturn(next, delivered, now, 'normal-return');
@@ -3079,7 +3175,7 @@ export function reconcileFlights(
             ? resolveSpyTarget(next, current.destinationPlanetId, { coordinate: current.destinationCoordinate })
             : null;
           if (!resolved || (resolved.relation !== 'enemy' && resolved.relation !== 'neutral')) {
-            const returnStartedAt = current.phase === 'arrived' ? Math.max(now, arrivalAt) : now;
+            const returnStartedAt = Math.min(now, arrivalAt);
             const returningState = beginDomainFlightReturn(next.flights, current.id, returnStartedAt, 'target-unavailable');
             const returning = returningState.records.find((flight) => flight.id === current.id)!;
             const withArrival: FlightRecord = {
@@ -3099,7 +3195,7 @@ export function reconcileFlights(
 
           const resolvedAttack = resolveAttackAtTarget(next, current, arrivalAt);
           if (!resolvedAttack) {
-            const returnStartedAt = current.phase === 'arrived' ? Math.max(now, arrivalAt) : now;
+            const returnStartedAt = Math.min(now, arrivalAt);
             const returningState = beginDomainFlightReturn(next.flights, current.id, returnStartedAt, 'target-unavailable');
             const returning = returningState.records.find((flight) => flight.id === current.id)!;
             const withArrival: FlightRecord = { ...returning, arrivedAt: arrivalAt, completionReason: 'target-unavailable' };
@@ -3115,7 +3211,7 @@ export function reconcileFlights(
             arrivedAt: arrivalAt,
           };
           next = { ...next, flights: updateFlight(next.flights, withResolution) };
-          const returningState = beginDomainFlightReturn(next.flights, current.id, Math.max(now, arrivalAt), 'normal-return');
+          const returningState = beginDomainFlightReturn(next.flights, current.id, Math.min(now, arrivalAt), 'normal-return');
           const returning = returningState.records.find((flight) => flight.id === current.id)!;
           const returningWithResolution: FlightRecord = {
             ...returning,
@@ -3133,7 +3229,7 @@ export function reconcileFlights(
           continue;
         }
 
-        const returningState = beginDomainFlightReturn(next.flights, current.id, Math.max(now, arrivalAt), 'normal-return');
+        const returningState = beginDomainFlightReturn(next.flights, current.id, Math.min(now, arrivalAt), 'normal-return');
         const returning = returningState.records.find((flight) => flight.id === current.id)!;
         const withResolution: FlightRecord = { ...returning, arrivedAt: arrivalAt, completionReason: 'normal-return' };
         next = { ...next, flights: updateFlight(returningState, withResolution) };
@@ -3149,7 +3245,7 @@ export function reconcileFlights(
         continue;
       }
       if (targetOccupied(next, current.destinationCoordinate, arrivalCheckAt, current.id) || targetHasInvalidKind(current.targetKind)) {
-        const returnStartedAt = current.phase === 'arrived' ? Math.max(now, arrivalAt) : now;
+        const returnStartedAt = Math.min(now, arrivalAt);
         const returningState = beginDomainFlightReturn(next.flights, current.id, returnStartedAt, 'target-occupied');
         const returning = returningState.records.find((flight) => flight.id === current.id)!;
         const withArrival: FlightRecord = { ...returning, arrivedAt: arrivalAt, completionReason: 'target-occupied' };
@@ -3161,7 +3257,7 @@ export function reconcileFlights(
 
       const planetId = makePlanetId(current.destinationCoordinate);
       if (next.planets[planetId]) {
-        const returnStartedAt = current.phase === 'arrived' ? Math.max(now, arrivalAt) : now;
+        const returnStartedAt = Math.min(now, arrivalAt);
         const returningState = beginDomainFlightReturn(next.flights, current.id, returnStartedAt, 'target-occupied');
         const returning = returningState.records.find((flight) => flight.id === current.id)!;
         const withArrival: FlightRecord = { ...returning, arrivedAt: arrivalAt, completionReason: 'target-occupied' };

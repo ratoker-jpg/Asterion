@@ -272,9 +272,8 @@ export function dismantleSolarSatellites(
   context: Pick<BuildingApplicationContext, 'planetId'>,
   count?: number,
 ): SolarSatelliteDismantleResult {
-  if (isPlanetBlocked(state, context.planetId)) {
-    return { ok: false, state, removed: 0, reason: 'Планета заблокирована из-за перенаселения.' };
-  }
+  // Allowed on an overpopulated planet: dismantling satellites is one of the
+  // ways out of the block (audit A3).
   const planet = getPlanetState(state, context.planetId);
   const migratedFleet = removeSolarSatellitesFromFleet(planet.fleet);
   const currentCount = Math.max(0, Math.floor(planet.solarSatellites ?? migratedFleet.count));

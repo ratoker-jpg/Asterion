@@ -115,7 +115,7 @@ export function launchExplorationScore(state: ExplorationState, ownerId: string,
  * use the existing shared baseline, not the first visitor's wealth.
  * The existing universe schedule is the only authority for appearance/expiry.
  */
-export function materializeExplorationContact(node: UniversePlanetNode, _observerResourceScore: number): ExplorationContact {
+export function materializeExplorationContact(node: UniversePlanetNode): ExplorationContact {
   // The runtime has no historical world-score authority for past spawn ticks.
   // Use the EXISTING universe-wide resource-point baseline, never the first
   // discoverer's personal score. Otherwise visits or captures mint different
@@ -150,13 +150,12 @@ export function materializeExplorationContact(node: UniversePlanetNode, _observe
 export function getOrMaterializeExplorationContact(
   state: ExplorationState,
   node: UniversePlanetNode,
-  worldScoreAtAppearance: number,
 ): { state: ExplorationState; contact: ExplorationContact } {
   const id = explorationNodeId(node);
   if (!id) throw new Error('Missing canonical contact ID');
   const existing = state.contacts[id];
   if (existing) return { state, contact: existing };
-  const contact = materializeExplorationContact(node, worldScoreAtAppearance);
+  const contact = materializeExplorationContact(node);
   return { state: { ...state, contacts: { ...state.contacts, [id]: contact } }, contact };
 }
 

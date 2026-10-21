@@ -216,3 +216,34 @@ test('all race presentations resolve canonical names and an asset URL', () => {
   }
   assert.equal(getBuildingEffect('shipyard', 15).kind, 'unit-production-time-factor');
 });
+
+test('construction energy never falls between levels; equal neighbours only where the source has them', () => {
+  // Plateaus that exist in the approved source tables (small integer energies).
+  // Basic and advanced energy plants cost no energy at all.
+  const allowedPlateaus: Partial<Record<(typeof BUILDING_ROLES)[number], readonly number[]>> = {
+    construction: [2, 3, 5],
+    'advanced-factory': [2, 4],
+    'metal-storage': [2, 4, 5, 6, 8, 10, 13],
+    'mineral-storage': [2, 4, 5, 6, 8, 10, 13],
+    'gas-storage': [3, 4, 5, 7, 9, 11],
+    'trade-center': [3, 5],
+    spaceport: [2, 3],
+  };
+  const zeroEnergyRoles = new Set(['basic-energy', 'advanced-energy']);
+  for (const role of BUILDING_ROLES) {
+    for (let level = 2; level <= getBuildingMaxLevel(role); level += 1) {
+      const previous = getBuildingBalanceRow(role, level - 1)!.cost!.energy;
+      const current = getBuildingBalanceRow(role, level)!.cost!.energy;
+      assert.ok(current >= previous, `${role} ${level}: energy ${previous} → ${current} falls`);
+      if (current === previous && !zeroEnergyRoles.has(role)) {
+        assert.ok(allowedPlateaus[role]?.includes(level), `${role} ${level}: energy plateau ${current} is not in the source whitelist`);
+      }
+    }
+  }
+  // Audit 2.7 fixes: gas 21–30 from 577, hangar 18–20 from 110, trade center 10 from 15.
+  assert.deepEqual([21, 22, 23, 24, 25, 26, 27, 28, 29, 30].map((level) => getBuildingBalanceRow('gas-production-1', level)!.cost!.energy),
+    [635, 699, 769, 846, 931, 1024, 1126, 1239, 1363, 1499]);
+  assert.deepEqual([18, 19, 20].map((level) => getBuildingBalanceRow('hangar', level)!.cost!.energy), [121, 133, 146]);
+  assert.equal(getBuildingBalanceRow('trade-center', 10)!.cost!.energy, 17);
+  assert.equal(getHangarCapacity(20), 25_112, 'capacity is unchanged');
+});

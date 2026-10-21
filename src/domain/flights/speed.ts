@@ -8,19 +8,27 @@ import { getFlightRouteDeltas } from './distance.ts';
 import type { FlightScienceLevels } from './types.ts';
 
 const MAX_FLIGHT_SCIENCE_LEVEL = 15;
+/** Commander Typhoon «Форсаж»: +0.1% fleet speed per level while aboard. */
+export const TYPHOON_SPEED_BONUS_PER_LEVEL = 0.001;
 
 function cappedLevel(value: number | undefined): number {
   return Number.isFinite(value) ? Math.min(MAX_FLIGHT_SCIENCE_LEVEL, Math.max(0, Math.floor(value ?? 0))) : 0;
 }
 
-export function calculateFlightSpeedMultiplier(science: FlightScienceLevels = {}): number {
-  return 1 + 0.10 * cappedLevel(science[4]) + 0.15 * cappedLevel(science[8])
-    + 0.15 * cappedLevel(science[9]) + 0.20 * cappedLevel(science[14]);
+function commanderLevel(value: number | undefined): number {
+  return Number.isFinite(value) ? Math.max(0, Math.floor(value ?? 0)) : 0;
 }
 
-export function calculateEffectiveShipSpeed(baseSpeed: number, science: FlightScienceLevels = {}): number {
+/** Additive bonuses, like the sciences: 1 + science bonuses + Typhoon bonus. */
+export function calculateFlightSpeedMultiplier(science: FlightScienceLevels = {}, typhoonLevel = 0): number {
+  return 1 + 0.10 * cappedLevel(science[4]) + 0.15 * cappedLevel(science[8])
+    + 0.15 * cappedLevel(science[9]) + 0.20 * cappedLevel(science[14])
+    + TYPHOON_SPEED_BONUS_PER_LEVEL * commanderLevel(typhoonLevel);
+}
+
+export function calculateEffectiveShipSpeed(baseSpeed: number, science: FlightScienceLevels = {}, typhoonLevel = 0): number {
   if (!Number.isFinite(baseSpeed) || baseSpeed <= 0) throw new Error('Ship speed must be positive.');
-  return baseSpeed * calculateFlightSpeedMultiplier(science);
+  return baseSpeed * calculateFlightSpeedMultiplier(science, typhoonLevel);
 }
 
 export function calculateEffectiveFleetSpeed(
@@ -28,21 +36,26 @@ export function calculateEffectiveFleetSpeed(
   selectedShips: Partial<Record<ShipId, number>>,
   science: FlightScienceLevels = {},
   selectedCommanders: Partial<Record<CommanderId, number>> = {},
+  commanderLevels: Partial<Record<CommanderId, number>> = {},
 ): number {
+  // Typhoon speeds up the whole fleet it flies with.
+  const typhoonLevel = Number.isInteger(selectedCommanders.typhoon) && (selectedCommanders.typhoon ?? 0) > 0
+    ? commanderLevel(commanderLevels.typhoon)
+    : 0;
   const catalog = new Map(getFactionShipCatalog(factionId).map((ship) => [ship.id, ship]));
   const speeds: number[] = [];
   for (const [id, quantity] of Object.entries(selectedShips) as [ShipId, number][]) {
     if (!Number.isInteger(quantity) || quantity <= 0) continue;
     const ship = catalog.get(id);
     if (!ship?.ship) throw new Error(`Unknown ship: ${id}`);
-    speeds.push(calculateEffectiveShipSpeed(ship.ship.speed, science));
+    speeds.push(calculateEffectiveShipSpeed(ship.ship.speed, science, typhoonLevel));
   }
   const commanders = new Map(COMMANDER_COMBAT_CATALOG.map((commander) => [commander.id, commander]));
   for (const [id, quantity] of Object.entries(selectedCommanders) as [CommanderId, number][]) {
     if (!Number.isInteger(quantity) || quantity <= 0) continue;
     const commander = commanders.get(id);
     if (!commander?.ship) throw new Error(`Unknown commander: ${id}`);
-    speeds.push(calculateEffectiveShipSpeed(commander.ship.speed, science));
+    speeds.push(calculateEffectiveShipSpeed(commander.ship.speed, science, typhoonLevel));
   }
   if (speeds.length === 0) throw new Error('A flight needs at least one ship.');
   return Math.min(...speeds);

@@ -264,6 +264,10 @@ test('«Поддержка солнца» from Fleets: no alliance needed, civil
   const civil = dispatchFlight(state, { requestId: 'civil', missionId: 'sun-support', originPlanetId: 'helion-01', destination, operationId: 'sun:1:1', selectedShips: { cruiser: 10, transporter: 5 } }, options(T0 + HOUR));
   assert.equal(civil.ok, false);
   assert.match(civil.ok ? '' : civil.error.message, /боевые/);
+  // The real reason code reaches the Fleets screen, not a blanket target-not-available.
+  assert.equal(civil.ok ? '' : civil.error.code, 'wrong-ship-composition');
+  const declared = dispatchFlight(state, { requestId: 'declared', missionId: 'sun-attack', originPlanetId: 'helion-01', destination, operationId: 'sun:1:1', selectedShips: { cruiser: 10 } }, options(T0 + HOUR));
+  assert.equal(declared.ok ? '' : declared.error.code, 'mission-not-supported');
 
   const sent = dispatchFlight(state, {
     requestId: 'fleet-support', missionId: 'sun-support', originPlanetId: 'helion-01', destination, operationId: 'sun:1:1',

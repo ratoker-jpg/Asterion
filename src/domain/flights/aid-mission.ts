@@ -1,5 +1,4 @@
 import type { AidResource } from '../command/types.ts';
-import type { UniverseOwnerRelation } from '../universe/runtime.ts';
 import { TRANSPORT_CARGO_KEYS, normalizeTransportCargo, type TransportCargo } from './cargo.ts';
 import type { FlightRecord } from './types.ts';
 
@@ -15,23 +14,6 @@ export const AID_MISSION_DESCRIPTION = 'Отправка запрошенног�
 
 /** Only dedicated cargo hulls can carry aid; this is not a combat or espionage mission. */
 export const AID_TRANSPORT_SHIP_IDS = ['transporter', 'mega-transporter'] as const;
-
-export type AidRequirementFailure = 'target-not-ally' | 'no-free-transporters';
-
-export type AidRequirementResult = { ok: true } | { ok: false; reason: AidRequirementFailure };
-
-/** Pure rule check shared by the future UI preview and runtime: ally target + at least one free transporter. */
-export function evaluateAidMissionRequirements(input: {
-  targetRelation: UniverseOwnerRelation | 'empty' | undefined;
-  freeShips: Readonly<Partial<Record<string, number>>>;
-}): AidRequirementResult {
-  if (input.targetRelation !== 'ally') return { ok: false, reason: 'target-not-ally' };
-  const freeTransporters = AID_TRANSPORT_SHIP_IDS.reduce((sum, id) => {
-    const count = input.freeShips[id];
-    return sum + (typeof count === 'number' && Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0);
-  }, 0);
-  return freeTransporters > 0 ? { ok: true } : { ok: false, reason: 'no-free-transporters' };
-}
 
 /** Phases in which an aid flight still holds its cargo and therefore reserves part of the request. */
 const RESERVING_PHASES = new Set<FlightRecord['phase']>(['outbound', 'arrived']);

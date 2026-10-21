@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { PIRATE_BASE_SHIPS, PIRATE_CATALOG } from './catalog.ts';
-import { pirateCombatBalanceMarkdown, PIRATE_BALANCE_SCORE_BANDS, PIRATE_PROFILE_SLICES, runPirateCombatBalanceSimulation } from './balance-simulation.ts';
+import { pirateBalanceGarrisonBudget, pirateCombatBalanceMarkdown, PIRATE_BALANCE_SCORE_BANDS, PIRATE_PROFILE_SLICES, runPirateCombatBalanceSimulation } from './balance-simulation.ts';
 import { createPirateProfile, expectedPirateTierShares, pirateLevelForResourcePoints, pirateTechnologyLevelForResourcePoints } from './profile.ts';
 
 test('balance harness produces reproducible matchup, profile, and level tables', () => {
@@ -58,4 +58,12 @@ test('battle points change tier mix while resource-derived level and technology 
   assert.notDeepEqual(expectedPirateTierShares(resourceOnly.totalPoints), expectedPirateTierShares(battleHeavy.totalPoints));
   assert.equal(profileA.shipLevel, profileB.shipLevel);
   assert.equal(profileA.technologyLevel, profileB.technologyLevel);
+});
+
+test('balance simulation garrisons use the production seeded coefficient, not the unseeded 0.9', () => {
+  const coefficients = PIRATE_BALANCE_SCORE_BANDS.map((band, run) => pirateBalanceGarrisonBudget(createPirateProfile({
+    ownerId: `balance-owner:aegis:${band.id}`, contactCycleKey: `run-${run.toString().padStart(4, '0')}`, score: band,
+  })).coefficient!);
+  for (const coefficient of coefficients) assert.ok(coefficient >= 0.90 && coefficient < 0.95, String(coefficient));
+  assert.ok(coefficients.some((coefficient) => coefficient !== 0.9));
 });

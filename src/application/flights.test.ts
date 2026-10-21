@@ -486,7 +486,7 @@ test('a reloaded arrived flight starts one full occupied-target return without d
   const arrival = reconcileFlights(reloaded, sent.flight.arrivalAt + 1);
   assert.equal(arrival.events[0]?.status, 'target-occupied');
   assert.equal(arrival.state.flights.records[0]?.phase, 'returning');
-  assert.equal(arrival.state.flights.records[0]?.returnAt, sent.flight.arrivalAt + 1 + sent.flight.oneWayDurationMs);
+  assert.equal(arrival.state.flights.records[0]?.returnAt, sent.flight.arrivalAt + sent.flight.oneWayDurationMs);
   assert.equal(arrival.state.planets['helion-01'].fleet.ships.colonizer, 1);
   assert.equal(Object.keys(arrival.state.planets).filter((id) => id.startsWith('planet-')).length, 0);
 
@@ -546,8 +546,9 @@ test('late reconcile uses arrivalAt when a target was occupied at arrival but is
 
   const reconciled = reconcileFlights(sent.state, lateNow);
   assert.equal(reconciled.events[0]?.status, 'target-occupied');
-  assert.equal(reconciled.state.flights.records[0]?.phase, 'returning');
-  assert.equal(reconciled.state.flights.records[0]?.returnAt, lateNow + sent.flight.oneWayDurationMs);
+  assert.equal(reconciled.state.flights.records[0]?.phase, 'completed', 'home long before the late reconcile');
+  // The colonizer turned back at arrival, not when the late reconcile noticed it.
+  assert.equal(reconciled.state.flights.records[0]?.returnAt, sent.flight.arrivalAt + sent.flight.oneWayDurationMs);
   assert.equal(reconciled.state.planets['helion-01'].fleet.ships.colonizer, 1);
   assert.equal(reconciled.state.planets[planetId], undefined);
 });
@@ -621,8 +622,9 @@ test('persisted arrived phase keeps the arrival-time occupancy result after a la
   assert.equal(reloaded.flights.records[0]?.phase, 'arrived');
   const reconciled = reconcileFlights(reloaded, lateNow);
   assert.equal(reconciled.events[0]?.status, 'target-occupied');
-  assert.equal(reconciled.state.flights.records[0]?.phase, 'returning');
-  assert.equal(reconciled.state.flights.records[0]?.returnAt, lateNow + sent.flight.oneWayDurationMs);
+  assert.equal(reconciled.state.flights.records[0]?.phase, 'completed', 'home long before the late reconcile');
+  // The colonizer turned back at arrival, not when the late reconcile noticed it.
+  assert.equal(reconciled.state.flights.records[0]?.returnAt, sent.flight.arrivalAt + sent.flight.oneWayDurationMs);
   assert.equal(reconciled.state.planets['helion-01'].fleet.ships.colonizer, 1);
   assert.equal(reconciled.state.planets[planetId], undefined);
 });
@@ -1471,7 +1473,8 @@ test('a 13:41 attack makes debris available to the 13:42 recycle arrival in the 
   const recycleFlight = arrival.state.flights.records.find((flight) => flight.requestId === 'ordered-recycle-1342')!;
   assert.ok((attackFlight.attackResolution?.debris ?? 0) > 0);
   assert.equal(recycleFlight.cargo?.debris, attackFlight.attackResolution?.debris);
-  assert.deepEqual(arrival.events.map((event) => event.status), ['arrived', 'delivered']);
+  // The attack fleet turns back at 13:41 and, on this short route, is home before 13:42.
+  assert.deepEqual(arrival.events.map((event) => event.status), ['arrived', 'returned', 'delivered']);
 });
 
 test('colony actions spend the colony wallet without changing the homeworld alias', () => {
@@ -1595,6 +1598,60 @@ test('transport dispatches an atomic cargo snapshot to the Test Mode ally and re
   assert.equal(returned.state.flights.records[0].cargoState, 'delivered');
   assert.equal(returned.state.planets['helion-01'].resources!.metal, sent.state.planets['helion-01'].resources!.metal);
   assert.equal(reconcileFlights(returned.state, arrival.state.flights.records[0].returnAt! + 1).changed, false);
+});
+
+test('transport gas cargo must leave enough gas for fuel; gas is never created', () => {
+  const initial = createInitialSaveState('test', 1_000);
+  const destination = {
+    kind: 'planet' as const,
+    planetId: 'test-mode-ally-ira-vel-v1',
+    coordinate: { galaxy: 1, system: 1, position: 2 },
+  };
+  const baseCommand = {
+    requestId: 'transport-gas-probe',
+    missionId: 'transport' as const,
+    originPlanetId: 'helion-01',
+    destination,
+    targetRelation: 'ally' as const,
+    selectedShips: { scout: 1 },
+    cargo: { metal: 0, minerals: 0, gas: 0, debris: 0 },
+    departedAt: 1_000,
+  };
+  const probe = dispatchFlight(initial, baseCommand, { now: 1_000, mode: 'test' });
+  assert.equal(probe.ok, true);
+  if (!probe.ok) return;
+  const fuel = probe.flight.gasCost;
+  assert.ok(fuel > 0);
+  const stock = 100 + fuel;
+  const starved = replacePlanetResources(initial, 'helion-01', {
+    ...getPlanetResources(initial, 'helion-01'),
+    gas: stock,
+  });
+
+  const rejected = dispatchFlight(starved, {
+    ...baseCommand,
+    requestId: 'transport-gas-too-much',
+    cargo: { metal: 0, minerals: 0, gas: stock, debris: 0 },
+  }, { now: 1_000, mode: 'test' });
+  assert.equal(rejected.ok, false);
+  if (rejected.ok) return;
+  assert.equal(rejected.error.code, 'insufficient-gas');
+  assert.equal(getPlanetResources(rejected.state, 'helion-01').gas, stock);
+
+  const allyGasBefore = starved.alliedPlanets![destination.planetId].resources!.gas;
+  const exact = dispatchFlight(starved, {
+    ...baseCommand,
+    requestId: 'transport-gas-exact',
+    cargo: { metal: 0, minerals: 0, gas: 100, debris: 0 },
+  }, { now: 1_000, mode: 'test' });
+  assert.equal(exact.ok, true);
+  if (!exact.ok) return;
+  assert.equal(exact.flight.cargo?.gas, 100);
+  assert.equal(getPlanetResources(exact.state, 'helion-01').gas, 0);
+  const arrival = reconcileFlights(exact.state, exact.flight.arrivalAt);
+  const allyGasAfter = arrival.state.alliedPlanets![destination.planetId].resources!.gas;
+  // Total gas in the system = source stock - fuel; nothing appears from nowhere.
+  assert.ok(allyGasAfter - allyGasBefore <= 100);
 });
 
 test('transport overflow keeps the pre-send warning but uses the normal delivery notice', () => {
@@ -2253,8 +2310,9 @@ test('deployment reservation survives reload during attrition and the complete m
   assert.ok(attrition.state.planets['helion-01'].fleet.ships.scout >= 2);
   assert.ok(
     attrition.state.planets['helion-01'].fleet.ships.battleship
-      < reloadedOutbound.planets['helion-01'].fleet.ships.battleship,
-    'unreserved ordinary ships should burn during the persisted flight',
+      < reloadedOutbound.planets['helion-01'].fleet.ships.battleship
+      || (attrition.state.planets['helion-01'].solarSatellites ?? 0) < (reloadedOutbound.planets['helion-01'].solarSatellites ?? 0),
+    'unreserved units (satellites first, then ordinary ships) should burn during the persisted flight',
   );
   assert.ok((attrition.state.planets['helion-01'].overpopulation?.removedShips?.length ?? 0) > 0);
   assert.equal(getReservedShipsForPlanet(attrition.state, 'helion-01').scout, 2);
@@ -2954,7 +3012,7 @@ test('reconcileRuntime catches up multiple asteroid moves equivalently and does 
   assert.deepEqual(replay.state.asteroidDebrisBySpawnIndex, catchUp.state.asteroidDebrisBySpawnIndex);
 });
 
-test('audit P1-3: ally transport follows current alliance membership at the send boundary', () => {
+test('audit P1-3: transport relation follows current alliance membership at the send boundary', () => {
   const initial = createInitialSaveState('test', 1_000);
   const destination = { kind: 'planet' as const, planetId: 'test-mode-ally-ira-vel-v1', coordinate: { galaxy: 1, system: 1, position: 2 } };
   const command = (requestId: string) => ({
@@ -2974,13 +3032,19 @@ test('audit P1-3: ally transport follows current alliance membership at the send
   const kicked = kickMember(initial.command, initial.profile.playerId, 'member-ira-vel', 1_000);
   assert.equal(kicked.ok, true);
   const afterKick = { ...initial, command: kicked.state };
-  assert.equal(resolveTransportTarget(afterKick, destination).acceptsTransport, false);
-  assert.equal(resolveTransportTarget(afterKick, { kind: 'coordinate', coordinate: destination.coordinate }).acceptsTransport, false);
-  assert.equal(dispatchFlight(afterKick, command('ira-kicked'), { now: 1_000, mode: 'test' }).ok, false);
+  // Any inhabited planet accepts transport (audit 2.6), but it is no longer an ally.
+  assert.equal(resolveTransportTarget(afterKick, destination).relation, 'neutral');
+  assert.equal(resolveTransportTarget(afterKick, destination).acceptsTransport, true);
+  assert.equal(resolveTransportTarget(afterKick, { kind: 'coordinate', coordinate: destination.coordinate }).relation, 'neutral');
+  // A launch prepared while she was an ally is refused: the relation changed.
+  const stale = dispatchFlight(afterKick, command('ira-kicked'), { now: 1_000, mode: 'test' });
+  assert.equal(stale.ok, false);
+  assert.equal(stale.ok ? '' : stale.error.code, 'target-not-available');
+  assert.equal(dispatchFlight(afterKick, { ...command('ira-kicked-neutral'), targetRelation: 'neutral' as const }, { now: 1_000, mode: 'test' }).ok, true);
 
   const playerLeft = leaveAlliance(initial.command, initial.profile.playerId, 1_000, { successorOwnerId: 'member-ira-vel' });
   assert.equal(playerLeft.ok, true);
-  assert.equal(resolveTransportTarget({ ...initial, command: playerLeft.state }, destination).acceptsTransport, false);
+  assert.equal(resolveTransportTarget({ ...initial, command: playerLeft.state }, destination).relation, 'neutral');
 
   // Own planets never depend on alliances.
   const own = { kind: 'planet' as const, planetId: 'helion-01', coordinate: origin };
@@ -3000,4 +3064,74 @@ test('the aid mission is connected to the runtime but always needs an open reque
   }, { now: 1_000, mode: 'test' });
   assert.equal(result.ok, false);
   if (!result.ok) assert.equal(result.error.code, 'target-not-available');
+});
+
+test('transport reaches any inhabited planet: an NPC planet stores what fits, the rest burns, and the warning shows first', () => {
+  const initial = createInitialSaveState('test', 1_000);
+  const npc = Object.values(initial.espionage!.targets!)[0]!;
+  const caps = getStorageCapacities(npc.buildings as Parameters<typeof getStorageCapacities>[0]);
+  // Leave room for exactly 40 metal on the NPC planet.
+  const room = 40;
+  const prepared: SaveState = {
+    ...initial,
+    espionage: { ...initial.espionage!, targets: { ...initial.espionage!.targets!, [npc.id]: {
+      ...npc, resources: { ...npc.resources, metal: caps.metal - room },
+    } } },
+  };
+  const destination = { kind: 'planet' as const, planetId: npc.id, coordinate: npc.coordinate };
+  const target = resolveTransportTarget(prepared, destination);
+  assert.equal(target.acceptsTransport, true);
+  assert.equal(target.storage, 'foreign');
+  assert.equal(target.relation, 'neutral');
+  assert.equal(getTransportCargoSummary(prepared, 'helion-01', { scout: 1 }, { metal: room, minerals: 0, gas: 0, debris: 0 }, destination).overflowWarning, false);
+  assert.equal(getTransportCargoSummary(prepared, 'helion-01', { scout: 1 }, { metal: room + 60, minerals: 0, gas: 0, debris: 0 }, destination).overflowWarning, true);
+
+  const sent = dispatchFlight(prepared, {
+    requestId: 'transport-npc', missionId: 'transport', originPlanetId: 'helion-01', destination,
+    selectedShips: { scout: 1 }, cargo: { metal: room + 60, minerals: 0, gas: 0, debris: 0 }, departedAt: 1_000,
+  }, { now: 1_000, mode: 'test' });
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  assert.equal(sent.flight.overflowWarning, true);
+  assert.equal(sent.flight.targetRelation, 'neutral');
+  const arrival = reconcileFlights(sent.state, sent.flight.arrivalAt, undefined, { mode: 'test' });
+  assert.equal(arrival.events[0]?.status, 'delivered');
+  // Only the free room was credited; 60 metal burned.
+  assert.equal(arrival.state.espionage!.targets![npc.id]!.resources.metal, caps.metal);
+  assert.equal(arrival.state.flights.records.find((flight) => flight.id === sent.flight.id)?.phase, 'returning');
+});
+
+test('offline catch-up records cargo delivery at the arrival time, not at the reconcile time', () => {
+  const initial = createInitialSaveState('test', 1_000);
+  const sent = dispatchFlight(initial, {
+    requestId: 'transport-delivered-at', missionId: 'transport', originPlanetId: 'helion-01',
+    destination: { kind: 'planet', planetId: 'test-mode-ally-ira-vel-v1', coordinate: { galaxy: 1, system: 1, position: 2 } },
+    targetRelation: 'ally', selectedShips: { scout: 1 }, cargo: { metal: 1, minerals: 0, gas: 0, debris: 0 }, departedAt: 1_000,
+  }, { now: 1_000, mode: 'test' });
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  const late = reconcileFlights(sent.state, sent.flight.arrivalAt + 3_600_000, undefined, { mode: 'test' });
+  const flight = late.state.flights.records.find((record) => record.id === sent.flight.id)!;
+  assert.equal(flight.cargoState, 'delivered');
+  assert.equal(flight.deliveredAt, sent.flight.arrivalAt);
+});
+
+test('offline catch-up: transport and attack fleets start home at arrival, not at the reconcile time', () => {
+  const initial = createInitialSaveState('test', 1_000);
+  const sent = dispatchFlight(initial, {
+    requestId: 'transport-late-return', missionId: 'transport', originPlanetId: 'helion-01',
+    destination: { kind: 'planet', planetId: 'test-mode-ally-ira-vel-v1', coordinate: { galaxy: 1, system: 1, position: 2 } },
+    targetRelation: 'ally', selectedShips: { scout: 1 }, cargo: { metal: 1, minerals: 0, gas: 0, debris: 0 }, departedAt: 1_000,
+  }, { now: 1_000, mode: 'test' });
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  const hourLater = sent.flight.arrivalAt + 3_600_000;
+  const late = reconcileFlights(sent.state, hourLater, undefined, { mode: 'test' });
+  const flight = late.state.flights.records.find((record) => record.id === sent.flight.id)!;
+  // Back home long before the late reconcile: one more pass completes it at the right time.
+  assert.equal(flight.returnAt, sent.flight.arrivalAt + sent.flight.oneWayDurationMs);
+  const completed = reconcileFlights(late.state, hourLater, undefined, { mode: 'test' });
+  const done = completed.state.flights.records.find((record) => record.id === sent.flight.id)!;
+  assert.equal(done.phase, 'completed');
+  assert.equal(done.completedAt, sent.flight.arrivalAt + sent.flight.oneWayDurationMs);
 });

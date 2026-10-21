@@ -28,9 +28,9 @@ import {
   createGasExtractionArrivalReportId,
   createOverpopulationEpisodeReportId,
 } from '../domain/reports/adapters.ts';
-import type { GasExtractionArrivalReport, OverpopulationEpisodeReport, OrdinaryShipId, RecyclerArrivalReport } from '../domain/reports/types.ts';
+import type { GasExtractionArrivalReport, OverpopulationEpisodeReport, RecyclerArrivalReport } from '../domain/reports/types.ts';
 import { normalizeCombatFactionId } from '../domain/combat/factions.ts';
-import { SHIP_IDS } from '../domain/combat/ids.ts';
+import { SHIP_IDS, type ShipId } from '../domain/combat/ids.ts';
 import {
   createDefaultReportsState,
   migrateReportsState,
@@ -265,7 +265,7 @@ function objectRecord(value: unknown): Record<string, unknown> | undefined {
 
 function migrateOverpopulationEpisodeReports(value: unknown): OverpopulationEpisodeReport[] {
   if (!Array.isArray(value)) return [];
-  const ordinaryShipIds = new Set<string>(SHIP_IDS.filter((id) => id !== 'solar-satellite'));
+  const ordinaryShipIds = new Set<string>(SHIP_IDS); // includes satellites burned by overpopulation
   const reports: OverpopulationEpisodeReport[] = [];
   for (const candidate of value) {
     const source = objectRecord(candidate);
@@ -281,7 +281,7 @@ function migrateOverpopulationEpisodeReports(value: unknown): OverpopulationEpis
         const record = objectRecord(loss);
         if (!record || typeof record.shipId !== 'string' || !ordinaryShipIds.has(record.shipId)
           || typeof record.count !== 'number' || !Number.isFinite(record.count) || record.count <= 0) return [];
-        return [{ shipId: record.shipId as OrdinaryShipId, count: Math.floor(record.count) }].filter((item) => item.count > 0);
+        return [{ shipId: record.shipId as ShipId, count: Math.floor(record.count) }].filter((item) => item.count > 0);
       })
       : [];
     reports.push({
@@ -610,7 +610,7 @@ function isNonEmptyPersistedString(value: unknown): value is string {
 type PersistedOverpopulationState = OverpopulationState & {
   initialPopulation?: number;
   initialCapacity?: number;
-  removedShips?: Array<{ shipId: OrdinaryShipId; count: number }>;
+  removedShips?: Array<{ shipId: ShipId; count: number }>;
 };
 
 function migrateOverpopulationState(value: unknown, now: number): PersistedOverpopulationState | undefined {
@@ -628,8 +628,8 @@ function migrateOverpopulationState(value: unknown, now: number): PersistedOverp
   const initialCapacity = isFinitePersistedNumber(source.initialCapacity)
     ? Math.max(0, Math.floor(source.initialCapacity))
     : undefined;
-  const ordinaryShipIds = new Set<string>(SHIP_IDS.filter((id) => id !== 'solar-satellite'));
-  const removedShipCounts = new Map<OrdinaryShipId, number>();
+  const ordinaryShipIds = new Set<string>(SHIP_IDS); // includes satellites burned by overpopulation
+  const removedShipCounts = new Map<ShipId, number>();
   if (Array.isArray(source.removedShips)) {
     source.removedShips.forEach((candidate) => {
       const loss = objectRecord(candidate);
@@ -637,7 +637,7 @@ function migrateOverpopulationState(value: unknown, now: number): PersistedOverp
         || !isFinitePersistedNumber(loss.count) || loss.count <= 0) return;
       const count = Math.floor(loss.count);
       if (count > 0) {
-        const shipId = loss.shipId as OrdinaryShipId;
+        const shipId = loss.shipId as ShipId;
         removedShipCounts.set(shipId, (removedShipCounts.get(shipId) ?? 0) + count);
       }
     });

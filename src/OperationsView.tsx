@@ -40,7 +40,6 @@ type OperationsViewProps = {
   state: OperationsState;
   onAccept: (operationId: OperationId) => void;
   onCancel: (operationId: OperationId) => void;
-  onReveal: (operationId: OperationId) => void;
   onOpenFleets: () => void;
   pirateContacts?: readonly PirateContactPresentation[];
   pirateThreatPercent?: number;
@@ -425,7 +424,7 @@ function OperationCard({ operation, selected, onSelect, contact, exploration, no
           {exploration.recon?.success
             ? <b title="Категория риска подтверждена разведданными">· РИСК {['I','II','III','IV','V'][(operation.threat ?? 1)-1]}/V</b> : null}
         </span> : null}
-        {!exploration && pirate && operation.state !== 'completed' ? <span className="opsA-card-debris"><ResourceIcon kind="debris" /> ОБЛОМКИ · от 60%</span> : null}
+        {!exploration && pirate && operation.state !== 'completed' ? <span className="opsA-card-debris"><ResourceIcon kind="debris" /> ОБЛОМКИ · 125–175%</span> : null}
         {raidCheck ? <span className="opsA-card-raid" data-qa-raid-check-interval="15m">
           <span className="opsA-card-raid-label">
             <span>{pirateRaidRoll ? 'Проверка завершена' : 'Проверка нападения'}</span>
@@ -472,7 +471,7 @@ function formatPercent(value: number) {
   return `${value.toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 }
 
-function OperationDossier({ operation, pirateContact, exploration, onExpedition, onExplorationAttack, onBot01Occupy, onExplorationAccept, onExplorationCancel, onExplorationRecon, onExplorationUniverse, onExplorationReport, battleReportId, completed, nowMs, threatPercent, onAccept, onCancel, onReveal, onOpenFleets, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: {
+function OperationDossier({ operation, pirateContact, exploration, onExpedition, onExplorationAttack, onBot01Occupy, onExplorationAccept, onExplorationCancel, onExplorationRecon, onExplorationUniverse, onExplorationReport, battleReportId, completed, nowMs, threatPercent, onAccept, onCancel, onOpenFleets, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: {
   operation: OperationInstance | null;
   pirateContact?: PirateContactPresentation;
   exploration?: ExplorationOperationContact;
@@ -495,7 +494,6 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
   onPirateUniverse?: (contact: PirateContactPresentation) => void;
   onAccept: (id: OperationId) => void;
   onCancel: (id: OperationId) => void;
-  onReveal: (id: OperationId) => void;
   onOpenFleets: () => void;
 }) {
   if (!operation) {
@@ -766,7 +764,7 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
 
   const metrics: DossierMetric[] = pirate ? [
     { label: 'РАЗВЕДКА', value: reconLabel, note: pirateContact?.latestReportId ? 'отчёт в «Системе»' : 'Отправь зонд, чтобы узнать состав', tone: pirateContact?.latestReportOutcome === 'success' ? 'good' : 'bad' },
-    { label: 'ОБЛОМКИ', value: 'от 60%', note: 'стоимости уничтоженных кораблей', tone: 'good' },
+    { label: 'ОБЛОМКИ', value: '125–175%', note: 'жизни уничтоженных пиратов', tone: 'good' },
     ...(isActive && pirateContact ? [{ label: 'ДО ИСЧЕЗНОВЕНИЯ', value: pirateRemainingLabel(pirateContact.expiresAt, nowMs), note: 'успейте провести рейд', tone: 'time' as const }] : []),
     ...(threatTile ? [threatTile] : []),
   ] : [
@@ -818,7 +816,6 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
               <button type="button" className="opsA-btn opsA-btn--danger" onClick={() => onCancel(operation.id)}>ОТМЕНИТЬ</button>
             </> : null
         : <>
-          {intelZero ? <button type="button" className="opsA-btn opsA-btn--primary" onClick={() => onReveal(operation.id)}>ПРОСКАНИРОВАТЬ</button> : null}
           {!intelZero && operation.state === 'available' ? <button type="button" className="opsA-btn opsA-btn--primary" onClick={() => onAccept(operation.id)}>ПРИНЯТЬ ОПЕРАЦИЮ</button> : null}
           {isActive ? <button type="button" className="opsA-btn opsA-btn--primary" onClick={onOpenFleets}>К ФЛОТАМ</button> : null}
           {isActive ? <button type="button" className="opsA-btn opsA-btn--danger" onClick={() => onCancel(operation.id)}>ОТМЕНИТЬ</button> : null}
@@ -846,17 +843,15 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
   );
 }
 
-export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets, explorationContacts = [], onExpedition, onExplorationAttack, onBot01Occupy, onExplorationAccept, onExplorationCancel, onExplorationRecon, onExplorationUniverse, onExplorationReport, pirateContacts = [], pirateThreatPercent = 2, pirateAdaptiveDiagnostics, onPirateBattleExport, pirateRaidRolls = {}, pirateOwnerId = '', pirateCheckDelayMs, completedPirateOperations = [], nowMs = Date.now(), onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: OperationsViewProps) {
+export function OperationsView({ state, onAccept, onCancel, onOpenFleets, explorationContacts = [], onExpedition, onExplorationAttack, onBot01Occupy, onExplorationAccept, onExplorationCancel, onExplorationRecon, onExplorationUniverse, onExplorationReport, pirateContacts = [], pirateThreatPercent = 2, pirateAdaptiveDiagnostics, onPirateBattleExport, pirateRaidRolls = {}, pirateOwnerId = '', pirateCheckDelayMs, completedPirateOperations = [], nowMs = Date.now(), onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: OperationsViewProps) {
   const [tab, setTab] = useState<OperationsTab>('available');
   const [selectedId, setSelectedId] = useState<OperationId | null>(null);
   const [contactFilter, setContactFilter] = useState<ContactFilter>('all');
 
   const operationRows = useMemo((): OperationRow[] => {
-    // Demo placeholders are not playable pirate targets. Keep them in Test save for
-    // backwards compatibility, but render only authoritative live contacts.
-    const demoIds = new Set(['op-pirate-patrol-01', 'op-pirate-outpost-01', 'op-signal-derelict-01', 'op-anomaly-01']);
+    // Stored items are only accepted pirate cycles (migration drops old demo records).
     const normal: OperationRow[] = state.items
-      .filter((item) => !demoIds.has(item.id) && !isPirateOperationId(item.id))
+      .filter((item) => !isPirateOperationId(item.id))
       .map((operation) => ({ operation }));
     const acceptedIds = new Set(state.items.filter((item) => isPirateOperationId(item.id) && item.state === 'active').map((item) => item.id));
     const live: OperationRow[] = pirateContacts.map((contact) => ({
@@ -1016,7 +1011,6 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
           threatPercent={pirateThreatPercent}
           onAccept={accept}
           onCancel={cancel}
-          onReveal={onReveal}
           onOpenFleets={onOpenFleets}
           onPirateRecon={onPirateRecon}
           onPirateAttack={onPirateAttack}

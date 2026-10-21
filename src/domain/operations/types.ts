@@ -1,7 +1,10 @@
+/**
+ * Presentation classes of real operation rows: live pirate bases, unique
+ * objects and anomalies. The old demo archetypes (raider group, unknown
+ * signal) had no mechanics and were removed; old saves drop those records.
+ */
 export const OPERATION_ARCHETYPES = [
   'pirate_elimination',
-  'pirate_outpost',
-  'unknown_signal',
   'derelict_recovery',
   'anomaly_scan',
 ] as const;
@@ -51,7 +54,6 @@ export type OperationInstance = {
   objective: OperationObjective;
   modifiers: OperationModifier[];
   rewardPreview: OperationRewardPreview;
-  originSignalId?: OperationId;
   battleReportId?: string;
 };
 

@@ -64,6 +64,7 @@ import {
   resolvePirateEliminationAtTarget,
 } from './attack.ts';
 import {
+  getOwnerShipUpgradeLevel,
   getPlanetResources,
   replacePlanetResources,
   type SaveState,
@@ -427,6 +428,7 @@ export function dispatchPirateFlight(
     ...(attackSnapshot ? { attackSnapshot } : {}),
     pirateSnapshot: snapshot,
     populationReserved,
+    speedCommanderLevels: { typhoon: getOwnerShipUpgradeLevel(state, 'typhoon') },
     departedAt,
     factionId,
     science: state.science.levels,

@@ -33,13 +33,14 @@ import {
   PIRATE_CONTACT_MIN_LIFETIME_MS,
   PIRATE_CONTACT_QUIET_MS,
 } from '../pirates/contact-schedule.ts';
-import type { PirateContactDefeatRecord } from '../pirates/contact-schedule.ts';
+import { PIRATE_RAID_CHECK_INTERVAL_MS, type PirateContactDefeatRecord } from '../pirates/contact-schedule.ts';
+import { UNIVERSE_POSITION_COUNT, UNIVERSE_SYSTEM_COUNT } from './grid.ts';
 
 export const GALAXY = 1;
 /** Galaxies that exist today; the map navigator already steps through galaxies. */
 export const GALAXY_COUNT = 1;
-export const SYSTEM_COUNT = 40;
-export const POSITION_COUNT = 24;
+export const SYSTEM_COUNT = UNIVERSE_SYSTEM_COUNT;
+export const POSITION_COUNT = UNIVERSE_POSITION_COUNT;
 export const MAX_PLANETS_PER_OWNER = 7;
 /** World generator limit: a campaign may have 1..10 galaxies of 40 systems each. */
 export const MAX_GALAXY_COUNT = 10;
@@ -369,7 +370,8 @@ export function getUniverseOwnerRelation(
   targetOwner?: UniverseOwnerProfile,
   diplomacy?: readonly Pick<DiplomaticRelation, 'id' | 'tag' | 'status'>[],
 ): UniverseOwnerRelation {
-  if (node.isHomeworld || node.ownerId === currentOwnerId) return 'self';
+  // Ownership decides; a foreign homeworld is never «self».
+  if (node.ownerId === currentOwnerId) return 'self';
 
   const targetAlliance = targetOwner?.alliance;
   if (!currentAlliance || !targetAlliance) return 'neutral';
@@ -841,7 +843,7 @@ export function getPirateContactCyclesBetween(
   afterMs: number,
   throughMs: number,
   defeatedCycles: readonly PirateContactDefeatRecord[] = [],
-  checkDelayMs = 15 * 60_000,
+  checkDelayMs = PIRATE_RAID_CHECK_INTERVAL_MS,
 ): readonly UniverseTimedObjectSchedule[] {
   if (!Number.isSafeInteger(afterMs) || !Number.isSafeInteger(throughMs) || throughMs <= afterMs) return [];
   const relevantDefeats = defeatedCycles.filter((record) => record.galaxy === galaxy && record.system === system);
@@ -1042,22 +1044,16 @@ export function getUniverseActionState(
       reason: action === 'attack' ? 'Атака запрещена против своей планеты.' : 'Это ваша планета.',
     };
   }
-  if (action === 'fleet' && node.fixture?.id === TEST_MODE_ALLY_PLANET_FIXTURE.marker.id && relation === 'ally') {
+  if (action === 'fleet') {
+    // Any inhabited planet accepts transport; what does not fit its storage burns.
     return {
       action,
       enabled: true,
       status: 'supported',
       label,
-      reason: 'Союзная планета принимает транспортировку.',
-    };
-  }
-  if (action === 'fleet') {
-    return {
-      action,
-      enabled: false,
-      status: 'disabled',
-      label,
-      reason: 'Транспортировка доступна только на свою или явную союзную планету.',
+      reason: relation === 'ally'
+        ? 'Союзная планета принимает транспортировку.'
+        : 'Планета принимает транспортировку: ресурсы сверх её склада сгорят.',
     };
   }
   const targetRelation = relation ?? 'neutral';

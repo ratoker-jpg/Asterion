@@ -6,8 +6,9 @@ import type { PirateReconReport } from '../pirates/recon-report.ts';
 
 export type OrdinaryShipId = Exclude<ShipId, 'solar-satellite'>;
 
+/** Overpopulation attrition loss; includes burned solar satellites. */
 export type OverpopulationShipLoss = {
-  shipId: OrdinaryShipId;
+  shipId: ShipId;
   count: number;
 };
 

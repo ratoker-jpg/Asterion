@@ -9,6 +9,8 @@ import { resolveCombat } from '../src/domain/combat/resolver.ts';
 import { createPirateProfile, calculatePirateEliminationPopulationBudget } from '../src/domain/pirates/profile.ts';
 import { PIRATE_BASE_SHIPS, PIRATE_CATALOG_BY_ID } from '../src/domain/pirates/catalog.ts';
 import { calculatePirateForceDebris } from '../src/domain/pirates/debris.ts';
+import { battleDebrisRoll } from '../src/domain/combat/debris.ts';
+import { PR91_HANGAR_CAPACITY, PR91_POPULATIONS } from './pr91-constants.mjs';
 import { pirateDebrisRewardMultiplier, pirateSeededDraw } from '../src/domain/pirates/threat.ts';
 import { calculateAttackDebris } from '../src/application/attack.ts';
 import { calculateFlightFuel } from '../src/domain/flights/fuel.ts';
@@ -17,9 +19,9 @@ import { getRecyclingOutput } from '../src/domain/buildings/recycling.ts';
 // APPROVED garrison-interval comparison. Pair identical combat seeds, player
 // manifest, pirate science, faction and exclusive-tech roll. The only
 // experimental variable is the 75–90% vs 85–105% seeded garrison population.
-const HANGAR=25_112;
+const HANGAR=PR91_HANGAR_CAPACITY;
 const POINTS=[3_000_000,3_500_000];
-const POPULATIONS=[25_090,25_112];
+const POPULATIONS=PR91_POPULATIONS;
 const PLAYER_DESTROYER_LEVELS=[0,10];
 const OUT=resolve('artifacts/pr91-garrison-85-105');
 const ORDINARY_SEEDS=24;
@@ -134,8 +136,9 @@ function runBattle(faction,player,profile,pirates,seed){
   },{reportId:seed,missionType:'pirate-elimination'});
 }
 const net = (faction,player,report) => {
-  const destroyedPirate=calculatePirateForceDebris(report.defenderForce,report.attackerForce,'pirate-elimination');
-  const orbitalDebris=calculateAttackDebris(report,faction,faction);
+  const debrisRoll=battleDebrisRoll(report.id);
+  const destroyedPirate=calculatePirateForceDebris(report.defenderForce,report.attackerForce,'pirate-elimination',debrisRoll);
+  const orbitalDebris=calculateAttackDebris(report,faction,faction,debrisRoll);
   const fullWin=report.winner==='attacker'&&report.defenderForce.populationAfter===0;
   const multiplier=fullWin?pirateDebrisRewardMultiplier(player.actual,HANGAR):1;
   const extra=Math.max(0,Math.floor(destroyedPirate*multiplier)-destroyedPirate);

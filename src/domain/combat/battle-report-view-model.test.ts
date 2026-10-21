@@ -228,3 +228,16 @@ test('view model reads siege fields while legacy reports remain siege-free', () 
   assert.equal(viewModel.siege?.demolition.rolls[0]?.success, true);
   assert.equal(viewModel.siege?.destruction.blockedReason, 'LAST_COLONY_PROTECTED');
 });
+
+test('critical rolls read from one field; old reports with the roll in abilityDraw stay readable', () => {
+  const base = DEMO_BATTLE_REPORTS[0];
+  const event = (extra: Record<string, unknown>) => ({ sequence: 1, actorSide: 'attacker', actorEntityId: 'cruiser',
+    targetSide: 'defender', targetEntityId: 'cruiser', actionType: 'attack', actorCount: 1, targetCount: 1, ...extra });
+  const report = { ...base, rounds: [{ index: 1, events: [
+    event({ criticalChance: 0.1, criticalDraw: 0.05 }),
+    event({ criticalChance: 0.1, abilityDraw: 0.07 }),
+    event({ abilityChance: 0.2, abilityDraw: 0.4 }),
+  ] }] };
+  const events = createBattleReportViewModel(report).rounds[0]!.events;
+  assert.deepEqual(events.map((item) => [item.criticalDraw, item.abilityDraw]), [[0.05, null], [0.07, null], [null, 0.4]]);
+});

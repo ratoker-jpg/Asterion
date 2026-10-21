@@ -1,6 +1,6 @@
 import { PIRATE_BASE_SHIPS } from './catalog.ts';
 import type { PirateProfile, PirateShipShares } from './profile.ts';
-import type { PirateReconMissionSnapshot, PirateReconOutcome } from './recon.ts';
+import { PIRATE_RECON_SUCCESS_THRESHOLD, type PirateReconMissionSnapshot, type PirateReconOutcome } from './recon.ts';
 import { isCanonicalPirateContactCycleKey } from './contact-schedule.ts';
 
 const SHIP_NAME_BY_ID = new Map(PIRATE_BASE_SHIPS.map((ship) => [ship.id, ship.name]));
@@ -90,7 +90,7 @@ export function createPirateReconReport(input: {
     return Object.freeze({ ...base, outcome: 'no-target' as const });
   }
 
-  const outcome = mission.roll < 0.7 ? 'success' : 'failure';
+  const outcome = mission.roll < PIRATE_RECON_SUCCESS_THRESHOLD ? 'success' : 'failure';
   if (outcome === 'failure') return Object.freeze({ ...base, outcome });
   const profile = input.profile;
   if (!profile || profile.ownerId !== mission.ownerId || profile.contactCycleKey !== mission.contactCycleKey) {

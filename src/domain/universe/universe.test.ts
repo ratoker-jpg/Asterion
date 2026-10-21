@@ -50,6 +50,9 @@ import {
 import { ASTEROID_GAS_CAP } from './asteroid-gas.ts';
 import type { UniverseOwnerAlliance, UniversePlanetNode } from './types.ts';
 
+// Timed universe objects depend on time; tests pin it (audit A4).
+const TEST_UNIVERSE_NOW_MS = Date.UTC(2026, 9, 21, 12);
+
 test('planet coordinates remain unchanged while asteroid clock advances', () => {
   const points = Array.from({ length: POSITION_COUNT }, (_, index) => getUniverseSlotPoint(index + 1));
   const asteroid = getUniverseAsteroidState(0, ASTEROID_SCHEDULE_EPOCH_MS + 1);
@@ -68,7 +71,7 @@ test('slot 18 is upper-right of its sun in both Universe and the Operations sens
 });
 
 test('galaxy contains 40 systems and each system has exactly 24 positions', () => {
-  const map = createUniverseMap();
+  const map = createUniverseMap({ nowMs: TEST_UNIVERSE_NOW_MS });
 
   assert.equal(map.galaxy, GALAXY);
   assert.equal(map.systems.length, SYSTEM_COUNT);
@@ -77,7 +80,7 @@ test('galaxy contains 40 systems and each system has exactly 24 positions', () =
 });
 
 test('homeworld caption uses player nickname while its planet name stays in node data', () => {
-  const system = createUniverseSystem({ system: 1, currentPlanetName: 'Helion 01', currentOwnerId: 'player-current' });
+  const system = createUniverseSystem({ nowMs: TEST_UNIVERSE_NOW_MS, system: 1, currentPlanetName: 'Helion 01', currentOwnerId: 'player-current' });
   const homeworld = system.positions.find((node) => node.isHomeworld);
 
   assert.ok(homeworld);
@@ -87,8 +90,8 @@ test('homeworld caption uses player nickname while its planet name stays in node
 });
 
 test('owner color relation follows ownership and alliance status instead of bot identity', () => {
-  const homeworld = createUniverseSystem({ system: 1, currentOwnerId: 'player-current' }).positions.find((node) => node.isHomeworld)!;
-  const botPlanet = createUniverseMap().systems.flatMap((system) => system.positions).find((node) => node.kind === 'npc')!;
+  const homeworld = createUniverseSystem({ nowMs: TEST_UNIVERSE_NOW_MS, system: 1, currentOwnerId: 'player-current' }).positions.find((node) => node.isHomeworld)!;
+  const botPlanet = createUniverseMap({ nowMs: TEST_UNIVERSE_NOW_MS }).systems.flatMap((system) => system.positions).find((node) => node.kind === 'npc')!;
   const alliance = (id: string, tag: string): UniverseOwnerAlliance => ({
     id,
     name: id,
@@ -108,7 +111,7 @@ test('owner color relation follows ownership and alliance status instead of bot 
 });
 
 test('war is an explicit enemy status for a different alliance', () => {
-  const node = createUniverseSystem({ system: 2 }).positions.find((item) => item.kind === 'uninhabited')!;
+  const node = createUniverseSystem({ nowMs: TEST_UNIVERSE_NOW_MS, system: 2 }).positions.find((item) => item.kind === 'uninhabited')!;
   const currentAlliance: UniverseOwnerAlliance = {
     id: 'alliance-current',
     name: 'Current',
@@ -138,7 +141,7 @@ test('registered production targets become selectable map nodes without adding f
     kind: 'npc' as const,
     ownerId: 'future-owner',
   };
-  const map = createUniverseMap({ mode: 'production', registeredPlanets: [registered] });
+  const map = createUniverseMap({ nowMs: TEST_UNIVERSE_NOW_MS, mode: 'production', registeredPlanets: [registered] });
   const nodes = map.systems.flatMap((system) => system.positions);
   const node = nodes.find((item) => item.id === registered.id);
 
@@ -149,7 +152,7 @@ test('registered production targets become selectable map nodes without adding f
   assert.equal(nodes.filter((item) => item.kind === 'npc').length, 1);
 });
 
-test('registered Test Mode targets override coordinate fixtures and block fleet actions', () => {
+test('registered Test Mode targets override coordinate fixtures and accept transport like any inhabited planet', () => {
   for (const relation of ['neutral', 'enemy'] as const) {
     const registered = {
       id: `test-mode-${relation}-target`,
@@ -158,7 +161,7 @@ test('registered Test Mode targets override coordinate fixtures and block fleet 
       kind: 'npc' as const,
       ownerId: `foreign-${relation}-owner`,
     };
-    const system = createUniverseSystem({
+    const system = createUniverseSystem({ nowMs: TEST_UNIVERSE_NOW_MS,
       mode: 'test',
       system: 1,
       registeredPlanets: [registered],
@@ -167,7 +170,7 @@ test('registered Test Mode targets override coordinate fixtures and block fleet 
 
     assert.ok(node);
     assert.equal(node?.fixture, undefined);
-    assert.equal(getUniverseActionState('fleet', node!, 'player-current', relation).enabled, false);
+    assert.equal(getUniverseActionState('fleet', node!, 'player-current', relation).enabled, true);
   }
 });
 
@@ -263,7 +266,7 @@ test('one seeded owner keeps exactly seven legacy NPC planets across seven syste
 });
 
 test('production universe has no NPC fixture planets while preserving the player homeworld', () => {
-  const map = createUniverseMap({ mode: 'production' });
+  const map = createUniverseMap({ nowMs: TEST_UNIVERSE_NOW_MS, mode: 'production' });
   const nodes = map.systems.flatMap((system) => system.positions);
 
   assert.equal(nodes.filter((node) => node.kind === 'npc').length, 0);
@@ -333,7 +336,7 @@ test('asset catalogs select the correct kinds and unique art has a default fallb
   }).filter((node): node is UniversePlanetNode => Boolean(node));
   assert.deepEqual([...new Set(uniques.map((node) => node.art))].sort(), [...specialArts].sort());
   const botAssetCatalog = Array.from({ length: 25 }, (_, index) => `planet-${index}`);
-  const botPlanets = createUniverseMap({ assets: { planetArts: botAssetCatalog } }).systems
+  const botPlanets = createUniverseMap({ nowMs: TEST_UNIVERSE_NOW_MS, assets: { planetArts: botAssetCatalog } }).systems
     .flatMap((system) => system.positions).filter((node) => node.ownerId === UNIVERSE_NPC_OWNER_ID);
   assert.equal(new Set(botPlanets.map((node) => node.art)).size, MAX_PLANETS_PER_OWNER);
 });
@@ -484,10 +487,10 @@ test('pirate projection exposes a stable cycle identity and resumes the schedule
 });
 
 test('spy and fleet actions follow the owner relation contract', () => {
-  const system = createUniverseSystem({ system: 1, currentOwnerId: 'player-current' });
+  const system = createUniverseSystem({ nowMs: TEST_UNIVERSE_NOW_MS, system: 1, currentOwnerId: 'player-current' });
   const homeworld = system.positions.find((node) => node.isHomeworld)!;
-  const ally = createUniverseMap({ mode: 'test' }).systems.flatMap((item) => item.positions).find((node) => node.fixture?.id === 'test-mode-ally-ira-vel-v1')!;
-  const foreign = createUniverseMap({ mode: 'test' }).systems.flatMap((item) => item.positions).find((node) => node.kind === 'npc' && !node.fixture)!;
+  const ally = createUniverseMap({ nowMs: TEST_UNIVERSE_NOW_MS, mode: 'test' }).systems.flatMap((item) => item.positions).find((node) => node.fixture?.id === 'test-mode-ally-ira-vel-v1')!;
+  const foreign = createUniverseMap({ nowMs: TEST_UNIVERSE_NOW_MS, mode: 'test' }).systems.flatMap((item) => item.positions).find((node) => node.kind === 'npc' && !node.fixture)!;
   const empty = system.positions.find((node) => node.kind === 'empty')!;
 
   assert.equal(getUniverseActionState('spy', homeworld, 'player-current').enabled, false);
@@ -500,11 +503,19 @@ test('spy and fleet actions follow the owner relation contract', () => {
   assert.equal(getUniverseActionState('attack', foreign, 'player-current', 'enemy').reason, 'Вражеская цель доступна для атаки.');
   assert.equal(getUniverseActionState('attack', ally, 'player-current', 'ally').enabled, false);
   assert.equal(getUniverseActionState('attack', homeworld, 'player-current', 'self').enabled, false);
-  assert.equal(getUniverseActionState('fleet', foreign, 'player-current').enabled, false);
+  // Transport goes to any inhabited planet; overflow burns at the target (audit 2.6).
+  assert.equal(getUniverseActionState('fleet', foreign, 'player-current').enabled, true);
+  assert.match(getUniverseActionState('fleet', foreign, 'player-current').reason ?? '', /сгорят/);
   assert.equal(getUniverseActionState('fleet', ally, 'player-current', 'ally').status, 'supported');
   assert.equal(getUniverseActionState('fleet', ally, 'player-current', 'ally').enabled, true);
-  // The fixture alone grants nothing: without a current alliance relation the route is closed.
-  assert.equal(getUniverseActionState('fleet', ally, 'player-current', 'neutral').enabled, false);
-  assert.equal(getUniverseActionState('fleet', ally, 'player-current').enabled, false);
+  assert.equal(getUniverseActionState('fleet', ally, 'player-current', 'ally').reason, 'Союзная планета принимает транспортировку.');
+  assert.equal(getUniverseActionState('fleet', ally, 'player-current', 'neutral').enabled, true);
   assert.equal(getUniverseActionState('spy', empty, 'player-current').status, 'disabled');
+});
+
+test('a foreign homeworld is not «self»: the relation follows the owner id only', () => {
+  const foreignHome = { id: 'foreign-home', coordinate: { galaxy: 1, system: 3, position: 1 }, kind: 'player' as const,
+    name: 'Чужая столица', art: '', ownerId: 'someone-else', isHomeworld: true, statusLabel: '', description: '' };
+  assert.equal(getUniverseOwnerRelation(foreignHome, 'player-current'), 'neutral');
+  assert.equal(getUniverseOwnerRelation({ ...foreignHome, ownerId: 'player-current' }, 'player-current'), 'self');
 });

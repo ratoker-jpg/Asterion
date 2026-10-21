@@ -130,32 +130,6 @@ export function battleReportToReportItem(report: BattleReport, operation?: Opera
   };
 }
 
-export function operationIntelToReportItem(operation: OperationInstance): ReportItem | null {
-  if (!operation.originSignalId || operation.intel <= 0) return null;
-  const location = operationLocationLabel(operation);
-  return {
-    id: `system:operation:${operation.id}`,
-    source: 'operations',
-    category: 'system',
-    typeLabel: 'Информация операции',
-    title: `Сигнал классифицирован: ${operation.title}`,
-    preview: `${location} · разведданные уровня ${operation.intel}.`,
-    body: operation.briefing,
-    statusLabel: 'ДАННЫЕ ПОЛУЧЕНЫ',
-    statusTone: 'info',
-    participantNames: [],
-    planetNames: [],
-    coordinates: operation.location.kind === 'coordinates' ? [operation.location.coordinates] : [],
-    details: [
-      { label: 'Локация', value: location },
-      { label: 'Разведданные', value: `${operation.intel} / 3` },
-      { label: 'Цель', value: operation.objective.label },
-      { label: 'Источник сигнала', value: operation.originSignalId },
-    ],
-    operationId: operation.id,
-  };
-}
-
 function spyQualityLabel(report: SpyReportSnapshot) {
   return report.quality === 'full' ? 'ПОЛНЫЙ СНИМОК' : report.quality === 'detailed' ? 'ДЕТАЛЬНЫЙ СНИМОК' : 'БАЗОВЫЙ СНИМОК';
 }
@@ -267,7 +241,7 @@ export function overpopulationEpisodeReportToReportItem(report: OverpopulationEp
     typeLabel: 'Итог перенаселения',
     title: `Планета разблокирована: ${report.planetName}`,
     preview: `${removedCount} кораблей уничтожено · население ${report.populationBefore} → ${report.populationAfter} · вместимость ${report.capacity}`,
-    body: `Планета ${report.planetName} разблокирована. Эпизод перенаселения завершён; итоговое население и уничтоженные обычные корабли перечислены в отчёте.`,
+    body: `Планета ${report.planetName} разблокирована. Эпизод перенаселения завершён; итоговое население, уничтоженные корабли и спутники перечислены в отчёте.`,
     timestamp,
     statusLabel: 'ПЛАНЕТА РАЗБЛОКИРОВАНА',
     statusTone: 'warning',
@@ -416,10 +390,6 @@ export function buildReportsFeed(
     .filter((report) => report.missionType !== 'simulation' && report.missionType !== 'arena')
     .map((report) => battleReportToReportItem(report, operationByBattleId.get(report.id)));
 
-  const systemItems = operations.items
-    .map(operationIntelToReportItem)
-    .filter((item): item is ReportItem => Boolean(item));
-
   const espionageItems = [
     ...(espionage?.reports ?? []).map((report) => spyReportToReportItem(report, espionage)),
     ...(espionage?.hunterNotices ?? []).map(spyHunterNoticeToReportItem),
@@ -439,7 +409,7 @@ export function buildReportsFeed(
     typeLabel: 'Прибытие добывающего флота',
   })) : [];
 
-  return [...battleItems, ...systemItems, ...espionageItems, ...overpopulationItems, ...extractionSystemItems, ...pirateReconItems, ...pirateFlightAbsenceReports(pirateFlights), ...explorationMailboxReports(exploration, pirateFlights, playerOwnerId), ...arrivalFlightItems].sort((a, b) => {
+  return [...battleItems, ...espionageItems, ...overpopulationItems, ...extractionSystemItems, ...pirateReconItems, ...pirateFlightAbsenceReports(pirateFlights), ...explorationMailboxReports(exploration, pirateFlights, playerOwnerId), ...arrivalFlightItems].sort((a, b) => {
     if (a.timestamp && b.timestamp) return Date.parse(b.timestamp) - Date.parse(a.timestamp);
     if (!a.timestamp && b.timestamp) return -1;
     if (a.timestamp && !b.timestamp) return 1;

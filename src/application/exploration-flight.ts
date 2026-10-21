@@ -49,7 +49,7 @@ export function materializeExplorationAtDispatch(
   if (!node) return state;
   const existing = state.exploration ?? createExplorationState();
   const scored = recordHighestExplorationScore(existing, state.profile.playerId, selectOwnerScores(state)[state.profile.playerId]?.resourcePoints ?? 0);
-  const { state: updated } = getOrMaterializeExplorationContact(scored, node, explorationResourceScore(state));
+  const { state: updated } = getOrMaterializeExplorationContact(scored, node);
   return { ...state, exploration: updated };
 }
 

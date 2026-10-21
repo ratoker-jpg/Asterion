@@ -1124,3 +1124,11 @@ test('saving simulation does not mutate demo reports', () => {
   addBattleReportSaved(createDefaultBattleHistory(), report);
   assert.equal(JSON.stringify(DEMO_BATTLE_REPORTS), before);
 });
+
+test('without an explicit choice the active commander follows the side priority, not catalog order', async () => {
+  const { chooseActiveCommander } = await import('./resolver.ts');
+  assert.equal(chooseActiveCommander(null, ['viper', 'corsair'], ['corsair', 'viper']), 'viper');
+  assert.equal(chooseActiveCommander('corsair', ['viper', 'corsair'], ['corsair', 'viper']), 'corsair', 'an explicit choice wins');
+  assert.equal(chooseActiveCommander(undefined, ['judge'], ['corsair', 'viper']), 'corsair', 'falls back to catalog order');
+  assert.equal(chooseActiveCommander(undefined, [], []), null);
+});

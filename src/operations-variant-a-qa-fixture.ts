@@ -36,7 +36,7 @@ function completedExplorationContact(node: ExplorationOperationPresentation['nod
   const flightId = `qa-variant-a:${node.id}`;
   const claim = `claim:${flightId}`;
   const arrivalAt = Math.max(node.special?.startAt ?? nowMs, nowMs - 60_000);
-  const initial = materializeExplorationContact(node, 0);
+  const initial = materializeExplorationContact(node);
   const occupied = occupyExplorationContact(initial, {
     claimId: claim, ownerId, originPlanetId: 'helion-01', flightId,
     arrivedAt: arrivalAt,

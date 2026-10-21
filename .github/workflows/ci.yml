@@ -58,6 +58,20 @@ jobs:
         run: npm run test:runtime
       - name: Fleet domain tests
         run: npm run test:fleet
+      - name: Application integration tests
+        run: npm run test:application
+      - name: Espionage tests
+        run: npm run test:espionage
+      - name: Repair tests
+        run: npm run test:repair
+      - name: Resource domain tests
+        run: npm run test:resources
+      - name: Energy domain tests
+        run: npm run test:energy
+      - name: Sun raid tests
+        run: npm run test:sun-raid
+      - name: New game and save slot tests
+        run: npm run test:new-game
       - name: Build renderer
         run: npm run build
       - name: Production/test isolation Electron QA

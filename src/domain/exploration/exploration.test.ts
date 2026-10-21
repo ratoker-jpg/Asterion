@@ -117,9 +117,9 @@ test('micro-accumulation exactly matches split reconciliation and obeys finite s
 });
 
 test('one shared finite reserve survives ownership change and no later reissue on same cycle', () => {
-  const contact = getOrMaterializeExplorationContact(createExplorationState(), makeNode('unique'), 100_000).contact;
+  const contact = getOrMaterializeExplorationContact(createExplorationState(), makeNode('unique')).contact;
   const reloaded = getOrMaterializeExplorationContact({ ...createExplorationState(), contacts: { [contact.id]: contact } },
-    makeNode('unique'), 6_000_000).contact;
+    makeNode('unique')).contact;
   assert.equal(contact.initialReserve.metal, reloaded.initialReserve.metal);
   let occupied = occupyExplorationContact(contact, arrival());
   occupied = reconcileExplorationContact(occupied, start + 4 * minute);
@@ -138,7 +138,7 @@ test('one shared finite reserve survives ownership change and no later reissue o
 
 test('30-second recall preparation freezes production and expiry immediately releases', () => {
   let contact = occupyExplorationContact(getOrMaterializeExplorationContact(
-    createExplorationState(), makeNode('unique'), 100_000).contact, arrival());
+    createExplorationState(), makeNode('unique')).contact, arrival());
   contact = prepareExplorationRecall(contact, 'player', start + 3 * minute);
   const amount = contact.claim!.cargo.metal;
   contact = reconcileExplorationContact(contact, start + 3 * minute + 29_000);
@@ -152,7 +152,7 @@ test('30-second recall preparation freezes production and expiry immediately rel
   assert.throws(() => releaseExplorationClaim(contact, start + 4 * minute));
 
   let expiring = occupyExplorationContact(getOrMaterializeExplorationContact(
-    createExplorationState(), makeNode('anomaly'), 100_000).contact, arrival(start + 17 * minute));
+    createExplorationState(), makeNode('anomaly')).contact, arrival(start + 17 * minute));
   expiring = prepareExplorationRecall(expiring, start + 17 * minute + 55_000 > 0 ? 'player' : 'bad', start + 17 * minute + 55_000);
   const released = releaseExplorationClaim(expiring, start + 18 * minute);
   assert.equal(released.events.at(-1)!.kind, 'expired');
@@ -160,7 +160,7 @@ test('30-second recall preparation freezes production and expiry immediately rel
 
 test('defense boost only once; draws do not award a bonus', () => {
   let contact = occupyExplorationContact(getOrMaterializeExplorationContact(
-    createExplorationState(), makeNode('unique'), 100_000).contact, arrival());
+    createExplorationState(), makeNode('unique')).contact, arrival());
   const attack = { ...arrival(start + 2 * minute, 'attacker-1'), ownerId: 'enemy' };
   const first = settleExplorationContest(contact, attack.arrivedAt, 'defender', attack, 0,
     { all: 5000, transporters: 5000, recyclers: 0 }, true, { attacker: true, defender: true }).contact;
@@ -189,7 +189,7 @@ test('rare roll scales with time, deterministic, no payout at under one minute',
 test('completed return persists deterministic token and empty-token rewards exactly once', () => {
   const node = makeNode('anomaly');
   node.special!.profileVariant = 10;
-  const baseline = getOrMaterializeExplorationContact(createExplorationState(), node, 100_000).contact;
+  const baseline = getOrMaterializeExplorationContact(createExplorationState(), node).contact;
   const profile = explorationProfile('anomaly', 10);
   const heldMs = 12 * minute + 30_000;
   const findClaim = (won: boolean) => {
@@ -219,7 +219,7 @@ test('completed return persists deterministic token and empty-token rewards exac
 });
 
 test('recon seeded, cooldown persists if caller stores reports, cannot inspect foreign ship counts', () => {
-  const contact = getOrMaterializeExplorationContact(createExplorationState(), makeNode('unique'), 100_000).contact;
+  const contact = getOrMaterializeExplorationContact(createExplorationState(), makeNode('unique')).contact;
   const first = resolveExplorationRecon(contact, 'player', 'probe-1', start + 2 * minute, []);
   assert.equal(resolveExplorationRecon(contact, 'player', 'probe-1', start + 2 * minute, [first]).success, first.success);
   assert.throws(() => resolveExplorationRecon(contact, 'player', 'probe-2', start + 3 * minute, [first]));
@@ -246,7 +246,7 @@ test('NPC chance is seeded per slot, not rerolled on render; rookie threshold is
 });
 
 test('save migration accepts legitimate contact; rejects forged stockpiles and keeps empty legacy save safe', () => {
-  const state = getOrMaterializeExplorationContact(createExplorationState(), makeNode('unique'), 100_000).state;
+  const state = getOrMaterializeExplorationContact(createExplorationState(), makeNode('unique')).state;
   assert.deepEqual(migrateExplorationState(undefined), createExplorationState());
   const migrated = migrateExplorationState(state);
   assert.equal(Object.keys(migrated.contacts).length, 1);
@@ -268,7 +268,7 @@ test('save migration accepts legitimate contact; rejects forged stockpiles and k
 });
 
 test('successful return pays once from origin, never on cancelled/missing origin or repeated reload', () => {
-  const baseline = getOrMaterializeExplorationContact(createExplorationState(), makeNode('anomaly'), 100_000).contact;
+  const baseline = getOrMaterializeExplorationContact(createExplorationState(), makeNode('anomaly')).contact;
   let active = occupyExplorationContact(baseline, arrival());
   active = prepareExplorationRecall(active, 'player', start + 14 * minute);
   active = releaseExplorationClaim(active, start + 14 * minute + 30_000);
@@ -284,7 +284,7 @@ test('successful return pays once from origin, never on cancelled/missing origin
 });
 
 test('arrival after object expiry cannot occupy and contest closes exactly after 30 seconds', () => {
-  const contact = getOrMaterializeExplorationContact(createExplorationState(), makeNode('unique'), 100_000).contact;
+  const contact = getOrMaterializeExplorationContact(createExplorationState(), makeNode('unique')).contact;
   assert.throws(() => occupyExplorationContact(contact, arrival(start + 18 * minute)));
   let active = occupyExplorationContact(contact, arrival());
   active = prepareExplorationRecall(active, 'player', start + 3 * minute);
@@ -300,7 +300,7 @@ test('arrival after object expiry cannot occupy and contest closes exactly after
 
 test('anomaly risk hazards are bounded material losses and replay/split deterministic', () => {
   const node = makeNode('anomaly');
-  const contact = getOrMaterializeExplorationContact(createExplorationState(),node,100_000).contact;
+  const contact = getOrMaterializeExplorationContact(createExplorationState(),node).contact;
   const active = occupyExplorationContact(contact, arrival(start+minute));
   const finalAt=start+15*minute;
   const whole=reconcileExplorationContact(active,finalAt);
@@ -316,11 +316,10 @@ test('anomaly risk hazards are bounded material losses and replay/split determin
     assert.ok(whole.resourceReserve[key]>=0 && whole.resourceReserve[key]<=contact.initialReserve[key]);
 });
 
-
-test('finite shared world stock is identical for rich and poor first visitors and remains frozen after capture', () => {
+test('finite shared world stock never depends on the visitor (no score input) and remains frozen after capture', () => {
   const node=makeNode('unique');
-  const poor=getOrMaterializeExplorationContact(createExplorationState(),node,1).contact;
-  const rich=getOrMaterializeExplorationContact(createExplorationState(),node,50_000_000).contact;
+  const poor=getOrMaterializeExplorationContact(createExplorationState(),node).contact;
+  const rich=getOrMaterializeExplorationContact({...createExplorationState()},node).contact;
   assert.deepEqual(poor.initialReserve,rich.initialReserve);
   assert.equal(poor.worldScoreAtAppearance,EXPLORATION_RULES.resourcePointsBase);
   assert.equal(rich.worldScoreAtAppearance,EXPLORATION_RULES.resourcePointsBase);
@@ -335,7 +334,7 @@ test('finite shared world stock is identical for rich and poor first visitors an
 test('three deterministic territory outcomes: attacker capture, defender holds and draw never gives bonus', () => {
   const node=makeNode('unique');
   const defender=occupyExplorationContact(
-    getOrMaterializeExplorationContact(createExplorationState(),node,100_000).contact,arrival());
+    getOrMaterializeExplorationContact(createExplorationState(),node).contact,arrival());
   const attack={...arrival(start+2*minute,'foreign-attack'),ownerId:'foreign'};
   const capacity={all:5000,transporters:5000,recyclers:0};
   const win=settleExplorationContest(defender,start+2*minute,'attacker',attack,5000,capacity,true,{attacker:true,defender:true});
@@ -356,7 +355,7 @@ test('three deterministic territory outcomes: attacker capture, defender holds a
 test('zero surviving combatants release the contact while a surviving commander holds it without mining capacity', () => {
   const node = makeNode('unique');
   const occupied = occupyExplorationContact(
-    getOrMaterializeExplorationContact(createExplorationState(), node, 100_000).contact, arrival());
+    getOrMaterializeExplorationContact(createExplorationState(), node).contact, arrival());
   const attack = { ...arrival(start + 5 * minute, 'empty-field-attack'), ownerId: 'enemy' };
   const zeroCapacity = { all: 0, transporters: 0, recyclers: 0 };
   const accrued = reconcileExplorationContact(occupied, start + 5 * minute).claim!.cargo;

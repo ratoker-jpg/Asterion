@@ -17,6 +17,8 @@ import {
 } from '../domain/pirates/contact.ts';
 import { calculateAttackDebris } from './attack.ts';
 import { calculatePirateForceDebris } from '../domain/pirates/debris.ts';
+import { battleDebrisRoll } from '../domain/combat/debris.ts';
+import { pirateHangarFraction } from '../domain/pirates/threat.ts';
 import { calculatePirateEliminationPopulationBudget } from '../domain/pirates/profile.ts';
 import { isPirateMissionSnapshot, normalizePirateMissionSnapshot } from '../domain/pirates/mission.ts';
 import { PIRATE_BASE_SHIPS, type PirateBaseShipId } from '../domain/pirates/catalog.ts';
@@ -230,7 +232,7 @@ test('public elimination dispatch resolves a full wipe, applies the quiet window
 
   const corsair = report.attackerForce.stacks.find((stack) => stack.entityId === 'corsair');
   assert.equal(corsair?.countAfter, 1);
-  const expectedPirateDebris = calculatePirateForceDebris(report.defenderForce, report.attackerForce, report.missionType);
+  const expectedPirateDebris = calculatePirateForceDebris(report.defenderForce, report.attackerForce, report.missionType, battleDebrisRoll(report.id));
   assert.ok(expectedPirateDebris > 0);
   const reportDebris = report.debris ?? 0;
   assert.ok(reportDebris >= expectedPirateDebris);
@@ -282,13 +284,13 @@ test('a defeated commander is removed once, contributes ordinary debris, and doe
   assert.equal(arrived.state.pirate?.contact.defeatedCycles[contact.contactCycleKey], undefined);
   assertNoBattlePointAward(arrived.state, reportId);
   const corsairEntity = COMMANDER_COMBAT_CATALOG.find((entity) => entity.id === 'corsair')!;
-  const corsairOrdinaryDebris = Math.floor(corsairEntity.cost.metal * 0.3) + Math.floor(corsairEntity.cost.minerals * 0.3);
-  const basePirateDebris = calculatePirateForceDebris(report.defenderForce, report.attackerForce, report.missionType);
+  const corsairOrdinaryDebris = Math.floor(0.25 * corsairEntity.combat.life);
+  const basePirateDebris = calculatePirateForceDebris(report.defenderForce, report.attackerForce, report.missionType, battleDebrisRoll(report.id));
   const expectedMultiplier=report.winner==='draw'?0.75:0.5;
   assert.equal(report.pirateReward?.multiplier,expectedMultiplier);
   const ownDebris=calculateAttackDebris(report,launched.flight.attackSnapshot!.attackerFactionId,
     launched.flight.attackSnapshot!.attackerFactionId)-basePirateDebris;
-  assert.ok(ownDebris>=corsairOrdinaryDebris,'own hull debris remains at standard 30%, even on pirate defeat');
+  assert.ok(ownDebris>=corsairOrdinaryDebris,'own hull debris stays on the common 25–35% base, even on pirate defeat');
   assert.equal(report.debris,ownDebris+Math.floor(basePirateDebris*expectedMultiplier),
     'only pirate wreckage receives x0.5 or x0.75; own wreckage is never penalized');
 
@@ -502,4 +504,24 @@ test('migration validator retains both historical 75–90% and approved 85–105
     const bad: typeof snapshot={...snapshot,eliminationBudget:{...snapshot.eliminationBudget!,coefficient}};
     assert.equal(isPirateMissionSnapshot(bad,'pirate-elimination'),false,`reject ${coefficient}`);
   }
+});
+
+test('report threat reduction uses the same hangar fraction the threat reducer applies', () => {
+  const manifest = { ships: { 'death-star': 48 } } satisfies FleetManifest;
+  const { state, contact, now } = fixture(manifest, { shipUpgrades: { 'death-star': 10 }, scienceLevel: 15 });
+  const launched = dispatchElimination(state, contact, now, 'pirate-threat-fraction', manifest);
+  assert.equal(launched.ok, true);
+  if (!launched.ok) return;
+  const sent = launched.flight.pirateSnapshot!.sentCombatPopulation!;
+  assert.ok(sent > 1);
+  // Corrupt snapshot: sent population exceeds the stored hangar capacity.
+  const tampered = { ...launched.flight, pirateSnapshot: { ...launched.flight.pirateSnapshot!, historicalHangarCapacity: sent - 1 } };
+  const prepared = { ...launched.state, flights: { ...launched.state.flights,
+    records: launched.state.flights.records.map((flight) => flight.id === tampered.id ? tampered : flight) } };
+  const arrived = arrive(prepared, tampered.arrivalAt);
+  const report = arrived.state.combat.reports.find((candidate) => candidate.id === `battle-pirate-${tampered.id}`);
+  assert.ok(report);
+  assert.equal(report.winner, 'attacker');
+  assert.equal(report.pirateReward?.threatReductionFraction, pirateHangarFraction(sent, sent - 1));
+  assert.equal(report.pirateReward?.threatReductionFraction, 0);
 });

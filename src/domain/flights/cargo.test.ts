@@ -64,7 +64,7 @@ test('credits capped resources once and returns debris without a capacity cap', 
   assert.deepEqual(result.burned, { metal: 15, minerals: 0, gas: 4 });
   assert.equal(result.debris, 507);
   assert.equal(result.burnedDebris, 0);
-  assert.equal(getOverflowWarning({ metal: 11 }, { metal: 90 }, 0, { metal: 100 }), true);
-  assert.equal(getOverflowWarning({ debris: 1_000 }, {}, 0, {}), false);
+  assert.equal(getOverflowWarning({ metal: 11 }, { metal: 90 }, { metal: 100 }), true);
+  assert.equal(getOverflowWarning({ debris: 1_000 }, {}, {}), false);
   assert.equal(addDebris(Number.MAX_SAFE_INTEGER, 1), Number.MAX_SAFE_INTEGER);
 });

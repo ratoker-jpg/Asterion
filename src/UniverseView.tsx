@@ -469,7 +469,7 @@ function SpecialInspector({ node, underlyingNode, nowMs, asteroidHasDebris, pira
   ] : isPirate ? [
     { label: 'ИСЧЕЗНЕТ', value: pirateContact ? countdownLabel(nowMs, pirateContact.expiresAt) : countdownLabel(nowMs, timedState?.expiresAt), note: 'затем пауза 15 мин', tone: 'time', progress: timedProgress },
     { label: 'РАЗВЕДКА', value: reconOutcome === 'success' ? 'Успешна' : reconOutcome === 'failure' ? 'Не удалась' : pirateContact?.statusLabel === 'Зонд в пути' ? 'Зонд в пути' : 'Нет данных', note: reportEnabled ? 'отчёт в «Системе»' : 'разведотчёт не сформирован', tone: reconOutcome === 'success' ? 'good' : 'bad' },
-    { label: 'ОБЛОМКИ', value: <><ResourceIcon kind="debris" />от 60%</>, note: 'стоимости кораблей', tone: 'good' },
+    { label: 'ОБЛОМКИ', value: <><ResourceIcon kind="debris" />125–175%</>, note: 'жизни пиратских кораблей', tone: 'good' },
     { label: 'ЦИКЛ', value: pirateContact ? String(pirateContact.cycleIndex) : '—', note: <span data-qa-universe-pirate-cycle={pirateContact?.contactCycleKey ?? node.pirate?.contactCycleKey ?? ''}>{pirateContact ? formatUniverseCoordinate(pirateContact.coordinate) : 'СИНХРОНИЗАЦИЯ КОНТАКТА'}</span> },
   ] : isExploration ? [
     { label: 'ИСЧЕЗНЕТ', value: countdownLabel(nowMs, timedState?.expiresAt), note: 'активен', tone: 'time', progress: timedProgress },

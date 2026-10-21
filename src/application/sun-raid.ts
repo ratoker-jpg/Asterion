@@ -52,6 +52,7 @@ import type {
 } from '../domain/sun-raid/types.ts';
 import type { UniverseCoordinate } from '../domain/universe/types.ts';
 import { calculateAttackDebris, technologiesFromScience } from './attack.ts';
+import { battleDebrisRoll } from '../domain/combat/debris.ts';
 import { recordBattleScoreAward } from '../domain/rating/scoring.ts';
 import {
   getOwnerShipUpgradeLevel,
@@ -70,9 +71,23 @@ export const OPEN_SUN_OPERATIONS_EVENT = 'asterion:open-sun-operations';
 
 export type SunRuntimeOptions = { now: number; mode: RuntimeMode; testTimeScale?: number };
 
+/** Reason codes shared with FlightErrorCode, so the Fleets screen gets the real cause. */
+export type SunFailureCode =
+  | 'invalid-command'
+  | 'mission-not-supported'
+  | 'target-not-available'
+  | 'wrong-ship-composition'
+  | 'insufficient-ships'
+  | 'insufficient-commanders'
+  | 'capacity-exceeded'
+  | 'insufficient-gas'
+  | 'flight-limit-reached';
+
+type SunFailure = { code: SunFailureCode; message: string };
+
 export type SunActionResult =
   | { ok: true; state: SaveState; notice: string; raidId?: string; flightId?: string }
-  | { ok: false; state: SaveState; error: string };
+  | { ok: false; state: SaveState; error: string; code?: SunFailureCode };
 
 export type SunRaidNotice = { tone: 'info' | 'success' | 'error'; text: string; galaxy?: number; system?: number };
 
@@ -298,6 +313,7 @@ function createSunFlight(
     destination,
     selectedShips: input.ships,
     ...(Object.keys(commanders).length ? { selectedCommanders: commanders } : {}),
+    speedCommanderLevels: { typhoon: owner.commanderLevels.typhoon ?? 0 },
     departedAt: input.departedAt,
     factionId: owner.factionId,
     science: owner.scienceLevels as import('../domain/flights/types.ts').FlightScienceLevels,
@@ -335,22 +351,26 @@ function appendFlight(flights: FlightState, flight: FlightRecord): FlightState {
   return { records: [...flights.records, flight], requestIndex: { ...flights.requestIndex, [flight.requestId]: flight.id } };
 }
 
-function validateShips(owner: SunOwner, ships: Partial<Record<ShipId, number>>, commanders: Partial<Record<CommanderId, number>> = {}): string | null {
+function validateShipsDetailed(owner: SunOwner, ships: Partial<Record<ShipId, number>>, commanders: Partial<Record<CommanderId, number>> = {}): SunFailure | null {
   const selection = normalizeSelection(ships);
   const selectedCommanders = normalizeCommanders(commanders);
-  if (!Object.keys(selection).length && !Object.keys(selectedCommanders).length) return 'Выберите боевые корабли.';
+  if (!Object.keys(selection).length && !Object.keys(selectedCommanders).length) return { code: 'wrong-ship-composition', message: 'Выберите боевые корабли.' };
   if (Object.keys(selection).some((id) => SUN_CIVIL_SHIP_IDS.has(id as ShipId))) {
-    return 'К Солнцу летят только боевые корабли: зонды, колонизаторы, транспорты и переработчики не допускаются.';
+    return { code: 'wrong-ship-composition', message: 'К Солнцу летят только боевые корабли: зонды, колонизаторы, транспорты и переработчики не допускаются.' };
   }
   const catalog = new Set(getFactionShipCatalog(owner.factionId).map((entity) => entity.id));
   for (const [id, count] of Object.entries(selection) as [ShipId, number][]) {
-    if (!catalog.has(id)) return 'Этот корабль недоступен вашей расе.';
-    if ((owner.available[id] ?? 0) < count) return 'На планете недостаточно свободных кораблей.';
+    if (!catalog.has(id)) return { code: 'wrong-ship-composition', message: 'Этот корабль недоступен вашей расе.' };
+    if ((owner.available[id] ?? 0) < count) return { code: 'insufficient-ships', message: 'На планете недостаточно свободных кораблей.' };
   }
   for (const id of Object.keys(selectedCommanders) as CommanderId[]) {
-    if ((owner.availableCommanders[id] ?? 0) < 1) return 'Выбранный командирский корабль недоступен на этой планете.';
+    if ((owner.availableCommanders[id] ?? 0) < 1) return { code: 'insufficient-commanders', message: 'Выбранный командирский корабль недоступен на этой планете.' };
   }
   return null;
+}
+
+function validateShips(owner: SunOwner, ships: Partial<Record<ShipId, number>>, commanders: Partial<Record<CommanderId, number>> = {}): string | null {
+  return validateShipsDetailed(owner, ships, commanders)?.message ?? null;
 }
 
 /** Takes NPC fixture ships off their planet for the flight; survivors come back on return. */
@@ -449,32 +469,36 @@ function launchRaidFor(state: SaveState, owner: SunOwner, input: RaidLaunchInput
 
 export type SupportInput = { raidId: string; originPlanetId: string; ships: Partial<Record<ShipId, number>>; commanders?: Partial<Record<CommanderId, number>>; requestId: string; departedAt?: number };
 
-function supportCheck(state: SaveState, owner: SunOwner, raid: SunRaidRecord | undefined, ships: Partial<Record<ShipId, number>>, options: SunRuntimeOptions, fixture: boolean, commanders: Partial<Record<CommanderId, number>> = {}): string | null {
-  if (!raid || raid.status !== 'incoming') return 'Входящей атаки на это Солнце уже нет.';
+function supportCheckDetailed(state: SaveState, owner: SunOwner, raid: SunRaidRecord | undefined, ships: Partial<Record<ShipId, number>>, options: SunRuntimeOptions, fixture: boolean, commanders: Partial<Record<CommanderId, number>> = {}): SunFailure | null {
+  if (!raid || raid.status !== 'incoming') return { code: 'target-not-available', message: 'Входящей атаки на это Солнце уже нет.' };
   const membership = allianceOf(state, owner.ownerId);
-  if (membership?.alliance.id === raid.allianceId) return 'Нельзя защищать Солнце от рейда собственного союза.';
+  if (membership?.alliance.id === raid.allianceId) return { code: 'target-not-available', message: 'Нельзя защищать Солнце от рейда собственного союза.' };
   if (!fixture && !Object.values(state.planets).some((planet) => (planet.universeGalaxy ?? 1) === raid.galaxy)) {
-    return 'Защищать Солнце может только владелец планеты в этой галактике.';
+    return { code: 'target-not-available', message: 'Защищать Солнце может только владелец планеты в этой галактике.' };
   }
   const population = sunFleetPopulation(ships, owner.factionId, commanders);
-  if (population <= 0) return 'Выберите боевые корабли для защиты.';
+  if (population <= 0) return { code: 'wrong-ship-composition', message: 'Выберите боевые корабли для защиты.' };
   const committed = selectRaidSides(state, raid.id).defenders.population;
   const remaining = SUN_RAID_CONFIG.populationCapPerSide - committed;
   if (population > remaining) {
-    return `Лимит защиты — ${SUN_RAID_CONFIG.populationCapPerSide.toLocaleString('ru-RU')}: свободно ${Math.max(0, remaining).toLocaleString('ru-RU')} населения.`;
+    return { code: 'capacity-exceeded', message: `Лимит защиты — ${SUN_RAID_CONFIG.populationCapPerSide.toLocaleString('ru-RU')}: свободно ${Math.max(0, remaining).toLocaleString('ru-RU')} населения.` };
   }
   const preview = createSunFlight(owner, {
     missionId: 'sun-support', raidId: raid.id, galaxy: raid.galaxy, system: raid.system, ships, commanders,
     requestId: 'preview', departedAt: options.now, allianceId: null,
   }, options);
-  if (preview.arrivalAt > raid.arrivesAt) return 'Флот не успеет: он прибудет позже атакующих.';
+  if (preview.arrivalAt > raid.arrivesAt) return { code: 'target-not-available', message: 'Флот не успеет: он прибудет позже атакующих.' };
   return null;
+}
+
+function supportCheck(state: SaveState, owner: SunOwner, raid: SunRaidRecord | undefined, ships: Partial<Record<ShipId, number>>, options: SunRuntimeOptions, fixture: boolean, commanders: Partial<Record<CommanderId, number>> = {}): string | null {
+  return supportCheckDetailed(state, owner, raid, ships, options, fixture, commanders)?.message ?? null;
 }
 
 /** «Поддержка солнца»: any owner of a planet in the Sun's galaxy, regardless of alliance. */
 export function sendSunSupport(state: SaveState, input: SupportInput, options: SunRuntimeOptions): SunActionResult {
   const owner = playerOwner(state, input.originPlanetId);
-  if (!owner) return { ok: false, state, error: 'Планета отправления не найдена.' };
+  if (!owner) return { ok: false, state, error: 'Планета отправления не найдена.', code: 'invalid-command' };
   return sendSupportFor(state, owner, input, options, false);
 }
 
@@ -485,11 +509,11 @@ function sendSupportFor(state: SaveState, owner: SunOwner, input: SupportInput, 
   const raid = sunRaid.raids.find((item) => item.id === input.raidId);
   const ships = normalizeSelection(input.ships);
   const commanders = normalizeCommanders(input.commanders);
-  const shipError = validateShips(owner, ships, commanders);
-  if (shipError) return { ok: false, state, error: shipError };
+  const shipError = validateShipsDetailed(owner, ships, commanders);
+  if (shipError) return { ok: false, state, error: shipError.message, code: shipError.code };
   const departedAt = input.departedAt ?? options.now;
-  const error = supportCheck(state, owner, raid, ships, { ...options, now: departedAt }, fixture, commanders);
-  if (error) return { ok: false, state, error };
+  const error = supportCheckDetailed(state, owner, raid, ships, { ...options, now: departedAt }, fixture, commanders);
+  if (error) return { ok: false, state, error: error.message, code: error.code };
   const membership = allianceOf(state, owner.ownerId);
   const flight = createSunFlight(owner, {
     missionId: 'sun-support', raidId: raid!.id, galaxy: raid!.galaxy, system: raid!.system, ships, commanders,
@@ -498,7 +522,7 @@ function sendSupportFor(state: SaveState, owner: SunOwner, input: SupportInput, 
   let next: SaveState = { ...state, flights: appendFlight(state.flights, flight) };
   if (owner.ownerSide === 'player') {
     const resources = getPlanetResources(next, owner.planetId);
-    if (resources.gas < flight.gasCost) return { ok: false, state, error: `Недостаточно газа: нужно ${flight.gasCost.toLocaleString('ru-RU')}.` };
+    if (resources.gas < flight.gasCost) return { ok: false, state, error: `Недостаточно газа: нужно ${flight.gasCost.toLocaleString('ru-RU')}.`, code: 'insufficient-gas' };
     next = replacePlanetResources(next, owner.planetId, { ...resources, gas: resources.gas - flight.gasCost });
   }
   next = detachNpcShips(next, owner, ships, -1);
@@ -755,8 +779,9 @@ function resolveRaid(state: SaveState, raid: SunRaidRecord, at: number, options:
   const attackerCommanderSurvivors = commanderLosses(attackers, report.attackerForce, attack.commanderSources);
   const defenderCommanderSurvivors = commanderLosses(defenders, report.defenderForce, defense.commanderSources);
   const winner = report.winner;
-  // Debris of a Sun battle drift at the Sun (position 0), by the usual 30% rule.
-  const debris = Math.max(0, Math.floor(calculateAttackDebris(report, attack.factionId, defense.factionId)));
+  // Debris of a Sun battle drift at the Sun (position 0), by the common battle
+  // scrap rule (25–35% of destroyed life, one roll per battle).
+  const debris = Math.max(0, Math.floor(calculateAttackDebris(report, attack.factionId, defense.factionId, battleDebrisRoll(reportId))));
 
   // Sun and crystal outcome.
   const holder: CrystalHolder = { kind: 'alliance', id: raid.allianceId };
@@ -1351,7 +1376,7 @@ export type SunDispatchCommand = {
 
 export type SunDispatchOutcome =
   | { ok: true; state: SaveState; flight: FlightRecord; notice: string }
-  | { ok: false; message: string };
+  | { ok: false; message: string; code: SunFailureCode };
 
 /**
  * The «Флоты» screen sends Sun missions through `dispatchFlight`. Support is
@@ -1359,11 +1384,11 @@ export type SunDispatchOutcome =
  * is declared only from «Командование → Операции».
  */
 export function dispatchSunMission(state: SaveState, command: SunDispatchCommand, options: SunRuntimeOptions): SunDispatchOutcome {
-  if (command.missionId === 'sun-attack') return { ok: false, message: 'Рейд на Солнце объявляется только в «Командование → Операции».' };
+  if (command.missionId === 'sun-attack') return { ok: false, code: 'mission-not-supported', message: 'Рейд на Солнце объявляется только в «Командование → Операции».' };
   const sun = parseSunOperationId(command.operationId ?? command.destination?.operationId);
-  if (!sun) return { ok: false, message: 'Выберите Солнце под атакой.' };
+  if (!sun) return { ok: false, code: 'target-not-available', message: 'Выберите Солнце под атакой.' };
   const raid = currentSunRaidState(state).raids.find((item) => item.status === 'incoming' && item.galaxy === sun.galaxy && item.system === sun.system);
-  if (!raid) return { ok: false, message: 'На это Солнце сейчас нет входящей атаки.' };
+  if (!raid) return { ok: false, code: 'target-not-available', message: 'На это Солнце сейчас нет входящей атаки.' };
   const result = sendSunSupport(state, {
     raidId: raid.id,
     originPlanetId: command.originPlanetId,
@@ -1372,9 +1397,9 @@ export function dispatchSunMission(state: SaveState, command: SunDispatchCommand
     requestId: command.requestId,
     departedAt: command.departedAt,
   }, options);
-  if (!result.ok) return { ok: false, message: result.error };
+  if (!result.ok) return { ok: false, message: result.error, code: result.code ?? 'target-not-available' };
   const flight = result.state.flights.records.find((item) => item.requestId === command.requestId);
-  return flight ? { ok: true, state: result.state, flight, notice: result.notice } : { ok: false, message: 'Флот поддержки не создан.' };
+  return flight ? { ok: true, state: result.state, flight, notice: result.notice } : { ok: false, code: 'invalid-command', message: 'Флот поддержки не создан.' };
 }
 
 /** Suns of the player's galaxies that are under attack: the «Поддержка солнца» targets. */

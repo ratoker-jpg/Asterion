@@ -228,7 +228,9 @@ const commanderInfoByName: Readonly<Record<string, ShipInfoDefinition>> = Object
         name: ability.ability,
         description: ability.description,
         scaling: ability.ratePerLevel,
-        note: ability.note ?? 'Способность хранится в едином typed commander catalog. Математическое применение в бою пока не реализовано.',
+        note: ability.note ?? (ability.implementationStatus === 'implemented'
+          ? 'Способность действует в Asterion.'
+          : 'Скоро: способность ещё не действует в Asterion.'),
         source: commanderId === 'corsair' ? 'ASTERION' : 'NEMEXIA',
       },
     } satisfies ShipInfoDefinition] as const;

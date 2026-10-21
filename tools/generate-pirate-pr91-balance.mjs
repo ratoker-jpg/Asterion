@@ -11,12 +11,14 @@ import {planPirateRaidFleet} from '../src/domain/pirates/raid.ts';
 import {pirateDebrisRewardMultiplier} from '../src/domain/pirates/threat.ts';
 import {calculateAttackDebris,calculateAttackLoot} from '../src/application/attack.ts';
 import {calculatePirateForceDebris} from '../src/domain/pirates/debris.ts';
+import {battleDebrisRoll} from '../src/domain/combat/debris.ts';
+import {PR91_HANGAR_CAPACITY} from './pr91-constants.mjs';
 import {calculateFlightFuel} from '../src/domain/flights/fuel.ts';
 import {startRecyclingJob,collectRecyclingJob} from '../src/domain/buildings/recycling.ts';
 import {collectOrbitalDebrisAtCoordinate,getOrbitalDebrisAtCoordinate} from '../src/domain/espionage/orbital-debris.ts';
 
 const PREFIX='pr91-seeded-v1';
-const H=25112;
+const H=PR91_HANGAR_CAPACITY;
 const CASES_PER_COMBINATION=6;
 const SCORE_BANDS=[
   {id:'low',resourcePoints:1000,battlePoints:0,population:1000},
@@ -148,8 +150,8 @@ for(const faction of COMBAT_FACTION_IDS){
   const ownCatalog=[...getFactionShipCatalog(faction),...getFactionDefenseCatalog(faction)];
   for(const band of SCORE_BANDS)for(const level of [0,5,10])for(let index=0;index<CASES_PER_COMBINATION;index++){
     const profile=techFactorProfile(band,index);
-    // Span the approved full-hangar bonus boundaries with real fleets:
-    // x1 (<50%), x1.25 (50%), x1.5 (75%), x2 (>=95%), x2.5 (full).
+    // Span the hangar-share reward boundaries of pirateDebrisRewardMultiplier
+    // (x0.7 <50%, x0.9 50-85%, x1.0 85-95%, x1.3 >=95%, x1.5 full hangar).
     // The +16-pop safety margin for the 95% case accounts for integer
     // per-class formation without changing any game multiplier.
     const highTierPopulation=[Math.floor(H*.25),Math.ceil(H*.5)+16,
@@ -166,10 +168,15 @@ for(const faction of COMBAT_FACTION_IDS){
     const report=resolveCombat(inputFor('base',faction,profile,ownFleet,[],pirates,level,seedBase),
       {reportId:seedBase,missionType:'pirate-elimination'});
     const fullWin=report.winner==='attacker'&&report.defenderForce.populationAfter===0;
-    const basePirateDebris=calculatePirateForceDebris(report.defenderForce,report.attackerForce,report.missionType);
-    const baselineDebris=calculateAttackDebris(report,faction,faction);
-    const multiplier=fullWin?pirateDebrisRewardMultiplier(ownFleet.population,H):1;
-    const extraDebris=Math.max(0,Math.floor(basePirateDebris*multiplier)-basePirateDebris);
+    const debrisRoll=battleDebrisRoll(report.id);
+    const basePirateDebris=calculatePirateForceDebris(report.defenderForce,report.attackerForce,report.missionType,debrisRoll);
+    const baselineDebris=calculateAttackDebris(report,faction,faction,debrisRoll);
+    // Production (resolvePirateEliminationAtTarget): full win -> hangar reward,
+    // draw -> x0.75, defeat -> x0.5, applied to pirate wreckage only. Penalties
+    // are kept: extraDebris may be negative.
+    const multiplier=fullWin?pirateDebrisRewardMultiplier(ownFleet.population,H)
+      :report.winner==='draw'?0.75:0.5;
+    const extraDebris=Math.floor(basePirateDebris*multiplier)-basePirateDebris;
     const ownDebris=Math.max(0,baselineDebris-basePirateDebris);
     const producedDebris=baselineDebris+extraDebris;
     const collected=collectModel(faction,producedDebris,level);
@@ -214,7 +221,9 @@ for(const faction of COMBAT_FACTION_IDS){
     const defending=resolveCombat(inputFor('incoming',faction,profile,ownFleet,defenses,raidPirates,level,incomingSeed),
       {reportId:incomingSeed,missionType:'pirate-raid'});
     const loot=calculateAttackLoot(defending,{metal:1000000,minerals:1000000,gas:1000000},faction);
-    const actualDebris=calculateAttackDebris(defending,faction,faction);
+    const raidRoll=battleDebrisRoll(defending.id);
+    const actualDebris=calculateAttackDebris(defending,faction,faction,raidRoll);
+    const raidPirateDebris=calculatePirateForceDebris(defending.attackerForce,defending.defenderForce,'pirate-raid',raidRoll);
     const battleOwnLossCost=costOf(ownCatalog,defending.defenderForce);
     const damage=defending.defenderForce.populationBefore-defending.defenderForce.populationAfter;
     const collectedRaid=collectModel(faction,actualDebris,level);
@@ -225,8 +234,8 @@ for(const faction of COMBAT_FACTION_IDS){
       garrisonCoefficient:fleet.coefficient,multiplier:1,
       lostPlayerPopulation:damage,ownLossCost:battleOwnLossCost,
       attackGas:0,collectionGas:collectedRaid.collectionGas,
-      pirateDebris:calculatePirateForceDebris(defending.attackerForce,defending.defenderForce,'pirate-raid'),
-      ownDebris:Math.max(0,actualDebris-calculatePirateForceDebris(defending.attackerForce,defending.defenderForce,'pirate-raid')),
+      pirateDebris:raidPirateDebris,
+      ownDebris:Math.max(0,actualDebris-raidPirateDebris),
       extraDebris:0,producedDebris:actualDebris,collectedDebris:collectedRaid.debrisCollected,
       loot,stolenResources:stolen,
       output75:collectedRaid.output75,output120:collectedRaid.output120,

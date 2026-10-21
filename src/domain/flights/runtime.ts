@@ -20,6 +20,8 @@ export type DispatchFlightInput = {
   selectedShips: Partial<Record<ShipId, number>>;
   selectedCommanders?: Partial<Record<CommanderId, number>>;
   selectedCommanderLevels?: Partial<Record<CommanderId, number>>;
+  /** Levels used for flight-speed abilities (Typhoon); falls back to selectedCommanderLevels. */
+  speedCommanderLevels?: Partial<Record<CommanderId, number>>;
   recycleCapacity?: number;
   gasCapacity?: number;
   attackSnapshot?: AttackLaunchSnapshot;
@@ -79,7 +81,8 @@ export function createFlightRecord(input: DispatchFlightInput): FlightRecord {
     throw new Error('Only Space Flight may use a destinationless route.');
   }
   const routeDistance = isSpaceFlight ? 0 : calculateRouteDistance(input.originCoordinate, input.destination.coordinate);
-  const effectiveSpeed = isSpaceFlight ? 0 : calculateEffectiveFleetSpeed(input.factionId, input.selectedShips, input.science, selectedCommanders);
+  const effectiveSpeed = isSpaceFlight ? 0 : calculateEffectiveFleetSpeed(input.factionId, input.selectedShips, input.science, selectedCommanders,
+    input.speedCommanderLevels ?? input.selectedCommanderLevels ?? {});
   const oneWayDurationMs = isSpaceFlight
     ? requestedDuration!
     : calculateOneWayDurationMs(input.originCoordinate, input.destination.coordinate, effectiveSpeed,

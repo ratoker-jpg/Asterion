@@ -46,22 +46,36 @@ test('science queue display pause starts at the first unfinished locked task and
   assert.equal(getScienceQueuePauseAt(queue, new Map([['another-colony', 16_000]])), undefined);
 });
 
-test('catalog contains the 22 source-backed sciences and does not invent science 16', () => {
-  assert.equal(SCIENCE_CATALOG.length, 22);
-  assert.equal(new Set(SCIENCE_CATALOG.map((science) => science.id)).size, 22);
+test('catalog contains the 21 source-backed sciences, without science 16 and removed Ecology (13)', () => {
+  assert.equal(SCIENCE_CATALOG.length, 21);
+  assert.equal(new Set(SCIENCE_CATALOG.map((science) => science.id)).size, 21);
   assert.equal(SCIENCE_CATALOG.some((science) => Number(science.id) === 16), false);
+  assert.equal(SCIENCE_CATALOG.some((science) => Number(science.id) === 13), false);
+});
+
+test('an old save with Ecology (13) levels and queue loads without the removed science', () => {
+  const migrated = migrateScienceState({
+    levels: { 1: 3, 13: 7 },
+    queue: [
+      { id: 'old-ecology', scienceId: 13, planetId: 'helion-01', fromLevel: 7, toLevel: 8, startedAt: 0, finishAt: 1_000, durationMs: 1_000, cost: { metal: 1, minerals: 1, gas: 1, energy: 0 } },
+      { id: 'kept-energy', scienceId: 1, planetId: 'helion-01', fromLevel: 3, toLevel: 4, startedAt: 1_000, finishAt: 2_000, durationMs: 1_000, cost: { metal: 1, minerals: 1, gas: 1, energy: 0 } },
+    ],
+  });
+  assert.equal(Object.hasOwn(migrated.levels, 13), false);
+  assert.equal(migrated.levels[1], 3);
+  assert.deepEqual(migrated.queue.map((task) => task.id), ['kept-energy']);
 });
 test('section membership is deterministic', () => {
   assert.deepEqual(SCIENCE_SECTIONS.map((section) => [section.id, sciencesForSection(section.id).map((science) => science.id)]), [
     ['basic', [1, 2, 3, 4]],
-    ['advanced', [5, 6, 7, 8, 9, 10, 11, 12, 13]],
+    ['advanced', [5, 6, 7, 8, 9, 10, 11, 12]],
     ['expert', [14, 15, 17, 21, 22, 23]],
     ['additional', [18, 19, 20]],
   ]);
 });
 
 test('every science maps to an Asterion technology art slug', () => {
-  assert.equal(new Set(SCIENCE_CATALOG.map((science) => science.artSlug)).size, 22);
+  assert.equal(new Set(SCIENCE_CATALOG.map((science) => science.artSlug)).size, 21);
   for (const science of SCIENCE_CATALOG) assert.match(science.artSlug, /^technology\.shared\.[a-z0-9-]+\.png$/);
 });
 
@@ -81,7 +95,7 @@ test('all prerequisites reference valid source science ids', () => {
   }
 });
 
-test('official NEMEXIA RAW 0 → 1 base costs are present for all 22 sciences', () => {
+test('official NEMEXIA RAW 0 → 1 base costs are present for all 21 sciences', () => {
   const expected = {
     1: { metal: 1_000, minerals: 500, gas: 0, energy: 0 },
     2: { metal: 400, minerals: 200, gas: 50, energy: 0 },
@@ -95,7 +109,6 @@ test('official NEMEXIA RAW 0 → 1 base costs are present for all 22 sciences', 
     10: { metal: 200, minerals: 100, gas: 0, energy: 0 },
     11: { metal: 500, minerals: 250, gas: 50, energy: 0 },
     12: { metal: 1_000, minerals: 1_000, gas: 1_000, energy: 0 },
-    13: { metal: 2_000, minerals: 1_500, gas: 500, energy: 0 },
     14: { metal: 2_500, minerals: 3_750, gas: 1_500, energy: 0 },
     15: { metal: 0, minerals: 0, gas: 0, energy: 250_000 },
     17: { metal: 10_000, minerals: 5_000, gas: 0, energy: 0 },
@@ -133,7 +146,7 @@ test('canonical science maxima are per technology and the laboratory is level 20
     Object.fromEntries(SCIENCE_CATALOG.map((science) => [science.id, science.maxLevel])),
     {
       1: 10, 2: 15, 3: 10, 4: 15, 5: 20, 6: 15, 7: 20, 8: 15, 9: 15,
-      10: 15, 11: 15, 12: 15, 13: 15, 14: 15, 15: 1, 17: 10,
+      10: 15, 11: 15, 12: 15, 14: 15, 15: 1, 17: 10,
       18: 10, 19: 10, 20: 10, 21: 10, 22: 10, 23: 10,
     },
   );

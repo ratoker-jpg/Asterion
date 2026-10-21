@@ -148,7 +148,6 @@ export function creditTransportCargo(
 export function getOverflowWarning(
   cargo: unknown,
   destinationResources: CreditWalletInput,
-  _destinationDebris: unknown,
   caps: ResourceCapacitiesInput | undefined,
 ): boolean {
   const delivery = getCappedDelivery(destinationResources, caps, cargo);

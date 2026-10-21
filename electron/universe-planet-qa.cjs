@@ -713,7 +713,7 @@ async function runViewport(width, height) {
     const npcAttackActions = npc.actions.filter((action) => action.action === 'attack');
     if (npc.kind !== 'npc' || npc.ownerName !== 'Бот 01' || !npc.ownerId || npc.planetRows !== 7 || npc.actions.length !== 21
       || npcSpyActions.length !== 7 || npcSpyActions.some((action) => action.disabled || action.status !== 'supported' || !action.title.includes('доступна для шпионажа'))
-      || npcFleetActions.length !== 7 || npcFleetActions.some((action) => !action.disabled || action.status !== 'disabled' || !action.title.includes('только на свою или явную союзную планету'))
+      || npcFleetActions.length !== 7 || npcFleetActions.some((action) => action.disabled || action.status !== 'supported' || !action.title.includes('сверх её склада сгорят'))
       || npcAttackActions.length !== 7 || npcAttackActions.some((action) => action.disabled || action.status !== 'supported' || !action.title.includes('доступна для атаки'))) {
       throw new Error(`${label}: NPC action/list contract failed ${JSON.stringify(npc)}`);
     }
@@ -768,7 +768,7 @@ async function runViewport(width, height) {
       const reopenedAttackActions = reopened.actions.filter((action) => action.action === 'attack');
       if (reopened.ownerId !== npc.ownerId || reopened.ownerName !== 'Бот 01' || JSON.stringify(reopened.rows) !== JSON.stringify(npc.rows) || reopened.actions.length !== 21
         || reopenedSpyActions.length !== 7 || reopenedSpyActions.some((action) => action.disabled || action.status !== 'supported' || !action.title.includes('доступна для шпионажа'))
-        || reopenedFleetActions.length !== 7 || reopenedFleetActions.some((action) => !action.disabled || action.status !== 'disabled' || !action.title.includes('только на свою или явную союзную планету'))
+        || reopenedFleetActions.length !== 7 || reopenedFleetActions.some((action) => action.disabled || action.status !== 'supported' || !action.title.includes('сверх её склада сгорят'))
         || reopenedAttackActions.length !== 7 || reopenedAttackActions.some((action) => action.disabled || action.status !== 'supported' || !action.title.includes('доступна для атаки'))) {
         throw new Error(`${label}: visit did not reopen the same seven holdings ${JSON.stringify(reopened)}`);
       }
@@ -1125,7 +1125,7 @@ async function runViewport(width, height) {
       map: { system: map.system, systemOptions: map.systemOptions, positionCount: map.positionCount, asteroidCount: map.asteroidCount, objectKinds: map.objectKinds, homeCaption: map.homeCaption },
       layout: { htmlClass: map.htmlClass, webStageScale: map.webStageScale, visualViewport: map.visualViewport, stageRect: map.stageRect },
       player: { ownerName: player.ownerName, points: player.points, planetRows: player.planetRows },
-      npc: { ownerName: npc.ownerName, planetRows: npc.planetRows, rows: npc.rows, fleetActionsDisabled: npcFleetActions.every((action) => action.disabled && action.status === 'disabled') },
+      npc: { ownerName: npc.ownerName, planetRows: npc.planetRows, rows: npc.rows, fleetActionsEnabled: npcFleetActions.every((action) => !action.disabled && action.status === 'supported') },
       specialInspectors: { empty: empty.kind, asteroid: freeAsteroid.kind, occupiedAsteroid: occupiedAsteroid.kind, pirate: pirate.kind, anomaly: anomaly.kind, uninhabited: 'uninhabited', unique: 'unique' },
       debrisMarkers: {
         dead: { coordinate: debrisFixtures.deadCoordinate, amount: deadMarker.amount, interaction: deadDebrisInteraction },

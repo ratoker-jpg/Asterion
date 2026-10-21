@@ -4,6 +4,7 @@ import { createInitialSaveState, createPersistenceFacade } from './persistence.t
 import { createBot01Planets } from '../domain/espionage/fixtures.ts';
 import {
   dispatchFlight,
+  getPlayerFlightSlotUsage,
   reconcileFlights,
   recallFlight,
   requestSpyReport,
@@ -162,6 +163,11 @@ test('destroyed spy target returns the probe once without a new report', () => {
     const arrival = reconcileFlights(attack.state, attack.flight.arrivalAt, undefined, { mode: 'test', testTimeScale: 15 });
     state = arrival.state;
     destroyed = state.flights.records.some((flight) => flight.attackResolution?.planetDestroyed === true);
+    // Land the attack fleet before the next wave so it frees its flight slot (Computer Systems limit).
+    const returnAt = state.flights.records.find((flight) => flight.id === attack.flight.id)?.returnAt;
+    if (!destroyed && returnAt && returnAt < delayedArrivalAt) {
+      state = reconcileFlights(state, returnAt, undefined, { mode: 'test', testTimeScale: 15 }).state;
+    }
   }
   assert.equal(destroyed, true);
   const spyFlight = state.flights.records.find((flight) => flight.missionId === 'espionage');
@@ -780,4 +786,63 @@ test('old-contract bot planets are regenerated while historical reports stay imm
   assert.equal(report.population?.defense, 300);
   assert.equal(report.population?.total, 1_600);
   assert.equal(report.population?.civilian, 1_600);
+});
+
+test('Computer Systems flight limit: three slots at level 0, returns hold a slot, spy probes never do', () => {
+  const base = createInitialSaveState('test', 1_000);
+  const state0 = {
+    ...base,
+    science: { ...base.science, levels: { ...base.science.levels, 6: 0 } },
+    planets: { ...base.planets, [base.currentPlanetId]: {
+      ...base.planets[base.currentPlanetId],
+      fleet: { ...base.planets[base.currentPlanetId].fleet, ships: { ...base.planets[base.currentPlanetId].fleet.ships, scout: 50, 'spy-probe': 5 } },
+    } },
+  };
+  const ally = { kind: 'planet' as const, planetId: 'test-mode-ally-ira-vel-v1', coordinate: { galaxy: 1, system: 1, position: 2 } };
+  const transport = (requestId: string) => ({
+    requestId, missionId: 'transport' as const, originPlanetId: base.currentPlanetId, destination: ally,
+    targetRelation: 'ally' as const, selectedShips: { scout: 1 }, cargo: { metal: 1, minerals: 0, gas: 0, debris: 0 }, departedAt: 1_000,
+  });
+  const options = { now: 1_000, mode: 'test' as const };
+  let state: ReturnType<typeof createInitialSaveState> = state0;
+  for (const id of ['limit-1', 'limit-2', 'limit-3']) {
+    const sent = dispatchFlight(state, transport(id), options);
+    assert.equal(sent.ok, true);
+    if (!sent.ok) return;
+    state = sent.state;
+  }
+  assert.deepEqual(getPlayerFlightSlotUsage(state), { used: 3, limit: 3, free: 0 });
+  const blocked = dispatchFlight(state, transport('limit-4'), options);
+  assert.equal(blocked.ok, false);
+  if (blocked.ok) return;
+  assert.equal(blocked.error.code, 'flight-limit-reached');
+  assert.match(blocked.error.message, /3 из 3/);
+
+  const targetId = Object.keys(getEspionageTargets(state.espionage))[0];
+  const spy = dispatchFlight(state, spyCommand(state, 'limit-spy', targetId), options);
+  assert.equal(spy.ok, true, 'spy probes ignore the flight limit');
+  if (!spy.ok) return;
+  assert.equal(getPlayerFlightSlotUsage(spy.state).used, 3);
+
+  // A delivered transport flying home still holds its slot.
+  const first = spy.state.flights.records.find((flight) => flight.requestId === 'limit-1')!;
+  const delivered = reconcileFlights(spy.state, first.arrivalAt, undefined, { mode: 'test' }).state;
+  assert.equal(delivered.flights.records.find((flight) => flight.requestId === 'limit-1')?.phase, 'returning');
+  assert.equal(dispatchFlight(delivered, transport('limit-4'), options).ok, false);
+
+  const levelTwo = { ...state, science: { ...state.science, levels: { ...state.science.levels, 6: 2 } } };
+  assert.equal(getPlayerFlightSlotUsage(levelTwo).limit, 6);
+  assert.equal(dispatchFlight(levelTwo, transport('limit-4'), options).ok, true);
+});
+
+test('a saved spy report roll is normalized into the canonical 0..99 range', () => {
+  const report = (roll: unknown) => ({
+    id: `spy-report-roll-${String(roll)}`, missionId: 'mission-roll', createdAt: 1_000, sourcePlanetId: 'helion-01',
+    targetPlanetId: 'bot-01', targetPlanetName: 'Бот 01 I', targetOwnerId: 'npc-bot-01', targetOwnerName: 'Бот 01',
+    targetRaceId: 'veyra', targetRelation: 'neutral', targetCoordinate: { galaxy: 1, system: 2, position: 3 },
+    spyLevel: 10, targetEspionageLevel: 10, delta: 0, roll, quality: 'basic',
+    resources: { metal: 1, minerals: 1, gas: 1, debris: 0, developmentEnergy: 0 }, firstReport: false,
+  });
+  const migrated = migrateEspionageState({ missions: [], hunterNotices: [], reports: [report(450), report(-3), report(57.9), report('x')] });
+  assert.deepEqual(migrated.reports.map((item) => item.roll), [99, 0, 57, 0]);
 });
