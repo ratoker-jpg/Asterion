@@ -37,7 +37,7 @@
    open starfield (no extra outer plate), the sidebar spans the page height and
    keeps its queue at the bottom, the catalog cards never change height. */
 .spaceport-upgrades-v2 { background: none; padding: 18px; min-height: 0; }
-.spaceport-sidebar-v2 { position: static; align-self: start; min-height: 846px; }
+.spaceport-sidebar-v2 { align-self: start; min-height: 846px; }
 .spaceport-side-queue { margin-top: auto; padding-top: 16px; border: 0; border-top: 1px solid rgba(66, 185, 214, .14); border-radius: 0; background: none; }
 .spaceport-side-queue > header { font-weight: 700; letter-spacing: 1px; }
 .spaceport-back-v2 { margin-top: 14px; }
