@@ -1,4 +1,5 @@
 import { PIRATE_CATALOG_BY_ID } from './catalog.ts';
+import { isBattleDebrisRoll, BATTLE_DEBRIS_ROLL_MIN } from '../combat/debris.ts';
 import { isPirateShipId } from '../combat/side-entity.ts';
 import { isPiratePveMissionType, type BattleForceSnapshot, type BattleMissionType } from '../combat/report.ts';
 
@@ -36,22 +37,28 @@ function corsairState(force: BattleForceSnapshot): CommanderCorsairSalvageState 
   };
 }
 
+/**
+ * Pirate wreckage on the common battle base: u x life of destroyed pirate
+ * hulls, scaled by share / PIRATE_ORDINARY_DEBRIS_SHARE. In ordinary battles
+ * the ratio is 1 (same as any other hull); PvE pirate battles keep their
+ * relative bonus (x2 base, Corsair raises it as before). `debrisRoll` must be
+ * the same per-battle roll used for the ordinary part (battleDebrisRoll).
+ */
 export function calculatePirateForceDebris(
   force: BattleForceSnapshot,
   opposingForce: BattleForceSnapshot,
   missionType: BattleMissionType,
+  debrisRoll: number,
 ) {
   const share = isPiratePveMissionType(missionType)
     ? pirateDebrisShare(corsairState(opposingForce))
     : PIRATE_ORDINARY_DEBRIS_SHARE;
-  return force.stacks.reduce((total, stack) => {
+  const roll = isBattleDebrisRoll(debrisRoll) ? debrisRoll : BATTLE_DEBRIS_ROLL_MIN;
+  const life = force.stacks.reduce((total, stack) => {
     if (!isPirateShipId(stack.entityId)) return total;
     const destroyed = safeCount(stack.destroyed);
     if (destroyed <= 0) return total;
-    const cost = PIRATE_CATALOG_BY_ID[stack.entityId].cost;
-    // Match the existing per-stack, per-resource floor rounding.
-    return total
-      + Math.floor(cost.metal * destroyed * share)
-      + Math.floor(cost.minerals * destroyed * share);
+    return total + PIRATE_CATALOG_BY_ID[stack.entityId].combat.life * destroyed;
   }, 0);
+  return Math.floor(roll * life * (share / PIRATE_ORDINARY_DEBRIS_SHARE));
 }

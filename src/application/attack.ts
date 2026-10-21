@@ -28,6 +28,7 @@ import type { AttackLaunchSnapshot, AttackLoot, AttackResolution } from '../doma
 import { recordBattleScoreAward } from '../domain/rating/scoring.ts';
 import { isPirateShipId } from '../domain/combat/side-entity.ts';
 import { calculatePirateForceDebris } from '../domain/pirates/debris.ts';
+import { BATTLE_DEBRIS_EXCLUDED_IDS, battleDebrisRoll } from '../domain/combat/debris.ts';
 import { pirateHangarFraction } from '../domain/pirates/threat.ts';
 import { PIRATE_CATALOG_BY_ID } from '../domain/pirates/catalog.ts';
 import { normalizePirateRaidSnapshot } from '../domain/pirates/mission.ts';
@@ -149,32 +150,38 @@ function targetShipStacksWithProfile(state: SaveState, target: SpyTargetState): 
   return shipStacks(target.raceId, target.fleet.ships, resolveSpyOwnerProfile(target, state.espionage?.bot01Profile)?.shipLevels);
 }
 
-function reportDestroyedDebris(report: BattleReport, side: 'attacker' | 'defender', factionId: CombatFactionId): number {
+/** Base catalog life of destroyed non-pirate units on one side (see BATTLE_DEBRIS_LIFE_BASIS). */
+function reportDestroyedLife(report: BattleReport, side: 'attacker' | 'defender', factionId: CombatFactionId): number {
   const force = side === 'attacker' ? report.attackerForce : report.defenderForce;
-  let debris = 0;
+  let life = 0;
   for (const stack of [...(force.stacks ?? []), ...(force.defenses ?? [])]) {
     if (isPirateShipId(stack.entityId)) continue;
+    if (BATTLE_DEBRIS_EXCLUDED_IDS.has(stack.entityId)) continue;
     const entity = getFactionCombatEntity(factionId, stack.entityId);
-    // Commanders are combat ships in the same construction catalog. Their
-    // destroyed hulls therefore contribute to orbit debris just like regular
-    // ships and defensive installations.
+    // Ships (satellites included), commanders and defenses all leave scrap.
     if (entity.kind !== 'ship' && entity.kind !== 'commander' && entity.kind !== 'defense') continue;
-    const destroyed = safeCount(stack.destroyed);
-    debris += Math.floor(entity.cost.metal * destroyed * 0.30)
-      + Math.floor(entity.cost.minerals * destroyed * 0.30);
+    life += entity.combat.life * safeCount(stack.destroyed);
   }
-  return debris;
+  return life;
 }
 
+/**
+ * Battle scrap = floor(u x base life of all destroyed units of both sides),
+ * u in [0.25, 0.35) rolled once per battle from the report id. Pirate hulls
+ * use the same u (see calculatePirateForceDebris), so callers can subtract the
+ * pirate part from this total.
+ */
 export function calculateAttackDebris(
   report: BattleReport,
   attackerFactionId: CombatFactionId,
   defenderFactionId: CombatFactionId,
+  debrisRoll: number = battleDebrisRoll(report.id),
 ): number {
-  return reportDestroyedDebris(report, 'attacker', attackerFactionId)
-    + reportDestroyedDebris(report, 'defender', defenderFactionId)
-    + calculatePirateForceDebris(report.attackerForce, report.defenderForce, report.missionType)
-    + calculatePirateForceDebris(report.defenderForce, report.attackerForce, report.missionType);
+  const ordinaryLife = reportDestroyedLife(report, 'attacker', attackerFactionId)
+    + reportDestroyedLife(report, 'defender', defenderFactionId);
+  return Math.floor(debrisRoll * ordinaryLife)
+    + calculatePirateForceDebris(report.attackerForce, report.defenderForce, report.missionType, debrisRoll)
+    + calculatePirateForceDebris(report.defenderForce, report.attackerForce, report.missionType, debrisRoll);
 }
 
 function survivorsCargo(report: BattleReport, factionId: CombatFactionId) {
@@ -438,9 +445,10 @@ export function resolvePirateEliminationAtTarget(state: SaveState, flight: Fligh
   if (encounter.kind !== 'resolved') return null;
   // The ordinary entity lookup skips all pirate stacks; pirate hull debris is
   // calculated separately by the existing PvE debris rule (including Corsair).
-  const baseDebris = calculateAttackDebris(encounter.report, launch.attackerFactionId, launch.attackerFactionId);
+  const debrisRoll = battleDebrisRoll(encounter.report.id);
+  const baseDebris = calculateAttackDebris(encounter.report, launch.attackerFactionId, launch.attackerFactionId, debrisRoll);
   const basePirateDebris = calculatePirateForceDebris(
-    encounter.report.defenderForce, encounter.report.attackerForce, encounter.report.missionType);
+    encounter.report.defenderForce, encounter.report.attackerForce, encounter.report.missionType, debrisRoll);
   // Modifiers are frozen at launch. Legacy defeats/draws retain x1.
   const multiplier=encounter.victory&&snapshot.eliminationBudget ? (snapshot.rewardMultiplier??1)
     : encounter.report.winner==='draw' ? (snapshot.drawMultiplier??1)
@@ -508,7 +516,7 @@ export function resolveAttackAtTarget(state: SaveState, flight: FlightRecord, no
   const input = createAttackInput(state, flight, target);
   if (input.attacker.ships.length === 0) return null;
   const rawReport = resolveCombat(input, { reportId, missionType: 'attack' });
-  const debris = calculateAttackDebris(rawReport, input.attacker.factionId!, input.defender.factionId!);
+  const debris = calculateAttackDebris(rawReport, input.attacker.factionId!, input.defender.factionId!, battleDebrisRoll(reportId));
   const loot = calculateAttackLoot(rawReport, target.resources, input.attacker.factionId!);
   const reportWithOutcome: BattleReport = {
     ...rawReport,
@@ -684,7 +692,7 @@ export function resolveBot01IncomingAttack(state: SaveState, flight: FlightRecor
   const input = createBot01IncomingAttackInput(state, flight, source, target);
   if (input.attacker.ships.length === 0) return null;
   const rawReport = resolveCombat(input, { reportId, missionType: 'attack' });
-  const debris = calculateAttackDebris(rawReport, input.attacker.factionId!, input.defender.factionId!);
+  const debris = calculateAttackDebris(rawReport, input.attacker.factionId!, input.defender.factionId!, battleDebrisRoll(reportId));
   const targetResources = getPlanetResources(state, flight.destinationPlanetId);
   const loot = calculateAttackLoot(rawReport, targetResources, input.attacker.factionId!);
   const reportWithOutcome: BattleReport = {
@@ -977,7 +985,7 @@ export function resolvePirateIncomingRaid(state: SaveState, flight: FlightRecord
     profileId:'asterion-pirate-raid-v1',
   };
   const rawReport = resolveCombat(input,{reportId,missionType:'pirate-raid'});
-  const debris = calculateAttackDebris(rawReport,factionId,factionId);
+  const debris = calculateAttackDebris(rawReport,factionId,factionId,battleDebrisRoll(reportId));
   const targetResources = playerTarget
     ? getPlanetResources(state,flight.destinationPlanetId)
     : npcTarget!.resources;

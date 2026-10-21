@@ -17,6 +17,7 @@ import {
 } from '../domain/pirates/contact.ts';
 import { calculateAttackDebris } from './attack.ts';
 import { calculatePirateForceDebris } from '../domain/pirates/debris.ts';
+import { battleDebrisRoll } from '../domain/combat/debris.ts';
 import { pirateHangarFraction } from '../domain/pirates/threat.ts';
 import { calculatePirateEliminationPopulationBudget } from '../domain/pirates/profile.ts';
 import { isPirateMissionSnapshot, normalizePirateMissionSnapshot } from '../domain/pirates/mission.ts';
@@ -231,7 +232,7 @@ test('public elimination dispatch resolves a full wipe, applies the quiet window
 
   const corsair = report.attackerForce.stacks.find((stack) => stack.entityId === 'corsair');
   assert.equal(corsair?.countAfter, 1);
-  const expectedPirateDebris = calculatePirateForceDebris(report.defenderForce, report.attackerForce, report.missionType);
+  const expectedPirateDebris = calculatePirateForceDebris(report.defenderForce, report.attackerForce, report.missionType, battleDebrisRoll(report.id));
   assert.ok(expectedPirateDebris > 0);
   const reportDebris = report.debris ?? 0;
   assert.ok(reportDebris >= expectedPirateDebris);
@@ -283,13 +284,13 @@ test('a defeated commander is removed once, contributes ordinary debris, and doe
   assert.equal(arrived.state.pirate?.contact.defeatedCycles[contact.contactCycleKey], undefined);
   assertNoBattlePointAward(arrived.state, reportId);
   const corsairEntity = COMMANDER_COMBAT_CATALOG.find((entity) => entity.id === 'corsair')!;
-  const corsairOrdinaryDebris = Math.floor(corsairEntity.cost.metal * 0.3) + Math.floor(corsairEntity.cost.minerals * 0.3);
-  const basePirateDebris = calculatePirateForceDebris(report.defenderForce, report.attackerForce, report.missionType);
+  const corsairOrdinaryDebris = Math.floor(0.25 * corsairEntity.combat.life);
+  const basePirateDebris = calculatePirateForceDebris(report.defenderForce, report.attackerForce, report.missionType, battleDebrisRoll(report.id));
   const expectedMultiplier=report.winner==='draw'?0.75:0.5;
   assert.equal(report.pirateReward?.multiplier,expectedMultiplier);
   const ownDebris=calculateAttackDebris(report,launched.flight.attackSnapshot!.attackerFactionId,
     launched.flight.attackSnapshot!.attackerFactionId)-basePirateDebris;
-  assert.ok(ownDebris>=corsairOrdinaryDebris,'own hull debris remains at standard 30%, even on pirate defeat');
+  assert.ok(ownDebris>=corsairOrdinaryDebris,'own hull debris stays on the common 25–35% base, even on pirate defeat');
   assert.equal(report.debris,ownDebris+Math.floor(basePirateDebris*expectedMultiplier),
     'only pirate wreckage receives x0.5 or x0.75; own wreckage is never penalized');
 

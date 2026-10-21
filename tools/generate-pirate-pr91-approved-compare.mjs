@@ -8,6 +8,7 @@ import { resolveCombat } from '../src/domain/combat/resolver.ts';
 import { createPirateProfile, calculatePirateEliminationPopulationBudget } from '../src/domain/pirates/profile.ts';
 import { PIRATE_BASE_SHIPS, PIRATE_CATALOG_BY_ID } from '../src/domain/pirates/catalog.ts';
 import { calculatePirateForceDebris } from '../src/domain/pirates/debris.ts';
+import { battleDebrisRoll } from '../src/domain/combat/debris.ts';
 import { pirateDebrisRewardMultiplier } from '../src/domain/pirates/threat.ts';
 import { calculateAttackDebris } from '../src/application/attack.ts';
 import { calculateFlightFuel } from '../src/domain/flights/fuel.ts';
@@ -100,8 +101,9 @@ function runBattle(faction,player,profile,pirates,seed){
   },{reportId:seed,missionType:'pirate-elimination'});
 }
 const net = (faction,player,report) => {
-  const destroyedPirate=calculatePirateForceDebris(report.defenderForce,report.attackerForce,'pirate-elimination');
-  const orbitalDebris=calculateAttackDebris(report,faction,faction);
+  const debrisRoll=battleDebrisRoll(report.id);
+  const destroyedPirate=calculatePirateForceDebris(report.defenderForce,report.attackerForce,'pirate-elimination',debrisRoll);
+  const orbitalDebris=calculateAttackDebris(report,faction,faction,debrisRoll);
   const fullWin=report.winner==='attacker'&&report.defenderForce.populationAfter===0;
   const multiplier=fullWin?pirateDebrisRewardMultiplier(player.actual,HANGAR):1;
   const extra=Math.max(0,Math.floor(destroyedPirate*multiplier)-destroyedPirate);

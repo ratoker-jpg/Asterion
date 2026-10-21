@@ -7,6 +7,7 @@ import {DEFAULT_COMBAT_PRIORITY} from '../src/domain/combat/priority.ts';
 import {resolveCombat} from '../src/domain/combat/resolver.ts';
 import {createPirateProfile,calculatePirateEliminationPopulationBudget} from '../src/domain/pirates/profile.ts';
 import {calculatePirateForceDebris} from '../src/domain/pirates/debris.ts';
+import {battleDebrisRoll} from '../src/domain/combat/debris.ts';
 import {pirateDebrisRewardMultiplier} from '../src/domain/pirates/threat.ts';
 import {calculateAttackDebris} from '../src/application/attack.ts';
 import {calculateFlightFuel} from '../src/domain/flights/fuel.ts';
@@ -58,8 +59,9 @@ function run(faction,points,population,level,q,seedIndex){
     profileId:'pr91-adaptive-C-economics',
   },{reportId:seed,missionType:'pirate-elimination'});
   const fullWin=report.winner==='attacker'&&report.defenderForce.populationAfter===0;
-  const pirateDebris=calculatePirateForceDebris(report.defenderForce,report.attackerForce,'pirate-elimination');
-  const baseDebris=calculateAttackDebris(report,faction,faction);
+  const debrisRoll=battleDebrisRoll(report.id);
+  const pirateDebris=calculatePirateForceDebris(report.defenderForce,report.attackerForce,'pirate-elimination',debrisRoll);
+  const baseDebris=calculateAttackDebris(report,faction,faction,debrisRoll);
   const mult=fullWin?pirateDebrisRewardMultiplier(attacker.population,HANGAR):
     report.winner==='draw'?.75:.5;
   const orbital=Math.max(0,baseDebris+Math.floor(pirateDebris*mult)-pirateDebris);

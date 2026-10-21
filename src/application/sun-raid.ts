@@ -52,6 +52,7 @@ import type {
 } from '../domain/sun-raid/types.ts';
 import type { UniverseCoordinate } from '../domain/universe/types.ts';
 import { calculateAttackDebris, technologiesFromScience } from './attack.ts';
+import { battleDebrisRoll } from '../domain/combat/debris.ts';
 import { recordBattleScoreAward } from '../domain/rating/scoring.ts';
 import {
   getOwnerShipUpgradeLevel,
@@ -755,8 +756,9 @@ function resolveRaid(state: SaveState, raid: SunRaidRecord, at: number, options:
   const attackerCommanderSurvivors = commanderLosses(attackers, report.attackerForce, attack.commanderSources);
   const defenderCommanderSurvivors = commanderLosses(defenders, report.defenderForce, defense.commanderSources);
   const winner = report.winner;
-  // Debris of a Sun battle drift at the Sun (position 0), by the usual 30% rule.
-  const debris = Math.max(0, Math.floor(calculateAttackDebris(report, attack.factionId, defense.factionId)));
+  // Debris of a Sun battle drift at the Sun (position 0), by the common battle
+  // scrap rule (25–35% of destroyed life, one roll per battle).
+  const debris = Math.max(0, Math.floor(calculateAttackDebris(report, attack.factionId, defense.factionId, battleDebrisRoll(reportId))));
 
   // Sun and crystal outcome.
   const holder: CrystalHolder = { kind: 'alliance', id: raid.allianceId };
