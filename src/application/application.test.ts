@@ -129,7 +129,7 @@ test('production and test persistence seeds stay isolated at every fixture bound
   assert.deepEqual(testMode.command.alliances[0].members.map((member) => member.ownerId), [testMode.profile.playerId, 'member-ira-vel']);
   assert.equal(testMode.profile.allianceId, testMode.command.alliances[0].id);
   assert.equal(testMode.planets['helion-01'].buildings['planetary-government'], 1);
-  assert.equal(testMode.operations.items.length, 4);
+  assert.equal(testMode.operations.items.length, 0, 'demo operations without mechanics were removed');
   assert.ok(testMode.combat.reports.length > 0);
   assert.equal(createUniverseMap({ nowMs: TEST_UNIVERSE_NOW_MS, mode: 'test' }).systems.flatMap((system) => system.positions).filter((node) => node.kind === 'npc').length, 8);
   assert.equal(Object.keys(testMode.alliedPlanets ?? {}).length, 1);

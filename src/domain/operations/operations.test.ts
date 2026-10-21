@@ -8,7 +8,6 @@ import {
   migrateOperationsState,
   persistOperationsState,
   readOperationsState,
-  revealOperation,
 } from './repository.ts';
 
 class MemoryStorage {
@@ -24,95 +23,58 @@ class MemoryStorage {
 }
 
 const SAVE_KEY = 'asterion.vertical-slice.v1';
+const CYCLE_ID = 'pirate:pirate-cycle-v1:1:1:0:1000';
 
-test('default state is deterministic and contains the four expected operation slots', () => {
-  const first = createDefaultOperationsState();
-  const second = createDefaultOperationsState();
+function pirateOperation(id = CYCLE_ID, state: 'available' | 'active' | 'completed' = 'available') {
+  return {
+    id,
+    archetype: 'pirate_elimination',
+    state,
+    location: { kind: 'coordinates', coordinates: '[1:1:18]' },
+    rewardPreview: {},
+  };
+}
 
-  assert.deepEqual(first, second);
-  assert.deepEqual(first.items.map((item) => [item.id, item.archetype]), [
-    ['op-pirate-patrol-01', 'pirate_elimination'],
-    ['op-pirate-outpost-01', 'pirate_outpost'],
-    ['op-signal-derelict-01', 'unknown_signal'],
-    ['op-anomaly-01', 'anomaly_scan'],
-  ]);
+/** The five demo records that older saves (Test Mode) carried; they had no mechanics. */
+const LEGACY_DEMO_ITEMS = [
+  { id: 'op-pirate-patrol-01', archetype: 'pirate_elimination', state: 'active', intel: 2, rewardPreview: { metal: 2100, minerals: 900, gas: 300 } },
+  { id: 'op-pirate-outpost-01', archetype: 'pirate_outpost', state: 'available', intel: 3, rewardPreview: { metal: 4200 } },
+  { id: 'op-signal-derelict-01', archetype: 'unknown_signal', state: 'available', intel: 0, threat: null },
+  { id: 'op-signal-derelict-01', archetype: 'derelict_recovery', state: 'available', intel: 3, originSignalId: 'op-signal-derelict-01' },
+  { id: 'op-anomaly-01', archetype: 'anomaly_scan', state: 'available', intel: 3, rewardPreview: { minerals: 1800 } },
+];
+
+test('default operations state is empty in every mode: no demo operations without mechanics', () => {
+  assert.deepEqual(createDefaultOperationsState(), { items: [] });
+  assert.deepEqual(createDefaultOperationsState('test'), { items: [] });
+  assert.deepEqual(createDefaultOperationsState('production'), { items: [] });
 });
 
-test('default operation ids are unique', () => {
-  const ids = createDefaultOperationsState().items.map((item) => item.id);
-  assert.equal(new Set(ids).size, ids.length);
+test('old saves drop every demo operation record and keep real pirate cycles', () => {
+  for (const mode of ['test', 'production'] as const) {
+    const migrated = migrateOperationsState({ items: [...LEGACY_DEMO_ITEMS, pirateOperation(CYCLE_ID, 'active')] }, mode);
+    assert.deepEqual(migrated.items.map((item) => item.id), [CYCLE_ID]);
+    assert.equal(migrated.items[0].state, 'active');
+  }
+  assert.deepEqual(migrateOperationsState({ items: LEGACY_DEMO_ITEMS }, 'test'), { items: [] });
 });
 
-test('two default factories do not share mutable arrays', () => {
-  const first = createDefaultOperationsState();
-  const second = createDefaultOperationsState();
-  first.items[0].modifiers.push('ion_storm');
-  first.items[0].rewardPreview.labels = ['changed'];
-
-  assert.notDeepEqual(first, second);
-  assert.deepEqual(second, createDefaultOperationsState());
-});
-
-test('missing operations migrates to canonical defaults', () => {
+test('missing or malformed operations migrate to the empty state', () => {
   assert.deepEqual(migrateOperationsState(undefined), createDefaultOperationsState());
   assert.deepEqual(migrateOperationsState({}), createDefaultOperationsState());
-});
-
-test('production operations stay empty even when an old fixture payload is present', () => {
-  const production = createDefaultOperationsState('production');
-  const migrated = migrateOperationsState(createDefaultOperationsState(), 'production');
-
-  assert.deepEqual(production.items, []);
-  assert.deepEqual(migrated.items, []);
-});
-
-test('malformed operations do not break migration', () => {
   assert.deepEqual(migrateOperationsState({ items: 'broken' }), createDefaultOperationsState());
   assert.deepEqual(migrateOperationsState({ items: [{ nope: true }] }), createDefaultOperationsState());
 });
 
-test('available operation can be accepted and becomes active', () => {
-  const initial = createDefaultOperationsState();
-  const next = acceptOperation(initial, 'op-pirate-patrol-01');
-
-  assert.equal(next.items.find((item) => item.id === 'op-pirate-patrol-01')?.state, 'active');
-  assert.equal(initial.items.find((item) => item.id === 'op-pirate-patrol-01')?.state, 'available');
+test('an accepted pirate operation can be cancelled back to available', () => {
+  const available = migrateOperationsState({ items: [pirateOperation()] });
+  const active = acceptOperation(available, CYCLE_ID);
+  assert.equal(active.items[0].state, 'active');
+  assert.equal(available.items[0].state, 'available');
+  assert.equal(cancelOperation(active, CYCLE_ID).items[0].state, 'available');
 });
 
-test('active operation can be cancelled back to available without penalty metadata', () => {
-  const active = acceptOperation(createDefaultOperationsState(), 'op-pirate-outpost-01');
-  const next = cancelOperation(active, 'op-pirate-outpost-01');
-
-  assert.equal(next.items.find((item) => item.id === 'op-pirate-outpost-01')?.state, 'available');
-});
-
-test('unknown signal reveal is deterministic, keeps the stable id and records traceability', () => {
-  const first = revealOperation(createDefaultOperationsState(), 'op-signal-derelict-01');
-  const second = revealOperation(createDefaultOperationsState(), 'op-signal-derelict-01');
-  const revealed = first.items.find((item) => item.id === 'op-signal-derelict-01');
-
-  assert.deepEqual(first, second);
-  assert.equal(revealed?.archetype, 'derelict_recovery');
-  assert.equal(revealed?.intel, 3);
-  assert.equal(revealed?.originSignalId, 'op-signal-derelict-01');
-});
-
-test('unrevealed intel-zero signal cannot be accepted', () => {
-  const initial = createDefaultOperationsState();
-  const next = acceptOperation(initial, 'op-signal-derelict-01');
-  assert.equal(next.items.find((item) => item.id === 'op-signal-derelict-01')?.state, 'available');
-});
-
-test('revealed state survives migration and storage reload', () => {
-  const storage = new MemoryStorage();
-  const revealed = revealOperation(createDefaultOperationsState(), 'op-signal-derelict-01');
-  const persisted = persistOperationsState(revealed, storage);
-
-  assert.equal(persisted.ok, true);
-  assert.deepEqual(readOperationsState(storage), revealed);
-});
-
-test('persisting operations preserves unrelated save fields', () => {
+test('operations survive storage reload and persisting preserves unrelated save fields', () => {
   const storage = new MemoryStorage();
   storage.setItem(SAVE_KEY, JSON.stringify({
     schemaVersion: 4,
@@ -120,65 +82,41 @@ test('persisting operations preserves unrelated save fields', () => {
     combat: { reports: ['keep-me'] },
     combatSimulator: { selectedFaction: 'aster' },
   }));
-
-  persistOperationsState(acceptOperation(createDefaultOperationsState(), 'op-pirate-patrol-01'), storage);
+  const active = acceptOperation(migrateOperationsState({ items: [pirateOperation()] }), CYCLE_ID);
+  const persisted = persistOperationsState(active, storage);
   const saved = JSON.parse(storage.getItem(SAVE_KEY) ?? '{}') as Record<string, unknown>;
 
+  assert.equal(persisted.ok, true);
+  assert.deepEqual(readOperationsState(storage), active);
   assert.equal(saved.schemaVersion, 4);
   assert.equal(saved.metal, 777);
   assert.deepEqual(saved.combat, { reports: ['keep-me'] });
   assert.deepEqual(saved.combatSimulator, { selectedFaction: 'aster' });
-  assert.ok(saved.operations);
 });
 
-test('invalid intel, threat and state normalize safely while duplicate ids are dropped', () => {
+test('invalid state normalizes safely while duplicate ids are dropped', () => {
   const migrated = migrateOperationsState({
     items: [
-      {
-        id: 'custom-pirate',
-        archetype: 'pirate_elimination',
-        state: 'expired',
-        threat: 99,
-        intel: 68,
-        location: { kind: 'system', galaxy: 1, system: 7 },
-        rewardPreview: { metal: -10 },
-      },
-      {
-        id: 'custom-pirate',
-        archetype: 'pirate_outpost',
-        state: 'active',
-        threat: 5,
-        intel: 3,
-      },
+      { ...pirateOperation(), state: 'expired', threat: 99, intel: 68 },
+      { ...pirateOperation(), state: 'active' },
     ],
   });
-  const operation = migrated.items[0];
-
   assert.equal(migrated.items.length, 1);
-  assert.equal(operation.state, 'available');
-  assert.equal(operation.threat, 3);
-  assert.equal(operation.intel, 2);
-  assert.equal(operation.rewardPreview.metal, 2100);
+  assert.equal(migrated.items[0].state, 'available');
+  assert.equal(migrated.items[0].intel, 2);
 });
 
 test('persisted real pirate operation retains cycle, accepted state and no demo rewards', () => {
-  const template = createDefaultOperationsState().items[0];
-  const cycleId = 'pirate:pirate-cycle-v1:1:1:0:1000';
-  const accepted = {
-    ...template, id: cycleId, state: 'active' as const,
-    location: { kind: 'coordinates' as const, coordinates: '[1:1:18]' },
-    rewardPreview: {},
-  };
+  const accepted = { ...pirateOperation(CYCLE_ID, 'active'), rewardPreview: { metal: 2100 } };
   const migrated = migrateOperationsState({ items: [accepted] }, 'production');
   assert.equal(migrated.items.length, 1);
   const item = migrated.items[0];
-  assert.equal(item.id, cycleId);
+  assert.equal(item.id, CYCLE_ID);
   assert.equal(item.state, 'active');
   assert.equal(item.title, 'ПИРАТСКАЯ БАЗА');
   assert.equal(item.threat, null);
   assert.deepEqual(item.rewardPreview, {});
   assert.deepEqual(item.location, { kind: 'coordinates', coordinates: '[1:1:18]' });
-  assert.equal(migrateOperationsState({ items: migrated.items }, 'production').items[0].id, cycleId);
-  const spoofed = migrateOperationsState({ items: [{ ...accepted, id: 'pirate:wrong-cycle' }] }, 'production');
-  assert.notEqual(spoofed.items[0]?.title, 'ПИРАТСКАЯ БАЗА');
+  assert.equal(migrateOperationsState({ items: migrated.items }, 'production').items[0].id, CYCLE_ID);
+  assert.deepEqual(migrateOperationsState({ items: [{ ...accepted, id: 'pirate:wrong-cycle' }] }, 'production').items, []);
 });

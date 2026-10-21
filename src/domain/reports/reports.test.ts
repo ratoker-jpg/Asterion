@@ -7,7 +7,7 @@ import { ASTERION_SAVE_KEY } from '../combat/priority.ts';
 import { getBattleResultForPlayer } from '../combat/report.ts';
 import type { BattleReport } from '../combat/report.ts';
 import { createDefaultCommandState } from '../command/repository.ts';
-import { createDefaultOperationsState, revealOperation } from '../operations/repository.ts';
+import { createDefaultOperationsState, migrateOperationsState } from '../operations/repository.ts';
 import {
   battleReportToReportItem,
   buildReportsFeed,
@@ -18,7 +18,6 @@ import {
   gasExtractionArrivalReportToReportItem,
   getReportCategoryCounts,
   getReportUnreadCounts,
-  operationIntelToReportItem,
   overpopulationEpisodeReportToReportItem,
   preservePersistentReportCollections,
   recyclerArrivalReportToReportItem,
@@ -406,10 +405,12 @@ test('local player aliases produce attack-specific report labels and results', (
 
 test('operation battle remains canonical BattleReport but receives operation context', () => {
   const report = DEMO_BATTLE_REPORTS[0];
-  const operations = createDefaultOperationsState();
-  const operation = operations.items.find((item) => item.category === 'combat');
+  const operations = migrateOperationsState({ items: [{
+    id: 'pirate:pirate-cycle-v1:1:1:0:1000', archetype: 'pirate_elimination', state: 'completed',
+    location: { kind: 'coordinates', coordinates: '[1:1:18]' }, battleReportId: report.id,
+  }] });
+  const operation = operations.items[0];
   assert.ok(operation);
-  operation.battleReportId = report.id;
 
   const feed = buildReportsFeed([report], operations, commandWithoutJointOperations());
   const item = feed.find((candidate) => candidate.battleReportId === report.id);
@@ -419,33 +420,9 @@ test('operation battle remains canonical BattleReport but receives operation con
   assert.match(item.title, /Операция:/);
 });
 
-test('revealed Operations information appears in System without inventing a timestamp', () => {
-  const initial = createDefaultOperationsState();
-  const signal = initial.items.find((item) => item.archetype === 'unknown_signal');
-  assert.ok(signal);
-  const revealed = revealOperation(initial, signal.id);
-  const revealedOperation = revealed.items.find((item) => item.originSignalId === signal.id);
-  assert.ok(revealedOperation);
-
-  const item = operationIntelToReportItem(revealedOperation);
-  assert.ok(item);
-  assert.equal(item.category, 'system');
-  assert.equal(item.source, 'operations');
-  assert.equal(item.timestamp, undefined);
-});
-
-test('Reports feed follows the OperationsState passed by App without a remount', () => {
-  const initial = createDefaultOperationsState();
-  const command = commandWithoutJointOperations();
-  const signal = initial.items.find((item) => item.archetype === 'unknown_signal');
-  assert.ok(signal);
-
-  const before = buildReportsFeed([], initial, command);
-  assert.equal(before.some((item) => item.category === 'system'), false);
-
-  const revealed = revealOperation(initial, signal.id);
-  const after = buildReportsFeed([], revealed, command);
-  assert.equal(after.some((item) => item.category === 'system' && item.source === 'operations'), true);
+test('Reports feed has no Operations system items: demo signal reveals were removed', () => {
+  const feed = buildReportsFeed([], createDefaultOperationsState(), commandWithoutJointOperations());
+  assert.equal(feed.some((item) => item.source === 'operations'), false);
 });
 
 test('Reports feed never fabricates alliance invitations or joint operations from Command state', () => {
@@ -455,19 +432,6 @@ test('Reports feed never fabricates alliance invitations or joint operations fro
     assert.equal(feed.some((item) => item.category === 'alliances'), false);
     assert.equal(feed.some((item) => item.commandOperationId !== undefined), false);
   }
-});
-
-test('default/reset cross-domain state does not preserve stale Reports data', () => {
-  const initialOperations = createDefaultOperationsState();
-  const signal = initialOperations.items.find((item) => item.archetype === 'unknown_signal');
-  assert.ok(signal);
-  const revealedOperations = revealOperation(initialOperations, signal.id);
-
-  const mutatedFeed = buildReportsFeed([], revealedOperations, createDefaultCommandState());
-  assert.equal(mutatedFeed.some((item) => item.source === 'operations'), true);
-
-  const resetFeed = buildReportsFeed([], createDefaultOperationsState(), createDefaultCommandState());
-  assert.equal(resetFeed.some((item) => item.source === 'operations'), false);
 });
 
 test('saved filter uses canonical BattleHistory saved ids, not Reports metadata', () => {

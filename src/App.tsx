@@ -48,7 +48,6 @@ import {
 import {
   acceptOperation,
   cancelOperation,
-  revealOperation,
 } from './domain/operations/repository.ts';
 import type { OperationId } from './domain/operations/types.ts';
 import {
@@ -1372,11 +1371,6 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     setNotice('Операция отменена и возвращена в доступные без штрафа.');
   };
 
-  const revealOperationsOperation = (operationId: OperationId) => {
-    setState((current) => ({ ...current, operations: revealOperation(current.operations, operationId, RUNTIME_MODE) }));
-    setNotice('Сигнал просканирован. Классификация операции обновлена.');
-  };
-
   const acceptExplorationContact = (node: import('./domain/universe/types.ts').UniversePlanetNode) => {
     const current = stateRef.current;
     const next = acceptLiveExploration(current, node.id, Date.now(), RUNTIME_MODE);
@@ -2332,7 +2326,6 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               state={operationsVariantAFixture?.state ?? state.operations}
               onAccept={acceptOperationsOperation}
               onCancel={cancelOperationsOperation}
-              onReveal={revealOperationsOperation}
               onOpenFleets={openFleetRootFromOperations}
             />
           ) : activeRoute === 'command' ? (

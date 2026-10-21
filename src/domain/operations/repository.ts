@@ -1,4 +1,4 @@
-import { createDefaultOperationInstances, createDerelictReveal, getOperationDefinition } from './catalog.ts';
+import { getOperationDefinition } from './catalog.ts';
 import {
   OPERATION_ARCHETYPES,
   type OperationArchetype,
@@ -27,12 +27,6 @@ const OPERATION_MODIFIERS: readonly OperationModifier[] = [
   'ion_storm',
   'unknown_contact',
 ];
-const DEFAULT_OPERATION_IDS = new Set([
-  'op-pirate-patrol-01',
-  'op-pirate-outpost-01',
-  'op-signal-derelict-01',
-  'op-anomaly-01',
-]);
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
 type SaveEnvelope = { operations?: unknown; [key: string]: unknown };
@@ -134,15 +128,10 @@ function normalizeOperation(value: unknown): OperationInstance | null {
     && id.startsWith('pirate:')
     && isCanonicalPirateContactCycleKey(id.slice('pirate:'.length));
   const definition = getOperationDefinition(value.archetype);
-  const threat = value.archetype === 'unknown_signal'
-    ? value.threat === null ? null : definition.threat
-    : isThreat(value.threat) ? value.threat : definition.threat;
+  const threat = isThreat(value.threat) ? value.threat : definition.threat;
   const modifiers = Array.isArray(value.modifiers)
     ? value.modifiers.filter(isModifier).filter((modifier, index, all) => all.indexOf(modifier) === index)
     : [...definition.modifiers];
-  const originSignalId = typeof value.originSignalId === 'string' && value.originSignalId.trim()
-    ? value.originSignalId.trim().slice(0, 80)
-    : null;
   const battleReportId = typeof value.battleReportId === 'string' && value.battleReportId.trim()
     ? value.battleReportId.trim().slice(0, 120)
     : null;
@@ -163,7 +152,6 @@ function normalizeOperation(value: unknown): OperationInstance | null {
     modifiers: realPirateCycle ? [] : modifiers,
     // No static metal/minerals/gas payout: actual pirate debris follows combat losses.
     rewardPreview: realPirateCycle ? {} : normalizeReward(value.rewardPreview, definition.rewardPreview),
-    ...(originSignalId ? { originSignalId } : {}),
     ...(battleReportId ? { battleReportId } : {}),
   };
 }
@@ -174,8 +162,15 @@ function resolveStorage(storage?: StorageLike): StorageLike | null {
   return window.localStorage;
 }
 
-export function createDefaultOperationsState(mode: RuntimeMode = 'test'): OperationsState {
-  return { items: mode === 'production' ? [] : createDefaultOperationInstances() };
+export function createDefaultOperationsState(_mode: RuntimeMode = 'test'): OperationsState {
+  return { items: [] };
+}
+
+/** Only real pirate-cycle operations persist; old demo records (no mechanics) are dropped. */
+function isRealPirateOperation(operation: OperationInstance): boolean {
+  return operation.archetype === 'pirate_elimination'
+    && operation.id.startsWith('pirate:')
+    && isCanonicalPirateContactCycleKey(operation.id.slice('pirate:'.length));
 }
 
 export function migrateOperationsState(value: unknown, mode: RuntimeMode = 'test'): OperationsState {
@@ -184,12 +179,11 @@ export function migrateOperationsState(value: unknown, mode: RuntimeMode = 'test
   const seen = new Set<string>();
   const items = value.items.flatMap((candidate) => {
     const normalized = normalizeOperation(candidate);
-    if (!normalized || (mode === 'production' && DEFAULT_OPERATION_IDS.has(normalized.id)) || seen.has(normalized.id)) return [];
+    if (!normalized || !isRealPirateOperation(normalized) || seen.has(normalized.id)) return [];
     seen.add(normalized.id);
     return [normalized];
   });
-
-  return mode === 'production' ? { items } : items.length ? { items } : createDefaultOperationsState(mode);
+  return { items };
 }
 
 export function acceptOperation(state: OperationsState, operationId: OperationId, mode: RuntimeMode = 'test'): OperationsState {
@@ -208,19 +202,6 @@ export function cancelOperation(state: OperationsState, operationId: OperationId
     items: normalized.items.map((operation) => operation.id === operationId && operation.state === 'active'
       ? { ...operation, state: 'available' }
       : operation),
-  };
-}
-
-export function revealOperation(state: OperationsState, operationId: OperationId, mode: RuntimeMode = 'test'): OperationsState {
-  const normalized = migrateOperationsState(state, mode);
-  return {
-    items: normalized.items.map((operation) => {
-      if (operation.id !== operationId || operation.archetype !== 'unknown_signal' || operation.intel !== 0) return operation;
-      return {
-        ...createDerelictReveal(operation.id),
-        state: operation.state,
-      };
-    }),
   };
 }
 
