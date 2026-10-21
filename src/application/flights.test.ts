@@ -3097,3 +3097,18 @@ test('transport reaches any inhabited planet: an NPC planet stores what fits, th
   assert.equal(arrival.state.espionage!.targets![npc.id]!.resources.metal, caps.metal);
   assert.equal(arrival.state.flights.records.find((flight) => flight.id === sent.flight.id)?.phase, 'returning');
 });
+
+test('offline catch-up records cargo delivery at the arrival time, not at the reconcile time', () => {
+  const initial = createInitialSaveState('test', 1_000);
+  const sent = dispatchFlight(initial, {
+    requestId: 'transport-delivered-at', missionId: 'transport', originPlanetId: 'helion-01',
+    destination: { kind: 'planet', planetId: 'test-mode-ally-ira-vel-v1', coordinate: { galaxy: 1, system: 1, position: 2 } },
+    targetRelation: 'ally', selectedShips: { scout: 1 }, cargo: { metal: 1, minerals: 0, gas: 0, debris: 0 }, departedAt: 1_000,
+  }, { now: 1_000, mode: 'test' });
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  const late = reconcileFlights(sent.state, sent.flight.arrivalAt + 3_600_000, undefined, { mode: 'test' });
+  const flight = late.state.flights.records.find((record) => record.id === sent.flight.id)!;
+  assert.equal(flight.cargoState, 'delivered');
+  assert.equal(flight.deliveredAt, sent.flight.arrivalAt);
+});

@@ -2120,10 +2120,10 @@ export function recallFlight(
     return { ok: true, created: false, state: updateExpeditionContact(state, next), flight,
       notice: 'Экспедиция готовится к возвращению 30 секунд. Добыча остановлена; в течение подготовки возможна атака.' };
   }
-  if (flight.missionId !== 'espionage' && now >= flight.arrivalAt) {
+  // A probe orbiting its target may still be recalled; anything else that has arrived may not.
+  if (now >= flight.arrivalAt && (flight.missionId !== 'espionage' || flight.phase === 'outbound')) {
     return failure(state, 'flight-already-arrived', 'Рейс уже прибыл.');
   }
-  if (now >= flight.arrivalAt && flight.phase === 'outbound') return failure(state, 'flight-already-arrived', 'Рейс уже прибыл.');
   if (flight.phase !== 'outbound') return failure(state, 'flight-not-recallable', 'Отозвать можно только исходящий рейс или зонд на орбите.');
   const nextFlights = recallDomainFlight(flights, flightId, now);
   const nextFlight = nextFlights.records.find((item) => item.id === flightId)!;
@@ -2911,7 +2911,7 @@ export function reconcileFlights(
           aid: { ...aid, creditedUnits: accepted },
           arrivedAt: arrivalAt,
           cargoState: 'delivered',
-          deliveredAt: now,
+          deliveredAt: arrivalAt,
           cargoResolvedAt: now,
         };
         const returning = beginTransportReturn(next, delivered, now, 'normal-return');
@@ -2959,7 +2959,7 @@ export function reconcileFlights(
             ...current,
             arrivedAt: arrivalAt,
             cargoState: 'delivered',
-            deliveredAt: now,
+            deliveredAt: arrivalAt,
             cargoResolvedAt: now,
           };
           const returning = beginTransportReturn(next, delivered, now, 'normal-return');
@@ -3011,7 +3011,7 @@ export function reconcileFlights(
             cargo,
             cargoState: 'delivered',
             arrivedAt: arrivalAt,
-            deliveredAt: now,
+            deliveredAt: arrivalAt,
             cargoResolvedAt: now,
           };
           const returning = beginTransportReturn(next, delivered, now, 'normal-return');
@@ -3089,7 +3089,7 @@ export function reconcileFlights(
             cargo,
             cargoState: 'delivered',
             arrivedAt: arrivalAt,
-            deliveredAt: now,
+            deliveredAt: arrivalAt,
             cargoResolvedAt: now,
           };
           const returning = beginTransportReturn(next, delivered, now, 'normal-return');

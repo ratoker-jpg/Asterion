@@ -834,3 +834,15 @@ test('Computer Systems flight limit: three slots at level 0, returns hold a slot
   assert.equal(getPlayerFlightSlotUsage(levelTwo).limit, 6);
   assert.equal(dispatchFlight(levelTwo, transport('limit-4'), options).ok, true);
 });
+
+test('a saved spy report roll is normalized into the canonical 0..99 range', () => {
+  const report = (roll: unknown) => ({
+    id: `spy-report-roll-${String(roll)}`, missionId: 'mission-roll', createdAt: 1_000, sourcePlanetId: 'helion-01',
+    targetPlanetId: 'bot-01', targetPlanetName: 'Бот 01 I', targetOwnerId: 'npc-bot-01', targetOwnerName: 'Бот 01',
+    targetRaceId: 'veyra', targetRelation: 'neutral', targetCoordinate: { galaxy: 1, system: 2, position: 3 },
+    spyLevel: 10, targetEspionageLevel: 10, delta: 0, roll, quality: 'basic',
+    resources: { metal: 1, minerals: 1, gas: 1, debris: 0, developmentEnergy: 0 }, firstReport: false,
+  });
+  const migrated = migrateEspionageState({ missions: [], hunterNotices: [], reports: [report(450), report(-3), report(57.9), report('x')] });
+  assert.deepEqual(migrated.reports.map((item) => item.roll), [99, 0, 57, 0]);
+});
