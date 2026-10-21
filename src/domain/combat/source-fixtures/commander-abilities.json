@@ -16,7 +16,7 @@
     },
     {
       "commanderId": "corsair",
-      "expectedCatalog": { "commanderName": "Корсар", "ability": "Форсированное пиратство", "description": "Увеличивает долю обломков от уничтоженных пиратских кораблей, если Корсар участвовал в бою и выжил.", "ratePerLevel": "+0,5 п.п. обломков за уровень", "implementationStatus": "implemented" },
+      "expectedCatalog": { "commanderName": "Корсар", "ability": "Форсированное пиратство", "description": "Увеличивает долю обломков от уничтоженных пиратских кораблей, если Корсар участвовал в бою и выжил.", "ratePerLevel": "+0,83% пиратских обломков за уровень", "implementationStatus": "implemented" },
       "sourceEvidence": [
         { "text": "имеет возможность совершать пиратские вылеты", "normalizedEffect": "pirate-raid capability", "ratePerLevel": null },
         { "text": "увеличивает процент украденых ресурсов на  1.25% за уровень", "normalizedEffect": "pirate-raid resource theft", "ratePerLevel": 1.25 }

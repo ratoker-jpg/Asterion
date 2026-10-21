@@ -3,10 +3,17 @@ import { isBattleDebrisRoll, BATTLE_DEBRIS_ROLL_MIN } from '../combat/debris.ts'
 import { isPirateShipId } from '../combat/side-entity.ts';
 import { isPiratePveMissionType, type BattleForceSnapshot, type BattleMissionType } from '../combat/report.ts';
 
-export const PIRATE_BASE_DEBRIS_SHARE = 0.6;
-export const COMMANDER_CORSAIR_DEBRIS_PER_LEVEL = 0.005;
+/**
+ * Pirate PvE wreckage shares, relative to PIRATE_ORDINARY_DEBRIS_SHARE (the
+ * common battle base, 25-35% of destroyed life). Owner retune 2026-10-21
+ * (audit v2, option A x2.5): base 0.6 -> 1.5 (x5 the common base, i.e. 125-175%
+ * of destroyed pirate life); Corsair and the cap scaled proportionally, so a
+ * surviving Corsair L40 still adds +33.3% pirate wreckage (x6.67 the base).
+ */
+export const PIRATE_BASE_DEBRIS_SHARE = 1.5;
+export const COMMANDER_CORSAIR_DEBRIS_PER_LEVEL = 0.0125;
 export const COMMANDER_CORSAIR_DEBRIS_LEVEL_CAP = 40;
-export const PIRATE_MAX_DEBRIS_SHARE = 0.8;
+export const PIRATE_MAX_DEBRIS_SHARE = 2.0;
 export const PIRATE_ORDINARY_DEBRIS_SHARE = 0.3;
 
 export type CommanderCorsairSalvageState = Readonly<{

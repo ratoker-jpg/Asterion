@@ -56,7 +56,7 @@ export const COMMANDER_ABILITIES: Readonly<Record<CommanderId, CommanderAbilityD
     commanderName: 'Корсар',
     ability: 'Форсированное пиратство',
     description: 'Увеличивает долю обломков от уничтоженных пиратских кораблей, если Корсар участвовал в бою и выжил.',
-    ratePerLevel: '+0,5 п.п. обломков за уровень',
+    ratePerLevel: '+0,83% пиратских обломков за уровень',
     implementationStatus: 'implemented',
     note: 'Корсар не обязан быть ведущим командиром. Кража ресурсов в Пиратском рейде (+1,25% за уровень в Nemexia) в Asterion не реализована.',
   },
@@ -182,17 +182,18 @@ export function getCommanderPresentedAbility(id: CommanderId): CommanderAbilityD
     ...COMMANDER_ABILITIES.corsair,
     ability: 'Сбор пиратских обломков',
     description: 'Увеличивает обломки от уничтоженных пиратских кораблей, если Корсар участвовал в бою и выжил. Не обязан быть ведущим.',
-    ratePerLevel: '+0,5 п.п. за уровень, максимум 80% обломков',
+    ratePerLevel: '+0,83% пиратских обломков за уровень, максимум +33,3% на 40 уровне',
     implementationStatus: 'implemented',
-    note: 'Базовая доля обломков — 60%. Дополнительная доля действует против пиратов. Обломки остаются на орбите и требуют отдельного сбора.',
+    note: 'В боях с пиратами их корабли дают 125–175% своей жизни в обломки. Корсар увеличивает эту долю. Обломки остаются на орбите и требуют отдельного сбора.',
   };
 }
 
 export function formatCommanderPresentedEffect(id: CommanderId, level: number): string {
   if (id !== 'corsair') return formatCommanderAbilityEffect(id, level);
   const safeLevel = Math.max(0, Math.floor(Number.isFinite(level) ? level : 0));
-  const bonus = Math.min(20, safeLevel * 0.5);
-  return `+${EFFECT_PERCENT_FORMAT.format(bonus)} п.п. к обломкам · доля ${EFFECT_PERCENT_FORMAT.format(60 + bonus)}%`;
+  // Relative bonus to pirate wreckage: share (1.5 + 0.0125 x level) / 1.5, capped at level 40.
+  const bonus = Math.min(40, safeLevel) * 0.0125 / 1.5 * 100;
+  return `+${EFFECT_PERCENT_FORMAT.format(Math.round(bonus * 10) / 10)}% к пиратским обломкам`;
 }
 
 /**

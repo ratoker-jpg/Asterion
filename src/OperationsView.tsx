@@ -424,7 +424,7 @@ function OperationCard({ operation, selected, onSelect, contact, exploration, no
           {exploration.recon?.success
             ? <b title="Категория риска подтверждена разведданными">· РИСК {['I','II','III','IV','V'][(operation.threat ?? 1)-1]}/V</b> : null}
         </span> : null}
-        {!exploration && pirate && operation.state !== 'completed' ? <span className="opsA-card-debris"><ResourceIcon kind="debris" /> ОБЛОМКИ · от 60%</span> : null}
+        {!exploration && pirate && operation.state !== 'completed' ? <span className="opsA-card-debris"><ResourceIcon kind="debris" /> ОБЛОМКИ · 125–175%</span> : null}
         {raidCheck ? <span className="opsA-card-raid" data-qa-raid-check-interval="15m">
           <span className="opsA-card-raid-label">
             <span>{pirateRaidRoll ? 'Проверка завершена' : 'Проверка нападения'}</span>
@@ -764,7 +764,7 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
 
   const metrics: DossierMetric[] = pirate ? [
     { label: 'РАЗВЕДКА', value: reconLabel, note: pirateContact?.latestReportId ? 'отчёт в «Системе»' : 'Отправь зонд, чтобы узнать состав', tone: pirateContact?.latestReportOutcome === 'success' ? 'good' : 'bad' },
-    { label: 'ОБЛОМКИ', value: 'от 60%', note: 'стоимости уничтоженных кораблей', tone: 'good' },
+    { label: 'ОБЛОМКИ', value: '125–175%', note: 'жизни уничтоженных пиратов', tone: 'good' },
     ...(isActive && pirateContact ? [{ label: 'ДО ИСЧЕЗНОВЕНИЯ', value: pirateRemainingLabel(pirateContact.expiresAt, nowMs), note: 'успейте провести рейд', tone: 'time' as const }] : []),
     ...(threatTile ? [threatTile] : []),
   ] : [

@@ -23,31 +23,34 @@ function pirateDebris(life: number, share: number) {
   return Math.floor(ROLL * life * (share / PIRATE_ORDINARY_DEBRIS_SHARE));
 }
 
-test('Commander Corsair salvage is 60% base and grows by 0.5 points per surviving level to 80%', () => {
-  assert.equal(pirateDebrisShare(), 0.6);
-  assert.equal(pirateDebrisShare({ participated: false, survived: true, level: 40 }), 0.6);
-  assert.equal(pirateDebrisShare({ participated: true, survived: false, level: 40 }), 0.6);
-  assert.equal(pirateDebrisShare({ participated: true, survived: true, level: 0 }), 0.6);
-  assert.equal(pirateDebrisShare({ participated: true, survived: true, level: 40 }), 0.8);
-  assert.equal(pirateDebrisShare({ participated: true, survived: true, level: 99 }), 0.8);
+test('Commander Corsair salvage: share 1.5 (x5 the common base), +0.0125 per surviving level, capped at 2.0', () => {
+  assert.equal(pirateDebrisShare(), 1.5);
+  assert.equal(pirateDebrisShare({ participated: false, survived: true, level: 40 }), 1.5);
+  assert.equal(pirateDebrisShare({ participated: true, survived: false, level: 40 }), 1.5);
+  assert.equal(pirateDebrisShare({ participated: true, survived: true, level: 0 }), 1.5);
+  assert.equal(pirateDebrisShare({ participated: true, survived: true, level: 20 }), 1.75);
+  assert.equal(pirateDebrisShare({ participated: true, survived: true, level: 40 }), 2.0);
+  assert.equal(pirateDebrisShare({ participated: true, survived: true, level: 99 }), 2.0);
+  // The Corsair bonus keeps its pre-retune proportion: L40 = +1/3 of the base wreckage.
+  assert.ok(Math.abs(pirateDebrisShare({ participated: true, survived: true, level: 40 }) / pirateDebrisShare() - 0.8 / 0.6) < 1e-12);
 });
 
 test('surviving participating Commander Corsair boosts only pirate losses and need not be the lead commander', () => {
   const corsairFleet = force([{ entityId: 'corsair', countBefore: 1, countAfter: 1, destroyed: 0, level: 40 }]);
   const pirateLosses = force([{ entityId: 'pirate-hound', countBefore: 1, countAfter: 0, destroyed: 1 }]);
-  const expected = pirateDebris(HOUND_LIFE, 0.8);
+  const expected = pirateDebris(HOUND_LIFE, 2.0);
   assert.equal(calculatePirateForceDebris(pirateLosses, corsairFleet, 'pirate-elimination', ROLL), expected);
   assert.equal(calculateAttackDebris(report(corsairFleet, pirateLosses, 'pirate-elimination'), 'aegis', 'aegis'), expected);
   assert.equal(calculateAttackDebris(report(pirateLosses, corsairFleet, 'pirate-raid'), 'aegis', 'aegis'), expected);
 });
 
-test('dead or absent Commander Corsair leaves pirate debris at x2 of the base, while player losses use the base', () => {
+test('dead or absent Commander Corsair leaves pirate debris at x5 of the base, while player losses use the base', () => {
   const deadCorsair = force([{ entityId: 'corsair', countBefore: 1, countAfter: 0, destroyed: 1, level: 40 }]);
   const pirateLosses = force([{ entityId: 'pirate-hound', countBefore: 1, countAfter: 0, destroyed: 1 }]);
   const corsairLife = getFactionCombatEntity('aegis', 'corsair').combat.life;
-  const expected = pirateDebris(HOUND_LIFE, 0.6) + Math.floor(ROLL * corsairLife);
+  const expected = pirateDebris(HOUND_LIFE, 1.5) + Math.floor(ROLL * corsairLife);
   assert.equal(calculateAttackDebris(report(deadCorsair, pirateLosses, 'pirate-raid'), 'aegis', 'aegis'), expected);
-  assert.equal(calculatePirateForceDebris(pirateLosses, force([]), 'pirate-raid', ROLL), pirateDebris(HOUND_LIFE, 0.6));
+  assert.equal(calculatePirateForceDebris(pirateLosses, force([]), 'pirate-raid', ROLL), pirateDebris(HOUND_LIFE, 1.5));
 });
 
 test('pirate losses outside explicit pirate PvE missions use the ordinary base', () => {
@@ -66,7 +69,7 @@ test('the pirate share ratio keeps PvE wreckage proportional to the ordinary bas
     const ordinary = calculatePirateForceDebris(pirateLosses, force([]), 'attack', roll);
     const pve = calculatePirateForceDebris(pirateLosses, force([]), 'pirate-elimination', roll);
     assert.equal(ordinary, Math.floor(roll * life));
-    assert.equal(pve, Math.floor(roll * life * (0.6 / PIRATE_ORDINARY_DEBRIS_SHARE)));
+    assert.equal(pve, Math.floor(roll * life * (1.5 / PIRATE_ORDINARY_DEBRIS_SHARE)));
   }
 });
 
