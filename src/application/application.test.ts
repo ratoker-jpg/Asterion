@@ -80,6 +80,9 @@ import { advanceAsteroidGasAt } from '../domain/universe/asteroid-gas.ts';
 import { getEspionageTargets } from '../domain/espionage/runtime.ts';
 import { createBot01Planets } from '../domain/espionage/fixtures.ts';
 
+// Timed universe objects depend on time; tests pin it (audit A4).
+const TEST_UNIVERSE_NOW_MS = Date.UTC(2026, 9, 21, 12);
+
 class MemoryStorage implements StorageLike {
   readonly values = new Map<string, string>();
   writes = 0;
@@ -115,7 +118,7 @@ test('production and test persistence seeds stay isolated at every fixture bound
   assert.equal(production.planets['helion-01'].buildings['planetary-government'], 0);
   assert.equal(production.operations.items.length, 0);
   assert.equal(production.combat.reports.length, 0);
-  assert.equal(createUniverseMap({ mode: 'production' }).systems.flatMap((system) => system.positions).filter((node) => node.kind === 'npc').length, 0);
+  assert.equal(createUniverseMap({ nowMs: TEST_UNIVERSE_NOW_MS, mode: 'production' }).systems.flatMap((system) => system.positions).filter((node) => node.kind === 'npc').length, 0);
   assert.equal(createPlayerRatingEntries(0, 'production').length, 1);
   assert.equal(createAllianceRatingEntries(production.command, {}, production.profile.playerId).length, 0);
 
@@ -128,7 +131,7 @@ test('production and test persistence seeds stay isolated at every fixture bound
   assert.equal(testMode.planets['helion-01'].buildings['planetary-government'], 1);
   assert.equal(testMode.operations.items.length, 4);
   assert.ok(testMode.combat.reports.length > 0);
-  assert.equal(createUniverseMap({ mode: 'test' }).systems.flatMap((system) => system.positions).filter((node) => node.kind === 'npc').length, 8);
+  assert.equal(createUniverseMap({ nowMs: TEST_UNIVERSE_NOW_MS, mode: 'test' }).systems.flatMap((system) => system.positions).filter((node) => node.kind === 'npc').length, 8);
   assert.equal(Object.keys(testMode.alliedPlanets ?? {}).length, 1);
   assert.equal(createPlayerRatingEntries(0, 'test').length, 84);
   assert.equal(createAllianceRatingEntries(testMode.command, {}, testMode.profile.playerId).length, 2);
@@ -620,7 +623,7 @@ test('Test Mode persistence keeps one deleted Bot 01 target deleted and preserve
   assert.equal(Object.keys(reloaded.espionage?.bot01Planets ?? {}).length, 6);
   assert.equal(reloaded.espionage?.orbitalDebris?.[debris.id]?.debris, 777);
 
-  const map = createUniverseMap({ mode: 'test', registeredPlanets: registeredTargetsForUniverse(reloaded) });
+  const map = createUniverseMap({ nowMs: TEST_UNIVERSE_NOW_MS, mode: 'test', registeredPlanets: registeredTargetsForUniverse(reloaded) });
   const nodes = map.systems.flatMap((system) => system.positions);
   assert.equal(nodes.some((node) => node.id === deletedTarget.id), false);
   const coordinateOccupant = nodes.find((node) => node.coordinate.galaxy === deletedTarget.coordinate.galaxy
@@ -648,7 +651,7 @@ test('Test Mode persistence treats an empty canonical Bot 01 registry as authori
   assert.equal(Object.keys(reloaded.espionage?.bot01Planets ?? {}).length, 0);
   assert.ok(reloaded.espionage?.bot01Profile, 'owner profile may survive without recreating planets');
 
-  const map = createUniverseMap({ mode: 'test', registeredPlanets: registeredTargetsForUniverse(reloaded) });
+  const map = createUniverseMap({ nowMs: TEST_UNIVERSE_NOW_MS, mode: 'test', registeredPlanets: registeredTargetsForUniverse(reloaded) });
   const nodes = map.systems.flatMap((system) => system.positions);
   assert.equal(nodes.some((node) => node.kind === 'npc' && node.ownerId === 'npc-bot-01'), false);
 });
@@ -798,7 +801,7 @@ test('destroying Helion keeps the surviving planet and global progress through r
     planets: { ...initial.planets, [survivorId]: survivor },
     queues: { ...initial.queues, [survivorId]: [] },
   };
-  const initialUniverse = createUniverseMap({
+  const initialUniverse = createUniverseMap({ nowMs: TEST_UNIVERSE_NOW_MS,
     mode: 'test',
     playerPlanets: Object.entries(twoWorlds.planets).map(([id, planet]) => ({
       id,
@@ -851,7 +854,7 @@ test('destroying Helion keeps the surviving planet and global progress through r
   assert.equal(getOwnerShipUpgradeLevel(reloaded, 'corsair'), 6);
   assert.deepEqual(getPlanetResources(reloaded), survivor.resources);
 
-  const universeAfterReload = createUniverseMap({
+  const universeAfterReload = createUniverseMap({ nowMs: TEST_UNIVERSE_NOW_MS,
     mode: 'test',
     playerPlanets: Object.entries(reloaded.planets).map(([id, planet]) => ({
       id,
@@ -1308,7 +1311,7 @@ test('persistence keeps one-time energy attribution and migrates legacy satellit
 });
 
 test('building application owns start, queue cancellation, completion, destroy, and production bot transitions', () => {
-  const initial = withBuildingSetup(createInitialSaveState('test'));
+  const initial = withBuildingSetup(createInitialSaveState('test', TEST_UNIVERSE_NOW_MS));
   const buildingContext = context(10_000);
   const initialTradeCenterLevel = initial.planets['helion-01'].buildings['trade-center'];
   const preview = previewBuilding(initial, buildingContext, 'trade-center');
@@ -1480,7 +1483,7 @@ test('over-capacity fleet rejects hangar downgrade without changing state or ref
 });
 
 test('recycling, trade, and spaceport actions remain thin domain-backed transitions', () => {
-  const initial = withBuildingSetup(createInitialSaveState('test'));
+  const initial = withBuildingSetup(createInitialSaveState('test', TEST_UNIVERSE_NOW_MS));
   const startAt = 20_000;
   const recycling = startRecycling(initial, context(startAt), 100, { metal: 40, minerals: 40, gas: 20 }, 'recycle-1');
   assert.equal(recycling.ok, true);
@@ -1533,7 +1536,7 @@ test('recycling, trade, and spaceport actions remain thin domain-backed transiti
 });
 
 test('manual and automatic recycling credits persist on the current planet wallet', () => {
-  const initial = withBuildingSetup(createInitialSaveState('test'));
+  const initial = withBuildingSetup(createInitialSaveState('test', TEST_UNIVERSE_NOW_MS));
   const startAt = 20_000;
   const assertWalletsMatchCredit = (state: SaveState, wallet: { metal: number; minerals: number; gas: number }) => {
     const planetResources = state.planets['helion-01'].resources;
@@ -1580,8 +1583,8 @@ test('manual and automatic recycling credits persist on the current planet walle
 
 test('spaceport application action names and resolves the selected faction ship', () => {
   const state = {
-    ...withBuildingSetup(createInitialSaveState('test')),
-    profile: { ...createInitialSaveState('test').profile, factionId: 'synod' as const },
+    ...withBuildingSetup(createInitialSaveState('test', TEST_UNIVERSE_NOW_MS)),
+    profile: { ...createInitialSaveState('test', TEST_UNIVERSE_NOW_MS).profile, factionId: 'synod' as const },
   };
   const result = startSpaceportUpgrade(state, context(25_000), 'ships', 'transporter', 'synod-transporter-1');
 
@@ -1830,7 +1833,7 @@ test('satellite batches complete one unit at a time, keep the first unit through
 });
 
 test('science application uses one clock, reconciles idempotently, and event bridge reads latest state', () => {
-  const base = createInitialSaveState('test');
+  const base = createInitialSaveState('test', TEST_UNIVERSE_NOW_MS);
   const initial = {
     ...base,
     planets: {
@@ -1955,7 +1958,7 @@ test('runtime snapshot adapter emits one science event and one runtime event per
 });
 
 test('functional application commits preserve simultaneous building and bot updates', () => {
-  const initial = withBuildingSetup(createInitialSaveState('test'));
+  const initial = withBuildingSetup(createInitialSaveState('test', TEST_UNIVERSE_NOW_MS));
   const stateRef = { current: initial };
   const queuedUpdates: Array<(current: SaveState) => SaveState> = [];
   let committed = initial;
@@ -1990,7 +1993,7 @@ test('functional application commits preserve simultaneous building and bot upda
 });
 
 test('application result reflects a failed transition after a queued functional update fills the queue', () => {
-  const testState = withBuildingSetup(createInitialSaveState('test'));
+  const testState = withBuildingSetup(createInitialSaveState('test', TEST_UNIVERSE_NOW_MS));
   const initial = {
     ...testState,
     planets: {
