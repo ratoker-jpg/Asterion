@@ -17,6 +17,7 @@ import {
 } from '../domain/pirates/contact.ts';
 import { calculateAttackDebris } from './attack.ts';
 import { calculatePirateForceDebris } from '../domain/pirates/debris.ts';
+import { pirateHangarFraction } from '../domain/pirates/threat.ts';
 import { calculatePirateEliminationPopulationBudget } from '../domain/pirates/profile.ts';
 import { isPirateMissionSnapshot, normalizePirateMissionSnapshot } from '../domain/pirates/mission.ts';
 import { PIRATE_BASE_SHIPS, type PirateBaseShipId } from '../domain/pirates/catalog.ts';
@@ -502,4 +503,24 @@ test('migration validator retains both historical 75–90% and approved 85–105
     const bad: typeof snapshot={...snapshot,eliminationBudget:{...snapshot.eliminationBudget!,coefficient}};
     assert.equal(isPirateMissionSnapshot(bad,'pirate-elimination'),false,`reject ${coefficient}`);
   }
+});
+
+test('report threat reduction uses the same hangar fraction the threat reducer applies', () => {
+  const manifest = { ships: { 'death-star': 48 } } satisfies FleetManifest;
+  const { state, contact, now } = fixture(manifest, { shipUpgrades: { 'death-star': 10 }, scienceLevel: 15 });
+  const launched = dispatchElimination(state, contact, now, 'pirate-threat-fraction', manifest);
+  assert.equal(launched.ok, true);
+  if (!launched.ok) return;
+  const sent = launched.flight.pirateSnapshot!.sentCombatPopulation!;
+  assert.ok(sent > 1);
+  // Corrupt snapshot: sent population exceeds the stored hangar capacity.
+  const tampered = { ...launched.flight, pirateSnapshot: { ...launched.flight.pirateSnapshot!, historicalHangarCapacity: sent - 1 } };
+  const prepared = { ...launched.state, flights: { ...launched.state.flights,
+    records: launched.state.flights.records.map((flight) => flight.id === tampered.id ? tampered : flight) } };
+  const arrived = arrive(prepared, tampered.arrivalAt);
+  const report = arrived.state.combat.reports.find((candidate) => candidate.id === `battle-pirate-${tampered.id}`);
+  assert.ok(report);
+  assert.equal(report.winner, 'attacker');
+  assert.equal(report.pirateReward?.threatReductionFraction, pirateHangarFraction(sent, sent - 1));
+  assert.equal(report.pirateReward?.threatReductionFraction, 0);
 });

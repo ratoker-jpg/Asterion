@@ -1768,6 +1768,11 @@ export function dispatchFlight(
   if (aidPlan && aidPlan.cargo.gas > 0 && gas.gas < flight.gasCost + aidPlan.cargo.gas) {
     return failure(state, 'insufficient-gas', 'Недостаточно газа: нужен и груз помощи, и топливо на путь.');
   }
+  // Same rule for an ordinary transport: gas cargo and fuel come from one stock.
+  if (command.missionId === 'transport' && transportCargo && transportCargo.gas > 0
+    && gas.gas < flight.gasCost + transportCargo.gas) {
+    return failure(state, 'insufficient-gas', 'Недостаточно газа: нужен и груз, и топливо на путь.');
+  }
 
   const nextFlights = domainResult.created ? updateFlight(domainResult.state, flight) : domainResult.state;
   let nextState = replacePlanetResources({ ...state, flights: nextFlights }, originPlanetId, {
@@ -1785,10 +1790,12 @@ export function dispatchFlight(
       },
     });
     const debited = getPlanetResources(nextState, originPlanetId);
+    // Cargo is clamped to the source and gas is checked against fuel above,
+    // so plain subtraction cannot go negative.
     const nextResources = {
-      metal: Math.max(0, debited.metal - transportCargo.metal),
-      minerals: Math.max(0, debited.minerals - transportCargo.minerals),
-      gas: Math.max(0, debited.gas - transportCargo.gas),
+      metal: debited.metal - transportCargo.metal,
+      minerals: debited.minerals - transportCargo.minerals,
+      gas: debited.gas - transportCargo.gas,
     };
     nextState = replacePlanetResources(nextState, originPlanetId, nextResources);
   }

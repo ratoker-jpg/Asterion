@@ -28,6 +28,7 @@ import type { AttackLaunchSnapshot, AttackLoot, AttackResolution } from '../doma
 import { recordBattleScoreAward } from '../domain/rating/scoring.ts';
 import { isPirateShipId } from '../domain/combat/side-entity.ts';
 import { calculatePirateForceDebris } from '../domain/pirates/debris.ts';
+import { pirateHangarFraction } from '../domain/pirates/threat.ts';
 import { PIRATE_CATALOG_BY_ID } from '../domain/pirates/catalog.ts';
 import { normalizePirateRaidSnapshot } from '../domain/pirates/mission.ts';
 import { resolvePirateEliminationEncounter } from '../domain/pirates/encounter.ts';
@@ -462,8 +463,10 @@ export function resolvePirateEliminationAtTarget(state: SaveState, flight: Fligh
       basePirateDebris,
       bonusPirateDebris,
       ownDebris,
-      threatReductionFraction: encounter.victory && snapshot.eliminationBudget && snapshot.historicalHangarCapacity
-        ? Math.min(1, (snapshot.sentCombatPopulation ?? 0) / snapshot.historicalHangarCapacity)
+      // Same function the threat reducer applies (pirates.ts), so the report
+      // never shows a reduction that did not happen.
+      threatReductionFraction: encounter.victory && snapshot.eliminationBudget
+        ? pirateHangarFraction(snapshot.sentCombatPopulation ?? 0, snapshot.historicalHangarCapacity ?? 0)
         : 0,
     },
   };

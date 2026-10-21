@@ -1597,6 +1597,60 @@ test('transport dispatches an atomic cargo snapshot to the Test Mode ally and re
   assert.equal(reconcileFlights(returned.state, arrival.state.flights.records[0].returnAt! + 1).changed, false);
 });
 
+test('transport gas cargo must leave enough gas for fuel; gas is never created', () => {
+  const initial = createInitialSaveState('test', 1_000);
+  const destination = {
+    kind: 'planet' as const,
+    planetId: 'test-mode-ally-ira-vel-v1',
+    coordinate: { galaxy: 1, system: 1, position: 2 },
+  };
+  const baseCommand = {
+    requestId: 'transport-gas-probe',
+    missionId: 'transport' as const,
+    originPlanetId: 'helion-01',
+    destination,
+    targetRelation: 'ally' as const,
+    selectedShips: { scout: 1 },
+    cargo: { metal: 0, minerals: 0, gas: 0, debris: 0 },
+    departedAt: 1_000,
+  };
+  const probe = dispatchFlight(initial, baseCommand, { now: 1_000, mode: 'test' });
+  assert.equal(probe.ok, true);
+  if (!probe.ok) return;
+  const fuel = probe.flight.gasCost;
+  assert.ok(fuel > 0);
+  const stock = 100 + fuel;
+  const starved = replacePlanetResources(initial, 'helion-01', {
+    ...getPlanetResources(initial, 'helion-01'),
+    gas: stock,
+  });
+
+  const rejected = dispatchFlight(starved, {
+    ...baseCommand,
+    requestId: 'transport-gas-too-much',
+    cargo: { metal: 0, minerals: 0, gas: stock, debris: 0 },
+  }, { now: 1_000, mode: 'test' });
+  assert.equal(rejected.ok, false);
+  if (rejected.ok) return;
+  assert.equal(rejected.error.code, 'insufficient-gas');
+  assert.equal(getPlanetResources(rejected.state, 'helion-01').gas, stock);
+
+  const allyGasBefore = starved.alliedPlanets![destination.planetId].resources!.gas;
+  const exact = dispatchFlight(starved, {
+    ...baseCommand,
+    requestId: 'transport-gas-exact',
+    cargo: { metal: 0, minerals: 0, gas: 100, debris: 0 },
+  }, { now: 1_000, mode: 'test' });
+  assert.equal(exact.ok, true);
+  if (!exact.ok) return;
+  assert.equal(exact.flight.cargo?.gas, 100);
+  assert.equal(getPlanetResources(exact.state, 'helion-01').gas, 0);
+  const arrival = reconcileFlights(exact.state, exact.flight.arrivalAt);
+  const allyGasAfter = arrival.state.alliedPlanets![destination.planetId].resources!.gas;
+  // Total gas in the system = source stock - fuel; nothing appears from nowhere.
+  assert.ok(allyGasAfter - allyGasBefore <= 100);
+});
+
 test('transport overflow keeps the pre-send warning but uses the normal delivery notice', () => {
   const initial = createInitialSaveState('test', 1_000);
   const destination = {
