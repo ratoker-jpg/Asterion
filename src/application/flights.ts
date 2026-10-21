@@ -2293,6 +2293,11 @@ function beginDeploymentReturn(state: SaveState, flight: FlightRecord, now: numb
   };
 }
 
+/**
+ * Free hangar capacity is checked once, at dispatch. On arrival the fleet is
+ * transferred even if parallel deployments now exceed the target hangar; the
+ * overpopulation rules then handle the excess (see the parallel-deployment test).
+ */
 function applyDeploymentArrival(
   state: SaveState,
   flight: FlightRecord,

@@ -337,7 +337,11 @@ function parseRequest(value: unknown): ResourceRequest | null {
   if (!id || !allianceId || !authorOwnerId || !planetId || !isAidResource(value.resource)) return null;
   const requested = nonNegativeInteger(value.requested, 0);
   if (requested <= 0) return null;
-  const coordinate = isRecord(value.coordinate) ? value.coordinate : {};
+  // A request without a full, valid coordinate is dropped: never invent [1:1:1].
+  if (!isRecord(value.coordinate)) return null;
+  const coordinate = value.coordinate;
+  if (![coordinate.galaxy, coordinate.system, coordinate.position]
+    .every((part) => typeof part === 'number' && Number.isInteger(part) && part >= 1)) return null;
   const status = REQUEST_STATUSES.includes(value.status as RequestStatus) ? value.status as RequestStatus : 'closed';
   const createdAt = nonNegativeNumber(value.createdAt, 0);
   const delivered = Math.min(requested, nonNegativeInteger(value.delivered, 0));
@@ -354,9 +358,9 @@ function parseRequest(value: unknown): ResourceRequest | null {
     planetId,
     planetName: text(value.planetName, planetId, 48, 1),
     coordinate: {
-      galaxy: Math.max(1, nonNegativeInteger(coordinate.galaxy, 1)),
-      system: Math.max(1, nonNegativeInteger(coordinate.system, 1)),
-      position: Math.max(1, nonNegativeInteger(coordinate.position, 1)),
+      galaxy: coordinate.galaxy as number,
+      system: coordinate.system as number,
+      position: coordinate.position as number,
     },
     resource: value.resource,
     requested,
@@ -601,7 +605,8 @@ export function migrateCommandState(
   if (!isRecord(value)) return createDefaultCommandState(mode, resolved);
   if ((value.version === 2 || value.version === 3) && Array.isArray(value.alliances)) {
     const migrated = migrateV2(value, mode);
-    return mode === 'test' ? ensureTestBotAlliance(migrated, resolved.now || Date.now()) : migrated;
+    // resolved.now defaults to 0: migration stays deterministic.
+    return mode === 'test' ? ensureTestBotAlliance(migrated, resolved.now) : migrated;
   }
   return migrateLegacy(value, mode, resolved);
 }

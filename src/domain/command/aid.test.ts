@@ -374,9 +374,11 @@ test('persistence: v2 saves migrate, ledgers/requests round-trip, damaged data n
     ...JSON.parse(JSON.stringify(made.state)),
     requests: [
       { id: 'request-3', allianceId: made.state.alliances[0].id, authorOwnerId: 'alice', planetId: 'helion-01', resource: 'energy', requested: 50_000 },
-      { id: 'request-4', allianceId: made.state.alliances[0].id, authorOwnerId: 'alice', planetId: 'helion-01', resource: 'gas', requested: 50_000, delivered: 9e9, status: 'open' },
-      { id: 'request-5', allianceId: 'alliance-404', authorOwnerId: 'alice', planetId: 'p', resource: 'metal', requested: 50_000, status: 'open' },
-      { id: 'request-6', allianceId: made.state.alliances[0].id, authorOwnerId: 'ghost', planetId: 'p', resource: 'metal', requested: 60_000, status: 'open' },
+      { id: 'request-4', allianceId: made.state.alliances[0].id, authorOwnerId: 'alice', planetId: 'helion-01', coordinate: { galaxy: 1, system: 3, position: 5 }, resource: 'gas', requested: 50_000, delivered: 9e9, status: 'open' },
+      { id: 'request-5', allianceId: 'alliance-404', authorOwnerId: 'alice', planetId: 'p', coordinate: { galaxy: 1, system: 3, position: 5 }, resource: 'metal', requested: 50_000, status: 'open' },
+      { id: 'request-6', allianceId: made.state.alliances[0].id, authorOwnerId: 'ghost', planetId: 'p', coordinate: { galaxy: 1, system: 3, position: 5 }, resource: 'metal', requested: 60_000, status: 'open' },
+      { id: 'request-7', allianceId: made.state.alliances[0].id, authorOwnerId: 'alice', planetId: 'helion-01', resource: 'metal', requested: 50_000, status: 'open' },
+      { id: 'request-8', allianceId: made.state.alliances[0].id, authorOwnerId: 'alice', planetId: 'helion-01', coordinate: { galaxy: 1, system: 0 }, resource: 'metal', requested: 50_000, status: 'open' },
       'garbage', null,
     ],
     aidLedgers: [
@@ -391,6 +393,9 @@ test('persistence: v2 saves migrate, ledgers/requests round-trip, damaged data n
   assert.equal(byId.get('request-4')?.delivered, 50_000);
   assert.equal(byId.get('request-5')?.status, 'closed');
   assert.equal(byId.get('request-6')?.closeReason, 'author_left');
+  assert.deepEqual(byId.get('request-4')?.coordinate, { galaxy: 1, system: 3, position: 5 });
+  assert.equal(byId.has('request-7'), false, 'a request without a coordinate is dropped, not moved to [1:1:1]');
+  assert.equal(byId.has('request-8'), false, 'a request with a broken coordinate is dropped');
   const ledger = hostile.aidLedgers.find((item) => item.ownerId === 'alice')!;
   assert.equal(ledger.charges, 3);
   assert.equal(ledger.progress, 0);

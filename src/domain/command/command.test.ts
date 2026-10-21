@@ -646,3 +646,13 @@ test('audit P1-4: finished applications to a vanished alliance survive a reload;
   assert.equal(cleaned.applications.some((entry) => entry.status === 'pending'), false);
   assert.ok(cleaned.nextSerial > 77);
 });
+
+test('test-mode migration seeds the bot alliance deterministically without a clock', async () => {
+  const { TEST_BOT_OWNER_ID } = await import('./catalog.ts');
+  const withoutBot = createDefaultCommandState('production');
+  const first = migrateCommandState(JSON.parse(JSON.stringify(withoutBot)), 'test');
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  const second = migrateCommandState(JSON.parse(JSON.stringify(withoutBot)), 'test');
+  assert.ok(first.alliances.some((alliance) => alliance.members.some((member) => member.ownerId === TEST_BOT_OWNER_ID)));
+  assert.deepEqual(first, second, 'no wall-clock time leaks into migrated data');
+});
