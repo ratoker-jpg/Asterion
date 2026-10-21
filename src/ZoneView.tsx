@@ -35,7 +35,7 @@ import type { PlanetEnergyCoordinates } from './application/energy.ts';
 import { getProductionBotBonusPercent, type BotAssignment, type ProductionResourceIncome } from './domain/buildings/production-bots.ts';
 import { RUNTIME_RESET_EVENT } from './domain/runtime/mode.ts';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
-import { GATE_BUILDING_ART } from './ui/sun-raid/gate-art.ts';
+import { gateArt } from './ui/sun-raid/gate-art.ts';
 import { SOLAR_CRYSTALS, SOLAR_CRYSTAL_IDS } from './domain/sun-raid/config.ts';
 import './ui/sun-raid/gate.css';
 import type { SolarCrystalId } from './domain/sun-raid/config.ts';
@@ -500,7 +500,7 @@ export function ZoneView({
               data-qa-gate-slot={gate.status}
             >
               <span className="resource-building-ground-shadow" aria-hidden="true" />
-              <span className="resource-building-art"><img src={GATE_BUILDING_ART[factionId]} alt="" draggable={false} /></span>
+              <span className="resource-building-art"><img src={gateArt(factionId, gate.status === 'building' ? 'construction' : gate.status === 'destroyed' ? 'ruined' : 'built')} alt="" draggable={false} /></span>
               <span className="gate-node__crystals" aria-hidden="true">
                 {SOLAR_CRYSTAL_IDS.map((id) => <i key={id} className={gate.crystals.includes(id) ? 'is-on' : ''} style={{ '--gem': SOLAR_CRYSTALS[id].color } as CSSProperties} />)}
               </span>

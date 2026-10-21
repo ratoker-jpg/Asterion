@@ -1,11 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import { CAMPAIGN_RESULT_ART } from '../sun-raid/sun-raid-assets.ts';
 import { createPortal } from 'react-dom';
 import type { CampaignResult } from '../../domain/sun-raid/types.ts';
-import { SOLAR_CRYSTAL_IDS } from '../../domain/sun-raid/config.ts';
 import { formatPlayTime } from '../../domain/session/slots.ts';
 import type { PlayerFactionId } from '../../domain/profile/types.ts';
-import { GateArt } from '../sun-raid/SunRaidArt.tsx';
-import { GATE_BUILDING_ART } from '../sun-raid/gate-art.ts';
 import '../sun-raid/gate.css';
 import { raceCard } from './race-catalog.ts';
 import './overlays.css';
@@ -103,20 +101,14 @@ type ResultProps = {
 };
 
 /** End of the campaign: the Gate is complete. Written to the save before it is shown. */
-export function CampaignResultOverlay({ result, factionId, playTimeMs, onStay, onNewGame, onMainMenu }: ResultProps) {
-  const card = raceCard(factionId);
+export function CampaignResultOverlay({ result, playTimeMs, onStay, onNewGame, onMainMenu }: ResultProps) {
   const stayRef = useRef<HTMLButtonElement>(null);
   useEffect(() => { stayRef.current?.focus(); }, []);
   return createPortal(
     <div className={`igo-result ${result.playerWon ? 'is-victory' : 'is-defeat'}`} role="dialog" aria-modal="true" aria-label={result.playerWon ? 'Победа' : 'Поражение'} data-qa-campaign-result={result.playerWon ? 'victory' : 'defeat'}>
-      <div className="igo-result__rays" aria-hidden="true" />
-      <div className="igo-result__gate">
-        <div className={`gate-hero is-${result.playerWon ? 'completed' : 'destroyed'}`}>
-          <GateArt crystals={SOLAR_CRYSTAL_IDS} progress={100} status={result.playerWon ? 'completed' : 'destroyed'} size={420} />
-          <img className="gate-hero__building" src={GATE_BUILDING_ART[factionId]} alt="" draggable={false} />
-        </div>
-      </div>
-      {result.playerWon ? <img className="igo-result__general" src={card.general} alt="" draggable={false} /> : null}
+      {/* Key art: the activated Gate (victory) or the enemy's Gate over our battered fleet (defeat). */}
+      <img className="igo-result__art" src={result.playerWon ? CAMPAIGN_RESULT_ART.victory : CAMPAIGN_RESULT_ART.defeat} alt="" draggable={false} />
+      <div className="igo-result__shade" aria-hidden="true" />
       <div className="igo-result__copy">
         <small>ИТОГ КАМПАНИИ</small>
         <h1>{result.playerWon ? 'ПОБЕДА' : 'ПОРАЖЕНИЕ'}</h1>

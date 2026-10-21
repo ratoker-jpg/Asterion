@@ -1,0 +1,123 @@
+{
+  "engine": "built-in image_gen",
+  "brief": "docs/notes/sun-raid-asset-prompts.md",
+  "status": "completed",
+  "jobs": [
+    {
+      "path": "assets/source/sun-raid/crystals/crystal-3.png",
+      "transparent": true,
+      "prompt": "Single elongated hexagonal faceted solar crystal, vertical tilt 8 degrees, deep violet #b58cff / #7a3cff interior containing a dark eclipse disc with a thin bright ring of light, sharp polished facets, purple glow and soft rim light, subtle shadow halo. One complete centered crystal, 8% transparent margins. 1024x1024."
+    },
+    {
+      "path": "assets/source/sun-raid/crystals/crystal-4.png",
+      "transparent": true,
+      "prompt": "Single elongated hexagonal faceted solar crystal, vertical tilt 8 degrees, crimson #ff6b5a / #ff2d3f interior with a frozen solar prominence arc bursting inside, sharp polished facets, intense red-orange glow and soft rim light, small sparks. One complete centered crystal, 8% transparent margins. 1024x1024."
+    },
+    {
+      "path": "assets/source/mission-icons-v1/37_sun_raid.png",
+      "transparent": false,
+      "prompt": "Edit the reference mission tile: preserve its dark blue sci-fi HUD tile and cyan circuit-line frame, replace the missile glyph with a centered glowing white glyph of a stylized sun disc with rays pierced by THREE converging arrowhead ships for an alliance raid. Clean bold silhouette readable at 48px, subtle cyan bloom, no text. Square 1254x1254. The decorative HUD frame is required; no other UI or labels.",
+      "reference": "D:/Desktop/Asterion/worktrees/new-game-sun-raid/assets/source/mission-icons-v1/20_bombardment.png"
+    },
+    {
+      "path": "assets/source/sun-raid/sun/sun-bright.png",
+      "transparent": true,
+      "prompt": "A blazing star seen from space, turbulent plasma surface, bright golden-white core, long corona filaments and prominences, intense glow. Complete centered sphere with 8% clear margins, isolated transparent backdrop. 1024x1024."
+    },
+    {
+      "path": "assets/source/sun-raid/sun/sun-dimmed.png",
+      "transparent": true,
+      "prompt": "A weakened dim star seen from space, darker orange-red surface with scarred dark patches and broken corona, faint glow, ominous. Complete centered sphere, straight-on view, 8% clear margins, isolated transparent backdrop. 1024x1024."
+    },
+    {
+      "path": "assets/source/sun-raid/sun/sun-frozen.png",
+      "transparent": true,
+      "prompt": "A star frozen in crystalline ice, pale cyan-white surface covered by hexagonal frost lattice and ice shards, cold blue halo, still and silent. Complete centered sphere seen straight-on from space, 8% clear margins, isolated transparent backdrop. 1024x1024."
+    },
+    {
+      "path": "assets/source/New assets/buildings/aegis/building.aegis.supreme-galactic-gates-construction.png",
+      "transparent": true,
+      "prompt": "Modify only the referenced star gate into its under-construction state: scaffolding, cranes and energy beams, open unfinished frame segments, portal not yet lit, construction lights. Preserve the reference camera angle, scale, base silhouette, faction materials and style. Aegis: blue #5f9bff, steel and gold, angular panels. No people. Entire structure centered, no backdrop or shadow plate, transparent PNG RGBA, 1254x1254.",
+      "reference": "D:/Desktop/Asterion/worktrees/new-game-sun-raid/assets/source/New assets/buildings/aegis/building.aegis.supreme-galactic-gates.png"
+    },
+    {
+      "path": "assets/source/New assets/buildings/aegis/building.aegis.supreme-galactic-gates-ruined.png",
+      "transparent": true,
+      "prompt": "Modify only the referenced star gate into its destroyed state: cracked and collapsed frame, smoking debris, broken extinguished portal, scorch marks and sparks. Preserve the reference camera angle, scale, base silhouette, faction materials and style. Aegis: blue #5f9bff, steel and gold, angular panels. No people. Entire structure centered, no backdrop or shadow plate, transparent PNG RGBA, 1254x1254.",
+      "reference": "D:/Desktop/Asterion/worktrees/new-game-sun-raid/assets/source/New assets/buildings/aegis/building.aegis.supreme-galactic-gates.png"
+    },
+    {
+      "path": "assets/source/New assets/buildings/synod/building.synod.supreme-galactic-gates-construction.png",
+      "transparent": true,
+      "prompt": "Modify only the referenced star gate into its under-construction state: scaffolding, cranes and energy beams, open unfinished frame segments, portal not yet lit, construction lights. Preserve the reference camera angle, scale, base silhouette, faction materials and style. Synod: white/gold with green #3fdc86, flowing curves and spires. No people. Entire structure centered, no backdrop or shadow plate, transparent PNG RGBA, 1254x1254.",
+      "reference": "D:/Desktop/Asterion/worktrees/new-game-sun-raid/assets/source/New assets/buildings/synod/building.synod.supreme-galactic-gates.png"
+    },
+    {
+      "path": "assets/source/New assets/buildings/synod/building.synod.supreme-galactic-gates-ruined.png",
+      "transparent": true,
+      "prompt": "Modify only the referenced star gate into its destroyed state: cracked and collapsed frame, smoking debris, broken extinguished portal, scorch marks and sparks. Preserve the reference camera angle, scale, base silhouette, faction materials and style. Synod: white/gold with green #3fdc86, flowing curves and spires. No people. Entire structure centered, no backdrop or shadow plate, transparent PNG RGBA, 1254x1254.",
+      "reference": "D:/Desktop/Asterion/worktrees/new-game-sun-raid/assets/source/New assets/buildings/synod/building.synod.supreme-galactic-gates.png"
+    },
+    {
+      "path": "assets/source/New assets/buildings/veyra/building.veyra.supreme-galactic-gates-construction.png",
+      "transparent": true,
+      "prompt": "Modify only the referenced star gate into its under-construction state: scaffolding, cranes and energy beams, open unfinished frame segments, portal not yet lit, construction lights. Preserve the reference camera angle, scale, base silhouette, faction materials and style. Veyra: organic red #ff5468 chitin and glowing veins. No people. Entire structure centered, no backdrop or shadow plate, transparent PNG RGBA, 1254x1254.",
+      "reference": "D:/Desktop/Asterion/worktrees/new-game-sun-raid/assets/source/New assets/buildings/veyra/building.veyra.supreme-galactic-gates.png"
+    },
+    {
+      "path": "assets/source/New assets/buildings/veyra/building.veyra.supreme-galactic-gates-ruined.png",
+      "transparent": true,
+      "prompt": "Modify only the referenced star gate into its destroyed state: cracked and collapsed frame, smoking debris, broken extinguished portal, scorch marks and sparks. Preserve the reference camera angle, scale, base silhouette, faction materials and style. Veyra: organic red #ff5468 chitin and glowing veins. No people. Entire structure centered, no backdrop or shadow plate, transparent PNG RGBA, 1254x1254.",
+      "reference": "D:/Desktop/Asterion/worktrees/new-game-sun-raid/assets/source/New assets/buildings/veyra/building.veyra.supreme-galactic-gates.png"
+    },
+    {
+      "path": "assets/source/menu/menu-background.png",
+      "transparent": false,
+      "prompt": "Epic wide space vista for a strategy game main menu: giant glowing star on the right third, faint ring of four crystals orbiting it (gold, cyan, violet, crimson), distant spiral galaxies, dark planet horizon curving along the bottom, left 40% dark and calm for menu overlay text, cinematic lighting, deep navy/black palette with warm sun highlights. Full bleed landscape 1920x1080, opaque. No actual text."
+    },
+    {
+      "path": "assets/source/menu/menu-background-aegis.png",
+      "transparent": false,
+      "prompt": "Epic wide space vista for a strategy game main menu: giant glowing star on the right third, faint ring of four crystals orbiting it (gold, cyan, violet, crimson), distant spiral galaxies, dark planet horizon curving along the bottom, left 40% dark and calm for menu overlay text, cinematic lighting, deep navy/black palette with warm sun highlights. Full bleed landscape 1920x1080, opaque. No actual text. Add blue horizon reflection and a distant angular steel and blue flagship. Keep the same composition."
+    },
+    {
+      "path": "assets/source/menu/menu-background-synod.png",
+      "transparent": false,
+      "prompt": "Epic wide space vista for a strategy game main menu: giant glowing star on the right third, faint ring of four crystals orbiting it (gold, cyan, violet, crimson), distant spiral galaxies, dark planet horizon curving along the bottom, left 40% dark and calm for menu overlay text, cinematic lighting, deep navy/black palette with warm sun highlights. Full bleed landscape 1920x1080, opaque. No actual text. Add green horizon reflection and a distant elegant white/gold flagship with smooth rings and spires. Keep the same composition."
+    },
+    {
+      "path": "assets/source/menu/menu-background-veyra.png",
+      "transparent": false,
+      "prompt": "Epic wide space vista for a strategy game main menu: giant glowing star on the right third, faint ring of four crystals orbiting it (gold, cyan, violet, crimson), distant spiral galaxies, dark planet horizon curving along the bottom, left 40% dark and calm for menu overlay text, cinematic lighting, deep navy/black palette with warm sun highlights. Full bleed landscape 1920x1080, opaque. No actual text. Add red horizon reflection and a distant organic red chitin flagship with glowing veins. Keep the same composition."
+    },
+    {
+      "path": "assets/source/menu/campaign-victory.png",
+      "transparent": false,
+      "prompt": "A colossal star gate activating in deep space, four solar crystals blazing in its sockets (gold, cyan, violet, crimson), blinding white vortex in center, fleets of ships silhouetted in front, triumphant cinematic composition, left half darker and calm for overlay text. Landscape 1920x1080 opaque full bleed, no actual text."
+    },
+    {
+      "path": "assets/source/menu/campaign-defeat.png",
+      "transparent": false,
+      "prompt": "A colossal enemy star gate seen from afar, cold red light, our damaged fleet drifting in foreground, somber cinematic mood, left half darker and calm for overlay text. Four solar crystal sockets on the gate. Landscape 1920x1080 opaque full bleed, no actual text."
+    },
+    {
+      "path": "assets/source/debris/debris-finder.png",
+      "transparent": true,
+      "prompt": "Small square game UI icon: dark navy sci-fi tile with thin cyan frame, centered radar sweep arc over scattered cluster of glowing metal ship fragments, cyan scan line, warm amber highlights on fragments, clean bold silhouette readable at 24px. 256x256 PNG RGBA, transparent outside tile. Decorative tile frame is required, no other UI, no text."
+    },
+    {
+      "path": "assets/source/debris/sun-debris.png",
+      "transparent": true,
+      "prompt": "A drifting field of wrecked starship fragments and twisted hull plates silhouetted against the edge of a blazing golden star, embers and molten metal glints, debris lit from behind with orange rim light. Centered isolated cutout composition, transparent background outside the debris and star edge, 8% margins. 512x512 PNG RGBA."
+    }
+  ],
+  "additional": [
+    "crystal-1.png",
+    "crystal-2.png",
+    "crystal-1-empty.png",
+    "crystal-2-empty.png",
+    "crystal-3-empty.png",
+    "crystal-4-empty.png"
+  ],
+  "deliveryManifest": "docs/notes/sun-raid-imagegen-manifest.json"
+}

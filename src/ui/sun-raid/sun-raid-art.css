@@ -2,12 +2,12 @@
 
 .sr-gem {
   position: relative;
-  display: inline-grid;
-  place-items: center;
+  display: inline-block;
   flex: 0 0 auto;
 }
-.sr-gem svg { width: 100%; height: 100%; overflow: visible; }
-.sr-gem.is-owned svg { filter: drop-shadow(0 0 6px var(--gem-glow)) drop-shadow(0 0 14px color-mix(in srgb, var(--gem-glow) 45%, transparent)); }
+/* The crystal fills ~78% of its square art: oversize the image so the gem spans the box. */
+.sr-gem img { position: absolute; left: 50%; top: 50%; height: 128%; aspect-ratio: 1; transform: translate(-50%, -50%); pointer-events: none; }
+.sr-gem.is-owned img { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--gem-glow) 70%, transparent)); }
 .sr-gem.is-owned::after {
   content: '';
   position: absolute;
@@ -18,7 +18,8 @@
   z-index: -1;
   animation: sr-gem-breathe 3.6s ease-in-out infinite;
 }
-.sr-gem.is-locked svg { filter: drop-shadow(0 0 4px var(--gem-glow)) grayscale(.25); }
+.sr-gem.is-missing img { opacity: .4; filter: drop-shadow(0 0 3px color-mix(in srgb, var(--gem-color) 50%, transparent)); }
+.sr-gem.is-locked img { filter: drop-shadow(0 0 4px var(--gem-glow)) grayscale(.25); }
 .sr-gem-set { display: inline-flex; gap: 10px; align-items: center; }
 
 @keyframes sr-gem-breathe { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
@@ -36,50 +37,18 @@
   inset: -18%;
   background: radial-gradient(circle, rgba(255, 196, 92, calc(.42 * var(--sun-intensity))) 0%, rgba(255, 120, 40, calc(.16 * var(--sun-intensity))) 45%, transparent 70%);
 }
-.sr-sun__corona {
-  inset: 2%;
-  background: repeating-conic-gradient(from 0deg, rgba(255, 214, 120, calc(.55 * var(--sun-intensity))) 0deg 4deg, transparent 4deg 13deg);
-  mask: radial-gradient(circle, transparent 46%, #000 49%, #000 60%, transparent 71%);
-  -webkit-mask: radial-gradient(circle, transparent 46%, #000 49%, #000 60%, transparent 71%);
-  animation: sr-sun-spin 60s linear infinite;
-}
-.sr-sun__core {
-  inset: 22%;
-  background:
-    radial-gradient(circle at 38% 34%, #fffbe8 0%, #ffe28a 18%, #ffb238 46%, #e96a1a 78%, #8a2f0d 100%);
-  box-shadow:
-    0 0 calc(var(--sun-size) * .12) rgba(255, 170, 60, calc(.85 * var(--sun-intensity))),
-    0 0 calc(var(--sun-size) * .3) rgba(255, 120, 30, calc(.45 * var(--sun-intensity))),
-    inset 0 0 calc(var(--sun-size) * .08) rgba(120, 30, 0, .55);
-  filter: saturate(calc(1 - .55 * var(--sun-dim))) brightness(calc(.62 + .48 * var(--sun-intensity)));
-}
-.sr-sun__core::after {
-  content: '';
+/* Generated star art: the bright Sun fades into its scarred, dimmed state as brightness drops. */
+.sr-sun__img {
   position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  /* Granulation: soft darker cells drifting over the photosphere. */
-  background:
-    radial-gradient(circle at 30% 60%, rgba(140, 40, 0, .28) 0 6%, transparent 13%),
-    radial-gradient(circle at 64% 30%, rgba(140, 40, 0, .22) 0 5%, transparent 12%),
-    radial-gradient(circle at 70% 70%, rgba(140, 40, 0, .26) 0 7%, transparent 15%),
-    radial-gradient(circle at 45% 42%, rgba(255, 240, 200, .25) 0 8%, transparent 18%),
-    radial-gradient(circle at 22% 32%, rgba(140, 40, 0, .18) 0 4%, transparent 10%),
-    radial-gradient(circle at 52% 80%, rgba(140, 40, 0, .2) 0 5%, transparent 12%);
-  filter: blur(2px);
-  mix-blend-mode: multiply;
-  animation: sr-sun-spin 90s linear infinite reverse;
+  inset: -6%;
+  width: 112%;
+  height: 112%;
+  pointer-events: none;
+  animation: sr-sun-spin 240s linear infinite;
 }
-.sr-sun.is-frozen .sr-sun__core { filter: hue-rotate(170deg) saturate(.55) brightness(.92); }
+.sr-sun__img--bright { opacity: calc(1 - var(--sun-dim)); filter: brightness(calc(.7 + .3 * var(--sun-intensity))); transition: opacity .6s ease; }
 .sr-sun.is-frozen .sr-sun__halo { background: radial-gradient(circle, rgba(140, 220, 255, .32) 0%, rgba(80, 160, 255, .12) 45%, transparent 70%); }
-.sr-sun.is-frozen .sr-sun__corona { animation-play-state: paused; filter: hue-rotate(170deg) saturate(.4); }
-.sr-sun__frost {
-  inset: 18%;
-  border: 2px solid rgba(190, 240, 255, .7);
-  background:
-    repeating-conic-gradient(from 15deg, rgba(220, 248, 255, .32) 0deg 2deg, transparent 2deg 30deg);
-  box-shadow: 0 0 22px rgba(150, 225, 255, .55), inset 0 0 26px rgba(170, 235, 255, .45);
-}
+.sr-sun.is-frozen .sr-sun__img { animation-play-state: paused; }
 
 @keyframes sr-sun-spin { to { transform: rotate(360deg); } }
 
@@ -137,7 +106,7 @@
 .sr-bright__scale { display: flex; justify-content: space-between; color: var(--ut-label); font-size: var(--ut-font-secondary); }
 
 @media (prefers-reduced-motion: reduce) {
-  .sr-sun__corona, .sr-sun__core::after, .sr-gate__vortex, .sr-gem.is-owned::after { animation: none !important; }
+  .sr-sun__img, .sr-gate__vortex, .sr-gem.is-owned::after { animation: none !important; }
 }
 
 .sun-report-strip { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 16px; margin: 0 24px 12px; padding: 12px 18px; border-radius: var(--ut-r-card); border: 1px solid rgba(255, 184, 74, .35); background: rgba(255, 160, 60, .07); }

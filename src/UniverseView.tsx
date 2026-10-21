@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { DEBRIS_FINDER_ICON, SUN_DEBRIS_ART } from './ui/sun-raid/sun-raid-assets.ts';
 import { NEARBY_DEBRIS_SYSTEM_SPAN, findDebrisNearSystem, nearbySystemWindow } from './domain/espionage/orbital-debris.ts';
 import { createPortal } from 'react-dom';
 import { EmblemGlyph } from './CommandView';
@@ -1041,7 +1042,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
         {debrisOrigin ? (
           <button type="button" className="universe-radar__home universe-radar__debris" data-qa-universe-find-debris
             title={`Свободные обломки в ${NEARBY_DEBRIS_SYSTEM_SPAN} солнечных системах вокруг ${debrisOrigin.planetName} ${formatUniverseCoordinate(debrisOrigin.coordinate)}`}
-            onClick={openDebrisSearch}>✦ Найти обломки</button>
+            onClick={openDebrisSearch}><img className="universe-radar__debris-icon" src={DEBRIS_FINDER_ICON} alt="" draggable={false} />Найти обломки</button>
         ) : null}
       </div>
 
@@ -1095,6 +1096,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
         <div className="universe-modal-backdrop" onClick={(event) => { if (event.target === event.currentTarget) setDebrisSearch(null); }}>
           <section className="universe-debris-finder uw" role="dialog" aria-modal="true" aria-label="Обломки в ближайших системах" data-qa-debris-finder={debrisSearch.results.length}>
             <header className="universe-debris-finder__head">
+              <img className="universe-debris-finder__icon" src={DEBRIS_FINDER_ICON} alt="" draggable={false} />
               <div>
                 <small>ОБЛОМКИ · СИСТЕМЫ {pad2(debrisSearch.from)}–{pad2(debrisSearch.to)} · ГАЛАКТИКА {pad2(debrisSearch.origin.coordinate.galaxy)}</small>
                 <h2>Рядом с {debrisSearch.origin.planetName} {formatUniverseCoordinate(debrisSearch.origin.coordinate)}</h2>
@@ -1114,6 +1116,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
                     const isSun = entry.coordinate.position === 0;
                     return (
                       <li key={key} data-qa-debris-row={key}>
+                        {isSun ? <img className="universe-debris-finder__thumb" src={SUN_DEBRIS_ART} alt="" draggable={false} /> : <span className="universe-debris-finder__thumb is-orbit" aria-hidden="true" />}
                         <button type="button" className="universe-debris-finder__coord" title="Показать на карте" onClick={() => pinpointCoordinate(entry.coordinate)}>
                           <b>{key}</b><small>{isSun ? 'Солнце системы' : `Система ${pad2(entry.coordinate.system)} · позиция ${entry.coordinate.position}`}</small>
                         </button>

@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { SUN_RAID_MISSION_ICON } from './ui/sun-raid/sun-raid-assets.ts';
 import { isSunCombatHull, selectSunSupportTargets } from './application/sun-raid.ts';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -113,7 +114,6 @@ import missionColonizeIcon from '../assets/source/mission-icons-v1/05_colonize.p
 import missionRecycleIcon from '../assets/source/mission-icons-v1/06_recycle.png';
 import missionGasIcon from '../assets/source/mission-icons-v1/07_gas_harvest.png';
 import missionSunSupportIcon from '../assets/source/mission-icons-v1/08_sun_support.png';
-import missionSunRaidIcon from '../assets/source/mission-icons-v1/20_bombardment.png';
 import missionSpaceFlightIcon from '../assets/source/mission-icons-v1/09_space_flight.png';
 import missionPirateEliminationIcon from '../assets/source/mission-icons-v1/10_pirate_elimination.png';
 import missionExpeditionIcon from '../assets/source/mission-icons-v1/31_expedition.png';
@@ -247,7 +247,7 @@ function flightMissionIcon(missionId: MissionId) {
   if (missionId === 'pirate-recon') return missionEspionageIcon;
   if (missionId === 'pirate-raid') return missionAttackIcon;
   if (missionId === 'exploration-recon') return missionEspionageIcon;
-  if (missionId === 'sun-attack') return missionSunRaidIcon;
+  if (missionId === 'sun-attack') return SUN_RAID_MISSION_ICON;
   return missions.find((mission) => mission.id === missionId)?.icon;
 }
 

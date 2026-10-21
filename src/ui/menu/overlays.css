@@ -58,21 +58,19 @@ body .igo-pause .igo-pause__copy h2 { margin: 0; font-size: 26px !important; fon
   inset: 0;
   z-index: 10060;
   display: grid;
-  grid-template-columns: 1fr minmax(0, 620px);
+  grid-template-columns: minmax(0, 620px) 1fr;
   align-items: center;
   gap: 40px;
   padding: 40px 80px;
   overflow: hidden;
-  background: radial-gradient(circle at 30% 50%, color-mix(in srgb, var(--race-accent-strong) 30%, #02060a) 0%, #010307 62%);
+  background: #010307;
   font-family: Montserrat, Arial, sans-serif;
   color: #f2fbff;
   animation: igo-fade .9s ease both;
 }
-.igo-result.is-defeat { background: radial-gradient(circle at 30% 50%, rgba(120, 20, 34, .55) 0%, #010307 62%); }
-.igo-result__rays { position: absolute; left: 30%; top: 50%; width: 1600px; height: 1600px; margin: -800px 0 0 -800px; background: repeating-conic-gradient(from 0deg, color-mix(in srgb, var(--race-accent) 10%, transparent) 0deg 3deg, transparent 3deg 12deg); mask: radial-gradient(circle, #000 0%, transparent 62%); -webkit-mask: radial-gradient(circle, #000 0%, transparent 62%); animation: sr-sun-spin 120s linear infinite; }
-.igo-result.is-defeat .igo-result__rays { opacity: .35; filter: grayscale(1); }
-.igo-result__gate { position: relative; justify-self: end; margin-right: 40px; animation: igo-rise 1.2s cubic-bezier(.22, 1, .36, 1) .2s both; }
-.igo-result__general { position: absolute; left: 1%; bottom: 0; height: 80%; object-fit: contain; object-position: left bottom; filter: drop-shadow(0 0 50px var(--race-glow)); opacity: .9; animation: igo-rise 1.2s cubic-bezier(.22, 1, .36, 1) .4s both; }
+.igo-result__art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 70% center; animation: igo-drift 40s ease-in-out infinite alternate; }
+.igo-result.is-defeat .igo-result__art { filter: saturate(.85) brightness(.9); }
+.igo-result__shade { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(1, 4, 8, .92) 0%, rgba(1, 4, 8, .7) 32%, rgba(1, 4, 8, .08) 62%, transparent 100%); }
 .igo-result__copy { position: relative; display: grid; gap: 14px; padding: 34px 36px; border-radius: var(--ut-r-panel); border: 1px solid var(--race-border); background: rgba(5, 11, 16, .86); backdrop-filter: blur(6px); animation: igo-rise 1s cubic-bezier(.22, 1, .36, 1) .5s both; }
 .igo-result.is-defeat .igo-result__copy { border-color: rgba(240, 68, 94, .45); }
 .igo-result__copy small { color: var(--race-accent); font-size: 12px; font-weight: 700; letter-spacing: .3em; }
@@ -87,12 +85,11 @@ body .igo-result .igo-result__copy h1 { margin: 0; font-size: 72px !important; f
 .igo-result__actions .igo-btn { text-align: center; }
 
 @keyframes igo-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes igo-drift { from { transform: scale(1); } to { transform: scale(1.05); } }
 @keyframes igo-rise { from { opacity: 0; transform: translateY(24px) scale(.97); } to { opacity: 1; transform: none; } }
 
 @media (max-width: 1100px) {
   .igo-result { grid-template-columns: 1fr; padding: 24px; }
-  .igo-result__general { display: none; }
-  .igo-result__gate .sr-gate { --gate-size: 240px !important; }
 }
 @media (prefers-reduced-motion: reduce) {
   .igo-result, .igo-result *, .igo-backdrop * { animation: none !important; }

@@ -29,7 +29,8 @@
   inset: -4%;
   background-size: cover;
   background-position: center;
-  filter: saturate(1.1) brightness(.62);
+  filter: saturate(1.05) brightness(.9);
+  transition: background-image .6s ease;
   animation: menu-drift 90s ease-in-out infinite alternate;
   z-index: -3;
 }
@@ -38,8 +39,7 @@
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(90deg, rgba(1, 5, 10, .94) 0%, rgba(1, 5, 10, .72) 32%, rgba(1, 5, 10, .2) 62%, rgba(1, 5, 10, .55) 100%),
-    radial-gradient(circle at 78% 40%, color-mix(in srgb, var(--race-accent-strong) 18%, transparent), transparent 46%);
+    linear-gradient(90deg, rgba(1, 5, 10, .9) 0%, rgba(1, 5, 10, .62) 30%, rgba(1, 5, 10, .08) 60%, rgba(1, 5, 10, .3) 100%);
 }
 .menu-stars {
   position: absolute;
@@ -57,19 +57,6 @@
     radial-gradient(1px 1px at 22% 48%, #fff 50%, transparent 51%);
   background-size: 640px 480px;
   animation: menu-twinkle 7s ease-in-out infinite alternate;
-}
-.menu-horizon {
-  position: absolute;
-  z-index: -1;
-  right: -420px;
-  bottom: -1180px;
-  width: 1900px;
-  height: 1900px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 50% 50%, #02070c 62%, color-mix(in srgb, var(--race-accent-strong) 40%, #071019) 66.5%, transparent 69%);
-  box-shadow: 0 0 120px color-mix(in srgb, var(--race-accent-strong) 22%, transparent);
-  opacity: .8;
-  transition: background .8s var(--menu-ease), box-shadow .8s var(--menu-ease);
 }
 @keyframes menu-drift { from { transform: scale(1) translate(0, 0); } to { transform: scale(1.06) translate(-1.5%, 1%); } }
 @keyframes menu-twinkle { from { opacity: .45; } to { opacity: .85; } }

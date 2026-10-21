@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import systemBackground from '../../../assets/source/starter/backgrounds/system_background.png';
+import { menuBackground } from '../sun-raid/sun-raid-assets.ts';
 import { SettingsView } from '../../SettingsView';
 import {
   applyTypographyPreferences,
@@ -70,7 +70,7 @@ export function MenuApp({ initialScreen, onEnterSlot }: MenuAppProps) {
   // Race art is large: warm the cache while the player reads the main menu.
   useEffect(() => {
     for (const card of RACE_CARDS) {
-      for (const src of [card.general, card.background, card.emblem, card.flagship]) {
+      for (const src of [card.general, card.background, card.emblem, card.flagship, menuBackground(card.id)]) {
         const image = new Image();
         image.decoding = 'async';
         image.src = src;
@@ -81,9 +81,9 @@ export function MenuApp({ initialScreen, onEnterSlot }: MenuAppProps) {
   return (
     <div className="menu-viewport" data-qa-menu={screen}>
       <div className="menu-stage" style={{ '--menu-scale': scale } as CSSProperties} data-faction={themeFaction}>
-        <div className="menu-bg" aria-hidden="true" style={{ backgroundImage: `url(${systemBackground})` }} />
+        {/* Key art per race: the planet horizon and the crystal-ringed star are part of the image. */}
+        <div className="menu-bg" aria-hidden="true" style={{ backgroundImage: `url(${menuBackground(themeFaction)})` }} data-qa-menu-bg={themeFaction} />
         <div className="menu-stars" aria-hidden="true" />
-        <div className="menu-horizon" aria-hidden="true" />
         {screen === 'main' ? (
           <MainMenuScreen continueSlot={continueSlot} slotCount={index.slots.length} onNavigate={setScreen} onContinue={() => continueSlot && onEnterSlot(continueSlot)} />
         ) : screen === 'load' ? (

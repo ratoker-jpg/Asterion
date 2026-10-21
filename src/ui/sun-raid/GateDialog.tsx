@@ -7,7 +7,7 @@ import { scaleRuntimeDuration, type RuntimeMode } from '../../domain/runtime/mod
 import type { SaveState } from '../../application/contracts.ts';
 import { currentSunRaidState, selectGateContext } from '../../application/sun-raid.ts';
 import { CrystalSet, GateArt } from './SunRaidArt.tsx';
-import { GATE_BUILDING_ART } from './gate-art.ts';
+import { gateArt } from './gate-art.ts';
 import './gate.css';
 
 function duration(ms: number) {
@@ -67,7 +67,7 @@ export function GateDialog({ state, planetId, now, mode, testTimeScale, onClose,
         <div className="gate-dialog__art">
           <div className={`gate-hero is-${gate?.status === 'cancelled' ? 'idle' : gate?.status ?? 'idle'}`}>
             <GateArt crystals={building || gate?.status === 'completed' ? gate!.crystals : context.crystals} progress={progress} status={gate?.status === 'cancelled' ? 'idle' : gate?.status ?? 'idle'} size={380} />
-            <img className="gate-hero__building" src={GATE_BUILDING_ART[state.profile.factionId]} alt="" draggable={false} />
+            <img className="gate-hero__building" src={gateArt(state.profile.factionId, building ? 'construction' : gate?.status === 'destroyed' ? 'ruined' : 'built')} alt="" draggable={false} />
           </div>
           <div className="gate-dialog__progress" aria-label={`Прогресс ${Math.floor(progress)}%`}>
             <b>{Math.floor(progress)}%</b>

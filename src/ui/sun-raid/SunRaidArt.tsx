@@ -1,18 +1,18 @@
 import type { CSSProperties } from 'react';
 import { SOLAR_CRYSTALS, SOLAR_CRYSTAL_IDS, type SolarCrystalId } from '../../domain/sun-raid/config.ts';
+import { CRYSTAL_ART, SUN_ART } from './sun-raid-assets.ts';
 import './sun-raid-art.css';
 
 /**
- * Procedural art for the Sun raid until the generated assets arrive
- * (prompts: docs/notes/sun-raid-asset-prompts.md). Pure SVG/CSS, no images.
+ * Sun raid art: generated crystals and Suns (src/ui/sun-raid/sun-raid-assets.ts),
+ * procedural Gate ring and brightness meter.
  */
 
 type CrystalGemProps = { id: SolarCrystalId; size?: number; owned?: boolean; locked?: boolean; title?: string };
 
-/** One faceted solar crystal. A missing crystal is drawn as an empty socket outline. */
+/** One solar crystal. A missing crystal is its empty glass at 40% opacity. */
 export function CrystalGem({ id, size = 40, owned = true, locked = false, title }: CrystalGemProps) {
   const crystal = SOLAR_CRYSTALS[id];
-  const gradient = `crystal-${id}-${owned ? 'on' : 'off'}`;
   return (
     <span
       className={`sr-gem ${owned ? 'is-owned' : 'is-missing'} ${locked ? 'is-locked' : ''}`}
@@ -23,28 +23,7 @@ export function CrystalGem({ id, size = 40, owned = true, locked = false, title 
       data-qa-crystal={id}
       data-qa-crystal-owned={owned ? 'true' : 'false'}
     >
-      <svg viewBox="0 0 40 52" aria-hidden="true">
-        <defs>
-          <linearGradient id={gradient} x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor="#ffffff" stopOpacity={owned ? 0.95 : 0.12} />
-            <stop offset=".35" stopColor={crystal.color} stopOpacity={owned ? 1 : 0.18} />
-            <stop offset="1" stopColor={crystal.glow} stopOpacity={owned ? 1 : 0.1} />
-          </linearGradient>
-        </defs>
-        <polygon className="sr-gem__body" points="20,1 35,14 31,40 20,51 9,40 5,14" fill={`url(#${gradient})`} />
-        {owned ? (
-          <>
-            <polygon points="20,1 35,14 20,20" fill="#fff" opacity=".35" />
-            <polygon points="20,1 5,14 20,20" fill="#fff" opacity=".18" />
-            <polygon points="5,14 20,20 9,40" fill="#000" opacity=".12" />
-            <polygon points="35,14 20,20 31,40" fill="#000" opacity=".28" />
-            <polygon points="9,40 20,20 31,40 20,51" fill="#000" opacity=".18" />
-            <line x1="20" y1="20" x2="20" y2="51" stroke="#fff" strokeOpacity=".35" strokeWidth=".8" />
-          </>
-        ) : (
-          <polygon points="20,1 35,14 31,40 20,51 9,40 5,14" fill="none" stroke={crystal.color} strokeOpacity=".55" strokeWidth="1.2" strokeDasharray="3 3" />
-        )}
-      </svg>
+      <img src={owned ? CRYSTAL_ART[id].lit : CRYSTAL_ART[id].empty} alt="" draggable={false} decoding="async" />
     </span>
   );
 }
@@ -60,7 +39,7 @@ export function CrystalSet({ owned, size = 34, locked = false }: { owned: readon
 
 type SunOrbProps = { brightness: number; baseEfficiency: number; frozen?: boolean; size?: number; label?: string };
 
-/** A star whose glow follows its current efficiency; a frozen Sun turns to ice. */
+/** A star whose look follows its current efficiency: bright → scarred and dim → frozen in ice. */
 export function SunOrb({ brightness, baseEfficiency, frozen = false, size = 220, label }: SunOrbProps) {
   const intensity = Math.max(0.2, Math.min(1, brightness / 100));
   const dimming = Math.max(0, Math.min(1, (baseEfficiency - brightness) / Math.max(1, baseEfficiency - 25)));
@@ -73,9 +52,8 @@ export function SunOrb({ brightness, baseEfficiency, frozen = false, size = 220,
       data-qa-sun-orb={brightness}
     >
       <span className="sr-sun__halo" aria-hidden="true" />
-      <span className="sr-sun__corona" aria-hidden="true" />
-      <span className="sr-sun__core" aria-hidden="true" />
-      {frozen ? <span className="sr-sun__frost" aria-hidden="true" /> : null}
+      <img className="sr-sun__img" src={frozen ? SUN_ART.frozen : SUN_ART.dimmed} alt="" draggable={false} decoding="async" />
+      {frozen ? null : <img className="sr-sun__img sr-sun__img--bright" src={SUN_ART.bright} alt="" draggable={false} decoding="async" />}
     </span>
   );
 }

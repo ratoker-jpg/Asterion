@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { SUN_DEBRIS_ART, SUN_RAID_MISSION_ICON } from './sun-raid-assets.ts';
 import { createPortal } from 'react-dom';
-import bombardmentIcon from '../../../assets/source/mission-icons-v1/20_bombardment.png';
 import sunSupportIcon from '../../../assets/source/mission-icons-v1/08_sun_support.png';
 import { getFactionCombatEntity, getFactionShipCatalog } from '../../domain/combat/faction-catalog.ts';
 import { COMMANDER_IDS, type CommanderId } from '../../domain/combat/commanders.ts';
@@ -117,7 +117,7 @@ export function SunRaidPanel({ state, now, mode, testTimeScale, selected, onSele
           <header><small>ТРЕВОГИ ГАЛАКТИКИ</small><b>{alerts.length}</b></header>
           {alerts.length ? alerts.map(({ raid, arrivesInMs }) => (
             <button key={raid.id} type="button" className="srp-alert" onClick={() => onSelect({ galaxy: raid.galaxy, system: raid.system })} data-qa-sun-alert={raid.id}>
-              <img src={bombardmentIcon} alt="" />
+              <img src={SUN_RAID_MISSION_ICON} alt="" />
               <span><b>Атака на Солнце {formatSun(raid.galaxy, raid.system)}</b><small>[{raid.allianceTag}] {raid.initiatorName} · прибытие через {countdown(arrivesInMs)}</small></span>
             </button>
           )) : <p className="srp-empty">Входящих атак на Солнца ваших галактик нет.</p>}
@@ -201,7 +201,7 @@ export function SunRaidPanel({ state, now, mode, testTimeScale, selected, onSele
 
         <div className="srp-cards">
           <article className="srp-card">
-            <header><img src={bombardmentIcon} alt="" /><span><b>Командный рейд</b><small>Командование → Операции · союз · 3 ч туда и 3 ч обратно</small></span></header>
+            <header><img src={SUN_RAID_MISSION_ICON} alt="" /><span><b>Командный рейд</b><small>Командование → Операции · союз · 3 ч туда и 3 ч обратно</small></span></header>
             <ul className="srp-rules">
               <li>Лимит стороны — {SUN_RAID_CONFIG.populationCapPerSide.toLocaleString('ru-RU')} населения</li>
               <li>Технологии и уровни кораблей — лучшие среди участников стороны</li>
@@ -218,6 +218,7 @@ export function SunRaidPanel({ state, now, mode, testTimeScale, selected, onSele
             {supportBlock ? <p className="srp-block-reason" role="note">{supportBlock}</p> : null}
             <button type="button" className="opsA-btn srp-cta" disabled={Boolean(supportBlock)} onClick={() => raidHere && onSendSupport(raidHere)} data-qa-sun-support>ОТПРАВИТЬ ЗАЩИТУ · ФЛОТЫ</button>
             <div className="srp-debris" data-qa-sun-debris={sunDebris}>
+              <img className="srp-debris__art" src={SUN_DEBRIS_ART} alt="" draggable={false} />
               <span><small>ОБЛОМКИ У СОЛНЦА [{selected.galaxy}:{selected.system}:0]</small><b>{sunDebris.toLocaleString('ru-RU')}</b></span>
               <button type="button" className="opsA-btn opsA-btn--small" disabled={sunDebris <= 0} onClick={() => onRecycleDebris(selected)} title="Переработчики летят к Солнцу. Астероид на позиции 1 этой системы тоже собирает эти обломки." data-qa-sun-recycle>ПЕРЕРАБОТАТЬ</button>
             </div>
@@ -373,7 +374,7 @@ function SunLaunchDialog({ state, now, options, kind, raid, galaxy, system, onCl
     <div className="opsA srp-portal"><div className="srp-modal" role="presentation" onMouseDown={onClose}>
       <section className="srp-launch" role="dialog" aria-modal="true" aria-label={kind === 'attack' ? 'Объявить рейд' : 'Отправить защиту'} onMouseDown={(event) => event.stopPropagation()} data-qa-sun-launch={kind}>
         <header>
-          <img src={kind === 'attack' ? bombardmentIcon : sunSupportIcon} alt="" />
+          <img src={kind === 'attack' ? SUN_RAID_MISSION_ICON : sunSupportIcon} alt="" />
           <div><small>{kind === 'attack' ? 'КОМАНДНЫЙ РЕЙД' : 'ПОДДЕРЖКА СОЛНЦА'}</small><h2>Солнце {formatSun(galaxy, system)}</h2></div>
           <button ref={closeRef} type="button" className="srp-close" data-asterion-close aria-label="Закрыть" onClick={onClose}>×</button>
         </header>

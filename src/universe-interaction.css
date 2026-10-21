@@ -107,13 +107,14 @@
 
 /* «Найти обломки» */
 .universe-debris-finder{width:min(620px,100%);max-height:min(640px,calc(100% - 48px));display:flex;flex-direction:column;gap:14px;padding:20px 22px;border:1px solid #6fb8c84d;border-radius:12px;background:linear-gradient(180deg,#0b1a26f2,#06101af2);box-shadow:0 24px 64px #000a}
-.universe-debris-finder__head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.universe-debris-finder__head{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:14px}
+.universe-debris-finder__icon{width:44px;height:44px;object-fit:contain}
 .universe-debris-finder__head small{display:block;font-size:11px;letter-spacing:.12em;color:#8fb6c0}
 .universe-debris-finder__head h2{margin:4px 0 0;font-size:18px;font-weight:700;color:#eef6fa}
 .universe-debris-finder__empty{display:grid;justify-items:center;gap:16px;padding:12px 0 4px;text-align:center}
 .universe-debris-finder__empty p{margin:0;font-size:14px;color:#cfe0e8}
 .universe-debris-finder__list{list-style:none;margin:0;padding:0;display:grid;gap:8px;overflow:auto}
-.universe-debris-finder__list li{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:14px;padding:10px 12px;border:1px solid #6fb8c829;border-radius:8px;background:#0a1823b3}
+.universe-debris-finder__list li{display:grid;grid-template-columns:44px 1fr auto auto;align-items:center;gap:14px;padding:10px 12px;border:1px solid #6fb8c829;border-radius:8px;background:#0a1823b3}
 .universe-debris-finder__coord{display:grid;justify-items:start;gap:2px;padding:0;border:0;background:none;color:inherit;cursor:pointer;text-align:left}
 .universe-debris-finder__coord b{font-size:15px;color:#a4edf6;font-variant-numeric:tabular-nums;text-decoration:underline;text-decoration-color:#a4edf655;text-underline-offset:3px;transition:color .14s ease}
 .universe-debris-finder__coord:hover b{color:#fff}
@@ -122,3 +123,7 @@
 .universe-debris-finder__amount small{font-size:10px;letter-spacing:.1em;color:#8fa7b3}
 .universe-debris-finder__amount b{font-size:15px;color:#f1d48a;font-variant-numeric:tabular-nums}
 .universe-debris-finder__note{margin:0;font-size:12px;color:#8fa7b3}
+.universe-debris-finder__thumb{width:44px;height:44px;object-fit:contain}
+.universe-debris-finder__thumb.is-orbit{border-radius:50%;background:radial-gradient(circle at 40% 38%,#f1d48a 0 6%,transparent 7%),radial-gradient(circle at 62% 58%,#c9a15e 0 5%,transparent 6%),radial-gradient(circle at 34% 66%,#e2b870 0 4%,transparent 5%),radial-gradient(circle,#1b2c38 0 46%,transparent 47%);box-shadow:inset 0 0 0 1px #6fb8c840}
+.universe-radar__debris{display:inline-flex;align-items:center;gap:6px}
+.universe-radar__debris-icon{width:20px;height:20px;object-fit:contain}

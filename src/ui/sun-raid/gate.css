@@ -82,7 +82,7 @@ body .gate-dialog .gate-dialog__copy h2 { margin: 0; font-size: 32px !important;
 .resource-building-node.gate-node.is-idle .resource-building-art img { filter: grayscale(.85) brightness(.55) contrast(1.05); }
 .resource-building-node.gate-node.is-building .resource-building-art img { animation: gate-node-charge 2.8s ease-in-out infinite; }
 .resource-building-node.gate-node.is-completed .resource-building-art img { filter: drop-shadow(0 0 26px var(--race-glow)) brightness(1.12); }
-.resource-building-node.gate-node.is-destroyed .resource-building-art img { filter: grayscale(1) sepia(.5) hue-rotate(-30deg) brightness(.5); }
+.resource-building-node.gate-node.is-destroyed .resource-building-art img { filter: brightness(.85); }
 .gate-node__crystals { position: absolute; left: 50%; top: -10px; display: flex; gap: 6px; transform: translateX(-50%); z-index: 3; }
 .gate-node__crystals i { width: 12px; height: 12px; transform: rotate(45deg); border-radius: 2px; border: 1px solid var(--gem); background: rgba(3, 8, 12, .8); }
 .gate-node__crystals i.is-on { background: var(--gem); box-shadow: 0 0 10px var(--gem); }
@@ -95,7 +95,7 @@ body .gate-dialog .gate-dialog__copy h2 { margin: 0; font-size: 32px !important;
 .gate-hero { position: relative; display: grid; place-items: center; }
 .gate-hero__building { position: absolute; width: 62%; height: 62%; object-fit: contain; filter: drop-shadow(0 18px 30px rgba(0, 0, 0, .6)); }
 .gate-hero.is-idle .gate-hero__building { filter: grayscale(.8) brightness(.6); }
-.gate-hero.is-destroyed .gate-hero__building { filter: grayscale(1) brightness(.45); }
+.gate-hero.is-destroyed .gate-hero__building { filter: drop-shadow(0 18px 30px rgba(0, 0, 0, .6)) brightness(.9); }
 .gate-hero .sr-gate__vortex { display: none; }
 
 @media (max-width: 900px) {
