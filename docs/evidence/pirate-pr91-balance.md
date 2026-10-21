@@ -103,3 +103,31 @@ Corsair L40 grants at most 80% ordinary pirate metal+mineral wreckage, and 120% 
 Adaptive `Q` is hidden from production UI and updates only after economically significant resolved battle; full-fleet win increases Q by up to 0.054, full-fleet loss lowers it by up to 0.066, with q clipped 0–1. Ten scouts at 25,112 population cap carry negligible weight and cannot be used for practical cooldown abuse. Q=0 gives randomly 90–95%, Q=0.5 gives 97.5–102.5%, Q=1 gives 105–110% of sent population. This **does not** enforce 55% wins; a perfect matchup may still beat every garrison.
 
 **New conditional combat evidence:** `tools/generate-pirate-pr91-adaptive.mjs` executes 864 reproducible real resolver cases under fixed Q=0, 0.5 and 1. It writes `artifacts/pr91-adaptive-c/results.json` and `summary.md` with win/loss/draw counts and *optimistic* net resources under full debris collection. CI artifact is linked from the [current PR checks](https://github.com/ratoker-jpg/Asterion/pull/91/checks). Numerical outcomes should only be taken from the actual successful CI artifact, not extrapolated from the former ×2.5 study or confused with a simulated closed-loop 55% win-rate controller.
+
+## Аудит v2 (2026-10-21): новая база обломков — до / после
+
+Решение владельца (аудит v2, п. 2.1): обломки боя = `floor(u × базовая жизнь всех уничтоженных юнитов обеих сторон)`, где `u ∈ [0,25; 0,35)` — один детерминированный множитель на бой (`battleDebrisRoll(id отчёта)`, `src/domain/combat/debris.ts`). Щиты обломков не дают. Пиратские корпуса стоят на той же базе и сохраняют прежнюю относительную долю: `u × жизнь × share / PIRATE_ORDINARY_DEBRIS_SHARE` (PvE ×2, Корсар до ×2,67). Множители награды (0,7/0,9/1,0/1,3/1,5), ничьей (×0,75) и поражения (×0,5) не менялись.
+
+Цифры ниже — **медианы** по реальным прогонам резолвера, локально на `795bb35` («до») и на ветке аудита. Колонка «после 2.1» — только смена базы обломков; «после всех правок» — дополнительно правки инструмента из блока 3 (штрафы ничьей/поражения больше не обнуляются, множитель поражения ×0,5 и ничьей ×0,75 применяются как в продакшне). `net75`/`net120` — оптимистичная чистая выгода при переработке 75% / 120% (полный сбор, минус потери корпусов, топливо атаки и сбора).
+
+| Метрика (медиана) | до | после 2.1 | после всех правок |
+|---|---:|---:|---:|
+| pr91-balance, зачистка: обломки всего | 20 175 780 | 8 509 264 | 6 866 886 |
+| pr91-balance, зачистка: пиратские обломки | 5 525 010 | 2 217 292 | 2 217 292 |
+| pr91-balance, зачистка: net75 | −16 483 520 | −26 893 466 | −28 243 898 |
+| pr91-balance, зачистка: net120 | −4 761 454 | −21 782 470 | −24 500 128 |
+| pr91-balance, только полные победы: net75 | −41 986 | −1 041 842 | −1 202 063 |
+| pr91-balance, только полные победы: net120 | 1 131 424 | −597 964 | −897 632 |
+| pr91-balance, входящий рейд: обломки всего | 22 799 910 | 10 276 553 | 10 276 553 |
+| pr91-balance, входящий рейд: net75 | −36 043 872 | −45 247 033 | −45 247 033 |
+| pr91-balance, входящий рейд: net120 | −25 389 955 | −41 522 934 | −41 522 934 |
+| approved-compare: обломки | 98 956 929 | 36 326 932 | 36 326 932 |
+| approved-compare: net75 | −82 571 534 | −128 777 594 | −128 777 594 |
+| approved-compare: net120 | −37 723 238 | −111 681 516 | −111 681 516 |
+| garrison 85–105: обломки | 94 379 655 | 34 282 298 | 34 282 298 |
+| garrison 85–105: net75 | −85 877 285 | −130 717 374 | −130 717 374 |
+| garrison 85–105: net120 | −43 040 658 | −114 818 844 | −114 818 844 |
+| adaptive C: орбитальные обломки | 68 549 895 | 24 343 436 | 24 343 436 |
+| adaptive C: оптимистичный net120 | −75 120 820 | −128 146 858 | −128 146 858 |
+
+Вывод: у боевых корпусов базовая жизнь заметно меньше стоимости металл+минералы, поэтому обломков в медиане становится в ~2,4–2,8 раза меньше, и зачистка пиратов при текущих множителях в медиане перестаёт окупаться даже при переработке 120%. Это ожидаемое следствие правила; **ретюн множителей пиратской награды — решение владельца**, константы баланса в этом PR не менялись. `balance:pirates` (`docs/evidence/pirate-combat-balance.md`) перегенерирован: симуляция теперь строит гарнизон с тем же сид-коэффициентом, что и продакшн (90–95% для нового владельца, Q = 0), а не фиксированные 90%.
