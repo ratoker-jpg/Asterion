@@ -325,7 +325,7 @@ export function reconcilePlanetOverpopulation(
   const resolved = hadEpisode && !result.state;
   let next = state;
   const nextPlanet = withOverpopulationState(
-    { ...planet, fleet: result.fleet, solarSatellites: satellites },
+    { ...planet, fleet: result.fleet, solarSatellites: result.solarSatellites },
     result.state,
   );
   const planetChanged = nextPlanet !== planet

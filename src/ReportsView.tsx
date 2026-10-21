@@ -323,13 +323,13 @@ function OverpopulationDossier({ item }: { item: ReportItem }) {
         <div className="is-danger"><small>УНИЧТОЖЕНО</small><strong>{numberFormat.format(report.removedShips.reduce((sum, loss) => sum + loss.count, 0))}</strong></div>
       </section>
       <section className="spy-report-card overpopulation-report-losses">
-        <header><strong>УНИЧТОЖЕННЫЕ ОБЫЧНЫЕ КОРАБЛИ</strong><span>{numberFormat.format(report.removedShips.reduce((sum, loss) => sum + loss.count, 0))} ед.</span></header>
+        <header><strong>УНИЧТОЖЕННЫЕ КОРАБЛИ И СПУТНИКИ</strong><span>{numberFormat.format(report.removedShips.reduce((sum, loss) => sum + loss.count, 0))} ед.</span></header>
         {report.removedShips.length ? <div className="spy-report-entity-grid">
           {report.removedShips.map(({ shipId, count }) => {
             const entity = getFactionCombatEntity(report.factionId, shipId as CombatEntityId);
             return <article className="spy-report-entity" key={shipId} data-qa-overpopulation-loss={shipId}><span className="reports-v2-art reports-v2-entity-art"><img src={entity.art} alt="" /></span><div><strong>{entity.name}</strong><span>{shipId}</span></div><b>{numberFormat.format(count)}</b></article>;
           })}
-        </div> : <p className="spy-report-empty">Потери обычных кораблей не зафиксированы.</p>}
+        </div> : <p className="spy-report-empty">Потери кораблей не зафиксированы.</p>}
       </section>
       <section className="reports-generic-body reports-episode-meta"><small>{report.planetName} · {getCombatFactionName(report.factionId)}</small><p>Начало эпизода: {formatDate(new Date(report.episodeStartedAt).toISOString())} · Разблокировка: {formatDate(new Date(report.episodeEndedAt).toISOString())}</p></section>
     </div>

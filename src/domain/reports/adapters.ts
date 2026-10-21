@@ -267,7 +267,7 @@ export function overpopulationEpisodeReportToReportItem(report: OverpopulationEp
     typeLabel: 'Итог перенаселения',
     title: `Планета разблокирована: ${report.planetName}`,
     preview: `${removedCount} кораблей уничтожено · население ${report.populationBefore} → ${report.populationAfter} · вместимость ${report.capacity}`,
-    body: `Планета ${report.planetName} разблокирована. Эпизод перенаселения завершён; итоговое население и уничтоженные обычные корабли перечислены в отчёте.`,
+    body: `Планета ${report.planetName} разблокирована. Эпизод перенаселения завершён; итоговое население, уничтоженные корабли и спутники перечислены в отчёте.`,
     timestamp,
     statusLabel: 'ПЛАНЕТА РАЗБЛОКИРОВАНА',
     statusTone: 'warning',

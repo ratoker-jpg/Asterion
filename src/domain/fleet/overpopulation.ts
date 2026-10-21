@@ -12,8 +12,9 @@ export const OVERPOPULATION_WINDOW_MS = 10 * 60 * 1000;
 
 export type OverpopulationResolutionReason = 'resolved' | 'no-eligible-units';
 
+/** Attrition loss; solar satellites are burned too (stored apart from the fleet). */
 export type OverpopulationShipLoss = {
-  shipId: Exclude<ShipId, 'solar-satellite'>;
+  shipId: ShipId;
   count: number;
 };
 
@@ -42,6 +43,8 @@ export type OverpopulationUnit = {
 
 export type OverpopulationReconciliation = {
   fleet: OwnedFleetState;
+  /** Orbital solar satellites left after attrition. */
+  solarSatellites: number;
   state?: OverpopulationState;
   actualPopulation: number;
   capacity: number;
@@ -77,12 +80,36 @@ function unreservedShipCount(
 
 function hasEligibleBurnUnits(
   fleet: OwnedFleetState,
+  solarSatellites: number,
   factionId: CombatFactionId,
   protectedShipCounts?: OverpopulationProtectedShipCounts,
 ): boolean {
-  return getFactionShipCatalog(factionId).some((entity) => entity.id !== SOLAR_SATELLITE_ID
-    && unreservedShipCount(fleet, entity.id as ShipId, protectedShipCounts) > 0
-    && safeNonNegativeInteger(entity.population) > 0);
+  return burnGroups(fleet, solarSatellites, factionId, protectedShipCounts).length > 0;
+}
+
+type BurnGroup = { id: ShipId; population: number; quantity: number };
+
+/**
+ * Burn candidates grouped by hull. Solar satellites live outside `fleet.ships`
+ * (planet.solarSatellites) and join the queue with their catalog population.
+ * Commanders are never candidates. Order: population, then stable id.
+ */
+function burnGroups(
+  fleet: OwnedFleetState,
+  solarSatellites: number,
+  factionId: CombatFactionId,
+  protectedShipCounts?: OverpopulationProtectedShipCounts,
+): BurnGroup[] {
+  return getFactionShipCatalog(factionId)
+    .map((entity) => ({
+      id: entity.id as ShipId,
+      population: Math.max(0, Math.floor(entity.population)),
+      quantity: entity.id === SOLAR_SATELLITE_ID
+        ? safeNonNegativeInteger(solarSatellites)
+        : unreservedShipCount(fleet, entity.id as ShipId, protectedShipCounts),
+    }))
+    .filter((group) => group.quantity > 0 && group.population > 0)
+    .sort((left, right) => left.population - right.population || String(left.id).localeCompare(String(right.id)));
 }
 
 function cloneFleet(fleet: OwnedFleetState): OwnedFleetState {
@@ -121,64 +148,57 @@ export function getOverpopulationEligibleUnits(
   fleet: OwnedFleetState,
   factionId: CombatFactionId = 'aegis',
   protectedShipCounts?: OverpopulationProtectedShipCounts,
+  solarSatellites = 0,
 ): OverpopulationUnit[] {
   const units: OverpopulationUnit[] = [];
-  for (const entity of getFactionShipCatalog(factionId)) {
-    if (entity.id === SOLAR_SATELLITE_ID) continue;
-    const quantity = unreservedShipCount(fleet, entity.id as ShipId, protectedShipCounts);
-    for (let slot = 0; slot < quantity; slot += 1) {
-      units.push({ kind: 'ship', id: entity.id as ShipId, population: Math.max(0, Math.floor(entity.population)), slot });
+  for (const group of burnGroups(fleet, solarSatellites, factionId, protectedShipCounts)) {
+    for (let slot = 0; slot < group.quantity; slot += 1) {
+      units.push({ kind: 'ship', id: group.id, population: group.population, slot });
     }
   }
-  units.sort((left, right) => left.population - right.population || String(left.id).localeCompare(String(right.id)) || left.slot - right.slot);
   return units;
 }
 
 function removeUnitsToTarget(
   fleet: OwnedFleetState,
+  solarSatellites: number,
   targetPopulation: number,
   actualPopulation: number,
   factionId: CombatFactionId,
   protectedShipCounts?: OverpopulationProtectedShipCounts,
-): { fleet: OwnedFleetState; removed: OverpopulationUnit[]; actualPopulation: number } {
+): { fleet: OwnedFleetState; solarSatellites: number; removed: OverpopulationUnit[]; actualPopulation: number } {
   const next = cloneFleet(fleet);
+  let satellites = safeNonNegativeInteger(solarSatellites);
   const removed: OverpopulationUnit[] = [];
   let population = actualPopulation;
-  if (population <= targetPopulation) return { fleet: next, removed, actualPopulation: population };
+  if (population <= targetPopulation) return { fleet: next, solarSatellites: satellites, removed, actualPopulation: population };
 
   // Work by catalog groups rather than expanding every hull into an array;
   // damaged saves may contain millions of units. The detail list remains
   // useful for diagnostics while the state transition stays bounded.
-  const groups = getFactionShipCatalog(factionId)
-    .filter((entity) => entity.id !== SOLAR_SATELLITE_ID)
-    .map((entity) => ({
-      id: entity.id as ShipId,
-      population: Math.max(0, Math.floor(entity.population)),
-      quantity: unreservedShipCount(next, entity.id as ShipId, protectedShipCounts),
-    }))
-    .filter((group) => group.quantity > 0 && group.population > 0)
-    .sort((left, right) => left.population - right.population || String(left.id).localeCompare(String(right.id)));
+  const groups = burnGroups(next, satellites, factionId, protectedShipCounts);
   for (const group of groups) {
     if (population <= targetPopulation) break;
     const remove = Math.min(group.quantity, Math.ceil((population - targetPopulation) / group.population));
     if (remove <= 0) continue;
-    next.ships[group.id] = Math.max(0, (next.ships[group.id] ?? 0) - remove);
+    if (group.id === SOLAR_SATELLITE_ID) satellites = Math.max(0, satellites - remove);
+    else next.ships[group.id] = Math.max(0, (next.ships[group.id] ?? 0) - remove);
     population -= remove * group.population;
     for (let slot = 0; slot < Math.min(remove, 1_024 - removed.length); slot += 1) {
       removed.push({ kind: 'ship', id: group.id, population: group.population, slot });
     }
   }
-  return { fleet: next, removed, actualPopulation: population };
+  return { fleet: next, solarSatellites: satellites, removed, actualPopulation: population };
 }
 
 function normalizeEpisode(value: OverpopulationState | undefined): OverpopulationState | undefined {
   if (!value || !value.blocked) return undefined;
   const episodeStartedAt = safeNonNegativeInteger(value.episodeStartedAt);
-  const validShipIds = new Set<string>(SHIP_IDS.filter((id) => id !== SOLAR_SATELLITE_ID));
-  const removedShipCounts = new Map<Exclude<ShipId, 'solar-satellite'>, number>();
+  const validShipIds = new Set<string>(SHIP_IDS);
+  const removedShipCounts = new Map<ShipId, number>();
   for (const loss of value.removedShips ?? []) {
     if (!validShipIds.has(loss.shipId) || !Number.isFinite(loss.count) || loss.count <= 0) continue;
-    const shipId = loss.shipId as Exclude<ShipId, 'solar-satellite'>;
+    const shipId = loss.shipId;
     const count = Math.floor(loss.count);
     if (count > 0) removedShipCounts.set(shipId, (removedShipCounts.get(shipId) ?? 0) + count);
   }
@@ -205,14 +225,16 @@ function normalizeEpisode(value: OverpopulationState | undefined): Overpopulatio
 function countRemovedShips(
   previous: OwnedFleetState,
   next: OwnedFleetState,
+  previousSatellites: number,
+  nextSatellites: number,
   factionId: CombatFactionId,
 ): OverpopulationShipLoss[] {
   return getFactionShipCatalog(factionId)
-    .filter((entity) => entity.id !== SOLAR_SATELLITE_ID)
     .flatMap((entity) => {
-      const shipId = entity.id as Exclude<ShipId, 'solar-satellite'>;
-      const count = Math.max(0,
-        safeNonNegativeInteger(previous.ships[shipId]) - safeNonNegativeInteger(next.ships[shipId]));
+      const shipId = entity.id as ShipId;
+      const count = shipId === SOLAR_SATELLITE_ID
+        ? Math.max(0, safeNonNegativeInteger(previousSatellites) - safeNonNegativeInteger(nextSatellites))
+        : Math.max(0, safeNonNegativeInteger(previous.ships[shipId]) - safeNonNegativeInteger(next.ships[shipId]));
       return count > 0 ? [{ shipId, count }] : [];
     });
 }
@@ -221,7 +243,7 @@ function accumulateRemovedShips(
   previous: readonly OverpopulationShipLoss[],
   added: readonly OverpopulationShipLoss[],
 ): OverpopulationShipLoss[] {
-  const counts = new Map<Exclude<ShipId, 'solar-satellite'>, number>();
+  const counts = new Map<ShipId, number>();
   for (const loss of [...previous, ...added]) {
     counts.set(loss.shipId, (counts.get(loss.shipId) ?? 0) + loss.count);
   }
@@ -229,8 +251,8 @@ function accumulateRemovedShips(
 }
 
 /**
- * Applies the persisted linear burn schedule without mutating commanders or
- * orbital satellites. A newly arrived excess amount extends the current burn
+ * Applies the persisted linear burn schedule. Ships and orbital solar
+ * satellites burn; commanders never do. A newly arrived excess amount extends the current burn
  * pool but never resets the original episode deadline.
  */
 export function reconcileOverpopulation(
@@ -250,6 +272,7 @@ export function reconcileOverpopulation(
   if (initialExcess <= 0) {
     return {
       fleet,
+      solarSatellites: safeNonNegativeInteger(solarSatellites),
       state: undefined,
       actualPopulation: initialPopulation,
       capacity,
@@ -275,8 +298,10 @@ export function reconcileOverpopulation(
     ? 0
     : Math.max(0, scheduledBurnPool - targetBurn);
   const targetPopulation = capacity + remainingScheduledExcess;
-  const removedResult = removeUnitsToTarget(fleet, targetPopulation, initialPopulation, factionId, protectedShipCounts);
-  const removedShipCounts = countRemovedShips(fleet, removedResult.fleet, factionId);
+  const removedResult = removeUnitsToTarget(
+    fleet, solarSatellites, targetPopulation, initialPopulation, factionId, protectedShipCounts);
+  const removedShipCounts = countRemovedShips(
+    fleet, removedResult.fleet, solarSatellites, removedResult.solarSatellites, factionId);
   const actualPopulation = removedResult.actualPopulation;
   const blocked = actualPopulation > capacity;
   const burnedPopulation = (episode?.burnedPopulation ?? 0)
@@ -285,6 +310,7 @@ export function reconcileOverpopulation(
   if (!blocked) {
     return {
       fleet: removedResult.fleet,
+      solarSatellites: removedResult.solarSatellites,
       state: undefined,
       actualPopulation,
       capacity,
@@ -307,12 +333,13 @@ export function reconcileOverpopulation(
     burnedPopulation,
     lastReconciledAt: safeNow,
     blocked: true,
-    ...(removedResult.removed.length === 0 && initialExcess > 0 && !hasEligibleBurnUnits(fleet, factionId, protectedShipCounts)
+    ...(removedResult.removed.length === 0 && initialExcess > 0 && !hasEligibleBurnUnits(fleet, solarSatellites, factionId, protectedShipCounts)
       ? { lastResolutionReason: 'no-eligible-units' as const }
       : {}),
   };
   return {
     fleet: removedResult.fleet,
+    solarSatellites: removedResult.solarSatellites,
     state: nextState,
     actualPopulation,
     capacity,

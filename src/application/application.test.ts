@@ -68,6 +68,7 @@ import { createColonyPlanetRuntime, destroyOwnedPlanet } from './owned-planets.t
 import {
   getPlanetOverpopulationSummary,
   reconcileAllPlanetOverpopulation,
+  isPlanetBlocked,
   reconcilePlanetOverpopulation,
 } from './overpopulation.ts';
 import { createPlayerRatingEntries } from '../domain/rating/fixtures.ts';
@@ -2859,9 +2860,10 @@ test('blocked planet rejects local commands before overdue queues can reconcile'
   const canceledFleet = cancelFleetProduction(blocked, blockedContext, fleetTask.id);
   assert.equal(canceledFleet.transition.ok, false);
   assert.equal(canceledFleet.state, blocked);
+  // Dismantling satellites stays available on a blocked planet: it is a way out of the block.
   const dismantled = dismantleSolarSatellites(blocked, { planetId: 'helion-01' }, 1);
-  assert.equal(dismantled.ok, false);
-  assert.equal(dismantled.state, blocked);
+  assert.equal(dismantled.ok, true);
+  assert.equal(dismantled.state.planets['helion-01'].solarSatellites, 2);
 
   const spaceportTask = blocked.planets['helion-01'].spaceportUpgrades.shipQueue[0];
   assert.ok(spaceportTask);
@@ -2935,4 +2937,26 @@ test('blocked planet rejects local commands before overdue queues can reconcile'
   assert.deepEqual(scienceCommits, []);
   assert.equal(current, blocked);
   unbindScience();
+});
+
+test('dismantling satellites on a planet blocked only by satellites lifts the block', () => {
+  const initial = createInitialSaveState('production', 0);
+  const planet = initial.planets['helion-01'];
+  const overfull = {
+    ...initial,
+    planets: { ...initial.planets, 'helion-01': {
+      ...planet,
+      buildings: { ...planet.buildings, hangar: 0 },
+      fleet: createEmptyFleetState(),
+      solarSatellites: 200,
+    } },
+  } satisfies SaveState;
+  const blocked = reconcilePlanetOverpopulation(overfull, 'helion-01', 0).state;
+  assert.equal(isPlanetBlocked(blocked, 'helion-01'), true);
+  const dismantled = dismantleSolarSatellites(blocked, { planetId: 'helion-01' }, 150);
+  assert.equal(dismantled.ok, true);
+  assert.equal(dismantled.removed, 150);
+  const reconciled = reconcilePlanetOverpopulation(dismantled.state, 'helion-01', 1_000);
+  assert.equal(reconciled.summary.blocked, false);
+  assert.equal(isPlanetBlocked(reconciled.state, 'helion-01'), false);
 });
