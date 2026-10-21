@@ -11,21 +11,26 @@ import { raceCard } from './race-catalog.ts';
 import './overlays.css';
 
 type PauseMenuProps = {
-  slotName: string;
+  /** `slot`: a production save slot; `test`: the isolated Test Mode save. */
+  variant: 'slot' | 'test';
+  title: string;
   factionId: PlayerFactionId;
   playTimeMs: number;
   onResume: () => void;
   onSave: () => void;
-  onLoad: () => void;
   onRestart: () => void;
-  onMainMenu: () => void;
+  onLoad?: () => void;
+  onMainMenu?: () => void;
+  onExport?: () => void;
+  testSpeed?: { value: number; options: readonly number[]; onChange: (value: number) => void };
 };
 
-/** In-game menu (Esc / ≡): replaces the old one-click «↻» reset. Restarting asks first. */
-export function PauseMenu({ slotName, factionId, playTimeMs, onResume, onSave, onLoad, onRestart, onMainMenu }: PauseMenuProps) {
+/** In-game menu (Esc / ≡): replaces the old one-click «↻» reset. Restarting always asks first. */
+export function PauseMenu({ variant, title, factionId, playTimeMs, onResume, onSave, onRestart, onLoad, onMainMenu, onExport, testSpeed }: PauseMenuProps) {
   const [confirmRestart, setConfirmRestart] = useState(false);
   const firstRef = useRef<HTMLButtonElement>(null);
   const card = raceCard(factionId);
+  const isTest = variant === 'test';
   useEffect(() => {
     firstRef.current?.focus();
     const onKey = (event: KeyboardEvent) => {
@@ -39,20 +44,23 @@ export function PauseMenu({ slotName, factionId, playTimeMs, onResume, onSave, o
     return () => window.removeEventListener('keydown', onKey, true);
   }, [confirmRestart, onResume]);
 
+  const resetLabel = 'Сбросить текущее тестовое сохранение';
   return createPortal(
-    <div className="igo-backdrop" onMouseDown={onResume} data-qa-pause-menu>
+    <div className="igo-backdrop" onMouseDown={onResume} data-qa-pause-menu={variant}>
       <section className="igo-pause" role="dialog" aria-modal="true" aria-label="Меню игры" onMouseDown={(event) => event.stopPropagation()}>
         <img className="igo-pause__general" src={card.general} alt="" draggable={false} />
         <div className="igo-pause__copy">
-          <small>ПАУЗА · {card.name.toUpperCase()}</small>
-          <h2>{slotName}</h2>
-          <p>Наиграно {formatPlayTime(playTimeMs)} · автосохранение включено</p>
+          <small>{isTest ? 'TEST MODE · ' : 'ПАУЗА · '}{card.name.toUpperCase()}</small>
+          <h2>{title}</h2>
+          <p>{isTest ? 'Изолированное тестовое сохранение · ускоренное время' : `Наиграно ${formatPlayTime(playTimeMs)} · автосохранение включено`}</p>
           {confirmRestart ? (
-            <div className="igo-confirm" role="alertdialog" aria-label="Начать заново">
-              <b>Начать кампанию заново?</b>
-              <span>Мир будет создан заново по тем же настройкам и сиду. Весь прогресс этого слота будет потерян.</span>
+            <div className="igo-confirm" role="alertdialog" aria-label={isTest ? 'Сбросить тестовое сохранение' : 'Начать заново'}>
+              <b>{isTest ? 'Сбросить тестовое сохранение?' : 'Начать кампанию заново?'}</b>
+              <span>{isTest
+                ? 'Тестовый мир будет пересоздан с новой раскладкой объектов. Производственные слоты не затрагиваются.'
+                : 'Мир будет создан заново по тем же настройкам и сиду. Весь прогресс этого слота будет потерян.'}</span>
               <div>
-                <button type="button" className="igo-btn igo-btn--danger" onClick={onRestart} data-qa-pause-restart-confirm>НАЧАТЬ ЗАНОВО</button>
+                <button type="button" className="igo-btn igo-btn--danger" onClick={onRestart} data-qa-pause-restart-confirm>{isTest ? 'СБРОСИТЬ' : 'НАЧАТЬ ЗАНОВО'}</button>
                 <button type="button" className="igo-btn" onClick={() => setConfirmRestart(false)}>ОТМЕНА</button>
               </div>
             </div>
@@ -60,9 +68,22 @@ export function PauseMenu({ slotName, factionId, playTimeMs, onResume, onSave, o
             <nav className="igo-pause__nav">
               <button ref={firstRef} type="button" className="igo-btn igo-btn--primary" onClick={onResume} data-qa-pause="resume">ПРОДОЛЖИТЬ</button>
               <button type="button" className="igo-btn" onClick={onSave} data-qa-pause="save">СОХРАНИТЬ СЕЙЧАС</button>
-              <button type="button" className="igo-btn" onClick={onLoad} data-qa-pause="load">ЗАГРУЗИТЬ ИГРУ</button>
-              <button type="button" className="igo-btn igo-btn--danger" onClick={() => setConfirmRestart(true)} data-qa-pause="restart">НАЧАТЬ ЗАНОВО</button>
-              <button type="button" className="igo-btn" onClick={onMainMenu} data-qa-pause="menu">В ГЛАВНОЕ МЕНЮ</button>
+              {onLoad ? <button type="button" className="igo-btn" onClick={onLoad} data-qa-pause="load">ЗАГРУЗИТЬ ИГРУ</button> : null}
+              {onExport ? <button type="button" className="igo-btn" onClick={onExport} data-qa-pause="export">ЭКСПОРТ СОХРАНЕНИЯ (JSON)</button> : null}
+              {testSpeed ? (
+                <div className="igo-speed" role="group" aria-label="Скорость тестового времени">
+                  <small>УСКОРЕНИЕ ВРЕМЕНИ</small>
+                  <div>{testSpeed.options.map((option) => (
+                    <button key={option} type="button" className={option === testSpeed.value ? 'is-on' : ''} aria-pressed={option === testSpeed.value} onClick={() => testSpeed.onChange(option)}>×{option}</button>
+                  ))}</div>
+                </div>
+              ) : null}
+              {isTest ? (
+                <button type="button" className="igo-btn igo-btn--danger" onClick={() => setConfirmRestart(true)} data-qa-pause="restart" data-qa-reset-progress aria-label={resetLabel} title={resetLabel}>СБРОСИТЬ ТЕСТОВОЕ СОХРАНЕНИЕ</button>
+              ) : (
+                <button type="button" className="igo-btn igo-btn--danger" onClick={() => setConfirmRestart(true)} data-qa-pause="restart">НАЧАТЬ ЗАНОВО</button>
+              )}
+              {onMainMenu ? <button type="button" className="igo-btn" onClick={onMainMenu} data-qa-pause="menu">{isTest ? 'ВЫЙТИ ИЗ TEST MODE · ГЛАВНОЕ МЕНЮ' : 'В ГЛАВНОЕ МЕНЮ'}</button> : null}
             </nav>
           )}
         </div>

@@ -98,3 +98,19 @@ test('campaign speed scales production timers; standard is unchanged', () => {
     setCampaignTimeScale(previous);
   }
 });
+
+test('a fixed NPC race mix gives exact shares; random stays seeded', async () => {
+  const { normalizeNpcFactionMix, setNpcFactionShare } = await import('./config.ts');
+  const mixed = { ...config({ npcCount: 50 }), npcFactions: { aegis: 20, synod: 0, veyra: 80 } };
+  const world = generateWorld(mixed, 0);
+  const count = (race: string) => world.npcPlanets.filter((planet) => planet.raceId === race).length;
+  assert.equal(count('aegis'), 10);
+  assert.equal(count('synod'), 0);
+  assert.equal(count('veyra'), 40);
+  assert.deepEqual(generateWorld(mixed, 0), world, 'deterministic');
+  assert.deepEqual(normalizeNpcFactionMix({ aegis: 1, synod: 1, veyra: 1 }), { aegis: 34, synod: 33, veyra: 33 });
+  assert.equal(normalizeNpcFactionMix({ aegis: 0, synod: 0, veyra: 0 }), null);
+  const moved = setNpcFactionShare({ aegis: 34, synod: 33, veyra: 33 }, 'veyra', 60);
+  assert.equal(moved.veyra, 60);
+  assert.equal(moved.aegis + moved.synod + moved.veyra, 100);
+});

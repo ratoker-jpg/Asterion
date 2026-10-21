@@ -62,7 +62,7 @@ import {
 import { syncPlanetEnergySources } from './energy.ts';
 import { getAvailableFleetForPlanet } from './flights.ts';
 
-/** UI event: open «Операции → Солнца» (from the fleet mission tile). */
+/** UI event: open «Командование → Операции» (from the fleet mission tile). */
 export const OPEN_SUN_OPERATIONS_EVENT = 'asterion:open-sun-operations';
 
 export type SunRuntimeOptions = { now: number; mode: RuntimeMode; testTimeScale?: number };

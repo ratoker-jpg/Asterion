@@ -59,11 +59,6 @@ type OperationsViewProps = {
   onPirateAttack?: (contact: PirateContactPresentation) => void;
   onPirateReport?: (reportId: string) => void;
   onPirateUniverse?: (contact: PirateContactPresentation) => void;
-  /** «Солнца» mode: command raids on Suns (rendered by App, same Briefing frame). */
-  sunsPanel?: ReactNode;
-  sunsAlertCount?: number;
-  screenMode?: 'operations' | 'suns';
-  onScreenModeChange?: (mode: 'operations' | 'suns') => void;
 };
 
 type OperationsTab = Extract<OperationState, 'available' | 'active' | 'completed'>;
@@ -851,7 +846,7 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
   );
 }
 
-export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets, explorationContacts = [], onExpedition, onExplorationAttack, onBot01Occupy, onExplorationAccept, onExplorationCancel, onExplorationRecon, onExplorationUniverse, onExplorationReport, pirateContacts = [], pirateThreatPercent = 2, pirateAdaptiveDiagnostics, onPirateBattleExport, pirateRaidRolls = {}, pirateOwnerId = '', pirateCheckDelayMs, completedPirateOperations = [], nowMs = Date.now(), onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse, sunsPanel, sunsAlertCount = 0, screenMode = 'operations', onScreenModeChange }: OperationsViewProps) {
+export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets, explorationContacts = [], onExpedition, onExplorationAttack, onBot01Occupy, onExplorationAccept, onExplorationCancel, onExplorationRecon, onExplorationUniverse, onExplorationReport, pirateContacts = [], pirateThreatPercent = 2, pirateAdaptiveDiagnostics, onPirateBattleExport, pirateRaidRolls = {}, pirateOwnerId = '', pirateCheckDelayMs, completedPirateOperations = [], nowMs = Date.now(), onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: OperationsViewProps) {
   const [tab, setTab] = useState<OperationsTab>('available');
   const [selectedId, setSelectedId] = useState<OperationId | null>(null);
   const [contactFilter, setContactFilter] = useState<ContactFilter>('all');
@@ -944,24 +939,15 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
           </span>
           <span className="opsA-threat-copy"><b>ПИРАТСКАЯ УГРОЗА</b><small>Шанс рейда при проверке одной базы. Растёт, если боевых очков мало.</small></span>
         </div>
-        {sunsPanel ? (
-          <div className="opsA-modes" role="tablist" aria-label="Раздел операций">
-            <button type="button" role="tab" aria-selected={screenMode === 'operations'} className={screenMode === 'operations' ? 'is-on' : ''} onClick={() => onScreenModeChange?.('operations')} data-qa-ops-mode="operations">ОПЕРАЦИИ</button>
-            <button type="button" role="tab" aria-selected={screenMode === 'suns'} className={screenMode === 'suns' ? 'is-on' : ''} onClick={() => onScreenModeChange?.('suns')} data-qa-ops-mode="suns">
-              СОЛНЦА{sunsAlertCount > 0 ? <i aria-label={`Входящих атак: ${sunsAlertCount}`} /> : null}
-            </button>
-          </div>
-        ) : null}
-        {screenMode === 'suns' && sunsPanel ? null : <nav className="operations-tabs-v2 opsA-tabs" role="tablist" aria-label="Состояние операций">
+        <nav className="operations-tabs-v2 opsA-tabs" role="tablist" aria-label="Состояние операций">
           {(Object.keys(TAB_LABELS) as OperationsTab[]).map((entry) => (
             <button key={entry} type="button" role="tab" aria-selected={tab === entry} className={tab === entry ? 'active' : ''} onClick={() => chooseTab(entry)}>
               <span>{TAB_LABELS[entry]}</span><b>{operationRows.filter(({ operation }) => operation.state === entry).length}</b>
             </button>
           ))}
-        </nav>}
+        </nav>
         <div className="opsA-bases"><small>ПИРАТСКИЕ БАЗЫ</small><strong>{pirateContacts.length} <span>активны</span></strong></div>
       </header>
-      {screenMode === 'suns' && sunsPanel ? sunsPanel : <>
       {pirateAdaptiveDiagnostics && (() => {
         const d=pirateAdaptiveDiagnostics;
         const band=pirateAdaptiveInterval(d.q);
@@ -1039,7 +1025,6 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
           onPirateUniverse={onPirateUniverse}
         />
       </div>
-      </>}
     </main>
   );
 }

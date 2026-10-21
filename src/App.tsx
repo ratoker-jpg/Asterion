@@ -1943,7 +1943,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
 
   /* ---------------------------------------------- Sun raids, Gates, session */
   const homePlanet = state.planets['helion-01'] ?? state.planets[state.currentPlanetId];
-  const [opsMode, setOpsMode] = useState<'operations' | 'suns'>('operations');
+  const [commandFocus, setCommandFocus] = useState<{ tab: 'operations' | 'overview'; nonce: number } | null>(null);
   const [selectedSun, setSelectedSun] = useState<SunSelection>(() => ({ galaxy: homePlanet?.universeGalaxy ?? 1, system: homePlanet?.universeSystem ?? 1 }));
   const [gateDialogPlanetId, setGateDialogPlanetId] = useState<string | null>(null);
   const [pauseOpen, setPauseOpen] = useState(false);
@@ -1963,8 +1963,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const openSunsPanel = (sun?: SunSelection) => {
     clearBuildingInterior();
     if (sun) setSelectedSun(sun);
-    setOpsMode('suns');
-    navigateTo('operations');
+    setCommandFocus({ tab: 'operations', nonce: Date.now() });
+    navigateTo('command');
     setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
   };
@@ -1996,7 +1996,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     for (const alert of sunAlerts) {
       if (announcedSunAlerts.current.has(alert.raid.id)) continue;
       announcedSunAlerts.current.add(alert.raid.id);
-      setNotice(`Входящая атака на Солнце ${formatSun(alert.raid.galaxy, alert.raid.system)}: [${alert.raid.allianceTag}], прибытие через ${Math.ceil(alert.arrivesInMs / 60_000)} мин. Операции → Солнца.`, 'error');
+      setNotice(`Входящая атака на Солнце ${formatSun(alert.raid.galaxy, alert.raid.system)}: [${alert.raid.allianceTag}], прибытие через ${Math.ceil(alert.arrivesInMs / 60_000)} мин. Командование → Операции.`, 'error');
     }
   }, [sunAlerts, setNotice]);
 
@@ -2025,9 +2025,23 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     return () => window.removeEventListener('beforeunload', onUnload);
   }, [foldPlayTime, persistence, session]);
 
+  const exportCurrentSave = () => {
+    const latest = foldPlayTime(true);
+    persistence.write(latest);
+    const blob = new Blob([JSON.stringify(latest, null, 2)], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `asterion-${RUNTIME_MODE === 'test' ? 'test' : (session?.slotName ?? 'campaign').replace(/[^\p{L}\p{N}_-]+/gu, '-')}-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    setNotice('Сохранение выгружено в файл.', 'success');
+  };
+
   // Esc opens the pause menu when nothing else is open.
   useEffect(() => {
-    if (!session) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented || pauseOpen || buildingInterior) return;
       if (document.querySelector('[aria-modal="true"], .resource-building-dialog-backdrop, .universe-modal-backdrop, .skin-picker-backdrop')) return;
@@ -2035,7 +2049,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [session, pauseOpen, buildingInterior]);
+  }, [pauseOpen, buildingInterior]);
 
   const saveNow = () => {
     foldPlayTime(true);
@@ -2140,27 +2154,16 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
           onPlanetMenuToggle={() => setPlanetMenuOpen((open) => !open)}
          />
 
-        {session ? (
-          <button
-            className="shell-reset-control shell-pause-control"
-            type="button"
-            data-qa-pause-open
-            onClick={() => setPauseOpen(true)}
-            aria-label="Меню игры"
-            title="Меню игры (Esc)"
-          >
-            <span aria-hidden="true">≡</span>
-          </button>
-        ) : <button
-          className="shell-reset-control"
+        <button
+          className="shell-reset-control shell-pause-control"
           type="button"
-          data-qa-reset-progress
-          onClick={reset}
-          aria-label={RUNTIME_MODE === 'test' ? 'Сбросить текущее тестовое сохранение' : 'Сбросить текущий прогресс'}
-          title={RUNTIME_MODE === 'test' ? 'Сбросить текущее тестовое сохранение' : 'Сбросить текущий прогресс'}
+          data-qa-pause-open
+          onClick={() => setPauseOpen(true)}
+          aria-label="Меню игры"
+          title="Меню игры (Esc)"
         >
-          <span aria-hidden="true">↻</span>
-        </button>}
+          <span aria-hidden="true">≡</span>
+        </button>
 
         <section className={`workspace workspace-v4 workspace--${workspaceKind}`}>
           {/* Command shows its own «Назад» inside its top bar instead of this overlay (it would cover the tabs). */}
@@ -2276,24 +2279,6 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               onCancel={cancelOperationsOperation}
               onReveal={revealOperationsOperation}
               onOpenFleets={openFleetRootFromOperations}
-              screenMode={opsMode}
-              onScreenModeChange={setOpsMode}
-              sunsAlertCount={sunAlerts.length}
-              sunsPanel={(
-                <SunRaidPanel
-                  state={state}
-                  now={now}
-                  mode={RUNTIME_MODE}
-                  testTimeScale={testTimeScale}
-                  selected={selectedSun}
-                  onSelect={setSelectedSun}
-                  onCommit={commitSunAction}
-                  onOpenReport={openPirateReport}
-                  onOpenCommand={() => chooseRoute('command')}
-                  onOpenGate={() => { setGateDialogPlanetId(state.currentPlanetId); }}
-                  onTestGateAssault={testGateAssault}
-                />
-              )}
             />
           ) : activeRoute === 'command' ? (
             <CommandView
@@ -2315,6 +2300,23 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               aid={selectAidOverview(state, { now, mode: RUNTIME_MODE, testTimeScale })}
               now={now}
               actions={commandActions}
+              operationsAlertCount={sunAlerts.length}
+              focusTab={commandFocus}
+              operationsPanel={(
+                <SunRaidPanel
+                  state={state}
+                  now={now}
+                  mode={RUNTIME_MODE}
+                  testTimeScale={testTimeScale}
+                  selected={selectedSun}
+                  onSelect={setSelectedSun}
+                  onCommit={commitSunAction}
+                  onOpenReport={openPirateReport}
+                  onOpenCommand={() => setCommandFocus({ tab: 'overview', nonce: Date.now() })}
+                  onOpenGate={() => { setGateDialogPlanetId(state.currentPlanetId); }}
+                  onTestGateAssault={testGateAssault}
+                />
+              )}
             />
           ) : activeRoute === 'reports' ? (
             <ReportsView
@@ -2490,18 +2492,33 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
             onOpenSuns={() => { setGateDialogPlanetId(null); openSunsPanel(); }}
           />
         ) : null}
-        {pauseOpen && session ? (
+        {pauseOpen ? (session ? (
           <PauseMenu
-            slotName={session.slotName}
+            variant="slot"
+            title={session.slotName}
             factionId={state.profile.factionId}
             playTimeMs={state.playTimeMs ?? 0}
             onResume={() => setPauseOpen(false)}
             onSave={saveNow}
             onLoad={() => leaveTo('load')}
+            onExport={exportCurrentSave}
             onRestart={restartCampaign}
             onMainMenu={() => leaveTo('main')}
           />
-        ) : null}
+        ) : (
+          <PauseMenu
+            variant="test"
+            title="Тестовая кампания"
+            factionId={state.profile.factionId}
+            playTimeMs={0}
+            onResume={() => setPauseOpen(false)}
+            onSave={saveNow}
+            onExport={exportCurrentSave}
+            testSpeed={RUNTIME_MODE === 'test' ? { value: testTimeScale, options: TEST_TIME_SCALE_OPTIONS, onChange: (value) => setTestTimeScale(value as TestTimeScale) } : undefined}
+            onRestart={() => { setPauseOpen(false); reset(); }}
+            onMainMenu={() => { persistence.write(stateRef.current); window.location.href = window.location.pathname; }}
+          />
+        )) : null}
         {sunRaidState.campaignResult && !resultDismissed ? (
           <CampaignResultOverlay
             result={sunRaidState.campaignResult}

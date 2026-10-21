@@ -138,7 +138,7 @@ const missions: MissionDefinition[] = [
   { id: 'colonize', label: 'Колонизация', description: 'Основание новой колонии на свободной планете.', icon: missionColonizeIcon },
   { id: 'recycle', label: 'Переработка', description: 'Сбор и переработка обломков в космосе.', icon: missionRecycleIcon },
   { id: 'gas', label: 'Добыча газа', description: 'Специализированная экспедиция за газом.', icon: missionGasIcon },
-  { id: 'sun-support', label: 'Поддержка солнца', description: 'Защита Солнца от командного рейда. Флот отправляется из «Операции → Солнца».', icon: missionSunSupportIcon },
+  { id: 'sun-support', label: 'Поддержка солнца', description: 'Защита Солнца от командного рейда. Флот отправляется из «Командование → Операции».', icon: missionSunSupportIcon },
   { id: 'aid', label: 'Помощь союзу', description: AID_MISSION_DESCRIPTION, icon: missionAidIcon, enabled: AID_MISSION_ENABLED },
   { id: 'space-flight', label: 'Космический рейс', description: 'Дальний автономный рейс с заданной продолжительностью.', icon: missionSpaceFlightIcon },
 ];
@@ -1213,6 +1213,7 @@ function FleetWorkspace({
     constructionView ? 'fleet-main-v1--shipyard' : '',
     selectedSection === 'battles' ? 'fleet-main-v1--battles' : '',
     selectedSection === 'simulator' ? 'fleet-main-v1--subpage' : '',
+    selectedSection === 'repair' ? 'fleet-main-v1--repair' : '',
   ].filter(Boolean).join(' ');
   const productionQueueKind = queueKindForConstructionView(constructionView);
   const previewRuntimeState = previewOpen ? saveState : null;
@@ -1387,6 +1388,10 @@ function FleetWorkspace({
           <BattleReportsView planetName={planetName} coords={coords} onBack={openFleetRoot} />
         ) : selectedSection === 'simulator' ? (
           <SimulatorView planetName={planetName} coords={coords} onBack={openFleetRoot} initialScenario={simulatorHandoff} />
+        ) : selectedSection === 'repair' ? (
+          // The Repair Workshop is portaled into this container by RepairWorkshopPortal;
+          // the fleet root must not render underneath it.
+          null
         ) : (
           <>
             <div className={`fleet-root-v2${hostileIncomingFlights.length ? ' has-incoming' : ''}`} data-qa-fleet-root>
@@ -1557,7 +1562,7 @@ function FleetWorkspace({
                       onFocus={() => setHoveredMissionId(mission.id)}
                       onBlur={() => setHoveredMissionId(null)}
                       onClick={() => {
-                        // Sun missions live in «Операции → Солнца» (population cap, side, alerts).
+                        // Sun missions live in «Командование → Операции» (population cap, side, alerts).
                         if (mission.id === 'sun-support') { window.dispatchEvent(new Event(OPEN_SUN_OPERATIONS_EVENT)); return; }
                         chooseMission(mission.id);
                       }}

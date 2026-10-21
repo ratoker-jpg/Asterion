@@ -136,7 +136,7 @@ type UniverseViewProps = {
   onPirateSystemChange?: (selection: PirateSystemSelection) => void;
   focusTarget?: { coordinate: UniverseCoordinate; planetId?: string; ownerId?: string; mode?: 'inspect' | 'highlight' } | null;
   onFocusHandled?: () => void;
-  /** Click on the system's Sun: opens «Операции → Солнца» for it. */
+  /** Click on the system's Sun: opens «Командование → Операции» for it. */
   onSunSelect?: (galaxy: number, system: number) => void;
   /** Suns of the player's galaxies with an incoming raid. */
   sunAlerts?: readonly { galaxy: number; system: number }[];

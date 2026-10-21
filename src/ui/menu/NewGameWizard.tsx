@@ -4,6 +4,8 @@ import {
   WORLD_DENSITY_RULES,
   WORLD_LIMITS,
   createDefaultNewGameConfig,
+  DEFAULT_NPC_FACTION_MIX,
+  setNpcFactionShare,
   getWorldNpcCapacity,
   validateNewGameConfig,
   type NewGameConfig,
@@ -274,6 +276,7 @@ function WorldStep({ config, issues, onChange, onWorld, onNext }: WorldStepProps
               options={(Object.keys(WORLD_DENSITY_RULES) as WorldDensity[]).map((value) => ({ value, label: WORLD_DENSITY_RULES[value].label, hint: WORLD_DENSITY_RULES[value].hint }))} />
           </div>
         </div>
+        <NpcRaceMix config={config} onChange={onChange} />
         <div className="menu-field">
           <small>СКОРОСТЬ ПАРТИИ · ФИКСИРУЕТСЯ НА СТАРТЕ</small>
           <Segmented<CampaignSpeed> label="Скорость партии" value={config.world.campaignSpeed} onChange={(value) => onWorld({ campaignSpeed: value })}
@@ -315,6 +318,46 @@ function WorldStep({ config, issues, onChange, onWorld, onNext }: WorldStepProps
         <button type="button" className="menu-btn menu-btn--primary menu-btn--large" disabled={issues.length > 0} onClick={onNext} title={issues[0]?.message} data-qa-wizard-next>ДАЛЕЕ: ПОДТВЕРЖДЕНИЕ</button>
       </footer>
     </section>
+  );
+}
+
+/** NPC race composition: seeded random or exact shares that always sum to 100%. */
+function NpcRaceMix({ config, onChange }: { config: NewGameConfig; onChange: WorldStepProps['onChange'] }) {
+  const mix = config.npcFactions === 'random' ? null : config.npcFactions;
+  const counts = useMemo(() => {
+    const world = generateWorld(config, 0);
+    return world.npcPlanets.reduce<Record<PlayerFactionId, number>>((acc, planet) => {
+      acc[planet.raceId as PlayerFactionId] += 1;
+      return acc;
+    }, { aegis: 0, synod: 0, veyra: 0 });
+  }, [config]);
+  return (
+    <div className="menu-field menu-race-mix" data-qa-npc-mix={mix ? 'mix' : 'random'}>
+      <small>РАСЫ NPC</small>
+      <Segmented<'random' | 'mix'> label="Расы NPC" value={mix ? 'mix' : 'random'}
+        onChange={(value) => onChange((current) => ({ ...current, npcFactions: value === 'random' ? 'random' : { ...DEFAULT_NPC_FACTION_MIX } }))}
+        options={[{ value: 'random', label: 'Случайно по сиду' }, { value: 'mix', label: 'Задать соотношение' }]} />
+      <div className="menu-race-mix__bar" aria-hidden="true">
+        {RACE_CARDS.map((card) => {
+          const share = mix ? mix[card.id] : config.world.npcCount ? (counts[card.id] / config.world.npcCount) * 100 : 0;
+          return <i key={card.id} style={{ width: `${share}%`, background: RACE_DOT[card.id] }} />;
+        })}
+      </div>
+      <div className="menu-race-mix__rows">
+        {RACE_CARDS.map((card) => (
+          <label key={card.id} className="menu-race-mix__row" style={{ '--mix-color': RACE_DOT[card.id] } as CSSProperties}>
+            <span className="menu-race-mix__name"><img src={card.emblem} alt="" />{card.name}</span>
+            {mix ? (
+              <input type="range" min={0} max={100} value={mix[card.id]}
+                style={{ '--range-p': `${mix[card.id]}%` } as CSSProperties}
+                onChange={(event) => onChange((current) => ({ ...current, npcFactions: setNpcFactionShare(current.npcFactions === 'random' ? { ...DEFAULT_NPC_FACTION_MIX } : current.npcFactions, card.id, Number(event.target.value)) }))}
+                aria-label={`Доля расы ${card.name}`} data-qa-npc-mix-race={card.id} />
+            ) : <span className="menu-race-mix__random">случайно</span>}
+            <b>{mix ? `${Math.round(mix[card.id])}%` : ''} · {counts[card.id]} NPC</b>
+          </label>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -402,6 +445,7 @@ function ConfirmStep({ config, error, starting, disabledReason, onStart, onEdit 
           <div><dt>Раса</dt><dd>{card.name}</dd><button type="button" onClick={() => onEdit('race')}>изменить</button></div>
           <div><dt>Мир</dt><dd>{config.world.galaxyCount} гал. · {summary.systems} систем · {summary.npcCount} NPC</dd><button type="button" onClick={() => onEdit('world')}>изменить</button></div>
           <div><dt>Расселение NPC</dt><dd>{WORLD_DENSITY_RULES[config.world.density].label} · до {config.world.maxNpcPerSystem} на систему</dd></div>
+          <div><dt>Расы NPC</dt><dd>{config.npcFactions === 'random' ? 'Случайно по сиду' : `Астеры ${config.npcFactions.aegis}% · Илары ${config.npcFactions.synod}% · Рой ${config.npcFactions.veyra}%`}</dd><button type="button" onClick={() => onEdit('world')}>изменить</button></div>
           <div><dt>Скорость</dt><dd>{CAMPAIGN_SPEED_LABELS[config.world.campaignSpeed].label}</dd></div>
           <div><dt>Старт</dt><dd>{config.world.randomPlayerStart ? 'Случайная система по сиду' : 'Галактика 1 · система 1'}</dd></div>
           <div><dt>Сид</dt><dd className="menu-mono">{config.seed}</dd></div>
@@ -422,7 +466,7 @@ function ConfirmStep({ config, error, starting, disabledReason, onStart, onEdit 
           <small>ЦЕЛЬ КАМПАНИИ</small>
           <ol>
             <li>Постройте «Палату управления» и создайте союз в «Командовании».</li>
-            <li>Водите командные рейды на Солнца из «Операций»: победа — шанс 70% на кристалл.</li>
+            <li>Водите командные рейды на Солнца из «Командование → Операции»: победа — шанс 70% на кристалл.</li>
             <li>Соберите 4 разных кристалла и достройте Звёздные Врата в военной зоне — это победа.</li>
           </ol>
         </section>

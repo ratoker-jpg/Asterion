@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 
 import { MAX_ALLIANCE_MEMBERS, TEST_BOT_ALLIANCE_ID } from './domain/command/catalog.ts';
 import {
@@ -111,6 +111,12 @@ type CommandViewProps = {
   /** Wall-clock milliseconds; drives the re-application countdowns. */
   now: number;
   actions: CommandActions;
+  /** «Операции → Рейд на Солнце» panel (App renders it with the live save). */
+  operationsPanel?: ReactNode;
+  /** Incoming Sun raids in the player's galaxies: a hot badge on «Операции». */
+  operationsAlertCount?: number;
+  /** Jump request from the map, alerts or the Fleet tile; `nonce` makes repeats work. */
+  focusTab?: { tab: 'operations' | 'overview'; nonce: number } | null;
 };
 
 type CommandTab = 'overview' | 'members' | 'applications' | 'requests' | 'alliances' | 'diplomacy' | 'operations';
@@ -1407,8 +1413,9 @@ function DiplomacyTab({ command, allianceId, role, ownerScores, now, timeScale, 
 
 // ---- root ----------------------------------------------------------------------
 
-export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFactions = {}, playerFactionId, testTimeScale = 1, returnToBuilding, aid, now, actions }: CommandViewProps) {
-  const [tab, setTab] = useState<CommandTab>('overview');
+export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFactions = {}, playerFactionId, testTimeScale = 1, returnToBuilding, aid, now, actions, operationsPanel, operationsAlertCount = 0, focusTab = null }: CommandViewProps) {
+  const [tab, setTab] = useState<CommandTab>(focusTab?.tab ?? 'overview');
+  useEffect(() => { if (focusTab) setTab(focusTab.tab); }, [focusTab?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
   const [feedback, setFeedback] = useState<CommandActionResult | null>(null);
   const testControls = mode === 'test';
 
@@ -1425,7 +1432,10 @@ export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFa
         ? { key: 'pending', label: 'ЗАЯВКА ОЖИДАЕТ' }
         : { key: 'none', label: 'БЕЗ СОЮЗА' };
 
-  const visibleTabs = (Object.keys(TAB_LABELS) as CommandTab[]).filter((key) => key !== 'applications' || membership);
+  // Without an alliance the Hall still opens «Операции»: any owner may defend a Sun of their galaxy.
+  const visibleTabs = membership
+    ? (Object.keys(TAB_LABELS) as CommandTab[])
+    : (['overview', 'operations'] as CommandTab[]);
   const activeTab = visibleTabs.includes(tab) ? tab : 'overview';
   const pendingCount = membership ? selectPendingApplicationsFor(command, membership.alliance.id).length : 0;
   const badges: Partial<Record<CommandTab, { value: string; hot?: boolean }>> = membership ? {
@@ -1437,7 +1447,8 @@ export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFa
       const wars = selectAllianceRelations(command, membership.alliance.id).filter((relation) => relation.status === 'war').length;
       return wars ? { value: `⚔ ${wars}`, hot: true } : undefined;
     })(),
-  } : {};
+    ...(operationsAlertCount ? { operations: { value: String(operationsAlertCount), hot: true } } : {}),
+  } : operationsAlertCount ? { operations: { value: String(operationsAlertCount), hot: true } } : {};
   const catalogProps: CatalogProps = { command, ownerId, ownerScores, now, actions, onFeedback, testControls, ownerFactions };
 
   return (
@@ -1459,11 +1470,11 @@ export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFa
             <span aria-hidden="true">←</span>{returnToBuilding.label}
           </button>
         ) : null}
-        {!locked && membership ? (
+        {!locked && (membership || operationsPanel) ? (
           <nav className="command-tabs cmdA-tabs" aria-label="Разделы Командования">
             {visibleTabs.map((key) => (
               <button key={key} type="button" className={activeTab === key ? 'active' : ''} aria-current={activeTab === key ? 'page' : undefined} onClick={() => setTab(key)} data-qa-command-tab={key}>
-                {TAB_LABELS[key]}{badges[key] ? <b className={`command-badge ${badges[key]!.hot ? 'is-hot' : ''}`}>{badges[key]!.value}</b> : null}
+                {!membership && key === 'overview' ? 'СОЮЗ' : TAB_LABELS[key]}{badges[key] ? <b className={`command-badge ${badges[key]!.hot ? 'is-hot' : ''}`}>{badges[key]!.value}</b> : null}
               </button>
             ))}
           </nav>
@@ -1480,6 +1491,8 @@ export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFa
       <section className="command-content cmdA-content">
         {locked ? (
           <LockedHall hall={hall} onBuild={actions.openHallConstruction} />
+        ) : !membership && activeTab === 'operations' && operationsPanel ? (
+          <div className="opsA srp-host" data-qa-command-operations>{operationsPanel}</div>
         ) : !membership ? (
           <NoAlliance {...catalogProps} hall={hall} />
         ) : activeTab === 'overview' ? (
@@ -1494,6 +1507,8 @@ export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFa
           <RequestsTab aid={aid} now={now} actions={actions} onFeedback={onFeedback} testControls={testControls} playerFactionId={playerFactionId} />
         ) : activeTab === 'diplomacy' ? (
           <DiplomacyTab command={command} allianceId={membership.alliance.id} role={membership.role} ownerScores={ownerScores} now={now} timeScale={testTimeScale} actions={actions} onFeedback={onFeedback} testControls={testControls} />
+        ) : operationsPanel ? (
+          <div className="opsA srp-host" data-qa-command-operations>{operationsPanel}</div>
         ) : (
           <OperationsTab playerFactionId={playerFactionId} />
         )}

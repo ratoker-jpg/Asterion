@@ -30,6 +30,7 @@ import {
   type SunActionResult,
 } from '../../application/sun-raid.ts';
 import { CrystalSet, SunBrightnessBar, SunOrb } from './SunRaidArt.tsx';
+import { AmountSlider } from '../AmountSlider.tsx';
 import './sun-raid.css';
 
 export type SunSelection = { galaxy: number; system: number };
@@ -53,7 +54,8 @@ function countdown(ms: number) {
   const hours = Math.floor(total / 3600);
   const minutes = Math.floor((total % 3600) / 60);
   const seconds = total % 60;
-  return hours ? `${hours} ч ${String(minutes).padStart(2, '0')} мин` : `${minutes}:${String(seconds).padStart(2, '0')}`;
+  if (hours) return `${hours} ч ${String(minutes).padStart(2, '0')} мин`;
+  return minutes ? `${minutes} мин ${String(seconds).padStart(2, '0')} с` : `${seconds} с`;
 }
 
 const pad2 = (value: number) => String(value).padStart(2, '0');
@@ -80,7 +82,7 @@ export function SunRaidPanel({ state, now, mode, testTimeScale, selected, onSele
   const homeGalaxies = new Set(Object.values(state.planets).map((planet) => planet.universeGalaxy ?? 1));
   const activeOwnRaid = ownRaids.find((raid) => raid.closedAt === undefined);
   const raidBlock = !role.allianceId
-    ? 'Рейд на Солнце — командная операция. Создайте союз или вступите в него («Командование»).'
+    ? 'Рейд на Солнце — командная операция. Создайте союз или вступите в него (вкладка «Союз»).'
     : role.role !== 'leader' && role.role !== 'deputy'
       ? 'Рейд объявляют лидер или заместитель союза.'
       : sunRaid.campaignResult
@@ -118,8 +120,8 @@ export function SunRaidPanel({ state, now, mode, testTimeScale, selected, onSele
           <header><small>РЕЙДЫ СОЮЗА {role.allianceTag ? `[${role.allianceTag}]` : ''}</small><b>{ownRaids.length}</b></header>
           {!role.allianceId ? (
             <div className="srp-solo">
-              <p>Рейды на Солнца ведут союзы. Одиночка не может объявить рейд, но может строить Врата, если добудет 4 кристалла.</p>
-              <button type="button" className="opsA-btn" onClick={onOpenCommand}>ОТКРЫТЬ КОМАНДОВАНИЕ</button>
+              <p>Рейды на Солнца ведут союзы: создайте союз или вступите в него на вкладке «Союз». Одиночка может защищать Солнца своей галактики и строить Врата, если добудет 4 кристалла.</p>
+              <button type="button" className="opsA-btn" onClick={onOpenCommand}>К ВКЛАДКЕ «СОЮЗ»</button>
             </div>
           ) : ownRaids.length ? ownRaids.map((raid) => <RaidRow key={raid.id} raid={raid} now={now} onSelect={() => onSelect({ galaxy: raid.galaxy, system: raid.system })} onReport={onOpenReport} />)
             : <p className="srp-empty">Союз ещё не водил рейдов. Выберите Солнце справа.</p>}
@@ -193,7 +195,7 @@ export function SunRaidPanel({ state, now, mode, testTimeScale, selected, onSele
 
         <div className="srp-cards">
           <article className="srp-card">
-            <header><img src={bombardmentIcon} alt="" /><span><b>Командный рейд</b><small>Только через «Операции» · союз · 3 ч туда и 3 ч обратно</small></span></header>
+            <header><img src={bombardmentIcon} alt="" /><span><b>Командный рейд</b><small>Командование → Операции · союз · 3 ч туда и 3 ч обратно</small></span></header>
             <ul className="srp-rules">
               <li>Лимит стороны — {SUN_RAID_CONFIG.populationCapPerSide.toLocaleString('ru-RU')} населения</li>
               <li>Технологии и уровни кораблей — лучшие среди участников стороны</li>
@@ -335,7 +337,14 @@ function SunLaunchDialog({ state, now, options, kind, raid, galaxy, system, onCl
   }, [onClose]);
   useEffect(() => { setShips({}); }, [originPlanetId]);
 
-  const setCount = (id: ShipId, value: number) => setShips((current) => ({ ...current, [id]: Math.max(0, Math.min(available[id] ?? 0, Math.floor(value || 0))) }));
+  const popOf = (id: ShipId) => Math.max(1, catalog.find((entity) => entity.id === id)?.population ?? 1);
+  /** Most of one hull that still fits under the side cap together with the rest of the selection. */
+  const maxFor = (id: ShipId) => {
+    const others = sunFleetPopulation({ ...ships, [id]: 0 }, factionId);
+    const room = Math.max(0, preview.remaining - others);
+    return Math.max(0, Math.min(available[id] ?? 0, Math.floor(room / popOf(id))));
+  };
+  const setCount = (id: ShipId, value: number) => setShips((current) => ({ ...current, [id]: Math.max(0, Math.min(maxFor(id), Math.floor(value || 0))) }));
   const fillToCap = () => {
     let left = preview.remaining;
     const next: Partial<Record<ShipId, number>> = {};
@@ -378,9 +387,12 @@ function SunLaunchDialog({ state, now, options, kind, raid, galaxy, system, onCl
             return (
               <li key={id} className={have ? '' : 'is-empty'}>
                 <img src={entity.art} alt="" />
-                <span><b>{entity.name}</b><small>есть {have.toLocaleString('ru-RU')} · {entity.population} нас.</small></span>
+                <span className="srp-ship-copy">
+                  <b>{entity.name}</b><small>есть {have.toLocaleString('ru-RU')} · {entity.population} нас.</small>
+                  <AmountSlider compact value={count} max={Math.max(count, maxFor(id))} onChange={(value) => setCount(id, value)} label={`${entity.name}: количество`} qa={`sun-ship-${id}`} />
+                </span>
                 <input type="number" min={0} max={have} value={count || ''} placeholder="0" disabled={!have} onChange={(event) => setCount(id, Number(event.target.value))} aria-label={`${entity.name}: количество`} />
-                <button type="button" className="opsA-btn opsA-btn--small" disabled={!have} onClick={() => setCount(id, have)}>ВСЕ</button>
+                <button type="button" className="opsA-btn opsA-btn--small" disabled={!have} onClick={() => setCount(id, have)} title="Максимум, который помещается в лимит стороны">МАКС</button>
               </li>
             );
           })}

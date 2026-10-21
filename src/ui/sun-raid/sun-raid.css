@@ -1,4 +1,4 @@
-/* «Операции → Солнца»: command raids, Sun support, crystals. Lives inside .opsA (variant A «Брифинг»). */
+/* «Командование → Операции»: command raids, Sun support, crystals. Lives inside .opsA (variant A «Брифинг»). */
 
 .opsA .srp {
   --sun: #ffb84a;
@@ -150,7 +150,7 @@ body .opsA .srp-hero .srp-hero__copy h2 { margin: 0; font-size: 30px !important;
 
 .srp-portal { position: absolute; inset: 0; z-index: 900; }
 .opsA .srp-modal { position: absolute; inset: 0; z-index: 900; display: grid; place-items: center; background: rgba(1, 4, 8, .7); backdrop-filter: blur(3px); }
-.opsA .srp-launch { width: 860px; max-height: 960px; display: flex; flex-direction: column; gap: 14px; padding: 22px 24px; border-radius: var(--ut-r-panel); border: 1px solid rgba(255, 184, 74, .35); background: rgba(8, 15, 20, .98); box-shadow: 0 30px 90px rgba(0, 0, 0, .65); }
+.opsA .srp-launch { width: 940px; max-height: 960px; display: flex; flex-direction: column; gap: 14px; padding: 22px 24px; border-radius: var(--ut-r-panel); border: 1px solid rgba(255, 184, 74, .35); background: rgba(8, 15, 20, .98); box-shadow: 0 30px 90px rgba(0, 0, 0, .65); }
 .opsA .srp-launch > header { display: grid; grid-template-columns: 56px 1fr 40px; align-items: center; gap: 14px; }
 .opsA .srp-launch > header img { width: 56px; height: 56px; border-radius: 10px; }
 .opsA .srp-launch > header small { color: var(--sun); font-weight: 700; letter-spacing: .2em; }
@@ -161,7 +161,9 @@ body .opsA .srp-launch > header h2 { margin: 4px 0 0; font-size: 20px !important
 .opsA .srp-launch__origin label { flex: 1; display: grid; gap: 6px; }
 .opsA .srp-launch__origin small { color: var(--ut-label); font-weight: 700; letter-spacing: .14em; }
 .opsA .srp-launch__origin select { height: 40px; padding: 0 12px; border-radius: var(--ut-r-input); border: 1px solid var(--ut-border-strong); background: rgba(2, 8, 12, .9); color: #fff; font: 600 13px Montserrat, sans-serif; }
-.opsA .srp-ships { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; max-height: 470px; overflow: auto; }
+.opsA .srp-ships { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; max-height: 520px; overflow: auto; }
+.opsA .srp-ship-copy { display: grid; gap: 4px; min-width: 0; }
+.opsA .srp-ship-copy .amount-slider { margin-top: 2px; }
 .opsA .srp-ships li { display: grid; grid-template-columns: 52px minmax(0, 1fr) 96px auto; align-items: center; gap: 10px; padding: 6px 8px; border-radius: var(--ut-r-card); border: 1px solid var(--ut-border); background: var(--ut-surface-2); }
 .opsA .srp-ships li.is-empty { opacity: .45; }
 .opsA .srp-ships img { width: 52px; height: 52px; object-fit: contain; }
@@ -194,3 +196,16 @@ body .opsA .srp-cap .srp-cap__head b { font-size: 18px !important; font-variant-
 @media (prefers-reduced-motion: reduce) {
   .opsA .srp-alert, .opsA .srp-sun-tile.is-attacked::after { animation: none; }
 }
+
+/* Embedded in «Командование → Операции». */
+.cmdA .srp-host {
+  --opsA-text: #e8f4f7;
+  --opsA-muted: #7f98a0;
+  --opsA-bad: #ff8c9c;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  color: var(--opsA-text);
+}
+.cmdA .srp-host button { font-family: inherit; }

@@ -74,6 +74,8 @@ async function clickText(win, selector, text) {
 }
 
 async function clickTestModeReset(win, label) {
+  // The reset lives in the in-game menu (≡ / Esc) and asks for confirmation.
+  await click(win, '[data-qa-pause-open]');
   const resetControl = await win.webContents.executeJavaScript(`(() => {
     const button = document.querySelector('[data-qa-reset-progress]');
     if (!button || button.disabled) return null;
@@ -87,6 +89,7 @@ async function clickTestModeReset(win, label) {
     throw new Error(`${label}: reset control contract mismatch ${JSON.stringify(resetControl)}`);
   }
   await click(win, '[data-qa-reset-progress]');
+  await click(win, '[data-qa-pause-restart-confirm]');
 }
 
 async function capture(win, directory, name, { nativeCapture = false } = {}) {

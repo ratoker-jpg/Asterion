@@ -24,7 +24,7 @@
   box-shadow: 0 30px 110px rgba(0, 0, 0, .7);
   overflow: hidden;
 }
-.igo-pause__general { align-self: end; justify-self: center; width: 250px; height: 440px; object-fit: contain; object-position: bottom center; margin-bottom: -30px; filter: drop-shadow(0 0 30px var(--race-glow)); }
+.igo-pause__general { align-self: end; justify-self: center; width: 250px; height: 440px; object-fit: contain; object-position: bottom center; margin-bottom: 0; filter: drop-shadow(0 0 30px var(--race-glow)); }
 .igo-pause__copy { display: flex; flex-direction: column; gap: 10px; padding: 34px 34px 30px 10px; min-width: 0; }
 .igo-pause__copy small { color: var(--race-accent); font-size: 12px; font-weight: 700; letter-spacing: .22em; }
 body .igo-pause .igo-pause__copy h2 { margin: 0; font-size: 26px !important; font-weight: 800; overflow-wrap: anywhere; }
@@ -72,7 +72,7 @@ body .igo-pause .igo-pause__copy h2 { margin: 0; font-size: 26px !important; fon
 .igo-result__rays { position: absolute; left: 30%; top: 50%; width: 1600px; height: 1600px; margin: -800px 0 0 -800px; background: repeating-conic-gradient(from 0deg, color-mix(in srgb, var(--race-accent) 10%, transparent) 0deg 3deg, transparent 3deg 12deg); mask: radial-gradient(circle, #000 0%, transparent 62%); -webkit-mask: radial-gradient(circle, #000 0%, transparent 62%); animation: sr-sun-spin 120s linear infinite; }
 .igo-result.is-defeat .igo-result__rays { opacity: .35; filter: grayscale(1); }
 .igo-result__gate { position: relative; justify-self: end; margin-right: 40px; animation: igo-rise 1.2s cubic-bezier(.22, 1, .36, 1) .2s both; }
-.igo-result__general { position: absolute; left: 1%; bottom: -60px; height: 72%; filter: drop-shadow(0 0 50px var(--race-glow)); opacity: .9; animation: igo-rise 1.2s cubic-bezier(.22, 1, .36, 1) .4s both; }
+.igo-result__general { position: absolute; left: 1%; bottom: 0; height: 80%; object-fit: contain; object-position: left bottom; filter: drop-shadow(0 0 50px var(--race-glow)); opacity: .9; animation: igo-rise 1.2s cubic-bezier(.22, 1, .36, 1) .4s both; }
 .igo-result__copy { position: relative; display: grid; gap: 14px; padding: 34px 36px; border-radius: var(--ut-r-panel); border: 1px solid var(--race-border); background: rgba(5, 11, 16, .86); backdrop-filter: blur(6px); animation: igo-rise 1s cubic-bezier(.22, 1, .36, 1) .5s both; }
 .igo-result.is-defeat .igo-result__copy { border-color: rgba(240, 68, 94, .45); }
 .igo-result__copy small { color: var(--race-accent); font-size: 12px; font-weight: 700; letter-spacing: .3em; }
@@ -97,3 +97,10 @@ body .igo-result .igo-result__copy h1 { margin: 0; font-size: 72px !important; f
 @media (prefers-reduced-motion: reduce) {
   .igo-result, .igo-result *, .igo-backdrop * { animation: none !important; }
 }
+
+.igo-speed { display: grid; gap: 6px; padding: 8px 0 2px; }
+.igo-speed small { color: var(--ut-label); font-size: 11px; font-weight: 700; letter-spacing: .16em; }
+.igo-speed > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.igo-speed button { min-width: 52px; height: 34px; border-radius: var(--ut-r-chip); border: 1px solid var(--ut-border); background: rgba(8, 18, 26, .9); color: #cfe6ef; font: 700 12px Montserrat, sans-serif; cursor: pointer; }
+.igo-speed button.is-on { border-color: var(--race-accent); background: var(--race-fill); color: #fff; }
+.igo-speed button:focus-visible { outline: var(--ut-focus); outline-offset: 2px; }

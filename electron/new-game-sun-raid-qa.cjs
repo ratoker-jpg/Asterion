@@ -91,10 +91,10 @@ async function production(win, label) {
   if (save.save.worldConfig.world.galaxyCount !== 3) throw new Error('World config not stored');
   if (save.index.slots.length !== 1 || save.index.activeSlotId !== save.index.slots[0].id) throw new Error('Slot index mismatch');
 
-  await clickText(win, 'Операции');
-  await click(win, '[data-qa-ops-mode="suns"]');
+  await clickText(win, 'Командование');
+  await click(win, '[data-qa-command-tab="operations"]');
   await waitFor(win, `document.querySelector('[data-qa-sun-raid-panel]')`);
-  await capture(win, label, '07-operations-suns-solo');
+  await capture(win, label, '07-command-operations-solo');
 
   await click(win, '[data-qa-pause-open]');
   await waitFor(win, `document.querySelector('[data-qa-pause-menu]')`);
@@ -114,8 +114,8 @@ async function testMode(win, label) {
   await load(win, '?mode=test');
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await sleep(800);
-  await clickText(win, 'Операции');
-  await click(win, '[data-qa-ops-mode="suns"]');
+  await clickText(win, 'Командование');
+  await click(win, '[data-qa-command-tab="operations"]');
   await waitFor(win, `document.querySelector('[data-qa-sun-raid-panel]')`);
   await click(win, '[data-qa-test="bot01-raid"]');
   await waitFor(win, `document.querySelector('[data-qa-sun-alert]')`);
@@ -125,6 +125,7 @@ async function testMode(win, label) {
   await run(win, `(() => { const row = [...document.querySelectorAll('.srp-ships li')].find((item) => item.textContent.includes('Скаут')); row.querySelector('button').click(); })()`);
   await sleep(300);
   await capture(win, label, '11-test-support-dialog');
+  await capture(win, label, '11b-test-support-dialog-filled');
   await click(win, '[data-qa-sun-launch-confirm]');
   await click(win, '[data-qa-test="ira-support"]');
   await shiftClock(win, 13);
@@ -143,6 +144,10 @@ async function testMode(win, label) {
   await run(win, `[...document.querySelectorAll('button')].find((item) => /ВОЕННАЯ/.test(item.textContent))?.click()`);
   await waitFor(win, `document.querySelector('[data-qa-gate-slot="building"]')`);
   await capture(win, label, '15-test-military-zone-gate');
+  await click(win, '[data-qa-pause-open]');
+  await waitFor(win, `document.querySelector('[data-qa-pause-menu="test"]')`);
+  await capture(win, label, '15b-test-pause-menu');
+  await click(win, '[data-qa-pause="resume"]');
   await shiftClock(win, 60);
   await waitFor(win, `document.querySelector('[data-qa-campaign-result="victory"]')`);
   await sleep(1500);

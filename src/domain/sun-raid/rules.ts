@@ -189,7 +189,7 @@ export function checkRaidLaunch(input: {
 }): RaidLaunchCheck {
   const { state, allianceId, role, galaxy, system, population, now } = input;
   if (state.campaignResult) return { ok: false, code: 'campaign-finished', message: 'Кампания завершена: Врата уже построены.' };
-  if (!allianceId) return { ok: false, code: 'no-alliance', message: 'Рейд на Солнце — командная операция: нужен союз (Командование).' };
+  if (!allianceId) return { ok: false, code: 'no-alliance', message: 'Рейд на Солнце — командная операция: нужен союз (Командование → Союз).' };
   if (role !== 'leader' && role !== 'deputy') return { ok: false, code: 'not-leadership', message: 'Рейд объявляет лидер или заместитель союза.' };
   if (population <= 0) return { ok: false, code: 'no-ships', message: 'Выберите боевые корабли для рейда.' };
   if (population > SUN_RAID_CONFIG.populationCapPerSide) {

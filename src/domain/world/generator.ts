@@ -95,6 +95,23 @@ export function generateWorld(config: NewGameConfig, now: number): GeneratedWorl
     for (let system = 1; system <= WORLD_LIMITS.systemsPerGalaxy; system += 1) systems.push({ galaxy, system });
   }
   const weightOf = WORLD_DENSITY_RULES[density].weight;
+  // A fixed mix gives exact counts (largest remainder) in a seeded order; `random` rolls each stub.
+  const mix = config.npcFactions === 'random' ? null : config.npcFactions;
+  const raceQueue: PlayerFactionId[] = [];
+  if (mix) {
+    const exact = FACTIONS.map((id) => (npcCount * mix[id]) / 100);
+    const counts = exact.map(Math.floor);
+    let left = npcCount - counts.reduce((sum, item) => sum + item, 0);
+    exact.map((item, index) => ({ index, remainder: item - Math.floor(item) }))
+      .sort((a, b) => b.remainder - a.remainder || a.index - b.index)
+      .forEach((entry) => { if (left > 0) { counts[entry.index]! += 1; left -= 1; } });
+    FACTIONS.forEach((id, index) => { for (let n = 0; n < counts[index]!; n += 1) raceQueue.push(id); });
+    const raceRandom = createSeededRandom(`world-races:${config.seed}`);
+    for (let index = raceQueue.length - 1; index > 0; index -= 1) {
+      const swap = Math.floor(raceRandom() * (index + 1));
+      [raceQueue[index], raceQueue[swap]] = [raceQueue[swap]!, raceQueue[index]!];
+    }
+  }
   const npcPlanets: SpyTargetState[] = [];
   for (let index = 0; index < npcCount; index += 1) {
     const candidates = systems.filter((entry) => (perSystem.get(`${entry.galaxy}:${entry.system}`) ?? 0) < maxNpcPerSystem);
@@ -116,7 +133,8 @@ export function generateWorld(config: NewGameConfig, now: number): GeneratedWorl
     perSystem.set(systemKey, (perSystem.get(systemKey) ?? 0) + 1);
 
     const number = String(index + 1).padStart(2, '0');
-    const raceId = pickRandom(random, FACTIONS);
+    const rolledRace = pickRandom(random, FACTIONS);
+    const raceId = mix ? raceQueue[index] ?? rolledRace : rolledRace;
     const cycle = Math.floor(index / NPC_NAMES.length);
     const ownerName = `${NPC_NAMES[index % NPC_NAMES.length]}${cycle ? ` ${cycle + 1}` : ''}`;
     const planetName = `${PLANET_NAMES[(index * 7) % PLANET_NAMES.length]}${cycle ? `-${cycle + 1}` : ''}`;
