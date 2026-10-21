@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom';
 import bombardmentIcon from '../../../assets/source/mission-icons-v1/20_bombardment.png';
 import sunSupportIcon from '../../../assets/source/mission-icons-v1/08_sun_support.png';
-import { getFactionShipCatalog } from '../../domain/combat/faction-catalog.ts';
+import { getFactionCombatEntity, getFactionShipCatalog } from '../../domain/combat/faction-catalog.ts';
+import { COMMANDER_IDS, type CommanderId } from '../../domain/combat/commanders.ts';
 import type { ShipId } from '../../domain/combat/ids.ts';
 import { getBaseSunEfficiencyPercent } from '../../domain/energy/runtime.ts';
 import type { RuntimeMode } from '../../domain/runtime/mode.ts';
@@ -15,12 +16,13 @@ import { getAvailableFleetForPlanet } from '../../application/flights.ts';
 import {
   currentSunRaidState,
   formatSun,
+  getSunDebris,
+  isSunCombatHull,
   launchSunRaid,
   previewSunLaunch,
   selectIncomingSunAlerts,
   selectPlayerRaidRole,
   selectRaidSides,
-  sendSunSupport,
   sunFleetPopulation,
   testBot01DefendSun,
   testBot01RaidSun,
@@ -46,6 +48,10 @@ type SunRaidPanelProps = {
   onOpenReport: (reportId: string) => void;
   onOpenCommand: () => void;
   onOpenGate: () => void;
+  /** «Поддержка солнца» is a Fleets mission: opens «Флоты» with the Sun preselected. */
+  onSendSupport: (raid: SunRaidRecord) => void;
+  /** Opens «Флоты → Переработка» aimed at the Sun's debris. */
+  onRecycleDebris: (sun: SunSelection) => void;
   onTestGateAssault?: () => void;
 };
 
@@ -59,16 +65,15 @@ function countdown(ms: number) {
 }
 
 const pad2 = (value: number) => String(value).padStart(2, '0');
-const CIVIL_SHIPS = new Set<ShipId>(['spy-probe', 'colonizer', 'recycler', 'transporter', 'mega-transporter']);
 
-export function SunRaidPanel({ state, now, mode, testTimeScale, selected, onSelect, onCommit, onOpenReport, onOpenCommand, onOpenGate, onTestGateAssault }: SunRaidPanelProps) {
+export function SunRaidPanel({ state, now, mode, testTimeScale, selected, onSelect, onCommit, onOpenReport, onOpenCommand, onOpenGate, onSendSupport, onRecycleDebris, onTestGateAssault }: SunRaidPanelProps) {
   const sunRaid = currentSunRaidState(state);
   const role = selectPlayerRaidRole(state);
   const crystals = getHolderCrystals(sunRaid, role.holder);
   const alerts = selectIncomingSunAlerts(state, now);
   const ownRaids = role.allianceId ? sunRaid.raids.filter((raid) => raid.allianceId === role.allianceId).slice(-6).reverse() : [];
   const [galaxy, setGalaxy] = useState(selected.galaxy);
-  const [launch, setLaunch] = useState<null | { kind: 'attack' } | { kind: 'support'; raid: SunRaidRecord }>(null);
+  const [launch, setLaunch] = useState<null | { kind: 'attack' }>(null);
   const galaxyCount = getActiveGalaxyCount();
   const options = { now, mode, testTimeScale };
 
@@ -101,6 +106,7 @@ export function SunRaidPanel({ state, now, mode, testTimeScale, selected, onSele
       : !homeGalaxies.has(raidHere.galaxy)
         ? 'Защищать могут владельцы планет в этой галактике.'
         : null;
+  const sunDebris = getSunDebris(state, selected.galaxy, selected.system);
   const events = sunRaid.history.filter((event) => event.galaxy === undefined || (event.galaxy === selected.galaxy && event.system === selected.system) || event.kind.startsWith('gate')).slice(-8).reverse();
   const latestResult = [...sunRaid.raids].reverse().find((raid) => raid.galaxy === selected.galaxy && raid.system === selected.system && raid.result);
 
@@ -205,12 +211,16 @@ export function SunRaidPanel({ state, now, mode, testTimeScale, selected, onSele
             <button type="button" className="opsA-btn opsA-btn--primary srp-cta" disabled={Boolean(raidBlock)} onClick={() => setLaunch({ kind: 'attack' })} data-qa-sun-attack>ОБЪЯВИТЬ РЕЙД</button>
           </article>
           <article className="srp-card">
-            <header><img src={sunSupportIcon} alt="" /><span><b>Поддержка солнца</b><small>Любой владелец планеты в галактике · обычный маршрут</small></span></header>
+            <header><img src={sunSupportIcon} alt="" /><span><b>Поддержка солнца</b><small>«Флоты» · любой владелец планеты в галактике, союз не нужен</small></span></header>
             {raidHere ? (
               <p className="srp-raid-line"><b>[{raidHere.allianceTag}] {raidHere.initiatorName}</b> · атакующих {selectRaidSides(state, raidHere.id).attackers.population.toLocaleString('ru-RU')} · защитников {selectRaidSides(state, raidHere.id).defenders.population.toLocaleString('ru-RU')} населения</p>
             ) : <p className="srp-raid-line">Нейтральной стражи нет: Солнце без защитников достаётся атакующим.</p>}
             {supportBlock ? <p className="srp-block-reason" role="note">{supportBlock}</p> : null}
-            <button type="button" className="opsA-btn srp-cta" disabled={Boolean(supportBlock)} onClick={() => raidHere && setLaunch({ kind: 'support', raid: raidHere })} data-qa-sun-support>ОТПРАВИТЬ ЗАЩИТУ</button>
+            <button type="button" className="opsA-btn srp-cta" disabled={Boolean(supportBlock)} onClick={() => raidHere && onSendSupport(raidHere)} data-qa-sun-support>ОТПРАВИТЬ ЗАЩИТУ · ФЛОТЫ</button>
+            <div className="srp-debris" data-qa-sun-debris={sunDebris}>
+              <span><small>ОБЛОМКИ У СОЛНЦА [{selected.galaxy}:{selected.system}:0]</small><b>{sunDebris.toLocaleString('ru-RU')}</b></span>
+              <button type="button" className="opsA-btn opsA-btn--small" disabled={sunDebris <= 0} onClick={() => onRecycleDebris(selected)} title="Переработчики летят к Солнцу. Астероид на позиции 1 этой системы тоже собирает эти обломки." data-qa-sun-recycle>ПЕРЕРАБОТАТЬ</button>
+            </div>
           </article>
           <article className="srp-card srp-card--crystals">
             <header><span><b>Кристаллы {role.allianceTag ? `союза [${role.allianceTag}]` : 'командира'}</b><small>{crystals.length} из 4 · не ресурс: не грузятся и не торгуются</small></span></header>
@@ -250,14 +260,12 @@ export function SunRaidPanel({ state, now, mode, testTimeScale, selected, onSele
           now={now}
           options={options}
           kind={launch.kind}
-          raid={launch.kind === 'support' ? launch.raid : null}
+          raid={null}
           galaxy={selected.galaxy}
           system={selected.system}
           onClose={() => setLaunch(null)}
-          onSubmit={(originPlanetId, ships) => {
-            const result = launch.kind === 'attack'
-              ? launchSunRaid(state, { galaxy: selected.galaxy, system: selected.system, originPlanetId, ships, requestId: `sun-raid-${selected.galaxy}-${selected.system}-${Date.now()}` }, { ...options, now: Date.now() })
-              : sendSunSupport(state, { raidId: launch.raid.id, originPlanetId, ships, requestId: `sun-support-${launch.raid.id}-${Date.now()}` }, { ...options, now: Date.now() });
+          onSubmit={(originPlanetId, ships, commanders) => {
+            const result = launchSunRaid(state, { galaxy: selected.galaxy, system: selected.system, originPlanetId, ships, commanders, requestId: `sun-raid-${selected.galaxy}-${selected.system}-${Date.now()}` }, { ...options, now: Date.now() });
             onCommit(result);
             if (result.ok) setLaunch(null);
             return result.ok ? null : result.error;
@@ -312,7 +320,7 @@ type LaunchProps = {
   galaxy: number;
   system: number;
   onClose: () => void;
-  onSubmit: (originPlanetId: string, ships: Partial<Record<ShipId, number>>) => string | null;
+  onSubmit: (originPlanetId: string, ships: Partial<Record<ShipId, number>>, commanders: Partial<Record<CommanderId, number>>) => string | null;
 };
 
 /** Fleet picker with the live population counter X / 225 000 and the blocking reason. */
@@ -320,12 +328,16 @@ function SunLaunchDialog({ state, now, options, kind, raid, galaxy, system, onCl
   const planetIds = Object.keys(state.planets);
   const [originPlanetId, setOriginPlanetId] = useState(state.currentPlanetId);
   const [ships, setShips] = useState<Partial<Record<ShipId, number>>>({});
+  const [commanders, setCommanders] = useState<Partial<Record<CommanderId, number>>>({});
   const [error, setError] = useState<string | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const factionId = state.profile.factionId;
-  const catalog = useMemo(() => getFactionShipCatalog(factionId).filter((entity) => entity.id !== 'solar-satellite'), [factionId]);
-  const available = getAvailableFleetForPlanet(state, originPlanetId).ships;
-  const preview = previewSunLaunch(state, { kind, galaxy, system, raidId: raid?.id, originPlanetId, ships }, options);
+  // Only combat hulls fly to a Sun: probes, colonizers, cargo and recyclers stay home.
+  const catalog = useMemo(() => getFactionShipCatalog(factionId).filter((entity) => isSunCombatHull(entity.id as ShipId)), [factionId]);
+  const fleet = getAvailableFleetForPlanet(state, originPlanetId);
+  const available = fleet.ships;
+  const commanderIds = COMMANDER_IDS.filter((id) => (fleet.commanders[id] ?? 0) > 0);
+  const preview = previewSunLaunch(state, { kind, galaxy, system, raidId: raid?.id, originPlanetId, ships, commanders }, options);
   const used = preview.committed + preview.population;
   const percent = Math.min(100, (used / preview.cap) * 100);
 
@@ -335,21 +347,20 @@ function SunLaunchDialog({ state, now, options, kind, raid, galaxy, system, onCl
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [onClose]);
-  useEffect(() => { setShips({}); }, [originPlanetId]);
+  useEffect(() => { setShips({}); setCommanders({}); }, [originPlanetId]);
 
   const popOf = (id: ShipId) => Math.max(1, catalog.find((entity) => entity.id === id)?.population ?? 1);
   /** Most of one hull that still fits under the side cap together with the rest of the selection. */
   const maxFor = (id: ShipId) => {
-    const others = sunFleetPopulation({ ...ships, [id]: 0 }, factionId);
+    const others = sunFleetPopulation({ ...ships, [id]: 0 }, factionId, commanders);
     const room = Math.max(0, preview.remaining - others);
     return Math.max(0, Math.min(available[id] ?? 0, Math.floor(room / popOf(id))));
   };
   const setCount = (id: ShipId, value: number) => setShips((current) => ({ ...current, [id]: Math.max(0, Math.min(maxFor(id), Math.floor(value || 0))) }));
   const fillToCap = () => {
-    let left = preview.remaining;
+    let left = preview.remaining - sunFleetPopulation({}, factionId, commanders);
     const next: Partial<Record<ShipId, number>> = {};
-    // Civil hulls (probes, colonizers, cargo, recyclers) are never auto-picked for a battle.
-    for (const entity of [...catalog].filter((item) => !CIVIL_SHIPS.has(item.id as ShipId)).sort((a, b) => b.population - a.population)) {
+    for (const entity of [...catalog].sort((a, b) => b.population - a.population)) {
       const count = Math.min(available[entity.id as ShipId] ?? 0, Math.floor(left / Math.max(1, entity.population)));
       if (count > 0) { next[entity.id as ShipId] = count; left -= count * entity.population; }
     }
@@ -397,6 +408,25 @@ function SunLaunchDialog({ state, now, options, kind, raid, galaxy, system, onCl
             );
           })}
         </ul>
+        {commanderIds.length ? (
+          <div className="srp-commanders" data-qa-sun-commanders>
+            <small>КОМАНДИРСКИЕ КОРАБЛИ · бой ведёт командир наивысшего уровня стороны</small>
+            <div>
+              {commanderIds.map((id) => {
+                const entity = getFactionCombatEntity(factionId, id);
+                const on = Boolean(commanders[id]);
+                return (
+                  <button key={id} type="button" className={`srp-commander${on ? ' is-on' : ''}`} aria-pressed={on}
+                    onClick={() => setCommanders((current) => { const next = { ...current }; if (next[id]) delete next[id]; else next[id] = 1; return next; })}
+                    data-qa-sun-commander={id}>
+                    {entity.art ? <img src={entity.art} alt="" /> : null}
+                    <span><b>{entity.name}</b><small>{entity.population} нас.</small></span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
         <div className="srp-cap" data-qa-sun-population={`${used}/${preview.cap}`}>
           <div className="srp-cap__head">
             <small>НАСЕЛЕНИЕ СТОРОНЫ{preview.committed ? ` · уже в пути ${preview.committed.toLocaleString('ru-RU')}` : ''}</small>
@@ -413,8 +443,8 @@ function SunLaunchDialog({ state, now, options, kind, raid, galaxy, system, onCl
         {(error ?? preview.error) && preview.population > 0 ? <p className="srp-block-reason" role="alert">{error ?? preview.error}</p> : null}
         <footer>
           <button type="button" className="opsA-btn" onClick={onClose}>ОТМЕНА</button>
-          <button type="button" className="opsA-btn opsA-btn--primary" disabled={Boolean(preview.error) || preview.population <= 0} onClick={() => setError(onSubmit(originPlanetId, ships))} data-qa-sun-launch-confirm>
-            {kind === 'attack' ? 'ОБЪЯВИТЬ РЕЙД' : 'ОТПРАВИТЬ ЗАЩИТУ'} · {sunFleetPopulation(ships, factionId).toLocaleString('ru-RU')}
+          <button type="button" className="opsA-btn opsA-btn--primary" disabled={Boolean(preview.error) || preview.population <= 0} onClick={() => setError(onSubmit(originPlanetId, ships, commanders))} data-qa-sun-launch-confirm>
+            {kind === 'attack' ? 'ОБЪЯВИТЬ РЕЙД' : 'ОТПРАВИТЬ ЗАЩИТУ'} · {sunFleetPopulation(ships, factionId, commanders).toLocaleString('ru-RU')}
           </button>
         </footer>
       </section>

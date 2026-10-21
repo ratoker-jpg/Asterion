@@ -51,6 +51,8 @@ export type SunFlightSnapshot = {
   allianceId: string | null;
   technologies: CombatTechnologyLevels;
   shipLevels: Partial<Record<ShipId, number>>;
+  /** Upgrade levels of the commander ships sent with this fleet. */
+  commanderLevels?: Partial<Record<import('../combat/commanders.ts').CommanderId, number>>;
   population: number;
 };
 

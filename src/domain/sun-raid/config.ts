@@ -24,7 +24,8 @@ export const SUN_RAID_CONFIG = Object.freeze({
   crystalCount: 4,
   /** No neutral guard: a Sun without defenders falls to the attackers. Kept for a future NPC stage. */
   neutralGuardEnabled: false,
-  maxRounds: 8 as const,
+  // Standard battle rules: the same 12-round profile as a regular attack.
+  maxRounds: 12 as const,
   historyLimit: 64,
 });
 

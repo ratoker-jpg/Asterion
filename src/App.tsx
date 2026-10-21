@@ -1968,6 +1968,24 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
   };
+  const openSunFleetLaunch = (detail: FlightLaunchContext) => {
+    clearBuildingInterior();
+    navigateTo('fleets');
+    setPlanetViewMode('overview');
+    setPlanetMenuOpen(false);
+    window.setTimeout(() => window.dispatchEvent(new CustomEvent<FlightLaunchContext>(FLIGHT_LAUNCH_CONTEXT_EVENT, { detail })), 40);
+  };
+  const sunLaunchDestination = (galaxy: number, system: number) => ({
+    kind: 'operation' as const, operationId: `sun:${galaxy}:${system}`, coordinate: { galaxy, system, position: 1 },
+  });
+  const openSunSupportInFleets = (raid: { galaxy: number; system: number }) => openSunFleetLaunch({
+    missionId: 'sun-support', operationId: `sun:${raid.galaxy}:${raid.system}`,
+    destination: sunLaunchDestination(raid.galaxy, raid.system), targetRelation: 'neutral', targetPlanetName: `Солнце ${raid.galaxy}:${raid.system}`,
+  });
+  const openSunRecycleInFleets = (sun: SunSelection) => openSunFleetLaunch({
+    missionId: 'recycle', operationId: `sun:${sun.galaxy}:${sun.system}`, targetKind: 'empty',
+    destination: sunLaunchDestination(sun.galaxy, sun.system), targetPlanetName: `Обломки Солнца ${sun.galaxy}:${sun.system}`,
+  });
   const startGate = () => {
     if (!gateDialogPlanetId) return;
     commitSunAction(startGateConstruction(stateRef.current, gateDialogPlanetId, { now: Date.now(), mode: RUNTIME_MODE, testTimeScale }));
@@ -2314,6 +2332,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
                   onOpenReport={openPirateReport}
                   onOpenCommand={() => setCommandFocus({ tab: 'overview', nonce: Date.now() })}
                   onOpenGate={() => { setGateDialogPlanetId(state.currentPlanetId); }}
+                  onSendSupport={openSunSupportInFleets}
+                  onRecycleDebris={openSunRecycleInFleets}
                   onTestGateAssault={testGateAssault}
                 />
               )}

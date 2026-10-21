@@ -1,4 +1,5 @@
 import { selectOwnerAlliance, selectOwnerMembership } from '../domain/command/selectors.ts';
+import { dispatchSunMission, getSunDebris, parseSunOperationId, sunDebrisCoordinate } from './sun-raid.ts';
 import {
   appendAidEvent,
   creditAidDelivery,
@@ -1241,6 +1242,22 @@ export function dispatchFlight(
   if (command.missionId === 'pirate-recon' || command.missionId === 'pirate-elimination') {
     return dispatchPirateFlight(state, command, runtimeOptions);
   }
+  if (command.missionId === 'sun-support' || command.missionId === 'sun-attack') {
+    const now = Number.isFinite(command.departedAt) ? command.departedAt! : (runtimeOptions.now ?? Date.now());
+    const outcome = dispatchSunMission(state, {
+      requestId,
+      missionId: command.missionId,
+      originPlanetId: command.originPlanetId ?? state.currentPlanetId,
+      destination: command.destination as { kind: string; coordinate: UniverseCoordinate; operationId?: string } | undefined,
+      operationId: command.operationId,
+      selectedShips: command.selectedShips,
+      selectedCommanders: command.selectedCommanders,
+      departedAt: now,
+    }, { now, mode: runtimeOptions.mode ?? 'production', testTimeScale: runtimeOptions.testTimeScale });
+    return outcome.ok
+      ? { ok: true, state: outcome.state, flight: outcome.flight, created: true, notice: outcome.notice }
+      : failure(state, 'target-not-available', outcome.message);
+  }
   if (command.missionId !== 'expedition' && command.missionId !== 'exploration-recon' && command.missionId !== 'colonize' && command.missionId !== 'transport' && command.missionId !== 'aid' && command.missionId !== 'espionage' && command.missionId !== 'attack' && command.missionId !== 'deployment' && command.missionId !== 'recycle' && command.missionId !== 'gas' && command.missionId !== 'space-flight') {
     return failure(state, 'mission-not-supported', 'Эта миссия пока не подключена к flight runtime.');
   }
@@ -1372,6 +1389,19 @@ export function dispatchFlight(
       || Object.keys(selectedShips).some((shipId) => !isRecyclerShip(shipId as ShipId, state.profile.factionId as CombatFactionId))) {
       return failure(state, 'wrong-ship-composition', 'Для переработки обломков нужны только корабли-переработчики.');
     }
+    const sunTarget = command.destination?.kind === 'operation' ? parseSunOperationId(command.destination.operationId) : null;
+    if (sunTarget) {
+      // Sun debris: the route goes to the system's first position, the debris lie on the Sun (position 0).
+      const route = command.destination!.coordinate;
+      if (!isFlightCoordinate(route) || route.galaxy !== sunTarget.galaxy || route.system !== sunTarget.system || route.position !== 1
+        || command.operationId !== (command.destination as { operationId?: string }).operationId) {
+        return failure(state, 'invalid-coordinate', 'Координата Солнца некорректна.');
+      }
+      if (getSunDebris(state, sunTarget.galaxy, sunTarget.system) <= 0) {
+        return failure(state, 'target-not-available', 'У этого Солнца нет обломков для переработки.');
+      }
+      recycleTargetKind = 'empty';
+    } else {
     if (!command.destination || !isFlightCoordinate(command.destination.coordinate)) {
       return failure(state, 'invalid-coordinate', 'Координата цели некорректна.');
     }
@@ -1395,6 +1425,7 @@ export function dispatchFlight(
       && !asteroidOverlayIsActive
       && getOrbitalDebrisAtCoordinate(currentEspionageState(state), command.destination.coordinate) <= 0) {
       return failure(state, 'target-not-available', 'На свободной координате нет обломков для переработки.');
+    }
     }
     const cargoCatalog = Object.fromEntries(
       getFactionShipCatalog(state.profile.factionId as CombatFactionId)
@@ -2865,21 +2896,23 @@ export function reconcileFlights(
       }
       if (current.missionId === 'recycle') {
         if (current.cargoState !== 'delivered' && current.cargoState !== 'returned') {
+          const sunTarget = current.destination?.kind === 'operation' ? parseSunOperationId(current.operationId) : null;
+          const debrisCoordinate = sunTarget ? sunDebrisCoordinate(sunTarget.galaxy, sunTarget.system) : current.destinationCoordinate;
           const collectedDebris = collectOrbitalDebrisAtCoordinate(
             currentEspionageState(next),
-            current.destinationCoordinate,
+            debrisCoordinate,
             current.recycleCapacity ?? 0,
           );
           const remainingOrbitalDebris = getOrbitalDebrisAtCoordinate(
             collectedDebris.espionage,
-            current.destinationCoordinate,
+            debrisCoordinate,
           );
           next = withEspionageState(next, collectedDebris.espionage);
           next = {
             ...next,
             reports: upsertRecyclerArrivalReport(next.reports, {
               flightId: current.id,
-              coordinate: current.destinationCoordinate,
+              coordinate: debrisCoordinate,
               arrivedAtMs: arrivalAt,
               collectedDebris: collectedDebris.collected,
               remainingOrbitalDebris,

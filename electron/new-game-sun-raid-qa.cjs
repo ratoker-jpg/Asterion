@@ -34,6 +34,10 @@ async function capture(win, label, name) {
   const directory = path.join(OUTPUT, label);
   fs.mkdirSync(directory, { recursive: true });
   await sleep(900); // menu entrance animations
+  // A hidden window may hand back its last composited frame: force a fresh one.
+  win.webContents.invalidate();
+  await run(win, 'new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+  await sleep(300);
   const [width, height] = win.getContentSize();
   const image = await win.capturePage({ x: 0, y: 0, width, height });
   fs.writeFileSync(path.join(directory, `${name}.png`), image.toPNG());
@@ -120,17 +124,36 @@ async function testMode(win, label) {
   await click(win, '[data-qa-test="bot01-raid"]');
   await waitFor(win, `document.querySelector('[data-qa-sun-alert]')`);
   await capture(win, label, '10-test-incoming-sun-raid');
+  // «Поддержка солнца» is a Fleets mission: the panel opens «Флоты» with the Sun preselected.
   await click(win, '[data-qa-sun-support]');
-  await waitFor(win, `document.querySelector('[data-qa-sun-launch="support"]')`);
-  await run(win, `(() => { const row = [...document.querySelectorAll('.srp-ships li')].find((item) => item.textContent.includes('Скаут')); row.querySelector('button').click(); })()`);
+  await waitFor(win, `document.querySelector('[data-qa-mission-id="sun-support"].active')`);
+  const civil = await run(win, `[...document.querySelectorAll('[data-qa-fleet-roster] [data-qa-fleet-ship]')].map((row) => row.getAttribute('data-qa-fleet-ship')).filter((id) => ['spy-probe','colonizer','recycler','transporter','mega-transporter','solar-satellite'].includes(id))`);
+  if (civil.length) throw new Error('Civil hulls offered for Sun support: ' + civil.join(', '));
+  await run(win, `(() => { const row = document.querySelector('[data-qa-fleet-roster] [data-qa-fleet-ship]'); [...row.querySelectorAll('button')].find((item) => item.textContent.trim() === 'МАКС.').click(); })()`);
   await sleep(300);
-  await capture(win, label, '11-test-support-dialog');
-  await capture(win, label, '11b-test-support-dialog-filled');
-  await click(win, '[data-qa-sun-launch-confirm]');
+  await capture(win, label, '11-test-support-fleets');
+  await click(win, '[data-qa-flight-preview-open]');
+  await waitFor(win, `document.querySelector('[data-qa-sun-target-select] select')?.value?.startsWith('sun:')`);
+  await waitFor(win, `!document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled`);
+  await capture(win, label, '11b-test-support-plan');
+  await click(win, '[data-qa-flight-dispatch-confirm]');
+  await waitFor(win, `[...document.querySelectorAll('[data-qa-flight-row]')].length > 0`);
+  await clickText(win, 'Командование');
+  await click(win, '[data-qa-command-tab="operations"]');
+  await waitFor(win, `document.querySelector('[data-qa-sun-raid-panel]')`);
   await click(win, '[data-qa-test="ira-support"]');
   await shiftClock(win, 13);
   await waitFor(win, `document.querySelector('[data-qa-sun-result]')`);
   await capture(win, label, '12-test-raid-resolved');
+  // The battle left debris at [G:S:0]: recyclers fly to the Sun from «Флоты».
+  if (await run(win, `Number(document.querySelector('[data-qa-sun-debris]')?.getAttribute('data-qa-sun-debris') ?? 0) > 0`)) {
+    await click(win, '[data-qa-sun-recycle]');
+    await waitFor(win, `document.querySelector('[data-qa-mission-id="recycle"].active')`);
+    await capture(win, label, '12b-test-sun-debris-recycle');
+    await clickText(win, 'Командование');
+    await click(win, '[data-qa-command-tab="operations"]');
+    await waitFor(win, `document.querySelector('[data-qa-sun-raid-panel]')`);
+  }
 
   for (let index = 0; index < 4; index += 1) await click(win, '[data-qa-test="grant-crystal"]');
   await click(win, '[data-qa-open-gate]');

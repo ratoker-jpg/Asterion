@@ -187,11 +187,16 @@ export function reconcileRuntime(
     const advanced = advanceUniverseAsteroidSimulationAt(simulation, at, 1);
     next = { ...next, asteroidSimulation: advanced.state };
     for (const transition of advanced.transitions) {
-      const espionage = getEspionageState(next);
-      const freeDebris = getOrbitalDebrisAtCoordinate(espionage, transition.fromCoordinate);
       const key = String(transition.spawnIndex);
+      // An asteroid on the first position of a system also sweeps the Sun's debris (position 0).
+      const sweep = transition.fromCoordinate.position === 1
+        ? [transition.fromCoordinate, { ...transition.fromCoordinate, position: 0 }]
+        : [transition.fromCoordinate];
+      for (const coordinate of sweep) {
+      const espionage = getEspionageState(next);
+      const freeDebris = getOrbitalDebrisAtCoordinate(espionage, coordinate);
       if (freeDebris > 0) {
-        const captured = collectOrbitalDebrisAtCoordinate(espionage, transition.fromCoordinate, freeDebris);
+        const captured = collectOrbitalDebrisAtCoordinate(espionage, coordinate, freeDebris);
         if (captured.collected > 0) {
           const previousCargo = Math.max(0, Math.floor(next.asteroidDebrisBySpawnIndex?.[key] ?? 0));
           next = {
@@ -203,6 +208,7 @@ export function reconcileRuntime(
             },
           };
         }
+      }
       }
 
       // The final boundary transition still vacates its last coordinate and

@@ -3,6 +3,8 @@ import { TEST_ALLY_OWNER_ID, TEST_BOT_OWNER_ID } from '../domain/command/catalog
 import { getCombatFactionName, isCombatFactionId, type CombatFactionId } from '../domain/combat/factions.ts';
 import { getFactionCombatEntity, getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
 import { SHIP_IDS, SOLAR_SATELLITE_ID, type ShipId } from '../domain/combat/ids.ts';
+import { COMMANDER_IDS, type CommanderId } from '../domain/combat/commanders.ts';
+import { addDebris } from '../domain/flights/cargo.ts';
 import { DEFAULT_COMBAT_PRIORITY } from '../domain/combat/priority.ts';
 import { resolveCombat } from '../domain/combat/resolver.ts';
 import { createDefaultCombatTechnologies, type CombatTechnologyLevels } from '../domain/combat/technologies.ts';
@@ -49,9 +51,10 @@ import type {
   SunRaidState,
 } from '../domain/sun-raid/types.ts';
 import type { UniverseCoordinate } from '../domain/universe/types.ts';
-import { technologiesFromScience } from './attack.ts';
+import { calculateAttackDebris, technologiesFromScience } from './attack.ts';
 import { recordBattleScoreAward } from '../domain/rating/scoring.ts';
 import {
+  getOwnerShipUpgradeLevel,
   getOwnerShipUpgradeLevels,
   getPlanetResources,
   replaceAlliedPlanetState,
@@ -104,15 +107,56 @@ export function isSunFlight(flight: FlightRecord): boolean {
   return SUN_MISSIONS.has(flight.missionId);
 }
 
-/** Population of a ship selection for one race (solar satellites and commanders never fly to a Sun). */
-export function sunFleetPopulation(ships: Partial<Record<ShipId, number>>, factionId: CombatFactionId): number {
+/** Civil hulls never join a Sun battle: only combat ships and commander ships fly there. */
+export const SUN_CIVIL_SHIP_IDS: ReadonlySet<ShipId> = new Set<ShipId>(['spy-probe', 'colonizer', 'recycler', 'transporter', 'mega-transporter', SOLAR_SATELLITE_ID]);
+
+export function isSunCombatHull(id: ShipId): boolean {
+  return SHIP_IDS.includes(id) && !SUN_CIVIL_SHIP_IDS.has(id);
+}
+
+/** Population of a Sun fleet (combat ships and commander ships) for one race. */
+export function sunFleetPopulation(
+  ships: Partial<Record<ShipId, number>>,
+  factionId: CombatFactionId,
+  commanders: Partial<Record<CommanderId, number>> = {},
+): number {
   let total = 0;
   for (const [id, count] of Object.entries(ships) as [ShipId, number][]) {
     if (!SHIP_IDS.includes(id) || id === SOLAR_SATELLITE_ID) continue;
     const entity = getFactionCombatEntity(factionId, id);
     total += Math.max(0, Math.floor(entity.population ?? 0)) * safeCount(count);
   }
+  for (const [id, count] of Object.entries(commanders) as [CommanderId, number][]) {
+    if (!COMMANDER_IDS.includes(id) || safeCount(count) <= 0) continue;
+    total += Math.max(0, Math.floor(getFactionCombatEntity(factionId, id).population ?? 0)) * Math.min(1, safeCount(count));
+  }
   return total;
+}
+
+function normalizeCommanders(commanders: Partial<Record<CommanderId, number>> | undefined): Partial<Record<CommanderId, number>> {
+  return Object.fromEntries((Object.entries(commanders ?? {}) as [CommanderId, number][])
+    .filter(([id, count]) => COMMANDER_IDS.includes(id) && safeCount(count) > 0)
+    .map(([id]) => [id, 1])) as Partial<Record<CommanderId, number>>;
+}
+
+/** Sun debris lie on the system's «zero» position: the Sun itself. */
+export function sunDebrisCoordinate(galaxy: number, system: number): UniverseCoordinate {
+  return { galaxy, system, position: 0 };
+}
+
+export function sunDebrisLedgerKey(galaxy: number, system: number): string {
+  return `sun-debris-${galaxy}-${system}`;
+}
+
+/** Free debris orbiting a Sun (left by Sun battles). */
+export function getSunDebris(state: SaveState, galaxy: number, system: number): number {
+  return Math.max(0, Math.floor(state.espionage?.orbitalDebris?.[sunDebrisLedgerKey(galaxy, system)]?.debris ?? 0));
+}
+
+/** Parses `sun:G:S` operation ids. */
+export function parseSunOperationId(value: string | undefined): { galaxy: number; system: number } | null {
+  const match = typeof value === 'string' ? /^sun:(\d+):(\d+)$/.exec(value) : null;
+  return match ? { galaxy: Number(match[1]), system: Number(match[2]) } : null;
 }
 
 function normalizeSelection(ships: Partial<Record<ShipId, number>>): Partial<Record<ShipId, number>> {
@@ -135,6 +179,8 @@ type SunOwner = {
   shipLevels: Partial<Record<ShipId, number>>;
   scienceLevels: Partial<Record<number, number>>;
   available: Partial<Record<ShipId, number>>;
+  availableCommanders: Partial<Record<CommanderId, number>>;
+  commanderLevels: Partial<Record<CommanderId, number>>;
 };
 
 function shipLevelsOnly(levels: Record<string, number>): Partial<Record<ShipId, number>> {
@@ -156,6 +202,8 @@ function playerOwner(state: SaveState, planetId: string): SunOwner | null {
     shipLevels: shipLevelsOnly(getOwnerShipUpgradeLevels(state)),
     scienceLevels: state.science.levels,
     available: getAvailableFleetForPlanet(state, planetId).ships,
+    availableCommanders: getAvailableFleetForPlanet(state, planetId).commanders,
+    commanderLevels: Object.fromEntries(COMMANDER_IDS.map((id) => [id, getOwnerShipUpgradeLevel(state, id)])) as Partial<Record<CommanderId, number>>,
   };
 }
 
@@ -173,6 +221,8 @@ function bot01Owner(state: SaveState, target: SpyTargetState): SunOwner {
     shipLevels: { ...(profile?.shipLevels ?? {}) },
     scienceLevels: profile?.scienceLevels ?? {},
     available: { ...target.fleet.ships },
+    availableCommanders: {},
+    commanderLevels: { ...(profile?.commanderLevels ?? {}) },
   };
 }
 
@@ -191,6 +241,8 @@ function allyOwner(state: SaveState): SunOwner | null {
     shipLevels: {},
     scienceLevels: {},
     available: { ...planet.fleet.ships },
+    availableCommanders: {},
+    commanderLevels: {},
   };
 }
 
@@ -228,12 +280,14 @@ function createSunFlight(
     galaxy: number;
     system: number;
     ships: Partial<Record<ShipId, number>>;
+    commanders?: Partial<Record<CommanderId, number>>;
     requestId: string;
     departedAt: number;
     allianceId: string | null;
   },
   options: SunRuntimeOptions,
 ): FlightRecord {
+  const commanders = normalizeCommanders(input.commanders);
   const destination = { kind: 'operation' as const, operationId: sunOperationId(input.galaxy, input.system), coordinate: sunRouteCoordinate(input.galaxy, input.system) };
   const base = createFlightRecord({
     requestId: input.requestId,
@@ -243,6 +297,7 @@ function createSunFlight(
     originCoordinate: owner.coordinate,
     destination,
     selectedShips: input.ships,
+    ...(Object.keys(commanders).length ? { selectedCommanders: commanders } : {}),
     departedAt: input.departedAt,
     factionId: owner.factionId,
     science: owner.scienceLevels as import('../domain/flights/types.ts').FlightScienceLevels,
@@ -263,7 +318,8 @@ function createSunFlight(
     allianceId: input.allianceId,
     technologies: owner.technologies,
     shipLevels: owner.shipLevels,
-    population: sunFleetPopulation(input.ships, owner.factionId),
+    ...(Object.keys(commanders).length ? { commanderLevels: Object.fromEntries(Object.keys(commanders).map((id) => [id, Math.max(0, Math.floor(owner.commanderLevels[id as CommanderId] ?? 0))])) } : {}),
+    population: sunFleetPopulation(input.ships, owner.factionId, commanders),
   };
   return {
     ...base,
@@ -279,13 +335,20 @@ function appendFlight(flights: FlightState, flight: FlightRecord): FlightState {
   return { records: [...flights.records, flight], requestIndex: { ...flights.requestIndex, [flight.requestId]: flight.id } };
 }
 
-function validateShips(owner: SunOwner, ships: Partial<Record<ShipId, number>>): string | null {
+function validateShips(owner: SunOwner, ships: Partial<Record<ShipId, number>>, commanders: Partial<Record<CommanderId, number>> = {}): string | null {
   const selection = normalizeSelection(ships);
-  if (!Object.keys(selection).length) return 'Выберите хотя бы один корабль.';
+  const selectedCommanders = normalizeCommanders(commanders);
+  if (!Object.keys(selection).length && !Object.keys(selectedCommanders).length) return 'Выберите боевые корабли.';
+  if (Object.keys(selection).some((id) => SUN_CIVIL_SHIP_IDS.has(id as ShipId))) {
+    return 'К Солнцу летят только боевые корабли: зонды, колонизаторы, транспорты и переработчики не допускаются.';
+  }
   const catalog = new Set(getFactionShipCatalog(owner.factionId).map((entity) => entity.id));
   for (const [id, count] of Object.entries(selection) as [ShipId, number][]) {
     if (!catalog.has(id)) return 'Этот корабль недоступен вашей расе.';
     if ((owner.available[id] ?? 0) < count) return 'На планете недостаточно свободных кораблей.';
+  }
+  for (const id of Object.keys(selectedCommanders) as CommanderId[]) {
+    if ((owner.availableCommanders[id] ?? 0) < 1) return 'Выбранный командирский корабль недоступен на этой планете.';
   }
   return null;
 }
@@ -315,7 +378,7 @@ function detachNpcShips(state: SaveState, owner: SunOwner, ships: Partial<Record
 
 /* ------------------------------------------------------------ launch rules */
 
-export type RaidLaunchInput = { galaxy: number; system: number; originPlanetId: string; ships: Partial<Record<ShipId, number>>; requestId: string };
+export type RaidLaunchInput = { galaxy: number; system: number; originPlanetId: string; ships: Partial<Record<ShipId, number>>; commanders?: Partial<Record<CommanderId, number>>; requestId: string };
 
 /**
  * Starts a command raid: the alliance leadership sends the first fleet from
@@ -333,7 +396,8 @@ function launchRaidFor(state: SaveState, owner: SunOwner, input: RaidLaunchInput
   if (existing) return { ok: true, state, notice: 'Рейд уже объявлен.', raidId: existing.sunRaid?.raidId, flightId: existing.id };
   const membership = allianceOf(state, owner.ownerId);
   const ships = normalizeSelection(input.ships);
-  const population = sunFleetPopulation(ships, owner.factionId);
+  const commanders = normalizeCommanders(input.commanders);
+  const population = sunFleetPopulation(ships, owner.factionId, commanders);
   const check = checkRaidLaunch({
     state: sunRaid,
     allianceId: membership?.alliance.id ?? null,
@@ -344,12 +408,12 @@ function launchRaidFor(state: SaveState, owner: SunOwner, input: RaidLaunchInput
     now: options.now,
   });
   if (!check.ok) return { ok: false, state, error: check.message };
-  const shipError = validateShips(owner, ships);
+  const shipError = validateShips(owner, ships, commanders);
   if (shipError) return { ok: false, state, error: shipError };
   const alliance = membership!.alliance;
   const raidId = `sun-raid-${input.requestId}`;
   const flight = createSunFlight(owner, {
-    missionId: 'sun-attack', raidId, galaxy: input.galaxy, system: input.system, ships,
+    missionId: 'sun-attack', raidId, galaxy: input.galaxy, system: input.system, ships, commanders,
     requestId: input.requestId, departedAt: options.now, allianceId: alliance.id,
   }, options);
   if (owner.ownerSide === 'player') {
@@ -383,16 +447,16 @@ function launchRaidFor(state: SaveState, owner: SunOwner, input: RaidLaunchInput
   return { ok: true, state: next, notice: `Рейд на Солнце ${formatSun(input.galaxy, input.system)} объявлен. Прибытие через 3 ч.`, raidId, flightId: flight.id };
 }
 
-export type SupportInput = { raidId: string; originPlanetId: string; ships: Partial<Record<ShipId, number>>; requestId: string };
+export type SupportInput = { raidId: string; originPlanetId: string; ships: Partial<Record<ShipId, number>>; commanders?: Partial<Record<CommanderId, number>>; requestId: string; departedAt?: number };
 
-function supportCheck(state: SaveState, owner: SunOwner, raid: SunRaidRecord | undefined, ships: Partial<Record<ShipId, number>>, options: SunRuntimeOptions, fixture: boolean): string | null {
+function supportCheck(state: SaveState, owner: SunOwner, raid: SunRaidRecord | undefined, ships: Partial<Record<ShipId, number>>, options: SunRuntimeOptions, fixture: boolean, commanders: Partial<Record<CommanderId, number>> = {}): string | null {
   if (!raid || raid.status !== 'incoming') return 'Входящей атаки на это Солнце уже нет.';
   const membership = allianceOf(state, owner.ownerId);
   if (membership?.alliance.id === raid.allianceId) return 'Нельзя защищать Солнце от рейда собственного союза.';
   if (!fixture && !Object.values(state.planets).some((planet) => (planet.universeGalaxy ?? 1) === raid.galaxy)) {
     return 'Защищать Солнце может только владелец планеты в этой галактике.';
   }
-  const population = sunFleetPopulation(ships, owner.factionId);
+  const population = sunFleetPopulation(ships, owner.factionId, commanders);
   if (population <= 0) return 'Выберите боевые корабли для защиты.';
   const committed = selectRaidSides(state, raid.id).defenders.population;
   const remaining = SUN_RAID_CONFIG.populationCapPerSide - committed;
@@ -400,7 +464,7 @@ function supportCheck(state: SaveState, owner: SunOwner, raid: SunRaidRecord | u
     return `Лимит защиты — ${SUN_RAID_CONFIG.populationCapPerSide.toLocaleString('ru-RU')}: свободно ${Math.max(0, remaining).toLocaleString('ru-RU')} населения.`;
   }
   const preview = createSunFlight(owner, {
-    missionId: 'sun-support', raidId: raid.id, galaxy: raid.galaxy, system: raid.system, ships,
+    missionId: 'sun-support', raidId: raid.id, galaxy: raid.galaxy, system: raid.system, ships, commanders,
     requestId: 'preview', departedAt: options.now, allianceId: null,
   }, options);
   if (preview.arrivalAt > raid.arrivesAt) return 'Флот не успеет: он прибудет позже атакующих.';
@@ -420,14 +484,16 @@ function sendSupportFor(state: SaveState, owner: SunOwner, input: SupportInput, 
   const sunRaid = currentSunRaidState(state);
   const raid = sunRaid.raids.find((item) => item.id === input.raidId);
   const ships = normalizeSelection(input.ships);
-  const shipError = validateShips(owner, ships);
+  const commanders = normalizeCommanders(input.commanders);
+  const shipError = validateShips(owner, ships, commanders);
   if (shipError) return { ok: false, state, error: shipError };
-  const error = supportCheck(state, owner, raid, ships, options, fixture);
+  const departedAt = input.departedAt ?? options.now;
+  const error = supportCheck(state, owner, raid, ships, { ...options, now: departedAt }, fixture, commanders);
   if (error) return { ok: false, state, error };
   const membership = allianceOf(state, owner.ownerId);
   const flight = createSunFlight(owner, {
-    missionId: 'sun-support', raidId: raid!.id, galaxy: raid!.galaxy, system: raid!.system, ships,
-    requestId: input.requestId, departedAt: options.now, allianceId: membership?.alliance.id ?? null,
+    missionId: 'sun-support', raidId: raid!.id, galaxy: raid!.galaxy, system: raid!.system, ships, commanders,
+    requestId: input.requestId, departedAt, allianceId: membership?.alliance.id ?? null,
   }, options);
   let next: SaveState = { ...state, flights: appendFlight(state.flights, flight) };
   if (owner.ownerSide === 'player') {
@@ -453,23 +519,24 @@ export type SunLaunchPreview = {
 /** Live numbers of the launch dialog: population counter, travel time, fuel and the blocking reason. */
 export function previewSunLaunch(
   state: SaveState,
-  input: { kind: 'attack' | 'support'; galaxy: number; system: number; raidId?: string; originPlanetId: string; ships: Partial<Record<ShipId, number>> },
+  input: { kind: 'attack' | 'support'; galaxy: number; system: number; raidId?: string; originPlanetId: string; ships: Partial<Record<ShipId, number>>; commanders?: Partial<Record<CommanderId, number>> },
   options: SunRuntimeOptions,
 ): SunLaunchPreview {
   const owner = playerOwner(state, input.originPlanetId);
   const ships = normalizeSelection(input.ships);
+  const commanders = normalizeCommanders(input.commanders);
   const cap = SUN_RAID_CONFIG.populationCapPerSide;
   if (!owner) return { population: 0, cap, committed: 0, remaining: cap, oneWayMs: 0, arrivesAt: options.now, gasCost: 0, error: 'Планета отправления не найдена.' };
-  const population = sunFleetPopulation(ships, owner.factionId);
+  const population = sunFleetPopulation(ships, owner.factionId, commanders);
   const raid = input.raidId ? currentSunRaidState(state).raids.find((item) => item.id === input.raidId) : undefined;
   const committed = input.kind === 'support' && raid ? selectRaidSides(state, raid.id).defenders.population : 0;
-  const flight = Object.keys(ships).length
+  const flight = Object.keys(ships).length || Object.keys(commanders).length
     ? createSunFlight(owner, {
       missionId: input.kind === 'attack' ? 'sun-attack' : 'sun-support', raidId: raid?.id ?? 'preview',
-      galaxy: input.galaxy, system: input.system, ships, requestId: 'preview', departedAt: options.now, allianceId: null,
+      galaxy: input.galaxy, system: input.system, ships, commanders, requestId: 'preview', departedAt: options.now, allianceId: null,
     }, options)
     : null;
-  let error = validateShips(owner, ships);
+  let error = validateShips(owner, ships, commanders);
   if (!error && input.kind === 'attack') {
     const membership = allianceOf(state, owner.ownerId);
     const check = checkRaidLaunch({
@@ -478,7 +545,7 @@ export function previewSunLaunch(
     });
     error = check.ok ? null : check.message;
   }
-  if (!error && input.kind === 'support') error = supportCheck(state, owner, raid, ships, options, false);
+  if (!error && input.kind === 'support') error = supportCheck(state, owner, raid, ships, options, false, commanders);
   if (!error && flight && getPlanetResources(state, owner.planetId).gas < flight.gasCost) error = `Недостаточно газа: нужно ${flight.gasCost.toLocaleString('ru-RU')}.`;
   const oneWayMs = input.kind === 'attack'
     ? scaleRuntimeDuration(SUN_RAID_CONFIG.flightOneWayMs, options.mode, options.testTimeScale)
@@ -515,13 +582,45 @@ function sideInput(participants: readonly SideParticipant[]) {
     .filter(([id]) => catalog.has(id))
     .sort(([left], [right]) => SHIP_IDS.indexOf(left) - SHIP_IDS.indexOf(right))
     .map(([id, count]) => ({ entityId: id, count, level: levels[id] ?? 0 }));
-  return { lead, factionId, technologies, ships };
+  // Commander ships: one per commander type, the highest level sent by any participant
+  // fights; the highest-level commander overall leads the side and heads the priority.
+  const commanderSources = new Map<CommanderId, { level: number; flightId: string }>();
+  for (const { flight, snapshot } of participants) {
+    for (const id of Object.keys(flight.selectedCommanders ?? {}) as CommanderId[]) {
+      if (safeCount(flight.selectedCommanders?.[id]) <= 0) continue;
+      const level = Math.max(0, Math.floor(snapshot.commanderLevels?.[id] ?? 0));
+      const known = commanderSources.get(id);
+      if (!known || level > known.level || (level === known.level && flight.id < known.flightId)) commanderSources.set(id, { level, flightId: flight.id });
+    }
+  }
+  const commanders: CombatStackInput[] = [...commanderSources.entries()]
+    .sort(([leftId, left], [rightId, right]) => right.level - left.level || COMMANDER_IDS.indexOf(leftId) - COMMANDER_IDS.indexOf(rightId))
+    .map(([id, source]) => ({ entityId: id, count: 1, level: source.level }));
+  const priority = commanders.map((stack) => stack.entityId as CommanderId);
+  return { lead, factionId, technologies, ships, commanders, commanderSources, priority };
+}
+
+function sidePriority(priority: readonly CommanderId[], fallback: readonly CommanderId[]): CommanderId[] {
+  return [...priority, ...fallback.filter((id) => !priority.includes(id))];
 }
 
 /** Splits the destroyed hulls of a merged stack back to each fleet (largest remainder, stable order). */
+function commanderLosses(participants: readonly SideParticipant[], force: BattleForceSnapshot, sources: ReadonlyMap<CommanderId, { flightId: string }>): Map<string, Partial<Record<CommanderId, number>>> {
+  const survivors = new Map(participants.map((item) => [item.flight.id, normalizeCommanders(item.flight.selectedCommanders)]));
+  for (const stack of force.stacks) {
+    const id = stack.entityId as CommanderId;
+    if (!COMMANDER_IDS.includes(id) || safeCount(stack.destroyed) <= 0) continue;
+    const source = sources.get(id);
+    const owned = source ? survivors.get(source.flightId) : undefined;
+    if (owned) delete owned[id];
+  }
+  return survivors;
+}
+
 function distributeLosses(participants: readonly SideParticipant[], force: BattleForceSnapshot): Map<string, Partial<Record<ShipId, number>>> {
   const survivors = new Map(participants.map((item) => [item.flight.id, { ...item.flight.selectedShips } as Partial<Record<ShipId, number>>]));
   for (const stack of force.stacks) {
+    if (COMMANDER_IDS.includes(stack.entityId as CommanderId)) continue;
     const id = stack.entityId as ShipId;
     let destroyed = safeCount(stack.destroyed);
     if (!destroyed) continue;
@@ -547,7 +646,7 @@ function distributeLosses(participants: readonly SideParticipant[], force: Battl
   return survivors;
 }
 
-function applyPlayerLosses(state: SaveState, flight: FlightRecord, survivors: Partial<Record<ShipId, number>>): SaveState {
+function applyPlayerLosses(state: SaveState, flight: FlightRecord, survivors: Partial<Record<ShipId, number>>, survivingCommanders: Partial<Record<CommanderId, number>> = {}): SaveState {
   if (flight.ownerSide !== undefined && flight.ownerSide !== 'player') return state;
   const planet = state.planets[flight.originPlanetId];
   if (!planet) return state;
@@ -556,7 +655,11 @@ function applyPlayerLosses(state: SaveState, flight: FlightRecord, survivors: Pa
     const lost = Math.max(0, safeCount(count) - safeCount(survivors[id]));
     if (lost) ships[id] = Math.max(0, safeCount(ships[id]) - lost);
   }
-  return replacePlanetState(state, flight.originPlanetId, { ...planet, fleet: { ...planet.fleet, ships } });
+  const commanders = { ...planet.fleet.commanders };
+  for (const id of Object.keys(normalizeCommanders(flight.selectedCommanders)) as CommanderId[]) {
+    if (!survivingCommanders[id]) commanders[id] = Math.max(0, safeCount(commanders[id]) - 1);
+  }
+  return replacePlanetState(state, flight.originPlanetId, { ...planet, fleet: { ...planet.fleet, ships, commanders } });
 }
 
 function participantLabel(participants: readonly SideParticipant[], fallback: string): string {
@@ -579,7 +682,7 @@ function playerHolders(state: SaveState): CrystalHolder[] {
 
 /** Resolves one raid at its battle moment. Idempotent: a resolved raid is never fought again. */
 function resolveRaid(state: SaveState, raid: SunRaidRecord, at: number, options: SunRuntimeOptions, notices: SunRaidNotice[]): SaveState {
-  const toParticipant = (flight: FlightRecord): SideParticipant => ({ flight, snapshot: flight.sunRaid!, population: sunFleetPopulation(flight.selectedShips, flight.sunRaid!.factionId) });
+  const toParticipant = (flight: FlightRecord): SideParticipant => ({ flight, snapshot: flight.sunRaid!, population: sunFleetPopulation(flight.selectedShips, flight.sunRaid!.factionId, flight.selectedCommanders) });
   const attackers = flightsOfRaid(state, raid.id, 'attacker')
     .filter((flight) => (flight.phase === 'outbound' || flight.phase === 'arrived') && flight.arrivalAt <= at)
     .map(toParticipant);
@@ -616,8 +719,8 @@ function resolveRaid(state: SaveState, raid: SunRaidRecord, at: number, options:
     seed: `sun-raid:${worldSeed(state)}:${raid.id}`,
     profileId: 'asterion-attack-v1',
     maxRounds: SUN_RAID_CONFIG.maxRounds,
-    attackerPriority: [...DEFAULT_COMBAT_PRIORITY.attack],
-    defenderPriority: [...DEFAULT_COMBAT_PRIORITY.defense],
+    attackerPriority: sidePriority(attack.priority, DEFAULT_COMBAT_PRIORITY.attack),
+    defenderPriority: sidePriority(defense.priority, DEFAULT_COMBAT_PRIORITY.defense),
     attackerTechnologies: attack.technologies,
     defenderTechnologies: defense.technologies,
     technologyMode: 'independent',
@@ -629,7 +732,9 @@ function resolveRaid(state: SaveState, raid: SunRaidRecord, at: number, options:
         planetName: `Рейд на Солнце ${sunLabel}`,
         coordinates: sunLabel, race: getCombatFactionName(attack.factionId),
       },
-      factionId: attack.factionId, ships: attack.ships, commanders: [],
+      factionId: attack.factionId, ships: attack.ships, commanders: attack.commanders,
+      commander: attack.commanders[0] ?? null,
+      activeCommanderId: (attack.commanders[0]?.entityId as CommanderId | undefined) ?? null,
     },
     defender: {
       participant: {
@@ -638,14 +743,20 @@ function resolveRaid(state: SaveState, raid: SunRaidRecord, at: number, options:
         planetName: `Солнце ${sunLabel}`,
         coordinates: sunLabel, race: getCombatFactionName(defense.factionId),
       },
-      factionId: defense.factionId, ships: defense.ships, commanders: [],
+      factionId: defense.factionId, ships: defense.ships, commanders: defense.commanders,
+      commander: defense.commanders[0] ?? null,
+      activeCommanderId: (defense.commanders[0]?.entityId as CommanderId | undefined) ?? null,
     },
   };
   const reportId = `battle-sun-${raid.id}`;
   const report = resolveCombat(input, { reportId, missionType: 'attack', allowPopulationOverflow: true });
   const attackerSurvivors = distributeLosses(attackers, report.attackerForce);
   const defenderSurvivors = distributeLosses(defenders, report.defenderForce);
+  const attackerCommanderSurvivors = commanderLosses(attackers, report.attackerForce, attack.commanderSources);
+  const defenderCommanderSurvivors = commanderLosses(defenders, report.defenderForce, defense.commanderSources);
   const winner = report.winner;
+  // Debris of a Sun battle drift at the Sun (position 0), by the usual 30% rule.
+  const debris = Math.max(0, Math.floor(calculateAttackDebris(report, attack.factionId, defense.factionId)));
 
   // Sun and crystal outcome.
   const holder: CrystalHolder = { kind: 'alliance', id: raid.allianceId };
@@ -686,14 +797,39 @@ function resolveRaid(state: SaveState, raid: SunRaidRecord, at: number, options:
   let next = withSunRaid(state, sunRaid);
   for (const item of [...attackers, ...defenders]) {
     const survivors = (item.snapshot.side === 'attacker' ? attackerSurvivors : defenderSurvivors).get(item.flight.id) ?? {};
-    next = applyPlayerLosses(next, item.flight, survivors);
-    next = { ...next, flights: { ...next.flights, records: next.flights.records.map((flight) => flight.id === item.flight.id ? { ...flight, selectedShips: survivors } : flight) } };
+    const survivingCommanders = (item.snapshot.side === 'attacker' ? attackerCommanderSurvivors : defenderCommanderSurvivors).get(item.flight.id) ?? {};
+    next = applyPlayerLosses(next, item.flight, survivors, survivingCommanders);
+    next = { ...next, flights: { ...next.flights, records: next.flights.records.map((flight) => flight.id === item.flight.id ? { ...flight, selectedShips: survivors, selectedCommanders: survivingCommanders } : flight) } };
+  }
+  if (debris > 0 && next.espionage) {
+    const key = sunDebrisLedgerKey(raid.galaxy, raid.system);
+    const previous = next.espionage.orbitalDebris?.[key];
+    next = {
+      ...next,
+      espionage: {
+        ...next.espionage,
+        orbitalDebris: {
+          ...(next.espionage.orbitalDebris ?? {}),
+          [key]: {
+            id: previous?.id ?? `orbital-debris-${key}`,
+            targetPlanetId: sunOperationId(raid.galaxy, raid.system),
+            targetPlanetName: `Солнце ${sunLabel}`,
+            targetOwnerId: 'neutral',
+            targetCoordinate: sunDebrisCoordinate(raid.galaxy, raid.system),
+            debris: addDebris(previous?.debris ?? 0, debris),
+            createdAt: previous?.createdAt ?? at,
+            reportId,
+          },
+        },
+      },
+    };
   }
   next = releaseFlights(next, [...attackers, ...defenders].map((item) => next.flights.records.find((flight) => flight.id === item.flight.id)!), at, raid.id);
 
   if (playerInvolved) {
     const enriched: BattleReport & { sunRaid: SunReportExtension } = {
       ...report,
+      debris,
       sunRaid: {
         version: 1,
         galaxy: raid.galaxy,
@@ -746,7 +882,8 @@ function releaseFlights(state: SaveState, flights: readonly FlightRecord[], at: 
   const ids = new Set(flights.map((flight) => flight.id));
   const records = state.flights.records.map((flight) => {
     if (!ids.has(flight.id)) return flight;
-    const hasShips = Object.values(flight.selectedShips).some((count) => safeCount(count) > 0);
+    const hasShips = Object.values(flight.selectedShips).some((count) => safeCount(count) > 0)
+      || Object.values(flight.selectedCommanders ?? {}).some((count) => safeCount(count) > 0);
     const arrivedAt = flight.arrivedAt ?? Math.min(at, flight.arrivalAt);
     if (!hasShips) return { ...flight, phase: 'completed' as const, arrivedAt, completedAt: at, completionReason: 'mission-failed' as const };
     return { ...flight, phase: 'returning' as const, arrivedAt, returnAt: at + flight.oneWayDurationMs, completionReason: raidId ? 'normal-return' as const : 'target-unavailable' as const };
@@ -1103,7 +1240,7 @@ function pickFixtureShips(owner: SunOwner, target: number): Partial<Record<ShipI
   const picked: Partial<Record<ShipId, number>> = {};
   let left = target;
   const options = (Object.entries(owner.available) as [ShipId, number][])
-    .filter(([id, count]) => safeCount(count) > 0 && id !== SOLAR_SATELLITE_ID && id !== 'spy-probe' && id !== 'colonizer' && id !== 'recycler')
+    .filter(([id, count]) => safeCount(count) > 0 && isSunCombatHull(id))
     .map(([id, count]) => ({ id, count: safeCount(count), population: getFactionCombatEntity(owner.factionId, id).population ?? 1 }))
     .sort((left, right) => right.population - left.population);
   for (const option of options) {
@@ -1197,4 +1334,56 @@ export function testGrantCrystal(state: SaveState, options: SunRuntimeOptions): 
   const missing = (['crystal-1', 'crystal-2', 'crystal-3', 'crystal-4'] as const).find((id) => !getHolderCrystals(sunRaid, holder).includes(id));
   if (!missing) return { ok: false, state, error: 'Все четыре кристалла уже собраны.' };
   return { ok: true, state: withSunRaid(state, addCrystal(sunRaid, holder, missing)), notice: `Тест: выдан ${SOLAR_CRYSTALS[missing].name}.` };
+}
+
+/* ------------------------------------------------------- flight engine bridge */
+
+export type SunDispatchCommand = {
+  requestId: string;
+  missionId: 'sun-support' | 'sun-attack';
+  originPlanetId: string;
+  destination?: { kind: string; coordinate: UniverseCoordinate; operationId?: string };
+  operationId?: string;
+  selectedShips: Partial<Record<ShipId, number>>;
+  selectedCommanders?: Partial<Record<CommanderId, number>>;
+  departedAt?: number;
+};
+
+export type SunDispatchOutcome =
+  | { ok: true; state: SaveState; flight: FlightRecord; notice: string }
+  | { ok: false; message: string };
+
+/**
+ * The «Флоты» screen sends Sun missions through `dispatchFlight`. Support is
+ * open to every owner of a planet in the Sun's galaxy (alliance or not); a raid
+ * is declared only from «Командование → Операции».
+ */
+export function dispatchSunMission(state: SaveState, command: SunDispatchCommand, options: SunRuntimeOptions): SunDispatchOutcome {
+  if (command.missionId === 'sun-attack') return { ok: false, message: 'Рейд на Солнце объявляется только в «Командование → Операции».' };
+  const sun = parseSunOperationId(command.operationId ?? command.destination?.operationId);
+  if (!sun) return { ok: false, message: 'Выберите Солнце под атакой.' };
+  const raid = currentSunRaidState(state).raids.find((item) => item.status === 'incoming' && item.galaxy === sun.galaxy && item.system === sun.system);
+  if (!raid) return { ok: false, message: 'На это Солнце сейчас нет входящей атаки.' };
+  const result = sendSunSupport(state, {
+    raidId: raid.id,
+    originPlanetId: command.originPlanetId,
+    ships: command.selectedShips,
+    commanders: command.selectedCommanders,
+    requestId: command.requestId,
+    departedAt: command.departedAt,
+  }, options);
+  if (!result.ok) return { ok: false, message: result.error };
+  const flight = result.state.flights.records.find((item) => item.requestId === command.requestId);
+  return flight ? { ok: true, state: result.state, flight, notice: result.notice } : { ok: false, message: 'Флот поддержки не создан.' };
+}
+
+/** Suns of the player's galaxies that are under attack: the «Поддержка солнца» targets. */
+export function selectSunSupportTargets(state: SaveState, now: number): Array<{ raid: SunRaidRecord; operationId: string; coordinate: UniverseCoordinate; label: string; arrivesInMs: number }> {
+  return selectIncomingSunAlerts(state, now).map(({ raid, arrivesInMs }) => ({
+    raid,
+    operationId: sunOperationId(raid.galaxy, raid.system),
+    coordinate: sunRouteCoordinate(raid.galaxy, raid.system),
+    label: `Солнце ${formatSun(raid.galaxy, raid.system)} · [${raid.allianceTag}] · бой через ${Math.max(1, Math.ceil(arrivesInMs / 60_000))} мин`,
+    arrivesInMs,
+  }));
 }

@@ -248,3 +248,63 @@ test('reconcile is idempotent', () => {
   assert.equal(currentSunRaidState(once).raids[0]!.status, 'resolved');
   void addCrystal; void SOLAR_CRYSTAL_IDS;
 });
+
+test('«Поддержка солнца» from Fleets: no alliance needed, civil hulls refused, commander leads, debris drift at [G:S:0] and recyclers collect them', async () => {
+  const { dispatchFlight } = await import('./flights.ts');
+  const { getSunDebris, sunDebrisLedgerKey } = await import('./sun-raid.ts');
+  let state = armed(createInitialSaveState('test', T0), { cruiser: 400, battleship: 120, recycler: 40, transporter: 5 });
+  const planet = state.planets['helion-01']!;
+  state = replacePlanetState(state, 'helion-01', { ...planet, fleet: { ...planet.fleet, commanders: { ...planet.fleet.commanders, corsair: 1 } } });
+  // A solo owner: the player leaves every alliance.
+  state = { ...state, command: { ...state.command, alliances: state.command.alliances.filter((alliance) => !alliance.members.some((member) => member.ownerId === state.profile.playerId)) } };
+  state = ok(testBot01RaidSun(state, 1, 1, options(T0))).state;
+  const raid = currentSunRaidState(state).raids[0]!;
+  const destination = { kind: 'operation' as const, operationId: `sun:1:1`, coordinate: { galaxy: 1, system: 1, position: 1 } };
+
+  const civil = dispatchFlight(state, { requestId: 'civil', missionId: 'sun-support', originPlanetId: 'helion-01', destination, operationId: 'sun:1:1', selectedShips: { cruiser: 10, transporter: 5 } }, options(T0 + HOUR));
+  assert.equal(civil.ok, false);
+  assert.match(civil.ok ? '' : civil.error.message, /боевые/);
+
+  const sent = dispatchFlight(state, {
+    requestId: 'fleet-support', missionId: 'sun-support', originPlanetId: 'helion-01', destination, operationId: 'sun:1:1',
+    selectedShips: { cruiser: 400, battleship: 120 }, selectedCommanders: { corsair: 1 },
+  }, options(T0 + HOUR));
+  assert.ok(sent.ok, sent.ok ? '' : sent.error.message);
+  state = sent.state;
+  const flight = state.flights.records.find((item) => item.requestId === 'fleet-support')!;
+  assert.equal(flight.missionId, 'sun-support');
+  assert.equal(flight.sunRaid?.raidId, raid.id);
+  assert.deepEqual(flight.selectedCommanders, { corsair: 1 });
+
+  // Survives a reload with the commander aboard.
+  const storage = memoryStorage();
+  const facade = createPersistenceFacade({ mode: 'test', storage, now: () => T0 + 2 * HOUR, testTimeScale: 1 });
+  assert.equal(facade.write(state).ok, true);
+  assert.deepEqual(facade.read().flights.records.find((item) => item.requestId === 'fleet-support')?.selectedCommanders, { corsair: 1 });
+
+  state = tick(state, T0 + 3 * HOUR + 1);
+  const result = currentSunRaidState(state).raids[0]!.result!;
+  const report = state.combat.reports.find((item) => item.id === result.reportId)!;
+  assert.ok(report, 'the solo defender receives the report');
+  const debris = getSunDebris(state, 1, 1);
+  assert.equal(debris, Math.floor(report.debris ?? 0));
+  assert.ok(debris > 0, 'a Sun battle leaves debris');
+  assert.deepEqual(state.espionage!.orbitalDebris![sunDebrisLedgerKey(1, 1)]!.targetCoordinate, { galaxy: 1, system: 1, position: 0 });
+
+  const recycle = dispatchFlight(state, {
+    requestId: 'sun-recycle', missionId: 'recycle', originPlanetId: 'helion-01', targetKind: 'empty',
+    destination, operationId: 'sun:1:1', selectedShips: { recycler: 40 },
+  }, options(T0 + 3 * HOUR + 2));
+  assert.ok(recycle.ok, recycle.ok ? '' : recycle.error.message);
+  state = recycle.state;
+  const reloaded = (() => {
+    const store = createPersistenceFacade({ mode: 'test', storage: memoryStorage(), now: () => T0 + 3 * HOUR + 3, testTimeScale: 1 });
+    assert.equal(store.write(state).ok, true);
+    return store.read();
+  })();
+  assert.ok(reloaded.flights.records.some((item) => item.requestId === 'sun-recycle'), 'a Sun recycle flight survives a reload');
+  state = tick(state, T0 + 6 * HOUR);
+  assert.ok(getSunDebris(state, 1, 1) < debris, 'recyclers took Sun debris');
+  const arrival = state.reports.recyclerArrivalReports?.find((item) => item.collectedDebris > 0);
+  assert.deepEqual(arrival?.coordinate, { galaxy: 1, system: 1, position: 0 });
+});

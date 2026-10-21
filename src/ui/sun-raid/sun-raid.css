@@ -209,3 +209,20 @@ body .opsA .srp-cap .srp-cap__head b { font-size: 18px !important; font-variant-
   color: var(--opsA-text);
 }
 .cmdA .srp-host button { font-family: inherit; }
+
+/* Sun debris line under «Поддержка солнца» */
+.srp .srp-debris { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; padding: 8px 10px; border: 1px solid var(--ut-line, rgba(140, 170, 210, 0.22)); border-radius: 6px; background: rgba(8, 14, 24, 0.55); }
+.srp .srp-debris span { display: grid; gap: 2px; }
+.srp .srp-debris small { font-size: 10px; letter-spacing: 0.08em; color: var(--ut-text-muted, #8fa0b8); }
+.srp .srp-debris b { font-size: 15px; color: var(--ut-text, #e6edf7); font-variant-numeric: tabular-nums; }
+
+/* Commander ships in the raid dialog */
+.srp-launch .srp-commanders { display: grid; gap: 8px; padding: 10px 0 4px; }
+.srp-launch .srp-commanders > small { font-size: 10px; letter-spacing: 0.08em; color: var(--ut-text-muted, #8fa0b8); }
+.srp-launch .srp-commanders > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.srp-launch .srp-commander { display: flex; align-items: center; gap: 8px; padding: 6px 10px 6px 6px; border: 1px solid var(--ut-line, rgba(140, 170, 210, 0.22)); border-radius: 6px; background: rgba(8, 14, 24, 0.6); color: var(--ut-text, #e6edf7); cursor: pointer; transition: border-color 140ms ease, background-color 140ms ease; }
+.srp-launch .srp-commander img { width: 40px; height: 40px; object-fit: contain; }
+.srp-launch .srp-commander span { display: grid; text-align: left; }
+.srp-launch .srp-commander small { font-size: 11px; color: var(--ut-text-muted, #8fa0b8); }
+.srp-launch .srp-commander.is-on { border-color: var(--race-accent, #f2b84b); background: color-mix(in srgb, var(--race-accent, #f2b84b) 14%, rgba(8, 14, 24, 0.7)); }
+.srp-launch .srp-commander:focus-visible { outline: 2px solid var(--race-accent, #f2b84b); outline-offset: 2px; }

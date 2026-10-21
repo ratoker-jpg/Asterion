@@ -327,11 +327,12 @@ function migrateGasExtractionArrivalReports(value: unknown): GasExtractionArriva
   return [...byFlightId.values()].slice(-500);
 }
 
-function persistedCoordinate(value: unknown): UniverseCoordinate | undefined {
+function persistedCoordinate(value: unknown, minPosition = 1): UniverseCoordinate | undefined {
   const source = objectRecord(value);
   if (!source) return undefined;
   const { galaxy, system, position } = source;
-  if (![galaxy, system, position].every((item) => typeof item === 'number' && Number.isSafeInteger(item) && item >= 1)
+  if (![galaxy, system].every((item) => typeof item === 'number' && Number.isSafeInteger(item) && item >= 1)
+    || typeof position !== 'number' || !Number.isSafeInteger(position) || position < minPosition
     || (system as number) > SYSTEM_COUNT || (position as number) > POSITION_COUNT) return undefined;
   return { galaxy: galaxy as number, system: system as number, position: position as number };
 }
@@ -427,7 +428,8 @@ function migrateRecyclerArrivalReports(value: unknown): RecyclerArrivalReport[] 
   const byFlightId = new Map<string, RecyclerArrivalReport>();
   for (const candidate of value) {
     const source = objectRecord(candidate);
-    const coordinate = persistedCoordinate(source?.coordinate);
+    // Position 0 is the Sun (recyclers sent to Sun debris).
+    const coordinate = persistedCoordinate(source?.coordinate, 0);
     if (!source || typeof source.flightId !== 'string' || !source.flightId.trim()
       || source.flightId.length > 160 || !coordinate
       || typeof source.arrivedAtMs !== 'number' || !Number.isSafeInteger(source.arrivedAtMs) || source.arrivedAtMs < 0
@@ -1063,7 +1065,11 @@ function isPersistedSunFlight(item: Record<string, unknown>, mode: RuntimeMode):
     if (!SHIP_IDS.includes(shipId as (typeof SHIP_IDS)[number]) || shipId === 'solar-satellite'
       || !isNonNegativeInteger(quantity)) return false;
   }
-  if (Object.keys(objectRecord(item.selectedCommanders) ?? {}).length > 0) return false;
+  for (const [commanderId, quantity] of Object.entries(objectRecord(item.selectedCommanders) ?? {})) {
+    if (!COMMANDER_IDS.includes(commanderId as (typeof COMMANDER_IDS)[number]) || quantity !== 1) return false;
+  }
+  if (snapshot.commanderLevels !== undefined && !objectRecord(snapshot.commanderLevels)) return false;
+  for (const shipId of Object.keys(ships)) if (['spy-probe', 'colonizer', 'recycler', 'transporter', 'mega-transporter'].includes(shipId) && ships[shipId]) return false;
   const phase = item.phase as FlightPhase;
   if (phase === 'returning' && (!isFinitePersistedNumber(item.returnAt) || item.returnAt < (item.departedAt as number))) return false;
   if (phase === 'arrived' && !isFinitePersistedNumber(item.arrivedAt)) return false;

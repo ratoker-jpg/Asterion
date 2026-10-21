@@ -1433,7 +1433,8 @@ export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFa
         : { key: 'none', label: 'БЕЗ СОЮЗА' };
 
   // Without an alliance the Hall still opens «Операции»: any owner may defend a Sun of their galaxy.
-  const visibleTabs = membership
+  // Suns stay reachable even before the Hall is built: support and Sun debris need no building.
+  const visibleTabs = membership && !locked
     ? (Object.keys(TAB_LABELS) as CommandTab[])
     : (['overview', 'operations'] as CommandTab[]);
   const activeTab = visibleTabs.includes(tab) ? tab : 'overview';
@@ -1470,11 +1471,11 @@ export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFa
             <span aria-hidden="true">←</span>{returnToBuilding.label}
           </button>
         ) : null}
-        {!locked && (membership || operationsPanel) ? (
+        {(!locked && membership) || operationsPanel ? (
           <nav className="command-tabs cmdA-tabs" aria-label="Разделы Командования">
             {visibleTabs.map((key) => (
               <button key={key} type="button" className={activeTab === key ? 'active' : ''} aria-current={activeTab === key ? 'page' : undefined} onClick={() => setTab(key)} data-qa-command-tab={key}>
-                {!membership && key === 'overview' ? 'СОЮЗ' : TAB_LABELS[key]}{badges[key] ? <b className={`command-badge ${badges[key]!.hot ? 'is-hot' : ''}`}>{badges[key]!.value}</b> : null}
+                {locked && key === 'overview' ? 'ЗДАНИЕ' : !membership && key === 'overview' ? 'СОЮЗ' : TAB_LABELS[key]}{badges[key] ? <b className={`command-badge ${badges[key]!.hot ? 'is-hot' : ''}`}>{badges[key]!.value}</b> : null}
               </button>
             ))}
           </nav>
@@ -1489,7 +1490,9 @@ export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFa
       ) : null}
 
       <section className="command-content cmdA-content">
-        {locked ? (
+        {(locked || !membership) && activeTab === 'operations' && operationsPanel ? (
+          <div className="opsA srp-host" data-qa-command-operations>{operationsPanel}</div>
+        ) : locked ? (
           <LockedHall hall={hall} onBuild={actions.openHallConstruction} />
         ) : !membership && activeTab === 'operations' && operationsPanel ? (
           <div className="opsA srp-host" data-qa-command-operations>{operationsPanel}</div>
