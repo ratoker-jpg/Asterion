@@ -5,11 +5,11 @@ import { calculateBattlePoints, calculateResourcePointsLost } from './battle-poi
 
 const stack = (entityId: string, countBefore: number | null, countAfter: number | null) => ({ entityId, countBefore, countAfter });
 
-test('resource points use destroyed catalog cost and exclude solar satellites', () => {
+test('resource points use destroyed catalog cost, solar satellites included (3 points each)', () => {
   assert.equal(calculateResourcePointsLost([
     stack('scout', 10, 0),
     stack('solar-satellite', 10, 0),
-  ]), 40);
+  ]), 70);
   assert.equal(calculateResourcePointsLost([], [stack('laser-turret', 1, 0)]), 4.5);
 });
 
@@ -59,4 +59,18 @@ test('malformed or zero-loss inputs are safe and produce no points', () => {
     attacker: 0,
     defender: 0,
   });
+});
+
+test('destroying 5 000 solar satellites costs the defender 15 000 RP and gives a lossless attacker 15 000 BP', () => {
+  const result = calculateBattlePoints(
+    'attacker',
+    [stack('cruiser', 100, 100)],
+    [stack('solar-satellite', 5_000, 0)],
+  );
+  assert.equal(result.attackerResourcePointsLost, 0);
+  assert.equal(result.defenderResourcePointsLost, 15_000);
+  assert.equal(result.attacker, 15_000);
+  for (const faction of ['aegis', 'synod', 'veyra'] as const) {
+    assert.equal(calculateResourcePointsLost([stack('solar-satellite', 5_000, 0)], [], faction), 15_000);
+  }
 });

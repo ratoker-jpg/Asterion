@@ -45,8 +45,9 @@ function resolveEntity(entityId: string, factionId?: CombatFactionId) {
  * Converts the catalog cost of destroyed units into Nemexia resource points.
  * When a faction is supplied, its historical catalog provides the unit cost;
  * otherwise the shared catalog keeps this helper backward-compatible. Solar
- * satellites are intentionally excluded: Nemexia does not award battle points
- * for them, even though they have a catalog cost in Asterion.
+ * satellites count by their cost like any unit (500+2000+500 = 3 points each),
+ * as verified by the owner in Nemexia: 5 000 destroyed satellites cost the
+ * defender 15 000 resource points and give a lossless attacker 15 000 BP.
  */
 export function calculateResourcePointsLost(
   stacks: readonly BattlePointStack[],
@@ -54,7 +55,6 @@ export function calculateResourcePointsLost(
   factionId?: CombatFactionId,
 ) {
   return [...stacks, ...defenses].reduce((total, stack) => {
-    if (stack.entityId === 'solar-satellite') return total;
     const destroyed = destroyedCount(stack);
     const entity = resolveEntity(stack.entityId, factionId);
     if (!destroyed || !entity) return total;

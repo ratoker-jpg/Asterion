@@ -332,13 +332,14 @@ test('overpopulation episode report survives save hydration with read/hidden met
   assert.deepEqual(hydrated.reports.readIds, [episodeId]);
   assert.equal(hydrated.planets['helion-01'].overpopulation?.initialPopulation, 12_000);
   assert.equal(hydrated.planets['helion-01'].overpopulation?.initialCapacity, 10_000);
+  // Satellites burn in overpopulation now (audit 1.3); commanders and unknown ids are dropped.
   assert.deepEqual(hydrated.planets['helion-01'].overpopulation?.removedShips, [
-    { shipId: 'scout', count: 3 }, { shipId: 'destroyer', count: 2 },
+    { shipId: 'scout', count: 3 }, { shipId: 'destroyer', count: 2 }, { shipId: 'solar-satellite', count: 4 },
   ]);
   assert.deepEqual(buildReportsFeed([], createDefaultOperationsState(), commandWithoutJointOperations(), undefined, hydrated.reports.overpopulationReports).map(({ id }) => id), [episodeId]);
   assert.deepEqual(persistence.write(hydrated), { ok: true });
   assert.deepEqual(persistence.read().planets['helion-01'].overpopulation?.removedShips, [
-    { shipId: 'scout', count: 3 }, { shipId: 'destroyer', count: 2 },
+    { shipId: 'scout', count: 3 }, { shipId: 'destroyer', count: 2 }, { shipId: 'solar-satellite', count: 4 },
   ]);
 });
 
