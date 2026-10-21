@@ -154,6 +154,18 @@ export function GlobalPageScrollController() {
       const contentHeight = measureContentHeight(pageContainer, stageScale, pageRoots);
       const needsScroll = contentHeight > availableHeight + OVERFLOW_EPSILON;
 
+      // A root stretched to its container (min-height: 100%) always measures the
+      // current workspace height; growing the workspace again would grow it
+      // forever (endless scroll). Content that merely fills the page is not taller.
+      const currentWorkspaceHeight = Number.parseFloat(root.style.getPropertyValue('--asterion-scroll-workspace-height'));
+      const fillsCurrentPage = root.classList.contains('asterion-long-page')
+        && Number.isFinite(currentWorkspaceHeight)
+        && contentHeight >= currentWorkspaceHeight - OVERFLOW_EPSILON;
+      if (needsScroll && fillsCurrentPage) {
+        observeCurrentPage(pageRoots);
+        return;
+      }
+
       if (needsScroll) {
         const workspaceHeight = Math.ceil(contentHeight + PAGE_BOTTOM_PADDING);
         const stageHeight = geometry.workspaceTop + workspaceHeight + geometry.stageBottomGap;
