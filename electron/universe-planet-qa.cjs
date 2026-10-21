@@ -1125,7 +1125,7 @@ async function runViewport(width, height) {
       map: { system: map.system, systemOptions: map.systemOptions, positionCount: map.positionCount, asteroidCount: map.asteroidCount, objectKinds: map.objectKinds, homeCaption: map.homeCaption },
       layout: { htmlClass: map.htmlClass, webStageScale: map.webStageScale, visualViewport: map.visualViewport, stageRect: map.stageRect },
       player: { ownerName: player.ownerName, points: player.points, planetRows: player.planetRows },
-      npc: { ownerName: npc.ownerName, planetRows: npc.planetRows, rows: npc.rows, fleetActionsDisabled: npcFleetActions.every((action) => action.disabled && action.status === 'disabled') },
+      npc: { ownerName: npc.ownerName, planetRows: npc.planetRows, rows: npc.rows, fleetActionsEnabled: npcFleetActions.every((action) => !action.disabled && action.status === 'supported') },
       specialInspectors: { empty: empty.kind, asteroid: freeAsteroid.kind, occupiedAsteroid: occupiedAsteroid.kind, pirate: pirate.kind, anomaly: anomaly.kind, uninhabited: 'uninhabited', unique: 'unique' },
       debrisMarkers: {
         dead: { coordinate: debrisFixtures.deadCoordinate, amount: deadMarker.amount, interaction: deadDebrisInteraction },
