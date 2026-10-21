@@ -10,6 +10,7 @@ import { createPirateProfile, calculatePirateEliminationPopulationBudget } from 
 import { PIRATE_BASE_SHIPS, PIRATE_CATALOG_BY_ID } from '../src/domain/pirates/catalog.ts';
 import { calculatePirateForceDebris } from '../src/domain/pirates/debris.ts';
 import { battleDebrisRoll } from '../src/domain/combat/debris.ts';
+import { PR91_HANGAR_CAPACITY, PR91_POPULATIONS } from './pr91-constants.mjs';
 import { pirateDebrisRewardMultiplier, pirateSeededDraw } from '../src/domain/pirates/threat.ts';
 import { calculateAttackDebris } from '../src/application/attack.ts';
 import { calculateFlightFuel } from '../src/domain/flights/fuel.ts';
@@ -18,9 +19,9 @@ import { getRecyclingOutput } from '../src/domain/buildings/recycling.ts';
 // APPROVED garrison-interval comparison. Pair identical combat seeds, player
 // manifest, pirate science, faction and exclusive-tech roll. The only
 // experimental variable is the 75–90% vs 85–105% seeded garrison population.
-const HANGAR=25_112;
+const HANGAR=PR91_HANGAR_CAPACITY;
 const POINTS=[3_000_000,3_500_000];
-const POPULATIONS=[25_090,25_112];
+const POPULATIONS=PR91_POPULATIONS;
 const PLAYER_DESTROYER_LEVELS=[0,10];
 const OUT=resolve('artifacts/pr91-garrison-85-105');
 const ORDINARY_SEEDS=24;

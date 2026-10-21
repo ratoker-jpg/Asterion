@@ -93,8 +93,11 @@ export function normalizePirateReconMissionSnapshot(value: unknown): PirateRecon
   return expected;
 }
 
+/** A recon roll below this succeeds (70%). */
+export const PIRATE_RECON_SUCCESS_THRESHOLD = 0.7;
+
 export function pirateReconOutcomeForMission(mission: PirateReconMissionSnapshot): Exclude<PirateReconOutcome, 'no-target'> {
-  return mission.roll < 0.7 ? 'success' : 'failure';
+  return mission.roll < PIRATE_RECON_SUCCESS_THRESHOLD ? 'success' : 'failure';
 }
 
 /**

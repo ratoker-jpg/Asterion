@@ -1,16 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { AID_MISSION_ENABLED, evaluateAidMissionRequirements } from './aid-mission.ts';
+import { AID_MISSION_ENABLED, isAidTransportComposition } from './aid-mission.ts';
 
-test('aid mission requires an ally target and at least one free transporter', () => {
-  assert.deepEqual(evaluateAidMissionRequirements({ targetRelation: 'ally', freeShips: { transporter: 1 } }), { ok: true });
-  assert.deepEqual(evaluateAidMissionRequirements({ targetRelation: 'ally', freeShips: { 'mega-transporter': 2 } }), { ok: true });
-  assert.deepEqual(evaluateAidMissionRequirements({ targetRelation: 'ally', freeShips: { scout: 50, transporter: 0 } }), { ok: false, reason: 'no-free-transporters' });
-  assert.deepEqual(evaluateAidMissionRequirements({ targetRelation: 'ally', freeShips: {} }), { ok: false, reason: 'no-free-transporters' });
-  for (const targetRelation of ['self', 'neutral', 'enemy', 'empty', undefined] as const) {
-    assert.deepEqual(evaluateAidMissionRequirements({ targetRelation, freeShips: { transporter: 5 } }), { ok: false, reason: 'target-not-ally' });
-  }
+// The ally/free-transporter rule lives in the application (planPlayerAidLaunch; see alliance-aid.test.ts).
+test('aid ships must be dedicated cargo hulls', () => {
+  assert.equal(isAidTransportComposition({ transporter: 1 }), true);
+  assert.equal(isAidTransportComposition({ 'mega-transporter': 2, transporter: 1 }), true);
+  assert.equal(isAidTransportComposition({ scout: 50, transporter: 1 }), false);
+  assert.equal(isAidTransportComposition({}), false);
 });
 
 test('aid mission is enabled in PR 2', () => {

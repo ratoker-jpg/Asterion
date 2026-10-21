@@ -9,6 +9,7 @@ import { createPirateProfile, calculatePirateEliminationPopulationBudget } from 
 import { PIRATE_BASE_SHIPS, PIRATE_CATALOG_BY_ID } from '../src/domain/pirates/catalog.ts';
 import { calculatePirateForceDebris } from '../src/domain/pirates/debris.ts';
 import { battleDebrisRoll } from '../src/domain/combat/debris.ts';
+import { PR91_HANGAR_CAPACITY, PR91_POPULATIONS } from './pr91-constants.mjs';
 import { pirateDebrisRewardMultiplier } from '../src/domain/pirates/threat.ts';
 import { calculateAttackDebris } from '../src/application/attack.ts';
 import { calculateFlightFuel } from '../src/domain/flights/fuel.ts';
@@ -17,9 +18,9 @@ import { getRecyclingOutput } from '../src/domain/buildings/recycling.ts';
 // APPROVED CONTROLLED EXPERIMENT. The battle seed and every input except
 // the pirate's technology levels are identical between old/new profiles.
 // "Planet breaker = 2" is a controlled scenario, NOT its production 10% draw.
-const HANGAR = 25_112;
+const HANGAR = PR91_HANGAR_CAPACITY;
 const POINTS = [3_000_000, 3_500_000];
-const POPULATIONS = [25_090, 25_112];
+const POPULATIONS = PR91_POPULATIONS;
 const PLAYER_DESTROYER_LEVELS = [0, 10];
 const BREAKER_COUNTS = [0, 2];
 const OUT = resolve('artifacts/pr91-approved-tech-compare');
@@ -199,6 +200,6 @@ await mkdir(OUT,{recursive:true});
 await writeFile(resolve(OUT,'comparison.json'),JSON.stringify({aggregate,rows},null,2));
 await writeFile(resolve(OUT,'comparison.md'),markdown);
 console.log('[pr91-approved-comparison] '+JSON.stringify(aggregate));
-console.log('[pr91-approved-example] '+JSON.stringify(rows.filter(r=>r.faction==='aegis'&&r.resourcePoints===3_000_000&&r.actualPopulation===25_112&&r.destroyerLevel===10)));
+console.log('[pr91-approved-example] '+JSON.stringify(rows.filter(r=>r.faction==='aegis'&&r.resourcePoints===3_000_000&&r.actualPopulation===PR91_HANGAR_CAPACITY&&r.destroyerLevel===10)));
 
 console.log('[pr91-approved-comparison] '+OUT);

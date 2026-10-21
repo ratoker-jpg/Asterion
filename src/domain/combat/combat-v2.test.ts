@@ -5,7 +5,6 @@ import { COMBAT_GOLDEN_FIXTURES } from './combat-golden-fixtures.ts';
 import { createDefaultCombatPriority } from './priority.ts';
 import { COMBAT_ENGINE_VERSION, normalizeBattleReport } from './report.ts';
 import { createSeededCombatRng, resolveCombat, selectCombatTarget } from './resolver.ts';
-import { PLANET_HANGAR_CAPACITY } from './config.ts';
 import { createPirateProfile } from '../pirates/profile.ts';
 import { PIRATE_BASE_SHIPS } from '../pirates/catalog.ts';
 import {
@@ -53,7 +52,6 @@ test('the three 35,000 population caps are independent', () => {
   assert.equal(validateCombatInput(input({ defender: { ...valid.defender, ships: [{ entityId: 'scout', count: 17_501 }] } })).errors.some((error) => error.path === 'defender'), true);
   assert.equal(validateCombatInput(input({ defender: { ...valid.defender, defenses: [{ entityId: 'ballistic-turret', count: 17_501 }] } })).errors.some((error) => error.path === 'defender.defenses'), true);
   assert.equal(SIMULATOR_POPULATION_LIMIT, 35_000);
-  assert.equal(PLANET_HANGAR_CAPACITY, 25_112);
 });
 
 test('planet hangar capacity is evidence only and never becomes a combat cap', () => {

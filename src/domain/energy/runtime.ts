@@ -1,5 +1,6 @@
 import { SCIENCE_ID_PHYSICS, type BuildingRole } from '../buildings/balance-v1.ts';
 import { getBuildingEnergyBaseContribution } from './balance-adapter.ts';
+import { UNIVERSE_POSITION_COUNT, UNIVERSE_SYSTEM_COUNT } from '../universe/grid.ts';
 
 /**
  * Energy is a one-time planetary stock.  The ledger deliberately keeps the
@@ -17,8 +18,8 @@ export type EnergySourceId = (typeof ENERGY_SOURCE_ORDER)[number];
 export type EnergySourceChangeKind = 'building' | 'satellite' | 'environment';
 
 export const SOLAR_SATELLITE_BASE_ENERGY = 55;
-export const ENERGY_SYSTEM_COUNT = 40;
-export const ENERGY_POSITION_COUNT = 24;
+export const ENERGY_SYSTEM_COUNT = UNIVERSE_SYSTEM_COUNT;
+export const ENERGY_POSITION_COUNT = UNIVERSE_POSITION_COUNT;
 
 // Keep this as an explicit, stable table.  It is intentionally independent
 // of seeded map decoration and is shared by the runtime, simulator, and UI.

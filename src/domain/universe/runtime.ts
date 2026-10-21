@@ -33,13 +33,14 @@ import {
   PIRATE_CONTACT_MIN_LIFETIME_MS,
   PIRATE_CONTACT_QUIET_MS,
 } from '../pirates/contact-schedule.ts';
-import type { PirateContactDefeatRecord } from '../pirates/contact-schedule.ts';
+import { PIRATE_RAID_CHECK_INTERVAL_MS, type PirateContactDefeatRecord } from '../pirates/contact-schedule.ts';
+import { UNIVERSE_POSITION_COUNT, UNIVERSE_SYSTEM_COUNT } from './grid.ts';
 
 export const GALAXY = 1;
 /** Galaxies that exist today; the map navigator already steps through galaxies. */
 export const GALAXY_COUNT = 1;
-export const SYSTEM_COUNT = 40;
-export const POSITION_COUNT = 24;
+export const SYSTEM_COUNT = UNIVERSE_SYSTEM_COUNT;
+export const POSITION_COUNT = UNIVERSE_POSITION_COUNT;
 export const MAX_PLANETS_PER_OWNER = 7;
 /** World generator limit: a campaign may have 1..10 galaxies of 40 systems each. */
 export const MAX_GALAXY_COUNT = 10;
@@ -842,7 +843,7 @@ export function getPirateContactCyclesBetween(
   afterMs: number,
   throughMs: number,
   defeatedCycles: readonly PirateContactDefeatRecord[] = [],
-  checkDelayMs = 15 * 60_000,
+  checkDelayMs = PIRATE_RAID_CHECK_INTERVAL_MS,
 ): readonly UniverseTimedObjectSchedule[] {
   if (!Number.isSafeInteger(afterMs) || !Number.isSafeInteger(throughMs) || throughMs <= afterMs) return [];
   const relevantDefeats = defeatedCycles.filter((record) => record.galaxy === galaxy && record.system === system);

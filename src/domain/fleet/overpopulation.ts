@@ -351,16 +351,3 @@ export function reconcileOverpopulation(
     blocked: true,
   };
 }
-
-/** A pure guard for application layers and UI selectors. */
-export function isFleetStateOverpopulated(
-  fleet: OwnedFleetState,
-  solarSatellites: number,
-  hangarLevel: number,
-  factionId: CombatFactionId,
-): boolean {
-  return isPlanetOverpopulated(
-    calculatePlanetPopulation(fleet, solarSatellites, factionId),
-    calculatePlanetCapacity(hangarLevel),
-  );
-}

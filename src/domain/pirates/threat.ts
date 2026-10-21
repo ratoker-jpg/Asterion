@@ -5,7 +5,8 @@
 export const PIRATE_THREAT_MIN = 0.02;
 export const PIRATE_THREAT_MAX = 0.30;
 export const PIRATE_THREAT_GRACE_HOURS = 8;
-export const PIRATE_THREAT_ALGORITHM = 'pirate-threat-v1';
+/** Growth span of the raid chance above its minimum (PIRATE_THREAT_MAX - PIRATE_THREAT_MIN). */
+const PIRATE_THREAT_SPAN = 0.28;
 
 const safe = (value: number) => Number.isFinite(value) ? Math.max(0, value) : 0;
 const clamp = (value: number, lower: number, upper: number) => Math.max(lower, Math.min(upper, value));
@@ -31,7 +32,7 @@ export function pirateRaidChance(resourcePoints: number, battlePoints: number, a
   if (age <= PIRATE_THREAT_GRACE_HOURS) return PIRATE_THREAT_MIN;
   const maximumAt = pirateThreatHoursToMaximum(resourcePoints, battlePoints);
   return clamp(
-    PIRATE_THREAT_MIN + 0.28 * Math.min(1, (age - PIRATE_THREAT_GRACE_HOURS) / (maximumAt - PIRATE_THREAT_GRACE_HOURS)),
+    PIRATE_THREAT_MIN + PIRATE_THREAT_SPAN * Math.min(1, (age - PIRATE_THREAT_GRACE_HOURS) / (maximumAt - PIRATE_THREAT_GRACE_HOURS)),
     PIRATE_THREAT_MIN, PIRATE_THREAT_MAX,
   );
 }
@@ -42,7 +43,7 @@ export function pirateCounterFleetChance(resourcePoints: number, battlePoints: n
   const battles = safe(battlePoints);
   const total = resources + battles;
   const economicShare = total > 0 ? resources / total : 0;
-  const normalizedThreat = clamp((Number.isFinite(raidChance) ? raidChance : PIRATE_THREAT_MIN) / 0.28 - (0.02 / 0.28), 0, 1);
+  const normalizedThreat = clamp((Number.isFinite(raidChance) ? raidChance : PIRATE_THREAT_MIN) / PIRATE_THREAT_SPAN - (PIRATE_THREAT_MIN / PIRATE_THREAT_SPAN), 0, 1);
   return clamp(0.10 + 0.60 * normalizedThreat * economicShare, 0.10, 0.70);
 }
 

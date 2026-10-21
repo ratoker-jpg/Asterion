@@ -12,12 +12,13 @@ import {pirateDebrisRewardMultiplier} from '../src/domain/pirates/threat.ts';
 import {calculateAttackDebris,calculateAttackLoot} from '../src/application/attack.ts';
 import {calculatePirateForceDebris} from '../src/domain/pirates/debris.ts';
 import {battleDebrisRoll} from '../src/domain/combat/debris.ts';
+import {PR91_HANGAR_CAPACITY} from './pr91-constants.mjs';
 import {calculateFlightFuel} from '../src/domain/flights/fuel.ts';
 import {startRecyclingJob,collectRecyclingJob} from '../src/domain/buildings/recycling.ts';
 import {collectOrbitalDebrisAtCoordinate,getOrbitalDebrisAtCoordinate} from '../src/domain/espionage/orbital-debris.ts';
 
 const PREFIX='pr91-seeded-v1';
-const H=25112;
+const H=PR91_HANGAR_CAPACITY;
 const CASES_PER_COMBINATION=6;
 const SCORE_BANDS=[
   {id:'low',resourcePoints:1000,battlePoints:0,population:1000},
