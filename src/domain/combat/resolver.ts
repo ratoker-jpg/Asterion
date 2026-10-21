@@ -1054,7 +1054,8 @@ function createAttackEvent(
     reportedBonus,
     matchupStatus: matchup.status,
     criticalChance,
-    ...(criticalDraw !== undefined ? (actor.pirateAbility ? { criticalDraw } : { abilityDraw: criticalDraw }) : {}),
+    // One field for the critical roll on every side (pirate and ordinary hulls alike).
+    ...(criticalDraw !== undefined ? { criticalDraw } : {}),
     ...(target.bucket === 'defenses' && pirateRoundEffect.artilleryMultiplierVsDefense > 1
       ? { abilityChance: pirateRoundEffect.artilleryChance, abilityDraw: pirateRoundEffect.artilleryDraw }
       : {}),
@@ -1545,13 +1546,14 @@ function activeCommanderLevel(stacks: readonly CombatStackInput[], id: Commander
   return id ? stacks.find((stack) => stack.entityId === id && stack.count > 0)?.level : undefined;
 }
 
-function chooseActiveCommander(
+/** Explicit choice first, then the side's commander priority, then catalog order. */
+export function chooseActiveCommander(
   requested: CommanderId | null | undefined,
-  _priority: CommanderId[],
+  priority: readonly CommanderId[],
   available: readonly CommanderId[],
 ) {
   if (requested && available.includes(requested)) return requested;
-  return available[0] ?? null;
+  return priority.find((commanderId) => available.includes(commanderId)) ?? available[0] ?? null;
 }
 
 function createInitialSnapshot(

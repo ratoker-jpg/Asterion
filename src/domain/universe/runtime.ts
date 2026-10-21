@@ -369,7 +369,8 @@ export function getUniverseOwnerRelation(
   targetOwner?: UniverseOwnerProfile,
   diplomacy?: readonly Pick<DiplomaticRelation, 'id' | 'tag' | 'status'>[],
 ): UniverseOwnerRelation {
-  if (node.isHomeworld || node.ownerId === currentOwnerId) return 'self';
+  // Ownership decides; a foreign homeworld is never «self».
+  if (node.ownerId === currentOwnerId) return 'self';
 
   const targetAlliance = targetOwner?.alliance;
   if (!currentAlliance || !targetAlliance) return 'neutral';

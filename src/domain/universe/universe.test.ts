@@ -512,3 +512,10 @@ test('spy and fleet actions follow the owner relation contract', () => {
   assert.equal(getUniverseActionState('fleet', ally, 'player-current', 'neutral').enabled, true);
   assert.equal(getUniverseActionState('spy', empty, 'player-current').status, 'disabled');
 });
+
+test('a foreign homeworld is not «self»: the relation follows the owner id only', () => {
+  const foreignHome = { id: 'foreign-home', coordinate: { galaxy: 1, system: 3, position: 1 }, kind: 'player' as const,
+    name: 'Чужая столица', art: '', ownerId: 'someone-else', isHomeworld: true, statusLabel: '', description: '' };
+  assert.equal(getUniverseOwnerRelation(foreignHome, 'player-current'), 'neutral');
+  assert.equal(getUniverseOwnerRelation({ ...foreignHome, ownerId: 'player-current' }, 'player-current'), 'self');
+});
