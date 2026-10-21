@@ -2266,13 +2266,20 @@ function aidArrivalTarget(state: SaveState, flight: FlightRecord): ResolvedTrans
   };
 }
 
+/** Return leg of a mission resolved on arrival starts at the arrival time (never in the future). */
+function arrivalReturnStart(flight: Pick<FlightRecord, 'arrivedAt' | 'arrivalAt'>, now: number): number {
+  return Math.min(now, flight.arrivedAt ?? flight.arrivalAt);
+}
+
 function beginTransportReturn(
   state: SaveState,
   flight: FlightRecord,
   now: number,
   reason: 'normal-return' | 'recalled' | 'target-unavailable',
 ): FlightRecord {
-  const returnStartedAt = flight.phase === 'arrived' ? Math.max(now, flight.arrivedAt ?? flight.arrivalAt) : now;
+  // The fleet turns back the moment it reaches the target, not when a (possibly
+  // much later, offline catch-up) reconcile notices the arrival.
+  const returnStartedAt = arrivalReturnStart(flight, now);
   const withSnapshot = updateFlight(state.flights, flight);
   const returningState = beginDomainFlightReturn(withSnapshot, flight.id, returnStartedAt, reason);
   const returning = returningState.records.find((item) => item.id === flight.id) ?? flight;
@@ -2284,7 +2291,7 @@ function completeFlight(state: SaveState, flight: FlightRecord, completed: Fligh
 }
 
 function beginDeploymentReturn(state: SaveState, flight: FlightRecord, now: number): FlightRecord {
-  const returningState = beginDomainFlightReturn(currentFlightState(state), flight.id, now, 'target-unavailable');
+  const returningState = beginDomainFlightReturn(currentFlightState(state), flight.id, arrivalReturnStart(flight, now), 'target-unavailable');
   const returning = returningState.records.find((item) => item.id === flight.id) ?? flight;
   return {
     ...returning,
@@ -3168,7 +3175,7 @@ export function reconcileFlights(
             ? resolveSpyTarget(next, current.destinationPlanetId, { coordinate: current.destinationCoordinate })
             : null;
           if (!resolved || (resolved.relation !== 'enemy' && resolved.relation !== 'neutral')) {
-            const returnStartedAt = current.phase === 'arrived' ? Math.max(now, arrivalAt) : now;
+            const returnStartedAt = Math.min(now, arrivalAt);
             const returningState = beginDomainFlightReturn(next.flights, current.id, returnStartedAt, 'target-unavailable');
             const returning = returningState.records.find((flight) => flight.id === current.id)!;
             const withArrival: FlightRecord = {
@@ -3188,7 +3195,7 @@ export function reconcileFlights(
 
           const resolvedAttack = resolveAttackAtTarget(next, current, arrivalAt);
           if (!resolvedAttack) {
-            const returnStartedAt = current.phase === 'arrived' ? Math.max(now, arrivalAt) : now;
+            const returnStartedAt = Math.min(now, arrivalAt);
             const returningState = beginDomainFlightReturn(next.flights, current.id, returnStartedAt, 'target-unavailable');
             const returning = returningState.records.find((flight) => flight.id === current.id)!;
             const withArrival: FlightRecord = { ...returning, arrivedAt: arrivalAt, completionReason: 'target-unavailable' };
@@ -3204,7 +3211,7 @@ export function reconcileFlights(
             arrivedAt: arrivalAt,
           };
           next = { ...next, flights: updateFlight(next.flights, withResolution) };
-          const returningState = beginDomainFlightReturn(next.flights, current.id, Math.max(now, arrivalAt), 'normal-return');
+          const returningState = beginDomainFlightReturn(next.flights, current.id, Math.min(now, arrivalAt), 'normal-return');
           const returning = returningState.records.find((flight) => flight.id === current.id)!;
           const returningWithResolution: FlightRecord = {
             ...returning,
@@ -3222,7 +3229,7 @@ export function reconcileFlights(
           continue;
         }
 
-        const returningState = beginDomainFlightReturn(next.flights, current.id, Math.max(now, arrivalAt), 'normal-return');
+        const returningState = beginDomainFlightReturn(next.flights, current.id, Math.min(now, arrivalAt), 'normal-return');
         const returning = returningState.records.find((flight) => flight.id === current.id)!;
         const withResolution: FlightRecord = { ...returning, arrivedAt: arrivalAt, completionReason: 'normal-return' };
         next = { ...next, flights: updateFlight(returningState, withResolution) };
@@ -3238,7 +3245,7 @@ export function reconcileFlights(
         continue;
       }
       if (targetOccupied(next, current.destinationCoordinate, arrivalCheckAt, current.id) || targetHasInvalidKind(current.targetKind)) {
-        const returnStartedAt = current.phase === 'arrived' ? Math.max(now, arrivalAt) : now;
+        const returnStartedAt = Math.min(now, arrivalAt);
         const returningState = beginDomainFlightReturn(next.flights, current.id, returnStartedAt, 'target-occupied');
         const returning = returningState.records.find((flight) => flight.id === current.id)!;
         const withArrival: FlightRecord = { ...returning, arrivedAt: arrivalAt, completionReason: 'target-occupied' };
@@ -3250,7 +3257,7 @@ export function reconcileFlights(
 
       const planetId = makePlanetId(current.destinationCoordinate);
       if (next.planets[planetId]) {
-        const returnStartedAt = current.phase === 'arrived' ? Math.max(now, arrivalAt) : now;
+        const returnStartedAt = Math.min(now, arrivalAt);
         const returningState = beginDomainFlightReturn(next.flights, current.id, returnStartedAt, 'target-occupied');
         const returning = returningState.records.find((flight) => flight.id === current.id)!;
         const withArrival: FlightRecord = { ...returning, arrivedAt: arrivalAt, completionReason: 'target-occupied' };

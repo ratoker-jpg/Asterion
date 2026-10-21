@@ -486,7 +486,7 @@ test('a reloaded arrived flight starts one full occupied-target return without d
   const arrival = reconcileFlights(reloaded, sent.flight.arrivalAt + 1);
   assert.equal(arrival.events[0]?.status, 'target-occupied');
   assert.equal(arrival.state.flights.records[0]?.phase, 'returning');
-  assert.equal(arrival.state.flights.records[0]?.returnAt, sent.flight.arrivalAt + 1 + sent.flight.oneWayDurationMs);
+  assert.equal(arrival.state.flights.records[0]?.returnAt, sent.flight.arrivalAt + sent.flight.oneWayDurationMs);
   assert.equal(arrival.state.planets['helion-01'].fleet.ships.colonizer, 1);
   assert.equal(Object.keys(arrival.state.planets).filter((id) => id.startsWith('planet-')).length, 0);
 
@@ -546,8 +546,9 @@ test('late reconcile uses arrivalAt when a target was occupied at arrival but is
 
   const reconciled = reconcileFlights(sent.state, lateNow);
   assert.equal(reconciled.events[0]?.status, 'target-occupied');
-  assert.equal(reconciled.state.flights.records[0]?.phase, 'returning');
-  assert.equal(reconciled.state.flights.records[0]?.returnAt, lateNow + sent.flight.oneWayDurationMs);
+  assert.equal(reconciled.state.flights.records[0]?.phase, 'completed', 'home long before the late reconcile');
+  // The colonizer turned back at arrival, not when the late reconcile noticed it.
+  assert.equal(reconciled.state.flights.records[0]?.returnAt, sent.flight.arrivalAt + sent.flight.oneWayDurationMs);
   assert.equal(reconciled.state.planets['helion-01'].fleet.ships.colonizer, 1);
   assert.equal(reconciled.state.planets[planetId], undefined);
 });
@@ -621,8 +622,9 @@ test('persisted arrived phase keeps the arrival-time occupancy result after a la
   assert.equal(reloaded.flights.records[0]?.phase, 'arrived');
   const reconciled = reconcileFlights(reloaded, lateNow);
   assert.equal(reconciled.events[0]?.status, 'target-occupied');
-  assert.equal(reconciled.state.flights.records[0]?.phase, 'returning');
-  assert.equal(reconciled.state.flights.records[0]?.returnAt, lateNow + sent.flight.oneWayDurationMs);
+  assert.equal(reconciled.state.flights.records[0]?.phase, 'completed', 'home long before the late reconcile');
+  // The colonizer turned back at arrival, not when the late reconcile noticed it.
+  assert.equal(reconciled.state.flights.records[0]?.returnAt, sent.flight.arrivalAt + sent.flight.oneWayDurationMs);
   assert.equal(reconciled.state.planets['helion-01'].fleet.ships.colonizer, 1);
   assert.equal(reconciled.state.planets[planetId], undefined);
 });
@@ -1471,7 +1473,8 @@ test('a 13:41 attack makes debris available to the 13:42 recycle arrival in the 
   const recycleFlight = arrival.state.flights.records.find((flight) => flight.requestId === 'ordered-recycle-1342')!;
   assert.ok((attackFlight.attackResolution?.debris ?? 0) > 0);
   assert.equal(recycleFlight.cargo?.debris, attackFlight.attackResolution?.debris);
-  assert.deepEqual(arrival.events.map((event) => event.status), ['arrived', 'delivered']);
+  // The attack fleet turns back at 13:41 and, on this short route, is home before 13:42.
+  assert.deepEqual(arrival.events.map((event) => event.status), ['arrived', 'returned', 'delivered']);
 });
 
 test('colony actions spend the colony wallet without changing the homeworld alias', () => {
@@ -3111,4 +3114,24 @@ test('offline catch-up records cargo delivery at the arrival time, not at the re
   const flight = late.state.flights.records.find((record) => record.id === sent.flight.id)!;
   assert.equal(flight.cargoState, 'delivered');
   assert.equal(flight.deliveredAt, sent.flight.arrivalAt);
+});
+
+test('offline catch-up: transport and attack fleets start home at arrival, not at the reconcile time', () => {
+  const initial = createInitialSaveState('test', 1_000);
+  const sent = dispatchFlight(initial, {
+    requestId: 'transport-late-return', missionId: 'transport', originPlanetId: 'helion-01',
+    destination: { kind: 'planet', planetId: 'test-mode-ally-ira-vel-v1', coordinate: { galaxy: 1, system: 1, position: 2 } },
+    targetRelation: 'ally', selectedShips: { scout: 1 }, cargo: { metal: 1, minerals: 0, gas: 0, debris: 0 }, departedAt: 1_000,
+  }, { now: 1_000, mode: 'test' });
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  const hourLater = sent.flight.arrivalAt + 3_600_000;
+  const late = reconcileFlights(sent.state, hourLater, undefined, { mode: 'test' });
+  const flight = late.state.flights.records.find((record) => record.id === sent.flight.id)!;
+  // Back home long before the late reconcile: one more pass completes it at the right time.
+  assert.equal(flight.returnAt, sent.flight.arrivalAt + sent.flight.oneWayDurationMs);
+  const completed = reconcileFlights(late.state, hourLater, undefined, { mode: 'test' });
+  const done = completed.state.flights.records.find((record) => record.id === sent.flight.id)!;
+  assert.equal(done.phase, 'completed');
+  assert.equal(done.completedAt, sent.flight.arrivalAt + sent.flight.oneWayDurationMs);
 });
