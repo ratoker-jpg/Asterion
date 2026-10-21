@@ -1,0 +1,206 @@
+/* ASTERION MOTION SYSTEM
+   ---------------------------------------------------------------------------
+   One motion language for the whole game. Contract and recipes:
+   docs/ui/motion-system.md. Tokens live in asterion-unified-theme.css (:root).
+
+   Rules (do not break them in new screens):
+   - Only opacity and the individual transform properties `translate` / `scale`
+     are animated. They compose with any existing `transform` (centring,
+     floating planets, scaled stage), never cause layout and run on the GPU.
+   - Entrances use --ut-ease-out. Nothing uses ease-in. In-game UI stays under
+     300 ms; the menu and the campaign result are the only "delight" screens.
+   - Frequent actions (resource ticks, timers, list navigation, keyboard
+     shortcuts, typing) do not animate.
+   - Entrances are mount-only CSS animations with `backwards` fill: once they
+     finish, the element carries no transform, so geometry, `position: fixed`
+     descendants and the long-page measurements are exactly as without motion.
+   - prefers-reduced-motion keeps the fades and drops every movement.
+   --------------------------------------------------------------------------- */
+
+/* A screen starts at .35, not 0: the previous one vanished instantly, a fade from black reads as a blink. */
+@keyframes ut-screen-in { from { opacity: .35; translate: 0 var(--ut-rise); } }
+@keyframes ut-item-in { from { opacity: 0; translate: 0 var(--ut-rise-small); } }
+@keyframes ut-fade-in { from { opacity: 0; } }
+@keyframes ut-pop-in { from { opacity: 0; scale: .96; } }
+@keyframes ut-slide-in-left { from { opacity: 0; translate: -16px 0; } }
+@keyframes ut-twinkle { from { opacity: .35; } to { opacity: .9; } }
+@keyframes ut-drift { from { translate: 0 0; } to { translate: -24px 10px; } }
+@keyframes ut-attention { 0%, 100% { scale: 1; } 50% { scale: 1.06; } }
+
+/* ---------------------------------------------------------------- 1. Screens
+   A route (Planet, Universe, Fleets, Operations, Command, Messages, Rating,
+   Settings, Science), a Fleets section, a building interior or a planet zone
+   rises 10px and fades in. Sibling panels of a screen follow 40ms apart. */
+.workspace > :not(.module-placeholder-v3),
+.fleet-main-v1 > *,
+.utility-screen-host > *,
+.building-interior-host > * {
+  animation: ut-screen-in var(--ut-motion-screen) var(--ut-ease-out) backwards;
+}
+/* The Universe map is spatial: it only fades in, the systems never travel. */
+.workspace > .universe-view { animation: ut-fade-in var(--ut-motion-screen) var(--ut-ease-out) backwards; }
+.fleet-workspace-v1 > .fleet-sidebar-v1 { animation: ut-slide-in-left var(--ut-motion-screen) var(--ut-ease-out) backwards; }
+.fleet-main-v1 > :nth-child(2),
+.science-view-v2 > :nth-child(2),
+.spaceport-upgrades-v2 > :nth-child(2) { animation-delay: calc(var(--ut-stagger) * 1); }
+.fleet-main-v1 > :nth-child(3) { animation-delay: calc(var(--ut-stagger) * 2); }
+.fleet-main-v1 > :nth-child(n + 4) { animation-delay: calc(var(--ut-stagger) * 3); }
+.science-view-v2 > *,
+.spaceport-upgrades-v2 > * { animation: ut-screen-in var(--ut-motion-screen) var(--ut-ease-out) backwards; }
+
+/* ---------------------------------------------------------------- 2. Catalog items
+   Cards of a catalog arrive one after another (first eight staggered, the rest
+   together). Mount-only: re-renders of the same card never replay it. */
+.shipyard-card-v1,
+.repair-card-v1,
+.science-row-v2,
+.spaceport-row-v2,
+.srp-card,
+.command-card,
+.rating-row-v2,
+.universe-debris-finder__list > li,
+.menu-slot {
+  animation: ut-item-in var(--ut-motion-item) var(--ut-ease-out) backwards;
+}
+:is(.shipyard-card-v1, .repair-card-v1, .science-row-v2, .spaceport-row-v2, .srp-card, .command-card, .rating-row-v2, .universe-debris-finder__list > li, .menu-slot):nth-child(2) { animation-delay: calc(var(--ut-stagger) * 1); }
+:is(.shipyard-card-v1, .repair-card-v1, .science-row-v2, .spaceport-row-v2, .srp-card, .command-card, .rating-row-v2, .universe-debris-finder__list > li, .menu-slot):nth-child(3) { animation-delay: calc(var(--ut-stagger) * 2); }
+:is(.shipyard-card-v1, .repair-card-v1, .science-row-v2, .spaceport-row-v2, .srp-card, .command-card, .rating-row-v2, .universe-debris-finder__list > li, .menu-slot):nth-child(4) { animation-delay: calc(var(--ut-stagger) * 3); }
+:is(.shipyard-card-v1, .repair-card-v1, .science-row-v2, .spaceport-row-v2, .srp-card, .command-card, .rating-row-v2, .universe-debris-finder__list > li, .menu-slot):nth-child(5) { animation-delay: calc(var(--ut-stagger) * 4); }
+:is(.shipyard-card-v1, .repair-card-v1, .science-row-v2, .spaceport-row-v2, .srp-card, .command-card, .rating-row-v2, .universe-debris-finder__list > li, .menu-slot):nth-child(6) { animation-delay: calc(var(--ut-stagger) * 5); }
+:is(.shipyard-card-v1, .repair-card-v1, .science-row-v2, .spaceport-row-v2, .srp-card, .command-card, .rating-row-v2, .universe-debris-finder__list > li, .menu-slot):nth-child(n + 7) { animation-delay: calc(var(--ut-stagger) * 6); }
+
+/* Fleets roster and mission tiles are seen many times a day: shorter, closer. */
+.fleet-ship-tile-v2,
+.fleet-mission-icons-v1 > button {
+  animation: ut-item-in var(--ut-motion-fast) var(--ut-ease-out) backwards;
+}
+:is(.fleet-ship-tile-v2, .fleet-mission-icons-v1 > button):nth-child(2) { animation-delay: 20ms; }
+:is(.fleet-ship-tile-v2, .fleet-mission-icons-v1 > button):nth-child(3) { animation-delay: 40ms; }
+:is(.fleet-ship-tile-v2, .fleet-mission-icons-v1 > button):nth-child(4) { animation-delay: 60ms; }
+:is(.fleet-ship-tile-v2, .fleet-mission-icons-v1 > button):nth-child(n + 5) { animation-delay: 80ms; }
+
+/* ---------------------------------------------------------------- 3. Dialogs
+   Backdrop fades, panel grows from 96% at its own centre (modals are not
+   anchored to their trigger). `scale` composes with translate(-50%,-50%). */
+.resource-building-action-confirm-backdrop,
+.resource-building-dialog-backdrop,
+.universe-modal-backdrop,
+.gate-backdrop,
+.command-dialog-backdrop,
+.skin-picker-backdrop,
+.srp-modal,
+.menu-modal,
+.igo-backdrop {
+  animation: ut-fade-in var(--ut-motion-modal) var(--ut-ease-out) backwards;
+}
+.resource-building-action-confirm,
+.resource-building-dialog,
+.universe-debris-finder,
+.gate-dialog,
+.srp-launch,
+.ship-info-modal-v1,
+.battle-report-modal-v1,
+.skin-picker-modal,
+.igo-pause,
+.igo-confirm,
+.command-dialog-backdrop > *,
+.menu-modal > * {
+  animation: ut-pop-in var(--ut-motion-modal) var(--ut-ease-out) backwards;
+}
+
+/* ---------------------------------------------------------------- 4. Buttons
+   Press: every enabled button sinks to 97% (the label and icon come along).
+   Hover (mouse only): primary actions lift 1px; everything else keeps the
+   theme's colour/border change. Disabled controls never move. */
+body button:not([disabled]) {
+  transition:
+    transform var(--ut-motion-fast) ease,
+    scale var(--ut-motion-press) var(--ut-ease-out),
+    translate var(--ut-motion-fast) var(--ut-ease-out),
+    color var(--ut-motion-fast) ease,
+    border-color var(--ut-motion-fast) ease,
+    background var(--ut-motion-fast) ease,
+    background-color var(--ut-motion-fast) ease,
+    box-shadow var(--ut-motion-fast) ease,
+    filter var(--ut-motion-fast) ease,
+    opacity var(--ut-motion-fast) ease;
+}
+body button:not([disabled]):active { scale: .97; }
+/* Large map objects and building plots press less: a 3% shrink of a 200px node reads as a jump. */
+body :is(.system-planet, .resource-building-node, .zone-hotspot, .universe-radar__row, .system-star-button):not([disabled]):active { scale: .99; }
+
+@media (hover: hover) and (pointer: fine) {
+  :is(
+    .igo-btn--primary, .menu-btn--primary, .uw-btn--primary, .opsA-btn--primary,
+    .resource-building-build-button, .resource-building-enter-button,
+    .spaceport-upgrade-cta-v2, [data-qa-science-action], [data-qa-flight-preview-open],
+    [data-qa-flight-dispatch-confirm], [data-qa-sun-launch-confirm], [data-qa-gate-start],
+    .shipyard-build-button-v1, .srp-cta
+  ):not([disabled]):hover {
+    translate: 0 -1px;
+    filter: brightness(1.08);
+  }
+}
+
+/* Tabs, section menus and segmented filters: the active plate fades in (colour only). */
+:is(.fleet-menu-group-v1 button, .science-sections-v2 button, .spaceport-sections-v2 button, .settings-nav-v2 nav button, .command-tabs button, .fleet-ship-filter-v2 button, .universe-radar__seg button) {
+  transition-duration: var(--ut-motion-base);
+}
+
+/* ---------------------------------------------------------------- 5. Living stage
+   Two layers of stars slowly drift and twinkle behind every screen
+   (composited: opacity + translate only, ~0 main-thread cost). */
+.stage-ambient {
+  position: absolute;
+  inset: -40px;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.stage-ambient i {
+  position: absolute;
+  inset: 0;
+  background-repeat: repeat;
+  will-change: opacity, translate;
+}
+.stage-ambient i:nth-child(1) {
+  background-image:
+    radial-gradient(1px 1px at 7% 13%, #fff 50%, transparent 51%),
+    radial-gradient(1px 1px at 23% 61%, #cfe9ff 50%, transparent 51%),
+    radial-gradient(1.4px 1.4px at 41% 27%, #fff 50%, transparent 51%),
+    radial-gradient(1px 1px at 63% 83%, #ffe7c4 50%, transparent 51%),
+    radial-gradient(1.4px 1.4px at 79% 39%, #fff 50%, transparent 51%),
+    radial-gradient(1px 1px at 91% 71%, #cfe9ff 50%, transparent 51%);
+  background-size: 520px 380px;
+  animation: ut-twinkle 6.5s ease-in-out infinite alternate, ut-drift 140s linear infinite alternate;
+}
+.stage-ambient i:nth-child(2) {
+  background-image:
+    radial-gradient(1.6px 1.6px at 15% 79%, #bfe6ff 50%, transparent 51%),
+    radial-gradient(1px 1px at 33% 9%, #fff 50%, transparent 51%),
+    radial-gradient(1.2px 1.2px at 57% 51%, #fff 50%, transparent 51%),
+    radial-gradient(1px 1px at 73% 17%, #ffd9a8 50%, transparent 51%),
+    radial-gradient(1.6px 1.6px at 88% 93%, #fff 50%, transparent 51%);
+  background-size: 760px 560px;
+  animation: ut-twinkle 9s ease-in-out infinite alternate-reverse, ut-drift 200s linear infinite alternate-reverse;
+}
+
+/* Something needs the player (incoming attack, Sun under attack): one calm pulse. */
+.ut-attention { animation: ut-attention 1.6s var(--ut-ease-in-out) 2; }
+
+/* ---------------------------------------------------------------- 6. Reduced motion
+   Fewer and gentler, not zero: fades stay (they explain what changed), every
+   movement, scale and ambient loop goes. */
+@media (prefers-reduced-motion: reduce) {
+  .workspace > *, .fleet-main-v1 > *, .utility-screen-host > *, .building-interior-host > *,
+  .fleet-workspace-v1 > .fleet-sidebar-v1, .science-view-v2 > *, .spaceport-upgrades-v2 > *,
+  .shipyard-card-v1, .repair-card-v1, .science-row-v2, .spaceport-row-v2, .srp-card, .command-card, .rating-row-v2,
+  .universe-debris-finder__list > li, .menu-slot, .fleet-ship-tile-v2, .fleet-mission-icons-v1 > button,
+  .resource-building-action-confirm, .resource-building-dialog, .universe-debris-finder, .gate-dialog, .srp-launch,
+  .ship-info-modal-v1, .battle-report-modal-v1, .skin-picker-modal, .igo-pause, .igo-confirm,
+  .command-dialog-backdrop > *, .menu-modal > * {
+    animation: ut-fade-in var(--ut-motion-fast) ease backwards !important;
+  }
+  body button:not([disabled]):active { scale: 1; }
+  .stage-ambient i, .ut-attention { animation: none !important; }
+}

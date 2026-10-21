@@ -2,7 +2,7 @@ import type { CombatFactionId } from '../combat/factions.ts';
 import type { ShipId } from '../combat/ids.ts';
 import { calculateRouteDistance, assertFlightCoordinate } from './distance.ts';
 import { calculateFlightFuel } from './fuel.ts';
-import { calculateEffectiveFleetSpeed, calculateOneWayDurationMs } from './speed.ts';
+import { MIN_ONE_WAY_DURATION_MS, MIN_RECON_ONE_WAY_DURATION_MS, calculateEffectiveFleetSpeed, calculateOneWayDurationMs, isReconOnlyFleet } from './speed.ts';
 import { normalizeTransportCargo } from './cargo.ts';
 import type { TransportCargo } from './cargo.ts';
 import type { AidFlightSnapshot, TargetRelation } from './types.ts';
@@ -82,7 +82,8 @@ export function createFlightRecord(input: DispatchFlightInput): FlightRecord {
   const effectiveSpeed = isSpaceFlight ? 0 : calculateEffectiveFleetSpeed(input.factionId, input.selectedShips, input.science, selectedCommanders);
   const oneWayDurationMs = isSpaceFlight
     ? requestedDuration!
-    : calculateOneWayDurationMs(input.originCoordinate, input.destination.coordinate, effectiveSpeed);
+    : calculateOneWayDurationMs(input.originCoordinate, input.destination.coordinate, effectiveSpeed,
+      isReconOnlyFleet(input.selectedShips, selectedCommanders) ? MIN_RECON_ONE_WAY_DURATION_MS : MIN_ONE_WAY_DURATION_MS);
   const destinationPlanetId = input.destination.kind === 'planet' ? input.destination.planetId : input.destinationPlanetId;
   if (input.missionId === 'transport' && input.cargo === undefined) {
     throw new Error('Transport flights require a cargo snapshot.');

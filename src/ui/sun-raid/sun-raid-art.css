@@ -1,0 +1,115 @@
+/* Procedural Sun raid art: crystals, Suns, Gates. Tokens: --ut-*, --race-*. */
+
+.sr-gem {
+  position: relative;
+  display: inline-block;
+  flex: 0 0 auto;
+}
+/* The crystal fills ~78% of its square art: oversize the image so the gem spans the box. */
+.sr-gem img { position: absolute; left: 50%; top: 50%; height: 128%; aspect-ratio: 1; transform: translate(-50%, -50%); pointer-events: none; }
+.sr-gem.is-owned img { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--gem-glow) 70%, transparent)); }
+.sr-gem.is-owned::after {
+  content: '';
+  position: absolute;
+  inset: 22% 18%;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--gem-color) 55%, transparent), transparent 70%);
+  filter: blur(6px);
+  z-index: -1;
+  animation: sr-gem-breathe 3.6s ease-in-out infinite;
+}
+.sr-gem.is-missing img { opacity: .4; filter: drop-shadow(0 0 3px color-mix(in srgb, var(--gem-color) 50%, transparent)); }
+.sr-gem.is-locked img { filter: drop-shadow(0 0 4px var(--gem-glow)) grayscale(.25); }
+.sr-gem-set { display: inline-flex; gap: 10px; align-items: center; }
+
+@keyframes sr-gem-breathe { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+
+.sr-sun {
+  --sun-size: 220px;
+  position: relative;
+  display: inline-block;
+  width: var(--sun-size);
+  height: var(--sun-size);
+  flex: 0 0 auto;
+}
+.sr-sun > span { position: absolute; border-radius: 50%; }
+.sr-sun__halo {
+  inset: -18%;
+  background: radial-gradient(circle, rgba(255, 196, 92, calc(.42 * var(--sun-intensity))) 0%, rgba(255, 120, 40, calc(.16 * var(--sun-intensity))) 45%, transparent 70%);
+}
+/* Generated star art: the bright Sun fades into its scarred, dimmed state as brightness drops. */
+.sr-sun__img {
+  position: absolute;
+  inset: -6%;
+  width: 112%;
+  height: 112%;
+  pointer-events: none;
+  animation: sr-sun-spin 240s linear infinite;
+}
+.sr-sun__img--bright { opacity: calc(1 - var(--sun-dim)); filter: brightness(calc(.7 + .3 * var(--sun-intensity))); transition: opacity .6s ease; }
+.sr-sun.is-frozen .sr-sun__halo { background: radial-gradient(circle, rgba(140, 220, 255, .32) 0%, rgba(80, 160, 255, .12) 45%, transparent 70%); }
+.sr-sun.is-frozen .sr-sun__img { animation-play-state: paused; }
+
+@keyframes sr-sun-spin { to { transform: rotate(360deg); } }
+
+.sr-gate {
+  --gate-size: 240px;
+  display: inline-block;
+  width: var(--gate-size);
+  height: var(--gate-size);
+  flex: 0 0 auto;
+}
+.sr-gate svg { width: 100%; height: 100%; overflow: visible; }
+.sr-gate__plate { fill: rgba(6, 12, 16, .85); stroke: var(--race-border-soft); stroke-width: 1; }
+.sr-gate__ring { fill: none; stroke: color-mix(in srgb, var(--race-accent-strong) 40%, #0b141a); stroke-width: 14; }
+.sr-gate__ticks { fill: none; stroke: var(--race-accent); stroke-opacity: .55; stroke-width: 14; stroke-dasharray: 2 14; }
+.sr-gate__progress { fill: none; stroke: var(--race-accent-strong); stroke-width: 5; stroke-linecap: round; filter: drop-shadow(0 0 6px var(--race-glow)); transition: stroke-dasharray .6s ease; }
+.sr-gate__vortex { transform-origin: 120px 120px; opacity: .18; }
+.sr-gate--building .sr-gate__vortex { opacity: .85; animation: sr-sun-spin 14s linear infinite; }
+.sr-gate--completed .sr-gate__vortex { opacity: 1; animation: sr-sun-spin 6s linear infinite; filter: drop-shadow(0 0 18px var(--race-glow)); }
+.sr-gate--destroyed svg { filter: grayscale(.85) brightness(.6); }
+.sr-gate__socket.is-lit polygon { filter: drop-shadow(0 0 5px currentColor); }
+
+.sr-bright { display: grid; gap: 6px; }
+.sr-bright__track {
+  position: relative;
+  height: 16px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(120, 200, 255, .16), rgba(255, 170, 60, .12));
+  border: 1px solid var(--ut-border);
+  overflow: hidden;
+}
+.sr-bright__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(90deg, #6fd3ff 0%, #ffd36b 55%, #ff8a2a 100%);
+  box-shadow: 0 0 14px rgba(255, 170, 60, .45);
+  transition: width .6s ease;
+}
+.sr-bright__track i {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  width: 1px;
+  background: rgba(0, 0, 0, .45);
+}
+.sr-bright__cap {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 3px;
+  margin-left: -1px;
+  background: #fff;
+  box-shadow: 0 0 8px #fff;
+  z-index: 2;
+}
+.sr-bright__scale { display: flex; justify-content: space-between; color: var(--ut-label); font-size: var(--ut-font-secondary); }
+
+@media (prefers-reduced-motion: reduce) {
+  .sr-sun__img, .sr-gate__vortex, .sr-gem.is-owned::after { animation: none !important; }
+}
+
+.sun-report-strip { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 16px; margin: 0 24px 12px; padding: 12px 18px; border-radius: var(--ut-r-card); border: 1px solid rgba(255, 184, 74, .35); background: rgba(255, 160, 60, .07); }
+.sun-report-strip small { display: block; color: #ffc98a; font-size: 11px; font-weight: 700; letter-spacing: .12em; }
+.sun-report-strip b { display: block; margin-top: 4px; font-size: 14px; }
+.sun-report-strip span { display: block; margin-top: 3px; color: #d7c7a8; font-size: 12px; }

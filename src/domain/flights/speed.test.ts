@@ -26,3 +26,17 @@ test('applies smoothing, the 1.5 divisor, minimum three minutes, and final-only 
   assert.equal(calculateOneWayDurationMs(origin, { galaxy: 3, system: 1, position: 1 }, 19_000), 607_744);
   assert.equal(calculateOneWayDurationMs(origin, { galaxy: 4, system: 1, position: 1 }, 200), 2_656_313);
 });
+
+test('recon (spy probes only) is floored at 3 seconds, every other fleet at 3 minutes', async () => {
+  const { MIN_RECON_ONE_WAY_DURATION_MS, isReconOnlyFleet } = await import('./speed.ts');
+  const origin = { galaxy: 1, system: 1, position: 1 };
+  const next = { galaxy: 1, system: 1, position: 2 };
+  assert.equal(calculateOneWayDurationMs(origin, next, 200_000_000), 3 * 60_000);
+  const probe = calculateOneWayDurationMs(origin, next, 200_000_000, MIN_RECON_ONE_WAY_DURATION_MS);
+  assert.ok(probe >= 3_000 && probe < 60_000, `probe ${probe}`);
+  assert.equal(calculateOneWayDurationMs(origin, origin, 1e30, MIN_RECON_ONE_WAY_DURATION_MS), 3_000);
+  assert.equal(isReconOnlyFleet({ 'spy-probe': 3 }), true);
+  assert.equal(isReconOnlyFleet({ 'spy-probe': 1, cruiser: 1 }), false);
+  assert.equal(isReconOnlyFleet({ 'spy-probe': 1 }, { corsair: 1 }), false);
+  assert.equal(isReconOnlyFleet({}), false);
+});

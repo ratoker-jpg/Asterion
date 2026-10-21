@@ -1,15 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { App } from './App';
-import { FleetWorkspacePortal } from './FleetWorkspacePortal';
-import { GlobalPageScrollController } from './GlobalPageScrollController';
-import { GlobalTypographyController } from './GlobalTypographyController';
-import { PrototypeResetController } from './PrototypeResetController';
-import { RepairWorkshopPortal } from './RepairWorkshopPortal';
-import { ShipInfoController } from './ShipInfoController';
-import { DefenseInfoController } from './DefenseInfoController';
-import { UtilityScreensPortal } from './UtilityScreensPortal';
-import { NavigationProvider } from './ui/navigation.tsx';
+import { GameRoot } from './ui/menu/GameRoot.tsx';
 import './ui/race/race-tokens.css';
 import './styles.css';
 import './universe-nav.css';
@@ -40,6 +31,8 @@ import './universe-interaction.css';
 import './universe-window.css';
 import './asterion-unified-theme.css';
 import './ui/race/race-theme.css';
+import './motion.css';
+import './final-polish.css';
 
 const isElectron = navigator.userAgent.includes('Electron');
 
@@ -107,16 +100,6 @@ if (!isElectron) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <NavigationProvider>
-      <App />
-      <PrototypeResetController />
-      <GlobalPageScrollController />
-      <GlobalTypographyController />
-      <FleetWorkspacePortal />
-      <UtilityScreensPortal />
-      <RepairWorkshopPortal />
-      <ShipInfoController />
-      <DefenseInfoController />
-    </NavigationProvider>
+    <GameRoot />
   </StrictMode>,
 );

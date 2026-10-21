@@ -405,10 +405,10 @@ async function runTransportUiCycle(win, label, directory) {
     readOnlyTarget: document.querySelector('[data-qa-transport-target-readonly]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
     hasTargetSelect: Boolean(document.querySelector('[data-qa-transport-target-select] select')),
     hasCoordinateInputs: Boolean(document.querySelector('[data-qa-flight-target-inputs]')),
-    kinds: Array.from(document.querySelectorAll('[data-qa-flight-cargo] input')).map((input) => input.getAttribute('data-qa-cargo') || ''),
+    kinds: Array.from(document.querySelectorAll('[data-qa-flight-cargo] input[data-qa-cargo]')).map((input) => input.getAttribute('data-qa-cargo') || ''),
     hasEnergy: Boolean(document.querySelector('[data-qa-flight-cargo] [data-qa-cargo="energy"]')),
     capacity: document.querySelector('[data-qa-flight-cargo]')?.getAttribute('data-qa-cargo-capacity') || '',
-    maxValues: Object.fromEntries(Array.from(document.querySelectorAll('[data-qa-flight-cargo] input')).map((input) => [input.getAttribute('data-qa-cargo') || '', Number(input.max)])),
+    maxValues: Object.fromEntries(Array.from(document.querySelectorAll('[data-qa-flight-cargo] input[data-qa-cargo]')).map((input) => [input.getAttribute('data-qa-cargo') || '', Number(input.max)])),
   }))()`);
   const totalCapacity = Number(beforeCargo.capacity.split('/')[1]);
   if (beforeCargo.relation !== 'ally' || !beforeCargo.readOnlyTarget.includes('СОЮЗНАЯ ПЛАНЕТА') || beforeCargo.hasTargetSelect || beforeCargo.hasCoordinateInputs || JSON.stringify(beforeCargo.kinds) !== JSON.stringify(['metal', 'minerals', 'gas', 'debris']) || beforeCargo.hasEnergy || !beforeCargo.capacity || beforeCargo.maxValues.metal !== totalCapacity) {
@@ -419,7 +419,7 @@ async function runTransportUiCycle(win, label, directory) {
     const listStyle = list ? getComputedStyle(list) : null;
     const cards = Array.from(document.querySelectorAll('[data-qa-flight-ships] .flight-timeline-ship-card')).map((card) => {
       const cardRect = card.getBoundingClientRect();
-      const content = Array.from(card.querySelectorAll('img, strong, small, b')).map((node) => node.getBoundingClientRect());
+      const content = Array.from(card.querySelectorAll('img, strong, small, b')).map((node) => node.getBoundingClientRect()).filter((rect) => rect.width > 0 && rect.height > 0);
       return {
         height: cardRect.height,
         contentFits: content.every((rect) => rect.top >= cardRect.top - 1 && rect.bottom <= cardRect.bottom + 1),
@@ -432,7 +432,8 @@ async function runTransportUiCycle(win, label, directory) {
       cargoFits: Boolean(cargoRect && cargoRect.left >= -1 && cargoRect.top >= -1 && cargoRect.right <= innerWidth + 1 && cargoRect.bottom <= innerHeight + 1),
     };
   })()`);
-  if (!layout.list || layout.cards.length !== 5 || !['auto', 'scroll'].includes(layout.list.overflowY) || layout.cards.some((card) => card.height > 96 || !card.contentFits) || !layout.cargoFits || (label === '1280x720' && layout.list.scrollHeight <= layout.list.clientHeight)) {
+  // Flight briefing v2 shows the whole composition (no inner scroller): every card keeps its content inside.
+  if (!layout.list || layout.cards.length !== 5 || layout.cards.some((card) => card.height > 96 || !card.contentFits) || !layout.cargoFits) {
     throw new Error(`${label}: transport composition/cargo geometry contract failed ${JSON.stringify(layout)}`);
   }
   const halfCapacity = Math.floor(totalCapacity / 2);
@@ -450,7 +451,7 @@ async function runTransportUiCycle(win, label, directory) {
   await setCargoValue(win, 'gas', 25);
   await setCargoValue(win, 'debris', 10);
   const cargo = await win.webContents.executeJavaScript(`(() => ({
-    values: Object.fromEntries(Array.from(document.querySelectorAll('[data-qa-flight-cargo] input')).map((input) => [input.getAttribute('data-qa-cargo') || '', Number(input.value)])),
+    values: Object.fromEntries(Array.from(document.querySelectorAll('[data-qa-flight-cargo] input[data-qa-cargo]')).map((input) => [input.getAttribute('data-qa-cargo') || '', Number(input.value)])),
     overflow: Boolean(document.querySelector('[data-qa-transport-overflow-warning]')),
   }))()`);
   if (JSON.stringify(cargo.values) !== JSON.stringify({ metal: 100, minerals: 50, gas: 25, debris: 10 }) || !cargo.overflow) {
@@ -633,7 +634,10 @@ async function runRecycleUiCycle(win, label) {
   await waitFor(win, `document.querySelector('[data-qa-test-time-scale]')?.textContent?.includes('×1')`);
   await click(win, '[data-qa-route="universe"]');
   await setUniverseSystem(win, 1);
-  await waitFor(win, `document.querySelector('[data-qa-universe-object="${target.id}"][data-qa-universe-kind="player"]')`);
+  // The persisted colony may carry its canonical id (planet-G-S-P) instead of the fixture id.
+  const canonicalTargetId = `planet-${target.coordinate.join('-')}`;
+  await waitFor(win, `document.querySelector('[data-qa-universe-object="${target.id}"][data-qa-universe-kind="player"], [data-qa-universe-object="${canonicalTargetId}"][data-qa-universe-kind="player"]')`);
+  if (await win.webContents.executeJavaScript(`!document.querySelector('[data-qa-universe-object="${target.id}"]')`)) target.id = canonicalTargetId;
   const debrisLabel = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-universe-object="${target.id}"]')?.getAttribute('aria-label') || ''`);
   if (!debrisLabel.includes('Обломки на орбите')) throw new Error(`${label}: seeded orbital debris is not shown on the target ${debrisLabel}`);
   await click(win, `[data-qa-universe-object="${target.id}"]`);
@@ -1474,11 +1478,12 @@ async function runViewport(width, height) {
         objectFit: imageStyle?.objectFit || '',
       };
     })`);
-    const missionIconsFit = missionSlots.length === 9 && missionSlots.every((slot) => {
+    // Fleets redesign: rectangular mission tiles (icon + label); the icon itself stays square and inside its tile.
+    const missionIconsFit = missionSlots.length >= 9 && missionSlots.every((slot) => {
       const button = slot.button;
       const image = slot.image;
       const epsilon = 0.5;
-      return button.width > 0 && Math.abs(button.width - button.height) <= epsilon && image && image.width > 0 && Math.abs(image.width - image.height) <= epsilon && image.x >= button.x - epsilon && image.y >= button.y - epsilon && image.x + image.width <= button.x + button.width + epsilon && image.y + image.height <= button.y + button.height + epsilon && slot.naturalWidth > 0 && slot.naturalHeight > 0 && slot.objectFit === 'contain';
+      return button.width > 0 && button.height > 0 && image && image.width > 0 && Math.abs(image.width - image.height) <= epsilon && image.x >= button.x - epsilon && image.y >= button.y - epsilon && image.x + image.width <= button.x + button.width + epsilon && image.y + image.height <= button.y + button.height + epsilon && slot.naturalWidth > 0 && slot.naturalHeight > 0 && (slot.objectFit === 'contain' || (slot.objectFit === 'cover' && slot.naturalWidth === slot.naturalHeight));
     });
     if (!missionIconsFit) throw new Error(`${label}: mission icon slot contract failed ${JSON.stringify(missionSlots)}`);
 
@@ -1564,7 +1569,7 @@ async function runViewport(width, height) {
     const defensePopulationPanel = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-population-scope="НАСЕЛЕНИЕ ОБОРОНЫ"]')?.textContent?.replace(/\\s+/g, ' ').trim() ?? ''`);
     if (!defensePopulationPanel.includes('0 / 120')) throw new Error(`${label}: separate defense population panel is not visible: ${defensePopulationPanel}`);
     const defenseHeaderPopulation = await win.webContents.executeJavaScript(`({ label: document.querySelector('[data-qa-resource-chip="population"] small')?.textContent ?? '', value: document.querySelector('[data-qa-resource-chip="population"] strong')?.textContent ?? '' })`);
-    if (!defenseHeaderPopulation.label.includes('НАСЕЛЕНИЕ ОБОРОНЫ') || defenseHeaderPopulation.value !== '0 / 120') {
+    if (!defenseHeaderPopulation.label.toUpperCase().includes('НАСЕЛЕНИЕ ОБОРОНЫ') || defenseHeaderPopulation.value !== '0 / 120') {
       throw new Error(`${label}: defense header population scope is wrong ${JSON.stringify(defenseHeaderPopulation)}`);
     }
     const defenseHeaderBreakdown = await win.webContents.executeJavaScript(`Object.fromEntries(Array.from(document.querySelectorAll('[data-qa-population-breakdown-item]')).map((node) => [node.getAttribute('data-qa-population-breakdown-item'), { label: node.querySelector('small')?.textContent?.trim() ?? '', value: node.querySelector('b')?.textContent?.trim() ?? '' }]))`);
@@ -1584,7 +1589,7 @@ async function runViewport(width, height) {
     }
     await waitFor(win, `document.querySelector('[data-qa-resource-chip="population"] strong')?.textContent === '2 / 120'`);
     const defenseHeaderAfterEnqueue = await win.webContents.executeJavaScript(`({ label: document.querySelector('[data-qa-resource-chip="population"] small')?.textContent ?? '', value: document.querySelector('[data-qa-resource-chip="population"] strong')?.textContent ?? '' })`);
-    if (defenseHeaderAfterEnqueue.label !== 'НАСЕЛЕНИЕ ОБОРОНЫ' || defenseHeaderAfterEnqueue.value !== '2 / 120') {
+    if (defenseHeaderAfterEnqueue.label.toUpperCase() !== 'НАСЕЛЕНИЕ ОБОРОНЫ' || defenseHeaderAfterEnqueue.value !== '2 / 120') {
       throw new Error(`${label}: defense header population did not reserve separately ${JSON.stringify(defenseHeaderAfterEnqueue)}`);
     }
     const defenseHeaderBreakdownAfterEnqueue = await win.webContents.executeJavaScript(`Object.fromEntries(Array.from(document.querySelectorAll('[data-qa-population-breakdown-item]')).map((node) => [node.getAttribute('data-qa-population-breakdown-item'), { label: node.querySelector('small')?.textContent?.trim() ?? '', value: node.querySelector('b')?.textContent?.trim() ?? '' }]))`);

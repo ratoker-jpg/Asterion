@@ -81,6 +81,8 @@ async function seedSave(win, {
   tokens = 31,
   wallet = { metal: 999999999, minerals: 999999999, gas: 999999999 },
 } = {}) {
+  // The running game saves every tick: write and reload in one task.
+  const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
   const seeded = await win.webContents.executeJavaScript(`(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
     const planet = save?.planets?.['helion-01'];
@@ -89,6 +91,8 @@ async function seedSave(win, {
     save.metal = ${JSON.stringify(wallet.metal)};
     save.minerals = ${JSON.stringify(wallet.minerals)};
     save.gas = ${JSON.stringify(wallet.gas)};
+    // The wallet lives on the planet; the top-level fields are legacy mirrors.
+    planet.resources = { ...(planet.resources || {}), metal: ${JSON.stringify(wallet.metal)}, minerals: ${JSON.stringify(wallet.minerals)}, gas: ${JSON.stringify(wallet.gas)} };
     save.resourceClock = { lastReconciledAt: Date.now(), remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
     planet.repair = {
       ships: { ...(planet.repair?.ships || {}), scout: ${JSON.stringify(capacity === 'fleet' ? 2 : shipPool)} },
@@ -146,10 +150,13 @@ async function seedSave(win, {
     save.queues = { 'helion-01': [] };
     save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 13);
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+    window.location.reload();
     return true;
   })()`);
   if (!seeded) throw new Error('Could not seed Repair Workshop QA save');
-  await reload(win);
+  await loaded;
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+  await settle(win);
 }
 
 async function openRepairWorkshop(win, cardId = 'scout') {

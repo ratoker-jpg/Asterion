@@ -285,13 +285,10 @@ export function ShipyardView({ planetName, coords, planetId, budget: providedBud
   );
   const [quantities, setQuantities] = useState<Partial<Record<ShipId, number>>>({});
 
+  // Document scrolling (long page) is owned by GlobalPageScrollController.
   useEffect(() => {
-    document.documentElement.classList.add('asterion-long-page');
     window.scrollTo(0, 0);
-    return () => {
-      document.documentElement.classList.remove('asterion-long-page');
-      window.scrollTo(0, 0);
-    };
+    return () => window.scrollTo(0, 0);
   }, []);
 
   useEffect(() => {

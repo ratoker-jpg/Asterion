@@ -39,6 +39,19 @@
   --ut-close-size:40px;
   --ut-focus:2px solid var(--ut-accent);
   --ut-motion-fast:160ms;
+  /* Motion system (src/motion.css, docs/ui/motion-system.md) */
+  --ut-ease-out:cubic-bezier(0.23, 1, 0.32, 1);      /* entrances, presses */
+  --ut-ease-in-out:cubic-bezier(0.77, 0, 0.175, 1);  /* on-screen movement */
+  --ut-ease-drawer:cubic-bezier(0.32, 0.72, 0, 1);   /* sheets, drawers */
+  --ut-ease-hero:cubic-bezier(.22, 1, .36, 1);       /* menu / campaign result only */
+  --ut-motion-press:120ms;   /* button press */
+  --ut-motion-base:200ms;    /* tabs, selection plates */
+  --ut-motion-modal:240ms;   /* dialogs and backdrops */
+  --ut-motion-item:260ms;    /* catalog cards */
+  --ut-motion-screen:280ms;  /* a screen or section entering */
+  --ut-stagger:40ms;         /* gap between siblings in an entrance */
+  --ut-rise:10px;            /* screen entrance offset */
+  --ut-rise-small:6px;       /* card entrance offset */
 }
 
 /* === 1. GLOBAL PRIMITIVES =================================== */
@@ -239,9 +252,9 @@
 .planet-details-v4{ border-radius:var(--ut-r-chip); }
 .zone-hotspot__label{
   border-radius:var(--ut-r-chip) !important;
-  background:rgba(8,15,19,.88);
+  background:rgba(8,15,19,.9);
   border:1px solid var(--ut-border-strong);
-  backdrop-filter:blur(4px);
+  /* No backdrop blur: labels sit over the animated planet and the .9 fill hides it anyway. */
 }
 .queue-card-v2{
   border-radius:var(--ut-r-card) !important;

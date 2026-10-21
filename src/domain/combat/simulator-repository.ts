@@ -25,7 +25,6 @@ import { migrateScienceState } from '../science/runtime.ts';
 import type { CombatEntityKind } from './types.ts';
 import { getRuntimeSaveKey, type RuntimeMode } from '../runtime/mode.ts';
 
-const LEGACY_SAVE_KEY = getRuntimeSaveKey();
 
 export const SIMULATOR_STATE_CHANGED_EVENT = 'asterion:combat-simulator-changed';
 
@@ -214,7 +213,7 @@ export function readSimulatorState(storage?: StorageLike, mode?: RuntimeMode): S
   const target = resolveStorage(storage);
   if (!target) return createDefaultSimulatorState();
   try {
-    const raw = target.getItem(mode === undefined ? LEGACY_SAVE_KEY : getRuntimeSaveKey(mode));
+    const raw = target.getItem(mode === undefined ? getRuntimeSaveKey() : getRuntimeSaveKey(mode));
     if (!raw) return createDefaultSimulatorState();
     const envelope = JSON.parse(raw) as SaveEnvelope;
     return migrateSimulatorState(envelope.combatSimulator);
@@ -227,7 +226,7 @@ export function readSavedCombatTechnologies(storage?: StorageLike, mode?: Runtim
   const target = resolveStorage(storage);
   if (!target) return createDefaultCombatTechnologies();
   try {
-    const raw = target.getItem(mode === undefined ? LEGACY_SAVE_KEY : getRuntimeSaveKey(mode));
+    const raw = target.getItem(mode === undefined ? getRuntimeSaveKey() : getRuntimeSaveKey(mode));
     if (!raw) return createDefaultCombatTechnologies();
     const envelope = JSON.parse(raw) as SaveEnvelope & { science?: unknown };
     const science = migrateScienceState(envelope.science);
@@ -248,7 +247,7 @@ export function readSavedCombatTechnologyProfiles(storage?: StorageLike, mode?: 
   if (!target) return { attacker: fallback, defender: { ...fallback } };
 
   try {
-    const raw = target.getItem(mode === undefined ? LEGACY_SAVE_KEY : getRuntimeSaveKey(mode));
+    const raw = target.getItem(mode === undefined ? getRuntimeSaveKey() : getRuntimeSaveKey(mode));
     if (!raw) return { attacker: fallback, defender: { ...fallback } };
     const envelope = JSON.parse(raw) as SaveEnvelope;
     const simulator = migrateSimulatorState(envelope.combatSimulator);
@@ -272,7 +271,7 @@ export function persistSimulatorState(value: SimulatorState, storage?: StorageLi
   if (!target) return { ok: false, value: normalized, error: 'Локальное сохранение недоступно.' };
 
   try {
-    const saveKey = mode === undefined ? LEGACY_SAVE_KEY : getRuntimeSaveKey(mode);
+    const saveKey = mode === undefined ? getRuntimeSaveKey() : getRuntimeSaveKey(mode);
     const raw = target.getItem(saveKey);
     const envelope = raw ? JSON.parse(raw) as SaveEnvelope : {};
     const nextEnvelope: SaveEnvelope = {

@@ -18,6 +18,8 @@ export type HeaderCampaignModel = {
   saveKey: string;
   timeScaleOptions?: readonly TestTimeScale[];
   onTimeScaleChange?: (timeScale: TestTimeScale) => void;
+  /** Production campaign label, e.g. «Кампания ×2» for a fast campaign. */
+  label?: string;
 };
 
 export type AsterionHeaderProps = {
@@ -309,7 +311,7 @@ export function AsterionHeader({
             ) : null}
           </div>
         ) : (
-          <div className="asterion-header__campaign-status"><i aria-hidden="true" />Кампания</div>
+          <div className="asterion-header__campaign-status"><i aria-hidden="true" />{campaign.label ?? 'Кампания'}</div>
         )}
         <time>{new Date(campaign.now).toLocaleTimeString('ru-RU', { hour12: false })}</time>
       </section>

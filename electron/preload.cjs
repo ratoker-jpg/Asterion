@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('asterionDesktop', {
   getDisplayState: () => ipcRenderer.invoke('asterion:display:get'),
+  quit: () => ipcRenderer.send('asterion:app:quit'),
   setDisplay: (request) => ipcRenderer.invoke('asterion:display:set', request),
   onDisplayState: (listener) => {
     if (typeof listener !== 'function') return () => undefined;

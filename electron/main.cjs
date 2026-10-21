@@ -39,6 +39,9 @@ function applyDisplayRequest(win, request) {
   return displayState(win);
 }
 
+// «Выход» from the main menu.
+ipcMain.on('asterion:app:quit', () => app.quit());
+
 ipcMain.handle('asterion:display:get', (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) throw new Error('Desktop window is unavailable.');

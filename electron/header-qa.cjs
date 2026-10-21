@@ -174,7 +174,7 @@ function expectedResourceTone(ratio) {
 }
 
 async function loadMode(win, file, search) {
-  await win.loadFile(file, search ? { search } : undefined);
+  await win.loadFile(file, { search: search || '?autostart=continue' });
   await waitFor(win, `document.querySelector('[data-qa-header]')`);
   await win.webContents.executeJavaScript('document.fonts?.ready');
   await settle(win);

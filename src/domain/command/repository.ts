@@ -47,7 +47,6 @@ import type {
 import { CURRENT_PLAYER_DISPLAY_NAME, CURRENT_PLAYER_ID } from '../rating/fixtures.ts';
 import { getRuntimeSaveKey, type RuntimeMode } from '../runtime/mode.ts';
 
-const LEGACY_SAVE_KEY = getRuntimeSaveKey();
 const FIXTURE_IDS = [TEST_COMMAND_DEFAULT_FIXTURE_ID, TEST_BOT_FIXTURE_ID] as const;
 const APPLICATION_STATUSES: readonly ApplicationStatus[] = ['pending', 'accepted', 'rejected', 'withdrawn', 'auto_rejected'];
 const APPLICATION_REASONS: readonly ApplicationReason[] = ['declined', 'full', 'already_member', 'disbanded'];
@@ -615,7 +614,7 @@ function resolveStorage(storage?: StorageLike): StorageLike | null {
 
 export function readCommandState(storage?: StorageLike, mode?: RuntimeMode, context?: Partial<CommandOwnerContext>): CommandState {
   const runtimeMode = mode ?? 'test';
-  const saveKey = mode === undefined ? LEGACY_SAVE_KEY : getRuntimeSaveKey(runtimeMode);
+  const saveKey = mode === undefined ? getRuntimeSaveKey() : getRuntimeSaveKey(runtimeMode);
   const target = resolveStorage(storage);
   if (!target) return createDefaultCommandState(runtimeMode, context);
 
@@ -640,7 +639,7 @@ export function persistCommandState(
   context?: Partial<CommandOwnerContext>,
 ): PersistCommandResult {
   const runtimeMode = mode ?? 'test';
-  const saveKey = mode === undefined ? LEGACY_SAVE_KEY : getRuntimeSaveKey(runtimeMode);
+  const saveKey = mode === undefined ? getRuntimeSaveKey() : getRuntimeSaveKey(runtimeMode);
   const normalized = migrateCommandState(value, runtimeMode, context);
   const target = resolveStorage(storage);
   if (!target) return { ok: false, value: normalized, error: 'Локальное сохранение недоступно.' };

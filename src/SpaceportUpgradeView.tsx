@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import {
-  SPACEPORT_UPGRADE_PROTOTYPE_NOTE,
   SPACEPORT_UPGRADE_QUEUE_CAPACITY,
   getSpaceportUpgradeCatalog,
   getSpaceportUpgradeEntity,
@@ -445,8 +444,6 @@ export function SpaceportUpgradeView({
           </div>
         </header>
 
-        <p className="spaceport-prototype-note-v2">{SPACEPORT_UPGRADE_PROTOTYPE_NOTE}</p>
-
         <div className="spaceport-catalog-v2" data-qa-spaceport-catalog={activeTrack}>
           {catalog.map((entity) => {
             const preview = previewSpaceportUpgrade({
@@ -545,41 +542,48 @@ export function SpaceportUpgradeView({
                     </div>
                   </div>
 
-                  {queuedTasks.map(({ task, index }) => (
-                    <div
-                      className="spaceport-state-strip-v2 queued"
-                      data-qa-spaceport-queued-task={entity.id}
-                      data-qa-spaceport-queued-position={index + 1}
-                      key={task.id}
-                    >
-                      Заказано · позиция {index + 1} в общей очереди · ур. {task.fromLevel} → {task.toLevel}
-                      {index === 0 ? ` · осталось ${formatCountdown(task.finishAt - now)}` : ' · ожидает'}
-                    </div>
-                  ))}
+                  {/* One status line of constant height (as in «Наука»): ordering, a
+                      blocker or a full queue never changes the card height. */}
+                  <div className="spaceport-status-slot-v2" data-qa-spaceport-status>
+                    {queuedTasks.map(({ task, index }) => (
+                      <span
+                        className="spaceport-state-strip-v2 queued"
+                        data-qa-spaceport-queued-task={entity.id}
+                        data-qa-spaceport-queued-position={index + 1}
+                        key={task.id}
+                        title={`Заказано · позиция ${index + 1} в общей очереди · ур. ${task.fromLevel} → ${task.toLevel}`}
+                      >
+                        №{index + 1} · ур. {task.fromLevel} → {task.toLevel}
+                        {index === 0 ? ` · ${formatCountdown(task.finishAt - now)}` : ' · ожидает'}
+                      </span>
+                    ))}
 
-                  {missingRequirements.map((requirement) => (
-                    <div
-                      className="spaceport-state-strip-v2 blocked"
-                      data-qa-spaceport-blocker="requirement"
-                      key={`${entity.id}-block-${requirement.kind}-${requirement.label}`}
-                    >
-                      {requirementBlocker(requirement)}
-                    </div>
-                  ))}
+                    {missingRequirements.map((requirement) => (
+                      <span
+                        className="spaceport-state-strip-v2 blocked"
+                        data-qa-spaceport-blocker="requirement"
+                        key={`${entity.id}-block-${requirement.kind}-${requirement.label}`}
+                        title={requirementBlocker(requirement)}
+                      >
+                        {requirementBlocker(requirement)}
+                      </span>
+                    ))}
 
-                  {missingResources.map((key) => (
-                    <div className="spaceport-state-strip-v2 blocked" data-qa-spaceport-blocker="resource" key={`${entity.id}-resource-${key}`}>
-                      Недостаточно {RESOURCE_LABELS[key]} · нужно {formatNumber(preview.cost[key])}, есть {formatNumber(wallet[key])}
-                    </div>
-                  ))}
+                    {missingResources.map((key) => (
+                      <span className="spaceport-state-strip-v2 blocked" data-qa-spaceport-blocker="resource" key={`${entity.id}-resource-${key}`}
+                        title={`Недостаточно ${RESOURCE_LABELS[key]} · нужно ${formatNumber(preview.cost[key])}, есть ${formatNumber(wallet[key])}`}>
+                        Недостаточно {RESOURCE_LABELS[key]} · нужно {formatNumber(preview.cost[key])}
+                      </span>
+                    ))}
 
-                  {preview.status === 'queue-full' && missingRequirements.length === 0 ? (
-                    <div className="spaceport-state-strip-v2 muted" data-qa-spaceport-blocker="queue">Очередь улучшений заполнена · 3 / 3</div>
-                  ) : null}
+                    {preview.status === 'queue-full' && missingRequirements.length === 0 ? (
+                      <span className="spaceport-state-strip-v2 muted" data-qa-spaceport-blocker="queue">Очередь улучшений заполнена · 3 / 3</span>
+                    ) : null}
 
-                  {preview.status === 'max-level' ? (
-                    <div className="spaceport-state-strip-v2 max" data-qa-spaceport-blocker="max">Максимальный уровень</div>
-                  ) : null}
+                    {preview.status === 'max-level' ? (
+                      <span className="spaceport-state-strip-v2 max" data-qa-spaceport-blocker="max">Максимальный уровень</span>
+                    ) : null}
+                  </div>
                 </div>
 
                 <aside className="spaceport-row-action-v2">

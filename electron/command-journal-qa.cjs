@@ -28,7 +28,7 @@ async function waitFor(win, expression, timeoutMs = 20_000) {
 
 async function load(win, mode) {
   const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-  await win.loadFile(path.join(ROOT, 'dist', 'index.html'), mode === 'test' ? { search: '?mode=test' } : undefined);
+  await win.loadFile(path.join(ROOT, 'dist', 'index.html'), { search: mode === 'test' ? '?mode=test' : '?autostart=continue' });
   await done;
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await waitFor(win, `localStorage.getItem(${JSON.stringify(mode === 'test' ? TEST_KEY : PRODUCTION_KEY)})`);
@@ -105,9 +105,9 @@ const journal = (win) => run(win, `(() => ({
   entries: Array.from(document.querySelectorAll('[data-qa-journal-entry]')).map((n) => n.getAttribute('data-qa-journal-entry')),
   text: document.querySelector('.command-journal')?.innerText || '',
   html: document.documentElement.outerHTML,
-  sun: Boolean(document.querySelector('[data-qa-sun-raid]')),
-  sunText: document.querySelector('[data-qa-sun-raid]')?.innerText || '',
-  sunControls: document.querySelectorAll('[data-qa-sun-raid] button, [data-qa-sun-raid] a, [data-qa-sun-raid] input').length,
+  sun: Boolean(document.querySelector('[data-qa-sun-raid-panel]')),
+  sunText: document.querySelector('[data-qa-sun-raid-panel]')?.innerText || '',
+  sunControls: document.querySelectorAll('[data-qa-sun-raid-panel] [data-qa-sun-attack], [data-qa-sun-raid-panel] [data-qa-sun-support]').length,
   overflowX: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
   contentOverflow: (() => { const c = document.querySelector('.command-content'); return c ? c.scrollWidth > c.clientWidth + 1 : false; })(),
 }))()`);
@@ -147,9 +147,9 @@ async function testModeScenario(win, label) {
   assert(!state.overflowX && !state.contentOverflow, `${label}: no overflow (locked)`, state);
   await capture(win, label, 'journal-locked');
   await click(win, '[data-qa-command-tab="operations"]');
-  await waitFor(win, `document.querySelector('[data-qa-operations]')`);
+  await waitFor(win, `document.querySelector('[data-qa-sun-raid-panel]')`);
   const operations = await journal(win);
-  assert(operations.sun && /Рейд на Солнце/.test(operations.sunText) && /Появится в будущей версии/.test(operations.sunText) && operations.sunControls === 0, `${label}: Sun raid is an honest stub with no controls`, operations.sunText);
+  assert(operations.sun && /КОМАНДНЫЙ РЕЙД/.test(operations.sunText) && /СОЛНЦА ГАЛАКТИКИ/.test(operations.sunText) && operations.sunControls === 2, `${label}: Operations shows the live Sun Raid panel and its attack/support actions`, operations.sunText);
   assert(!/SENTINEL|987654|876543|987 654|876 543/.test(operations.html), `${label}: operations DOM holds no hidden event data`);
 
   // 2. Three hours in: only events after the join are readable.

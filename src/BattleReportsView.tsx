@@ -1,4 +1,5 @@
 import { createPortal } from 'react-dom';
+import { SunReportStrip } from './ui/sun-raid/SunReportStrip.tsx';
 import {
   useCallback,
   useEffect,
@@ -1196,6 +1197,7 @@ export function BattleReportModal({
             <button ref={closeRef} type="button" className="battle-report-modal-close-v1" data-asterion-close onClick={onClose} aria-label="Закрыть боевой отчёт">×</button>
           </div>
         </header>
+        <SunReportStrip report={report} />
         <div ref={scrollRef} className="battle-report-modal-scroll-v1">
           <BattleReportDetailBody report={report} viewModel={viewModel} scrollRef={scrollRef} />
           <button type="button" className="battle-list-back-v1 battle-modal-back-v1" onClick={onClose}>{context === 'simulation' ? '← К СИМУЛЯТОРУ' : '← К СПИСКУ БИТВ'}</button>

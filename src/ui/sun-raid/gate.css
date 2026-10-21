@@ -1,0 +1,104 @@
+/* «Звёздные Врата» dialog (portaled to body, viewport-sized like the building dialog). */
+
+.gate-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 5, 9, .78);
+  backdrop-filter: blur(4px);
+  font-family: Montserrat, Arial, sans-serif;
+  color: #e8f4f7;
+}
+.gate-dialog {
+  position: relative;
+  width: min(1180px, 100%);
+  max-height: calc(100dvh - 48px);
+  overflow: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 440px) minmax(0, 1fr);
+  gap: 28px;
+  padding: 30px 34px;
+  border-radius: var(--ut-r-panel);
+  border: 1px solid var(--race-border);
+  background:
+    radial-gradient(circle at 220px 50%, color-mix(in srgb, var(--race-accent-strong) 18%, transparent), transparent 340px),
+    rgba(7, 13, 18, .98);
+  box-shadow: 0 30px 110px rgba(0, 0, 0, .7), 0 0 60px color-mix(in srgb, var(--race-accent-strong) 12%, transparent);
+}
+.gate-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: var(--ut-close-size);
+  height: var(--ut-close-size);
+  border: 0;
+  border-radius: var(--ut-r-btn);
+  background: transparent;
+  color: var(--ut-danger);
+  font-size: 24px;
+  cursor: pointer;
+}
+.gate-close:hover { background: rgba(240, 68, 94, .12); }
+.gate-close:focus-visible, .gate-btn:focus-visible { outline: var(--ut-focus); outline-offset: 2px; }
+.gate-dialog__art { position: relative; display: grid; place-items: center; align-content: center; gap: 12px; }
+.gate-dialog__progress { display: grid; justify-items: center; gap: 4px; }
+body .gate-dialog .gate-dialog__progress b { font-size: 34px; font-weight: 800; color: var(--race-accent); }
+.gate-dialog__progress small { color: var(--ut-label); font-size: 12px; letter-spacing: .14em; }
+.gate-dialog__copy { display: flex; flex-direction: column; gap: 14px; min-width: 0; padding-right: 30px; }
+.gate-dialog__eyebrow { display: inline-flex; align-items: center; gap: 10px; color: var(--race-accent); font-size: 12px; font-weight: 700; letter-spacing: .2em; }
+.gate-dialog__eyebrow img { width: 30px; height: 30px; border-radius: 6px; }
+body .gate-dialog .gate-dialog__copy h2 { margin: 0; font-size: 32px !important; font-weight: 800; letter-spacing: .04em; }
+.gate-dialog__lead { margin: 0; color: #c6dbe3; font-size: 13px; line-height: 1.55; }
+.gate-dialog__facts { margin: 0; display: grid; gap: 2px; }
+.gate-dialog__facts div { display: grid; grid-template-columns: 150px 1fr; gap: 12px; padding: 9px 0; border-bottom: 1px solid rgba(126, 200, 220, .08); }
+.gate-dialog__facts dt { color: var(--ut-label); font-size: 12px; }
+.gate-dialog__facts dd { margin: 0; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.gate-dialog__crystals { display: grid; gap: 10px; padding: 14px 16px; border-radius: var(--ut-r-card); border: 1px solid var(--ut-border); background: rgba(2, 8, 12, .7); }
+.gate-dialog__crystals small { color: var(--ut-label); font-size: 11px; font-weight: 700; letter-spacing: .16em; }
+.gate-dialog__rules { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: #aec6cf; font-size: 12px; line-height: 1.45; }
+.gate-dialog__note { margin: 0; padding: 10px 12px; border-radius: var(--ut-r-chip); border: 1px solid rgba(230, 173, 80, .35); background: rgba(230, 173, 80, .08); color: #f1d6a5; font-size: 12px; }
+.gate-dialog__actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: auto; }
+.gate-btn {
+  min-height: 44px;
+  padding: 0 22px;
+  border-radius: var(--ut-r-btn);
+  border: 1px solid var(--ut-border-strong);
+  background: rgba(86, 217, 242, .06);
+  color: #e8f4f7;
+  font: 700 12px Montserrat, sans-serif;
+  letter-spacing: .12em;
+  cursor: pointer;
+}
+.gate-btn:hover:not(:disabled) { border-color: var(--race-accent); }
+.gate-btn:disabled { opacity: .42; cursor: not-allowed; }
+.gate-btn--primary { border-color: transparent; background: linear-gradient(135deg, var(--race-accent-strong), color-mix(in srgb, var(--race-accent-strong) 55%, #0b1720)); box-shadow: 0 8px 26px var(--race-glow); color: #fff; }
+.gate-btn--danger { border-color: rgba(240, 68, 94, .55); color: #ffb3bf; }
+
+/* Military-zone slot (free bottom-right spot of the scene): the race's Gate building. */
+.resource-building-node.gate-node .resource-building-art img { transition: filter .4s ease; }
+.resource-building-node.gate-node.is-idle .resource-building-art img { filter: grayscale(.85) brightness(.55) contrast(1.05); }
+.resource-building-node.gate-node.is-building .resource-building-art img { animation: gate-node-charge 2.8s ease-in-out infinite; }
+.resource-building-node.gate-node.is-completed .resource-building-art img { filter: drop-shadow(0 0 26px var(--race-glow)) brightness(1.12); }
+.resource-building-node.gate-node.is-destroyed .resource-building-art img { filter: brightness(.85); }
+.gate-node__crystals { position: absolute; left: 50%; top: -10px; display: flex; gap: 6px; transform: translateX(-50%); z-index: 3; }
+.gate-node__crystals i { width: 12px; height: 12px; transform: rotate(45deg); border-radius: 2px; border: 1px solid var(--gem); background: rgba(3, 8, 12, .8); }
+.gate-node__crystals i.is-on { background: var(--gem); box-shadow: 0 0 10px var(--gem); }
+.gate-node__bar { position: absolute; left: 50%; bottom: 52px; width: 120px; height: 6px; transform: translateX(-50%); border-radius: 999px; background: rgba(3, 8, 12, .85); border: 1px solid var(--race-border); overflow: hidden; z-index: 3; }
+.gate-node__bar i { display: block; height: 100%; background: var(--race-underline); box-shadow: 0 0 8px var(--race-glow); }
+@keyframes gate-node-charge { 50% { filter: drop-shadow(0 0 18px var(--race-glow)) brightness(1.08); } }
+@media (prefers-reduced-motion: reduce) { .resource-building-node.gate-node.is-building .resource-building-art img { animation: none; } }
+
+/* Dialog hero: the Gate building inside the progress ring. */
+.gate-hero { position: relative; display: grid; place-items: center; }
+.gate-hero__building { position: absolute; width: 62%; height: 62%; object-fit: contain; filter: drop-shadow(0 18px 30px rgba(0, 0, 0, .6)); }
+.gate-hero.is-idle .gate-hero__building { filter: grayscale(.8) brightness(.6); }
+.gate-hero.is-destroyed .gate-hero__building { filter: drop-shadow(0 18px 30px rgba(0, 0, 0, .6)) brightness(.9); }
+.gate-hero .sr-gate__vortex { display: none; }
+
+@media (max-width: 900px) {
+  .gate-dialog { grid-template-columns: 1fr; }
+  .gate-dialog__copy { padding-right: 0; }
+}

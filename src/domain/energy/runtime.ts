@@ -87,6 +87,7 @@ export type EnergySourceBuildInput = {
   physicsLevel?: number;
   scienceLevels?: Readonly<Partial<Record<number, number>>>;
   solarSatellites?: number;
+  galaxy?: number;
   system?: number;
   position?: number;
 };
@@ -114,13 +115,33 @@ export function getPhysicsMultiplier(level: number): number {
   return 1 + safeLevel * 0.05;
 }
 
-export function getSunEfficiencyPercent(system: number): number {
+/** Base (maximum) efficiency of a system's Sun. */
+export function getBaseSunEfficiencyPercent(system: number): number {
   const safeSystem = safeInteger(system);
   return SUN_EFFICIENCY_BY_SYSTEM[safeSystem] ?? SUN_EFFICIENCY_BY_SYSTEM[1];
 }
 
-export function getSunMultiplier(system: number): number {
-  return getSunEfficiencyPercent(system) / 100;
+/**
+ * Current brightness of Suns dimmed by command raids, keyed `galaxy:system`.
+ * Published by the Sun raid layer from the save; a Sun absent here shines at
+ * its base value, so a campaign without raids is bit-for-bit unchanged.
+ */
+let sunBrightnessOverrides: ReadonlyMap<string, number> = new Map();
+
+export function setSunBrightnessOverrides(overrides: Readonly<Record<string, number>>): void {
+  sunBrightnessOverrides = new Map(Object.entries(overrides).filter(([, value]) => Number.isFinite(value) && value >= 0));
+}
+
+export function getSunEfficiencyPercent(system: number, galaxy?: number): number {
+  if (galaxy !== undefined) {
+    const override = sunBrightnessOverrides.get(`${safeInteger(galaxy)}:${safeInteger(system)}`);
+    if (override !== undefined) return override;
+  }
+  return getBaseSunEfficiencyPercent(system);
+}
+
+export function getSunMultiplier(system: number, galaxy?: number): number {
+  return getSunEfficiencyPercent(system, galaxy) / 100;
 }
 
 export function getPositionCoefficientPercent(position: number): number {
@@ -145,11 +166,12 @@ export function calculateSolarStationContribution(
   physicsLevel = 0,
   system = 1,
   position = 1,
+  galaxy?: number,
 ): number {
   return roundEnergy(
     tableValue('basic-energy', level)
     * getPhysicsMultiplier(physicsLevel)
-    * getSunMultiplier(system)
+    * getSunMultiplier(system, galaxy)
     * getPositionMultiplier(position),
   );
 }
@@ -163,12 +185,13 @@ export function calculateSolarSatelliteContribution(
   physicsLevel = 0,
   system = 1,
   position = 1,
+  galaxy?: number,
 ): number {
   return roundEnergy(
     safeInteger(count)
     * SOLAR_SATELLITE_BASE_ENERGY
     * getPhysicsMultiplier(physicsLevel)
-    * getSunMultiplier(system)
+    * getSunMultiplier(system, galaxy)
     * getPositionMultiplier(position),
   );
 }
@@ -203,7 +226,7 @@ export function calculateEnergySources(input: EnergySourceBuildInput = {}): Ener
   const buildings = input.buildings ?? {};
   const physicsLevel = normalizePhysicsLevel(input);
   const physicsMultiplier = getPhysicsMultiplier(physicsLevel);
-  const sunMultiplier = getSunMultiplier(input.system ?? 1);
+  const sunMultiplier = getSunMultiplier(input.system ?? 1, input.galaxy);
   const positionMultiplier = getPositionMultiplier(input.position ?? 1);
   const sources: EnergySourceSnapshot[] = [];
   const solarLevel = safeInteger(buildings['basic-energy']);

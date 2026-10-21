@@ -261,3 +261,17 @@ test('seeded stream materializes into the canonical reproducible 0..99 roll', ()
   assert.equal(Number.isInteger(materialize()), true);
   assert.equal(materialize() >= 0 && materialize() <= 99, true);
 });
+
+test('«Найти обломки» scans 20 systems around the selected planet, same galaxy, Suns included', async () => {
+  const { findDebrisNearSystem, nearbySystemWindow } = await import('./orbital-debris.ts');
+  assert.deepEqual(nearbySystemWindow(1), { from: 1, to: 20 });
+  assert.deepEqual(nearbySystemWindow(11), { from: 1, to: 20 });
+  assert.deepEqual(nearbySystemWindow(30), { from: 20, to: 39 });
+  assert.deepEqual(nearbySystemWindow(40), { from: 21, to: 40 });
+  const at = (galaxy: number, system: number, position: number, debris: number) => ({ coordinate: { galaxy, system, position }, debris });
+  const found = findDebrisNearSystem([
+    at(1, 25, 4, 500), at(1, 2, 0, 900), at(1, 3, 7, 0), at(2, 1, 3, 100), at(1, 1, 5, 40),
+  ], { galaxy: 1, system: 1 });
+  assert.deepEqual(found.map((item) => item.coordinate), [{ galaxy: 1, system: 1, position: 5 }, { galaxy: 1, system: 2, position: 0 }]);
+  assert.deepEqual(findDebrisNearSystem([at(1, 25, 4, 500)], { galaxy: 1, system: 30 }).length, 1);
+});

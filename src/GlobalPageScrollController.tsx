@@ -117,11 +117,12 @@ export function GlobalPageScrollController() {
       // contents. Measure the incoming page from the normal shell first; otherwise
       // a root with min-height: 100% can inherit the previous page's height and keep
       // the global scroll mode alive indefinitely.
+      // The reset and the re-measure below happen in the same task (layout is
+      // flushed synchronously by getBoundingClientRect), so the intermediate
+      // fixed shell is never painted and the page does not flicker.
       if (pageChanged && root.classList.contains('asterion-long-page')) {
         root.classList.remove('asterion-long-page');
         clearGeometry();
-        schedule();
-        return;
       }
 
       // Resource/planet zones are fixed-screen compositions. Their scene and
@@ -152,6 +153,18 @@ export function GlobalPageScrollController() {
           : baseWorkspaceHeight;
       const contentHeight = measureContentHeight(pageContainer, stageScale, pageRoots);
       const needsScroll = contentHeight > availableHeight + OVERFLOW_EPSILON;
+
+      // A root stretched to its container (min-height: 100%) always measures the
+      // current workspace height; growing the workspace again would grow it
+      // forever (endless scroll). Content that merely fills the page is not taller.
+      const currentWorkspaceHeight = Number.parseFloat(root.style.getPropertyValue('--asterion-scroll-workspace-height'));
+      const fillsCurrentPage = root.classList.contains('asterion-long-page')
+        && Number.isFinite(currentWorkspaceHeight)
+        && contentHeight >= currentWorkspaceHeight - OVERFLOW_EPSILON;
+      if (needsScroll && fillsCurrentPage) {
+        observeCurrentPage(pageRoots);
+        return;
+      }
 
       if (needsScroll) {
         const workspaceHeight = Math.ceil(contentHeight + PAGE_BOTTOM_PADDING);
@@ -192,6 +205,8 @@ export function GlobalPageScrollController() {
     });
 
     window.addEventListener('resize', schedule);
+    // Entrances (src/motion.css) translate a screen for ~300 ms: re-measure once they settle.
+    document.addEventListener('animationend', schedule);
     schedule();
 
     return () => {
@@ -200,6 +215,7 @@ export function GlobalPageScrollController() {
       window.cancelAnimationFrame(frame);
       window.clearTimeout(delayed);
       window.removeEventListener('resize', schedule);
+      document.removeEventListener('animationend', schedule);
       root.classList.remove('asterion-long-page');
       clearGeometry();
     };

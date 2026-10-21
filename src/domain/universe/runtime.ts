@@ -41,6 +41,19 @@ export const GALAXY_COUNT = 1;
 export const SYSTEM_COUNT = 40;
 export const POSITION_COUNT = 24;
 export const MAX_PLANETS_PER_OWNER = 7;
+/** World generator limit: a campaign may have 1..10 galaxies of 40 systems each. */
+export const MAX_GALAXY_COUNT = 10;
+
+let activeGalaxyCount = GALAXY_COUNT;
+
+/** Galaxies of the loaded campaign (`worldConfig.world.galaxyCount`); legacy saves keep one. */
+export function setActiveGalaxyCount(value: number): void {
+  activeGalaxyCount = Number.isSafeInteger(value) ? Math.min(MAX_GALAXY_COUNT, Math.max(1, value)) : GALAXY_COUNT;
+}
+
+export function getActiveGalaxyCount(): number {
+  return activeGalaxyCount;
+}
 
 export const ASTEROID_SPAWN_INTERVAL_MS = 60 * 60 * 1_000;
 export const ASTEROID_MIN_DWELL_MS = 15 * 60 * 1_000;
@@ -559,7 +572,7 @@ function createUniverseSystemBase(options: CreateUniverseSystemOptions, assets: 
     galaxy,
     system,
     starArt: pickAsset(assets.starArts, system - 1, 'star-default'),
-    sunEfficiencyPercent: getSunEfficiencyPercent(system),
+    sunEfficiencyPercent: getSunEfficiencyPercent(system, galaxy),
     positions,
     asteroids: [],
   };
@@ -808,8 +821,11 @@ export function getUniverseTimedObjectSchedule(
   const config = timedObjectConfig(kind);
   const safeIndex = Math.max(0, Math.floor(cycleIndex));
   const baseCycles = ensureTimedCycles(kind, galaxy, system, config.epoch + (safeIndex + 1) * (config.maxLifetimeMs + config.quietMs));
-  const cycles = kind === 'pirate'
-    ? applyPirateContactDefeatsToSchedules(baseCycles, galaxy, system, pirateContactDefeats)
+  const relevantDefeats = kind === 'pirate'
+    ? pirateContactDefeats.filter((record) => record.galaxy === galaxy && record.system === system)
+    : [];
+  const cycles = relevantDefeats.length
+    ? applyPirateContactDefeatsToSchedules(baseCycles, galaxy, system, relevantDefeats)
     : baseCycles;
   return cycles[safeIndex] ?? cycles[0];
 }
@@ -864,12 +880,15 @@ function activeTimedObjectSchedule(
   nowMs: number,
   pirateContactDefeats: readonly PirateContactDefeatRecord[] = [],
 ) {
-  const defeatCount = kind === 'pirate'
-    ? pirateContactDefeats.filter((record) => record.galaxy === galaxy && record.system === system).length
-    : 0;
-  const baseCycles = ensureTimedCycles(kind, galaxy, system, nowMs + defeatCount * PIRATE_MAX_LIFETIME_MS);
-  const cycles = kind === 'pirate'
-    ? applyPirateContactDefeatsToSchedules(baseCycles, galaxy, system, pirateContactDefeats)
+  const relevantDefeats = kind === 'pirate'
+    ? pirateContactDefeats.filter((record) => record.galaxy === galaxy && record.system === system)
+    : [];
+  const baseCycles = ensureTimedCycles(kind, galaxy, system, nowMs + relevantDefeats.length * PIRATE_MAX_LIFETIME_MS);
+  // Without defeats in this system the canonical schedule is already final:
+  // re-mapping every cycle since the epoch on each 1 s render was the
+  // Universe screen's main-thread hitch (see getPirateContactCyclesBetween).
+  const cycles = relevantDefeats.length
+    ? applyPirateContactDefeatsToSchedules(baseCycles, galaxy, system, relevantDefeats)
     : baseCycles;
   for (let index = cycles.length - 1; index >= 0; index -= 1) {
     const cycle = cycles[index];

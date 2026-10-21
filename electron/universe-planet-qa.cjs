@@ -820,6 +820,8 @@ async function runViewport(width, height) {
     const launchContext = await win.webContents.executeJavaScript(`document.querySelector('.fleet-workspace-v1')?.getAttribute('data-qa-flight-launch-context') || ''`);
     if (launchContext !== freeAsteroid.targetCoordinate) throw new Error(`${label}: asteroid colonization target context was not preserved ${JSON.stringify({ launchContext, target: freeAsteroid.targetCoordinate })}`);
     await waitFor(win, `document.querySelector('[data-qa-flight-preview-open]') && !document.querySelector('[data-qa-flight-preview-open]').disabled`);
+    // Let the screen entrance (src/motion.css) settle before measuring geometry; ambient loops are infinite and ignored.
+    await waitFor(win, `document.getAnimations().every((animation) => animation.playState !== 'running' || animation.effect?.getComputedTiming().iterations === Infinity)`);
     const geometryBeforePreview = await win.webContents.executeJavaScript(`(() => { const rect = (selector) => document.querySelector(selector)?.getBoundingClientRect().toJSON() || null; return { fleet: rect('.fleet-workspace-v1'), sidebar: rect('.fleet-sidebar-v1'), horizontalOverflow: document.documentElement.scrollWidth > innerWidth + 2 || document.body.scrollWidth > innerWidth + 2 }; })()`);
     await clickAt(win, '[data-qa-flight-preview-open]', false, true, true);
     await waitFor(win, `document.querySelector('[data-qa-flight-preview-backdrop]')`);

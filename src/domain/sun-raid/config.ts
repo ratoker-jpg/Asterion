@@ -1,0 +1,42 @@
+/**
+ * Every Sun raid / crystal / Gate number lives here. Logic never carries
+ * literals: balance changes are made in this table only.
+ */
+export const SUN_RAID_CONFIG = Object.freeze({
+  /** Chance that a won raid yields a crystal (the holder must still miss at least one). */
+  crystalChance: 0.7,
+  /** Brightness (efficiency percentage points) lost by a Sun per won raid. */
+  brightnessLossPerWin: 5,
+  /** At or below this brightness the Sun is frozen: it cannot be attacked. */
+  frozenThreshold: 25,
+  /** Recovery after a freeze: +step every stepMs up to the Sun's base efficiency. */
+  recoverStepPercent: 5,
+  recoverStepMs: 2 * 60 * 60 * 1000,
+  /** Population cap of each side (attack and defence) of one Sun battle. */
+  populationCapPerSide: 225_000,
+  /** Fixed one-way travel to any Sun, independent of distance and ship speed. */
+  flightOneWayMs: 3 * 60 * 60 * 1000,
+  /** Gate construction (scaled by campaign / Test Mode speed like every timer). */
+  gateBuildMs: 12 * 60 * 60 * 1000,
+  /** Delay before a holder may restart a destroyed Gate. */
+  gateRestartCooldownMs: 24 * 60 * 60 * 1000,
+  gateMilestones: [25, 50, 75, 90] as readonly number[],
+  crystalCount: 4,
+  /** No neutral guard: a Sun without defenders falls to the attackers. Kept for a future NPC stage. */
+  neutralGuardEnabled: false,
+  // Standard battle rules: the same 12-round profile as a regular attack.
+  maxRounds: 12 as const,
+  historyLimit: 64,
+});
+
+export type SolarCrystalId = 'crystal-1' | 'crystal-2' | 'crystal-3' | 'crystal-4';
+
+export const SOLAR_CRYSTAL_IDS: readonly SolarCrystalId[] = ['crystal-1', 'crystal-2', 'crystal-3', 'crystal-4'];
+
+/** Names and colours chosen for Asterion (doc 25 only fixes that there are four). */
+export const SOLAR_CRYSTALS: Readonly<Record<SolarCrystalId, { name: string; short: string; color: string; glow: string; lore: string }>> = Object.freeze({
+  'crystal-1': { name: 'Кристалл Короны', short: 'Корона', color: '#ffc94a', glow: '#ff9d1f', lore: 'Застывший свет солнечной короны.' },
+  'crystal-2': { name: 'Кристалл Прилива', short: 'Прилив', color: '#5fe6ff', glow: '#1fa8ff', lore: 'Холодная плазма магнитного прилива.' },
+  'crystal-3': { name: 'Кристалл Затмения', short: 'Затмение', color: '#b58cff', glow: '#7a3cff', lore: 'Тень, отбрасываемая звездой на саму себя.' },
+  'crystal-4': { name: 'Кристалл Вспышки', short: 'Вспышка', color: '#ff6b5a', glow: '#ff2d3f', lore: 'Сердцевина протуберанца, сжатая в камень.' },
+});

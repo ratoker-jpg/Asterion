@@ -53,13 +53,29 @@ export function calculateBaseTimeMinutes(origin: UniverseCoordinate, destination
   return 3 + 6 * delta.galaxy + 0.08 * delta.system + 0.02 * delta.position;
 }
 
+/** Any fleet with a real hull needs at least 3 minutes one way. */
+export const MIN_ONE_WAY_DURATION_MS = 3 * 60_000;
+/** Recon (a fleet of spy probes only) is bounded by the probe's speed alone: at least 3 seconds. */
+export const MIN_RECON_ONE_WAY_DURATION_MS = 3_000;
+
+/** True for a recon fleet: spy probes only, no commanders. */
+export function isReconOnlyFleet(
+  selectedShips: Partial<Record<ShipId, number>>,
+  selectedCommanders: Partial<Record<CommanderId, number>> = {},
+): boolean {
+  const ships = (Object.entries(selectedShips) as [ShipId, number][]).filter(([, quantity]) => Number.isInteger(quantity) && quantity > 0);
+  return ships.length > 0 && ships.every(([id]) => id === 'spy-probe')
+    && !Object.values(selectedCommanders).some((quantity) => Number.isInteger(quantity) && (quantity ?? 0) > 0);
+}
+
 export function calculateOneWayDurationMs(
   origin: UniverseCoordinate,
   destination: UniverseCoordinate,
   effectiveSpeed: number,
+  minimumMs: number = MIN_ONE_WAY_DURATION_MS,
 ): number {
   if (!Number.isFinite(effectiveSpeed) || effectiveSpeed <= 0) throw new Error('Effective speed must be positive.');
   const speedFactor = (20_000 / effectiveSpeed) ** 0.25;
-  const oneWayMinutes = Math.max(3, calculateBaseTimeMinutes(origin, destination) * speedFactor / 1.5);
-  return Math.round(oneWayMinutes * 60_000);
+  const oneWayMs = calculateBaseTimeMinutes(origin, destination) * speedFactor / 1.5 * 60_000;
+  return Math.round(Math.max(minimumMs, oneWayMs));
 }

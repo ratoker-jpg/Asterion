@@ -635,9 +635,10 @@ test('spy probe duration uses the common speed, distance and Test Mode scale cal
   const result = dispatchFlight(initial, spyCommand(initial, 'spy-flight-time', targetId), { now: 1_000, mode: 'test', testTimeScale: 15 });
   assert.equal(result.ok, true);
   if (!result.ok) return;
-  const expectedUnscaled = calculateOneWayDurationMs(result.flight.originCoordinate, result.flight.destinationCoordinate, result.flight.effectiveSpeed);
+  // Recon is bounded by the probe's speed alone: a 3-second floor instead of the fleets' 3 minutes.
+  const expectedUnscaled = calculateOneWayDurationMs(result.flight.originCoordinate, result.flight.destinationCoordinate, result.flight.effectiveSpeed, 3_000);
   assert.equal(result.flight.oneWayDurationMs, scaleRuntimeDuration(expectedUnscaled, 'test', 15));
-  assert.notEqual(result.flight.oneWayDurationMs, 3_000);
+  assert.ok(expectedUnscaled >= 3_000 && expectedUnscaled < 3 * 60_000, `probe one-way ${expectedUnscaled} ms`);
 });
 
 test('neutral to ally during outbound transit starts an irreversible automatic return', () => {

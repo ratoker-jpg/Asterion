@@ -140,6 +140,9 @@ function systemForState(state: SaveState, galaxy: number, system: number, now: n
     playerPlanets: persistedPlayerPlanets(state),
     registeredPlanets: registeredUniverseTargets(state),
     pirateContactDefeats: Object.values(pirate.contact.defeatedCycles),
+    // The save's asteroid positions (as on the Universe map) instead of
+    // re-simulating every asteroid route on each 1 s render.
+    ...(state.asteroidSimulation ? { asteroidStates: state.asteroidSimulation.asteroids } : {}),
   });
 }
 

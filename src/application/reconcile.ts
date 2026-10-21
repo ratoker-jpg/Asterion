@@ -15,6 +15,7 @@ import { reconcileResourceIncome } from './resource-clock.ts';
 import type { ResourceCreditResult } from '../domain/resources/credit.ts';
 import type { FleetProductionCompletion } from '../domain/fleet/production.ts';
 import { reconcileFlights, type FlightReconcileEvent } from './flights.ts';
+import { reconcileSunRaids, type SunRaidNotice } from './sun-raid.ts';
 import { reconcileAidMembership, syncAidState } from './alliance-aid.ts';
 import { selectDuePirateRolls, resolveDuePirateRoll } from './pirate-raids.ts';
 import { advanceExplorationNpcProgress, selectDueExplorationNpcRolls, resolveDueExplorationNpcRoll } from './exploration-npc.ts';
@@ -37,6 +38,7 @@ export type RuntimeReconcileEvent =
   | { kind: 'spaceport'; planetId: string; tasks: Array<{ track: SpaceportUpgradeTrack; shipId: string }> }
   | { kind: 'fleet-production'; planetId: string; completed: FleetProductionCompletion[] }
   | { kind: 'flight'; events: FlightReconcileEvent[] }
+  | { kind: 'sun-raid'; notices: SunRaidNotice[] }
   | { kind: 'pirate-raid-check'; ownerId: string; contactCycleKey: string; flightId?: string };
 
 export type RuntimeReconcileResult = {
@@ -185,11 +187,16 @@ export function reconcileRuntime(
     const advanced = advanceUniverseAsteroidSimulationAt(simulation, at, 1);
     next = { ...next, asteroidSimulation: advanced.state };
     for (const transition of advanced.transitions) {
-      const espionage = getEspionageState(next);
-      const freeDebris = getOrbitalDebrisAtCoordinate(espionage, transition.fromCoordinate);
       const key = String(transition.spawnIndex);
+      // An asteroid on the first position of a system also sweeps the Sun's debris (position 0).
+      const sweep = transition.fromCoordinate.position === 1
+        ? [transition.fromCoordinate, { ...transition.fromCoordinate, position: 0 }]
+        : [transition.fromCoordinate];
+      for (const coordinate of sweep) {
+      const espionage = getEspionageState(next);
+      const freeDebris = getOrbitalDebrisAtCoordinate(espionage, coordinate);
       if (freeDebris > 0) {
-        const captured = collectOrbitalDebrisAtCoordinate(espionage, transition.fromCoordinate, freeDebris);
+        const captured = collectOrbitalDebrisAtCoordinate(espionage, coordinate, freeDebris);
         if (captured.collected > 0) {
           const previousCargo = Math.max(0, Math.floor(next.asteroidDebrisBySpawnIndex?.[key] ?? 0));
           next = {
@@ -201,6 +208,7 @@ export function reconcileRuntime(
             },
           };
         }
+      }
       }
 
       // The final boundary transition still vacates its last coordinate and
@@ -239,7 +247,12 @@ export function reconcileRuntime(
       next = flights.state;
       if (flights.events.length > 0) events.push({ kind: 'flight', events: flights.events });
     }
-    return flights.changed && beforeSystems !== raidSystemFootprint(next);
+    // Sun raids run after ordinary arrivals: a Bot 01 assault resolved at this
+    // checkpoint can already destroy a Gate, and Sun battles see the same clock.
+    const sun = reconcileSunRaids(next, { now: at, mode: context.mode, testTimeScale: context.testTimeScale });
+    if (sun.changed) next = sun.state;
+    if (sun.notices.length) events.push({ kind: 'sun-raid', notices: sun.notices });
+    return (flights.changed || sun.changed) && beforeSystems !== raidSystemFootprint(next);
   };
 
   let processedThrough = Number.NEGATIVE_INFINITY;

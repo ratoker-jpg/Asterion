@@ -1,0 +1,103 @@
+/* In-game pause menu and campaign result (portaled to body, viewport-sized). */
+
+.igo-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(1, 4, 8, .74);
+  backdrop-filter: blur(6px);
+  font-family: Montserrat, Arial, sans-serif;
+  color: #eaf6fb;
+}
+.igo-pause {
+  position: relative;
+  width: min(760px, 100%);
+  min-height: 460px;
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  border-radius: var(--ut-r-panel);
+  border: 1px solid var(--race-border);
+  background: linear-gradient(120deg, color-mix(in srgb, var(--race-accent-strong) 16%, rgba(6, 12, 17, .98)), rgba(6, 12, 17, .98) 55%);
+  box-shadow: 0 30px 110px rgba(0, 0, 0, .7);
+  overflow: hidden;
+}
+.igo-pause__general { align-self: end; justify-self: center; width: 250px; height: 440px; object-fit: contain; object-position: bottom center; margin-bottom: 0; filter: drop-shadow(0 0 30px var(--race-glow)); }
+.igo-pause__copy { display: flex; flex-direction: column; gap: 10px; padding: 34px 34px 30px 10px; min-width: 0; }
+.igo-pause__copy small { color: var(--race-accent); font-size: 12px; font-weight: 700; letter-spacing: .22em; }
+body .igo-pause .igo-pause__copy h2 { margin: 0; font-size: 26px !important; font-weight: 800; overflow-wrap: anywhere; }
+.igo-pause__copy p { margin: 0 0 8px; color: #9fbcc6; font-size: 12px; }
+.igo-pause__nav { display: grid; gap: 10px; }
+.igo-btn {
+  min-height: 46px;
+  padding: 0 22px;
+  border-radius: var(--ut-r-btn);
+  border: 1px solid var(--ut-border-strong);
+  background: rgba(8, 18, 26, .9);
+  color: #e3f4fa;
+  font: 700 13px Montserrat, sans-serif;
+  letter-spacing: .14em;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms, background 160ms, transform 160ms;
+}
+.igo-btn:hover { border-color: var(--race-accent); background: rgba(16, 32, 44, .95); transform: translateX(4px); }
+.igo-btn:focus-visible { outline: var(--ut-focus); outline-offset: 2px; }
+.igo-btn--primary { border-color: transparent; background: linear-gradient(135deg, var(--race-accent-strong), color-mix(in srgb, var(--race-accent-strong) 50%, #0b1720)); color: #fff; box-shadow: 0 8px 24px var(--race-glow); }
+.igo-btn--danger { border-color: rgba(240, 68, 94, .5); color: #ffb3bf; }
+.igo-btn--danger:hover { border-color: var(--ut-danger); background: rgba(240, 68, 94, .16); }
+.igo-confirm { display: grid; gap: 10px; padding: 16px; border-radius: var(--ut-r-card); border: 1px solid rgba(240, 68, 94, .45); background: rgba(240, 68, 94, .08); }
+.igo-confirm b { font-size: 15px; }
+.igo-confirm span { color: #f3c4cb; font-size: 12px; line-height: 1.5; }
+.igo-confirm div { display: flex; gap: 10px; }
+
+.igo-result {
+  position: fixed;
+  inset: 0;
+  z-index: 10060;
+  display: grid;
+  grid-template-columns: minmax(0, 620px) 1fr;
+  align-items: center;
+  gap: 40px;
+  padding: 40px 80px;
+  overflow: hidden;
+  background: #010307;
+  font-family: Montserrat, Arial, sans-serif;
+  color: #f2fbff;
+  animation: igo-fade .9s ease both;
+}
+.igo-result__art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 70% center; animation: igo-drift 40s ease-in-out infinite alternate; }
+.igo-result.is-defeat .igo-result__art { filter: saturate(.85) brightness(.9); }
+.igo-result__shade { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(1, 4, 8, .92) 0%, rgba(1, 4, 8, .7) 32%, rgba(1, 4, 8, .08) 62%, transparent 100%); }
+.igo-result__copy { position: relative; display: grid; gap: 14px; padding: 34px 36px; border-radius: var(--ut-r-panel); border: 1px solid var(--race-border); background: rgba(5, 11, 16, .86); backdrop-filter: blur(6px); animation: igo-rise 1s cubic-bezier(.22, 1, .36, 1) .5s both; }
+.igo-result.is-defeat .igo-result__copy { border-color: rgba(240, 68, 94, .45); }
+.igo-result__copy small { color: var(--race-accent); font-size: 12px; font-weight: 700; letter-spacing: .3em; }
+body .igo-result .igo-result__copy h1 { margin: 0; font-size: 72px !important; font-weight: 800; letter-spacing: .14em; line-height: 1; background: linear-gradient(180deg, #fff, var(--race-accent)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.igo-result.is-defeat body .igo-result .igo-result__copy h1 { background: linear-gradient(180deg, #fff, #ff8e9e); -webkit-background-clip: text; background-clip: text; }
+.igo-result__copy p { margin: 0; color: #c8dde5; font-size: 14px; line-height: 1.6; }
+.igo-result__copy dl { margin: 0; display: grid; gap: 2px; }
+.igo-result__copy dl div { display: grid; grid-template-columns: 160px 1fr; gap: 12px; padding: 8px 0; border-bottom: 1px solid rgba(126, 200, 220, .08); }
+.igo-result__copy dt { color: var(--ut-label); font-size: 12px; }
+.igo-result__copy dd { margin: 0; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.igo-result__actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+.igo-result__actions .igo-btn { text-align: center; }
+
+@keyframes igo-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes igo-drift { from { transform: scale(1); } to { transform: scale(1.05); } }
+@keyframes igo-rise { from { opacity: 0; transform: translateY(24px) scale(.97); } to { opacity: 1; transform: none; } }
+
+@media (max-width: 1100px) {
+  .igo-result { grid-template-columns: 1fr; padding: 24px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .igo-result, .igo-result *, .igo-backdrop * { animation: none !important; }
+}
+
+.igo-speed { display: grid; gap: 6px; padding: 8px 0 2px; }
+.igo-speed small { color: var(--ut-label); font-size: 11px; font-weight: 700; letter-spacing: .16em; }
+.igo-speed > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.igo-speed button { min-width: 52px; height: 34px; border-radius: var(--ut-r-chip); border: 1px solid var(--ut-border); background: rgba(8, 18, 26, .9); color: #cfe6ef; font: 700 12px Montserrat, sans-serif; cursor: pointer; }
+.igo-speed button.is-on { border-color: var(--race-accent); background: var(--race-fill); color: #fff; }
+.igo-speed button:focus-visible { outline: var(--ut-focus); outline-offset: 2px; }

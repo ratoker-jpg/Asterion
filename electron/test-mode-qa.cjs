@@ -33,7 +33,7 @@ async function settle(win) {
 
 async function loadMode(win, mode) {
   const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-  await win.loadFile(path.join(ROOT, 'dist', 'index.html'), mode === 'test' ? { search: '?mode=test' } : undefined);
+  await win.loadFile(path.join(ROOT, 'dist', 'index.html'), { search: mode === 'test' ? '?mode=test' : '?autostart=continue' });
   await done;
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await waitFor(win, `localStorage.getItem(${JSON.stringify(mode === 'test' ? TEST_KEY : PRODUCTION_KEY)})`);
@@ -74,6 +74,8 @@ async function clickText(win, selector, text) {
 }
 
 async function clickTestModeReset(win, label) {
+  // The reset lives in the in-game menu (≡ / Esc) and asks for confirmation.
+  await click(win, '[data-qa-pause-open]');
   const resetControl = await win.webContents.executeJavaScript(`(() => {
     const button = document.querySelector('[data-qa-reset-progress]');
     if (!button || button.disabled) return null;
@@ -87,6 +89,7 @@ async function clickTestModeReset(win, label) {
     throw new Error(`${label}: reset control contract mismatch ${JSON.stringify(resetControl)}`);
   }
   await click(win, '[data-qa-reset-progress]');
+  await click(win, '[data-qa-pause-restart-confirm]');
 }
 
 async function capture(win, directory, name, { nativeCapture = false } = {}) {
@@ -146,6 +149,9 @@ function hasRepairFixture(envelope, amount) {
 }
 
 async function seedTestRuntime(win, changes = {}) {
+  // The running game saves every tick: write the seed and reload in one task so
+  // no autosave can land in between and overwrite it.
+  const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
   const ok = await win.webContents.executeJavaScript(`(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
     const planet = save?.planets?.['helion-01'];
@@ -168,9 +174,13 @@ async function seedTestRuntime(win, changes = {}) {
     save.gas = resourceWallet.gas;
     planet.energy = ${changes.energy ?? 1_000_000};
     localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
+    window.location.reload();
     return true;
   })()`);
   if (!ok) throw new Error('Could not seed Test Mode runtime');
+  await loaded;
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+  await settle(win);
   if (changes.resourceClock) {
     const seeded = await readEnvelope(win,TEST_KEY);
     console.log('[qa:pr91:resource-seed]',JSON.stringify({
@@ -180,7 +190,6 @@ async function seedTestRuntime(win, changes = {}) {
       hostileFlights:seeded?.flights?.records?.filter(x=>x.ownerSide==='pirate').length,
     }));
   }
-  await reload(win, 'test');
   if (changes.resourceClock && changes.resourceClock.lastReconciledAt < Date.now() - 60_000) {
     // Wait for actual persisted passive income reconciliation after loading a
     // backdated clock; the assertions themselves are unchanged. This applies
@@ -203,6 +212,7 @@ async function openSpaceport(win, track = 'ships') {
   await waitFor(win, `document.querySelector('[data-qa-zone-view][data-zone="military"]')`);
   await click(win, '[data-zone-building-role="spaceport"]');
   await waitFor(win, `document.querySelector('[data-qa-building-dialog="spaceport"]')`);
+  await waitFor(win, `document.querySelector('[data-qa-enter-building="spaceport"]')`);
   await click(win, '[data-qa-enter-building="spaceport"]');
   await waitFor(win, `document.querySelector('[data-qa-spaceport-upgrades]')`);
   if (track === 'commanders') await click(win, '[data-qa-spaceport-tab="commanders"]');
@@ -449,9 +459,12 @@ async function runViewport(width, height) {
   });
 
   try {
+    // Save slots left by other QA runs would win ?autostart=continue: clear them first.
+    await win.loadFile(path.join(ROOT, 'dist', 'index.html'));
+    await win.webContents.executeJavaScript(`Object.keys(localStorage).filter((key) => key === 'asterion.slots.index.v1' || key.startsWith('asterion.slot.')).forEach((key) => localStorage.removeItem(key));`);
     await loadMode(win, 'production');
     win.webContents.debugger.attach('1.3');
-    await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(PRODUCTION_KEY)}); localStorage.removeItem(${JSON.stringify(TEST_KEY)}); localStorage.removeItem(${JSON.stringify(TEST_TIME_SCALE_KEY)});`);
+    await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(PRODUCTION_KEY)}); localStorage.removeItem(${JSON.stringify(TEST_KEY)}); localStorage.removeItem(${JSON.stringify(TEST_TIME_SCALE_KEY)}); /* save slots from other QA runs would win ?autostart=continue */ Object.keys(localStorage).filter((key) => key === 'asterion.slots.index.v1' || key.startsWith('asterion.slot.')).forEach((key) => localStorage.removeItem(key));`);
     await reload(win, 'production');
     const productionInitial = await readQaState(win);
     if (productionInitial.mode !== 'production' || productionInitial.banner || productionInitial.testResources.metal === 1_000_000 || !productionInitial.scienceLevels || Object.values(productionInitial.scienceLevels).some((level) => level !== 0) || await win.webContents.executeJavaScript(`document.querySelectorAll('[data-qa-test-speed]').length`) !== 0) {

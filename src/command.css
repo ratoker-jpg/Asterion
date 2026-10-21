@@ -67,7 +67,7 @@
 }
 
 /* ---------- buttons (all buttons of the screen share one skin) ---------- */
-.command-view.cmdA button,
+.command-view.cmdA button:where(:not(.srp-host *, .srp-portal *)),
 .command-dialog button {
   display: inline-flex;
   align-items: center;
@@ -88,11 +88,11 @@
   cursor: pointer;
   transition: background var(--ut-motion-fast) ease, border-color var(--ut-motion-fast) ease, box-shadow var(--ut-motion-fast) ease;
 }
-.command-view.cmdA button:hover:not(:disabled),
+.command-view.cmdA button:where(:not(.srp-host *, .srp-portal *)):hover:not(:disabled),
 .command-dialog button:hover:not(:disabled) { border-color: rgba(86,217,242,.55); background: rgba(86,217,242,.12); }
-.command-view.cmdA button:focus-visible,
+.command-view.cmdA button:where(:not(.srp-host *, .srp-portal *)):focus-visible,
 .command-dialog button:focus-visible { outline: var(--ut-focus); outline-offset: 2px; }
-.command-view.cmdA button:disabled,
+.command-view.cmdA button:where(:not(.srp-host *, .srp-portal *)):disabled,
 .command-dialog button:disabled { opacity: .42; cursor: not-allowed; }
 .command-view.cmdA button.primary,
 .command-dialog button.primary {

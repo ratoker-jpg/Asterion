@@ -27,7 +27,7 @@ async function waitFor(win, expression, timeoutMs = 10_000) {
 
 async function load(win, mode) {
   const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-  await win.loadFile(path.join(ROOT, 'dist', 'index.html'), mode === 'test' ? { search: '?mode=test' } : undefined);
+  await win.loadFile(path.join(ROOT, 'dist', 'index.html'), { search: mode === 'test' ? '?mode=test' : '?autostart=continue' });
   await done;
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await waitFor(win, `localStorage.getItem(${JSON.stringify(mode === 'test' ? TEST_KEY : PRODUCTION_KEY)})`);
@@ -116,7 +116,7 @@ function assert(condition, message, detail) {
 
 async function productionScenario(win, label) {
   await load(win, 'production');
-  await run(win, `localStorage.removeItem(${JSON.stringify(PRODUCTION_KEY)}); localStorage.removeItem(${JSON.stringify(TEST_KEY)});`);
+  await run(win, `localStorage.removeItem(${JSON.stringify(PRODUCTION_KEY)}); localStorage.removeItem(${JSON.stringify(TEST_KEY)}); /* save slots from other QA runs would win ?autostart=continue */ Object.keys(localStorage).filter((key) => key === 'asterion.slots.index.v1' || key.startsWith('asterion.slot.')).forEach((key) => localStorage.removeItem(key));`);
   await reload(win, 'production');
 
   // 1. No Hall anywhere: locked, race art, build action, nothing fabricated.

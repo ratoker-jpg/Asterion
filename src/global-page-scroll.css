@@ -17,15 +17,12 @@
   scrollbar-gutter: auto;
 }
 
-/* Fleet can cross the fixed/long-page boundary when a dispatch changes the
-   roster height. Keep the document width invariant so the workspace does not
-   jump when the shared scrollbar appears or disappears. */
-html:has(.fleet-workspace-v1),
-html:has(.fleet-workspace-v1) body,
-html:has(.fleet-workspace-v1) #root {
-  overflow-y: auto;
-  scrollbar-gutter: stable;
-}
+/* Geometry invariants (no jumps when a page crosses the fixed/long boundary):
+   - the stage is always centred on the full window width (50vw), so a document
+     scrollbar never shifts it sideways; no element reserves a scrollbar gutter;
+   - its top is the same letterbox offset in both modes (--asterion-stage-top, App);
+   - backgrounds are identical in both modes: the starfield is one 1920×1080 tile
+     at the top of the stage, the Fleet workspace keeps its translucent wash. */
 
 html.asterion-long-page,
 html.asterion-long-page body,
@@ -35,7 +32,6 @@ html.asterion-long-page #root {
   min-height: 100%;
   overflow-x: hidden !important;
   overflow-y: auto !important;
-  scrollbar-gutter: stable;
   background: #010307;
 }
 
@@ -59,12 +55,13 @@ html.asterion-long-page.asterion-repair-page .stage,
 html.asterion-long-page.asterion-combat-priority-page .stage {
   position: absolute !important;
   left: 50vw !important;
-  top: 0 !important;
+  top: var(--asterion-stage-top, 0px) !important;
   margin-left: -960px !important;
   margin-top: 0 !important;
   height: var(--asterion-scroll-stage-height, 1080px) !important;
   overflow: visible !important;
   transform-origin: top center !important;
+  background: #020810 var(--space-bg) center top / 1920px 1080px no-repeat !important;
 }
 
 html.asterion-long-page .workspace,
@@ -82,9 +79,6 @@ html.asterion-long-page.asterion-combat-priority-page .fleet-workspace-v1 {
   min-height: var(--asterion-scroll-workspace-height, var(--hud-workspace-height, 776px)) !important;
   overflow: visible !important;
   align-items: start;
-  background:
-    radial-gradient(circle at 72% 14%, rgba(18, 119, 160, .09), transparent 30%),
-    linear-gradient(180deg, #031019 0%, #01080e 72%, #01060b 100%);
 }
 
 html.asterion-long-page .fleet-sidebar-v1 {

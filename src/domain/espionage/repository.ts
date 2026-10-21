@@ -281,8 +281,11 @@ function migrateOrbitalDebris(value: unknown): OrbitalDebrisRecord | null {
   const id = text(source.id);
   const targetPlanetId = text(source.targetPlanetId);
   const debris = nonNegative(source.debris, nonNegative(source.amount));
+  // Sun debris (`sun:G:S`) lie on position 0: the Sun itself.
+  const minPosition = /^sun:\d+:\d+$/.test(targetPlanetId) ? 0 : 1;
   if (!id || !targetPlanetId || debris <= 0
-    || ![coordinate.galaxy, coordinate.system, coordinate.position].every((part) => Number.isInteger(part) && Number(part) >= 1)) return null;
+    || ![coordinate.galaxy, coordinate.system].every((part) => Number.isInteger(part) && Number(part) >= 1)
+    || !Number.isInteger(coordinate.position) || Number(coordinate.position) < minPosition) return null;
   return {
     id,
     targetPlanetId,

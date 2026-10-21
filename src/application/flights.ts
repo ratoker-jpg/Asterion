@@ -1,4 +1,5 @@
 import { selectOwnerAlliance, selectOwnerMembership } from '../domain/command/selectors.ts';
+import { dispatchSunMission, getSunDebris, parseSunOperationId, sunDebrisCoordinate } from './sun-raid.ts';
 import {
   appendAidEvent,
   creditAidDelivery,
@@ -978,6 +979,47 @@ export function startBot01IncomingScenario(
     targetPlanetId = ownedIds[1];
   }
 
+  const launched = launchBot01PlanetAttack(state, working, source, targetPlanetId, `bot01-incoming-v1-${targetPlanetId}-seed-5`, now, options);
+  if (!launched.ok) return launched;
+  const { flight, target, targetCoordinate } = launched;
+  let next = launched.state;
+  let nextEspionage = next.espionage!;
+  nextEspionage = {
+    ...nextEspionage,
+    bot01IncomingScenario: {
+      version: 1,
+      status: 'in-flight',
+      flightId: flight.id,
+      targetPlanetId,
+      startedAt: now,
+    },
+  };
+  next = { ...next, espionage: nextEspionage };
+  return {
+    ok: true,
+    state: next,
+    flight,
+    created: launched.created,
+    notice: `Bot 01 отправил флот к ${target.name} [${targetCoordinate.galaxy}:${targetCoordinate.system}:${targetCoordinate.position}].`,
+  };
+}
+
+/**
+ * One Bot 01 attack flight against a player planet (death-star source, the
+ * same arrival resolver as the incoming-attack scenario). Shared by that
+ * scenario and the Test Mode Gate assault.
+ */
+function launchBot01PlanetAttack(
+  state: SaveState,
+  working: SaveState,
+  source: SpyTargetState,
+  targetPlanetId: string,
+  requestId: string,
+  now: number,
+  options: FlightRuntimeOptions,
+): ({ ok: true; state: SaveState; flight: FlightRecord; created: boolean; target: PlanetRuntime; targetCoordinate: UniverseCoordinate }) | FlightCommandFailure {
+  const espionage = working.espionage!;
+  if (!espionage.bot01Profile) return failure(state, 'target-not-available', 'Профиль Bot 01 недоступен в этом сохранении.');
   const target = working.planets[targetPlanetId];
   if (!target) return failure(state, 'target-not-available', 'Целевая планета для атаки недоступна.');
   const targetCoordinate = coordinateOfPlanet(target);
@@ -988,8 +1030,6 @@ export function startBot01IncomingScenario(
     Number.isInteger(source.fleet.commanders[commanderId]) && (source.fleet.commanders[commanderId] ?? 0) > 0
   )).map((commanderId) => [commanderId, source.fleet.commanders[commanderId]])) as Partial<Record<CommanderId, number>>;
   const attackSnapshot = createBot01IncomingAttackSnapshot(source, espionage.bot01Profile);
-  // This fixed suffix selects the versioned, deterministic Test Mode siege seed.
-  const requestId = `bot01-incoming-v1-${targetPlanetId}-seed-5`;
   const domainResult = dispatchDomainFlight(currentFlightState(working), {
     requestId,
     missionId: 'attack',
@@ -1044,23 +1084,37 @@ export function startBot01IncomingScenario(
       ...(nextEspionage.bot01Planets ? { bot01Planets: targets } : {}),
     };
   }
-  nextEspionage = {
-    ...nextEspionage,
-    bot01IncomingScenario: {
-      version: 1,
-      status: 'in-flight',
-      flightId: flight.id,
-      targetPlanetId,
-      startedAt: now,
-    },
-  };
-  next = { ...next, espionage: nextEspionage };
+  return { ok: true, state: { ...next, espionage: nextEspionage }, flight, created: domainResult.created, target, targetCoordinate };
+}
+
+/**
+ * Test Mode only: Bot 01 storms the planet that hosts a Gate under
+ * construction. Victory of the attackers destroys the Gate (see sun-raid).
+ */
+export function startBot01GateAssault(
+  state: SaveState,
+  targetPlanetId: string,
+  options: FlightRuntimeOptions = {},
+): FlightCommandResult {
+  if ((options.mode ?? 'production') !== 'test') {
+    return failure(state, 'invalid-command', 'Штурм Врат Ботом 01 доступен только в Test Mode.');
+  }
+  const now = options.now ?? Date.now();
+  const espionage = state.espionage;
+  if (!espionage?.bot01Profile) return failure(state, 'target-not-available', 'Профиль Bot 01 недоступен в этом сохранении.');
+  if (!state.planets[targetPlanetId]) return failure(state, 'target-not-available', 'Планета с Вратами недоступна.');
+  const source = Object.values(getEspionageTargets(espionage))
+    .filter((target) => target.ownerId === UNIVERSE_NPC_OWNER_ID && (target.fleet.ships['death-star'] ?? 0) > 0)
+    .sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0)[0];
+  if (!source) return failure(state, 'target-not-available', 'У Bot 01 нет планетолома для штурма.');
+  const launched = launchBot01PlanetAttack(state, state, source, targetPlanetId, `bot01-gate-assault-${targetPlanetId}-${now}`, now, options);
+  if (!launched.ok) return launched;
   return {
     ok: true,
-    state: next,
-    flight,
-    created: domainResult.created,
-    notice: `Bot 01 отправил флот к ${target.name} [${targetCoordinate.galaxy}:${targetCoordinate.system}:${targetCoordinate.position}].`,
+    state: launched.state,
+    flight: launched.flight,
+    created: launched.created,
+    notice: `Тест: Бот 01 штурмует ${launched.target.name} — цель удара Врата.`,
   };
 }
 
@@ -1187,6 +1241,22 @@ export function dispatchFlight(
   if (!requestId) return failure(state, 'invalid-command', 'Для отправки требуется requestId/commandId.');
   if (command.missionId === 'pirate-recon' || command.missionId === 'pirate-elimination') {
     return dispatchPirateFlight(state, command, runtimeOptions);
+  }
+  if (command.missionId === 'sun-support' || command.missionId === 'sun-attack') {
+    const now = Number.isFinite(command.departedAt) ? command.departedAt! : (runtimeOptions.now ?? Date.now());
+    const outcome = dispatchSunMission(state, {
+      requestId,
+      missionId: command.missionId,
+      originPlanetId: command.originPlanetId ?? state.currentPlanetId,
+      destination: command.destination as { kind: string; coordinate: UniverseCoordinate; operationId?: string } | undefined,
+      operationId: command.operationId,
+      selectedShips: command.selectedShips,
+      selectedCommanders: command.selectedCommanders,
+      departedAt: now,
+    }, { now, mode: runtimeOptions.mode ?? 'production', testTimeScale: runtimeOptions.testTimeScale });
+    return outcome.ok
+      ? { ok: true, state: outcome.state, flight: outcome.flight, created: true, notice: outcome.notice }
+      : failure(state, 'target-not-available', outcome.message);
   }
   if (command.missionId !== 'expedition' && command.missionId !== 'exploration-recon' && command.missionId !== 'colonize' && command.missionId !== 'transport' && command.missionId !== 'aid' && command.missionId !== 'espionage' && command.missionId !== 'attack' && command.missionId !== 'deployment' && command.missionId !== 'recycle' && command.missionId !== 'gas' && command.missionId !== 'space-flight') {
     return failure(state, 'mission-not-supported', 'Эта миссия пока не подключена к flight runtime.');
@@ -1319,6 +1389,19 @@ export function dispatchFlight(
       || Object.keys(selectedShips).some((shipId) => !isRecyclerShip(shipId as ShipId, state.profile.factionId as CombatFactionId))) {
       return failure(state, 'wrong-ship-composition', 'Для переработки обломков нужны только корабли-переработчики.');
     }
+    const sunTarget = command.destination?.kind === 'operation' ? parseSunOperationId(command.destination.operationId) : null;
+    if (sunTarget) {
+      // Sun debris: the route goes to the system's first position, the debris lie on the Sun (position 0).
+      const route = command.destination!.coordinate;
+      if (!isFlightCoordinate(route) || route.galaxy !== sunTarget.galaxy || route.system !== sunTarget.system || route.position !== 1
+        || command.operationId !== (command.destination as { operationId?: string }).operationId) {
+        return failure(state, 'invalid-coordinate', 'Координата Солнца некорректна.');
+      }
+      if (getSunDebris(state, sunTarget.galaxy, sunTarget.system) <= 0) {
+        return failure(state, 'target-not-available', 'У этого Солнца нет обломков для переработки.');
+      }
+      recycleTargetKind = 'empty';
+    } else {
     if (!command.destination || !isFlightCoordinate(command.destination.coordinate)) {
       return failure(state, 'invalid-coordinate', 'Координата цели некорректна.');
     }
@@ -1342,6 +1425,7 @@ export function dispatchFlight(
       && !asteroidOverlayIsActive
       && getOrbitalDebrisAtCoordinate(currentEspionageState(state), command.destination.coordinate) <= 0) {
       return failure(state, 'target-not-available', 'На свободной координате нет обломков для переработки.');
+    }
     }
     const cargoCatalog = Object.fromEntries(
       getFactionShipCatalog(state.profile.factionId as CombatFactionId)
@@ -2361,7 +2445,8 @@ export function reconcileFlights(
 
   while (true) {
     const original = next.flights.records
-      .filter((flight) => ACTIVE_FLIGHT_PHASES.has(flight.phase))
+      // Sun raid flights are owned by application/sun-raid.ts (fixed routes, side battles).
+      .filter((flight) => ACTIVE_FLIGHT_PHASES.has(flight.phase) && flight.missionId !== 'sun-attack' && flight.missionId !== 'sun-support')
       .filter((flight) => {
         const eventKey = flightEventKey(flight);
         if (processedFlightEvents.has(eventKey)) return false;
@@ -2811,21 +2896,23 @@ export function reconcileFlights(
       }
       if (current.missionId === 'recycle') {
         if (current.cargoState !== 'delivered' && current.cargoState !== 'returned') {
+          const sunTarget = current.destination?.kind === 'operation' ? parseSunOperationId(current.operationId) : null;
+          const debrisCoordinate = sunTarget ? sunDebrisCoordinate(sunTarget.galaxy, sunTarget.system) : current.destinationCoordinate;
           const collectedDebris = collectOrbitalDebrisAtCoordinate(
             currentEspionageState(next),
-            current.destinationCoordinate,
+            debrisCoordinate,
             current.recycleCapacity ?? 0,
           );
           const remainingOrbitalDebris = getOrbitalDebrisAtCoordinate(
             collectedDebris.espionage,
-            current.destinationCoordinate,
+            debrisCoordinate,
           );
           next = withEspionageState(next, collectedDebris.espionage);
           next = {
             ...next,
             reports: upsertRecyclerArrivalReport(next.reports, {
               flightId: current.id,
-              coordinate: current.destinationCoordinate,
+              coordinate: debrisCoordinate,
               arrivedAtMs: arrivalAt,
               collectedDebris: collectedDebris.collected,
               remainingOrbitalDebris,

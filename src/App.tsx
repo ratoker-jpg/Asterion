@@ -64,7 +64,7 @@ import {
   updateAllianceSettings,
   withdrawApplication,
 } from './domain/command/membership.ts';
-import { selectCommandHallLevel } from './domain/command/selectors.ts';
+import { selectCommandHallLevel, selectOwnerMembership } from './domain/command/selectors.ts';
 import { declareWar, proposeTruce, respondTruce } from './domain/command/diplomacy.ts';
 import { releaseTestBotFromOwnAlliance } from './domain/command/repository.ts';
 import type { AllianceSettingsInput, CommandResult, CommandState } from './domain/command/types.ts';
@@ -75,6 +75,7 @@ import {
   ACTIVE_RUNTIME_MODE,
   scaleRuntimeDuration,
   dispatchRuntimeReset,
+  getRuntimeElapsedScale,
   resolveTestTimeScale,
   TEST_TIME_SCALE_OPTIONS,
   type TestTimeScale,
@@ -197,6 +198,25 @@ import { materializePirateProfiles, pirateContactOperation, pirateOperationId, s
 import { selectExplorationTargets, getExplorationTarget, explorationTargetStatus, selectExplorationOperations } from './application/exploration.ts';
 import { acceptLiveExploration, cancelLiveExploration } from './application/exploration-operations.ts';
 import type { PirateContactPresentation, PirateSystemSelection } from './pirate-ui.ts';
+import { startBot01GateAssault } from './application/flights.ts';
+import {
+  currentSunRaidState,
+  formatSun,
+  OPEN_SUN_OPERATIONS_EVENT,
+  publishSunBrightness,
+  selectGateContext,
+  selectIncomingSunAlerts,
+  startGateConstruction,
+  type SunActionResult,
+} from './application/sun-raid.ts';
+import { refreshSlotMeta } from './application/slots.ts';
+import { gateProgressPercent } from './domain/sun-raid/rules.ts';
+import { getCampaignTimeScale, setCampaignTimeScale, CAMPAIGN_SPEED_SCALE } from './domain/runtime/mode.ts';
+import { setActiveGalaxyCount } from './domain/universe/runtime.ts';
+import { SunRaidPanel, type SunSelection } from './ui/sun-raid/SunRaidPanel.tsx';
+import { GateDialog } from './ui/sun-raid/GateDialog.tsx';
+import { CampaignResultOverlay, PauseMenu } from './ui/menu/InGameOverlays.tsx';
+import { reloadToMenu, type ActiveSession } from './ui/menu/session.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
 import planetColonized from '../assets/source/starter/planets/planet_colonized.png';
@@ -331,6 +351,10 @@ function useStageScale() {
   const calc = () => Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
   const [scale, setScale] = useState(calc);
   useEffect(() => {
+    // The long-page stage sits at the same letterbox offset as the centred fixed stage.
+    document.documentElement.style.setProperty('--asterion-stage-top', `${Math.max(0, Math.round((window.innerHeight - 1080 * scale) / 2))}px`);
+  }, [scale]);
+  useEffect(() => {
     const onResize = () => setScale(calc());
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
@@ -342,13 +366,26 @@ function AegisButton({ children, onClick, disabled = false }: { children: ReactN
   return <button className="aegis-button" disabled={disabled} onClick={onClick}><span>{children}</span></button>;
 }
 
-export function App() {
+/** Applies the loaded campaign's fixed parameters (speed, galaxies, dimmed Suns) to the runtime. */
+function applyCampaignRuntime(state: SaveState, mode: RuntimeMode) {
+  if (mode === 'production') setCampaignTimeScale(CAMPAIGN_SPEED_SCALE[state.worldConfig?.world.campaignSpeed ?? 'standard'] ?? 1);
+  setActiveGalaxyCount(state.worldConfig?.world.galaxyCount ?? 1);
+  publishSunBrightness(state, Date.now());
+}
+
+const SPEED_SUFFIX: Record<string, string> = { slow: ' ×0.5', standard: '', fast: ' ×2' };
+
+export function App({ session = null }: { session?: ActiveSession | null } = {}) {
   const scale = useStageScale();
   const { route: activeRoute, fleetSection: activeFleetSection, navigate } = useNavigation();
   const activeTab = APP_ROUTE_LABELS[activeRoute];
   const [planetViewMode, setPlanetViewMode] = useState<PlanetViewMode>('overview');
   const persistence = useMemo(() => createPersistenceFacade({ mode: RUNTIME_MODE }), []);
-  const [state, setState] = useState<SaveState>(() => persistence.read());
+  const [state, setState] = useState<SaveState>(() => {
+    const loaded = persistence.read();
+    applyCampaignRuntime(loaded, RUNTIME_MODE);
+    return loaded;
+  });
   const stateRef = useRef(state);
   stateRef.current = state;
   const [now, setNow] = useState(Date.now());
@@ -384,7 +421,7 @@ export function App() {
   const [selectedBuildingRole, setSelectedBuildingRole] = useState<BuildingRole | null>(null);
   const [buildingInterior, setBuildingInterior] = useState<BuildingInteriorContext | null>(null);
   const [universeFocusTarget, setUniverseFocusTarget] = useState<UniverseFocusTarget | null>(null);
-  const [pirateSystem, setPirateSystem] = useState<PirateSystemSelection>({ galaxy: 1, system: 1 });
+  const [pirateSystem, setPirateSystem] = useState<PirateSystemSelection>(() => ({ galaxy: state.planets[state.currentPlanetId]?.universeGalaxy ?? 1, system: state.planets[state.currentPlanetId]?.universeSystem ?? 1 }));
   const [pirateFocusTarget, setPirateFocusTarget] = useState<Pick<PirateContactPresentation, 'coordinate' | 'contactCycleKey'> | null>(null);
   const [pirateReportId, setPirateReportId] = useState<string | undefined>();
   const exportPirateBattleAnalysis = useCallback(() => {
@@ -875,6 +912,8 @@ export function App() {
           .join(', ');
         const planet = result.state.planets[event.planetId] ?? result.state.planets[result.state.currentPlanetId];
         setNotice(`${planet.name}: верфь — производство завершено — ${names}.`, 'success');
+      } else if (event.kind === 'sun-raid') {
+        event.notices.forEach((notice) => setNotice(notice.text, notice.tone));
       } else if (event.kind === 'flight') {
         event.events.forEach((flightEvent) => setNotice(
           flightEvent.status === 'spy-report' || flightEvent.status === 'spy-detected'
@@ -900,7 +939,7 @@ export function App() {
   );
   const currentEnergyCoordinates = useMemo(
     () => getPlanetEnergyCoordinates(currentPlanetState),
-    [currentPlanetState.universePosition, currentPlanetState.universeSystem],
+    [currentPlanetState.universeGalaxy, currentPlanetState.universePosition, currentPlanetState.universeSystem, state.sunRaid],
   );
   const fleetSummary = useMemo(
     () => getFleetSummaryForState(state),
@@ -993,6 +1032,7 @@ export function App() {
   // Same rule as the Fleet screen alert: hostile fleets still on their way in.
   const incomingAttackCount = state.flights.records.filter((flight) => flight.phase === 'outbound'
     && ((flight.ownerSide === 'bot01' && flight.missionId === 'attack') || (flight.ownerSide === 'pirate' && flight.missionId === 'pirate-raid'))).length;
+  const sunAlerts = useMemo(() => selectIncomingSunAlerts(state, now), [state, now]);
   const uiFactionId = HEADER_FACTION_PREVIEW ?? state.profile.factionId;
   useEffect(() => {
     document.documentElement.dataset.faction = uiFactionId;
@@ -1218,7 +1258,7 @@ export function App() {
       setNotice(result.reason ?? 'Строительство сейчас недоступно.');
       return false;
     }
-    setNotice(`${currentPlanetName}: ${getBuildingDefinition(assetRole).name} добавлено в общую очередь.`);
+    setNotice(`${currentPlanetName}: ${getBuildingDefinition(assetRole, state.profile.factionId).name} добавлено в общую очередь.`);
     return true;
   };
 
@@ -1238,7 +1278,7 @@ export function App() {
     stateRef.current = result.state;
     setState(result.state);
     const canceledDefinition = result.canceledRole
-      ? getBuildingDefinition(result.canceledRole)
+      ? getBuildingDefinition(result.canceledRole, state.profile.factionId)
       : null;
     const cascadedCount = result.cascadedCount;
     setNotice(`${canceledDefinition?.name ?? 'Проект'} отменён.${cascadedCount > 0 ? ` Каскадно отменено ещё ${cascadedCount} зависимых проектов.` : ''} Возвращено 90% сохранённых ресурсов.`);
@@ -1259,7 +1299,7 @@ export function App() {
     }
     stateRef.current = result.state;
     setState(result.state);
-    setNotice(`${getBuildingDefinition(assetRole).name}: уровень разрушен. Возвращено ${result.refundPercent}% ресурсов.`);
+    setNotice(`${getBuildingDefinition(assetRole, state.profile.factionId).name}: уровень разрушен. Возвращено ${result.refundPercent}% ресурсов.`);
     return true;
   };
 
@@ -1525,7 +1565,7 @@ export function App() {
   };
 
   // Test Mode runs the 3-hour truce timers on the same accelerated clock as the aid charges.
-  const diplomacyOptions = (at: number) => ({ now: at, elapsedScale: RUNTIME_MODE === 'test' ? testTimeScale : 1 });
+  const diplomacyOptions = (at: number) => ({ now: at, elapsedScale: getRuntimeElapsedScale(RUNTIME_MODE, testTimeScale) });
 
   /** Allied planets of a member known to this save (Test Mode ally planets today). Never shown on the Command screen. */
   const memberPlanetsOf = (current: SaveState, ownerId: string) => Object.values(current.alliedPlanets ?? {})
@@ -1824,7 +1864,7 @@ export function App() {
   const returnToBuilding = () => {
     if (!buildingInterior) return;
     const context = buildingInterior;
-    const definition = getBuildingDefinition(context.buildingRole);
+    const definition = getBuildingDefinition(context.buildingRole, state.profile.factionId);
     setBuildingInterior(null);
     setState((current) => current.currentPlanetId === context.planetId
       ? current
@@ -1851,7 +1891,7 @@ export function App() {
     if (target.kind === 'host') {
       navigateTo('planet');
       setPlanetViewMode(context.zone);
-      setNotice(`${getBuildingDefinition(assetRole).name}: внутренний модуль открыт.`);
+      setNotice(`${getBuildingDefinition(assetRole, state.profile.factionId).name}: внутренний модуль открыт.`);
       return;
     }
     if (target.kind === 'fleet-construction') {
@@ -1876,7 +1916,7 @@ export function App() {
     setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
     closePlanetEditor();
-    if (nextRoute === 'universe') setNotice('Галактика 1 загружена. Доступно 40 солнечных систем.');
+    if (nextRoute === 'universe') setNotice(`Галактика ${homePlanet?.universeGalaxy ?? 1} загружена. Доступно 40 солнечных систем.`);
     else if (nextRoute === 'operations') setNotice('Операции: доступные PvE-сценарии загружены.');
     else if (nextRoute === 'command') setNotice('Командование: союзный контур загружен.');
     else if (nextRoute === 'reports') setNotice('Отчёты: центр сообщений и боевых журналов загружен.');
@@ -1905,6 +1945,186 @@ export function App() {
     return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [buildingInterior]);
 
+  /* ---------------------------------------------- Sun raids, Gates, session */
+  const homePlanet = state.planets['helion-01'] ?? state.planets[state.currentPlanetId];
+  const [commandFocus, setCommandFocus] = useState<{ tab: 'operations' | 'overview'; nonce: number } | null>(null);
+  const [selectedSun, setSelectedSun] = useState<SunSelection>(() => ({ galaxy: homePlanet?.universeGalaxy ?? 1, system: homePlanet?.universeSystem ?? 1 }));
+  const [gateDialogPlanetId, setGateDialogPlanetId] = useState<string | null>(null);
+  const [pauseOpen, setPauseOpen] = useState(false);
+  const [resultDismissed, setResultDismissed] = useState(false);
+  const sunRaidState = currentSunRaidState(state);
+  const gateContext = useMemo(() => selectGateContext(state, now), [state, now]);
+
+  const commitSunAction = (result: SunActionResult) => {
+    if (result.ok) {
+      stateRef.current = result.state;
+      setState(result.state);
+      setNotice(result.notice, 'success');
+    } else {
+      setNotice(result.error, 'error');
+    }
+  };
+  const openSunsPanel = (sun?: SunSelection) => {
+    // Without an alliance there are no Sun operations: a Sun under attack opens «Поддержка солнца» in «Флоты».
+    if (!selectOwnerMembership(stateRef.current.command, stateRef.current.profile.playerId) || selectCommandHallLevel(stateRef.current.planets) <= 0) {
+      const target = sun ?? selectedSun;
+      const raid = selectIncomingSunAlerts(stateRef.current, Date.now()).find((alert) => alert.raid.galaxy === target.galaxy && alert.raid.system === target.system);
+      if (raid) openSunSupportInFleets(raid.raid);
+      else setNotice(`Солнце ${target.galaxy}:${target.system}. Рейды на Солнца — операция союза («Командование → Операции»).`);
+      return;
+    }
+    clearBuildingInterior();
+    if (sun) setSelectedSun(sun);
+    setCommandFocus({ tab: 'operations', nonce: Date.now() });
+    navigateTo('command');
+    setPlanetViewMode('overview');
+    setPlanetMenuOpen(false);
+  };
+  const openSunFleetLaunch = (detail: FlightLaunchContext) => {
+    clearBuildingInterior();
+    navigateTo('fleets');
+    setPlanetViewMode('overview');
+    setPlanetMenuOpen(false);
+    window.setTimeout(() => window.dispatchEvent(new CustomEvent<FlightLaunchContext>(FLIGHT_LAUNCH_CONTEXT_EVENT, { detail })), 40);
+  };
+  const sunLaunchDestination = (galaxy: number, system: number) => ({
+    kind: 'operation' as const, operationId: `sun:${galaxy}:${system}`, coordinate: { galaxy, system, position: 1 },
+  });
+  const openSunSupportInFleets = (raid: { galaxy: number; system: number }) => openSunFleetLaunch({
+    missionId: 'sun-support', operationId: `sun:${raid.galaxy}:${raid.system}`,
+    destination: sunLaunchDestination(raid.galaxy, raid.system), targetRelation: 'neutral', targetPlanetName: `Солнце ${raid.galaxy}:${raid.system}`,
+  });
+  const openSunRecycleInFleets = (sun: SunSelection) => openSunFleetLaunch({
+    missionId: 'recycle', operationId: `sun:${sun.galaxy}:${sun.system}`, targetKind: 'empty',
+    destination: sunLaunchDestination(sun.galaxy, sun.system), targetPlanetName: `Обломки Солнца ${sun.galaxy}:${sun.system}`,
+  });
+  /** «Найти обломки» → «Отправить»: recyclers to a planet orbit or, at position 0, to the Sun. */
+  const openDebrisRecycleLaunch = (coordinate: UniverseCoordinate) => {
+    if (coordinate.position === 0) { openSunRecycleInFleets({ galaxy: coordinate.galaxy, system: coordinate.system }); return; }
+    setNotice(`Переработка обломков: [${coordinate.galaxy}:${coordinate.system}:${coordinate.position}].`);
+    openSunFleetLaunch({ missionId: 'recycle', destination: { kind: 'coordinate', coordinate: { ...coordinate } } });
+  };
+  const startGate = () => {
+    if (!gateDialogPlanetId) return;
+    commitSunAction(startGateConstruction(stateRef.current, gateDialogPlanetId, { now: Date.now(), mode: RUNTIME_MODE, testTimeScale }));
+  };
+  const testGateAssault = RUNTIME_MODE === 'test' ? () => {
+    const gate = currentSunRaidState(stateRef.current).gates.find((item) => item.status === 'building');
+    if (!gate || !stateRef.current.planets[gate.hostPlanetId]) { setNotice('Нет строящихся Врат на вашей планете.', 'error'); return; }
+    const result = startBot01GateAssault(stateRef.current, gate.hostPlanetId, { now: Date.now(), mode: RUNTIME_MODE, testTimeScale });
+    if (result.ok) { stateRef.current = result.state; setState(result.state); setNotice(result.notice); }
+    else setNotice(result.error.message, 'error');
+  } : undefined;
+
+  const openSunsPanelRef = useRef(openSunsPanel);
+  openSunsPanelRef.current = openSunsPanel;
+  useEffect(() => {
+    const onOpen = () => openSunsPanelRef.current();
+    window.addEventListener(OPEN_SUN_OPERATIONS_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_SUN_OPERATIONS_EVENT, onOpen);
+  }, []);
+
+  // Galaxy-wide warning: every new incoming raid on a Sun of the player's galaxies raises a toast once.
+  const announcedSunAlerts = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const ids = sunAlerts.map((alert) => alert.raid.id);
+    if (announcedSunAlerts.current === null) { announcedSunAlerts.current = new Set(ids); return; }
+    for (const alert of sunAlerts) {
+      if (announcedSunAlerts.current.has(alert.raid.id)) continue;
+      announcedSunAlerts.current.add(alert.raid.id);
+      setNotice(`Входящая атака на Солнце ${formatSun(alert.raid.galaxy, alert.raid.system)}: [${alert.raid.allianceTag}], прибытие через ${Math.ceil(alert.arrivesInMs / 60_000)} мин. Командование → Операции.`, 'error');
+    }
+  }, [sunAlerts, setNotice]);
+
+  // Play time of the campaign and the slot card (production slots only).
+  const lastPlayTickRef = useRef(Date.now());
+  /** Adds the time since the last tick (at most 2 min: a sleeping laptop is not play time). */
+  const foldPlayTime = useCallback((commit: boolean) => {
+    if (RUNTIME_MODE !== 'production') return stateRef.current;
+    const at = Date.now();
+    const elapsed = Math.min(120_000, Math.max(0, at - lastPlayTickRef.current));
+    lastPlayTickRef.current = at;
+    if (elapsed <= 0) return stateRef.current;
+    const next = { ...stateRef.current, playTimeMs: (stateRef.current.playTimeMs ?? 0) + elapsed };
+    stateRef.current = next;
+    if (commit) setState(next);
+    return next;
+  }, []);
+  useEffect(() => {
+    foldPlayTime(true);
+    if (session) refreshSlotMeta(session.slotId, stateRef.current);
+  }, [foldPlayTime, presenceMinute, session]);
+  useEffect(() => {
+    if (!session) return;
+    // Only the play time is added on exit, onto the save as stored: the game state is
+    // already persisted by every action, and a full write here would overwrite a
+    // newer save (another window, an import, a QA patch).
+    const onUnload = () => {
+      const latest = foldPlayTime(false);
+      const stored = persistence.read();
+      const next = { ...stored, playTimeMs: Math.max(stored.playTimeMs ?? 0, latest.playTimeMs ?? 0) };
+      persistence.write(next);
+      refreshSlotMeta(session.slotId, next);
+    };
+    window.addEventListener('beforeunload', onUnload);
+    return () => window.removeEventListener('beforeunload', onUnload);
+  }, [foldPlayTime, persistence, session]);
+
+  const exportCurrentSave = () => {
+    const latest = foldPlayTime(true);
+    persistence.write(latest);
+    const blob = new Blob([JSON.stringify(latest, null, 2)], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `asterion-${RUNTIME_MODE === 'test' ? 'test' : (session?.slotName ?? 'campaign').replace(/[^\p{L}\p{N}_-]+/gu, '-')}-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    setNotice('Сохранение выгружено в файл.', 'success');
+  };
+
+  // Esc opens the pause menu when nothing else is open.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || pauseOpen || buildingInterior) return;
+      if (document.querySelector('[aria-modal="true"], .resource-building-dialog-backdrop, .universe-modal-backdrop, .skin-picker-backdrop')) return;
+      setPauseOpen(true);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [pauseOpen, buildingInterior]);
+
+  const saveNow = () => {
+    foldPlayTime(true);
+    const result = persistence.write(stateRef.current);
+    if (session) refreshSlotMeta(session.slotId, stateRef.current);
+    setNotice(result.ok ? 'Игра сохранена.' : `Не удалось сохранить: ${result.error}`, result.ok ? 'success' : 'error');
+  };
+  const leaveTo = (screen: 'main' | 'load' | 'new') => {
+    foldPlayTime(false);
+    persistence.write(stateRef.current);
+    if (session) refreshSlotMeta(session.slotId, stateRef.current);
+    reloadToMenu(screen);
+  };
+  const restartCampaign = () => {
+    const config = stateRef.current.worldConfig;
+    const nextState = createInitialSaveState(RUNTIME_MODE, Date.now(), config && !config.legacy ? config : undefined);
+    dispatchRuntimeReset(RUNTIME_MODE, window);
+    persistence.write(nextState);
+    applyCampaignRuntime(nextState, RUNTIME_MODE);
+    stateRef.current = nextState;
+    setState(nextState);
+    if (session) refreshSlotMeta(session.slotId, nextState);
+    window.setTimeout(() => window.dispatchEvent(new Event(FLEET_ROOT_REQUEST_EVENT)), 0);
+    setPauseOpen(false);
+    setResultDismissed(false);
+    setPlanetViewMode('overview');
+    navigateTo('planet');
+    setNotice('Кампания начата заново по тем же настройкам мира.', 'success');
+  };
+
   const remaining = currentActiveQueueItem ? currentActiveQueueItem.finishAt - now : 0;
   const workspaceKind = buildingInteriorTarget?.kind === 'host'
     ? 'building-interior'
@@ -1925,8 +2145,9 @@ export function App() {
   return (
     <div className="viewport">
       <div className="stage stage-shell-v3 stage-shell-v4" data-faction={uiFactionId} style={{ transform: `scale(${scale})`, '--space-bg': `url(${systemBackground})` } as CSSProperties}>
+        <div className="stage-ambient" aria-hidden="true"><i /><i /></div>
         <AsterionHeader
-          incomingAttackCount={incomingAttackCount}
+          incomingAttackCount={incomingAttackCount + sunAlerts.length}
           factionId={uiFactionId}
           currentPlanet={{
             id: currentPlanet.id,
@@ -1972,7 +2193,7 @@ export function App() {
           activeZone={activeRoute === 'planet' && planetViewMode !== 'overview' ? planetViewMode : null}
           reportsUnreadCount={reportsUnreadCount}
           planetMenuOpen={planetMenuOpen}
-            campaign={{ now, mode: RUNTIME_MODE, timeScale: testTimeScale, saveKey: persistence.saveKey, timeScaleOptions: TEST_TIME_SCALE_OPTIONS, onTimeScaleChange: setTestTimeScale }}
+            campaign={{ now, mode: RUNTIME_MODE, timeScale: testTimeScale, saveKey: persistence.saveKey, timeScaleOptions: TEST_TIME_SCALE_OPTIONS, onTimeScaleChange: setTestTimeScale, label: `Кампания${SPEED_SUFFIX[state.worldConfig?.world.campaignSpeed ?? 'standard'] ?? ''}` }}
           onRouteChange={chooseRoute}
           onZoneChange={chooseZone}
           onPlanetChange={(planetId) => selectPlanet(planetId)}
@@ -1980,14 +2201,14 @@ export function App() {
          />
 
         <button
-          className="shell-reset-control"
+          className="shell-reset-control shell-pause-control"
           type="button"
-          data-qa-reset-progress
-          onClick={reset}
-          aria-label={RUNTIME_MODE === 'test' ? 'Сбросить текущее тестовое сохранение' : 'Сбросить текущий прогресс'}
-          title={RUNTIME_MODE === 'test' ? 'Сбросить текущее тестовое сохранение' : 'Сбросить текущий прогресс'}
+          data-qa-pause-open
+          onClick={() => setPauseOpen(true)}
+          aria-label="Меню игры"
+          title="Меню игры (Esc)"
         >
-          <span aria-hidden="true">↻</span>
+          <span aria-hidden="true">≡</span>
         </button>
 
         <section className={`workspace workspace-v4 workspace--${workspaceKind}`}>
@@ -2058,6 +2279,18 @@ export function App() {
               onTransport={openTransportLaunch}
               onSpy={openSpyLaunch}
               onAttack={openAttackLaunch}
+              onSunSelect={(galaxy, system) => openSunsPanel({ galaxy, system })}
+              sunAlerts={sunAlerts.map((alert) => ({ galaxy: alert.raid.galaxy, system: alert.raid.system }))}
+              homeCoordinate={{ galaxy: homePlanet?.universeGalaxy ?? 1, system: homePlanet?.universeSystem ?? 1 }}
+              debrisOrigin={state.planets[state.currentPlanetId] ? {
+                planetName: state.planets[state.currentPlanetId]!.name,
+                coordinate: {
+                  galaxy: state.planets[state.currentPlanetId]!.universeGalaxy ?? 1,
+                  system: state.planets[state.currentPlanetId]!.universeSystem ?? 1,
+                  position: state.planets[state.currentPlanetId]!.universePosition ?? 1,
+                },
+              } : null}
+              onRecycleDebris={openDebrisRecycleLaunch}
               focusTarget={universeFocusTarget}
               onFocusHandled={() => { setUniverseFocusTarget(null); setPirateFocusTarget(null); }}
             />
@@ -2122,6 +2355,25 @@ export function App() {
               aid={selectAidOverview(state, { now, mode: RUNTIME_MODE, testTimeScale })}
               now={now}
               actions={commandActions}
+              operationsAlertCount={sunAlerts.length}
+              focusTab={commandFocus}
+              operationsPanel={(
+                <SunRaidPanel
+                  state={state}
+                  now={now}
+                  mode={RUNTIME_MODE}
+                  testTimeScale={testTimeScale}
+                  selected={selectedSun}
+                  onSelect={setSelectedSun}
+                  onCommit={commitSunAction}
+                  onOpenReport={openPirateReport}
+                  onOpenCommand={() => setCommandFocus({ tab: 'overview', nonce: Date.now() })}
+                  onOpenGate={() => { setGateDialogPlanetId(state.currentPlanetId); }}
+                  onSendSupport={openSunSupportInFleets}
+                  onRecycleDebris={openSunRecycleInFleets}
+                  onTestGateAssault={testGateAssault}
+                />
+              )}
             />
           ) : activeRoute === 'reports' ? (
             <ReportsView
@@ -2172,6 +2424,19 @@ export function App() {
               onCancelBuilding={cancelBuilding}
               onDestroyBuilding={destroyBuilding}
               onEnterBuilding={enterBuilding}
+              factionId={state.profile.factionId}
+              gate={(() => {
+                const gate = gateContext.gate;
+                const here = gate && gate.hostPlanetId === currentPlanet.id ? gate : null;
+                const status = here && here.status !== 'cancelled' ? here.status : 'idle';
+                return {
+                  status,
+                  progress: here ? (here.status === 'completed' ? 100 : gateProgressPercent(here, now)) : 0,
+                  crystals: here ? here.crystals : gateContext.crystals,
+                  caption: status === 'building' ? `Стройка ${Math.floor(gateProgressPercent(here!, now))}%` : status === 'completed' ? 'Достроены' : status === 'destroyed' ? 'Разрушены' : `Кристаллы ${gateContext.crystals.length}/4`,
+                  onOpen: () => setGateDialogPlanetId(currentPlanet.id),
+                };
+              })()}
             />
           ) : activeRoute === 'planet' ? (
             <PlanetOrbitView
@@ -2270,6 +2535,57 @@ export function App() {
           </div>,
           document.body,
         )}
+
+        {gateDialogPlanetId ? (
+          <GateDialog
+            state={state}
+            planetId={gateDialogPlanetId}
+            now={now}
+            mode={RUNTIME_MODE}
+            testTimeScale={testTimeScale}
+            onClose={() => setGateDialogPlanetId(null)}
+            onStart={startGate}
+            onTestAssault={testGateAssault}
+            onOpenSuns={() => { setGateDialogPlanetId(null); openSunsPanel(); }}
+          />
+        ) : null}
+        {pauseOpen ? (session ? (
+          <PauseMenu
+            variant="slot"
+            title={session.slotName}
+            factionId={state.profile.factionId}
+            playTimeMs={state.playTimeMs ?? 0}
+            onResume={() => setPauseOpen(false)}
+            onSave={saveNow}
+            onLoad={() => leaveTo('load')}
+            onExport={exportCurrentSave}
+            onRestart={restartCampaign}
+            onMainMenu={() => leaveTo('main')}
+          />
+        ) : (
+          <PauseMenu
+            variant="test"
+            title="Тестовая кампания"
+            factionId={state.profile.factionId}
+            playTimeMs={0}
+            onResume={() => setPauseOpen(false)}
+            onSave={saveNow}
+            onExport={exportCurrentSave}
+            testSpeed={RUNTIME_MODE === 'test' ? { value: testTimeScale, options: TEST_TIME_SCALE_OPTIONS, onChange: (value) => setTestTimeScale(value as TestTimeScale) } : undefined}
+            onRestart={() => { setPauseOpen(false); reset(); }}
+            onMainMenu={() => { persistence.write(stateRef.current); window.location.href = window.location.pathname; }}
+          />
+        )) : null}
+        {sunRaidState.campaignResult && !resultDismissed ? (
+          <CampaignResultOverlay
+            result={sunRaidState.campaignResult}
+            factionId={state.profile.factionId}
+            playTimeMs={state.playTimeMs ?? 0}
+            onStay={() => setResultDismissed(true)}
+            onNewGame={() => (session ? leaveTo('new') : setResultDismissed(true))}
+            onMainMenu={() => (session ? leaveTo('main') : setResultDismissed(true))}
+          />
+        ) : null}
 
         {editingPlanet && editingPlanetState ? (
           <div className="skin-picker-backdrop" onMouseDown={closePlanetEditor}>

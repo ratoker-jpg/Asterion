@@ -16,7 +16,6 @@ import {
 import { getRuntimeSaveKey, type RuntimeMode } from '../runtime/mode.ts';
 import { isCanonicalPirateContactCycleKey } from '../pirates/contact-schedule.ts';
 
-const LEGACY_SAVE_KEY = getRuntimeSaveKey();
 const OPERATION_STATES: readonly OperationState[] = ['available', 'active', 'completed'];
 const OPERATION_INTEL_LEVELS: readonly OperationIntelLevel[] = [0, 1, 2, 3];
 const OPERATION_THREAT_TIERS: readonly OperationThreatTier[] = [1, 2, 3, 4, 5, 6];
@@ -227,7 +226,7 @@ export function revealOperation(state: OperationsState, operationId: OperationId
 
 export function readOperationsState(storage?: StorageLike, mode?: RuntimeMode): OperationsState {
   const runtimeMode = mode ?? 'test';
-  const saveKey = mode === undefined ? LEGACY_SAVE_KEY : getRuntimeSaveKey(runtimeMode);
+  const saveKey = mode === undefined ? getRuntimeSaveKey() : getRuntimeSaveKey(runtimeMode);
   const target = resolveStorage(storage);
   if (!target) return createDefaultOperationsState(runtimeMode);
 
@@ -247,7 +246,7 @@ export type PersistOperationsResult =
 
 export function persistOperationsState(value: OperationsState, storage?: StorageLike, mode?: RuntimeMode): PersistOperationsResult {
   const runtimeMode = mode ?? 'test';
-  const saveKey = mode === undefined ? LEGACY_SAVE_KEY : getRuntimeSaveKey(runtimeMode);
+  const saveKey = mode === undefined ? getRuntimeSaveKey() : getRuntimeSaveKey(runtimeMode);
   const normalized = migrateOperationsState(value, runtimeMode);
   const target = resolveStorage(storage);
   if (!target) return { ok: false, value: normalized, error: 'Локальное сохранение недоступно.' };
