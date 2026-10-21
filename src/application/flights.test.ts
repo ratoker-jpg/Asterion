@@ -3009,7 +3009,7 @@ test('reconcileRuntime catches up multiple asteroid moves equivalently and does 
   assert.deepEqual(replay.state.asteroidDebrisBySpawnIndex, catchUp.state.asteroidDebrisBySpawnIndex);
 });
 
-test('audit P1-3: ally transport follows current alliance membership at the send boundary', () => {
+test('audit P1-3: transport relation follows current alliance membership at the send boundary', () => {
   const initial = createInitialSaveState('test', 1_000);
   const destination = { kind: 'planet' as const, planetId: 'test-mode-ally-ira-vel-v1', coordinate: { galaxy: 1, system: 1, position: 2 } };
   const command = (requestId: string) => ({
@@ -3029,13 +3029,19 @@ test('audit P1-3: ally transport follows current alliance membership at the send
   const kicked = kickMember(initial.command, initial.profile.playerId, 'member-ira-vel', 1_000);
   assert.equal(kicked.ok, true);
   const afterKick = { ...initial, command: kicked.state };
-  assert.equal(resolveTransportTarget(afterKick, destination).acceptsTransport, false);
-  assert.equal(resolveTransportTarget(afterKick, { kind: 'coordinate', coordinate: destination.coordinate }).acceptsTransport, false);
-  assert.equal(dispatchFlight(afterKick, command('ira-kicked'), { now: 1_000, mode: 'test' }).ok, false);
+  // Any inhabited planet accepts transport (audit 2.6), but it is no longer an ally.
+  assert.equal(resolveTransportTarget(afterKick, destination).relation, 'neutral');
+  assert.equal(resolveTransportTarget(afterKick, destination).acceptsTransport, true);
+  assert.equal(resolveTransportTarget(afterKick, { kind: 'coordinate', coordinate: destination.coordinate }).relation, 'neutral');
+  // A launch prepared while she was an ally is refused: the relation changed.
+  const stale = dispatchFlight(afterKick, command('ira-kicked'), { now: 1_000, mode: 'test' });
+  assert.equal(stale.ok, false);
+  assert.equal(stale.ok ? '' : stale.error.code, 'target-not-available');
+  assert.equal(dispatchFlight(afterKick, { ...command('ira-kicked-neutral'), targetRelation: 'neutral' as const }, { now: 1_000, mode: 'test' }).ok, true);
 
   const playerLeft = leaveAlliance(initial.command, initial.profile.playerId, 1_000, { successorOwnerId: 'member-ira-vel' });
   assert.equal(playerLeft.ok, true);
-  assert.equal(resolveTransportTarget({ ...initial, command: playerLeft.state }, destination).acceptsTransport, false);
+  assert.equal(resolveTransportTarget({ ...initial, command: playerLeft.state }, destination).relation, 'neutral');
 
   // Own planets never depend on alliances.
   const own = { kind: 'planet' as const, planetId: 'helion-01', coordinate: origin };
@@ -3055,4 +3061,39 @@ test('the aid mission is connected to the runtime but always needs an open reque
   }, { now: 1_000, mode: 'test' });
   assert.equal(result.ok, false);
   if (!result.ok) assert.equal(result.error.code, 'target-not-available');
+});
+
+test('transport reaches any inhabited planet: an NPC planet stores what fits, the rest burns, and the warning shows first', () => {
+  const initial = createInitialSaveState('test', 1_000);
+  const npc = Object.values(initial.espionage!.targets!)[0]!;
+  const caps = getStorageCapacities(npc.buildings as Parameters<typeof getStorageCapacities>[0]);
+  // Leave room for exactly 40 metal on the NPC planet.
+  const room = 40;
+  const prepared: SaveState = {
+    ...initial,
+    espionage: { ...initial.espionage!, targets: { ...initial.espionage!.targets!, [npc.id]: {
+      ...npc, resources: { ...npc.resources, metal: caps.metal - room },
+    } } },
+  };
+  const destination = { kind: 'planet' as const, planetId: npc.id, coordinate: npc.coordinate };
+  const target = resolveTransportTarget(prepared, destination);
+  assert.equal(target.acceptsTransport, true);
+  assert.equal(target.storage, 'foreign');
+  assert.equal(target.relation, 'neutral');
+  assert.equal(getTransportCargoSummary(prepared, 'helion-01', { scout: 1 }, { metal: room, minerals: 0, gas: 0, debris: 0 }, destination).overflowWarning, false);
+  assert.equal(getTransportCargoSummary(prepared, 'helion-01', { scout: 1 }, { metal: room + 60, minerals: 0, gas: 0, debris: 0 }, destination).overflowWarning, true);
+
+  const sent = dispatchFlight(prepared, {
+    requestId: 'transport-npc', missionId: 'transport', originPlanetId: 'helion-01', destination,
+    selectedShips: { scout: 1 }, cargo: { metal: room + 60, minerals: 0, gas: 0, debris: 0 }, departedAt: 1_000,
+  }, { now: 1_000, mode: 'test' });
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  assert.equal(sent.flight.overflowWarning, true);
+  assert.equal(sent.flight.targetRelation, 'neutral');
+  const arrival = reconcileFlights(sent.state, sent.flight.arrivalAt, undefined, { mode: 'test' });
+  assert.equal(arrival.events[0]?.status, 'delivered');
+  // Only the free room was credited; 60 metal burned.
+  assert.equal(arrival.state.espionage!.targets![npc.id]!.resources.metal, caps.metal);
+  assert.equal(arrival.state.flights.records.find((flight) => flight.id === sent.flight.id)?.phase, 'returning');
 });

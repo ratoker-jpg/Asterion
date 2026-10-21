@@ -650,8 +650,9 @@ test('Bot 01 Test Mode preserves an exact-tie Space Flight when the seeded siege
   assert.equal(initial.espionage?.bot01IncomingScenario, undefined);
   assert.equal(initial.flights.records.some((flight) => flight.ownerSide === 'bot01'), false);
   const initialBotPoints = selectOwnerScores(initial)[UNIVERSE_NPC_OWNER_ID]!.resourcePoints;
-  assert.equal(selectOwnerScores(loaded)[UNIVERSE_NPC_OWNER_ID]!.resourcePoints, 1_003_344);
-  assert.equal(initialBotPoints, 1_003_349);
+  // Ecology (science 13) was removed: Bot 01 no longer holds its 10 levels.
+  assert.equal(selectOwnerScores(loaded)[UNIVERSE_NPC_OWNER_ID]!.resourcePoints, 999_252);
+  assert.equal(initialBotPoints, 999_257);
   const productionAttempt = startBot01IncomingScenario(initial, { now: 1_000, mode: 'production' });
   assert.equal(productionAttempt.ok, false);
 

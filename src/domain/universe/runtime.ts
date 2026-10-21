@@ -1042,22 +1042,16 @@ export function getUniverseActionState(
       reason: action === 'attack' ? 'Атака запрещена против своей планеты.' : 'Это ваша планета.',
     };
   }
-  if (action === 'fleet' && node.fixture?.id === TEST_MODE_ALLY_PLANET_FIXTURE.marker.id && relation === 'ally') {
+  if (action === 'fleet') {
+    // Any inhabited planet accepts transport; what does not fit its storage burns.
     return {
       action,
       enabled: true,
       status: 'supported',
       label,
-      reason: 'Союзная планета принимает транспортировку.',
-    };
-  }
-  if (action === 'fleet') {
-    return {
-      action,
-      enabled: false,
-      status: 'disabled',
-      label,
-      reason: 'Транспортировка доступна только на свою или явную союзную планету.',
+      reason: relation === 'ally'
+        ? 'Союзная планета принимает транспортировку.'
+        : 'Планета принимает транспортировку: ресурсы сверх её склада сгорят.',
     };
   }
   const targetRelation = relation ?? 'neutral';

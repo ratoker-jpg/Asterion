@@ -152,7 +152,7 @@ test('registered production targets become selectable map nodes without adding f
   assert.equal(nodes.filter((item) => item.kind === 'npc').length, 1);
 });
 
-test('registered Test Mode targets override coordinate fixtures and block fleet actions', () => {
+test('registered Test Mode targets override coordinate fixtures and accept transport like any inhabited planet', () => {
   for (const relation of ['neutral', 'enemy'] as const) {
     const registered = {
       id: `test-mode-${relation}-target`,
@@ -170,7 +170,7 @@ test('registered Test Mode targets override coordinate fixtures and block fleet 
 
     assert.ok(node);
     assert.equal(node?.fixture, undefined);
-    assert.equal(getUniverseActionState('fleet', node!, 'player-current', relation).enabled, false);
+    assert.equal(getUniverseActionState('fleet', node!, 'player-current', relation).enabled, true);
   }
 });
 
@@ -503,11 +503,12 @@ test('spy and fleet actions follow the owner relation contract', () => {
   assert.equal(getUniverseActionState('attack', foreign, 'player-current', 'enemy').reason, 'Вражеская цель доступна для атаки.');
   assert.equal(getUniverseActionState('attack', ally, 'player-current', 'ally').enabled, false);
   assert.equal(getUniverseActionState('attack', homeworld, 'player-current', 'self').enabled, false);
-  assert.equal(getUniverseActionState('fleet', foreign, 'player-current').enabled, false);
+  // Transport goes to any inhabited planet; overflow burns at the target (audit 2.6).
+  assert.equal(getUniverseActionState('fleet', foreign, 'player-current').enabled, true);
+  assert.match(getUniverseActionState('fleet', foreign, 'player-current').reason ?? '', /сгорят/);
   assert.equal(getUniverseActionState('fleet', ally, 'player-current', 'ally').status, 'supported');
   assert.equal(getUniverseActionState('fleet', ally, 'player-current', 'ally').enabled, true);
-  // The fixture alone grants nothing: without a current alliance relation the route is closed.
-  assert.equal(getUniverseActionState('fleet', ally, 'player-current', 'neutral').enabled, false);
-  assert.equal(getUniverseActionState('fleet', ally, 'player-current').enabled, false);
+  assert.equal(getUniverseActionState('fleet', ally, 'player-current', 'ally').reason, 'Союзная планета принимает транспортировку.');
+  assert.equal(getUniverseActionState('fleet', ally, 'player-current', 'neutral').enabled, true);
   assert.equal(getUniverseActionState('spy', empty, 'player-current').status, 'disabled');
 });

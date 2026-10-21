@@ -536,7 +536,8 @@ function FleetWorkspace({
     const resources = target.runtime.resources ?? getPlanetResources(runtimeState, target.planetId);
     return {
       targetUnavailable: false,
-      overflowWarning: getOverflowWarning(flight.cargo, resources, target.runtime.recycling.availableDebris, getStorageCapacities(target.runtime.buildings)),
+      overflowWarning: getOverflowWarning(flight.cargo, resources, getStorageCapacities(target.runtime.buildings))
+        || (target.storage === 'foreign' && (flight.cargo?.debris ?? 0) > 0),
     };
   };
 

@@ -30,7 +30,7 @@ import {
   type OwnedFleetState,
 } from '../domain/fleet/runtime.ts';
 import { calculatePlanetCapacity, calculatePlanetPopulation } from '../domain/fleet/overpopulation.ts';
-import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
+import { getStorageCapacities, type BuildingRole } from '../domain/buildings/resource-zone.ts';
 import { EXCLUDED_SHIP_UPGRADE_IDS } from '../domain/buildings/spaceport-upgrades.ts';
 import { isPlanetBlocked } from './overpopulation.ts';
 import {
@@ -272,12 +272,22 @@ export type FlightReconcileResult = {
 
 const ACTIVE_FLIGHT_PHASES = new Set<FlightRecord['phase']>(['outbound', 'returning', 'arrived']);
 
+/** Storage view of a transport destination: own, allied or any other inhabited planet. */
+export type TransportTargetRuntime = {
+  name: string;
+  resources?: { metal: number; minerals: number; gas: number };
+  buildings: Partial<Record<BuildingRole, number>>;
+  recycling: { availableDebris: number };
+};
+
 export type ResolvedTransportTarget = {
   planetId: PlanetId;
   coordinate: UniverseCoordinate;
   ownerId: string;
   relation: 'self' | 'ally' | 'enemy' | 'neutral' | 'empty';
-  runtime: PlanetRuntime | null;
+  /** own: state.planets; allied: state.alliedPlanets; foreign: an espionage (NPC/player) target. */
+  storage?: 'own' | 'allied' | 'foreign';
+  runtime: TransportTargetRuntime | null;
   acceptsTransport: boolean;
 };
 function currentFlightState(state: SaveState): FlightState {
@@ -341,7 +351,30 @@ function isCurrentAllyOwner(state: SaveState, ownerId: string): boolean {
   return Boolean(own && selectOwnerAlliance(state.command, ownerId)?.id === own.id);
 }
 
-/** Resolves only authoritative SaveState targets; Universe paint cannot grant access. */
+function foreignTransportTarget(state: SaveState, resolved: ResolvedSpyTarget, coordinate: UniverseCoordinate): ResolvedTransportTarget {
+  const { target } = resolved;
+  return {
+    planetId: target.id,
+    coordinate,
+    ownerId: target.ownerId,
+    relation: resolved.relation === 'self' ? 'neutral' : resolved.relation,
+    storage: 'foreign',
+    runtime: {
+      name: target.name,
+      resources: { metal: target.resources.metal, minerals: target.resources.minerals, gas: target.resources.gas },
+      buildings: target.buildings as Partial<Record<BuildingRole, number>>,
+      // A foreign planet has no debris stock: debris cargo burns on delivery.
+      recycling: { availableDebris: 0 },
+    },
+    acceptsTransport: true,
+  };
+}
+
+/**
+ * Resolves only authoritative SaveState targets; Universe paint cannot grant
+ * access. Any inhabited planet accepts transport: own, allied, or any other
+ * player/NPC planet (its storage takes what fits, the rest burns).
+ */
 export function resolveTransportTarget(
   state: SaveState,
   destination?: FlightDestination,
@@ -349,33 +382,41 @@ export function resolveTransportTarget(
   if (!destination || !isFlightCoordinate(destination.coordinate)) return emptyTransportTarget(destination);
   const coordinate = destination.coordinate;
   const ownEntry = Object.entries(state.planets).find(([, planet]) => coordinatesEqual(targetCoordinateFromPlanet(planet), coordinate));
-  const allyEntry = Object.entries(state.alliedPlanets ?? {}).find(([, planet]) => coordinatesEqual(targetCoordinateFromPlanet(planet), coordinate) && isCurrentAllyOwner(state, planet.ownerId));
+  const allyEntry = Object.entries(state.alliedPlanets ?? {}).find(([, planet]) => coordinatesEqual(targetCoordinateFromPlanet(planet), coordinate));
   const byCoordinate = ownEntry ?? allyEntry;
   const byId = destination.kind === 'planet'
     ? state.planets[destination.planetId]
-      ? { id: destination.planetId, planet: state.planets[destination.planetId], relation: 'self' as const }
-      : state.alliedPlanets?.[destination.planetId] && isCurrentAllyOwner(state, state.alliedPlanets[destination.planetId].ownerId)
-        ? { id: destination.planetId, planet: state.alliedPlanets[destination.planetId], relation: 'ally' as const }
+      ? { id: destination.planetId, planet: state.planets[destination.planetId] as PlanetRuntime, own: true }
+      : state.alliedPlanets?.[destination.planetId]
+        ? { id: destination.planetId, planet: state.alliedPlanets[destination.planetId] as PlanetRuntime, own: false }
         : undefined
     : undefined;
 
+  if (!byCoordinate && !byId) {
+    const foreign = destination.kind === 'planet'
+      ? resolveSpyTarget(state, destination.planetId, { coordinate })
+      : resolveSpyTargetAtCoordinate(state, coordinate);
+    return foreign ? foreignTransportTarget(state, foreign, coordinate) : emptyTransportTarget(destination);
+  }
   if (destination.kind === 'planet' && (!byId || !coordinatesEqual(targetCoordinateFromPlanet(byId.planet), coordinate))) {
     return emptyTransportTarget(destination);
   }
-  if (!byCoordinate && !byId) return emptyTransportTarget(destination);
 
   const id = byId?.id ?? byCoordinate?.[0] ?? '';
   const planet = byId?.planet ?? byCoordinate?.[1];
   if (!planet) return emptyTransportTarget(destination);
-  const relation = byId?.relation ?? (ownEntry ? 'self' : 'ally');
-  const ownerId = relation === 'self' ? state.profile.playerId : (planet as AlliedPlanetState).ownerId;
+  const own = byId ? byId.own : Boolean(ownEntry);
+  const ownerId = own ? state.profile.playerId : (planet as AlliedPlanetState).ownerId;
+  // A planet stored as allied whose owner is no longer in our alliance is just a foreign planet.
+  const relation = own ? 'self' as const : isCurrentAllyOwner(state, ownerId) ? 'ally' as const : 'neutral' as const;
   return {
     planetId: id,
     coordinate,
     ownerId,
     relation,
+    storage: own ? 'own' : 'allied',
     runtime: planet,
-    acceptsTransport: relation === 'self' || relation === 'ally',
+    acceptsTransport: true,
   };
 }
 
@@ -411,7 +452,7 @@ function resolveDeploymentTarget(
 ): ResolvedTransportTarget | null {
   if (!destination || destination.kind !== 'planet' || destination.planetId === originPlanetId) return null;
   const target = resolveTransportTarget(state, destination);
-  if (target.relation !== 'self' || !target.runtime || !state.planets[target.planetId]) return null;
+  if (target.relation !== 'self' || target.storage !== 'own' || !state.planets[target.planetId]) return null;
   return target;
 }
 
@@ -476,9 +517,20 @@ export function getTransportCargoSummary(
     cargo,
     capacity: { used: getCargoUsed(cargo), total: capacityTotal, free: Math.max(0, capacityTotal - getCargoUsed(cargo)) },
     overflowWarning: target.acceptsTransport && target.runtime
-      ? getOverflowWarning(cargo, targetResources, target.runtime.recycling.availableDebris, targetCaps)
+      ? getTransportOverflowWarning(target, cargo, targetResources, targetCaps)
       : false,
   };
+}
+
+/** Storage overflow burns; a foreign planet also has no debris stock, so debris cargo burns there. */
+function getTransportOverflowWarning(
+  target: ResolvedTransportTarget,
+  cargo: TransportCargo,
+  targetResources: { metal: number; minerals: number; gas: number },
+  targetCaps: ReturnType<typeof getStorageCapacities> | undefined,
+): boolean {
+  return getOverflowWarning(cargo, targetResources, targetCaps)
+    || (target.storage === 'foreign' && normalizeTransportCargo(cargo).debris > 0);
 }
 
 export function getReservedShipsForPlanet(
@@ -1581,7 +1633,7 @@ export function dispatchFlight(
     if (command.targetRelation !== undefined && command.targetRelation !== 'self') {
       return failure(state, 'target-not-available', 'Дислокация возможна только на другую вашу планету.');
     }
-    const targetPlanet = deploymentTarget.runtime;
+    const targetPlanet = state.planets[deploymentTarget.planetId];
     if (!targetPlanet) return failure(state, 'target-not-available', 'Целевая планета больше не доступна.');
     if (isPlanetBlocked(state, deploymentTarget.planetId)) {
       return failure(state, 'target-overpopulated', `Дислокация на планету ${targetPlanet.name} временно заблокирована из-за перенаселения.`);
@@ -1628,13 +1680,13 @@ export function dispatchFlight(
     }
     transportTarget = resolveTransportTarget(state, command.destination);
     if (!transportTarget.acceptsTransport || !transportTarget.runtime) {
-      return failure(state, 'target-not-available', 'Транспортировка возможна только на вашу или союзную планету.');
+      return failure(state, 'target-not-available', 'Транспортировка возможна только на обитаемую планету.');
     }
     if (transportTarget.planetId === originPlanetId) {
       return failure(state, 'target-is-origin', 'Нельзя перевозить ресурсы на планету-источник.');
     }
     if (command.targetRelation !== undefined && command.targetRelation !== transportTarget.relation) {
-      return failure(state, 'target-not-available', 'Транспортировка возможна только на вашу или союзную планету.');
+      return failure(state, 'target-not-available', 'Отношения с владельцем планеты изменились. Выберите цель заново.');
     }
     const summary = getTransportCargoSummary(state, originPlanetId, selectedShips, command.cargo, command.destination);
     transportCargo = summary.cargo;
@@ -1975,7 +2027,6 @@ export function dispatchNpcAidFlight(
   const overflowWarning = getOverflowWarning(
     cargo,
     targetPlanet.resources ?? getPlanetResources(state, request.planetId),
-    targetPlanet.recycling.availableDebris,
     getStorageCapacities(targetPlanet.buildings),
   );
   const domainResult = dispatchDomainFlight(flights, {
@@ -2109,7 +2160,18 @@ function updatePlanetCargoState(
   debris: number,
 ): SaveState {
   if (!target.runtime) return state;
-  if (target.relation === 'self') {
+  if (target.storage === 'foreign') {
+    // Resources join the foreign storage; debris has nowhere to go and burns.
+    const espionage = state.espionage;
+    const stored = espionage ? getEspionageTargets(espionage)[target.planetId] : undefined;
+    if (!espionage || !stored) return state;
+    const targets = { ...getEspionageTargets(espionage), [target.planetId]: {
+      ...stored,
+      resources: { ...stored.resources, metal: resources.metal, minerals: resources.minerals, gas: resources.gas },
+    } };
+    return { ...state, espionage: { ...espionage, targets, ...(espionage.bot01Planets ? { bot01Planets: targets } : {}) } };
+  }
+  if (target.storage === 'own' || (target.storage === undefined && target.relation === 'self')) {
     const withResources = replacePlanetResources(state, target.planetId, resources);
     const planet = withResources.planets[target.planetId];
     if (!planet) return withResources;

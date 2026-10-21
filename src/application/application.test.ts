@@ -188,7 +188,8 @@ test('Test Mode scores the player and Bot 001 from their separate asset pools an
   const player = scores[state.profile.playerId];
   const bot = scores[UNIVERSE_NPC_OWNER_ID];
   assert.deepEqual(player && [player.resourcePoints, player.battlePoints, player.totalPoints, player.achievementPoints], [20_708, 0, 20_708, 0]);
-  assert.deepEqual(bot && [bot.resourcePoints, bot.battlePoints, bot.totalPoints, bot.achievementPoints], [1_003_344, 0, 1_003_344, 0]);
+  // 999 252 since Ecology (science 13, captured level 10) was removed from the catalog.
+  assert.deepEqual(bot && [bot.resourcePoints, bot.battlePoints, bot.totalPoints, bot.achievementPoints], [999_252, 0, 999_252, 0]);
 
   const targets = Object.values(state.espionage?.targets ?? {}).filter((target) => target.ownerId === UNIVERSE_NPC_OWNER_ID);
   const profile = state.espionage?.bot01Profile;
@@ -222,7 +223,7 @@ test('Test Mode scores the player and Bot 001 from their separate asset pools an
     shipUpgradeLevels: { ...profile.shipLevels, ...profile.commanderLevels },
   });
   assert.equal(botLocal.resourceTotal, 969_228_885);
-  assert.equal(botShipUpgrades.resourceTotal, 30_770_625);
+  assert.equal(botShipUpgrades.resourceTotal, 26_678_625); // without Ecology (science 13)
   assert.equal(profile.commanderLevels.hunter, 20);
   assert.equal(profile.commanderLevels.judge, 1);
   assert.ok(botCommanderUpgrades.resourceTotal > 0);
