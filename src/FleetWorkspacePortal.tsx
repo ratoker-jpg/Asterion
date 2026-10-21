@@ -46,6 +46,7 @@ import {
   SPY_REPORT_RESULT_EVENT,
   getTransportCargoSummary,
   getAvailableFleetForPlanet,
+  getPlayerFlightSlotUsage,
   resolveTransportTarget,
   resolveRecycleTargetKindAtCoordinate,
   previewFlight,
@@ -401,6 +402,7 @@ function FleetWorkspace({
   const fleetSnapshot = useMemo(() => getFleetSnapshot(saveState, planetId as SaveState['currentPlanetId']), [planetId, saveState]);
   const fleetBudget = useMemo(() => getFleetBuildBudget(saveState, planetId as SaveState['currentPlanetId']), [planetId, saveState]);
   const flightRecords = saveState.flights.records;
+  const flightSlots = useMemo(() => getPlayerFlightSlotUsage(saveState), [saveState]);
   const espionageState = saveState.espionage ?? { missions: [], reports: [], hunterNotices: [] };
   const entityLevels = getOwnerShipUpgradeLevels(saveState);
   const saveStateRef = useRef(saveState);
@@ -1639,6 +1641,11 @@ function FleetWorkspace({
                 <div><small>КОРАБЛЕЙ</small><b>{selectedShipCount}</b></div>
                 <div><small>НАСЕЛЕНИЕ</small><b>{selectedPopulation}</b></div>
                 <div><small>ФЛОТ</small><b>{fleetSummary.population} / {fleetSummary.capacity}</b></div>
+                <div
+                  className={flightSlots.free <= 0 ? 'is-full' : undefined}
+                  data-qa-flight-slots
+                  title={`Занято ${flightSlots.used} из ${flightSlots.limit} одновременных полётов. Лимит: 3 + 1,5 за уровень «Компьютерных систем»; шпионские зонды его не занимают.`}
+                ><small>ПОЛЁТЫ</small><b>{flightSlots.used} / {flightSlots.limit}</b></div>
               </div>
 
               {missionId === 'attack' || missionId === 'pirate-elimination' || missionId === 'deployment' || missionId === 'space-flight' || missionId === 'sun-support' ? <section className={`fleet-attack-prep-v1${missionId === 'space-flight' ? ' fleet-space-flight-prep-v1' : ''}`} data-qa-attack-prep={missionId === 'attack' || missionId === 'pirate-elimination' ? true : undefined} data-qa-deployment-commanders={missionId === 'deployment' ? true : undefined} data-qa-space-flight-prep={missionId === 'space-flight' ? true : undefined}>

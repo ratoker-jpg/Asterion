@@ -1,5 +1,6 @@
 import { selectOwnerAlliance, selectOwnerMembership } from '../domain/command/selectors.ts';
 import { dispatchSunMission, getSunDebris, parseSunOperationId, sunDebrisCoordinate } from './sun-raid.ts';
+import { COMPUTER_SYSTEMS_SCIENCE_ID, getFlightSlotUsage, isFlightLimitExempt, type FlightSlotUsage } from '../domain/flights/limit.ts';
 import {
   appendAidEvent,
   creditAidDelivery,
@@ -187,6 +188,7 @@ export type FlightErrorCode =
   | 'insufficient-commanders'
   | 'capacity-exceeded'
   | 'target-overpopulated'
+  | 'flight-limit-reached'
   | 'invalid-command';
 
 export type FlightError = {
@@ -300,6 +302,11 @@ function coordinatesEqual(left: UniverseCoordinate, right: UniverseCoordinate): 
 
 function activeFlights(state: SaveState): FlightRecord[] {
   return currentFlightState(state).records.filter((flight) => ACTIVE_FLIGHT_PHASES.has(flight.phase));
+}
+
+/** «Занято X из Y»: player flights holding a slot against the Computer Systems limit. */
+export function getPlayerFlightSlotUsage(state: SaveState): FlightSlotUsage {
+  return getFlightSlotUsage(currentFlightState(state).records, state.science.levels[COMPUTER_SYSTEMS_SCIENCE_ID]);
 }
 
 function persistedPlayerPlanets(state: SaveState): UniversePersistedPlayerPlanet[] {
@@ -1239,6 +1246,13 @@ export function dispatchFlight(
     if (existing) return { ok: true, state, flight: existing, created: false, notice: noticeForDispatch(existing) };
   }
   if (!requestId) return failure(state, 'invalid-command', 'Для отправки требуется requestId/commandId.');
+  if (!isFlightLimitExempt(command.missionId)) {
+    const slots = getPlayerFlightSlotUsage(state);
+    if (slots.free <= 0) {
+      return failure(state, 'flight-limit-reached',
+        `Достигнут лимит одновременных полётов: ${slots.used} из ${slots.limit}. Дождитесь возвращения флота или изучите «Компьютерные системы».`);
+    }
+  }
   if (command.missionId === 'pirate-recon' || command.missionId === 'pirate-elimination') {
     return dispatchPirateFlight(state, command, runtimeOptions);
   }
@@ -1256,7 +1270,7 @@ export function dispatchFlight(
     }, { now, mode: runtimeOptions.mode ?? 'production', testTimeScale: runtimeOptions.testTimeScale });
     return outcome.ok
       ? { ok: true, state: outcome.state, flight: outcome.flight, created: true, notice: outcome.notice }
-      : failure(state, 'target-not-available', outcome.message);
+      : failure(state, outcome.code, outcome.message);
   }
   if (command.missionId !== 'expedition' && command.missionId !== 'exploration-recon' && command.missionId !== 'colonize' && command.missionId !== 'transport' && command.missionId !== 'aid' && command.missionId !== 'espionage' && command.missionId !== 'attack' && command.missionId !== 'deployment' && command.missionId !== 'recycle' && command.missionId !== 'gas' && command.missionId !== 'space-flight') {
     return failure(state, 'mission-not-supported', 'Эта миссия пока не подключена к flight runtime.');

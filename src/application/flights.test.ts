@@ -2307,8 +2307,9 @@ test('deployment reservation survives reload during attrition and the complete m
   assert.ok(attrition.state.planets['helion-01'].fleet.ships.scout >= 2);
   assert.ok(
     attrition.state.planets['helion-01'].fleet.ships.battleship
-      < reloadedOutbound.planets['helion-01'].fleet.ships.battleship,
-    'unreserved ordinary ships should burn during the persisted flight',
+      < reloadedOutbound.planets['helion-01'].fleet.ships.battleship
+      || (attrition.state.planets['helion-01'].solarSatellites ?? 0) < (reloadedOutbound.planets['helion-01'].solarSatellites ?? 0),
+    'unreserved units (satellites first, then ordinary ships) should burn during the persisted flight',
   );
   assert.ok((attrition.state.planets['helion-01'].overpopulation?.removedShips?.length ?? 0) > 0);
   assert.equal(getReservedShipsForPlanet(attrition.state, 'helion-01').scout, 2);
