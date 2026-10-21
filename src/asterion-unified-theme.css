@@ -239,9 +239,9 @@
 .planet-details-v4{ border-radius:var(--ut-r-chip); }
 .zone-hotspot__label{
   border-radius:var(--ut-r-chip) !important;
-  background:rgba(8,15,19,.88);
+  background:rgba(8,15,19,.9);
   border:1px solid var(--ut-border-strong);
-  backdrop-filter:blur(4px);
+  /* No backdrop blur: labels sit over the animated planet and the .9 fill hides it anyway. */
 }
 .queue-card-v2{
   border-radius:var(--ut-r-card) !important;

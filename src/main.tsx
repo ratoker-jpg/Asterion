@@ -31,6 +31,7 @@ import './universe-interaction.css';
 import './universe-window.css';
 import './asterion-unified-theme.css';
 import './ui/race/race-theme.css';
+import './final-polish.css';
 
 const isElectron = navigator.userAgent.includes('Electron');
 

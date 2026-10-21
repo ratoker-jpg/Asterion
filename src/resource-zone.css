@@ -580,8 +580,7 @@
   .resource-building-action-confirm p{font-size:10px}
 }
 
-.viewport:has(.resource-zone-view){place-items:start}
-.viewport:has(.resource-zone-view) .stage{transform-origin:top left}
+/* Zones are centred like every other screen (see styles.css / global-page-scroll.css). */
 
 @keyframes resourceBuildingPulse{0%,100%{filter:drop-shadow(0 0 5px rgba(240,182,78,.15))}50%{filter:drop-shadow(0 0 15px rgba(240,182,78,.45))}}
 

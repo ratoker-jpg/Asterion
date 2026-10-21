@@ -117,11 +117,12 @@ export function GlobalPageScrollController() {
       // contents. Measure the incoming page from the normal shell first; otherwise
       // a root with min-height: 100% can inherit the previous page's height and keep
       // the global scroll mode alive indefinitely.
+      // The reset and the re-measure below happen in the same task (layout is
+      // flushed synchronously by getBoundingClientRect), so the intermediate
+      // fixed shell is never painted and the page does not flicker.
       if (pageChanged && root.classList.contains('asterion-long-page')) {
         root.classList.remove('asterion-long-page');
         clearGeometry();
-        schedule();
-        return;
       }
 
       // Resource/planet zones are fixed-screen compositions. Their scene and

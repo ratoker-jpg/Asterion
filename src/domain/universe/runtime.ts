@@ -821,8 +821,11 @@ export function getUniverseTimedObjectSchedule(
   const config = timedObjectConfig(kind);
   const safeIndex = Math.max(0, Math.floor(cycleIndex));
   const baseCycles = ensureTimedCycles(kind, galaxy, system, config.epoch + (safeIndex + 1) * (config.maxLifetimeMs + config.quietMs));
-  const cycles = kind === 'pirate'
-    ? applyPirateContactDefeatsToSchedules(baseCycles, galaxy, system, pirateContactDefeats)
+  const relevantDefeats = kind === 'pirate'
+    ? pirateContactDefeats.filter((record) => record.galaxy === galaxy && record.system === system)
+    : [];
+  const cycles = relevantDefeats.length
+    ? applyPirateContactDefeatsToSchedules(baseCycles, galaxy, system, relevantDefeats)
     : baseCycles;
   return cycles[safeIndex] ?? cycles[0];
 }
@@ -877,12 +880,15 @@ function activeTimedObjectSchedule(
   nowMs: number,
   pirateContactDefeats: readonly PirateContactDefeatRecord[] = [],
 ) {
-  const defeatCount = kind === 'pirate'
-    ? pirateContactDefeats.filter((record) => record.galaxy === galaxy && record.system === system).length
-    : 0;
-  const baseCycles = ensureTimedCycles(kind, galaxy, system, nowMs + defeatCount * PIRATE_MAX_LIFETIME_MS);
-  const cycles = kind === 'pirate'
-    ? applyPirateContactDefeatsToSchedules(baseCycles, galaxy, system, pirateContactDefeats)
+  const relevantDefeats = kind === 'pirate'
+    ? pirateContactDefeats.filter((record) => record.galaxy === galaxy && record.system === system)
+    : [];
+  const baseCycles = ensureTimedCycles(kind, galaxy, system, nowMs + relevantDefeats.length * PIRATE_MAX_LIFETIME_MS);
+  // Without defeats in this system the canonical schedule is already final:
+  // re-mapping every cycle since the epoch on each 1 s render was the
+  // Universe screen's main-thread hitch (see getPirateContactCyclesBetween).
+  const cycles = relevantDefeats.length
+    ? applyPirateContactDefeatsToSchedules(baseCycles, galaxy, system, relevantDefeats)
     : baseCycles;
   for (let index = cycles.length - 1; index >= 0; index -= 1) {
     const cycle = cycles[index];

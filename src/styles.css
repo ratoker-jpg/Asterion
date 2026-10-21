@@ -25,12 +25,12 @@
 
 /* Center the fixed canvas before scaling it on native windows narrower than 1920px. */
 @media (max-width: 1919px) {
-  html:not(.web-preview):not(.asterion-long-page) .viewport:not(:has(.resource-zone-view)) {
+  html:not(.web-preview):not(.asterion-long-page) .viewport {
     position: relative;
     display: block;
   }
 
-  html:not(.web-preview):not(.asterion-long-page) .viewport:not(:has(.resource-zone-view)) > .stage {
+  html:not(.web-preview):not(.asterion-long-page) .viewport > .stage {
     position: absolute;
     left: 50%;
     top: 50%;

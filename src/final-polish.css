@@ -1,0 +1,54 @@
+/* FINAL POLISH — text always fits its frame (audit: scratch text-fit probe over every
+   screen, with stress data: 987 654 ships per hull, max building levels).
+   Rule: a chip/plate sizes to its content (min width keeps the rhythm), labels never
+   paint over a border, long single words shrink their tracking before they overflow. */
+
+/* Ships / Defense / Commander cards: «В СТРОЮ / ПОСТРОЕНО» plate grows with the count. */
+.shipyard-card-title-v1 { grid-template-columns: minmax(94px, max-content) minmax(0, 1fr) 28px; }
+.shipyard-card-title-v1.commander { grid-template-columns: minmax(164px, max-content) minmax(0, 1fr) 28px; }
+.shipyard-owned-v1 { padding: 0 12px; gap: 8px; }
+.shipyard-owned-v1 > strong,
+.shipyard-owned-count-v1 strong { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.shipyard-owned-v1.has-commander-level { grid-template-columns: max-content max-content; gap: 10px; padding-right: 8px; }
+
+/* Commander level chip: label and value both inside the frame. */
+.fleet-commander-level-v1 { min-width: 64px; padding: 5px 9px; justify-items: center; }
+.fleet-commander-level-v1 small { letter-spacing: .06em; white-space: nowrap; }
+.fleet-commander-level-v1 strong { white-space: nowrap; }
+
+/* Repair workshop: «ДОСТУПНО» plate grows with the count. */
+.repair-card-title-v1 { grid-template-columns: minmax(98px, max-content) minmax(0, 1fr) 38px; }
+.repair-available-v1 { padding: 0 12px; gap: 8px; }
+.repair-available-v1 strong { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Fleets root: the compose header is a plate — its copy gets an inner margin. */
+.fleet-root-v2 .fleet-compose-v2 > header { padding: 10px 14px 9px; align-items: center; }
+.fleet-root-v2 .fleet-compose-v2 > .fleet-compose-v2__meta { padding: 0 14px; }
+
+/* Mission tiles: «Транспортировка» fits a quarter column without breaking mid-word. */
+.fleet-root-v2 .fleet-order-v2 .fleet-mission-icons-v1 button { padding-inline: 3px; }
+.fleet-root-v2 .fleet-order-v2 .fleet-mission-icons-v1 button span { font-size: 9px !important; letter-spacing: -.01em; overflow-wrap: normal; word-break: normal; hyphens: manual; }
+
+/* Settings → Typography: long labels wrap to a second line instead of «…». */
+.typography-row-v2 > div:first-child strong { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.25; }
+
+/* ---------------------------------------------------------------------------
+   Science ⇄ Spaceport: one layout. Both are a 330px sidebar + catalog on the
+   open starfield (no extra outer plate), the sidebar spans the page height and
+   keeps its queue at the bottom, the catalog cards never change height. */
+.spaceport-upgrades-v2 { background: none; padding: 18px; min-height: 0; }
+.spaceport-sidebar-v2 { position: static; align-self: start; min-height: 846px; }
+.spaceport-side-queue { margin-top: auto; padding-top: 16px; border: 0; border-top: 1px solid rgba(66, 185, 214, .14); border-radius: 0; background: none; }
+.spaceport-side-queue > header { font-weight: 700; letter-spacing: 1px; }
+.spaceport-back-v2 { margin-top: 14px; }
+.spaceport-heading-meta-v2 span { padding: 8px 11px; font-weight: 700; letter-spacing: .8px; }
+
+/* Status line of constant height (orders, blockers, full queue, max level). */
+.spaceport-status-slot-v2 { height: 30px; min-height: 30px; margin-top: 8px; display: flex; align-items: stretch; gap: 6px; overflow: hidden; }
+.spaceport-status-slot-v2 > .spaceport-state-strip-v2 {
+  width: auto; flex: 0 1 auto; min-width: 0;
+  display: flex; align-items: center;
+  padding: 0 10px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal;
+}
+.spaceport-status-slot-v2 > .spaceport-state-strip-v2.blocked { flex: 1 1 auto; }

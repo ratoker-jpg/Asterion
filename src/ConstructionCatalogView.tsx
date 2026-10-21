@@ -342,13 +342,10 @@ export function ConstructionCatalogView({
   );
   const [quantities, setQuantities] = useState<Record<string, number>>({});
 
+  // Document scrolling (long page) is owned by GlobalPageScrollController.
   useEffect(() => {
-    document.documentElement.classList.add('asterion-long-page');
     window.scrollTo(0, 0);
-    return () => {
-      document.documentElement.classList.remove('asterion-long-page');
-      window.scrollTo(0, 0);
-    };
+    return () => window.scrollTo(0, 0);
   }, []);
 
   useEffect(() => {

@@ -351,6 +351,10 @@ function useStageScale() {
   const calc = () => Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
   const [scale, setScale] = useState(calc);
   useEffect(() => {
+    // The long-page stage sits at the same letterbox offset as the centred fixed stage.
+    document.documentElement.style.setProperty('--asterion-stage-top', `${Math.max(0, Math.round((window.innerHeight - 1080 * scale) / 2))}px`);
+  }, [scale]);
+  useEffect(() => {
     const onResize = () => setScale(calc());
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);

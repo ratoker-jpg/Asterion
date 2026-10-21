@@ -29,7 +29,6 @@ import {
   SCIENCE_SECTIONS,
 } from './domain/science/catalog.ts';
 import {
-  SCIENCE_BASE_COSTS_NOTE,
   SCIENCE_CANCEL_REQUEST_EVENT,
   SCIENCE_CANCEL_REFUND_SOURCE_URL,
   SCIENCE_LABORATORY_MAX_LEVEL,
@@ -202,7 +201,6 @@ export function ScienceView() {
             <ScienceQueueCard key={task.id} task={task} now={scienceQueueNow} paused={scienceQueuePaused} onCancel={() => setPendingCancellation(task)} />
           )) : <p className="utility-helper">Очередь свободна.</p>}
         </section>
-        <small className="science-captured-note utility-helper" title={SCIENCE_BASE_COSTS_NOTE}>Стоимость: официальные RAW 0 → 1 × 2^уровень; время: Asterion Balance v1 с учётом лаборатории.</small>
       </aside>
 
       <main className="science-main-v2">
