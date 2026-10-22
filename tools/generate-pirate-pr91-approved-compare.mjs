@@ -7,7 +7,7 @@ import { DEFAULT_COMBAT_PRIORITY } from '../src/domain/combat/priority.ts';
 import { resolveCombat } from '../src/domain/combat/resolver.ts';
 import { createPirateProfile, calculatePirateEliminationPopulationBudget } from '../src/domain/pirates/profile.ts';
 import { PIRATE_BASE_SHIPS, PIRATE_CATALOG_BY_ID } from '../src/domain/pirates/catalog.ts';
-import { calculatePirateForceDebris } from '../src/domain/pirates/debris.ts';
+import { PIRATE_ELIMINATION_DEFEAT_MULTIPLIER, PIRATE_ELIMINATION_DRAW_MULTIPLIER, calculatePirateForceDebris, selectPirateEliminationMultiplier, settlePirateEliminationDebris } from '../src/domain/pirates/debris.ts';
 import { battleDebrisRoll } from '../src/domain/combat/debris.ts';
 import { PR91_HANGAR_CAPACITY, PR91_POPULATIONS } from './pr91-constants.mjs';
 import { pirateDebrisRewardMultiplier } from '../src/domain/pirates/threat.ts';
@@ -106,9 +106,14 @@ const net = (faction,player,report) => {
   const destroyedPirate=calculatePirateForceDebris(report.defenderForce,report.attackerForce,'pirate-elimination',debrisRoll);
   const orbitalDebris=calculateAttackDebris(report,faction,faction,debrisRoll);
   const fullWin=report.winner==='attacker'&&report.defenderForce.populationAfter===0;
-  const multiplier=fullWin?pirateDebrisRewardMultiplier(player.actual,HANGAR):1;
-  const extra=Math.max(0,Math.floor(destroyedPirate*multiplier)-destroyedPirate);
-  const totalDebris=orbitalDebris+extra;
+  // Production accounting (resolvePirateEliminationAtTarget): full win -> hangar
+  // reward, draw -> x0.75, any other outcome -> x0.5, on pirate wreckage only.
+  const multiplier=selectPirateEliminationMultiplier({victory:fullWin,winner:report.winner},{
+    rewardMultiplier:pirateDebrisRewardMultiplier(player.actual,HANGAR),
+    drawMultiplier:PIRATE_ELIMINATION_DRAW_MULTIPLIER,defeatMultiplier:PIRATE_ELIMINATION_DEFEAT_MULTIPLIER});
+  const settled=settlePirateEliminationDebris(orbitalDebris,destroyedPirate,multiplier);
+  const extra=settled.bonusPirateDebris;
+  const totalDebris=settled.debris;
   const factionRecycler=getFactionShipCatalog(faction).find(x=>x.id==='recycler');
   if(!factionRecycler?.ship?.cargo)throw Error('Missing recycler cargo');
   const flightFuel=calculateFlightFuel(faction,player.shipsRecord,12000,{2:15});

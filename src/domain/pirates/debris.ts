@@ -69,3 +69,38 @@ export function calculatePirateForceDebris(
   }, 0);
   return Math.floor(roll * life * (share / PIRATE_ORDINARY_DEBRIS_SHARE));
 }
+
+/** Frozen production multipliers for pirate-elimination wreckage on a draw / any non-victory. */
+export const PIRATE_ELIMINATION_DRAW_MULTIPLIER = 0.75;
+export const PIRATE_ELIMINATION_DEFEAT_MULTIPLIER = 0.5;
+
+export type PirateEliminationFrozenMultipliers = {
+  /** Full-victory reward (hangar fraction); 1 for legacy snapshots without a budget. */
+  rewardMultiplier?: number;
+  drawMultiplier?: number;
+  defeatMultiplier?: number;
+};
+
+/**
+ * The single outcome rule of a pirate elimination (production and balance tools
+ * alike): a full victory takes the reward multiplier, a draw x0.75, any other
+ * outcome x0.5. Missing frozen values (legacy flights) stay x1.
+ */
+export function selectPirateEliminationMultiplier(
+  outcome: { victory: boolean; winner: string },
+  frozen: PirateEliminationFrozenMultipliers,
+): number {
+  if (outcome.victory) return frozen.rewardMultiplier ?? 1;
+  return outcome.winner === 'draw' ? frozen.drawMultiplier ?? 1 : frozen.defeatMultiplier ?? 1;
+}
+
+/**
+ * Applies the multiplier to pirate wreckage only; the player's own hull salvage
+ * is never penalized. Negative amounts are dropped like `addDebris` does.
+ */
+export function settlePirateEliminationDebris(baseDebris: number, basePirateDebris: number, multiplier: number) {
+  const ownDebris = Math.max(0, baseDebris - basePirateDebris);
+  const adjustedPirateDebris = Math.floor(basePirateDebris * multiplier);
+  const debris = Math.min(Number.MAX_SAFE_INTEGER, ownDebris + Math.max(0, adjustedPirateDebris));
+  return { ownDebris, adjustedPirateDebris, bonusPirateDebris: adjustedPirateDebris - basePirateDebris, debris };
+}

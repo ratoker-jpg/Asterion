@@ -27,7 +27,7 @@ import { resolveSpyTarget } from './espionage-targets.ts';
 import type { AttackLaunchSnapshot, AttackLoot, AttackResolution } from '../domain/attack/types.ts';
 import { recordBattleScoreAward } from '../domain/rating/scoring.ts';
 import { isPirateShipId } from '../domain/combat/side-entity.ts';
-import { calculatePirateForceDebris } from '../domain/pirates/debris.ts';
+import { calculatePirateForceDebris, selectPirateEliminationMultiplier, settlePirateEliminationDebris } from '../domain/pirates/debris.ts';
 import { BATTLE_DEBRIS_EXCLUDED_IDS, battleDebrisRoll } from '../domain/combat/debris.ts';
 import { pirateHangarFraction } from '../domain/pirates/threat.ts';
 import { PIRATE_CATALOG_BY_ID } from '../domain/pirates/catalog.ts';
@@ -486,16 +486,15 @@ export function resolvePirateEliminationAtTarget(state: SaveState, flight: Fligh
   const baseDebris = calculateAttackDebris(encounter.report, launch.attackerFactionId, launch.attackerFactionId, debrisRoll);
   const basePirateDebris = calculatePirateForceDebris(
     encounter.report.defenderForce, encounter.report.attackerForce, encounter.report.missionType, debrisRoll);
-  // Modifiers are frozen at launch. Legacy defeats/draws retain x1.
-  const multiplier=encounter.victory&&snapshot.eliminationBudget ? (snapshot.rewardMultiplier??1)
-    : encounter.report.winner==='draw' ? (snapshot.drawMultiplier??1)
-    : (snapshot.defeatMultiplier??1);
-  // addDebris intentionally drops negative amounts; apply the multiplier to
-  // pirate wreckage FIRST, then add the ordinary untouched own-hull salvage.
-  const ownDebris=Math.max(0,baseDebris-basePirateDebris);
-  const adjustedPirateDebris=Math.floor(basePirateDebris*multiplier);
-  const bonusPirateDebris=adjustedPirateDebris-basePirateDebris;
-  const debris=addDebris(ownDebris,adjustedPirateDebris);
+  // Modifiers are frozen at launch. Legacy defeats/draws retain x1. The same
+  // helpers drive the PR91 balance tools, so their tables match this reward.
+  const multiplier=selectPirateEliminationMultiplier({ victory: encounter.victory, winner: encounter.report.winner }, {
+    rewardMultiplier: snapshot.eliminationBudget ? snapshot.rewardMultiplier ?? 1 : 1,
+    drawMultiplier: snapshot.drawMultiplier,
+    defeatMultiplier: snapshot.defeatMultiplier,
+  });
+  // Apply the multiplier to pirate wreckage FIRST, then add the ordinary untouched own-hull salvage.
+  const { ownDebris, bonusPirateDebris, debris } = settlePirateEliminationDebris(baseDebris, basePirateDebris, multiplier);
   const report: BattleReport = {
     ...encounter.report, debris, resources: { metal: 0, minerals: 0, gas: 0 },
     pirateReward: {
