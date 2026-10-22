@@ -22,13 +22,25 @@ const CATCHUP_MS = 30 * DAY_MS;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const run = (win, source) => win.webContents.executeJavaScript(source);
 
-function createProductionSave(startAt) {
+function createProductionSave(startAt, endAt) {
   const source = `
     import { createInitialSaveState } from './src/application/persistence.ts';
     import { createDefaultNewGameConfig } from './src/domain/world/config.ts';
+    import { getNpcOwnerIds } from './src/application/npc-foundation.ts';
+    import { createNpcState } from './src/domain/npc/state.ts';
     const config = createDefaultNewGameConfig({ seed: 'NPCREPLAYQA2026', campaignName: 'NPC replay QA' });
-    config.world = { ...config.world, galaxyCount: 10, npcCount: 100, randomPlayerStart: true };
-    const state = createInitialSaveState('production', ${startAt}, config);
+    config.world = { ...config.world, galaxyCount: 2, npcCount: 100, maxNpcPerSystem: 2, randomPlayerStart: false };
+    const base = createInitialSaveState('production', ${startAt}, config);
+    const ownerIds = getNpcOwnerIds(base.espionage?.targets, base.profile.playerId);
+    if (ownerIds.length !== 100) throw new Error('Expected exactly 100 generated NPC owners.');
+    const state = {
+      ...base,
+      npc: createNpcState(ownerIds, 'npc-replay-benchmark-persona-salt-v1', ${startAt}),
+      npcReplay: { version: 1, processedThroughAt: ${startAt}, targetAt: ${endAt} },
+      exploration: { ...base.exploration, npcProcessedAt: ${endAt} },
+      pirate: { ...base.pirate, raidProcessedAt: ${endAt} },
+      asteroidSimulation: undefined,
+    };
     console.log(JSON.stringify(state));
   `;
   const child = spawnSync(process.execPath, [
@@ -78,6 +90,29 @@ async function click(win, selector) {
   if (!clicked) throw new Error(`Missing or disabled test action: ${selector}`);
 }
 
+async function readMeasurement(win) {
+  return run(win, `(() => {
+    clearInterval(window.__npcReplayQaTimer);
+    const qa = window.__npcReplayQa || { gaps: [], progress: [] };
+    const sorted = [...qa.gaps].sort((a, b) => a - b);
+    const p95 = sorted.length ? sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * .95) - 1)] : null;
+    const save = JSON.parse(localStorage.getItem(${JSON.stringify(LEGACY_KEY)}) || 'null');
+    const targets = Object.values(save?.espionage?.targets ?? {}).filter((target) => target.kind === 'npc');
+    return {
+      pending: Boolean(save?.npcReplay && save.npcReplay.targetAt > save.npcReplay.processedThroughAt),
+      processedThroughAt: save?.npcReplay?.processedThroughAt ?? null,
+      targetAt: save?.npcReplay?.targetAt ?? null,
+      savedProgressSamples: qa.progress.length,
+      timerSamples: qa.gaps.length,
+      timerP95GapMs: p95,
+      timerWorstGapMs: sorted.length ? sorted[sorted.length - 1] : null,
+      npcActionIds: targets.reduce((count, target) => count + (target.economyAppliedActionIds?.length ?? 0), 0),
+      npcQueuedBuildings: targets.reduce((count, target) => count + (target.buildingQueue?.length ?? 0), 0),
+      npcProfiles: Object.keys(save?.npc?.profiles ?? {}).length,
+    };
+  })()`);
+}
+
 async function runScenario() {
   await app.whenReady();
   const win = new BrowserWindow({
@@ -96,7 +131,8 @@ async function runScenario() {
     await load(win, '?autostart=continue');
     await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
     const startAt = Date.now() - CATCHUP_MS;
-    const rawSeed = createProductionSave(startAt);
+    const endAt = startAt + CATCHUP_MS + 30_000;
+    const rawSeed = createProductionSave(startAt, endAt);
     await run(win, `localStorage.setItem(${JSON.stringify(LEGACY_KEY)}, ${JSON.stringify(rawSeed)})`);
     await load(win, '?autostart=continue');
     await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
@@ -112,6 +148,11 @@ async function runScenario() {
       return {
         processedThroughAt: save.npcReplay?.processedThroughAt ?? null,
         targetAt: save.npcReplay?.targetAt ?? null,
+        isolation: {
+          explorationCursorAtHorizon: save.exploration?.npcProcessedAt === ${endAt},
+          pirateCursorAtHorizon: save.pirate?.raidProcessedAt === ${endAt},
+          asteroidSimulationAbsent: save.asteroidSimulation === undefined,
+        },
         npcProfiles: Object.keys(save.npc?.profiles ?? {}).length,
         npcTargets: Object.values(save.espionage?.targets ?? {}).filter((target) => target.kind === 'npc').length,
         player: { ...save.planets?.['helion-01']?.resources },
@@ -190,33 +231,36 @@ async function runScenario() {
     }
 
     const catchupStartedAt = Date.now();
-    await waitFor(win, `(() => {
+    let catchupWaitError = null;
+    try {
+      await waitFor(win, `(() => {
       try { const save = JSON.parse(localStorage.getItem(${JSON.stringify(LEGACY_KEY)}) || 'null');
         return save?.npcReplay?.targetAt <= save?.npcReplay?.processedThroughAt; }
       catch { return false; }
-    })()`, 120_000);
+      })()`, 120_000);
+    } catch (error) {
+      catchupWaitError = error instanceof Error ? error.message : String(error);
+    }
     const elapsedMs = Date.now() - catchupStartedAt;
-    const measurement = await run(win, `(() => {
-      clearInterval(window.__npcReplayQaTimer);
-      const qa = window.__npcReplayQa || { gaps: [], progress: [] };
-      const sorted = [...qa.gaps].sort((a, b) => a - b);
-      const p95 = sorted.length ? sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * .95) - 1)] : null;
-      const save = JSON.parse(localStorage.getItem(${JSON.stringify(LEGACY_KEY)}) || 'null');
-      const targets = Object.values(save?.espionage?.targets ?? {}).filter((target) => target.kind === 'npc');
-      return {
-        pending: Boolean(save?.npcReplay && save.npcReplay.targetAt > save.npcReplay.processedThroughAt),
-        processedThroughAt: save?.npcReplay?.processedThroughAt ?? null,
-        targetAt: save?.npcReplay?.targetAt ?? null,
-        savedProgressSamples: qa.progress.length,
-        timerSamples: qa.gaps.length,
-        timerP95GapMs: p95,
-        timerWorstGapMs: sorted.length ? sorted[sorted.length - 1] : null,
-        npcActionIds: targets.reduce((count, target) => count + (target.economyAppliedActionIds?.length ?? 0), 0),
-        npcQueuedBuildings: targets.reduce((count, target) => count + (target.buildingQueue?.length ?? 0), 0),
-        npcProfiles: Object.keys(save?.npc?.profiles ?? {}).length,
+    const measurement = await readMeasurement(win);
+    if (catchupWaitError) {
+      const failedResults = {
+        status: 'timeout',
+        profile: PROFILE,
+        isolatedUserData: true,
+        seed: { npcProfiles: initial.npcProfiles, npcTargets: initial.npcTargets, startAt, endAt, catchupDays: 30,
+          fixtureIsolation: 'NPC economy replay only; exploration and pirate cursors are frozen at the fixed horizon and asteroid simulation is absent. Not a full-campaign replay.' },
+        commandGate: { pendingBeforeUiAction: beforeClickPending, requestEventPrevented: eventPrevented, buildButtonWasEnabled: buildButtonEnabled, playerStateUnchanged: true },
+        catchup: { elapsedMs, ...measurement },
+        error: catchupWaitError,
+        measurementNote: 'Renderer event-loop timer gaps; does not measure Node proxy latency.',
       };
-    })()`);
-    if (measurement.pending || measurement.processedThroughAt < startAt + CATCHUP_MS
+      fs.mkdirSync(OUTPUT, { recursive: true });
+      fs.writeFileSync(path.join(OUTPUT, 'result.json'), JSON.stringify(failedResults, null, 2));
+      console.log(JSON.stringify(failedResults, null, 2));
+      throw new Error(`${catchupWaitError}; diagnostic ${JSON.stringify(failedResults.catchup)}`);
+    }
+    if (measurement.pending || measurement.processedThroughAt < endAt
       || measurement.npcProfiles !== 100 || measurement.npcActionIds <= 0) {
       throw new Error(`Catch-up/control assertions failed: ${JSON.stringify(measurement)}`);
     }
@@ -228,7 +272,8 @@ async function runScenario() {
     const results = {
       profile: PROFILE,
       isolatedUserData: true,
-      seed: { npcProfiles: initial.npcProfiles, npcTargets: initial.npcTargets, startAt, catchupDays: 30 },
+      seed: { npcProfiles: initial.npcProfiles, npcTargets: initial.npcTargets, startAt, endAt, catchupDays: 30,
+        fixtureIsolation: 'NPC economy replay only; exploration and pirate cursors are frozen at the fixed horizon and asteroid simulation is absent. Not a full-campaign replay.' },
       commandGate: { pendingBeforeUiAction: beforeClickPending, requestEventPrevented: eventPrevented, buildButtonWasEnabled: buildButtonEnabled, playerStateUnchanged: true },
       catchup: { elapsedMs, ...measurement },
       measurementNote: 'Renderer event-loop timer gaps; does not measure Node proxy latency.',
