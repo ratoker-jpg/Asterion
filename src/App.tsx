@@ -388,23 +388,21 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const activeTab = APP_ROUTE_LABELS[activeRoute];
   const [planetViewMode, setPlanetViewMode] = useState<PlanetViewMode>('overview');
   const persistence = useMemo(() => createPersistenceFacade({ mode: RUNTIME_MODE }), []);
-  const [renderedState, setRenderedState] = useState<SaveState>(() => {
+  const [state, setState] = useState<SaveState>(() => {
     const loaded = persistence.read();
     applyCampaignRuntime(loaded, RUNTIME_MODE);
     return loaded;
   });
-  const state = renderedState;
   const stateRef = useRef(state);
+  stateRef.current = state;
   const runtimeReconcileRef = useRef<((at: number) => void) | null>(null);
-  const npcReplayContinuation = useRef<number | null>(null);
-  const scheduleNpcReplayRef = useRef<() => void>(() => {});
-  const lastNpcReplayPublishAt = useRef(0);
   const [now, setNow] = useState(Date.now());
   const [testTimeScale, setTestTimeScale] = useState<TestTimeScale>(() => resolveTestTimeScale());
   const [toasts, setToasts] = useState<RuntimeToast[]>([]);
   const [lastNotice, setLastNotice] = useState('Система готова. Локальное сохранение активно.');
   const noticeSeq = useRef(0);
   const persistenceFailureNotified = useRef(false);
+  const npcReplayContinuation = useRef<number | null>(null);
 
   /**
    * Keeps the QA notice layer in sync and emits a bottom-left toast. Silent
@@ -422,46 +420,6 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       setToasts((current) => current.filter((toast) => toast.id !== id));
     }, TOAST_AUTO_CLOSE_MS);
   }, []);
-  const cancelNpcReplayContinuation = useCallback(() => {
-    if (npcReplayContinuation.current !== null) {
-      window.clearTimeout(npcReplayContinuation.current);
-      npcReplayContinuation.current = null;
-    }
-  }, []);
-  const scheduleNpcReplayContinuation = useCallback(() => {
-    if (!isApplicationCommandBlocked(stateRef.current)) {
-      cancelNpcReplayContinuation();
-      return;
-    }
-    if (npcReplayContinuation.current !== null) return;
-    npcReplayContinuation.current = window.setTimeout(() => {
-      npcReplayContinuation.current = null;
-      runtimeReconcileRef.current?.(Date.now());
-      if (isApplicationCommandBlocked(stateRef.current)) scheduleNpcReplayRef.current();
-    }, 0);
-  }, [cancelNpcReplayContinuation]);
-  scheduleNpcReplayRef.current = scheduleNpcReplayContinuation;
-  const setState = useCallback((update: SaveState | ((current: SaveState) => SaveState)) => {
-    const current = stateRef.current;
-    const next = typeof update === 'function' ? update(current) : update;
-    stateRef.current = next;
-    if (isApplicationCommandBlocked(next)) scheduleNpcReplayRef.current();
-    else cancelNpcReplayContinuation();
-    setRenderedState(next);
-  }, [cancelNpcReplayContinuation]);
-  const persistSaveState = useCallback((save: SaveState) => {
-    const result = persistence.write(save);
-    if (!result.ok) {
-      if (!persistenceFailureNotified.current) {
-        persistenceFailureNotified.current = true;
-        const reason = result.error.trim().slice(0, 160);
-        setNotice(reason ? `Не удалось сохранить игру: ${reason}` : 'Не удалось сохранить игру в браузере.', 'error');
-      }
-      return false;
-    }
-    persistenceFailureNotified.current = false;
-    return true;
-  }, [persistence, setNotice]);
   const rejectNpcCatchupCommand = useCallback(() => {
     const current = stateRef.current;
     const hasRegisteredNpcReplay = Object.values(current.espionage?.targets ?? {}).some((target) =>
@@ -977,8 +935,17 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       adoptedFromOtherWindow.current = null;
       return;
     }
-    persistSaveState(stateRef.current);
-  }, [persistSaveState, state]);
+    const result = persistence.write(state);
+    if (!result.ok) {
+      if (!persistenceFailureNotified.current) {
+        persistenceFailureNotified.current = true;
+        const reason = result.error.trim().slice(0, 160);
+        setNotice(reason ? `Не удалось сохранить игру: ${reason}` : 'Не удалось сохранить игру в браузере.', 'error');
+      }
+      return;
+    }
+    persistenceFailureNotified.current = false;
+  }, [persistence, setNotice, state]);
   useEffect(() => {
     publishApplicationRuntimeSnapshot(
       state,
@@ -995,20 +962,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       testTimeScale,
     });
     if (!result.changed) return;
-    const wasPending = isApplicationCommandBlocked(current);
-    const isPending = isApplicationCommandBlocked(result.state);
     stateRef.current = result.state;
-    if (result.state.npcReplay
-      && result.state.npcReplay.processedThroughAt !== current.npcReplay?.processedThroughAt) {
-      persistSaveState(result.state);
-    }
-    const publishAt = performance.now();
-    if (!isPending || !wasPending || publishAt - lastNpcReplayPublishAt.current >= 200) {
-      lastNpcReplayPublishAt.current = publishAt;
-      setRenderedState(result.state);
-    }
-    if (isPending) scheduleNpcReplayRef.current();
-    else cancelNpcReplayContinuation();
+    setState(result.state);
     result.events.forEach((event) => {
       if (event.kind === 'science') {
         const names = event.scienceIds
@@ -1043,20 +998,35 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         ));
       }
     });
-  }, [cancelNpcReplayContinuation, persistSaveState, setNotice, testTimeScale]);
+  }, [setNotice, testTimeScale]);
   runtimeReconcileRef.current = runRuntimeReconcile;
 
   useEffect(() => {
     runRuntimeReconcile(now);
   }, [now, runRuntimeReconcile]);
 
-  // Replay scheduling lives outside React publication so coalesced snapshots do
-  // not pause chronological catch-up. Resume a saved pending prefix on mount and
-  // cancel its sole continuation when this App instance is removed.
+  // Long offline gaps are reconciled in bounded groups. Continue each persisted
+  // prefix in its own task so catch-up does not wait for the next clock tick or
+  // depend on render frames. The replay target remains frozen by reconcileRuntime.
   useEffect(() => {
-    scheduleNpcReplayRef.current();
-    return cancelNpcReplayContinuation;
-  }, [cancelNpcReplayContinuation]);
+    const replay = state.npcReplay;
+    if (!isApplicationCommandBlocked(state) || !replay) return;
+
+    const continuationTarget = replay.targetAt;
+    npcReplayContinuation.current = window.setTimeout(() => {
+      npcReplayContinuation.current = null;
+      const current = stateRef.current;
+      if (!isApplicationCommandBlocked(current) || current.npcReplay?.targetAt !== continuationTarget) return;
+      runRuntimeReconcile(Date.now());
+    }, 0);
+
+    return () => {
+      if (npcReplayContinuation.current !== null) {
+        window.clearTimeout(npcReplayContinuation.current);
+        npcReplayContinuation.current = null;
+      }
+    };
+  }, [runRuntimeReconcile, state]);
 
   const ownedPlanets = useMemo<PlanetDefinition[]>(() => Object.entries(state.planets).map(([id, planet]) => ({
     id,
