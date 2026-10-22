@@ -15,7 +15,9 @@ jobs:
         with:
           node-version: 24
       - name: Install dependencies
-        run: npm install
+        run: npm ci
+      - name: Test inventory (every *.test.ts runs in exactly one CI suite)
+        run: npm run test:inventory
       - name: Asterion asset audit
         run: npm run assets:asterion:audit
       - name: Resource building domain tests
