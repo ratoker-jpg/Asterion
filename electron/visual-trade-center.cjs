@@ -1,6 +1,7 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { assertFreshDocumentHasNoFixtureGuard, guardSaveKeyUntilReload } = require('./fixture-reload.cjs');
 
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
@@ -36,6 +37,7 @@ async function reload(win) {
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await win.webContents.executeJavaScript('document.fonts?.ready');
   await settle(win);
+  await assertFreshDocumentHasNoFixtureGuard(win, 'Trade Center reload');
 }
 
 async function rendererMutationAndReload(win, source, label) {
@@ -58,6 +60,7 @@ async function rendererMutationAndReload(win, source, label) {
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await win.webContents.executeJavaScript('document.fonts?.ready');
   await settle(win);
+  await assertFreshDocumentHasNoFixtureGuard(win, label);
 }
 
 async function click(win, selector) {
@@ -129,8 +132,7 @@ async function seedTradeCenter(win) {
     save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 7);
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     localStorage.setItem(${JSON.stringify(TEST_TIME_SCALE_KEY)}, '1');
-    window.location.reload();
-    return true;
+    ${guardSaveKeyUntilReload(SAVE_KEY)};
   })()`, 'Could not seed Trade Center state');
 }
 
@@ -193,6 +195,7 @@ async function readSave(win) {
       planetResources: planet?.resources,
       debris: planet?.recycling?.availableDebris,
       trade: planet?.trade,
+      refillQueue: planet?.trade?.refillAtQueue ?? [],
       tradeLevel: planet?.buildings?.['trade-center'],
       buildingQueue: save.queues?.['helion-01'] ?? [],
       recyclingJobs: planet?.recycling?.jobs ?? [],
@@ -272,22 +275,22 @@ async function assertTooltip(win, label, selector) {
 }
 
 async function setRefillQueueForOfflineStep(win, offsets) {
-  const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-  const ok = await win.webContents.executeJavaScript(`(() => {
+  await rendererMutationAndReload(win, `(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
     const planet = save.planets?.['helion-01'];
     if (!planet?.trade) return false;
     const base = Date.now();
     planet.trade.refillAtQueue = ${JSON.stringify(offsets)}.map((offset) => base + offset);
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
-    window.location.reload();
-    return true;
-  })()`).catch(() => false);
-  if (!ok) throw new Error('Could not rewrite trade refill queue');
-  await done;
-  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
-  await win.webContents.executeJavaScript('document.fonts?.ready');
-  await settle(win);
+    ${guardSaveKeyUntilReload(SAVE_KEY)};
+  })()`, 'Could not rewrite trade refill queue');
+  const normalized = await readSave(win);
+  const expectedQueueLength = Math.max(0, offsets.length - 1);
+  const queue = normalized.refillQueue;
+  if (queue.length !== expectedQueueLength || queue.some((at) => at <= Date.now())
+    || queue.some((at, index) => index > 0 && at - queue[index - 1] !== REFILL_MS)) {
+    throw new Error(`Offline refill fixture changed during reload: expected ${expectedQueueLength} future sequential deadlines, found ${JSON.stringify(queue)}`);
+  }
   await activateIndustry(win);
   await openTradeCenter(win);
 }
@@ -317,6 +320,7 @@ async function verifyFlow(win, directory, label) {
     || Number(seeded.planetResources?.metal) !== 15_880 || Number(seeded.planetResources?.minerals) !== 12_712 || Number(seeded.planetResources?.gas) !== 6_421) {
     throw new Error(`${label}: seeded canonical wallet mismatch ${JSON.stringify(seeded)}`);
   }
+  if (seeded.refillQueue.length !== 0) throw new Error(`${label}: seeded refill queue changed during reload ${JSON.stringify(seeded.refillQueue)}`);
   const buildingQueueBefore = JSON.stringify(seeded.buildingQueue);
   const recyclingJobsBefore = JSON.stringify(seeded.recyclingJobs);
 

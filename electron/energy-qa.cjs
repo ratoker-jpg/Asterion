@@ -1,6 +1,7 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { assertFreshDocumentHasNoFixtureGuard, guardSaveKeyUntilReload } = require('./fixture-reload.cjs');
 
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
@@ -34,13 +35,27 @@ async function loadTestMode(win) {
   await settle(win);
 }
 
-async function reload(win) {
-  const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-  win.webContents.reload();
-  await done;
+async function rendererMutationAndReload(win, source, label) {
+  const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
+  const execution = win.webContents.executeJavaScript(source)
+    .then((value) => ({ value }))
+    .catch((error) => ({ error: String(error?.stack || error) }));
+  const first = await Promise.race([
+    execution.then((result) => ({ result })),
+    loaded.then(() => ({ loaded: true })),
+  ]);
+  if (first.result?.value === false) throw new Error(`${label}: fixture mutation was rejected`);
+  if (!first.loaded) {
+    const reloaded = await Promise.race([
+      loaded.then(() => true),
+      sleep(10_000).then(() => false),
+    ]);
+    if (!reloaded) throw new Error(`${label}: renderer fixture did not reload: ${JSON.stringify(first.result)}`);
+  }
   await waitFor(win, `document.querySelector('[data-qa-header]')`);
   await waitFor(win, `localStorage.getItem(${JSON.stringify(SAVE_KEY)})`);
   await settle(win);
+  await assertFreshDocumentHasNoFixtureGuard(win, label);
 }
 
 async function click(win, selector) {
@@ -55,7 +70,7 @@ async function click(win, selector) {
 }
 
 async function seedStation(win) {
-  const seeded = await win.webContents.executeJavaScript(`(() => {
+  await rendererMutationAndReload(win, `(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
     const planet = save?.planets?.['helion-01'];
     if (!save || !planet?.buildings || !save.science?.levels) return false;
@@ -78,14 +93,18 @@ async function seedStation(win) {
     save.schemaVersion = 14;
     save.resourceClock = { lastReconciledAt: Date.now(), remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+    ${guardSaveKeyUntilReload(SAVE_KEY)};
     return true;
+  })()`, 'Could not seed the energy station fixture');
+  const seeded = await win.webContents.executeJavaScript(`(() => {
+    const planet = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null')?.planets?.['helion-01'];
+    return { basicEnergy: planet?.buildings?.['basic-energy'] ?? -1, satellites: planet?.solarSatellites ?? -1 };
   })()`);
-  if (!seeded) throw new Error('Could not seed the energy station fixture');
-  await reload(win);
+  if (seeded.basicEnergy !== 23 || seeded.satellites !== 0) throw new Error(`Energy station fixture changed during reload: ${JSON.stringify(seeded)}`);
 }
 
 async function seedSatellites(win) {
-  const seeded = await win.webContents.executeJavaScript(`(() => {
+  await rendererMutationAndReload(win, `(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
     const planet = save?.planets?.['helion-01'];
     if (!save || !planet) return false;
@@ -98,10 +117,11 @@ async function seedSatellites(win) {
     delete planet.energySources;
     delete planet.energyExpenseAttribution;
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+    ${guardSaveKeyUntilReload(SAVE_KEY)};
     return true;
-  })()`);
-  if (!seeded) throw new Error('Could not seed the satellite fixture');
-  await reload(win);
+  })()`, 'Could not seed the satellite fixture');
+  const seededCount = await win.webContents.executeJavaScript(`JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null')?.planets?.['helion-01']?.solarSatellites ?? -1`);
+  if (seededCount !== 2) throw new Error(`Satellite fixture changed during reload: expected 2, found ${seededCount}`);
 }
 
 async function capture(win, directory, name, width, height) {
