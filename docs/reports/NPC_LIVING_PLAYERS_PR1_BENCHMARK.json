@@ -1,0 +1,256 @@
+{
+  "benchmark": "npc-state-and-calendar-generation",
+  "methodology": {
+    "warmupRunsPerDuration": 1,
+    "measuredRunsPerDuration": 3,
+    "timedWork": "createNpcState + getNpcSessionEvents for all generated profiles + JSON save serialization + event digest",
+    "heapMethod": "process.memoryUsage().heapUsed immediately before and after each timed workload; delta is observational and includes runtime allocation/GC noise",
+    "partitionCheck": "compare SHA-256 digest of full-horizon events against concatenated adjacent one-day interval event digests",
+    "fixedStartUtc": "2026-01-01T00:00:00.000Z",
+    "timezoneModel": "profile fixed offsets from UTC−12 through UTC+14; no daylight-saving transitions"
+  },
+  "inputs": {
+    "npcCount": 100,
+    "ownerIds": [
+      "benchmark-owner-001",
+      "benchmark-owner-002",
+      "benchmark-owner-003",
+      "benchmark-owner-004",
+      "benchmark-owner-005",
+      "benchmark-owner-006",
+      "benchmark-owner-007",
+      "benchmark-owner-008",
+      "benchmark-owner-009",
+      "benchmark-owner-010",
+      "benchmark-owner-011",
+      "benchmark-owner-012",
+      "benchmark-owner-013",
+      "benchmark-owner-014",
+      "benchmark-owner-015",
+      "benchmark-owner-016",
+      "benchmark-owner-017",
+      "benchmark-owner-018",
+      "benchmark-owner-019",
+      "benchmark-owner-020",
+      "benchmark-owner-021",
+      "benchmark-owner-022",
+      "benchmark-owner-023",
+      "benchmark-owner-024",
+      "benchmark-owner-025",
+      "benchmark-owner-026",
+      "benchmark-owner-027",
+      "benchmark-owner-028",
+      "benchmark-owner-029",
+      "benchmark-owner-030",
+      "benchmark-owner-031",
+      "benchmark-owner-032",
+      "benchmark-owner-033",
+      "benchmark-owner-034",
+      "benchmark-owner-035",
+      "benchmark-owner-036",
+      "benchmark-owner-037",
+      "benchmark-owner-038",
+      "benchmark-owner-039",
+      "benchmark-owner-040",
+      "benchmark-owner-041",
+      "benchmark-owner-042",
+      "benchmark-owner-043",
+      "benchmark-owner-044",
+      "benchmark-owner-045",
+      "benchmark-owner-046",
+      "benchmark-owner-047",
+      "benchmark-owner-048",
+      "benchmark-owner-049",
+      "benchmark-owner-050",
+      "benchmark-owner-051",
+      "benchmark-owner-052",
+      "benchmark-owner-053",
+      "benchmark-owner-054",
+      "benchmark-owner-055",
+      "benchmark-owner-056",
+      "benchmark-owner-057",
+      "benchmark-owner-058",
+      "benchmark-owner-059",
+      "benchmark-owner-060",
+      "benchmark-owner-061",
+      "benchmark-owner-062",
+      "benchmark-owner-063",
+      "benchmark-owner-064",
+      "benchmark-owner-065",
+      "benchmark-owner-066",
+      "benchmark-owner-067",
+      "benchmark-owner-068",
+      "benchmark-owner-069",
+      "benchmark-owner-070",
+      "benchmark-owner-071",
+      "benchmark-owner-072",
+      "benchmark-owner-073",
+      "benchmark-owner-074",
+      "benchmark-owner-075",
+      "benchmark-owner-076",
+      "benchmark-owner-077",
+      "benchmark-owner-078",
+      "benchmark-owner-079",
+      "benchmark-owner-080",
+      "benchmark-owner-081",
+      "benchmark-owner-082",
+      "benchmark-owner-083",
+      "benchmark-owner-084",
+      "benchmark-owner-085",
+      "benchmark-owner-086",
+      "benchmark-owner-087",
+      "benchmark-owner-088",
+      "benchmark-owner-089",
+      "benchmark-owner-090",
+      "benchmark-owner-091",
+      "benchmark-owner-092",
+      "benchmark-owner-093",
+      "benchmark-owner-094",
+      "benchmark-owner-095",
+      "benchmark-owner-096",
+      "benchmark-owner-097",
+      "benchmark-owner-098",
+      "benchmark-owner-099",
+      "benchmark-owner-100"
+    ],
+    "personaSalt": "npc-benchmark-v1-fixed-salt",
+    "durationsDays": [
+      1,
+      7,
+      30
+    ]
+  },
+  "system": {
+    "platform": "win32",
+    "release": "10.0.19045",
+    "arch": "x64",
+    "node": "v24.16.0",
+    "cpuModel": "AMD Ryzen 5 5600 6-Core Processor              ",
+    "logicalCpuCount": 12
+  },
+  "measurements": [
+    {
+      "days": 1,
+      "npcCount": 100,
+      "repetitions": [
+        {
+          "elapsedMs": 2.649,
+          "heapBeforeBytes": 16110232,
+          "heapAfterBytes": 14945656,
+          "heapDeltaBytes": -1164576,
+          "saveBytes": 97016,
+          "eventCount": 272,
+          "eventDigest": "0409eaf4e9a263d203bba7babcfabb079c8db618bd6a0788dedee2e2ae1c0c6c"
+        },
+        {
+          "elapsedMs": 2.6523,
+          "heapBeforeBytes": 14946072,
+          "heapAfterBytes": 13592664,
+          "heapDeltaBytes": -1353408,
+          "saveBytes": 97016,
+          "eventCount": 272,
+          "eventDigest": "0409eaf4e9a263d203bba7babcfabb079c8db618bd6a0788dedee2e2ae1c0c6c"
+        },
+        {
+          "elapsedMs": 2.4144,
+          "heapBeforeBytes": 13593000,
+          "heapAfterBytes": 15959128,
+          "heapDeltaBytes": 2366128,
+          "saveBytes": 97016,
+          "eventCount": 272,
+          "eventDigest": "0409eaf4e9a263d203bba7babcfabb079c8db618bd6a0788dedee2e2ae1c0c6c"
+        }
+      ],
+      "deterministicAcrossRepetitions": true,
+      "partitionDigestCheck": {
+        "fullDigest": "0409eaf4e9a263d203bba7babcfabb079c8db618bd6a0788dedee2e2ae1c0c6c",
+        "partitionedDigest": "0409eaf4e9a263d203bba7babcfabb079c8db618bd6a0788dedee2e2ae1c0c6c",
+        "match": true,
+        "fullEventCount": 272,
+        "partitionedEventCount": 272
+      }
+    },
+    {
+      "days": 7,
+      "npcCount": 100,
+      "repetitions": [
+        {
+          "elapsedMs": 6.5993,
+          "heapBeforeBytes": 12879744,
+          "heapAfterBytes": 14610880,
+          "heapDeltaBytes": 1731136,
+          "saveBytes": 97016,
+          "eventCount": 1519,
+          "eventDigest": "649093b623de8577c50b12d8f124082c35cf615098345c175c352a6fe46ff22b"
+        },
+        {
+          "elapsedMs": 7.0527,
+          "heapBeforeBytes": 14611312,
+          "heapAfterBytes": 12185528,
+          "heapDeltaBytes": -2425784,
+          "saveBytes": 97016,
+          "eventCount": 1519,
+          "eventDigest": "649093b623de8577c50b12d8f124082c35cf615098345c175c352a6fe46ff22b"
+        },
+        {
+          "elapsedMs": 6.7769,
+          "heapBeforeBytes": 12185960,
+          "heapAfterBytes": 17583880,
+          "heapDeltaBytes": 5397920,
+          "saveBytes": 97016,
+          "eventCount": 1519,
+          "eventDigest": "649093b623de8577c50b12d8f124082c35cf615098345c175c352a6fe46ff22b"
+        }
+      ],
+      "deterministicAcrossRepetitions": true,
+      "partitionDigestCheck": {
+        "fullDigest": "649093b623de8577c50b12d8f124082c35cf615098345c175c352a6fe46ff22b",
+        "partitionedDigest": "649093b623de8577c50b12d8f124082c35cf615098345c175c352a6fe46ff22b",
+        "match": true,
+        "fullEventCount": 1519,
+        "partitionedEventCount": 1519
+      }
+    },
+    {
+      "days": 30,
+      "npcCount": 100,
+      "repetitions": [
+        {
+          "elapsedMs": 20.4939,
+          "heapBeforeBytes": 11661880,
+          "heapAfterBytes": 14381424,
+          "heapDeltaBytes": 2719544,
+          "saveBytes": 97016,
+          "eventCount": 6796,
+          "eventDigest": "b50e85ef9870df82cb10eb5fd5db42b692b7aa6638711bcaa4f8eaef48838615"
+        },
+        {
+          "elapsedMs": 20.2563,
+          "heapBeforeBytes": 14381856,
+          "heapAfterBytes": 17817384,
+          "heapDeltaBytes": 3435528,
+          "saveBytes": 97016,
+          "eventCount": 6796,
+          "eventDigest": "b50e85ef9870df82cb10eb5fd5db42b692b7aa6638711bcaa4f8eaef48838615"
+        },
+        {
+          "elapsedMs": 21.2421,
+          "heapBeforeBytes": 17817816,
+          "heapAfterBytes": 19843120,
+          "heapDeltaBytes": 2025304,
+          "saveBytes": 97016,
+          "eventCount": 6796,
+          "eventDigest": "b50e85ef9870df82cb10eb5fd5db42b692b7aa6638711bcaa4f8eaef48838615"
+        }
+      ],
+      "deterministicAcrossRepetitions": true,
+      "partitionDigestCheck": {
+        "fullDigest": "b50e85ef9870df82cb10eb5fd5db42b692b7aa6638711bcaa4f8eaef48838615",
+        "partitionedDigest": "b50e85ef9870df82cb10eb5fd5db42b692b7aa6638711bcaa4f8eaef48838615",
+        "match": true,
+        "fullEventCount": 6796,
+        "partitionedEventCount": 6796
+      }
+    }
+  ]
+}
