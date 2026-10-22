@@ -4,6 +4,7 @@ import { BattleReportModal } from './BattleReportsView';
 import { COMMANDER_COMBAT_CATALOG, type CatalogEntity } from './domain/combat/catalog.ts';
 import { getCombatEntityForStack } from './domain/combat/side-entity.ts';
 import { COMMANDER_ABILITIES, type CommanderId } from './domain/combat/commanders.ts';
+import { SOLAR_SATELLITE_ID } from './domain/combat/ids.ts';
 import { getFactionDefenseCatalog, getFactionShipCatalog } from './domain/combat/faction-catalog.ts';
 import {
   COMBAT_FACTIONS,
@@ -579,7 +580,8 @@ export function SimulatorView({ planetName, coords, onBack, initialScenario }: {
 
   const attackerFactionId = normalizeCombatFactionId(scenario.attackerFactionId);
   const defenderFactionId = normalizeCombatFactionId(scenario.defenderFactionId);
-  const attackerShips = useMemo(() => getFactionShipCatalog(attackerFactionId), [attackerFactionId]);
+  // Satellites never fly: as in a real attack they can only stand on the defending side (SAT-01).
+  const attackerShips = useMemo(() => getFactionShipCatalog(attackerFactionId).filter((entity) => entity.id !== SOLAR_SATELLITE_ID), [attackerFactionId]);
   const defenderShips = useMemo(() => getFactionShipCatalog(defenderFactionId), [defenderFactionId]);
   const defenderDefenses = useMemo(() => getFactionDefenseCatalog(defenderFactionId), [defenderFactionId]);
   const population = useMemo(() => calculateScenarioPopulation(scenario), [scenario]);

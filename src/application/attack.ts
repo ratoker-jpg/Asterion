@@ -124,6 +124,38 @@ function shipStacks(
   });
 }
 
+/**
+ * SAT-01 (owner rule): solar satellites defend their planet in an ordinary
+ * defensive battle and can be destroyed. They never fly, so a defending planet
+ * fields its whole orbit; an attacking fleet never contains them.
+ */
+function ownedPlanetSatellites(planet: PlanetRuntime): number {
+  return safeCount(planet.solarSatellites ?? removeSolarSatellitesFromFleet(planet.fleet).count);
+}
+
+function withDefendingSatellites(stacks: CombatStackInput[], count: number, level: unknown): CombatStackInput[] {
+  const satellites = safeCount(count);
+  return satellites > 0 ? [...stacks, { entityId: SOLAR_SATELLITE_ID as CombatEntityId, count: satellites, level: safeLevel(level) }] : stacks;
+}
+
+function destroyedSatellites(report: BattleReport): number {
+  return safeCount(report.defenderForce.stacks?.find((stack) => stack.entityId === SOLAR_SATELLITE_ID)?.destroyed);
+}
+
+/** Removes the satellites lost in battle from an owned planet and rebuilds its energy from the smaller orbit. */
+function applyDestroyedSatellitesToPlanet(state: SaveState, planet: PlanetRuntime, report: BattleReport): PlanetRuntime {
+  const destroyed = destroyedSatellites(report);
+  if (destroyed <= 0) return planet;
+  const remaining = Math.max(0, ownedPlanetSatellites(planet) - destroyed);
+  return transitionPlanetEnergySources(
+    planet,
+    { ...planet, fleet: removeSolarSatellitesFromFleet(planet.fleet).fleet, solarSatellites: remaining },
+    state.science.levels,
+    state.science.levels,
+    { sourceChanges: { 'solar-satellite': 'satellite' } },
+  );
+}
+
 function targetCommanderStacks(state: SaveState, target: SpyTargetState, priority: readonly CommanderId[]): CombatStackInput[] {
   const profile = resolveSpyOwnerProfile(target, state.espionage?.bot01Profile);
   const selected = Object.fromEntries(COMMANDER_IDS.map((id) => [id, target.fleet.commanders[id] ?? target.commanders?.[id]?.count ?? 0])) as Partial<Record<CommanderId, number>>;
@@ -147,7 +179,8 @@ function defenseStacks(factionId: CombatFactionId, defenses: Record<string, numb
 }
 
 function targetShipStacksWithProfile(state: SaveState, target: SpyTargetState): CombatStackInput[] {
-  return shipStacks(target.raceId, target.fleet.ships, resolveSpyOwnerProfile(target, state.espionage?.bot01Profile)?.shipLevels);
+  const levels = resolveSpyOwnerProfile(target, state.espionage?.bot01Profile)?.shipLevels;
+  return withDefendingSatellites(shipStacks(target.raceId, target.fleet.ships, levels), target.fleet.ships[SOLAR_SATELLITE_ID] ?? 0, levels?.[SOLAR_SATELLITE_ID]);
 }
 
 /** Base catalog life of destroyed non-pirate units on one side (see BATTLE_DEBRIS_LIFE_BASIS). */
@@ -244,7 +277,11 @@ function applyDestroyedToFleet(fleet: OwnedFleetState, reportForce: BattleReport
 }
 
 function applyDestroyedToTarget(state: SaveState, target: SpyTargetState, report: BattleReport): SpyTargetState {
-  const fleet = applyDestroyedToFleet(target.fleet, report.defenderForce, target.raceId);
+  const afterShips = applyDestroyedToFleet(target.fleet, report.defenderForce, target.raceId);
+  const lostSatellites = destroyedSatellites(report);
+  const fleet = lostSatellites > 0
+    ? { ...afterShips, ships: { ...afterShips.ships, [SOLAR_SATELLITE_ID]: Math.max(0, safeCount(afterShips.ships[SOLAR_SATELLITE_ID]) - lostSatellites) } }
+    : afterShips;
   const defense = { defenses: { ...target.defense.defenses } };
   for (const stack of report.defenderForce.defenses ?? []) {
     const id = stack.entityId as DefenseId;
@@ -612,7 +649,12 @@ function createBot01IncomingAttackInput(
   const defenderPriority = [...DEFAULT_PRIORITY.defense];
   const defenderFleet = availableOwnedFleetForCombat(state, flight.destinationPlanetId!, target);
   const defenderCommanderLevels = Object.fromEntries(COMMANDER_IDS.map((id) => [id, getOwnerShipUpgradeLevel(state, id)])) as Partial<Record<CommanderId, number>>;
-  const defenderShips = shipStacks(state.profile.factionId as CombatFactionId, defenderFleet.ships, getOwnerShipUpgradeLevels(state) as Partial<Record<ShipId, number>>);
+  const defenderShipLevels = getOwnerShipUpgradeLevels(state) as Partial<Record<ShipId, number>>;
+  const defenderShips = withDefendingSatellites(
+    shipStacks(state.profile.factionId as CombatFactionId, defenderFleet.ships, defenderShipLevels),
+    ownedPlanetSatellites(target),
+    defenderShipLevels[SOLAR_SATELLITE_ID],
+  );
   const defenderCommanders = selectedCommanderStacks(defenderFleet.commanders, defenderCommanderLevels, defenderPriority);
   const attackerShips = shipStacks(snapshot.attackerFactionId, flight.selectedShips, snapshot.attackerShipLevels);
   const attackerCommanders = selectedCommanderStacks(flight.selectedCommanders, snapshot.attackerCommanderLevels, snapshot.attackerPriority);
@@ -763,6 +805,7 @@ export function resolveBot01IncomingAttack(state: SaveState, flight: FlightRecor
       };
     }
   }
+  if (!siege.planetDestroyed) planetAfterSiege = applyDestroyedSatellitesToPlanet(state, planetAfterSiege, report);
   next = replacePlanetState(next, flight.destinationPlanetId, {
     ...planetAfterSiege,
   });
@@ -937,7 +980,11 @@ export function resolvePirateIncomingRaid(state: SaveState, flight: FlightRecord
   const defenderCommanderLevels = playerTarget
     ? Object.fromEntries(COMMANDER_IDS.map((id) => [id, getOwnerShipUpgradeLevel(state,id)]))
     : npcProfile?.commanderLevels ?? {};
-  const defenderShips = shipStacks(factionId, targetFleet.ships, defenderShipLevels as Partial<Record<ShipId,number>>);
+  const defenderShips = withDefendingSatellites(
+    shipStacks(factionId, targetFleet.ships, defenderShipLevels as Partial<Record<ShipId,number>>),
+    playerTarget ? ownedPlanetSatellites(playerTarget) : npcTarget!.fleet.ships[SOLAR_SATELLITE_ID] ?? 0,
+    (defenderShipLevels as Partial<Record<ShipId,number>>)[SOLAR_SATELLITE_ID],
+  );
   const defenderCommanders = selectedCommanderStacks(
     targetFleet.commanders, defenderCommanderLevels as Partial<Record<CommanderId,number>>, defenderPriority);
   const pirateShips: CombatStackInput[] = Object.entries(raid.composition).map(([entityId,count]) => ({
@@ -1008,11 +1055,11 @@ export function resolvePirateIncomingRaid(state: SaveState, flight: FlightRecord
   };
   let next:SaveState=state;
   if(playerTarget){
-    next=replacePlanetState(next,flight.destinationPlanetId,{
+    next=replacePlanetState(next,flight.destinationPlanetId,applyDestroyedSatellitesToPlanet(state,{
       ...playerTarget,
       fleet:applyDestroyedToFleet(playerTarget.fleet,report.defenderForce,factionId),
       defense:remainingDefense,repair:repair.state,resources:resourcesAfterLoot,
-    });
+    },report));
     next=preserveOwnedPlanetOrbitalDebris(next,flight.destinationPlanetId,debris,reportId,now);
   }else if(npcTarget && next.espionage){
     // Reuse the canonical NPC loss accounting: it updates fleet, defenses,
