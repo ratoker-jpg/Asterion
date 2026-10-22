@@ -94,9 +94,14 @@ export function normalizeTestTimeScale(value: unknown): TestTimeScale {
 }
 
 export function resolveTestTimeScale(value?: unknown): TestTimeScale {
-  return normalizeTestTimeScale(value ?? (
-    typeof window !== 'undefined' ? window.localStorage.getItem(TEST_TIME_SCALE_STORAGE_KEY) : undefined
-  ));
+  if (value !== undefined && value !== null) return normalizeTestTimeScale(value);
+  // Production never uses the test scale; unreadable storage falls back to the default.
+  if (typeof window === 'undefined' || ACTIVE_RUNTIME_MODE !== 'test') return TEST_TIME_SCALE;
+  try {
+    return normalizeTestTimeScale(window.localStorage.getItem(TEST_TIME_SCALE_STORAGE_KEY));
+  } catch {
+    return TEST_TIME_SCALE;
+  }
 }
 
 export function scaleRuntimeDuration(

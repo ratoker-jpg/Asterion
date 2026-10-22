@@ -847,9 +847,15 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         persistence.write(stateRef.current);
         return;
       }
-      const next = persistence.read();
-      adoptedFromOtherWindow.current = next;
-      setState(next);
+      const loaded = persistence.load();
+      // An unreadable or newer-schema write is never adopted as a fresh campaign;
+      // the write guard keeps it intact and this window stops overwriting it.
+      if (loaded.status !== 'loaded') {
+        setForeignWriterAt(Date.now());
+        return;
+      }
+      adoptedFromOtherWindow.current = loaded.state;
+      setState(loaded.state);
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
@@ -2055,7 +2061,9 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     // newer save (another window, an import, a QA patch).
     const onUnload = () => {
       const latest = foldPlayTime(false);
-      const stored = persistence.read();
+      const loaded = persistence.load();
+      if (loaded.status !== 'loaded') return;
+      const stored = loaded.state;
       const next = { ...stored, playTimeMs: Math.max(stored.playTimeMs ?? 0, latest.playTimeMs ?? 0) };
       persistence.write(next);
       refreshSlotMeta(session.slotId, next);
@@ -2106,7 +2114,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     const config = stateRef.current.worldConfig;
     const nextState = createInitialSaveState(RUNTIME_MODE, Date.now(), config && !config.legacy ? config : undefined);
     dispatchRuntimeReset(RUNTIME_MODE, window);
-    persistence.write(nextState);
+    // Restarting is the player's explicit decision to replace this campaign.
+    persistence.write(nextState, { replaceUnreadable: true });
     applyCampaignRuntime(nextState, RUNTIME_MODE);
     stateRef.current = nextState;
     setState(nextState);

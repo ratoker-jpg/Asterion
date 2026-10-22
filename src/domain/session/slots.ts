@@ -103,8 +103,9 @@ export function normalizeSlotIndex(value: unknown): SaveSlotIndex {
       if (!slot || seen.has(slot.id)) return false;
       seen.add(slot.id);
       return true;
-    })
-    .slice(0, MAX_SAVE_SLOTS);
+    });
+  // No truncation at MAX_SAVE_SLOTS here: the limit gates creation, and cutting
+  // the index would hide campaigns that are still stored.
   const activeSlotId = typeof source.activeSlotId === 'string' && seen.has(source.activeSlotId) ? source.activeSlotId : null;
   return { version: 1, activeSlotId, slots };
 }

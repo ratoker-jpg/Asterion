@@ -45,13 +45,18 @@ function dateLabel(ms: number) {
   return new Date(ms).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+/** A slot the health gate refused to open; its data is left untouched. */
+export type SlotEntryProblem = { slotName: string; message: string };
+
 type MenuAppProps = {
   initialScreen: MenuScreen;
   onEnterSlot: (slot: SaveSlotMeta) => void;
+  entryProblem?: SlotEntryProblem | null;
+  onDismissEntryProblem?: () => void;
 };
 
 /** Main menu, «Новая игра», «Загрузить игру» and settings, on the same 1920×1080 stage as the game. */
-export function MenuApp({ initialScreen, onEnterSlot }: MenuAppProps) {
+export function MenuApp({ initialScreen, onEnterSlot, entryProblem = null, onDismissEntryProblem }: MenuAppProps) {
   const scale = useMenuScale();
   const [screen, setScreen] = useState<MenuScreen>(initialScreen);
   const [index, setIndex] = useState<SaveSlotIndex>(() => readSlotIndex());
@@ -66,6 +71,8 @@ export function MenuApp({ initialScreen, onEnterSlot }: MenuAppProps) {
   }, [screen, continueSlot?.factionId]);
 
   const refresh = useCallback(() => setIndex(readSlotIndex()), []);
+  // The load screen must show the refused slot as broken: re-read the index and health.
+  useEffect(() => { if (entryProblem) refresh(); }, [entryProblem, refresh]);
 
   // Race art is large: warm the cache while the player reads the main menu.
   useEffect(() => {
@@ -93,6 +100,17 @@ export function MenuApp({ initialScreen, onEnterSlot }: MenuAppProps) {
         ) : (
           <MenuSettingsScreen onBack={() => setScreen('main')} />
         )}
+        {entryProblem ? (
+          <ConfirmDialog
+            eyebrow="СОХРАНЕНИЕ НЕ ОТКРЫТО"
+            title={`Кампания «${entryProblem.slotName}» не загружена`}
+            text={`${entryProblem.message} Данные слота не изменены. В разделе «Загрузить игру» его можно экспортировать в файл или удалить.`}
+            confirmLabel="К СОХРАНЕНИЯМ"
+            cancelLabel="ЗАКРЫТЬ"
+            onConfirm={() => { onDismissEntryProblem?.(); setScreen('load'); }}
+            onCancel={() => onDismissEntryProblem?.()}
+          />
+        ) : null}
       </div>
     </div>
   );
@@ -374,7 +392,7 @@ function SlotCard({ slot, active, health, renaming, onRenameStart, onRenameChang
   );
 }
 
-export function ConfirmDialog({ title, text, confirmLabel, danger = false, onConfirm, onCancel }: { title: string; text: string; confirmLabel: string; danger?: boolean; onConfirm: () => void; onCancel: () => void }) {
+export function ConfirmDialog({ title, text, confirmLabel, cancelLabel = 'ОТМЕНА', eyebrow = 'ПОДТВЕРЖДЕНИЕ', danger = false, onConfirm, onCancel }: { title: string; text: string; confirmLabel: string; cancelLabel?: string; eyebrow?: string; danger?: boolean; onConfirm: () => void; onCancel: () => void }) {
   const cancelRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     cancelRef.current?.focus();
@@ -385,12 +403,12 @@ export function ConfirmDialog({ title, text, confirmLabel, danger = false, onCon
   return (
     <div className="menu-modal" role="presentation" onMouseDown={onCancel}>
       <section className="menu-modal__card" role="alertdialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}>
-        <small>ПОДТВЕРЖДЕНИЕ</small>
+        <small>{eyebrow}</small>
         <h2>{title}</h2>
         <p>{text}</p>
         <div className="menu-modal__actions">
           <button type="button" className={`menu-btn ${danger ? 'menu-btn--danger' : 'menu-btn--primary'}`} onClick={onConfirm} data-qa-confirm-yes>{confirmLabel}</button>
-          <button ref={cancelRef} type="button" className="menu-btn" onClick={onCancel} data-qa-confirm-no>ОТМЕНА</button>
+          <button ref={cancelRef} type="button" className="menu-btn" onClick={onCancel} data-qa-confirm-no>{cancelLabel}</button>
         </div>
       </section>
     </div>
