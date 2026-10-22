@@ -135,13 +135,19 @@ export type ScienceCancellationTransition = {
   refundPercents: number[];
   reason: string | null;
   credit?: ResourceCreditResult;
+  /** Per-task nominal refunds: each one belongs to the planet that paid that task. */
+  taskRefunds: ScienceTaskRefund[];
 };
+
+/** Nominal refund of one canceled task, owed to the planet that paid it (`task.planetId`). */
+export type ScienceTaskRefund = { task: ScienceQueueTask; refund: ScienceResourceCost; refundPercent: number };
 
 export type SciencePlanetDestructionTransition = {
   state: ScienceState;
   invalidatedSurvivorTasks: ScienceQueueTask[];
   refund: ScienceResourceCost;
   refundPercents: number[];
+  taskRefunds: ScienceTaskRefund[];
 };
 
 export type ScienceRuntimeSnapshot = {
@@ -152,6 +158,8 @@ export type ScienceRuntimeSnapshot = {
   mode: RuntimeMode;
   testTimeScale?: number;
   blockedPlanetStartedAt?: ReadonlyMap<string, number>;
+  /** Names of the owned planets, to show which planet paid (and is refunded for) each task. */
+  planetNames?: Readonly<Record<string, string>>;
 };
 
 export type ScienceStartRequest = {
@@ -451,18 +459,20 @@ function refundScienceCost(cost: ScienceResourceCost, refundPercent: number): Sc
 function refundScienceTasks(
   tasks: readonly ScienceQueueTask[],
   rng?: () => number,
-): { refund: ScienceResourceCost; refundPercents: number[] } {
+): { refund: ScienceResourceCost; refundPercents: number[]; taskRefunds: ScienceTaskRefund[] } {
   const refundPercents: number[] = [];
+  const taskRefunds: ScienceTaskRefund[] = [];
   const refund = tasks.reduce((total, task) => {
     if (task.refundEligible === false || !hasCompleteScienceCost(task.cost)) return total;
     const refundPercent = selectScienceCancelRefundPercent(rng);
     refundPercents.push(refundPercent);
     const itemRefund = refundScienceCost(task.cost, refundPercent);
+    taskRefunds.push({ task, refund: itemRefund, refundPercent });
     return Object.fromEntries(
       RESOURCE_KEYS.map((key) => [key, total[key] + itemRefund[key]]),
     ) as ScienceResourceCost;
   }, { metal: 0, minerals: 0, gas: 0, energy: 0 } as ScienceResourceCost);
-  return { refund, refundPercents };
+  return { refund, refundPercents, taskRefunds };
 }
 
 function rescheduleScienceQueue(queue: readonly ScienceQueueTask[], canceledWasActive: boolean, now: number): ScienceQueueTask[] {
@@ -522,6 +532,7 @@ export function discardScienceTasksForPlanet(
       invalidatedSurvivorTasks: [],
       refund: { metal: 0, minerals: 0, gas: 0, energy: 0 },
       refundPercents: [],
+      taskRefunds: [],
     };
   }
 
@@ -606,10 +617,10 @@ export function cancelScienceResearch(
   const queueIndex = queue.findIndex((task) => task.id === taskId);
   const task = queueIndex >= 0 ? queue[queueIndex] ?? null : null;
   if (!task) {
-    return { ok: false, state: reconciledState, wallet: context.wallet, canceled: null, canceledTasks: [], refund: null, refundPercent: null, refundPercents: [], reason: 'Исследование уже завершено или недоступно для отмены.' };
+    return { ok: false, state: reconciledState, wallet: context.wallet, canceled: null, canceledTasks: [], refund: null, refundPercent: null, refundPercents: [], taskRefunds: [], reason: 'Исследование уже завершено или недоступно для отмены.' };
   }
   if (task.refundEligible === false || !hasCompleteScienceCost(task.cost)) {
-    return { ok: false, state: reconciledState, wallet: context.wallet, canceled: null, canceledTasks: [], refund: null, refundPercent: null, refundPercents: [], reason: 'Невозможно подтвердить сохранённую стоимость старого исследования.' };
+    return { ok: false, state: reconciledState, wallet: context.wallet, canceled: null, canceledTasks: [], refund: null, refundPercent: null, refundPercents: [], taskRefunds: [], reason: 'Невозможно подтвердить сохранённую стоимость старого исследования.' };
   }
 
   const { remaining, cascaded } = removeDependentScienceTasks(queue, queueIndex, reconciledState.levels);
@@ -624,10 +635,11 @@ export function cancelScienceResearch(
       refund: null,
       refundPercent: null,
       refundPercents: [],
+      taskRefunds: [],
       reason: 'Исследование или его зависимые задачи принадлежат заблокированной планете.',
     };
   }
-  const { refund, refundPercents } = refundScienceTasks(canceledTasks, context.rng);
+  const { refund, refundPercents, taskRefunds } = refundScienceTasks(canceledTasks, context.rng);
   const unlimitedCapacities = { metal: Number.MAX_SAFE_INTEGER, minerals: Number.MAX_SAFE_INTEGER, gas: Number.MAX_SAFE_INTEGER };
   const credit = creditResources(context.wallet, context.capacities ?? unlimitedCapacities, refund);
   const wallet = credit.wallet;
@@ -642,6 +654,7 @@ export function cancelScienceResearch(
     refundPercents,
     reason: null,
     credit,
+    taskRefunds,
   };
 }
 

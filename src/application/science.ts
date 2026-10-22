@@ -44,6 +44,7 @@ import {
 } from '../domain/fleet/overpopulation.ts';
 import { isPlanetBlocked } from './overpopulation.ts';
 import { addUnrecoveredResourceCost } from '../domain/rating/scoring.ts';
+import { creditScienceRefundsToPayers, type SciencePayerCredit } from './science-refunds.ts';
 
 export type ScienceApplicationContext = {
   planetId: PlanetId;
@@ -59,6 +60,8 @@ export type ScienceApplicationContext = {
 export type ScienceActionResult = {
   state: SaveState;
   transition: ScienceCancellationTransition | ReturnType<typeof startScienceResearch>;
+  /** Cancel only: what each paying planet actually received (accepted/burned). */
+  payerCredits?: SciencePayerCredit[];
 };
 
 function walletFor(state: SaveState, planetId: PlanetId) {
@@ -167,6 +170,7 @@ export function cancelScience(
         refund: null,
         refundPercent: null,
         refundPercents: [],
+        taskRefunds: [],
         reason: 'Планета заблокирована из-за перенаселения.',
       },
       state,
@@ -186,9 +190,16 @@ export function cancelScience(
     testTimeScale: context.testTimeScale,
     rng: context.rng,
   }, taskId);
-  const nextState = transition.ok
-    ? stateFromScienceTransition(state, context.planetId, transition.state, transition.wallet)
-    : state;
+  // The refund of every canceled task goes to the planet that paid for it,
+  // whichever planet is selected now; the domain's wallet is not used here.
+  const credited = transition.ok
+    ? creditScienceRefundsToPayers(
+      { ...state, schemaVersion: SAVE_SCHEMA_VERSION, science: transition.state },
+      transition.taskRefunds,
+      context.planetId,
+    )
+    : null;
+  const nextState = credited?.state ?? state;
   const paidCost = transition.canceledTasks.reduce((total, task) => ({
     metal: total.metal + task.cost.metal,
     minerals: total.minerals + task.cost.minerals,
@@ -199,6 +210,7 @@ export function cancelScience(
     state: transition.ok
       ? { ...nextState, rating: addUnrecoveredResourceCost(nextState.rating, nextState.profile.playerId, paidCost, transition.refund) }
       : nextState,
+    payerCredits: credited?.credits ?? [],
   };
 }
 
@@ -246,15 +258,18 @@ export function createScienceSnapshot(
       blockedPlanetStartedAt.set(planetId, candidate.overpopulation.episodeStartedAt);
     }
   }
-  return createScienceRuntimeSnapshot(
-    state.science,
-    walletFor(state, context.planetId),
-    planet.buildings.research,
-    context.now,
-    context.mode,
-    context.testTimeScale,
-    blockedPlanetStartedAt,
-  );
+  return {
+    ...createScienceRuntimeSnapshot(
+      state.science,
+      walletFor(state, context.planetId),
+      planet.buildings.research,
+      context.now,
+      context.mode,
+      context.testTimeScale,
+      blockedPlanetStartedAt,
+    ),
+    planetNames: Object.fromEntries(Object.entries(state.planets).map(([planetId, candidate]) => [planetId, candidate.name])),
+  };
 }
 
 export function readScienceSnapshot(options: PersistenceOptions = {}): ScienceRuntimeSnapshot {
@@ -305,6 +320,25 @@ export type ScienceEventBridgeOptions = {
   onNotice: (notice: string) => void;
 };
 
+const formatAmounts = (amounts: { metal: number; minerals: number; gas: number }) => (
+  ([['metal', 'металла'], ['minerals', 'минералов'], ['gas', 'газа']] as const)
+    .filter(([key]) => amounts[key] > 0)
+    .map(([key, label]) => `${amounts[key].toLocaleString('ru-RU')} ${label}`)
+    .join(', ')
+);
+
+/** Where the refund actually went: the payer's name, storage overflow and a destroyed payer. */
+export function describeSciencePayerCredits(state: SaveState, credits: readonly SciencePayerCredit[]): string {
+  return credits.map((credit) => {
+    if (credit.payerMissing) return ' Планета, оплатившая исследование, уничтожена — возврат не начислен.';
+    const name = state.planets[credit.planetId]?.name ?? credit.planetId;
+    const accepted = formatAmounts(credit.accepted);
+    const burned = formatAmounts(credit.burned);
+    if (burned) return ` На «${name}» зачислено: ${accepted || 'ничего'}; не поместилось на склад и сгорело: ${burned}.`;
+    return accepted ? ` Зачислено на «${name}»: ${accepted}.` : '';
+  }).join('');
+}
+
 export function bindScienceEventBridge(options: ScienceEventBridgeOptions): () => void {
   const onScienceStartRequest = (event: Event) => {
     const request = (event as CustomEvent<ScienceStartRequest>).detail;
@@ -340,7 +374,7 @@ export function bindScienceEventBridge(options: ScienceEventBridgeOptions): () =
     options.onNotice(transition.ok
       ? `Исследование отменено.${cascadedCount > 0 ? ` Каскадно отменено ещё ${cascadedCount} зависимых исследований.` : ''} ${cascadedCount > 0
         ? `Для ${transition.refundPercents.length} отменённых заданий рассчитан отдельный возврат 60–80%.${unreimbursedCount > 0 ? ` ${unreimbursedCount} старых заданий без подтверждённой стоимости возвращены без компенсации.` : ''}`
-        : `Возвращено ${transition.refundPercent}% сохранённой стоимости.`}`
+        : `Возвращено ${transition.refundPercent}% сохранённой стоимости.`}${describeSciencePayerCredits(currentState, result.payerCredits ?? [])}`
       : transition.reason ?? 'Исследование недоступно для отмены.');
   };
 
