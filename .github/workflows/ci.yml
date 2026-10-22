@@ -8,7 +8,7 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -129,6 +129,26 @@ jobs:
         run: npm run test:universe-ui
       - name: Pirate operations end-to-end Electron QA
         run: npm run test:pirate-operations-ui
+      - name: Save safety Electron QA (F-01/F-04)
+        env:
+          ASTERION_SKIP_SCREENSHOTS: '1'
+        run: npm run test:save-safety-ui
+      - name: Fleet production Electron QA
+        env:
+          ASTERION_SKIP_SCREENSHOTS: '1'
+        run: npm run test:fleet-ui
+      - name: Energy Electron QA
+        env:
+          ASTERION_SKIP_SCREENSHOTS: '1'
+        run: npm run test:energy-ui
+      - name: Repair workshop Electron QA
+        env:
+          ASTERION_SKIP_SCREENSHOTS: '1'
+        run: npm run test:repair-ui
+      - name: New game and Sun raid Electron QA
+        env:
+          ASTERION_SKIP_SCREENSHOTS: '1'
+        run: npm run test:new-game-ui
       - name: Capture utility and resource-zone visual QA
         run: npm run qa:visual
       - name: Upload visual QA artifact
