@@ -114,7 +114,14 @@ async function readMeasurement(win) {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(LEGACY_KEY)}) || 'null');
     const targets = Object.values(save?.espionage?.targets ?? {}).filter((target) => target.kind === 'npc');
     const progress = qa.progress;
+    const longTasks = [...qa.longTasks].sort((a, b) => a - b);
     return {
+      longTasks: {
+        count: longTasks.length,
+        totalMs: Math.round(longTasks.reduce((sum, value) => sum + value, 0)),
+        p95Ms: longTasks.length ? longTasks[Math.min(longTasks.length - 1, Math.ceil(longTasks.length * .95) - 1)] : null,
+        maxMs: longTasks.length ? longTasks[longTasks.length - 1] : null,
+      },
       inMemoryReplay: qa.latest,
       runtimePublications: qa.publications,
       persistedSaveChars: (localStorage.getItem(${JSON.stringify(LEGACY_KEY)}) || '').length,
@@ -142,7 +149,12 @@ async function runScenario() {
     show: false,
     width: 1280,
     height: 720,
-    webPreferences: { contextIsolation: true, sandbox: true },
+    // The QA window is hidden; Chromium budget-throttles a hidden page's timers
+    // after ~10 s, which would throttle the catch-up continuation and the gap
+    // probe alike. The game window is shown fullscreen, so the full-world run
+    // measures it unthrottled. ASTERION_QA_THROTTLED=1 keeps the default.
+    webPreferences: { contextIsolation: true, sandbox: true,
+      backgroundThrottling: !(FULL_WORLD && process.env.ASTERION_QA_THROTTLED !== '1') },
   });
   win.webContents.on('console-message', (_event, _level, message) => {
     if (/\berror\b/i.test(message)) console.warn(`[renderer] ${message}`);
@@ -189,8 +201,13 @@ async function runScenario() {
     // One renderer-side measurement timer records persisted cursor advances
     // and timer gaps. It measures UI-thread scheduling, not Node proxy latency.
     await run(win, `(() => {
-      const qa = { last: performance.now(), gaps: [], progress: [], lastCursor: null, latest: null, publications: 0 };
+      const qa = { last: performance.now(), gaps: [], progress: [], lastCursor: null, latest: null, publications: 0, longTasks: [] };
       window.__npcReplayQa = qa;
+      // Main-thread tasks over 50 ms, as the browser itself reports them.
+      try {
+        new PerformanceObserver((list) => { for (const entry of list.getEntries()) qa.longTasks.push(entry.duration); })
+          .observe({ type: 'longtask', buffered: false });
+      } catch { /* longtask timing unavailable */ }
       // Full world: the save grows to tens of MB, so parsing it every 16 ms
       // would measure the probe. Read the published runtime state instead.
       if (${FULL_WORLD}) window.addEventListener('asterion:runtime-state-changed', (event) => {
@@ -270,6 +287,19 @@ async function runScenario() {
     }
 
     const catchupStartedAt = Date.now();
+    // Diagnostic only: ASTERION_QA_CPU_PROFILE=<file> records a renderer CPU
+    // profile for the first ASTERION_QA_CPU_PROFILE_MS (default 20 s) of catch-up.
+    const cpuProfileFile = process.env.ASTERION_QA_CPU_PROFILE;
+    const cpuProfileDone = cpuProfileFile ? (async () => {
+      const dbg = win.webContents.debugger;
+      dbg.attach('1.3');
+      await dbg.sendCommand('Profiler.enable');
+      await dbg.sendCommand('Profiler.start');
+      await sleep(Number(process.env.ASTERION_QA_CPU_PROFILE_MS || 20_000));
+      const { profile } = await dbg.sendCommand('Profiler.stop');
+      fs.writeFileSync(cpuProfileFile, JSON.stringify(profile));
+      dbg.detach();
+    })() : null;
     let catchupWaitError = null;
     try {
       await waitFor(win, FULL_WORLD
@@ -289,6 +319,7 @@ async function runScenario() {
       catchupWaitError = error instanceof Error ? error.message : String(error);
     }
     const elapsedMs = Date.now() - catchupStartedAt;
+    if (cpuProfileDone) await cpuProfileDone;
     const measurement = await readMeasurement(win);
     if (catchupWaitError) {
       const failedResults = {
@@ -301,6 +332,7 @@ async function runScenario() {
         catchup: { elapsedMs, ...measurement },
         error: catchupWaitError,
         measurementNote: 'Renderer event-loop timer gaps; does not measure Node proxy latency.',
+        hiddenWindowBackgroundThrottling: win.webContents.getBackgroundThrottling(),
       };
       fs.mkdirSync(OUTPUT, { recursive: true });
       fs.writeFileSync(path.join(OUTPUT, 'result.json'), JSON.stringify(failedResults, null, 2));
@@ -324,6 +356,7 @@ async function runScenario() {
       commandGate: { pendingBeforeUiAction: beforeClickPending, requestEventPrevented: eventPrevented, buildButtonWasEnabled: buildButtonEnabled, playerStateUnchanged: true },
       catchup: { elapsedMs, ...measurement },
       measurementNote: 'Renderer event-loop timer gaps; does not measure Node proxy latency.',
+      hiddenWindowBackgroundThrottling: win.webContents.getBackgroundThrottling(),
     };
     fs.mkdirSync(OUTPUT, { recursive: true });
     fs.writeFileSync(path.join(OUTPUT, 'result.json'), JSON.stringify(results, null, 2));

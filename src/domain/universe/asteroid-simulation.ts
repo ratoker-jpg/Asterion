@@ -114,13 +114,27 @@ function movedStateInGalaxyCount(
   };
 }
 
+/**
+ * Injective occupancy key: one number for ordinary coordinates (no string per
+ * asteroid per movement), the shared string key for anything outside range.
+ */
+function occupancyKey(coordinate: UniverseCoordinate): number | string {
+  const { galaxy, system, position } = coordinate;
+  return Number.isInteger(galaxy) && Number.isInteger(system) && Number.isInteger(position)
+    && galaxy >= 0 && galaxy < 1_048_576 && system >= 0 && system < 4096 && position >= 0 && position < 4096
+    ? (galaxy * 4096 + system) * 4096 + position
+    : universeCoordinateKey(coordinate);
+}
+
 function processTimestamp(
   state: UniverseAsteroidSimulationState,
   atMs: number,
   galaxyCount: number,
   transitions: UniverseAsteroidTransition[],
 ): UniverseAsteroidSimulationState {
-  const asteroids = new Map(state.asteroids.map((asteroid) => [asteroid.spawnIndex, { ...asteroid }]));
+  // Asteroid states are never mutated in place (every change builds a new
+  // object), so untouched asteroids keep their objects; no per-move copies.
+  const asteroids = new Map(state.asteroids.map((asteroid) => [asteroid.spawnIndex, asteroid]));
   const spawnedIndices = new Set<number>();
 
   while (asteroidSpawnAt(state.nextSpawnIndex) === atMs) {
@@ -132,17 +146,20 @@ function processTimestamp(
     state = { ...state, nextSpawnIndex: state.nextSpawnIndex + 1 };
   }
 
-  const dueMoves = [...asteroids.values()]
-    .filter((asteroid) => asteroid.nextMoveAt === atMs)
-    .sort((left, right) => left.spawnIndex - right.spawnIndex);
-  const movingIndices = new Set(dueMoves.map((asteroid) => asteroid.spawnIndex));
-  const occupied = new Map<string, number>();
+  // One pass in map order: due movers are collected, and only stationary
+  // asteroids occupy coordinates during arrival resolution (same-time spawns
+  // and movement origins are incoming/vacating).
+  const dueMoves: UniverseAsteroidRuntimeState[] = [];
+  const occupied = new Map<number | string, number>();
   for (const asteroid of asteroids.values()) {
-    // Same-time spawns and movement origins are incoming/vacating, so only
-    // stationary asteroids occupy coordinates during arrival resolution.
-    if (movingIndices.has(asteroid.spawnIndex) || spawnedIndices.has(asteroid.spawnIndex)) continue;
-    occupied.set(universeCoordinateKey(asteroid.coordinate), asteroid.spawnIndex);
+    if (asteroid.nextMoveAt === atMs) {
+      dueMoves.push(asteroid);
+      continue;
+    }
+    if (spawnedIndices.has(asteroid.spawnIndex)) continue;
+    occupied.set(occupancyKey(asteroid.coordinate), asteroid.spawnIndex);
   }
+  dueMoves.sort((left, right) => left.spawnIndex - right.spawnIndex);
   const arrivals = new Map<number, UniverseAsteroidRuntimeState>();
 
   // Treat every due movement as simultaneous: first vacate all origins, then
@@ -166,7 +183,7 @@ function processTimestamp(
   const vacateAndAdvance = (spawnIndex: number, fromCoordinate: UniverseCoordinate): UniverseAsteroidRuntimeState | null => {
     const asteroid = asteroids.get(spawnIndex);
     if (!asteroid) return null;
-    const oldKey = universeCoordinateKey(fromCoordinate);
+    const oldKey = occupancyKey(fromCoordinate);
     if (occupied.get(oldKey) === spawnIndex) occupied.delete(oldKey);
     transitions.push({ spawnIndex, atMs, fromCoordinate: { ...fromCoordinate } });
     const coordinate = advanceUniverseAsteroidCoordinate(asteroid.coordinate, 1, galaxyCount);
@@ -178,7 +195,7 @@ function processTimestamp(
   };
 
   const place = (incoming: UniverseAsteroidRuntimeState): void => {
-    const key = universeCoordinateKey(incoming.coordinate);
+    const key = occupancyKey(incoming.coordinate);
     const occupantIndex = occupied.get(key);
     if (occupantIndex !== undefined && occupantIndex !== incoming.spawnIndex) {
       const occupant = asteroids.get(occupantIndex);

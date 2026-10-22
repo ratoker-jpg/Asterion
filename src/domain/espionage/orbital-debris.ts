@@ -78,12 +78,45 @@ function getSourcesAtCoordinate(
   return sources.sort((left, right) => compareText(left.targetId, right.targetId));
 }
 
+/**
+ * The sum getSourcesAtCoordinate's sources would give, without sorting every
+ * target: per id the lexically first key wins (as in that sorted scan), and
+ * the saturating sum does not depend on order. Asteroids ask this per move.
+ */
 export function getOrbitalDebrisAtCoordinate(
   espionage: EspionageState,
   coordinate: UniverseCoordinate,
 ): number {
-  return getSourcesAtCoordinate(espionage, coordinate)
-    .reduce((total, source) => addSafe(total, source.debris), 0);
+  // Espionage states are replaced, never edited, so totals per coordinate are
+  // computed once per state object.
+  let totals = debrisTotalsByState.get(espionage);
+  if (!totals) debrisTotalsByState.set(espionage, totals = computeDebrisTotals(espionage));
+  return totals.get(coordinateKey(coordinate)) ?? 0;
+}
+
+const debrisTotalsByState = new WeakMap<EspionageState, Map<string, number>>();
+
+function computeDebrisTotals(espionage: EspionageState): Map<string, number> {
+  const targets = getEspionageTargets(espionage);
+  const liveById = new Map<string, { key: string; debris: number; at: UniverseCoordinate }>();
+  for (const [key, target] of Object.entries(targets)) {
+    const current = liveById.get(target.id);
+    if (current && compareText(current.key, key) <= 0) continue;
+    liveById.set(target.id, { key, debris: safeCount(target.resources?.debris), at: target.coordinate });
+  }
+  const orbitalById = new Map<string, { key: string; debris: number; at: UniverseCoordinate }>();
+  for (const [key, record] of Object.entries(espionage.orbitalDebris ?? {})) {
+    if (liveById.has(record.targetPlanetId)) continue;
+    const current = orbitalById.get(record.targetPlanetId);
+    if (current && compareText(current.key, key) <= 0) continue;
+    orbitalById.set(record.targetPlanetId, { key, debris: safeCount(record.debris), at: record.targetCoordinate });
+  }
+  const totals = new Map<string, number>();
+  for (const source of [...liveById.values(), ...orbitalById.values()]) {
+    const key = coordinateKey(source.at);
+    totals.set(key, addSafe(totals.get(key) ?? 0, source.debris));
+  }
+  return totals;
 }
 
 export function getOrbitalDebrisByCoordinate(

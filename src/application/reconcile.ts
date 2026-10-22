@@ -18,7 +18,7 @@ import type { FleetProductionCompletion } from '../domain/fleet/production.ts';
 import { reconcileFlights, type FlightReconcileEvent } from './flights.ts';
 import { reconcileSunRaids, type SunRaidNotice } from './sun-raid.ts';
 import { reconcileAidMembership, syncAidState } from './alliance-aid.ts';
-import { selectDuePirateRolls, resolveDuePirateRoll, type PirateRollWriteScope } from './pirate-raids.ts';
+import { selectDuePirateRolls, resolveDuePirateRoll, type PirateDueRoll, type PirateRollWriteScope } from './pirate-raids.ts';
 import { advanceExplorationNpcProgress, selectDueExplorationNpcRolls, resolveDueExplorationNpcRoll } from './exploration-npc.ts';
 import { createDefaultPirateState } from '../domain/pirates/mission.ts';
 import {
@@ -28,7 +28,7 @@ import type { PlanetId } from './contracts.ts';
 import { getEspionageState, getEspionageTargets } from '../domain/espionage/runtime.ts';
 import { collectOrbitalDebrisAtCoordinate, getOrbitalDebrisAtCoordinate } from '../domain/espionage/orbital-debris.ts';
 import { advanceUniverseAsteroidSimulationAt, getNextUniverseAsteroidTransitionAt } from '../domain/universe/asteroid-simulation.ts';
-import { advanceAsteroidGasAt } from '../domain/universe/asteroid-gas.ts';
+import { advanceAsteroidGasAt, initializeAsteroidGasState } from '../domain/universe/asteroid-gas.ts';
 import { selectOwnerScore } from '../domain/rating/scoring.ts';
 import { createExplorationState, recordHighestExplorationScore } from '../domain/exploration/ledger.ts';
 import { generateNpcOwnerReplayEvents, applyNpcReplayEventsAt, initializeNpcReplaySessionsAt, type NpcReplayEmission, type NpcReplayEvent } from './npc-replay.ts';
@@ -201,8 +201,27 @@ function reconcileRuntimeSlice(
   const startingPirate = next.pirate ?? createDefaultPirateState();
   let pirateCursor = startingPirate.raidProcessedAt ?? context.now;
   if (!Number.isSafeInteger(pirateCursor) || pirateCursor < 0) pirateCursor = context.now;
-  let raidDueEvents = selectDuePirateRolls(next, pirateCursor, context.now, context.mode, context.testTimeScale);
+  // Due pirate rolls in (after, now], selected an hour at a time from the
+  // state snapshot taken when the list was (re)started: selection is a pure
+  // function of that state and the window, and the (at, cycle, owner) order is
+  // total, so the hours concatenate to the one selection of the whole window.
+  let raidDueEvents: PirateDueRoll[] = [];
   let raidIndex = 0;
+  let raidSelectionState = next;
+  let raidSelectedTo = pirateCursor;
+  const restartRaidSelection = (after: number) => {
+    raidDueEvents = [];
+    raidIndex = 0;
+    raidSelectionState = next;
+    raidSelectedTo = after;
+  };
+  const ensureRaidEvent = (index: number) => {
+    while (raidDueEvents.length <= index && raidSelectedTo < context.now) {
+      const to = Math.min(context.now, raidSelectedTo + NPC_REPLAY_GENERATION_STEP_MS);
+      for (const event of selectDuePirateRolls(raidSelectionState, raidSelectedTo, to, context.mode, context.testTimeScale)) raidDueEvents.push(event);
+      raidSelectedTo = to;
+    }
+  };
   // Rolls in this pass append to one private copy of the roll ledger.
   const pirateRollScope: PirateRollWriteScope = {};
   const npcCursor = next.exploration?.npcProcessedAt ?? Math.max(0,context.now - 20*60_000);
@@ -374,8 +393,29 @@ function reconcileRuntimeSlice(
         next = { ...next, asteroidDebrisBySpawnIndex: cargo };
       }
     }
-    advanceAsteroidGasForSimulationAt(at);
+    initializeAsteroidGasForSimulationAt(at);
   };
+
+  // Gas accrues in integer rate x milliseconds with a carried remainder, so
+  // advancing it at every movement or once later gives the same reserve. It is
+  // advanced before arrivals read it and for everyone at the slice end; a
+  // movement only has to give a not-yet-initialized asteroid its baseline now.
+  const initializeAsteroidGasForSimulationAt = (at: number) => {
+    const simulation = next.asteroidSimulation;
+    if (!simulation || !asteroidGasNeedsInitialization) return;
+    let changed = false;
+    const asteroids = simulation.asteroids.map((asteroid) => {
+      if (initializeAsteroidGasState(asteroid, at) === asteroid) return asteroid;
+      changed = true;
+      return advanceAsteroidGasAt(asteroid, at);
+    });
+    if (changed) next = { ...next, asteroidSimulation: { ...simulation, asteroids } };
+  };
+
+  // Spawns start initialized and nothing un-initializes gas, so only a save
+  // whose asteroids lack gas state at the slice start needs per-move baselines.
+  const asteroidGasNeedsInitialization = (next.asteroidSimulation?.asteroids ?? [])
+    .some((asteroid) => initializeAsteroidGasState(asteroid, context.now) !== asteroid);
 
   const advanceAsteroidGasForSimulationAt = (at: number) => {
     const simulation = next.asteroidSimulation;
@@ -413,7 +453,11 @@ function reconcileRuntimeSlice(
   let processedThrough = Number.NEGATIVE_INFINITY;
   while (true) {
     const flightCheckpoint = nextDueFlightCheckpoint(processedThrough);
-    while (raidIndex < raidDueEvents.length && raidDueEvents[raidIndex]!.at <= processedThrough) raidIndex++;
+    ensureRaidEvent(raidIndex);
+    while (raidIndex < raidDueEvents.length && raidDueEvents[raidIndex]!.at <= processedThrough) {
+      raidIndex++;
+      ensureRaidEvent(raidIndex);
+    }
     while (npcIndex < npcDueEvents.length && npcDueEvents[npcIndex]!.at <= processedThrough) npcIndex++;
     const pirateCheckpoint = raidDueEvents[raidIndex]?.at;
     const npcCheckpoint = npcDueEvents[npcIndex]?.at;
@@ -490,13 +534,14 @@ function reconcileRuntimeSlice(
       if (flightIsDue && processFlightsAt(checkpoint)) {
         // Include checks exactly at this timestamp: arrivals are resolved first,
         // then newly owned systems participate in the same-time pirate roll.
-        raidDueEvents = selectDuePirateRolls(next, Math.max(pirateCursor, checkpoint - 1),
-          context.now, context.mode, context.testTimeScale);
-        raidIndex = 0;
+        restartRaidSelection(Math.max(pirateCursor, checkpoint - 1));
       }
+      ensureRaidEvent(raidIndex);
       next = reconcileAllPlanetOverpopulation(next, checkpoint).state;
       if (pirateIsDue || raidDueEvents[raidIndex]?.at === checkpoint) {
-        while (raidIndex < raidDueEvents.length && raidDueEvents[raidIndex]!.at === checkpoint) {
+        while (true) {
+          ensureRaidEvent(raidIndex);
+          if (raidDueEvents[raidIndex]?.at !== checkpoint) break;
           const event = raidDueEvents[raidIndex++]!;
           // Rolls re-selected after an arrival may name an owner not settled yet.
           if (replay) settleNpcOwnersAt(checkpoint, new Set([event.ownerId]), settledOwners);
@@ -515,8 +560,7 @@ function reconcileRuntimeSlice(
         }
       }
       if (next.pirate?.contact.defeatedCycles !== defeatedBefore) {
-        raidDueEvents = selectDuePirateRolls(next, checkpoint, context.now, context.mode, context.testTimeScale);
-        raidIndex = 0;
+        restartRaidSelection(checkpoint);
       }
       // A Hall lost to an arrival at this checkpoint must stop the charge clock from here on, not from `now`.
       next = syncAidState(next, { now: checkpoint, mode: context.mode, testTimeScale: context.testTimeScale });
