@@ -67,7 +67,10 @@ function ProductionRoot() {
     }
     if (!slot) return { session: null, problem: null };
     const check = checkSlotEntry(slot);
-    return check.ok
+    // Autostart keeps its old meaning for a slot whose payload is gone: there are
+    // no bytes left to protect, so the game starts that slot fresh as before.
+    // Unreadable bytes (corrupt / newer / malformed) are still refused.
+    return check.ok || check.health.status === 'missing'
       ? { session: enter(slot), problem: null }
       : { session: null, problem: { slotName: slot.name, message: check.message } };
   });
