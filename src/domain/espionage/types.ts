@@ -7,6 +7,9 @@ import type { TargetRelation } from '../flights/types.ts';
 import type { BuildingQueueItem, ScienceLevels } from '../buildings/resource-zone.ts';
 import type { UniverseCoordinate, UniverseOwnerAlliance } from '../universe/types.ts';
 import type { RepairWorkshopState } from '../repair/workshop.ts';
+import type { EnergyLedger } from '../energy/runtime.ts';
+import type { BotAssignment } from '../buildings/production-bots.ts';
+import type { OverpopulationState } from '../fleet/overpopulation.ts';
 
 export type SpyMissionStatus = 'transit' | 'orbiting' | 'returning' | 'returned' | 'destroyed' | 'target-destroyed';
 export type SpyReportQuality = 'basic' | 'detailed' | 'full';
@@ -93,6 +96,15 @@ export type SpyTargetState = {
   repair?: RepairWorkshopState;
   /** Optional authoritative queue for injected targets; demolition cancels affected entries without refund. */
   buildingQueue?: BuildingQueueItem[];
+  /** Shared player economy runtime metadata for NPC settlement. */
+  energyLedger?: EnergyLedger;
+  productionBots?: BotAssignment;
+  /** Canonical orbital satellite count; legacy fleet entries are promoted when settled. */
+  solarSatellites?: number;
+  /** Persisted fleet-only capacity burn episode. Defense population is excluded. */
+  overpopulation?: OverpopulationState;
+  /** Idempotency keys for replayed economy actions. */
+  economyAppliedActionIds?: string[];
   /** Migration-safe escape hatch for future endgame buildings absent from the current catalog. */
   endgameLockedBuildings?: string[];
   /** Independent target economy clock, persisted with the authoritative target. */

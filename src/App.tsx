@@ -191,7 +191,13 @@ import type { SpyReportSnapshot } from './domain/espionage/types.ts';
 import { getEspionageTargets, getEspionageState } from './domain/espionage/runtime.ts';
 import { getOrbitalDebrisByCoordinate } from './domain/espionage/orbital-debris.ts';
 import type { UniverseCoordinate, UniverseObjectKind, UniverseOwnerProfile } from './domain/universe/types.ts';
-import { enqueueApplicationStateUpdate } from './application/state.ts';
+import {
+  APPLICATION_COMMAND_REQUEST_EVENTS,
+  enqueueApplicationStateUpdate,
+  isApplicationCommandBlocked,
+  isGameplayCommandRequestEvent,
+  NPC_CATCHUP_COMMAND_BLOCKED_MESSAGE,
+} from './application/state.ts';
 import { getOwnerShipUpgradeLevels, getPlanetResources, type PlanetId, type SaveState } from './application/contracts.ts';
 import { selectOwnedPlanet } from './application/owned-planets.ts';
 import type { TargetRelation } from './domain/flights/types.ts';
@@ -389,12 +395,14 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   });
   const stateRef = useRef(state);
   stateRef.current = state;
+  const runtimeReconcileRef = useRef<((at: number) => void) | null>(null);
   const [now, setNow] = useState(Date.now());
   const [testTimeScale, setTestTimeScale] = useState<TestTimeScale>(() => resolveTestTimeScale());
   const [toasts, setToasts] = useState<RuntimeToast[]>([]);
   const [lastNotice, setLastNotice] = useState('Система готова. Локальное сохранение активно.');
   const noticeSeq = useRef(0);
   const persistenceFailureNotified = useRef(false);
+  const npcReplayContinuation = useRef<number | null>(null);
 
   /**
    * Keeps the QA notice layer in sync and emits a bottom-left toast. Silent
@@ -412,6 +420,34 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       setToasts((current) => current.filter((toast) => toast.id !== id));
     }, TOAST_AUTO_CLOSE_MS);
   }, []);
+  const rejectNpcCatchupCommand = useCallback(() => {
+    const current = stateRef.current;
+    const hasRegisteredNpcReplay = Object.values(current.espionage?.targets ?? {}).some((target) =>
+      target.kind === 'npc' && target.ownerId !== UNIVERSE_NPC_OWNER_ID && Boolean(current.npc?.profiles[target.ownerId]),
+    );
+    if (hasRegisteredNpcReplay) runtimeReconcileRef.current?.(Date.now());
+    if (!isApplicationCommandBlocked(stateRef.current)) return false;
+    setNotice(NPC_CATCHUP_COMMAND_BLOCKED_MESSAGE, 'error');
+    return true;
+  }, [setNotice]);
+  useEffect(() => {
+    const handledByApp = new Set<string>([
+      FLIGHT_DISPATCH_REQUEST_EVENT,
+      FLIGHT_RECALL_REQUEST_EVENT,
+      BOT01_INCOMING_SCENARIO_REQUEST_EVENT,
+      BOT01_EXPLORATION_SCENARIO_REQUEST_EVENT,
+      SPY_REPORT_REQUEST_EVENT,
+      SPY_REPORT_ALL_REQUEST_EVENT,
+    ]);
+    const onCommandRequest = (event: Event) => {
+      if (!isGameplayCommandRequestEvent(event.type) || handledByApp.has(event.type)
+        || !rejectNpcCatchupCommand()) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    };
+    for (const type of APPLICATION_COMMAND_REQUEST_EVENTS) window.addEventListener(type, onCommandRequest, true);
+    return () => APPLICATION_COMMAND_REQUEST_EVENTS.forEach((type) => window.removeEventListener(type, onCommandRequest, true));
+  }, [rejectNpcCatchupCommand]);
   const dismissToast = useCallback((id: number) => {
     setToasts((current) => current.filter((toast) => toast.id !== id));
   }, []);
@@ -576,6 +612,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     })), 40);
   };
   const launchPirateRecon = (contact: PirateContactPresentation) => {
+    if (rejectNpcCatchupCommand()) return;
     const result = dispatchFlight(stateRef.current, { requestId: `pirate-recon-${crypto.randomUUID()}`,
       missionId: 'pirate-recon', contactCycleKey: contact.contactCycleKey,
       originPlanetId: stateRef.current.currentPlanetId,
@@ -602,6 +639,12 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   useEffect(() => {
     const onDispatchRequest = (event: Event) => {
       const detail = (event as CustomEvent<DispatchFlightCommand & { now?: number }>).detail;
+      if (rejectNpcCatchupCommand()) {
+        const result = { ok: false as const, state: stateRef.current,
+          error: { code: 'invalid-command' as const, message: NPC_CATCHUP_COMMAND_BLOCKED_MESSAGE } };
+        window.dispatchEvent(new CustomEvent(FLIGHT_COMMAND_RESULT_EVENT, { detail: result }));
+        return;
+      }
       const result = dispatchFlight(stateRef.current, detail, {
         now: detail.now ?? Date.now(),
         mode: RUNTIME_MODE,
@@ -618,6 +661,12 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     };
     const onRecallRequest = (event: Event) => {
       const detail = (event as CustomEvent<{ flightId: string; now?: number }>).detail;
+      if (rejectNpcCatchupCommand()) {
+        const result = { ok: false as const, state: stateRef.current,
+          error: { code: 'invalid-command' as const, message: NPC_CATCHUP_COMMAND_BLOCKED_MESSAGE } };
+        window.dispatchEvent(new CustomEvent(FLIGHT_COMMAND_RESULT_EVENT, { detail: result }));
+        return;
+      }
       const result = recallFlight(stateRef.current, detail.flightId, {
         now: detail.now ?? Date.now(),
         mode: RUNTIME_MODE,
@@ -633,6 +682,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       window.dispatchEvent(new CustomEvent(FLIGHT_COMMAND_RESULT_EVENT, { detail: result }));
     };
     const onBot01ScenarioRequest = (event: Event) => {
+      if (rejectNpcCatchupCommand()) return;
       const detail = (event as CustomEvent<{ now?: number }>).detail;
       const result = startBot01IncomingScenario(stateRef.current, {
         now: detail.now ?? Date.now(),
@@ -649,6 +699,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       window.dispatchEvent(new CustomEvent(FLIGHT_COMMAND_RESULT_EVENT, { detail: result }));
     };
     const onBot01ExplorationScenarioRequest = (event: Event) => {
+      if (rejectNpcCatchupCommand()) return;
       if(RUNTIME_MODE !== 'test') return;
       const detail=(event as CustomEvent<{now?:number}>).detail;
       const now=detail?.now ?? Date.now();
@@ -673,6 +724,12 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     };
     const onSpyReportRequest = (event: Event) => {
       const detail = (event as CustomEvent<{ missionId: string; now?: number }>).detail;
+      if (rejectNpcCatchupCommand()) {
+        const result = { ok: false as const, state: stateRef.current,
+          error: { code: 'invalid-command' as const, message: NPC_CATCHUP_COMMAND_BLOCKED_MESSAGE } };
+        window.dispatchEvent(new CustomEvent(SPY_REPORT_RESULT_EVENT, { detail: result }));
+        return;
+      }
       const result = requestSpyReport(stateRef.current, detail.missionId, { now: detail.now ?? Date.now() });
       if (result.ok) {
         stateRef.current = result.state;
@@ -689,6 +746,12 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     };
     const onSpyReportAllRequest = (event: Event) => {
       const detail = (event as CustomEvent<{ missionIds?: string[]; now?: number }>).detail;
+      if (rejectNpcCatchupCommand()) {
+        const result = { ok: false as const, state: stateRef.current,
+          error: { code: 'invalid-command' as const, message: NPC_CATCHUP_COMMAND_BLOCKED_MESSAGE } };
+        window.dispatchEvent(new CustomEvent(SPY_REPORT_RESULT_EVENT, { detail: result }));
+        return;
+      }
       const result = requestAllSpyReports(stateRef.current, detail.missionIds ?? [], { now: detail.now ?? Date.now() });
       if (result.ok) {
         stateRef.current = result.state;
@@ -719,7 +782,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       window.removeEventListener(SPY_REPORT_REQUEST_EVENT, onSpyReportRequest);
       window.removeEventListener(SPY_REPORT_ALL_REQUEST_EVENT, onSpyReportAllRequest);
     };
-  }, [testTimeScale]);
+  }, [rejectNpcCatchupCommand, testTimeScale]);
 
   useEffect(() => {
     const onCombatPriorityChanged = (event: Event) => {
@@ -775,11 +838,12 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       rng: Math.random,
     }),
     commit: (nextState) => {
+      if (rejectNpcCatchupCommand()) return;
       stateRef.current = nextState;
       setState(nextState);
     },
     onNotice: setNotice,
-  }), [testTimeScale]);
+  }), [rejectNpcCatchupCommand, testTimeScale]);
   useEffect(() => bindFleetProductionEventBridge({
     target: window,
     getState: () => stateRef.current,
@@ -791,38 +855,42 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       rng: Math.random,
     }),
     commit: (nextState) => {
+      if (rejectNpcCatchupCommand()) return;
       stateRef.current = nextState;
       setState(nextState);
     },
     onNotice: setNotice,
-  }), [testTimeScale]);
+  }), [rejectNpcCatchupCommand, testTimeScale]);
   useEffect(() => bindRepairEventBridge({
     target: window,
     getState: () => stateRef.current,
     commit: (nextState) => {
+      if (rejectNpcCatchupCommand()) return;
       stateRef.current = nextState;
       setState(nextState);
     },
     onNotice: setNotice,
-  }), []);
+  }), [rejectNpcCatchupCommand]);
   useEffect(() => bindCombatResultEventBridge({
     target: window,
     getState: () => stateRef.current,
     commit: (nextState) => {
+      if (rejectNpcCatchupCommand()) return;
       stateRef.current = nextState;
       setState(nextState);
     },
     onNotice: setNotice,
-  }), []);
+  }), [rejectNpcCatchupCommand]);
   useEffect(() => bindCombatResolutionEventBridge({
     target: window,
     getState: () => stateRef.current,
     commit: (nextState) => {
+      if (rejectNpcCatchupCommand()) return;
       stateRef.current = nextState;
       setState(nextState);
     },
     onNotice: setNotice,
-  }), []);
+  }), [rejectNpcCatchupCommand]);
   const presenceMinute = Math.floor(now / 60_000);
   useEffect(() => {
     setState((current) => {
@@ -885,10 +953,11 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       window,
     );
   }, [now, state, testTimeScale]);
-  useEffect(() => {
-    const result = reconcileRuntime(stateRef.current, {
-      planetId: stateRef.current.currentPlanetId,
-      now,
+  const runRuntimeReconcile = useCallback((at: number) => {
+    const current = stateRef.current;
+    const result = reconcileRuntime(current, {
+      planetId: current.currentPlanetId,
+      now: at,
       mode: RUNTIME_MODE,
       testTimeScale,
     });
@@ -929,7 +998,35 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         ));
       }
     });
-  }, [now, state, testTimeScale]);
+  }, [setNotice, testTimeScale]);
+  runtimeReconcileRef.current = runRuntimeReconcile;
+
+  useEffect(() => {
+    runRuntimeReconcile(now);
+  }, [now, runRuntimeReconcile]);
+
+  // Long offline gaps are reconciled in bounded groups. Continue each persisted
+  // prefix in its own task so catch-up does not wait for the next clock tick or
+  // depend on render frames. The replay target remains frozen by reconcileRuntime.
+  useEffect(() => {
+    const replay = state.npcReplay;
+    if (!isApplicationCommandBlocked(state) || !replay) return;
+
+    const continuationTarget = replay.targetAt;
+    npcReplayContinuation.current = window.setTimeout(() => {
+      npcReplayContinuation.current = null;
+      const current = stateRef.current;
+      if (!isApplicationCommandBlocked(current) || current.npcReplay?.targetAt !== continuationTarget) return;
+      runRuntimeReconcile(Date.now());
+    }, 0);
+
+    return () => {
+      if (npcReplayContinuation.current !== null) {
+        window.clearTimeout(npcReplayContinuation.current);
+        npcReplayContinuation.current = null;
+      }
+    };
+  }, [runRuntimeReconcile, state]);
 
   const ownedPlanets = useMemo<PlanetDefinition[]>(() => Object.entries(state.planets).map(([id, planet]) => ({
     id,
@@ -1129,6 +1226,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   };
 
   const applyProductionBots = (assignment: BotAssignment) => {
+    if (rejectNpcCatchupCommand()) return;
     enqueueApplicationStateUpdate(stateRef, setState, (current) => ({
       state: applyProductionBotsAction(current, {
         planetId: state.currentPlanetId,
@@ -1142,6 +1240,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   };
 
   const startRecycling = (debrisAmount: number, allocation: ResourceAllocationPercent) => {
+    if (rejectNpcCatchupCommand()) return false;
     const startedAt = Date.now();
     const jobId = globalThis.crypto?.randomUUID?.() ?? `recycling-${startedAt}-${Math.random().toString(36).slice(2, 9)}`;
     const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
@@ -1165,6 +1264,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   };
 
   const collectRecycling = (jobId: string) => {
+    if (rejectNpcCatchupCommand()) return false;
     const collectedAt = Date.now();
     const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
       const transition = collectRecyclingAction(current, {
@@ -1184,6 +1284,17 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   };
 
   const tradeResources = (request: TradeRequest): TradeExecution => {
+    if (rejectNpcCatchupCommand()) return {
+      ok: false,
+      canTrade: false,
+      reason: NPC_CATCHUP_COMMAND_BLOCKED_MESSAGE,
+      amountLimit: 0,
+      received: 0,
+      refill: { maxSlots: 0, availableSlots: 0, missingSlots: 0, refillAtQueue: [], nextRefillAt: null,
+        fullRefillAt: null, nextRefillMs: 0, fullRefillMs: 0 },
+      state: { wallet: { metal: 0, minerals: 0, gas: 0, debris: 0 }, trade: { refillAtQueue: [] } },
+      refillAt: null,
+    };
     const tradedAt = Date.now();
     const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
       const transition = executeTradeAction(current, {
@@ -1203,6 +1314,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   };
 
   const startSpaceportUpgrade = (track: SpaceportUpgradeTrack, shipId: string) => {
+    if (rejectNpcCatchupCommand()) return false;
     const enqueuedAt = Date.now();
     const taskId = globalThis.crypto?.randomUUID?.() ?? `spaceport-${track}-${shipId}-${enqueuedAt}-${Math.random().toString(36).slice(2, 9)}`;
     const result = startSpaceportUpgradeAction(stateRef.current, {
@@ -1222,6 +1334,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   };
 
   const cancelSpaceportUpgrade = (taskId: string) => {
+    if (rejectNpcCatchupCommand()) return false;
     const canceledAt = Date.now();
     const result = cancelSpaceportUpgradeAction(stateRef.current, {
       planetId: state.currentPlanetId,
@@ -1245,6 +1358,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   };
 
   const buildBuilding = (assetRole: BuildingRole) => {
+    if (rejectNpcCatchupCommand()) return false;
     const enqueuedAt = Date.now();
     const context = { planetId: state.currentPlanetId, now: enqueuedAt, mode: RUNTIME_MODE, testTimeScale };
     const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
@@ -1270,6 +1384,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   };
 
   const cancelBuilding = (queueId: string) => {
+    if (rejectNpcCatchupCommand()) return false;
     const canceledAt = Date.now();
     const current = stateRef.current;
     const result = cancelBuildingAction(current, {
@@ -1293,6 +1408,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   };
 
   const destroyBuilding = (assetRole: BuildingRole) => {
+    if (rejectNpcCatchupCommand()) return false;
     const current = stateRef.current;
     const result = destroyBuildingAction(current, {
       planetId: state.currentPlanetId,
@@ -1343,11 +1459,13 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   };
 
   const acceptOperationsOperation = (operationId: OperationId) => {
+    if (rejectNpcCatchupCommand()) return;
     setState((current) => ({ ...current, operations: acceptOperation(current.operations, operationId, RUNTIME_MODE) }));
     setNotice('Операция принята. Подготовьте флот для выполнения.');
   };
 
   const acceptPirateOperation = (contact: PirateContactPresentation) => {
+    if (rejectNpcCatchupCommand()) return;
     const current = stateRef.current;
     const live = selectOwnedPiratePresentations(current, Date.now()).find((item) => item.contactCycleKey === contact.contactCycleKey);
     if (!live) {
@@ -1366,6 +1484,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   };
 
   const cancelPirateOperation = (contact: PirateContactPresentation) => {
+    if (rejectNpcCatchupCommand()) return;
     const current = stateRef.current;
     const id = pirateOperationId(contact.contactCycleKey);
     const next = { ...current, operations: { items: current.operations.items.filter((item) => item.id !== id) } };
@@ -1375,11 +1494,13 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   };
 
   const cancelOperationsOperation = (operationId: OperationId) => {
+    if (rejectNpcCatchupCommand()) return;
     setState((current) => ({ ...current, operations: cancelOperation(current.operations, operationId, RUNTIME_MODE) }));
     setNotice('Операция отменена и возвращена в доступные без штрафа.');
   };
 
   const acceptExplorationContact = (node: import('./domain/universe/types.ts').UniversePlanetNode) => {
+    if (rejectNpcCatchupCommand()) return;
     const current = stateRef.current;
     const next = acceptLiveExploration(current, node.id, Date.now(), RUNTIME_MODE);
     if (!next) { setNotice('Контакт уже исчез. Принять операцию нельзя.', 'error'); return; }
@@ -1389,6 +1510,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   };
 
   const cancelExplorationContact = (id: string) => {
+    if (rejectNpcCatchupCommand()) return;
     const next = cancelLiveExploration(stateRef.current, id);
     stateRef.current = next;
     setState(next);
@@ -1396,6 +1518,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   };
 
   const launchExplorationRecon = (node: import('./domain/universe/types.ts').UniversePlanetNode) => {
+    if (rejectNpcCatchupCommand()) return;
     const current = stateRef.current;
     const nowMs = Date.now();
     const live = getExplorationTarget(current, node.id, nowMs, RUNTIME_MODE);
@@ -1452,6 +1575,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   };
 
   const launchBot01Exploration = (node: import('./domain/universe/types.ts').UniversePlanetNode) => {
+    if (rejectNpcCatchupCommand()) return;
     if (RUNTIME_MODE !== 'test')return;
     const at=Date.now();
     const result=dispatchBot01Exploration(stateRef.current,node,at,testTimeScale);
@@ -1499,6 +1623,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     action: (command: CommandState, at: number, ownerId: string, ownerName: string) => CommandResult<object>,
     success?: string,
   ): CommandActionResult => {
+    if (rejectNpcCatchupCommand()) return { ok: false, message: NPC_CATCHUP_COMMAND_BLOCKED_MESSAGE };
     const current = stateRef.current;
     if (selectCommandHallLevel(current.planets) <= 0) {
       return { ok: false, message: 'Командование недоступно: на планетах нет здания «Палата управления».' };
@@ -1524,6 +1649,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
 
   /** Applies one resource-request action to the whole save (planets, scores and flights are involved). */
   const runAidAction = (action: (current: SaveState, at: number) => AidActionResult): CommandActionResult => {
+    if (rejectNpcCatchupCommand()) return { ok: false, message: NPC_CATCHUP_COMMAND_BLOCKED_MESSAGE };
     const current = stateRef.current;
     if (selectCommandHallLevel(current.planets) <= 0) {
       return { ok: false, message: 'Командование недоступно: на планетах нет здания «Палата управления».' };
@@ -1578,6 +1704,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     }));
 
   const sendFleetToMember = (ownerId: string): CommandActionResult => {
+    if (rejectNpcCatchupCommand()) return { ok: false, message: NPC_CATCHUP_COMMAND_BLOCKED_MESSAGE };
     const current = stateRef.current;
     const target = memberPlanetsOf(current, ownerId)[0];
     if (!target) return { ok: false, message: 'Планета участника неизвестна: найдите её во «Вселенной».' };
@@ -1739,6 +1866,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   };
 
   const openSpyLaunch = (target: { planetId: string; planetName: string; coordinate: UniverseCoordinate; relation: Extract<TargetRelation, 'enemy' | 'neutral'>; owner: UniverseOwnerProfile; targetKind: 'player' | 'npc' }) => {
+    if (rejectNpcCatchupCommand()) return;
     const targetRaceId = target.owner.raceId === 'synod' || target.owner.raceId === 'veyra' ? target.owner.raceId : 'aegis';
     const result = dispatchFlight(stateRef.current, {
       requestId: `spy-universe-${target.planetId}-${Date.now()}`,
@@ -1825,6 +1953,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   };
 
   const recallSpyFromReport = (missionId: string) => {
+    if (rejectNpcCatchupCommand()) return;
     const mission = stateRef.current.espionage?.missions.find((candidate) => candidate.id === missionId);
     const flight = mission ? stateRef.current.flights.records.find((candidate) => candidate.id === mission.flightId) : undefined;
     if (!mission || !flight || mission.status !== 'orbiting') {
@@ -1959,6 +2088,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const gateContext = useMemo(() => selectGateContext(state, now), [state, now]);
 
   const commitSunAction = (result: SunActionResult) => {
+    if (rejectNpcCatchupCommand()) return;
     if (result.ok) {
       stateRef.current = result.state;
       setState(result.state);
@@ -2008,10 +2138,12 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     openSunFleetLaunch({ missionId: 'recycle', destination: { kind: 'coordinate', coordinate: { ...coordinate } } });
   };
   const startGate = () => {
+    if (rejectNpcCatchupCommand()) return;
     if (!gateDialogPlanetId) return;
     commitSunAction(startGateConstruction(stateRef.current, gateDialogPlanetId, { now: Date.now(), mode: RUNTIME_MODE, testTimeScale }));
   };
   const testGateAssault = RUNTIME_MODE === 'test' ? () => {
+    if (rejectNpcCatchupCommand()) return;
     const gate = currentSunRaidState(stateRef.current).gates.find((item) => item.status === 'building');
     if (!gate || !stateRef.current.planets[gate.hostPlanetId]) { setNotice('Нет строящихся Врат на вашей планете.', 'error'); return; }
     const result = startBot01GateAssault(stateRef.current, gate.hostPlanetId, { now: Date.now(), mode: RUNTIME_MODE, testTimeScale });

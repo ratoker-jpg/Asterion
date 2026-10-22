@@ -57,7 +57,7 @@ function finiteNonNegative(value: unknown, fallback = 0): number {
  * one interval across many runtime ticks cannot lose credits to float drift.
  * The persisted remainder stays a resource-unit fraction for save compatibility.
  */
-function accrueResourceCredits(
+export function accrueResourceCredits(
   hourlyRate: number,
   elapsedMs: number,
   previousRemainder: number,

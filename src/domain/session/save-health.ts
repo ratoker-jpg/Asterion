@@ -7,6 +7,7 @@
  * `planets` of the wrong type), so it must not be loaded as a campaign.
  */
 import { validateNpcState } from '../npc/state.ts';
+import { isNpcReplayMetadata } from '../npc/replay-state.ts';
 
 export type SavePayloadHealth =
   | { status: 'missing' }
@@ -30,6 +31,9 @@ export function inspectParsedSave(parsed: unknown, currentSchemaVersion: number)
   }
   const schemaVersion = typeof schema === 'number' ? schema : 0;
   if (schemaVersion > currentSchemaVersion) return { status: 'newer', schemaVersion };
+  if (parsed.npcReplay !== undefined && !isNpcReplayMetadata(parsed.npcReplay)) {
+    return { status: 'malformed', reason: 'Повреждён курсор экономического расчёта NPC.' };
+  }
   // Do not admit or autosave a private foundation we cannot losslessly read.
   // Rescue/backup export remains available for these original bytes.
   if (parsed.npc !== undefined && !validateNpcState(parsed.npc)) {

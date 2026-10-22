@@ -30,8 +30,16 @@ import { advanceUniverseAsteroidSimulationAt, getNextUniverseAsteroidTransitionA
 import { advanceAsteroidGasAt } from '../domain/universe/asteroid-gas.ts';
 import { selectOwnerScores } from '../domain/rating/scoring.ts';
 import { createExplorationState, recordHighestExplorationScore } from '../domain/exploration/ledger.ts';
+import { generateNpcReplayEvents, applyNpcReplayEventsAt, initializeNpcReplaySessionsAt, type NpcReplayEmission } from './npc-replay.ts';
+import { getNextNpcEconomyCheckpoint, settleNpcPlanet } from './npc-economy.ts';
+import { getNpcOwnerIds } from './npc-foundation.ts';
+import { NPC_REPLAY_MAX_GROUPS, NPC_REPLAY_WINDOW_MS } from './npc-catchup.ts';
+import { CAMPAIGN_SPEED_SCALE } from '../domain/runtime/mode.ts';
+import { UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 
 export type RuntimeReconcileEvent =
+  | { kind: 'npc-economy'; events: readonly NpcReplayEmission[] }
+  | { kind: 'npc-building'; planetId: string; assetRole: BuildingRole; at: number }
   | { kind: 'science'; scienceIds: ScienceId[] }
   | { kind: 'building'; planetId: string; assetRole: BuildingRole }
   | { kind: 'recycling'; planetId: string; jobIds: string[] }
@@ -57,9 +65,57 @@ export function reconcileRuntime(
   state: SaveState,
   context: BuildingApplicationContext,
 ): RuntimeReconcileResult {
+  const owners = context.mode === 'production' && state.npc
+    ? getNpcOwnerIds(state.espionage?.targets, state.profile.playerId).filter((id) => id !== UNIVERSE_NPC_OWNER_ID && Boolean(state.npc?.profiles[id]))
+    : [];
+  if (!owners.length) {
+    const result = reconcileRuntimeSlice(state, context);
+    if (context.mode === 'production' && state.npcReplay && state.npcReplay.targetAt > state.npcReplay.processedThroughAt) {
+      result.state = { ...result.state, npcReplay: { version: 1, processedThroughAt: context.now, targetAt: context.now } };
+      result.changed = true;
+    }
+    return result;
+  }
+  const from = state.npcReplay?.processedThroughAt ?? Math.max(0, Math.floor(state.resourceClock.lastReconciledAt));
+  const frozen = state.npcReplay && state.npcReplay.targetAt > from ? state.npcReplay.targetAt : context.now;
+  const targetAt = Math.max(from, Math.floor(frozen));
+  const windowEnd = Math.min(targetAt, from + NPC_REPLAY_WINDOW_MS);
+  const result = reconcileRuntimeSlice(state, { ...context, now: windowEnd }, { from, owners, targetAt });
+  return result;
+}
+
+function reconcileRuntimeSlice(
+  state: SaveState,
+  context: BuildingApplicationContext,
+  replay?: { from: number; owners: string[]; targetAt: number },
+): RuntimeReconcileResult {
   // Aid flights whose sender, recipient or request no longer stand turn back before anything else settles.
   let next = reconcileAidMembership(state, context.now);
   const events: RuntimeReconcileEvent[] = [];
+  const timeScale = CAMPAIGN_SPEED_SCALE[state.worldConfig?.world.campaignSpeed ?? 'standard'];
+  const replayOwners = new Set(replay?.owners);
+  if (replay && next.npc) next = { ...next, npc: initializeNpcReplaySessionsAt(next.npc, replay.from, replay.owners) };
+  const economicEvents = replay && next.npc
+    ? generateNpcReplayEvents(next.npc, replay.from, context.now + 1, replay.owners)
+    : [];
+  let economicIndex = 0;
+  let processedGroups = 0;
+  const settleNpcEconomies = (at: number, ownerIds?: ReadonlySet<string>) => {
+    if (!replay || !next.espionage?.targets) return;
+    const targets = { ...next.espionage.targets };
+    let changed = false;
+    for (const [id, target] of Object.entries(targets)) {
+      if (!replayOwners.has(target.ownerId) || (ownerIds && !ownerIds.has(target.ownerId))) continue;
+      const settled = settleNpcPlanet(target, at, { timeScale });
+      targets[id] = settled.target;
+      changed ||= settled.target !== target;
+      for (const assetRole of settled.completedRoles) events.push({ kind: 'npc-building', planetId: id, assetRole, at });
+    }
+    if (changed) next = { ...next, espionage: { ...next.espionage, targets } };
+  };
+  // Establish legacy overpopulation episodes at the committed prefix, never at
+  // a later caller-dependent decision time. Existing clocks/queues are retained.
+  if (replay) settleNpcEconomies(replay.from);
   const startingPirate = next.pirate ?? createDefaultPirateState();
   let pirateCursor = startingPirate.raidProcessedAt ?? context.now;
   if (!Number.isSafeInteger(pirateCursor) || pirateCursor < 0) pirateCursor = context.now;
@@ -282,15 +338,38 @@ export function reconcileRuntime(
       : null;
     const asteroidCheckpoint = nextAsteroidCheckpoint ?? undefined;
     const workCheckpoint = nextDueWorkCheckpoint(processedThrough);
-    const checkpoint = [flightCheckpoint, asteroidCheckpoint, pirateCheckpoint, npcCheckpoint, workCheckpoint]
+    while (economicIndex < economicEvents.length && economicEvents[economicIndex]!.at <= processedThrough) economicIndex++;
+    const sessionCheckpoint = economicEvents[economicIndex]?.at;
+    let economyCheckpoint: number | undefined;
+    if (replay) for (const target of Object.values(next.espionage?.targets ?? {})) {
+      if (!replayOwners.has(target.ownerId)) continue;
+      const due = getNextNpcEconomyCheckpoint(target, processedThrough);
+      if (due !== null && due > processedThrough && due <= context.now) economyCheckpoint = Math.min(economyCheckpoint ?? due, due);
+    }
+    const checkpoint = [flightCheckpoint, asteroidCheckpoint, pirateCheckpoint, npcCheckpoint, workCheckpoint, sessionCheckpoint, economyCheckpoint]
       .filter((point): point is number => point !== undefined)
       .reduce<number | undefined>((min, point) => min === undefined ? point : Math.min(min,point), undefined);
     if (checkpoint === undefined) break;
+    if (replay && processedGroups >= NPC_REPLAY_MAX_GROUPS) {
+      context = { ...context, now: Math.max(replay.from, processedThrough) };
+      break;
+    }
+    processedGroups++;
     const asteroidIsDue = asteroidCheckpoint === checkpoint;
     const flightIsDue = flightCheckpoint === checkpoint;
     const pirateIsDue = pirateCheckpoint === checkpoint;
     const npcIsDue = npcCheckpoint === checkpoint;
     const workIsDue = workCheckpoint === checkpoint;
+    const economicIsDue = sessionCheckpoint === checkpoint;
+    const dueOwners = new Set<string>();
+    if (replay) {
+      for (const target of Object.values(next.espionage?.targets ?? {})) {
+        const due = getNextNpcEconomyCheckpoint(target, processedThrough);
+        if (due === checkpoint) dueOwners.add(target.ownerId);
+      }
+      for (let index = economicIndex; economicEvents[index]?.at === checkpoint; index++) dueOwners.add(economicEvents[index]!.ownerId);
+      settleNpcEconomies(checkpoint, flightIsDue || pirateIsDue || npcIsDue ? undefined : dueOwners);
+    }
     // Advancing the cursor before processing prevents a due-but-unmodified
     // record at this timestamp from creating a zero-progress loop. Flights
     // created by this checkpoint can still contribute a later return time.
@@ -345,10 +424,21 @@ export function reconcileRuntime(
       // A Hall lost to an arrival at this checkpoint must stop the charge clock from here on, not from `now`.
       next = syncAidState(next, { now: checkpoint, mode: context.mode, testTimeScale: context.testTimeScale });
     }
+    // Existing asteroid/raid/battle micro-order above is unchanged. NPC session
+    // boundaries and decisions observe timer completions and arrival effects.
+    if (replay && (flightIsDue || pirateIsDue || npcIsDue)) settleNpcEconomies(checkpoint);
+    if (economicIsDue && next.npc && next.espionage?.targets) {
+      const group = [];
+      while (economicEvents[economicIndex]?.at === checkpoint) group.push(economicEvents[economicIndex++]!);
+      const applied = applyNpcReplayEventsAt(next.npc, checkpoint, group, { targets: next.espionage.targets, timeScale });
+      next = { ...next, npc: applied.state, espionage: { ...next.espionage, targets: { ...applied.targets } } };
+      if (applied.emitted.length) events.push({ kind: 'npc-economy', events: applied.emitted });
+    }
   }
 
   const finalOverpopulation = reconcileAllPlanetOverpopulation(next, context.now);
   next = finalOverpopulation.state;
+  if (replay) settleNpcEconomies(context.now);
   reconcilePlanetWork(context.now, finalOverpopulation.blockedPlanetIds);
   advanceAsteroidGasForSimulationAt(context.now);
   if (processFlightsAt(context.now)) {
@@ -377,6 +467,7 @@ export function reconcileRuntime(
   if (next.pirate?.raidProcessedAt !== completedCursor) {
     next = {...next, pirate: {...(next.pirate ?? createDefaultPirateState()),raidProcessedAt:completedCursor}};
   }
+  if (replay) next = { ...next, npcReplay: { version: 1, processedThroughAt: context.now, targetAt: replay.targetAt } };
 
   return {
     changed: next !== state,

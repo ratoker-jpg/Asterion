@@ -1,5 +1,6 @@
 import type { NewGameConfig } from '../domain/world/config.ts';
 import type { NpcStateV1 } from '../domain/npc/types.ts';
+import type { NpcReplayState } from '../domain/npc/replay-state.ts';
 import type { SunRaidState } from '../domain/sun-raid/types.ts';
 import type { ExplorationState } from '../domain/exploration/ledger.ts';
 import type { BattleHistoryState } from '../domain/combat/battle-repository.ts';
@@ -117,6 +118,8 @@ export type PlanetQueueRecord = Record<PlanetId, BuildingQueueItem[]>;
 export type SaveState = {
   /** Private, versioned NPC foundation; absent only in pre-PR1 saves/fixtures. */
   npc?: NpcStateV1;
+  /** Committed chronological prefix; an unfinished target survives reload. */
+  npcReplay?: NpcReplayState;
   /** PR92 optional migration field. No second save key is used. */
   exploration?: ExplorationState;
   schemaVersion: number;

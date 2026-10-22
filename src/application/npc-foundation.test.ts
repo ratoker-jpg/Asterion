@@ -175,10 +175,12 @@ test('schema 24 Production and Test saves migrate deterministically without losi
   }
 });
 
-test('reconciliation across elapsed time does not issue new NPC commands or alter NPC state', () => {
+test('NPCs without online sessions issue no new commands across elapsed time', () => {
   const initial = createInitialSaveState('production', NOW, config('NPCNOAUTO1', 12));
   const state: SaveState = {
     ...initial,
+    npc: { ...initial.npc!, profiles: Object.fromEntries(Object.entries(initial.npc!.profiles).map(([id, profile]) =>
+      [id, { ...profile, activity: { ...profile.activity, propensity: 0 } }])) },
     exploration: { ...createExplorationState(), ...initial.exploration, npcProcessedAt: NOW },
     pirate: { ...createDefaultPirateState(), ...initial.pirate, raidProcessedAt: NOW },
   };
