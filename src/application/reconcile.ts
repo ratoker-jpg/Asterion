@@ -181,6 +181,21 @@ export function reconcileRuntime(
     return earliest;
   };
 
+  // Building and research completions change income and energy: income up to
+  // each finishAt accrues at the old rate, the completion applies, and the rest
+  // of the interval accrues at the new rate, however rarely the game is opened.
+  const nextDueWorkCheckpoint = (after: number): number | undefined => {
+    let earliest: number | undefined;
+    const consider = (checkpoint: number | undefined) => {
+      if (checkpoint === undefined || !Number.isFinite(checkpoint)
+        || checkpoint > context.now || checkpoint <= after) return;
+      if (earliest === undefined || checkpoint < earliest) earliest = checkpoint;
+    };
+    for (const planetId of Object.keys(next.planets)) consider(next.queues[planetId]?.[0]?.finishAt);
+    consider(next.science.queue[0]?.finishAt);
+    return earliest;
+  };
+
   const applyAsteroidTransitionsAt = (at: number) => {
     const simulation = next.asteroidSimulation;
     if (!simulation) return;
@@ -266,7 +281,8 @@ export function reconcileRuntime(
       ? getNextUniverseAsteroidTransitionAt(next.asteroidSimulation, context.now)
       : null;
     const asteroidCheckpoint = nextAsteroidCheckpoint ?? undefined;
-    const checkpoint = [flightCheckpoint, asteroidCheckpoint, pirateCheckpoint, npcCheckpoint]
+    const workCheckpoint = nextDueWorkCheckpoint(processedThrough);
+    const checkpoint = [flightCheckpoint, asteroidCheckpoint, pirateCheckpoint, npcCheckpoint, workCheckpoint]
       .filter((point): point is number => point !== undefined)
       .reduce<number | undefined>((min, point) => min === undefined ? point : Math.min(min,point), undefined);
     if (checkpoint === undefined) break;
@@ -274,6 +290,7 @@ export function reconcileRuntime(
     const flightIsDue = flightCheckpoint === checkpoint;
     const pirateIsDue = pirateCheckpoint === checkpoint;
     const npcIsDue = npcCheckpoint === checkpoint;
+    const workIsDue = workCheckpoint === checkpoint;
     // Advancing the cursor before processing prevents a due-but-unmodified
     // record at this timestamp from creating a zero-progress loop. Flights
     // created by this checkpoint can still contribute a later return time.
@@ -282,7 +299,15 @@ export function reconcileRuntime(
     // first; flight arrivals and battles then observe the post-transition
     // free-orbit state. Flight ties retain reconcileFlights' stable ID order.
     if (asteroidIsDue) applyAsteroidTransitionsAt(checkpoint);
-    if (flightIsDue || pirateIsDue || npcIsDue) {
+    if (workIsDue && !flightIsDue && !pirateIsDue && !npcIsDue) {
+      // A completion alone: settle income and queues at its finishAt. Overpopulation
+      // episodes keep their existing detection points (reconcile time and the
+      // other checkpoints); only an already stored lock pauses work here.
+      const storedLocks = new Set(Object.entries(next.planets)
+        .filter(([, planet]) => planet.overpopulation?.blocked === true)
+        .map(([planetId]) => planetId));
+      reconcilePlanetWork(checkpoint, storedLocks);
+    } else if (flightIsDue || pirateIsDue || npcIsDue) {
       advanceAsteroidGasForSimulationAt(checkpoint);
       const overpopulation = reconcileAllPlanetOverpopulation(next, checkpoint);
       next = overpopulation.state;
