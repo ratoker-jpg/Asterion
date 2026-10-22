@@ -97,10 +97,14 @@ function targetQueue(target: SpyTargetState, buildings = targetBuildingLevels(ta
   return migrateBuildingQueue(target.buildingQueue ?? [], target.id, buildings, targetScience(target));
 }
 
-function economyFor(target: SpyTargetState): BuildingEconomyState {
-  const buildings = targetBuildingLevels(target);
+function economyFor(target: SpyTargetState, buildings = targetBuildingLevels(target)): BuildingEconomyState {
+  return economyWithLedger(target, buildings).economy;
+}
+
+/** One snapshot of the derived economy; the ledger is reused by callers that also persist it. */
+function economyWithLedger(target: SpyTargetState, buildings: BuildingLevels): { economy: BuildingEconomyState; ledger: EnergyLedger } {
   const ledger = targetEnergyLedger(target, buildings);
-  return {
+  return { ledger, economy: {
     resources: {
       metal: finiteNonNegative(target.resources.metal),
       minerals: finiteNonNegative(target.resources.minerals),
@@ -111,7 +115,7 @@ function economyFor(target: SpyTargetState): BuildingEconomyState {
     queue: targetQueue(target, buildings),
     scienceLevels: targetScience(target),
     capacities: getStorageCapacities(buildings),
-  };
+  } };
 }
 
 function withEconomy(target: SpyTargetState, economy: BuildingEconomyState, energyLedger: EnergyLedger): SpyTargetState {
@@ -130,8 +134,7 @@ function withEconomy(target: SpyTargetState, economy: BuildingEconomyState, ener
   };
 }
 
-function incomeFor(target: SpyTargetState, timeScale: number) {
-  const buildings = targetBuildingLevels(target);
+function incomeFor(target: SpyTargetState, timeScale: number, buildings = targetBuildingLevels(target)) {
   const base = getBuildingResourceIncomePerHour(buildings, targetScience(target));
   const bots = migrateProductionBotAssignment(target.productionBots, buildings);
   const income = getProductionBotIncomePerHour(base, bots);
@@ -150,12 +153,14 @@ function accrueInterval(target: SpyTargetState, to: number, timeScale: number): 
   };
   const finishAt = Math.max(clock.lastReconciledAt, Math.floor(to));
   const elapsed = finishAt - clock.lastReconciledAt;
-  const income = incomeFor(target, timeScale);
+  // Levels, ledger and queue are pure functions of this target; derive them once.
+  const buildings = targetBuildingLevels(target);
+  const income = incomeFor(target, timeScale, buildings);
   const accrued = Object.fromEntries(RESOURCE_KEYS.map((key) => [
     key,
     accrueResourceCredits(income[key], elapsed, clock.remainder[key]),
   ])) as Record<(typeof RESOURCE_KEYS)[number], { wholeCredits: number; remainder: number }>;
-  const economy = economyFor(target);
+  const { economy, ledger } = economyWithLedger(target, buildings);
   const credited = creditResources(economy.resources, economy.capacities, {
     metal: accrued.metal.wholeCredits,
     minerals: accrued.minerals.wholeCredits,
@@ -170,7 +175,7 @@ function accrueInterval(target: SpyTargetState, to: number, timeScale: number): 
     nextRemainder[key] = wasFull || isFull ? 0 : accrued[key].remainder;
   }
   return {
-    ...withEconomy(target, { ...economy, resources: credited.wallet }, targetEnergyLedger(target, economy.buildings)),
+    ...withEconomy(target, { ...economy, resources: credited.wallet }, ledger),
     resourceClock: { lastReconciledAt: finishAt, remainder: nextRemainder },
   };
 }
@@ -215,11 +220,11 @@ function settleOverpopulation(target: SpyTargetState, at: number): SpyTargetStat
   };
 }
 
-function isBlocked(target: SpyTargetState): boolean {
+function isBlocked(target: SpyTargetState, buildings?: BuildingLevels): boolean {
+  if (target.overpopulation?.blocked === true) return true;
   const normalizedFleet = removeSolarSatellitesFromFleet(target.fleet).fleet;
   const actualFleetPopulation = calculatePlanetPopulation(normalizedFleet, targetSatelliteCount(target), target.raceId);
-  return target.overpopulation?.blocked === true
-    || actualFleetPopulation > calculatePlanetCapacity(targetBuildingLevels(target).hangar ?? 0);
+  return actualFleetPopulation > calculatePlanetCapacity((buildings ?? targetBuildingLevels(target)).hangar ?? 0);
 }
 
 function rebuildEnergyAfterCompletion(target: SpyTargetState, role: BuildingRole): SpyTargetState {
@@ -309,6 +314,17 @@ export function settleNpcPlanet(
   const safeAt = Math.max(0, Math.floor(at));
   let target = initialTarget;
   const completedRoles: BuildingRole[] = [];
+  // Common case: no overpopulation episode, under capacity and no completion
+  // due. Overpopulation settlement is then the identity, so the general path
+  // below reduces to one accrual; take it without re-deriving the target.
+  if (!target.overpopulation) {
+    const buildings = targetBuildingLevels(target);
+    const active = targetQueue(target, buildings)[0];
+    if ((!active || active.finishAt > safeAt) && !isBlocked(target, buildings)) {
+      target = accrueInterval(target, safeAt, context.timeScale);
+      return { target, completedRoles, nextDueAt: getNextNpcEconomyCheckpoint(target, safeAt) };
+    }
+  }
   const clockAtStart = target.resourceClock?.lastReconciledAt ?? safeAt;
   const startedBlocked = isBlocked(target);
   if (startedBlocked) {

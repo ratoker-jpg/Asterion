@@ -164,7 +164,8 @@ import { getPlanetOverpopulationSummary } from './application/overpopulation.ts'
 import { energySummaryForPlanet, getPlanetEnergyCoordinates } from './application/energy.ts';
 import { getEffectiveResourceIncomePerHour } from './application/resource-clock.ts';
 import { publishApplicationRuntimeSnapshot } from './application/runtime.ts';
-import { reconcileRuntime } from './application/reconcile.ts';
+import { reconcileRuntime, type RuntimeReconcileEvent } from './application/reconcile.ts';
+import { freezeNpcCatchupTarget, isNpcCatchupPending, needsNpcCatchupBefore } from './application/npc-catchup.ts';
 import {
   FLIGHT_COMMAND_RESULT_EVENT,
   FLIGHT_DISPATCH_REQUEST_EVENT,
@@ -295,6 +296,14 @@ type RuntimeToast = {
 
 const TOAST_AUTO_CLOSE_MS = 3_000;
 const TOAST_STACK_LIMIT = 3;
+/** Replay compute per catch-up task before React gets the frame back. */
+const NPC_CATCHUP_TASK_BUDGET_MS = 40;
+/**
+ * While a catch-up is pending only replay progress changes the save, and a
+ * lost prefix is replayed identically, so the full save is written at most
+ * this often; completion is written at once.
+ */
+const NPC_CATCHUP_PERSIST_INTERVAL_MS = 2_000;
 
 /**
  * Navigation noise the plan explicitly silences: section/route openings, zone
@@ -395,7 +404,6 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   });
   const stateRef = useRef(state);
   stateRef.current = state;
-  const runtimeReconcileRef = useRef<((at: number) => void) | null>(null);
   const [now, setNow] = useState(Date.now());
   const [testTimeScale, setTestTimeScale] = useState<TestTimeScale>(() => resolveTestTimeScale());
   const [toasts, setToasts] = useState<RuntimeToast[]>([]);
@@ -420,13 +428,19 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       setToasts((current) => current.filter((toast) => toast.id !== id));
     }, TOAST_AUTO_CLOSE_MS);
   }, []);
+  // A command never runs the replay itself: it reads replay metadata only. An
+  // unreconciled gap (a save just loaded, or a long background throttle) is
+  // frozen as the catch-up target right here, so the refusal holds from this
+  // click on, and the bounded catch-up continues in its own tasks.
   const rejectNpcCatchupCommand = useCallback(() => {
     const current = stateRef.current;
-    const hasRegisteredNpcReplay = Object.values(current.espionage?.targets ?? {}).some((target) =>
-      target.kind === 'npc' && target.ownerId !== UNIVERSE_NPC_OWNER_ID && Boolean(current.npc?.profiles[target.ownerId]),
-    );
-    if (hasRegisteredNpcReplay) runtimeReconcileRef.current?.(Date.now());
-    if (!isApplicationCommandBlocked(stateRef.current)) return false;
+    const at = Date.now();
+    if (!needsNpcCatchupBefore(current, at)) return false;
+    const frozen = freezeNpcCatchupTarget(current, at);
+    if (frozen !== current) {
+      stateRef.current = frozen;
+      setState(frozen);
+    }
     setNotice(NPC_CATCHUP_COMMAND_BLOCKED_MESSAGE, 'error');
     return true;
   }, [setNotice]);
@@ -930,12 +944,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
   }, [persistence]);
-  useEffect(() => {
-    if (adoptedFromOtherWindow.current === state) {
-      adoptedFromOtherWindow.current = null;
-      return;
-    }
-    const result = persistence.write(state);
+  const writeSave = useCallback((value: SaveState) => {
+    const result = persistence.write(value);
     if (!result.ok) {
       if (!persistenceFailureNotified.current) {
         persistenceFailureNotified.current = true;
@@ -945,7 +955,36 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       return;
     }
     persistenceFailureNotified.current = false;
-  }, [persistence, setNotice, state]);
+  }, [persistence, setNotice]);
+  const lastCatchupWriteAt = useRef(0);
+  const deferredCatchupWrite = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (deferredCatchupWrite.current !== null) window.clearTimeout(deferredCatchupWrite.current);
+  }, []);
+  useEffect(() => {
+    if (adoptedFromOtherWindow.current === state) {
+      adoptedFromOtherWindow.current = null;
+      return;
+    }
+    if (deferredCatchupWrite.current !== null) {
+      window.clearTimeout(deferredCatchupWrite.current);
+      deferredCatchupWrite.current = null;
+    }
+    if (isNpcCatchupPending(state)) {
+      const wait = lastCatchupWriteAt.current + NPC_CATCHUP_PERSIST_INTERVAL_MS - Date.now();
+      if (wait > 0) {
+        // Trailing write of this prefix unless a newer state replaces it first.
+        deferredCatchupWrite.current = window.setTimeout(() => {
+          deferredCatchupWrite.current = null;
+          lastCatchupWriteAt.current = Date.now();
+          writeSave(state);
+        }, wait);
+        return;
+      }
+      lastCatchupWriteAt.current = Date.now();
+    }
+    writeSave(state);
+  }, [persistence, state, writeSave]);
   useEffect(() => {
     publishApplicationRuntimeSnapshot(
       state,
@@ -953,18 +992,33 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       window,
     );
   }, [now, state, testTimeScale]);
-  const runRuntimeReconcile = useCallback((at: number) => {
-    const current = stateRef.current;
-    const result = reconcileRuntime(current, {
-      planetId: current.currentPlanetId,
-      now: at,
-      mode: RUNTIME_MODE,
-      testTimeScale,
-    });
-    if (!result.changed) return;
+  /**
+   * Reconciles to `at`. A pending NPC catch-up keeps taking bounded replay
+   * chunks inside one task until `budgetMs` of compute is spent, then
+   * publishes only the last consistent prefix: React and autosave see one
+   * state per task instead of one per 64-event chunk.
+   */
+  const runRuntimeReconcile = useCallback((at: number, budgetMs = 0) => {
+    const startedAt = performance.now();
+    const initial = stateRef.current;
+    let current = initial;
+    const events: RuntimeReconcileEvent[] = [];
+    do {
+      const result = reconcileRuntime(current, {
+        planetId: current.currentPlanetId,
+        now: at,
+        mode: RUNTIME_MODE,
+        testTimeScale,
+      });
+      if (!result.changed) break;
+      current = result.state;
+      for (const event of result.events) events.push(event);
+    } while (isNpcCatchupPending(current) && performance.now() - startedAt < budgetMs);
+    if (current === initial) return;
+    const result = { state: current };
     stateRef.current = result.state;
     setState(result.state);
-    result.events.forEach((event) => {
+    events.forEach((event) => {
       if (event.kind === 'science') {
         const names = event.scienceIds
           .map((scienceId) => SCIENCE_CATALOG.find((science) => science.id === scienceId)?.name ?? `Наука ${scienceId}`)
@@ -999,7 +1053,6 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       }
     });
   }, [setNotice, testTimeScale]);
-  runtimeReconcileRef.current = runRuntimeReconcile;
 
   useEffect(() => {
     runRuntimeReconcile(now);
@@ -1017,7 +1070,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       npcReplayContinuation.current = null;
       const current = stateRef.current;
       if (!isApplicationCommandBlocked(current) || current.npcReplay?.targetAt !== continuationTarget) return;
-      runRuntimeReconcile(Date.now());
+      runRuntimeReconcile(Date.now(), NPC_CATCHUP_TASK_BUDGET_MS);
     }, 0);
 
     return () => {

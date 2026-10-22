@@ -15,7 +15,15 @@ const PROFILE = fs.mkdtempSync(path.join(os.tmpdir(), 'asterion-npc-replay-qa-')
 app.setPath('userData', PROFILE);
 
 const ROOT = path.join(__dirname, '..');
-const OUTPUT = process.env.ASTERION_QA_OUTPUT || path.join(ROOT, 'artifacts', 'npc-replay-qa');
+// --full-world: a real 10-galaxy campaign with asteroid, exploration and pirate
+// timelines running from its start. The default stays the scoped economy run.
+const FULL_WORLD = process.argv.includes('--full-world');
+const OUTPUT = process.env.ASTERION_QA_OUTPUT
+  || path.join(ROOT, 'artifacts', FULL_WORLD ? 'npc-replay-full-world-qa' : 'npc-replay-qa');
+const CATCHUP_TIMEOUT_MS = 120_000;
+const FIXTURE_ISOLATION = FULL_WORLD
+  ? 'None: 10 galaxies, 100 NPC, asteroid simulation, exploration and pirate timelines run from campaign start.'
+  : 'NPC economy replay only; exploration and pirate cursors are frozen at the fixed horizon and asteroid simulation is absent. Not a full-campaign replay.';
 const LEGACY_KEY = 'asterion.vertical-slice.v1';
 const DAY_MS = 24 * 60 * 60 * 1_000;
 const CATCHUP_MS = 30 * DAY_MS;
@@ -28,15 +36,22 @@ function createProductionSave(startAt, endAt) {
     import { createDefaultNewGameConfig } from './src/domain/world/config.ts';
     import { getNpcOwnerIds } from './src/application/npc-foundation.ts';
     import { createNpcState } from './src/domain/npc/state.ts';
-    const config = createDefaultNewGameConfig({ seed: 'NPCREPLAYQA2026', campaignName: 'NPC replay QA' });
-    config.world = { ...config.world, galaxyCount: 2, npcCount: 100, maxNpcPerSystem: 2, randomPlayerStart: false };
+    const fullWorld = ${FULL_WORLD};
+    const config = createDefaultNewGameConfig({ seed: 'NPCREPLAYQA2026', campaignName: fullWorld ? 'NPC full-world QA' : 'NPC replay QA' });
+    config.world = fullWorld
+      ? { ...config.world, galaxyCount: 10, npcCount: 100, randomPlayerStart: false }
+      : { ...config.world, galaxyCount: 2, npcCount: 100, maxNpcPerSystem: 2, randomPlayerStart: false };
     const base = createInitialSaveState('production', ${startAt}, config);
     const ownerIds = getNpcOwnerIds(base.espionage?.targets, base.profile.playerId);
     if (ownerIds.length !== 100) throw new Error('Expected exactly 100 generated NPC owners.');
-    const state = {
+    if (fullWorld && !base.asteroidSimulation) throw new Error('Full-world fixture lost its asteroid simulation.');
+    const replay = { version: 1, processedThroughAt: ${startAt}, targetAt: ${endAt} };
+    const npc = createNpcState(ownerIds, 'npc-replay-benchmark-persona-salt-v1', ${startAt});
+    // Full world keeps every other timeline exactly as the new campaign made it.
+    const state = fullWorld ? { ...base, npc, npcReplay: replay } : {
       ...base,
-      npc: createNpcState(ownerIds, 'npc-replay-benchmark-persona-salt-v1', ${startAt}),
-      npcReplay: { version: 1, processedThroughAt: ${startAt}, targetAt: ${endAt} },
+      npc,
+      npcReplay: replay,
       exploration: { ...base.exploration, npcProcessedAt: ${endAt} },
       pirate: { ...base.pirate, raidProcessedAt: ${endAt} },
       asteroidSimulation: undefined,
@@ -98,7 +113,15 @@ async function readMeasurement(win) {
     const p95 = sorted.length ? sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * .95) - 1)] : null;
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(LEGACY_KEY)}) || 'null');
     const targets = Object.values(save?.espionage?.targets ?? {}).filter((target) => target.kind === 'npc');
+    const progress = qa.progress;
     return {
+      inMemoryReplay: qa.latest,
+      runtimePublications: qa.publications,
+      persistedSaveChars: (localStorage.getItem(${JSON.stringify(LEGACY_KEY)}) || '').length,
+      persistenceNotice: [...document.querySelectorAll('[data-qa-notice], [role="status"], [role="alert"]')]
+        .map((node) => node.textContent || '').find((text) => text.includes('Не удалось сохранить')) || null,
+      firstProgress: progress[0] ?? null,
+      lastProgress: progress[progress.length - 1] ?? null,
       pending: Boolean(save?.npcReplay && save.npcReplay.targetAt > save.npcReplay.processedThroughAt),
       processedThroughAt: save?.npcReplay?.processedThroughAt ?? null,
       targetAt: save?.npcReplay?.targetAt ?? null,
@@ -166,12 +189,28 @@ async function runScenario() {
     // One renderer-side measurement timer records persisted cursor advances
     // and timer gaps. It measures UI-thread scheduling, not Node proxy latency.
     await run(win, `(() => {
-      const qa = { last: performance.now(), gaps: [], progress: [], lastCursor: null };
+      const qa = { last: performance.now(), gaps: [], progress: [], lastCursor: null, latest: null, publications: 0 };
       window.__npcReplayQa = qa;
+      // Full world: the save grows to tens of MB, so parsing it every 16 ms
+      // would measure the probe. Read the published runtime state instead.
+      if (${FULL_WORLD}) window.addEventListener('asterion:runtime-state-changed', (event) => {
+        const replay = event.detail?.npcReplay;
+        if (!replay) return;
+        qa.publications += 1;
+        qa.latest = { processedThroughAt: replay.processedThroughAt, targetAt: replay.targetAt };
+      });
       window.__npcReplayQaTimer = window.setInterval(() => {
         const now = performance.now();
         qa.gaps.push(now - qa.last);
         qa.last = now;
+        if (${FULL_WORLD}) {
+          const replay = qa.latest;
+          if (replay && replay.processedThroughAt !== qa.lastCursor) {
+            qa.lastCursor = replay.processedThroughAt;
+            qa.progress.push({ processedThroughAt: replay.processedThroughAt, targetAt: replay.targetAt, at: now });
+          }
+          return;
+        }
         try {
           const save = JSON.parse(localStorage.getItem(${JSON.stringify(LEGACY_KEY)}) || 'null');
           const replay = save?.npcReplay;
@@ -233,11 +272,19 @@ async function runScenario() {
     const catchupStartedAt = Date.now();
     let catchupWaitError = null;
     try {
-      await waitFor(win, `(() => {
+      await waitFor(win, FULL_WORLD
+        ? `(() => { const r = window.__npcReplayQa?.latest; return Boolean(r && r.targetAt <= r.processedThroughAt); })()`
+        : `(() => {
       try { const save = JSON.parse(localStorage.getItem(${JSON.stringify(LEGACY_KEY)}) || 'null');
         return save?.npcReplay?.targetAt <= save?.npcReplay?.processedThroughAt; }
       catch { return false; }
-      })()`, 120_000);
+      })()`, CATCHUP_TIMEOUT_MS);
+      // Completion is written at once; give the write and its storage read a moment.
+      if (FULL_WORLD) await waitFor(win, `(() => {
+        try { const save = JSON.parse(localStorage.getItem(${JSON.stringify(LEGACY_KEY)}) || 'null');
+          return save?.npcReplay?.targetAt <= save?.npcReplay?.processedThroughAt; }
+        catch { return false; }
+      })()`, 15_000);
     } catch (error) {
       catchupWaitError = error instanceof Error ? error.message : String(error);
     }
@@ -249,7 +296,7 @@ async function runScenario() {
         profile: PROFILE,
         isolatedUserData: true,
         seed: { npcProfiles: initial.npcProfiles, npcTargets: initial.npcTargets, startAt, endAt, catchupDays: 30,
-          fixtureIsolation: 'NPC economy replay only; exploration and pirate cursors are frozen at the fixed horizon and asteroid simulation is absent. Not a full-campaign replay.' },
+          scenario: FULL_WORLD ? 'full-world' : 'scoped', isolation: initial.isolation, fixtureIsolation: FIXTURE_ISOLATION },
         commandGate: { pendingBeforeUiAction: beforeClickPending, requestEventPrevented: eventPrevented, buildButtonWasEnabled: buildButtonEnabled, playerStateUnchanged: true },
         catchup: { elapsedMs, ...measurement },
         error: catchupWaitError,
@@ -273,7 +320,7 @@ async function runScenario() {
       profile: PROFILE,
       isolatedUserData: true,
       seed: { npcProfiles: initial.npcProfiles, npcTargets: initial.npcTargets, startAt, endAt, catchupDays: 30,
-        fixtureIsolation: 'NPC economy replay only; exploration and pirate cursors are frozen at the fixed horizon and asteroid simulation is absent. Not a full-campaign replay.' },
+        scenario: FULL_WORLD ? 'full-world' : 'scoped', isolation: initial.isolation, fixtureIsolation: FIXTURE_ISOLATION },
       commandGate: { pendingBeforeUiAction: beforeClickPending, requestEventPrevented: eventPrevented, buildButtonWasEnabled: buildButtonEnabled, playerStateUnchanged: true },
       catchup: { elapsedMs, ...measurement },
       measurementNote: 'Renderer event-loop timer gaps; does not measure Node proxy latency.',

@@ -281,9 +281,15 @@ type OwnerRegistration = {
   queuedScience?: { cost: ScienceResourceCost }[];
 };
 
+/** Report lookup built only when a Bot 01 flight actually needs its resolution. */
+function lazyReportLookup(state: SaveState): (id: string) => SaveState['combat']['reports'][number] | undefined {
+  let reports: Map<string, SaveState['combat']['reports'][number]> | undefined;
+  return (id) => (reports ??= new Map(state.combat.reports.map((report) => [report.id, report]))).get(id);
+}
+
 function flightShipCounts(state: SaveState, factionId: FactionId, ownerId: string) {
   const counts: Record<string, number> = {};
-  const reports = new Map(state.combat.reports.map((report) => [report.id, report]));
+  const reports = lazyReportLookup(state);
   for (const flight of state.flights.records) {
     // Player dispatch reserves ships but keeps them in the source planet's
     // saved fleet until the mission applies its result. Bot 001 removes its
@@ -292,7 +298,7 @@ function flightShipCounts(state: SaveState, factionId: FactionId, ownerId: strin
     if (flight.phase !== 'outbound' && flight.phase !== 'returning' && flight.phase !== 'arrived') continue;
     const flightOwnerId = flight.ownerSide === 'bot01' ? UNIVERSE_NPC_OWNER_ID : state.profile.playerId;
     if (flightOwnerId !== ownerId) continue;
-    const report = flight.attackResolution ? reports.get(flight.attackResolution.reportId) : undefined;
+    const report = flight.attackResolution ? reports(flight.attackResolution.reportId) : undefined;
     const shipCounts = report
       ? Object.fromEntries(report.attackerForce.stacks.map((stack) => [stack.entityId, stack.countAfter]))
       : flight.selectedShips;
@@ -305,12 +311,12 @@ function flightShipCounts(state: SaveState, factionId: FactionId, ownerId: strin
 
 function flightCommanderCounts(state: SaveState, ownerId: string) {
   const counts: Record<string, number> = {};
-  const reports = new Map(state.combat.reports.map((report) => [report.id, report]));
+  const reports = lazyReportLookup(state);
   for (const flight of state.flights.records) {
     if (flight.ownerSide !== 'bot01') continue;
     if (flight.phase !== 'outbound' && flight.phase !== 'returning' && flight.phase !== 'arrived') continue;
     if (ownerId !== UNIVERSE_NPC_OWNER_ID) continue;
-    const report = flight.attackResolution ? reports.get(flight.attackResolution.reportId) : undefined;
+    const report = flight.attackResolution ? reports(flight.attackResolution.reportId) : undefined;
     const commanderCounts = report
       ? Object.fromEntries(report.attackerForce.stacks
         .filter((stack) => COMMANDER_COMBAT_CATALOG.some((entity) => entity.id === stack.entityId))
@@ -325,6 +331,24 @@ function flightCommanderCounts(state: SaveState, ownerId: string) {
 
 /** Calculates one authoritative score per owner represented in the save. */
 export function selectOwnerScores(state: SaveState): Record<string, OwnerScore> {
+  const { owners, battlePoints } = collectOwnerRegistrations(state);
+  const scores: Record<string, OwnerScore> = {};
+  for (const [ownerId, owner] of owners) scores[ownerId] = scoreOwner(state, owner, battlePoints);
+  return scores;
+}
+
+/**
+ * The same score selectOwnerScores reports for one owner, without pricing
+ * every other owner. Registration still walks the whole save, because an
+ * owner's planets and profile are merged across all of its targets.
+ */
+export function selectOwnerScore(state: SaveState, ownerId: string): OwnerScore | undefined {
+  const { owners, battlePoints } = collectOwnerRegistrations(state);
+  const owner = owners.get(ownerId);
+  return owner ? scoreOwner(state, owner, battlePoints) : undefined;
+}
+
+function collectOwnerRegistrations(state: SaveState): { owners: Map<string, OwnerRegistration>; battlePoints: Record<string, number> } {
   const owners = new Map<string, OwnerRegistration>();
   const playerOwnerId = state.profile.playerId || CURRENT_PLAYER_ID;
   const player: OwnerRegistration = {
@@ -379,26 +403,27 @@ export function selectOwnerScores(state: SaveState): Record<string, OwnerScore> 
     if (!owners.has(ownerId)) owners.set(ownerId, { ownerId, factionId: state.profile.factionId, planets: [] });
   }
 
-  const scores: Record<string, OwnerScore> = {};
-  for (const [ownerId, owner] of owners) {
-    const score = calculateResourceScore({
-      factionId: owner.factionId,
-      planets: owner.planets,
-      scienceLevels: owner.scienceLevels,
-      shipUpgradeLevels: owner.shipUpgradeLevels,
-      queuedScience: owner.queuedScience,
-      inFlightShips: flightShipCounts(state, owner.factionId, ownerId),
-      inFlightCommanders: flightCommanderCounts(state, ownerId),
-      unrecoveredCosts: state.rating.unrecoveredCostsByOwnerId[ownerId],
-    });
-    const ownerBattlePoints = battlePoints[ownerId] ?? 0;
-    scores[ownerId] = {
-      ownerId,
-      resourcePoints: score.resourcePoints,
-      battlePoints: ownerBattlePoints,
-      totalPoints: score.resourcePoints + ownerBattlePoints,
-      achievementPoints: 0,
-    };
-  }
-  return scores;
+  return { owners, battlePoints };
+}
+
+function scoreOwner(state: SaveState, owner: OwnerRegistration, battlePoints: Record<string, number>): OwnerScore {
+  const ownerId = owner.ownerId;
+  const score = calculateResourceScore({
+    factionId: owner.factionId,
+    planets: owner.planets,
+    scienceLevels: owner.scienceLevels,
+    shipUpgradeLevels: owner.shipUpgradeLevels,
+    queuedScience: owner.queuedScience,
+    inFlightShips: flightShipCounts(state, owner.factionId, ownerId),
+    inFlightCommanders: flightCommanderCounts(state, ownerId),
+    unrecoveredCosts: state.rating.unrecoveredCostsByOwnerId[ownerId],
+  });
+  const ownerBattlePoints = battlePoints[ownerId] ?? 0;
+  return {
+    ownerId,
+    resourcePoints: score.resourcePoints,
+    battlePoints: ownerBattlePoints,
+    totalPoints: score.resourcePoints + ownerBattlePoints,
+    achievementPoints: 0,
+  };
 }

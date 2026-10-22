@@ -17,7 +17,7 @@ import type { FleetProductionCompletion } from '../domain/fleet/production.ts';
 import { reconcileFlights, type FlightReconcileEvent } from './flights.ts';
 import { reconcileSunRaids, type SunRaidNotice } from './sun-raid.ts';
 import { reconcileAidMembership, syncAidState } from './alliance-aid.ts';
-import { selectDuePirateRolls, resolveDuePirateRoll } from './pirate-raids.ts';
+import { selectDuePirateRolls, resolveDuePirateRoll, type PirateRollWriteScope } from './pirate-raids.ts';
 import { advanceExplorationNpcProgress, selectDueExplorationNpcRolls, resolveDueExplorationNpcRoll } from './exploration-npc.ts';
 import { createDefaultPirateState } from '../domain/pirates/mission.ts';
 import {
@@ -28,14 +28,12 @@ import { getEspionageState, getEspionageTargets } from '../domain/espionage/runt
 import { collectOrbitalDebrisAtCoordinate, getOrbitalDebrisAtCoordinate } from '../domain/espionage/orbital-debris.ts';
 import { advanceUniverseAsteroidSimulationAt, getNextUniverseAsteroidTransitionAt } from '../domain/universe/asteroid-simulation.ts';
 import { advanceAsteroidGasAt } from '../domain/universe/asteroid-gas.ts';
-import { selectOwnerScores } from '../domain/rating/scoring.ts';
+import { selectOwnerScore } from '../domain/rating/scoring.ts';
 import { createExplorationState, recordHighestExplorationScore } from '../domain/exploration/ledger.ts';
-import { generateNpcReplayEvents, applyNpcReplayEventsAt, initializeNpcReplaySessionsAt, type NpcReplayEmission } from './npc-replay.ts';
+import { generateNpcReplayEvents, applyNpcReplayEventsAt, initializeNpcReplaySessionsAt, type NpcReplayEmission, type NpcReplayEvent } from './npc-replay.ts';
 import { getNextNpcEconomyCheckpoint, settleNpcPlanet } from './npc-economy.ts';
-import { getNpcOwnerIds } from './npc-foundation.ts';
-import { NPC_REPLAY_MAX_GROUPS, NPC_REPLAY_WINDOW_MS } from './npc-catchup.ts';
+import { getReplayNpcOwnerIds, NPC_REPLAY_GENERATION_STEP_MS, NPC_REPLAY_MAX_GROUPS, NPC_REPLAY_WINDOW_MS } from './npc-catchup.ts';
 import { CAMPAIGN_SPEED_SCALE } from '../domain/runtime/mode.ts';
-import { UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 
 export type RuntimeReconcileEvent =
   | { kind: 'npc-economy'; events: readonly NpcReplayEmission[] }
@@ -65,9 +63,7 @@ export function reconcileRuntime(
   state: SaveState,
   context: BuildingApplicationContext,
 ): RuntimeReconcileResult {
-  const owners = context.mode === 'production' && state.npc
-    ? getNpcOwnerIds(state.espionage?.targets, state.profile.playerId).filter((id) => id !== UNIVERSE_NPC_OWNER_ID && Boolean(state.npc?.profiles[id]))
-    : [];
+  const owners = context.mode === 'production' ? getReplayNpcOwnerIds(state) : [];
   if (!owners.length) {
     const result = reconcileRuntimeSlice(state, context);
     if (context.mode === 'production' && state.npcReplay && state.npcReplay.targetAt > state.npcReplay.processedThroughAt) {
@@ -95,9 +91,22 @@ function reconcileRuntimeSlice(
   const timeScale = CAMPAIGN_SPEED_SCALE[state.worldConfig?.world.campaignSpeed ?? 'standard'];
   const replayOwners = new Set(replay?.owners);
   if (replay && next.npc) next = { ...next, npc: initializeNpcReplaySessionsAt(next.npc, replay.from, replay.owners) };
-  const economicEvents = replay && next.npc
-    ? generateNpcReplayEvents(next.npc, replay.from, context.now + 1, replay.owners)
-    : [];
+  // NPC sessions and decisions in [from, now + 1), generated on demand an hour
+  // at a time: a bounded slice usually consumes minutes of a 24-hour window.
+  // Generation is a pure function of the slice-start profiles and the
+  // half-open interval, and compareNpcEvents is a total order, so the
+  // concatenated hours equal one generation of the whole window.
+  const economicEvents: NpcReplayEvent[] = [];
+  const npcAtSliceStart = replay ? next.npc : undefined;
+  const economicEnd = context.now + 1;
+  let economicGeneratedTo = replay?.from ?? economicEnd;
+  const ensureNextEconomicEvent = (index: number) => {
+    while (economicEvents.length <= index && npcAtSliceStart && replay && economicGeneratedTo < economicEnd) {
+      const to = Math.min(economicEnd, economicGeneratedTo + NPC_REPLAY_GENERATION_STEP_MS);
+      for (const event of generateNpcReplayEvents(npcAtSliceStart, economicGeneratedTo, to, replay.owners)) economicEvents.push(event);
+      economicGeneratedTo = to;
+    }
+  };
   let economicIndex = 0;
   let processedGroups = 0;
   const settleNpcEconomies = (at: number, ownerIds?: ReadonlySet<string>) => {
@@ -113,6 +122,45 @@ function reconcileRuntimeSlice(
     }
     if (changed) next = { ...next, espionage: { ...next.espionage, targets } };
   };
+  /**
+   * Settles the given owners at `at` unless already settled there.
+   *
+   * Only owners that the work at a checkpoint can read or write need their
+   * economy brought to that timestamp first. Everyone else accrues exactly the
+   * same integer credits later (at their own completion/session/burn point, a
+   * touching checkpoint or the slice end): accrual is split-invariant, the
+   * property the per-chunk and per-window boundaries already rely on.
+   */
+  const settleNpcOwnersAt = (at: number, ownerIds: ReadonlySet<string>, settled: Set<string>) => {
+    const pending = new Set<string>();
+    for (const ownerId of ownerIds) if (replayOwners.has(ownerId) && !settled.has(ownerId)) pending.add(ownerId);
+    if (!pending.size) return;
+    for (const ownerId of pending) settled.add(ownerId);
+    settleNpcEconomies(at, pending);
+  };
+  /**
+   * Owners whose targets flights, raids or burns may read or write at this
+   * checkpoint: due pirate-roll owners (loot wallet, population, hangar),
+   * owners with a stored overpopulation episode (burns move fleets that
+   * scores and raids read) and every owner a live flight names as origin or
+   * destination. Flights only change targets they name, so an owner outside
+   * this set is neither read nor written by arrivals, returns or battles.
+   */
+  const ownersTouchedAtCheckpoint = (at: number): Set<string> => {
+    const owners = new Set<string>();
+    for (let index = raidIndex; raidDueEvents[index]?.at === at; index++) owners.add(raidDueEvents[index]!.ownerId);
+    const targets = next.espionage?.targets ?? {};
+    for (const target of Object.values(targets)) if (target.overpopulation) owners.add(target.ownerId);
+    for (const flight of next.flights.records) {
+      if (flight.phase !== 'outbound' && flight.phase !== 'arrived' && flight.phase !== 'returning') continue;
+      if (flight.destinationOwnerId) owners.add(flight.destinationOwnerId);
+      const destination = flight.destinationPlanetId ? targets[flight.destinationPlanetId] : undefined;
+      if (destination) owners.add(destination.ownerId);
+      const origin = targets[flight.originPlanetId];
+      if (origin) owners.add(origin.ownerId);
+    }
+    return owners;
+  };
   // Establish legacy overpopulation episodes at the committed prefix, never at
   // a later caller-dependent decision time. Existing clocks/queues are retained.
   if (replay) settleNpcEconomies(replay.from);
@@ -121,6 +169,8 @@ function reconcileRuntimeSlice(
   if (!Number.isSafeInteger(pirateCursor) || pirateCursor < 0) pirateCursor = context.now;
   let raidDueEvents = selectDuePirateRolls(next, pirateCursor, context.now, context.mode, context.testTimeScale);
   let raidIndex = 0;
+  // Rolls in this pass append to one private copy of the roll ledger.
+  const pirateRollScope: PirateRollWriteScope = {};
   const npcCursor = next.exploration?.npcProcessedAt ?? Math.max(0,context.now - 20*60_000);
   const npcDueEvents = selectDueExplorationNpcRolls(next,npcCursor,context.now,context.mode);
   let npcIndex = 0;
@@ -338,7 +388,11 @@ function reconcileRuntimeSlice(
       : null;
     const asteroidCheckpoint = nextAsteroidCheckpoint ?? undefined;
     const workCheckpoint = nextDueWorkCheckpoint(processedThrough);
-    while (economicIndex < economicEvents.length && economicEvents[economicIndex]!.at <= processedThrough) economicIndex++;
+    ensureNextEconomicEvent(economicIndex);
+    while (economicIndex < economicEvents.length && economicEvents[economicIndex]!.at <= processedThrough) {
+      economicIndex++;
+      ensureNextEconomicEvent(economicIndex);
+    }
     const sessionCheckpoint = economicEvents[economicIndex]?.at;
     let economyCheckpoint: number | undefined;
     if (replay) for (const target of Object.values(next.espionage?.targets ?? {})) {
@@ -362,13 +416,20 @@ function reconcileRuntimeSlice(
     const workIsDue = workCheckpoint === checkpoint;
     const economicIsDue = sessionCheckpoint === checkpoint;
     const dueOwners = new Set<string>();
+    // Replay owners settled at this checkpoint. Only these can be read or
+    // written below; see settleNpcOwnersAt for why the rest may wait.
+    const settledOwners = new Set<string>();
     if (replay) {
       for (const target of Object.values(next.espionage?.targets ?? {})) {
         const due = getNextNpcEconomyCheckpoint(target, processedThrough);
         if (due === checkpoint) dueOwners.add(target.ownerId);
       }
       for (let index = economicIndex; economicEvents[index]?.at === checkpoint; index++) dueOwners.add(economicEvents[index]!.ownerId);
-      settleNpcEconomies(checkpoint, flightIsDue || pirateIsDue || npcIsDue ? undefined : dueOwners);
+      if (flightIsDue || pirateIsDue || npcIsDue) {
+        for (const ownerId of ownersTouchedAtCheckpoint(checkpoint)) dueOwners.add(ownerId);
+        if (npcIsDue) for (const ownerId of replayOwners) dueOwners.add(ownerId);
+      }
+      settleNpcOwnersAt(checkpoint, dueOwners, settledOwners);
     }
     // Advancing the cursor before processing prevents a due-but-unmodified
     // record at this timestamp from creating a zero-progress loop. Flights
@@ -403,7 +464,9 @@ function reconcileRuntimeSlice(
       if (pirateIsDue || raidDueEvents[raidIndex]?.at === checkpoint) {
         while (raidIndex < raidDueEvents.length && raidDueEvents[raidIndex]!.at === checkpoint) {
           const event = raidDueEvents[raidIndex++]!;
-          next = resolveDuePirateRoll(next, event, context.mode, context.testTimeScale);
+          // Rolls re-selected after an arrival may name an owner not settled yet.
+          if (replay) settleNpcOwnersAt(checkpoint, new Set([event.ownerId]), settledOwners);
+          next = resolveDuePirateRoll(next, event, context.mode, context.testTimeScale, pirateRollScope);
           const roll = next.pirate?.raidRolls?.[JSON.stringify([event.ownerId,event.contactCycleKey])];
           events.push({kind:'pirate-raid-check', ownerId:event.ownerId,
             contactCycleKey:event.contactCycleKey,...(roll?.flightId?{flightId:roll.flightId}:{})});
@@ -426,7 +489,12 @@ function reconcileRuntimeSlice(
     }
     // Existing asteroid/raid/battle micro-order above is unchanged. NPC session
     // boundaries and decisions observe timer completions and arrival effects.
-    if (replay && (flightIsDue || pirateIsDue || npcIsDue)) settleNpcEconomies(checkpoint);
+    if (replay && (flightIsDue || pirateIsDue || npcIsDue)) {
+      // Re-settle everyone settled above plus owners named by flights created
+      // here, so arrival effects (losses, returns) start their episodes now.
+      for (const ownerId of ownersTouchedAtCheckpoint(checkpoint)) settledOwners.add(ownerId);
+      settleNpcEconomies(checkpoint, settledOwners);
+    }
     if (economicIsDue && next.npc && next.espionage?.targets) {
       const group = [];
       while (economicEvents[economicIndex]?.at === checkpoint) group.push(economicEvents[economicIndex++]!);
@@ -445,7 +513,7 @@ function reconcileRuntimeSlice(
     // Covers legacy arrived-phase flights processed only by the final sweep.
     for (const event of selectDuePirateRolls(next, Math.max(pirateCursor, context.now - 1),
       context.now, context.mode, context.testTimeScale)) {
-      next = resolveDuePirateRoll(next, event, context.mode, context.testTimeScale);
+      next = resolveDuePirateRoll(next, event, context.mode, context.testTimeScale, pirateRollScope);
       const roll = next.pirate?.raidRolls?.[JSON.stringify([event.ownerId, event.contactCycleKey])];
       events.push({ kind: 'pirate-raid-check', ownerId: event.ownerId,
         contactCycleKey: event.contactCycleKey, ...(roll?.flightId ? { flightId: roll.flightId } : {}) });
@@ -456,7 +524,7 @@ function reconcileRuntimeSlice(
   next = syncAidState(next, { now: context.now, mode: context.mode, testTimeScale: context.testTimeScale });
   // Preserve the all-time resource high-water mark across losses, fleet launches
   // and reloads. A later weak expedition must never erase an earlier real peak.
-  const currentScore = selectOwnerScores(next)[next.profile.playerId]?.resourcePoints ?? 0;
+  const currentScore = selectOwnerScore(next, next.profile.playerId)?.resourcePoints ?? 0;
   const previousLedger = next.exploration ?? createExplorationState();
   const scoredLedger = recordHighestExplorationScore(previousLedger, next.profile.playerId, currentScore);
   const updatedLedger = context.mode === 'production'
