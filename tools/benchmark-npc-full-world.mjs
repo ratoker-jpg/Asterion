@@ -55,6 +55,45 @@ export function digestState(state) {
   return sha256(JSON.stringify(state));
 }
 
+/**
+ * Digest of the game state with archive history removed: every pirate-vs-NPC
+ * battle report, every completed pirate raid flight against an NPC (and its
+ * request index entry) and every pirate roll ledger entry before the raid
+ * cursor (retention keeps a 90-minute margin, a subset of these). These are exactly the records history retention may drop, so a
+ * revision with retention and one without must agree on this digest.
+ * Self-contained on purpose: it also runs against revisions without retention.
+ */
+export function digestGameState(state) {
+  const playerId = state.profile.playerId;
+  const finished = new Set(state.flights.records
+    .filter((flight) => flight.ownerSide === 'pirate' && flight.missionId === 'pirate-raid' && flight.phase === 'completed'
+      && flight.targetKind === 'npc' && flight.destinationOwnerId !== undefined && flight.destinationOwnerId !== playerId)
+    .map((flight) => flight.id));
+  const requestIndex = Object.fromEntries(Object.entries(state.flights.requestIndex ?? {}).filter(([, id]) => !finished.has(id)));
+  const cursor = state.pirate?.raidProcessedAt;
+  const raidRolls = Object.fromEntries(Object.entries(state.pirate?.raidRolls ?? {})
+    .filter(([, roll]) => typeof cursor !== 'number' || roll.checkAt >= cursor));
+  return sha256(JSON.stringify({
+    ...state,
+    flights: { ...state.flights, records: state.flights.records.filter((flight) => !finished.has(flight.id)), requestIndex },
+    combat: { ...state.combat, reports: state.combat.reports.filter((report) => !(report.missionType === 'pirate-raid'
+      && report.attacker?.playerId === 'pirates' && report.defender?.playerId !== playerId)) },
+    pirate: state.pirate ? { ...state.pirate, raidRolls } : state.pirate,
+  }));
+}
+
+function collectionSizes(state) {
+  const size = (value) => JSON.stringify(value ?? null).length;
+  return {
+    saveChars: size(state),
+    combatReports: state.combat.reports.length, combatChars: size(state.combat),
+    flightRecords: state.flights.records.length, requestIndexEntries: Object.keys(state.flights.requestIndex ?? {}).length, flightsChars: size(state.flights),
+    raidRolls: Object.keys(state.pirate?.raidRolls ?? {}).length, raidRollChars: size(state.pirate?.raidRolls),
+    espionageChars: size(state.espionage), npcChars: size(state.npc), asteroids: state.asteroidSimulation?.asteroids.length ?? null,
+    asteroidChars: size(state.asteroidSimulation), reportsStateChars: size(state.reports), ratingChars: size(state.rating),
+  };
+}
+
 export function replayToTarget(state, now, { serialize = false, onChunk } = {}) {
   let chunks = 0;
   let computeMs = 0;
@@ -123,7 +162,7 @@ async function main() {
     for (let repeat = 0; repeat < repeats; repeat += 1) {
       const run = replayToTarget(fixture, now, { serialize });
       const { state, ...numbers } = run;
-      repetitions.push({ ...numbers, digest: digestState(state), result: summarize(state) });
+      repetitions.push({ ...numbers, digest: digestState(state), gameStateDigest: digestGameState(state), result: summarize(state), sizes: collectionSizes(state) });
       process.stderr.write(`full-world ${day}d #${repeat + 1}: compute ${run.computeMs.toFixed(0)} ms, ${run.chunks} chunks, serialize ${run.serializeMs.toFixed(0)} ms\n`);
     }
     measurements.push({ days: day, repetitions });

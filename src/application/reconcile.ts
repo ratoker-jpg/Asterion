@@ -6,6 +6,7 @@ import {
   type BuildingApplicationContext,
 } from './buildings.ts';
 import { reconcileScience } from './science.ts';
+import { pruneCampaignHistory } from './history-retention.ts';
 import { reconcileFleetProduction } from './fleet-production.ts';
 import type { BuildingRole } from '../domain/buildings/resource-zone.ts';
 import type { ScienceId } from '../domain/science/types.ts';
@@ -30,10 +31,30 @@ import { advanceUniverseAsteroidSimulationAt, getNextUniverseAsteroidTransitionA
 import { advanceAsteroidGasAt } from '../domain/universe/asteroid-gas.ts';
 import { selectOwnerScore } from '../domain/rating/scoring.ts';
 import { createExplorationState, recordHighestExplorationScore } from '../domain/exploration/ledger.ts';
-import { generateNpcReplayEvents, applyNpcReplayEventsAt, initializeNpcReplaySessionsAt, type NpcReplayEmission, type NpcReplayEvent } from './npc-replay.ts';
+import { generateNpcOwnerReplayEvents, applyNpcReplayEventsAt, initializeNpcReplaySessionsAt, type NpcReplayEmission, type NpcReplayEvent } from './npc-replay.ts';
+import { compareNpcEvents } from '../domain/npc/events.ts';
+import type { NpcProfile } from '../domain/npc/types.ts';
 import { getNextNpcEconomyCheckpoint, settleNpcPlanet } from './npc-economy.ts';
 import { getReplayNpcOwnerIds, NPC_REPLAY_GENERATION_STEP_MS, NPC_REPLAY_MAX_GROUPS, NPC_REPLAY_WINDOW_MS } from './npc-catchup.ts';
 import { CAMPAIGN_SPEED_SCALE } from '../domain/runtime/mode.ts';
+
+/**
+ * One owner's NPC events in one aligned generation step, keyed by the frozen
+ * profile (any applied event replaces the profile and so misses the cache).
+ */
+const ownerStepEventCache = new WeakMap<NpcProfile, Map<number, readonly NpcReplayEvent[]>>();
+function cachedOwnerStepEvents(profile: NpcProfile, ownerId: string, stepStart: number): readonly NpcReplayEvent[] {
+  let steps = ownerStepEventCache.get(profile);
+  if (!steps) ownerStepEventCache.set(profile, steps = new Map());
+  let events = steps.get(stepStart);
+  if (!events) {
+    // Replay only moves forward: earlier steps of this profile are done.
+    for (const key of steps.keys()) if (key < stepStart) steps.delete(key);
+    events = generateNpcOwnerReplayEvents(profile, ownerId, stepStart, stepStart + NPC_REPLAY_GENERATION_STEP_MS);
+    steps.set(stepStart, events);
+  }
+  return events;
+}
 
 export type RuntimeReconcileEvent =
   | { kind: 'npc-economy'; events: readonly NpcReplayEmission[] }
@@ -100,10 +121,23 @@ function reconcileRuntimeSlice(
   const npcAtSliceStart = replay ? next.npc : undefined;
   const economicEnd = context.now + 1;
   let economicGeneratedTo = replay?.from ?? economicEnd;
+  // Owner order is irrelevant: each step is sorted by the total event order.
+  const replayOwnerOrder = replay ? [...new Set(replay.owners)] : [];
   const ensureNextEconomicEvent = (index: number) => {
-    while (economicEvents.length <= index && npcAtSliceStart && replay && economicGeneratedTo < economicEnd) {
-      const to = Math.min(economicEnd, economicGeneratedTo + NPC_REPLAY_GENERATION_STEP_MS);
-      for (const event of generateNpcReplayEvents(npcAtSliceStart, economicGeneratedTo, to, replay.owners)) economicEvents.push(event);
+    while (economicEvents.length <= index && npcAtSliceStart && economicGeneratedTo < economicEnd) {
+      // Whole aligned steps are generated (and cached per unchanged profile
+      // across slices), then clipped to [generatedTo, end).
+      const stepStart = Math.floor(economicGeneratedTo / NPC_REPLAY_GENERATION_STEP_MS) * NPC_REPLAY_GENERATION_STEP_MS;
+      const to = Math.min(economicEnd, stepStart + NPC_REPLAY_GENERATION_STEP_MS);
+      const step: NpcReplayEvent[] = [];
+      for (const ownerId of replayOwnerOrder) {
+        const profile = npcAtSliceStart.profiles[ownerId];
+        if (!profile) continue;
+        for (const event of cachedOwnerStepEvents(profile, ownerId, stepStart)) {
+          if (event.at >= economicGeneratedTo && event.at < to) step.push(event);
+        }
+      }
+      for (const event of step.sort(compareNpcEvents)) economicEvents.push(event);
       economicGeneratedTo = to;
     }
   };
@@ -536,6 +570,8 @@ function reconcileRuntimeSlice(
     next = {...next, pirate: {...(next.pirate ?? createDefaultPirateState()),raidProcessedAt:completedCursor}};
   }
   if (replay) next = { ...next, npcReplay: { version: 1, processedThroughAt: context.now, targetAt: replay.targetAt } };
+  // Archive records nothing reads any more leave the save after each pass.
+  next = pruneCampaignHistory(next);
 
   return {
     changed: next !== state,

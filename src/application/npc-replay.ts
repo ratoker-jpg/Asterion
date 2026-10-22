@@ -109,65 +109,81 @@ export function generateNpcReplayEvents(
   const events: NpcReplayEvent[] = [];
   for (const ownerId of [...registered].sort(compareStableIds)) {
     const profile = state.profiles[ownerId];
-    if (!profile) continue;
-    // A session can begin up to three hours before this bounded window. The
-    // calendar's max session duration is 180 minutes, so this halo is complete.
-    const lookback = Math.max(Number.MIN_SAFE_INTEGER, fromAt - MAX_SESSION_MS);
-    const calendarThrough = Math.min(Number.MAX_SAFE_INTEGER, toAt + MAX_SESSION_MS + 1);
-    const calendarEvents = getNpcSessionEvents(profile, lookback, calendarThrough);
-    const sessions = new Map<string, { startAt: number; endAt: number; sessionId: string }>();
-    for (const event of calendarEvents) {
-      const key = event.sessionId;
-      const session = sessions.get(key) ?? { startAt: -1, endAt: -1, sessionId: opaqueId('session', profile, key) };
-      if (event.boundary === 'session-start') session.startAt = event.at;
-      else session.endAt = event.at;
-      sessions.set(key, session);
-    }
-    for (const [calendarId, session] of sessions) {
-      if (session.startAt < 0 || session.endAt < session.startAt) continue;
-      const boundaryStart = calendarEvents.find((event) => event.sessionId === calendarId && event.boundary === 'session-start');
-      const boundaryEnd = calendarEvents.find((event) => event.sessionId === calendarId && event.boundary === 'session-end');
-      if (!boundaryStart || !boundaryEnd) continue;
-      const startEvent: NpcReplayBoundaryEvent = Object.freeze({
-        ...boundaryStart,
-        eventId: opaqueId('boundary-start', profile, boundaryStart.eventId),
-        sessionId: session.sessionId,
-        sessionEndsAt: session.endAt,
-      });
-      const endEvent: NpcReplayBoundaryEvent = Object.freeze({
-        ...boundaryEnd,
-        eventId: opaqueId('boundary-end', profile, boundaryEnd.eventId),
-        sessionId: session.sessionId,
-        sessionEndsAt: session.endAt,
-      });
-      if (inInterval(startEvent.at, fromAt, toAt) && isNpcEventAfterCursor(startEvent, profile.cursor)) events.push(startEvent);
-      if (inInterval(endEvent.at, fromAt, toAt) && isNpcEventAfterCursor(endEvent, profile.cursor)) events.push(endEvent);
-
-      let decisionAt = session.startAt;
-      for (let attempt = 0; attempt < NPC_REPLAY_MAX_ATTEMPTS_PER_SESSION && decisionAt < session.endAt; attempt += 1) {
-        if (inInterval(decisionAt, fromAt, toAt)) {
-          const event: NpcReplayDecisionEvent = Object.freeze({
-            at: decisionAt,
-            priority: 'npc-decision',
-            eventId: opaqueId('decision', profile, JSON.stringify([session.startAt, attempt])),
-            ownerId,
-            sessionId: session.sessionId,
-            sessionStartedAt: session.startAt,
-            sessionEndsAt: session.endAt,
-            attempt,
-          });
-          if (isNpcEventAfterCursor(event, profile.cursor)) events.push(event);
-        }
-        if (attempt + 1 >= NPC_REPLAY_MAX_ATTEMPTS_PER_SESSION) break;
-        const random = createReplayRandom(profile, session.startAt, attempt + 1);
-        const delay = NPC_REPLAY_DECISION_MIN_DELAY_MS + Math.floor(
-          random() * (NPC_REPLAY_DECISION_MAX_DELAY_MS - NPC_REPLAY_DECISION_MIN_DELAY_MS + 1),
-        );
-        decisionAt += delay;
-      }
-    }
+    if (profile) for (const event of generateNpcOwnerReplayEvents(profile, ownerId, fromAt, toAt)) events.push(event);
   }
   return events.sort(compareNpcEvents);
+}
+
+/**
+ * One owner's events in [fromAt, toAt), unsorted. A pure function of the
+ * (frozen) profile, including its cursor, and the interval.
+ */
+export function generateNpcOwnerReplayEvents(
+  profile: NpcProfile,
+  ownerId: string,
+  fromAt: number,
+  toAt: number,
+): NpcReplayEvent[] {
+  assertInterval(fromAt, toAt);
+  const events: NpcReplayEvent[] = [];
+  if (fromAt === toAt) return events;
+  // A session can begin up to three hours before this bounded window. The
+  // calendar's max session duration is 180 minutes, so this halo is complete.
+  const lookback = Math.max(Number.MIN_SAFE_INTEGER, fromAt - MAX_SESSION_MS);
+  const calendarThrough = Math.min(Number.MAX_SAFE_INTEGER, toAt + MAX_SESSION_MS + 1);
+  const calendarEvents = getNpcSessionEvents(profile, lookback, calendarThrough);
+  const sessions = new Map<string, { startAt: number; endAt: number; sessionId: string }>();
+  for (const event of calendarEvents) {
+    const key = event.sessionId;
+    const session = sessions.get(key) ?? { startAt: -1, endAt: -1, sessionId: opaqueId('session', profile, key) };
+    if (event.boundary === 'session-start') session.startAt = event.at;
+    else session.endAt = event.at;
+    sessions.set(key, session);
+  }
+  for (const [calendarId, session] of sessions) {
+    if (session.startAt < 0 || session.endAt < session.startAt) continue;
+    const boundaryStart = calendarEvents.find((event) => event.sessionId === calendarId && event.boundary === 'session-start');
+    const boundaryEnd = calendarEvents.find((event) => event.sessionId === calendarId && event.boundary === 'session-end');
+    if (!boundaryStart || !boundaryEnd) continue;
+    const startEvent: NpcReplayBoundaryEvent = Object.freeze({
+      ...boundaryStart,
+      eventId: opaqueId('boundary-start', profile, boundaryStart.eventId),
+      sessionId: session.sessionId,
+      sessionEndsAt: session.endAt,
+    });
+    const endEvent: NpcReplayBoundaryEvent = Object.freeze({
+      ...boundaryEnd,
+      eventId: opaqueId('boundary-end', profile, boundaryEnd.eventId),
+      sessionId: session.sessionId,
+      sessionEndsAt: session.endAt,
+    });
+    if (inInterval(startEvent.at, fromAt, toAt) && isNpcEventAfterCursor(startEvent, profile.cursor)) events.push(startEvent);
+    if (inInterval(endEvent.at, fromAt, toAt) && isNpcEventAfterCursor(endEvent, profile.cursor)) events.push(endEvent);
+
+    let decisionAt = session.startAt;
+    for (let attempt = 0; attempt < NPC_REPLAY_MAX_ATTEMPTS_PER_SESSION && decisionAt < session.endAt; attempt += 1) {
+      if (inInterval(decisionAt, fromAt, toAt)) {
+        const event: NpcReplayDecisionEvent = Object.freeze({
+          at: decisionAt,
+          priority: 'npc-decision',
+          eventId: opaqueId('decision', profile, JSON.stringify([session.startAt, attempt])),
+          ownerId,
+          sessionId: session.sessionId,
+          sessionStartedAt: session.startAt,
+          sessionEndsAt: session.endAt,
+          attempt,
+        });
+        if (isNpcEventAfterCursor(event, profile.cursor)) events.push(event);
+      }
+      if (attempt + 1 >= NPC_REPLAY_MAX_ATTEMPTS_PER_SESSION) break;
+      const random = createReplayRandom(profile, session.startAt, attempt + 1);
+      const delay = NPC_REPLAY_DECISION_MIN_DELAY_MS + Math.floor(
+        random() * (NPC_REPLAY_DECISION_MAX_DELAY_MS - NPC_REPLAY_DECISION_MIN_DELAY_MS + 1),
+      );
+      decisionAt += delay;
+    }
+  }
+  return events;
 }
 
 /** Apply one timestamp's boundaries before its decisions and persist each cursor. */

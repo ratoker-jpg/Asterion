@@ -146,7 +146,7 @@ function incomeFor(target: SpyTargetState, timeScale: number, buildings = target
   };
 }
 
-function accrueInterval(target: SpyTargetState, to: number, timeScale: number): SpyTargetState {
+function accrueInterval(target: SpyTargetState, to: number, timeScale: number, derivedBuildings?: BuildingLevels): SpyTargetState {
   const clock = target.resourceClock ?? {
     lastReconciledAt: to,
     remainder: { metal: 0, minerals: 0, gas: 0 },
@@ -154,7 +154,7 @@ function accrueInterval(target: SpyTargetState, to: number, timeScale: number): 
   const finishAt = Math.max(clock.lastReconciledAt, Math.floor(to));
   const elapsed = finishAt - clock.lastReconciledAt;
   // Levels, ledger and queue are pure functions of this target; derive them once.
-  const buildings = targetBuildingLevels(target);
+  const buildings = derivedBuildings ?? targetBuildingLevels(target);
   const income = incomeFor(target, timeScale, buildings);
   const accrued = Object.fromEntries(RESOURCE_KEYS.map((key) => [
     key,
@@ -306,6 +306,14 @@ export function getNextNpcEconomyCheckpoint(target: SpyTargetState, at: number):
   return due.length ? Math.min(...due) : null;
 }
 
+/**
+ * Targets produced by the common-case settlement below, with the timestamp
+ * they were settled at. Settling such a target again at that same timestamp
+ * accrues nothing and re-derives equal levels, queue and ledger, so it is
+ * returned as is (catch-up chunks settle every owner at both of their ends).
+ */
+const settledAt = new WeakMap<SpyTargetState, number>();
+
 export function settleNpcPlanet(
   initialTarget: SpyTargetState,
   at: number,
@@ -314,6 +322,7 @@ export function settleNpcPlanet(
   const safeAt = Math.max(0, Math.floor(at));
   let target = initialTarget;
   const completedRoles: BuildingRole[] = [];
+  if (settledAt.get(target) === safeAt) return { target, completedRoles, nextDueAt: getNextNpcEconomyCheckpoint(target, safeAt) };
   // Common case: no overpopulation episode, under capacity and no completion
   // due. Overpopulation settlement is then the identity, so the general path
   // below reduces to one accrual; take it without re-deriving the target.
@@ -321,7 +330,8 @@ export function settleNpcPlanet(
     const buildings = targetBuildingLevels(target);
     const active = targetQueue(target, buildings)[0];
     if ((!active || active.finishAt > safeAt) && !isBlocked(target, buildings)) {
-      target = accrueInterval(target, safeAt, context.timeScale);
+      target = accrueInterval(target, safeAt, context.timeScale, buildings);
+      settledAt.set(target, safeAt);
       return { target, completedRoles, nextDueAt: getNextNpcEconomyCheckpoint(target, safeAt) };
     }
   }
