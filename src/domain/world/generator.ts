@@ -1,5 +1,5 @@
 import { calculateDefensePopulation, createEmptyDefenseState } from '../fleet/production.ts';
-import { calculateFleetPopulation, createEmptyFleetState } from '../fleet/runtime.ts';
+import { calculateFleetPopulation, createCanonicalStartingFleet, createEmptyFleetState } from '../fleet/runtime.ts';
 import { getFactionDefenseCatalog, getFactionShipCatalog } from '../combat/faction-catalog.ts';
 import type { ShipId } from '../combat/ids.ts';
 import type { PlayerFactionId } from '../profile/types.ts';
@@ -7,6 +7,8 @@ import type { SpyTargetState } from '../espionage/types.ts';
 import type { UniverseCoordinate } from '../universe/types.ts';
 import { WORLD_DENSITY_RULES, WORLD_LIMITS, getWorldNpcCapacity, type NewGameConfig } from './config.ts';
 import { createSeededRandom, pickRandom, randomInteger } from './random.ts';
+import { createCanonicalStartingBuildingLevels } from '../buildings/resource-zone.ts';
+import { CANONICAL_STARTING_WALLET } from './start.ts';
 
 /** Owner ids of generated stubs. They never collide with Bot 01 (`npc-bot-01`). */
 export const GENERATED_NPC_OWNER_PREFIX = 'npc-gen-';
@@ -138,9 +140,25 @@ export function generateWorld(config: NewGameConfig, now: number): GeneratedWorl
     const cycle = Math.floor(index / NPC_NAMES.length);
     const ownerName = `${NPC_NAMES[index % NPC_NAMES.length]}${cycle ? ` ${cycle + 1}` : ''}`;
     const planetName = `${PLANET_NAMES[(index * 7) % PLANET_NAMES.length]}${cycle ? `-${cycle + 1}` : ''}`;
-    const garrison = createStubGarrison(raceId, random);
-    const fleetPopulation = calculateFleetPopulation(garrison.fleet, raceId);
-    const defensePopulation = calculateDefensePopulation(garrison.defense, raceId);
+    // Keep the legacy random draws in place so changing NPC starting fleets
+    // and economy does not shift seeded world placement or other map details.
+    createStubGarrison(raceId, random);
+    // Preserve the previous seeded draw while starting at the player's level.
+    randomInteger(random, 0, 4);
+    randomInteger(random, 4_000, 24_000);
+    randomInteger(random, 3_000, 18_000);
+    randomInteger(random, 1_000, 9_000);
+    randomInteger(random, 80, 260);
+    randomInteger(random, 3, 9);
+    randomInteger(random, 3, 8);
+    randomInteger(random, 2, 6);
+    randomInteger(random, 1, 5);
+    randomInteger(random, 1, 5);
+    randomInteger(random, 2, 6);
+    const fleet = createCanonicalStartingFleet(raceId);
+    const defense = createEmptyDefenseState();
+    const fleetPopulation = calculateFleetPopulation(fleet, raceId);
+    const defensePopulation = calculateDefensePopulation(defense, raceId);
     npcPlanets.push({
       id: `${GENERATED_NPC_OWNER_PREFIX}${number}-planet`,
       name: planetName,
@@ -150,24 +168,17 @@ export function generateWorld(config: NewGameConfig, now: number): GeneratedWorl
       raceId,
       alliance: null,
       kind: 'npc',
-      espionageLevel: randomInteger(random, 0, 4),
+      espionageLevel: 0,
       resources: {
-        metal: randomInteger(random, 4_000, 24_000),
-        minerals: randomInteger(random, 3_000, 18_000),
-        gas: randomInteger(random, 1_000, 9_000),
-        developmentEnergy: randomInteger(random, 80, 260),
+        metal: CANONICAL_STARTING_WALLET.metal,
+        minerals: CANONICAL_STARTING_WALLET.minerals,
+        gas: CANONICAL_STARTING_WALLET.gas,
+        developmentEnergy: CANONICAL_STARTING_WALLET.energy,
         debris: 0,
       },
-      buildings: {
-        'metal-production-1': randomInteger(random, 3, 9),
-        'mineral-production-1': randomInteger(random, 3, 8),
-        'gas-production-1': randomInteger(random, 2, 6),
-        research: randomInteger(random, 1, 5),
-        shipyard: randomInteger(random, 1, 5),
-        hangar: randomInteger(random, 2, 6),
-      },
-      fleet: garrison.fleet,
-      defense: garrison.defense,
+      buildings: createCanonicalStartingBuildingLevels(),
+      fleet,
+      defense,
       commanders: {},
       population: { total: fleetPopulation + defensePopulation, fleet: fleetPopulation, defense: defensePopulation },
       hunterLevel: 0,

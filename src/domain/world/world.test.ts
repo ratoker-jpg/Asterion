@@ -10,6 +10,11 @@ import {
   type NewGameConfig,
 } from './config.ts';
 import { generateWorld, isGeneratedNpcOwnerId, summarizeWorld } from './generator.ts';
+import { CANONICAL_STARTING_WALLET } from './start.ts';
+import { createCanonicalStartingBuildingLevels } from '../buildings/resource-zone.ts';
+import { calculateFleetCapacity, calculateFleetPopulation, createCanonicalStartingFleet } from '../fleet/runtime.ts';
+import { calculateDefensePopulation, createEmptyDefenseState } from '../fleet/production.ts';
+import { createDefaultScienceState } from '../science/runtime.ts';
 import { CAMPAIGN_SPEED_SCALE, getCampaignTimeScale, scaleRuntimeDuration, setCampaignTimeScale } from '../runtime/mode.ts';
 
 function config(patch: Partial<NewGameConfig['world']> = {}, seed = 'SEED1234'): NewGameConfig {
@@ -46,6 +51,37 @@ test('NPC stubs respect the per-system limit, never sit on the player and never 
       }
       assert.ok(Math.max(...perSystem.values()) <= maxNpcPerSystem);
     }
+  }
+});
+
+test('100 NPC starts match canonical player wallet, buildings, and race fleet within Hangar 1', () => {
+  const world = generateWorld({
+    ...config({ npcCount: 100, galaxyCount: 4 }),
+    npcFactions: { aegis: 34, synod: 33, veyra: 33 },
+  }, 0);
+  const startingBuildings = createCanonicalStartingBuildingLevels();
+  const emptyDefense = createEmptyDefenseState();
+
+  assert.equal(world.npcPlanets.length, 100);
+  assert.deepEqual(new Set(world.npcPlanets.map((planet) => planet.raceId)), new Set(['aegis', 'synod', 'veyra']));
+  assert.equal(createDefaultScienceState().levels[5], 0, 'the player starts with zero espionage science');
+  for (const planet of world.npcPlanets) {
+    assert.equal(planet.espionageLevel, 0, 'new NPC targets have no hidden starting espionage defense');
+    assert.deepEqual(planet.resources, {
+      metal: CANONICAL_STARTING_WALLET.metal,
+      minerals: CANONICAL_STARTING_WALLET.minerals,
+      gas: CANONICAL_STARTING_WALLET.gas,
+      developmentEnergy: CANONICAL_STARTING_WALLET.energy,
+      debris: 0,
+    });
+    assert.deepEqual(planet.buildings, startingBuildings);
+    assert.deepEqual(planet.fleet, createCanonicalStartingFleet(planet.raceId));
+    assert.deepEqual(planet.defense, emptyDefense);
+    assert.equal(planet.population.fleet, calculateFleetPopulation(planet.fleet, planet.raceId));
+    assert.equal(planet.population.defense, 0);
+    assert.equal(calculateDefensePopulation(planet.defense, planet.raceId), 0);
+    assert.ok(planet.population.fleet <= calculateFleetCapacity(planet.buildings.hangar));
+    assert.equal(planet.buildings.hangar, 1, 'starting capacity comes from the canonical Hangar 1');
   }
 });
 
