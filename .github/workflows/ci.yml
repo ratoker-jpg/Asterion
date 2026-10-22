@@ -84,6 +84,8 @@ jobs:
         run: npm run test:sun-raid
       - name: New game and save slot tests
         run: npm run test:new-game
+      - name: NPC foundation contracts and persistence
+        run: npm run test:npc
       - name: Type-check and build renderer
         run: npm run build
       - name: Upload balance evidence

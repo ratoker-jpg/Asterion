@@ -6,6 +6,8 @@
  * would silently replace with defaults (a planet entry that is not an object,
  * `planets` of the wrong type), so it must not be loaded as a campaign.
  */
+import { validateNpcState } from '../npc/state.ts';
+
 export type SavePayloadHealth =
   | { status: 'missing' }
   | { status: 'valid'; schemaVersion: number }
@@ -28,6 +30,11 @@ export function inspectParsedSave(parsed: unknown, currentSchemaVersion: number)
   }
   const schemaVersion = typeof schema === 'number' ? schema : 0;
   if (schemaVersion > currentSchemaVersion) return { status: 'newer', schemaVersion };
+  // Do not admit or autosave a private foundation we cannot losslessly read.
+  // Rescue/backup export remains available for these original bytes.
+  if (parsed.npc !== undefined && !validateNpcState(parsed.npc)) {
+    return { status: 'malformed', reason: 'Неподдерживаемая версия или повреждённые данные NPC.' };
+  }
   if (parsed.planets !== undefined) {
     if (!plainObject(parsed.planets)) return { status: 'malformed', reason: 'Повреждён список планет.' };
     for (const [planetId, planet] of Object.entries(parsed.planets)) {

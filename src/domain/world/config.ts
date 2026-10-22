@@ -14,7 +14,7 @@ export type NpcFactionMix = Record<PlayerFactionId, number>;
  */
 export type NewGameConfig = {
   version: 1;
-  /** Visible campaign seed; the whole world is derived from it. */
+  /** Visible map seed. Private NPC identity is independently salted per campaign. */
   seed: string;
   factionId: PlayerFactionId;
   playerName: string;
