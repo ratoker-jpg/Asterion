@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { createDefaultNewGameConfig } from '../domain/world/config.ts';
 import { getNpcSessionEvents } from '../domain/npc/calendar.ts';
+import { createNpcState } from '../domain/npc/state.ts';
 import { CAMPAIGN_SPEED_SCALE } from '../domain/runtime/mode.ts';
 import { getNpcBuildingCandidates, settleNpcPlanet, startNpcBuilding } from './npc-economy.ts';
 import { isNpcCatchupPending } from './npc-catchup.ts';
@@ -30,8 +31,12 @@ function campaign(npcCount: number, seed = `NPC-RUNTIME-${npcCount}`, campaignSp
   const base = createDefaultNewGameConfig({ seed, factionId: 'aegis', playerName: 'NPC QA' });
   const setup = { ...base, world: { ...base.world, galaxyCount: npcCount > 80 ? 2 : base.world.galaxyCount, npcCount, campaignSpeed } };
   const state = createInitialSaveState('production', START, setup);
+  const ownerIds = Object.keys(state.npc!.profiles);
   return {
     ...state,
+    // Preserve the production-created world and targets, while pinning only the
+    // private NPC inputs so replay workloads and decisions stay reproducible.
+    npc: createNpcState(ownerIds, `npc-runtime-integration-v1:${seed}`, START),
     asteroidSimulation: undefined,
     // Keep old independent calendars inert for this isolated foundation replay.
     exploration: { ...state.exploration!, npcProcessedAt: START + 30 * DAY },

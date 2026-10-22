@@ -1,0 +1,32 @@
+{
+  "profile": "C:\\Users\\Den\\AppData\\Local\\Temp\\asterion-npc-replay-qa-CQfwo1",
+  "isolatedUserData": true,
+  "seed": {
+    "npcProfiles": 100,
+    "npcTargets": 100,
+    "startAt": 1790103715224,
+    "endAt": 1792695745224,
+    "catchupDays": 30,
+    "fixtureIsolation": "NPC economy replay only; exploration and pirate cursors are frozen at the fixed horizon and asteroid simulation is absent. Not a full-campaign replay."
+  },
+  "commandGate": {
+    "pendingBeforeUiAction": true,
+    "requestEventPrevented": true,
+    "buildButtonWasEnabled": true,
+    "playerStateUnchanged": true
+  },
+  "catchup": {
+    "elapsedMs": 52444,
+    "pending": false,
+    "processedThroughAt": 1792695745224,
+    "targetAt": 1792695745224,
+    "savedProgressSamples": 826,
+    "timerSamples": 1204,
+    "timerP95GapMs": 78.69999999552965,
+    "timerWorstGapMs": 648.3999999985099,
+    "npcActionIds": 17246,
+    "npcQueuedBuildings": 1,
+    "npcProfiles": 100
+  },
+  "measurementNote": "Renderer event-loop timer gaps; does not measure Node proxy latency."
+}
