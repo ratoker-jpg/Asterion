@@ -144,7 +144,8 @@ async function main() {
 }
 
 main().then(() => {
-  fs.rmSync(PROFILE, { recursive: true, force: true });
+  // The running Electron still holds the profile open on Windows; leave it to the OS temp cleanup.
+  try { fs.rmSync(PROFILE, { recursive: true, force: true }); } catch { /* locked until exit */ }
   app.exit(0);
 }, (error) => {
   console.error(error);
