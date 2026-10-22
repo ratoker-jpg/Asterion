@@ -414,36 +414,40 @@ async function enqueueThree(win, shipId) {
 }
 
 async function seedMaxLevels(win) {
-  const seed = await win.webContents.executeJavaScript(`(() => {
+  // Fixture injection and navigation must share one renderer turn. A separate
+  // localStorage write followed by a host-side delay/reload races React autosave
+  // and can revive the preceding 3-item queue on the second viewport.
+  const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
+  const execution = win.webContents.executeJavaScript(`(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
     const state = save.planets?.['helion-01']?.spaceportUpgrades;
     if (!state) return false;
     state.shipQueue = [];
     state.commanderQueue = [];
-    state.shipLevels.transporter = 10;
-    state.shipLevels.corsair = 40;
+    // Ship upgrades are global to the owner. Planet-local shipLevels is a
+    // legacy migration input, not the authoritative current save field.
+    state.shipLevels = {};
+    save.shipUpgradeLevels = { ...(save.shipUpgradeLevels || {}), transporter: 10, corsair: 40 };
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+    window.location.reload();
     return true;
-  })()`);
-  if (!seed) throw new Error('Could not seed max-level state');
-
-  // The app persists its current React state in an effect. Re-apply the
-  // fixture after that first effect has settled so it cannot overwrite the
-  // injected max-level values before the following reload.
-  await sleep(180);
-  const stabilized = await win.webContents.executeJavaScript(`(() => {
-    const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
-    const state = save.planets?.['helion-01']?.spaceportUpgrades;
-    if (!state) return false;
-    state.shipQueue = [];
-    state.commanderQueue = [];
-    state.shipLevels = state.shipLevels || {};
-    state.shipLevels.transporter = 10;
-    state.shipLevels.corsair = 40;
-    localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
-    return true;
-  })()`);
-  if (!stabilized) throw new Error('Could not stabilize max-level state');
+  })()`)
+    .then((value) => ({ value }))
+    .catch((error) => ({ error: String(error?.stack || error) }));
+  const first = await Promise.race([
+    execution.then((result) => ({ result })),
+    loaded.then(() => ({ loaded: true })),
+  ]);
+  if (first.result?.value === false || first.result?.error) {
+    throw new Error(`Could not seed max-level state: ${JSON.stringify(first.result)}`);
+  }
+  if (!first.loaded) {
+    const reloaded = await Promise.race([loaded.then(() => true), sleep(10_000).then(() => false)]);
+    if (!reloaded) throw new Error('Max-level fixture did not trigger a reload');
+  }
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+  await win.webContents.executeJavaScript('document.fonts?.ready');
+  await settle(win);
 }
 
 async function assertMaxProgress(win, shipId, maxLevel, label) {
@@ -501,7 +505,8 @@ async function verifyFlow(win, directory, label) {
   await capture(win, directory, 'spaceport-commanders-repeated-3-of-3');
 
   await seedMaxLevels(win);
-  await reopenSpaceport(win, 'ships');
+  await activateMilitary(win);
+  await openSpaceport(win);
   await assertMaxProgress(win, 'transporter', 10, `${label}/ship-max`);
   assertLayout(await measureLayout(win), `${label}/ship-max`);
   await capture(win, directory, 'spaceport-ships-max-level');
