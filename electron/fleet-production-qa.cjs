@@ -13,13 +13,40 @@ const VIEWPORTS = [[1920, 1080], [1280, 720]];
 const skipScreenshots = process.env.ASTERION_SKIP_SCREENSHOTS === '1';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// A timeout names the flight-preview state the page actually reached, so a
+// failed run is diagnosable from its log alone.
+const FAILURE_STATE = `(() => {
+  const text = (selector) => document.querySelector(selector)?.textContent?.trim().slice(0, 240) ?? null;
+  const open = document.querySelector('[data-qa-flight-preview-open]');
+  return {
+    route: document.querySelector('[data-qa-route].is-active, [data-qa-route][aria-current]')?.getAttribute('data-qa-route') ?? null,
+    launchContext: document.querySelector('.fleet-workspace-v1')?.getAttribute('data-qa-flight-launch-context') ?? null,
+    targetRelation: document.querySelector('.fleet-workspace-v1')?.getAttribute('data-qa-target-relation') ?? null,
+    previewOpen: open ? { disabled: open.disabled, title: open.getAttribute('title') } : null,
+    previewBackdrop: Boolean(document.querySelector('[data-qa-flight-preview-backdrop]')),
+    previewError: text('[data-qa-flight-preview-error]'),
+    targetStatus: text('[data-qa-flight-target-status]'),
+    notice: text('[data-qa-last-notice]') ?? text('[data-qa-runtime-notice]'),
+    inspector: text('[data-qa-universe-inspector]'),
+    stored: (() => {
+      try {
+        const save = JSON.parse(localStorage.getItem('asterion.vertical-slice.test.v1') || 'null');
+        const home = save?.planets?.['helion-01'];
+        return { gas: home?.resources?.gas, colonizer: home?.fleet?.ships?.colonizer, transporter: home?.fleet?.ships?.transporter, flights: save?.flights?.records?.length };
+      } catch (error) { return String(error); }
+    })(),
+  };
+})()`;
+
 async function waitFor(win, expression, timeoutMs = 10_000) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     if (await win.webContents.executeJavaScript(`Boolean(${expression})`)) return;
     await sleep(50);
   }
-  throw new Error(`Timed out waiting for: ${expression}`);
+  const state = await win.webContents.executeJavaScript(FAILURE_STATE).catch((error) => ({ unavailable: String(error) }));
+  throw new Error(`Timed out waiting for: ${expression}
+Page state: ${JSON.stringify(state)}`);
 }
 
 async function settle(win) {
@@ -124,6 +151,22 @@ async function openGasPreviewAt(win, coordinate) {
   await waitFor(win, `document.querySelector('[data-qa-flight-preview]') && document.querySelector('[data-qa-gas-asteroid-preview]')`);
 }
 
+// Root cause of the audit's Fleet QA timeouts: the harness patches the save of a
+// *running* game and reloads, and the old page's per-tick autosave could still
+// write its stale in-memory state over the patch before the navigation commits
+// (observed: a gas=0 patch read back as 189 000 000; a seeded empty flight list
+// came back with the previous transport). After its own patch the old page may
+// no longer write the save key; the reloaded page gets a fresh Storage.
+const PATCH_AND_RELOAD = `
+  localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
+  const writeSetItem = Storage.prototype.setItem;
+  Storage.prototype.setItem = function (key, value) {
+    if (this === window.localStorage && key === ${JSON.stringify(TEST_KEY)}) return;
+    return writeSetItem.call(this, key, value);
+  };
+  window.location.reload();
+`;
+
 async function seedProductionSave(win, mutator, args = []) {
   const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
   const result = await win.webContents.executeJavaScript(`(async () => {
@@ -133,8 +176,7 @@ async function seedProductionSave(win, mutator, args = []) {
       const planet = save?.planets?.['helion-01'];
       if (!save || !planet) return { ok: false, error: 'missing test save or homeworld' };
       (${mutator.toString()})(save, planet, ...${JSON.stringify(args)});
-      localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
-      window.location.reload();
+      ${PATCH_AND_RELOAD}
       return { ok: true };
     } catch (error) {
       return { ok: false, error: String(error?.stack || error) };
@@ -168,8 +210,7 @@ async function setStoredSourceGas(win, gas) {
       ...homeworldClock,
       byPlanet: { ...(previousClock.byPlanet || {}), 'helion-01': homeworldClock },
     };
-    localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
-    window.location.reload();
+    ${PATCH_AND_RELOAD}
     return true;
   })()`);
   if (!ok) throw new Error('Could not set stored source gas');
