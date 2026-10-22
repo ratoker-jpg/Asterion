@@ -82,6 +82,7 @@ import {
 } from './domain/runtime/mode.ts';
 import {
   BUILDING_QUEUE_CAPACITY,
+  BUILDING_CANCEL_REFUND_PERCENT,
   RESOURCE_BUILDING_ROLES,
   getBuildingDefinition,
   getBuildingsForZone,
@@ -124,6 +125,7 @@ import {
   collectRecycling as collectRecyclingAction,
   cancelSpaceportUpgrade as cancelSpaceportUpgradeAction,
   destroyBuilding as destroyBuildingAction,
+  describeBuildingRefund,
   executeTradeAction,
   previewBuilding,
   startBuilding as startBuildingAction,
@@ -1286,7 +1288,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       ? getBuildingDefinition(result.canceledRole, state.profile.factionId)
       : null;
     const cascadedCount = result.cascadedCount;
-    setNotice(`${canceledDefinition?.name ?? 'Проект'} отменён.${cascadedCount > 0 ? ` Каскадно отменено ещё ${cascadedCount} зависимых проектов.` : ''} Возвращено 90% сохранённых ресурсов.`);
+    setNotice(`${canceledDefinition?.name ?? 'Проект'} отменён.${cascadedCount > 0 ? ` Каскадно отменено ещё ${cascadedCount} зависимых проектов.` : ''} ${describeBuildingRefund(BUILDING_CANCEL_REFUND_PERCENT, result.credit)}`);
     return true;
   };
 
@@ -1304,7 +1306,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     }
     stateRef.current = result.state;
     setState(result.state);
-    setNotice(`${getBuildingDefinition(assetRole, state.profile.factionId).name}: уровень разрушен. Возвращено ${result.refundPercent}% ресурсов.`);
+    setNotice(`${getBuildingDefinition(assetRole, state.profile.factionId).name}: уровень разрушен. ${describeBuildingRefund(result.refundPercent ?? 0, result.credit)}`);
     return true;
   };
 
@@ -1723,7 +1725,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     navigateTo('fleets');
     setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
-    setNotice(`${target.relation === 'self' ? 'Своя' : 'Союзная'} цель выбрана: [${target.coordinate.galaxy}:${target.coordinate.system}:${target.coordinate.position}].`);
+    const relationLabel = target.relation === 'self' ? 'Своя' : target.relation === 'ally' ? 'Союзная' : target.relation === 'enemy' ? 'Вражеская' : 'Нейтральная';
+    setNotice(`${relationLabel} цель выбрана: [${target.coordinate.galaxy}:${target.coordinate.system}:${target.coordinate.position}].`);
     window.setTimeout(() => {
       window.dispatchEvent(new CustomEvent<FlightLaunchContext>(FLIGHT_LAUNCH_CONTEXT_EVENT, {
         detail: {

@@ -1,6 +1,6 @@
 import { findScience } from '../science/catalog.ts';
 import type { ScienceId } from '../science/types.ts';
-import { creditResources, type ResourceCapacitiesInput } from '../resources/credit.ts';
+import { creditResources, type ResourceCapacitiesInput, type ResourceCreditResult } from '../resources/credit.ts';
 import {
   BUILDING_ROLES,
   INDUSTRY_BUILDING_ROLES,
@@ -571,9 +571,9 @@ function addResourceCost(
   resources: ResourceWallet,
   cost: ResourceCost,
   capacities?: ResourceCapacitiesInput,
-): ResourceWallet {
+): ResourceCreditResult {
   const unlimitedCapacities = { metal: Number.MAX_SAFE_INTEGER, minerals: Number.MAX_SAFE_INTEGER, gas: Number.MAX_SAFE_INTEGER };
-  return creditResources(resources, capacities ?? unlimitedCapacities, cost).wallet;
+  return creditResources(resources, capacities ?? unlimitedCapacities, cost);
 }
 
 function getQueuedBuildingCost(item: BuildingQueueItem, scienceLevels: ScienceLevels): ResourceCost | null {
@@ -642,6 +642,8 @@ export type BuildingCancellationTransition = {
   canceled: BuildingQueueItem | null;
   canceledItems: BuildingQueueItem[];
   refund: ResourceCost | null;
+  /** What the storage actually accepted of `refund`; the rest burned over the cap. */
+  credit?: ResourceCreditResult;
 };
 
 export function cancelBuildingProject(
@@ -684,17 +686,19 @@ export function cancelBuildingProject(
       (Object.keys(total) as ResourceKey[]).map((key) => [key, total[key] + itemRefund[key]]),
     ) as ResourceCost;
   }, { metal: 0, minerals: 0, gas: 0, energy: 0 } as ResourceCost);
+  const credit = addResourceCost(state.resources, refund, state.capacities);
   return {
     ok: true,
     state: {
       ...state,
-      resources: addResourceCost(state.resources, refund, state.capacities),
+      resources: credit.wallet,
       queue: rescheduleQueueAfterCancellation(remaining, queueIndex === 0, now),
     },
     reason: null,
     canceled,
     canceledItems,
     refund,
+    credit,
   };
 }
 
@@ -708,6 +712,7 @@ export type BuildingDestructionTransition = {
   destroyedLevel: number | null;
   refundPercent: number | null;
   refund: ResourceCost | null;
+  credit?: ResourceCreditResult;
 };
 
 export function destroyBuildingLevel(
@@ -766,15 +771,16 @@ export function destroyBuildingLevel(
     ...state.buildings,
     [assetRole]: currentLevel - 1,
   };
+  const credit = addResourceCost(
+    state.resources,
+    refund,
+    state.capacities ? getStorageCapacities(nextBuildings) : undefined,
+  );
   return {
     ok: true,
     state: {
       ...state,
-      resources: addResourceCost(
-        state.resources,
-        refund,
-        state.capacities ? getStorageCapacities(nextBuildings) : undefined,
-      ),
+      resources: credit.wallet,
       buildings: nextBuildings,
     },
     reason: null,
@@ -782,6 +788,7 @@ export function destroyBuildingLevel(
     destroyedLevel: currentLevel,
     refundPercent: safeRefundPercent,
     refund,
+    credit,
   };
 }
 

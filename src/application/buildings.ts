@@ -188,7 +188,7 @@ export function cancelBuilding(
   state: SaveState,
   context: BuildingApplicationContext,
   queueId: string,
-): BuildingActionResult & { canceledRole: BuildingRole | null; cascadedCount: number } {
+): BuildingActionResult & { canceledRole: BuildingRole | null; cascadedCount: number; credit?: ResourceCreditResult } {
   if (isPlanetBlocked(state, context.planetId)) {
     return { ok: false, state, reason: 'Планета заблокирована из-за перенаселения.', canceledRole: null, cascadedCount: 0 };
   }
@@ -211,6 +211,7 @@ export function cancelBuilding(
     reason: null,
     canceledRole: transition.canceled?.assetRole ?? null,
     cascadedCount: Math.max(0, transition.canceledItems.length - 1),
+    credit: transition.credit,
   };
 }
 
@@ -235,7 +236,7 @@ export function destroyBuilding(
   context: BuildingApplicationContext,
   assetRole: BuildingRole,
   rng: () => number = Math.random,
-): BuildingActionResult & { refundPercent: number | null } {
+): BuildingActionResult & { refundPercent: number | null; credit?: ResourceCreditResult } {
   if (isPlanetBlocked(state, context.planetId)) {
     return { ok: false, state, reason: 'Планета заблокирована из-за перенаселения.', refundPercent: null };
   }
@@ -293,7 +294,23 @@ export function destroyBuilding(
     }),
     reason: null,
     refundPercent: transition.refundPercent,
+    credit: transition.credit,
   };
+}
+
+const REFUND_LABELS = [['metal', 'металла'], ['minerals', 'минералов'], ['gas', 'газа']] as const;
+
+/**
+ * Notice for a building refund: the nominal percent stays the rule, but the text
+ * reports what the storage really accepted and what burned over its cap.
+ */
+export function describeBuildingRefund(percent: number, credit: ResourceCreditResult | undefined): string {
+  const burned = credit
+    ? REFUND_LABELS.filter(([key]) => credit.burned[key] > 0).map(([key, label]) => `${credit.burned[key].toLocaleString('ru-RU')} ${label}`)
+    : [];
+  if (!credit || burned.length === 0) return `Возвращено ${percent}% ресурсов.`;
+  const accepted = REFUND_LABELS.filter(([key]) => credit.accepted[key] > 0).map(([key, label]) => `${credit.accepted[key].toLocaleString('ru-RU')} ${label}`);
+  return `Возврат ${percent}%: зачислено ${accepted.length ? accepted.join(', ') : 'ничего'}; склад переполнен — сгорело ${burned.join(', ')}.`;
 }
 
 export function completeBuilding(
