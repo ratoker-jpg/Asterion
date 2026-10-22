@@ -75,6 +75,7 @@ import {
   getUniverseSlotPoint,
   getUniverseAsteroidPoint,
   getUniverseOwnerRelation,
+  getUniverseTransportLaunchTarget,
   type UniverseOwnerRelation,
   normalizeUniverseOwnerProfile,
 } from './domain/universe/runtime.ts';
@@ -884,11 +885,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
     const relation = getUniverseOwnerRelation(node, owner.id, owner.alliance, targetOwner, allianceDiplomacy);
     const actionState = getUniverseActionState(action, node, owner.id, relation);
     if (action === 'fleet' && actionState.enabled) {
-      onTransport({
-        planetId: node.id,
-        coordinate: node.coordinate,
-        relation: node.ownerId === owner.id || node.isHomeworld ? 'self' : 'ally',
-      });
+      onTransport(getUniverseTransportLaunchTarget(node, relation));
       return;
     }
     if ((action === 'spy' || action === 'attack') && actionState.enabled && targetOwner && (relation === 'enemy' || relation === 'neutral')) {
@@ -942,7 +939,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
           const coordinate = formatUniverseCoordinate(node.coordinate);
           const orbitalDebris = orbitalDebrisByKey.get(`${node.coordinate.galaxy}:${node.coordinate.system}:${node.coordinate.position}`) ?? 0;
           const debrisDescription = orbitalDebris > 0 ? ` · Обломки на орбите: ${numberFormat.format(orbitalDebris)}` : '';
-          const caption = getUniverseNodeCaption(node, profile.displayName, owners.get(node.ownerId ?? '')?.displayName);
+          const caption = getUniverseNodeCaption(node, profile.displayName, owners.get(node.ownerId ?? '')?.displayName, owner.id);
           const relation = node.kind === 'player' || node.kind === 'npc'
             ? getUniverseOwnerRelation(node, owner.id, owner.alliance, owners.get(node.ownerId ?? ''), allianceDiplomacy)
             : null;
@@ -1019,7 +1016,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
             <button type="button" key={node.id} className={`universe-radar__row legend-${legend} ${selectedNodeId === node.id ? 'is-selected' : ''}`} onClick={() => selectNode(node)}>
               <span className="universe-radar__pos">{node.coordinate.position}</span>
               <img src={node.art} alt="" draggable={false} />
-              <strong>{getUniverseNodeCaption(node, profile.displayName, owners.get(node.ownerId ?? '')?.displayName)}</strong>
+              <strong>{getUniverseNodeCaption(node, profile.displayName, owners.get(node.ownerId ?? '')?.displayName, owner.id)}</strong>
               <i aria-hidden="true" />
             </button>
           ))}

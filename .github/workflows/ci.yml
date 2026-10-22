@@ -5,17 +5,29 @@ on:
   push:
     branches: [main]
 
+# A newer push to the same PR makes the older run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Jobs run in parallel on separate Windows runners: logical tests, four
+# balanced Electron QA shards and the installer. Wall time is the slowest job
+# instead of the sum of every step.
 jobs:
-  build:
+  logic:
+    name: Logical tests and evidence
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+          cache: npm
       - name: Install dependencies
-        run: npm install
+        run: npm ci
+      - name: Test inventory (every *.test.ts runs in exactly one CI suite)
+        run: npm run test:inventory
       - name: Asterion asset audit
         run: npm run assets:asterion:audit
       - name: Resource building domain tests
@@ -72,68 +84,65 @@ jobs:
         run: npm run test:sun-raid
       - name: New game and save slot tests
         run: npm run test:new-game
+      - name: Type-check and build renderer
+        run: npm run build
+      - name: Upload balance evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: Asterion-Balance-Evidence
+          path: |
+            artifacts/pr91-balance/**/*
+            artifacts/pr91-approved-tech-compare/**/*
+            artifacts/pr91-garrison-85-105/**/*
+            artifacts/pr91-adaptive-c/**/*
+          if-no-files-found: warn
+          retention-days: 14
+
+  electron:
+    name: Electron QA (${{ matrix.shard }})
+    runs-on: windows-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      # Shards are balanced by measured CI step times (about 5-6 minutes each).
+      # Entry format: npm-script[:skip] where :skip sets ASTERION_SKIP_SCREENSHOTS=1
+      # (GitHub's hidden Windows compositor can block captures on long pages).
+      matrix:
+        include:
+          - shard: visual
+            suites: "qa:visual test:test-mode-ui:skip test:header-ui test:resource-assets-ui test:save-safety-ui:skip"
+          - shard: science-reports
+            suites: "test:science-ui:skip test:building-actions-ui test:reports-ui test:battle-reports-ui:skip test:simulator-ui:skip test:space-flight-ui:skip test:production-test-isolation-ui:skip"
+          - shard: campaign-command
+            suites: "test:new-game-ui:skip test:pirate-operations-ui test:command-ui:skip test:command-aid-ui:skip test:command-journal-ui:skip"
+          - shard: fleet-universe
+            suites: "test:fleet-ui:skip test:universe-ui:skip test:energy-ui:skip test:repair-ui:skip"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
       - name: Build renderer
         run: npm run build
-      - name: Production/test isolation Electron QA
-        env:
-          ASTERION_SKIP_SCREENSHOTS: '1'
-        run: npm run test:production-test-isolation-ui
-      - name: Command Electron QA
-        env:
-          ASTERION_SKIP_SCREENSHOTS: '1'
-        run: npm run test:command-ui
-      - name: Command aid Electron QA
-        env:
-          ASTERION_SKIP_SCREENSHOTS: '1'
-        run: npm run test:command-aid-ui
-      - name: Command journal Electron QA
-        env:
-          ASTERION_SKIP_SCREENSHOTS: '1'
-        run: npm run test:command-journal-ui
-      - name: Science Electron QA
-        env:
-          ASTERION_SKIP_SCREENSHOTS: '1'
-        run: npm run test:science-ui
-      - name: Header Electron QA
-        run: npm run test:header-ui
-      - name: Building actions Electron QA
-        run: npm run test:building-actions-ui
-      - name: Reports Electron QA
-        run: npm run test:reports-ui
-      - name: Space Flight Electron QA
-        env:
-          ASTERION_SKIP_SCREENSHOTS: '1'
-        run: npm run test:space-flight-ui
-      - name: Battle reports Electron QA
-        env:
-          ASTERION_SKIP_SCREENSHOTS: '1'
-        run: npm run test:battle-reports-ui
-      - name: Simulator Electron QA
-        env:
-          ASTERION_SKIP_SCREENSHOTS: '1'
-        run: npm run test:simulator-ui
-      - name: Resource asset Electron QA
-        run: npm run test:resource-assets-ui
-      - name: Test Mode Electron QA
-        env:
-          # GitHub's hidden Windows compositor can block viewport captures on
-          # long pages. Functional DOM/queue assertions still run; local QA
-          # retains screenshots by leaving this unset.
-          ASTERION_SKIP_SCREENSHOTS: '1'
-        run: npm run test:test-mode-ui
-      - name: Universe planet interaction Electron QA
-        env:
-          ASTERION_SKIP_SCREENSHOTS: '1'
-        run: npm run test:universe-ui
-      - name: Pirate operations end-to-end Electron QA
-        run: npm run test:pirate-operations-ui
-      - name: Capture utility and resource-zone visual QA
-        run: npm run qa:visual
+      - name: Run Electron QA suites
+        shell: bash
+        run: |
+          for entry in ${{ matrix.suites }}; do
+            script="${entry%:skip}"
+            echo "::group::$script"
+            if [ "$entry" != "$script" ]; then export ASTERION_SKIP_SCREENSHOTS=1; else unset ASTERION_SKIP_SCREENSHOTS; fi
+            npm run "$script" || { echo "::endgroup::"; echo "::error::$script failed"; exit 1; }
+            echo "::endgroup::"
+          done
       - name: Upload visual QA artifact
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: Asterion-Utility-Visual-QA
+          name: Asterion-QA-${{ matrix.shard }}
           path: |
             visual-qa/**/*
             artifacts-pass1/science-qa/**/*
@@ -141,13 +150,23 @@ jobs:
             artifacts-pass1/test-mode-qa/**/*
             artifacts/battle-report-qa/**/*
             artifacts/universe-planet-qa/**/*
-            artifacts/pr91-balance/**/*
-            artifacts/pr91-approved-tech-compare/**/*
-            artifacts/pr91-garrison-85-105/**/*
-            artifacts/pr91-adaptive-c/**/*
             artifacts/pirate-operations-qa/**/*
+            artifacts/save-safety-qa/**/*
           if-no-files-found: warn
           retention-days: 14
+
+  package:
+    name: Windows installer
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
       - name: Package Windows app
         run: npm run dist:win
       - name: Upload Windows installer

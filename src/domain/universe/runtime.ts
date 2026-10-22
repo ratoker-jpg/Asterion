@@ -384,8 +384,19 @@ export function getUniverseOwnerRelation(
     : 'neutral';
 }
 
-export function getUniverseNodeCaption(node: UniversePlanetNode, currentPlayerName: string, ownerDisplayName = 'Владелец планеты') {
-  if (node.isHomeworld) return `★ ${currentPlayerName}`;
+/**
+ * Launch payload of the map's «Флот» action: the relation the map computed for
+ * the target owner travels with it unchanged (a neutral world is never sent as
+ * an ally); the flight dispatch re-validates it against the live save.
+ */
+export function getUniverseTransportLaunchTarget(node: Pick<UniversePlanetNode, 'id' | 'coordinate'>, relation: UniverseOwnerRelation) {
+  return { planetId: node.id, coordinate: node.coordinate, relation };
+}
+
+export function getUniverseNodeCaption(node: UniversePlanetNode, currentPlayerName: string, ownerDisplayName = 'Владелец планеты', currentOwnerId?: string) {
+  // A foreign capital (a future NPC homeworld) is captioned with its owner, not the player.
+  if (node.isHomeworld && (currentOwnerId === undefined || node.ownerId === currentOwnerId)) return `★ ${currentPlayerName}`;
+  if (node.isHomeworld) return `★ ${ownerDisplayName}`;
   if (node.kind === 'npc') return ownerDisplayName;
   if (node.kind === 'uninhabited') return 'Необитаемая';
   if (node.kind === 'unique') return 'Уникальная';
@@ -1026,7 +1037,8 @@ export function getUniverseActionState(
       reason: 'Цель не является доступной планетой.',
     };
   }
-  if (node.ownerId === currentOwnerId || node.isHomeworld) {
+  // Ownership decides, as in getUniverseOwnerRelation: a foreign homeworld is not «self».
+  if (node.ownerId === currentOwnerId) {
     if (action === 'fleet') {
       return {
         action,

@@ -19,11 +19,18 @@ import {
   type SaveSlotSummary,
 } from '../domain/session/slots.ts';
 import { isGeneratedNpcOwnerId } from '../domain/world/generator.ts';
+import { describeSaveProblem, inspectParsedSave, inspectSavePayload, isSaveProblem } from '../domain/session/save-health.ts';
 import type { PlayerFactionId } from '../domain/profile/types.ts';
 import type { CampaignSpeed } from '../domain/runtime/mode.ts';
 import type { SaveState } from './contracts.ts';
+import { loadSavedState, SAVE_SCHEMA_VERSION } from './persistence.ts';
 
-export type SlotStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+/** `key`/`length` let a damaged index be rebuilt from the slot payloads still in storage. */
+export type SlotStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> & Partial<Pick<Storage, 'key' | 'length'>>;
+
+/** The unreadable index text is kept here once, untouched, for support/rescue. */
+export const SLOT_INDEX_RESCUE_KEY = `${SLOT_INDEX_KEY}.rescue`;
+const SLOT_PAYLOAD_KEY = /^asterion\.slot\.(slot-[a-z0-9-]{1,40})\.v1$/;
 
 export type SlotWriteResult = { ok: true; index: SaveSlotIndex } | { ok: false; error: string; index: SaveSlotIndex };
 
@@ -101,28 +108,94 @@ export function writeSlotIndex(index: SaveSlotIndex, storage?: SlotStorage | nul
   }
 }
 
+function storageKeys(storage: SlotStorage): string[] {
+  if (typeof storage.key !== 'function' || typeof storage.length !== 'number') return [];
+  const keys: string[] = [];
+  try {
+    for (let position = 0; position < storage.length; position += 1) {
+      const key = storage.key(position);
+      if (key) keys.push(key);
+    }
+  } catch { /* enumeration is best effort */ }
+  return keys;
+}
+
+/** Card for a payload found in storage but missing from the index; unreadable payloads stay visible as broken. */
+function recoveredSlotMeta(id: string, storageKey: string, raw: string | null, now: number): SaveSlotMeta {
+  let parsed: LooseSave | null = null;
+  try { parsed = raw ? JSON.parse(raw) as LooseSave : null; } catch { parsed = null; }
+  const described = parsed ? describeSave(parsed, now) : null;
+  const clock = parsed ? record(parsed.resourceClock).lastReconciledAt : undefined;
+  const base = described ?? {
+    createdAt: 0, updatedAt: 0, playTimeMs: 0, factionId: 'aegis' as PlayerFactionId, playerName: 'Командир',
+    campaignSpeed: 'standard' as CampaignSpeed, schemaVersion: 0,
+    summary: { planets: 0, npcCount: 0, galaxyCount: 1, days: 0, crystals: 0, victory: false },
+  };
+  return {
+    ...base,
+    // The save's own clock orders recovered campaigns; "now" would make them all equally recent.
+    updatedAt: typeof clock === 'number' && Number.isFinite(clock) ? Math.min(clock, now) : base.createdAt,
+    id,
+    name: described ? 'Восстановленная кампания' : 'Восстановленный слот',
+    storageKey,
+    mode: 'production',
+  };
+}
+
 /**
  * Reads the production slot index and migrates the single legacy save into a
  * slot exactly once. The legacy key itself stays in place as that slot's storage.
+ * An unreadable index is kept under SLOT_INDEX_RESCUE_KEY, and every slot payload
+ * still in storage but absent from the index is listed again, so a damaged index
+ * never hides (and a new campaign never orphans) an existing campaign.
  */
 export function readSlotIndex(storage?: SlotStorage | null, now = Date.now()): SaveSlotIndex {
   const target = resolveStorage(storage);
   if (!target) return createEmptySlotIndex();
   let index = createEmptySlotIndex();
+  let raw: string | null = null;
+  let damaged = false;
   try {
-    const raw = target.getItem(SLOT_INDEX_KEY);
-    index = raw ? normalizeSlotIndex(JSON.parse(raw)) : createEmptySlotIndex();
+    raw = target.getItem(SLOT_INDEX_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as unknown;
+      index = normalizeSlotIndex(parsed);
+      const listed = parsed && typeof parsed === 'object' && Array.isArray((parsed as { slots?: unknown }).slots)
+        ? (parsed as { slots: unknown[] }).slots.length
+        : -1;
+      damaged = listed < 0 || listed > index.slots.length;
+    }
   } catch {
     index = createEmptySlotIndex();
+    damaged = Boolean(raw);
+  }
+  if (damaged && raw) {
+    try {
+      if (target.getItem(SLOT_INDEX_RESCUE_KEY) === null) target.setItem(SLOT_INDEX_RESCUE_KEY, raw);
+    } catch { /* rescue copy is best effort; nothing is deleted either way */ }
   }
   let legacyRaw: string | null = null;
   try { legacyRaw = target.getItem(LEGACY_PRODUCTION_SAVE_KEY); } catch { legacyRaw = null; }
-  const migrated = migrateLegacySave(index, legacyRaw, (raw) => {
-    const described = describeRaw(raw, now);
+  let next = migrateLegacySave(index, legacyRaw, (legacy) => {
+    const described = describeRaw(legacy, now);
     return described ? { ...described, createdAt: Math.min(described.createdAt, now) } : null;
   });
-  if (migrated !== index) writeSlotIndex(migrated, target);
-  return migrated;
+  // An unreadable legacy save is still listed (as broken) so it can be exported or deleted.
+  if (legacyRaw && !next.slots.some((slot) => slot.id === LEGACY_SLOT_ID)) {
+    next = upsertSlot(next, { ...recoveredSlotMeta(LEGACY_SLOT_ID, LEGACY_PRODUCTION_SAVE_KEY, legacyRaw, now), name: 'Прежнее сохранение' });
+  }
+  const listedKeys = new Set(next.slots.map((slot) => slot.storageKey));
+  for (const key of storageKeys(target).sort()) {
+    const match = SLOT_PAYLOAD_KEY.exec(key);
+    if (!match || listedKeys.has(key)) continue;
+    let payload: string | null = null;
+    try { payload = target.getItem(key); } catch { payload = null; }
+    if (payload === null) continue;
+    next = upsertSlot(next, recoveredSlotMeta(match[1]!, key, payload, now));
+    listedKeys.add(key);
+  }
+  if (next !== index || damaged) writeSlotIndex(next, target);
+  return next;
 }
 
 /** Raw slot payload state for the load screen: readable, broken or written by a newer build. */
@@ -133,16 +206,40 @@ export function inspectSlot(meta: SaveSlotMeta, currentSchemaVersion: number, st
   if (!target) return { status: 'missing' };
   let raw: string | null = null;
   try { raw = target.getItem(meta.storageKey); } catch { return { status: 'missing' }; }
-  if (!raw) return { status: 'missing' };
-  try {
-    const parsed = JSON.parse(raw) as LooseSave;
-    if (!describeSave(parsed, Date.now())) return { status: 'broken', reason: 'Нет планет в сохранении.' };
-    const schema = typeof parsed.schemaVersion === 'number' ? parsed.schemaVersion : 0;
-    if (schema > currentSchemaVersion) return { status: 'newer', schemaVersion: schema };
-    return { status: 'ok' };
-  } catch {
-    return { status: 'broken', reason: 'Повреждённый JSON.' };
-  }
+  const health = inspectSavePayload(raw, currentSchemaVersion);
+  if (health.status === 'missing') return { status: 'missing' };
+  if (health.status === 'newer') return { status: 'newer', schemaVersion: health.schemaVersion };
+  if (health.status === 'corrupt' || health.status === 'malformed') return { status: 'broken', reason: health.reason };
+  if (!describeRaw(raw!, Date.now())) return { status: 'broken', reason: 'Нет планет в сохранении.' };
+  return { status: 'ok' };
+}
+
+/** Player-facing text of a slot that cannot be opened. */
+export function describeSlotHealth(health: Exclude<SlotHealth, { status: 'ok' }>, currentSchemaVersion: number): string {
+  if (health.status === 'missing') return 'Данные слота отсутствуют.';
+  if (health.status === 'newer') return describeSaveProblem({ status: 'newer', schemaVersion: health.schemaVersion }, currentSchemaVersion);
+  return describeSaveProblem({ status: 'corrupt', reason: health.reason }, currentSchemaVersion);
+}
+
+export type SlotEntryCheck = { ok: true } | { ok: false; health: Exclude<SlotHealth, { status: 'ok' }>; message: string };
+
+/**
+ * The one gate in front of every way into a campaign (Continue, Load,
+ * autostart): the payload must pass the health check and the full migration.
+ * A refused slot is left byte-for-byte as it is.
+ */
+export function checkSlotEntry(meta: SaveSlotMeta, storage?: SlotStorage | null, currentSchemaVersion = SAVE_SCHEMA_VERSION): SlotEntryCheck {
+  const target = resolveStorage(storage);
+  const health = inspectSlot(meta, currentSchemaVersion, target);
+  if (health.status !== 'ok') return { ok: false, health, message: describeSlotHealth(health, currentSchemaVersion) };
+  const loaded = loadSavedState({ mode: 'production', storage: target, saveKey: meta.storageKey });
+  if (loaded.status === 'loaded') return { ok: true };
+  const broken: Exclude<SlotHealth, { status: 'ok' }> = !('problem' in loaded)
+    ? { status: 'missing' }
+    : loaded.problem.status === 'newer'
+      ? { status: 'newer', schemaVersion: loaded.problem.schemaVersion }
+      : { status: 'broken', reason: loaded.problem.reason };
+  return { ok: false, health: broken, message: describeSlotHealth(broken, currentSchemaVersion) };
 }
 
 export function createSlot(
@@ -249,6 +346,8 @@ export function importSaveSlot(text: string, currentSchemaVersion: number, optio
   const index = readSlotIndex(target, now);
   const parsed = parseSlotImport(text, currentSchemaVersion);
   if (!parsed.ok) return { ok: false, error: parsed.error, index };
+  const structure = inspectParsedSave(parsed.save, currentSchemaVersion);
+  if (isSaveProblem(structure)) return { ok: false, error: describeSaveProblem(structure, currentSchemaVersion), index };
   if (!target) return { ok: false, error: 'Хранилище недоступно.', index };
   if (index.slots.length >= MAX_SAVE_SLOTS) return { ok: false, error: `Достигнут предел слотов (${MAX_SAVE_SLOTS}).`, index };
   const described = describeSave(parsed.save as LooseSave, now);

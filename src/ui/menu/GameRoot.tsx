@@ -12,8 +12,9 @@ import { NavigationProvider } from '../navigation.tsx';
 import { ACTIVE_RUNTIME_MODE } from '../../domain/runtime/mode.ts';
 import { LEGACY_PRODUCTION_SAVE_KEY, selectContinueSlot, type SaveSlotMeta } from '../../domain/session/slots.ts';
 import { createInitialSaveState } from '../../application/persistence.ts';
-import { readSlotIndex } from '../../application/slots.ts';
-import { MenuApp } from './MenuApp.tsx';
+import { checkSlotEntry, readSlotIndex } from '../../application/slots.ts';
+import { MenuApp, type SlotEntryProblem } from './MenuApp.tsx';
+import { TestSaveGuard } from './SaveProblemScreen.tsx';
 import { applySlotRuntime, consumeNextScreen, wantsAutostart, type ActiveSession } from './session.ts';
 
 /** The running campaign: the game screen and its global controllers. */
@@ -44,25 +45,53 @@ function enter(slot: SaveSlotMeta): ActiveSession {
  * own isolated save, so the existing QA scripts work unchanged.
  */
 export function GameRoot() {
-  if (ACTIVE_RUNTIME_MODE === 'test') return <GameShell session={null} />;
+  if (ACTIVE_RUNTIME_MODE === 'test') return <TestSaveGuard><GameShell session={null} /></TestSaveGuard>;
   return <ProductionRoot />;
 }
 
 function ProductionRoot() {
   const [initialScreen] = useState(() => consumeNextScreen() ?? 'main');
-  const [session, setSession] = useState<ActiveSession | null>(() => {
-    if (!wantsAutostart()) return null;
+  const [start] = useState<{ session: ActiveSession | null; problem: SlotEntryProblem | null }>(() => {
+    if (!wantsAutostart()) return { session: null, problem: null };
     let slot = selectContinueSlot(readSlotIndex());
     if (!slot) {
       // Desktop shortcuts and QA scripts expect a playable world at once:
-      // seed the legacy campaign (the same key and start as before the menu).
+      // seed the legacy campaign (the same key and start as before the menu),
+      // but never over an existing legacy payload, even an unreadable one.
       try {
-        window.localStorage.setItem(LEGACY_PRODUCTION_SAVE_KEY, JSON.stringify(createInitialSaveState('production')));
+        if (window.localStorage.getItem(LEGACY_PRODUCTION_SAVE_KEY) === null) {
+          window.localStorage.setItem(LEGACY_PRODUCTION_SAVE_KEY, JSON.stringify(createInitialSaveState('production')));
+        }
       } catch { /* the menu stays available */ }
       slot = selectContinueSlot(readSlotIndex());
     }
-    return slot ? enter(slot) : null;
+    if (!slot) return { session: null, problem: null };
+    const check = checkSlotEntry(slot);
+    // Autostart keeps its old meaning for a slot whose payload is gone: there are
+    // no bytes left to protect, so the game starts that slot fresh as before.
+    // Unreadable bytes (corrupt / newer / malformed) are still refused.
+    return check.ok || check.health.status === 'missing'
+      ? { session: enter(slot), problem: null }
+      : { session: null, problem: { slotName: slot.name, message: check.message } };
   });
+  const [session, setSession] = useState<ActiveSession | null>(start.session);
+  const [entryProblem, setEntryProblem] = useState<SlotEntryProblem | null>(start.problem);
+  // Continue, Load and a freshly created slot all pass the same health gate.
+  const tryEnter = (slot: SaveSlotMeta) => {
+    const check = checkSlotEntry(slot);
+    if (!check.ok) {
+      setEntryProblem({ slotName: slot.name, message: check.message });
+      return;
+    }
+    setSession(enter(slot));
+  };
   if (session) return <GameShell session={session} />;
-  return <MenuApp initialScreen={initialScreen} onEnterSlot={(slot) => setSession(enter(slot))} />;
+  return (
+    <MenuApp
+      initialScreen={initialScreen}
+      onEnterSlot={tryEnter}
+      entryProblem={entryProblem}
+      onDismissEntryProblem={() => setEntryProblem(null)}
+    />
+  );
 }

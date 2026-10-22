@@ -1164,6 +1164,17 @@ function commanderAtSide(stacks: readonly RuntimeStack[], id: CommanderId | null
   return id === expectedId ? commanderFor(stacks, id) : undefined;
 }
 
+/**
+ * PH-01 (owner rule): a Phantom that entered the battle keeps its cancel aura
+ * until the battle ends; the destruction of its stack is a battle outcome and
+ * does not switch the aura off mid-battle. Unit destruction order is unchanged.
+ */
+function battlePhantomAura(stacks: readonly RuntimeStack[], commanderId: CommanderId | null) {
+  return commanderId === 'phantom'
+    ? stacks.find((stack) => stack.entityId === 'phantom' && stack.kind === 'commander' && stack.startingCount > 0)
+    : undefined;
+}
+
 function resolveReanimator(
   stacks: readonly RuntimeStack[],
   activeCommanderId: CommanderId | null,
@@ -1280,7 +1291,7 @@ function resolveSideActions(
   const criticalBonus = criticalEffect?.kind === 'critical'
     ? criticalEffect.ratePerLevel * (commanderFor(actorStacks, activeCommanderId)?.level ?? 0)
     : 0;
-  const opposingPhantom = commanderAtSide(targetStacks, opposingCommanderId, 'phantom');
+  const opposingPhantom = battlePhantomAura(targetStacks, opposingCommanderId);
   const phantomEffect = opposingPhantom ? getCommanderCombatEffect('phantom') : null;
 
   for (const actor of actionOrder) {

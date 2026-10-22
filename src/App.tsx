@@ -82,6 +82,7 @@ import {
 } from './domain/runtime/mode.ts';
 import {
   BUILDING_QUEUE_CAPACITY,
+  BUILDING_CANCEL_REFUND_PERCENT,
   RESOURCE_BUILDING_ROLES,
   getBuildingDefinition,
   getBuildingsForZone,
@@ -124,6 +125,7 @@ import {
   collectRecycling as collectRecyclingAction,
   cancelSpaceportUpgrade as cancelSpaceportUpgradeAction,
   destroyBuilding as destroyBuildingAction,
+  describeBuildingRefund,
   executeTradeAction,
   previewBuilding,
   startBuilding as startBuildingAction,
@@ -847,9 +849,15 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         persistence.write(stateRef.current);
         return;
       }
-      const next = persistence.read();
-      adoptedFromOtherWindow.current = next;
-      setState(next);
+      const loaded = persistence.load();
+      // An unreadable or newer-schema write is never adopted as a fresh campaign;
+      // the write guard keeps it intact and this window stops overwriting it.
+      if (loaded.status !== 'loaded') {
+        setForeignWriterAt(Date.now());
+        return;
+      }
+      adoptedFromOtherWindow.current = loaded.state;
+      setState(loaded.state);
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
@@ -1280,7 +1288,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       ? getBuildingDefinition(result.canceledRole, state.profile.factionId)
       : null;
     const cascadedCount = result.cascadedCount;
-    setNotice(`${canceledDefinition?.name ?? 'Проект'} отменён.${cascadedCount > 0 ? ` Каскадно отменено ещё ${cascadedCount} зависимых проектов.` : ''} Возвращено 90% сохранённых ресурсов.`);
+    setNotice(`${canceledDefinition?.name ?? 'Проект'} отменён.${cascadedCount > 0 ? ` Каскадно отменено ещё ${cascadedCount} зависимых проектов.` : ''} ${describeBuildingRefund(BUILDING_CANCEL_REFUND_PERCENT, result.credit)}`);
     return true;
   };
 
@@ -1298,7 +1306,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     }
     stateRef.current = result.state;
     setState(result.state);
-    setNotice(`${getBuildingDefinition(assetRole, state.profile.factionId).name}: уровень разрушен. Возвращено ${result.refundPercent}% ресурсов.`);
+    setNotice(`${getBuildingDefinition(assetRole, state.profile.factionId).name}: уровень разрушен. ${describeBuildingRefund(result.refundPercent ?? 0, result.credit)}`);
     return true;
   };
 
@@ -1717,7 +1725,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     navigateTo('fleets');
     setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
-    setNotice(`${target.relation === 'self' ? 'Своя' : 'Союзная'} цель выбрана: [${target.coordinate.galaxy}:${target.coordinate.system}:${target.coordinate.position}].`);
+    const relationLabel = target.relation === 'self' ? 'Своя' : target.relation === 'ally' ? 'Союзная' : target.relation === 'enemy' ? 'Вражеская' : 'Нейтральная';
+    setNotice(`${relationLabel} цель выбрана: [${target.coordinate.galaxy}:${target.coordinate.system}:${target.coordinate.position}].`);
     window.setTimeout(() => {
       window.dispatchEvent(new CustomEvent<FlightLaunchContext>(FLIGHT_LAUNCH_CONTEXT_EVENT, {
         detail: {
@@ -2055,7 +2064,9 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     // newer save (another window, an import, a QA patch).
     const onUnload = () => {
       const latest = foldPlayTime(false);
-      const stored = persistence.read();
+      const loaded = persistence.load();
+      if (loaded.status !== 'loaded') return;
+      const stored = loaded.state;
       const next = { ...stored, playTimeMs: Math.max(stored.playTimeMs ?? 0, latest.playTimeMs ?? 0) };
       persistence.write(next);
       refreshSlotMeta(session.slotId, next);
@@ -2106,7 +2117,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     const config = stateRef.current.worldConfig;
     const nextState = createInitialSaveState(RUNTIME_MODE, Date.now(), config && !config.legacy ? config : undefined);
     dispatchRuntimeReset(RUNTIME_MODE, window);
-    persistence.write(nextState);
+    // Restarting is the player's explicit decision to replace this campaign.
+    persistence.write(nextState, { replaceUnreadable: true });
     applyCampaignRuntime(nextState, RUNTIME_MODE);
     stateRef.current = nextState;
     setState(nextState);

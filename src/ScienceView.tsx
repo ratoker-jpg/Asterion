@@ -197,7 +197,7 @@ export function ScienceView() {
             <small className="utility-secondary" data-qa-science-queue-count>{scienceState.queue.length}/{SCIENCE_QUEUE_CAPACITY}</small>
           </header>
           {scienceState.queue.length > 0 ? scienceState.queue.map((task) => (
-            <ScienceQueueCard key={task.id} task={task} now={scienceQueueNow} paused={scienceQueuePaused} onCancel={() => setPendingCancellation(task)} />
+            <ScienceQueueCard key={task.id} task={task} payerName={task.planetId ? runtime.planetNames?.[task.planetId] : undefined} now={scienceQueueNow} paused={scienceQueuePaused} onCancel={() => setPendingCancellation(task)} />
           )) : <p className="utility-helper">Очередь свободна.</p>}
         </section>
       </aside>
@@ -231,7 +231,7 @@ export function ScienceView() {
           >
             <small>ПОДТВЕРЖДЕНИЕ ДЕЙСТВИЯ</small>
             <h3 id="science-cancel-confirm-title">Отменить исследование?</h3>
-            <p>Вы уверены, что хотите отменить исследование «{SCIENCE_CATALOG.find((science) => science.id === pendingCancellation.scienceId)?.name ?? 'Наука'}»? Случайные 60–80% сохранённой стоимости будут возвращены; остальное будет потеряно.</p>
+            <p>Вы уверены, что хотите отменить исследование «{SCIENCE_CATALOG.find((science) => science.id === pendingCancellation.scienceId)?.name ?? 'Наука'}»? Случайные 60–80% сохранённой стоимости будут возвращены{pendingCancellation.planetId && runtime.planetNames?.[pendingCancellation.planetId] ? <> на планету-плательщик «{runtime.planetNames[pendingCancellation.planetId]}»</> : null}; остальное будет потеряно.</p>
             <small className="utility-helper">Источник правила: <a href={SCIENCE_CANCEL_REFUND_SOURCE_URL} target="_blank" rel="noreferrer">Nemexia, 60–80%</a>.</small>
             <div className="resource-building-action-confirm-actions">
               <button ref={confirmYesRef} type="button" data-qa-action-confirm-yes data-qa-science-cancel-yes onClick={confirmCancellation}>ДА</button>
@@ -245,7 +245,7 @@ export function ScienceView() {
   );
 }
 
-function ScienceQueueCard({ task, now, paused, onCancel }: { task: ScienceState['queue'][number]; now: number; paused: boolean; onCancel: () => void }) {
+function ScienceQueueCard({ task, payerName, now, paused, onCancel }: { task: ScienceState['queue'][number]; payerName?: string; now: number; paused: boolean; onCancel: () => void }) {
   const science = SCIENCE_CATALOG.find((item) => item.id === task.scienceId);
   if (!science) return null;
   const duration = task.durationMs;
@@ -261,7 +261,7 @@ function ScienceQueueCard({ task, now, paused, onCancel }: { task: ScienceState[
       <img src={SCIENCE_ARTS[science.artSlug]} alt="" draggable={false} />
       <div>
         <strong className="utility-section-title">{science.name}</strong>
-        <span className="utility-secondary">Уровень {task.fromLevel} → {task.toLevel}</span>
+        <span className="utility-secondary">Уровень {task.fromLevel} → {task.toLevel}{payerName ? <> · <span data-qa-science-payer={task.planetId}>{payerName}</span></> : null}</span>
         <time
           className="utility-data-text"
           data-qa-science-remaining

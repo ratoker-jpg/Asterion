@@ -148,9 +148,21 @@ function hasRepairFixture(envelope, amount) {
     && defenses['planetary-shield'] === 0;
 }
 
+// After the harness writes its seed, the old page must not write the save again
+// before the reload commits (its per-tick autosave would restore the stale state).
+const FREEZE_SAVE_WRITES = `{
+  const writeSetItem = Storage.prototype.setItem;
+  Storage.prototype.setItem = function (key, value) {
+    if (this === window.localStorage && key === ${JSON.stringify(TEST_KEY)}) return;
+    return writeSetItem.call(this, key, value);
+  };
+}`;
+
 async function seedTestRuntime(win, changes = {}) {
-  // The running game saves every tick: write the seed and reload in one task so
-  // no autosave can land in between and overwrite it.
+  // The running game saves every tick, and location.reload() only *schedules* the
+  // navigation: a tick can still land before unload and write its stale state over
+  // the seed (seen on CI: the seeded finished Science task came back unapplied).
+  // After writing the seed the old page may no longer write the save key.
   const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
   const ok = await win.webContents.executeJavaScript(`(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
@@ -174,6 +186,7 @@ async function seedTestRuntime(win, changes = {}) {
     save.gas = resourceWallet.gas;
     planet.energy = ${changes.energy ?? 1_000_000};
     localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
+    ${FREEZE_SAVE_WRITES}
     window.location.reload();
     return true;
   })()`);
@@ -353,6 +366,7 @@ async function seedTestFleet(win, ships, reset = false) {
     }
     Object.assign(fleet.ships, ${JSON.stringify(ships)});
     localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
+    ${FREEZE_SAVE_WRITES}
     window.location.reload();
     return true;
   })()`);
@@ -613,6 +627,7 @@ async function runViewport(width, height) {
       if (!fleet) return false;
       fleet.commanders = { ...(fleet.commanders || {}), corsair: 1 };
       localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
+      ${FREEZE_SAVE_WRITES}
       return true;
     })()`);
     await reload(win, 'test');
@@ -627,6 +642,7 @@ async function runViewport(width, height) {
       fleet.commanders = { ...(fleet.commanders || {}), corsair: 0 };
       delete save.planets['helion-01'].fleet;
       localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
+      ${FREEZE_SAVE_WRITES}
       return true;
     })()`);
     await reload(win, 'test');
@@ -656,6 +672,8 @@ async function runViewport(width, height) {
     await seedTestRuntime(win, { buildings: { construction: 1, research: 1 }, scienceLevels: { 1: 0 }, scienceQueue: finishedScienceTask });
     await openScience(win);
     await waitFor(win, `document.querySelector('[data-qa-science-queue-count]')?.textContent === '0/3'`);
+    // The screen can show the completion one render before the autosave writes it.
+    await waitFor(win, `(() => { try { const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}'); return save?.science?.levels?.[1] === 1 && save?.science?.queue?.length === 0; } catch { return false; } })()`);
     const scienceOffline = await readEnvelope(win, TEST_KEY);
     if (scienceOffline.science.levels[1] !== 1 || scienceOffline.science.queue.length !== 0) throw new Error(`${label}: Science offline completion failed`);
     await reload(win, 'test');

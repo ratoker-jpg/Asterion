@@ -20,6 +20,7 @@ import { calculatePirateEliminationPopulationBudget } from '../domain/pirates/pr
 import { PIRATE_CATALOG } from '../domain/pirates/catalog.ts';
 import { getHangarCapacity } from '../domain/buildings/balance-v1.ts';
 import { pirateDebrisRewardMultiplier, pirateHangarFraction, reducePirateThreatAfterVictory } from '../domain/pirates/threat.ts';
+import { PIRATE_ELIMINATION_DEFEAT_MULTIPLIER, PIRATE_ELIMINATION_DRAW_MULTIPLIER } from '../domain/pirates/debris.ts';
 import {defaultPirateOwnerAdaptation,pirateAdaptiveFleetWeight,recordPirateAdaptiveOutcome} from '../domain/pirates/adaptive.ts';
 import type { PiratePopulationBudget } from '../domain/pirates/profile.ts';
 import { PIRATE_ELIMINATION_NO_TARGET_MESSAGE } from '../domain/pirates/encounter.ts';
@@ -409,7 +410,7 @@ export function dispatchPirateFlight(
       sentCombatPopulation: Math.round(populationReserved),
       historicalHangarCapacity,
       rewardMultiplier: pirateDebrisRewardMultiplier(Math.round(populationReserved), historicalHangarCapacity),
-      defeatMultiplier:0.5 as const,drawMultiplier:0.75 as const,
+      defeatMultiplier:PIRATE_ELIMINATION_DEFEAT_MULTIPLIER,drawMultiplier:PIRATE_ELIMINATION_DRAW_MULTIPLIER,
       adaptiveWeight,adaptiveQ:ownerAdaptation.q,
     } : {}),
     ...(reconMission ? { reconMission } : {}),

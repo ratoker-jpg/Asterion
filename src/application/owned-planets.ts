@@ -6,9 +6,8 @@ import { createDefaultSpaceportUpgradeState } from '../domain/buildings/spacepor
 import { createDefaultTradeState } from '../domain/buildings/trade.ts';
 import { createDefaultRepairWorkshopState } from '../domain/repair/workshop.ts';
 import { addDebris } from '../domain/flights/cargo.ts';
-import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
-import { creditResources } from '../domain/resources/credit.ts';
 import { discardScienceTasksForPlanet } from '../domain/science/runtime.ts';
+import { creditScienceRefundsToPayers } from './science-refunds.ts';
 import type { UniverseCoordinate } from '../domain/universe/types.ts';
 import { initializePlanetEnergy } from './energy.ts';
 import {
@@ -120,18 +119,19 @@ export function destroyOwnedPlanet(
   const currentPlanetId = state.currentPlanetId === planetId
     ? Object.keys(planets).sort()[0]
     : state.currentPlanetId;
-  const currentPlanet = planets[currentPlanetId];
-  let currentWallet = currentPlanet.resources ?? { metal: 0, minerals: 0, gas: 0 };
+  // The destroyed planet's own research is lost without refund. Survivors' tasks
+  // that lose a predecessor are canceled with the usual refund to their own payer.
   const scienceDestruction = discardScienceTasksForPlanet(state.science, planetId, now, rng);
-  if (currentPlanet && scienceDestruction.refundPercents.length > 0) {
-    const credit = creditResources(
-      { ...currentWallet, energy: 0 },
-      getStorageCapacities(currentPlanet.buildings),
-      scienceDestruction.refund,
-    );
-    currentWallet = { metal: credit.wallet.metal, minerals: credit.wallet.minerals, gas: credit.wallet.gas };
-    planets[currentPlanetId] = { ...currentPlanet, resources: currentWallet };
-  }
+  const rootWallet = currentPlanetId === state.currentPlanetId
+    ? { metal: state.metal, minerals: state.minerals, gas: state.gas }
+    : planets[currentPlanetId]!.resources ?? { metal: 0, minerals: 0, gas: 0 };
+  const refunded = creditScienceRefundsToPayers(
+    { ...state, currentPlanetId, planets, ...rootWallet },
+    scienceDestruction.taskRefunds,
+    currentPlanetId,
+  ).state;
+  Object.assign(planets, refunded.planets);
+  const currentWallet = getPlanetResources(refunded, currentPlanetId);
   const currentClock = byPlanetClock[currentPlanetId] ?? {
     lastReconciledAt: Math.max(0, Math.floor(now)),
     remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 },

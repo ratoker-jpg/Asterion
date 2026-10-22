@@ -139,6 +139,7 @@ import { generateWorld } from '../domain/world/generator.ts';
 import { createDefaultSunRaidState } from '../domain/sun-raid/rules.ts';
 import { migrateSunRaidState } from '../domain/sun-raid/repository.ts';
 import { isCombatFactionId } from '../domain/combat/factions.ts';
+import { inspectSavePayload, isSaveProblem, type SaveProblem } from '../domain/session/save-health.ts';
 
 /** Schema 24: save slots, `worldConfig`, the saved race is authoritative, Sun raid state. */
 export const WORLD_CONFIG_SCHEMA_VERSION = 24;
@@ -235,14 +236,25 @@ type StoredSave = {
 
 export type PersistenceWriteResult =
   | { ok: true }
-  | { ok: false; error: string };
+  | { ok: false; error: string; unreadableSave?: SaveProblem };
 
 export type PersistenceOptions = {
   mode?: RuntimeMode;
   storage?: StorageLike | null;
   now?: () => number;
   testTimeScale?: TestTimeScale;
+  /** Reads another key than the active runtime save (a slot checked from the menu). */
+  saveKey?: string;
 };
+
+/**
+ * Outcome of reading a save. A problem save never turns into a fresh campaign
+ * silently: the caller gets the problem and the initial state only as a
+ * placeholder it must not write back.
+ */
+export type SaveLoadResult =
+  | { status: 'loaded' | 'missing'; state: SaveState }
+  | { status: SaveProblem['status']; problem: SaveProblem; state: SaveState };
 
 function resolveStorage(storage?: StorageLike | null): StorageLike | null {
   if (storage !== undefined) return storage;
@@ -1307,404 +1319,428 @@ export function createInitialSaveState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, 
 }
 
 function readSavedState(options: PersistenceOptions = {}): SaveState {
+  return loadSavedState(options).state;
+}
+
+export function loadSavedState(options: PersistenceOptions = {}): SaveLoadResult {
   const mode = options.mode ?? ACTIVE_RUNTIME_MODE;
   const now = options.now ?? Date.now;
-  const testTimeScale = options.testTimeScale ?? resolveTestTimeScale();
   const timestamp = now();
   const initialState = createInitialState(mode, timestamp);
   const storage = resolveStorage(options.storage);
-  if (!storage) return initialState;
-
+  if (!storage) return { status: 'missing', state: initialState };
+  let raw: string | null;
   try {
-    const raw = storage.getItem(getRuntimeSaveKey(mode));
-    if (!raw) return initialState;
+    raw = storage.getItem(options.saveKey ?? getRuntimeSaveKey(mode));
+  } catch {
+    // Storage that cannot be read is not an empty campaign either.
+    const problem: SaveProblem = { status: 'corrupt', reason: 'Хранилище недоступно для чтения.' };
+    return { status: problem.status, problem, state: initialState };
+  }
+  const health = inspectSavePayload(raw, SAVE_SCHEMA_VERSION);
+  if (health.status === 'missing') return { status: 'missing', state: initialState };
+  if (isSaveProblem(health)) return { status: health.status, problem: health, state: initialState };
+  try {
+    return { status: 'loaded', state: migrateParsedSave(JSON.parse(raw!) as StoredSave, mode, timestamp, initialState, options) };
+  } catch (error) {
+    const problem: SaveProblem = {
+      status: 'corrupt',
+      reason: `Не удалось прочитать данные (${(error instanceof Error ? error.message : String(error)).slice(0, 120)}).`,
+    };
+    return { status: problem.status, problem, state: initialState };
+  }
+}
 
-    const parsed = JSON.parse(raw) as StoredSave;
-    const persistedPlanetEntries = Object.entries(parsed.planets ?? {}).filter(([, candidate]) => (
-      Boolean(candidate) && typeof candidate === 'object' && !Array.isArray(candidate)
-    ));
-    const savedCurrentPlanetId = typeof parsed.currentPlanetId === 'string' ? parsed.currentPlanetId.trim() : '';
-    const primaryPlanetId = parsed.planets?.['helion-01']
-      ? 'helion-01'
-      : persistedPlanetEntries.some(([id]) => id === savedCurrentPlanetId)
-        ? savedCurrentPlanetId
-        : persistedPlanetEntries.map(([id]) => id).sort()[0] ?? 'helion-01';
-    const savedHomeworld = parsed.planets?.[primaryPlanetId];
-    const savedHomeworldOverpopulation = migrateOverpopulationState(savedHomeworld?.overpopulation, timestamp);
-    const legacySolarStations = numberOr(savedHomeworld?.solarStations, numberOr(parsed.solarStations, 0));
-    const buildings = migrateBuildingLevels(savedHomeworld?.buildings, legacySolarStations);
-    const migratedSpaceportUpgrades = migrateSpaceportUpgradeState(savedHomeworld?.spaceportUpgrades);
-    const spaceportUpgrades = savedHomeworldOverpopulation
-      ? migratedSpaceportUpgrades
-      : reconcileSpaceportUpgradeState(migratedSpaceportUpgrades, timestamp).state;
-    const science = migrateScienceState(parsed.science, {
-      laboratoryLevel: buildings.research,
-      legacyPlanetId: savedCurrentPlanetId && parsed.planets?.[savedCurrentPlanetId]
-        ? savedCurrentPlanetId
-        : primaryPlanetId,
-      mode,
-      testTimeScale,
-      schemaVersion: numberOr(parsed.schemaVersion, 0),
-    });
-    const combat = migrateBattleHistory(parsed.combat, mode);
-    const operations = migrateOperationsState(parsed.operations, mode);
-    // The saved race is the source of truth (it used to be forced back to Астеры on every load).
-    const storedProfile = migratePlayerProfileState(parsed.profile);
-    const command = migrateCommandState(parsed.command, mode, {
-      playerId: storedProfile.playerId,
-      playerDisplayName: storedProfile.displayName,
-      now: timestamp,
-    });
-    const profile = syncPlayerProfileWithCommand(storedProfile, command);
-    const overpopulationReports = migrateOverpopulationEpisodeReports(
-      objectRecord(parsed.reports)?.overpopulationReports,
+function migrateParsedSave(
+  parsed: StoredSave,
+  mode: RuntimeMode,
+  timestamp: number,
+  initialState: SaveState,
+  options: PersistenceOptions,
+): SaveState {
+  const testTimeScale = options.testTimeScale ?? resolveTestTimeScale();
+  const persistedPlanetEntries = Object.entries(parsed.planets ?? {}).filter(([, candidate]) => (
+    Boolean(candidate) && typeof candidate === 'object' && !Array.isArray(candidate)
+  ));
+  const savedCurrentPlanetId = typeof parsed.currentPlanetId === 'string' ? parsed.currentPlanetId.trim() : '';
+  const primaryPlanetId = parsed.planets?.['helion-01']
+    ? 'helion-01'
+    : persistedPlanetEntries.some(([id]) => id === savedCurrentPlanetId)
+      ? savedCurrentPlanetId
+      : persistedPlanetEntries.map(([id]) => id).sort()[0] ?? 'helion-01';
+  const savedHomeworld = parsed.planets?.[primaryPlanetId];
+  const savedHomeworldOverpopulation = migrateOverpopulationState(savedHomeworld?.overpopulation, timestamp);
+  const legacySolarStations = numberOr(savedHomeworld?.solarStations, numberOr(parsed.solarStations, 0));
+  const buildings = migrateBuildingLevels(savedHomeworld?.buildings, legacySolarStations);
+  const migratedSpaceportUpgrades = migrateSpaceportUpgradeState(savedHomeworld?.spaceportUpgrades);
+  const spaceportUpgrades = savedHomeworldOverpopulation
+    ? migratedSpaceportUpgrades
+    : reconcileSpaceportUpgradeState(migratedSpaceportUpgrades, timestamp).state;
+  const science = migrateScienceState(parsed.science, {
+    laboratoryLevel: buildings.research,
+    legacyPlanetId: savedCurrentPlanetId && parsed.planets?.[savedCurrentPlanetId]
+      ? savedCurrentPlanetId
+      : primaryPlanetId,
+    mode,
+    testTimeScale,
+    schemaVersion: numberOr(parsed.schemaVersion, 0),
+  });
+  const combat = migrateBattleHistory(parsed.combat, mode);
+  const operations = migrateOperationsState(parsed.operations, mode);
+  // The saved race is the source of truth (it used to be forced back to Астеры on every load).
+  const storedProfile = migratePlayerProfileState(parsed.profile);
+  const command = migrateCommandState(parsed.command, mode, {
+    playerId: storedProfile.playerId,
+    playerDisplayName: storedProfile.displayName,
+    now: timestamp,
+  });
+  const profile = syncPlayerProfileWithCommand(storedProfile, command);
+  const overpopulationReports = migrateOverpopulationEpisodeReports(
+    objectRecord(parsed.reports)?.overpopulationReports,
+  );
+  const recyclerArrivalReports = migrateRecyclerArrivalReports(
+    objectRecord(parsed.reports)?.recyclerArrivalReports,
+  );
+  const gasExtractionArrivalReports = migrateGasExtractionArrivalReports(
+    objectRecord(parsed.reports)?.gasExtractionArrivalReports,
+  );
+  const pirate = normalizePirateState(parsed.pirate);
+  const migratedFlights = migrateFlightState(parsed.flights, mode);
+  const reportIds = buildReportsFeed(
+    combat.reports,
+    operations,
+    command,
+    undefined,
+    overpopulationReports,
+    recyclerArrivalReports,
+    gasExtractionArrivalReports,
+    pirate.reconReports,
+    migratedFlights.records,
+  ).map((item) => item.id);
+  const migratedSavedFleet = removeSolarSatellitesFromFleet(
+    resolveSavedFleetState(savedHomeworld?.fleet, profile.factionId),
+  );
+  const persistedSatelliteCount = Math.max(
+    0,
+    Math.floor(numberOr(savedHomeworld?.solarSatellites, migratedSavedFleet.count)),
+  );
+  const savedFleet = savedHomeworldOverpopulation
+    ? migratedSavedFleet.fleet
+    : normalizeFleetStateForCapacity(
+      migratedSavedFleet.fleet,
+      buildings.hangar,
+      profile.factionId,
     );
-    const recyclerArrivalReports = migrateRecyclerArrivalReports(
-      objectRecord(parsed.reports)?.recyclerArrivalReports,
+  const savedDefense = migrateDefenseState(savedHomeworld?.defense);
+  const migratedFleetProduction = migrateFleetProductionState(savedHomeworld?.fleetProduction, {
+    factionId: profile.factionId,
+    fleet: savedFleet,
+    defense: savedDefense,
+    hangarLevel: buildings.hangar,
+    solarSatellites: persistedSatelliteCount,
+    enforceCapacity: !savedHomeworldOverpopulation,
+  });
+  const reconciledFleetProduction = savedHomeworldOverpopulation
+    ? { changed: false, state: migratedFleetProduction, fleet: savedFleet, defense: savedDefense, completed: [] }
+    : reconcileFleetProductionState(
+      migratedFleetProduction,
+      savedFleet,
+      savedDefense,
+      profile.factionId,
+      timestamp,
     );
-    const gasExtractionArrivalReports = migrateGasExtractionArrivalReports(
-      objectRecord(parsed.reports)?.gasExtractionArrivalReports,
+  const completedSatellites = reconciledFleetProduction.completed
+    .filter((item) => item.itemId === 'solar-satellite')
+    .reduce((total, item) => total + Math.max(0, Math.floor(item.quantity)), 0);
+  const savedSatelliteCount = Math.max(
+    0,
+    Math.floor(persistedSatelliteCount + completedSatellites),
+  );
+  const homeworldStorageCapacities = getStorageCapacities(buildings);
+  const legacyHomeworldResources: PlanetResources = primaryPlanetId === 'helion-01' ? {
+    metal: normalizeStoredResource(parsed.metal, initialState.metal, homeworldStorageCapacities.metal),
+    minerals: normalizeStoredResource(parsed.minerals, initialState.minerals, homeworldStorageCapacities.minerals),
+    gas: normalizeStoredResource(parsed.gas, initialState.gas, homeworldStorageCapacities.gas),
+  } : { metal: 500, minerals: 500, gas: 500 };
+  const hasRootHomeworldWallet = parsed.metal !== undefined || parsed.minerals !== undefined || parsed.gas !== undefined;
+  const hasPersistedPlanetWallet = persistedPlanetEntries.some(([, candidate]) => {
+    const resources = (candidate as StoredPlanetRuntime).resources;
+    return Boolean(resources && typeof resources === 'object' && !Array.isArray(resources));
+  });
+  const legacyWalletCanSeedHomeworld = primaryPlanetId === 'helion-01'
+    && numberOr(parsed.schemaVersion, 0) < CURRENT_PLANET_ROOT_WALLET_SCHEMA_VERSION
+    && !hasPersistedPlanetWallet
+    && savedHomeworld?.resources === undefined
+    && hasRootHomeworldWallet;
+  const initialHomeworldResources = initialState.planets['helion-01'].resources ?? {
+    metal: initialState.metal,
+    minerals: initialState.minerals,
+    gas: initialState.gas,
+  };
+  const homeworldResources = normalizePlanetResources(
+    legacyWalletCanSeedHomeworld ? legacyHomeworldResources : savedHomeworld?.resources,
+    legacyWalletCanSeedHomeworld ? legacyHomeworldResources : initialHomeworldResources,
+    homeworldStorageCapacities,
+  );
+  const homeworldBase: PlanetRuntime = {
+    name: typeof savedHomeworld?.name === 'string' && savedHomeworld.name.trim()
+      ? savedHomeworld.name.trim().slice(0, 28)
+      : primaryPlanetId === 'helion-01' ? DEFAULT_PLANET_NAME : `Колония ${primaryPlanetId}`,
+    skin: typeof savedHomeworld?.skin === 'string' && KNOWN_PLANET_SKINS.has(savedHomeworld.skin)
+      ? savedHomeworld.skin
+      : typeof parsed.planetSkin === 'string' && KNOWN_PLANET_SKINS.has(parsed.planetSkin)
+        ? parsed.planetSkin
+        : initialState.planets['helion-01'].skin,
+    fleet: savedHomeworldOverpopulation
+      ? reconciledFleetProduction.fleet
+      : normalizeFleetStateForCapacity(reconciledFleetProduction.fleet, buildings.hangar, profile.factionId),
+    defense: reconciledFleetProduction.defense,
+    fleetProduction: reconciledFleetProduction.state,
+    repair: mode === 'test' && savedHomeworld?.repair === undefined
+      ? createTestRepairWorkshopState()
+      : migrateRepairWorkshopState(savedHomeworld?.repair),
+    energy: numberOr(savedHomeworld?.energy, numberOr(parsed.energy, initialState.planets['helion-01'].energy)),
+    energyLedger: savedHomeworld?.energyLedger && typeof savedHomeworld.energyLedger === 'object'
+      ? savedHomeworld.energyLedger as EnergyLedger
+      : undefined,
+    producedEnergy: optionalNumber(savedHomeworld?.producedEnergy),
+    consumedEnergy: optionalNumber(savedHomeworld?.consumedEnergy),
+    availableEnergy: optionalNumber(savedHomeworld?.availableEnergy),
+    energySources: Array.isArray(savedHomeworld?.energySources)
+      ? savedHomeworld.energySources as EnergyLedger['sources']
+      : undefined,
+    energyExpenseAttribution: savedHomeworld?.energyExpenseAttribution && typeof savedHomeworld.energyExpenseAttribution === 'object'
+      ? savedHomeworld.energyExpenseAttribution as Partial<Record<string, number>>
+      : undefined,
+    solarSatellites: savedSatelliteCount,
+    ...(savedHomeworldOverpopulation ? { overpopulation: savedHomeworldOverpopulation } : {}),
+    universeGalaxy: numberOr(savedHomeworld?.universeGalaxy, 1),
+    universeSystem: numberOr(savedHomeworld?.universeSystem, 1),
+    universePosition: numberOr(savedHomeworld?.universePosition, 1),
+    buildings,
+    productionBots: migrateProductionBotAssignment(savedHomeworld?.productionBots, buildings),
+    recycling: migrateRecyclingState(
+      savedHomeworld?.recycling,
+      buildings.recycling,
+      timestamp,
+      { mode, fixture: resolveRecyclingFixture(mode) },
+    ),
+    trade: migrateTradeState(savedHomeworld?.trade, buildings['trade-center'], timestamp),
+    spaceportUpgrades,
+    stability: numberOr(savedHomeworld?.stability, initialState.planets['helion-01'].stability),
+    resources: homeworldResources,
+  };
+  const homeworld = syncPlanetEnergySources(homeworldBase, science.levels);
+  const savedQueue = parsed.queues?.[primaryPlanetId] ?? (primaryPlanetId === 'helion-01' ? parsed.queue : null) ?? null;
+  const queue = migrateBuildingQueue(savedQueue, primaryPlanetId, homeworld.buildings, science.levels);
+  const storageCapacities = getStorageCapacities(homeworld.buildings);
+
+  const planets: PlanetStateRecord = { [primaryPlanetId]: homeworld };
+  for (const [planetId, rawValue] of Object.entries(parsed.planets ?? {})) {
+    if (planetId === primaryPlanetId || !rawValue || typeof rawValue !== 'object') continue;
+    const raw = rawValue as StoredPlanetRuntime;
+    const planetBuildings = migrateBuildingLevels(raw.buildings);
+    const migratedPlanetFleet = removeSolarSatellitesFromFleet(
+      resolveSavedFleetState(raw.fleet, profile.factionId),
     );
-    const pirate = normalizePirateState(parsed.pirate);
-    const migratedFlights = migrateFlightState(parsed.flights, mode);
-    const reportIds = buildReportsFeed(
-      combat.reports,
-      operations,
-      command,
-      undefined,
-      overpopulationReports,
-      recyclerArrivalReports,
-      gasExtractionArrivalReports,
-      pirate.reconReports,
-      migratedFlights.records,
-    ).map((item) => item.id);
-    const migratedSavedFleet = removeSolarSatellitesFromFleet(
-      resolveSavedFleetState(savedHomeworld?.fleet, profile.factionId),
-    );
-    const persistedSatelliteCount = Math.max(
+    const planetOverpopulation = migrateOverpopulationState(raw.overpopulation, timestamp);
+    const planetSatelliteCount = Math.max(
       0,
-      Math.floor(numberOr(savedHomeworld?.solarSatellites, migratedSavedFleet.count)),
+      Math.floor(numberOr(raw.solarSatellites, migratedPlanetFleet.count)),
     );
-    const savedFleet = savedHomeworldOverpopulation
-      ? migratedSavedFleet.fleet
+    const planetFleet = planetOverpopulation
+      ? migratedPlanetFleet.fleet
       : normalizeFleetStateForCapacity(
-        migratedSavedFleet.fleet,
-        buildings.hangar,
+        migratedPlanetFleet.fleet,
+        planetBuildings.hangar,
         profile.factionId,
       );
-    const savedDefense = migrateDefenseState(savedHomeworld?.defense);
-    const migratedFleetProduction = migrateFleetProductionState(savedHomeworld?.fleetProduction, {
+    const planetDefense = migrateDefenseState(raw.defense);
+    const migratedPlanetProduction = migrateFleetProductionState(raw.fleetProduction, {
       factionId: profile.factionId,
-      fleet: savedFleet,
-      defense: savedDefense,
-      hangarLevel: buildings.hangar,
-      solarSatellites: persistedSatelliteCount,
-      enforceCapacity: !savedHomeworldOverpopulation,
+      fleet: planetFleet,
+      defense: planetDefense,
+      hangarLevel: planetBuildings.hangar,
+      solarSatellites: planetSatelliteCount,
+      enforceCapacity: !planetOverpopulation,
     });
-    const reconciledFleetProduction = savedHomeworldOverpopulation
-      ? { changed: false, state: migratedFleetProduction, fleet: savedFleet, defense: savedDefense, completed: [] }
+    const planetProduction = planetOverpopulation
+      ? migratedPlanetProduction
       : reconcileFleetProductionState(
-        migratedFleetProduction,
-        savedFleet,
-        savedDefense,
+        migratedPlanetProduction,
+        planetFleet,
+        planetDefense,
         profile.factionId,
         timestamp,
-      );
-    const completedSatellites = reconciledFleetProduction.completed
-      .filter((item) => item.itemId === 'solar-satellite')
-      .reduce((total, item) => total + Math.max(0, Math.floor(item.quantity)), 0);
-    const savedSatelliteCount = Math.max(
-      0,
-      Math.floor(persistedSatelliteCount + completedSatellites),
-    );
-    const homeworldStorageCapacities = getStorageCapacities(buildings);
-    const legacyHomeworldResources: PlanetResources = primaryPlanetId === 'helion-01' ? {
-      metal: normalizeStoredResource(parsed.metal, initialState.metal, homeworldStorageCapacities.metal),
-      minerals: normalizeStoredResource(parsed.minerals, initialState.minerals, homeworldStorageCapacities.minerals),
-      gas: normalizeStoredResource(parsed.gas, initialState.gas, homeworldStorageCapacities.gas),
-    } : { metal: 500, minerals: 500, gas: 500 };
-    const hasRootHomeworldWallet = parsed.metal !== undefined || parsed.minerals !== undefined || parsed.gas !== undefined;
-    const hasPersistedPlanetWallet = persistedPlanetEntries.some(([, candidate]) => {
-      const resources = (candidate as StoredPlanetRuntime).resources;
-      return Boolean(resources && typeof resources === 'object' && !Array.isArray(resources));
-    });
-    const legacyWalletCanSeedHomeworld = primaryPlanetId === 'helion-01'
-      && numberOr(parsed.schemaVersion, 0) < CURRENT_PLANET_ROOT_WALLET_SCHEMA_VERSION
-      && !hasPersistedPlanetWallet
-      && savedHomeworld?.resources === undefined
-      && hasRootHomeworldWallet;
-    const initialHomeworldResources = initialState.planets['helion-01'].resources ?? {
-      metal: initialState.metal,
-      minerals: initialState.minerals,
-      gas: initialState.gas,
-    };
-    const homeworldResources = normalizePlanetResources(
-      legacyWalletCanSeedHomeworld ? legacyHomeworldResources : savedHomeworld?.resources,
-      legacyWalletCanSeedHomeworld ? legacyHomeworldResources : initialHomeworldResources,
-      homeworldStorageCapacities,
-    );
-    const homeworldBase: PlanetRuntime = {
-      name: typeof savedHomeworld?.name === 'string' && savedHomeworld.name.trim()
-        ? savedHomeworld.name.trim().slice(0, 28)
-        : primaryPlanetId === 'helion-01' ? DEFAULT_PLANET_NAME : `Колония ${primaryPlanetId}`,
-      skin: typeof savedHomeworld?.skin === 'string' && KNOWN_PLANET_SKINS.has(savedHomeworld.skin)
-        ? savedHomeworld.skin
-        : typeof parsed.planetSkin === 'string' && KNOWN_PLANET_SKINS.has(parsed.planetSkin)
-          ? parsed.planetSkin
-          : initialState.planets['helion-01'].skin,
-      fleet: savedHomeworldOverpopulation
-        ? reconciledFleetProduction.fleet
-        : normalizeFleetStateForCapacity(reconciledFleetProduction.fleet, buildings.hangar, profile.factionId),
-      defense: reconciledFleetProduction.defense,
-      fleetProduction: reconciledFleetProduction.state,
-      repair: mode === 'test' && savedHomeworld?.repair === undefined
-        ? createTestRepairWorkshopState()
-        : migrateRepairWorkshopState(savedHomeworld?.repair),
-      energy: numberOr(savedHomeworld?.energy, numberOr(parsed.energy, initialState.planets['helion-01'].energy)),
-      energyLedger: savedHomeworld?.energyLedger && typeof savedHomeworld.energyLedger === 'object'
-        ? savedHomeworld.energyLedger as EnergyLedger
+      ).state;
+    const planetBase: PlanetRuntime = {
+      name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim().slice(0, 28) : `Колония ${planetId}`,
+      skin: typeof raw.skin === 'string' && KNOWN_PLANET_SKINS.has(raw.skin) ? raw.skin : 'colonized',
+      fleet: planetFleet,
+      defense: planetDefense,
+      fleetProduction: planetProduction,
+      repair: mode === 'test' && raw.repair === undefined ? createTestRepairWorkshopState() : migrateRepairWorkshopState(raw.repair),
+      energy: numberOr(raw.energy, 0),
+      energyLedger: raw.energyLedger && typeof raw.energyLedger === 'object' ? raw.energyLedger as EnergyLedger : undefined,
+      producedEnergy: optionalNumber(raw.producedEnergy),
+      consumedEnergy: optionalNumber(raw.consumedEnergy),
+      availableEnergy: optionalNumber(raw.availableEnergy),
+      energySources: Array.isArray(raw.energySources) ? raw.energySources as EnergyLedger['sources'] : undefined,
+      energyExpenseAttribution: raw.energyExpenseAttribution && typeof raw.energyExpenseAttribution === 'object'
+        ? raw.energyExpenseAttribution as Partial<Record<string, number>>
         : undefined,
-      producedEnergy: optionalNumber(savedHomeworld?.producedEnergy),
-      consumedEnergy: optionalNumber(savedHomeworld?.consumedEnergy),
-      availableEnergy: optionalNumber(savedHomeworld?.availableEnergy),
-      energySources: Array.isArray(savedHomeworld?.energySources)
-        ? savedHomeworld.energySources as EnergyLedger['sources']
-        : undefined,
-      energyExpenseAttribution: savedHomeworld?.energyExpenseAttribution && typeof savedHomeworld.energyExpenseAttribution === 'object'
-        ? savedHomeworld.energyExpenseAttribution as Partial<Record<string, number>>
-        : undefined,
-      solarSatellites: savedSatelliteCount,
-      ...(savedHomeworldOverpopulation ? { overpopulation: savedHomeworldOverpopulation } : {}),
-      universeGalaxy: numberOr(savedHomeworld?.universeGalaxy, 1),
-      universeSystem: numberOr(savedHomeworld?.universeSystem, 1),
-      universePosition: numberOr(savedHomeworld?.universePosition, 1),
-      buildings,
-      productionBots: migrateProductionBotAssignment(savedHomeworld?.productionBots, buildings),
+      solarSatellites: planetSatelliteCount,
+      ...(planetOverpopulation ? { overpopulation: planetOverpopulation } : {}),
+      universeGalaxy: numberOr(raw.universeGalaxy, 1),
+      universeSystem: numberOr(raw.universeSystem, 1),
+      universePosition: numberOr(raw.universePosition, 1),
+      buildings: planetBuildings,
+      productionBots: migrateProductionBotAssignment(raw.productionBots, planetBuildings),
       recycling: migrateRecyclingState(
-        savedHomeworld?.recycling,
-        buildings.recycling,
+        raw.recycling,
+        planetBuildings.recycling,
         timestamp,
         { mode, fixture: resolveRecyclingFixture(mode) },
       ),
-      trade: migrateTradeState(savedHomeworld?.trade, buildings['trade-center'], timestamp),
-      spaceportUpgrades,
-      stability: numberOr(savedHomeworld?.stability, initialState.planets['helion-01'].stability),
-      resources: homeworldResources,
+      trade: migrateTradeState(raw.trade, planetBuildings['trade-center'], timestamp),
+      spaceportUpgrades: planetOverpopulation
+        ? migrateSpaceportUpgradeState(raw.spaceportUpgrades)
+        : reconcileSpaceportUpgradeState(migrateSpaceportUpgradeState(raw.spaceportUpgrades), timestamp).state,
+      stability: numberOr(raw.stability, 100),
+      resources: normalizePlanetResources(raw.resources, { metal: 500, minerals: 500, gas: 500 }, getStorageCapacities(planetBuildings)),
     };
-    const homeworld = syncPlanetEnergySources(homeworldBase, science.levels);
-    const savedQueue = parsed.queues?.[primaryPlanetId] ?? (primaryPlanetId === 'helion-01' ? parsed.queue : null) ?? null;
-    const queue = migrateBuildingQueue(savedQueue, primaryPlanetId, homeworld.buildings, science.levels);
-    const storageCapacities = getStorageCapacities(homeworld.buildings);
+    planets[planetId] = syncPlanetEnergySources(planetBase, science.levels);
+  }
 
-    const planets: PlanetStateRecord = { [primaryPlanetId]: homeworld };
-    for (const [planetId, rawValue] of Object.entries(parsed.planets ?? {})) {
-      if (planetId === primaryPlanetId || !rawValue || typeof rawValue !== 'object') continue;
-      const raw = rawValue as StoredPlanetRuntime;
-      const planetBuildings = migrateBuildingLevels(raw.buildings);
-      const migratedPlanetFleet = removeSolarSatellitesFromFleet(
-        resolveSavedFleetState(raw.fleet, profile.factionId),
-      );
-      const planetOverpopulation = migrateOverpopulationState(raw.overpopulation, timestamp);
-      const planetSatelliteCount = Math.max(
-        0,
-        Math.floor(numberOr(raw.solarSatellites, migratedPlanetFleet.count)),
-      );
-      const planetFleet = planetOverpopulation
-        ? migratedPlanetFleet.fleet
-        : normalizeFleetStateForCapacity(
-          migratedPlanetFleet.fleet,
-          planetBuildings.hangar,
-          profile.factionId,
-        );
-      const planetDefense = migrateDefenseState(raw.defense);
-      const migratedPlanetProduction = migrateFleetProductionState(raw.fleetProduction, {
-        factionId: profile.factionId,
-        fleet: planetFleet,
-        defense: planetDefense,
-        hangarLevel: planetBuildings.hangar,
-        solarSatellites: planetSatelliteCount,
-        enforceCapacity: !planetOverpopulation,
-      });
-      const planetProduction = planetOverpopulation
-        ? migratedPlanetProduction
-        : reconcileFleetProductionState(
-          migratedPlanetProduction,
-          planetFleet,
-          planetDefense,
-          profile.factionId,
-          timestamp,
-        ).state;
-      const planetBase: PlanetRuntime = {
-        name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim().slice(0, 28) : `Колония ${planetId}`,
-        skin: typeof raw.skin === 'string' && KNOWN_PLANET_SKINS.has(raw.skin) ? raw.skin : 'colonized',
-        fleet: planetFleet,
-        defense: planetDefense,
-        fleetProduction: planetProduction,
-        repair: mode === 'test' && raw.repair === undefined ? createTestRepairWorkshopState() : migrateRepairWorkshopState(raw.repair),
-        energy: numberOr(raw.energy, 0),
-        energyLedger: raw.energyLedger && typeof raw.energyLedger === 'object' ? raw.energyLedger as EnergyLedger : undefined,
-        producedEnergy: optionalNumber(raw.producedEnergy),
-        consumedEnergy: optionalNumber(raw.consumedEnergy),
-        availableEnergy: optionalNumber(raw.availableEnergy),
-        energySources: Array.isArray(raw.energySources) ? raw.energySources as EnergyLedger['sources'] : undefined,
-        energyExpenseAttribution: raw.energyExpenseAttribution && typeof raw.energyExpenseAttribution === 'object'
-          ? raw.energyExpenseAttribution as Partial<Record<string, number>>
-          : undefined,
-        solarSatellites: planetSatelliteCount,
-        ...(planetOverpopulation ? { overpopulation: planetOverpopulation } : {}),
-        universeGalaxy: numberOr(raw.universeGalaxy, 1),
-        universeSystem: numberOr(raw.universeSystem, 1),
-        universePosition: numberOr(raw.universePosition, 1),
-        buildings: planetBuildings,
-        productionBots: migrateProductionBotAssignment(raw.productionBots, planetBuildings),
-        recycling: migrateRecyclingState(
-          raw.recycling,
-          planetBuildings.recycling,
-          timestamp,
-          { mode, fixture: resolveRecyclingFixture(mode) },
-        ),
-        trade: migrateTradeState(raw.trade, planetBuildings['trade-center'], timestamp),
-        spaceportUpgrades: planetOverpopulation
-          ? migrateSpaceportUpgradeState(raw.spaceportUpgrades)
-          : reconcileSpaceportUpgradeState(migrateSpaceportUpgradeState(raw.spaceportUpgrades), timestamp).state,
-        stability: numberOr(raw.stability, 100),
-        resources: normalizePlanetResources(raw.resources, { metal: 500, minerals: 500, gas: 500 }, getStorageCapacities(planetBuildings)),
-      };
-      planets[planetId] = syncPlanetEnergySources(planetBase, science.levels);
-    }
+  const queues: PlanetQueueRecord = { [primaryPlanetId]: queue };
+  for (const planetId of Object.keys(planets)) {
+    if (planetId === primaryPlanetId) continue;
+    const planet = planets[planetId];
+    queues[planetId] = migrateBuildingQueue(parsed.queues?.[planetId], planetId, planet.buildings, science.levels);
+  }
 
-    const queues: PlanetQueueRecord = { [primaryPlanetId]: queue };
-    for (const planetId of Object.keys(planets)) {
-      if (planetId === primaryPlanetId) continue;
-      const planet = planets[planetId];
-      queues[planetId] = migrateBuildingQueue(parsed.queues?.[planetId], planetId, planet.buildings, science.levels);
-    }
-
-    const currentPlanetId = savedCurrentPlanetId && planets[savedCurrentPlanetId]
-      ? savedCurrentPlanetId
-      : primaryPlanetId;
-    const alliedPlanets = migrateAlliedPlanets(parsed.alliedPlanets, mode, timestamp, science.levels);
-    const rawEspionage = objectRecord(parsed.espionage);
-    // A canonical `targets` object is authoritative even when it is empty.
-    // Inspect the persisted envelope before migration because migration also
-    // exposes legacy `bot01Planets` through the canonical `targets` field.
-    const hasCanonicalTargetRegistry = Boolean(objectRecord(rawEspionage?.targets));
-    const hasLegacyBotRegistry = Boolean(objectRecord(rawEspionage?.bot01Planets));
-    const migratedEspionage = migrateEspionageState(parsed.espionage, timestamp);
-    const defaultTestEspionage = createDefaultTestEspionageState(timestamp, { botFleet: 'seeded' });
-    const savedTargets = Object.values(migratedEspionage.targets ?? {});
-    const savedBotPlanets = savedTargets.filter((planet) => planet.ownerId === UNIVERSE_NPC_OWNER_ID);
-    const legacyBotFixtures = savedBotPlanets.some((planet) => {
-      const population = planet.population as unknown as Record<string, unknown> | undefined;
-      return !population || population.total === undefined || population.civilian !== undefined;
-    });
-    const hasCurrentBotProfile = Boolean(migratedEspionage.bot01Profile)
-      && !legacyBotFixtures;
-    const testTargets = defaultTestEspionage.targets ?? defaultTestEspionage.bot01Planets ?? {};
-    const espionage = mode === 'test'
-      ? (hasCanonicalTargetRegistry
-        ? {
-          ...migratedEspionage,
-          targets: migratedEspionage.targets ?? {},
-          // Keep the old alias synchronized without allowing it to resurrect
-          // targets that were removed from the canonical registry.
-          bot01Planets: (migratedEspionage.targets ?? {}) as NonNullable<typeof migratedEspionage.bot01Planets>,
-        }
-        : (hasCurrentBotProfile && hasLegacyBotRegistry)
-        ? migratedEspionage
-        : {
-          ...migratedEspionage,
-          bot01Profile: defaultTestEspionage.bot01Profile,
-          targets: { ...(migratedEspionage.targets ?? {}), ...testTargets },
-          bot01Planets: testTargets,
-        })
+  const currentPlanetId = savedCurrentPlanetId && planets[savedCurrentPlanetId]
+    ? savedCurrentPlanetId
+    : primaryPlanetId;
+  const alliedPlanets = migrateAlliedPlanets(parsed.alliedPlanets, mode, timestamp, science.levels);
+  const rawEspionage = objectRecord(parsed.espionage);
+  // A canonical `targets` object is authoritative even when it is empty.
+  // Inspect the persisted envelope before migration because migration also
+  // exposes legacy `bot01Planets` through the canonical `targets` field.
+  const hasCanonicalTargetRegistry = Boolean(objectRecord(rawEspionage?.targets));
+  const hasLegacyBotRegistry = Boolean(objectRecord(rawEspionage?.bot01Planets));
+  const migratedEspionage = migrateEspionageState(parsed.espionage, timestamp);
+  const defaultTestEspionage = createDefaultTestEspionageState(timestamp, { botFleet: 'seeded' });
+  const savedTargets = Object.values(migratedEspionage.targets ?? {});
+  const savedBotPlanets = savedTargets.filter((planet) => planet.ownerId === UNIVERSE_NPC_OWNER_ID);
+  const legacyBotFixtures = savedBotPlanets.some((planet) => {
+    const population = planet.population as unknown as Record<string, unknown> | undefined;
+    return !population || population.total === undefined || population.civilian !== undefined;
+  });
+  const hasCurrentBotProfile = Boolean(migratedEspionage.bot01Profile)
+    && !legacyBotFixtures;
+  const testTargets = defaultTestEspionage.targets ?? defaultTestEspionage.bot01Planets ?? {};
+  const espionage = mode === 'test'
+    ? (hasCanonicalTargetRegistry
+      ? {
+        ...migratedEspionage,
+        targets: migratedEspionage.targets ?? {},
+        // Keep the old alias synchronized without allowing it to resurrect
+        // targets that were removed from the canonical registry.
+        bot01Planets: (migratedEspionage.targets ?? {}) as NonNullable<typeof migratedEspionage.bot01Planets>,
+      }
+      : (hasCurrentBotProfile && hasLegacyBotRegistry)
+      ? migratedEspionage
       : {
         ...migratedEspionage,
-        targets: Object.fromEntries(Object.entries(migratedEspionage.targets ?? {}).filter(([, target]) => target.ownerId !== UNIVERSE_NPC_OWNER_ID)),
-        bot01Planets: undefined,
-        bot01Profile: undefined,
-        bot01IncomingScenario: undefined,
-      };
-
-    const asteroidSimulation = migrateAsteroidSimulation(
-      parsed.asteroidSimulation,
-      timestamp,
-      numberOr(parsed.schemaVersion, 0) < ASTEROID_GAS_RATE_MIGRATION_SCHEMA_VERSION,
-    );
-    const activeAsteroidSpawnIndices = new Set(asteroidSimulation.asteroids.map((asteroid) => asteroid.spawnIndex));
-    const ownerUpgradeLevels = migrateSpaceportUpgradeState({ shipLevels: parsed.shipUpgradeLevels }).shipLevels;
-    for (const planet of Object.values(planets)) {
-      for (const [id, level] of Object.entries(planet.spaceportUpgrades.shipLevels)) {
-        ownerUpgradeLevels[id] = Math.max(ownerUpgradeLevels[id] ?? 0, Math.max(0, Math.floor(level)));
-      }
-    }
-    for (const [planetId, planet] of Object.entries(planets)) {
-      planets[planetId] = {
-        ...planet,
-        spaceportUpgrades: { ...planet.spaceportUpgrades, shipLevels: {} },
-      };
-    }
-    const currentWallet = planets[currentPlanetId]?.resources ?? homeworldResources;
-    // Legacy migrations cannot reconstruct destroyed hangars. Seed the owner
-    // ledger from every *currently accessible* completed hangar level only.
-    const historicHangar = Math.max(
-      pirate.ownerMaxHangarLevel?.[profile.playerId] ?? 0,
-      ...Object.values(planets).map((planet) =>
-        Number.isSafeInteger(planet.buildings.hangar) ? planet.buildings.hangar : 0),
-    );
-    const migratedPirate = {
-      ...pirate,
-      raidProcessedAt: pirate.raidProcessedAt ?? timestamp,
-      ownerMaxHangarLevel: {
-        ...pirate.ownerMaxHangarLevel,
-        [profile.playerId]: historicHangar,
-      },
-      ownerThreats: {
-        ...pirate.ownerThreats,
-        [profile.playerId]: pirate.ownerThreats?.[profile.playerId] ?? {
-          version: 1 as const, ageHours: 0, integratedAt: timestamp,
-        },
-      },
+        bot01Profile: defaultTestEspionage.bot01Profile,
+        targets: { ...(migratedEspionage.targets ?? {}), ...testTargets },
+        bot01Planets: testTargets,
+      })
+    : {
+      ...migratedEspionage,
+      targets: Object.fromEntries(Object.entries(migratedEspionage.targets ?? {}).filter(([, target]) => target.ownerId !== UNIVERSE_NPC_OWNER_ID)),
+      bot01Planets: undefined,
+      bot01Profile: undefined,
+      bot01IncomingScenario: undefined,
     };
 
-    return {
-      schemaVersion: SAVE_SCHEMA_VERSION,
-      metal: currentWallet.metal,
-      minerals: currentWallet.minerals,
-      gas: currentWallet.gas,
-      currentPlanetId,
-      planets,
-      queues,
-      shipUpgradeLevels: ownerUpgradeLevels,
-      rating: migrateRatingPrototypeState(parsed.rating),
-      combatPriority: migrateCombatPriority(parsed.combatPriority),
-      combat,
-      combatSimulator: migrateSimulatorState(parsed.combatSimulator),
-      operations,
-      command,
-      profile,
-      reports: {
-        ...migrateReportsState(parsed.reports, reportIds),
-        ...(overpopulationReports.length > 0 ? { overpopulationReports } : {}),
-        ...(recyclerArrivalReports.length > 0 ? { recyclerArrivalReports } : {}),
-        ...(gasExtractionArrivalReports.length > 0 ? { gasExtractionArrivalReports } : {}),
-      },
-      science,
-      resourceClock: migrateResourceClock(parsed.resourceClock, timestamp, Object.keys(planets), currentPlanetId),
-      flights: migratedFlights,
-      exploration: migrateExplorationState(parsed.exploration),
-      pirate: migratedPirate,
-      asteroidSimulation,
-      asteroidDebrisBySpawnIndex: migrateAsteroidDebris(parsed.asteroidDebrisBySpawnIndex, activeAsteroidSpawnIndices),
-      espionage,
-      alliedPlanets,
-      worldConfig: normalizeNewGameConfig(parsed.worldConfig, createLegacyWorldConfig(profile.factionId, profile.displayName)),
-      sunRaid: migrateSunRaidState(parsed.sunRaid),
-      playTimeMs: Math.max(0, numberOr(parsed.playTimeMs, 0)),
-    };
-  } catch {
-    return initialState;
+  const asteroidSimulation = migrateAsteroidSimulation(
+    parsed.asteroidSimulation,
+    timestamp,
+    numberOr(parsed.schemaVersion, 0) < ASTEROID_GAS_RATE_MIGRATION_SCHEMA_VERSION,
+  );
+  const activeAsteroidSpawnIndices = new Set(asteroidSimulation.asteroids.map((asteroid) => asteroid.spawnIndex));
+  const ownerUpgradeLevels = migrateSpaceportUpgradeState({ shipLevels: parsed.shipUpgradeLevels }).shipLevels;
+  for (const planet of Object.values(planets)) {
+    for (const [id, level] of Object.entries(planet.spaceportUpgrades.shipLevels)) {
+      ownerUpgradeLevels[id] = Math.max(ownerUpgradeLevels[id] ?? 0, Math.max(0, Math.floor(level)));
+    }
   }
+  for (const [planetId, planet] of Object.entries(planets)) {
+    planets[planetId] = {
+      ...planet,
+      spaceportUpgrades: { ...planet.spaceportUpgrades, shipLevels: {} },
+    };
+  }
+  const currentWallet = planets[currentPlanetId]?.resources ?? homeworldResources;
+  // Legacy migrations cannot reconstruct destroyed hangars. Seed the owner
+  // ledger from every *currently accessible* completed hangar level only.
+  const historicHangar = Math.max(
+    pirate.ownerMaxHangarLevel?.[profile.playerId] ?? 0,
+    ...Object.values(planets).map((planet) =>
+      Number.isSafeInteger(planet.buildings.hangar) ? planet.buildings.hangar : 0),
+  );
+  const migratedPirate = {
+    ...pirate,
+    raidProcessedAt: pirate.raidProcessedAt ?? timestamp,
+    ownerMaxHangarLevel: {
+      ...pirate.ownerMaxHangarLevel,
+      [profile.playerId]: historicHangar,
+    },
+    ownerThreats: {
+      ...pirate.ownerThreats,
+      [profile.playerId]: pirate.ownerThreats?.[profile.playerId] ?? {
+        version: 1 as const, ageHours: 0, integratedAt: timestamp,
+      },
+    },
+  };
+
+  return {
+    schemaVersion: SAVE_SCHEMA_VERSION,
+    metal: currentWallet.metal,
+    minerals: currentWallet.minerals,
+    gas: currentWallet.gas,
+    currentPlanetId,
+    planets,
+    queues,
+    shipUpgradeLevels: ownerUpgradeLevels,
+    rating: migrateRatingPrototypeState(parsed.rating),
+    combatPriority: migrateCombatPriority(parsed.combatPriority),
+    combat,
+    combatSimulator: migrateSimulatorState(parsed.combatSimulator),
+    operations,
+    command,
+    profile,
+    reports: {
+      ...migrateReportsState(parsed.reports, reportIds),
+      ...(overpopulationReports.length > 0 ? { overpopulationReports } : {}),
+      ...(recyclerArrivalReports.length > 0 ? { recyclerArrivalReports } : {}),
+      ...(gasExtractionArrivalReports.length > 0 ? { gasExtractionArrivalReports } : {}),
+    },
+    science,
+    resourceClock: migrateResourceClock(parsed.resourceClock, timestamp, Object.keys(planets), currentPlanetId),
+    flights: migratedFlights,
+    exploration: migrateExplorationState(parsed.exploration),
+    pirate: migratedPirate,
+    asteroidSimulation,
+    asteroidDebrisBySpawnIndex: migrateAsteroidDebris(parsed.asteroidDebrisBySpawnIndex, activeAsteroidSpawnIndices),
+    espionage,
+    alliedPlanets,
+    worldConfig: normalizeNewGameConfig(parsed.worldConfig, createLegacyWorldConfig(profile.factionId, profile.displayName)),
+    sunRaid: migrateSunRaidState(parsed.sunRaid),
+    playTimeMs: Math.max(0, numberOr(parsed.playTimeMs, 0)),
+  };
 }
 
 /**
@@ -1721,17 +1757,37 @@ export function isCurrentBuildSave(raw: string | null): boolean {
   return typeof raw === 'string' && raw.includes(`"${SAVE_WRITER_FIELD}":`);
 }
 
+export type PersistenceWriteOptions = {
+  /** The player explicitly chose to replace an unreadable save (Test Mode reset). */
+  replaceUnreadable?: boolean;
+};
+
 export function createPersistenceFacade(options: PersistenceOptions = {}) {
   const mode = options.mode ?? ACTIVE_RUNTIME_MODE;
   const storage = resolveStorage(options.storage);
-  const saveKey = getRuntimeSaveKey(mode);
+  const saveKey = options.saveKey ?? getRuntimeSaveKey(mode);
+  // The last bytes this facade wrote: an unchanged key needs no re-check, so
+  // the per-tick autosave parses the stored save only after a foreign write.
+  let lastWritten: string | null = null;
   return {
     mode,
     saveKey,
     read: () => readSavedState(options),
-    write: (state: SaveState): PersistenceWriteResult => {
+    load: () => loadSavedState(options),
+    write: (state: SaveState, writeOptions: PersistenceWriteOptions = {}): PersistenceWriteResult => {
       if (!storage) return { ok: false, error: 'Storage is unavailable.' };
       try {
+        if (!writeOptions.replaceUnreadable) {
+          // Never overwrite a corrupt, malformed or newer-schema save: its bytes
+          // are the player's only copy until they export or delete it.
+          const existing = storage.getItem(saveKey);
+          if (existing !== null && existing !== lastWritten) {
+            const health = inspectSavePayload(existing, SAVE_SCHEMA_VERSION);
+            if (isSaveProblem(health)) {
+              return { ok: false, error: 'Сохранение не читается этой версией игры и не перезаписано.', unreadableSave: health };
+            }
+          }
+        }
         const persistedState = mode === 'test' || !state.espionage
           ? state
           : {
@@ -1744,7 +1800,9 @@ export function createPersistenceFacade(options: PersistenceOptions = {}) {
               bot01IncomingScenario: undefined,
             },
           };
-        storage.setItem(saveKey, JSON.stringify({ ...persistedState, [SAVE_WRITER_FIELD]: SAVE_WRITER_VERSION }));
+        const text = JSON.stringify({ ...persistedState, [SAVE_WRITER_FIELD]: SAVE_WRITER_VERSION });
+        storage.setItem(saveKey, text);
+        lastWritten = text;
         return { ok: true };
       } catch (error) {
         return { ok: false, error: error instanceof Error ? error.message : String(error) };
@@ -1754,6 +1812,7 @@ export function createPersistenceFacade(options: PersistenceOptions = {}) {
       if (!storage) return { ok: false, error: 'Storage is unavailable.' };
       try {
         storage.removeItem(saveKey);
+        lastWritten = null;
         return { ok: true };
       } catch (error) {
         return { ok: false, error: error instanceof Error ? error.message : String(error) };
