@@ -23,6 +23,7 @@ import {
 } from './runtime.ts';
 import { SCIENCE_REBALANCED_BASE_TIME_MS, getScienceRebalancedBaseDurationMs } from './time-rebalanced.ts';
 import { sciencesForSection } from './selectors.ts';
+import { getCampaignTimeScale, setCampaignTimeScale } from '../runtime/mode.ts';
 
 const wallet = { metal: 1_000_000, minerals: 1_000_000, gas: 1_000_000, energy: 1_000_000 };
 
@@ -204,6 +205,53 @@ test('one canonical duration calculation is used by preview and queued snapshots
         assert.equal(transition.task?.finishAt, transition.task!.startedAt + transition.task!.durationMs);
       }
     }
+  }
+});
+
+test('explicit campaign speed keeps science durations in parity and saved snapshots stable', () => {
+  const originalCampaignTimeScale = getCampaignTimeScale();
+  const base = getScienceRebalancedBaseDurationMs(1, 1)!;
+  try {
+    for (const durationScale of [0.5, 1, 2]) {
+      const expectedDuration = Math.max(1, Math.round(
+        calculateScienceDurationMs(base, 1, 'production', undefined, 1) / durationScale,
+      ));
+      for (const campaignTimeScale of [0.5, 1, 2]) {
+        setCampaignTimeScale(campaignTimeScale);
+        const current = {
+          ...context(createDefaultScienceState(), 1, 10_000),
+          mode: 'production' as const,
+          durationScale,
+        };
+        const preview = previewScience(current, 1);
+        assert.equal(preview.durationMs, expectedDuration);
+        assert.equal(calculateScienceDurationMs(base, 1, 'production', undefined, durationScale), expectedDuration);
+
+        const transition = startScienceResearch(current, 1, `campaign-${durationScale}-${campaignTimeScale}`);
+        assert.equal(transition.ok, true);
+        assert.equal(transition.task?.durationMs, expectedDuration);
+        assert.equal(transition.task?.finishAt, transition.task!.startedAt + expectedDuration);
+      }
+    }
+
+    setCampaignTimeScale(2);
+    const started = startScienceResearch({
+      ...context(createDefaultScienceState(), 1, 10_000),
+      mode: 'production',
+      durationScale: 0.5,
+    }, 1, 'campaign-snapshot');
+    assert.equal(started.ok, true);
+    setCampaignTimeScale(0.5);
+    const reloaded = migrateScienceState(started.state, {
+      schemaVersion: SCIENCE_SAVE_SCHEMA_VERSION,
+      laboratoryLevel: 20,
+      mode: 'production',
+    });
+    assert.equal(reloaded.queue[0]?.durationMs, started.task?.durationMs);
+    assert.equal(reloaded.queue[0]?.startedAt, started.task?.startedAt);
+    assert.equal(reloaded.queue[0]?.finishAt, started.task?.finishAt);
+  } finally {
+    setCampaignTimeScale(originalCampaignTimeScale);
   }
 });
 

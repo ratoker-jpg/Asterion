@@ -15,7 +15,8 @@ app.on('window-all-closed', () => {});
 
 const ROOT = path.join(__dirname, '..');
 const OUTPUT = process.env.ASTERION_QA_OUTPUT || path.join(ROOT, 'artifacts-pass1', 'production-test-isolation-qa');
-const PRODUCTION_KEY = 'asterion.vertical-slice.v1';
+const LEGACY_PRODUCTION_KEY = 'asterion.vertical-slice.v1';
+const SLOT_INDEX_KEY = 'asterion.slots.index.v1';
 const TEST_KEY = 'asterion.vertical-slice.test.v1';
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
 const BUILT_FACTION_GENERAL_ASSETS = getBuiltFactionGeneralAssets(ROOT);
@@ -40,7 +41,9 @@ async function loadMode(win, mode) {
   await win.loadFile(path.join(ROOT, 'dist', 'index.html'), { search: mode === 'test' ? '?mode=test' : '?autostart=continue' });
   await done;
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
-  await waitFor(win, `localStorage.getItem(${JSON.stringify(mode === 'test' ? TEST_KEY : PRODUCTION_KEY)})`);
+  await waitFor(win, mode === 'test'
+    ? `localStorage.getItem(${JSON.stringify(TEST_KEY)})`
+    : `(() => { const index = JSON.parse(localStorage.getItem(${JSON.stringify(SLOT_INDEX_KEY)}) || 'null'); const slot = index?.slots?.find((item) => item.id === index.activeSlotId); return localStorage.getItem(slot?.storageKey || ${JSON.stringify(LEGACY_PRODUCTION_KEY)}) !== null; })()`);
   await settle(win);
 }
 
@@ -49,7 +52,9 @@ async function reload(win, mode) {
   win.webContents.reload();
   await done;
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
-  await waitFor(win, `localStorage.getItem(${JSON.stringify(mode === 'test' ? TEST_KEY : PRODUCTION_KEY)})`);
+  await waitFor(win, mode === 'test'
+    ? `localStorage.getItem(${JSON.stringify(TEST_KEY)})`
+    : `(() => { const index = JSON.parse(localStorage.getItem(${JSON.stringify(SLOT_INDEX_KEY)}) || 'null'); const slot = index?.slots?.find((item) => item.id === index.activeSlotId); return localStorage.getItem(slot?.storageKey || ${JSON.stringify(LEGACY_PRODUCTION_KEY)}) !== null; })()`);
   await settle(win);
 }
 
@@ -69,6 +74,25 @@ async function readEnvelope(win, key) {
   return win.webContents.executeJavaScript(`JSON.parse(localStorage.getItem(${JSON.stringify(key)}) || 'null')`);
 }
 
+async function modeSaveKey(win, mode) {
+  if (mode === 'test') return TEST_KEY;
+  return win.webContents.executeJavaScript(`(() => {
+    const index = JSON.parse(localStorage.getItem(${JSON.stringify(SLOT_INDEX_KEY)}) || 'null');
+    const slot = index?.slots?.find((item) => item.id === index.activeSlotId);
+    return slot?.storageKey || ${JSON.stringify(LEGACY_PRODUCTION_KEY)};
+  })()`);
+}
+
+async function clearCampaignSaves(win) {
+  await win.webContents.executeJavaScript(`(() => {
+    const keys = Object.keys(localStorage);
+    for (const key of keys) {
+      if (key === ${JSON.stringify(LEGACY_PRODUCTION_KEY)} || key === ${JSON.stringify(SLOT_INDEX_KEY)}
+        || key === ${JSON.stringify(TEST_KEY)} || key.startsWith('asterion.slot.')) localStorage.removeItem(key);
+    }
+  })()`);
+}
+
 async function capture(win, directory, name) {
   if (skipScreenshots) return;
   fs.mkdirSync(directory, { recursive: true });
@@ -80,7 +104,7 @@ async function inspectMode(win, mode, label) {
   const expectedNpcCount = mode === 'test' ? 8 : 0;
   const expectedReports = mode === 'test' ? 3 : 0;
   const expectedOperations = 0;
-  const envelope = await readEnvelope(win, mode === 'test' ? TEST_KEY : PRODUCTION_KEY);
+  const envelope = await readEnvelope(win, await modeSaveKey(win, mode));
   const modeMarker = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-runtime-mode]')?.getAttribute('data-qa-runtime-mode') || ''`);
   if (modeMarker !== mode) throw new Error(`${label}: runtime mode marker mismatch ${modeMarker}`);
 
@@ -168,7 +192,7 @@ async function runViewport(width, height) {
   });
   try {
     await loadMode(win, 'production');
-    await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(PRODUCTION_KEY)}); localStorage.removeItem(${JSON.stringify(TEST_KEY)});`);
+    await clearCampaignSaves(win);
     await reload(win, 'production');
     const builtAssets = await inspectFactionGeneralAssets(win, BUILT_FACTION_GENERAL_ASSETS);
     assertBuiltFactionGeneralAssets(builtAssets, `${label} build`);
@@ -180,7 +204,7 @@ async function runViewport(width, height) {
     if (testReloaded?.combat?.reports?.length !== testEnvelope?.combat?.reports?.length || testReloaded?.command?.alliances?.[0]?.name !== 'Содружество Гелион') {
       throw new Error(`${label}: Test Mode reload lost fixtures`);
     }
-    const productionAfterTest = await readEnvelope(win, PRODUCTION_KEY);
+    const productionAfterTest = await readEnvelope(win, await modeSaveKey(win, 'production'));
     if (JSON.stringify(productionAfterTest?.command?.alliances) !== JSON.stringify(productionBefore?.command?.alliances) || productionAfterTest?.combat?.reports?.length !== productionBefore?.combat?.reports?.length) {
       throw new Error(`${label}: Test Mode mutated Production save`);
     }

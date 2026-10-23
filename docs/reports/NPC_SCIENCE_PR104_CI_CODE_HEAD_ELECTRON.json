@@ -1,0 +1,66 @@
+{
+  "commit": "2d06ace169fe0323a4f91111967600ae9bedb2dc",
+  "jobUrl": "https://github.com/ratoker-jpg/Asterion/actions/runs/39980238111/job/120505322646",
+  "result": {
+    "profile": "C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\asterion-npc-replay-qa-8dTwzU",
+    "isolatedUserData": true,
+    "seed": {
+      "npcProfiles": 100,
+      "npcTargets": 100,
+      "startAt": 1790178227493,
+      "endAt": 1792770257493,
+      "catchupDays": 30,
+      "scenario": "full-world",
+      "isolation": {
+        "explorationCursorAtHorizon": false,
+        "pirateCursorAtHorizon": false,
+        "asteroidSimulationAbsent": false
+      },
+      "fixtureIsolation": "None: 10 galaxies, 100 NPC, asteroid simulation, exploration and pirate timelines run from campaign start."
+    },
+    "commandGate": {
+      "pendingBeforeUiAction": true,
+      "requestEventPrevented": true,
+      "buildButtonWasEnabled": true,
+      "playerStateUnchanged": true
+    },
+    "catchup": {
+      "elapsedMs": 101755,
+      "longTasks": {
+        "count": 98,
+        "totalMs": 7545,
+        "p95Ms": 125,
+        "maxMs": 270
+      },
+      "inMemoryReplay": {
+        "processedThroughAt": 1792770257493,
+        "targetAt": 1792770257493
+      },
+      "runtimePublications": 1923,
+      "persistedSaveChars": 8409186,
+      "persistenceNotice": null,
+      "firstProgress": {
+        "processedThroughAt": 1790179648906,
+        "targetAt": 1792770257493,
+        "at": 1003.3000000000466
+      },
+      "lastProgress": {
+        "processedThroughAt": 1792624560225,
+        "targetAt": 1792770257493,
+        "at": 96973.69999999995
+      },
+      "pending": false,
+      "processedThroughAt": 1792770257493,
+      "targetAt": 1792770257493,
+      "savedProgressSamples": 310,
+      "timerSamples": 328,
+      "timerP95GapMs": 404.19999999995343,
+      "timerWorstGapMs": 17455.199999999953,
+      "npcActionIds": 17756,
+      "npcQueuedBuildings": 2,
+      "npcProfiles": 100
+    },
+    "measurementNote": "Renderer event-loop timer gaps; does not measure Node proxy latency.",
+    "hiddenWindowBackgroundThrottling": false
+  }
+}

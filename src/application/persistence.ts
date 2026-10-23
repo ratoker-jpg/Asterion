@@ -141,6 +141,8 @@ import { migrateSunRaidState } from '../domain/sun-raid/repository.ts';
 import { isCombatFactionId } from '../domain/combat/factions.ts';
 import { inspectSavePayload, isSaveProblem, type SaveProblem } from '../domain/session/save-health.ts';
 import { createNpcState, migrateNpcState } from '../domain/npc/state.ts';
+import { migrateNpcScienceState } from '../domain/npc/science-state.ts';
+import { projectNpcScienceLedger } from './npc-science.ts';
 import { assignNpcDisplayNames, createNpcPersonaSalt, deriveLegacyNpcSalt, getNpcOwnerIds } from './npc-foundation.ts';
 import { isNpcReplayMetadata } from './npc-catchup.ts';
 import { CANONICAL_STARTING_WALLET } from '../domain/world/start.ts';
@@ -150,10 +152,12 @@ export const WORLD_CONFIG_SCHEMA_VERSION = 24;
 /** Schema 25: private versioned NPC profiles and campaign persona salt. */
 export const NPC_FOUNDATION_SCHEMA_VERSION = 25;
 export const NPC_ECONOMY_SCHEMA_VERSION = 26;
+export const NPC_SCIENCE_SCHEMA_VERSION = 27;
 
 export const SAVE_SCHEMA_VERSION = Math.max(
   NPC_FOUNDATION_SCHEMA_VERSION,
   NPC_ECONOMY_SCHEMA_VERSION,
+  NPC_SCIENCE_SCHEMA_VERSION,
   WORLD_CONFIG_SCHEMA_VERSION,
   COMBAT_SAVE_SCHEMA_VERSION,
   SCIENCE_SAVE_SCHEMA_VERSION,
@@ -210,6 +214,7 @@ type StoredPlanetRuntime = {
 type StoredSave = {
   npcReplay?: unknown;
   npc?: unknown;
+  npcScience?: unknown;
   exploration?: unknown;
   pirate?: unknown;
   schemaVersion?: unknown;
@@ -1282,6 +1287,7 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
   return {
     schemaVersion: SAVE_SCHEMA_VERSION,
     npc: createNpcState(getNpcOwnerIds(espionage.targets, defaultProfile.playerId), salt, now),
+    npcScience: migrateNpcScienceState(undefined, espionage.targets, now),
     ...(mode === 'production' ? { npcReplay: { version: 1 as const, processedThroughAt: now, targetAt: now } } : {}),
     metal: initialResources.metal,
     minerals: initialResources.minerals,
@@ -1722,11 +1728,19 @@ function migrateParsedSave(
     },
   };
 
-  return {
+  const savedReplayTarget = isNpcReplayMetadata(parsed.npcReplay) ? parsed.npcReplay.targetAt : 0;
+  const resourceClockBaseline = objectRecord(parsed.resourceClock)?.lastReconciledAt;
+  const activationBaseline = Math.max(
+    Number.isSafeInteger(resourceClockBaseline) && Number(resourceClockBaseline) >= 0 ? Number(resourceClockBaseline) : 0,
+    savedReplayTarget,
+  );
+
+  const migratedState: SaveState = {
     schemaVersion: SAVE_SCHEMA_VERSION,
     npc: migrateNpcState(parsed.npc, getNpcOwnerIds(espionage.targets, profile.playerId),
       parsed.npc === undefined ? deriveLegacyNpcSalt(parsed) : '',
       Math.max(0, numberOr(objectRecord(parsed.resourceClock)?.lastReconciledAt, 0))),
+    npcScience: migrateNpcScienceState(parsed.npcScience, espionage.targets, activationBaseline),
     ...(mode === 'production' ? { npcReplay: isNpcReplayMetadata(parsed.npcReplay)
       ? parsed.npcReplay
       : { version: 1 as const,
@@ -1765,6 +1779,7 @@ function migrateParsedSave(
     sunRaid: migrateSunRaidState(parsed.sunRaid),
     playTimeMs: Math.max(0, numberOr(parsed.playTimeMs, 0)),
   };
+  return projectNpcScienceLedger(migratedState);
 }
 
 /**
