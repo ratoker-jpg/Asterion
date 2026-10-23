@@ -35,6 +35,7 @@ import { generateNpcOwnerReplayEvents, applyNpcReplayEventsAt, initializeNpcRepl
 import { compareNpcEvents } from '../domain/npc/events.ts';
 import type { NpcProfile } from '../domain/npc/types.ts';
 import { getNextNpcEconomyCheckpoint, settleNpcPlanet } from './npc-economy.ts';
+import { getNextNpcScienceCheckpoint, pauseNpcScienceForSettlement, projectNpcScienceLedger, reconcileNpcScienceAt } from './npc-science.ts';
 import { getReplayNpcOwnerIds, NPC_REPLAY_GENERATION_STEP_MS, NPC_REPLAY_MAX_GROUPS, NPC_REPLAY_WINDOW_MS } from './npc-catchup.ts';
 import { CAMPAIGN_SPEED_SCALE } from '../domain/runtime/mode.ts';
 
@@ -59,6 +60,7 @@ function cachedOwnerStepEvents(profile: NpcProfile, ownerId: string, stepStart: 
 export type RuntimeReconcileEvent =
   | { kind: 'npc-economy'; events: readonly NpcReplayEmission[] }
   | { kind: 'npc-building'; planetId: string; assetRole: BuildingRole; at: number }
+  | { kind: 'npc-science'; ownerId: string; scienceId: ScienceId; at: number }
   | { kind: 'science'; scienceIds: ScienceId[] }
   | { kind: 'building'; planetId: string; assetRole: BuildingRole }
   | { kind: 'recycling'; planetId: string; jobIds: string[] }
@@ -87,6 +89,10 @@ export function reconcileRuntime(
   const owners = context.mode === 'production' ? getReplayNpcOwnerIds(state) : [];
   if (!owners.length) {
     const result = reconcileRuntimeSlice(state, context);
+    if (context.mode === 'production') {
+      const cleaned = reconcileNpcScienceAt(result.state, context.now).state;
+      if (cleaned !== result.state) { result.state = cleaned; result.changed = true; }
+    }
     if (context.mode === 'production' && state.npcReplay && state.npcReplay.targetAt > state.npcReplay.processedThroughAt) {
       result.state = { ...result.state, npcReplay: { version: 1, processedThroughAt: context.now, targetAt: context.now } };
       result.changed = true;
@@ -107,7 +113,7 @@ function reconcileRuntimeSlice(
   replay?: { from: number; owners: string[]; targetAt: number },
 ): RuntimeReconcileResult {
   // Aid flights whose sender, recipient or request no longer stand turn back before anything else settles.
-  let next = reconcileAidMembership(state, context.now);
+  let next = projectNpcScienceLedger(reconcileAidMembership(state, context.now));
   const events: RuntimeReconcileEvent[] = [];
   const timeScale = CAMPAIGN_SPEED_SCALE[state.worldConfig?.world.campaignSpeed ?? 'standard'];
   const replayOwners = new Set(replay?.owners);
@@ -145,16 +151,26 @@ function reconcileRuntimeSlice(
   let processedGroups = 0;
   const settleNpcEconomies = (at: number, ownerIds?: ReadonlySet<string>) => {
     if (!replay || !next.espionage?.targets) return;
-    const targets = { ...next.espionage.targets };
+    const before = next.espionage.targets;
+    const targets = { ...before };
+    const settled = new Set<string>();
     let changed = false;
     for (const [id, target] of Object.entries(targets)) {
       if (!replayOwners.has(target.ownerId) || (ownerIds && !ownerIds.has(target.ownerId))) continue;
-      const settled = settleNpcPlanet(target, at, { timeScale });
-      targets[id] = settled.target;
-      changed ||= settled.target !== target;
-      for (const assetRole of settled.completedRoles) events.push({ kind: 'npc-building', planetId: id, assetRole, at });
+      const result = settleNpcPlanet(target, at, { timeScale });
+      settled.add(target.ownerId);
+      targets[id] = result.target;
+      changed ||= result.target !== target;
+      for (const assetRole of result.completedRoles) events.push({ kind: 'npc-building', planetId: id, assetRole, at });
     }
     if (changed) next = { ...next, espionage: { ...next.espionage, targets } };
+    const science = pauseNpcScienceForSettlement(next.npcScience, before, settled, at, targets);
+    if (science !== next.npcScience) next = { ...next, npcScience: science };
+  };
+  const completeNpcScience = (at: number, ownerIds?: ReadonlySet<string>) => {
+    const result = reconcileNpcScienceAt(next, at, ownerIds);
+    next = result.state;
+    for (const completion of result.completed) events.push({ kind: 'npc-science', ...completion });
   };
   /**
    * Settles the given owners at `at` unless already settled there.
@@ -198,6 +214,7 @@ function reconcileRuntimeSlice(
   // Establish legacy overpopulation episodes at the committed prefix, never at
   // a later caller-dependent decision time. Existing clocks/queues are retained.
   if (replay) settleNpcEconomies(replay.from);
+  if (replay) completeNpcScience(replay.from);
   const startingPirate = next.pirate ?? createDefaultPirateState();
   let pirateCursor = startingPirate.raidProcessedAt ?? context.now;
   if (!Number.isSafeInteger(pirateCursor) || pirateCursor < 0) pirateCursor = context.now;
@@ -478,7 +495,8 @@ function reconcileRuntimeSlice(
       const due = getNextNpcEconomyCheckpoint(target, processedThrough);
       if (due !== null && due > processedThrough && due <= context.now) economyCheckpoint = Math.min(economyCheckpoint ?? due, due);
     }
-    const checkpoint = [flightCheckpoint, asteroidCheckpoint, pirateCheckpoint, npcCheckpoint, workCheckpoint, sessionCheckpoint, economyCheckpoint]
+    const scienceCheckpoint = replay ? getNextNpcScienceCheckpoint(next, processedThrough, context.now) : undefined;
+    const checkpoint = [flightCheckpoint, asteroidCheckpoint, pirateCheckpoint, npcCheckpoint, workCheckpoint, sessionCheckpoint, economyCheckpoint, scienceCheckpoint]
       .filter((point): point is number => point !== undefined)
       .reduce<number | undefined>((min, point) => min === undefined ? point : Math.min(min,point), undefined);
     if (checkpoint === undefined) break;
@@ -498,6 +516,9 @@ function reconcileRuntimeSlice(
     // written below; see settleNpcOwnersAt for why the rest may wait.
     const settledOwners = new Set<string>();
     if (replay) {
+      if (scienceCheckpoint === checkpoint) for (const [ownerId, science] of Object.entries(next.npcScience?.owners ?? {})) {
+        if (science.queue[0]?.finishAt === checkpoint) dueOwners.add(ownerId);
+      }
       for (const target of Object.values(next.espionage?.targets ?? {})) {
         const due = getNextNpcEconomyCheckpoint(target, processedThrough);
         if (due === checkpoint) dueOwners.add(target.ownerId);
@@ -508,6 +529,8 @@ function reconcileRuntimeSlice(
         if (npcIsDue) for (const ownerId of replayOwners) dueOwners.add(ownerId);
       }
       settleNpcOwnersAt(checkpoint, dueOwners, settledOwners);
+      // Old income ends here; owner knowledge changes before arrivals, raids and decisions.
+      if (scienceCheckpoint === checkpoint) completeNpcScience(checkpoint);
     }
     // Advancing the cursor before processing prevents a due-but-unmodified
     // record at this timestamp from creating a zero-progress loop. Flights
@@ -572,12 +595,14 @@ function reconcileRuntimeSlice(
       // here, so arrival effects (losses, returns) start their episodes now.
       for (const ownerId of ownersTouchedAtCheckpoint(checkpoint)) settledOwners.add(ownerId);
       settleNpcEconomies(checkpoint, settledOwners);
+      // A battle can remove a payer. Drop its paid work before any new command.
+      completeNpcScience(checkpoint, settledOwners);
     }
     if (economicIsDue && next.npc && next.espionage?.targets) {
       const group = [];
       while (economicEvents[economicIndex]?.at === checkpoint) group.push(economicEvents[economicIndex++]!);
-      const applied = applyNpcReplayEventsAt(next.npc, checkpoint, group, { targets: next.espionage.targets, timeScale });
-      next = { ...next, npc: applied.state, espionage: { ...next.espionage, targets: { ...applied.targets } } };
+      const applied = applyNpcReplayEventsAt(next.npc, checkpoint, group, { targets: next.espionage.targets, timeScale, science: next.npcScience });
+      next = { ...next, npc: applied.state, npcScience: applied.science ?? next.npcScience, espionage: { ...next.espionage, targets: { ...applied.targets } } };
       if (applied.emitted.length) events.push({ kind: 'npc-economy', events: applied.emitted });
     }
   }

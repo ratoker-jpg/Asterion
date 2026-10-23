@@ -26,6 +26,7 @@ import {
 import { calculatePlanetCapacity, calculatePlanetPopulation, OVERPOPULATION_WINDOW_MS, reconcileOverpopulation } from '../domain/fleet/overpopulation.ts';
 import { getSolarSatelliteFleetCount, removeSolarSatellitesFromFleet } from '../domain/fleet/runtime.ts';
 import { NPC_ECONOMY_ROLES } from '../domain/npc/economy-policy.ts';
+import { SCIENCE_ID_PHYSICS } from '../domain/buildings/balance-v1.ts';
 import { accrueResourceCredits } from './resource-clock.ts';
 import type { SpyTargetState } from '../domain/espionage/types.ts';
 
@@ -85,7 +86,7 @@ function energySources(target: SpyTargetState, buildings: BuildingLevels) {
   });
 }
 
-function targetEnergyLedger(target: SpyTargetState, buildings = targetBuildingLevels(target)): EnergyLedger {
+export function targetEnergyLedger(target: SpyTargetState, buildings = targetBuildingLevels(target)): EnergyLedger {
   return hydrateEnergyLedger(
     target.energyLedger,
     energySources(target, buildings),
@@ -220,11 +221,28 @@ function settleOverpopulation(target: SpyTargetState, at: number): SpyTargetStat
   };
 }
 
-function isBlocked(target: SpyTargetState, buildings?: BuildingLevels): boolean {
+export function isNpcPlanetBlocked(target: SpyTargetState, buildings?: BuildingLevels): boolean {
   if (target.overpopulation?.blocked === true) return true;
   const normalizedFleet = removeSolarSatellitesFromFleet(target.fleet).fleet;
   const actualFleetPopulation = calculatePlanetPopulation(normalizedFleet, targetSatelliteCount(target), target.raceId);
   return actualFleetPopulation > calculatePlanetCapacity((buildings ?? targetBuildingLevels(target)).hangar ?? 0);
+}
+
+const isBlocked = isNpcPlanetBlocked;
+
+/** Project owner knowledge and transition existing one-time sources without resetting consumption. */
+export function projectNpcScience(target: SpyTargetState, levels: import('../domain/science/runtime.ts').ScienceLevels): SpyTargetState {
+  const previous = target.ownerProfile?.scienceLevels ?? {};
+  if (Object.keys(levels).every((id) => previous[Number(id) as keyof typeof levels] === levels[Number(id) as keyof typeof levels])
+    && Object.keys(previous).every((id) => previous[Number(id) as keyof typeof levels] === levels[Number(id) as keyof typeof levels])) return target;
+  const projected = { ...target, ownerProfile: { scienceLevels: levels,
+    shipLevels: target.ownerProfile?.shipLevels ?? {}, commanderLevels: target.ownerProfile?.commanderLevels ?? {} } };
+  // Most levels do not change energy. Preserve saved ledger bytes in that case.
+  if ((previous[SCIENCE_ID_PHYSICS] ?? 0) === (levels[SCIENCE_ID_PHYSICS] ?? 0)) return projected;
+  const ledger = targetEnergyLedger(target);
+  const rebuilt = rebuildEnergyLedger(ledger, energySources(projected, targetBuildingLevels(projected)));
+  return { ...projected, energyLedger: rebuilt,
+    resources: { ...projected.resources, developmentEnergy: rebuilt.availableEnergy } };
 }
 
 function rebuildEnergyAfterCompletion(target: SpyTargetState, role: BuildingRole): SpyTargetState {

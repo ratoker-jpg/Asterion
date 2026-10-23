@@ -8,6 +8,7 @@
  */
 import { validateNpcState } from '../npc/state.ts';
 import { isNpcReplayMetadata } from '../npc/replay-state.ts';
+import { validateNpcScienceLedger } from '../npc/science-state.ts';
 
 export type SavePayloadHealth =
   | { status: 'missing' }
@@ -38,6 +39,12 @@ export function inspectParsedSave(parsed: unknown, currentSchemaVersion: number)
   // Rescue/backup export remains available for these original bytes.
   if (parsed.npc !== undefined && !validateNpcState(parsed.npc)) {
     return { status: 'malformed', reason: 'Неподдерживаемая версия или повреждённые данные NPC.' };
+  }
+  if (parsed.npcScience !== undefined && !validateNpcScienceLedger(parsed.npcScience)) {
+    return { status: 'malformed', reason: 'Неподдерживаемая версия или повреждённые данные науки NPC.' };
+  }
+  if (schemaVersion >= 27 && parsed.npcScience === undefined) {
+    return { status: 'malformed', reason: 'В сохранении отсутствует каноническая наука NPC.' };
   }
   if (parsed.planets !== undefined) {
     if (!plainObject(parsed.planets)) return { status: 'malformed', reason: 'Повреждён список планет.' };

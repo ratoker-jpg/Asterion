@@ -98,6 +98,8 @@ export type ScienceRuntimeContext = {
   now: number;
   mode?: RuntimeMode;
   testTimeScale?: number;
+  /** Explicit campaign speed for owner-scoped runtimes; takes precedence over global mode scaling. */
+  durationScale?: number;
   rng?: () => number;
 };
 
@@ -252,6 +254,7 @@ export function calculateScienceDurationMs(
   laboratoryLevel: number,
   mode: RuntimeMode = 'production',
   testTimeScale?: number,
+  durationScale?: number,
 ): number {
   const safeBaseDuration = Math.max(1, Math.round(baseDurationMs));
   const safeLaboratoryLevel = Math.min(
@@ -259,7 +262,12 @@ export function calculateScienceDurationMs(
     Math.max(0, Math.floor(laboratoryLevel)),
   );
   const laboratoryFactor = (1 - SCIENCE_LABORATORY_TIME_REDUCTION_PER_LEVEL) ** safeLaboratoryLevel;
-  return scaleRuntimeDuration(Math.max(1, Math.round(safeBaseDuration * laboratoryFactor)), mode, testTimeScale);
+  const labAdjustedDuration = Math.max(1, Math.round(safeBaseDuration * laboratoryFactor));
+  if (durationScale !== undefined) {
+    const safeDurationScale = Number.isFinite(durationScale) && durationScale > 0 ? durationScale : 1;
+    return Math.max(1, Math.round(labAdjustedDuration / safeDurationScale));
+  }
+  return scaleRuntimeDuration(labAdjustedDuration, mode, testTimeScale);
 }
 
 export function createDefaultScienceLevels(): ScienceLevels {
@@ -339,6 +347,7 @@ export function previewScience(context: ScienceRuntimeContext, scienceId: Scienc
     context.laboratoryLevel,
     context.mode ?? 'production',
     context.testTimeScale,
+    context.durationScale,
   );
   const base = {
     scienceId,

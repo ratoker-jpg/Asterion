@@ -77,15 +77,19 @@ function buildingLevelValue(role: BuildingRole, value: unknown): number {
   return total;
 }
 
-function scienceLevelValue(scienceId: ScienceId, value: unknown): number {
-  const science = SCIENCE_CATALOG.find((item) => item.id === scienceId);
-  const level = Math.min(science?.maxLevel ?? 0, safeCount(value));
-  if (!science) return 0;
-  let total = 0;
-  for (let fromLevel = 0; fromLevel < level; fromLevel += 1) {
-    total += resourceValue(calculateScienceCost(science.baseCost, fromLevel));
+// Catalogue costs are immutable across campaigns. Preprice their bounded levels
+// once instead of repeating the same sums for every NPC threat/score read.
+const scienceLevelValues = new Map(SCIENCE_CATALOG.map((science) => {
+  const values = [0];
+  for (let fromLevel = 0; fromLevel < science.maxLevel; fromLevel++) {
+    values.push(values[fromLevel]! + resourceValue(calculateScienceCost(science.baseCost, fromLevel)));
   }
-  return total;
+  return [science.id, values] as const;
+}));
+
+function scienceLevelValue(scienceId: ScienceId, value: unknown): number {
+  const values = scienceLevelValues.get(scienceId);
+  return values?.[Math.min(values.length - 1, safeCount(value))] ?? 0;
 }
 
 function spaceportUpgradeLevelValue(factionId: CombatFactionId, shipId: string, value: unknown): number {
@@ -339,30 +343,30 @@ export function selectOwnerScores(state: SaveState): Record<string, OwnerScore> 
 
 /**
  * The same score selectOwnerScores reports for one owner, without pricing
- * every other owner. Registration still walks the whole save, because an
- * owner's planets and profile are merged across all of its targets.
+ * every other owner. Merge only matching planets and profiles.
  */
 export function selectOwnerScore(state: SaveState, ownerId: string): OwnerScore | undefined {
-  const { owners, battlePoints } = collectOwnerRegistrations(state);
+  const { owners, battlePoints } = collectOwnerRegistrations(state, ownerId);
   const owner = owners.get(ownerId);
   return owner ? scoreOwner(state, owner, battlePoints) : undefined;
 }
 
-function collectOwnerRegistrations(state: SaveState): { owners: Map<string, OwnerRegistration>; battlePoints: Record<string, number> } {
+function collectOwnerRegistrations(state: SaveState, selectedOwnerId?: string): { owners: Map<string, OwnerRegistration>; battlePoints: Record<string, number> } {
   const owners = new Map<string, OwnerRegistration>();
   const playerOwnerId = state.profile.playerId || CURRENT_PLAYER_ID;
-  const player: OwnerRegistration = {
-    ownerId: playerOwnerId,
-    factionId: state.profile.factionId,
-    planets: [],
-    scienceLevels: state.science.levels,
-    shipUpgradeLevels: getOwnerShipUpgradeLevels(state),
-    queuedScience: state.science.queue,
-  };
-  owners.set(playerOwnerId, player);
+  if (selectedOwnerId === undefined || selectedOwnerId === playerOwnerId) {
+    const player: OwnerRegistration = {
+      ownerId: playerOwnerId,
+      factionId: state.profile.factionId,
+      planets: [],
+      scienceLevels: state.science.levels,
+      shipUpgradeLevels: getOwnerShipUpgradeLevels(state),
+      queuedScience: state.science.queue,
+    };
+    owners.set(playerOwnerId, player);
 
-  for (const [planetId, planet] of Object.entries(state.planets)) {
-    player.planets.push({
+    for (const [planetId, planet] of Object.entries(state.planets)) {
+      player.planets.push({
       factionId: player.factionId,
       buildings: planet.buildings,
       fleet: planet.fleet,
@@ -371,10 +375,12 @@ function collectOwnerRegistrations(state: SaveState): { owners: Map<string, Owne
       buildingQueue: state.queues[planetId],
       fleetProduction: planet.fleetProduction,
       spaceportUpgrades: planet.spaceportUpgrades,
-    });
+      });
+    }
   }
 
   for (const target of Object.values(state.espionage?.targets ?? state.espionage?.bot01Planets ?? {})) {
+    if (selectedOwnerId !== undefined && target.ownerId !== selectedOwnerId) continue;
     if (!target.ownerId || target.ownerId === playerOwnerId || target.ownerId === 'player-aster') continue;
     const owner = owners.get(target.ownerId) ?? {
       ownerId: target.ownerId,
@@ -395,11 +401,22 @@ function collectOwnerRegistrations(state: SaveState): { owners: Map<string, Owne
       owner.scienceLevels = profile.scienceLevels;
       owner.shipUpgradeLevels = { ...profile.shipLevels, ...profile.commanderLevels };
     }
+    // Canonical NPC research is owner-scoped, so attach it once to the merged
+    // owner registration rather than once per target planet. Bot 01 keeps its
+    // separate profile and the player keeps the campaign science state above.
+    const npcScience = target.kind === 'npc' && target.ownerId !== UNIVERSE_NPC_OWNER_ID
+      ? state.npcScience?.owners[target.ownerId]
+      : undefined;
+    if (npcScience) {
+      owner.scienceLevels = npcScience.levels;
+      owner.queuedScience = npcScience.queue;
+    }
     owners.set(target.ownerId, owner);
   }
 
   const battlePoints = battlePointTotals(state.rating);
   for (const ownerId of Object.keys(battlePoints)) {
+    if (selectedOwnerId !== undefined && ownerId !== selectedOwnerId) continue;
     if (!owners.has(ownerId)) owners.set(ownerId, { ownerId, factionId: state.profile.factionId, planets: [] });
   }
 

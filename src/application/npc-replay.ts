@@ -2,6 +2,10 @@ import { getNpcBuildingCandidates, startNpcBuilding } from './npc-economy.ts';
 import { getNpcSessionEvents } from '../domain/npc/calendar.ts';
 import { compareNpcEvents, isNpcEventAfterCursor } from '../domain/npc/events.ts';
 import { chooseNpcEconomyAction } from '../domain/npc/economy-policy.ts';
+import { chooseNpcDevelopmentAction } from '../domain/npc/economy-policy.ts';
+import { getNpcScienceCandidates, startNpcScience } from './npc-science.ts';
+import type { NpcScienceLedger } from '../domain/npc/science-state.ts';
+import type { ScienceId } from '../domain/science/types.ts';
 import { createSeededRandom } from '../domain/world/random.ts';
 import type { NpcStateV1, NpcProfile, NpcSessionEvent } from '../domain/npc/types.ts';
 import type { SpyTargetState } from '../domain/espionage/types.ts';
@@ -28,6 +32,7 @@ export type NpcReplayEvent = NpcReplayBoundaryEvent | NpcReplayDecisionEvent;
 export type NpcReplayContext = Readonly<{
   targets: Readonly<Record<string, SpyTargetState>>;
   timeScale: number;
+  science?: NpcScienceLedger;
 }>;
 
 export type NpcReplayEmission = Readonly<{
@@ -36,6 +41,7 @@ export type NpcReplayEmission = Readonly<{
   eventId: string;
   attempt: number;
   selectedRole: BuildingRole | null;
+  selectedScienceId?: ScienceId | null;
   wait: boolean;
   started: boolean;
   reason: string | null;
@@ -46,6 +52,7 @@ export type NpcReplayApplyResult = Readonly<{
   state: NpcStateV1;
   targets: Readonly<Record<string, SpyTargetState>>;
   emitted: readonly NpcReplayEmission[];
+  science?: NpcScienceLedger;
 }>;
 
 /**
@@ -197,6 +204,7 @@ export function applyNpcReplayEventsAt(
   if (!Number.isFinite(context.timeScale) || context.timeScale <= 0) throw new RangeError('timeScale must be positive');
   const profiles = { ...state.profiles };
   let targets: Record<string, SpyTargetState> = { ...context.targets };
+  let science = context.science;
   const emitted: NpcReplayEmission[] = [];
   const ordered = [...eventsAtTimestamp]
     .filter((event) => event.at === at)
@@ -226,6 +234,7 @@ export function applyNpcReplayEventsAt(
       && profile.session.sessionStartedAt === event.sessionStartedAt
       && profile.session.sessionEndsAt === event.sessionEndsAt;
     let selectedRole: BuildingRole | null = null;
+    let selectedScienceId: ScienceId | null = null;
     let wait = true;
     let started = false;
     let reason: string | null = null;
@@ -235,8 +244,14 @@ export function applyNpcReplayEventsAt(
         .filter((item) => item.kind === 'npc' && item.ownerId === event.ownerId)
         .sort((left, right) => compareStableIds(left.id, right.id))[0];
       if (target) {
-        const choice = chooseNpcEconomyAction(profile, target, getNpcBuildingCandidates(target), event.eventId);
+        const ownerScience = science?.owners[event.ownerId];
+        const scienceEnabled = science && ownerScience && at >= science.activatedAt;
+        const candidates = getNpcBuildingCandidates(target);
+        const choice = scienceEnabled
+          ? chooseNpcDevelopmentAction(profile, target, candidates, getNpcScienceCandidates(target, ownerScience, at, context.timeScale), event.eventId)
+          : { ...chooseNpcEconomyAction(profile, target, candidates.filter(({ role }) => role !== 'research'), event.eventId), scienceId: null };
         selectedRole = choice.role;
+        selectedScienceId = choice.scienceId;
         wait = choice.wait;
         if (choice.role) {
           const result = startNpcBuilding(target, choice.role, event.at, { timeScale: context.timeScale }, choice.idempotencyKey);
@@ -244,9 +259,16 @@ export function applyNpcReplayEventsAt(
           started = result.ok;
           reason = result.reason;
         }
+        if (choice.scienceId && ownerScience && science) {
+          const result = startNpcScience(target, ownerScience, choice.scienceId, at, context.timeScale, choice.idempotencyKey);
+          targets[target.id] = result.target;
+          science = { ...science, owners: { ...science.owners, [event.ownerId]: result.science } };
+          started = result.ok;
+          reason = result.reason;
+        }
         emitted.push(Object.freeze({
           ownerId: event.ownerId, at: event.at, eventId: event.eventId, attempt: event.attempt,
-          selectedRole, wait, started, reason, idempotencyKey: choice.idempotencyKey,
+          selectedRole, selectedScienceId, wait, started, reason, idempotencyKey: choice.idempotencyKey,
         }));
       }
     }
@@ -260,6 +282,7 @@ export function applyNpcReplayEventsAt(
     state: Object.freeze({ ...state, profiles: Object.freeze(profiles) }),
     targets: Object.freeze(targets),
     emitted: Object.freeze(emitted),
+    ...(science ? { science } : {}),
   });
 }
 

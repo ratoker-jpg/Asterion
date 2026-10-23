@@ -8,13 +8,17 @@ import { getCommanderSpaceportUpgradeBalance } from '../buildings/commander-upgr
 import { createDefaultSpaceportUpgradeState, enqueueSpaceportUpgrade, reconcileSpaceportUpgradeState } from '../buildings/spaceport-upgrades.ts';
 import { createDefaultBuildingLevels } from '../buildings/resource-zone.ts';
 import { SCIENCE_CATALOG } from '../science/catalog.ts';
+import { calculateScienceCost } from '../science/runtime.ts';
 import { createDefaultBot01Profile } from '../espionage/fixtures.ts';
+import type { SpyTargetState } from '../espionage/types.ts';
+import { UNIVERSE_NPC_OWNER_ID } from '../universe/runtime.ts';
 import { calculateBattlePoints } from '../combat/battle-points.ts';
 import { DEMO_BATTLE_REPORTS } from '../combat/battle-fixtures.ts';
 import { getCombatFactionId } from '../combat/factions.ts';
 import type { BattleReport } from '../combat/report.ts';
-import { addUnrecoveredResourceCost, calculateAwardedBattlePoints, calculateResourceScore, recordBattleScoreAward, selectRecordedBattlePointAwards } from './scoring.ts';
+import { addUnrecoveredResourceCost, calculateAwardedBattlePoints, calculateResourceScore, recordBattleScoreAward, selectOwnerScore, selectOwnerScores, selectRecordedBattlePointAwards } from './scoring.ts';
 import { createDefaultRatingPrototypeState } from './fixtures.ts';
+import { createInitialSaveState } from '../../application/persistence.ts';
 
 test('empty owner assets produce zero resource points', () => {
   assert.deepEqual(calculateResourceScore({ factionId: 'aegis', planets: [] }), {
@@ -269,6 +273,89 @@ test('defender victory doubles only the defender award; defeat remains base and 
   assert.equal(expected.attacker, base.attacker, 'the losing attacker keeps the base award');
   assert.equal(expected.defender, base.defender * 2, 'the winning defender receives the established ×2 award');
   assert.strictEqual(recordBattleScoreAward(awarded, report, 'player-current'), awarded);
+});
+
+test('canonical NPC science scores its paid queue once across planets and matches the completed level', () => {
+  const science = SCIENCE_CATALOG.find((item) => item.id === 1)!;
+  const cost = calculateScienceCost(science.baseCost, 0);
+  const task = {
+    id: 'npc-physics-level-1',
+    scienceId: science.id,
+    fromLevel: 0,
+    toLevel: 1,
+    startedAt: 100,
+    finishAt: 200,
+    durationMs: 100,
+    cost,
+  };
+  const target = (id: string, ownerId: string, kind: 'npc' | 'player' = 'npc') => ({
+    id,
+    ownerId,
+    kind,
+    raceId: 'aegis',
+    buildings: {},
+    fleet: createEmptyFleetState(),
+    defense: createEmptyDefenseState(),
+  } as unknown as SpyTargetState);
+  const base = createInitialSaveState('test', 0);
+  const botProfile = createDefaultBot01Profile();
+  const state = {
+    ...base,
+    planets: {},
+    queues: {},
+    science: { levels: { [science.id]: 2 }, queue: [] },
+    espionage: {
+      ...base.espionage!,
+      targets: {
+        'npc-a-planet-1': target('npc-a-planet-1', 'npc-a'),
+        'npc-a-planet-2': target('npc-a-planet-2', 'npc-a'),
+        'npc-b-planet': target('npc-b-planet', 'npc-b'),
+        'bot-planet': target('bot-planet', UNIVERSE_NPC_OWNER_ID),
+      },
+      bot01Profile: botProfile,
+    },
+    npcScience: {
+      version: 1 as const,
+      activatedAt: 0,
+      owners: {
+        'npc-a': { levels: { [science.id]: 0 }, queue: [task] },
+        'npc-b': { levels: { [science.id]: 1 }, queue: [] },
+        [UNIVERSE_NPC_OWNER_ID]: { levels: { [science.id]: 2 }, queue: [task] },
+      },
+    },
+  };
+
+  const queuedScores = selectOwnerScores(state);
+  for (const [ownerId, score] of Object.entries(queuedScores)) {
+    assert.deepEqual(selectOwnerScore(state, ownerId), score, 'single-owner scoring matches the complete owner registry');
+  }
+  assert.equal(selectOwnerScore(state, 'absent-owner'), undefined);
+  const queuedScore = queuedScores['npc-a']!;
+  const completedState = {
+    ...state,
+    npcScience: {
+      ...state.npcScience,
+      owners: {
+        ...state.npcScience.owners,
+        'npc-a': { levels: { [science.id]: 1 }, queue: [] },
+      },
+    },
+  };
+  const completedScore = selectOwnerScores(completedState)['npc-a']!;
+
+  assert.equal(queuedScore.resourcePoints, completedScore.resourcePoints);
+  assert.equal(queuedScore.resourcePoints, Math.round((cost.metal + cost.minerals + cost.gas) / 1_000));
+  assert.equal(queuedScores['npc-b']!.resourcePoints,
+    Math.round((science.baseCost.metal + science.baseCost.minerals + science.baseCost.gas) / 1_000));
+  assert.equal(queuedScores[base.profile.playerId]!.resourcePoints,
+    calculateResourceScore({ factionId: base.profile.factionId, planets: [], scienceLevels: state.science.levels }).resourcePoints);
+  assert.equal(queuedScores[UNIVERSE_NPC_OWNER_ID]!.resourcePoints,
+    calculateResourceScore({
+      factionId: base.profile.factionId,
+      planets: [],
+      scienceLevels: botProfile.scienceLevels,
+      shipUpgradeLevels: { ...botProfile.shipLevels, ...botProfile.commanderLevels },
+    }).resourcePoints);
 });
 
 function resourceValueForCommander(commander: (typeof COMMANDER_COMBAT_CATALOG)[number]) {
