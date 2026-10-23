@@ -484,6 +484,7 @@ function FleetWorkspace({
   const describedMission = missions.find((mission) => mission.id === hoveredMissionId) ?? selectedMission;
   const activeFlightRecords = useMemo(
     () => flightRecords
+      .filter((flight) => flight.ownerSide !== 'npc' || flight.destinationOwnerId === saveState.profile.playerId)
       .filter((flight) => flight.missionId !== 'espionage' && (flight.phase === 'outbound' || flight.phase === 'returning' || flight.phase === 'arrived'))
       .sort((left, right) => {
         if (left.missionId === 'attack' && right.missionId === 'attack') {
@@ -495,12 +496,12 @@ function FleetWorkspace({
         if (right.missionId === 'attack') return 1;
         return left.arrivalAt - right.arrivalAt || left.id.localeCompare(right.id);
       }),
-    [flightRecords],
+    [flightRecords, saveState.profile.playerId],
   );
   // Hostile flights heading to the player light up the whole Fleet screen.
   const hostileIncomingFlights = useMemo(() => activeFlightRecords
-    .filter((flight) => flight.phase === 'outbound' && ((flight.ownerSide === 'bot01' && flight.missionId === 'attack') || (flight.ownerSide === 'pirate' && flight.missionId === 'pirate-raid')))
-    .map((flight) => ({ flight, originLabel: flight.ownerSide === 'pirate' ? 'Пираты' : 'Bot 01' })), [activeFlightRecords]);
+    .filter((flight) => flight.phase === 'outbound' && (((flight.ownerSide === 'bot01' || flight.ownerSide === 'npc') && flight.missionId === 'attack') || (flight.ownerSide === 'pirate' && flight.missionId === 'pirate-raid')))
+    .map((flight) => ({ flight, originLabel: flight.ownerSide === 'pirate' ? 'Пираты' : flight.ownerSide === 'npc' ? 'NPC' : 'Bot 01' })), [activeFlightRecords]);
   const ownFlightGroups = useMemo(() => {
     const counts = new Map<FlightRecord["missionId"], number>();
     for (const flight of activeFlightRecords) {
@@ -524,9 +525,10 @@ function FleetWorkspace({
     return new Map(activeFlightRecords.filter((flight) => flight.missionId === 'attack').map((flight) => [flight.id, ++order]));
   }, [activeFlightRecords]);
   const spyRows = useMemo(() => espionageState.missions
+    .filter((mission) => mission.ownerId === saveState.profile.playerId)
     .filter((mission) => mission.status === 'transit' || mission.status === 'orbiting' || mission.status === 'returning')
     .map((mission) => ({ mission, flight: flightRecords.find((flight) => flight.id === mission.flightId) }))
-    .filter((row): row is { mission: SpyMission; flight: FlightRecord } => Boolean(row.flight)), [espionageState.missions, flightRecords]);
+    .filter((row): row is { mission: SpyMission; flight: FlightRecord } => Boolean(row.flight)), [espionageState.missions, flightRecords, saveState.profile.playerId]);
 
   const getActiveTransportState = (flight: FlightRecord) => {
     if (flight.missionId !== 'transport' && flight.missionId !== 'aid') return { overflowWarning: false, targetUnavailable: false };
@@ -1486,7 +1488,7 @@ function FleetWorkspace({
                   <strong>Активных полётов нет</strong>
                   <span>Флоты, находящиеся в пути, будут отображаться здесь.</span>
                 </div> : activeFlightRecords.map((flight) => {
-                  const isIncomingBotAttack = flight.ownerSide === 'bot01' && flight.missionId === 'attack';
+                  const isIncomingBotAttack = (flight.ownerSide === 'bot01' || flight.ownerSide === 'npc') && flight.missionId === 'attack';
                   const isBot01Explorer = (flight.ownerSide === 'bot01' || flight.ownerSide === 'npc') && (flight.missionId === 'expedition'||flight.explorationAttack);
                   const isIncomingPirateRaid = flight.ownerSide === 'pirate' && flight.missionId === 'pirate-raid';
                   const isHostileIncoming = isIncomingBotAttack || isIncomingPirateRaid || isBot01Explorer;

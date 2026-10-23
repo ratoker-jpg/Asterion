@@ -388,11 +388,12 @@ export function buildReportsFeed(
 
   const battleItems = battleReports
     .filter((report) => report.missionType !== 'simulation' && report.missionType !== 'arena')
+    .filter((report) => !playerOwnerId || report.attacker.playerId === playerOwnerId || report.defender.playerId === playerOwnerId)
     .map((report) => battleReportToReportItem(report, operationByBattleId.get(report.id)));
 
   const espionageItems = [
-    ...(espionage?.reports ?? []).map((report) => spyReportToReportItem(report, espionage)),
-    ...(espionage?.hunterNotices ?? []).map(spyHunterNoticeToReportItem),
+    ...(espionage?.reports ?? []).filter((report) => report.ownerId === undefined || report.ownerId === playerOwnerId).map((report) => spyReportToReportItem(report, espionage)),
+    ...(espionage?.hunterNotices ?? []).filter((notice) => notice.ownerId === undefined || notice.ownerId === playerOwnerId).map(spyHunterNoticeToReportItem),
   ];
   const overpopulationItems = overpopulationReports.map(overpopulationEpisodeReportToReportItem);
   const recyclerItems = recyclerArrivalReports.map(recyclerArrivalReportToReportItem);

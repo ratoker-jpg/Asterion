@@ -22,7 +22,7 @@ export type NewGameConfig = {
   world: {
     galaxyCount: number;
     systemsPerGalaxy: 40;
-    /** NPC = one owner with one stub planet; no behaviour at all. */
+    /** Number of seeded autonomous owners, each beginning with one canonical planet. */
     npcCount: number;
     maxNpcPerSystem: 1 | 2 | 3;
     density: WorldDensity;

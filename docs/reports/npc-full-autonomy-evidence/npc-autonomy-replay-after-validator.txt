@@ -1,0 +1,39 @@
+(node:35304) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ NPC decisions run inside generated sessions and debit only their own exact construction cost (254.113ms)
+✖ a frozen 30-day replay target survives intermediate save/reload and does not duplicate actions (755.7523ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1569.4451
+
+✖ failing tests:
+
+test at src\application\npc-runtime.integration.test.ts:244:1
+✖ a frozen 30-day replay target survives intermediate save/reload and does not duplicate actions (755.7523ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + 'malformed'
+  - 'loaded'
+
+      at TestContext.<anonymous> (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/application/npc-runtime.integration.test.ts:260:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1306:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+      at Test.postRun (node:internal/test_runner/test:1447:19)
+      at Test.run (node:internal/test_runner/test:1372:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'malformed',
+    expected: 'loaded',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

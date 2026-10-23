@@ -32,6 +32,9 @@ import { accrueResourceCredits } from './resource-clock.ts';
 import type { SpyTargetState } from '../domain/espionage/types.ts';
 
 const RESOURCE_KEYS = ['metal', 'minerals', 'gas'] as const;
+export const NPC_AUTONOMY_BUILDING_ROLES: readonly BuildingRole[] = [
+  ...NPC_ECONOMY_ROLES, 'shipyard', 'hangar', 'spaceport', 'planetary-government',
+];
 
 export type NpcEconomyContext = {
   /** Explicit campaign/test scale snapshot for deterministic historical replay. */
@@ -215,10 +218,18 @@ function accrueInterval(target: SpyTargetState, to: number, timeScale: number, d
 }
 
 function shiftQueue(target: SpyTargetState, delta: number, blockedSince: number): SpyTargetState {
-  if (delta <= 0 || !target.buildingQueue?.length) return target;
+  if (delta <= 0) return target;
+  const shiftProduction = (queue: NonNullable<SpyTargetState['fleetProduction']>['shipQueue']) => queue.map((item) => item.finishAt <= blockedSince ? item : ({
+    ...item, enqueuedAt: item.enqueuedAt + delta, startedAt: item.startedAt + delta, finishAt: item.finishAt + delta,
+  }));
   return {
     ...target,
-    buildingQueue: target.buildingQueue.map((item) => item.finishAt <= blockedSince ? item : ({
+    ...(target.fleetProduction ? { fleetProduction: {
+      shipQueue: shiftProduction(target.fleetProduction.shipQueue),
+      defenseQueue: shiftProduction(target.fleetProduction.defenseQueue),
+      commanderQueue: shiftProduction(target.fleetProduction.commanderQueue),
+    } } : {}),
+    buildingQueue: (target.buildingQueue ?? []).map((item) => item.finishAt <= blockedSince ? item : ({
       ...item,
       enqueuedAt: item.enqueuedAt + delta,
       startedAt: item.startedAt + delta,
@@ -303,12 +314,12 @@ export function previewNpcBuilding(target: SpyTargetState, role: BuildingRole): 
   return availability;
 }
 
-export function getNpcBuildingCandidates(target: SpyTargetState): Array<{ role: BuildingRole; availability: BuildAvailability }> {
+export function getNpcBuildingCandidates(target: SpyTargetState, autonomous = false): Array<{ role: BuildingRole; availability: BuildAvailability }> {
   // Each candidate observes the same owner snapshot. Hydrate the persisted
   // ledger and queue once rather than once per catalogue role.
   const economy = economyFor(target);
   const blocked = isBlocked(target);
-  return [...NPC_ECONOMY_ROLES].map((role) => ({
+  return [...(autonomous ? NPC_AUTONOMY_BUILDING_ROLES : NPC_ECONOMY_ROLES)].map((role) => ({
     role,
     availability: blocked
       ? { ...evaluateBuildingBuild(economy, role), canBuild: false, reason: 'Планета заблокирована из-за перенаселения.' }
@@ -325,7 +336,7 @@ export function startNpcBuilding(
 ): NpcBuildingStartResult {
   if (target.economyAppliedActionIds?.includes(idempotencyKey)) return { target, ok: true, reason: null };
   if (isBlocked(target)) return { target, ok: false, reason: 'Планета заблокирована из-за перенаселения.' };
-  if (!NPC_ECONOMY_ROLES.includes(role)) return { target, ok: false, reason: 'Это здание вне доступных экономических решений NPC.' };
+  if (!NPC_AUTONOMY_BUILDING_ROLES.includes(role)) return { target, ok: false, reason: 'Это здание вне доступных решений NPC.' };
   const economy = economyFor(target);
   const availability = evaluateBuildingBuild(economy, role);
   if (!availability.canBuild || availability.timeMs == null || !availability.cost) {

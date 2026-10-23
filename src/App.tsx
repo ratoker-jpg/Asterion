@@ -910,6 +910,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     setState((current) => {
       const at = Date.now();
       const playerId = current.profile.playerId;
+      if (needsNpcCatchupBefore(current, at)) return current;
       const command = refreshPresence(current.command, playerId, at, current.profile.displayName);
       if (command === current.command) return current;
       return { ...current, command, profile: syncPlayerProfileWithCommand(current.profile, command) };
@@ -1188,7 +1189,9 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   // The race theme lives on <html> so portals and dialogs outside the stage get it too.
   // Same rule as the Fleet screen alert: hostile fleets still on their way in.
   const incomingAttackCount = state.flights.records.filter((flight) => flight.phase === 'outbound'
-    && ((flight.ownerSide === 'bot01' && flight.missionId === 'attack') || (flight.ownerSide === 'pirate' && flight.missionId === 'pirate-raid'))).length;
+    && ((flight.ownerSide === 'bot01' && flight.missionId === 'attack')
+      || (flight.ownerSide === 'npc' && flight.missionId === 'attack' && flight.destinationOwnerId === state.profile.playerId)
+      || (flight.ownerSide === 'pirate' && flight.missionId === 'pirate-raid'))).length;
   const sunAlerts = useMemo(() => selectIncomingSunAlerts(state, now), [state, now]);
   const uiFactionId = HEADER_FACTION_PREVIEW ?? state.profile.factionId;
   useEffect(() => {

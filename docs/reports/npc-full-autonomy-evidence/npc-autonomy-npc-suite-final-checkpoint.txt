@@ -1,0 +1,325 @@
+
+> asterion@0.1.0 test:npc
+> node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/domain/npc/*.test.ts src/application/npc-*.test.ts src/application/state.test.ts
+
+(node:36840) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ NPC aid candidates are limited to open same-alliance requests and own cargo capacity (55.4076ms)
+✔ denied owner and source requests do not debit NPC resources or ships (28.9354ms)
+✔ aid dispatch and arrival are idempotent and credit only the recipient accepted amount (20.8563ms)
+✔ return handler restores loaded cargo to its NPC source once and leaves ship restoration to flight runtime (19.1469ms)
+(node:15464) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✖ full-world NPC replay matches at 1/3/7/30 days across continuous, irregular, and reloaded slices (8290.3365ms)
+✔ full-world decisions start one legal paid ship across an owner’s planets and replay its physical completion once (862.7107ms)
+(node:30772) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ command gate reads replay metadata only and freezes the target reconcileRuntime would choose (450.085ms)
+✔ one-owner score equals the all-owner selection for every owner (211.5305ms)
+✔ rolls written through one pass scope equal per-roll copies and never touch the input ledger (80.8738ms)
+(node:37492) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ NPC founding uses its public name and persists one real owner membership (73.2065ms)
+✔ NPC alliance application stays pending and replaying its action id changes nothing (24.9458ms)
+✔ full alliances and active cooldowns do not produce illegal join or create candidates (22.8961ms)
+✔ NPC leaders leave player applications and truce offers pending, but can decide NPC applications (20.179ms)
+(node:10244) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ cached NPC energy follows Sun brightness changes and restoration without resetting consumption (6.0134ms)
+✔ NPC construction uses the shared price and charges each resource once (2.6859ms)
+✔ legacy development energy remains the opening balance when energy sources exist (1.1028ms)
+✔ legacy fleet satellites feed energy and overpopulation once, then use the canonical field (3.9254ms)
+✔ building candidates and direct starts enforce the exact economy role policy (2.224ms)
+✔ NPC income obeys warehouse caps (0.8412ms)
+✔ production changes exactly at the building completion timestamp (1.4964ms)
+✔ energy-source completion credits once across repeated settlement (1.1209ms)
+✔ an overpopulated legacy NPC burns fleet units and pauses income and construction timers (1.8602ms)
+✔ economy metadata survives espionage target persistence normalization (3.5011ms)
+(node:30828) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ fleet candidates and paid starts are faction legal and replay idempotently (12.9503ms)
+✔ settlement completes exactly at the saved due time once and exposes the next timer (2.2708ms)
+✔ an owner mismatch and a denied catalog action cannot debit the target wallet (1.7847ms)
+✔ candidate catalog is limited to the target faction catalog (1.861ms)
+✔ campaign duration scale is explicit and independent of the global player runtime scale (2.8459ms)
+(node:36500) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ NPC foundation creates 100 distinct owner profiles and accepts an empty world (9.1864ms)
+✔ new campaigns with the same visible seed keep their world but independently salt NPC identity (96.6831ms)
+✔ save and reload preserve private NPC profiles, active sessions, and event cursors (59.988ms)
+✔ schema 24 Production and Test saves migrate deterministically without losing live state (192.0406ms)
+✔ NPCs without online sessions issue no new commands across elapsed time (112.1651ms)
+✔ public owner/save summaries and pirate analysis do not expose or depend on private NPC state (36.9053ms)
+✔ full save backup exports retain the NPC foundation (37.3495ms)
+✔ future or malformed nested NPC state is rejected and its original bytes remain untouched (93.0739ms)
+(node:37084) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ keeps the newest 200 pirate-vs-NPC reports and never touches player, saved or live-flight reports (25.1536ms)
+✔ drops only completed pirate raid flights against NPCs and their request index entries (15.1316ms)
+✔ roll ledger keeps entries inside the margin and those whose raid is still flying (6.5179ms)
+(node:36184) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ mission candidates are deterministic and ignore hidden target fleet changes (26.4264ms)
+✔ attack eligibility is owner-scoped and respects the observation time (6.7276ms)
+✔ colonization only proposes canonical public empty coordinates and respects the owner cap (8.1718ms)
+✔ candidate adapter emits a real mission command with canonical target/contact payload (3.434ms)
+(node:15512) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ neutral NPC-to-player attack survives production reload and settles once at exact arrival and return times (155.3745ms)
+✔ NPC-to-NPC attack uses the real defender planet and conserves both garrisons through return (30.8794ms)
+✔ arrival revalidates live relations and target ownership before any combat (40.2098ms)
+✔ competing NPC colonizers resolve by arrival order across save reload without double-claiming a coordinate (170.8943ms)
+✔ NPC exploration recon dispatch uses a canonical live contact and shared arrival settlement (106.4178ms)
+(node:37532) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ dispatch debits only the NPC owner, uses canonical flight timing, and is request-idempotent (28.4151ms)
+✔ attack dispatch accepts a neutral owner through the current relation rules (4.147ms)
+✔ spy probe arrival records an owner-scoped canonical report and is idempotent (3.4568ms)
+✔ colonization creates an owner target with canonical start resources and consumes its colonizer (4.4207ms)
+✔ return credits only surviving ships and owner loot once, and rejects an origin now owned by someone else (6.2129ms)
+(node:31476) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ NPC pirate candidates use an owned public contact, own fleet, and canonical recon availability (27.5341ms)
+✔ NPC elimination arrival runs canonical combat and isolates player-owned save fields (24.0241ms)
+(node:12416) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ replay interval partitions preserve boundary and decision events with opaque IDs (31.8493ms)
+✔ registered owner filtering drops orphans and applies session boundary before the first decision (8.6884ms)
+✔ baseline inside a canonical session seeds it and replays only remaining decisions (13.2394ms)
+(node:34412) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✖ NPC runtime replay is equivalent at 1, 7, and 30 days across continuous and irregular chunks (12998.7327ms)
+✔ NPC decisions run inside generated sessions and debit only their own exact construction cost (149.3814ms)
+✖ a frozen 30-day replay target survives intermediate save/reload and does not duplicate actions (717.4314ms)
+✖ 100 real NPC owners finish a 30-day production replay with their own bounded economy state (4138.6405ms)
+✔ legacy NPC queue and energy ledger survive schema migration and complete through runtime (36.2738ms)
+✖ zero NPC and campaign speed scale stay isolated from player resources and saved clocks (1765.0662ms)
+(node:33748) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ NPC science completing exactly at an attack arrival updates that battle before combat, while launch snapshots and other owners stay isolated (257.7471ms)
+(node:35932) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ schema 26 migration merges legacy science by owner and activates after pending replay (121.0245ms)
+✔ fresh campaigns create an active owner science ledger at the creation timestamp (46.3691ms)
+✔ schema 27 requires a valid ledger and preserves malformed original bytes (297.291ms)
+✖ schema 26 partial month catch-up activates NPC science only at its frozen target (2508.168ms)
+(node:36464) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ started NPC research pauses once across irregular settlements and reload, then resumes at its shifted finish (119.6195ms)
+✔ a task already due before the overpopulation lock still completes at its original finish (24.6813ms)
+✔ only FIFO work paid by the blocked planet shifts when another owner planet is not blocked (19.6726ms)
+✔ research remains paused past the nominal burn window until an unburnable lock actually clears (32.4999ms)
+(node:33912) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ NPC science candidates and starts use production research costs and duration scales (49.0009ms)
+✔ NPC science start is idempotent and runtime reconciliation finishes paid owner research (34.0401ms)
+✔ owner science projects to both colonies without crossing owners (22.8282ms)
+✔ destroying the research payer drops its queue without refunding a surviving colony (19.8654ms)
+✔ building a production research lab pays its exact resource and energy cost before completion (17.6092ms)
+✔ a generated zero-lab NPC campaign earns its lab and completes paid research within 30 days (10303.0206ms)
+✔ Mathematics income and Physics energy are exact once across projection and save reload (47.5588ms)
+✔ Mathematics takes effect at its paid finish boundary without retroactive or duplicate income (12.005ms)
+✔ canonical owner science and completion events match across replay partitions, reloads, speeds, and seeds (1964.5188ms)
+✔ blocked research pauses once through the locked overpopulation interval and resumes from the shifted FIFO (12.789ms)
+(node:28828) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ application command guard follows persisted NPC replay progress (44.4215ms)
+✔ gameplay request gate covers command bridges and leaves navigation requests alone (0.2463ms)
+(node:37768) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ action selection is stable across reloads and candidate enumeration order (2.5494ms)
+✔ selection only uses supplied legal candidates and wait shares the draw (1.9604ms)
+✔ matching personalities favor different supplied strategies reproducibly (6.7403ms)
+✔ memory learns only explicit fact references and records event outcomes once (0.7054ms)
+✔ a fact-backed battle loss changes attack weight and forces timely goal reconsideration (0.8045ms)
+✔ adaptability, persistence, and risk tolerance scale the effect of fact-backed outcomes (0.3051ms)
+✔ recon and diplomacy observations also invalidate a still-live goal (0.3899ms)
+✔ saved memory and long-term goals remain bounded through repeated outcomes (2.9838ms)
+✔ v1 validation rejects out-of-range policy values and unsafe reconsideration timestamps (3.3324ms)
+(node:25628) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ accepts canonical owner fleet queues and a flight bound to its live NPC origin (3.7429ms)
+✔ accepts legacy payloads with absent autonomy queues and unbound NPC flights (0.299ms)
+✔ rejects malformed queue shape, catalog identity, timing, duplicate IDs, costs, and commander levels (2.1318ms)
+✔ rejects cross-queue duplicate order IDs and wrong owner faction (0.2734ms)
+✔ rejects malformed owner-bound flight identity, mission, destination, ships, and attack snapshot (0.5815ms)
+✔ requires matching live origin ownership, while allowing a destroyed origin on its pending return (0.3012ms)
+✔ validates NPC return receipts and rejects receipts on other owners or invalid timestamps (0.2944ms)
+✔ rejects a new owner-bound flight whose identity collides with a legacy flight record (0.2292ms)
+✔ enforces mission-specific frozen snapshots and owner binding (0.9078ms)
+(node:35460) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ absolute day buckets produce identical events across arbitrary interval partitions (11.6752ms)
+✔ sessions stay within the approved day count, duration, timezone, and pause envelope (5.2785ms)
+✔ rare absences are multi-day and next-event search is bounded (38.6202ms)
+✔ invalid interval boundaries are rejected (0.4619ms)
+(node:37580) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ policy chooses only caller-supplied legal economy roles and repeats identically (3.3846ms)
+✔ policy waits when no legal in-scope action is available (0.3772ms)
+✔ development policy uses actual startable science previews and returns a stable single action (1.4074ms)
+✔ scienceFocus measurably shifts the deterministic shared choice toward science (7.9973ms)
+✔ scienceFocus raises level-0 laboratory preference relative to economyFocus (5.2039ms)
+✔ laboratory weight decays with lab level and is zero when supplied previews show a full queue (4.7526ms)
+(node:37536) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ same-time priorities apply timers, arrivals, session boundaries, then decisions (2.1041ms)
+✔ event IDs give a stable tie-break within a priority and cursor is exclusive (0.3986ms)
+✔ bounded next-event query rejects non-finite horizons (0.5955ms)
+✔ decision selector is a deterministic no-op over explicit visible facts and actions (0.5447ms)
+(node:26888) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ creation supports zero and one hundred owner profiles with stable owner-keyed variety (11.7478ms)
+✔ same public seed is irrelevant while a new private campaign salt changes profiles (1.0032ms)
+✔ v1 migration preserves saved profiles and cursors, salt, and orphan owners (0.6676ms)
+✔ absent legacy production or test state uses deterministic fallback salt and supplied saved time (0.3636ms)
+✔ future and malformed v1 schemas fail closed before state regeneration (1.0654ms)
+ℹ tests 122
+ℹ suites 0
+ℹ pass 116
+ℹ fail 6
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 22462.3354
+
+✖ failing tests:
+
+test at src\application\npc-autonomy.integration.test.ts:206:1
+✖ full-world NPC replay matches at 1/3/7/30 days across continuous, irregular, and reloaded slices (8290.3365ms)
+  AssertionError [ERR_ASSERTION]: NPC catch-up exceeded the bounded drain guard at 1793102400000; processedThroughAt=1792765955517; targetAt=1793102400000; drains=1000; decisions={"diplomacy":7,"production":38,"recon":2,"economy":18,"colonize":1,"pve":4,"wait":3,"attack":1}; fleetCompletions={}
+      at advanceTo (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/application/npc-autonomy.integration.test.ts:155:14)
+      at TestContext.<anonymous> (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/application/npc-autonomy.integration.test.ts:210:24)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1306:25)
+      at Test.start (node:internal/test_runner/test:1177:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:385:17)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at src\application\npc-runtime.integration.test.ts:168:1
+✖ NPC runtime replay is equivalent at 1, 7, and 30 days across continuous and irregular chunks (12998.7327ms)
+  Error [CombatInputValidationError]: Для запуска у атакующего должна быть хотя бы одна единица.
+      at resolveCombat (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/domain/combat/resolver.ts:1585:29)
+      at resolvePirateEliminationEncounter (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/domain/pirates/encounter.ts:290:18)
+      at resolvePirateEliminationAtTarget (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/application/attack.ts:498:21)
+      at resolvePirateFlightAtTarget (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/application/pirates.ts:553:20)
+      at resolveNpcPirateArrival (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/application/npc-pirates.ts:315:18)
+      at reconcileFlights (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/application/flights.ts:2625:24)
+      at processFlightsAt (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/application/reconcile.ts:471:21)
+      at reconcileRuntimeSlice (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/application/reconcile.ts:581:26)
+      at reconcileRuntime (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/application/reconcile.ts:110:18)
+      at advanceTo (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/application/npc-runtime.integration.test.ts:86:22) {
+    errors: [ { code: 'empty-side', path: 'attacker', message: 'Для запуска у атакующего должна быть хотя бы одна единица.' } ]
+  }
+
+test at src\application\npc-runtime.integration.test.ts:244:1
+✖ a frozen 30-day replay target survives intermediate save/reload and does not duplicate actions (717.4314ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + 'malformed'
+  - 'loaded'
+
+      at TestContext.<anonymous> (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/application/npc-runtime.integration.test.ts:260:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1306:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+      at Test.postRun (node:internal/test_runner/test:1447:19)
+      at Test.run (node:internal/test_runner/test:1372:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:897:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'malformed',
+    expected: 'loaded',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at src\application\npc-runtime.integration.test.ts:280:1
+✖ 100 real NPC owners finish a 30-day production replay with their own bounded economy state (4138.6405ms)
+  Error [CombatInputValidationError]: Для запуска у атакующего должна быть хотя бы одна единица.
+      at resolveCombat (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/domain/combat/resolver.ts:1585:29)
+      at resolvePirateEliminationEncounter (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/domain/pirates/encounter.ts:290:18)
+      at resolvePirateEliminationAtTarget (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/application/attack.ts:498:21)
+      at resolvePirateFlightAtTarget (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/application/pirates.ts:553:20)
+      at resolveNpcPirateArrival (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/application/npc-pirates.ts:315:18)
+      at reconcileFlights (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/application/flights.ts:2625:24)
+      at processFlightsAt (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/application/reconcile.ts:471:21)
+      at reconcileRuntimeSlice (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/application/reconcile.ts:581:26)
+      at reconcileRuntime (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/application/reconcile.ts:110:18)
+      at advanceTo (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/application/npc-runtime.integration.test.ts:86:22) {
+    errors: [ { code: 'empty-side', path: 'attacker', message: 'Для запуска у атакующего должна быть хотя бы одна единица.' } ]
+  }
+
+test at src\application\npc-runtime.integration.test.ts:334:1
+✖ zero NPC and campaign speed scale stay isolated from player resources and saved clocks (1765.0662ms)
+  Error [CombatInputValidationError]: Для запуска у атакующего должна быть хотя бы одна единица.
+      at resolveCombat (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/domain/combat/resolver.ts:1585:29)
+      at resolvePirateEliminationEncounter (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/domain/pirates/encounter.ts:290:18)
+      at resolvePirateEliminationAtTarget (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/application/attack.ts:498:21)
+      at resolvePirateFlightAtTarget (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/application/pirates.ts:553:20)
+      at resolveNpcPirateArrival (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/application/npc-pirates.ts:315:18)
+      at reconcileFlights (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/application/flights.ts:2625:24)
+      at processFlightsAt (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/application/reconcile.ts:471:21)
+      at reconcileRuntimeSlice (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/application/reconcile.ts:581:26)
+      at reconcileRuntime (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/application/reconcile.ts:110:18)
+      at advanceTo (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/application/npc-runtime.integration.test.ts:86:22) {
+    errors: [ { code: 'empty-side', path: 'attacker', message: 'Для запуска у атакующего должна быть хотя бы одна единица.' } ]
+  }
+
+test at src\application\npc-science-migration.test.ts:138:1
+✖ schema 26 partial month catch-up activates NPC science only at its frozen target (2508.168ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + 'malformed'
+  - 'loaded'
+
+      at TestContext.<anonymous> (file:///D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified/src/application/npc-science-migration.test.ts:191:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1306:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+      at Test.postRun (node:internal/test_runner/test:1447:19)
+      at Test.run (node:internal/test_runner/test:1372:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:897:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'malformed',
+    expected: 'loaded',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

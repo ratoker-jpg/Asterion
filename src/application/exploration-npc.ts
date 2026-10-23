@@ -23,13 +23,14 @@ export type ExplorationNpcRoll = Readonly<{at:number;contactId:string;slot:numbe
 export type ExplorationNpcSource = Readonly<{ownerId:string;coordinate:UniverseCoordinate}>;
 export type ExplorationNpcSourceProvider = (state:SaveState)=>readonly ExplorationNpcSource[];
 
-/**
- * Production competition is paused until persisted NPC settlements and fleets
- * exist. Test Mode Bot 01 continues to use its explicit fixture and manual
- * dispatch path. A future owner-backed source can be connected here without
- * changing the calendar, combat resolver, or return settlement.
- */
+/** Explicit empty provider retained for callers that disable legacy risk rolls. */
 export const noProductionExplorationNpcSources: ExplorationNpcSourceProvider = () => [];
+
+/** Real owner-backed sources; autonomous missions compete in their session decision. */
+export const productionExplorationNpcSources: ExplorationNpcSourceProvider = (state) =>
+  Object.values(state.espionage?.targets ?? {})
+    .filter((target) => target.kind === 'npc' && Boolean(state.npc?.profiles[target.ownerId]))
+    .map((target) => ({ ownerId: target.ownerId, coordinate: target.coordinate }));
 
 /** Replay at most the latest day. The omitted interval is persisted by the
  * reconcile layer so long offline gaps are an explicit, reviewable policy. */
@@ -72,18 +73,21 @@ type ScheduledNpcCandidate = Readonly<{
  * player's hidden ship count to set raid force or decide whether to attack. */
 export function selectDueExplorationNpcRolls(
   state:SaveState,after:number,until:number,mode:RuntimeMode,
-  sourceProvider:ExplorationNpcSourceProvider=noProductionExplorationNpcSources,
+  sourceProvider:ExplorationNpcSourceProvider=productionExplorationNpcSources,
 ):ExplorationNpcRoll[]{
   if(mode!=='production'||until<=after)return [];
   const sources=sourceProvider(state)
-    .filter(target=>target.ownerId!==state.profile.playerId&&target.ownerId!==UNIVERSE_NPC_OWNER_ID);
+    // Registered personas use the shared 5–15 minute decision, never a second
+    // risk-roll attempt. Already launched flights settle without this window.
+    .filter(target=>target.ownerId!==state.profile.playerId&&target.ownerId!==UNIVERSE_NPC_OWNER_ID
+      && !state.npc?.profiles[target.ownerId]);
   if(!sources.length)return [];
 
   const sourceGalaxies=new Set(sources.map(source=>source.coordinate.galaxy));
   const visibleSystems=new Map<string,UniverseCoordinate>();
-  for(const planet of Object.values(state.planets)){
-    const galaxy=planet.universeGalaxy??1;
-    const system=planet.universeSystem??1;
+  for(const source of sources){
+    const galaxy=source.coordinate.galaxy;
+    const system=source.coordinate.system;
     if(!Number.isInteger(galaxy)||galaxy<1||!Number.isInteger(system)||system<1||system>SYSTEM_COUNT)continue;
     for(let visible=Math.max(1,system-5);visible<=Math.min(SYSTEM_COUNT,system+5);visible++){
       if(!sourceGalaxies.has(galaxy))continue;

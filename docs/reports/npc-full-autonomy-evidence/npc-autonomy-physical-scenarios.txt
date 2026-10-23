@@ -1,0 +1,16 @@
+(node:36784) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ neutral NPC-to-player attack survives production reload and settles once at exact arrival and return times (82.304ms)
+✔ NPC-to-NPC attack uses the real defender planet and conserves both garrisons through return (13.2087ms)
+✔ arrival revalidates live relations and target ownership before any combat (22.6623ms)
+✔ competing NPC colonizers resolve by arrival order across save reload without double-claiming a coordinate (87.362ms)
+✔ NPC exploration recon dispatch uses a canonical live contact and shared arrival settlement (53.8909ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 747.5734

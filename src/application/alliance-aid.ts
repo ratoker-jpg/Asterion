@@ -87,6 +87,11 @@ export function syncAidState(state: SaveState, context: AidContext): SaveState {
 
 /** The request's planet still exists and still belongs to the request's author. */
 export function isRequestPlanetAlive(state: SaveState, request: ResourceRequest): boolean {
+  const npc = state.espionage?.targets?.[request.planetId];
+  if (request.authorOwnerId !== state.profile.playerId && npc?.kind === 'npc' && npc.ownerId === request.authorOwnerId) {
+    return npc.coordinate.galaxy === request.coordinate.galaxy && npc.coordinate.system === request.coordinate.system
+      && npc.coordinate.position === request.coordinate.position;
+  }
   const planet = request.authorOwnerId === state.profile.playerId
     ? state.planets[request.planetId]
     : state.alliedPlanets?.[request.planetId];

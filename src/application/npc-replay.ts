@@ -10,6 +10,9 @@ import { createSeededRandom } from '../domain/world/random.ts';
 import type { NpcStateV1, NpcProfile, NpcSessionEvent } from '../domain/npc/types.ts';
 import type { SpyTargetState } from '../domain/espionage/types.ts';
 import type { BuildingRole } from '../domain/buildings/resource-zone.ts';
+import type { SaveState } from './contracts.ts';
+import { applyNpcAutonomyDecision } from './npc-autonomy.ts';
+import { touchMember } from '../domain/command/membership.ts';
 
 export const NPC_REPLAY_DECISION_MIN_DELAY_MS = 5 * 60_000;
 export const NPC_REPLAY_DECISION_MAX_DELAY_MS = 15 * 60_000;
@@ -33,6 +36,8 @@ export type NpcReplayContext = Readonly<{
   targets: Readonly<Record<string, SpyTargetState>>;
   timeScale: number;
   science?: NpcScienceLedger;
+  /** Full authoritative state enables the unified owner-wide decision path. */
+  world?: SaveState;
 }>;
 
 export type NpcReplayEmission = Readonly<{
@@ -42,6 +47,9 @@ export type NpcReplayEmission = Readonly<{
   attempt: number;
   selectedRole: BuildingRole | null;
   selectedScienceId?: ScienceId | null;
+  selectedActionKind?: string;
+  planetId?: string;
+  economyActionId?: string;
   wait: boolean;
   started: boolean;
   reason: string | null;
@@ -53,6 +61,7 @@ export type NpcReplayApplyResult = Readonly<{
   targets: Readonly<Record<string, SpyTargetState>>;
   emitted: readonly NpcReplayEmission[];
   science?: NpcScienceLedger;
+  world?: SaveState;
 }>;
 
 /**
@@ -205,6 +214,7 @@ export function applyNpcReplayEventsAt(
   const profiles = { ...state.profiles };
   let targets: Record<string, SpyTargetState> = { ...context.targets };
   let science = context.science;
+  let world = context.world;
   const emitted: NpcReplayEmission[] = [];
   const ordered = [...eventsAtTimestamp]
     .filter((event) => event.at === at)
@@ -213,6 +223,7 @@ export function applyNpcReplayEventsAt(
   for (const event of ordered) {
     const profile = profiles[event.ownerId];
     if (!profile || !isNpcEventAfterCursor(event, profile.cursor)) continue;
+    if (world) world = { ...world, command: touchMember(world.command, event.ownerId, event.at) };
     if (event.priority === 'npc-session-boundary') {
       const isStart = event.boundary === 'session-start';
       profiles[event.ownerId] = {
@@ -239,7 +250,21 @@ export function applyNpcReplayEventsAt(
     let started = false;
     let reason: string | null = null;
     const idempotencyKey = 'npc-economy:v1:' + JSON.stringify([event.ownerId, event.eventId]);
-    if (activeProfile) {
+    if (activeProfile && world) {
+      world = { ...world, npc: { ...state, profiles }, npcScience: science,
+        espionage: { ...world.espionage!, targets } };
+      const decision = applyNpcAutonomyDecision(world, profile, event.eventId, at, context.timeScale);
+      world = decision.state;
+      targets = { ...world.espionage!.targets };
+      science = world.npcScience;
+      profiles[event.ownerId] = world.npc!.profiles[event.ownerId]!;
+      emitted.push(Object.freeze({ ownerId: event.ownerId, at, eventId: event.eventId, attempt: event.attempt,
+        selectedRole: decision.selectedRole, selectedScienceId: decision.selectedScienceId,
+        selectedActionKind: decision.kind, wait: decision.wait, started: decision.started,
+        ...(decision.planetId ? { planetId: decision.planetId } : {}),
+        ...(decision.economyActionId ? { economyActionId: decision.economyActionId } : {}),
+        reason: decision.reason, idempotencyKey: decision.idempotencyKey }));
+    } else if (activeProfile) {
       const target = Object.values(targets)
         .filter((item) => item.kind === 'npc' && item.ownerId === event.ownerId)
         .sort((left, right) => compareStableIds(left.id, right.id))[0];
@@ -283,6 +308,7 @@ export function applyNpcReplayEventsAt(
     targets: Object.freeze(targets),
     emitted: Object.freeze(emitted),
     ...(science ? { science } : {}),
+    ...(world ? { world } : {}),
   });
 }
 

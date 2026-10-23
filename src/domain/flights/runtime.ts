@@ -14,6 +14,7 @@ export type DispatchFlightInput = {
   requestId: string;
   missionId: MissionId;
   ownerSide?: FlightRecord['ownerSide'];
+  ownerId?: string;
   originPlanetId: string;
   originCoordinate: FlightRecord['originCoordinate'];
   destination: FlightDestination;
@@ -116,6 +117,7 @@ export function createFlightRecord(input: DispatchFlightInput): FlightRecord {
     id: `flight-${input.requestId}`,
     requestId: input.requestId,
     ...(input.ownerSide ? { ownerSide: input.ownerSide } : {}),
+    ...(input.ownerId ? { ownerId: input.ownerId } : {}),
     missionId: input.missionId,
     operationId: input.operationId ?? (input.destination.kind === 'operation' ? input.destination.operationId : undefined),
     spyMissionId: input.spyMissionId,

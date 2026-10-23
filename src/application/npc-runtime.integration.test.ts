@@ -203,7 +203,7 @@ test('NPC decisions run inside generated sessions and debit only their own exact
     // committed prefix immediately before this decision, so the comparison
     // isolates its one debit rather than earlier actions in the same replay.
     state = advanceTo(state, scheduled.at - 1, [scheduled.at - 1]).state;
-    const beforeTarget = npcTargets(state).find((item) => item.ownerId === ownerId)!;
+    const beforeTargets = npcTargets(state);
     const result = reconcileRuntime(state, {
       planetId: state.currentPlanetId,
       now: scheduled.at,
@@ -212,14 +212,16 @@ test('NPC decisions run inside generated sessions and debit only their own exact
     });
     state = result.state;
     const decision = keepNpcEvents(result.events).find((entry) =>
-      entry.kind === 'npc-economy' && entry.event.at === scheduled.at && entry.event.started);
+      entry.kind === 'npc-economy' && entry.event.at === scheduled.at && entry.event.started && Boolean(entry.event.selectedRole));
     if (!decision || decision.kind !== 'npc-economy') continue;
 
     assert.ok(intervals.some(({ start, end }) => decision.event.at >= start && decision.event.at < end),
       'a persisted economic action must occur during the generated online session');
     assert.ok(decision.event.selectedRole);
+    const beforeTarget = beforeTargets.find((item) => item.id === decision.event.planetId && item.ownerId === ownerId)!;
+    assert.ok(beforeTarget, 'the decision identifies the actual paying owner planet');
     const settled = settleNpcPlanet(beforeTarget, decision.event.at, { timeScale }).target;
-    const candidate = getNpcBuildingCandidates(settled).find((item) => item.role === decision.event.selectedRole);
+    const candidate = getNpcBuildingCandidates(settled, true).find((item) => item.role === decision.event.selectedRole);
     assert.ok(candidate?.availability.canBuild && candidate.availability.cost);
     const expected = startNpcBuilding(settled, decision.event.selectedRole, decision.event.at,
       { timeScale }, decision.event.idempotencyKey);
@@ -228,7 +230,7 @@ test('NPC decisions run inside generated sessions and debit only their own exact
     assert.equal(expected.target.resources.minerals, settled.resources.minerals - candidate.availability.cost.minerals);
     assert.equal(expected.target.resources.gas, settled.resources.gas - candidate.availability.cost.gas);
 
-    const actualTarget = npcTargets(state).find((item) => item.ownerId === ownerId)!;
+    const actualTarget = npcTargets(state).find((item) => item.id === beforeTarget.id)!;
     assert.deepEqual(ownerEconomy(actualTarget), ownerEconomy(expected.target),
       'reconcileRuntime must use the NPC owner wallet and energy ledger for the real building start');
     assert.ok(actualTarget.economyAppliedActionIds?.includes(decision.event.idempotencyKey));
@@ -265,11 +267,14 @@ test('a frozen 30-day replay target survives intermediate save/reload and does n
   assert.deepEqual(economySnapshot(remaining.state), economySnapshot(complete.state));
   assert.deepEqual(allEmissions, complete.emissions);
   const actionIds = npcTargets(remaining.state).flatMap((target) => target.economyAppliedActionIds ?? []);
-  const startedIds = allEmissions.flatMap((entry) => entry.kind === 'npc-economy' && entry.event.started
-    ? [entry.event.idempotencyKey] : []);
+  const startedIds = allEmissions.flatMap((entry) => entry.kind === 'npc-economy' && entry.event.started && entry.event.economyActionId
+    ? [entry.event.economyActionId] : []);
   assert.equal(new Set(startedIds).size, startedIds.length, 'reloading never emits a started action twice');
-  assert.deepEqual(actionIds, startedIds.slice(-256),
-    'the bounded persisted idempotency window retains the most recent started decisions after reload');
+  const expectedActionIds = npcTargets(remaining.state).flatMap((target) => allEmissions.flatMap((entry) =>
+    entry.kind === 'npc-economy' && entry.event.started && entry.event.planetId === target.id && entry.event.economyActionId
+      ? [entry.event.economyActionId] : []).slice(-256));
+  assert.deepEqual(actionIds, expectedActionIds,
+    'each planet retains the bounded canonical receipts of its most recent paid decisions after reload');
 });
 
 test('100 real NPC owners finish a 30-day production replay with their own bounded economy state', () => {

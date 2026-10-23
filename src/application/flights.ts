@@ -67,7 +67,7 @@ import {
   type TransportCargo,
 } from '../domain/flights/cargo.ts';
 import { SHIP_IDS, SOLAR_SATELLITE_ID, type ShipId } from '../domain/combat/ids.ts';
-import { scaleRuntimeDuration, type RuntimeMode, type TestTimeScale } from '../domain/runtime/mode.ts';
+import { scaleRuntimeDuration, CAMPAIGN_SPEED_SCALE, type RuntimeMode, type TestTimeScale } from '../domain/runtime/mode.ts';
 import type {
   AidFlightSnapshot,
   FlightDestination,
@@ -118,10 +118,15 @@ import {
   isAttackCombatShip,
   normalizeAttackRounds,
   resolveBot01IncomingAttack,
+  resolveNpcIncomingAttack,
   resolvePirateIncomingRaid,
   resolveAttackAtTarget,
 } from './attack.ts';
 import { dispatchPirateFlight, resolvePirateFlightAtTarget } from './pirates.ts';
+import { resolveNpcMissionArrival, settleNpcMissionReturn } from './npc-missions.ts';
+import { resolveNpcPirateArrival } from './npc-pirates.ts';
+import { resolveNpcAidArrival, settleNpcAidReturn } from './npc-aid.ts';
+import { getOwnerRelation } from './owner-relations.ts';
 import { getExplorationTarget } from './exploration.ts';
 import { resolveExplorationProbeArrival } from './exploration-operations.ts';
 import {
@@ -2385,8 +2390,15 @@ function applyDeploymentArrival(
   return { state: next, flight: completed, transferred: true };
 }
 
+const spyMissionIndexes = new WeakMap<SpyMission[], Map<string, SpyMission>>();
 function spyMissionForFlight(state: SaveState, flight: FlightRecord): SpyMission | undefined {
-  return currentEspionageState(state).missions.find((mission) => mission.flightId === flight.id);
+  const missions = currentEspionageState(state).missions;
+  let index = spyMissionIndexes.get(missions);
+  if (!index) {
+    index = new Map(missions.map((mission) => [mission.flightId, mission]));
+    spyMissionIndexes.set(missions, index);
+  }
+  return index.get(flight.id);
 }
 
 function beginSpyTargetReturn(
@@ -2544,6 +2556,14 @@ export function reconcileFlights(
       // Sun raid flights are owned by application/sun-raid.ts (fixed routes, side battles).
       .filter((flight) => ACTIVE_FLIGHT_PHASES.has(flight.phase) && flight.missionId !== 'sun-attack' && flight.missionId !== 'sun-support')
       .filter((flight) => {
+        // Autonomous orbiting probes await the owner's next explicit decision;
+        // they have no automatic report timer. Revalidate when a publicly
+        // observable owner/alliance change makes their station illegal.
+        if (flight.ownerSide === 'npc' && flight.ownerId && flight.missionId === 'espionage' && flight.phase === 'arrived') {
+          const owner = flight.destinationPlanetId && getEspionageTargets(next.espionage)[flight.destinationPlanetId]?.ownerId;
+          const actualOwner = owner || (next.planets[flight.destinationPlanetId ?? ''] ? next.profile.playerId : undefined);
+          if (actualOwner === flight.destinationOwnerId && ['neutral', 'enemy'].includes(getOwnerRelation(next, flight.ownerId, actualOwner!))) return false;
+        }
         const eventKey = flightEventKey(flight);
         if (processedFlightEvents.has(eventKey)) return false;
         const hasMissingOrigin = (flight.missionId === 'deployment' || flight.missionId === 'space-flight' || flight.missionId === 'pirate-recon' || flight.missionId === 'pirate-elimination' || (flight.missionId === 'expedition' && flight.ownerSide !== 'bot01' && flight.ownerSide !== 'npc') || (flight.explorationAttack && flight.ownerSide !== 'npc'))
@@ -2563,7 +2583,57 @@ export function reconcileFlights(
     processedFlightEvents.add(flightEventKey(original));
     const current = next.flights.records.find((flight) => flight.id === original.id);
     if (!current) continue;
-    if ((current.missionId === 'deployment' || current.missionId === 'space-flight' || current.missionId === 'pirate-recon' || current.missionId === 'pirate-elimination' || (current.missionId === 'expedition' && current.ownerSide !== 'bot01' && current.ownerSide !== 'npc') || current.missionId === 'exploration-recon' || (current.explorationAttack && current.ownerSide !== 'npc'))
+    if (current.ownerSide === 'npc' && current.ownerId) {
+      const source = getEspionageTargets(next.espionage)[current.originPlanetId];
+      if (!source || source.ownerId !== current.ownerId) {
+        const failed: FlightRecord = { ...current, phase: 'failed', completionReason: 'origin-destroyed', completedAt: Math.min(now, scheduledFlightEventAt(current)) };
+        next = completeFlight(next, current, failed);
+        changed = true;
+        events.push({ flight: failed, status: 'destroyed', notice: 'Флот NPC потерян: исходная планета больше не принадлежит владельцу.' });
+        continue;
+      }
+      if (current.phase === 'returning' && current.returnAt !== undefined && current.returnAt <= now) {
+        const cargo = current.missionId === 'aid' && current.cargoState === 'loaded'
+          ? settleNpcAidReturn(next, current, current.returnAt) : { state: next, flight: current };
+        const settled = settleNpcMissionReturn(cargo.state, cargo.flight ?? current, current.returnAt);
+        const completed: FlightRecord = { ...settled.flight, phase: 'completed', completedAt: current.returnAt,
+          completionReason: current.completionReason ?? 'normal-return' };
+        next = completeFlight(settled.state, settled.flight, completed);
+        changed = true;
+        events.push({ flight: completed, status: 'returned', notice: 'Флот NPC вернулся к владельцу.' });
+        continue;
+      }
+      if (current.missionId === 'aid' && current.phase === 'outbound' && current.arrivalAt <= now) {
+        const result = resolveNpcAidArrival(next, current, current.arrivalAt);
+        next = result.state;
+        changed = true;
+        if (result.flight) events.push({ flight: result.flight, status: result.ok ? 'delivered' : 'target-unavailable', notice: 'Результат доставки союзной помощи NPC сохранён.' });
+        continue;
+      }
+      if ((current.missionId === 'espionage' || current.missionId === 'colonize')
+        && current.phase !== 'returning' && current.arrivalAt <= now) {
+        const settled = resolveNpcMissionArrival(next, current, current.arrivalAt, CAMPAIGN_SPEED_SCALE[next.worldConfig?.world.campaignSpeed ?? 'standard']);
+        changed ||= settled.state !== next;
+        next = settled.state;
+        if (settled.flight) events.push({ flight: settled.flight,
+          status: settled.flight.completionReason === 'colonized' ? 'colonized' : current.missionId === 'espionage' ? 'spy-report' : 'target-unavailable',
+          notice: current.missionId === 'colonize' ? 'Результат колонизации NPC сохранён.' : 'Наблюдение NPC сохранено у владельца.' });
+        continue;
+      }
+      if ((current.missionId === 'pirate-recon' || current.missionId === 'pirate-elimination')
+        && current.phase === 'outbound' && current.arrivalAt <= now) {
+        const result = resolveNpcPirateArrival(next, current, current.arrivalAt);
+        const resolved = result.flight ?? current;
+        const returning: FlightRecord = { ...resolved, phase: 'returning', arrivedAt: current.arrivalAt,
+          returnAt: current.arrivalAt + current.oneWayDurationMs,
+          completionReason: result.ok ? 'normal-return' : 'target-unavailable' };
+        next = { ...result.state, flights: updateFlight(result.state.flights, returning) };
+        changed = true;
+        events.push({ flight: returning, status: 'arrived', notice: 'Пиратская миссия NPC завершена; выживший флот возвращается.' });
+        continue;
+      }
+    }
+    if (current.ownerSide !== 'npc' && (current.missionId === 'deployment' || current.missionId === 'space-flight' || current.missionId === 'pirate-recon' || current.missionId === 'pirate-elimination' || (current.missionId === 'expedition' && current.ownerSide !== 'bot01') || current.missionId === 'exploration-recon' || current.explorationAttack)
       && (current.phase === 'outbound' || current.phase === 'returning' || current.phase === 'arrived')
       && !next.planets[current.originPlanetId]) {
       const destroyed: FlightRecord = {
@@ -2586,7 +2656,7 @@ export function reconcileFlights(
       });
       continue;
     }
-    if (current.missionId === 'espionage') {
+    if (current.missionId === 'espionage' && current.ownerSide !== 'npc') {
       const mission = spyMissionForFlight(next, current);
       if (mission?.status === 'target-destroyed') {
         const returning = beginSpyDestroyedTargetReturn(next, current, mission, now);
@@ -2743,13 +2813,15 @@ export function reconcileFlights(
         });
         continue;
       }
-      if (current.ownerSide === 'bot01' && current.missionId === 'attack') {
+      if ((current.ownerSide === 'bot01' || (current.ownerSide === 'npc' && current.ownerId && !current.explorationAttack)) && current.missionId === 'attack') {
         const affectedSpaceFlightIds = new Set(next.flights.records
           .filter((flight) => flight.missionId === 'space-flight'
             && flight.originPlanetId === current.destinationPlanetId
             && ACTIVE_FLIGHT_PHASES.has(flight.phase))
           .map((flight) => flight.id));
-        const resolvedAttack = resolveBot01IncomingAttack(next, current, arrivalAt);
+        const resolvedAttack = current.ownerSide === 'npc'
+          ? next.planets[current.destinationPlanetId ?? ''] ? resolveNpcIncomingAttack(next, current, arrivalAt) : resolveAttackAtTarget(next, current, arrivalAt)
+          : resolveBot01IncomingAttack(next, current, arrivalAt);
         if (!resolvedAttack) {
           const failedReturn: FlightRecord = {
             ...current,

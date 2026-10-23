@@ -1,7 +1,7 @@
 import type { CommanderId } from '../combat/commanders.ts';
 import type { DefenseId, ShipId } from '../combat/ids.ts';
 import type { CombatFactionId } from '../combat/factions.ts';
-import type { OwnedDefenseState } from '../fleet/production.ts';
+import type { OwnedDefenseState, FleetProductionState } from '../fleet/production.ts';
 import type { OwnedFleetState } from '../fleet/runtime.ts';
 import type { TargetRelation } from '../flights/types.ts';
 import type { BuildingQueueItem, ScienceLevels } from '../buildings/resource-zone.ts';
@@ -79,6 +79,8 @@ export type SpyTargetState = {
   resources: SpyResourcesSnapshot;
   buildings: Record<string, number>;
   fleet: OwnedFleetState;
+  /** Canonical paid production queues, scoped to this real NPC planet. */
+  fleetProduction?: FleetProductionState;
   defense: OwnedDefenseState;
   commanders: Partial<Record<CommanderId, SpyCommanderSnapshot>>;
   population: SpyPlanetPopulation;
@@ -120,6 +122,8 @@ export type Bot01PlanetState = SpyTargetState;
 export type SpyMissionRelation = TargetRelation;
 
 export type SpyReportSnapshot = {
+  /** Observer identity; absent on legacy player reports. */
+  ownerId?: string;
   id: string;
   missionId: string;
   createdAt: number;
@@ -147,6 +151,8 @@ export type SpyReportSnapshot = {
 };
 
 export type SpyHunterNotice = {
+  /** Defender who observed the detection; absent on legacy player notices. */
+  ownerId?: string;
   id: string;
   missionId: string;
   createdAt: number;
