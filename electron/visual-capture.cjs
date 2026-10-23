@@ -389,10 +389,11 @@ async function readResourceQueueDiagnostics(win) {
   })()`);
 }
 
-async function enqueueResourceBuilding(win, role) {
+async function enqueueResourceBuilding(win, role, expectedQueueRoles) {
   await openResourceBuilding(win, role);
   const clicked = await win.webContents.executeJavaScript(`(() => {
-    const button=document.querySelector('[data-qa-build-button]');
+    const dialog=document.querySelector('[data-qa-building-dialog="${role}"]');
+    const button=dialog?.querySelector('[data-qa-build-button]');
     if(!button || button.disabled)return false;
     button.click();
     return true;
@@ -415,6 +416,24 @@ async function enqueueResourceBuilding(win, role) {
     throw new Error(`Build button did not activate for ${role}: ${JSON.stringify(diagnostics)}`);
   }
   await waitFor(win, `!document.querySelector('.resource-building-dialog')`);
+  // Each click must commit the exact FIFO prefix before the next dialog opens.
+  // Otherwise a pending React update/autosave can make a fast three-click QA
+  // report success even if an intermediate task never reaches the saved state.
+  const expected = JSON.stringify(expectedQueueRoles);
+  try {
+    await waitFor(win, `(() => {
+      try {
+        const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+        const queue = save.queues?.['helion-01'];
+        return Array.isArray(queue)
+          && JSON.stringify(queue.map((task) => task.assetRole)) === ${JSON.stringify(expected)};
+      } catch { return false; }
+    })()`);
+  } catch (error) {
+    const diagnostics = await readResourceQueueDiagnostics(win);
+    throw new Error(`Build queue did not persist after ${role}; expected=${expected}; actual=${JSON.stringify(diagnostics)}; error=${String(error)}`);
+  }
+  await waitFor(win, `JSON.stringify(Array.from(document.querySelectorAll('[data-qa-queue-role]')).map((item) => item.getAttribute('data-qa-queue-role')))===${JSON.stringify(expected)}`);
   await settle(win);
   return { role, clickResult: clicked };
 }
@@ -743,8 +762,10 @@ async function verifyResourceZoneFlow(win, directory, label) {
   await activateResourceZone(win);
 
   const queueClickResults=[];
+  const expectedQueueRoles=[];
   for(const role of ['basic-energy','gas-production-1','hangar']) {
-    queueClickResults.push(await enqueueResourceBuilding(win,role));
+    expectedQueueRoles.push(role);
+    queueClickResults.push(await enqueueResourceBuilding(win,role,[...expectedQueueRoles]));
   }
   try {
     await waitFor(win, `(() => { try { const q=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}').queues?.['helion-01']; return Array.isArray(q)&&q.length===3; } catch { return false; } })()`);
