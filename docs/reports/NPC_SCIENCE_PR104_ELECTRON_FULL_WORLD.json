@@ -1,0 +1,382 @@
+{
+  "baselineCommit": "34000847794156ec912439fd23e510e8accec1b6",
+  "implementationCommit": "2d06ace169fe0323a4f91111967600ae9bedb2dc",
+  "baseline": [
+    {
+      "profile": "C:\\Users\\Den\\AppData\\Local\\Temp\\asterion-npc-replay-qa-oKTp04",
+      "isolatedUserData": true,
+      "seed": {
+        "npcProfiles": 100,
+        "npcTargets": 100,
+        "startAt": 1792683253385,
+        "endAt": 1792769683385,
+        "catchupDays": 1,
+        "scenario": "full-world",
+        "isolation": {
+          "explorationCursorAtHorizon": false,
+          "pirateCursorAtHorizon": false,
+          "asteroidSimulationAbsent": false
+        },
+        "fixtureIsolation": "None: 10 galaxies, 100 NPC, asteroid simulation, exploration and pirate timelines run from campaign start."
+      },
+      "commandGate": {
+        "pendingBeforeUiAction": true,
+        "requestEventPrevented": true,
+        "buildButtonWasEnabled": true,
+        "playerStateUnchanged": true
+      },
+      "catchup": {
+        "elapsedMs": 6960,
+        "longTasks": {
+          "count": 43,
+          "totalMs": 2990,
+          "p95Ms": 125,
+          "maxMs": 136
+        },
+        "inMemoryReplay": {
+          "processedThroughAt": 1792769683385,
+          "targetAt": 1792769683385
+        },
+        "runtimePublications": 128,
+        "persistedSaveChars": 1854551,
+        "persistenceNotice": null,
+        "firstProgress": {
+          "processedThroughAt": 1792684172683,
+          "targetAt": 1792769683385,
+          "at": 1424.7000000029802
+        },
+        "lastProgress": {
+          "processedThroughAt": 1792769683385,
+          "targetAt": 1792769683385,
+          "at": 9060.20000000298
+        },
+        "pending": false,
+        "processedThroughAt": 1792769683385,
+        "targetAt": 1792769683385,
+        "savedProgressSamples": 121,
+        "timerSamples": 133,
+        "timerP95GapMs": 118,
+        "timerWorstGapMs": 236.19999999552965,
+        "npcActionIds": 1172,
+        "npcQueuedBuildings": 0,
+        "npcProfiles": 100
+      },
+      "measurementNote": "Renderer event-loop timer gaps; does not measure Node proxy latency.",
+      "hiddenWindowBackgroundThrottling": false
+    },
+    {
+      "profile": "C:\\Users\\Den\\AppData\\Local\\Temp\\asterion-npc-replay-qa-gB2iNi",
+      "isolatedUserData": true,
+      "seed": {
+        "npcProfiles": 100,
+        "npcTargets": 100,
+        "startAt": 1792165122384,
+        "endAt": 1792769952384,
+        "catchupDays": 7,
+        "scenario": "full-world",
+        "isolation": {
+          "explorationCursorAtHorizon": false,
+          "pirateCursorAtHorizon": false,
+          "asteroidSimulationAbsent": false
+        },
+        "fixtureIsolation": "None: 10 galaxies, 100 NPC, asteroid simulation, exploration and pirate timelines run from campaign start."
+      },
+      "commandGate": {
+        "pendingBeforeUiAction": true,
+        "requestEventPrevented": true,
+        "buildButtonWasEnabled": true,
+        "playerStateUnchanged": true
+      },
+      "catchup": {
+        "elapsedMs": 25591,
+        "longTasks": {
+          "count": 41,
+          "totalMs": 2462,
+          "p95Ms": 91,
+          "maxMs": 102
+        },
+        "inMemoryReplay": {
+          "processedThroughAt": 1792769952384,
+          "targetAt": 1792769952384
+        },
+        "runtimePublications": 511,
+        "persistedSaveChars": 4530387,
+        "persistenceNotice": null,
+        "firstProgress": {
+          "processedThroughAt": 1792166290723,
+          "targetAt": 1792769952384,
+          "at": 875.1999999955297
+        },
+        "lastProgress": {
+          "processedThroughAt": 1792769952384,
+          "targetAt": 1792769952384,
+          "at": 27106.09999999404
+        },
+        "pending": false,
+        "processedThroughAt": 1792769952384,
+        "targetAt": 1792769952384,
+        "savedProgressSamples": 387,
+        "timerSamples": 413,
+        "timerP95GapMs": 118.29999999701977,
+        "timerWorstGapMs": 450.3999999985099,
+        "npcActionIds": 6931,
+        "npcQueuedBuildings": 7,
+        "npcProfiles": 100
+      },
+      "measurementNote": "Renderer event-loop timer gaps; does not measure Node proxy latency.",
+      "hiddenWindowBackgroundThrottling": false
+    },
+    {
+      "status": "timeout",
+      "profile": "C:\\Users\\Den\\AppData\\Local\\Temp\\asterion-npc-replay-qa-udcZ2o",
+      "isolatedUserData": true,
+      "seed": {
+        "npcProfiles": 100,
+        "npcTargets": 100,
+        "startAt": 1790177728101,
+        "endAt": 1792769758101,
+        "catchupDays": 30,
+        "scenario": "full-world",
+        "isolation": {
+          "explorationCursorAtHorizon": false,
+          "pirateCursorAtHorizon": false,
+          "asteroidSimulationAbsent": false
+        },
+        "fixtureIsolation": "None: 10 galaxies, 100 NPC, asteroid simulation, exploration and pirate timelines run from campaign start."
+      },
+      "commandGate": {
+        "pendingBeforeUiAction": true,
+        "requestEventPrevented": true,
+        "buildButtonWasEnabled": true,
+        "playerStateUnchanged": true
+      },
+      "catchup": {
+        "elapsedMs": 120050,
+        "longTasks": {
+          "count": 276,
+          "totalMs": 22466,
+          "p95Ms": 214,
+          "maxMs": 828
+        },
+        "inMemoryReplay": {
+          "processedThroughAt": 1792126804317,
+          "targetAt": 1792769758101
+        },
+        "runtimePublications": 2055,
+        "persistedSaveChars": 7329975,
+        "persistenceNotice": null,
+        "firstProgress": {
+          "processedThroughAt": 1790178891880,
+          "targetAt": 1792769758101,
+          "at": 798.3999999985099
+        },
+        "lastProgress": {
+          "processedThroughAt": 1792126804317,
+          "targetAt": 1792769758101,
+          "at": 121542.5
+        },
+        "pending": true,
+        "processedThroughAt": 1792113025717,
+        "targetAt": 1792769758101,
+        "savedProgressSamples": 1030,
+        "timerSamples": 1081,
+        "timerP95GapMs": 396.8999999985099,
+        "timerWorstGapMs": 971.6999999955297,
+        "npcActionIds": 15945,
+        "npcQueuedBuildings": 0,
+        "npcProfiles": 100
+      },
+      "error": "Timed out waiting for: (() => { const r = window.__npcReplayQa?.latest; return Boolean(r && r.targetAt <= r.processedThroughAt); })()",
+      "measurementNote": "Renderer event-loop timer gaps; does not measure Node proxy latency.",
+      "hiddenWindowBackgroundThrottling": false
+    }
+  ],
+  "after": [
+    {
+      "profile": "C:\\Users\\Den\\AppData\\Local\\Temp\\asterion-npc-replay-qa-5Te6m9",
+      "isolatedUserData": true,
+      "seed": {
+        "npcProfiles": 100,
+        "npcTargets": 100,
+        "startAt": 1792683606981,
+        "endAt": 1792770036981,
+        "catchupDays": 1,
+        "scenario": "full-world",
+        "isolation": {
+          "explorationCursorAtHorizon": false,
+          "pirateCursorAtHorizon": false,
+          "asteroidSimulationAbsent": false
+        },
+        "fixtureIsolation": "None: 10 galaxies, 100 NPC, asteroid simulation, exploration and pirate timelines run from campaign start."
+      },
+      "commandGate": {
+        "pendingBeforeUiAction": true,
+        "requestEventPrevented": true,
+        "buildButtonWasEnabled": true,
+        "playerStateUnchanged": true
+      },
+      "catchup": {
+        "elapsedMs": 2019,
+        "longTasks": {
+          "count": 8,
+          "totalMs": 497,
+          "p95Ms": 71,
+          "maxMs": 71
+        },
+        "inMemoryReplay": {
+          "processedThroughAt": 1792770036981,
+          "targetAt": 1792770036981
+        },
+        "runtimePublications": 52,
+        "persistedSaveChars": 1925338,
+        "persistenceNotice": null,
+        "firstProgress": {
+          "processedThroughAt": 1792685042069,
+          "targetAt": 1792770036981,
+          "at": 811
+        },
+        "lastProgress": {
+          "processedThroughAt": 1792770036981,
+          "targetAt": 1792770036981,
+          "at": 3274.10000000149
+        },
+        "pending": false,
+        "processedThroughAt": 1792770036981,
+        "targetAt": 1792770036981,
+        "savedProgressSamples": 49,
+        "timerSamples": 54,
+        "timerP95GapMs": 81.5,
+        "timerWorstGapMs": 101.29999999701977,
+        "npcActionIds": 1295,
+        "npcQueuedBuildings": 0,
+        "npcProfiles": 100
+      },
+      "measurementNote": "Renderer event-loop timer gaps; does not measure Node proxy latency.",
+      "hiddenWindowBackgroundThrottling": false
+    },
+    {
+      "profile": "C:\\Users\\Den\\AppData\\Local\\Temp\\asterion-npc-replay-qa-TTHRJA",
+      "isolatedUserData": true,
+      "seed": {
+        "npcProfiles": 100,
+        "npcTargets": 100,
+        "startAt": 1792165211998,
+        "endAt": 1792770041998,
+        "catchupDays": 7,
+        "scenario": "full-world",
+        "isolation": {
+          "explorationCursorAtHorizon": false,
+          "pirateCursorAtHorizon": false,
+          "asteroidSimulationAbsent": false
+        },
+        "fixtureIsolation": "None: 10 galaxies, 100 NPC, asteroid simulation, exploration and pirate timelines run from campaign start."
+      },
+      "commandGate": {
+        "pendingBeforeUiAction": true,
+        "requestEventPrevented": true,
+        "buildButtonWasEnabled": true,
+        "playerStateUnchanged": true
+      },
+      "catchup": {
+        "elapsedMs": 14382,
+        "longTasks": {
+          "count": 10,
+          "totalMs": 610,
+          "p95Ms": 89,
+          "maxMs": 89
+        },
+        "inMemoryReplay": {
+          "processedThroughAt": 1792770041998,
+          "targetAt": 1792770041998
+        },
+        "runtimePublications": 312,
+        "persistedSaveChars": 4666889,
+        "persistenceNotice": null,
+        "firstProgress": {
+          "processedThroughAt": 1792166629121,
+          "targetAt": 1792770041998,
+          "at": 709.5
+        },
+        "lastProgress": {
+          "processedThroughAt": 1792735139989,
+          "targetAt": 1792770041998,
+          "at": 14421.40000000596
+        },
+        "pending": false,
+        "processedThroughAt": 1792770041998,
+        "targetAt": 1792770041998,
+        "savedProgressSamples": 168,
+        "timerSamples": 181,
+        "timerP95GapMs": 184.30000000447035,
+        "timerWorstGapMs": 1341.8000000044703,
+        "npcActionIds": 7286,
+        "npcQueuedBuildings": 2,
+        "npcProfiles": 100
+      },
+      "measurementNote": "Renderer event-loop timer gaps; does not measure Node proxy latency.",
+      "hiddenWindowBackgroundThrottling": false
+    },
+    {
+      "profile": "C:\\Users\\Den\\AppData\\Local\\Temp\\asterion-npc-replay-qa-DJp4Sf",
+      "isolatedUserData": true,
+      "seed": {
+        "npcProfiles": 100,
+        "npcTargets": 100,
+        "startAt": 1790178029301,
+        "endAt": 1792770059301,
+        "catchupDays": 30,
+        "scenario": "full-world",
+        "isolation": {
+          "explorationCursorAtHorizon": false,
+          "pirateCursorAtHorizon": false,
+          "asteroidSimulationAbsent": false
+        },
+        "fixtureIsolation": "None: 10 galaxies, 100 NPC, asteroid simulation, exploration and pirate timelines run from campaign start."
+      },
+      "commandGate": {
+        "pendingBeforeUiAction": true,
+        "requestEventPrevented": true,
+        "buildButtonWasEnabled": true,
+        "playerStateUnchanged": true
+      },
+      "catchup": {
+        "elapsedMs": 67729,
+        "longTasks": {
+          "count": 50,
+          "totalMs": 3239,
+          "p95Ms": 81,
+          "maxMs": 85
+        },
+        "inMemoryReplay": {
+          "processedThroughAt": 1792770059301,
+          "targetAt": 1792770059301
+        },
+        "runtimePublications": 1378,
+        "persistedSaveChars": 8408823,
+        "persistenceNotice": null,
+        "firstProgress": {
+          "processedThroughAt": 1790179422400,
+          "targetAt": 1792770059301,
+          "at": 699.3000000044703
+        },
+        "lastProgress": {
+          "processedThroughAt": 1792257972403,
+          "targetAt": 1792770059301,
+          "at": 55492.20000000298
+        },
+        "pending": false,
+        "processedThroughAt": 1792770059301,
+        "targetAt": 1792770059301,
+        "savedProgressSamples": 166,
+        "timerSamples": 172,
+        "timerP95GapMs": 417.1000000014901,
+        "timerWorstGapMs": 19133.5,
+        "npcActionIds": 17751,
+        "npcQueuedBuildings": 1,
+        "npcProfiles": 100
+      },
+      "measurementNote": "Renderer event-loop timer gaps; does not measure Node proxy latency.",
+      "hiddenWindowBackgroundThrottling": false
+    }
+  ]
+}

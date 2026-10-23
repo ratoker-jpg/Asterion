@@ -1,0 +1,153 @@
+{
+  "benchmark": "npc-full-world-production-catchup",
+  "fixture": {
+    "seed": "NPCREPLAYQA2026",
+    "personaSalt": "npc-replay-benchmark-persona-salt-v1",
+    "startUtc": "2026-01-01T00:00:00.000Z",
+    "galaxies": 10,
+    "npcOwners": 100,
+    "isolation": "none: asteroid simulation, exploration NPC and pirate timelines run from campaign start",
+    "bytes": 268891,
+    "file": null,
+    "sha256": "761f326b62acff9f05a4187d7e6df0fcfda053fa5c7215ea2fbcd0865878413c"
+  },
+  "system": {
+    "platform": "win32",
+    "release": "10.0.26100",
+    "arch": "x64",
+    "node": "v24.22.1",
+    "cpuModel": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+    "logicalCpuCount": 4
+  },
+  "measurements": [
+    {
+      "days": 1,
+      "repetitions": [
+        {
+          "chunks": 74,
+          "computeMs": 1485.2698999999996,
+          "serializeMs": 0,
+          "maxSaveBytes": 0,
+          "longestChunkMs": 83.4313,
+          "events": 4069,
+          "wallMs": 1485.6736,
+          "digest": "06ac66a463a77628e9514f64169b6db89f76702ae69e7bdad14d1604493f12e2",
+          "gameStateDigest": "a33bd444f144014460a0bc37eb8ef7b8149f54ba384f224c42520a9987721099",
+          "result": {
+            "processedThroughAt": 1767312000000,
+            "targetAt": 1767312000000,
+            "explorationNpcProcessedAt": 1767312000000,
+            "pirateRaidProcessedAt": 1767312000000,
+            "asteroids": 25,
+            "flights": 0,
+            "pirateRaidRolls": 121,
+            "npcActionIds": 938,
+            "npcQueuedBuildings": 1
+          },
+          "sizes": {
+            "saveChars": 1864137,
+            "combatReports": 60,
+            "combatChars": 1298595,
+            "flightRecords": 0,
+            "requestIndexEntries": 0,
+            "flightsChars": 32,
+            "raidRolls": 121,
+            "raidRollChars": 19744,
+            "espionageChars": 403303,
+            "npcChars": 101314,
+            "asteroids": 25,
+            "asteroidChars": 7931,
+            "reportsStateChars": 29,
+            "ratingChars": 60
+          }
+        }
+      ]
+    },
+    {
+      "days": 7,
+      "repetitions": [
+        {
+          "chunks": 1061,
+          "computeMs": 13534.19439999999,
+          "serializeMs": 0,
+          "maxSaveBytes": 0,
+          "longestChunkMs": 34.9221,
+          "events": 33462,
+          "wallMs": 13537.74,
+          "digest": "27de64e3a421c325c232b00f404e7e8b987e8366ae12514f133fd03c36d57035",
+          "gameStateDigest": "da850e174e3a53d8c6c7c4ba982d1529b8fad44ed14ec5dca20c0157ac9eaf20",
+          "result": {
+            "processedThroughAt": 1767830400000,
+            "targetAt": 1767830400000,
+            "explorationNpcProcessedAt": 1767830400000,
+            "pirateRaidProcessedAt": 1767830400000,
+            "asteroids": 169,
+            "flights": 36,
+            "pirateRaidRolls": 118,
+            "npcActionIds": 7221,
+            "npcQueuedBuildings": 0
+          },
+          "sizes": {
+            "saveChars": 4820735,
+            "combatReports": 235,
+            "combatChars": 3065163,
+            "flightRecords": 36,
+            "requestIndexEntries": 36,
+            "flightsChars": 83401,
+            "raidRolls": 118,
+            "raidRollChars": 21811,
+            "espionageChars": 1458105,
+            "npcChars": 104935,
+            "asteroids": 169,
+            "asteroidChars": 53682,
+            "reportsStateChars": 29,
+            "ratingChars": 60
+          }
+        }
+      ]
+    },
+    {
+      "days": 30,
+      "repetitions": [
+        {
+          "chunks": 9652,
+          "computeMs": 99278.3052,
+          "serializeMs": 0,
+          "maxSaveBytes": 0,
+          "longestChunkMs": 72.295,
+          "events": 151646,
+          "wallMs": 99293.724,
+          "digest": "8b737d6b8afba35f53c5593de6a7c014c313333a9836bc220e2b6d7aacec8097",
+          "gameStateDigest": "08906bd664c39bb366bf5e1dff5b039dbcb5c4f17de300afcde664c40c981493",
+          "result": {
+            "processedThroughAt": 1769817600000,
+            "targetAt": 1769817600000,
+            "explorationNpcProcessedAt": 1769817600000,
+            "pirateRaidProcessedAt": 1769817600000,
+            "asteroids": 351,
+            "flights": 169,
+            "pirateRaidRolls": 115,
+            "npcActionIds": 18065,
+            "npcQueuedBuildings": 5
+          },
+          "sizes": {
+            "saveChars": 8726619,
+            "combatReports": 367,
+            "combatChars": 4802733,
+            "flightRecords": 169,
+            "requestIndexEntries": 169,
+            "flightsChars": 393422,
+            "raidRolls": 115,
+            "raidRollChars": 21153,
+            "espionageChars": 3253096,
+            "npcChars": 105316,
+            "asteroids": 351,
+            "asteroidChars": 111797,
+            "reportsStateChars": 29,
+            "ratingChars": 60
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -188,7 +188,9 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: Asterion-NPC-full-world
-          path: artifacts/npc-full-world*/**/*
+          path: |
+            artifacts/npc-full-world*/**/*
+            artifacts/npc-replay-full-world-qa*/**/*
           if-no-files-found: warn
           retention-days: 14
 

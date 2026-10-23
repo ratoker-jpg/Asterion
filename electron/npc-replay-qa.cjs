@@ -27,7 +27,7 @@ function parseCatchupDays(args) {
 }
 const CATCHUP_DAYS = parseCatchupDays(process.argv.slice(2));
 const OUTPUT = process.env.ASTERION_QA_OUTPUT
-  || path.join(ROOT, 'artifacts', `${FULL_WORLD ? 'npc-replay-full-world-qa' : 'npc-replay-qa'}-${CATCHUP_DAYS}d`);
+  || path.join(ROOT, 'artifacts', `${FULL_WORLD ? 'npc-replay-full-world-qa' : 'npc-replay-qa'}${CATCHUP_DAYS === 30 ? '' : `-${CATCHUP_DAYS}d`}`);
 const CATCHUP_TIMEOUT_MS = 120_000;
 const FIXTURE_ISOLATION = FULL_WORLD
   ? 'None: 10 galaxies, 100 NPC, asteroid simulation, exploration and pirate timelines run from campaign start.'
