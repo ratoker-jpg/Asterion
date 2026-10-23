@@ -262,7 +262,11 @@ export function getBuildingsForZone(zone: BuildingZone, faction: BuildingFaction
 }
 
 export function createDefaultBuildingLevels(): BuildingLevels {
-  return Object.fromEntries(BUILDING_ROLES.map((role) => [role, 0])) as BuildingLevels;
+  // Same keys in the same order as before; a plain loop because offline
+  // catch-up derives levels for every NPC planet at every settlement.
+  const levels = {} as BuildingLevels;
+  for (const role of BUILDING_ROLES) levels[role] = 0;
+  return levels;
 }
 
 export function createCanonicalStartingBuildingLevels(): BuildingLevels {

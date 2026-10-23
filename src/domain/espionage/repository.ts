@@ -16,6 +16,7 @@ import { migrateFleetState } from '../fleet/runtime.ts';
 import { migrateDefenseState } from '../fleet/production.ts';
 import { migrateRepairWorkshopState } from '../repair/workshop.ts';
 import { createDefaultBuildingLevels, migrateBuildingQueue } from '../buildings/resource-zone.ts';
+import { migrateProductionBotAssignment } from '../buildings/production-bots.ts';
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -235,6 +236,18 @@ function migrateSpyTarget(value: unknown, now: number): SpyTargetState | null {
   const buildingQueue = Array.isArray(source.buildingQueue)
     ? migrateBuildingQueue(source.buildingQueue, text(source.id), { ...createDefaultBuildingLevels(), ...buildingLevels })
     : undefined;
+  const productionBots = source.productionBots && typeof source.productionBots === 'object'
+    ? migrateProductionBotAssignment(source.productionBots, { ...createDefaultBuildingLevels(), ...buildingLevels })
+    : undefined;
+  const energyLedger = source.energyLedger && typeof source.energyLedger === 'object'
+    ? source.energyLedger as SpyTargetState['energyLedger']
+    : undefined;
+  const overpopulation = record(source.overpopulation).blocked === true
+    ? source.overpopulation as SpyTargetState['overpopulation']
+    : undefined;
+  const economyAppliedActionIds = Array.isArray(source.economyAppliedActionIds)
+    ? [...new Set(source.economyAppliedActionIds.filter((item): item is string => typeof item === 'string' && item.length > 0))].slice(-256)
+    : undefined;
   const endgameLockedBuildings = Array.isArray(source.endgameLockedBuildings)
     ? source.endgameLockedBuildings.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
     : undefined;
@@ -271,6 +284,13 @@ function migrateSpyTarget(value: unknown, now: number): SpyTargetState | null {
     ...(ownerProfile ? { ownerProfile } : {}),
     repair: migrateRepairWorkshopState(source.repair),
     ...(buildingQueue ? { buildingQueue } : {}),
+    ...(energyLedger ? { energyLedger } : {}),
+    ...(productionBots ? { productionBots } : {}),
+    ...(typeof source.solarSatellites === 'number' && Number.isFinite(source.solarSatellites)
+      ? { solarSatellites: nonNegative(source.solarSatellites) }
+      : {}),
+    ...(overpopulation ? { overpopulation } : {}),
+    ...(economyAppliedActionIds ? { economyAppliedActionIds } : {}),
     ...(endgameLockedBuildings ? { endgameLockedBuildings } : {}),
     resourceClock: migrateTargetResourceClock(source.resourceClock, now),
   } as unknown as SpyTargetState;

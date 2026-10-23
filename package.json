@@ -11,6 +11,10 @@
     "assets:asterion:rebaseline-pirate-ships": "node tools/asterion-asset-integration.mjs rebaseline-pirate-ships",
     "assets:asterion:audit": "node tools/asterion-asset-integration.mjs audit",
     "test:inventory": "node tools/check-test-inventory.mjs",
+    "test:npc": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/domain/npc/*.test.ts src/application/npc-*.test.ts src/application/state.test.ts",
+    "benchmark:npc": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs tools/benchmark-npc.mjs",
+    "benchmark:npc-replay": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs tools/benchmark-npc-replay.mjs",
+    "benchmark:npc-full-world": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs tools/benchmark-npc-full-world.mjs",
     "test:buildings": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/domain/buildings/balance-v1.test.ts src/domain/buildings/resource-zone.test.ts src/domain/buildings/production-bots.test.ts src/domain/buildings/production-bot-building-limits.test.ts src/domain/buildings/recycling.test.ts src/domain/buildings/recycling-building-limits.test.ts src/domain/buildings/trade.test.ts src/domain/buildings/spaceport-building-limits.test.ts src/domain/buildings/spaceport-upgrades.test.ts src/building-interior-navigation.test.ts",
     "test:application": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/application/application.test.ts src/application/ship-catalog-save-compatibility.test.ts src/application/offline-boundaries.test.ts src/application/science-refunds.test.ts src/application/building-refund-notice.test.ts",
     "test:flights": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/domain/flights/*.test.ts src/application/flights.test.ts src/application/alliance-aid.test.ts src/application/commander-deployment.test.ts src/application/map-transport.test.ts",
@@ -64,6 +68,8 @@
     "test:sun-raid": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/domain/sun-raid/sun-raid.test.ts src/application/sun-raid.integration.test.ts",
     "test:new-game": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/domain/world/world.test.ts src/domain/session/slots.test.ts src/application/new-game.test.ts src/application/save-safety.test.ts",
     "test:new-game-ui": "electron electron/new-game-sun-raid-qa.cjs",
+    "test:npc-replay-ui": "electron electron/npc-replay-qa.cjs",
+    "test:npc-replay-full-world-ui": "electron electron/npc-replay-qa.cjs --full-world",
     "test:save-safety-ui": "electron electron/save-safety-qa.cjs"
   },
   "dependencies": {

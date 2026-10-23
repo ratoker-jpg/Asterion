@@ -1,0 +1,32 @@
+{
+  "status": "timeout",
+  "profile": "C:\\Users\\Den\\AppData\\Local\\Temp\\asterion-npc-replay-qa-k94oUd",
+  "isolatedUserData": true,
+  "seed": {
+    "npcProfiles": 100,
+    "npcTargets": 100,
+    "startAt": 1790103462547,
+    "catchupDays": 30
+  },
+  "commandGate": {
+    "pendingBeforeUiAction": true,
+    "requestEventPrevented": true,
+    "buildButtonWasEnabled": true,
+    "playerStateUnchanged": true
+  },
+  "catchup": {
+    "elapsedMs": 120003,
+    "pending": true,
+    "processedThroughAt": 1790328869484,
+    "targetAt": 1792695463012,
+    "savedProgressSamples": 899,
+    "timerSamples": 1467,
+    "timerP95GapMs": 160.5,
+    "timerWorstGapMs": 291.6000000014901,
+    "npcActionIds": 2828,
+    "npcQueuedBuildings": 0,
+    "npcProfiles": 100
+  },
+  "error": "Timed out waiting for: (() => {\n      try { const save = JSON.parse(localStorage.getItem(\"asterion.vertical-slice.v1\") || 'null');\n        return save?.npcReplay?.targetAt <= save?.npcReplay?.processedThroughAt; }\n      catch { return false; }\n      })()",
+  "measurementNote": "Renderer event-loop timer gaps; does not measure Node proxy latency."
+}

@@ -1,0 +1,682 @@
+{
+  "benchmark": "npc-full-world-catchup-before-after",
+  "date": "2026-10-23",
+  "revisions": {
+    "before": "eb8bdcae83b655435242da4b71dd2410a1492c30",
+    "after": "HEAD of codex/npc-living-players-pr1 at the commit adding this file"
+  },
+  "system": {
+    "platform": "win32",
+    "release": "10.0.19045",
+    "arch": "x64",
+    "node": "v24.16.0",
+    "cpuModel": "AMD Ryzen 5 5600 6-Core Processor              ",
+    "logicalCpuCount": 12
+  },
+  "fixture": {
+    "seed": "NPCREPLAYQA2026",
+    "personaSalt": "npc-replay-benchmark-persona-salt-v1",
+    "startUtc": "2026-01-01T00:00:00.000Z",
+    "galaxies": 10,
+    "npcOwners": 100,
+    "isolation": "none: asteroid simulation, exploration NPC and pirate timelines run from campaign start",
+    "bytes": 251324,
+    "file": "one fixture file written by --write-fixture and loaded by both revisions (fresh campaigns draw ids/names from crypto entropy)",
+    "sha256": "322b1ba3f05523cf916f2135ab27f5c5a788aa8d992b2cb219560b40b5f7cbee"
+  },
+  "commands": {
+    "node": "npm run benchmark:npc-full-world -- 1 7 30 --fixture=<file>",
+    "parity": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs tools/check-npc-full-world-parity.mjs --fixture=<file> <days> --reload-every=<n>",
+    "electron": "npm run build && npm run test:npc-replay-full-world-ui",
+    "scopedNode": "npm run benchmark:npc-replay",
+    "scopedElectron": "npm run test:npc-replay-ui"
+  },
+  "nodeFullWorld": {
+    "before": {
+      "note": "previous HEAD eb8bdca, same fixture; 30-day run did not finish before this report (quadratic history growth), see report",
+      "measurements": [
+        {
+          "days": 1,
+          "repetitions": [
+            {
+              "chunks": 74,
+              "computeMs": 14196.265,
+              "serializeMs": 0,
+              "maxSaveBytes": 0,
+              "longestChunkMs": 366.2029,
+              "events": 4031,
+              "wallMs": 14196.5953,
+              "digest": "f1ecfa1ba3f9ad989c3021cf9d20e02fb45930f358b3fa6b1d46b4d39b7ad8c3",
+              "gameStateDigest": "14677c4784f4b6b841f70660b74acb418ada64f5625b5aa044437ded1eb76531",
+              "result": {
+                "processedThroughAt": 1767312000000,
+                "targetAt": 1767312000000,
+                "explorationNpcProcessedAt": 1767312000000,
+                "pirateRaidProcessedAt": 1767312000000,
+                "asteroids": 25,
+                "flights": 60,
+                "pirateRaidRolls": 1891,
+                "npcActionIds": 899,
+                "npcQueuedBuildings": 0
+              },
+              "sizes": {
+                "saveChars": 2236500,
+                "combatReports": 60,
+                "combatChars": 1298596,
+                "flightRecords": 60,
+                "requestIndexEntries": 60,
+                "flightsChars": 139358,
+                "raidRolls": 1891,
+                "raidRollChars": 305272,
+                "espionageChars": 368379,
+                "npcChars": 101314,
+                "asteroids": 25,
+                "asteroidChars": 7931,
+                "reportsStateChars": 29,
+                "ratingChars": 60
+              }
+            }
+          ]
+        },
+        {
+          "days": 3,
+          "repetitions": [
+            {
+              "chunks": 299,
+              "computeMs": 63946.7422,
+              "serializeMs": 0,
+              "maxSaveBytes": 0,
+              "longestChunkMs": 370.2797,
+              "events": 12861,
+              "wallMs": 63947.8327,
+              "digest": "79856f49c5d9c66035b8a5e373122a99cba82e04e0ace2ce4beab3bc8faf41bc",
+              "gameStateDigest": "3e0c28a614d02ff9bf1e23af81fb2c2284d2f7f18c838ab81ee7cba7ebb44aa3",
+              "result": {
+                "processedThroughAt": 1767484800000,
+                "targetAt": 1767484800000,
+                "explorationNpcProcessedAt": 1767484800000,
+                "pirateRaidProcessedAt": 1767484800000,
+                "asteroids": 73,
+                "flights": 449,
+                "pirateRaidRolls": 5693,
+                "npcActionIds": 2831,
+                "npcQueuedBuildings": 0
+              },
+              "sizes": {
+                "saveChars": 9668914,
+                "combatReports": 448,
+                "combatChars": 6847785,
+                "flightRecords": 449,
+                "requestIndexEntries": 449,
+                "flightsChars": 1041708,
+                "raidRolls": 5693,
+                "raidRollChars": 944474,
+                "espionageChars": 692046,
+                "npcChars": 104200,
+                "asteroids": 73,
+                "asteroidChars": 23093,
+                "reportsStateChars": 29,
+                "ratingChars": 60
+              }
+            }
+          ]
+        },
+        {
+          "days": 7,
+          "repetitions": [
+            {
+              "chunks": 1056,
+              "computeMs": 400552.99859999964,
+              "serializeMs": 0,
+              "maxSaveBytes": 0,
+              "longestChunkMs": 1287.1985,
+              "events": 33122,
+              "wallMs": 400557.8037,
+              "digest": "6bfa4d7e72aa82ea7f5421857b9c01207048b635841ab28c7444731953ae016e",
+              "gameStateDigest": "91dbd59ee809fd1dccce109125316771c88ada1d6075678b248204adb6ce4722",
+              "result": {
+                "processedThroughAt": 1767830400000,
+                "targetAt": 1767830400000,
+                "explorationNpcProcessedAt": 1767830400000,
+                "pirateRaidProcessedAt": 1767830400000,
+                "asteroids": 169,
+                "flights": 2326,
+                "pirateRaidRolls": 13281,
+                "npcActionIds": 6884,
+                "npcQueuedBuildings": 0
+              },
+              "sizes": {
+                "saveChars": 40518566,
+                "combatReports": 2325,
+                "combatChars": 31286127,
+                "flightRecords": 2326,
+                "requestIndexEntries": 2326,
+                "flightsChars": 5412923,
+                "raidRolls": 13281,
+                "raidRollChars": 2318931,
+                "espionageChars": 1326263,
+                "npcChars": 104935,
+                "asteroids": 169,
+                "asteroidChars": 53682,
+                "reportsStateChars": 29,
+                "ratingChars": 60
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "after": [
+      {
+        "days": 1,
+        "repetitions": [
+          {
+            "chunks": 74,
+            "computeMs": 1148.7016999999996,
+            "serializeMs": 0,
+            "maxSaveBytes": 0,
+            "longestChunkMs": 54.2633,
+            "events": 4031,
+            "wallMs": 1149.0095,
+            "digest": "5607b4bec00816b9cf8192190159ac5fe0f316b6687d2e487e63a5937912edd1",
+            "gameStateDigest": "14677c4784f4b6b841f70660b74acb418ada64f5625b5aa044437ded1eb76531",
+            "result": {
+              "processedThroughAt": 1767312000000,
+              "targetAt": 1767312000000,
+              "explorationNpcProcessedAt": 1767312000000,
+              "pirateRaidProcessedAt": 1767312000000,
+              "asteroids": 25,
+              "flights": 0,
+              "pirateRaidRolls": 121,
+              "npcActionIds": 899,
+              "npcQueuedBuildings": 0
+            },
+            "sizes": {
+              "saveChars": 1811646,
+              "combatReports": 60,
+              "combatChars": 1298596,
+              "flightRecords": 0,
+              "requestIndexEntries": 0,
+              "flightsChars": 32,
+              "raidRolls": 121,
+              "raidRollChars": 19744,
+              "espionageChars": 368379,
+              "npcChars": 101314,
+              "asteroids": 25,
+              "asteroidChars": 7931,
+              "reportsStateChars": 29,
+              "ratingChars": 60
+            }
+          }
+        ]
+      },
+      {
+        "days": 7,
+        "repetitions": [
+          {
+            "chunks": 1056,
+            "computeMs": 10997.945199999993,
+            "serializeMs": 0,
+            "maxSaveBytes": 0,
+            "longestChunkMs": 23.2618,
+            "events": 33122,
+            "wallMs": 11000.5572,
+            "digest": "14af4ba739a4c97b9e949416639070f06e096247937eb000c8a0221e0eb16dac",
+            "gameStateDigest": "91dbd59ee809fd1dccce109125316771c88ada1d6075678b248204adb6ce4722",
+            "result": {
+              "processedThroughAt": 1767830400000,
+              "targetAt": 1767830400000,
+              "explorationNpcProcessedAt": 1767830400000,
+              "pirateRaidProcessedAt": 1767830400000,
+              "asteroids": 169,
+              "flights": 36,
+              "pirateRaidRolls": 118,
+              "npcActionIds": 6884,
+              "npcQueuedBuildings": 0
+            },
+            "sizes": {
+              "saveChars": 4671126,
+              "combatReports": 235,
+              "combatChars": 3065331,
+              "flightRecords": 36,
+              "requestIndexEntries": 36,
+              "flightsChars": 83399,
+              "raidRolls": 118,
+              "raidRollChars": 21811,
+              "espionageChars": 1326263,
+              "npcChars": 104935,
+              "asteroids": 169,
+              "asteroidChars": 53682,
+              "reportsStateChars": 29,
+              "ratingChars": 60
+            }
+          }
+        ]
+      },
+      {
+        "days": 30,
+        "repetitions": [
+          {
+            "chunks": 9495,
+            "computeMs": 94370.03270000008,
+            "serializeMs": 0,
+            "maxSaveBytes": 0,
+            "longestChunkMs": 29.1346,
+            "events": 141619,
+            "wallMs": 94378.2846,
+            "digest": "18418479cfaf63400012dcd6c6f5fb81ed130a65ad845770ea06235455d6d0fb",
+            "gameStateDigest": "eb8740e51b44bd96bf87ae585aa584184257d7829fd754978ab5ad8380c4989e",
+            "result": {
+              "processedThroughAt": 1769817600000,
+              "targetAt": 1769817600000,
+              "explorationNpcProcessedAt": 1769817600000,
+              "pirateRaidProcessedAt": 1769817600000,
+              "asteroids": 351,
+              "flights": 169,
+              "pirateRaidRolls": 115,
+              "npcActionIds": 17682,
+              "npcQueuedBuildings": 0
+            },
+            "sizes": {
+              "saveChars": 8449453,
+              "combatReports": 367,
+              "combatChars": 4790612,
+              "flightRecords": 169,
+              "requestIndexEntries": 169,
+              "flightsChars": 393354,
+              "raidRolls": 115,
+              "raidRollChars": 21153,
+              "espionageChars": 3011607,
+              "npcChars": 105316,
+              "asteroids": 351,
+              "asteroidChars": 111797,
+              "reportsStateChars": 29,
+              "ratingChars": 60
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "nodeScoped": {
+    "beforeMedianComputeMs": {
+      "1": 576.46,
+      "7": 4407.76,
+      "30": 15419.56
+    },
+    "after": [
+      {
+        "days": 1,
+        "computeMs": [
+          392.79699999999997,
+          269.98390000000006,
+          270.54510000000005
+        ],
+        "stateDigest": [
+          "9f8ef6f2d728598b26968776109bf418d7912793e437677a2c87a176f240ad36"
+        ]
+      },
+      {
+        "days": 7,
+        "computeMs": [
+          1884.3021999999996,
+          1766.7111000000011,
+          1787.590300000001
+        ],
+        "stateDigest": [
+          "362a2af35c544de84eb17fb3593558cae1e580ac46742d4878abaacb260c18e7"
+        ]
+      },
+      {
+        "days": 30,
+        "computeMs": [
+          6866.211299999995,
+          6792.3958999999995,
+          6873.944499999999
+        ],
+        "stateDigest": [
+          "52f5d080a18ef22d36647e265da28c7ce268f2ce5e6d3145ba6abdb82cdb6fbe"
+        ]
+      }
+    ],
+    "afterPartitionParity": [
+      {
+        "days": 1,
+        "fullDigest": "9f8ef6f2d728598b26968776109bf418d7912793e437677a2c87a176f240ad36",
+        "partitionedDigest": "9f8ef6f2d728598b26968776109bf418d7912793e437677a2c87a176f240ad36",
+        "match": true
+      },
+      {
+        "days": 7,
+        "fullDigest": "362a2af35c544de84eb17fb3593558cae1e580ac46742d4878abaacb260c18e7",
+        "partitionedDigest": "362a2af35c544de84eb17fb3593558cae1e580ac46742d4878abaacb260c18e7",
+        "match": true
+      },
+      {
+        "days": 30,
+        "fullDigest": "52f5d080a18ef22d36647e265da28c7ce268f2ce5e6d3145ba6abdb82cdb6fbe",
+        "partitionedDigest": "52f5d080a18ef22d36647e265da28c7ce268f2ce5e6d3145ba6abdb82cdb6fbe",
+        "match": true
+      }
+    ]
+  },
+  "parity": {
+    "days7": {
+      "days": 7,
+      "reloadEvery": 50,
+      "reloads": 21,
+      "continuous": {
+        "digest": "14af4ba739a4c97b9e949416639070f06e096247937eb000c8a0221e0eb16dac",
+        "gameStateDigest": "91dbd59ee809fd1dccce109125316771c88ada1d6075678b248204adb6ce4722",
+        "loadNormalizedDigest": "c30a98a7a0758b631bb6ae61e8a7c0522b04cb5fc7ac71a572aaece2f7bbe25b",
+        "loadNormalizedCanonicalDigest": "c3d3f24933f1e5b5cf30aa6a62df9f1f0932b01b9e52dbc1fba00e5d3c8a1299",
+        "processedThroughAt": 1767830400000
+      },
+      "reloaded": {
+        "digest": "cb1adee35e8e52679fc093c6b5c8bb13cfc7a24f55df15d67446a8c875d9f2a2",
+        "gameStateDigest": "0d1b5a8ac4114ebd3c7896f5201c7ad731475ffb49a51f45f5828b59e55eb0f8",
+        "loadNormalizedDigest": "a7bd709f1e3179f30a9183c7589d58f8c443fe9ce14b891b700a7eb4adf86c3c",
+        "loadNormalizedCanonicalDigest": "c3d3f24933f1e5b5cf30aa6a62df9f1f0932b01b9e52dbc1fba00e5d3c8a1299",
+        "processedThroughAt": 1767830400000
+      },
+      "daily": {
+        "digest": "14af4ba739a4c97b9e949416639070f06e096247937eb000c8a0221e0eb16dac",
+        "gameStateDigest": "91dbd59ee809fd1dccce109125316771c88ada1d6075678b248204adb6ce4722",
+        "loadNormalizedDigest": "c30a98a7a0758b631bb6ae61e8a7c0522b04cb5fc7ac71a572aaece2f7bbe25b",
+        "loadNormalizedCanonicalDigest": "c3d3f24933f1e5b5cf30aa6a62df9f1f0932b01b9e52dbc1fba00e5d3c8a1299",
+        "processedThroughAt": 1767830400000
+      },
+      "dailyMatchesContinuous": true,
+      "reloadedMatchesContinuousAfterLoad": true,
+      "reloadedMatchesContinuousRaw": false
+    },
+    "days30": {
+      "days": 30,
+      "reloadEvery": 500,
+      "reloads": 18,
+      "continuous": {
+        "digest": "18418479cfaf63400012dcd6c6f5fb81ed130a65ad845770ea06235455d6d0fb",
+        "gameStateDigest": "eb8740e51b44bd96bf87ae585aa584184257d7829fd754978ab5ad8380c4989e",
+        "loadNormalizedDigest": "43be748c0b80b1c8a3593e1e1069a57fa3fbe7ed296eb3034aa167d12c9f579f",
+        "loadNormalizedCanonicalDigest": "42dcf2a26be10c97ecf28aff3c9d72ac9bae3a663c531c2f47e10bc0a471bd1e",
+        "processedThroughAt": 1769817600000
+      },
+      "reloaded": {
+        "digest": "e44c5b5d79ca30ca7f05c8baf9ee63f6859f6c3baed24fdbf94f01ae46b62b9a",
+        "gameStateDigest": "c59f3729ec0641ba14edf791c444191e592761aacd4fcb841e71622a4b3068da",
+        "loadNormalizedDigest": "43be748c0b80b1c8a3593e1e1069a57fa3fbe7ed296eb3034aa167d12c9f579f",
+        "loadNormalizedCanonicalDigest": "42dcf2a26be10c97ecf28aff3c9d72ac9bae3a663c531c2f47e10bc0a471bd1e",
+        "processedThroughAt": 1769817600000
+      },
+      "daily": {
+        "digest": "18418479cfaf63400012dcd6c6f5fb81ed130a65ad845770ea06235455d6d0fb",
+        "gameStateDigest": "eb8740e51b44bd96bf87ae585aa584184257d7829fd754978ab5ad8380c4989e",
+        "loadNormalizedDigest": "43be748c0b80b1c8a3593e1e1069a57fa3fbe7ed296eb3034aa167d12c9f579f",
+        "loadNormalizedCanonicalDigest": "42dcf2a26be10c97ecf28aff3c9d72ac9bae3a663c531c2f47e10bc0a471bd1e",
+        "processedThroughAt": 1769817600000
+      },
+      "dailyMatchesContinuous": true,
+      "reloadedMatchesContinuousAfterLoad": true,
+      "reloadedMatchesContinuousRaw": false
+    }
+  },
+  "electronFullWorld": {
+    "before": {
+      "status": "timeout",
+      "isolatedUserData": true,
+      "seed": {
+        "npcProfiles": 100,
+        "npcTargets": 100,
+        "startAt": 1790114794587,
+        "endAt": 1792706824587,
+        "catchupDays": 30,
+        "scenario": "full-world",
+        "isolation": {
+          "explorationCursorAtHorizon": false,
+          "pirateCursorAtHorizon": false,
+          "asteroidSimulationAbsent": false
+        },
+        "fixtureIsolation": "None: 10 galaxies, 100 NPC, asteroid simulation, exploration and pirate timelines run from campaign start."
+      },
+      "commandGate": {
+        "pendingBeforeUiAction": true,
+        "requestEventPrevented": true,
+        "buildButtonWasEnabled": true,
+        "playerStateUnchanged": true
+      },
+      "catchup": {
+        "elapsedMs": 120052,
+        "longTasks": {
+          "count": 949,
+          "totalMs": 74574,
+          "p95Ms": 142,
+          "maxMs": 228
+        },
+        "inMemoryReplay": {
+          "processedThroughAt": 1790340728700,
+          "targetAt": 1792706824587
+        },
+        "runtimePublications": 895,
+        "persistedSaveChars": 7935068,
+        "persistenceNotice": null,
+        "firstProgress": {
+          "processedThroughAt": 1790115984443,
+          "targetAt": 1792706824587,
+          "at": 960.8999999985099
+        },
+        "lastProgress": {
+          "processedThroughAt": 1790340434850,
+          "targetAt": 1792706824587,
+          "at": 121853.10000000149
+        },
+        "pending": true,
+        "processedThroughAt": 1790340728700,
+        "targetAt": 1792706824587,
+        "savedProgressSamples": 890,
+        "timerSamples": 1193,
+        "timerP95GapMs": 227.60000000149012,
+        "timerWorstGapMs": 322.30000000447035,
+        "npcActionIds": 2591,
+        "npcQueuedBuildings": 0,
+        "npcProfiles": 100
+      },
+      "error": "Timed out waiting for: (() => { const r = window.__npcReplayQa?.latest; return Boolean(r && r.targetAt <= r.processedThroughAt); })()",
+      "measurementNote": "Renderer event-loop timer gaps; does not measure Node proxy latency.",
+      "hiddenWindowBackgroundThrottling": false
+    },
+    "after": [
+      {
+        "isolatedUserData": true,
+        "seed": {
+          "npcProfiles": 100,
+          "npcTargets": 100,
+          "startAt": 1790114956630,
+          "endAt": 1792706986630,
+          "catchupDays": 30,
+          "scenario": "full-world",
+          "isolation": {
+            "explorationCursorAtHorizon": false,
+            "pirateCursorAtHorizon": false,
+            "asteroidSimulationAbsent": false
+          },
+          "fixtureIsolation": "None: 10 galaxies, 100 NPC, asteroid simulation, exploration and pirate timelines run from campaign start."
+        },
+        "commandGate": {
+          "pendingBeforeUiAction": true,
+          "requestEventPrevented": true,
+          "buildButtonWasEnabled": true,
+          "playerStateUnchanged": true
+        },
+        "catchup": {
+          "elapsedMs": 98424,
+          "longTasks": {
+            "count": 76,
+            "totalMs": 5712,
+            "p95Ms": 99,
+            "maxMs": 361
+          },
+          "inMemoryReplay": {
+            "processedThroughAt": 1792706986630,
+            "targetAt": 1792706986630
+          },
+          "runtimePublications": 1930,
+          "persistedSaveChars": 8121984,
+          "persistenceNotice": null,
+          "firstProgress": {
+            "processedThroughAt": 1790115961913,
+            "targetAt": 1792706986630,
+            "at": 700.8000000044703
+          },
+          "lastProgress": {
+            "processedThroughAt": 1792418691669,
+            "targetAt": 1792706986630,
+            "at": 88078.30000000447
+          },
+          "pending": false,
+          "processedThroughAt": 1792706986630,
+          "targetAt": 1792706986630,
+          "savedProgressSamples": 308,
+          "timerSamples": 323,
+          "timerP95GapMs": 607.1000000014901,
+          "timerWorstGapMs": 14499.60000000149,
+          "npcActionIds": 17335,
+          "npcQueuedBuildings": 5,
+          "npcProfiles": 100
+        },
+        "measurementNote": "Renderer event-loop timer gaps; does not measure Node proxy latency.",
+        "hiddenWindowBackgroundThrottling": false
+      },
+      {
+        "isolatedUserData": true,
+        "seed": {
+          "npcProfiles": 100,
+          "npcTargets": 100,
+          "startAt": 1790115057958,
+          "endAt": 1792707087958,
+          "catchupDays": 30,
+          "scenario": "full-world",
+          "isolation": {
+            "explorationCursorAtHorizon": false,
+            "pirateCursorAtHorizon": false,
+            "asteroidSimulationAbsent": false
+          },
+          "fixtureIsolation": "None: 10 galaxies, 100 NPC, asteroid simulation, exploration and pirate timelines run from campaign start."
+        },
+        "commandGate": {
+          "pendingBeforeUiAction": true,
+          "requestEventPrevented": true,
+          "buildButtonWasEnabled": true,
+          "playerStateUnchanged": true
+        },
+        "catchup": {
+          "elapsedMs": 96158,
+          "longTasks": {
+            "count": 78,
+            "totalMs": 6191,
+            "p95Ms": 109,
+            "maxMs": 980
+          },
+          "inMemoryReplay": {
+            "processedThroughAt": 1792707087958,
+            "targetAt": 1792707087958
+          },
+          "runtimePublications": 1887,
+          "persistedSaveChars": 8134714,
+          "persistenceNotice": null,
+          "firstProgress": {
+            "processedThroughAt": 1790116252516,
+            "targetAt": 1792707087958,
+            "at": 1229.8999999985099
+          },
+          "lastProgress": {
+            "processedThroughAt": 1792325811065,
+            "targetAt": 1792707087958,
+            "at": 82841.39999999851
+          },
+          "pending": false,
+          "processedThroughAt": 1792707087958,
+          "targetAt": 1792707087958,
+          "savedProgressSamples": 282,
+          "timerSamples": 296,
+          "timerP95GapMs": 454.1000000014901,
+          "timerWorstGapMs": 14684.5,
+          "npcActionIds": 17330,
+          "npcQueuedBuildings": 6,
+          "npcProfiles": 100
+        },
+        "measurementNote": "Renderer event-loop timer gaps; does not measure Node proxy latency.",
+        "hiddenWindowBackgroundThrottling": false
+      }
+    ]
+  },
+  "electronScoped": {
+    "beforeElapsedMs": 52257,
+    "after": {
+      "isolatedUserData": true,
+      "seed": {
+        "npcProfiles": 100,
+        "npcTargets": 100,
+        "startAt": 1790115157594,
+        "endAt": 1792707187594,
+        "catchupDays": 30,
+        "scenario": "scoped",
+        "isolation": {
+          "explorationCursorAtHorizon": true,
+          "pirateCursorAtHorizon": true,
+          "asteroidSimulationAbsent": false
+        },
+        "fixtureIsolation": "NPC economy replay only; exploration and pirate cursors are frozen at the fixed horizon and asteroid simulation is absent. Not a full-campaign replay."
+      },
+      "commandGate": {
+        "pendingBeforeUiAction": true,
+        "requestEventPrevented": true,
+        "buildButtonWasEnabled": true,
+        "playerStateUnchanged": true
+      },
+      "catchup": {
+        "elapsedMs": 5173,
+        "longTasks": {
+          "count": 0,
+          "totalMs": 0,
+          "p95Ms": null,
+          "maxMs": null
+        },
+        "inMemoryReplay": null,
+        "runtimePublications": 0,
+        "persistedSaveChars": 3177448,
+        "persistenceNotice": null,
+        "firstProgress": {
+          "processedThroughAt": 1790115157594,
+          "targetAt": 1792707187594
+        },
+        "lastProgress": {
+          "processedThroughAt": 1792707187594,
+          "targetAt": 1792707187594
+        },
+        "pending": false,
+        "processedThroughAt": 1792707187594,
+        "targetAt": 1792707187594,
+        "savedProgressSamples": 4,
+        "timerSamples": 134,
+        "timerP95GapMs": 57.5,
+        "timerWorstGapMs": 83.39999999850988,
+        "npcActionIds": 17292,
+        "npcQueuedBuildings": 1,
+        "npcProfiles": 100
+      },
+      "measurementNote": "Renderer event-loop timer gaps; does not measure Node proxy latency.",
+      "hiddenWindowBackgroundThrottling": true
+    }
+  },
+  "saveGrowthWithoutRetention": {
+    "days30Chars": 251597657,
+    "combatReports": 15422,
+    "flightRecords": 15424,
+    "raidRolls": 56917,
+    "source": "current replay code before history retention (commit 4de2adf)"
+  },
+  "electronLocalStorageQuota": {
+    "accepted": "40M chars",
+    "refused": "64M chars (QuotaExceededError)"
+  }
+}

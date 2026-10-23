@@ -13,7 +13,7 @@ import { createPirateProfile } from '../domain/pirates/profile.ts';
 import { createDefaultPirateState, type PirateState } from '../domain/pirates/mission.ts';
 import { advancePirateThreat, pirateCounterFleetChance, pirateRaidChance, pirateSeededDraw } from '../domain/pirates/threat.ts';
 import { PIRATE_CATALOG_BY_ID } from '../domain/pirates/catalog.ts';
-import { selectOwnerScores } from '../domain/rating/scoring.ts';
+import { selectOwnerScore } from '../domain/rating/scoring.ts';
 import { scaleRuntimeDuration, type RuntimeMode, type TestTimeScale } from '../domain/runtime/mode.ts';
 import type { FlightRecord } from '../domain/flights/types.ts';
 import type { UniverseCoordinate } from '../domain/universe/types.ts';
@@ -33,7 +33,8 @@ type RaidTarget = Readonly<{
 }>;
 
 const safe = (value: number) => Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
-function targetsByOwner(state: SaveState): ReadonlyMap<string, ReadonlyMap<string, RaidTarget[]>> {
+/** Raid targets grouped by owner and system; `onlyOwnerId` keeps one owner's entries in the same order. */
+function targetsByOwner(state: SaveState, onlyOwnerId?: string): ReadonlyMap<string, ReadonlyMap<string, RaidTarget[]>> {
   const all = new Map<string, Map<string, RaidTarget[]>>();
   const add = (target: RaidTarget) => {
     const systems = all.get(target.ownerId) ?? new Map<string, RaidTarget[]>();
@@ -62,7 +63,7 @@ function targetsByOwner(state: SaveState): ReadonlyMap<string, ReadonlyMap<strin
         : [];
     }),
   ];
-  for (const [id, planet] of Object.entries(state.planets)) {
+  if (onlyOwnerId === undefined || onlyOwnerId === state.profile.playerId) for (const [id, planet] of Object.entries(state.planets)) {
     add({
       id, ownerId: state.profile.playerId, name: planet.name,
       coordinate: { galaxy: planet.universeGalaxy ?? 1, system: planet.universeSystem ?? 1,
@@ -77,6 +78,7 @@ function targetsByOwner(state: SaveState): ReadonlyMap<string, ReadonlyMap<strin
   }
   for (const target of Object.values(getEspionageTargets(state.espionage))) {
     if (target.ownerId === state.profile.playerId) continue;
+    if (onlyOwnerId !== undefined && target.ownerId !== onlyOwnerId) continue;
     add({
       id: target.id, ownerId: target.ownerId, name: target.name,
       coordinate: { ...target.coordinate }, factionId: target.raceId,
@@ -123,12 +125,23 @@ export function selectDuePirateRolls(
     || a.ownerId.localeCompare(b.ownerId));
 }
 
+type RaidRollLedger = Record<string, NonNullable<PirateState['raidRolls']>[string]>;
+
+/**
+ * Lets one catch-up pass record many rolls without copying the whole,
+ * ever-growing roll ledger per roll. The pass copies the ledger on its first
+ * roll and afterwards appends to that private copy, which no earlier state
+ * shares; the resulting ledger equals the one per-roll copies would build.
+ */
+export type PirateRollWriteScope = { raidRolls?: RaidRollLedger };
+
 /** Exactly once per owner/contact, irrespective of how many owned colonies share the system. */
 export function resolveDuePirateRoll(
   state: SaveState,
   event: PirateDueRoll,
   mode: RuntimeMode = 'production',
   testTimeScale?: TestTimeScale,
+  writeScope?: PirateRollWriteScope,
 ): SaveState {
   const pirate: PirateState = state.pirate ?? createDefaultPirateState();
   const rollKey = JSON.stringify([event.ownerId, event.contactCycleKey]);
@@ -138,13 +151,12 @@ export function resolveDuePirateRoll(
     version: 1 as const, ageHours: 0, integratedAt: pirate.raidProcessedAt ?? event.at,
   };
   const threat = advancePirateThreat(current, event.at);
-  const scores = selectOwnerScores(state);
-  const points = scores[event.ownerId];
+  const points = selectOwnerScore(state, event.ownerId);
   const resourcePoints = safe(points?.resourcePoints ?? 0);
   const battlePoints = safe(points?.battlePoints ?? 0);
   const chance = pirateRaidChance(resourcePoints, battlePoints, threat.ageHours);
   const qualified = pirateSeededDraw(seed) < chance;
-  const allTargets = targetsByOwner(state);
+  const allTargets = targetsByOwner(state, event.ownerId);
   const candidates = allTargets.get(event.ownerId)?.get(`${event.galaxy}:${event.system}`) ?? [];
   const selected = candidates.length ? [...candidates].sort((a,b)=>a.id.localeCompare(b.id))[
     Math.floor(pirateSeededDraw(`${seed}:target`) * candidates.length)
@@ -211,7 +223,7 @@ export function resolveDuePirateRoll(
         [event.ownerId]:Math.max(pirate.ownerMaxHangarLevel?.[event.ownerId]??0,
           ...[...allTargets.get(event.ownerId)?.values() ?? []].flatMap((entries)=>entries.map(x=>x.hangarLevel)))},
       ownerThreats: {...pirate.ownerThreats,[event.ownerId]:threat},
-      raidRolls: {...pirate.raidRolls,[rollKey]:{checkAt:event.at,seed,...(flight?{flightId:flight.id}:{})}},
+      raidRolls: appendRaidRoll(pirate.raidRolls, rollKey, {checkAt:event.at,seed,...(flight?{flightId:flight.id}:{})}, writeScope),
     },
     ...(flight ? {
       flights: {
@@ -220,4 +232,18 @@ export function resolveDuePirateRoll(
       },
     } : {}),
   };
+}
+
+function appendRaidRoll(
+  current: PirateState['raidRolls'],
+  rollKey: string,
+  roll: RaidRollLedger[string],
+  writeScope?: PirateRollWriteScope,
+): RaidRollLedger {
+  if (!writeScope) return { ...current, [rollKey]: roll };
+  // Only the scope's own copy is ever written; any other ledger (the caller's
+  // input, a migrated or replaced one) is copied first.
+  if (writeScope.raidRolls === undefined || writeScope.raidRolls !== current) writeScope.raidRolls = { ...current };
+  writeScope.raidRolls[rollKey] = roll;
+  return writeScope.raidRolls;
 }

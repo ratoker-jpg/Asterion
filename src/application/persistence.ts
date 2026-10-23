@@ -140,11 +140,20 @@ import { createDefaultSunRaidState } from '../domain/sun-raid/rules.ts';
 import { migrateSunRaidState } from '../domain/sun-raid/repository.ts';
 import { isCombatFactionId } from '../domain/combat/factions.ts';
 import { inspectSavePayload, isSaveProblem, type SaveProblem } from '../domain/session/save-health.ts';
+import { createNpcState, migrateNpcState } from '../domain/npc/state.ts';
+import { assignNpcDisplayNames, createNpcPersonaSalt, deriveLegacyNpcSalt, getNpcOwnerIds } from './npc-foundation.ts';
+import { isNpcReplayMetadata } from './npc-catchup.ts';
+import { CANONICAL_STARTING_WALLET } from '../domain/world/start.ts';
 
 /** Schema 24: save slots, `worldConfig`, the saved race is authoritative, Sun raid state. */
 export const WORLD_CONFIG_SCHEMA_VERSION = 24;
+/** Schema 25: private versioned NPC profiles and campaign persona salt. */
+export const NPC_FOUNDATION_SCHEMA_VERSION = 25;
+export const NPC_ECONOMY_SCHEMA_VERSION = 26;
 
 export const SAVE_SCHEMA_VERSION = Math.max(
+  NPC_FOUNDATION_SCHEMA_VERSION,
+  NPC_ECONOMY_SCHEMA_VERSION,
   WORLD_CONFIG_SCHEMA_VERSION,
   COMBAT_SAVE_SCHEMA_VERSION,
   SCIENCE_SAVE_SCHEMA_VERSION,
@@ -199,6 +208,8 @@ type StoredPlanetRuntime = {
 };
 
 type StoredSave = {
+  npcReplay?: unknown;
+  npc?: unknown;
   exploration?: unknown;
   pirate?: unknown;
   schemaVersion?: unknown;
@@ -1207,7 +1218,7 @@ function migrateAlliedPlanets(
   };
 }
 
-function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.now(), setup?: NewGameConfig): SaveState {
+function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.now(), setup?: NewGameConfig, salt = createNpcPersonaSalt()): SaveState {
   const baseProfile = createDefaultPlayerProfileState();
   // Test Mode keeps its fixed fixtures world; the wizard config applies to production campaigns.
   const worldConfig = setup && mode === 'production'
@@ -1219,6 +1230,12 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
     displayName: worldConfig.playerName.trim() || baseProfile.displayName,
   };
   const generatedWorld = setup && mode === 'production' ? generateWorld(worldConfig, now) : null;
+  const espionage = mode === 'test'
+    ? createDefaultTestEspionageState(now)
+    : {
+      ...createDefaultEspionageState(),
+      targets: Object.fromEntries(assignNpcDisplayNames(generatedWorld?.npcPlanets ?? [], salt).map((planet) => [planet.id, planet])),
+    };
   const home = generatedWorld?.playerStart ?? { galaxy: 1, system: 1, position: 1 };
   const command = createDefaultCommandState(mode, {
     playerId: defaultProfile.playerId,
@@ -1237,9 +1254,9 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
   }
   const storageCapacities = getStorageCapacities(buildings);
   const initialResources: PlanetResources = {
-    metal: mode === 'test' ? storageCapacities.metal : 15_880,
-    minerals: mode === 'test' ? storageCapacities.minerals : 12_712,
-    gas: mode === 'test' ? storageCapacities.gas : 6_421,
+    metal: mode === 'test' ? storageCapacities.metal : CANONICAL_STARTING_WALLET.metal,
+    minerals: mode === 'test' ? storageCapacities.minerals : CANONICAL_STARTING_WALLET.minerals,
+    gas: mode === 'test' ? storageCapacities.gas : CANONICAL_STARTING_WALLET.gas,
   };
   const initialSpaceportUpgrades = createDefaultSpaceportUpgradeState();
   const initialPlanet: PlanetRuntime = {
@@ -1248,7 +1265,7 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
     fleet: createCanonicalStartingFleet(defaultProfile.factionId),
     defense: createEmptyDefenseState(),
     fleetProduction: createDefaultFleetProductionState(),
-    energy: mode === 'test' ? TEST_MODE_RESOURCE_AMOUNT : 140,
+    energy: mode === 'test' ? TEST_MODE_RESOURCE_AMOUNT : CANONICAL_STARTING_WALLET.energy,
     solarSatellites: 0,
     universeSystem: home.system,
     universeGalaxy: home.galaxy,
@@ -1264,6 +1281,8 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
   };
   return {
     schemaVersion: SAVE_SCHEMA_VERSION,
+    npc: createNpcState(getNpcOwnerIds(espionage.targets, defaultProfile.playerId), salt, now),
+    ...(mode === 'production' ? { npcReplay: { version: 1 as const, processedThroughAt: now, targetAt: now } } : {}),
     metal: initialResources.metal,
     minerals: initialResources.minerals,
     gas: initialResources.gas,
@@ -1294,12 +1313,7 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
     },
     asteroidSimulation: createUniverseAsteroidSimulationState(now),
     asteroidDebrisBySpawnIndex: {},
-    espionage: mode === 'test'
-      ? createDefaultTestEspionageState(now)
-      : {
-        ...createDefaultEspionageState(),
-        targets: Object.fromEntries((generatedWorld?.npcPlanets ?? []).map((planet) => [planet.id, planet])),
-      },
+    espionage,
     alliedPlanets: mode === 'test'
       ? { [TEST_MODE_ALLY_PLANET_FIXTURE.planet.id]: createDefaultAlliedPlanetState(mode, now, science.levels) }
       : {},
@@ -1326,9 +1340,11 @@ export function loadSavedState(options: PersistenceOptions = {}): SaveLoadResult
   const mode = options.mode ?? ACTIVE_RUNTIME_MODE;
   const now = options.now ?? Date.now;
   const timestamp = now();
-  const initialState = createInitialState(mode, timestamp);
+  // Loading an existing save must never mint new persona entropy. This empty
+  // fallback cannot become an active campaign when health checks refuse entry.
+  const initialState = createInitialState(mode, timestamp, undefined, 'pending-load');
   const storage = resolveStorage(options.storage);
-  if (!storage) return { status: 'missing', state: initialState };
+  if (!storage) return { status: 'missing', state: createInitialState(mode, timestamp) };
   let raw: string | null;
   try {
     raw = storage.getItem(options.saveKey ?? getRuntimeSaveKey(mode));
@@ -1338,7 +1354,7 @@ export function loadSavedState(options: PersistenceOptions = {}): SaveLoadResult
     return { status: problem.status, problem, state: initialState };
   }
   const health = inspectSavePayload(raw, SAVE_SCHEMA_VERSION);
-  if (health.status === 'missing') return { status: 'missing', state: initialState };
+  if (health.status === 'missing') return { status: 'missing', state: createInitialState(mode, timestamp) };
   if (isSaveProblem(health)) return { status: health.status, problem: health, state: initialState };
   try {
     return { status: 'loaded', state: migrateParsedSave(JSON.parse(raw!) as StoredSave, mode, timestamp, initialState, options) };
@@ -1708,6 +1724,14 @@ function migrateParsedSave(
 
   return {
     schemaVersion: SAVE_SCHEMA_VERSION,
+    npc: migrateNpcState(parsed.npc, getNpcOwnerIds(espionage.targets, profile.playerId),
+      parsed.npc === undefined ? deriveLegacyNpcSalt(parsed) : '',
+      Math.max(0, numberOr(objectRecord(parsed.resourceClock)?.lastReconciledAt, 0))),
+    ...(mode === 'production' ? { npcReplay: isNpcReplayMetadata(parsed.npcReplay)
+      ? parsed.npcReplay
+      : { version: 1 as const,
+        processedThroughAt: Math.max(0, Math.floor(numberOr(objectRecord(parsed.resourceClock)?.lastReconciledAt, 0))),
+        targetAt: Math.max(0, Math.floor(numberOr(objectRecord(parsed.resourceClock)?.lastReconciledAt, 0))) } } : {}),
     metal: currentWallet.metal,
     minerals: currentWallet.minerals,
     gas: currentWallet.gas,

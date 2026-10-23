@@ -369,6 +369,26 @@ async function closeResourceBuilding(win) {
   await settle(win);
 }
 
+async function readResourceQueueDiagnostics(win) {
+  return win.webContents.executeJavaScript(`(() => {
+    const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}');
+    const queue=save.queues?.['helion-01'];
+    const dialog=document.querySelector('.resource-building-dialog');
+    const button=dialog?.querySelector('[data-qa-build-button]');
+    return {
+      queueRoles:Array.isArray(queue)?queue.slice(0,10).map((item)=>item.assetRole):null,
+      queueLength:Array.isArray(queue)?queue.length:null,
+      wallet:{metal:save.metal??null,planetMetal:save.planets?.['helion-01']?.resources?.metal??null,
+        energy:save.planets?.['helion-01']?.energy??null},
+      visibleQueueRoles:Array.from(document.querySelectorAll('[data-qa-queue-role]'))
+        .slice(0,10).map((item)=>item.getAttribute('data-qa-queue-role')),
+      queueFullVisible:Boolean(document.querySelector('[data-qa-queue-full]')),
+      dialog:{open:Boolean(dialog),status:dialog?.querySelector('[data-qa-build-status]')?.getAttribute('data-qa-build-status')??'',
+        buttonDisabled:Boolean(button?.disabled)},
+    };
+  })()`);
+}
+
 async function enqueueResourceBuilding(win, role) {
   await openResourceBuilding(win, role);
   const clicked = await win.webContents.executeJavaScript(`(() => {
@@ -396,6 +416,7 @@ async function enqueueResourceBuilding(win, role) {
   }
   await waitFor(win, `!document.querySelector('.resource-building-dialog')`);
   await settle(win);
+  return { role, clickResult: clicked };
 }
 
 async function metrics(win, screen) {
@@ -721,10 +742,16 @@ async function verifyResourceZoneFlow(win, directory, label) {
   await freezeRendererClock(win);
   await activateResourceZone(win);
 
+  const queueClickResults=[];
   for(const role of ['basic-energy','gas-production-1','hangar']) {
-    await enqueueResourceBuilding(win,role);
+    queueClickResults.push(await enqueueResourceBuilding(win,role));
   }
-  await waitFor(win, `(() => { try { const q=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}').queues?.['helion-01']; return Array.isArray(q)&&q.length===3; } catch { return false; } })()`);
+  try {
+    await waitFor(win, `(() => { try { const q=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}').queues?.['helion-01']; return Array.isArray(q)&&q.length===3; } catch { return false; } })()`);
+  } catch (error) {
+    const diagnostics=await readResourceQueueDiagnostics(win);
+    throw new Error(`Three-slot resource queue persistence timed out: ${JSON.stringify({clickResults:queueClickResults, state:diagnostics, waitError:String(error)})}`);
+  }
   await waitFor(win, `document.querySelectorAll('[data-qa-queue-role]').length===3 && document.querySelector('[data-qa-queue-full]')`);
   await settle(win);
 

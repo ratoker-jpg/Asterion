@@ -84,6 +84,8 @@ jobs:
         run: npm run test:sun-raid
       - name: New game and save slot tests
         run: npm run test:new-game
+      - name: NPC foundation contracts and persistence
+        run: npm run test:npc
       - name: Type-check and build renderer
         run: npm run build
       - name: Upload balance evidence
@@ -115,7 +117,7 @@ jobs:
           - shard: science-reports
             suites: "test:science-ui:skip test:building-actions-ui test:reports-ui test:battle-reports-ui:skip test:simulator-ui:skip test:space-flight-ui:skip test:production-test-isolation-ui:skip"
           - shard: campaign-command
-            suites: "test:new-game-ui:skip test:pirate-operations-ui test:command-ui:skip test:command-aid-ui:skip test:command-journal-ui:skip"
+            suites: "test:new-game-ui:skip test:npc-replay-ui test:pirate-operations-ui test:command-ui:skip test:command-aid-ui:skip test:command-journal-ui:skip"
           - shard: fleet-universe
             suites: "test:fleet-ui:skip test:universe-ui:skip test:energy-ui:skip test:repair-ui:skip"
     steps:
@@ -152,6 +154,41 @@ jobs:
             artifacts/universe-planet-qa/**/*
             artifacts/pirate-operations-qa/**/*
             artifacts/save-safety-qa/**/*
+          if-no-files-found: warn
+          retention-days: 14
+
+  # Full campaign catch-up: 10 galaxies, 100 NPC, 30 offline days with asteroid,
+  # exploration and pirate timelines (no isolation). A measurement on shared
+  # runners whose speed varies, so it reports without gating the PR; the local
+  # result in docs/reports is the reviewed evidence.
+  npc-full-world:
+    name: NPC full-world catch-up (measurement)
+    runs-on: windows-latest
+    timeout-minutes: 25
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Node full-world benchmark (1/7/30 days)
+        shell: bash
+        run: |
+          mkdir -p artifacts/npc-full-world
+          npm run --silent benchmark:npc-full-world -- 1 7 30 > artifacts/npc-full-world/benchmark.json
+      - name: Build renderer
+        run: npm run build
+      - name: Electron full-world QA (30 days, 120 s limit)
+        run: npm run test:npc-replay-full-world-ui
+      - name: Upload full-world results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: Asterion-NPC-full-world
+          path: artifacts/npc-full-world*/**/*
           if-no-files-found: warn
           retention-days: 14
 
