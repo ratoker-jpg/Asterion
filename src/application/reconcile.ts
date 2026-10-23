@@ -526,6 +526,23 @@ function reconcileRuntimeSlice(
       break;
     }
     processedGroups++;
+    const otherCheckpoint = [flightCheckpoint, pirateCheckpoint, npcCheckpoint, workCheckpoint, sessionCheckpoint, economyCheckpoint, scienceCheckpoint, leadershipCheckpoint]
+      .reduce<number | undefined>((min, point) => point === undefined ? min : min === undefined ? point : Math.min(min, point), undefined);
+    if (asteroidCheckpoint === checkpoint && (otherCheckpoint === undefined || otherCheckpoint > checkpoint)) {
+      // Asteroid-only moments change nothing the other clocks read (their next
+      // times are fixed "first after" points), so each timestamp is applied
+      // exactly as its own group would, up to the next competing event. A tie
+      // with that event is left to the ordinary group: asteroids still go first.
+      let at = checkpoint;
+      while (true) {
+        processedThrough = at;
+        applyAsteroidTransitionsAt(at);
+        const following = next.asteroidSimulation ? getNextUniverseAsteroidTransitionAt(next.asteroidSimulation, context.now) : null;
+        if (following === null || (otherCheckpoint !== undefined && following >= otherCheckpoint)) break;
+        at = following;
+      }
+      continue;
+    }
     const asteroidIsDue = asteroidCheckpoint === checkpoint;
     const flightIsDue = flightCheckpoint === checkpoint;
     const pirateIsDue = pirateCheckpoint === checkpoint;
@@ -607,7 +624,9 @@ function reconcileRuntimeSlice(
         }
       }
       if (next.pirate?.contact.defeatedCycles !== defeatedBefore) {
-        restartRaidSelection(checkpoint);
+        // An NPC victory inside catch-up can precede the committed raid cursor;
+        // rolls at or before that cursor were already settled and are never reselected.
+        restartRaidSelection(Math.max(pirateCursor, checkpoint));
       }
       // A Hall lost to an arrival at this checkpoint must stop the charge clock from here on, not from `now`.
       next = syncAidState(next, { now: checkpoint, mode: context.mode, testTimeScale: context.testTimeScale });

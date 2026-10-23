@@ -600,24 +600,61 @@ export function getUniverseAsteroidDwellMs(spawnIndex: number, movementIndex: nu
   return randomInt(random, ASTEROID_MIN_DWELL_MS, ASTEROID_MAX_DWELL_MS);
 }
 
+type AsteroidRoutePoint = Readonly<{
+  coordinate: UniverseCoordinate;
+  movementIndex: number;
+  previousMoveAt: number;
+  nextMoveAt: number;
+  /** Move time at which the route leaves the universe; queries at or after it are null. */
+  exitAt?: number;
+}>;
+
+// Route walks are pure in (galaxyCount, spawnIndex, time). Saves without an
+// asteroid simulation re-derive every route per system render, so the latest
+// reached point is kept and later queries continue the identical walk.
+const ASTEROID_ROUTE_CACHE_LIMIT = 20_000;
+const asteroidRouteCache = new Map<string, AsteroidRoutePoint>();
+
+function rememberAsteroidRoute(key: string, point: AsteroidRoutePoint) {
+  if (!asteroidRouteCache.has(key) && asteroidRouteCache.size >= ASTEROID_ROUTE_CACHE_LIMIT) asteroidRouteCache.clear();
+  asteroidRouteCache.set(key, point);
+}
+
 export function getUniverseAsteroidState(spawnIndex: number, nowMs: number, galaxyCount = 1): InitializedUniverseAsteroidRuntimeState | null {
   const safeNow = normalizeNow(nowMs);
   if (!Number.isInteger(spawnIndex) || spawnIndex < 0) return null;
   const spawnedAt = ASTEROID_SCHEDULE_EPOCH_MS + spawnIndex * ASTEROID_SPAWN_INTERVAL_MS;
   if (spawnedAt > safeNow) return null;
-  const random = seededRandom(0xA570, spawnIndex);
-  let coordinate: UniverseCoordinate = { galaxy: GALAXY, system: 1, position: randomInt(random, 1, POSITION_COUNT) };
-  let movementIndex = 0;
-  let previousMoveAt = spawnedAt;
-  let nextMoveAt = spawnedAt + getUniverseAsteroidDwellMs(spawnIndex, movementIndex);
+  const cacheKey = `${galaxyCount}:${spawnIndex}`;
+  const cached = asteroidRouteCache.get(cacheKey);
+  if (cached?.exitAt !== undefined && safeNow >= cached.exitAt) return null;
+  let coordinate: UniverseCoordinate;
+  let movementIndex: number;
+  let previousMoveAt: number;
+  let nextMoveAt: number;
+  if (cached && safeNow >= cached.previousMoveAt) {
+    // Resume the same deterministic walk from a point it already passed.
+    ({ movementIndex, previousMoveAt, nextMoveAt } = cached);
+    coordinate = { ...cached.coordinate };
+  } else {
+    const random = seededRandom(0xA570, spawnIndex);
+    coordinate = { galaxy: GALAXY, system: 1, position: randomInt(random, 1, POSITION_COUNT) };
+    movementIndex = 0;
+    previousMoveAt = spawnedAt;
+    nextMoveAt = spawnedAt + getUniverseAsteroidDwellMs(spawnIndex, movementIndex);
+  }
   while (safeNow >= nextMoveAt) {
     previousMoveAt = nextMoveAt;
     const nextCoordinate = advanceUniverseAsteroidCoordinate(coordinate, 1, galaxyCount);
-    if (!nextCoordinate) return null;
+    if (!nextCoordinate) {
+      rememberAsteroidRoute(cacheKey, { coordinate, movementIndex, previousMoveAt, nextMoveAt, exitAt: previousMoveAt });
+      return null;
+    }
     coordinate = nextCoordinate;
     movementIndex += 1;
     nextMoveAt = previousMoveAt + getUniverseAsteroidDwellMs(spawnIndex, movementIndex);
   }
+  if (!cached || previousMoveAt >= cached.previousMoveAt) rememberAsteroidRoute(cacheKey, { coordinate: { ...coordinate }, movementIndex, previousMoveAt, nextMoveAt });
   const nextCoordinate = advanceUniverseAsteroidCoordinate(coordinate, 1, galaxyCount) ?? undefined;
   const gasRandom = seededRandom(0x6A5, spawnIndex);
   const gasYield = randomInt(gasRandom, ASTEROID_GAS_MIN, ASTEROID_GAS_MAX);

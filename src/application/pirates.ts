@@ -152,6 +152,11 @@ function systemForState(state: SaveState, galaxy: number, system: number, now: n
  * Returns the active pirate contact for a system. `coordinate.position` is a
  * caller placeholder; the returned coordinate is the procedural contact slot.
  */
+/** Canonical pirate-elimination composition: only combat-category hulls may fly (commanders are separate). */
+export function isPirateEliminationShip(shipId: ShipId, factionId: CombatFactionId): boolean {
+  return getFactionShipCatalog(factionId).find((entity) => entity.id === shipId)?.category === 'Боевой корабль';
+}
+
 export function getCurrentPirateContact(
   state: SaveState,
   coordinate: UniverseCoordinate,
@@ -318,8 +323,7 @@ export function dispatchPirateFlight(
       return flightFailure(state, 'wrong-ship-composition', 'Для разведки пиратского объекта нужен ровно один шпионский зонд.');
     }
   } else {
-    if (Object.keys(selectedShips).some((shipId) =>
-      getFactionShipCatalog(factionId).find((entity) => entity.id === shipId)?.category !== 'Боевой корабль')) {
+    if (Object.keys(selectedShips).some((shipId) => !isPirateEliminationShip(shipId as ShipId, factionId))) {
       return flightFailure(state, 'wrong-ship-composition', 'Для уничтожения пиратов можно отправить только боевые корабли и командиров.');
     }
     const availableAttackCommanders = getAttackCommanderSelection(state, originPlanetId);

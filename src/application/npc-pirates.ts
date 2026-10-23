@@ -1,7 +1,7 @@
 import { calculateFleetPopulation, createEmptyFleetState, resolveSavedFleetState } from '../domain/fleet/runtime.ts';
 import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
 import type { ShipId } from '../domain/combat/ids.ts';
-import { createBot01IncomingAttackSnapshot, isAttackCombatShip } from './attack.ts';
+import { createBot01IncomingAttackSnapshot } from './attack.ts';
 import { getHangarCapacity } from '../domain/buildings/balance-v1.ts';
 import { getFlightSlotUsage, isFlightLimitExempt } from '../domain/flights/limit.ts';
 import { dispatchFlight, getFlightByRequestId } from '../domain/flights/runtime.ts';
@@ -19,7 +19,7 @@ import { selectOwnerScores } from '../domain/rating/scoring.ts';
 import { createDefaultEspionageState, getEspionageTargets } from '../domain/espionage/runtime.ts';
 import { getNpcMissionAvailableFleet } from './npc-missions.ts';
 import { getOwnerRelation } from './owner-relations.ts';
-import { getCurrentPirateContact, resolvePirateFlightAtTarget } from './pirates.ts';
+import { getCurrentPirateContact, isPirateEliminationShip, resolvePirateFlightAtTarget } from './pirates.ts';
 import { pirateOperationId } from './pirate-presentation.ts';
 import type { NpcProfile } from '../domain/npc/types.ts';
 import type { SpyOwnerProfile, SpyTargetState } from '../domain/espionage/types.ts';
@@ -143,7 +143,7 @@ export function getNpcPirateCandidates(state: SaveState, profile: NpcProfile, at
       ...(ownReconReport ? { ownReconReport } : {}),
     });
     const combatShips = Object.fromEntries(Object.entries(free).filter(([id, count]) =>
-      safeCount(count) > 0 && isAttackCombatShip(id as ShipId, origin.raceId))) as Partial<Record<ShipId, number>>;
+      safeCount(count) > 0 && isPirateEliminationShip(id as ShipId, origin.raceId))) as Partial<Record<ShipId, number>>;
     if (Object.keys(combatShips).length > 0 && ownerCanUseFlightSlot(state, ownerId, ownerProfile(state, origin), 'pirate-elimination')) candidates.push({
       id: `pirate-elimination:${JSON.stringify([ownerId, origin.id, contact.contactCycleKey])}`,
       kind: 'pve', weight: 1, ownerId, originPlanetId: origin.id,
@@ -185,7 +185,7 @@ export function dispatchNpcPirateMission(
       || !Number.isSafeInteger(raw) || Number(raw) <= 0) return fail(state, 'invalid-ship-selection');
     if ((getNpcMissionAvailableFleet(state, ownerId, origin.id)[id as ShipId] ?? 0) < Number(raw)) return fail(state, 'insufficient-ships');
     if (candidate.missionId === 'pirate-recon' && (id !== 'spy-probe' || raw !== 1)) return fail(state, 'invalid-recon-composition');
-    if (candidate.missionId === 'pirate-elimination' && !isAttackCombatShip(id as ShipId, origin.raceId)) return fail(state, 'invalid-elimination-composition');
+    if (candidate.missionId === 'pirate-elimination' && !isPirateEliminationShip(id as ShipId, origin.raceId)) return fail(state, 'invalid-elimination-composition');
     selectedShips[id as ShipId] = Number(raw);
   }
   if (!Object.keys(selectedShips).length) return fail(state, 'empty-ship-selection');

@@ -125,3 +125,23 @@ test('NPC elimination arrival runs canonical combat and isolates player-owned sa
   }
   assert.equal(npcOriginAfter.resources.gas, afterDispatch.resources.gas, 'arrival does not grant unearned resources');
 });
+
+test('NPC pirate elimination follows the canonical combat-hull composition rule', () => {
+  const scheduled = firstScheduledContact();
+  const at = scheduled.startAt + 1;
+  const civilianOnly = withNpcOrigin(createInitialSaveState('test', scheduled.startAt), { transporter: 5, recycler: 2 });
+  assert.equal(getNpcPirateCandidates(civilianOnly, civilianOnly.npc!.profiles[OWNER]!, at)
+    .some((candidate) => candidate.missionId === 'pirate-elimination'), false,
+  'civilian and service hulls cannot form an elimination fleet, exactly as for the player');
+
+  const mixed = withNpcOrigin(createInitialSaveState('test', scheduled.startAt), { transporter: 5, cruiser: 2 });
+  const candidate = getNpcPirateCandidates(mixed, mixed.npc!.profiles[OWNER]!, at)
+    .find((item) => item.missionId === 'pirate-elimination');
+  assert.ok(candidate);
+  assert.deepEqual(candidate.selectedShips, { cruiser: 2 });
+  const forged = { ...candidate, selectedShips: { ...candidate.selectedShips, transporter: 5 } };
+  const denied = dispatchNpcPirateMission(mixed, OWNER, forged, at, 'npc-pirate-forged-composition', TIME_SCALE);
+  assert.equal(denied.ok, false);
+  assert.equal(denied.reason, 'invalid-elimination-composition');
+  assert.equal(denied.state, mixed, 'a denied launch leaves wallet and fleet untouched');
+});

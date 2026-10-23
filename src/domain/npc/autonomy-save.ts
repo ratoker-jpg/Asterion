@@ -172,7 +172,10 @@ function validBoundNpcFlight(value: unknown): boolean {
     || !entriesAreNonNegativeIntegers(flight.selectedShips, SHIP_IDS)) return false;
 
   const selectedShips = flight.selectedShips as UnknownRecord;
-  if (!Object.values(selectedShips).some((quantity) => typeof quantity === 'number' && quantity > 0)) return false;
+  // A launch always carries ships; after a battle the survivor manifest may be
+  // empty (total loss) and the flight still completes as a legitimate record.
+  if (flight.phase === 'outbound'
+    && !Object.values(selectedShips).some((quantity) => typeof quantity === 'number' && quantity > 0)) return false;
   if (flight.selectedCommanders !== undefined && !entriesAreNonNegativeIntegers(flight.selectedCommanders, COMMANDER_IDS)) return false;
   if (flight.completionReason !== undefined && !FLIGHT_COMPLETION_REASONS.has(String(flight.completionReason))) return false;
 

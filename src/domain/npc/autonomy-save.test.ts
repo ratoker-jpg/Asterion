@@ -218,3 +218,12 @@ test('accepts canonical expeditions without an attack snapshot and rejects a mal
     attackSnapshot: { ...attackSnapshot(), attackerFactionId: 'unknown' },
   } })), false);
 });
+
+test('accepts a post-battle survivor manifest with zero ships but still rejects an empty launch', () => {
+  assert.equal(validateNpcAutonomyPayload(payload({ flight: npcFlight({ selectedShips: { scout: 0 } }) })), false,
+    'an outbound flight must carry at least one ship');
+  for (const flight of [
+    npcFlight({ selectedShips: { scout: 0 }, phase: 'completed', completedAt: 11_000, arrivedAt: 11_000, completionReason: 'normal-return' }),
+    npcFlight({ selectedShips: { scout: 0 }, phase: 'returning', arrivedAt: 11_000, returnAt: 21_000 }),
+  ]) assert.equal(validateNpcAutonomyPayload(payload({ flight })), true, `total loss is a legal ${String(flight.phase)} record`);
+});
