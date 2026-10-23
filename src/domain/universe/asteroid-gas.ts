@@ -96,16 +96,17 @@ export function advanceAsteroidGasAt(
   if (timestamp <= initialized.gasUpdatedAt) return initialized;
 
   const elapsedMs = timestamp - initialized.gasUpdatedAt;
-  const accruedNumerator = BigInt(initialized.gasRatePerHour) * BigInt(elapsedMs)
-    + BigInt(initialized.gasRemainder);
-  const wholeGas = accruedNumerator / BigInt(ASTEROID_GAS_HOUR_MS);
-  const nextGas = BigInt(initialized.gasYield) + wholeGas;
-  const reachedCap = nextGas >= BigInt(ASTEROID_GAS_CAP);
+  // Below the cap this numerator is bounded by 2,000,000 * 3,600,000,
+  // safely inside exact integer range. Larger intervals saturate before any
+  // division/remainder arithmetic, including intervals beyond safe products.
+  const accruedNumerator = initialized.gasRatePerHour * elapsedMs + initialized.gasRemainder;
+  const reachedCap = accruedNumerator >= (ASTEROID_GAS_CAP - initialized.gasYield) * ASTEROID_GAS_HOUR_MS;
+  const wholeGas = reachedCap ? 0 : Math.floor(accruedNumerator / ASTEROID_GAS_HOUR_MS);
 
   return {
     ...initialized,
-    gasYield: reachedCap ? ASTEROID_GAS_CAP : Number(nextGas),
+    gasYield: reachedCap ? ASTEROID_GAS_CAP : initialized.gasYield + wholeGas,
     gasUpdatedAt: timestamp,
-    gasRemainder: reachedCap ? 0 : Number(accruedNumerator % BigInt(ASTEROID_GAS_HOUR_MS)),
+    gasRemainder: reachedCap ? 0 : accruedNumerator % ASTEROID_GAS_HOUR_MS,
   };
 }

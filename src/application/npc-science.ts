@@ -124,6 +124,8 @@ export function reconcileNpcScienceAt(state: SaveState, at: number, ownerIds?: R
     const planets = planetsByOwner.get(ownerId) ?? [];
     if (!planets.length) { owners = { ...owners }; delete owners[ownerId]; continue; }
     if (!initialScience.queue.length) continue;
+    if (initialScience.queue[0]!.finishAt > at && initialScience.queue.every((task) =>
+      task.planetId && targets[task.planetId]?.ownerId === ownerId)) continue;
     let science = initialScience;
     for (const payerId of new Set(science.queue.map((task) => task.planetId))) {
       if (!payerId || planets.some((target) => target.id === payerId)) continue;

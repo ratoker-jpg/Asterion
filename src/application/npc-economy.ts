@@ -18,6 +18,7 @@ import {
 import { creditResources } from '../domain/resources/credit.ts';
 import {
   calculateEnergySources,
+  getSunEfficiencyPercent,
   consumeEnergy,
   hydrateEnergyLedger,
   rebuildEnergyLedger,
@@ -53,14 +54,21 @@ function finiteNonNegative(value: unknown, fallback = 0): number {
   return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : fallback;
 }
 
+const normalizedBuildings = new WeakMap<object, BuildingLevels>();
+
 function targetBuildingLevels(target: SpyTargetState): BuildingLevels {
   const source = target.buildings ?? {};
-  return migrateBuildingLevels({
+  const cached = normalizedBuildings.get(source);
+  if (cached) return cached;
+  const levels = migrateBuildingLevels({
     ...source,
     'metal-production-1': source['metal-production-1'] ?? source['metal-mine'],
     'mineral-production-1': source['mineral-production-1'] ?? source['mineral-mine'],
     'gas-production-1': source['gas-production-1'] ?? source['gas-extractor'],
   });
+  normalizedBuildings.set(source, levels);
+  normalizedBuildings.set(levels, levels);
+  return levels;
 }
 
 function targetScience(target: SpyTargetState) {
@@ -86,12 +94,27 @@ function energySources(target: SpyTargetState, buildings: BuildingLevels) {
   });
 }
 
+const hydratedEnergy = new WeakMap<EnergyLedger, { signature: string; ledger: EnergyLedger }>();
+
 export function targetEnergyLedger(target: SpyTargetState, buildings = targetBuildingLevels(target)): EnergyLedger {
-  return hydrateEnergyLedger(
+  // Resource accrual replaces targets but retains the same immutable ledger.
+  // Rehydrate only when that ledger or an actual energy source input changes.
+  const signature = [buildings['basic-energy'] ?? 0, buildings['advanced-energy'] ?? 0,
+    targetScience(target)[SCIENCE_ID_PHYSICS] ?? 0, targetSatelliteCount(target),
+    target.coordinate.galaxy, target.coordinate.system, target.coordinate.position,
+    getSunEfficiencyPercent(target.coordinate.system, target.coordinate.galaxy)].join(':');
+  const cached = target.energyLedger ? hydratedEnergy.get(target.energyLedger) : undefined;
+  if (cached?.signature === signature) return cached.ledger;
+  const ledger = hydrateEnergyLedger(
     target.energyLedger,
     energySources(target, buildings),
     finiteNonNegative(target.resources.developmentEnergy),
   );
+  if (target.energyLedger) {
+    hydratedEnergy.set(target.energyLedger, { signature, ledger });
+    hydratedEnergy.set(ledger, { signature, ledger });
+  }
+  return ledger;
 }
 
 function targetQueue(target: SpyTargetState, buildings = targetBuildingLevels(target)) {
@@ -135,16 +158,26 @@ function withEconomy(target: SpyTargetState, economy: BuildingEconomyState, ener
   };
 }
 
+const derivedIncome = new WeakMap<BuildingLevels, {
+  science: ReturnType<typeof targetScience>; bots: SpyTargetState['productionBots']; timeScale: number;
+  income: { metal: number; minerals: number; gas: number };
+}>();
+
 function incomeFor(target: SpyTargetState, timeScale: number, buildings = targetBuildingLevels(target)) {
-  const base = getBuildingResourceIncomePerHour(buildings, targetScience(target));
+  const science = targetScience(target);
+  const cached = derivedIncome.get(buildings);
+  if (cached && cached.science === science && cached.bots === target.productionBots && cached.timeScale === timeScale) return cached.income;
+  const base = getBuildingResourceIncomePerHour(buildings, science);
   const bots = migrateProductionBotAssignment(target.productionBots, buildings);
   const income = getProductionBotIncomePerHour(base, bots);
   const multiplier = Number.isFinite(timeScale) ? Math.max(0, timeScale) : 1;
-  return {
+  const result = {
     metal: finiteNonNegative(income.metal) * multiplier,
     minerals: finiteNonNegative(income.minerals) * multiplier,
     gas: finiteNonNegative(income.gas) * multiplier,
   };
+  derivedIncome.set(buildings, { science, bots: target.productionBots, timeScale, income: result });
+  return result;
 }
 
 function accrueInterval(target: SpyTargetState, to: number, timeScale: number, derivedBuildings?: BuildingLevels): SpyTargetState {
@@ -233,8 +266,11 @@ const isBlocked = isNpcPlanetBlocked;
 /** Project owner knowledge and transition existing one-time sources without resetting consumption. */
 export function projectNpcScience(target: SpyTargetState, levels: import('../domain/science/runtime.ts').ScienceLevels): SpyTargetState {
   const previous = target.ownerProfile?.scienceLevels ?? {};
+  if (previous === levels) return target;
   if (Object.keys(levels).every((id) => previous[Number(id) as keyof typeof levels] === levels[Number(id) as keyof typeof levels])
-    && Object.keys(previous).every((id) => previous[Number(id) as keyof typeof levels] === levels[Number(id) as keyof typeof levels])) return target;
+    && Object.keys(previous).every((id) => previous[Number(id) as keyof typeof levels] === levels[Number(id) as keyof typeof levels])) {
+    return target.ownerProfile ? { ...target, ownerProfile: { ...target.ownerProfile, scienceLevels: levels } } : target;
+  }
   const projected = { ...target, ownerProfile: { scienceLevels: levels,
     shipLevels: target.ownerProfile?.shipLevels ?? {}, commanderLevels: target.ownerProfile?.commanderLevels ?? {} } };
   // Most levels do not change energy. Preserve saved ledger bytes in that case.

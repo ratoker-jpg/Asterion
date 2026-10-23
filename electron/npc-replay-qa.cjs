@@ -18,15 +18,24 @@ const ROOT = path.join(__dirname, '..');
 // --full-world: a real 10-galaxy campaign with asteroid, exploration and pirate
 // timelines running from its start. The default stays the scoped economy run.
 const FULL_WORLD = process.argv.includes('--full-world');
+function parseCatchupDays(args) {
+  const value = args.find((arg) => arg.startsWith('--days='))?.slice('--days='.length) ?? '30';
+  if (!/^\d+$/.test(value)) throw new Error(`Invalid --days value ${JSON.stringify(value)}; expected an integer from 1 to 30.`);
+  const days = Number(value);
+  if (!Number.isSafeInteger(days) || days < 1 || days > 30) throw new Error(`Invalid --days value ${JSON.stringify(value)}; expected an integer from 1 to 30.`);
+  return days;
+}
+const CATCHUP_DAYS = parseCatchupDays(process.argv.slice(2));
 const OUTPUT = process.env.ASTERION_QA_OUTPUT
-  || path.join(ROOT, 'artifacts', FULL_WORLD ? 'npc-replay-full-world-qa' : 'npc-replay-qa');
+  || path.join(ROOT, 'artifacts', `${FULL_WORLD ? 'npc-replay-full-world-qa' : 'npc-replay-qa'}-${CATCHUP_DAYS}d`);
 const CATCHUP_TIMEOUT_MS = 120_000;
 const FIXTURE_ISOLATION = FULL_WORLD
   ? 'None: 10 galaxies, 100 NPC, asteroid simulation, exploration and pirate timelines run from campaign start.'
   : 'NPC economy replay only; exploration and pirate cursors are frozen at the fixed horizon and asteroid simulation is absent. Not a full-campaign replay.';
 const LEGACY_KEY = 'asterion.vertical-slice.v1';
+const SLOT_INDEX_KEY = 'asterion.slots.index.v1';
 const DAY_MS = 24 * 60 * 60 * 1_000;
-const CATCHUP_MS = 30 * DAY_MS;
+const CATCHUP_MS = CATCHUP_DAYS * DAY_MS;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const run = (win, source) => win.webContents.executeJavaScript(source);
 
@@ -105,13 +114,13 @@ async function click(win, selector) {
   if (!clicked) throw new Error(`Missing or disabled test action: ${selector}`);
 }
 
-async function readMeasurement(win) {
+async function readMeasurement(win, saveKey) {
   return run(win, `(() => {
     clearInterval(window.__npcReplayQaTimer);
     const qa = window.__npcReplayQa || { gaps: [], progress: [] };
     const sorted = [...qa.gaps].sort((a, b) => a - b);
     const p95 = sorted.length ? sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * .95) - 1)] : null;
-    const save = JSON.parse(localStorage.getItem(${JSON.stringify(LEGACY_KEY)}) || 'null');
+    const save = JSON.parse(localStorage.getItem(${JSON.stringify(saveKey)}) || 'null');
     const targets = Object.values(save?.espionage?.targets ?? {}).filter((target) => target.kind === 'npc');
     const progress = qa.progress;
     const longTasks = [...qa.longTasks].sort((a, b) => a - b);
@@ -124,7 +133,7 @@ async function readMeasurement(win) {
       },
       inMemoryReplay: qa.latest,
       runtimePublications: qa.publications,
-      persistedSaveChars: (localStorage.getItem(${JSON.stringify(LEGACY_KEY)}) || '').length,
+      persistedSaveChars: (localStorage.getItem(${JSON.stringify(saveKey)}) || '').length,
       persistenceNotice: [...document.querySelectorAll('[data-qa-notice], [role="status"], [role="alert"]')]
         .map((node) => node.textContent || '').find((text) => text.includes('Не удалось сохранить')) || null,
       firstProgress: progress[0] ?? null,
@@ -165,21 +174,26 @@ async function runScenario() {
     // replace its payload with a source-generated, schema-current 100-NPC save.
     await load(win, '?autostart=continue');
     await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+    const saveKey = await run(win, `(() => {
+      const index = JSON.parse(localStorage.getItem(${JSON.stringify(SLOT_INDEX_KEY)}) || 'null');
+      const slot = index?.slots?.find((item) => item.id === index.activeSlotId);
+      return slot?.storageKey || ${JSON.stringify(LEGACY_KEY)};
+    })()`);
     const startAt = Date.now() - CATCHUP_MS;
     const endAt = startAt + CATCHUP_MS + 30_000;
     const rawSeed = createProductionSave(startAt, endAt);
-    await run(win, `localStorage.setItem(${JSON.stringify(LEGACY_KEY)}, ${JSON.stringify(rawSeed)})`);
+    await run(win, `localStorage.setItem(${JSON.stringify(saveKey)}, ${JSON.stringify(rawSeed)})`);
     await load(win, '?autostart=continue');
     await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
     const pendingExpression = `(() => {
-      try { const save = JSON.parse(localStorage.getItem(${JSON.stringify(LEGACY_KEY)}) || 'null');
+      try { const save = JSON.parse(localStorage.getItem(${JSON.stringify(saveKey)}) || 'null');
         return save?.npcReplay?.targetAt > save?.npcReplay?.processedThroughAt; }
       catch { return false; }
     })()`;
     await waitFor(win, pendingExpression, 30_000);
 
     const initial = await run(win, `(() => {
-      const save = JSON.parse(localStorage.getItem(${JSON.stringify(LEGACY_KEY)}) || '{}');
+      const save = JSON.parse(localStorage.getItem(${JSON.stringify(saveKey)}) || '{}');
       return {
         processedThroughAt: save.npcReplay?.processedThroughAt ?? null,
         targetAt: save.npcReplay?.targetAt ?? null,
@@ -229,7 +243,7 @@ async function runScenario() {
           return;
         }
         try {
-          const save = JSON.parse(localStorage.getItem(${JSON.stringify(LEGACY_KEY)}) || 'null');
+          const save = JSON.parse(localStorage.getItem(${JSON.stringify(saveKey)}) || 'null');
           const replay = save?.npcReplay;
           if (replay && replay.processedThroughAt !== qa.lastCursor) {
             qa.lastCursor = replay.processedThroughAt;
@@ -263,7 +277,7 @@ async function runScenario() {
     const beforeClickPending = await run(win, pendingExpression);
     if (!beforeClickPending) throw new Error('The replay completed before the representative building action could be probed.');
     const beforePlayerAction = await run(win, `(() => {
-      const save = JSON.parse(localStorage.getItem(${JSON.stringify(LEGACY_KEY)}) || '{}');
+      const save = JSON.parse(localStorage.getItem(${JSON.stringify(saveKey)}) || '{}');
       return {
         buildingLevel: save.planets?.['helion-01']?.buildings?.['metal-production-1'] ?? null,
         queue: [...(save.queues?.['helion-01'] ?? [])],
@@ -273,7 +287,7 @@ async function runScenario() {
     await click(win, '[data-qa-building-dialog="metal-production-1"] [data-qa-build-button]');
     await sleep(100);
     const afterPlayerAction = await run(win, `(() => {
-      const save = JSON.parse(localStorage.getItem(${JSON.stringify(LEGACY_KEY)}) || '{}');
+      const save = JSON.parse(localStorage.getItem(${JSON.stringify(saveKey)}) || '{}');
       return {
         buildingLevel: save.planets?.['helion-01']?.buildings?.['metal-production-1'] ?? null,
         queue: [...(save.queues?.['helion-01'] ?? [])],
@@ -305,13 +319,13 @@ async function runScenario() {
       await waitFor(win, FULL_WORLD
         ? `(() => { const r = window.__npcReplayQa?.latest; return Boolean(r && r.targetAt <= r.processedThroughAt); })()`
         : `(() => {
-      try { const save = JSON.parse(localStorage.getItem(${JSON.stringify(LEGACY_KEY)}) || 'null');
+      try { const save = JSON.parse(localStorage.getItem(${JSON.stringify(saveKey)}) || 'null');
         return save?.npcReplay?.targetAt <= save?.npcReplay?.processedThroughAt; }
       catch { return false; }
       })()`, CATCHUP_TIMEOUT_MS);
       // Completion is written at once; give the write and its storage read a moment.
       if (FULL_WORLD) await waitFor(win, `(() => {
-        try { const save = JSON.parse(localStorage.getItem(${JSON.stringify(LEGACY_KEY)}) || 'null');
+        try { const save = JSON.parse(localStorage.getItem(${JSON.stringify(saveKey)}) || 'null');
           return save?.npcReplay?.targetAt <= save?.npcReplay?.processedThroughAt; }
         catch { return false; }
       })()`, 15_000);
@@ -320,13 +334,13 @@ async function runScenario() {
     }
     const elapsedMs = Date.now() - catchupStartedAt;
     if (cpuProfileDone) await cpuProfileDone;
-    const measurement = await readMeasurement(win);
+    const measurement = await readMeasurement(win, saveKey);
     if (catchupWaitError) {
       const failedResults = {
         status: 'timeout',
         profile: PROFILE,
         isolatedUserData: true,
-        seed: { npcProfiles: initial.npcProfiles, npcTargets: initial.npcTargets, startAt, endAt, catchupDays: 30,
+        seed: { npcProfiles: initial.npcProfiles, npcTargets: initial.npcTargets, startAt, endAt, catchupDays: CATCHUP_DAYS,
           scenario: FULL_WORLD ? 'full-world' : 'scoped', isolation: initial.isolation, fixtureIsolation: FIXTURE_ISOLATION },
         commandGate: { pendingBeforeUiAction: beforeClickPending, requestEventPrevented: eventPrevented, buildButtonWasEnabled: buildButtonEnabled, playerStateUnchanged: true },
         catchup: { elapsedMs, ...measurement },
@@ -351,7 +365,7 @@ async function runScenario() {
     const results = {
       profile: PROFILE,
       isolatedUserData: true,
-      seed: { npcProfiles: initial.npcProfiles, npcTargets: initial.npcTargets, startAt, endAt, catchupDays: 30,
+      seed: { npcProfiles: initial.npcProfiles, npcTargets: initial.npcTargets, startAt, endAt, catchupDays: CATCHUP_DAYS,
         scenario: FULL_WORLD ? 'full-world' : 'scoped', isolation: initial.isolation, fixtureIsolation: FIXTURE_ISOLATION },
       commandGate: { pendingBeforeUiAction: beforeClickPending, requestEventPrevented: eventPrevented, buildButtonWasEnabled: buildButtonEnabled, playerStateUnchanged: true },
       catchup: { elapsedMs, ...measurement },

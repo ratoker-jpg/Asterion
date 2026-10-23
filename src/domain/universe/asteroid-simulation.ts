@@ -126,6 +126,26 @@ function occupancyKey(coordinate: UniverseCoordinate): number | string {
     : universeCoordinateKey(coordinate);
 }
 
+type AsteroidTimestampIndex = {
+  asteroids: Map<number, UniverseAsteroidRuntimeState>;
+  occupied: Map<number | string, number>;
+};
+
+// A consumed index belongs only to the latest immutable asteroid array. Old
+// replay branches rebuild it, so the cache never changes saved state or order.
+const timestampIndexes = new WeakMap<UniverseAsteroidRuntimeState[], AsteroidTimestampIndex>();
+
+function takeTimestampIndex(states: UniverseAsteroidRuntimeState[], atMs: number): AsteroidTimestampIndex {
+  const cached = timestampIndexes.get(states);
+  if (cached) { timestampIndexes.delete(states); return cached; }
+  const asteroids = new Map(states.map((asteroid) => [asteroid.spawnIndex, asteroid]));
+  const occupied = new Map<number | string, number>();
+  for (const asteroid of asteroids.values()) {
+    if (asteroid.nextMoveAt !== atMs) occupied.set(occupancyKey(asteroid.coordinate), asteroid.spawnIndex);
+  }
+  return { asteroids: new Map([...asteroids].sort(([left], [right]) => left - right)), occupied };
+}
+
 function processTimestamp(
   state: UniverseAsteroidSimulationState,
   atMs: number,
@@ -134,7 +154,7 @@ function processTimestamp(
 ): UniverseAsteroidSimulationState {
   // Asteroid states are never mutated in place (every change builds a new
   // object), so untouched asteroids keep their objects; no per-move copies.
-  const asteroids = new Map(state.asteroids.map((asteroid) => [asteroid.spawnIndex, asteroid]));
+  const { asteroids, occupied } = takeTimestampIndex(state.asteroids, atMs);
   const spawnedIndices = new Set<number>();
 
   while (asteroidSpawnAt(state.nextSpawnIndex) === atMs) {
@@ -146,18 +166,15 @@ function processTimestamp(
     state = { ...state, nextSpawnIndex: state.nextSpawnIndex + 1 };
   }
 
-  // One pass in map order: due movers are collected, and only stationary
-  // asteroids occupy coordinates during arrival resolution (same-time spawns
-  // and movement origins are incoming/vacating).
+  // Vacate all same-time origins before placing arrivals. Stationary occupancy
+  // is retained from the last transition rather than rebuilt for every move.
   const dueMoves: UniverseAsteroidRuntimeState[] = [];
-  const occupied = new Map<number | string, number>();
   for (const asteroid of asteroids.values()) {
     if (asteroid.nextMoveAt === atMs) {
       dueMoves.push(asteroid);
-      continue;
+      const key = occupancyKey(asteroid.coordinate);
+      if (occupied.get(key) === asteroid.spawnIndex) occupied.delete(key);
     }
-    if (spawnedIndices.has(asteroid.spawnIndex)) continue;
-    occupied.set(occupancyKey(asteroid.coordinate), asteroid.spawnIndex);
   }
   dueMoves.sort((left, right) => left.spawnIndex - right.spawnIndex);
   const arrivals = new Map<number, UniverseAsteroidRuntimeState>();
@@ -225,10 +242,14 @@ function processTimestamp(
     if (incoming && asteroids.get(spawnIndex) === incoming) place(incoming);
   }
 
+  const nextAsteroids = [...asteroids.values()];
+  // Legacy saves may contain overlapping stationary objects. Preserve their
+  // original per-pass last-writer rule until ordinary collisions resolve them.
+  if (occupied.size === asteroids.size) timestampIndexes.set(nextAsteroids, { asteroids, occupied });
   return {
     ...state,
     processedThroughAt: atMs,
-    asteroids: [...asteroids.values()].sort((left, right) => left.spawnIndex - right.spawnIndex),
+    asteroids: nextAsteroids,
   };
 }
 

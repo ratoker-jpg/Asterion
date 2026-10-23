@@ -5,16 +5,40 @@ import { createEmptyFleetState, calculateFleetPopulation } from '../domain/fleet
 import { getBuildingResourceIncomePerHour, getStorageCapacities } from '../domain/buildings/resource-zone.ts';
 import { migrateEspionageState } from '../domain/espionage/repository.ts';
 import { NPC_ECONOMY_ROLES } from '../domain/npc/economy-policy.ts';
+import { setSunBrightnessOverrides } from '../domain/energy/runtime.ts';
 import { accrueResourceCredits } from './resource-clock.ts';
 import {
   getNpcBuildingCandidates,
   previewNpcBuilding,
   settleNpcPlanet,
   startNpcBuilding,
+  targetEnergyLedger,
 } from './npc-economy.ts';
 import type { SpyTargetState } from '../domain/espionage/types.ts';
 
 const context = { timeScale: 1 };
+
+test('cached NPC energy follows Sun brightness changes and restoration without resetting consumption', () => {
+  const initial = target();
+  initial.buildings = { 'basic-energy': 20 };
+  initial.coordinate = { galaxy: 1, system: 29, position: 5 };
+  setSunBrightnessOverrides({});
+  try {
+    const baseline = targetEnergyLedger(initial);
+    const persisted = { ...initial, energyLedger: baseline };
+    const bright = targetEnergyLedger(persisted);
+    setSunBrightnessOverrides({ '1:29': 40 });
+    const dim = targetEnergyLedger(persisted);
+    assert.ok(dim.producedEnergy < bright.producedEnergy);
+    assert.equal(dim.consumedEnergy, bright.consumedEnergy);
+    setSunBrightnessOverrides({});
+    const restored = targetEnergyLedger(persisted);
+    assert.equal(restored.producedEnergy, bright.producedEnergy);
+    assert.equal(restored.consumedEnergy, bright.consumedEnergy);
+  } finally {
+    setSunBrightnessOverrides({});
+  }
+});
 
 function target(): SpyTargetState {
   const base = Object.values(createBot01Planets(0))[0]!;

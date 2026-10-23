@@ -29,6 +29,23 @@ function legacyAsteroid(spawnIndex: number, gasYield = 1_000): UniverseAsteroidR
   };
 }
 
+test('bounded gas arithmetic matches the integer reference at cap boundaries and extreme intervals', () => {
+  for (const rate of ASTEROID_GAS_RATES_PER_HOUR) for (let sample = 0; sample < 64; sample++) {
+    const gasYield = (sample * 31_337) % ASTEROID_GAS_CAP;
+    const gasRemainder = (sample * 17_171) % ASTEROID_GAS_HOUR_MS;
+    const start = { ...legacyAsteroid(sample, gasYield), gasRatePerHour: rate, gasUpdatedAt: 0, gasRemainder };
+    const capAt = Math.ceil(((ASTEROID_GAS_CAP - gasYield) * ASTEROID_GAS_HOUR_MS - gasRemainder) / rate);
+    for (const elapsed of [1, Math.max(1, capAt - 1), capAt, capAt + 1, Number.MAX_SAFE_INTEGER]) {
+      const numerator = BigInt(rate) * BigInt(elapsed) + BigInt(gasRemainder);
+      const amount = BigInt(gasYield) + numerator / BigInt(ASTEROID_GAS_HOUR_MS);
+      const saturated = amount >= BigInt(ASTEROID_GAS_CAP);
+      const result = advanceAsteroidGasAt(start, elapsed);
+      assert.equal(result.gasYield, saturated ? ASTEROID_GAS_CAP : Number(amount));
+      assert.equal(result.gasRemainder, saturated ? 0 : Number(numerator % BigInt(ASTEROID_GAS_HOUR_MS)));
+    }
+  }
+});
+
 test('gas rate is deterministic by spawn index and approximately one third per rate', () => {
   assert.deepEqual(ASTEROID_GAS_RATES_PER_HOUR, [25_000, 100_000, 250_000]);
   const counts = new Map(ASTEROID_GAS_RATES_PER_HOUR.map((rate) => [rate, 0]));

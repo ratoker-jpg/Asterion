@@ -152,3 +152,24 @@ test('advancing through a processed event does not replay it', () => {
     transitions: [],
   });
 });
+
+test('transient occupancy indexes preserve cold replay, serialization and alternate branches', () => {
+  const startAt = ASTEROID_SCHEDULE_EPOCH_MS + 7 * 24 * 60 * 60_000;
+  const initial = createUniverseAsteroidSimulationState(startAt, 10);
+  const original = JSON.stringify(initial);
+  const through = startAt + 30 * 60_000;
+  const hot = advanceUniverseAsteroidSimulationAt(initial, through, 10);
+  let cold = JSON.parse(original) as UniverseAsteroidSimulationState;
+  const transitions = [] as typeof hot.transitions;
+  while (true) {
+    const at = getNextUniverseAsteroidTransitionAt(cold, through);
+    if (at === null) break;
+    const result = advanceUniverseAsteroidSimulationAt(JSON.parse(JSON.stringify(cold)), at, 10);
+    cold = result.state;
+    transitions.push(...result.transitions);
+  }
+  cold = advanceUniverseAsteroidSimulationAt(cold, through, 10).state;
+  assert.deepEqual(JSON.parse(JSON.stringify(hot)), JSON.parse(JSON.stringify({ state: cold, transitions })));
+  assert.deepEqual(advanceUniverseAsteroidSimulationAt(initial, through, 10), hot);
+  assert.equal(JSON.stringify(initial), original, 'consuming a derived index never changes a saved branch');
+});
