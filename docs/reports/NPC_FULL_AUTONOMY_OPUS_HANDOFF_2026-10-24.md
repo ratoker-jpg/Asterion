@@ -23,7 +23,7 @@
 - Изолированный worktree: `D:/Desktop/Asterion/worktrees/npc-full-autonomy-unified`.
 - Исходный checkout `D:/Desktop/Asterion/repo` находится на старой `codex/phase5-resource-assets` и содержит чужие изменённые/неотслеживаемые UI/asset-файлы. **Они не тронуты. Не переносить и не очищать их.**
 - `npm ci --no-audit --no-fund` выполнен в новом worktree. Node 24/Electron локально доступны.
-- Пользовательские документы скопированы без изменения в `docs/task-inputs/npc-full-autonomy/TASK_PROMPT_2026-10-23.md` и `AUDIT_2026-10-23.md`. Оригиналы лежат в `D:/Downloads/ASTERION_ONE_DRAFT_PR_FULL_NPC_AUTONOMY_GPT61_SOL_PROMPT_2026-10-23.md` и `D:/Downloads/ASTERION_UNIFIED_NPC_AUTONOMY_AUDIT_2026-10-23.md`.
+- Пользовательские документы сохранены в `docs/task-inputs/npc-full-autonomy/TASK_PROMPT_2026-10-23.md` и `AUDIT_2026-10-23.md`. Содержание сохранено; хвостовые пробелы audit и копий логов нормализованы для git whitespace check. Оригинальные байты документов лежат в `D:/Downloads/ASTERION_ONE_DRAFT_PR_FULL_NPC_AUTONOMY_GPT61_SOL_PROMPT_2026-10-23.md` и `D:/Downloads/ASTERION_UNIFIED_NPC_AUTONOMY_AUDIT_2026-10-23.md`.
 - Обязательный протокол прочитан из актуального main: `docs/process/ASTERION_AUDITOR_PROTOCOL.md`. Также прочитаны локальные `AGENTS.md`, `docs/ASTERION_SKILLS.md`, registry UI и глобальные orchestrator/graphify/planning/TypeScript/React/design-doctrine. Часть локальных registry/AGENTS в исходном checkout неотслеживаемая, поэтому в новом worktree их может не быть; прямые указания пользователя важнее.
 - Свежий **структурный** graphify создан командой `graphify update src --no-cluster`: 379 файлов, 4481 узел, 16704 ребра, baseline SHA записан в игнорируемом `src/graphify-out/source-head.txt`. Старый `D:/Desktop/Asterion/graphify-out` от сентября непригоден для доказательств. После новых файлов свежий граф нужно обновить; семантический анализ не нужен, API-ключ не требуется. CLI 0.8.38 предупреждает о skill 0.9.92; установка не менялась.
 
@@ -156,3 +156,14 @@ npm run test:repair-ui
 - Batching астероидов в код **не реализован**. Не искать «готовую оптимизацию»: есть только измеренная причина и план. Последние кэши и spy event suppression не заменяют этого шага.
 
 Финальный локальный checkpoint после последних hooks: `npm run build` PASS; новая focused selection **48/48 PASS**; `test:inventory` **125 файлов / 24 scripts / 0 missing / 0 doubled / 0 outside CI**; `git diff --check` PASS. Копии ключевых сырых логов сохранены как `.txt` в `docs/reports/npc-full-autonomy-evidence/`. Успех этих проверок не отменяет failing full NPC suite и незавершённый performance gate. Последний считываемый перед публикацией checkpoint лимит: 13% пятичасового окна оставалось; точный остаток на остановке сообщается отдельно.
+
+### Финальная остановка по прямому указанию владельца
+
+- Инструмент лимитов вернул **usedPercent=90** для windowDurationMins=300: **10% осталось**. Реализация остановлена; после этого обновлены только документы передачи. Reset credits не использованы.
+- Единственный Draft PR: **https://github.com/ratoker-jpg/Asterion/pull/105**. Он прикреплён к этому чату. Merge/Ready не выполнялись.
+- Реализация закоммичена и отправлена: **`9b926fa042a07615fd8f19a3cd748b0c7ca126e7`** (`feat: integrate owner-scoped NPC autonomy checkpoint`). Следующий коммит содержит только финализацию этого handoff/отчёта.
+- Ветка: `codex/npc-full-autonomy-unified`, remote tracking `origin/codex/npc-full-autonomy-unified`.
+- GitHub CI run при публикации: **40031999236**; Pages: **40031999235**. На момент последнего чтения все jobs были QUEUED, включая logical, Electron suites, NPC full-world measurement и Windows installer. Итоги неизвестны; проверить на продолжении, не считать зелёными. Новый docs-коммит может породить новый run.
+- GitHub connector при создании PR вернул transport error. Проверено отсутствие дубликата, затем `gh pr create --draft --body-file` успешно создал #105. Никаких других PR не создавали.
+- В worktree остались только неотслеживаемые локальные артефакты baseline repair QA (`artifacts-pass1/repair-workshop-qa/`) и `npc-autonomy-pr-body.txt`; это не незакоммиченный код. `.log`/Graphify/Node/build artifacts могут быть игнорируемыми. Ничего не очищать рекурсивно ради косметической чистоты.
+- Все назначенные подагенты закончили работу. В новом сеансе не полагаться на их live-контекст: результаты, исходники, tests, raw evidence и решения сохранены в этом PR.

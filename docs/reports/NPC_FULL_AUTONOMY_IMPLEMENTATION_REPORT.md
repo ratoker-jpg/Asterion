@@ -75,3 +75,5 @@ Final checkpoint refresh: build passed again after the last hooks; focused selec
 ## User-supplied task references
 
 Exact reference copies are preserved in `docs/task-inputs/npc-full-autonomy/TASK_PROMPT_2026-10-23.md` and `AUDIT_2026-10-23.md`. Their instructions are task materials; direct owner decisions in this report and the handoff take precedence. Do not reinterpret historical SHA/CI claims as current state.
+
+Final stop: owner-requested five-hour threshold reached (90% used / 10% remaining). Implementation checkpoint `9b926fa042a07615fd8f19a3cd748b0c7ca126e7` is pushed in **Draft PR #105**, https://github.com/ratoker-jpg/Asterion/pull/105. CI 40031999236 was queued when last inspected; its result is unknown. Only handoff documents were finalized after the threshold. Continue from `NPC_FULL_AUTONOMY_OPUS_HANDOFF_2026-10-24.md`; the task is incomplete and no merge/Ready was performed. Reference audit/log copies have trailing whitespace normalized; original user document bytes remain in Downloads.
