@@ -365,9 +365,19 @@ test('zero NPC and campaign speed scale stay isolated from player resources and 
   const end = START + 7 * DAY;
   const standardResult = advanceTo(clone(standard), end, [end]);
   const fastResult = advanceTo(clone(faster), end, [end]);
-  const standardEvents = standardResult.emissions.filter((entry) => entry.kind === 'npc-economy').map((entry) => entry.kind === 'npc-economy' ? entry.event.eventId : '');
-  const fastEvents = fastResult.emissions.filter((entry) => entry.kind === 'npc-economy').map((entry) => entry.kind === 'npc-economy' ? entry.event.eventId : '');
-  assert.deepEqual(fastEvents, standardEvents, 'campaign speed cannot rewrite an NPC’s saved attention calendar');
+  // Faster queues legitimately change when an attentive NPC looks again,
+  // hence the emitted action IDs are not a speed-independent calendar.
+  // The owner's actual online session schedule must nevertheless stay fixed.
+  const ownerId = npcTargets(standard)[0]!.ownerId;
+  const standardProfile = standardResult.state.npc!.profiles[ownerId]!;
+  const fastProfile = fastResult.state.npc!.profiles[ownerId]!;
+  assert.deepEqual(
+    getNpcSessionEvents(standardProfile, START, end),
+    getNpcSessionEvents(fastProfile, START, end),
+    'campaign speed cannot rewrite the owner’s online session schedule',
+  );
+  assert.equal(fastProfile.activity.completedSessions, standardProfile.activity.completedSessions,
+    'campaign speed must not change the number of completed online sessions');
   assert.deepEqual(fastResult.state.planets['helion-01']?.resources, standardResult.state.planets['helion-01']?.resources,
     'NPC replay never draws resources from the current player');
 });
