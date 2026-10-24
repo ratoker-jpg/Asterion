@@ -1472,6 +1472,11 @@ function FleetWorkspace({
             </div> : null}
             <section className="fleet-panel-v1 fleet-flights-v1 fleet-flights-v2">
               <small className="fleet-flights-v2__label">В ПУТИ · {activeFlightRecords.length}</small>
+              <span
+                className={`fleet-flights-v2__slots${flightSlots.free <= 0 ? ' is-full' : ''}`}
+                data-qa-flight-slots-bar
+                title={`Одновременных полётов: занято ${flightSlots.used} из ${flightSlots.limit}. Лимит: 3 + 1,5 за каждый уровень науки «Компьютерные системы»; шпионские зонды лимит не занимают.`}
+              ><small>ЛИМИТ ПОЛЁТОВ</small><b>{flightSlots.used} / {flightSlots.limit}</b><em>{flightSlots.free > 0 ? `свободно ${flightSlots.free}` : 'все слоты заняты'}</em></span>
               {activeFlightRecords.length === 0 ? <span className="fleet-flights-v2__empty">Флотов в пути нет</span> : null}
               {ownFlightGroups.map((group) => <span className="fleet-flights-v2__count" key={group.missionId} title={flightMissionLabel(group.missionId)}><img src={flightMissionIcon(group.missionId)} alt="" />{flightMissionLabel(group.missionId)}<b>{group.count}</b></span>)}
               {nextFlightEvent ? <span className="fleet-flights-v2__next"><small>БЛИЖАЙШЕЕ СОБЫТИЕ</small><strong>{nextFlightEvent.label} · {flightCountdown(nextFlightEvent.at, clockNow)}</strong></span> : null}
