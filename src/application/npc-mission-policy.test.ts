@@ -148,3 +148,37 @@ test('candidate adapter emits a real mission command with canonical target/conta
   });
   assert.equal(candidateToNpcMissionCommand({ ...attack, payload: { ...attack.payload, selectedShips: '{bad' } }, OWNER, 'decision-1'), null);
 });
+
+test('the live player is ranked exactly like any NPC owner (owner-id permutation)', () => {
+  const state = baseState();
+  const playerPlanetId = 'helion-01';
+  const withPlayer = (reportTargets: readonly string[]): SaveState => {
+    const planet = state.planets[playerPlanetId]!;
+    const coordinate = { galaxy: 1, system: 1, position: 3 };
+    const reports = reportTargets.map((targetPlanetId, index) => ({
+      ...({} as SpyReportSnapshot), id: `report-perm-${index}`, missionId: `mission-perm-${index}`, ownerId: OWNER, createdAt: AT,
+      targetPlanetId, targetCoordinate: targetPlanetId === TARGET_ID ? { galaxy: 1, system: 1, position: 2 } : coordinate,
+    })) as SpyReportSnapshot[];
+    return {
+      ...state,
+      planets: { ...state.planets, [playerPlanetId]: { ...planet, universeGalaxy: 1, universeSystem: 1, universePosition: 3 } },
+      espionage: { ...state.espionage!, reports },
+    };
+  };
+  const shape = (list: ReturnType<typeof candidates>, kind: string, destination: string) => {
+    const found = list.find((candidate) => candidate.kind === kind && candidate.payload.destinationPlanetId === destination);
+    if (!found) return null;
+    return { weight: found.weight, relation: found.payload.targetRelation, ships: found.payload.selectedShips };
+  };
+
+  const unobserved = candidates(withPlayer([]));
+  assert.ok(shape(unobserved, 'espionage', playerPlanetId), 'the player is a legal spy target');
+  assert.deepEqual(shape(unobserved, 'espionage', playerPlanetId), shape(unobserved, 'espionage', TARGET_ID));
+  assert.equal(shape(unobserved, 'attack', playerPlanetId), null, 'no attack on the player without own intelligence');
+  assert.equal(shape(unobserved, 'attack', TARGET_ID), null, 'no attack on an NPC without own intelligence');
+
+  const observed = candidates(withPlayer([playerPlanetId, TARGET_ID]));
+  assert.ok(shape(observed, 'attack', playerPlanetId));
+  assert.deepEqual(shape(observed, 'attack', playerPlanetId), shape(observed, 'attack', TARGET_ID),
+    'same weight, relation and fleet for the player and an equivalent NPC target');
+});
