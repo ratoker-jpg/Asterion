@@ -184,7 +184,13 @@ test('colonizing an untracked system before its first pirate check yields the sa
     .find(schedule=>schedule.present);
   assert.ok(cycle);
   const start = cycle!.startAt;
-  const initial = createInitialSaveState('production',start);
+  const base = createInitialSaveState('production',start);
+  // The first colony requires 500 total points for every owner. Seed the
+  // canonical rating ledger rather than bypassing the colony rule.
+  const initial = { ...base, rating: { ...base.rating, battleAwardsByReportId: {
+    ...base.rating.battleAwardsByReportId,
+    'qa-colony-threshold': { [base.profile.playerId]: 500 },
+  } } };
   let launched:ReturnType<typeof dispatchFlight>|undefined;
   for(let position=1;position<=24;position++){
     const attempt=dispatchFlight(initial,{
