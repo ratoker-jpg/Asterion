@@ -8,6 +8,8 @@ export type NpcAutonomyCandidate = Readonly<{
   payload?: Readonly<Record<string, string | number | boolean | null>>;
 }>;
 
+/** Draw weight of waiting regardless of the options: about one middling estimate (U ≈ 0). */
+export const NPC_WAIT_FLOOR_WEIGHT = 1;
 const MEMORY_LIMIT = 64;
 const MEMORY_FACT_LIMIT = 16;
 const GOAL_LIMIT = 8;
@@ -109,9 +111,15 @@ export function chooseNpcAutonomyAction(
     || (left.kind < right.kind ? -1 : left.kind > right.kind ? 1 : 0));
   if (legal.length === 0) return null;
 
+  const kindWeights = new Map<string, number>();
+  const kindWeight = (kind: string) => {
+    let weight = kindWeights.get(kind);
+    if (weight === undefined) kindWeights.set(kind, weight = weightNpcAction(profile, kind));
+    return weight;
+  };
   const weighted = legal.map((candidate) => ({
     candidate,
-    weight: Math.min(candidate.weight, 1_000_000_000) * weightNpcAction(profile, candidate.kind),
+    weight: Math.min(candidate.weight, 1_000_000_000) * kindWeight(candidate.kind),
   }));
   const totalWeight = weighted.reduce((sum, item) => sum + item.weight, 0);
   if (!(totalWeight > 0) || !Number.isFinite(totalWeight)) return null;
@@ -121,7 +129,9 @@ export function chooseNpcAutonomyAction(
   const persistence = normalizedTrait(profile.traits.persistence);
   const waitProbability = clamp(0.04 + (1 - attention) * 0.15 + (1 - persistence) * 0.05
     - (activeGoal ? persistence * 0.04 : 0), 0.02, 0.24);
-  const waitWeight = totalWeight * waitProbability / (1 - waitProbability);
+  // A fixed floor too: when every option is poor (all estimates negative) a
+  // player leaves the game for a while rather than doing something pointless.
+  const waitWeight = totalWeight * waitProbability / (1 - waitProbability) + NPC_WAIT_FLOOR_WEIGHT;
   const random = createSeededRandom(JSON.stringify([
     'npc-autonomy-choice:v1', profile.privateSeed, profile.ownerId, eventId,
   ]));
@@ -156,6 +166,7 @@ function updateGoalAtReconsideration(
   at: number,
   outcomeKind: string,
   forceReconsideration = false,
+  goalKind = outcomeKind,
 ) {
   const dueAt = profile.planning.reconsiderAt;
   if (!forceReconsideration && dueAt !== null && at < dueAt) return {
@@ -166,12 +177,12 @@ function updateGoalAtReconsideration(
   const goals: NpcLongTermGoal[] = profile.longTermGoals.map((goal) => goal.status === 'active'
     ? { ...goal, status: 'paused' as const }
     : { ...goal });
-  if (outcomeKind !== 'wait') {
+  if (goalKind !== 'wait') {
     goals.push({
       id: `npc-goal:${profile.ownerId}:${eventId}`,
-      kind: outcomeKind,
+      kind: goalKind,
       createdAt: at,
-      priority: clamp(weightNpcAction(profile, outcomeKind) / 1.9, 0, 1),
+      priority: clamp(weightNpcAction(profile, goalKind) / 1.9, 0, 1),
       status: 'active',
       progress: 0,
     });
@@ -185,6 +196,13 @@ function updateGoalAtReconsideration(
   };
 }
 
+/**
+ * A strategic goal the caller assessed. When given, a reconsideration commits
+ * to it instead of echoing the outcome kind, and an active goal outside
+ * `goalKinds` (e.g. one left by a battle outcome) is reconsidered at once.
+ */
+export type NpcStrategicGoalOption = Readonly<{ goalKind: string; goalKinds: ReadonlySet<string> }>;
+
 /** Stores only explicit fact references supplied by the caller and bounds saved history. */
 export function updateNpcAutonomyMemory(
   profile: NpcProfile,
@@ -193,6 +211,7 @@ export function updateNpcAutonomyMemory(
   outcomeKind: string,
   succeeded: boolean,
   factIds: readonly string[],
+  strategic?: NpcStrategicGoalOption,
 ): NpcProfile {
   if (typeof eventId !== 'string' || eventId.length === 0) throw new TypeError('eventId must be a non-empty string');
   if (!Number.isSafeInteger(at) || at < 0) throw new TypeError('at must be a non-negative safe integer timestamp');
@@ -202,12 +221,15 @@ export function updateNpcAutonomyMemory(
 
   const id = `npc-memory:${profile.ownerId}:${eventId}`;
   if (profile.memory.some((entry) => entry.id === id)) return profile;
+  const activeGoal = profile.longTermGoals.find((goal) => goal.status === 'active');
+  const offStrategy = strategic !== undefined && (!activeGoal || !strategic.goalKinds.has(activeGoal.kind));
   const plan = updateGoalAtReconsideration(
     profile,
     eventId,
     at,
     outcomeKind,
-    REPLAN_OUTCOME_KINDS.has(outcomeKind),
+    REPLAN_OUTCOME_KINDS.has(outcomeKind) || offStrategy,
+    strategic?.goalKind ?? outcomeKind,
   );
   const memory = Object.freeze([...profile.memory, Object.freeze({
     id,

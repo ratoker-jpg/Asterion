@@ -6,6 +6,7 @@ import type { CommanderId } from '../domain/combat/commanders.ts';
 import type { CombatFactionId } from '../domain/combat/factions.ts';
 import type { DefenseId, ShipId } from '../domain/combat/ids.ts';
 import { getStorageCapacities, migrateBuildingLevels } from '../domain/buildings/resource-zone.ts';
+import { calculatePlanetCapacity, calculatePlanetPopulation } from '../domain/fleet/overpopulation.ts';
 import { calculateEnergySources, rebuildEnergyLedger } from '../domain/energy/runtime.ts';
 import {
   createDefaultFleetProductionState,
@@ -23,11 +24,11 @@ import {
   getSolarSatelliteFleetCount,
   removeSolarSatellitesFromFleet,
 } from '../domain/fleet/runtime.ts';
-import { isNpcPlanetBlocked, targetEnergyLedger } from './npc-economy.ts';
+import { isNpcPlanetBlocked, NPC_APPLIED_ID_LIMIT, targetEnergyLedger } from './npc-economy.ts';
 import type { SpyTargetState } from '../domain/espionage/types.ts';
 import { UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 
-/** The adapter accepts one unit per decision, keeping each NPC action bounded. */
+/** One catalog entry previewed at a single unit; the order itself may ask for a batch. */
 export type NpcFleetProductionCandidate = {
   queueKind: FleetProductionQueueKind;
   itemId: string;
@@ -132,7 +133,7 @@ function updateEnergyAfterProduction(
     fleet: normalizedFleet(next).fleet,
     solarSatellites: satellites,
     energyLedger,
-    resources: { ...next.resources, developmentEnergy: energyLedger.availableEnergy },
+    resources: { ...next.resources, developmentEnergy: Math.max(0, energyLedger.availableEnergy) },
     population: recalculatePopulation(next, normalizedFleet(next).fleet, next.defense, satellites),
   };
 }
@@ -191,7 +192,11 @@ export function getNpcFleetProductionCandidates(
   });
 }
 
-/** Starts one paid unit and records a bounded replay key on the producing planet. */
+/**
+ * Starts one paid order of `quantity` units (a player orders a batch at once)
+ * and records a bounded replay key on the producing planet. Payment, limits
+ * and population room are the canonical enqueue gate's.
+ */
 export function startNpcFleetProduction(
   target: SpyTargetState,
   ownerId: string,
@@ -201,6 +206,7 @@ export function startNpcFleetProduction(
   timeScale: number,
   idempotencyKey: string,
   reservedFleetPopulation = 0,
+  quantity = 1,
 ): NpcFleetProductionResult {
   if (!validOwnerTarget(target, ownerId)) {
     return { target, ok: false, reason: 'Планета не принадлежит этому NPC.', orderId: null, completed: [] };
@@ -220,14 +226,14 @@ export function startNpcFleetProduction(
     { ...context, commanderLevel: ownerCommanderLevel(target, itemId) },
     queueKind,
     itemId,
-    1,
+    Math.max(1, Math.floor(quantity)),
     actionId,
   );
   const transitioned = applyTransition(target, transition);
   if (!transition.ok) {
     return { target: transitioned, ok: false, reason: transition.reason, orderId: null, completed: transition.completed };
   }
-  const appliedIds = [...(transitioned.economyAppliedActionIds ?? []), actionId].slice(-256);
+  const appliedIds = [...(transitioned.economyAppliedActionIds ?? []), actionId].slice(-NPC_APPLIED_ID_LIMIT);
   const next = { ...transitioned, economyAppliedActionIds: appliedIds };
   return { target: next, ok: true, reason: null, orderId: actionId, completed: transition.completed };
 }
@@ -279,6 +285,84 @@ export function settleNpcFleetProduction(
   };
   const next = applyTransition(current, transition);
   return { target: next, changed: next !== target, completed: reconciled.completed, nextDueAt: nextDueAt(next, at) };
+}
+
+/**
+ * The next solar satellite completion: the one production unit with an
+ * effect of its own (energy, which can start a waiting building), so replay
+ * steps on it. Ships, defence and commanders complete by time and are
+ * settled before anything reads them.
+ */
+export function getNextNpcSatelliteCheckpoint(
+  target: SpyTargetState,
+  ownerId: string,
+  after: number,
+  through: number,
+): number | undefined {
+  if (!validOwnerTarget(target, ownerId) || isNpcPlanetBlocked(target)) return undefined;
+  // Every queued order has its own fixed schedule, so satellites behind other
+  // ships are known before they reach the head of the queue.
+  let next: number | undefined;
+  for (const order of target.fleetProduction?.shipQueue ?? []) {
+    if (order.itemId !== 'solar-satellite') continue;
+    const duration = Math.max(1, Math.round(order.effectiveDurationMs));
+    const unit = Math.max(finiteLevel(order.completedQuantity) + 1,
+      after >= order.startedAt ? Math.floor((after - order.startedAt) / duration) + 1 : 1);
+    if (unit > order.quantity) continue;
+    const due = order.startedAt + duration * unit;
+    if (due > after && due <= through) next = Math.min(next ?? due, due);
+  }
+  return next;
+}
+
+/**
+ * The moment completing ships would first push the planet's fleet population
+ * over its hangar capacity (a returned fleet can leave little room), or null.
+ * Overpopulation starts there and pauses the queues, so replay steps on it;
+ * without it, the start would depend on when the queue happened to be read.
+ * Pure of the (immutable) target, so it is computed once per version.
+ */
+const overflowByTarget = new WeakMap<SpyTargetState, number | null>();
+
+function fleetOverflowAt(target: FleetProductionTarget): number | null {
+  const cached = overflowByTarget.get(target);
+  if (cached !== undefined) return cached;
+  let result: number | null = null;
+  const state = target.fleetProduction;
+  if (state && !target.overpopulation && (state.shipQueue.length || state.commanderQueue.length)) {
+    const capacity = calculatePlanetCapacity(finiteLevel(migrateBuildingLevels(target.buildings).hangar));
+    let population = calculatePlanetPopulation(normalizedFleet(target).fleet, satelliteCount(target), target.raceId);
+    const units: Array<{ at: number; population: number }> = [];
+    for (const [queueKind, queue] of [['ships', state.shipQueue], ['commanders', state.commanderQueue]] as const) {
+      for (const order of queue) {
+        const entity = getFleetProductionEntity(queueKind, order.itemId, target.raceId);
+        const each = Math.max(0, Math.floor(entity?.population ?? 0));
+        if (!each) continue;
+        const duration = Math.max(1, Math.round(order.effectiveDurationMs));
+        for (let unit = finiteLevel(order.completedQuantity) + 1; unit <= order.quantity; unit += 1) {
+          units.push({ at: order.startedAt + duration * unit, population: each });
+        }
+      }
+    }
+    units.sort((left, right) => left.at - right.at);
+    for (const unit of units) {
+      population += unit.population;
+      if (population > capacity) { result = unit.at; break; }
+    }
+  }
+  overflowByTarget.set(target, result);
+  return result;
+}
+
+export function getNextNpcFleetOverflowCheckpoint(
+  target: SpyTargetState,
+  ownerId: string,
+  after: number,
+  through: number,
+): number | undefined {
+  if (!validOwnerTarget(target, ownerId) || isNpcPlanetBlocked(target)) return undefined;
+  const at = fleetOverflowAt(target);
+  return at !== null && at > after && at <= through ? at : undefined;
 }
 
 /** Returns a bounded timer event only when production is due within the replay range. */

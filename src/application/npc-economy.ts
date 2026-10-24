@@ -32,6 +32,12 @@ import { accrueResourceCredits } from './resource-clock.ts';
 import type { SpyTargetState } from '../domain/espionage/types.ts';
 
 const RESOURCE_KEYS = ['metal', 'minerals', 'gas'] as const;
+/**
+ * Replay guards kept per NPC planet. An action id is only ever re-presented
+ * while its own decision is being applied (the cursor never revisits it), so
+ * a short tail is enough; 256 long keys per planet made a 100-NPC save huge.
+ */
+export const NPC_APPLIED_ID_LIMIT = 64;
 export const NPC_AUTONOMY_BUILDING_ROLES: readonly BuildingRole[] = [
   ...NPC_ECONOMY_ROLES, 'shipyard', 'hangar', 'spaceport', 'planetary-government',
 ];
@@ -153,11 +159,14 @@ function withEconomy(target: SpyTargetState, economy: BuildingEconomyState, ener
       metal: economy.resources.metal,
       minerals: economy.resources.minerals,
       gas: economy.resources.gas,
-      developmentEnergy: energyLedger.availableEnergy,
+      // The mirror never shows a debt (the ledger keeps it), exactly as a load normalizes it.
+      developmentEnergy: Math.max(0, energyLedger.availableEnergy),
     },
     buildings: economy.buildings,
     buildingQueue: economy.queue,
-    energyLedger,
+    energyLedger: energyLedger.appliedTransactionIds.length > NPC_APPLIED_ID_LIMIT
+      ? { ...energyLedger, appliedTransactionIds: energyLedger.appliedTransactionIds.slice(-NPC_APPLIED_ID_LIMIT) }
+      : energyLedger,
   };
 }
 
@@ -312,7 +321,7 @@ export function projectNpcScience(target: SpyTargetState, levels: import('../dom
   const ledger = targetEnergyLedger(target);
   const rebuilt = rebuildEnergyLedger(ledger, energySources(projected, targetBuildingLevels(projected)));
   return { ...projected, energyLedger: rebuilt,
-    resources: { ...projected.resources, developmentEnergy: rebuilt.availableEnergy } };
+    resources: { ...projected.resources, developmentEnergy: Math.max(0, rebuilt.availableEnergy) } };
 }
 
 function rebuildEnergyAfterCompletion(target: SpyTargetState, role: BuildingRole): SpyTargetState {
@@ -325,7 +334,7 @@ function rebuildEnergyAfterCompletion(target: SpyTargetState, role: BuildingRole
   });
   return {
     ...target,
-    resources: { ...target.resources, developmentEnergy: rebuilt.availableEnergy },
+    resources: { ...target.resources, developmentEnergy: Math.max(0, rebuilt.availableEnergy) },
     energyLedger: rebuilt,
   };
 }
@@ -371,7 +380,7 @@ export function startNpcBuilding(
   if (!transition.ok) return { target, ok: false, reason: transition.reason };
   const chargedEnergy = consumeEnergy(energyLedger, availability.cost.energy, idempotencyKey);
   if (!chargedEnergy.ok) return { target, ok: false, reason: chargedEnergy.reason };
-  const actionIds = [...(target.economyAppliedActionIds ?? []), idempotencyKey].slice(-256);
+  const actionIds = [...(target.economyAppliedActionIds ?? []), idempotencyKey].slice(-NPC_APPLIED_ID_LIMIT);
   const next = withEconomy(target, transition.state, chargedEnergy.ledger);
   return {
     target: {

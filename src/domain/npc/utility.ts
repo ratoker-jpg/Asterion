@@ -54,7 +54,10 @@ export function estimationError(profile: NpcProfile, eventId: string, candidateI
   return (random() * 2 - 1) * spread;
 }
 
+/** Upper bound of any estimate: a clearly best option, not an overwhelming one. */
+export const NPC_MAX_UTILITY = 2.5;
+
 /** Turns utility into a draw weight: clearly bad options stay possible but rare. */
 export function utilityToWeight(utility: number): number {
-  return Math.exp(Math.min(2.5, Math.max(-5, finite(utility, -5))));
+  return Math.exp(Math.min(NPC_MAX_UTILITY, Math.max(-5, finite(utility, -5))));
 }

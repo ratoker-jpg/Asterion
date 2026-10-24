@@ -19,6 +19,8 @@ const AUTONOMY_MISSIONS = new Set([
   'pirate-recon',
   'pirate-elimination',
   'aid',
+  'space-flight',
+  'recycle',
 ]);
 
 const FLIGHT_PHASES = new Set(['outbound', 'returning', 'arrived', 'completed', 'failed']);
@@ -139,8 +141,10 @@ function validAttackSnapshot(value: unknown): boolean {
 
 function validDestination(value: unknown, flight: UnknownRecord): boolean {
   const destination = record(value);
-  if (!destination || !['coordinate', 'planet', 'operation'].includes(String(destination.kind))
+  if (!destination || !['coordinate', 'planet', 'operation', 'space'].includes(String(destination.kind))
     || !coordinate(destination.coordinate)) return false;
+  // Only «Космический рейс» flies without a destination, and it always does.
+  if ((destination.kind === 'space') !== (flight.missionId === 'space-flight')) return false;
   if (destination.kind === 'planet') {
     return nonEmptyString(destination.planetId) && flight.destinationPlanetId === destination.planetId;
   }
@@ -164,8 +168,9 @@ function validBoundNpcFlight(value: unknown): boolean {
     || !validDestination(flight.destination, flight)
     || !FLIGHT_PHASES.has(String(flight.phase))
     || !safeInteger(flight.populationReserved) || flight.populationReserved < 0
-    || !positiveFiniteNumber(flight.routeDistance)
-    || !positiveFiniteNumber(flight.effectiveSpeed)
+    // A space flight has no route: zero distance and speed, a chosen duration.
+    || !(flight.missionId === 'space-flight' ? flight.routeDistance === 0 : positiveFiniteNumber(flight.routeDistance))
+    || !(flight.missionId === 'space-flight' ? flight.effectiveSpeed === 0 : positiveFiniteNumber(flight.effectiveSpeed))
     || !safeInteger(flight.oneWayDurationMs) || flight.oneWayDurationMs <= 0
     || !timestamp(flight.departedAt) || !timestamp(flight.arrivalAt) || flight.arrivalAt <= flight.departedAt
     || !safeInteger(flight.gasCost) || flight.gasCost < 0
@@ -205,6 +210,7 @@ function validBoundNpcFlight(value: unknown): boolean {
     if (!isPirateMissionSnapshot(flight.pirateSnapshot, missionId)
       || (flight.pirateSnapshot as UnknownRecord).ownerId !== flight.ownerId) return false;
   }
+  if ((missionId === 'space-flight' || missionId === 'recycle') && !validCargo(flight.cargo)) return false;
   if (missionId === 'aid') {
     const aid = record(flight.aid);
     if (!aid || aid.senderOwnerId !== flight.ownerId || !nonEmptyString(aid.requestId)

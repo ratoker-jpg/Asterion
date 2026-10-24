@@ -8,7 +8,7 @@ import {
 import { reconcileScience } from './science.ts';
 import { pruneCampaignHistory } from './history-retention.ts';
 import { reconcileFleetProduction } from './fleet-production.ts';
-import { settleNpcFleetProduction, getNextNpcFleetProductionCheckpoint } from './npc-fleet-production.ts';
+import { getNextNpcFleetOverflowCheckpoint, getNextNpcSatelliteCheckpoint, settleNpcFleetProduction } from './npc-fleet-production.ts';
 import type { BuildingRole } from '../domain/buildings/resource-zone.ts';
 import type { ScienceId } from '../domain/science/types.ts';
 import type { SpaceportUpgradeTrack } from '../domain/buildings/spaceport-upgrades.ts';
@@ -32,7 +32,7 @@ import { advanceUniverseAsteroidSimulationAt, getNextUniverseAsteroidTransitionA
 import { advanceAsteroidGasAt, initializeAsteroidGasState } from '../domain/universe/asteroid-gas.ts';
 import { selectOwnerScore } from '../domain/rating/scoring.ts';
 import { createExplorationState, recordHighestExplorationScore } from '../domain/exploration/ledger.ts';
-import { generateNpcOwnerReplayEvents, applyNpcReplayEventsAt, initializeNpcReplaySessionsAt, type NpcReplayEmission, type NpcReplayEvent } from './npc-replay.ts';
+import { generateNpcOwnerReplayEvents, applyNpcReplayEventsAt, initializeNpcReplaySessionsAt, isNpcDecisionIdle, type NpcReplayEmission, type NpcReplayEvent } from './npc-replay.ts';
 import { compareNpcEvents } from '../domain/npc/events.ts';
 import type { NpcProfile } from '../domain/npc/types.ts';
 import { getNextNpcEconomyCheckpoint, settleNpcPlanet } from './npc-economy.ts';
@@ -165,8 +165,10 @@ function reconcileRuntimeSlice(
       settled.add(target.ownerId);
       const production = settleNpcFleetProduction(result.target, target.ownerId, at);
       if (production.completed.length) events.push({ kind: 'npc-fleet-production', ownerId: target.ownerId, planetId: id, at, completed: production.completed });
-      targets[id] = production.target;
-      changed ||= production.target !== target;
+      // Units that just completed may overfill the hangar: overpopulation
+      // starts now, not at whenever this planet happens to be settled next.
+      targets[id] = production.completed.length ? settleNpcPlanet(production.target, at, { timeScale }).target : production.target;
+      changed ||= targets[id] !== target;
       for (const assetRole of result.completedRoles) events.push({ kind: 'npc-building', planetId: id, assetRole, at });
     }
     if (changed) next = { ...next, espionage: { ...next.espionage, targets } };
@@ -341,8 +343,26 @@ function reconcileRuntimeSlice(
     }
   };
 
+  // Flight times are pure of the records and exploration contacts; both are
+  // immutable, so the sorted list is rebuilt only when either changes.
+  let flightTimes: { records: unknown; exploration: unknown; times: number[] } | null = null;
   const nextDueFlightCheckpoint = (after: number): number | undefined => {
-    let earliest: number | undefined;
+    if (!flightTimes || flightTimes.records !== next.flights.records || flightTimes.exploration !== next.exploration) {
+      flightTimes = { records: next.flights.records, exploration: next.exploration, times: collectFlightTimes() };
+    }
+    const times = flightTimes.times;
+    let low = 0;
+    let high = times.length;
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      if (times[middle]! <= after) low = middle + 1;
+      else high = middle;
+    }
+    const earliest = times[low];
+    return earliest !== undefined && earliest <= context.now ? earliest : undefined;
+  };
+  const collectFlightTimes = (): number[] => {
+    const times: number[] = [];
     for (const flight of next.flights.records) {
       const checkpoint = flight.phase === 'outbound'
         ? flight.arrivalAt
@@ -356,11 +376,10 @@ function reconcileRuntimeSlice(
                 ? Number.POSITIVE_INFINITY : contact.claim.pendingRecallAt + 30_000);
             })()
           : undefined;
-      if (checkpoint === undefined || !Number.isFinite(checkpoint)
-        || checkpoint > context.now || checkpoint <= after) continue;
-      if (earliest === undefined || checkpoint < earliest) earliest = checkpoint;
+      if (checkpoint === undefined || !Number.isFinite(checkpoint)) continue;
+      times.push(checkpoint);
     }
-    return earliest;
+    return times.sort((left, right) => left - right);
   };
 
   // Building and research completions change income and energy: income up to
@@ -502,7 +521,13 @@ function reconcileRuntimeSlice(
     const asteroidCheckpoint = nextAsteroidCheckpoint ?? undefined;
     const workCheckpoint = nextDueWorkCheckpoint(processedThrough);
     ensureNextEconomicEvent(economicIndex);
-    while (economicIndex < economicEvents.length && economicEvents[economicIndex]!.at <= processedThrough) {
+    // An owner that found nothing to do skips its attention moments until its
+    // idle time; applying them would only move its cursor, so they form no group.
+    const skipsEconomicEvent = (event: NpcReplayEvent) => {
+      const profile = next.npc?.profiles[event.ownerId];
+      return event.at <= processedThrough || (profile !== undefined && isNpcDecisionIdle(profile, event));
+    };
+    while (economicIndex < economicEvents.length && skipsEconomicEvent(economicEvents[economicIndex]!)) {
       economicIndex++;
       ensureNextEconomicEvent(economicIndex);
     }
@@ -512,8 +537,16 @@ function reconcileRuntimeSlice(
       if (!replayOwners.has(target.ownerId)) continue;
       const due = getNextNpcEconomyCheckpoint(target, processedThrough);
       if (due !== null && due > processedThrough && due <= context.now) economyCheckpoint = Math.min(economyCheckpoint ?? due, due);
-      const productionDue = getNextNpcFleetProductionCheckpoint(target, target.ownerId, processedThrough, context.now);
-      if (productionDue !== undefined) economyCheckpoint = Math.min(economyCheckpoint ?? productionDue, productionDue);
+      // Ship, defence and commander units are not moments of their own: a
+      // queue completes by time and every reader (a battle or spy probe at the
+      // planet, the owner's decision, the end of the slice) settles the owner
+      // first. A batch of hundreds of units no longer makes hundreds of steps.
+      // Solar satellites add energy that can start a waiting building, so they keep theirs.
+      // So does the unit that would overfill the hangar: overpopulation starts there.
+      const satelliteDue = getNextNpcSatelliteCheckpoint(target, target.ownerId, processedThrough, context.now);
+      if (satelliteDue !== undefined) economyCheckpoint = Math.min(economyCheckpoint ?? satelliteDue, satelliteDue);
+      const overflowDue = getNextNpcFleetOverflowCheckpoint(target, target.ownerId, processedThrough, context.now);
+      if (overflowDue !== undefined) economyCheckpoint = Math.min(economyCheckpoint ?? overflowDue, overflowDue);
     }
     const scienceCheckpoint = replay ? getNextNpcScienceCheckpoint(next, processedThrough, context.now) : undefined;
     const leadershipCheckpoint = nextLeadershipCheckpoint(processedThrough);
@@ -562,7 +595,8 @@ function reconcileRuntimeSlice(
       for (const target of Object.values(next.espionage?.targets ?? {})) {
         const due = getNextNpcEconomyCheckpoint(target, processedThrough);
         if (due === checkpoint) dueOwners.add(target.ownerId);
-        if (getNextNpcFleetProductionCheckpoint(target, target.ownerId, processedThrough, context.now) === checkpoint) dueOwners.add(target.ownerId);
+        if (getNextNpcSatelliteCheckpoint(target, target.ownerId, processedThrough, context.now) === checkpoint) dueOwners.add(target.ownerId);
+        if (getNextNpcFleetOverflowCheckpoint(target, target.ownerId, processedThrough, context.now) === checkpoint) dueOwners.add(target.ownerId);
       }
       for (let index = economicIndex; economicEvents[index]?.at === checkpoint; index++) dueOwners.add(economicEvents[index]!.ownerId);
       if (flightIsDue || pirateIsDue || npcIsDue) {

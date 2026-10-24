@@ -236,7 +236,8 @@ function migrateSpyTarget(value: unknown, now: number): SpyTargetState | null {
       : undefined);
   const buildingLevels = numericRecord(source.buildings);
   const buildingQueue = Array.isArray(source.buildingQueue)
-    ? migrateBuildingQueue(source.buildingQueue, text(source.id), { ...createDefaultBuildingLevels(), ...buildingLevels })
+    // Queued prices depend on the owner's science, exactly as when they were paid.
+    ? migrateBuildingQueue(source.buildingQueue, text(source.id), { ...createDefaultBuildingLevels(), ...buildingLevels }, ownerProfile?.scienceLevels ?? {})
     : undefined;
   const productionBots = source.productionBots && typeof source.productionBots === 'object'
     ? migrateProductionBotAssignment(source.productionBots, { ...createDefaultBuildingLevels(), ...buildingLevels })

@@ -1,4 +1,5 @@
 import type { NpcProfile } from '../domain/npc/types.ts';
+import { ownerBattleReports, ownerSpyReports } from './npc-knowledge-index.ts';
 import { SHIP_IDS, type ShipId } from '../domain/combat/ids.ts';
 import { isAttackCombatShip } from './attack.ts';
 import { activeSpyMissionForTarget, getEspionageTargets } from '../domain/espionage/runtime.ts';
@@ -116,9 +117,8 @@ function coordinateKey(coordinate: UniverseCoordinate): string {
 function observedPlanetIds(state: SaveState, ownerId: string, at: number): Set<string> {
   const observed = new Set<string>();
   const missions = state.espionage?.missions ?? [];
-  for (const report of state.espionage?.reports ?? []) {
-    if (report.createdAt > at
-      || missionOwnerId(report, missions) !== ownerId) continue;
+  for (const report of ownerSpyReports(state.espionage?.reports ?? [], missions, ownerId)) {
+    if (report.createdAt > at) continue;
     observed.add(report.targetPlanetId);
   }
 
@@ -133,7 +133,7 @@ function observedPlanetIds(state: SaveState, ownerId: string, at: number): Set<s
     const key = coordinateKey(planet.coordinate);
     targetsByCoordinate.set(key, [...(targetsByCoordinate.get(key) ?? []), planet.id]);
   }
-  for (const report of state.combat.reports) {
+  for (const report of ownerBattleReports(state.combat.reports, ownerId)) {
     if (!OBSERVABLE_BATTLE_TYPES.has(report.missionType)) continue;
     const timestamp = Date.parse(report.timestamp);
     if (!Number.isFinite(timestamp) || timestamp > at) continue;
@@ -185,10 +185,35 @@ function ownerSystems(targets: readonly SpyTargetState[]): Map<string, { galaxy:
   return systems;
 }
 
+/**
+ * Systems are pure of the map inputs and time. Within the decisions of one
+ * timestamp those inputs are fixed (arrivals, landings and battles resolve
+ * before decisions; a decision only launches flights), so every owner
+ * deciding at that moment shares one build per system.
+ */
+let systemCache: { at: number; signature: string; systems: Map<string, ReturnType<typeof createUniverseSystem>> } | null = null;
+
 function publicSystems(state: SaveState, ownerTargets: readonly SpyTargetState[], at: number) {
   const playerPlanets = publicPlayerPlanets(state);
   const registered = registeredPlanets(state);
-  return [...ownerSystems(ownerTargets).values()].map(({ galaxy, system }) => createUniverseSystem({
+  const defeats = Object.values(state.pirate?.contact.defeatedCycles ?? {});
+  const signature = JSON.stringify([playerPlanets.map((planet) => [planet.id, coordinateKey(planet.coordinate)]),
+    registered.map((planet) => [planet.id, planet.ownerId, coordinateKey(planet.coordinate)]), defeats]);
+  if (!systemCache || systemCache.at !== at || systemCache.signature !== signature) systemCache = { at, signature, systems: new Map() };
+  const cache = systemCache.systems;
+  return [...ownerSystems(ownerTargets).values()].map(({ galaxy, system }) => {
+    const key = `${galaxy}:${system}`;
+    const hit = cache.get(key);
+    if (hit) return hit;
+    const built = buildPublicSystem(state, galaxy, system, at, playerPlanets, registered, defeats);
+    cache.set(key, built);
+    return built;
+  });
+}
+
+function buildPublicSystem(state: SaveState, galaxy: number, system: number, at: number,
+  playerPlanets: UniversePersistedPlayerPlanet[], registered: UniverseRegisteredPlanet[], defeats: unknown[]) {
+  return createUniverseSystem({
     mode: 'production',
     galaxy,
     system,
@@ -196,11 +221,15 @@ function publicSystems(state: SaveState, ownerTargets: readonly SpyTargetState[]
     galaxyCount: Math.max(1, galaxy),
     playerPlanets,
     registeredPlanets: registered,
-    pirateContactDefeats: Object.values(state.pirate?.contact.defeatedCycles ?? {}),
+    pirateContactDefeats: defeats as Parameters<typeof createUniverseSystem>[0]['pirateContactDefeats'],
     asteroidStates: state.asteroidSimulation?.asteroids ?? [],
     assets: { uniqueArts: EXPLORATION_ARTS.unique, anomalyArts: EXPLORATION_ARTS.anomaly },
     skipAsteroids: true,
-  }));
+  });
+}
+
+function systemDistance(left: UniverseCoordinate, right: UniverseCoordinate): number {
+  return left.galaxy === right.galaxy ? Math.abs(left.system - right.system) : 1_000 + Math.abs(left.galaxy - right.galaxy);
 }
 
 function availableExpeditionShip(available: Partial<Record<ShipId, number>>, factionId: SpyTargetState['raceId']): Partial<Record<ShipId, number>> | null {
@@ -248,15 +277,23 @@ export function getNpcMissionCandidates(
     .filter((coordinate) => !reservedColonize.has(coordinateKey(coordinate)))
     .sort((left, right) => compareIds(coordinateKey(left), coordinateKey(right)));
 
+  // A target is spied from the nearest own planet that has a probe. Any
+  // galaxy is in reach (only the flight is longer); distance enters the
+  // owner's estimate, and the rule is the same for every owner.
+  const probeOrigins = ownerTargets.filter((origin) => (getNpcMissionAvailableFleet(state, ownerId, origin.id)?.['spy-probe'] ?? 0) > 0);
+  const nearestProbeOrigin = (coordinate: UniverseCoordinate) => probeOrigins.reduce<SpyTargetState | undefined>((best, origin) =>
+    !best || systemDistance(origin.coordinate, coordinate) < systemDistance(best.coordinate, coordinate) ? origin : best, undefined);
   for (const origin of ownerTargets) {
     const available = getNpcMissionAvailableFleet(state, ownerId, origin.id);
     if (!available) continue;
 
     if ((available['spy-probe'] ?? 0) > 0 && hasFlightSlot(state, ownerId, 'espionage')) {
       for (const target of allTargets) {
-        if (target.id === origin.id || (target.kind !== 'player' && target.kind !== 'npc')) continue;
+        if (target.id === origin.id || (target.kind !== 'player' && target.kind !== 'npc') || target.ownerId === ownerId) continue;
         const relation = legalRelation(state, ownerId, target);
-        if (!relation || activeSpyMissionForTarget(state.espionage?.missions ?? [], ownerId, target.id)) continue;
+        if (!relation) continue;
+        if (nearestProbeOrigin(target.coordinate)?.id !== origin.id) continue;
+        if (activeSpyMissionForTarget(state.espionage?.missions ?? [], ownerId, target.id)) continue;
         addCandidate(candidateList, ownerId, 'espionage', origin.id, target.coordinate, { 'spy-probe': 1 }, {
           destinationPlanetId: target.id,
           targetRelation: relation,

@@ -66,6 +66,8 @@ export type NpcSessionState = Readonly<{
   sessionStartedAt: number | null;
   sessionEndsAt: number | null;
   lastBoundaryAt: number | null;
+  /** Within the current session: the owner found nothing to do and looks again at this time. */
+  idleUntil?: number;
 }>;
 
 export type NpcEventPriority =
@@ -105,6 +107,8 @@ export type NpcProfile = Readonly<{
   activity: NpcActivityState;
   session: NpcSessionState;
   cursor: NpcEventCursor | null;
+  /** Campaign start this owner joined at (absent in older saves): the opening days are played harder. */
+  campaignStartedAt?: number;
 }>;
 
 export type NpcStateV1 = Readonly<{

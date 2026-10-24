@@ -4,16 +4,16 @@ import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
 import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
 import { selectOwnerAlliance } from '../domain/command/selectors.ts';
 import { createExplorationState, getOrMaterializeExplorationContact, launchExplorationScore, recordHighestExplorationScore } from '../domain/exploration/ledger.ts';
-import { selectOwnerScores } from '../domain/rating/scoring.ts';
+import { selectOwnerScore } from '../domain/rating/scoring.ts';
 import { isAttackCombatShip, normalizeAttackRounds, createBot01IncomingAttackSnapshot } from './attack.ts';
 import { createColonyPlanetRuntime } from './owned-planets.ts';
 import { getOwnerRelation } from './owner-relations.ts';
 import { getExplorationTarget } from './exploration.ts';
 import { creditNpcExplorationReturn } from './exploration-bot01.ts';
 import { getEspionageTargets, activeSpyMissionForTarget, createSeededEspionageRng, espionageRollSeed, hunterDetects, normalizeRngRoll, resolveSpyReportQuality, SPY_REPORT_COOLDOWN_MS } from '../domain/espionage/runtime.ts';
-import { addDebris, getCappedDelivery } from '../domain/flights/cargo.ts';
+import { addDebris, getCappedDelivery, getCargoUsed, getFleetCargoCapacity, normalizeTransportCargo, type TransportCargo } from '../domain/flights/cargo.ts';
 import { getFlightSlotUsage, isFlightLimitExempt } from '../domain/flights/limit.ts';
-import { beginFlightReturn, dispatchFlight, getFlightByRequestId } from '../domain/flights/runtime.ts';
+import { beginFlightReturn, dispatchFlight, getFlightByRequestId, MAX_SPACE_FLIGHT_DURATION_MS, MIN_SPACE_FLIGHT_DURATION_MS, SPACE_FLIGHT_DURATION_STEP_MS } from '../domain/flights/runtime.ts';
 import { isFlightCoordinate } from '../domain/flights/distance.ts';
 import { createUniverseSystem, MAX_PLANETS_PER_OWNER } from '../domain/universe/runtime.ts';
 import { createDefaultEspionageState } from '../domain/espionage/runtime.ts';
@@ -324,9 +324,10 @@ export function dispatchNpcMission(
     speedCommanderLevels: { typhoon: profile.commanderLevels.typhoon ?? 0 },
   });
   const duration = Math.max(1, Math.round(domainResult.flight.oneWayDurationMs / timeScale));
-  const scores = selectOwnerScores(state);
+  // Only exploration launches record the owner's score; price that one owner alone.
+  const ownResourcePoints = explorationNode ? selectOwnerScore(state, command.ownerId)?.resourcePoints ?? 0 : 0;
   const explorationLaunchResourcePoints = command.missionId === 'expedition' || command.missionId === 'exploration-recon'
-    ? launchExplorationScore(state.exploration ?? createExplorationState(), command.ownerId, scores[command.ownerId]?.resourcePoints ?? 0)
+    ? launchExplorationScore(state.exploration ?? createExplorationState(), command.ownerId, ownResourcePoints)
     : undefined;
   if (explorationNode && duration + at >= explorationNode.special!.expiresAt) return fail(state, 'target-not-available');
   const flight: FlightRecord = {
@@ -351,7 +352,7 @@ export function dispatchNpcMission(
   next = setFlight(next, flight);
   if (explorationNode && operationId) {
     const exploration = state.exploration ?? createExplorationState();
-    const scored = recordHighestExplorationScore(exploration, command.ownerId, scores[command.ownerId]?.resourcePoints ?? 0);
+    const scored = recordHighestExplorationScore(exploration, command.ownerId, ownResourcePoints);
     const materialized = getOrMaterializeExplorationContact(scored, explorationNode).state;
     next = { ...next, exploration: materialized };
   }
@@ -379,6 +380,84 @@ export function dispatchNpcMission(
     const espionage = next.espionage ?? createDefaultEspionageState();
     next = { ...next, espionage: { ...espionage, missions: [...espionage.missions, mission] } };
   }
+  return { state: next, ok: true, reason: null, flight, created: true };
+}
+
+/** The flat gas fee of «Космический рейс», the same as the player's. */
+export const NPC_SPACE_FLIGHT_GAS_FEE = 100;
+
+export type NpcSpaceFlightCommand = Readonly<{
+  requestId: string;
+  ownerId: string;
+  originPlanetId: string;
+  selectedShips: Partial<Record<ShipId, number>>;
+  cargo: TransportCargo;
+  /** One leg; the fleet is back after twice this. */
+  oneWayDurationMs: number;
+}>;
+
+/**
+ * «Космический рейс» for an NPC, under the player's rules: the fleet and its
+ * loaded cargo leave the planet and come back after two legs of a chosen
+ * length (5 min – 11 h 59 min); 100 gas whatever the fleet. While away they
+ * are out of reach of any attack on the planet.
+ */
+export function dispatchNpcSpaceFlight(state: SaveState, command: NpcSpaceFlightCommand, at: number): NpcMissionResult {
+  if (!Number.isSafeInteger(at) || at < 0) return fail(state, 'invalid-time');
+  if (!command.requestId.trim()) return fail(state, 'request-id-required');
+  const existing = getFlightByRequestId(state.flights, command.requestId);
+  if (existing) {
+    return existing.ownerSide === 'npc' && existing.ownerId === command.ownerId && existing.originPlanetId === command.originPlanetId
+      ? { state, ok: true, reason: null, flight: existing, created: false }
+      : fail(state, 'request-id-owned-by-another-flight');
+  }
+  const origin = validNpcOrigin(state, command.ownerId, command.originPlanetId);
+  if (!origin) return fail(state, 'npc-origin-not-found');
+  const profile = ownerProfile(state, origin);
+  if (!flightSlotsAvailable(state, command.ownerId, profile, 'space-flight')) return fail(state, 'flight-limit-reached');
+  const duration = command.oneWayDurationMs;
+  if (!Number.isSafeInteger(duration) || duration < MIN_SPACE_FLIGHT_DURATION_MS || duration > MAX_SPACE_FLIGHT_DURATION_MS
+    || duration % SPACE_FLIGHT_DURATION_STEP_MS !== 0) return fail(state, 'invalid-duration');
+  const selectedShips = normalizeShips(command.selectedShips, origin.raceId);
+  if (!selectedShips || selectedShips['solar-satellite']) return fail(state, 'invalid-ship-selection');
+  const freeShips = getNpcMissionAvailableFleet(state, command.ownerId, origin.id);
+  for (const [shipId, count] of Object.entries(selectedShips) as [ShipId, number][]) {
+    if ((freeShips[shipId] ?? 0) < count) return fail(state, 'insufficient-ships');
+  }
+  const cargo = normalizeTransportCargo(command.cargo);
+  const catalog = Object.fromEntries(getFactionShipCatalog(origin.raceId).map((entity) => [entity.id, { cargo: entity.ship?.cargo ?? 0 }]));
+  if (getCargoUsed(cargo) > getFleetCargoCapacity(selectedShips, catalog)) return fail(state, 'insufficient-cargo-capacity');
+  if (cargo.debris > 0 || cargo.metal > origin.resources.metal || cargo.minerals > origin.resources.minerals) return fail(state, 'invalid-cargo');
+  if (origin.resources.gas < cargo.gas + NPC_SPACE_FLIGHT_GAS_FEE) return fail(state, 'insufficient-gas');
+  const domainResult = dispatchFlight(state.flights, {
+    requestId: command.requestId,
+    missionId: 'space-flight',
+    ownerSide: 'npc',
+    ownerId: command.ownerId,
+    originPlanetId: origin.id,
+    originCoordinate: origin.coordinate,
+    destination: { kind: 'space', coordinate: { ...origin.coordinate } },
+    selectedShips,
+    departedAt: at,
+    factionId: origin.raceId,
+    science: profile.scienceLevels as FlightScienceLevels,
+    cargo,
+    durationMs: duration,
+  });
+  const flight = domainResult.flight;
+  const ships = { ...origin.fleet.ships };
+  for (const [shipId, count] of Object.entries(selectedShips) as [ShipId, number][]) ships[shipId] = Math.max(0, (ships[shipId] ?? 0) - count);
+  const debitedOrigin: SpyTargetState = {
+    ...origin,
+    fleet: { ...origin.fleet, ships },
+    resources: {
+      ...origin.resources,
+      metal: origin.resources.metal - cargo.metal,
+      minerals: origin.resources.minerals - cargo.minerals,
+      gas: origin.resources.gas - cargo.gas - flight.gasCost,
+    },
+  };
+  const next = setFlight(setTarget({ ...state, flights: domainResult.state }, debitedOrigin), flight);
   return { state: next, ok: true, reason: null, flight, created: true };
 }
 
@@ -614,7 +693,10 @@ export function settleNpcMissionReturn(
       if (count) ships[id] = (ships[id] ?? 0) + count;
     }
     let resources = { metal: source.resources.metal, minerals: source.resources.minerals, gas: source.resources.gas };
-    const loot = flight.attackResolution?.loot;
+    // A space flight brings its own loaded cargo home; loot comes from attacks.
+    const loot = flight.missionId === 'space-flight' && flight.cargoState === 'loaded' && flight.cargo
+      ? { ...flight.cargo, debris: 0 }
+      : flight.attackResolution?.loot;
     if (loot) {
       const capacities = getStorageCapacities(source.buildings);
       const safeCapacities = {

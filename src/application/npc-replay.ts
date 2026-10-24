@@ -1,4 +1,5 @@
-import { getNpcBuildingCandidates, startNpcBuilding } from './npc-economy.ts';
+import { getNextNpcEconomyCheckpoint, getNpcBuildingCandidates, startNpcBuilding } from './npc-economy.ts';
+import { getNextNpcFleetProductionCheckpoint } from './npc-fleet-production.ts';
 import { getNpcSessionEvents } from '../domain/npc/calendar.ts';
 import { compareNpcEvents, isNpcEventAfterCursor } from '../domain/npc/events.ts';
 import { chooseNpcEconomyAction } from '../domain/npc/economy-policy.ts';
@@ -11,13 +12,60 @@ import type { NpcStateV1, NpcProfile, NpcSessionEvent } from '../domain/npc/type
 import type { SpyTargetState } from '../domain/espionage/types.ts';
 import type { BuildingRole } from '../domain/buildings/resource-zone.ts';
 import type { SaveState } from './contracts.ts';
-import { applyNpcAutonomyDecision } from './npc-autonomy.ts';
+import { applyNpcAutonomyAttention, npcAttentionActionId } from './npc-autonomy.ts';
 import { touchMember } from '../domain/command/membership.ts';
 
-export const NPC_REPLAY_DECISION_MIN_DELAY_MS = 5 * 60_000;
-export const NPC_REPLAY_DECISION_MAX_DELAY_MS = 15 * 60_000;
-export const NPC_REPLAY_MAX_ATTEMPTS_PER_SESSION = 36;
+/**
+ * Owner rule (24.10.2026): while online an NPC acts like a player, looking at
+ * the game every one to three minutes and doing everything worth doing, with
+ * no cap on actions per session. When nothing is worth doing it waits for its
+ * next own event (a building, an order, a flight) or for resources to pile up.
+ */
+export const NPC_REPLAY_DECISION_MIN_DELAY_MS = 60_000;
+export const NPC_REPLAY_DECISION_MAX_DELAY_MS = 3 * 60_000;
 const MAX_SESSION_MS = 180 * 60_000;
+/** Attention moments a session can hold: its longest duration at the shortest delay. */
+export const NPC_REPLAY_MAX_ATTEMPTS_PER_SESSION = MAX_SESSION_MS / NPC_REPLAY_DECISION_MIN_DELAY_MS;
+/** Actions one look at the game can chain; a wait ends it sooner. */
+export const NPC_REPLAY_MAX_ACTIONS_PER_ATTENTION = 16;
+
+/**
+ * An attention moment the owner skips: it decided there was nothing to do and
+ * waits until its idle time, within the same session. Pure of the profile.
+ */
+export function isNpcDecisionIdle(profile: NpcProfile, event: NpcReplayEvent): boolean {
+  return event.priority === 'npc-decision'
+    && profile.session.active
+    && profile.session.sessionStartedAt === event.sessionStartedAt
+    && typeof profile.session.idleUntil === 'number'
+    && event.at < profile.session.idleUntil;
+}
+
+/**
+ * When an owner with nothing to do looks again: at its next own completion
+ * or arrival, or after a pause in which resources pile up (shorter for
+ * attentive owners). Everything read is the owner's own state.
+ */
+export function getNpcIdleUntil(world: SaveState, profile: NpcProfile, at: number): number {
+  const ownerId = profile.ownerId;
+  const attention = Math.min(1, Math.max(0, Number.isFinite(profile.traits.attention) ? profile.traits.attention : 0.5));
+  let until = at + Math.round((10 + 30 * (1 - attention)) * 60_000);
+  const consider = (value: number | null | undefined) => {
+    if (typeof value === 'number' && Number.isFinite(value) && value > at && value < until) until = value;
+  };
+  for (const target of Object.values(world.espionage?.targets ?? {})) {
+    if (target.kind !== 'npc' || target.ownerId !== ownerId) continue;
+    consider(getNextNpcEconomyCheckpoint(target, at + 1));
+    consider(getNextNpcFleetProductionCheckpoint(target, ownerId, at, until));
+  }
+  consider(world.npcScience?.owners[ownerId]?.queue[0]?.finishAt);
+  for (const flight of world.flights.records) {
+    if (flight.ownerSide !== 'npc' || flight.ownerId !== ownerId) continue;
+    if (flight.phase === 'outbound') consider(flight.arrivalAt);
+    if (flight.phase === 'returning') consider(flight.returnAt);
+  }
+  return Math.max(at + 1, Math.round(until));
+}
 
 export type NpcReplayBoundaryEvent = Readonly<NpcSessionEvent & { sessionEndsAt: number }>;
 export type NpcReplayDecisionEvent = Readonly<{
@@ -229,8 +277,8 @@ export function applyNpcReplayEventsAt(
       profiles[event.ownerId] = {
         ...profile,
         session: isStart
-          ? { ...profile.session, active: true, sessionStartedAt: event.at, sessionEndsAt: event.sessionEndsAt, lastBoundaryAt: event.at }
-          : { ...profile.session, active: false, sessionStartedAt: null, sessionEndsAt: null, lastBoundaryAt: event.at },
+          ? { ...withoutIdle(profile.session), active: true, sessionStartedAt: event.at, sessionEndsAt: event.sessionEndsAt, lastBoundaryAt: event.at }
+          : { ...withoutIdle(profile.session), active: false, sessionStartedAt: null, sessionEndsAt: null, lastBoundaryAt: event.at },
         activity: isStart ? profile.activity : {
           ...profile.activity,
           completedSessions: profile.activity.completedSessions + 1,
@@ -241,6 +289,10 @@ export function applyNpcReplayEventsAt(
       continue;
     }
 
+    if (isNpcDecisionIdle(profile, event)) {
+      profiles[event.ownerId] = { ...profile, cursor: { at: event.at, priority: event.priority, eventId: event.eventId } };
+      continue;
+    }
     const activeProfile = profile.session.active
       && profile.session.sessionStartedAt === event.sessionStartedAt
       && profile.session.sessionEndsAt === event.sessionEndsAt;
@@ -253,17 +305,26 @@ export function applyNpcReplayEventsAt(
     if (activeProfile && world) {
       world = { ...world, npc: { ...state, profiles }, npcScience: science,
         espionage: { ...world.espionage!, targets } };
-      const decision = applyNpcAutonomyDecision(world, profile, event.eventId, at, context.timeScale);
-      world = decision.state;
+      const decisions = applyNpcAutonomyAttention(world, profile, event.eventId, at, context.timeScale, NPC_REPLAY_MAX_ACTIONS_PER_ATTENTION);
+      decisions.forEach((decision, index) => {
+        emitted.push(Object.freeze({ ownerId: event.ownerId, at, eventId: npcAttentionActionId(event.eventId, index), attempt: event.attempt,
+          selectedRole: decision.selectedRole, selectedScienceId: decision.selectedScienceId,
+          selectedActionKind: decision.kind, wait: decision.wait, started: decision.started,
+          ...(decision.planetId ? { planetId: decision.planetId } : {}),
+          ...(decision.economyActionId ? { economyActionId: decision.economyActionId } : {}),
+          reason: decision.reason, idempotencyKey: decision.idempotencyKey }));
+      });
+      world = decisions[decisions.length - 1]!.state;
+      const waited = decisions[decisions.length - 1]!.wait;
+      if (waited) {
+        const after = world.npc!.profiles[event.ownerId]!;
+        world = { ...world, npc: { ...world.npc!, profiles: { ...world.npc!.profiles, [event.ownerId]: {
+          ...after, session: { ...after.session, idleUntil: getNpcIdleUntil(world, after, at) },
+        } } } };
+      }
       targets = { ...world.espionage!.targets };
       science = world.npcScience;
       profiles[event.ownerId] = world.npc!.profiles[event.ownerId]!;
-      emitted.push(Object.freeze({ ownerId: event.ownerId, at, eventId: event.eventId, attempt: event.attempt,
-        selectedRole: decision.selectedRole, selectedScienceId: decision.selectedScienceId,
-        selectedActionKind: decision.kind, wait: decision.wait, started: decision.started,
-        ...(decision.planetId ? { planetId: decision.planetId } : {}),
-        ...(decision.economyActionId ? { economyActionId: decision.economyActionId } : {}),
-        reason: decision.reason, idempotencyKey: decision.idempotencyKey }));
     } else if (activeProfile) {
       const target = Object.values(targets)
         .filter((item) => item.kind === 'npc' && item.ownerId === event.ownerId)
@@ -344,6 +405,11 @@ function opaqueId(kind: string, profile: NpcProfile, value: string): string {
   return 'npc-replay:v1:' + kind + ':' + hash.toString(16).padStart(16, '0');
 }
 
+function withoutIdle(session: NpcProfile['session']): NpcProfile['session'] {
+  if (session.idleUntil === undefined) return session;
+  const { idleUntil: _idle, ...rest } = session;
+  return rest;
+}
 function inInterval(at: number, fromAt: number, toAt: number): boolean { return at >= fromAt && at < toAt; }
 function assertInterval(fromAt: number, toAt: number): void {
   if (!Number.isSafeInteger(fromAt) || !Number.isSafeInteger(toAt) || toAt < fromAt) {
