@@ -104,6 +104,7 @@ export function UtilityScreensPortal() {
             currentPlayerScore={runtimeState.ownerScores[runtimeState.currentPlayerId]}
             currentPlayerId={runtimeState.currentPlayerId}
             owners={runtimeState.owners}
+            allianceDetails={runtimeState.alliances}
           />
         ) : null
       ) : (

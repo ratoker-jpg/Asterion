@@ -1,4 +1,7 @@
-import type { RatedOwnerIdentity } from '../domain/runtime/state-store.ts';
+import type { RatedAllianceDetails, RatedOwnerIdentity } from '../domain/runtime/state-store.ts';
+import { selectOwnerPresence } from './owner-presence.ts';
+import { holderKey } from '../domain/sun-raid/rules.ts';
+import { selectAllianceRelations } from '../domain/command/diplomacy.ts';
 import { UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 import {
   RUNTIME_STATE_CHANGED_EVENT,
@@ -20,14 +23,48 @@ export type RuntimeApplicationContext = {
 
 /** Owners the rating lists: the player and every real NPC owner on the map. */
 export function selectRatedOwners(state: SaveState): Record<string, RatedOwnerIdentity> {
+  const presence = selectOwnerPresence(state);
+  const sunRaid = state.sunRaid;
+  const crystalsOf = (ownerId: string) => sunRaid?.crystals[holderKey({ kind: 'owner', id: ownerId })]?.length ?? 0;
+  const gateOf = (ownerId: string) => sunRaid?.gates.find((gate) => gate.holder.kind === 'owner' && gate.holder.id === ownerId
+    && (gate.status === 'building' || gate.status === 'completed'))?.status as RatedOwnerIdentity['gate'];
+  const describe = (ownerId: string, name: string, factionId: string): RatedOwnerIdentity => ({
+    name, factionId, planets: [],
+    ...(presence[ownerId] ? { presence: presence[ownerId]!.online ? { online: true } : { online: false, lastSeenAt: (presence[ownerId] as { lastSeenAt: number }).lastSeenAt } } : {}),
+    crystals: crystalsOf(ownerId),
+    ...(gateOf(ownerId) ? { gate: gateOf(ownerId) } : {}),
+  });
+  const playerId = state.profile.playerId;
   const owners: Record<string, RatedOwnerIdentity> = {
-    [state.profile.playerId]: { name: state.profile.displayName, factionId: state.profile.factionId },
+    [playerId]: describe(playerId, state.profile.displayName, state.profile.factionId),
   };
+  for (const [id, planet] of Object.entries(state.planets)) {
+    if (planet.universeGalaxy === undefined || planet.universeSystem === undefined || planet.universePosition === undefined) continue;
+    owners[playerId]!.planets!.push({ id, name: planet.name, coordinate: { galaxy: planet.universeGalaxy, system: planet.universeSystem, position: planet.universePosition } });
+  }
   for (const target of Object.values(state.espionage?.targets ?? {})) {
-    if (target.kind !== 'npc' || target.ownerId === UNIVERSE_NPC_OWNER_ID || owners[target.ownerId]) continue;
-    owners[target.ownerId] = { name: target.ownerName, factionId: target.raceId };
+    if (target.kind !== 'npc' || target.ownerId === UNIVERSE_NPC_OWNER_ID) continue;
+    owners[target.ownerId] ??= describe(target.ownerId, target.ownerName, target.raceId);
+    owners[target.ownerId]!.planets!.push({ id: target.id, name: target.name, coordinate: { ...target.coordinate } });
   }
   return owners;
+}
+
+/** Public facts the alliance rating opens up: size, wars, crystals and the Gate. */
+export function selectRatedAlliances(state: SaveState): Record<string, RatedAllianceDetails> {
+  const details: Record<string, RatedAllianceDetails> = {};
+  for (const alliance of state.command.alliances) {
+    const holder = holderKey({ kind: 'alliance', id: alliance.id });
+    const gate = state.sunRaid?.gates.find((item) => item.holder.kind === 'alliance' && item.holder.id === alliance.id
+      && (item.status === 'building' || item.status === 'completed'))?.status as RatedAllianceDetails['gate'];
+    details[alliance.id] = {
+      members: alliance.members.length,
+      wars: selectAllianceRelations(state.command, alliance.id).filter((relation) => relation.status === 'war').length,
+      crystals: state.sunRaid?.crystals[holder]?.length ?? 0,
+      ...(gate ? { gate } : {}),
+    };
+  }
+  return details;
 }
 
 export function publishApplicationRuntimeSnapshot(
@@ -43,6 +80,7 @@ export function publishApplicationRuntimeSnapshot(
     rating: state.rating,
     ownerScores: selectOwnerScores(state),
     owners: selectRatedOwners(state),
+    alliances: selectRatedAlliances(state),
     currentPlayerId: state.profile.playerId,
   });
   target.dispatchEvent(new CustomEvent(RUNTIME_STATE_CHANGED_EVENT, { detail: state }));

@@ -66,3 +66,34 @@
 .rating-empty-v2{min-height:260px;display:grid;place-content:center;gap:10px;padding:32px;text-align:center;color:#8faeb9}
 .rating-empty-v2 strong{color:#e2f7fb;font-size:18px;font-weight:500;letter-spacing:.4px}
 .rating-empty-v2 span{color:#6f8f9b;font-size:12px}
+
+/* Expandable rating rows (Nemexia-style card under a player or alliance). */
+.rating-expand-mark-v2 { margin-left: 8px; color: #56d9f2; font-size: 11px; font-style: normal; }
+.rating-row-v2.expanded { background: rgba(7, 62, 80, .72); border-bottom-color: transparent; }
+.rating-card-v2 { display: grid; grid-template-columns: 120px minmax(200px, 1.1fr) minmax(260px, 2fr) minmax(180px, 1fr) auto; gap: 18px; align-items: center; padding: 14px 18px; border-bottom: 1px solid rgba(69, 217, 247, .32); background: linear-gradient(180deg, rgba(7, 50, 65, .78), rgba(3, 25, 36, .9)); }
+.rating-card-v2--alliance { grid-template-columns: repeat(4, minmax(160px, 1fr)); }
+.rating-card-v2__art { height: 96px; display: grid; place-items: center; overflow: hidden; }
+.rating-card-v2__art img { max-height: 100%; max-width: 100%; object-fit: contain; }
+.rating-card-v2__who { display: grid; gap: 4px; min-width: 0; }
+.rating-card-v2__who strong { color: #f2fdff; font-size: 18px !important; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rating-card-v2__who > span { color: #8fb4bf; font-size: 12px !important; }
+.rating-card-v2__link { justify-self: start; padding: 0; border: 0; background: none; color: #56d9f2; font-size: 12px !important; font-weight: 700; cursor: pointer; }
+.rating-presence-v2 { display: inline-flex; align-items: center; gap: 6px; color: #8fb4bf; font-size: 12px !important; font-style: normal; font-weight: 700; }
+.rating-presence-v2 i { width: 7px; height: 7px; border-radius: 50%; background: #5d6f82; }
+.rating-presence-v2.is-online { color: #35e58a; }
+.rating-presence-v2.is-online i { background: #35e58a; box-shadow: 0 0 6px rgba(53, 229, 138, .7); }
+.rating-presence-v2.is-recent i { background: #f2b84b; }
+.rating-card-v2__block { display: grid; gap: 8px; min-width: 0; }
+.rating-card-v2__block > small { color: #7ca8b4; font-size: 11px !important; font-weight: 800; letter-spacing: .1em; }
+.rating-card-v2__planets { display: flex; flex-wrap: wrap; gap: 6px; }
+.rating-card-v2__planets button { display: inline-flex; align-items: baseline; gap: 6px; padding: 4px 9px; border: 1px solid rgba(86, 217, 242, .3); border-radius: var(--ut-r-chip, 6px); background: rgba(86, 217, 242, .06); color: #dff8ff; font-size: 12px !important; cursor: pointer; }
+.rating-card-v2__planets button b { color: #56d9f2; font-size: 11px !important; }
+.rating-crystals-v2 { display: inline-flex; align-items: center; gap: 6px; }
+.rating-crystals-v2 i { width: 12px; height: 16px; clip-path: polygon(50% 0, 100% 35%, 50% 100%, 0 35%); background: rgba(143, 180, 191, .25); }
+.rating-crystals-v2 i.is-owned { background: linear-gradient(180deg, #8af3ff, #3aa6e0); }
+.rating-crystals-v2 b { margin-left: 4px; color: #dff8ff; font-size: 12px !important; }
+.rating-card-v2__gate { color: #f2b84b; font-size: 12px !important; font-weight: 700; }
+.rating-card-v2__stat { color: #dff8ff; font-size: 14px !important; }
+.rating-card-v2__stat b { font-size: 18px !important; font-weight: 800; }
+.rating-card-v2__actions button { min-height: 36px; padding: 0 16px; border: 1px solid rgba(86, 217, 242, .55); border-radius: var(--ut-r-chip, 6px); background: rgba(0, 153, 193, .18); color: #eafbff; font-size: 12px !important; font-weight: 800; letter-spacing: .08em; cursor: pointer; }
+.rating-card-v2__actions button:disabled { opacity: .4; cursor: default; }

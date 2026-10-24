@@ -1993,8 +1993,10 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   openUniverseTargetRef.current = openUniverseTarget;
   useEffect(() => {
     const onOpenCoordinate = (event: Event) => {
-      const coordinate = (event as CustomEvent<{ coordinate?: UniverseCoordinate }>).detail?.coordinate;
-      if (coordinate) openUniverseTargetRef.current({ coordinate });
+      // An owner id opens that owner's card (the rating's «Профиль»); a bare coordinate pulses it.
+      const detail = (event as CustomEvent<{ coordinate?: UniverseCoordinate; ownerId?: string; planetId?: string }>).detail;
+      if (detail?.coordinate) openUniverseTargetRef.current({ coordinate: detail.coordinate,
+        ...(detail.ownerId ? { ownerId: detail.ownerId } : {}), ...(detail.planetId ? { planetId: detail.planetId } : {}) });
     };
     window.addEventListener(UNIVERSE_COORDINATE_OPEN_EVENT, onOpenCoordinate);
     return () => window.removeEventListener(UNIVERSE_COORDINATE_OPEN_EVENT, onOpenCoordinate);
