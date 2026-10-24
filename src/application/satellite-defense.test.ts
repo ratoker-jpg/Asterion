@@ -9,7 +9,7 @@ import { getCurrentPirateContact } from './pirates.ts';
 import { getPlanetEnergyLedger } from './energy.ts';
 import { createEmptyFleetState } from '../domain/fleet/runtime.ts';
 import { getUniverseTimedObjectSchedule } from '../domain/universe/runtime.ts';
-import { pirateSeededDraw } from '../domain/pirates/threat.ts';
+import { pirateSeededDraw, PIRATE_PROTECTION_TOTAL_POINTS } from '../domain/pirates/threat.ts';
 import { selectOwnerScores } from '../domain/rating/scoring.ts';
 import { SOLAR_SATELLITE_ID } from '../domain/combat/ids.ts';
 import type { PlanetRuntime, SaveState } from './contracts.ts';
@@ -90,6 +90,9 @@ test('SAT-01: satellites defend against a pirate raid on the player planet (owne
     const seeded: SaveState = {
       ...baseline,
       planets: { ...baseline.planets, 'helion-01': satelliteOnlyPlanet(baseline.planets['helion-01']!) },
+      // Past the 100 000-point pirate protection via the canonical battle-award ledger.
+      rating: { ...baseline.rating, battleAwardsByReportId: { ...baseline.rating.battleAwardsByReportId,
+        'qa-veteran-awards': { [baseline.profile.playerId]: PIRATE_PROTECTION_TOTAL_POINTS } } },
       pirate: {
         ...baseline.pirate!,
         raidProcessedAt: cycle.startAt,
