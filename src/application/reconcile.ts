@@ -648,6 +648,9 @@ function reconcileRuntimeSlice(
       next = { ...(applied.world ?? next), npc: applied.state, npcScience: applied.science ?? next.npcScience, espionage: { ...(applied.world?.espionage ?? next.espionage), targets: { ...applied.targets } } };
       if (applied.emitted.length) events.push({ kind: 'npc-economy', events: applied.emitted });
     }
+    // Archive limits hold after every group, so what NPCs can still read never
+    // depends on where a catch-up slice ended.
+    if (replay) next = pruneCampaignHistory(next, checkpoint);
   }
 
   const finalOverpopulation = reconcileAllPlanetOverpopulation(next, context.now);

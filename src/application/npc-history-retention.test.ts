@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createInitialSaveState } from './persistence.ts';
 import {
+  FOREIGN_NPC_BATTLE_REPORT_LIMIT,
   FOREIGN_PIRATE_BATTLE_REPORT_LIMIT,
+  NPC_FLIGHT_ARCHIVE_MARGIN_MS,
   PIRATE_ROLL_LEDGER_MARGIN_MS,
   pruneCampaignHistory,
 } from './history-retention.ts';
@@ -94,4 +96,69 @@ test('roll ledger keeps entries inside the margin and those whose raid is still 
   assert.equal(pruned.pirate!.raidProcessedAt, cursor);
   assert.deepEqual(pruned.pirate!.ownerThreats, prepared.pirate!.ownerThreats);
   assert.equal(pruneCampaignHistory(pruned), pruned);
+});
+
+function npcFlight(id: string, phase: FlightRecord['phase'], completedAt?: number, extra: Partial<FlightRecord> = {}): FlightRecord {
+  return {
+    id, requestId: `npc-autonomy:["npc-gen-1","${id}"]`, ownerSide: 'npc', ownerId: 'npc-gen-1', missionId: 'attack', phase,
+    originPlanetId: 'npc-gen-01-planet', ...(completedAt === undefined ? {} : { completedAt }), ...extra,
+  } as unknown as FlightRecord;
+}
+
+test('battles between other owners keep their own newest window and never touch the player or live flights', () => {
+  const state = base();
+  const player = state.profile.playerId;
+  const npcBattles = Array.from({ length: FOREIGN_NPC_BATTLE_REPORT_LIMIT + 40 }, (_, i) => i % 2
+    ? report(`npc-${i}`, `npc-gen-${i % 5}`, 'attack', `npc-gen-${(i + 1) % 5}`)
+    : report(`npc-${i}`, 'pirates', 'pirate-elimination', `npc-gen-${i % 5}`));
+  const live = npcFlight('live-attack', 'returning');
+  const own = [report('hit-on-player', player, 'attack', 'npc-gen-3'), report('player-hits-npc', 'npc-gen-3', 'attack', player)];
+  const pirateRaid = report('raid-0', 'npc-gen-1');
+  const prepared: SaveState = {
+    ...state,
+    combat: { reports: [pirateRaid, ...own, ...npcBattles, report('battle-attack-live-attack', 'npc-gen-2', 'attack', 'npc-gen-1')], savedReportIds: [] },
+    flights: { records: [live], requestIndex: { [live.requestId]: live.id } },
+  };
+  const ids = pruneCampaignHistory(prepared).combat.reports.map((item) => item.id);
+  for (const id of ['raid-0', 'hit-on-player', 'player-hits-npc', 'battle-attack-live-attack']) assert.ok(ids.includes(id), id);
+  assert.deepEqual(ids.filter((id) => id.startsWith('npc-')), npcBattles.slice(-FOREIGN_NPC_BATTLE_REPORT_LIMIT).map((item) => item.id));
+});
+
+test('finished autonomous NPC flights leave a day after the replay cursor unless a spy mission or cargo still needs them', () => {
+  const state = base();
+  const cursor = AT;
+  const old = cursor - NPC_FLIGHT_ARCHIVE_MARGIN_MS - 1;
+  const records = [
+    npcFlight('old-done', 'completed', old),
+    npcFlight('recent-done', 'completed', cursor - 1),
+    npcFlight('old-failed', 'failed', old),
+    npcFlight('old-cargo', 'completed', old, { cargoState: 'loaded' } as Partial<FlightRecord>),
+    npcFlight('old-spy', 'completed', old),
+    npcFlight('flying', 'outbound'),
+  ];
+  const prepared: SaveState = {
+    ...state,
+    npcReplay: { version: 1, processedThroughAt: cursor, targetAt: cursor },
+    espionage: { ...state.espionage!, missions: [{ id: 'm', flightId: 'old-spy', ownerId: 'npc-gen-1', status: 'orbiting' } as never] },
+    flights: { records, requestIndex: Object.fromEntries(records.map((flight) => [flight.requestId, flight.id])) },
+  };
+  const pruned = pruneCampaignHistory(prepared);
+  assert.deepEqual(pruned.flights.records.map((flight) => flight.id), ['recent-done', 'old-failed', 'old-cargo', 'old-spy', 'flying']);
+  assert.equal(Object.values(pruned.flights.requestIndex).includes('old-done'), false);
+  const noCursor = { ...prepared, npcReplay: undefined };
+  assert.equal(pruneCampaignHistory(noCursor).flights.records.length, records.length, 'without a replay cursor nothing is archived');
+});
+
+test('NPC spy intelligence keeps the newest report per owner and target; player reports stay', () => {
+  const state = base();
+  const player = state.profile.playerId;
+  const spy = (id: string, ownerId: string | undefined, targetPlanetId: string, createdAt: number) =>
+    ({ id, ownerId, targetPlanetId, createdAt, missionId: `m-${id}` }) as never;
+  const reports = [
+    spy('a1', 'npc-gen-1', 'p1', 1), spy('a2', 'npc-gen-1', 'p1', 3), spy('b1', 'npc-gen-2', 'p1', 2),
+    spy('a3', 'npc-gen-1', 'p2', 1), spy('mine1', player, 'p1', 1), spy('mine2', undefined, 'p1', 2), spy('a4', 'npc-gen-1', 'p1', 2),
+  ];
+  const prepared: SaveState = { ...state, espionage: { ...state.espionage!, reports } };
+  const ids = pruneCampaignHistory(prepared).espionage!.reports.map((item) => item.id);
+  assert.deepEqual(ids, ['a2', 'b1', 'a3', 'mine1', 'mine2']);
 });
