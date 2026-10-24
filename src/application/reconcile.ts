@@ -169,7 +169,9 @@ function reconcileRuntimeSlice(
       if (production.completed.length) events.push({ kind: 'npc-fleet-production', ownerId: target.ownerId, planetId: id, at, completed: production.completed });
       // Units that just completed may overfill the hangar: overpopulation
       // starts now, not at whenever this planet happens to be settled next.
-      targets[id] = production.completed.length ? settleNpcPlanet(production.target, at, { timeScale }).target : production.target;
+      // `completed` lists whole orders only; single units of a running order
+      // land in the fleet too, so any production change re-settles.
+      targets[id] = production.changed ? settleNpcPlanet(production.target, at, { timeScale }).target : production.target;
       changed ||= targets[id] !== target;
       for (const assetRole of result.completedRoles) events.push({ kind: 'npc-building', planetId: id, assetRole, at });
     }
@@ -685,6 +687,18 @@ function reconcileRuntimeSlice(
       const applied = applyNpcReplayEventsAt(next.npc, checkpoint, group, { targets: next.espionage.targets, timeScale, science: next.npcScience, world: next });
       next = { ...(applied.world ?? next), npc: applied.state, npcScience: applied.science ?? next.npcScience, espionage: { ...(applied.world?.espionage ?? next.espionage), targets: { ...applied.targets } } };
       if (applied.emitted.length) events.push({ kind: 'npc-economy', events: applied.emitted });
+      // A fleet the owner sends out can end an overpopulation lock. The lock
+      // ends at this decision, not at whenever the planet is settled next
+      // (which would depend on where a catch-up slice happened to end).
+      const groupOwners = new Set(group.map((event) => event.ownerId));
+      const lockedOwners = new Set<string>();
+      for (const target of Object.values(next.espionage?.targets ?? {})) {
+        if (target.overpopulation && groupOwners.has(target.ownerId)) lockedOwners.add(target.ownerId);
+      }
+      if (lockedOwners.size) {
+        settleNpcEconomies(checkpoint, lockedOwners);
+        completeNpcScience(checkpoint, lockedOwners);
+      }
     }
     // Archive limits hold after every group, so what NPCs can still read never
     // depends on where a catch-up slice ended.
