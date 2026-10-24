@@ -12,6 +12,7 @@ import { createInitialSaveState, createPersistenceFacade } from './persistence.t
 import type { SaveState } from './contracts.ts';
 import { generateNpcReplayEvents, type NpcReplayEmission } from './npc-replay.ts';
 import type { SpyTargetState } from '../domain/espionage/types.ts';
+import { MAX_PLANETS_PER_OWNER } from '../domain/universe/runtime.ts';
 
 const START = Date.UTC(2026, 9, 20, 12);
 const HOUR = 60 * 60 * 1_000;
@@ -277,17 +278,25 @@ test('a frozen 30-day replay target survives intermediate save/reload and does n
     'each planet retains the bounded canonical receipts of its most recent paid decisions after reload');
 });
 
-test('100 real NPC owners finish a 30-day production replay with their own bounded economy state', () => {
+// Owner target (24.10.2026): the longest realistic absence is two weeks.
+// Correctness beyond it is covered by the single-NPC 30-day equivalence tests.
+test('100 real NPC owners finish a 14-day production replay with their own bounded economy state', () => {
   const initial = campaign(100, 'NPC-REPLAY-100');
   assert.equal(npcTargets(initial).length, 100);
   assert.equal(Object.keys(initial.npc!.profiles).length, 100);
-  const targetAt = START + 30 * DAY;
+  const targetAt = START + 14 * DAY;
   const completed = advanceTo(clone(initial), targetAt, [targetAt]);
 
   assert.equal(completed.state.npcReplay?.processedThroughAt, targetAt);
   assert.equal(isNpcCatchupPending(completed.state), false);
-  assert.equal(npcTargets(completed.state).length, 100);
   assert.equal(Object.keys(completed.state.npc!.profiles).length, 100);
+  // NPCs colonize through real flights: every owner keeps 1..7 canonical planets.
+  const planetsByOwner = new Map<string, number>();
+  for (const target of npcTargets(completed.state)) planetsByOwner.set(target.ownerId, (planetsByOwner.get(target.ownerId) ?? 0) + 1);
+  assert.equal(planetsByOwner.size, 100);
+  for (const [ownerId, count] of planetsByOwner) assert.ok(count >= 1 && count <= MAX_PLANETS_PER_OWNER, `${ownerId} owns ${count} planets`);
+  const coordinates = npcTargets(completed.state).map((target) => `${target.coordinate.galaxy}:${target.coordinate.system}:${target.coordinate.position}`);
+  assert.equal(new Set(coordinates).size, coordinates.length, 'no two planets share a coordinate');
   for (const target of npcTargets(completed.state)) {
     assert.ok(target.resources.metal >= 0 && target.resources.minerals >= 0 && target.resources.gas >= 0);
     assert.ok(target.buildingQueue!.length <= 3);
