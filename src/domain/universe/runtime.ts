@@ -434,6 +434,8 @@ export type CreateUniverseSystemOptions = {
   registeredPlanets?: readonly UniverseRegisteredPlanet[];
   /** Global pirate victories for this local save; unrelated timed objects are unchanged. */
   pirateContactDefeats?: readonly PirateContactDefeatRecord[];
+  /** Readers of `positions` only (contacts, timed objects) skip the galaxy-wide asteroid projection. */
+  skipAsteroids?: boolean;
 };
 
 function persistedPlanetFor(options: CreateUniverseSystemOptions, galaxy: number, system: number, slot: number) {
@@ -1029,7 +1031,8 @@ export function createUniverseSystem(options: CreateUniverseSystemOptions): Univ
   const assets = mergeAssets(options.assets);
   const nowMs = normalizeNow(options.nowMs);
   const galaxyCount = Math.max(1, Math.floor(options.galaxyCount ?? 1));
-  const asteroidNodes = createActiveAsteroidsBySystem(
+  // Asteroids never occupy `positions`; timed objects are placed without them.
+  const asteroidNodes = options.skipAsteroids ? null : createActiveAsteroidsBySystem(
     Math.max(1, Math.floor(options.galaxy ?? GALAXY)), nowMs, galaxyCount, assets, options.asteroidStates,
   );
   let system = createUniverseSystemBase(options, assets);
@@ -1038,7 +1041,7 @@ export function createUniverseSystem(options: CreateUniverseSystemOptions): Univ
   system = injectTimedObject(system, 'anomaly', nowMs, assets);
   return {
     ...system,
-    asteroids: asteroidNodes[system.system - 1],
+    asteroids: asteroidNodes ? asteroidNodes[system.system - 1] : [],
   };
 }
 

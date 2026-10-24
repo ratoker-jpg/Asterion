@@ -131,7 +131,7 @@ function registeredUniverseTargets(state: SaveState): UniverseRegisteredPlanet[]
   }));
 }
 
-function systemForState(state: SaveState, galaxy: number, system: number, now: number, mode?: RuntimeMode): UniverseSystem {
+function systemForState(state: SaveState, galaxy: number, system: number, now: number, mode?: RuntimeMode, skipAsteroids = false): UniverseSystem {
   const pirate = statePirate(state);
   return createUniverseSystem({
     mode: mode ?? (Object.keys(state.alliedPlanets ?? {}).length > 0 ? 'test' : 'production'),
@@ -145,6 +145,7 @@ function systemForState(state: SaveState, galaxy: number, system: number, now: n
     // The save's asteroid positions (as on the Universe map) instead of
     // re-simulating every asteroid route on each 1 s render.
     ...(state.asteroidSimulation ? { asteroidStates: state.asteroidSimulation.asteroids } : {}),
+    skipAsteroids,
   });
 }
 
@@ -164,7 +165,7 @@ export function getCurrentPirateContact(
   mode?: RuntimeMode,
 ): CurrentPirateContact | null {
   if (!isFlightCoordinate(coordinate) || !Number.isSafeInteger(now) || now < 0) return null;
-  const system = systemForState(state, coordinate.galaxy, coordinate.system, now, mode);
+  const system = systemForState(state, coordinate.galaxy, coordinate.system, now, mode, true);
   const node = system.positions.find((candidate) => candidate.kind === 'pirate');
   const pirate = node?.pirate;
   if (!node || !pirate) return null;

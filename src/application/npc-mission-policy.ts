@@ -199,6 +199,7 @@ function publicSystems(state: SaveState, ownerTargets: readonly SpyTargetState[]
     pirateContactDefeats: Object.values(state.pirate?.contact.defeatedCycles ?? {}),
     asteroidStates: state.asteroidSimulation?.asteroids ?? [],
     assets: { uniqueArts: EXPLORATION_ARTS.unique, anomalyArts: EXPLORATION_ARTS.anomaly },
+    skipAsteroids: true,
   }));
 }
 
