@@ -1,3 +1,4 @@
+import { isFlightVisibleToPlayer, isHostileFlightIncomingToPlayer } from './application/flight-visibility.ts';
 import { dispatchBot01Exploration } from './application/exploration-bot01.ts';
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { flushSync, createPortal } from 'react-dom';
@@ -1046,7 +1047,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       } else if (event.kind === 'sun-raid') {
         event.notices.forEach((notice) => setNotice(notice.text, notice.tone));
       } else if (event.kind === 'flight') {
-        event.events.forEach((flightEvent) => setNotice(
+        event.events.filter((flightEvent) => isFlightVisibleToPlayer(flightEvent.flight, result.state.profile.playerId)).forEach((flightEvent) => setNotice(
           flightEvent.status === 'spy-report' || flightEvent.status === 'spy-detected'
             ? `Проверьте системные сообщения. ${flightEvent.notice}`
             : flightEvent.notice,
@@ -1188,10 +1189,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const commandHallDefinition = getBuildingDefinition('planetary-government', state.profile.factionId);
   // The race theme lives on <html> so portals and dialogs outside the stage get it too.
   // Same rule as the Fleet screen alert: hostile fleets still on their way in.
-  const incomingAttackCount = state.flights.records.filter((flight) => flight.phase === 'outbound'
-    && ((flight.ownerSide === 'bot01' && flight.missionId === 'attack')
-      || (flight.ownerSide === 'npc' && flight.missionId === 'attack' && flight.destinationOwnerId === state.profile.playerId)
-      || (flight.ownerSide === 'pirate' && flight.missionId === 'pirate-raid'))).length;
+  const incomingAttackCount = state.flights.records.filter((flight) => isHostileFlightIncomingToPlayer(flight, state.profile.playerId)).length;
   const sunAlerts = useMemo(() => selectIncomingSunAlerts(state, now), [state, now]);
   const uiFactionId = HEADER_FACTION_PREVIEW ?? state.profile.factionId;
   useEffect(() => {

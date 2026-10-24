@@ -1,3 +1,4 @@
+import { isFlightVisibleToPlayer, isHostileFlightIncomingToPlayer } from './application/flight-visibility.ts';
 import type { CSSProperties } from 'react';
 import { SUN_RAID_MISSION_ICON } from './ui/sun-raid/sun-raid-assets.ts';
 import { isSunCombatHull, selectSunSupportTargets } from './application/sun-raid.ts';
@@ -484,7 +485,7 @@ function FleetWorkspace({
   const describedMission = missions.find((mission) => mission.id === hoveredMissionId) ?? selectedMission;
   const activeFlightRecords = useMemo(
     () => flightRecords
-      .filter((flight) => flight.ownerSide !== 'npc' || flight.destinationOwnerId === saveState.profile.playerId)
+      .filter((flight) => isFlightVisibleToPlayer(flight, saveState.profile.playerId))
       .filter((flight) => flight.missionId !== 'espionage' && (flight.phase === 'outbound' || flight.phase === 'returning' || flight.phase === 'arrived'))
       .sort((left, right) => {
         if (left.missionId === 'attack' && right.missionId === 'attack') {
@@ -500,8 +501,8 @@ function FleetWorkspace({
   );
   // Hostile flights heading to the player light up the whole Fleet screen.
   const hostileIncomingFlights = useMemo(() => activeFlightRecords
-    .filter((flight) => flight.phase === 'outbound' && (((flight.ownerSide === 'bot01' || flight.ownerSide === 'npc') && flight.missionId === 'attack') || (flight.ownerSide === 'pirate' && flight.missionId === 'pirate-raid')))
-    .map((flight) => ({ flight, originLabel: flight.ownerSide === 'pirate' ? 'Пираты' : flight.ownerSide === 'npc' ? 'NPC' : 'Bot 01' })), [activeFlightRecords]);
+    .filter((flight) => isHostileFlightIncomingToPlayer(flight, saveState.profile.playerId))
+    .map((flight) => ({ flight, originLabel: flight.ownerSide === 'pirate' ? 'Пираты' : flight.ownerSide === 'npc' ? 'NPC' : 'Bot 01' })), [activeFlightRecords, saveState.profile.playerId]);
   const ownFlightGroups = useMemo(() => {
     const counts = new Map<FlightRecord["missionId"], number>();
     for (const flight of activeFlightRecords) {
