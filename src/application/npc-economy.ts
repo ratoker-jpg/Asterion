@@ -265,11 +265,20 @@ function settleOverpopulation(target: SpyTargetState, at: number): SpyTargetStat
   };
 }
 
+// Targets are immutable; replay checkpoints ask every planet this per group.
+const blockedByTarget = new WeakMap<SpyTargetState, boolean>();
+
 export function isNpcPlanetBlocked(target: SpyTargetState, buildings?: BuildingLevels): boolean {
   if (target.overpopulation?.blocked === true) return true;
+  if (!buildings) {
+    const cached = blockedByTarget.get(target);
+    if (cached !== undefined) return cached;
+  }
   const normalizedFleet = removeSolarSatellitesFromFleet(target.fleet).fleet;
   const actualFleetPopulation = calculatePlanetPopulation(normalizedFleet, targetSatelliteCount(target), target.raceId);
-  return actualFleetPopulation > calculatePlanetCapacity((buildings ?? targetBuildingLevels(target)).hangar ?? 0);
+  const blocked = actualFleetPopulation > calculatePlanetCapacity((buildings ?? targetBuildingLevels(target)).hangar ?? 0);
+  if (!buildings) blockedByTarget.set(target, blocked);
+  return blocked;
 }
 
 const isBlocked = isNpcPlanetBlocked;
