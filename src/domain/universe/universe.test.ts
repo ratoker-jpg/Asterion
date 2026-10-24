@@ -46,6 +46,7 @@ import {
   resolveUniverseFixtures,
   TEST_MODE_ALLY_PLANET_FIXTURE,
   UNIVERSE_NPC_OWNER_ID,
+  UNINHABITED_PLANETS_ENABLED,
 } from './runtime.ts';
 import { ASTEROID_GAS_CAP } from './asteroid-gas.ts';
 import type { UniverseOwnerAlliance, UniversePlanetNode } from './types.ts';
@@ -111,7 +112,7 @@ test('owner color relation follows ownership and alliance status instead of bot 
 });
 
 test('war is an explicit enemy status for a different alliance', () => {
-  const node = createUniverseSystem({ nowMs: TEST_UNIVERSE_NOW_MS, system: 2 }).positions.find((item) => item.kind === 'uninhabited')!;
+  const node = createUniverseSystem({ nowMs: TEST_UNIVERSE_NOW_MS, system: 2 }).positions.find((item) => item.kind === 'empty')!;
   const currentAlliance: UniverseOwnerAlliance = {
     id: 'alliance-current',
     name: 'Current',
@@ -213,7 +214,7 @@ test('dynamic objects are scheduled independently and never duplicate within a s
   assert.ok(kinds.has('empty'));
   assert.ok(kinds.has('npc'));
   assert.ok(kinds.has('player'));
-  assert.ok(kinds.has('uninhabited'));
+  assert.equal(kinds.has('uninhabited'), UNINHABITED_PLANETS_ENABLED, 'uninhabited planets stay hidden until their mechanic exists');
   assert.ok(kinds.has('asteroid'));
   for (const system of map.systems) {
     for (const kind of ['pirate', 'unique', 'anomaly'] as const) {
@@ -222,8 +223,18 @@ test('dynamic objects are scheduled independently and never duplicate within a s
   }
   assert.deepEqual(createUniverseMap({ nowMs }), map);
   const first = createUniverseSystem({ system: 1, nowMs });
-  assert.ok(first.positions.some((node) => node.kind === 'uninhabited'));
+  assert.equal(first.positions.some((node) => node.kind === 'uninhabited'), UNINHABITED_PLANETS_ENABLED);
   assert.doesNotMatch(first.positions.find((node) => node.kind === 'uninhabited')?.description ?? '', /fixture|runtime|прототип|демонстрац/i);
+});
+
+test('a homeworld outside galaxy 1 appears once: no system-one atlas copy in other galaxies', () => {
+  const home = { id: 'helion-01', name: 'Home', coordinate: { galaxy: 2, system: 4, position: 23 }, isHomeworld: true };
+  const players = (galaxy: number, system: number) => createUniverseSystem({
+    mode: 'production', galaxy, system, nowMs: TEST_UNIVERSE_NOW_MS, galaxyCount: 2, playerPlanets: [home], registeredPlanets: [],
+  }).positions.filter((node) => node.kind === 'player').map((node) => node.coordinate.position);
+  assert.deepEqual(players(2, 4), [23]);
+  assert.deepEqual(players(2, 1), []);
+  assert.deepEqual(players(1, 1), []);
 });
 
 test('owner planet ids are unique and capped at seven in the domain layer', () => {

@@ -1029,17 +1029,10 @@ async function runViewport(width, height) {
       : { kind: 'not-spawned' };
 
     let uniqueSystem = 1;
-    const uninhabitedSystem = await findObject(win, '[data-qa-universe-kind="uninhabited"]');
-    await clickObject(win, '[data-qa-universe-kind="uninhabited"]');
-    const uninhabited = await inspectorSnapshot(win);
-    checkCopy(uninhabited);
-    await checkModal(win);
-    if (uninhabited.kind !== 'uninhabited' || !uninhabited.specialArt.loaded
-      || !uninhabited.specialActions.some(action => action.action === 'disabled' && action.disabled)) {
-      throw new Error(`${label}: uninhabited inspector contract failed ${JSON.stringify(uninhabited)}`);
-    }
-    await capture(win, directory, 'uninhabited-inspector');
-    await dismissInspector(win);
+    // Owner decision (24.10.2026): uninhabited planets are hidden until their
+    // mechanic exists (UNINHABITED_PLANETS_ENABLED). None may reach the map.
+    const uninhabitedSystem = await findObject(win, '[data-qa-universe-kind="uninhabited"]', { required: false });
+    if (uninhabitedSystem) throw new Error(`${label}: hidden uninhabited planet rendered in system ${uninhabitedSystem}`);
 
     uniqueSystem = await findObject(win, '[data-qa-universe-kind="unique"]');
     const unique = await verifyExplorationReachability(win, directory, label, 'unique', '[data-qa-universe-kind="unique"]', uniqueSystem,
@@ -1126,7 +1119,7 @@ async function runViewport(width, height) {
       layout: { htmlClass: map.htmlClass, webStageScale: map.webStageScale, visualViewport: map.visualViewport, stageRect: map.stageRect },
       player: { ownerName: player.ownerName, points: player.points, planetRows: player.planetRows },
       npc: { ownerName: npc.ownerName, planetRows: npc.planetRows, rows: npc.rows, fleetActionsEnabled: npcFleetActions.every((action) => !action.disabled && action.status === 'supported') },
-      specialInspectors: { empty: empty.kind, asteroid: freeAsteroid.kind, occupiedAsteroid: occupiedAsteroid.kind, pirate: pirate.kind, anomaly: anomaly.kind, uninhabited: 'uninhabited', unique: 'unique' },
+      specialInspectors: { empty: empty.kind, asteroid: freeAsteroid.kind, occupiedAsteroid: occupiedAsteroid.kind, pirate: pirate.kind, anomaly: anomaly.kind, uninhabited: 'hidden', unique: 'unique' },
       debrisMarkers: {
         dead: { coordinate: debrisFixtures.deadCoordinate, amount: deadMarker.amount, interaction: deadDebrisInteraction },
         live: { coordinate: debrisFixtures.liveCoordinate, amount: liveMarker.amount, interaction: liveDebrisInteraction },

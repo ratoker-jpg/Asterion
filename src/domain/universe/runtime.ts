@@ -457,14 +457,24 @@ function botFixtureFor(system: number, slot: number, mode: RuntimeMode = 'test')
   return npc ? { ...npc, kind: 'npc' as const, ownerId: NPC_OWNER_ID, known: true } : undefined;
 }
 
-function fixtureFor(system: number, slot: number, mode: RuntimeMode = 'test', registeredPlanets?: readonly UniverseRegisteredPlanet[]) {
+/**
+ * Owner decision (24.10.2026): uninhabited planets are hidden until their
+ * mechanic is designed. Generation stays in code (and its seeded draws stay in
+ * place, so the rest of the map does not shift); set true to bring them back.
+ */
+export const UNINHABITED_PLANETS_ENABLED = false;
+
+function fixtureFor(galaxy: number, system: number, slot: number, mode: RuntimeMode = 'test', registeredPlanets?: readonly UniverseRegisteredPlanet[]) {
   const npc = botFixtureFor(system, slot, mode);
   // When an authoritative runtime registry is supplied, its presence is the
   // source of truth for Bot 01 planets. This prevents a destroyed target from
   // being recreated by the static Test Mode atlas on the next render/reload.
   if (npc && (registeredPlanets === undefined || registeredPlanets.some((planet) => planet.id === npc.id))) return npc;
-  if (system === 1) {
+  // The system-one atlas (home slot, ally fixture) belongs to galaxy 1 only;
+  // other galaxies' system 1 is ordinary space.
+  if (system === 1 && galaxy === GALAXY) {
     const fixture = SYSTEM_ONE_FIXTURES[slot];
+    if (fixture?.kind === 'uninhabited' && !UNINHABITED_PLANETS_ENABLED) return undefined;
     return fixture?.mode && fixture.mode !== mode ? undefined : fixture;
   }
   return undefined;
@@ -519,7 +529,7 @@ function createPositionNode(
   }
   const fixture = persisted || registered
     ? undefined
-    : fixtureFor(system, slot, options.mode, options.registeredPlanets);
+    : fixtureFor(galaxy, system, slot, options.mode, options.registeredPlanets);
   const kind = persisted ? 'player' : registered?.kind ?? fixture?.kind ?? generatedKind();
   const ownerId = persisted?.ownerId ?? registered?.ownerId ?? fixture?.ownerId;
   const isHomeworld = persisted?.isHomeworld ?? registered?.isHomeworld ?? (kind === 'player' && system === 1 && slot === 1);
@@ -553,7 +563,7 @@ function createUniverseSystemBase(options: CreateUniverseSystemOptions, assets: 
   const random = mulberry32(10_000 + galaxy * 977 + system * 1_003
     + (options.mode === 'test' ? testUniverseLayoutSeed() * 37 : 0));
   const fixtureSlots = Array.from({ length: POSITION_COUNT }, (_, index) => index + 1)
-    .filter((slot) => fixtureFor(system, slot, options.mode, options.registeredPlanets)
+    .filter((slot) => fixtureFor(galaxy, system, slot, options.mode, options.registeredPlanets)
       || isSuppressedBotFixture(options, galaxy, system, slot)
       || isSuppressedHelionFixture(options, galaxy, system, slot));
   const persistedSlots = (options.playerPlanets ?? [])
@@ -568,7 +578,8 @@ function createUniverseSystemBase(options: CreateUniverseSystemOptions, assets: 
     Array.from({ length: POSITION_COUNT }, (_, index) => index + 1).filter((slot) => !fixedSlots.includes(slot)),
     random,
   );
-  const occupiedSlots = new Set([...fixedSlots, ...remainingSlots.slice(0, Math.max(0, planetCount - fixedSlots.length))]);
+  const generatedSlots = UNINHABITED_PLANETS_ENABLED ? remainingSlots.slice(0, Math.max(0, planetCount - fixedSlots.length)) : [];
+  const occupiedSlots = new Set([...fixedSlots, ...generatedSlots]);
   const positions = Array.from({ length: POSITION_COUNT }, (_, index) => index + 1).map((slot) => occupiedSlots.has(slot)
     ? createPositionNode(galaxy, system, slot, options, assets)
     : {
