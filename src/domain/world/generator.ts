@@ -43,7 +43,10 @@ function coordinateKey(coordinate: UniverseCoordinate): string {
   return `${coordinate.galaxy}:${coordinate.system}:${coordinate.position}`;
 }
 
-/** A small, believable garrison: the stub can be spied on and attacked, it never acts. */
+/**
+ * Legacy stub garrison roll. New campaigns discard its result (NPCs start with the
+ * player's canonical package); it is still called only to keep seeded placement stable.
+ */
 function createStubGarrison(raceId: PlayerFactionId, random: () => number) {
   const fleet = createEmptyFleetState();
   const defense = createEmptyDefenseState();
@@ -75,8 +78,9 @@ function createStubGarrison(raceId: PlayerFactionId, random: () => number) {
 
 /**
  * Builds the world of a new campaign from its seed. Pure: the same config
- * always yields the same player start and the same NPC stubs. NPC stubs are
- * owners with exactly one planet and no behaviour (no flights, no growth).
+ * always yields the same player start and the same NPC starts. Each NPC begins
+ * with one planet and the player's canonical package for its race (wallet,
+ * buildings, starting fleet, no defense); its later growth is its own.
  */
 export function generateWorld(config: NewGameConfig, now: number): GeneratedWorld {
   const random = createSeededRandom(`world:${config.seed}`);
