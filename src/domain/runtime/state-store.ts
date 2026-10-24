@@ -8,8 +8,12 @@ export type RuntimeStateSnapshot = {
   command: CommandState;
   rating: RatingPrototypeState;
   ownerScores: Record<string, OwnerScore>;
+  /** Public identity of every rated owner (map name and race), never private persona data. */
+  owners: Record<string, RatedOwnerIdentity>;
   currentPlayerId: string;
 };
+
+export type RatedOwnerIdentity = { name: string; factionId: string };
 
 let currentSnapshot: RuntimeStateSnapshot | null = null;
 const listeners = new Set<() => void>();

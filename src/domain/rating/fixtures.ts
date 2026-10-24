@@ -52,6 +52,29 @@ export function migrateRatingPrototypeState(value: unknown): RatingPrototypeStat
   };
 }
 
+const RATING_RACE_BY_FACTION: Readonly<Record<string, PlayerRatingEntry['race']>> = { aegis: 'aster', synod: 'cyber', veyra: 'xeno' };
+
+/** Production standings: every real owner with their canonical scores, ranked by total points. */
+export function createOwnerRatingEntries(
+  ownerScores: Readonly<Record<string, { resourcePoints: number; battlePoints: number }>>,
+  owners: Readonly<Record<string, { name: string; factionId: string }>>,
+  currentPlayerId: string,
+): PlayerRatingEntry[] {
+  const safe = (value: number | undefined) => Math.max(0, Math.floor(Number.isFinite(value) ? value! : 0));
+  return Object.entries(owners)
+    .map(([id, owner]) => {
+      const resourcePoints = safe(ownerScores[id]?.resourcePoints);
+      const battlePoints = safe(ownerScores[id]?.battlePoints);
+      return {
+        id, rank: 0, name: owner.name, race: RATING_RACE_BY_FACTION[owner.factionId] ?? 'aster', allianceTag: null,
+        achievementPoints: 0, resourcePoints, battlePoints, totalPoints: resourcePoints + battlePoints,
+        isCurrentPlayer: id === currentPlayerId,
+      };
+    })
+    .sort((left, right) => right.totalPoints - left.totalPoints || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))
+    .map((entry, index) => ({ ...entry, rank: index + 1 }));
+}
+
 export function createPlayerRatingEntries(
   currentPlayerScore: number | { resourcePoints: number; battlePoints: number } = 0,
   mode: RuntimeMode = 'test',

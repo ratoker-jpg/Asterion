@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { EmblemGlyph } from './CommandView';
 import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
-import { CURRENT_PLAYER_ID, createPlayerRatingEntries, withTestOwnerScoreFixtures } from './domain/rating/fixtures.ts';
+import { CURRENT_PLAYER_ID, createOwnerRatingEntries, createPlayerRatingEntries, withTestOwnerScoreFixtures } from './domain/rating/fixtures.ts';
 import { createAllianceRatingEntries } from './domain/rating/alliances.ts';
 import { selectOwnerAlliance } from './domain/command/selectors.ts';
 import type { CommandState } from './domain/command/types.ts';
@@ -32,12 +32,14 @@ export function RatingView({
   ownerScores = {},
   currentPlayerScore,
   currentPlayerId = CURRENT_PLAYER_ID,
+  owners,
 }: {
   mode?: RuntimeMode;
   command: CommandState;
   ownerScores?: Readonly<Record<string, OwnerScore>>;
   currentPlayerScore?: OwnerScore;
   currentPlayerId?: string;
+  owners?: Readonly<Record<string, { name: string; factionId: string }>>;
 }) {
   const [mode, setMode] = useState<RatingMode>('players');
   const [query, setQuery] = useState('');
@@ -49,9 +51,12 @@ export function RatingView({
 
   const currentAlliance = useMemo(() => selectOwnerAlliance(command, currentPlayerId), [command, currentPlayerId]);
   const players = useMemo(
-    () => createPlayerRatingEntries(currentPlayerScore, runtimeMode, currentPlayerId)
-      .map((entry) => entry.isCurrentPlayer ? { ...entry, allianceTag: currentAlliance?.tag ?? null } : entry),
-    [currentPlayerScore, currentPlayerId, currentAlliance, runtimeMode],
+    () => (runtimeMode === 'production' && owners
+      ? createOwnerRatingEntries(ownerScores, owners, currentPlayerId)
+        .map((entry) => ({ ...entry, allianceTag: selectOwnerAlliance(command, entry.id)?.tag ?? null }))
+      : createPlayerRatingEntries(currentPlayerScore, runtimeMode, currentPlayerId)
+        .map((entry) => entry.isCurrentPlayer ? { ...entry, allianceTag: currentAlliance?.tag ?? null } : entry)),
+    [currentPlayerScore, currentPlayerId, currentAlliance, runtimeMode, owners, ownerScores, command],
   );
   const scoresWithFixtures = useMemo(() => withTestOwnerScoreFixtures(ownerScores, runtimeMode), [ownerScores, runtimeMode]);
   const alliances = useMemo(
