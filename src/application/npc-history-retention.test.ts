@@ -19,7 +19,7 @@ function base(): SaveState {
 }
 
 function report(id: string, defender: string, missionType = 'pirate-raid', attacker = 'pirates'): BattleReport {
-  return { id, missionType, attacker: { playerId: attacker }, defender: { playerId: defender } } as unknown as BattleReport;
+  return { id, missionType, attacker: { playerId: attacker }, defender: { playerId: defender }, rounds: [] } as unknown as BattleReport;
 }
 
 function raidFlight(id: string, phase: FlightRecord['phase'], targetKind: 'npc' | 'player', owner: string): FlightRecord {
@@ -153,7 +153,7 @@ test('NPC spy intelligence keeps the newest report per owner and target; player 
   const state = base();
   const player = state.profile.playerId;
   const spy = (id: string, ownerId: string | undefined, targetPlanetId: string, createdAt: number) =>
-    ({ id, ownerId, targetPlanetId, createdAt, missionId: `m-${id}` }) as never;
+    ({ id, ownerId, targetPlanetId, createdAt: AT - 60_000 + createdAt, missionId: `m-${id}` }) as never;
   const reports = [
     spy('a1', 'npc-gen-1', 'p1', 1), spy('a2', 'npc-gen-1', 'p1', 3), spy('b1', 'npc-gen-2', 'p1', 2),
     spy('a3', 'npc-gen-1', 'p2', 1), spy('mine1', player, 'p1', 1), spy('mine2', undefined, 'p1', 2), spy('a4', 'npc-gen-1', 'p1', 2),
