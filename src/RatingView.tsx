@@ -219,11 +219,11 @@ function PlayerTable({
   return (
     <div className="rating-table-v2 rating-table-v2--players" role="table" aria-label="Рейтинг игроков">
       <div className="rating-row-v2 rating-head-v2" role="row">
-        <span>МЕСТО</span><span>ИГРОК</span><span>АЛЬЯНС</span>
-        <ScoreHead label="ДОСТИЖ." iconPath={asterionAssetIntegrationAssets.scoreIcons.achievementPoints} scoreKey="achievementPoints" selected={sortKey === 'achievementPoints'} direction={direction} onSort={onSort} />
+        <span>МЕСТО</span><span>ИГРОК</span><span>РАСА</span><span>АЛЬЯНС</span>
         <ScoreHead label="ОБЩИЕ" iconPath={asterionAssetIntegrationAssets.scoreIcons.totalPoints} scoreKey="totalPoints" selected={sortKey === 'totalPoints'} direction={direction} onSort={onSort} />
         <ScoreHead label="РЕСУРС." iconPath={asterionAssetIntegrationAssets.scoreIcons.resourcePoints} scoreKey="resourcePoints" selected={sortKey === 'resourcePoints'} direction={direction} onSort={onSort} />
         <ScoreHead label="БОЕВЫЕ" iconPath={asterionAssetIntegrationAssets.scoreIcons.battlePoints} scoreKey="battlePoints" selected={sortKey === 'battlePoints'} direction={direction} onSort={onSort} />
+        <ScoreHead label="ДОСТИЖ." iconPath={asterionAssetIntegrationAssets.scoreIcons.achievementPoints} scoreKey="achievementPoints" selected={sortKey === 'achievementPoints'} direction={direction} onSort={onSort} />
       </div>
       {entries.map((entry) => (
         <PlayerRow key={entry.id} entry={entry} selectedId={selectedId} onSelect={onSelect} />
@@ -264,12 +264,13 @@ function PlayerRow({
       data-qa-rating-player-row={entry.id}
     >
       <span className="rank-v2"><b>{entry.rank}</b></span>
-      <span className="identity-v2"><RaceEmblem race={entry.race} /><strong className="utility-data-text">{entry.name}</strong></span>
+      <span className="identity-v2"><strong className="utility-data-text">{entry.name}</strong></span>
+      <span className={`race-label-v2 race-${entry.race}`}>{RACE_LABELS[entry.race]}</span>
       <span className="alliance-tag-v2">{entry.allianceTag ? `[${entry.allianceTag}]` : '—'}</span>
-      <Value value={entry.achievementPoints} />
-      <Value value={entry.totalPoints} />
+      <Value value={entry.totalPoints} lead />
       <Value value={entry.resourcePoints} />
       <Value value={entry.battlePoints} />
+      <Value value={entry.achievementPoints} />
     </button>
   );
 }
@@ -338,17 +339,14 @@ function ScoreHead<K extends string>({
   direction: SortDirection;
   onSort: (key: K) => void;
 }) {
-  return <button type="button" className={`utility-control score-head-v2 ${selected ? 'selected' : ''}`} onClick={() => onSort(scoreKey)}><span>{label}</span>{iconPath ? <img className="score-head-v2__icon" src={iconPath} alt="" aria-hidden="true" draggable={false} /> : null}<b>{selected ? (direction === 'desc' ? '▼' : '▲') : '◇'}</b></button>;
+  return <button type="button" className={`utility-control score-head-v2 ${selected ? 'selected' : ''}`} onClick={() => onSort(scoreKey)}><span>{label}</span>{iconPath ? <img className="score-head-v2__icon" src={iconPath} alt="" aria-hidden="true" draggable={false} /> : null}{selected ? <b>{direction === 'desc' ? '▼' : '▲'}</b> : null}</button>;
 }
 
-function Value({ value }: { value: number }) {
-  return <span className="utility-data-text score-value-v2">{new Intl.NumberFormat('ru-RU').format(value)}</span>;
+function Value({ value, lead = false }: { value: number; lead?: boolean }) {
+  return <span className={`utility-data-text score-value-v2${lead ? ' is-lead' : ''}`}>{new Intl.NumberFormat('ru-RU').format(value)}</span>;
 }
 
-function RaceEmblem({ race }: { race: PlayerRatingEntry['race'] }) {
-  const label = race === 'aster' ? 'A' : race === 'cyber' ? 'C' : 'X';
-  return <span className={`race-emblem-v2 race-${race}`} aria-label={race}>{label}</span>;
-}
+const RACE_LABELS: Record<PlayerRatingEntry['race'], string> = { aster: 'Астеры', cyber: 'Илары', xeno: 'Рой' };
 
 function Pagination({ page, pageCount, onPage }: { page: number; pageCount: number; onPage: (page: number) => void }) {
   const pages = Array.from({ length: pageCount }, (_, index) => index + 1);

@@ -109,6 +109,11 @@
 .uw .uw-owner-copy small { color: var(--uw-k); }
 .uw .uw-owner-copy h3 { margin: 2px 0; overflow: hidden; color: var(--uw-text); font-size: 15px !important; font-weight: 800; white-space: nowrap; text-overflow: ellipsis; }
 .uw .uw-owner-copy span { display: block; color: var(--uw-muted); font-size: 11px !important; }
+.uw .uw-owner-copy .uw-owner-presence { display: flex; align-items: center; gap: 6px; margin-top: 4px; color: var(--uw-muted); font-size: 11px !important; font-style: normal; font-weight: 700; }
+.uw .uw-owner-presence i { width: 7px; height: 7px; flex: none; border-radius: 50%; background: #5d6f82; }
+.uw .uw-owner-presence.is-online { color: #35e58a; }
+.uw .uw-owner-presence.is-online i { background: #35e58a; box-shadow: 0 0 6px rgba(53, 229, 138, .7); }
+.uw .uw-owner-presence.is-recent i { background: #f2b84b; }
 .uw .uw-owner-copy strong { display: block; margin-top: 6px; color: #56d9f2; font-size: 11px !important; font-weight: 800; letter-spacing: .1em; }
 .uw .uw-alliance { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 14px; align-items: center; padding: 14px; }
 .uw .uw-alliance-crest { width: 76px; height: 76px; display: grid; place-items: center; border-radius: 16px; background: radial-gradient(circle, rgba(86, 217, 242, .16), transparent 70%); }

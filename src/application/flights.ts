@@ -101,7 +101,7 @@ import type {
 } from '../domain/espionage/types.ts';
 import { resolveSpyOwnerProfile } from '../domain/espionage/owner-profile.ts';
 import { collectOrbitalDebrisAtCoordinate, getOrbitalDebrisAtCoordinate } from '../domain/espionage/orbital-debris.ts';
-import { createUniverseSystem, UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
+import { createUniverseSystem, MAX_PLANETS_PER_OWNER, UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 import type { UniverseCoordinate, UniverseObjectKind, UniversePersistedPlayerPlanet, UniverseRegisteredPlanet } from '../domain/universe/types.ts';
 import { findUniverseAsteroidAtCoordinate } from '../domain/universe/asteroid-simulation.ts';
 import { advanceAsteroidGasAt } from '../domain/universe/asteroid-gas.ts';
@@ -194,6 +194,7 @@ export type FlightErrorCode =
   | 'capacity-exceeded'
   | 'target-overpopulated'
   | 'flight-limit-reached'
+  | 'planet-limit-reached'
   | 'invalid-command';
 
 export type FlightError = {
@@ -1674,6 +1675,8 @@ export function dispatchFlight(
     if (targetHasInvalidKind(command.targetKind)) return failure(state, 'target-not-colonizable', 'Эта позиция не подходит для колонизации.');
     if (targetOccupied(state, command.destination.coordinate, departedAt, undefined, runtimeOptions.mode)) return failure(state, 'target-occupied', 'Координата уже занята.');
     if (!selectedColonizerOnly(selectedShips)) return failure(state, 'wrong-ship-composition', 'Для колонизации нужен ровно один колонизатор и никаких других кораблей.');
+    // Owner rule: at most seven planets for any owner (home + six colonies), as for NPCs.
+    if (Object.keys(state.planets).length >= MAX_PLANETS_PER_OWNER) return failure(state, 'planet-limit-reached', `Достигнут предел: не более ${MAX_PLANETS_PER_OWNER} планет.`);
   }
 
   let transportTarget: ResolvedTransportTarget | undefined;
@@ -2599,6 +2602,11 @@ export function reconcileFlights(
         const completed: FlightRecord = { ...settled.flight, phase: 'completed', completedAt: current.returnAt,
           completionReason: current.completionReason ?? 'normal-return' };
         next = completeFlight(settled.state, settled.flight, completed);
+        // The probe is home: its mission ends as the player's does.
+        const npcSpyMission = current.missionId === 'espionage' ? spyMissionForFlight(next, current) : undefined;
+        if (npcSpyMission?.status === 'returning') {
+          next = withEspionageState(next, updateSpyMission(currentEspionageState(next), { ...npcSpyMission, status: 'returned', returnedAt: current.returnAt, nextReportAt: undefined }));
+        }
         changed = true;
         events.push({ flight: completed, status: 'returned', notice: 'Флот NPC вернулся к владельцу.' });
         continue;
@@ -3328,14 +3336,17 @@ export function reconcileFlights(
       }
 
       const planetId = makePlanetId(current.destinationCoordinate);
-      if (next.planets[planetId]) {
+      // A seventh planet gained while this colonizer flew: it returns, as an NPC's does.
+      if (next.planets[planetId] || Object.keys(next.planets).length >= MAX_PLANETS_PER_OWNER) {
         const returnStartedAt = Math.min(now, arrivalAt);
         const returningState = beginDomainFlightReturn(next.flights, current.id, returnStartedAt, 'target-occupied');
         const returning = returningState.records.find((flight) => flight.id === current.id)!;
         const withArrival: FlightRecord = { ...returning, arrivedAt: arrivalAt, completionReason: 'target-occupied' };
         next = { ...next, flights: updateFlight(returningState, withArrival) };
         changed = true;
-        events.push({ flight: withArrival, status: 'target-occupied', notice: 'Координата уже занята. Колонизатор возвращается.' });
+        events.push({ flight: withArrival, status: 'target-occupied', notice: next.planets[planetId]
+          ? 'Координата уже занята. Колонизатор возвращается.'
+          : `Достигнут предел в ${MAX_PLANETS_PER_OWNER} планет. Колонизатор возвращается.` });
         continue;
       }
       const colony = createColonyPlanet(next, current.destinationCoordinate);

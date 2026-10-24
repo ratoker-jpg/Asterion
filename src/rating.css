@@ -26,7 +26,7 @@
   width:100%;height:calc(100% / 13);min-height:43px;display:grid;align-items:center;
   border:0;border-bottom:1px solid rgba(64,179,207,.12);background:rgba(3,21,32,.36);color:#a8c1c8;text-align:left
 }
-.rating-table-v2--players .rating-row-v2{grid-template-columns:88px minmax(210px,1.45fr) 150px repeat(4,minmax(120px,.8fr))}
+.rating-table-v2--players .rating-row-v2{grid-template-columns:88px minmax(200px,1.4fr) 110px 130px repeat(4,minmax(110px,.8fr))}
 .rating-table-v2--alliances .rating-row-v2{grid-template-columns:88px minmax(220px,1.7fr) 100px 110px repeat(3,minmax(130px,1fr))}
 .rating-row-v2>*{min-width:0;padding:0 14px}
 .rating-head-v2{height:calc(100% / 13);min-height:43px;background:linear-gradient(180deg,rgba(7,50,65,.92),rgba(4,31,43,.92));color:#7ca8b4;font-weight:800;letter-spacing:.7px}
@@ -55,7 +55,11 @@
 .race-emblem-v2::first-letter,.alliance-emblem-v2::first-letter{transform:rotate(-45deg)}
 .race-cyber{color:#aab7ff}.race-xeno{color:#74f0ad}
 .alliance-tag-v2{color:#63bbcf;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.score-value-v2{text-align:right;font-variant-numeric:tabular-nums;color:#d8edf2}
+.score-value-v2{text-align:right;font-variant-numeric:tabular-nums;color:#d8edf2;font-size:14px !important;font-weight:700}
+.score-value-v2.is-lead{color:#f2fdff;font-size:18px !important;font-weight:800}
+.identity-v2 strong{font-size:14px !important;font-weight:700}
+.race-label-v2{color:#8fb4bf;font-size:12px !important;font-weight:700;letter-spacing:.3px}
+.race-label-v2.race-aster{color:#6fe8ff}
 .rating-selection-v2{min-width:420px;height:36px;display:flex;align-items:center;justify-content:flex-end;gap:14px;color:#73949e;white-space:nowrap}
 .rating-selection-v2 strong{color:#dffaff}
 .rating-selection-v2 .utility-data-text{color:#9ec8d2}

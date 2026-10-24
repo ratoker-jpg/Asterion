@@ -1,4 +1,5 @@
 import { isFlightVisibleToPlayer, isHostileFlightIncomingToPlayer } from './application/flight-visibility.ts';
+import { selectOwnerPresence } from './application/owner-presence.ts';
 import { dispatchBot01Exploration } from './application/exploration-bot01.ts';
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { flushSync, createPortal } from 'react-dom';
@@ -296,6 +297,7 @@ type RuntimeToast = {
 };
 
 const TOAST_AUTO_CLOSE_MS = 3_000;
+const SAVE_FAILURE_NOTICE_INTERVAL_MS = 10 * 60_000;
 const TOAST_STACK_LIMIT = 3;
 /** Replay compute per catch-up task before React gets the frame back. */
 const NPC_CATCHUP_TASK_BUDGET_MS = 40;
@@ -410,7 +412,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const [toasts, setToasts] = useState<RuntimeToast[]>([]);
   const [lastNotice, setLastNotice] = useState('Система готова. Локальное сохранение активно.');
   const noticeSeq = useRef(0);
-  const persistenceFailureNotified = useRef(false);
+  // When a save failure was last shown (null: never in this window).
+  const persistenceFailureNotified = useRef<number | null>(null);
   const npcReplayContinuation = useRef<number | null>(null);
 
   /**
@@ -949,14 +952,15 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const writeSave = useCallback((value: SaveState) => {
     const result = persistence.write(value);
     if (!result.ok) {
-      if (!persistenceFailureNotified.current) {
-        persistenceFailureNotified.current = true;
+      // A save near the storage limit can alternate between failing and
+      // succeeding; tell the player once in a while, not on every write.
+      const now = Date.now();
+      if (persistenceFailureNotified.current === null || now - persistenceFailureNotified.current >= SAVE_FAILURE_NOTICE_INTERVAL_MS) {
+        persistenceFailureNotified.current = now;
         const reason = result.error.trim().slice(0, 160);
         setNotice(reason ? `Не удалось сохранить игру: ${reason}` : 'Не удалось сохранить игру в браузере.', 'error');
       }
-      return;
     }
-    persistenceFailureNotified.current = false;
   }, [persistence, setNotice]);
   const lastCatchupWriteAt = useRef(0);
   const deferredCatchupWrite = useRef<number | null>(null);
@@ -1181,6 +1185,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     () => getStorageCapacities(currentPlanetState.buildings),
     [currentPlanetState.buildings],
   );
+  // NPC sessions advance only with replay, so this follows state.npc.
+  const ownerPresence = useMemo(() => selectOwnerPresence(state), [state.npc, state.profile.playerId]);
   const reportsUnreadCount = useMemo(() => {
     const items = buildReportsFeed(state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.pirate?.reconReports, state.flights.records, state.exploration, state.profile.playerId);
     return Object.values(getReportUnreadCounts(items, state.reports)).reduce((total, count) => total + count, 0);
@@ -2444,6 +2450,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
             />
           ) : activeRoute === 'universe' ? (
             <UniverseView
+              ownerPresence={ownerPresence}
               pirateContacts={pirateContacts}
               pirateContactState={state.pirate?.contact}
               pirateFocusTarget={pirateFocusTarget}
