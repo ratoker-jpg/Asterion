@@ -114,6 +114,24 @@ export function isValidPirateContactDefeatRecord(
     && value.nextEligibleAt === value.defeatedAt + PIRATE_CONTACT_QUIET_MS;
 }
 
+// Defeat records are immutable once saved; every system render re-reads all of
+// them, so each record object's validity is computed once.
+const validDefeatRecords = new WeakMap<object, boolean>();
+
+function isValidDefeatRecordCached(record: PirateContactDefeatRecord): boolean {
+  if (!isRecord(record)) return false;
+  const cached = validDefeatRecords.get(record);
+  if (cached !== undefined) return cached;
+  const valid = isValidPirateContactDefeatRecord(record);
+  validDefeatRecords.set(record, valid);
+  return valid;
+}
+
+// The shifted sequence is a pure function of the (append-only) base cycles and
+// this system's defeats. Re-deriving every cycle since the epoch on each system
+// render dominated NPC decisions, so the latest few results per base are kept.
+const shiftedScheduleCache = new WeakMap<object, Map<string, readonly PirateScheduleCycle[]>>();
+
 export type PirateScheduleCycle = Readonly<{
   cycleIndex: number;
   startAt: number;
@@ -133,12 +151,17 @@ export function applyPirateContactDefeatsToSchedules<T extends PirateScheduleCyc
 ): T[] {
   const records = new Map<string, PirateContactDefeatRecord>();
   for (const record of defeats) {
-    if (record.galaxy !== galaxy || record.system !== system || !isValidPirateContactDefeatRecord(record)) continue;
+    if (record.galaxy !== galaxy || record.system !== system || !isValidDefeatRecordCached(record)) continue;
     const previous = records.get(record.contactCycleKey);
     if (!previous || record.defeatedAt < previous.defeatedAt) records.set(record.contactCycleKey, record);
   }
+  const signature = `${galaxy}:${system}:${schedules.length}:${[...records.values()]
+    .map((record) => `${record.contactCycleKey}@${record.defeatedAt}`).sort().join('|')}`;
+  let bySignature = shiftedScheduleCache.get(schedules);
+  const cached = bySignature?.get(signature);
+  if (cached) return cached as T[];
   let nextStartAt: number | undefined;
-  return schedules.map((schedule) => {
+  const shifted = schedules.map((schedule) => {
     const startAt = nextStartAt ?? schedule.startAt;
     const expiresAt = schedule.present ? startAt + schedule.lifetimeMs : startAt;
     const contactCycleKey = createPirateContactCycleKey({ galaxy, system, cycleIndex: schedule.cycleIndex, startAt });
@@ -151,4 +174,8 @@ export function applyPirateContactDefeatsToSchedules<T extends PirateScheduleCyc
     nextStartAt = respawnAt;
     return { ...schedule, startAt, expiresAt: adjustedExpiresAt, respawnAt };
   });
+  if (!bySignature) { bySignature = new Map(); shiftedScheduleCache.set(schedules, bySignature); }
+  if (bySignature.size >= 8) bySignature.clear();
+  bySignature.set(signature, shifted);
+  return shifted;
 }
