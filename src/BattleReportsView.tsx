@@ -1238,7 +1238,8 @@ export function BattleReportsView({ planetName, coords, onBack }: { planetName: 
   }, []);
 
   const viewModels = useMemo(
-    () => new Map(history.reports.map((report) => [report.id, createBattleReportViewModel(report, {
+    () => new Map(history.reports.filter((report) => !saveState.npc?.profiles[report.attacker.playerId ?? '']
+      || !saveState.npc?.profiles[report.defender.playerId ?? '']).map((report) => [report.id, createBattleReportViewModel(report, {
       awardedBattlePoints: selectRecordedBattlePointAwards(saveState.rating, report, saveState.profile.playerId),
     })])),
     [history.reports, saveState],

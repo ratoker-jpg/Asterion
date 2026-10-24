@@ -296,11 +296,12 @@ function flightShipCounts(state: SaveState, factionId: FactionId, ownerId: strin
   const reports = lazyReportLookup(state);
   for (const flight of state.flights.records) {
     // Player dispatch reserves ships but keeps them in the source planet's
-    // saved fleet until the mission applies its result. Bot 001 removes its
-    // ships at launch, so only its in-flight fleet needs a separate score.
-    if (flight.ownerSide !== 'bot01') continue;
+    // saved fleet until the mission applies its result. Bot 001 and the
+    // autonomous NPCs remove their ships at launch, so their in-flight fleets
+    // need a separate score (otherwise a fleet in flight drops out of the rating).
+    if (flight.ownerSide !== 'bot01' && !(flight.ownerSide === 'npc' && flight.ownerId)) continue;
     if (flight.phase !== 'outbound' && flight.phase !== 'returning' && flight.phase !== 'arrived') continue;
-    const flightOwnerId = flight.ownerSide === 'bot01' ? UNIVERSE_NPC_OWNER_ID : state.profile.playerId;
+    const flightOwnerId = flight.ownerSide === 'bot01' ? UNIVERSE_NPC_OWNER_ID : flight.ownerId;
     if (flightOwnerId !== ownerId) continue;
     const report = flight.attackResolution ? reports(flight.attackResolution.reportId) : undefined;
     const shipCounts = report

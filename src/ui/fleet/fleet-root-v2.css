@@ -36,6 +36,12 @@
 /* «В пути» summary bar + dropdown */
 .fleet-root-v2 .fleet-flights-v2 { position: relative; z-index: 2; display: flex; align-items: center; gap: 10px; min-height: 60px; padding: 8px 14px; }
 .fleet-flights-v2__label { color: var(--ut-label, #8fb6c0); font-size: 11px !important; font-weight: 800; letter-spacing: .14em; white-space: nowrap; }
+.fleet-flights-v2__slots { display: inline-flex; align-items: baseline; gap: 8px; padding: 4px 12px; border: 1px solid rgba(86, 217, 242, .35); border-radius: var(--ut-r-chip, 6px); background: rgba(86, 217, 242, .08); white-space: nowrap; }
+.fleet-flights-v2__slots small { color: var(--ut-label, #8fb6c0); font-size: 11px !important; font-weight: 800; letter-spacing: .12em; }
+.fleet-flights-v2__slots b { color: #e9fbff; font-size: 14px !important; font-weight: 800; font-variant-numeric: tabular-nums; }
+.fleet-flights-v2__slots em { color: #8fb6c0; font-size: 11px !important; font-style: normal; }
+.fleet-flights-v2__slots.is-full { border-color: rgba(240, 68, 94, .55); background: rgba(240, 68, 94, .1); }
+.fleet-flights-v2__slots.is-full b, .fleet-flights-v2__slots.is-full em { color: #ff8a9b; }
 .fleet-flights-v2__empty { color: #7f98a0; font-size: 12px !important; }
 .fleet-flights-v2__count { display: inline-flex; align-items: center; gap: 7px; height: 38px; padding: 0 12px 0 5px; border-radius: 10px; border: 1px solid rgba(126, 200, 220, .16); background: rgba(16, 26, 31, .7); font-size: 12px !important; font-weight: 800; white-space: nowrap; }
 .fleet-flights-v2__count img { width: 28px; height: 28px; border-radius: 7px; object-fit: cover; }

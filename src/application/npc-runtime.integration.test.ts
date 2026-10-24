@@ -5,13 +5,14 @@ import { createDefaultNewGameConfig } from '../domain/world/config.ts';
 import { getNpcSessionEvents } from '../domain/npc/calendar.ts';
 import { createNpcState } from '../domain/npc/state.ts';
 import { CAMPAIGN_SPEED_SCALE } from '../domain/runtime/mode.ts';
-import { getNpcBuildingCandidates, settleNpcPlanet, startNpcBuilding } from './npc-economy.ts';
+import { getNpcBuildingCandidates, NPC_APPLIED_ID_LIMIT, settleNpcPlanet, startNpcBuilding } from './npc-economy.ts';
 import { isNpcCatchupPending } from './npc-catchup.ts';
 import { reconcileRuntime, type RuntimeReconcileEvent } from './reconcile.ts';
 import { createInitialSaveState, createPersistenceFacade } from './persistence.ts';
 import type { SaveState } from './contracts.ts';
 import { generateNpcReplayEvents, type NpcReplayEmission } from './npc-replay.ts';
 import type { SpyTargetState } from '../domain/espionage/types.ts';
+import { MAX_PLANETS_PER_OWNER } from '../domain/universe/runtime.ts';
 
 const START = Date.UTC(2026, 9, 20, 12);
 const HOUR = 60 * 60 * 1_000;
@@ -203,7 +204,7 @@ test('NPC decisions run inside generated sessions and debit only their own exact
     // committed prefix immediately before this decision, so the comparison
     // isolates its one debit rather than earlier actions in the same replay.
     state = advanceTo(state, scheduled.at - 1, [scheduled.at - 1]).state;
-    const beforeTarget = npcTargets(state).find((item) => item.ownerId === ownerId)!;
+    const beforeTargets = npcTargets(state);
     const result = reconcileRuntime(state, {
       planetId: state.currentPlanetId,
       now: scheduled.at,
@@ -212,14 +213,21 @@ test('NPC decisions run inside generated sessions and debit only their own exact
     });
     state = result.state;
     const decision = keepNpcEvents(result.events).find((entry) =>
-      entry.kind === 'npc-economy' && entry.event.at === scheduled.at && entry.event.started);
+      entry.kind === 'npc-economy' && entry.event.at === scheduled.at && entry.event.started && Boolean(entry.event.selectedRole));
     if (!decision || decision.kind !== 'npc-economy') continue;
+    // One look may do several things; isolate a building that was the only
+    // paid action on its planet in that look.
+    const samePlanet = keepNpcEvents(result.events).filter((entry) => entry.kind === 'npc-economy' && entry.event.at === scheduled.at
+      && entry.event.started && entry.event.planetId === decision.event.planetId);
+    if (samePlanet.length !== 1) continue;
 
     assert.ok(intervals.some(({ start, end }) => decision.event.at >= start && decision.event.at < end),
       'a persisted economic action must occur during the generated online session');
     assert.ok(decision.event.selectedRole);
+    const beforeTarget = beforeTargets.find((item) => item.id === decision.event.planetId && item.ownerId === ownerId)!;
+    assert.ok(beforeTarget, 'the decision identifies the actual paying owner planet');
     const settled = settleNpcPlanet(beforeTarget, decision.event.at, { timeScale }).target;
-    const candidate = getNpcBuildingCandidates(settled).find((item) => item.role === decision.event.selectedRole);
+    const candidate = getNpcBuildingCandidates(settled, true).find((item) => item.role === decision.event.selectedRole);
     assert.ok(candidate?.availability.canBuild && candidate.availability.cost);
     const expected = startNpcBuilding(settled, decision.event.selectedRole, decision.event.at,
       { timeScale }, decision.event.idempotencyKey);
@@ -228,7 +236,7 @@ test('NPC decisions run inside generated sessions and debit only their own exact
     assert.equal(expected.target.resources.minerals, settled.resources.minerals - candidate.availability.cost.minerals);
     assert.equal(expected.target.resources.gas, settled.resources.gas - candidate.availability.cost.gas);
 
-    const actualTarget = npcTargets(state).find((item) => item.ownerId === ownerId)!;
+    const actualTarget = npcTargets(state).find((item) => item.id === beforeTarget.id)!;
     assert.deepEqual(ownerEconomy(actualTarget), ownerEconomy(expected.target),
       'reconcileRuntime must use the NPC owner wallet and energy ledger for the real building start');
     assert.ok(actualTarget.economyAppliedActionIds?.includes(decision.event.idempotencyKey));
@@ -265,24 +273,35 @@ test('a frozen 30-day replay target survives intermediate save/reload and does n
   assert.deepEqual(economySnapshot(remaining.state), economySnapshot(complete.state));
   assert.deepEqual(allEmissions, complete.emissions);
   const actionIds = npcTargets(remaining.state).flatMap((target) => target.economyAppliedActionIds ?? []);
-  const startedIds = allEmissions.flatMap((entry) => entry.kind === 'npc-economy' && entry.event.started
-    ? [entry.event.idempotencyKey] : []);
+  const startedIds = allEmissions.flatMap((entry) => entry.kind === 'npc-economy' && entry.event.started && entry.event.economyActionId
+    ? [entry.event.economyActionId] : []);
   assert.equal(new Set(startedIds).size, startedIds.length, 'reloading never emits a started action twice');
-  assert.deepEqual(actionIds, startedIds.slice(-256),
-    'the bounded persisted idempotency window retains the most recent started decisions after reload');
+  const expectedActionIds = npcTargets(remaining.state).flatMap((target) => allEmissions.flatMap((entry) =>
+    entry.kind === 'npc-economy' && entry.event.started && entry.event.planetId === target.id && entry.event.economyActionId
+      ? [entry.event.economyActionId] : []).slice(-NPC_APPLIED_ID_LIMIT));
+  assert.deepEqual(actionIds, expectedActionIds,
+    'each planet retains the bounded canonical receipts of its most recent paid decisions after reload');
 });
 
-test('100 real NPC owners finish a 30-day production replay with their own bounded economy state', () => {
+// Owner target (24.10.2026): the longest realistic absence is two weeks.
+// Correctness beyond it is covered by the single-NPC 30-day equivalence tests.
+test('100 real NPC owners finish a 14-day production replay with their own bounded economy state', () => {
   const initial = campaign(100, 'NPC-REPLAY-100');
   assert.equal(npcTargets(initial).length, 100);
   assert.equal(Object.keys(initial.npc!.profiles).length, 100);
-  const targetAt = START + 30 * DAY;
+  const targetAt = START + 14 * DAY;
   const completed = advanceTo(clone(initial), targetAt, [targetAt]);
 
   assert.equal(completed.state.npcReplay?.processedThroughAt, targetAt);
   assert.equal(isNpcCatchupPending(completed.state), false);
-  assert.equal(npcTargets(completed.state).length, 100);
   assert.equal(Object.keys(completed.state.npc!.profiles).length, 100);
+  // NPCs colonize through real flights: every owner keeps 1..7 canonical planets.
+  const planetsByOwner = new Map<string, number>();
+  for (const target of npcTargets(completed.state)) planetsByOwner.set(target.ownerId, (planetsByOwner.get(target.ownerId) ?? 0) + 1);
+  assert.equal(planetsByOwner.size, 100);
+  for (const [ownerId, count] of planetsByOwner) assert.ok(count >= 1 && count <= MAX_PLANETS_PER_OWNER, `${ownerId} owns ${count} planets`);
+  const coordinates = npcTargets(completed.state).map((target) => `${target.coordinate.galaxy}:${target.coordinate.system}:${target.coordinate.position}`);
+  assert.equal(new Set(coordinates).size, coordinates.length, 'no two planets share a coordinate');
   for (const target of npcTargets(completed.state)) {
     assert.ok(target.resources.metal >= 0 && target.resources.minerals >= 0 && target.resources.gas >= 0);
     assert.ok(target.buildingQueue!.length <= 3);
@@ -346,9 +365,19 @@ test('zero NPC and campaign speed scale stay isolated from player resources and 
   const end = START + 7 * DAY;
   const standardResult = advanceTo(clone(standard), end, [end]);
   const fastResult = advanceTo(clone(faster), end, [end]);
-  const standardEvents = standardResult.emissions.filter((entry) => entry.kind === 'npc-economy').map((entry) => entry.kind === 'npc-economy' ? entry.event.eventId : '');
-  const fastEvents = fastResult.emissions.filter((entry) => entry.kind === 'npc-economy').map((entry) => entry.kind === 'npc-economy' ? entry.event.eventId : '');
-  assert.deepEqual(fastEvents, standardEvents, 'campaign speed cannot rewrite an NPC’s saved attention calendar');
+  // Faster queues legitimately change when an attentive NPC looks again,
+  // hence the emitted action IDs are not a speed-independent calendar.
+  // The owner's actual online session schedule must nevertheless stay fixed.
+  const ownerId = npcTargets(standard)[0]!.ownerId;
+  const standardProfile = standardResult.state.npc!.profiles[ownerId]!;
+  const fastProfile = fastResult.state.npc!.profiles[ownerId]!;
+  assert.deepEqual(
+    getNpcSessionEvents(standardProfile, START, end),
+    getNpcSessionEvents(fastProfile, START, end),
+    'campaign speed cannot rewrite the owner’s online session schedule',
+  );
+  assert.equal(fastProfile.activity.completedSessions, standardProfile.activity.completedSessions,
+    'campaign speed must not change the number of completed online sessions');
   assert.deepEqual(fastResult.state.planets['helion-01']?.resources, standardResult.state.planets['helion-01']?.resources,
     'NPC replay never draws resources from the current player');
 });

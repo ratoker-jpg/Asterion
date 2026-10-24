@@ -1,7 +1,11 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
+import { describeOwnerPresence } from './application/owner-presence.ts';
+import { UNIVERSE_COORDINATE_OPEN_EVENT } from './application/flights.ts';
+import { getFactionGeneralAsset } from './domain/profile/faction-assets.ts';
+import type { RatedAllianceDetails, RatedOwnerIdentity } from './domain/runtime/state-store.ts';
 import { EmblemGlyph } from './CommandView';
 import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
-import { CURRENT_PLAYER_ID, createPlayerRatingEntries, withTestOwnerScoreFixtures } from './domain/rating/fixtures.ts';
+import { CURRENT_PLAYER_ID, createOwnerRatingEntries, createPlayerRatingEntries, withTestOwnerScoreFixtures } from './domain/rating/fixtures.ts';
 import { createAllianceRatingEntries } from './domain/rating/alliances.ts';
 import { selectOwnerAlliance } from './domain/command/selectors.ts';
 import type { CommandState } from './domain/command/types.ts';
@@ -32,12 +36,16 @@ export function RatingView({
   ownerScores = {},
   currentPlayerScore,
   currentPlayerId = CURRENT_PLAYER_ID,
+  owners,
+  allianceDetails,
 }: {
   mode?: RuntimeMode;
   command: CommandState;
   ownerScores?: Readonly<Record<string, OwnerScore>>;
   currentPlayerScore?: OwnerScore;
   currentPlayerId?: string;
+  owners?: Readonly<Record<string, RatedOwnerIdentity>>;
+  allianceDetails?: Readonly<Record<string, RatedAllianceDetails>>;
 }) {
   const [mode, setMode] = useState<RatingMode>('players');
   const [query, setQuery] = useState('');
@@ -46,12 +54,30 @@ export function RatingView({
   const [allianceSort, setAllianceSort] = useState<AllianceScoreKey>('totalPoints');
   const [direction, setDirection] = useState<SortDirection>('desc');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Nemexia-style: a click on a row opens its card under it; another click closes it.
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const toggleRow = (id: string) => {
+    setSelectedId(id);
+    setExpandedId((current) => current === id ? null : id);
+  };
+  const openAlliance = (allianceId: string) => {
+    setMode('alliances');
+    setQuery('');
+    setDirection('desc');
+    setSelectedId(allianceId);
+    setExpandedId(allianceId);
+    const clean = sortAlliances(alliances, allianceSort, 'desc');
+    setPage(pageForEntry(clean, PAGE_SIZE, (entry) => entry.id === allianceId));
+  };
 
   const currentAlliance = useMemo(() => selectOwnerAlliance(command, currentPlayerId), [command, currentPlayerId]);
   const players = useMemo(
-    () => createPlayerRatingEntries(currentPlayerScore, runtimeMode, currentPlayerId)
-      .map((entry) => entry.isCurrentPlayer ? { ...entry, allianceTag: currentAlliance?.tag ?? null } : entry),
-    [currentPlayerScore, currentPlayerId, currentAlliance, runtimeMode],
+    () => (runtimeMode === 'production' && owners
+      ? createOwnerRatingEntries(ownerScores, owners, currentPlayerId)
+        .map((entry) => ({ ...entry, allianceTag: selectOwnerAlliance(command, entry.id)?.tag ?? null }))
+      : createPlayerRatingEntries(currentPlayerScore, runtimeMode, currentPlayerId)
+        .map((entry) => entry.isCurrentPlayer ? { ...entry, allianceTag: currentAlliance?.tag ?? null } : entry)),
+    [currentPlayerScore, currentPlayerId, currentAlliance, runtimeMode, owners, ownerScores, command],
   );
   const scoresWithFixtures = useMemo(() => withTestOwnerScoreFixtures(ownerScores, runtimeMode), [ownerScores, runtimeMode]);
   const alliances = useMemo(
@@ -78,6 +104,7 @@ export function RatingView({
     setPage(1);
     setQuery('');
     setSelectedId(null);
+    setExpandedId(null);
     setDirection('desc');
   };
 
@@ -163,8 +190,13 @@ export function RatingView({
             selectedId={selectedId}
             sortKey={playerSort}
             direction={direction}
-            onSelect={setSelectedId}
+            onSelect={toggleRow}
             onSort={sortPlayer}
+            expandedId={expandedId}
+            owners={owners}
+            command={command}
+            currentPlayerId={currentPlayerId}
+            onOpenAlliance={openAlliance}
           />
         ) : alliances.length === 0 ? (
           <div className="rating-empty-v2" data-qa-rating-empty role="status">
@@ -177,8 +209,10 @@ export function RatingView({
             selectedId={selectedId}
             sortKey={allianceSort}
             direction={direction}
-            onSelect={setSelectedId}
+            onSelect={toggleRow}
             onSort={sortAlliance}
+            expandedId={expandedId}
+            details={allianceDetails}
           />
         )}
 
@@ -199,6 +233,11 @@ function PlayerTable({
   direction,
   onSelect,
   onSort,
+  expandedId,
+  owners,
+  command,
+  currentPlayerId,
+  onOpenAlliance,
 }: {
   entries: readonly PlayerRatingEntry[];
   currentPlayer: PlayerRatingEntry | null;
@@ -207,26 +246,41 @@ function PlayerTable({
   direction: SortDirection;
   onSelect: (id: string) => void;
   onSort: (key: PlayerScoreKey) => void;
+  expandedId: string | null;
+  owners?: Readonly<Record<string, RatedOwnerIdentity>>;
+  command: CommandState;
+  currentPlayerId: string;
+  onOpenAlliance: (allianceId: string) => void;
 }) {
+  const playerAlliance = selectOwnerAlliance(command, currentPlayerId);
+  const card = (entry: PlayerRatingEntry) => expandedId === entry.id
+    ? <PlayerCard entry={entry} owner={owners?.[entry.id]} alliance={selectOwnerAlliance(command, entry.id)}
+      exactPresence={entry.id === currentPlayerId || Boolean(playerAlliance && selectOwnerAlliance(command, entry.id)?.id === playerAlliance.id)}
+      onOpenAlliance={onOpenAlliance} />
+    : null;
   const currentPlayerAlreadyVisible = Boolean(currentPlayer && entries.some((entry) => entry.id === currentPlayer.id));
   const showPinnedCurrentPlayer = Boolean(currentPlayer && !currentPlayerAlreadyVisible);
 
   return (
     <div className="rating-table-v2 rating-table-v2--players" role="table" aria-label="Рейтинг игроков">
       <div className="rating-row-v2 rating-head-v2" role="row">
-        <span>МЕСТО</span><span>ИГРОК</span><span>АЛЬЯНС</span>
-        <ScoreHead label="ДОСТИЖ." iconPath={asterionAssetIntegrationAssets.scoreIcons.achievementPoints} scoreKey="achievementPoints" selected={sortKey === 'achievementPoints'} direction={direction} onSort={onSort} />
+        <span>МЕСТО</span><span>ИГРОК</span><span>РАСА</span><span>АЛЬЯНС</span>
         <ScoreHead label="ОБЩИЕ" iconPath={asterionAssetIntegrationAssets.scoreIcons.totalPoints} scoreKey="totalPoints" selected={sortKey === 'totalPoints'} direction={direction} onSort={onSort} />
         <ScoreHead label="РЕСУРС." iconPath={asterionAssetIntegrationAssets.scoreIcons.resourcePoints} scoreKey="resourcePoints" selected={sortKey === 'resourcePoints'} direction={direction} onSort={onSort} />
         <ScoreHead label="БОЕВЫЕ" iconPath={asterionAssetIntegrationAssets.scoreIcons.battlePoints} scoreKey="battlePoints" selected={sortKey === 'battlePoints'} direction={direction} onSort={onSort} />
+        <ScoreHead label="ДОСТИЖ." iconPath={asterionAssetIntegrationAssets.scoreIcons.achievementPoints} scoreKey="achievementPoints" selected={sortKey === 'achievementPoints'} direction={direction} onSort={onSort} />
       </div>
       {entries.map((entry) => (
-        <PlayerRow key={entry.id} entry={entry} selectedId={selectedId} onSelect={onSelect} />
+        <Fragment key={entry.id}>
+          <PlayerRow entry={entry} selectedId={selectedId} onSelect={onSelect} expanded={expandedId === entry.id} />
+          {card(entry)}
+        </Fragment>
       ))}
       {showPinnedCurrentPlayer && currentPlayer ? (
         <>
           <div className="rating-self-separator-v2" role="row" aria-hidden="true"><span>…</span></div>
-          <PlayerRow entry={currentPlayer} selectedId={selectedId} onSelect={onSelect} pinned />
+          <PlayerRow entry={currentPlayer} selectedId={selectedId} onSelect={onSelect} pinned expanded={expandedId === currentPlayer.id} />
+          {card(currentPlayer)}
         </>
       ) : null}
     </div>
@@ -238,11 +292,13 @@ function PlayerRow({
   selectedId,
   onSelect,
   pinned = false,
+  expanded = false,
 }: {
   entry: PlayerRatingEntry;
   selectedId: string | null;
   onSelect: (id: string) => void;
   pinned?: boolean;
+  expanded?: boolean;
 }) {
   return (
     <button
@@ -254,17 +310,20 @@ function PlayerRow({
         entry.isCurrentPlayer ? 'current' : '',
         pinned ? 'pinned-current' : '',
         selectedId === entry.id ? 'selected' : '',
+        expanded ? 'expanded' : '',
       ].filter(Boolean).join(' ')}
       onClick={() => onSelect(entry.id)}
+      aria-expanded={expanded}
       data-qa-rating-player-row={entry.id}
     >
       <span className="rank-v2"><b>{entry.rank}</b></span>
-      <span className="identity-v2"><RaceEmblem race={entry.race} /><strong className="utility-data-text">{entry.name}</strong></span>
+      <span className="identity-v2"><strong className="utility-data-text">{entry.name}</strong><i className="rating-expand-mark-v2" aria-hidden="true">{expanded ? '▴' : '▾'}</i></span>
+      <span className={`race-label-v2 race-${entry.race}`}>{RACE_LABELS[entry.race]}</span>
       <span className="alliance-tag-v2">{entry.allianceTag ? `[${entry.allianceTag}]` : '—'}</span>
-      <Value value={entry.achievementPoints} />
-      <Value value={entry.totalPoints} />
+      <Value value={entry.totalPoints} lead />
       <Value value={entry.resourcePoints} />
       <Value value={entry.battlePoints} />
+      <Value value={entry.achievementPoints} />
     </button>
   );
 }
@@ -276,6 +335,8 @@ function AllianceTable({
   direction,
   onSelect,
   onSort,
+  expandedId,
+  details,
 }: {
   entries: readonly AllianceRatingEntry[];
   selectedId: string | null;
@@ -283,6 +344,8 @@ function AllianceTable({
   direction: SortDirection;
   onSelect: (id: string) => void;
   onSort: (key: AllianceScoreKey) => void;
+  expandedId: string | null;
+  details?: Readonly<Record<string, RatedAllianceDetails>>;
 }) {
   return (
     <div className="rating-table-v2 rating-table-v2--alliances" role="table" aria-label="Рейтинг альянсов">
@@ -293,26 +356,31 @@ function AllianceTable({
         <ScoreHead label="БОЕВЫЕ (СРЕДН.)" scoreKey="battlePoints" selected={sortKey === 'battlePoints'} direction={direction} onSort={onSort} />
       </div>
       {entries.map((entry) => (
+        <Fragment key={entry.id}>
         <button
           type="button"
           role="row"
-          key={entry.id}
           className={[
             'rating-row-v2',
             entry.rank <= 3 ? `top-${entry.rank}` : '',
             entry.isCurrentAlliance ? 'current' : '',
             selectedId === entry.id ? 'selected' : '',
+            expandedId === entry.id ? 'expanded' : '',
           ].filter(Boolean).join(' ')}
           onClick={() => onSelect(entry.id)}
+          aria-expanded={expandedId === entry.id}
+          data-qa-rating-alliance-row={entry.id}
         >
           <span className="rank-v2"><b>{entry.rank}</b></span>
-          <span className="identity-v2"><span className="alliance-emblem-v2">{entry.emblem ? <EmblemGlyph compact emblem={entry.emblem} /> : entry.tag.slice(0, 1)}</span><strong className="utility-data-text">{entry.name}</strong></span>
+          <span className="identity-v2"><span className="alliance-emblem-v2">{entry.emblem ? <EmblemGlyph compact emblem={entry.emblem} /> : entry.tag.slice(0, 1)}</span><strong className="utility-data-text">{entry.name}</strong><i className="rating-expand-mark-v2" aria-hidden="true">{expandedId === entry.id ? '▴' : '▾'}</i></span>
           <span className="alliance-tag-v2">[{entry.tag}]</span>
           <span className="utility-data-text">{entry.memberCount}/15</span>
-          <Value value={entry.totalPoints} />
+          <Value value={entry.totalPoints} lead />
           <Value value={entry.resourcePoints} />
           <Value value={entry.battlePoints} />
         </button>
+        {expandedId === entry.id ? <AllianceCard entry={entry} details={details?.[entry.id]} /> : null}
+        </Fragment>
       ))}
     </div>
   );
@@ -333,16 +401,99 @@ function ScoreHead<K extends string>({
   direction: SortDirection;
   onSort: (key: K) => void;
 }) {
-  return <button type="button" className={`utility-control score-head-v2 ${selected ? 'selected' : ''}`} onClick={() => onSort(scoreKey)}><span>{label}</span>{iconPath ? <img className="score-head-v2__icon" src={iconPath} alt="" aria-hidden="true" draggable={false} /> : null}<b>{selected ? (direction === 'desc' ? '▼' : '▲') : '◇'}</b></button>;
+  return <button type="button" className={`utility-control score-head-v2 ${selected ? 'selected' : ''}`} onClick={() => onSort(scoreKey)}><span>{label}</span>{iconPath ? <img className="score-head-v2__icon" src={iconPath} alt="" aria-hidden="true" draggable={false} /> : null}{selected ? <b>{direction === 'desc' ? '▼' : '▲'}</b> : null}</button>;
 }
 
-function Value({ value }: { value: number }) {
-  return <span className="utility-data-text score-value-v2">{new Intl.NumberFormat('ru-RU').format(value)}</span>;
+function Value({ value, lead = false }: { value: number; lead?: boolean }) {
+  return <span className={`utility-data-text score-value-v2${lead ? ' is-lead' : ''}`}>{new Intl.NumberFormat('ru-RU').format(value)}</span>;
 }
 
-function RaceEmblem({ race }: { race: PlayerRatingEntry['race'] }) {
-  const label = race === 'aster' ? 'A' : race === 'cyber' ? 'C' : 'X';
-  return <span className={`race-emblem-v2 race-${race}`} aria-label={race}>{label}</span>;
+const RACE_LABELS: Record<PlayerRatingEntry['race'], string> = { aster: 'Астеры', cyber: 'Илары', xeno: 'Рой' };
+const CRYSTAL_COUNT = 4;
+
+function openOwnerOnMap(coordinate: { galaxy: number; system: number; position: number }, ownerId?: string, planetId?: string) {
+  window.dispatchEvent(new CustomEvent(UNIVERSE_COORDINATE_OPEN_EVENT, { detail: { coordinate, ...(ownerId ? { ownerId } : {}), ...(planetId ? { planetId } : {}) } }));
+}
+
+function CrystalDots({ count }: { count: number }) {
+  return <span className="rating-crystals-v2" aria-label={`Кристаллы: ${count} из ${CRYSTAL_COUNT}`}>{Array.from({ length: CRYSTAL_COUNT }, (_, index) => <i key={index} className={index < count ? 'is-owned' : ''} />)}<b>{count}/{CRYSTAL_COUNT}</b></span>;
+}
+
+/** The card under a player row: what anyone can see about this owner, and the way to their profile. */
+function PlayerCard({ entry, owner, alliance, exactPresence, onOpenAlliance }: {
+  entry: PlayerRatingEntry;
+  owner?: RatedOwnerIdentity;
+  alliance: ReturnType<typeof selectOwnerAlliance>;
+  exactPresence: boolean;
+  onOpenAlliance: (allianceId: string) => void;
+}) {
+  const planets = owner?.planets ?? [];
+  const home = planets[0];
+  const presence = describeOwnerPresence(owner?.presence?.online ? { online: true }
+    : owner?.presence?.lastSeenAt !== undefined ? { online: false, lastSeenAt: owner.presence.lastSeenAt } : undefined, Date.now(), exactPresence);
+  const general = getFactionGeneralAsset(owner?.factionId);
+  return (
+    <div className="rating-card-v2" role="row" data-qa-rating-player-card={entry.id}>
+      <div className="rating-card-v2__art">{general ? <img src={general} alt="" draggable={false} /> : null}</div>
+      <div className="rating-card-v2__who">
+        <strong>{entry.name}</strong>
+        <span>{RACE_LABELS[entry.race]}</span>
+        <em className={`rating-presence-v2 is-${presence.tone}`}><i aria-hidden="true" />{presence.text}</em>
+        {alliance ? <button type="button" className="rating-card-v2__link" onClick={() => onOpenAlliance(alliance.id)}>Союз [{alliance.tag}] {alliance.name} ↗</button> : <span>Без союза</span>}
+      </div>
+      <div className="rating-card-v2__block">
+        <small>ПЛАНЕТЫ · {planets.length}</small>
+        <div className="rating-card-v2__planets">
+          {planets.map((planet) => (
+            <button type="button" key={planet.id} title={`${planet.name} [${planet.coordinate.galaxy}:${planet.coordinate.system}:${planet.coordinate.position}]`}
+              onClick={() => openOwnerOnMap(planet.coordinate)}>
+              <span>{planet.name}</span><b>[{planet.coordinate.galaxy}:{planet.coordinate.system}:{planet.coordinate.position}]</b>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="rating-card-v2__block">
+        <small>КРИСТАЛЛЫ СОЛНЦ</small>
+        <CrystalDots count={owner?.crystals ?? 0} />
+        {owner?.gate ? <span className="rating-card-v2__gate">{owner.gate === 'completed' ? 'Врата построены' : 'Строит Врата'}</span> : null}
+      </div>
+      <div className="rating-card-v2__actions">
+        <button type="button" disabled={!home} onClick={() => home && openOwnerOnMap(home.coordinate, entry.id, home.id)} data-qa-rating-open-profile>ПРОФИЛЬ</button>
+      </div>
+    </div>
+  );
+}
+
+/** The card under an alliance row: its wars, size, crystals and Gate. */
+function AllianceCard({ entry, details }: { entry: AllianceRatingEntry; details?: RatedAllianceDetails }) {
+  return (
+    <div className="rating-card-v2 rating-card-v2--alliance" role="row" data-qa-rating-alliance-card={entry.id}>
+      <div className="rating-card-v2__block">
+        <small>ПОЛИТИКА</small>
+        <span className="rating-card-v2__stat"><b>{details?.wars ?? 0}</b> {pluralWars(details?.wars ?? 0)}</span>
+      </div>
+      <div className="rating-card-v2__block">
+        <small>УЧАСТНИКИ</small>
+        <span className="rating-card-v2__stat"><b>{details?.members ?? entry.memberCount}</b> из 15</span>
+      </div>
+      <div className="rating-card-v2__block">
+        <small>КРИСТАЛЛЫ СОЛНЦ</small>
+        <CrystalDots count={details?.crystals ?? 0} />
+      </div>
+      <div className="rating-card-v2__block">
+        <small>ГАЛАКТИЧЕСКИЕ ВРАТА</small>
+        <span className="rating-card-v2__stat">{details?.gate === 'completed' ? 'Построены' : details?.gate === 'building' ? 'Строятся' : 'Нет'}</span>
+      </div>
+    </div>
+  );
+}
+
+function pluralWars(count: number): string {
+  const tail = count % 100;
+  if (tail >= 11 && tail <= 14) return 'войн';
+  if (count % 10 === 1) return 'война';
+  if (count % 10 >= 2 && count % 10 <= 4) return 'войны';
+  return 'войн';
 }
 
 function Pagination({ page, pageCount, onPage }: { page: number; pageCount: number; onPage: (page: number) => void }) {

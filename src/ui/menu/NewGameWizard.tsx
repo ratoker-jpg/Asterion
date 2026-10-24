@@ -310,7 +310,7 @@ function WorldStep({ config, issues, onChange, onWorld, onNext }: WorldStepProps
           <div><dt>NPC</dt><dd>{summary.npcCount}</dd></div>
           <div><dt>Заполненность NPC</dt><dd>{summary.occupancyPercent}%</dd></div>
         </dl>
-        <p className="menu-world-note">NPC — заглушки: одна планета, без флотов и атак. Видны на карте и доступны для шпионажа.</p>
+        <p className="menu-world-note">NPC — самостоятельные игроки: стартуют как вы, строятся, исследуют, воюют, колонизируют и вступают в союзы по тем же правилам. У каждого свой характер, опыт и время в игре.</p>
       </div>
 
       <footer className="menu-actionbar">

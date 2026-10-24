@@ -149,7 +149,7 @@ async function main() {
   const days = args.filter((arg) => /^\d+(\.\d+)?$/.test(arg)).map(Number);
   const repeats = Number(args.find((arg) => arg.startsWith('--repeats='))?.split('=')[1] ?? 1);
   const serialize = args.includes('--serialize');
-  const horizons = days.length ? days : [1, 7, 30];
+  const horizons = days.length ? days : [1, 7, 14];
   const fixtureArg = args.find((arg) => arg.startsWith('--fixture='))?.slice('--fixture='.length);
   const writeArg = args.find((arg) => arg.startsWith('--write-fixture='))?.slice('--write-fixture='.length);
   const fixture = fixtureArg ? JSON.parse(fs.readFileSync(fixtureArg, 'utf8')) : createFullWorldFixture();

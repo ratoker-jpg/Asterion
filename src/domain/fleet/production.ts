@@ -61,6 +61,8 @@ export type FleetProductionDurationContext = {
   commanderLevel?: number;
   mode?: RuntimeMode;
   testTimeScale?: number;
+  /** Explicit persisted campaign scale for deterministic owner replay. */
+  durationScale?: number;
 };
 
 export type FleetProductionContext = FleetProductionDurationContext & {
@@ -70,6 +72,8 @@ export type FleetProductionContext = FleetProductionDurationContext & {
   defense: OwnedDefenseState;
   /** Completed orbital satellites occupy the shared hangar population pool. */
   solarSatellites?: number;
+  /** Physical fleet population currently travelling for this planet/owner. */
+  reservedFleetPopulation?: number;
   wallet: FleetProductionWallet;
   capacities?: ResourceCapacitiesInput;
   hangarLevel: number;
@@ -331,6 +335,10 @@ export function calculateFleetProductionDurationMs(
   const commanderMultiplier = queueKind === 'commanders'
     ? Math.max(1, safeCommanderLevel(context.commanderLevel))
     : 1;
+  if (context.durationScale !== undefined) {
+    if (!Number.isFinite(context.durationScale) || context.durationScale <= 0) throw new RangeError('Production duration scale must be positive');
+    return Math.max(1, Math.round(Math.max(1, Math.round(canonicalEffectiveBaseDurationMs * commanderMultiplier)) / context.durationScale));
+  }
   return scaleRuntimeDuration(
     canonicalEffectiveBaseDurationMs * commanderMultiplier,
     context.mode ?? 'production',
@@ -477,7 +485,7 @@ export function enqueueFleetProduction(
       context.factionId,
       context.solarSatellites,
     );
-    if (summary.population + population > summary.capacity) return noEnqueue(context, settled, 'Недостаточно населения флота.');
+    if (summary.population + Math.max(0, Math.floor(context.reservedFleetPopulation ?? 0)) + population > summary.capacity) return noEnqueue(context, settled, 'Недостаточно населения флота.');
   }
 
   const batchCost = multiplyCost(entity.cost, safeQuantity);

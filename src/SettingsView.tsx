@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { downloadJournal, getActiveJournalCampaign, readJournal } from './ui/player-journal-store.ts';
 import { getDesktopBridge } from './domain/settings/desktop.ts';
 import {
   TYPOGRAPHY_MAX,
@@ -13,7 +14,7 @@ import {
   type UiPreferencesV2,
 } from './domain/settings/types.ts';
 
-type SettingsSection = 'screen' | 'interface' | 'controls' | 'sound' | 'notifications' | 'save';
+type SettingsSection = 'screen' | 'interface' | 'controls' | 'sound' | 'notifications' | 'save' | 'journal';
 
 const sections: readonly { id: SettingsSection; label: string; subtitle: string }[] = [
   { id: 'screen', label: 'ЭКРАН', subtitle: 'Режим окна' },
@@ -22,6 +23,7 @@ const sections: readonly { id: SettingsSection; label: string; subtitle: string 
   { id: 'sound', label: 'ЗВУК', subtitle: 'Аудиосистема' },
   { id: 'notifications', label: 'УВЕДОМЛЕНИЯ', subtitle: 'Системные сигналы' },
   { id: 'save', label: 'СОХРАНЕНИЕ', subtitle: 'Настройки интерфейса' },
+  { id: 'journal', label: 'ЖУРНАЛ ИГРОКА', subtitle: 'Ваши действия в JSON' },
 ];
 
 const typographyMeta: Record<TypographyKey, { label: string; sample: string }> = {
@@ -131,6 +133,8 @@ export function SettingsView({ preferences, onPreferencesChange, onReset }: Sett
           <UnavailablePanel eyebrow="УПРАВЛЕНИЕ" title="КЛАВИШИ" body="Текущие системные клавиши продолжают работать. Полное переназначение клавиш будет подключено отдельным этапом." />
         ) : section === 'sound' ? (
           <UnavailablePanel eyebrow="АУДИО" title="ЗВУК" body="Звуковая система пока недоступна. Настройки появятся после её подключения." />
+        ) : section === 'journal' ? (
+          <JournalPanel />
         ) : section === 'notifications' ? (
           <UnavailablePanel eyebrow="СИСТЕМНЫЕ СИГНАЛЫ" title="УВЕДОМЛЕНИЯ" body="Системные уведомления пока недоступны. Настройки появятся после их подключения." />
         ) : (
@@ -212,6 +216,33 @@ function TypographyPanel({
           <div className="preview-secondary-v2">{typographyMeta.secondary.sample}</div>
           <div className="preview-helper-v2">{typographyMeta.helper.sample}</div>
         </aside>
+      </div>
+    </section>
+  );
+}
+
+/** Owner request: export everything the player did in this campaign so NPC play can be studied and improved. */
+function JournalPanel() {
+  const [count, setCount] = useState<number | null>(null);
+  const [message, setMessage] = useState('');
+  const campaign = getActiveJournalCampaign();
+  useEffect(() => {
+    if (!campaign) return;
+    readJournal(campaign).then((entries) => setCount(entries.length)).catch(() => setCount(null));
+  }, [campaign]);
+  return (
+    <section className="settings-panel-v2" data-qa-player-journal>
+      <PanelHeading eyebrow="ИЗУЧЕНИЕ ИГРЫ" title="ЖУРНАЛ ИГРОКА" description="Игра записывает ваши действия в этой кампании: стройки, науку, заказы флота, полёты с целью, составом и грузом, отзывы, колонии, союз — и раз в час игрового времени снимок вашего положения. Журнал хранится отдельно от сохранения и не влияет на игру." />
+      <div className="settings-reset-card-v2">
+        <div>
+          <h3 className="utility-section-title">ЗАПИСЕЙ: {count ?? '—'}</h3>
+          <p className="utility-body-text">Скачайте файл после партии и передайте его для разбора: по нему NPC учатся играть как опытный игрок.</p>
+          {message ? <small className="utility-helper">{message}</small> : null}
+        </div>
+        <button type="button" className="utility-control" disabled={!campaign} onClick={() => {
+          if (!campaign) return;
+          downloadJournal(campaign, {}).then((total) => setMessage(`Файл с ${total} записями сохранён.`)).catch(() => setMessage('Не удалось прочитать журнал.'));
+        }} data-qa-player-journal-download>СКАЧАТЬ ЖУРНАЛ (JSON)</button>
       </div>
     </section>
   );

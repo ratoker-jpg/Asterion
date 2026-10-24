@@ -174,14 +174,14 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: Node full-world benchmark (1/7/30 days)
+      - name: Node full-world benchmark (1/7/14 days)
         shell: bash
         run: |
           mkdir -p artifacts/npc-full-world
-          npm run --silent benchmark:npc-full-world -- 1 7 30 > artifacts/npc-full-world/benchmark.json
+          npm run --silent benchmark:npc-full-world -- 1 7 14 > artifacts/npc-full-world/benchmark.json
       - name: Build renderer
         run: npm run build
-      - name: Electron full-world QA (30 days, 120 s limit)
+      - name: Electron full-world QA (14 days, 120 s limit)
         run: npm run test:npc-replay-full-world-ui
       - name: Upload full-world results
         if: always()

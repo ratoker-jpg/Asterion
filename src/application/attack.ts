@@ -24,6 +24,8 @@ import { destroyOwnedPlanet, preserveOwnedPlanetOrbitalDebris } from './owned-pl
 import { energySourceChangeForBuilding, transitionPlanetEnergySources } from './energy.ts';
 import { UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 import { resolveSpyTarget } from './espionage-targets.ts';
+import { getOwnerRelation } from './owner-relations.ts';
+import { updateNpcAutonomyMemory } from '../domain/npc/autonomy-policy.ts';
 import type { AttackLaunchSnapshot, AttackLoot, AttackResolution } from '../domain/attack/types.ts';
 import { recordBattleScoreAward } from '../domain/rating/scoring.ts';
 import { isPirateShipId } from '../domain/combat/side-entity.ts';
@@ -387,8 +389,32 @@ function reportLoot(report: BattleReport): AttackLoot {
   };
 }
 
+/** Both owners learn only from the battle in which they actually participated. */
+function rememberNpcBattle(state: SaveState, report: BattleReport, at: number): SaveState {
+  if (!state.npc) return state;
+  let profiles = state.npc.profiles;
+  for (const [side, participant] of [['attacker', report.attacker], ['defender', report.defender]] as const) {
+    const ownerId = participant.playerId;
+    const profile = ownerId ? profiles[ownerId] : undefined;
+    if (!profile || !ownerId) continue;
+    const won = report.winner === side;
+    profiles = { ...profiles, [ownerId]: updateNpcAutonomyMemory(profile, report.id, at,
+      won ? 'battle-victory' : 'battle-loss', won, [report.id]) };
+  }
+  return profiles === state.npc.profiles ? state : { ...state, npc: { ...state.npc, profiles } };
+}
+
 function resolveTargetForFlight(state: SaveState, flight: FlightRecord): SpyTargetState | null {
   if (!flight.destinationPlanetId) return null;
+  if (flight.ownerSide === 'npc') {
+    const target = getEspionageTargets(state.espionage)[flight.destinationPlanetId];
+    if (!flight.ownerId || !target || target.ownerId !== flight.destinationOwnerId
+      || target.coordinate.galaxy !== flight.destinationCoordinate.galaxy
+      || target.coordinate.system !== flight.destinationCoordinate.system
+      || target.coordinate.position !== flight.destinationCoordinate.position) return null;
+    const relation = getOwnerRelation(state, flight.ownerId, target.ownerId);
+    return relation === 'enemy' || relation === 'neutral' ? target : null;
+  }
   const resolved = resolveSpyTarget(state, flight.destinationPlanetId, { coordinate: flight.destinationCoordinate });
   return resolved?.target ?? null;
 }
@@ -403,14 +429,15 @@ function createAttackInput(state: SaveState, flight: FlightRecord, target: SpyTa
   const defenderCommanders = targetCommanderStacks(state, target, defenderPriority);
   const defenderTechnologies = technologiesFromScience(targetProfile?.scienceLevels);
   const origin = state.planets[flight.originPlanetId];
+  const npcOrigin = flight.ownerSide === 'npc' ? getEspionageTargets(state.espionage)[flight.originPlanetId] : undefined;
   return {
     scenarioId: flight.id,
     timestamp: new Date(flight.arrivalAt).toISOString(),
     attacker: {
       participant: {
-        playerId: state.profile.playerId,
-        playerName: state.profile.displayName,
-        planetName: origin?.name,
+        playerId: npcOrigin?.ownerId ?? state.profile.playerId,
+        playerName: npcOrigin?.ownerName ?? state.profile.displayName,
+        planetName: npcOrigin?.name ?? origin?.name,
         coordinates: coordinateLabel(flight.originCoordinate),
         race: getCombatFactionName(snapshot.attackerFactionId),
         side: 'attacker',
@@ -562,9 +589,15 @@ export function resolveAttackAtTarget(state: SaveState, flight: FlightRecord, no
   const repair = claimDefensiveBattleRepair(target.repair ?? createDefaultRepairWorkshopState(), reportWithOutcome, { allowAttackDefender: true });
   const report = annotateBattleReportRepair(reportWithOutcome, repair);
   const attackerPlanet = state.planets[flight.originPlanetId];
-  if (!attackerPlanet) return null;
-  const attackerFleet = applyDestroyedToFleet(removeSolarSatellitesFromFleet(attackerPlanet.fleet).fleet, report.attackerForce, input.attacker.factionId!);
-  let next = replacePlanetState(state, flight.originPlanetId, { ...attackerPlanet, fleet: attackerFleet });
+  const npcOrigin = flight.ownerSide === 'npc' ? getEspionageTargets(state.espionage)[flight.originPlanetId] : undefined;
+  if (flight.ownerSide === 'npc' ? !npcOrigin || npcOrigin.ownerId !== flight.ownerId : !attackerPlanet) return null;
+  // NPC ships were physically removed at dispatch; battle survivors remain in
+  // the flight until return. Player reservations retain their existing model.
+  let next = state;
+  if (flight.ownerSide !== 'npc' && attackerPlanet) {
+    const attackerFleet = applyDestroyedToFleet(removeSolarSatellitesFromFleet(attackerPlanet.fleet).fleet, report.attackerForce, input.attacker.factionId!);
+    next = replacePlanetState(state, flight.originPlanetId, { ...attackerPlanet, fleet: attackerFleet });
+  }
   const targetAfterLosses = applyDestroyedToTarget(next, { ...target, repair: repair.state }, report);
   const nextResources = {
     ...targetAfterLosses.resources,
@@ -599,6 +632,7 @@ export function resolveAttackAtTarget(state: SaveState, flight: FlightRecord, no
     )
     : withTargetState(next, siege.target);
   next = addReport(next, reportWithSiege);
+  next = rememberNpcBattle(next, reportWithSiege, now);
   const resolution: AttackResolution = { reportId, resolvedAt: safeCount(now), debris, loot, planetDestroyed: siege.planetDestroyed };
   return { state: next, report: reportWithSiege, resolution };
 }
@@ -712,8 +746,19 @@ function createBot01IncomingAttackInput(
 
 /** Resolves the Bot 01 demonstration against an actual owned PlanetRuntime. */
 export function resolveBot01IncomingAttack(state: SaveState, flight: FlightRecord, now: number): AttackResolutionResult | null {
-  if (flight.ownerSide !== 'bot01' || flight.missionId !== 'attack' || !flight.attackSnapshot || !flight.destinationPlanetId) return null;
-  const reportId = `battle-bot01-incoming-${flight.id}`;
+  return resolveOwnedIncomingAttack(state, flight, now, false);
+}
+
+/** Production NPC combat shares all player defensive loss/siege/repair rules. */
+export function resolveNpcIncomingAttack(state: SaveState, flight: FlightRecord, now: number): AttackResolutionResult | null {
+  return resolveOwnedIncomingAttack(state, flight, now, true);
+}
+
+function resolveOwnedIncomingAttack(state: SaveState, flight: FlightRecord, now: number, autonomous: boolean): AttackResolutionResult | null {
+  if (flight.ownerSide !== (autonomous ? 'npc' : 'bot01') || flight.missionId !== 'attack' || !flight.attackSnapshot || !flight.destinationPlanetId) return null;
+  if (autonomous && (!flight.ownerId || flight.destinationOwnerId !== state.profile.playerId
+    || !['enemy', 'neutral'].includes(getOwnerRelation(state, flight.ownerId, state.profile.playerId)))) return null;
+  const reportId = autonomous ? `${ATTACK_REPORT_PREFIX}${flight.id}` : `battle-bot01-incoming-${flight.id}`;
   const existing = state.combat.reports.find((candidate) => candidate.id === reportId);
   if (existing) {
     const resolution: AttackResolution = flight.attackResolution ?? {
@@ -728,7 +773,10 @@ export function resolveBot01IncomingAttack(state: SaveState, flight: FlightRecor
   const espionage = state.espionage;
   const source = espionage ? getEspionageTargets(espionage)[flight.originPlanetId] : undefined;
   const target = state.planets[flight.destinationPlanetId];
-  if (!source || source.ownerId !== UNIVERSE_NPC_OWNER_ID || !target) return null;
+  if (!source || (autonomous ? source.ownerId !== flight.ownerId : source.ownerId !== UNIVERSE_NPC_OWNER_ID) || !target) return null;
+  if (autonomous && ((target.universeGalaxy ?? 1) !== flight.destinationCoordinate.galaxy
+    || (target.universeSystem ?? 1) !== flight.destinationCoordinate.system
+    || (target.universePosition ?? 1) !== flight.destinationCoordinate.position)) return null;
 
   const input = createBot01IncomingAttackInput(state, flight, source, target);
   if (input.attacker.ships.length === 0) return null;
@@ -818,6 +866,7 @@ export function resolveBot01IncomingAttack(state: SaveState, flight: FlightRecor
     if (destroyed.destroyed) next = destroyed.state;
   }
   next = addReport(next, reportWithSiege);
+  next = rememberNpcBattle(next, reportWithSiege, now);
   const resolution: AttackResolution = { reportId, resolvedAt: safeCount(now), debris, loot, planetDestroyed: siege.planetDestroyed };
   return { state: next, report: reportWithSiege, resolution };
 }

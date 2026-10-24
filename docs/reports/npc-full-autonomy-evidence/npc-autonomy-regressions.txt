@@ -1,0 +1,64 @@
+(node:24076) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ attack resolves one live combat, records debris/repair, and credits loot only on return (36.0845ms)
+✔ player commander score stays single-counted in flight and follows actual battle losses (6.1205ms)
+✔ successful Planetolom siege removes the authoritative target and replays the historical report after target disappearance (34.6821ms)
+✔ attack arrival re-checks diplomacy and returns without combat after a target becomes allied (1.7581ms)
+✔ attack coordinates resolve only to an authoritative planet target (1.3165ms)
+✔ attacker victory reserves ordered loot until the surviving fleet returns (1.7702ms)
+✔ attack arrival reads live target resources and resolves an empty neutral planet as a real victory (1.4671ms)
+✔ an enemy target that becomes neutral before arrival still resolves with the live target state (1.4627ms)
+✔ multiple overdue attacks reconcile by arrival time and deterministic id tie-break after reload (9.8277ms)
+✔ defeat and draw outcomes never create attacker loot (2.5927ms)
+✔ debris = u x base life of destroyed ships, defenses and commanders of both sides, one roll per battle (0.2293ms)
+✔ solar satellites leave 25–35% of their 2 200 life each and repeat for the same battle id (0.311ms)
+✔ shields leave no debris; only destroyed units count, not damage to survivors (0.1147ms)
+✔ recall before attack arrival returns without combat or report (1.2047ms)
+✔ attack sends civilian and service hulls, preserves them as survivors, and uses their cargo (2.0099ms)
+✔ attack reads live hidden owner technology without copying it into spy snapshots (1.922ms)
+✔ Test Mode Bot 01 starts at the requested resource scale and ticks normally (1.3846ms)
+✔ Bot 01 Test Mode preserves an exact-tie Space Flight when the seeded siege roll fails (470.074ms)
+✔ late reconciliation returns a Space Flight before a Bot attack arriving one millisecond later (2.4904ms)
+✔ an incoming Bot attack does not cancel an outbound Space Flight when the seeded siege roll fails (1.8626ms)
+✔ Bot 01 can destroy an owned planet, persist its battle report, and burn flights from that origin (10.7272ms)
+✔ surviving Bot 01 sieges reconcile factory bots and the last energy source (6.9375ms)
+✔ new attacks default to 12 while explicit legacy 5/8/12 remain frozen (0.6231ms)
+(node:1496) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ destroyed spy target returns the probe once without a new report (78.1115ms)
+✔ same target stays blocked through transit and returning, then unlocks after actual return (3.8108ms)
+✔ automatic arrival report can be intercepted by Hunter and destroys the probe (1.4194ms)
+✔ full report is an immutable permitted snapshot and later reconcile keeps the probe orbiting (1.3201ms)
+✔ Bot 01 spy reports track commander counts during dispatch and after return casualties (13.1818ms)
+✔ spy reports use the current science level after the probe has arrived (1.2641ms)
+✔ one owner cannot send a second active probe from another origin to the same target (0.9458ms)
+✔ production rolls are seeded: the same mission replays the same outcome without an injected rng (1.8603ms)
+✔ seeded report rolls differ between distinct missions to the same target (1.2564ms)
+✔ full report carries a 0..10 level for every combat hull even when the planet state predates shipLevels (2.0255ms)
+✔ full spy report handoff preserves owner ship levels in the battle simulator (1.2698ms)
+✔ the authoritative spy resolver derives self, ally, neutral and war enemy relations (0.945ms)
+✔ spy probe duration uses the common speed, distance and Test Mode scale calculation (0.6645ms)
+✔ neutral to ally during outbound transit starts an irreversible automatic return (1.4856ms)
+✔ neutral to ally after arrival starts return and blocks reports and resends while preserving old reports (1.1975ms)
+✔ production accepts an injected future owner target without importing the Bot 01 fixture (1.2449ms)
+✔ the same target resolver and flight mechanic accept Aegis, Synod and Veyra owners (2.3954ms)
+✔ old-contract bot planets are regenerated while historical reports stay immutable (0.7944ms)
+✔ Computer Systems flight limit: three slots at level 0, returns hold a slot, spy probes never do (2.6229ms)
+✔ a saved spy report roll is normalized into the canonical 0..99 range (0.2803ms)
+(node:21068) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ schema 26 migration merges legacy science by owner and activates after pending replay (68.9434ms)
+✔ fresh campaigns create an active owner science ledger at the creation timestamp (25.7413ms)
+✔ schema 27 requires a valid ledger and preserves malformed original bytes (191.0161ms)
+✔ schema 26 partial month catch-up activates NPC science only at its frozen target (6174.6701ms)
+ℹ tests 47
+ℹ suites 0
+ℹ pass 47
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7127.4422

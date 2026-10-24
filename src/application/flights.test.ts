@@ -1,16 +1,17 @@
 import { kickMember, leaveAlliance } from '../domain/command/membership.ts';
 import assert from 'node:assert/strict';
+import { COLONY_TOTAL_POINT_THRESHOLDS, nextColonyPointThreshold } from '../domain/universe/runtime.ts';
 import test from 'node:test';
 
 import { createInitialSaveState, createPersistenceFacade } from './persistence.ts';
 import {
   createPlanetIdForCoordinate,
-  dispatchFlight,
+  dispatchFlight as dispatchFlightUngated,
   getAvailableFleetForPlanet,
   getReservedShipsForPlanet,
   getPendingInboundPopulation,
   getTransportCargoSummary,
-  previewFlight,
+  previewFlight as previewFlightUngated,
   resolveTransportTarget,
   resolveRecycleTargetKindAtCoordinate,
   reconcileFlights,
@@ -44,6 +45,20 @@ import { advanceUniverseAsteroidSimulationAt, findUniverseAsteroidAtCoordinate }
 import { advanceAsteroidGasAt } from '../domain/universe/asteroid-gas.ts';
 
 const origin = { galaxy: 1, system: 1, position: 1 };
+
+/** The first colony opens at 500 total points (owner rule); these flight tests start from a fresh campaign. */
+function colonyReady(state: SaveState): SaveState {
+  if (state.rating.battleAwardsByReportId['qa-first-colony-points']) return state;
+  return { ...state, rating: { ...state.rating, battleAwardsByReportId: { ...state.rating.battleAwardsByReportId,
+    'qa-first-colony-points': { [state.profile.playerId]: COLONY_TOTAL_POINT_THRESHOLDS[0]! } } } };
+}
+
+// Colonisation in these tests is about flights, not the point gate: give the
+// fresh campaign its first-colony points whenever a colonizer is sent.
+const dispatchFlight: typeof dispatchFlightUngated = (state, flightCommand, ...rest) =>
+  dispatchFlightUngated(flightCommand.missionId === 'colonize' ? colonyReady(state) : state, flightCommand, ...rest);
+const previewFlight: typeof previewFlightUngated = (state, flightCommand, ...rest) =>
+  previewFlightUngated(flightCommand.missionId === 'colonize' ? colonyReady(state) : state, flightCommand, ...rest);
 
 function command(requestId: string, destination = { galaxy: 1, system: 2, position: 1 }) {
   return {
@@ -288,7 +303,7 @@ function emptyUniverseCoordinate(galaxy = 1, systemNumber = 2, nowMs = 1_000) {
 }
 
 test('dispatch is atomic and persisted request IDs make retries idempotent', () => {
-  const initial = createInitialSaveState('production', 1_000);
+  const initial = colonyReady(createInitialSaveState('production', 1_000));
   const first = dispatchFlight(initial, command('request-1'), 1_000);
   assert.equal(first.ok, true);
   if (!first.ok) return;
@@ -309,7 +324,7 @@ test('dispatch is atomic and persisted request IDs make retries idempotent', () 
 });
 
 test('insufficient gas leaves the state untouched', () => {
-  const initial = createInitialSaveState('production', 1_000);
+  const initial = colonyReady(createInitialSaveState('production', 1_000));
   const noGas = replacePlanetResources(initial, 'helion-01', { metal: 1, minerals: 1, gas: 0 });
   const result = dispatchFlight(noGas, command('no-gas'), 1_000);
   assert.equal(result.ok, false);
@@ -319,7 +334,7 @@ test('insufficient gas leaves the state untouched', () => {
 });
 
 test('preview is read-only and a persisted request remains idempotent after reload', () => {
-  const initial = createInitialSaveState('production', 1_000);
+  const initial = colonyReady(createInitialSaveState('production', 1_000));
   const preview = previewFlight(initial, command('preview-only'), 1_000);
   assert.equal(preview.ok, true);
   if (!preview.ok) return;
@@ -334,7 +349,7 @@ test('preview is read-only and a persisted request remains idempotent after relo
     removeItem: (key: string) => { storage.delete(key); },
   };
   const persistence = createPersistenceFacade({ mode: 'production', storage: storageLike, now: () => 1_000 });
-  const sent = dispatchFlight(persistence.read(), command('reload-safe'), 1_000);
+  const sent = dispatchFlight(colonyReady(persistence.read()), command('reload-safe'), 1_000);
   assert.equal(sent.ok, true);
   if (!sent.ok) return;
   assert.equal(persistence.write(sent.state).ok, true);
@@ -349,7 +364,7 @@ test('preview is read-only and a persisted request remains idempotent after relo
 });
 
 test('recall returns the colonizer with elapsed reverse timer and no gas refund', () => {
-  const initial = createInitialSaveState('production', 1_000);
+  const initial = colonyReady(createInitialSaveState('production', 1_000));
   const sent = dispatchFlight(initial, command('recall-me'), 1_000);
   assert.equal(sent.ok, true);
   if (!sent.ok) return;
@@ -369,7 +384,7 @@ test('recall returns the colonizer with elapsed reverse timer and no gas refund'
 });
 
 test('recall at or after arrival refuses to create a reverse leg and does not refund gas', () => {
-  const initial = createInitialSaveState('production', 1_000);
+  const initial = colonyReady(createInitialSaveState('production', 1_000));
   const sent = dispatchFlight(initial, command('arrival-boundary'), 1_000);
   assert.equal(sent.ok, true);
   if (!sent.ok) return;
@@ -393,7 +408,7 @@ test('recall at or after arrival refuses to create a reverse leg and does not re
 });
 
 test('successful arrival creates one deterministic isolated colony and consumes payload only at arrival', () => {
-  const initial = createInitialSaveState('production', 1_000);
+  const initial = colonyReady(createInitialSaveState('production', 1_000));
   const sent = dispatchFlight(initial, command('colonize-me'), 1_000);
   assert.equal(sent.ok, true);
   if (!sent.ok) return;
@@ -423,7 +438,7 @@ test('a reloaded arrived colonization flight resolves once and releases the rese
     removeItem: (key: string) => { storage.delete(key); },
   };
   const persistence = createPersistenceFacade({ mode: 'production', storage: storageLike, now: () => 1_000 });
-  const sent = dispatchFlight(persistence.read(), command('reload-arrived'), 1_000);
+  const sent = dispatchFlight(colonyReady(persistence.read()), command('reload-arrived'), 1_000);
   assert.equal(sent.ok, true);
   if (!sent.ok) return;
   const savedArrived = {
@@ -461,7 +476,7 @@ test('a reloaded arrived flight starts one full occupied-target return without d
     removeItem: (key: string) => { storage.delete(key); },
   };
   const persistence = createPersistenceFacade({ mode: 'production', storage: storageLike, now: () => 1_000 });
-  const sent = dispatchFlight(persistence.read(), command('reload-arrived-occupied', { galaxy: 1, system: 3, position: 1 }), 1_000);
+  const sent = dispatchFlight(colonyReady(persistence.read()), command('reload-arrived-occupied', { galaxy: 1, system: 3, position: 1 }), 1_000);
   assert.equal(sent.ok, true);
   if (!sent.ok) return;
   const occupied = {
@@ -497,7 +512,7 @@ test('a reloaded arrived flight starts one full occupied-target return without d
 });
 
 test('target occupied at arrival starts a full return once and completes as target-occupied', () => {
-  const initial = createInitialSaveState('production', 1_000);
+  const initial = colonyReady(createInitialSaveState('production', 1_000));
   const sent = dispatchFlight(initial, command('occupied-later', { galaxy: 1, system: 3, position: 1 }), 1_000);
   assert.equal(sent.ok, true);
   if (!sent.ok) return;
@@ -630,7 +645,7 @@ test('persisted arrived phase keeps the arrival-time occupancy result after a la
 });
 
 test('a damaged save with an existing deterministic planet id returns instead of hanging outbound', () => {
-  const initial = createInitialSaveState('production', 1_000);
+  const initial = colonyReady(createInitialSaveState('production', 1_000));
   const sent = dispatchFlight(initial, command('damaged-planet-id'), 1_000);
   assert.equal(sent.ok, true);
   if (!sent.ok) return;
@@ -660,7 +675,7 @@ test('a damaged save with an existing deterministic planet id returns instead of
 });
 
 test('a damaged save without the origin planet completes the flight with a clear failure and no duplicate colony', () => {
-  const initial = createInitialSaveState('production', 1_000);
+  const initial = colonyReady(createInitialSaveState('production', 1_000));
   const sent = dispatchFlight(initial, command('missing-origin'), 1_000);
   assert.equal(sent.ok, true);
   if (!sent.ok) return;
@@ -716,7 +731,7 @@ test('an asteroid over an occupied coordinate remains blocked', () => {
 });
 
 test('colonization rejects non-coordinate destinations at the application boundary', () => {
-  const initial = createInitialSaveState('production', 1_000);
+  const initial = colonyReady(createInitialSaveState('production', 1_000));
   const result = dispatchFlight(initial, {
     ...command('planet-destination'),
     destination: { kind: 'planet', planetId: 'helion-01', coordinate: { galaxy: 1, system: 2, position: 1 } },
@@ -756,7 +771,7 @@ test('dispatch and arrival re-check dynamic objects while ignoring asteroid-only
 });
 
 test('recycle requires the current explicit target kind and a recycler-only ship manifest', () => {
-  const initial = withRecyclers(createInitialSaveState('production', 1_000), 4);
+  const initial = withRecyclers(colonyReady(createInitialSaveState('production', 1_000)), 4);
   const empty = emptyUniverseCoordinate();
   const withDebris = withOrbitalDebris(initial, empty.coordinate, 100);
   const invalidCommands = [
@@ -780,7 +795,7 @@ test('recycle requires the current explicit target kind and a recycler-only ship
 
 test('recycle snapshots catalog capacity, collects debris at arrival, and credits the origin exactly once after reload', () => {
   const empty = emptyUniverseCoordinate();
-  const initial = withOrbitalDebris(withRecyclers(createInitialSaveState('production', 1_000), 1), empty.coordinate, 275);
+  const initial = withOrbitalDebris(withRecyclers(colonyReady(createInitialSaveState('production', 1_000)), 1), empty.coordinate, 275);
   const expectedCapacity = getTransportCargoSummary(initial, 'helion-01', { recycler: 1 }, {}, { kind: 'coordinate', coordinate: empty.coordinate }).capacity.total;
   const storage = new Map<string, string>();
   const persistence = createPersistenceFacade({
@@ -838,7 +853,7 @@ test('recycle snapshots catalog capacity, collects debris at arrival, and credit
 
 test('ordered recycle arrivals contend deterministically and successive flights collect only remaining debris', () => {
   const empty = emptyUniverseCoordinate();
-  const fleetState = withRecyclers(createInitialSaveState('production', 1_000), 2);
+  const fleetState = withRecyclers(colonyReady(createInitialSaveState('production', 1_000)), 2);
   const capacity = getTransportCargoSummary(fleetState, 'helion-01', { recycler: 1 }, {}, { kind: 'coordinate', coordinate: empty.coordinate }).capacity.total;
   const initial = withOrbitalDebris(fleetState, empty.coordinate, capacity + 333);
   const laterIdFirst = dispatchFlight(initial, recycleCommand('recycle-z', empty.coordinate, empty.targetKind), 1_000);
@@ -873,7 +888,7 @@ test('ordered recycle arrivals contend deterministically and successive flights 
 
 test('recycle returns an empty cargo snapshot when an earlier arrival collected all debris', () => {
   const empty = emptyUniverseCoordinate();
-  const fleetState = withRecyclers(createInitialSaveState('production', 1_000), 2);
+  const fleetState = withRecyclers(colonyReady(createInitialSaveState('production', 1_000)), 2);
   const capacity = getTransportCargoSummary(fleetState, 'helion-01', { recycler: 1 }, {}, { kind: 'coordinate', coordinate: empty.coordinate }).capacity.total;
   const initial = withOrbitalDebris(fleetState, empty.coordinate, capacity);
   const first = dispatchFlight(initial, recycleCommand('empty-return-a', empty.coordinate, empty.targetKind), 1_000);
@@ -895,7 +910,7 @@ test('recycle returns an empty cargo snapshot when an earlier arrival collected 
 
 test('recycle accepts only an active persisted asteroid overlay and snapshots the underlying coordinate kind', () => {
   const empty = emptyUniverseCoordinate();
-  const initial = withOrbitalDebris(withRecyclers(createInitialSaveState('production', 1_000), 1), empty.coordinate, 100);
+  const initial = withOrbitalDebris(withRecyclers(colonyReady(createInitialSaveState('production', 1_000)), 1), empty.coordinate, 100);
   const active = withAsteroidOverlay(initial, empty.coordinate);
   const sent = dispatchFlight(active, recycleCommand('recycle-active-asteroid-overlay', empty.coordinate, 'asteroid'), 1_000);
   assert.equal(sent.ok, true);
@@ -908,7 +923,7 @@ test('recycle accepts only an active persisted asteroid overlay and snapshots th
 });
 
 test('recycler target edits resolve the current map kind, preview and dispatch the same allowed target, and reject unavailable coordinates', () => {
-  const initial = withRecyclers(createInitialSaveState('production', 1_000), 1);
+  const initial = withRecyclers(colonyReady(createInitialSaveState('production', 1_000)), 1);
   const emptyTargets = createUniverseSystem({ mode: 'production', galaxy: 1, system: 1, nowMs: 1_000 })
     .positions.filter((node) => node.kind === 'empty');
   assert.ok(emptyTargets.length >= 3);
@@ -954,7 +969,7 @@ test('recycler target edits resolve the current map kind, preview and dispatch t
 
 test('recycle arrival collects only free orbital debris and reports zero without touching hidden asteroid cargo', () => {
   const empty = emptyUniverseCoordinate();
-  const twoRecyclers = withRecyclers(createInitialSaveState('production', 1_000), 2);
+  const twoRecyclers = withRecyclers(colonyReady(createInitialSaveState('production', 1_000)), 2);
   const capacity = getTransportCargoSummary(twoRecyclers, 'helion-01', { recycler: 1 }, {}, { kind: 'coordinate', coordinate: empty.coordinate }).capacity.total;
   const freeDebris = capacity;
   const spawnIndex = 77;
@@ -996,7 +1011,7 @@ test('recycle arrival collects only free orbital debris and reports zero without
 
 test('gas dispatch accepts recycler-only fleets and snapshots its target coordinates and cargo capacity', () => {
   const empty = emptyUniverseCoordinate();
-  const initial = withGasAsteroid(withRecyclers(createInitialSaveState('production', 1_000), 4), empty.coordinate);
+  const initial = withGasAsteroid(withRecyclers(colonyReady(createInitialSaveState('production', 1_000)), 4), empty.coordinate);
   const expectedCapacity = getTransportCargoSummary(
     initial,
     'helion-01',
@@ -1188,7 +1203,7 @@ test('gas arrival gives gas priority and shares recycler capacity only with aste
   for (const scenario of cases) {
     const initial = {
       ...withGasAsteroid(
-        withOrbitalDebris(withRecyclers(createInitialSaveState('production', 1_000), 1), empty.coordinate, 777),
+        withOrbitalDebris(withRecyclers(colonyReady(createInitialSaveState('production', 1_000)), 1), empty.coordinate, 777),
         empty.coordinate,
         { spawnIndex: scenario.spawnIndex, gasYield: scenario.gasYield, gasUpdatedAt: 3_000 },
       ),
@@ -1220,7 +1235,7 @@ test('gas arrival resolves a hit, a moved-away miss with explicit zero cargo, an
   const arrivalAt = 3_000;
 
   const stationary = withGasArrivalAt(
-    withGasAsteroid(withRecyclers(createInitialSaveState('production', 1_000), 1), target, {
+    withGasAsteroid(withRecyclers(colonyReady(createInitialSaveState('production', 1_000)), 1), target, {
       spawnIndex: 80, gasYield: 20_000, gasUpdatedAt: arrivalAt, nextMoveAt: arrivalAt + 1,
     }),
     'gas-exact-hit', target, arrivalAt,
@@ -1235,7 +1250,7 @@ test('gas arrival resolves a hit, a moved-away miss with explicit zero cargo, an
   assert.equal(hit.state.reports.gasExtractionArrivalReports?.find((report) => report.flightId === hitFlight.id)?.outcome, 'found');
 
   const movedAway = withGasArrivalAt(
-    withGasAsteroid(withRecyclers(createInitialSaveState('production', 1_000), 1), target, {
+    withGasAsteroid(withRecyclers(colonyReady(createInitialSaveState('production', 1_000)), 1), target, {
       spawnIndex: 81, gasYield: 20_000, gasUpdatedAt: arrivalAt, nextMoveAt: arrivalAt - 1,
     }),
     'gas-exact-miss', target, arrivalAt,
@@ -1257,7 +1272,7 @@ test('gas arrival resolves a hit, a moved-away miss with explicit zero cargo, an
   const startingCoordinate = emptyUniverseCoordinate(1, 2).coordinate;
   const arrivedCoordinate = advanceUniverseAsteroidCoordinate(startingCoordinate, 1, 1)!;
   const movedIntoTarget = withGasArrivalAt(
-    withGasAsteroid(withRecyclers(createInitialSaveState('production', 1_000), 1), startingCoordinate, {
+    withGasAsteroid(withRecyclers(colonyReady(createInitialSaveState('production', 1_000)), 1), startingCoordinate, {
       spawnIndex: 82, gasYield: 20_000, gasUpdatedAt: arrivalAt, nextMoveAt: arrivalAt - 1,
     }),
     'gas-moved-into-target', arrivedCoordinate, arrivalAt,
@@ -1277,7 +1292,7 @@ test('asteroid movement wins an exact-millisecond tie with gas arrival', () => {
   const empty = emptyUniverseCoordinate();
   const arrivalAt = 3_000;
   const sent = withGasArrivalAt(
-    withGasAsteroid(withRecyclers(createInitialSaveState('production', 1_000), 1), empty.coordinate, {
+    withGasAsteroid(withRecyclers(colonyReady(createInitialSaveState('production', 1_000)), 1), empty.coordinate, {
       spawnIndex: 83, gasYield: 50_000, gasUpdatedAt: arrivalAt, nextMoveAt: arrivalAt,
     }),
     'gas-movement-tie', empty.coordinate, arrivalAt,
@@ -1308,7 +1323,7 @@ test('gas depletion keeps exactly 1,000 reserve and removes an asteroid with 999
 
   for (const scenario of cases) {
     const initial = {
-      ...withGasAsteroid(withRecyclers(createInitialSaveState('production', 1_000), 1), empty.coordinate, {
+      ...withGasAsteroid(withRecyclers(colonyReady(createInitialSaveState('production', 1_000)), 1), empty.coordinate, {
         spawnIndex: scenario.spawnIndex, gasYield: scenario.gasYield, gasUpdatedAt: 3_000,
       }),
       asteroidDebrisBySpawnIndex: { [String(scenario.spawnIndex)]: 50_000 },
@@ -1335,7 +1350,7 @@ test('gas depletion keeps exactly 1,000 reserve and removes an asteroid with 999
 
 test('simultaneous gas arrivals use stable flight order and replay without harvesting twice', () => {
   const empty = emptyUniverseCoordinate();
-  const initial = withGasAsteroid(withRecyclers(createInitialSaveState('production', 1_000), 2), empty.coordinate, {
+  const initial = withGasAsteroid(withRecyclers(colonyReady(createInitialSaveState('production', 1_000)), 2), empty.coordinate, {
     spawnIndex: 86, gasYield: 100_000, gasUpdatedAt: 3_000,
   });
   const firstDispatch = withGasArrivalAt(initial, 'gas-z', empty.coordinate, 3_000);
@@ -1372,7 +1387,7 @@ test('simultaneous gas arrivals use stable flight order and replay without harve
 test('gas cargo is credited to the origin exactly once after a reload', () => {
   const empty = emptyUniverseCoordinate();
   const initial = {
-    ...withGasAsteroid(withRecyclers(createInitialSaveState('production', 1_000), 1), empty.coordinate, {
+    ...withGasAsteroid(withRecyclers(colonyReady(createInitialSaveState('production', 1_000)), 1), empty.coordinate, {
       spawnIndex: 87, gasYield: 20_000, gasUpdatedAt: 3_000,
     }),
     asteroidDebrisBySpawnIndex: { '87': 2_000 },
@@ -1413,7 +1428,7 @@ test('gas cargo is credited to the origin exactly once after a reload', () => {
 
 test('recycle follows return policy if the origin disappears after collection', () => {
   const empty = emptyUniverseCoordinate();
-  const initial = withOrbitalDebris(withRecyclers(createInitialSaveState('production', 1_000), 1), empty.coordinate, 50);
+  const initial = withOrbitalDebris(withRecyclers(colonyReady(createInitialSaveState('production', 1_000)), 1), empty.coordinate, 50);
   const sent = dispatchFlight(initial, recycleCommand('recycle-origin-lost', empty.coordinate, empty.targetKind), 1_000);
   assert.equal(sent.ok, true);
   if (!sent.ok) return;
@@ -1478,7 +1493,7 @@ test('a 13:41 attack makes debris available to the 13:42 recycle arrival in the 
 });
 
 test('colony actions spend the colony wallet without changing the homeworld alias', () => {
-  const initial = createInitialSaveState('production', 1_000);
+  const initial = colonyReady(createInitialSaveState('production', 1_000));
   const sent = dispatchFlight(initial, command('colony-wallet'), 1_000);
   assert.equal(sent.ok, true);
   if (!sent.ok) return;
@@ -1501,7 +1516,7 @@ test('colony actions spend the colony wallet without changing the homeworld alia
 
 test('Test Mode seeds one persisted ally and Production keeps the fixture boundary empty', () => {
   const testState = createInitialSaveState('test', 1_000);
-  const productionState = createInitialSaveState('production', 1_000);
+  const productionState = colonyReady(createInitialSaveState('production', 1_000));
   assert.equal(testState.planets['helion-01'].recycling.availableDebris, 100_000);
   assert.equal(Object.keys(testState.alliedPlanets ?? {}).length, 1);
   assert.equal(testState.alliedPlanets?.['test-mode-ally-ira-vel-v1'].ownerId, 'member-ira-vel');
@@ -2836,7 +2851,7 @@ test('a deployment return created during reconciliation precedes later planet wo
 test('reconcileRuntime collects before an asteroid move, then captures only the remaining free debris', () => {
   const empty = emptyUniverseCoordinate();
   const spawnIndex = 42;
-  const fleet = withRecyclers(createInitialSaveState('production', 1_000), 1);
+  const fleet = withRecyclers(colonyReady(createInitialSaveState('production', 1_000)), 1);
   const capacity = getTransportCargoSummary(fleet, 'helion-01', { recycler: 1 }, {}, {
     kind: 'coordinate', coordinate: empty.coordinate,
   }).capacity.total;
@@ -2867,7 +2882,7 @@ test('reconcileRuntime collects before an asteroid move, then captures only the 
 test('reconcileRuntime lets an earlier asteroid move capture all free debris before recycler arrival', () => {
   const empty = emptyUniverseCoordinate();
   const spawnIndex = 43;
-  const fleet = withRecyclers(createInitialSaveState('production', 1_000), 1);
+  const fleet = withRecyclers(colonyReady(createInitialSaveState('production', 1_000)), 1);
   const capacity = getTransportCargoSummary(fleet, 'helion-01', { recycler: 1 }, {}, {
     kind: 'coordinate', coordinate: empty.coordinate,
   }).capacity.total;
@@ -2898,7 +2913,7 @@ test('reconcileRuntime lets an earlier asteroid move capture all free debris bef
 test('reconcileRuntime processes asteroid capture before a recycler arrival at the exact same millisecond', () => {
   const empty = emptyUniverseCoordinate();
   const spawnIndex = 44;
-  const fleet = withRecyclers(createInitialSaveState('production', 1_000), 1);
+  const fleet = withRecyclers(colonyReady(createInitialSaveState('production', 1_000)), 1);
   const freeDebris = 1_000;
   const scheduled = withScheduledAsteroid(
     withOrbitalDebris(fleet, empty.coordinate, freeDebris),
@@ -2981,7 +2996,7 @@ test('reconcileRuntime catches up multiple asteroid moves equivalently and does 
   const thirdMoveAt = secondMoveAt + getUniverseAsteroidDwellMs(spawnIndex, 2);
   const secondCoordinate = advanceUniverseAsteroidCoordinate(start, 1, 1)!;
   const thirdCoordinate = advanceUniverseAsteroidCoordinate(secondCoordinate, 1, 1)!;
-  const fleet = createInitialSaveState('production', 1_000);
+  const fleet = colonyReady(createInitialSaveState('production', 1_000));
   let seeded = withOrbitalDebris(fleet, start, 100, 'catch-up-debris-1');
   seeded = withOrbitalDebris(seeded, secondCoordinate, 200, 'catch-up-debris-2');
   seeded = withOrbitalDebris(seeded, thirdCoordinate, 300, 'catch-up-debris-3');
@@ -3134,4 +3149,18 @@ test('offline catch-up: transport and attack fleets start home at arrival, not a
   const done = completed.state.flights.records.find((record) => record.id === sent.flight.id)!;
   assert.equal(done.phase, 'completed');
   assert.equal(done.completedAt, sent.flight.arrivalAt + sent.flight.oneWayDurationMs);
+});
+
+test('a colony opens at its total-point threshold: 500 for the first, 100 000 for the sixth', () => {
+  const fresh = createInitialSaveState('production', 1_000);
+  const refused = dispatchFlightUngated(fresh, command('colony-too-early'), 1_000);
+  assert.equal(refused.ok, false);
+  if (!refused.ok) {
+    assert.equal(refused.error.code, 'colony-points-required');
+    assert.equal(refused.state, fresh, 'a refused launch spends nothing');
+  }
+  assert.equal(dispatchFlightUngated(colonyReady(fresh), command('colony-in-time'), 1_000).ok, true);
+  assert.equal(nextColonyPointThreshold(1), 500);
+  assert.equal(nextColonyPointThreshold(6), 100_000);
+  assert.equal(nextColonyPointThreshold(7), null);
 });

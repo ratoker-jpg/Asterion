@@ -42,6 +42,19 @@ export const GALAXY_COUNT = 1;
 export const SYSTEM_COUNT = UNIVERSE_SYSTEM_COUNT;
 export const POSITION_COUNT = UNIVERSE_POSITION_COUNT;
 export const MAX_PLANETS_PER_OWNER = 7;
+
+/**
+ * Owner rule (24.10.2026): total points an owner needs when launching each
+ * colony (index 0 = the first colony, i.e. the second planet). Points lost
+ * later never take a planet away; only new colonisation is gated.
+ */
+export const COLONY_TOTAL_POINT_THRESHOLDS: readonly number[] = Object.freeze([500, 2_500, 10_000, 25_000, 50_000, 100_000]);
+
+/** Total points needed for an owner's next colony, given planets owned plus colonizers already flying; null past the cap. */
+export function nextColonyPointThreshold(plannedPlanets: number): number | null {
+  const colonyIndex = Math.max(0, Math.floor(plannedPlanets) - 1);
+  return colonyIndex < COLONY_TOTAL_POINT_THRESHOLDS.length ? COLONY_TOTAL_POINT_THRESHOLDS[colonyIndex]! : null;
+}
 /** World generator limit: a campaign may have 1..10 galaxies of 40 systems each. */
 export const MAX_GALAXY_COUNT = 10;
 
@@ -434,6 +447,8 @@ export type CreateUniverseSystemOptions = {
   registeredPlanets?: readonly UniverseRegisteredPlanet[];
   /** Global pirate victories for this local save; unrelated timed objects are unchanged. */
   pirateContactDefeats?: readonly PirateContactDefeatRecord[];
+  /** Readers of `positions` only (contacts, timed objects) skip the galaxy-wide asteroid projection. */
+  skipAsteroids?: boolean;
 };
 
 function persistedPlanetFor(options: CreateUniverseSystemOptions, galaxy: number, system: number, slot: number) {
@@ -455,14 +470,24 @@ function botFixtureFor(system: number, slot: number, mode: RuntimeMode = 'test')
   return npc ? { ...npc, kind: 'npc' as const, ownerId: NPC_OWNER_ID, known: true } : undefined;
 }
 
-function fixtureFor(system: number, slot: number, mode: RuntimeMode = 'test', registeredPlanets?: readonly UniverseRegisteredPlanet[]) {
+/**
+ * Owner decision (24.10.2026): uninhabited planets are hidden until their
+ * mechanic is designed. Generation stays in code (and its seeded draws stay in
+ * place, so the rest of the map does not shift); set true to bring them back.
+ */
+export const UNINHABITED_PLANETS_ENABLED = false;
+
+function fixtureFor(galaxy: number, system: number, slot: number, mode: RuntimeMode = 'test', registeredPlanets?: readonly UniverseRegisteredPlanet[]) {
   const npc = botFixtureFor(system, slot, mode);
   // When an authoritative runtime registry is supplied, its presence is the
   // source of truth for Bot 01 planets. This prevents a destroyed target from
   // being recreated by the static Test Mode atlas on the next render/reload.
   if (npc && (registeredPlanets === undefined || registeredPlanets.some((planet) => planet.id === npc.id))) return npc;
-  if (system === 1) {
+  // The system-one atlas (home slot, ally fixture) belongs to galaxy 1 only;
+  // other galaxies' system 1 is ordinary space.
+  if (system === 1 && galaxy === GALAXY) {
     const fixture = SYSTEM_ONE_FIXTURES[slot];
+    if (fixture?.kind === 'uninhabited' && !UNINHABITED_PLANETS_ENABLED) return undefined;
     return fixture?.mode && fixture.mode !== mode ? undefined : fixture;
   }
   return undefined;
@@ -517,7 +542,7 @@ function createPositionNode(
   }
   const fixture = persisted || registered
     ? undefined
-    : fixtureFor(system, slot, options.mode, options.registeredPlanets);
+    : fixtureFor(galaxy, system, slot, options.mode, options.registeredPlanets);
   const kind = persisted ? 'player' : registered?.kind ?? fixture?.kind ?? generatedKind();
   const ownerId = persisted?.ownerId ?? registered?.ownerId ?? fixture?.ownerId;
   const isHomeworld = persisted?.isHomeworld ?? registered?.isHomeworld ?? (kind === 'player' && system === 1 && slot === 1);
@@ -551,7 +576,7 @@ function createUniverseSystemBase(options: CreateUniverseSystemOptions, assets: 
   const random = mulberry32(10_000 + galaxy * 977 + system * 1_003
     + (options.mode === 'test' ? testUniverseLayoutSeed() * 37 : 0));
   const fixtureSlots = Array.from({ length: POSITION_COUNT }, (_, index) => index + 1)
-    .filter((slot) => fixtureFor(system, slot, options.mode, options.registeredPlanets)
+    .filter((slot) => fixtureFor(galaxy, system, slot, options.mode, options.registeredPlanets)
       || isSuppressedBotFixture(options, galaxy, system, slot)
       || isSuppressedHelionFixture(options, galaxy, system, slot));
   const persistedSlots = (options.playerPlanets ?? [])
@@ -566,7 +591,8 @@ function createUniverseSystemBase(options: CreateUniverseSystemOptions, assets: 
     Array.from({ length: POSITION_COUNT }, (_, index) => index + 1).filter((slot) => !fixedSlots.includes(slot)),
     random,
   );
-  const occupiedSlots = new Set([...fixedSlots, ...remainingSlots.slice(0, Math.max(0, planetCount - fixedSlots.length))]);
+  const generatedSlots = UNINHABITED_PLANETS_ENABLED ? remainingSlots.slice(0, Math.max(0, planetCount - fixedSlots.length)) : [];
+  const occupiedSlots = new Set([...fixedSlots, ...generatedSlots]);
   const positions = Array.from({ length: POSITION_COUNT }, (_, index) => index + 1).map((slot) => occupiedSlots.has(slot)
     ? createPositionNode(galaxy, system, slot, options, assets)
     : {
@@ -600,24 +626,61 @@ export function getUniverseAsteroidDwellMs(spawnIndex: number, movementIndex: nu
   return randomInt(random, ASTEROID_MIN_DWELL_MS, ASTEROID_MAX_DWELL_MS);
 }
 
+type AsteroidRoutePoint = Readonly<{
+  coordinate: UniverseCoordinate;
+  movementIndex: number;
+  previousMoveAt: number;
+  nextMoveAt: number;
+  /** Move time at which the route leaves the universe; queries at or after it are null. */
+  exitAt?: number;
+}>;
+
+// Route walks are pure in (galaxyCount, spawnIndex, time). Saves without an
+// asteroid simulation re-derive every route per system render, so the latest
+// reached point is kept and later queries continue the identical walk.
+const ASTEROID_ROUTE_CACHE_LIMIT = 20_000;
+const asteroidRouteCache = new Map<string, AsteroidRoutePoint>();
+
+function rememberAsteroidRoute(key: string, point: AsteroidRoutePoint) {
+  if (!asteroidRouteCache.has(key) && asteroidRouteCache.size >= ASTEROID_ROUTE_CACHE_LIMIT) asteroidRouteCache.clear();
+  asteroidRouteCache.set(key, point);
+}
+
 export function getUniverseAsteroidState(spawnIndex: number, nowMs: number, galaxyCount = 1): InitializedUniverseAsteroidRuntimeState | null {
   const safeNow = normalizeNow(nowMs);
   if (!Number.isInteger(spawnIndex) || spawnIndex < 0) return null;
   const spawnedAt = ASTEROID_SCHEDULE_EPOCH_MS + spawnIndex * ASTEROID_SPAWN_INTERVAL_MS;
   if (spawnedAt > safeNow) return null;
-  const random = seededRandom(0xA570, spawnIndex);
-  let coordinate: UniverseCoordinate = { galaxy: GALAXY, system: 1, position: randomInt(random, 1, POSITION_COUNT) };
-  let movementIndex = 0;
-  let previousMoveAt = spawnedAt;
-  let nextMoveAt = spawnedAt + getUniverseAsteroidDwellMs(spawnIndex, movementIndex);
+  const cacheKey = `${galaxyCount}:${spawnIndex}`;
+  const cached = asteroidRouteCache.get(cacheKey);
+  if (cached?.exitAt !== undefined && safeNow >= cached.exitAt) return null;
+  let coordinate: UniverseCoordinate;
+  let movementIndex: number;
+  let previousMoveAt: number;
+  let nextMoveAt: number;
+  if (cached && safeNow >= cached.previousMoveAt) {
+    // Resume the same deterministic walk from a point it already passed.
+    ({ movementIndex, previousMoveAt, nextMoveAt } = cached);
+    coordinate = { ...cached.coordinate };
+  } else {
+    const random = seededRandom(0xA570, spawnIndex);
+    coordinate = { galaxy: GALAXY, system: 1, position: randomInt(random, 1, POSITION_COUNT) };
+    movementIndex = 0;
+    previousMoveAt = spawnedAt;
+    nextMoveAt = spawnedAt + getUniverseAsteroidDwellMs(spawnIndex, movementIndex);
+  }
   while (safeNow >= nextMoveAt) {
     previousMoveAt = nextMoveAt;
     const nextCoordinate = advanceUniverseAsteroidCoordinate(coordinate, 1, galaxyCount);
-    if (!nextCoordinate) return null;
+    if (!nextCoordinate) {
+      rememberAsteroidRoute(cacheKey, { coordinate, movementIndex, previousMoveAt, nextMoveAt, exitAt: previousMoveAt });
+      return null;
+    }
     coordinate = nextCoordinate;
     movementIndex += 1;
     nextMoveAt = previousMoveAt + getUniverseAsteroidDwellMs(spawnIndex, movementIndex);
   }
+  if (!cached || previousMoveAt >= cached.previousMoveAt) rememberAsteroidRoute(cacheKey, { coordinate: { ...coordinate }, movementIndex, previousMoveAt, nextMoveAt });
   const nextCoordinate = advanceUniverseAsteroidCoordinate(coordinate, 1, galaxyCount) ?? undefined;
   const gasRandom = seededRandom(0x6A5, spawnIndex);
   const gasYield = randomInt(gasRandom, ASTEROID_GAS_MIN, ASTEROID_GAS_MAX);
@@ -992,7 +1055,8 @@ export function createUniverseSystem(options: CreateUniverseSystemOptions): Univ
   const assets = mergeAssets(options.assets);
   const nowMs = normalizeNow(options.nowMs);
   const galaxyCount = Math.max(1, Math.floor(options.galaxyCount ?? 1));
-  const asteroidNodes = createActiveAsteroidsBySystem(
+  // Asteroids never occupy `positions`; timed objects are placed without them.
+  const asteroidNodes = options.skipAsteroids ? null : createActiveAsteroidsBySystem(
     Math.max(1, Math.floor(options.galaxy ?? GALAXY)), nowMs, galaxyCount, assets, options.asteroidStates,
   );
   let system = createUniverseSystemBase(options, assets);
@@ -1001,7 +1065,7 @@ export function createUniverseSystem(options: CreateUniverseSystemOptions): Univ
   system = injectTimedObject(system, 'anomaly', nowMs, assets);
   return {
     ...system,
-    asteroids: asteroidNodes[system.system - 1],
+    asteroids: asteroidNodes ? asteroidNodes[system.system - 1] : [],
   };
 }
 

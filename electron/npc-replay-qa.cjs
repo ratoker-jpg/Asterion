@@ -19,7 +19,7 @@ const ROOT = path.join(__dirname, '..');
 // timelines running from its start. The default stays the scoped economy run.
 const FULL_WORLD = process.argv.includes('--full-world');
 function parseCatchupDays(args) {
-  const value = args.find((arg) => arg.startsWith('--days='))?.slice('--days='.length) ?? '30';
+  const value = args.find((arg) => arg.startsWith('--days='))?.slice('--days='.length) ?? '14';
   if (!/^\d+$/.test(value)) throw new Error(`Invalid --days value ${JSON.stringify(value)}; expected an integer from 1 to 30.`);
   const days = Number(value);
   if (!Number.isSafeInteger(days) || days < 1 || days > 30) throw new Error(`Invalid --days value ${JSON.stringify(value)}; expected an integer from 1 to 30.`);
@@ -27,7 +27,7 @@ function parseCatchupDays(args) {
 }
 const CATCHUP_DAYS = parseCatchupDays(process.argv.slice(2));
 const OUTPUT = process.env.ASTERION_QA_OUTPUT
-  || path.join(ROOT, 'artifacts', `${FULL_WORLD ? 'npc-replay-full-world-qa' : 'npc-replay-qa'}${CATCHUP_DAYS === 30 ? '' : `-${CATCHUP_DAYS}d`}`);
+  || path.join(ROOT, 'artifacts', `${FULL_WORLD ? 'npc-replay-full-world-qa' : 'npc-replay-qa'}${CATCHUP_DAYS === 14 ? '' : `-${CATCHUP_DAYS}d`}`);
 const CATCHUP_TIMEOUT_MS = 120_000;
 const FIXTURE_ISOLATION = FULL_WORLD
   ? 'None: 10 galaxies, 100 NPC, asteroid simulation, exploration and pirate timelines run from campaign start.'

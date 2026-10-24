@@ -30,7 +30,38 @@ export function createNpcState(ownerIds: readonly string[], personaSalt: string,
   assertTimestamp(at, 'at');
   const profiles: Record<string, NpcProfile> = Object.create(null) as Record<string, NpcProfile>;
   for (const ownerId of [...ownerIds].sort(compareStableIds)) profiles[ownerId] = createNpcProfile(ownerId, personaSalt, at);
+  stratifyNpcPopulation(profiles, personaSalt);
   return Object.freeze({ version: NPC_STATE_VERSION, personaSalt, profiles: Object.freeze(profiles) });
+}
+
+/**
+ * Owner rule (24.10.2026): whatever the number of NPCs, a new campaign keeps
+ * the intended mix of how much they play and, independently, how well they
+ * decide. Each of the two is spread evenly over its range in a private
+ * seeded order (one slot per owner, jittered inside it), so seven NPCs get
+ * the same proportions as a hundred and activity says nothing about skill.
+ */
+function stratifyNpcPopulation(profiles: Record<string, NpcProfile>, personaSalt: string): void {
+  const ownerIds = Object.keys(profiles);
+  if (ownerIds.length < 2) return;
+  const spread = (axis: string): Map<string, number> => {
+    const key = (ownerId: string) => createSeededRandom(JSON.stringify(['npc-population:v1', personaSalt, axis, ownerId]))();
+    const order = [...ownerIds].sort((left, right) => key(left) - key(right) || compareStableIds(left, right));
+    return new Map(order.map((ownerId, slot) => {
+      const jitter = 0.1 + 0.8 * createSeededRandom(JSON.stringify(['npc-population-jitter:v1', personaSalt, axis, ownerId]))();
+      return [ownerId, (slot + jitter) / order.length];
+    }));
+  };
+  const activity = spread('activity');
+  const skill = spread('skill');
+  for (const ownerId of ownerIds) {
+    const profile = profiles[ownerId]!;
+    profiles[ownerId] = Object.freeze({
+      ...profile,
+      traits: Object.freeze({ ...profile.traits, mechanicsKnowledge: skill.get(ownerId)! }),
+      activity: Object.freeze({ ...profile.activity, propensity: activity.get(ownerId)! }),
+    });
+  }
 }
 
 /**
@@ -84,7 +115,8 @@ export function isNpcProfile(value: unknown): value is NpcProfile {
     || !isKnowledge(value.knowledge) || !isPlanning(value.planning) || !Array.isArray(value.memory)
     || !value.memory.every(isMemoryEntry) || !Array.isArray(value.longTermGoals)
     || !value.longTermGoals.every(isGoal) || !isActivity(value.activity) || !isSession(value.session)
-    || !isCursor(value.cursor)) return false;
+    || !isCursor(value.cursor)
+    || (value.campaignStartedAt !== undefined && !isTimestamp(value.campaignStartedAt))) return false;
   return true;
 }
 
@@ -126,6 +158,7 @@ function createNpcProfile(ownerId: string, personaSalt: string, at: number): Npc
     activity,
     session,
     cursor: null,
+    campaignStartedAt: at,
   });
 }
 
@@ -148,6 +181,7 @@ function isSession(value: unknown): value is NpcSessionState {
     && typeof value.active === 'boolean'
     && isNullableTimestamp(value.sessionStartedAt) && isNullableTimestamp(value.sessionEndsAt)
     && isNullableTimestamp(value.lastBoundaryAt)
+    && (value.idleUntil === undefined || isTimestamp(value.idleUntil))
     && (value.active
       ? isTimestamp(value.sessionStartedAt) && isTimestamp(value.sessionEndsAt) && value.sessionEndsAt >= value.sessionStartedAt
       : value.sessionStartedAt === null && value.sessionEndsAt === null);

@@ -108,6 +108,13 @@ const context = (now: number, mode: 'production' | 'test' = 'test') => ({
   testTimeScale: 10 as const,
 });
 
+
+/** The first colony opens at 500 total points (owner rule); these tests colonise from a fresh campaign. */
+function withFirstColonyPoints(state: SaveState): SaveState {
+  return { ...state, rating: { ...state.rating, battleAwardsByReportId: { ...state.rating.battleAwardsByReportId,
+    'qa-first-colony-points': { [state.profile.playerId]: 500 } } } };
+}
+
 test('production and test persistence seeds stay isolated at every fixture boundary', () => {
   const production = createInitialSaveState('production', 1_000);
   const testMode = createInitialSaveState('test', 1_000);
@@ -1056,7 +1063,7 @@ test('persistence keeps newly integrated regular planet skin IDs through reload'
 test('persistence drops incomplete flight records and rebuilds only a validated request index', () => {
   const storage = new MemoryStorage();
   const persistence = createPersistenceFacade({ mode: 'production', storage, now: () => 1_000 });
-  const sent = dispatchFlight(createInitialSaveState('production', 1_000), {
+  const sent = dispatchFlight(withFirstColonyPoints(createInitialSaveState('production', 1_000)), {
     requestId: 'persisted-valid-flight',
     missionId: 'colonize',
     originPlanetId: 'helion-01',
@@ -2168,7 +2175,7 @@ test('resource clock preserves whole credits across irregular reconciliation int
 });
 
 test('resource income uses an independent persisted clock per planet and reconciles repeatedly without duplication', () => {
-  const base = createInitialSaveState('production', 0);
+  const base = withFirstColonyPoints(createInitialSaveState('production', 0));
   const sent = dispatchFlight(base, {
     requestId: 'resource-clock-colony',
     missionId: 'colonize',

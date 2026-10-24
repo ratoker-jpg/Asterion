@@ -9,6 +9,7 @@
 import { validateNpcState } from '../npc/state.ts';
 import { isNpcReplayMetadata } from '../npc/replay-state.ts';
 import { validateNpcScienceLedger } from '../npc/science-state.ts';
+import { validateNpcAutonomyPayload } from '../npc/autonomy-save.ts';
 
 export type SavePayloadHealth =
   | { status: 'missing' }
@@ -45,6 +46,9 @@ export function inspectParsedSave(parsed: unknown, currentSchemaVersion: number)
   }
   if (schemaVersion >= 27 && parsed.npcScience === undefined) {
     return { status: 'malformed', reason: 'В сохранении отсутствует каноническая наука NPC.' };
+  }
+  if (!validateNpcAutonomyPayload(parsed)) {
+    return { status: 'malformed', reason: 'Повреждены очереди или полёты автономного NPC.' };
   }
   if (parsed.planets !== undefined) {
     if (!plainObject(parsed.planets)) return { status: 'malformed', reason: 'Повреждён список планет.' };

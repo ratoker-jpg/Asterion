@@ -27,6 +27,17 @@ export function pirateThreatHoursToMaximum(resourcePoints: number, battlePoints:
   return 8 + 40 * pirateThreatScale(resources) * (1 + 2.4 * battleShare);
 }
 
+/**
+ * Owner rule (24.10.2026): below this many total points (resource + battle)
+ * pirates show no aggression toward an owner, player or NPC alike: no raids
+ * and no threat build-up. Above it the existing formulas apply unchanged.
+ */
+export const PIRATE_PROTECTION_TOTAL_POINTS = 100_000;
+
+export function isOwnerProtectedFromPirates(resourcePoints: number, battlePoints: number): boolean {
+  return safe(resourcePoints) + safe(battlePoints) < PIRATE_PROTECTION_TOTAL_POINTS;
+}
+
 export function pirateRaidChance(resourcePoints: number, battlePoints: number, ageHours: number): number {
   const age = safe(ageHours);
   if (age <= PIRATE_THREAT_GRACE_HOURS) return PIRATE_THREAT_MIN;
