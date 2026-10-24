@@ -466,7 +466,7 @@ async function runViewport(win, width, height) {
   await clickUtility(win, 'rating');
   await waitFor(win, `document.querySelectorAll('.rating-table-v2--players .score-head-v2__icon').length === 4 && Array.from(document.querySelectorAll('.rating-table-v2--players .score-head-v2__icon')).every((image) => image.complete && image.naturalWidth > 0)`);
   const ratingScoreIcons = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('.rating-table-v2--players .score-head-v2__icon')).map((image) => ({ src: image.getAttribute('src') || '', loaded: Boolean(image.complete && image.naturalWidth > 0), decorative: image.alt === '' && image.getAttribute('aria-hidden') === 'true' }))`);
-  if (ratingScoreIcons.some((icon, index) => !icon.loaded || !icon.decorative || !icon.src.endsWith(expectedScoreIconSuffixes[[3, 2, 0, 1][index]]))) throw new Error(`Rating score asset contract failed at ${label}: ${JSON.stringify(ratingScoreIcons)}`);
+  if (ratingScoreIcons.some((icon, index) => !icon.loaded || !icon.decorative || !icon.src.endsWith(expectedScoreIconSuffixes[[2, 0, 1, 3][index]]))) throw new Error(`Rating score asset contract failed at ${label}: ${JSON.stringify(ratingScoreIcons)}`);
   await capture(win, directory, 'rating-score-icons');
   await showCurrentAllianceRating(win);
   const initialRating = await ratingAllianceSnapshot(win);
