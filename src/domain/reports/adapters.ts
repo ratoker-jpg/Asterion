@@ -401,7 +401,8 @@ export function buildReportsFeed(
   const overpopulationItems = overpopulationReports.map(overpopulationEpisodeReportToReportItem);
   const recyclerItems = recyclerArrivalReports.map(recyclerArrivalReportToReportItem);
   const gasExtractionItems = gasExtractionArrivalReports.map(gasExtractionArrivalReportToReportItem);
-  const pirateReconItems = pirateReconReports.map(pirateReconReportToReportItem);
+  // Pirate recon by an NPC is that owner's intelligence, not the player's mail.
+  const pirateReconItems = pirateReconReports.filter((report) => !playerOwnerId || mine(report.ownerId)).map(pirateReconReportToReportItem);
   // Existing legacy consumers keep the historical System projection.
   // In the live player mailbox MOVE these canonical single-event notifications to
   // Flights instead of cloning them: no double unread count or duplicate messages.
@@ -413,7 +414,7 @@ export function buildReportsFeed(
     typeLabel: 'Прибытие добывающего флота',
   })) : [];
 
-  return [...battleItems, ...espionageItems, ...overpopulationItems, ...extractionSystemItems, ...pirateReconItems, ...pirateFlightAbsenceReports(pirateFlights), ...explorationMailboxReports(exploration, pirateFlights, playerOwnerId), ...arrivalFlightItems].sort((a, b) => {
+  return [...battleItems, ...espionageItems, ...overpopulationItems, ...extractionSystemItems, ...pirateReconItems, ...pirateFlightAbsenceReports(pirateFlights.filter((flight) => flight.ownerSide !== 'npc')), ...explorationMailboxReports(exploration, pirateFlights, playerOwnerId), ...arrivalFlightItems].sort((a, b) => {
     if (a.timestamp && b.timestamp) return Date.parse(b.timestamp) - Date.parse(a.timestamp);
     if (!a.timestamp && b.timestamp) return -1;
     if (a.timestamp && !b.timestamp) return 1;

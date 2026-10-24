@@ -123,13 +123,25 @@
 .fleet-panel-header-v1.compact h2 { font-size: 17px; }
 
 .fleet-flight-table-v1 { margin-top: 11px; border: 1px solid rgba(42, 193, 238, .16); }
-.fleet-flight-row-v1 { display: grid; grid-template-columns: .9fr 1.35fr .95fr 1fr .95fr 1.35fr .8fr; }
+.fleet-flight-row-v1 { display: grid; grid-template-columns: 1.15fr 2.4fr 1fr .8fr .7fr; }
+.fleet-flight-mission-cell { display: flex; align-items: center; gap: 6px; }
+.fleet-flight-mission-cell > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+.fleet-flight-mission-cell > span > small { display: block; margin-top: 2px; color: #79aebb; font-size: 10px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.fleet-flight-mission-cell .fleet-flight-mission-icon { margin-right: 0; flex: none; }
+.fleet-flight-route-cell { display: grid !important; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 10px; }
+.fleet-flight-route-cell > span { min-width: 0; overflow: hidden; }
+.fleet-flight-route-cell > span > strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #eefbff; font-size: 12px; }
+.fleet-flight-route-cell > span > small { display: block; margin-top: 2px; overflow: hidden; color: #79aebb; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.fleet-flight-route-arrow { color: #56d9f2; font-size: 14px; }
+.fleet-flight-time-cell small { display: block; color: #79aebb; font-size: 10px; }
+.fleet-flight-time-cell strong { display: block; color: #eefbff; font-size: 14px; font-variant-numeric: tabular-nums; }
+.fleet-flight-time-cell strong[hidden] { display: none !important; }
 .fleet-flight-head-v1 {
   min-height: 30px;
   align-items: center;
   background: rgba(17, 95, 123, .32);
   color: #8cc7d9;
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: .07em;
 }
 .fleet-flight-head-v1 span { padding: 0 9px; }
@@ -143,12 +155,12 @@
 }
 .fleet-flight-empty-v1 strong { color: #eefbff; font-size: 12px; }
 .fleet-flight-empty-v1 span { font-size: 10px; }
-.fleet-flight-row-v1:not(.fleet-flight-head-v1) { min-height: 48px; align-items: center; border-top: 1px solid rgba(42, 193, 238, .1); color: #c9e8ef; font-size: 10px; }
+.fleet-flight-row-v1:not(.fleet-flight-head-v1) { min-height: 56px; align-items: center; border-top: 1px solid rgba(42, 193, 238, .1); color: #c9e8ef; font-size: 12px; }
 .fleet-flight-row-v1:not(.fleet-flight-head-v1) > span { padding: 0 9px; }
 .fleet-flight-row-v1:not(.fleet-flight-head-v1) > span > strong,
 .fleet-flight-row-v1:not(.fleet-flight-head-v1) > span > small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fleet-flight-row-v1:not(.fleet-flight-head-v1) > span > small { margin-top: 2px; color: #79aebb; font-size: 8px; }
-.fleet-flight-row-v1:not(.fleet-flight-head-v1) > span[data-qa-flight-status] { color: #82e2d2; font-size: 9px; letter-spacing: .04em; }
+.fleet-flight-row-v1:not(.fleet-flight-head-v1) > span[data-qa-flight-status] { color: #82e2d2; font-size: 11px; font-weight: 700; letter-spacing: .04em; }
 .fleet-flight-row-v1--incoming-attack:not(.fleet-flight-head-v1) { background: linear-gradient(90deg, rgba(95, 25, 43, .44), rgba(55, 19, 36, .28)); color: #ffd7df; box-shadow: inset 3px 0 #ef536d; }
 .fleet-flight-row-v1--incoming-attack:not(.fleet-flight-head-v1) > span[data-qa-flight-status] { color: #ff8294; }
 .fleet-flight-row-v1--incoming-attack:not(.fleet-flight-head-v1) > span[data-qa-flight-origin] > small,
