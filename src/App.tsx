@@ -1,4 +1,6 @@
 import { isFlightVisibleToPlayer, isHostileFlightIncomingToPlayer } from './application/flight-visibility.ts';
+import { diffPlayerActions, PLAYER_JOURNAL_SNAPSHOT_INTERVAL_MS, snapshotPlayer } from './application/player-journal.ts';
+import { appendJournalEntries, setActiveJournalCampaign } from './ui/player-journal-store.ts';
 import { selectOwnerPresence } from './application/owner-presence.ts';
 import { dispatchBot01Exploration } from './application/exploration-bot01.ts';
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
@@ -1185,6 +1187,24 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     () => getStorageCapacities(currentPlanetState.buildings),
     [currentPlanetState.buildings],
   );
+  // Owner request: a journal of the player's own actions, exported from Settings.
+  const journalPrevious = useRef<SaveState | null>(null);
+  const journalSnapshotAt = useRef(0);
+  useEffect(() => {
+    setActiveJournalCampaign(persistence.saveKey);
+    const previous = journalPrevious.current;
+    journalPrevious.current = state;
+    if (RUNTIME_MODE !== 'production' || !previous || previous === state) return;
+    // A different campaign is a fresh start, not a burst of actions.
+    if (previous.profile.playerId !== state.profile.playerId || previous.worldConfig?.seed !== state.worldConfig?.seed) return;
+    const at = Date.now();
+    const entries = diffPlayerActions(previous, state, at);
+    if (at - journalSnapshotAt.current >= PLAYER_JOURNAL_SNAPSHOT_INTERVAL_MS) {
+      journalSnapshotAt.current = at;
+      entries.push(snapshotPlayer(state, at));
+    }
+    void appendJournalEntries(persistence.saveKey, entries);
+  }, [state, persistence]);
   // NPC sessions advance only with replay, so this follows state.npc.
   const ownerPresence = useMemo(() => selectOwnerPresence(state), [state.npc, state.profile.playerId]);
   const reportsUnreadCount = useMemo(() => {
