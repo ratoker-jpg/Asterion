@@ -12,11 +12,18 @@ import type { SpyTargetState } from '../domain/espionage/types.ts';
 import { calculateDefensePopulation } from '../domain/fleet/production.ts';
 import { createPirateContactCycleKey } from '../domain/pirates/contact-schedule.ts';
 import { getUniverseTimedObjectSchedule } from '../domain/universe/runtime.ts';
-import { pirateSeededDraw } from '../domain/pirates/threat.ts';
+import { PIRATE_PROTECTION_TOTAL_POINTS, pirateSeededDraw } from '../domain/pirates/threat.ts';
 import { normalizePirateRaidSnapshot } from '../domain/pirates/mission.ts';
 
 // Pinned wall clock so schedules and rolls do not depend on the run date (audit A4).
 const PINNED_START_MS=Date.UTC(2026,9,21,12);
+
+/** An owner past the 100 000-point pirate protection, via the canonical battle-award ledger. */
+function veteran<T extends ReturnType<typeof createInitialSaveState>>(state: T, ownerId: string): T {
+  return { ...state, rating: { ...state.rating, battleAwardsByReportId: {
+    ...state.rating.battleAwardsByReportId, 'qa-veteran-awards': { [ownerId]: PIRATE_PROTECTION_TOTAL_POINTS },
+  } } };
+}
 
 class MemoryStorage {
   private data=new Map<string,string>();
@@ -53,7 +60,10 @@ test('owner-cycle roll dispatches one persisted real pirate flight, resolves no-
   const due=selectDuePirateRolls(seeded,fixture!.startAt,now,'production');
   const event=due.find(x=>x.contactCycleKey===cycleKey&&x.ownerId===baseline.profile.playerId);
   assert.ok(event);
-  const launched=resolveDuePirateRoll(seeded,event!,'production');
+  const protectedRoll=resolveDuePirateRoll(seeded,event!,'production');
+  assert.equal(protectedRoll.flights.records.length,0,'a new owner below 100 000 points is never raided');
+  assert.equal(protectedRoll.pirate!.ownerThreats![baseline.profile.playerId]!.ageHours,10_000,'and their threat does not grow');
+  const launched=resolveDuePirateRoll(veteran(seeded,baseline.profile.playerId),event!,'production');
   assert.equal(launched.flights.records.length,1);
   const flight=launched.flights.records[0]!;
   assert.equal(flight.missionId,'pirate-raid');
@@ -405,7 +415,7 @@ test('owned pirate raid losses update and persist the attacked planet while anot
     const event = selectDuePirateRolls(seeded, cycle.startAt, at, 'test', 1)
       .find((roll) => roll.ownerId === baseline.profile.playerId && roll.contactCycleKey === contact.contactCycleKey);
     if (!event) continue;
-    const launched = resolveDuePirateRoll(seeded, event, 'test', 1);
+    const launched = resolveDuePirateRoll(veteran(seeded, baseline.profile.playerId), event, 'test', 1);
     const flight = launched.flights.records.find((record) => record.ownerSide === 'pirate'
       && record.missionId === 'pirate-raid' && record.destinationPlanetId === 'helion-01');
     if (!flight) continue;

@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  PIRATE_PROTECTION_TOTAL_POINTS,
+  isOwnerProtectedFromPirates,
   pirateRaidChance, pirateCounterFleetChance, pirateThreatHoursToMaximum,
   pirateHangarFraction, pirateDebrisRewardMultiplier, pirateSeededDraw,
   advancePirateThreat, reducePirateThreatAfterVictory,
@@ -46,4 +48,13 @@ test('seeded rolls and virtual time survive repeated calls and full/partial rese
   assert.deepEqual(advancePirateThreat(current,1_000_000+3_600_000),current);
   assert.ok(Math.abs(reducePirateThreatAfterVictory(current,current.integratedAt,0.95).ageHours-0.55)<1e-10);
   assert.equal(reducePirateThreatAfterVictory(current,current.integratedAt,1).ageHours,0);
+});
+
+test('owners below 100 000 total points are protected from pirate aggression', () => {
+  assert.equal(PIRATE_PROTECTION_TOTAL_POINTS, 100_000);
+  assert.equal(isOwnerProtectedFromPirates(0, 0), true);
+  assert.equal(isOwnerProtectedFromPirates(60_000, 39_999), true);
+  assert.equal(isOwnerProtectedFromPirates(60_000, 40_000), false);
+  assert.equal(isOwnerProtectedFromPirates(100_000, 0), false);
+  assert.equal(isOwnerProtectedFromPirates(Number.NaN, -5), true, 'invalid scores never lift the protection');
 });

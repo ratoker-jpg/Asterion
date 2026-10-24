@@ -110,7 +110,7 @@ import {
 } from './domain/profile/repository.ts';
 import type { PlayerFactionId } from './domain/profile/types.ts';
 import { selectOwnerScores } from './domain/rating/scoring.ts';
-import { advancePirateThreat, pirateRaidChance } from './domain/pirates/threat.ts';
+import { advancePirateThreat, isOwnerProtectedFromPirates, pirateRaidChance } from './domain/pirates/threat.ts';
 import {defaultPirateOwnerAdaptation} from './domain/pirates/adaptive.ts';
 import { buildPirateBattleAnalysisExport } from './application/pirate-battle-export.ts';
 import {
@@ -2503,7 +2503,10 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               pirateAdaptiveDiagnostics={RUNTIME_MODE==='test'?(state.pirate?.ownerAdaptations?.[state.profile.playerId]??defaultPirateOwnerAdaptation()):undefined}
               onPirateBattleExport={RUNTIME_MODE==='test'?exportPirateBattleAnalysis:undefined}
               pirateCheckDelayMs={scaleRuntimeDuration(15*60_000,RUNTIME_MODE,testTimeScale)}
-              pirateThreatPercent={100*pirateRaidChance(
+              pirateThreatPercent={isOwnerProtectedFromPirates(
+                selectOwnerScores(state)[state.profile.playerId]?.resourcePoints??0,
+                selectOwnerScores(state)[state.profile.playerId]?.battlePoints??0,
+              ) ? 0 : 100*pirateRaidChance(
                 selectOwnerScores(state)[state.profile.playerId]?.resourcePoints??0,
                 selectOwnerScores(state)[state.profile.playerId]?.battlePoints??0,
                 advancePirateThreat(
