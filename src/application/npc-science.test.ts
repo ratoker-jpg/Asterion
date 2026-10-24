@@ -121,7 +121,9 @@ function replayWithFrozenTarget(initial: SaveState, targetAt: number, reloadAfte
   let state = initial;
   const events: unknown[] = [];
   const checkpoints = [1, 3, 7, 30].map((days) => START + days * DAY).filter((at) => at <= targetAt);
-  const snapshots: Record<number, { state: unknown; events: unknown[] }> = {};
+  // A frozen target replays in bounded slices that end wherever their group
+  // budget runs out, so each snapshot records the instant it was taken.
+  const snapshots: Record<number, { at: number; state: unknown; events: unknown[] }> = {};
   const storage = memoryStorage();
   const facade = createPersistenceFacade({ mode: 'production', storage, saveKey: `npc-science-parity-${reloadAfterFirstSlice}`, now: () => targetAt });
   let checkpointIndex = 0;
@@ -142,7 +144,7 @@ function replayWithFrozenTarget(initial: SaveState, targetAt: number, reloadAfte
     }
     while (checkpointIndex < checkpoints.length && (state.npcReplay?.processedThroughAt ?? START) >= checkpoints[checkpointIndex]!) {
       snapshots[(checkpointIndex === 0 ? 1 : checkpointIndex === 1 ? 3 : checkpointIndex === 2 ? 7 : 30)] = {
-        state: scienceSnapshot(state), events: clone(events),
+        at: state.npcReplay!.processedThroughAt, state: scienceSnapshot(state), events: clone(events),
       };
       checkpointIndex += 1;
     }
@@ -428,7 +430,12 @@ test('canonical owner science and completion events match across replay partitio
       const continuous = advanceTo(clone(initial), horizon);
       const expected = { state: scienceSnapshot(continuous.state), events: clone(continuous.events) };
       assert.deepEqual(irregular.snapshots[days], expected, `${seed} ${speed} ${days}-day irregular replay`);
-      assert.deepEqual(reloadReplay.snapshots[days], expected, `${seed} ${speed} ${days}-day reload replay`);
+      const reloaded = reloadReplay.snapshots[days]!;
+      assert.ok(reloaded.at >= horizon, `${seed} ${speed} ${days}-day reload snapshot is taken at or after its checkpoint`);
+      const continuousAtSnapshot = reloaded.at === horizon ? continuous : advanceTo(clone(initial), reloaded.at);
+      assert.deepEqual({ state: reloaded.state, events: reloaded.events },
+        { state: scienceSnapshot(continuousAtSnapshot.state), events: clone(continuousAtSnapshot.events) },
+        `${seed} ${speed} ${days}-day reload replay`);
     }
     assert.equal(reloadReplay.state.npcReplay?.processedThroughAt, START + 30 * DAY);
     assert.equal(isNpcCatchupPending(reloadReplay.state), false);
