@@ -1,0 +1,59 @@
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { normalizeNames } from './scratch-norm.mjs';
+import { createDefaultNewGameConfig } from './src/domain/world/config.ts';
+import { createNpcState } from './src/domain/npc/state.ts';
+import { isNpcCatchupPending } from './src/application/npc-catchup.ts';
+import { reconcileRuntime } from './src/application/reconcile.ts';
+import { createInitialSaveState } from './src/application/persistence.ts';
+import type { SaveState } from './src/application/contracts.ts';
+
+const START = Date.UTC(2026, 9, 20, 12);
+const HOUR = 60 * 60 * 1_000;
+const HOURS = Number(process.argv[2] ?? 6);
+const TAG = process.argv[3] ?? 'A';
+
+function campaign() {
+  const base = createDefaultNewGameConfig({ seed: 'NPC-HASH-CHECK', factionId: 'aegis', playerName: 'NPC QA' });
+  const setup = { ...base, world: { ...base.world, galaxyCount: 2, npcCount: 100, campaignSpeed: 'standard' as const } };
+  const state = createInitialSaveState('production', START, setup);
+  const ownerIds = Object.keys(state.npc!.profiles);
+  return {
+    ...state,
+    npc: createNpcState(ownerIds, 'npc-hash-check-v1:NPC-HASH-CHECK', START),
+    asteroidSimulation: undefined,
+    exploration: { ...state.exploration!, npcProcessedAt: START + 30 * 24 * HOUR },
+    pirate: { ...state.pirate!, raidProcessedAt: START + 30 * 24 * HOUR },
+  } satisfies SaveState;
+}
+
+function fingerprint(state: SaveState): string {
+  const payload = {
+    targets: state.espionage?.targets,
+    flights: state.flights.records.map((f) => ({ id: f.id, missionId: f.missionId, phase: f.phase,
+      origin: f.originPlanetId, dest: f.destinationPlanetId, arrivalAt: f.arrivalAt, returnAt: f.returnAt,
+      resolution: f.attackResolution, selectedShips: f.selectedShips })),
+    npc: state.npc,
+    npcScience: state.npcScience,
+    planets: state.planets,
+    command: state.command,
+    npcReplay: state.npcReplay,
+    reports: (state.combat?.reports ?? []).map((r) => r.id),
+  };
+  return createHash('sha256').update(JSON.stringify(normalizeNames(payload))).digest('hex').slice(0, 16);
+}
+
+let state = campaign();
+console.log(`${TAG} t=0h hash=${fingerprint(state)}`);
+for (let hour = 1; hour <= HOURS; hour += 1) {
+  const targetAt = START + hour * HOUR;
+  let groups = 0;
+  while (true) {
+    const result = reconcileRuntime(state, { planetId: state.currentPlanetId, now: targetAt, mode: 'production', testTimeScale: 1 });
+    state = result.state;
+    groups += 1;
+    if (!isNpcCatchupPending(state) && (state.npcReplay?.processedThroughAt ?? START) >= targetAt) break;
+    if (groups > 20000) { console.log(`${TAG} t=${hour}h GUARD HIT groups=${groups}`); process.exit(2); }
+  }
+  console.log(`${TAG} t=${hour}h hash=${fingerprint(state)} groups=${groups}`);
+}

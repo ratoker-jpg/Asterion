@@ -137,6 +137,12 @@ function advanceTo(
         now: requestedTarget,
         mode: 'production',
         testTimeScale: 1,
+        // Offline catch-up batches a full window of replay groups per call.
+        // A 30-day horizon of the owner-approved hyperactive calendar holds
+        // ~60k decision groups, which the interactive 64-group call budget
+        // would turn into >1000 drains; the grouping of the same group
+        // sequence does not change any resulting state or emission.
+        replayMaxGroups: 4096,
       });
       state = result.state;
       emissions = emissions.concat(replayEmissions(result.events));

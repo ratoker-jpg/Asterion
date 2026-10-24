@@ -195,7 +195,9 @@ export function pruneCampaignHistory(state: SaveState, at: number | undefined = 
     for (const report of spyKept) {
       if (typeof report.ownerId === 'string' && report.ownerId && report.ownerId !== playerId) oldestNpcAt = Math.min(oldestNpcAt, report.createdAt);
     }
-    cleanSpyReports.set(spyKept, { playerId, oldestNpcAt });
+    // When every report survives, the state keeps the original array. Cache
+    // against that identity so the next replay group can reuse this scan.
+    cleanSpyReports.set(spyKept.length === spyReports.length ? spyReports : spyKept, { playerId, oldestNpcAt });
   }
 
   const battleMemo = cleanBattleReports.get(next.combat.reports);

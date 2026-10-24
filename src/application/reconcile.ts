@@ -122,6 +122,11 @@ function reconcileRuntimeSlice(
   const events: RuntimeReconcileEvent[] = [];
   const timeScale = CAMPAIGN_SPEED_SCALE[state.worldConfig?.world.campaignSpeed ?? 'standard'];
   const replayOwners = new Set(replay?.owners);
+  // Interactive calls keep the per-call NPC_REPLAY_MAX_GROUPS budget; offline
+  // catch-up contexts may batch more groups into one call (same group order).
+  const replayMaxGroups = replay
+    ? Math.max(1, Math.floor(context.replayMaxGroups ?? NPC_REPLAY_MAX_GROUPS))
+    : NPC_REPLAY_MAX_GROUPS;
   if (replay && next.npc) next = { ...next, npc: initializeNpcReplaySessionsAt(next.npc, replay.from, replay.owners) };
   // NPC sessions and decisions in [from, now + 1), generated on demand an hour
   // at a time: a bounded slice usually consumes minutes of a 24-hour window.
@@ -560,7 +565,7 @@ function reconcileRuntimeSlice(
       .filter((point): point is number => point !== undefined)
       .reduce<number | undefined>((min, point) => min === undefined ? point : Math.min(min,point), undefined);
     if (checkpoint === undefined) break;
-    if (replay && processedGroups >= NPC_REPLAY_MAX_GROUPS) {
+    if (replay && processedGroups >= replayMaxGroups) {
       context = { ...context, now: Math.max(replay.from, processedThrough) };
       break;
     }

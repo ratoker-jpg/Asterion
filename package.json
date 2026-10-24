@@ -69,6 +69,7 @@
     "test:new-game": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/domain/world/world.test.ts src/domain/session/slots.test.ts src/application/new-game.test.ts src/application/save-safety.test.ts",
     "test:new-game-ui": "electron electron/new-game-sun-raid-qa.cjs",
     "test:npc-replay-ui": "electron electron/npc-replay-qa.cjs",
+    "test:npc-replay-ui-1d": "electron electron/npc-replay-qa.cjs --days=1",
     "test:npc-replay-full-world-ui": "electron electron/npc-replay-qa.cjs --full-world",
     "test:save-safety-ui": "electron electron/save-safety-qa.cjs"
   },

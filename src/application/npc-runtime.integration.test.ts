@@ -9,7 +9,7 @@ import { getNpcBuildingCandidates, NPC_APPLIED_ID_LIMIT, settleNpcPlanet, startN
 import { isNpcCatchupPending } from './npc-catchup.ts';
 import { reconcileRuntime, type RuntimeReconcileEvent } from './reconcile.ts';
 import { createInitialSaveState, createPersistenceFacade } from './persistence.ts';
-import type { SaveState } from './contracts.ts';
+import { getPlanetResources, type SaveState } from './contracts.ts';
 import { generateNpcReplayEvents, type NpcReplayEmission } from './npc-replay.ts';
 import type { SpyTargetState } from '../domain/espionage/types.ts';
 import { MAX_PLANETS_PER_OWNER } from '../domain/universe/runtime.ts';
@@ -89,6 +89,9 @@ function advanceTo(
         now: requestedTarget,
         mode: 'production',
         testTimeScale: 1,
+        // Offline catch-up batches a full window of replay groups per call;
+        // the drain guard below still bounds calls with enforced progress.
+        replayMaxGroups: 4096,
       });
       state = result.state;
       emitted = emitted.concat(keepNpcEvents(result.events));
@@ -406,8 +409,8 @@ test('zero NPC and campaign speed scale stay isolated from player resources and 
   // (In this fixture the raided wallet never reaches its stores' cap, so no
   // income is burned at the cap in either run.)
   const playerTotal = (result: { state: SaveState }, loot: Map<string, { metal: number; minerals: number; gas: number }>) => {
-    const wallet = result.state.planets['helion-01']!.resources;
-    const total = { metal: wallet.metal, minerals: wallet.minerals, gas: wallet.gas, energy: wallet.energy };
+    const wallet = getPlanetResources(result.state, 'helion-01');
+    const total = { metal: wallet.metal, minerals: wallet.minerals, gas: wallet.gas };
     for (const item of loot.values()) { total.metal += item.metal; total.minerals += item.minerals; total.gas += item.gas; }
     return total;
   };
