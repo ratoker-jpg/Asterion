@@ -1,0 +1,181 @@
+import assert from 'node:assert/strict';
+
+import { createDefaultNewGameConfig } from '../domain/world/config.ts';
+import { getNpcSessionEvents } from '../domain/npc/calendar.ts';
+import { createNpcState } from '../domain/npc/state.ts';
+import { CAMPAIGN_SPEED_SCALE } from '../domain/runtime/mode.ts';
+import { getNpcBuildingCandidates, settleNpcPlanet, startNpcBuilding } from './npc-economy.ts';
+import { isNpcCatchupPending } from './npc-catchup.ts';
+import { reconcileRuntime, type RuntimeReconcileEvent } from './reconcile.ts';
+import { createInitialSaveState, createPersistenceFacade } from './persistence.ts';
+import type { SaveState } from './contracts.ts';
+import { generateNpcReplayEvents, type NpcReplayEmission } from './npc-replay.ts';
+import type { SpyTargetState } from '../domain/espionage/types.ts';
+
+const START = Date.UTC(2026, 9, 20, 12);
+const HOUR = 60 * 60 * 1_000;
+const DAY = 24 * HOUR;
+
+function memoryStorage() {
+  const data = new Map<string, string>();
+  return {
+    data,
+    getItem: (key: string) => data.get(key) ?? null,
+    setItem: (key: string, value: string) => { data.set(key, value); },
+    removeItem: (key: string) => { data.delete(key); },
+  };
+}
+
+function campaign(npcCount: number, seed = `NPC-RUNTIME-${npcCount}`, campaignSpeed: 'slow' | 'standard' | 'fast' = 'standard') {
+  const base = createDefaultNewGameConfig({ seed, factionId: 'aegis', playerName: 'NPC QA' });
+  const setup = { ...base, world: { ...base.world, galaxyCount: npcCount > 80 ? 2 : base.world.galaxyCount, npcCount, campaignSpeed } };
+  const state = createInitialSaveState('production', START, setup);
+  const ownerIds = Object.keys(state.npc!.profiles);
+  return {
+    ...state,
+    // Preserve the production-created world and targets, while pinning only the
+    // private NPC inputs so replay workloads and decisions stay reproducible.
+    npc: createNpcState(ownerIds, `npc-runtime-integration-v1:${seed}`, START),
+    asteroidSimulation: undefined,
+    // Keep old independent calendars inert for this isolated foundation replay.
+    exploration: { ...state.exploration!, npcProcessedAt: START + 30 * DAY },
+    pirate: { ...state.pirate!, raidProcessedAt: START + 30 * DAY },
+  } satisfies SaveState;
+}
+
+function clone<T>(value: T): T { return JSON.parse(JSON.stringify(value)) as T; }
+
+function npcTargets(state: SaveState): SpyTargetState[] {
+  return Object.values(state.espionage?.targets ?? {})
+    .filter((target) => target.kind === 'npc' && target.ownerId !== state.profile.playerId)
+    .sort((left, right) => left.id.localeCompare(right.id));
+}
+
+type NpcEmission =
+  | { kind: 'npc-economy'; event: NpcReplayEmission }
+  | Extract<RuntimeReconcileEvent, { kind: 'npc-building' }>;
+
+function keepNpcEvents(events: readonly RuntimeReconcileEvent[]): NpcEmission[] {
+  const output: NpcEmission[] = [];
+  for (const event of events) {
+    if (event.kind === 'npc-economy') {
+      for (const emission of event.events) output.push({ kind: event.kind, event: emission });
+    } else if (event.kind === 'npc-building') output.push(event);
+  }
+  return output;
+}
+
+function advanceTo(
+  initial: SaveState,
+  targetAt: number,
+  steps: readonly number[],
+  options: { reloadAfterEachStep?: boolean } = {},
+): { state: SaveState; emissions: NpcEmission[] } {
+  let state = initial;
+  let emitted: NpcEmission[] = [];
+  const storage = memoryStorage();
+  const saveKey = 'asterion.npc-runtime.integration.v1';
+  const facade = createPersistenceFacade({ mode: 'production', storage, saveKey, now: () => targetAt });
+
+  for (const requestedAt of steps) {
+    const requestedTarget = Math.min(targetAt, requestedAt);
+    let guard = 0;
+    while (true) {
+      const before = state.npcReplay?.processedThroughAt ?? START;
+      const result = reconcileRuntime(state, {
+        planetId: state.currentPlanetId,
+        now: requestedTarget,
+        mode: 'production',
+        testTimeScale: 1,
+      });
+      state = result.state;
+      emitted = emitted.concat(keepNpcEvents(result.events));
+      if (!isNpcCatchupPending(state) && (state.npcReplay?.processedThroughAt ?? START) >= requestedTarget) break;
+      const after = state.npcReplay?.processedThroughAt ?? START;
+      assert.ok(after > before, `NPC catch-up must make progress (${before} → ${after}, target ${requestedTarget})`);
+      guard += 1;
+      assert.ok(guard < 1_000, `NPC catch-up exceeded the bounded drain guard at ${requestedTarget}`);
+    }
+
+    if (options.reloadAfterEachStep) {
+      assert.equal(facade.write(state).ok, true);
+      const loaded = facade.load();
+      assert.equal(loaded.status, 'loaded');
+      state = loaded.state;
+    }
+  }
+
+  assert.equal(state.npcReplay?.processedThroughAt, targetAt);
+  assert.equal(state.npcReplay?.targetAt, targetAt);
+  assert.equal(isNpcCatchupPending(state), false);
+  return { state, emissions: emitted };
+}
+
+function irregularSteps(targetAt: number): number[] {
+  const spans = [5 * HOUR, 13 * HOUR, 7 * HOUR, 19 * HOUR, 11 * HOUR];
+  const steps: number[] = [];
+  let at = START;
+  let index = 0;
+  while (at < targetAt) {
+    at = Math.min(targetAt, at + spans[index++ % spans.length]!);
+    steps.push(at);
+  }
+  return steps;
+}
+
+function economySnapshot(state: SaveState) {
+  return {
+    npc: clone(state.npc),
+    npcReplay: clone(state.npcReplay),
+    targets: Object.fromEntries(npcTargets(state).map((target) => [target.id, {
+      ownerId: target.ownerId,
+      resources: target.resources,
+      buildings: target.buildings,
+      buildingQueue: target.buildingQueue,
+      energyLedger: target.energyLedger,
+      overpopulation: target.overpopulation,
+      resourceClock: target.resourceClock,
+      economyAppliedActionIds: target.economyAppliedActionIds,
+    }])),
+  };
+}
+
+function sessionIntervals(profile: NonNullable<SaveState['npc']>['profiles'][string], fromAt: number, toAt: number) {
+  const events = getNpcSessionEvents(profile, fromAt - 3 * HOUR, toAt + 3 * HOUR);
+  const intervals = new Map<string, { start?: number; end?: number }>();
+  for (const event of events) {
+    const interval = intervals.get(event.sessionId) ?? {};
+    if (event.boundary === 'session-start') interval.start = event.at;
+    else interval.end = event.at;
+    intervals.set(event.sessionId, interval);
+  }
+  return [...intervals.values()].filter((item): item is { start: number; end: number } =>
+    item.start !== undefined && item.end !== undefined);
+}
+
+function ownerEconomy(target: SpyTargetState) {
+  return {
+    resources: target.resources,
+    buildings: target.buildings,
+    buildingQueue: target.buildingQueue,
+    energyLedger: target.energyLedger,
+    resourceClock: target.resourceClock,
+    economyAppliedActionIds: target.economyAppliedActionIds,
+  };
+}
+
+
+const initial = campaign(100, 'NPC-REPLAY-100');
+const days = Number(process.argv[2] ?? 2);
+let state = clone(initial) as SaveState; const targetAt = START + days * DAY; let calls = 0; const t0 = performance.now(); let maxCall = 0;
+while (true) {
+  const c0 = performance.now();
+  const r = reconcileRuntime(state, { planetId: state.currentPlanetId, now: targetAt, mode: 'production', testTimeScale: 1 });
+  maxCall = Math.max(maxCall, performance.now() - c0);
+  state = r.state; calls++;
+  if (calls % 30 === 0) console.log('PROG', calls, (((state.npcReplay?.processedThroughAt ?? 0) - START) / DAY).toFixed(2), Math.round(performance.now() - t0), 'flights', state.flights.records.length, 'spy', state.espionage?.reports.length, 'missions', state.espionage?.missions.length, 'bytes', JSON.stringify(state).length);
+  if (!isNpcCatchupPending(state) && (state.npcReplay?.processedThroughAt ?? 0) >= targetAt) break;
+  if (calls > 3000) break;
+}
+console.log(JSON.stringify({ days, calls, ms: Math.round(performance.now() - t0), maxCall: Math.round(maxCall), through: ((state.npcReplay?.processedThroughAt ?? 0) - START) / DAY, flights: state.flights.records.length, reports: state.combat.reports.length, saveBytes: JSON.stringify(state).length }));
+{ const fs = await import('node:fs'); fs.writeFileSync(process.argv[3] ?? 'nul', JSON.stringify(state, null, 1)); }
