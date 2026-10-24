@@ -230,9 +230,12 @@ test('arrival revalidates live relations and target ownership before any combat'
 });
 
 test('competing NPC colonizers resolve by arrival order across save reload without double-claiming a coordinate', () => {
-  const state = makeCampaign('npc-mission-colony-race');
-  const [first, second] = npcTargets(state);
+  const campaign = makeCampaign('npc-mission-colony-race');
+  const [first, second] = npcTargets(campaign);
   assert.ok(first && second);
+  // Both racers have the 500 total points the first colony needs (owner rule).
+  const state = { ...campaign, rating: { ...campaign.rating, battleAwardsByReportId: { ...campaign.rating.battleAwardsByReportId,
+    'qa-first-colony-points': { [first.ownerId]: 500, [second.ownerId]: 500 } } } };
   const coordinate = emptyCoordinate(state);
   const firstLaunch = dispatchNpcMission(state, {
     ownerId: first.ownerId,

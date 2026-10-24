@@ -15,7 +15,7 @@ import { addDebris, getCappedDelivery, getCargoUsed, getFleetCargoCapacity, norm
 import { getFlightSlotUsage, isFlightLimitExempt } from '../domain/flights/limit.ts';
 import { beginFlightReturn, dispatchFlight, getFlightByRequestId, MAX_SPACE_FLIGHT_DURATION_MS, MIN_SPACE_FLIGHT_DURATION_MS, SPACE_FLIGHT_DURATION_STEP_MS } from '../domain/flights/runtime.ts';
 import { isFlightCoordinate } from '../domain/flights/distance.ts';
-import { createUniverseSystem, MAX_PLANETS_PER_OWNER } from '../domain/universe/runtime.ts';
+import { createUniverseSystem, MAX_PLANETS_PER_OWNER, nextColonyPointThreshold } from '../domain/universe/runtime.ts';
 import { createDefaultEspionageState } from '../domain/espionage/runtime.ts';
 import { getOwnerShipUpgradeLevels, getPlanetResources } from './contracts.ts';
 import type { CombatFactionId } from '../domain/combat/factions.ts';
@@ -189,6 +189,11 @@ function coordinateOccupied(state: SaveState, coordinate: UniverseCoordinate, at
   return false;
 }
 
+function flyingColonizers(state: SaveState, ownerId: string): number {
+  return state.flights.records.filter((flight) => flight.ownerSide === 'npc' && flight.ownerId === ownerId
+    && flight.missionId === 'colonize' && (flight.phase === 'outbound' || flight.phase === 'arrived')).length;
+}
+
 function ownerPlanetCount(state: SaveState, ownerId: string): number {
   return Object.values(getEspionageTargets(state.espionage)).filter((target) => target.ownerId === ownerId).length;
 }
@@ -266,6 +271,10 @@ export function dispatchNpcMission(
       return fail(state, 'invalid-colonization-command');
     }
     if (ownerPlanetCount(state, command.ownerId) >= MAX_PLANETS_PER_OWNER) return fail(state, 'planet-limit-reached');
+    // The same total-point gate as the player's, counting colonizers already flying.
+    const threshold = nextColonyPointThreshold(ownerPlanetCount(state, command.ownerId) + flyingColonizers(state, command.ownerId));
+    if (threshold === null) return fail(state, 'planet-limit-reached');
+    if ((selectOwnerScore(state, command.ownerId)?.totalPoints ?? 0) < threshold) return fail(state, 'colony-points-required');
     if (coordinateOccupied(state, destination.coordinate, at)) return fail(state, 'target-occupied');
   }
   if (command.missionId === 'expedition' || command.missionId === 'exploration-recon') {

@@ -42,6 +42,19 @@ export const GALAXY_COUNT = 1;
 export const SYSTEM_COUNT = UNIVERSE_SYSTEM_COUNT;
 export const POSITION_COUNT = UNIVERSE_POSITION_COUNT;
 export const MAX_PLANETS_PER_OWNER = 7;
+
+/**
+ * Owner rule (24.10.2026): total points an owner needs when launching each
+ * colony (index 0 = the first colony, i.e. the second planet). Points lost
+ * later never take a planet away; only new colonisation is gated.
+ */
+export const COLONY_TOTAL_POINT_THRESHOLDS: readonly number[] = Object.freeze([500, 2_500, 10_000, 25_000, 50_000, 100_000]);
+
+/** Total points needed for an owner's next colony, given planets owned plus colonizers already flying; null past the cap. */
+export function nextColonyPointThreshold(plannedPlanets: number): number | null {
+  const colonyIndex = Math.max(0, Math.floor(plannedPlanets) - 1);
+  return colonyIndex < COLONY_TOTAL_POINT_THRESHOLDS.length ? COLONY_TOTAL_POINT_THRESHOLDS[colonyIndex]! : null;
+}
 /** World generator limit: a campaign may have 1..10 galaxies of 40 systems each. */
 export const MAX_GALAXY_COUNT = 10;
 

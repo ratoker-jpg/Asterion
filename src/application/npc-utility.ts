@@ -8,7 +8,9 @@ import type { NpcProfile } from '../domain/npc/types.ts';
 import { estimateForcePower, estimateWinProbability, planningHorizonHours, type ForceStack } from '../domain/npc/utility.ts';
 import { estimateNpcBuildingIncomeGain, getNpcPlanetIncomePerHour } from './npc-economy.ts';
 import type { SaveState } from './contracts.ts';
-import { ownerBattleReports, ownerSpyReports } from './npc-knowledge-index.ts';
+import { ownerBattleReports, ownerFlights, ownerSpyReports } from './npc-knowledge-index.ts';
+import { selectOwnerScore } from '../domain/rating/scoring.ts';
+import { nextColonyPointThreshold } from '../domain/universe/runtime.ts';
 
 /**
  * Owner-scoped utility estimates for NPC candidate actions. Every input is
@@ -80,6 +82,8 @@ export type NpcUtilityContext = Readonly<{
   knownDebris?: ReadonlyMap<string, number>;
   /** The owner's current strategic reading; derived from the rest when absent. */
   strategy?: NpcStrategyDrives;
+  /** The owner's points already open its next colony (owner rule thresholds). */
+  colonyOpen?: boolean;
 }>;
 
 /**
@@ -116,8 +120,12 @@ export function createNpcUtilityContext(state: SaveState, profile: NpcProfile, a
     const debris = report.resources?.debris ?? 0;
     if (debris > 0) knownDebris.set(report.targetPlanetId, debris);
   }
+  const flyingColonizers = ownerFlights(state.flights.records, ownerId).filter((flight) => flight.missionId === 'colonize'
+    && (flight.phase === 'outbound' || flight.phase === 'arrived')).length;
+  const threshold = nextColonyPointThreshold(ownPlanets.length + flyingColonizers);
   const base = {
     profile, at, timeScale,
+    colonyOpen: threshold !== null && (selectOwnerScore(state, ownerId)?.totalPoints ?? 0) >= threshold,
     dayValue: Math.max(2_000, income * 24),
     ownPlanets,
     threat: Math.min(1, defended / 3),
@@ -163,7 +171,7 @@ export function assessNpcStrategy(context: Omit<NpcUtilityContext, 'strategy'>):
     science: unit(0.15 + 0.55 * unit(t.scienceFocus) * (0.5 + 0.5 * unit(t.planningHorizon))),
     military: unit(0.1 + 0.4 * unit(t.militaryFocus) + 0.5 * context.threat + 0.2 * unit(t.aggression) + 0.15 * opportunity),
     war: unit(0.05 + 0.45 * unit(t.aggression) * (0.6 + 0.4 * unit(t.riskTolerance)) + 0.45 * opportunity - 0.3 * context.threat),
-    expansion: roomForColonies ? unit(0.1 + 0.6 * unit(t.expansionFocus) + 0.1 * unit(t.planningHorizon)) : 0,
+    expansion: roomForColonies && context.colonyOpen !== false ? unit(0.1 + 0.6 * unit(t.expansionFocus) + 0.1 * unit(t.planningHorizon)) : 0,
     operations: unit(0.05 + 0.55 * unit(t.operationsInterest) + (context.knownDebris?.size ? 0.15 : 0)),
     diplomacy: unit(0.05 + 0.5 * unit(t.cooperation) * (0.4 + 0.6 * unit(t.socialStyle)) + 0.2 * context.threat * unit(t.cooperation)),
   };
@@ -342,7 +350,7 @@ export function estimateProductionItemUtility(context: NpcUtilityContext, target
     case 'defense': return -0.8 + 1.4 * context.threat + 0.5 * drives.military + efficiency - price + push * 0.75;
     case 'energy': return -0.6 + 1.5 * (situation?.energyNeed ?? 0) - price;
     case 'spy': return (fleet[itemId] ?? 0) >= 2 ? -2 : -0.3 + 0.9 * Math.max(drives.war, drives.operations, drives.military * 0.6) - price;
-    case 'colony': return owned(itemId) > 0 || drives.expansion <= 0 ? -2.5 : -0.4 + 1.6 * drives.expansion - price;
+    case 'colony': return owned(itemId) > 0 || drives.expansion <= 0 || context.colonyOpen === false ? -2.5 : -0.4 + 1.6 * drives.expansion - price;
     case 'recycler': return owned(itemId) > 0 || !context.knownDebris?.size ? -2 : -0.2 + 1.2 * drives.operations - price;
     case 'commander': return -0.9 + 0.8 * drives.military - price;
     default: return -1.2 + 0.4 * unit(context.profile.traits.cooperation) - price;

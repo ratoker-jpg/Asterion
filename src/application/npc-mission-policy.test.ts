@@ -73,6 +73,9 @@ function baseState(reportOwner?: string, reportAt = AT): SaveState {
     ...state,
     npc: createNpcState([OWNER, OTHER_OWNER], 'npc-policy-tests', 0),
     espionage: { ...createDefaultEspionageState(), ...state.espionage, targets, reports },
+    // The first colony opens at 500 total points (owner rule).
+    rating: { ...state.rating, battleAwardsByReportId: { ...state.rating.battleAwardsByReportId,
+      'qa-first-colony-points': { [OWNER]: 500 } } },
   };
 }
 

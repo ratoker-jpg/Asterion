@@ -6,7 +6,8 @@ import { activeSpyMissionForTarget, getEspionageTargets } from '../domain/espion
 import type { SpyReportSnapshot, SpyTargetState } from '../domain/espionage/types.ts';
 import { getFlightSlotUsage, isFlightLimitExempt } from '../domain/flights/limit.ts';
 import type { FlightDestination, TargetRelation } from '../domain/flights/types.ts';
-import { createUniverseSystem, MAX_PLANETS_PER_OWNER, SYSTEM_COUNT } from '../domain/universe/runtime.ts';
+import { createUniverseSystem, MAX_PLANETS_PER_OWNER, nextColonyPointThreshold, SYSTEM_COUNT } from '../domain/universe/runtime.ts';
+import { selectOwnerScore } from '../domain/rating/scoring.ts';
 import type { UniverseCoordinate, UniverseObjectKind, UniversePersistedPlayerPlanet, UniverseRegisteredPlanet } from '../domain/universe/types.ts';
 import { explorationNodeId, visibleExplorationContacts } from '../domain/exploration/model.ts';
 import { EXPLORATION_ARTS } from '../exploration-art.ts';
@@ -283,6 +284,12 @@ export function getNpcMissionCandidates(
   const probeOrigins = ownerTargets.filter((origin) => (getNpcMissionAvailableFleet(state, ownerId, origin.id)?.['spy-probe'] ?? 0) > 0);
   const nearestProbeOrigin = (coordinate: UniverseCoordinate) => probeOrigins.reduce<SpyTargetState | undefined>((best, origin) =>
     !best || systemDistance(origin.coordinate, coordinate) < systemDistance(best.coordinate, coordinate) ? origin : best, undefined);
+  // The owner's next colony opens at a total-point threshold (owner rule, same as the player's).
+  let colonyOpenCache: boolean | undefined;
+  const colonyOpen = () => colonyOpenCache ??= (() => {
+    const threshold = nextColonyPointThreshold(ownerPlanetCount + reservedColonize.size);
+    return threshold !== null && (selectOwnerScore(state, ownerId)?.totalPoints ?? 0) >= threshold;
+  })();
   for (const origin of ownerTargets) {
     const available = getNpcMissionAvailableFleet(state, ownerId, origin.id);
     if (!available) continue;
@@ -329,7 +336,7 @@ export function getNpcMissionCandidates(
       }
     }
 
-    if ((available.colonizer ?? 0) > 0 && ownerPlanetCount < MAX_PLANETS_PER_OWNER
+    if ((available.colonizer ?? 0) > 0 && ownerPlanetCount < MAX_PLANETS_PER_OWNER && colonyOpen()
       && hasFlightSlot(state, ownerId, 'colonize')) {
       for (const coordinate of publicEmptyCoordinates) {
         addCandidate(candidateList, ownerId, 'colonize', origin.id, coordinate, { colonizer: 1 }, { targetKind: 'empty' });

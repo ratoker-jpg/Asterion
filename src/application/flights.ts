@@ -101,7 +101,8 @@ import type {
 } from '../domain/espionage/types.ts';
 import { resolveSpyOwnerProfile } from '../domain/espionage/owner-profile.ts';
 import { collectOrbitalDebrisAtCoordinate, getOrbitalDebrisAtCoordinate } from '../domain/espionage/orbital-debris.ts';
-import { createUniverseSystem, MAX_PLANETS_PER_OWNER, UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
+import { createUniverseSystem, MAX_PLANETS_PER_OWNER, nextColonyPointThreshold, UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
+import { selectOwnerScore } from '../domain/rating/scoring.ts';
 import type { UniverseCoordinate, UniverseObjectKind, UniversePersistedPlayerPlanet, UniverseRegisteredPlanet } from '../domain/universe/types.ts';
 import { findUniverseAsteroidAtCoordinate } from '../domain/universe/asteroid-simulation.ts';
 import { advanceAsteroidGasAt } from '../domain/universe/asteroid-gas.ts';
@@ -195,6 +196,7 @@ export type FlightErrorCode =
   | 'target-overpopulated'
   | 'flight-limit-reached'
   | 'planet-limit-reached'
+  | 'colony-points-required'
   | 'invalid-command';
 
 export type FlightError = {
@@ -1677,6 +1679,14 @@ export function dispatchFlight(
     if (!selectedColonizerOnly(selectedShips)) return failure(state, 'wrong-ship-composition', 'Для колонизации нужен ровно один колонизатор и никаких других кораблей.');
     // Owner rule: at most seven planets for any owner (home + six colonies), as for NPCs.
     if (Object.keys(state.planets).length >= MAX_PLANETS_PER_OWNER) return failure(state, 'planet-limit-reached', `Достигнут предел: не более ${MAX_PLANETS_PER_OWNER} планет.`);
+    // Each colony opens at a total-point threshold; colonizers already flying count as planned planets.
+    const flyingColonizers = state.flights.records.filter((flight) => (flight.ownerSide === undefined || flight.ownerSide === 'player')
+      && flight.missionId === 'colonize' && (flight.phase === 'outbound' || flight.phase === 'arrived')).length;
+    const plannedPlanets = Object.keys(state.planets).length + flyingColonizers;
+    const threshold = nextColonyPointThreshold(plannedPlanets);
+    const totalPoints = selectOwnerScore(state, state.profile.playerId)?.totalPoints ?? 0;
+    if (threshold === null) return failure(state, 'planet-limit-reached', `Достигнут предел: не более ${MAX_PLANETS_PER_OWNER} планет.`);
+    if (totalPoints < threshold) return failure(state, 'colony-points-required', `Колония №${plannedPlanets} откроется при ${threshold.toLocaleString('ru-RU')} общих очков (сейчас ${Math.floor(totalPoints).toLocaleString('ru-RU')}).`);
   }
 
   let transportTarget: ResolvedTransportTarget | undefined;
