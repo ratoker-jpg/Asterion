@@ -71,7 +71,7 @@ function advanceTo(
   initial: SaveState,
   targetAt: number,
   steps: readonly number[],
-  options: { reloadAfterEachStep?: boolean } = {},
+  options: { reloadAfterEachStep?: boolean; onEvents?: (events: readonly RuntimeReconcileEvent[]) => void } = {},
 ): { state: SaveState; emissions: NpcEmission[] } {
   let state = initial;
   let emitted: NpcEmission[] = [];
@@ -92,6 +92,7 @@ function advanceTo(
       });
       state = result.state;
       emitted = emitted.concat(keepNpcEvents(result.events));
+      options.onEvents?.(result.events);
       if (!isNpcCatchupPending(state) && (state.npcReplay?.processedThroughAt ?? START) >= requestedTarget) break;
       const after = state.npcReplay?.processedThroughAt ?? START;
       assert.ok(after > before, `NPC catch-up must make progress (${before} → ${after}, target ${requestedTarget})`);
@@ -363,8 +364,22 @@ test('zero NPC and campaign speed scale stay isolated from player resources and 
     worldConfig: { ...standard.worldConfig!, world: { ...standard.worldConfig!.world, campaignSpeed: 'fast' } },
   };
   const end = START + 7 * DAY;
-  const standardResult = advanceTo(clone(standard), end, [end]);
-  const fastResult = advanceTo(clone(faster), end, [end]);
+  // NPC owners may attack the player like any other planet; what their
+  // battles carry away is the only legal transfer out of the player wallet.
+  const lootFromPlayer = () => {
+    const loot = new Map<string, { metal: number; minerals: number; gas: number }>();
+    return { loot, onEvents: (events: readonly RuntimeReconcileEvent[]) => {
+      for (const event of events) if (event.kind === 'flight') for (const { flight } of event.events) {
+        if (flight.missionId === 'attack' && flight.destinationPlanetId === 'helion-01' && flight.attackResolution) {
+          loot.set(flight.id, flight.attackResolution.loot);
+        }
+      }
+    } };
+  };
+  const standardLoot = lootFromPlayer();
+  const fastLoot = lootFromPlayer();
+  const standardResult = advanceTo(clone(standard), end, [end], { onEvents: standardLoot.onEvents });
+  const fastResult = advanceTo(clone(faster), end, [end], { onEvents: fastLoot.onEvents });
   // Faster queues legitimately change when an attentive NPC looks again,
   // hence the emitted action IDs are not a speed-independent calendar.
   // The owner's actual online session schedule must nevertheless stay fixed.
@@ -378,6 +393,24 @@ test('zero NPC and campaign speed scale stay isolated from player resources and 
   );
   assert.equal(fastProfile.activity.completedSessions, standardProfile.activity.completedSessions,
     'campaign speed must not change the number of completed online sessions');
-  assert.deepEqual(fastResult.state.planets['helion-01']?.resources, standardResult.state.planets['helion-01']?.resources,
-    'NPC replay never draws resources from the current player');
+  // Campaign speed scales NPC timers, never the player's own income: with no
+  // NPC owners the player wallet is identical at both speeds.
+  const withoutNpc = (state: SaveState): SaveState => ({ ...clone(state), npc: { ...state.npc!, profiles: {} } });
+  const standardControl = reconcileRuntime(withoutNpc(standard), { planetId: standard.currentPlanetId, now: end, mode: 'production', testTimeScale: 1 });
+  const fastControl = reconcileRuntime(withoutNpc(faster), { planetId: faster.currentPlanetId, now: end, mode: 'production', testTimeScale: 1 });
+  assert.deepEqual(fastControl.state.planets['helion-01']?.resources, standardControl.state.planets['helion-01']?.resources,
+    'campaign speed does not change the player income');
+  // With NPC owners the speed changes how they attack, so the wallets differ;
+  // what the player kept plus what battles carried off must not. Any NPC
+  // decision debiting or crediting the player outside a battle would break it.
+  // (In this fixture the raided wallet never reaches its stores' cap, so no
+  // income is burned at the cap in either run.)
+  const playerTotal = (result: { state: SaveState }, loot: Map<string, { metal: number; minerals: number; gas: number }>) => {
+    const wallet = result.state.planets['helion-01']!.resources;
+    const total = { metal: wallet.metal, minerals: wallet.minerals, gas: wallet.gas, energy: wallet.energy };
+    for (const item of loot.values()) { total.metal += item.metal; total.minerals += item.minerals; total.gas += item.gas; }
+    return total;
+  };
+  assert.deepEqual(playerTotal(fastResult, fastLoot.loot), playerTotal(standardResult, standardLoot.loot),
+    'NPC replay never draws resources from the current player except through battle loot');
 });
