@@ -19,6 +19,9 @@ import { beginFlightReturn } from '../domain/flights/runtime.ts';
 import { getNpcPirateCandidates, dispatchNpcPirateMission } from './npc-pirates.ts';
 import { getNpcAidCandidates, dispatchNpcAid } from './npc-aid.ts';
 import { getStorageCapacities } from '../domain/buildings/balance-v1.ts';
+import { migrateBuildingLevels } from '../domain/buildings/resource-zone.ts';
+import { collectRecyclingJob, getRecyclingLevel, getRecyclingMaxConcurrentJobs, startRecyclingJob } from '../domain/buildings/recycling.ts';
+import { creditResources } from '../domain/resources/credit.ts';
 import { estimationError, NPC_MAX_UTILITY, utilityToWeight } from '../domain/npc/utility.ts';
 import { getFactionShipCatalog, getFactionDefenseCatalog } from '../domain/combat/faction-catalog.ts';
 import {
@@ -97,19 +100,20 @@ export function npcAttentionActionId(eventId: string, index: number): string {
 
 /**
  * What one action ties up, so a single look at the game does not plan two
- * things on it: a planet's construction queue, the science queue, a
- * production queue, a planet's fleet for attacks and operations, a colonizer.
- * Spying and returns are per target; dispatch still checks real ships.
+ * things on it: the science queue, a planet's fleet for attacks and
+ * operations, a colonizer. Buildings and orders are per item: a look may fill
+ * a construction queue (the queue's own capacity refuses the rest) and place
+ * several fleet orders. Spying and returns are per target; dispatch still
+ * checks real ships.
  */
 function actionSlot(candidate: NpcAutonomyCandidate): string {
   const id = candidate.id;
-  if (id.startsWith('building:')) return `build:${String(candidate.payload?.planetId)}`;
   if (id.startsWith('science:')) return 'science';
-  if (id.startsWith('production:')) return id.split(':').slice(0, 3).join(':');
   if (candidate.kind === 'diplomacy') return 'diplomacy';
   if (candidate.kind === 'aid') return 'aid';
   if (id.startsWith('pirate:')) return 'pirate';
   if (id.startsWith('fleetsave:')) return `fleet:${String(candidate.payload?.planetId)}`;
+  if (id.startsWith('recycling-start:')) return id;
   if (id.startsWith('npc-mission:')) {
     const [, , missionId, origin] = id.split(':');
     if (missionId === 'attack' || missionId === 'expedition') return `fleet:${origin}`;
@@ -142,6 +146,9 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     if (mission.kind === 'colonize') return estimateColonizeUtility(utility, origin,
       { galaxy: Number(mission.payload.destinationGalaxy), system: Number(mission.payload.destinationSystem) });
     if (mission.kind === 'expedition') return estimateOperationUtility(utility, 'expedition');
+    // Free resources at the cost of a flight: worth more the bigger the field.
+    if (mission.kind === 'recycle') return estimateOperationUtility(utility, 'recycle')
+      + 0.6 * Math.log1p(Number(mission.payload.debris ?? 0) / Math.max(1, utility.dayValue)) - 0.4 * remoteness;
     if (mission.kind === 'exploration-recon') return estimateOperationUtility(utility, 'recon');
     return 0;
   };
@@ -229,6 +236,40 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
       } });
     }
   }
+  // The recycling centre: collect what is ready (free resources), and turn
+  // collected debris into the resource this planet is shortest of.
+  for (const target of planets) {
+    const recycling = target.recycling;
+    const level = getRecyclingLevel(migrateBuildingLevels(target.buildings));
+    if (!recycling || level <= 0) continue;
+    for (const job of recycling.jobs) {
+      if (job.finishAt > at) continue;
+      const collectId = `recycling-collect:${target.id}:${job.id}`;
+      choices.push({ candidate: { id: collectId, kind: 'economy', weight: utilityToWeight(2), payload: { planetId: target.id } }, run: (current) => {
+        const planet = current.espionage!.targets![target.id]!;
+        const collected = collectRecyclingJob(planet.recycling ?? recycling, job.id, at);
+        if (!collected.ok || !collected.output) return { state: current, started: false, reason: collected.reason, planetId: target.id };
+        const credited = creditResources({ metal: planet.resources.metal, minerals: planet.resources.minerals, gas: planet.resources.gas, energy: 0 },
+          getStorageCapacities(migrateBuildingLevels(planet.buildings)), collected.output);
+        return { state: withTarget(current, { ...planet, recycling: collected.state,
+          resources: { ...planet.resources, metal: credited.wallet.metal, minerals: credited.wallet.minerals, gas: credited.wallet.gas } }),
+          started: true, reason: null, planetId: target.id };
+      } });
+    }
+    if (recycling.availableDebris > 0 && recycling.jobs.length < getRecyclingMaxConcurrentJobs(level)) {
+      const startId = `recycling-start:${target.id}`;
+      choices.push({ candidate: { id: startId, kind: 'economy', weight: utilityToWeight(1.5), payload: { planetId: target.id } }, run: (current, key) => {
+        const planet = current.espionage!.targets![target.id]!;
+        const store = planet.recycling ?? recycling;
+        const fill = describeNpcPlanet(planet, 0, 0, false).fill;
+        const scarcest = (['metal', 'minerals', 'gas'] as const).reduce((best, key2) => fill[key2] < fill[best] ? key2 : best, 'metal' as 'metal' | 'minerals' | 'gas');
+        const allocation = { metal: 0, minerals: 0, gas: 0, [scarcest]: 100 };
+        const started = startRecyclingJob(store, level, store.availableDebris, allocation, at, key);
+        if (!started.canStart) return { state: current, started: false, reason: started.reason, planetId: target.id };
+        return { state: withTarget(current, { ...planet, recycling: started.state }), started: true, reason: null, planetId: target.id };
+      } });
+    }
+  }
   // Fleet saving with «Космический рейс»: before leaving the game, or away from an attack on its way.
   const leaving = profile.session.active && typeof profile.session.sessionEndsAt === 'number'
     && profile.session.sessionEndsAt - at <= NPC_REPLAY_LAST_LOOK_MS;
@@ -258,18 +299,27 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     const result = applyNpcDiplomacyAction(current, ownerId, candidate, at, key);
     return { state: result.state, started: result.ok, reason: result.ok ? null : result.reason };
   } });
-  for (const mission of getNpcMissionCandidates(state, profile, at)) choices.push({
-    candidate: { ...mission, weight: mission.weight * scored(mission.id, missionUtility(mission)),
-      kind: mission.kind === 'espionage' || mission.kind === 'exploration-recon' ? 'recon' : mission.kind === 'expedition' ? 'pve' : mission.kind },
-    run: (current, key) => {
-      const chosen = mission.kind === 'attack' ? attackForces.get(mission.id) : undefined;
-      const sent = chosen ? { ...mission, payload: { ...mission.payload, selectedShips: JSON.stringify(Object.fromEntries(Object.entries(chosen).sort(([a], [b]) => a < b ? -1 : 1))) } } : mission;
-      const command = candidateToNpcMissionCommand(sent, ownerId, key);
-      if (!command) return { state: current, started: false, reason: 'invalid-mission-candidate' };
-      const result = dispatchNpcMission(current, command, at, timeScale);
-      return { state: result.state, started: result.ok, reason: result.reason };
-    },
-  });
+  for (const mission of getNpcMissionCandidates(state, profile, at)) {
+    // An attack the owner does not believe it wins with its own margin, even
+    // with everything at hand, is not an option (a lone ship against a
+    // defended planet was).
+    if (mission.kind === 'attack') {
+      attackShips(mission);
+      if (!attackForces.get(mission.id)) continue;
+    }
+    choices.push({
+      candidate: { ...mission, weight: mission.weight * scored(mission.id, missionUtility(mission)),
+        kind: mission.kind === 'espionage' || mission.kind === 'exploration-recon' ? 'recon' : mission.kind === 'expedition' || mission.kind === 'recycle' ? 'pve' : mission.kind },
+      run: (current, key) => {
+        const chosen = mission.kind === 'attack' ? attackForces.get(mission.id) : undefined;
+        const sent = chosen ? { ...mission, payload: { ...mission.payload, selectedShips: JSON.stringify(Object.fromEntries(Object.entries(chosen).sort(([a], [b]) => a < b ? -1 : 1))) } } : mission;
+        const command = candidateToNpcMissionCommand(sent, ownerId, key);
+        if (!command) return { state: current, started: false, reason: 'invalid-mission-candidate' };
+        const result = dispatchNpcMission(current, command, at, timeScale);
+        return { state: result.state, started: result.ok, reason: result.reason };
+      },
+    });
+  }
   for (const mission of getNpcPirateCandidates(state, profile, at)) choices.push({
     candidate: { id: `pirate:${mission.id}`, kind: mission.missionId === 'pirate-recon' ? 'recon' : 'pve',
       weight: mission.weight * scored(`pirate:${mission.id}`, estimateOperationUtility(utility,
@@ -337,7 +387,7 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     if (!selected) break;
     const slot = actionSlot(selected);
     open = open.filter((candidate) => candidate.id !== selected.id && actionSlot(candidate) !== slot);
-    if (!outcome.started && ++refusals >= 3) break;
+    if (!outcome.started && ++refusals >= 4) break;
     if (!open.length) break;
   }
   return decisions;

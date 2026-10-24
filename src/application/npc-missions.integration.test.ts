@@ -317,3 +317,28 @@ test('NPC exploration recon dispatch uses a canonical live contact and shared ar
   assert.equal(returned.flights.records.find((item) => item.id === sent.flight!.id)?.phase, 'completed');
   assert.equal(getEspionageTargets(returned.espionage)[origin.id]?.fleet.ships['spy-probe'], origin.fleet.ships['spy-probe']);
 });
+
+test('NPC recyclers collect public debris and bring it home to the recycling store, surviving a reload', () => {
+  const state = makeCampaign('npc-mission-recycle');
+  const [owner, neighbour] = npcTargets(state);
+  assert.ok(owner && neighbour);
+  // Debris lies in the neighbour's orbit (public: the map shows it to everyone).
+  const seeded: SaveState = { ...state, espionage: { ...state.espionage!, targets: { ...state.espionage!.targets,
+    [neighbour.id]: { ...neighbour, resources: { ...neighbour.resources, debris: 5_000 } } } } };
+  const recyclers = Object.fromEntries(Object.entries(owner.fleet.ships).filter(([id, count]) => id === 'recycler' && (count ?? 0) > 0));
+  assert.ok(Object.keys(recyclers).length, 'the canonical start includes a recycler');
+  const launch = dispatchNpcMission(seeded, {
+    ownerId: owner.ownerId, originPlanetId: owner.id, requestId: 'npc-autonomy:integration:recycle',
+    missionId: 'recycle', selectedShips: recyclers, destination: { kind: 'coordinate', coordinate: neighbour.coordinate },
+  }, START, FLIGHT_SCALE);
+  assert.equal(launch.ok, true, launch.reason ?? '');
+  const flight = launch.flight!;
+  const arrived = advance(saveReload(launch.state, 'npc-recycle-reload'), flight.arrivalAt).state;
+  assert.ok((getEspionageTargets(arrived.espionage)[neighbour.id]!.resources.debris ?? 0) < 5_000, 'debris was collected at arrival');
+  const flown = arrived.flights.records.find((record) => record.id === flight.id)!;
+  const home = advance(arrived, flown.returnAt!).state;
+  const store = getEspionageTargets(home.espionage)[owner.id]!.recycling;
+  assert.ok((store?.availableDebris ?? 0) > 0, 'the debris reached the owner\'s recycling store');
+  assert.equal(getEspionageTargets(home.espionage)[owner.id]!.resources.debris ?? 0, getEspionageTargets(seeded.espionage)[owner.id]!.resources.debris ?? 0,
+    'nothing was dumped into the owner\'s own orbit');
+});

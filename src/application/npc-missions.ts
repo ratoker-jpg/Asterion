@@ -12,6 +12,7 @@ import { getExplorationTarget } from './exploration.ts';
 import { creditNpcExplorationReturn } from './exploration-bot01.ts';
 import { getEspionageTargets, activeSpyMissionForTarget, createSeededEspionageRng, espionageRollSeed, hunterDetects, normalizeRngRoll, resolveSpyReportQuality, SPY_REPORT_COOLDOWN_MS } from '../domain/espionage/runtime.ts';
 import { addDebris, getCappedDelivery, getCargoUsed, getFleetCargoCapacity, normalizeTransportCargo, type TransportCargo } from '../domain/flights/cargo.ts';
+import { collectOrbitalDebrisAtCoordinate, getOrbitalDebrisAtCoordinate } from '../domain/espionage/orbital-debris.ts';
 import { getFlightSlotUsage, isFlightLimitExempt } from '../domain/flights/limit.ts';
 import { beginFlightReturn, dispatchFlight, getFlightByRequestId, MAX_SPACE_FLIGHT_DURATION_MS, MIN_SPACE_FLIGHT_DURATION_MS, SPACE_FLIGHT_DURATION_STEP_MS } from '../domain/flights/runtime.ts';
 import { isFlightCoordinate } from '../domain/flights/distance.ts';
@@ -27,7 +28,7 @@ import type { UniverseCoordinate, UniverseObjectKind } from '../domain/universe/
 import type { ScienceLevels } from '../domain/buildings/resource-zone.ts';
 import type { SimulatorMaxRounds } from '../domain/combat/simulator.ts';
 
-export type NpcMissionId = 'espionage' | 'colonize' | 'attack' | 'expedition' | 'exploration-recon';
+export type NpcMissionId = 'espionage' | 'colonize' | 'attack' | 'expedition' | 'exploration-recon' | 'recycle';
 
 export type NpcMissionDispatchCommand = Readonly<{
   ownerId: string;
@@ -265,6 +266,22 @@ export function dispatchNpcMission(
       if (command.maxRounds !== undefined && ![5, 8, 12].includes(command.maxRounds)) return fail(state, 'invalid-round-limit');
     }
   }
+  let recycleCapacity: number | undefined;
+  let recycleTargetKind: UniverseObjectKind | undefined;
+  if (command.missionId === 'recycle') {
+    // Recyclers only, to public debris (the map shows it to everyone), as the player's.
+    if (destination.kind !== 'coordinate' || Object.keys(selectedShips).length === 0
+      || Object.keys(selectedShips).some((shipId) => !isNpcRecyclerShip(shipId as ShipId, origin.raceId))) return fail(state, 'invalid-recycle-composition');
+    if (getOrbitalDebrisAtCoordinate(state.espionage ?? createDefaultEspionageState(), destination.coordinate) <= 0) return fail(state, 'target-not-available');
+    const catalog = Object.fromEntries(getFactionShipCatalog(origin.raceId).map((entity) => [entity.id, { cargo: entity.ship?.cargo ?? 0 }]));
+    recycleCapacity = getFleetCargoCapacity(selectedShips, catalog);
+    if (recycleCapacity <= 0) return fail(state, 'invalid-recycle-composition');
+    // What lies at the coordinate, as the player's recycler records it.
+    const atTarget = Object.values(getEspionageTargets(state.espionage)).find((item) => sameCoordinate(item.coordinate, destination.coordinate));
+    const atPlayer = Object.values(state.planets).some((planet) => planet.universeGalaxy === destination.coordinate.galaxy
+      && planet.universeSystem === destination.coordinate.system && planet.universePosition === destination.coordinate.position);
+    recycleTargetKind = atTarget ? (atTarget.kind === 'player' ? 'player' : 'npc') : atPlayer ? 'player' : 'empty';
+  }
   if (command.missionId === 'colonize') {
     if (destination.kind !== 'coordinate' || !isFlightCoordinate(destination.coordinate)
       || !selectedColonizerOnly(selectedShips) || (command.targetKind !== undefined && command.targetKind !== 'empty' && command.targetKind !== 'asteroid')) {
@@ -316,7 +333,7 @@ export function dispatchNpcMission(
     factionId: origin.raceId,
     science: science as FlightScienceLevels,
     operationId,
-    targetKind: command.targetKind ?? explorationNode?.kind ?? target?.kind,
+    targetKind: command.targetKind ?? recycleTargetKind ?? explorationNode?.kind ?? target?.kind,
     ...(command.missionId === 'expedition' || command.missionId === 'exploration-recon' ? {
       targetRelation: 'neutral' as const,
     } : {}),
@@ -330,6 +347,7 @@ export function dispatchNpcMission(
     ...(command.missionId === 'espionage' ? { spyMissionId: `spy-${command.requestId}` } : {}),
     ...(snapshot ? { attackSnapshot: snapshot } : {}),
     ...(command.missionId === 'colonize' ? { populationReserved: 12 } : {}),
+    ...(command.missionId === 'recycle' ? { recycleCapacity, cargo: { metal: 0, minerals: 0, gas: 0, debris: 0 } } : {}),
     speedCommanderLevels: { typhoon: profile.commanderLevels.typhoon ?? 0 },
   });
   const duration = Math.max(1, Math.round(domainResult.flight.oneWayDurationMs / timeScale));
@@ -390,6 +408,35 @@ export function dispatchNpcMission(
     next = { ...next, espionage: { ...espionage, missions: [...espionage.missions, mission] } };
   }
   return { state: next, ok: true, reason: null, flight, created: true };
+}
+
+/** A recycler hull of the owner's race (the catalog role names it), as for the player. */
+export function isNpcRecyclerShip(shipId: ShipId, raceId: SpyTargetState['raceId']): boolean {
+  const entity = getFactionShipCatalog(raceId).find((candidate) => candidate.id === shipId);
+  return Boolean(entity?.role.toLocaleLowerCase().includes('переработчик'));
+}
+
+/**
+ * Recyclers reach their coordinate: they collect up to their capacity from
+ * the debris there (the shared collector, first come first served) and turn
+ * home with it.
+ */
+export function resolveNpcRecycleArrival(state: SaveState, flight: FlightRecord, at: number): NpcMissionResult {
+  if (flight.ownerSide !== 'npc' || !flight.ownerId || flight.missionId !== 'recycle' || flight.phase !== 'outbound' || at < flight.arrivalAt) {
+    return fail(state, 'invalid-arrival');
+  }
+  const collected = collectOrbitalDebrisAtCoordinate(state.espionage ?? createDefaultEspionageState(), flight.destinationCoordinate, flight.recycleCapacity ?? 0);
+  const withDebris: SaveState = { ...state, espionage: collected.espionage };
+  const returning = beginFlightReturn(withDebris.flights, flight.id, flight.arrivalAt, 'normal-return');
+  const turned = returning.records.find((record) => record.id === flight.id)!;
+  const arrived: FlightRecord = {
+    ...turned,
+    arrivedAt: flight.arrivalAt,
+    cargo: { metal: 0, minerals: 0, gas: 0, debris: collected.collected },
+    cargoState: 'delivered',
+    completionReason: 'normal-return',
+  };
+  return { state: setFlight({ ...withDebris, flights: returning }, arrived), ok: true, reason: null, flight: arrived };
 }
 
 /** The flat gas fee of «Космический рейс», the same as the player's. */
@@ -702,10 +749,13 @@ export function settleNpcMissionReturn(
       if (count) ships[id] = (ships[id] ?? 0) + count;
     }
     let resources = { metal: source.resources.metal, minerals: source.resources.minerals, gas: source.resources.gas };
-    // A space flight brings its own loaded cargo home; loot comes from attacks.
+    // A space flight brings its own loaded cargo home, recyclers their debris;
+    // loot comes from attacks.
     const loot = flight.missionId === 'space-flight' && flight.cargoState === 'loaded' && flight.cargo
       ? { ...flight.cargo, debris: 0 }
-      : flight.attackResolution?.loot;
+      : flight.missionId === 'recycle' && flight.cargo
+        ? { metal: 0, minerals: 0, gas: 0, debris: flight.cargo.debris }
+        : flight.attackResolution?.loot;
     if (loot) {
       const capacities = getStorageCapacities(source.buildings);
       const safeCapacities = {
@@ -716,10 +766,14 @@ export function settleNpcMissionReturn(
       };
       const delivery = getCappedDelivery(resources, safeCapacities, loot);
       resources = delivery.resources;
+      // Debris brought home goes to the recycling store, as the player's does;
+      // the orbit field (resources.debris) is debris anyone may collect.
+      const recycling = source.recycling ?? { availableDebris: 0, jobs: [] };
       const updated: SpyTargetState = {
         ...source,
         fleet: { ...source.fleet, ships },
-        resources: { ...source.resources, ...resources, debris: addDebris(source.resources.debris, loot.debris) },
+        resources: { ...source.resources, ...resources },
+        ...(loot.debris > 0 ? { recycling: { ...recycling, availableDebris: addDebris(recycling.availableDebris, loot.debris) } } : {}),
       };
       next = setTarget(next, updated);
     } else {

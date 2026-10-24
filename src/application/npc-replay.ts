@@ -1,5 +1,4 @@
 import { getNextNpcEconomyCheckpoint, getNpcBuildingCandidates, startNpcBuilding } from './npc-economy.ts';
-import { getNextNpcFleetProductionCheckpoint } from './npc-fleet-production.ts';
 import { getNpcSessionEvents } from '../domain/npc/calendar.ts';
 import { compareNpcEvents, isNpcEventAfterCursor } from '../domain/npc/events.ts';
 import { chooseNpcEconomyAction } from '../domain/npc/economy-policy.ts';
@@ -14,20 +13,24 @@ import type { BuildingRole } from '../domain/buildings/resource-zone.ts';
 import type { SaveState } from './contracts.ts';
 import { applyNpcAutonomyAttention, npcAttentionActionId } from './npc-autonomy.ts';
 import { touchMember } from '../domain/command/membership.ts';
+import { ownerFlights } from './npc-knowledge-index.ts';
 
 /**
- * Owner rule (24.10.2026): while online an NPC acts like a player, looking at
- * the game every one to three minutes and doing everything worth doing, with
- * no cap on actions per session. When nothing is worth doing it waits for its
- * next own event (a building, an order, a flight) or for resources to pile up.
+ * Owner rule (24.10.2026): while online an NPC acts like a player, with no
+ * cap on actions per session. Every look does everything worth doing (fills
+ * construction queues, orders ships, sends fleets). When it looks again is
+ * its own choice (see getNpcNextLookAt): a skilled, attentive owner comes
+ * back as soon as a queue frees (seconds early in the game, when buildings
+ * take seconds), a weaker one later. Ticks every 20-40 s are the moments it
+ * may look; the ones before its next look are skipped without any work.
  */
-export const NPC_REPLAY_DECISION_MIN_DELAY_MS = 60_000;
-export const NPC_REPLAY_DECISION_MAX_DELAY_MS = 3 * 60_000;
+export const NPC_REPLAY_DECISION_MIN_DELAY_MS = 20_000;
+export const NPC_REPLAY_DECISION_MAX_DELAY_MS = 40_000;
 const MAX_SESSION_MS = 180 * 60_000;
 /** Attention moments a session can hold: its longest duration at the shortest delay. */
 export const NPC_REPLAY_MAX_ATTEMPTS_PER_SESSION = MAX_SESSION_MS / NPC_REPLAY_DECISION_MIN_DELAY_MS;
 /** Actions one look at the game can chain; a wait ends it sooner. */
-export const NPC_REPLAY_MAX_ACTIONS_PER_ATTENTION = 16;
+export const NPC_REPLAY_MAX_ACTIONS_PER_ATTENTION = 24;
 
 /**
  * An attention moment the owner skips: it decided there was nothing to do and
@@ -47,24 +50,56 @@ export function isNpcDecisionIdle(profile: NpcProfile, event: NpcReplayEvent): b
  * attentive owners). Everything read is the owner's own state.
  */
 export function getNpcIdleUntil(world: SaveState, profile: NpcProfile, at: number): number {
-  const ownerId = profile.ownerId;
-  const attention = Math.min(1, Math.max(0, Number.isFinite(profile.traits.attention) ? profile.traits.attention : 0.5));
-  let until = at + Math.round((10 + 30 * (1 - attention)) * 60_000);
+  const attention = unitTrait(profile.traits.attention);
+  const until = at + Math.round((10 + 30 * (1 - attention)) * 60_000);
+  return Math.max(at + 1, Math.min(until, nextOwnEventAt(world, profile.ownerId, at) ?? until));
+}
+
+/** The owner's next own completion or arrival after `at` (a building, an order, research, a fleet). */
+function nextOwnEventAt(world: SaveState, ownerId: string, at: number): number | null {
+  let next: number | null = null;
   const consider = (value: number | null | undefined) => {
-    if (typeof value === 'number' && Number.isFinite(value) && value > at && value < until) until = value;
+    if (typeof value === 'number' && Number.isFinite(value) && value > at && (next === null || value < next)) next = value;
   };
   for (const target of Object.values(world.espionage?.targets ?? {})) {
     if (target.kind !== 'npc' || target.ownerId !== ownerId) continue;
     consider(getNextNpcEconomyCheckpoint(target, at + 1));
-    consider(getNextNpcFleetProductionCheckpoint(target, ownerId, at, until));
+    // A whole order is what frees the production queue for a new one. Orders
+    // keep fixed schedules, so the first one still running is known whether or
+    // not the queue was settled up to now.
+    for (const queue of [target.fleetProduction?.shipQueue, target.fleetProduction?.defenseQueue, target.fleetProduction?.commanderQueue]) {
+      consider(queue?.find((order) => order.finishAt > at)?.finishAt);
+    }
   }
   consider(world.npcScience?.owners[ownerId]?.queue[0]?.finishAt);
-  for (const flight of world.flights.records) {
-    if (flight.ownerSide !== 'npc' || flight.ownerId !== ownerId) continue;
+  for (const flight of ownerFlights(world.flights.records, ownerId)) {
+    if (flight.ownerSide !== 'npc') continue;
     if (flight.phase === 'outbound') consider(flight.arrivalAt);
     if (flight.phase === 'returning') consider(flight.returnAt);
   }
-  return Math.max(at + 1, Math.round(until));
+  return next;
+}
+
+function unitTrait(value: number): number {
+  return Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0.5));
+}
+
+/**
+ * When an owner who just acted looks at the game again. Skill (mechanics
+ * knowledge) and attention set both its usual rhythm (about 1-3 min for the
+ * best, 4-10 for the weakest) and how fast it reacts once something of its
+ * own completes (5-30 s for the best, 1-3 min for the weakest): early in the
+ * game, when a building takes seconds, a good player keeps its queues busy.
+ */
+export function getNpcNextLookAt(world: SaveState, profile: NpcProfile, at: number, lookId: string): number {
+  const skill = (unitTrait(profile.traits.mechanicsKnowledge) + unitTrait(profile.traits.attention)) / 2;
+  const random = createSeededRandom(JSON.stringify(['npc-next-look:v1', profile.privateSeed, profile.ownerId, lookId]));
+  const lerp = (best: number, worst: number) => best + (worst - best) * (1 - skill);
+  const rhythm = at + Math.round(lerp(60_000, 240_000) + random() * lerp(120_000, 360_000));
+  const event = nextOwnEventAt(world, profile.ownerId, at);
+  const reaction = Math.round(lerp(5_000, 60_000) + random() * lerp(25_000, 120_000));
+  const next = event !== null ? Math.min(rhythm, event + reaction) : rhythm;
+  return Math.max(at + NPC_REPLAY_DECISION_MIN_DELAY_MS, next);
 }
 
 export type NpcReplayBoundaryEvent = Readonly<NpcSessionEvent & { sessionEndsAt: number }>;
@@ -316,12 +351,13 @@ export function applyNpcReplayEventsAt(
       });
       world = decisions[decisions.length - 1]!.state;
       const waited = decisions[decisions.length - 1]!.wait;
-      if (waited) {
-        const after = world.npc!.profiles[event.ownerId]!;
-        world = { ...world, npc: { ...world.npc!, profiles: { ...world.npc!.profiles, [event.ownerId]: {
-          ...after, session: { ...after.session, idleUntil: getNpcIdleUntil(world, after, at) },
-        } } } };
-      }
+      // The owner decides when it looks again: after nothing worth doing, at its
+      // next own event or once resources pile up; after acting, by its rhythm.
+      const after = world.npc!.profiles[event.ownerId]!;
+      const nextLook = waited ? getNpcIdleUntil(world, after, at) : getNpcNextLookAt(world, after, at, event.eventId);
+      world = { ...world, npc: { ...world.npc!, profiles: { ...world.npc!.profiles, [event.ownerId]: {
+        ...after, session: { ...after.session, idleUntil: nextLook },
+      } } } };
       targets = { ...world.espionage!.targets };
       science = world.npcScience;
       profiles[event.ownerId] = world.npc!.profiles[event.ownerId]!;

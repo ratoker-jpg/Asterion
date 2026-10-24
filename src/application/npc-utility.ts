@@ -8,9 +8,10 @@ import type { NpcProfile } from '../domain/npc/types.ts';
 import { estimateForcePower, estimateWinProbability, planningHorizonHours, type ForceStack } from '../domain/npc/utility.ts';
 import { estimateNpcBuildingIncomeGain, getNpcPlanetIncomePerHour } from './npc-economy.ts';
 import type { SaveState } from './contracts.ts';
-import { ownerBattleReports, ownerFlights, ownerSpyReports } from './npc-knowledge-index.ts';
+import { ownerBattleReports, ownerFlights, ownerSpyReports, publicDebrisEntries } from './npc-knowledge-index.ts';
 import { selectOwnerScore } from '../domain/rating/scoring.ts';
 import { nextColonyPointThreshold } from '../domain/universe/runtime.ts';
+import { findDebrisNearSystem } from '../domain/espionage/orbital-debris.ts';
 
 /**
  * Owner-scoped utility estimates for NPC candidate actions. Every input is
@@ -84,6 +85,8 @@ export type NpcUtilityContext = Readonly<{
   strategy?: NpcStrategyDrives;
   /** The owner's points already open its next colony (owner rule thresholds). */
   colonyOpen?: boolean;
+  /** Debris on the public map around the owner's planets (the player's «Найти обломки»). */
+  nearbyDebris?: number;
 }>;
 
 /**
@@ -123,8 +126,14 @@ export function createNpcUtilityContext(state: SaveState, profile: NpcProfile, a
   const flyingColonizers = ownerFlights(state.flights.records, ownerId).filter((flight) => flight.missionId === 'colonize'
     && (flight.phase === 'outbound' || flight.phase === 'arrived')).length;
   const threshold = nextColonyPointThreshold(ownPlanets.length + flyingColonizers);
+  const debrisMap = publicDebrisEntries(state.espionage);
+  const nearby = new Map<string, number>();
+  for (const planet of ownPlanets) {
+    for (const entry of findDebrisNearSystem(debrisMap, planet.coordinate)) nearby.set(`${entry.coordinate.galaxy}:${entry.coordinate.system}:${entry.coordinate.position}`, entry.debris);
+  }
   const base = {
     profile, at, timeScale,
+    nearbyDebris: [...nearby.values()].reduce((sum, value) => sum + value, 0),
     colonyOpen: threshold !== null && (selectOwnerScore(state, ownerId)?.totalPoints ?? 0) >= threshold,
     dayValue: Math.max(2_000, income * 24),
     ownPlanets,
@@ -285,6 +294,10 @@ export function estimateBuildingUtility(context: NpcUtilityContext, target: SpyT
       case 'research': return firstLevel ? -0.3 + 1.5 * drives.science : -0.5 + 0.9 * drives.science;
       case 'planetary-government': return firstLevel ? -0.4 + 1.4 * drives.diplomacy : -0.8 + 0.6 * drives.diplomacy;
       case 'spaceport': return -0.5 + 0.5 * Math.max(drives.war, drives.expansion, drives.operations);
+      // The recycling centre turns collected debris into the resource the owner lacks.
+      case 'recycling': return (target.recycling?.availableDebris ?? 0) > 0
+        ? (firstLevel ? 1.2 : -0.2 + 0.6 * drives.operations)
+        : (firstLevel ? -0.6 + 0.9 * drives.operations + 0.3 * Math.min(1, (context.nearbyDebris ?? 0) / Math.max(1, context.dayValue)) : -1);
       default: return -0.3 + 0.3 * (unit(traits.economyFocus) + unit(traits.militaryFocus)) / 2;
     }
   })();
@@ -351,7 +364,8 @@ export function estimateProductionItemUtility(context: NpcUtilityContext, target
     case 'energy': return -0.6 + 1.5 * (situation?.energyNeed ?? 0) - price;
     case 'spy': return (fleet[itemId] ?? 0) >= 2 ? -2 : -0.3 + 0.9 * Math.max(drives.war, drives.operations, drives.military * 0.6) - price;
     case 'colony': return owned(itemId) > 0 || drives.expansion <= 0 || context.colonyOpen === false ? -2.5 : -0.4 + 1.6 * drives.expansion - price;
-    case 'recycler': return owned(itemId) > 0 || !context.knownDebris?.size ? -2 : -0.2 + 1.2 * drives.operations - price;
+    case 'recycler': return owned(itemId) > 0 || !(context.nearbyDebris ?? 0) && !context.knownDebris?.size ? -2
+      : -0.2 + 1.2 * drives.operations + 0.4 * Math.log1p((context.nearbyDebris ?? 0) / Math.max(1, context.dayValue)) - price;
     case 'commander': return -0.9 + 0.8 * drives.military - price;
     default: return -1.2 + 0.4 * unit(context.profile.traits.cooperation) - price;
   }

@@ -1,5 +1,5 @@
 import type { NpcProfile } from '../domain/npc/types.ts';
-import { ownerBattleReports, ownerSpyReports } from './npc-knowledge-index.ts';
+import { ownerBattleReports, ownerSpyReports, publicDebrisEntries } from './npc-knowledge-index.ts';
 import { SHIP_IDS, type ShipId } from '../domain/combat/ids.ts';
 import { isAttackCombatShip } from './attack.ts';
 import { activeSpyMissionForTarget, getEspionageTargets } from '../domain/espionage/runtime.ts';
@@ -12,7 +12,8 @@ import type { UniverseCoordinate, UniverseObjectKind, UniversePersistedPlayerPla
 import { explorationNodeId, visibleExplorationContacts } from '../domain/exploration/model.ts';
 import { EXPLORATION_ARTS } from '../exploration-art.ts';
 import { getOwnerRelation } from './owner-relations.ts';
-import { getNpcMissionAvailableFleet, type NpcMissionDispatchCommand, type NpcMissionId } from './npc-missions.ts';
+import { getNpcMissionAvailableFleet, isNpcRecyclerShip, type NpcMissionDispatchCommand, type NpcMissionId } from './npc-missions.ts';
+import { findDebrisNearSystem } from '../domain/espionage/orbital-debris.ts';
 import type { SaveState } from './contracts.ts';
 import { productionExplorationNpcSources } from './exploration-npc.ts';
 
@@ -66,6 +67,7 @@ function addCandidate(
     operationId?: string;
     targetKind?: UniverseObjectKind;
     targetRelation?: TargetRelation;
+    debris?: number;
   } = {},
 ): void {
   const payload: Record<string, string | number | boolean | null> = {
@@ -82,6 +84,7 @@ function addCandidate(
   if (options.operationId) payload.operationId = options.operationId;
   if (options.targetKind) payload.targetKind = options.targetKind;
   if (options.targetRelation) payload.targetRelation = options.targetRelation;
+  if (options.debris !== undefined) payload.debris = options.debris;
   const destinationKey = options.destinationPlanetId ?? options.operationId
     ?? `${destination.galaxy}:${destination.system}:${destination.position}`;
   candidates.push({
@@ -343,6 +346,19 @@ export function getNpcMissionCandidates(
       }
     }
 
+    // Debris shown on the public map near this planet (the player's «Найти
+    // обломки»): recyclers go to the richest few, carrying what they can.
+    const recyclers = Object.fromEntries(SHIP_IDS.filter((shipId) => (available[shipId] ?? 0) > 0 && isNpcRecyclerShip(shipId, origin.raceId))
+      .map((shipId) => [shipId, available[shipId]!])) as Partial<Record<ShipId, number>>;
+    if (Object.keys(recyclers).length && hasFlightSlot(state, ownerId, 'recycle')) {
+      const nearby = findDebrisNearSystem(publicDebrisEntries(state.espionage), origin.coordinate)
+        .sort((left, right) => right.debris - left.debris || compareIds(coordinateKey(left.coordinate), coordinateKey(right.coordinate)))
+        .slice(0, 3);
+      for (const { coordinate, debris } of nearby) {
+        addCandidate(candidateList, ownerId, 'recycle', origin.id, coordinate, recyclers, { debris });
+      }
+    }
+
     const expeditionShips = availableExpeditionShip(available, origin.raceId);
     if (expeditionShips && hasFlightSlot(state, ownerId, 'expedition')) {
       for (const { node, id } of contactById) {
@@ -360,7 +376,7 @@ export function getNpcMissionCandidates(
 
 function isMissionId(value: unknown): value is NpcMissionId {
   return value === 'espionage' || value === 'colonize' || value === 'attack'
-    || value === 'expedition' || value === 'exploration-recon';
+    || value === 'expedition' || value === 'exploration-recon' || value === 'recycle';
 }
 
 function coordinateFromPayload(payload: NpcMissionCandidatePayload): UniverseCoordinate | null {

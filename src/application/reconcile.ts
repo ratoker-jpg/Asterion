@@ -8,6 +8,7 @@ import {
 import { reconcileScience } from './science.ts';
 import { pruneCampaignHistory } from './history-retention.ts';
 import { reconcileFleetProduction } from './fleet-production.ts';
+import type { FlightRecord } from '../domain/flights/types.ts';
 import { getNextNpcFleetOverflowCheckpoint, getNextNpcSatelliteCheckpoint, settleNpcFleetProduction } from './npc-fleet-production.ts';
 import type { BuildingRole } from '../domain/buildings/resource-zone.ts';
 import type { ScienceId } from '../domain/science/types.ts';
@@ -35,7 +36,7 @@ import { createExplorationState, recordHighestExplorationScore } from '../domain
 import { generateNpcOwnerReplayEvents, applyNpcReplayEventsAt, initializeNpcReplaySessionsAt, isNpcDecisionIdle, type NpcReplayEmission, type NpcReplayEvent } from './npc-replay.ts';
 import { compareNpcEvents } from '../domain/npc/events.ts';
 import type { NpcProfile } from '../domain/npc/types.ts';
-import { getNextNpcEconomyCheckpoint, settleNpcPlanet } from './npc-economy.ts';
+import { settleNpcRecycling, getNextNpcEconomyCheckpoint, settleNpcPlanet } from './npc-economy.ts';
 import { getNextNpcScienceCheckpoint, pauseNpcScienceForSettlement, projectNpcScienceLedger, reconcileNpcScienceAt } from './npc-science.ts';
 import { getReplayNpcOwnerIds, NPC_REPLAY_GENERATION_STEP_MS, NPC_REPLAY_MAX_GROUPS, NPC_REPLAY_WINDOW_MS } from './npc-catchup.ts';
 import { CAMPAIGN_SPEED_SCALE } from '../domain/runtime/mode.ts';
@@ -161,7 +162,8 @@ function reconcileRuntimeSlice(
     let changed = false;
     for (const [id, target] of Object.entries(targets)) {
       if (!replayOwners.has(target.ownerId) || (ownerIds && !ownerIds.has(target.ownerId))) continue;
-      const result = settleNpcPlanet(target, at, { timeScale });
+      const settledPlanet = settleNpcPlanet(target, at, { timeScale });
+      const result = { ...settledPlanet, target: settleNpcRecycling(settledPlanet.target, at) };
       settled.add(target.ownerId);
       const production = settleNpcFleetProduction(result.target, target.ownerId, at);
       if (production.completed.length) events.push({ kind: 'npc-fleet-production', ownerId: target.ownerId, planetId: id, at, completed: production.completed });
@@ -361,21 +363,23 @@ function reconcileRuntimeSlice(
     const earliest = times[low];
     return earliest !== undefined && earliest <= context.now ? earliest : undefined;
   };
+  /** When a flight next does something: arrival, return, or an expedition's leave time. */
+  const flightEventAt = (flight: FlightRecord): number | undefined => flight.phase === 'outbound'
+    ? flight.arrivalAt
+    : flight.phase === 'returning'
+      ? flight.returnAt
+      : flight.phase === 'arrived' && flight.missionId === 'expedition'
+        ? (() => {
+          const contact = flight.operationId ? next.exploration?.contacts[flight.operationId] : undefined;
+          if (!contact?.claim || contact.claim.flightId !== flight.id) return flight.arrivalAt;
+          return Math.min(contact.expiresAt, contact.claim.pendingRecallAt === undefined
+            ? Number.POSITIVE_INFINITY : contact.claim.pendingRecallAt + 30_000);
+        })()
+        : undefined;
   const collectFlightTimes = (): number[] => {
     const times: number[] = [];
     for (const flight of next.flights.records) {
-      const checkpoint = flight.phase === 'outbound'
-        ? flight.arrivalAt
-        : flight.phase === 'returning'
-          ? flight.returnAt
-          : flight.phase === 'arrived' && flight.missionId === 'expedition'
-            ? (() => {
-              const contact = flight.operationId ? next.exploration?.contacts[flight.operationId] : undefined;
-              if (!contact?.claim || contact.claim.flightId !== flight.id) return flight.arrivalAt;
-              return Math.min(contact.expiresAt, contact.claim.pendingRecallAt === undefined
-                ? Number.POSITIVE_INFINITY : contact.claim.pendingRecallAt + 30_000);
-            })()
-          : undefined;
+      const checkpoint = flightEventAt(flight);
       if (checkpoint === undefined || !Number.isFinite(checkpoint)) continue;
       times.push(checkpoint);
     }

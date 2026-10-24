@@ -1,3 +1,5 @@
+import { getOrbitalDebrisByCoordinate } from '../domain/espionage/orbital-debris.ts';
+import type { EspionageState } from '../domain/espionage/types.ts';
 import type { BattleReport } from '../domain/combat/report.ts';
 import type { SpyMission, SpyReportSnapshot } from '../domain/espionage/types.ts';
 import type { FlightRecord } from '../domain/flights/types.ts';
@@ -73,4 +75,14 @@ export function flightsToPlanet(records: readonly FlightRecord[], planetId: stri
     flightsByDestination.set(records, index);
   }
   return index.get(planetId) ?? [];
+}
+
+const debrisByEspionage = new WeakMap<object, ReturnType<typeof getOrbitalDebrisByCoordinate>>();
+
+/** Debris on the public map (planet orbits, ledger records), built once per immutable espionage state. */
+export function publicDebrisEntries(espionage: EspionageState | undefined): ReturnType<typeof getOrbitalDebrisByCoordinate> {
+  if (!espionage) return [];
+  let entries = debrisByEspionage.get(espionage);
+  if (!entries) debrisByEspionage.set(espionage, entries = getOrbitalDebrisByCoordinate(espionage));
+  return entries;
 }

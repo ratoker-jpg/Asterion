@@ -173,13 +173,17 @@ export function pruneCampaignHistory(state: SaveState, at: number | undefined = 
   // read (the observed set and latest estimate), so older duplicates leave.
   // Reports older than the stale window are no basis for a decision either.
   const spyReports = next.espionage?.reports ?? [];
-  const staleBefore = typeof at === 'number' ? at - NPC_SPY_REPORT_STALE_MS : Number.NEGATIVE_INFINITY;
+  // The threshold moves by whole hours, a pure function of the time, so the
+  // archive is rescanned for age at most hourly however often it is pruned.
+  const staleBefore = typeof at === 'number'
+    ? Math.floor((at - NPC_SPY_REPORT_STALE_MS) / 3_600_000) * 3_600_000
+    : Number.NEGATIVE_INFINITY;
   const spyMemo = cleanSpyReports.get(spyReports);
   if (!spyMemo || spyMemo.playerId !== playerId || staleBefore > spyMemo.oldestNpcAt) {
     const newestNpcReport = new Map<string, number>();
     spyReports.forEach((report, index) => {
       if (typeof report.ownerId !== 'string' || !report.ownerId || report.ownerId === playerId) return;
-      const key = JSON.stringify([report.ownerId, report.targetPlanetId]);
+      const key = `${report.ownerId}\u0000${report.targetPlanetId}`;
       const previous = newestNpcReport.get(key);
       if (previous === undefined || spyReports[previous]!.createdAt <= report.createdAt) newestNpcReport.set(key, index);
     });

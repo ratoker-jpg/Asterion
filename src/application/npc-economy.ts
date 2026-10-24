@@ -1,3 +1,4 @@
+import { advanceRecyclingState, RECYCLING_STORAGE_MS } from '../domain/buildings/recycling.ts';
 import {
   completeBuildingProject,
   evaluateBuildingBuild,
@@ -39,7 +40,7 @@ const RESOURCE_KEYS = ['metal', 'minerals', 'gas'] as const;
  */
 export const NPC_APPLIED_ID_LIMIT = 64;
 export const NPC_AUTONOMY_BUILDING_ROLES: readonly BuildingRole[] = [
-  ...NPC_ECONOMY_ROLES, 'shipyard', 'hangar', 'spaceport', 'planetary-government',
+  ...NPC_ECONOMY_ROLES, 'shipyard', 'hangar', 'spaceport', 'planetary-government', 'recycling',
 ];
 
 export type NpcEconomyContext = {
@@ -393,9 +394,39 @@ export function startNpcBuilding(
   };
 }
 
+/**
+ * Recycling jobs ready for a day are collected into the stores, capped as
+ * any income (the player's centre does the same); the rest of the store is
+ * untouched. Pure; the same target and time give the same result.
+ */
+export function settleNpcRecycling(target: SpyTargetState, at: number): SpyTargetState {
+  if (!target.recycling?.jobs.length) return target;
+  const transition = advanceRecyclingState(target.recycling, at);
+  // Only a collection changes the planet; a job merely turning "ready" is
+  // left as stored, so the state never depends on when it was settled.
+  if (!transition.autoCollectedJobIds.length) return target;
+  const collectedIds = new Set(transition.autoCollectedJobIds);
+  const capacities = getStorageCapacities(migrateBuildingLevels(target.buildings));
+  const credited = creditResources(
+    { metal: target.resources.metal, minerals: target.resources.minerals, gas: target.resources.gas, energy: 0 },
+    capacities,
+    transition.autoCollectedOutput,
+  );
+  return {
+    ...target,
+    recycling: { ...target.recycling, jobs: target.recycling.jobs.filter((job) => !collectedIds.has(job.id)) },
+    resources: { ...target.resources, metal: credited.wallet.metal, minerals: credited.wallet.minerals, gas: credited.wallet.gas },
+  };
+}
+
 export function getNextNpcEconomyCheckpoint(target: SpyTargetState, at: number): number | null {
   const due = [target.buildingQueue?.[0]?.finishAt]
     .filter((value): value is number => typeof value === 'number' && value >= at);
+  // Recycling output left uncollected is collected a day after it is ready.
+  for (const job of target.recycling?.jobs ?? []) {
+    const autoCollectAt = job.finishAt + RECYCLING_STORAGE_MS;
+    if (autoCollectAt >= at) due.push(autoCollectAt);
+  }
   if (target.overpopulation?.blocked) {
     const burnEnd = target.overpopulation.episodeStartedAt + OVERPOPULATION_WINDOW_MS;
     if (burnEnd >= at) due.push(burnEnd);

@@ -5,7 +5,7 @@ import { createDefaultNewGameConfig } from '../domain/world/config.ts';
 import { getNpcSessionEvents } from '../domain/npc/calendar.ts';
 import { createNpcState } from '../domain/npc/state.ts';
 import { CAMPAIGN_SPEED_SCALE } from '../domain/runtime/mode.ts';
-import { getNpcBuildingCandidates, settleNpcPlanet, startNpcBuilding } from './npc-economy.ts';
+import { getNpcBuildingCandidates, NPC_APPLIED_ID_LIMIT, settleNpcPlanet, startNpcBuilding } from './npc-economy.ts';
 import { isNpcCatchupPending } from './npc-catchup.ts';
 import { reconcileRuntime, type RuntimeReconcileEvent } from './reconcile.ts';
 import { createInitialSaveState, createPersistenceFacade } from './persistence.ts';
@@ -215,6 +215,11 @@ test('NPC decisions run inside generated sessions and debit only their own exact
     const decision = keepNpcEvents(result.events).find((entry) =>
       entry.kind === 'npc-economy' && entry.event.at === scheduled.at && entry.event.started && Boolean(entry.event.selectedRole));
     if (!decision || decision.kind !== 'npc-economy') continue;
+    // One look may do several things; isolate a building that was the only
+    // paid action on its planet in that look.
+    const samePlanet = keepNpcEvents(result.events).filter((entry) => entry.kind === 'npc-economy' && entry.event.at === scheduled.at
+      && entry.event.started && entry.event.planetId === decision.event.planetId);
+    if (samePlanet.length !== 1) continue;
 
     assert.ok(intervals.some(({ start, end }) => decision.event.at >= start && decision.event.at < end),
       'a persisted economic action must occur during the generated online session');
@@ -273,7 +278,7 @@ test('a frozen 30-day replay target survives intermediate save/reload and does n
   assert.equal(new Set(startedIds).size, startedIds.length, 'reloading never emits a started action twice');
   const expectedActionIds = npcTargets(remaining.state).flatMap((target) => allEmissions.flatMap((entry) =>
     entry.kind === 'npc-economy' && entry.event.started && entry.event.planetId === target.id && entry.event.economyActionId
-      ? [entry.event.economyActionId] : []).slice(-256));
+      ? [entry.event.economyActionId] : []).slice(-NPC_APPLIED_ID_LIMIT));
   assert.deepEqual(actionIds, expectedActionIds,
     'each planet retains the bounded canonical receipts of its most recent paid decisions after reload');
 });

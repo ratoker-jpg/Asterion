@@ -236,12 +236,17 @@ test('full-world decisions start one legal paid ship across an owner’s planets
       testTimeScale: 1,
     });
     state = result.state;
+    // A look opens with the event's own action; an owner waiting for its next
+    // own event skips the look (owner rule: no wasted looks while idle).
     const emittedAtDecision = replayEmissions(result.events).filter((event) => event.eventId === scheduled.eventId);
-    assert.equal(emittedAtDecision.length, 1, 'one owner-wide autonomous decision is emitted for the event');
-    const event = emittedAtDecision[0]!;
-    if (!event.started || event.selectedActionKind !== 'production' || event.selectedRole || event.selectedScienceId) continue;
+    assert.ok(emittedAtDecision.length <= 1, 'at most one opening action per look');
+    const event = emittedAtDecision[0];
+    if (!event || !event.started || event.selectedActionKind !== 'production' || event.selectedRole || event.selectedScienceId) continue;
     const found = findStartedShip(state, ownerId, event.idempotencyKey);
-    if (found) {
+    // Later actions of the same look on the same planet would mix into its wallet.
+    const lookTouchesPlanetAgain = found && replayEmissions(result.events).some((other) => other.eventId !== event.eventId
+      && other.eventId.startsWith(`${scheduled.eventId}:`) && other.started && other.planetId === found.target.id);
+    if (found && !lookTouchesPlanetAgain) {
       const beforeTarget = npcTargets(before).find((target) => target.id === found.target.id)!;
       started = { state, beforeTarget, target: found.target, order: found.order, event };
       break;
@@ -252,7 +257,7 @@ test('full-world decisions start one legal paid ship across an owner’s planets
   const { state: startedState, beforeTarget, target: actualTarget, order, event } = started;
   const factionShip = getFactionShipCatalog(actualTarget.raceId).find(({ id }) => id === order.itemId);
   assert.ok(factionShip, `queued item ${order.itemId} belongs to the owner faction catalog`);
-  assert.equal(order.quantity, 1, 'one owner decision produces one unit');
+  assert.ok(order.quantity >= 1, 'one owner decision orders a batch of at least one unit');
   assert.ok(actualTarget.buildings.shipyard >= factionShip.construction.requiredShipyardLevel,
     'the required shipyard was built through paid NPC decisions');
 
@@ -263,11 +268,11 @@ test('full-world decisions start one legal paid ship across an owner’s planets
   const legal = getNpcFleetProductionCandidates(settledBefore, ownerId, event.at, scale)
     .find((candidate) => candidate.queueKind === 'ships' && candidate.itemId === order.itemId);
   assert.ok(legal?.available, 'the ship was legal from this NPC owner’s saved science and faction state');
-  const expected = startNpcFleetProduction(settledBefore, ownerId, 'ships', order.itemId, event.at, scale, event.idempotencyKey);
+  const expected = startNpcFleetProduction(settledBefore, ownerId, 'ships', order.itemId, event.at, scale, event.idempotencyKey, 0, order.quantity);
   assert.equal(expected.ok, true);
-  assert.equal(order.cost.metal, factionShip.cost.metal);
-  assert.equal(order.cost.minerals, factionShip.cost.minerals);
-  assert.equal(order.cost.gas, factionShip.cost.gas);
+  assert.equal(order.cost.metal, factionShip.cost.metal * order.quantity);
+  assert.equal(order.cost.minerals, factionShip.cost.minerals * order.quantity);
+  assert.equal(order.cost.gas, factionShip.cost.gas * order.quantity);
   assert.deepEqual(actualTarget.resources, expected.target.resources, 'only the canonical ship cost is debited from its owner wallet');
   assert.deepEqual(actualTarget.fleetProduction, expected.target.fleetProduction);
   assert.deepEqual(actualTarget.fleet, expected.target.fleet, 'no ship appears at enqueue time');
@@ -286,14 +291,15 @@ test('full-world decisions start one legal paid ship across an owner’s planets
 
   const beforeFinish = advanceTo(clone(loaded.state), order.finishAt - 1, [order.finishAt - 1]).state;
   const beforeFinishTarget = beforeFinish.espionage!.targets![actualTarget.id]!;
+  // Units complete one by one; the last is still missing a millisecond before the order ends.
   assert.equal(beforeFinishTarget.fleet.ships[order.itemId as keyof typeof beforeFinishTarget.fleet.ships],
-    settledBefore.fleet.ships[order.itemId as keyof typeof settledBefore.fleet.ships]);
+    (settledBefore.fleet.ships[order.itemId as keyof typeof settledBefore.fleet.ships] ?? 0) + order.quantity - 1);
   const exact = advanceTo(clone(loaded.state), order.finishAt, [order.finishAt]);
   const sliced = advanceTo(clone(loaded.state), order.finishAt, [order.finishAt - 1, order.finishAt], true);
   assert.deepEqual(productionSnapshot(sliced.state), productionSnapshot(exact.state), 'reload and irregular chunks preserve exact fleet completion');
   const completedTarget = exact.state.espionage!.targets![actualTarget.id]!;
   assert.equal(completedTarget.fleet.ships[order.itemId as keyof typeof completedTarget.fleet.ships],
-    (settledBefore.fleet.ships[order.itemId as keyof typeof settledBefore.fleet.ships] ?? 0) + 1);
+    (settledBefore.fleet.ships[order.itemId as keyof typeof settledBefore.fleet.ships] ?? 0) + order.quantity);
   assert.equal(completedTarget.fleetProduction?.shipQueue.some((queued) => queued.id === order.id), false);
 
   const repeated = reconcileRuntime(exact.state, {

@@ -1,4 +1,5 @@
 import type { CommanderId } from '../combat/commanders.ts';
+import type { RecyclingState } from '../buildings/recycling.ts';
 import type { DefenseId, ShipId } from '../combat/ids.ts';
 import type { CombatFactionId } from '../combat/factions.ts';
 import type { OwnedDefenseState, FleetProductionState } from '../fleet/production.ts';
@@ -103,6 +104,8 @@ export type SpyTargetState = {
   productionBots?: BotAssignment;
   /** Canonical orbital satellite count; legacy fleet entries are promoted when settled. */
   solarSatellites?: number;
+  /** An NPC owner's recycling store and jobs (the player's «Центр переработки»); absent means empty. */
+  recycling?: RecyclingState;
   /** Persisted fleet-only capacity burn episode. Defense population is excluded. */
   overpopulation?: OverpopulationState;
   /** Idempotency keys for replayed economy actions. */

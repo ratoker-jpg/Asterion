@@ -322,11 +322,15 @@ export function getNextNpcSatelliteCheckpoint(
  * without it, the start would depend on when the queue happened to be read.
  * Pure of the (immutable) target, so it is computed once per version.
  */
-const overflowByTarget = new WeakMap<SpyTargetState, number | null>();
+// Keyed by the queue object and checked against everything else it reads:
+// income settlement makes a new target every time but keeps these objects.
+const overflowByQueue = new WeakMap<object, { fleet: unknown; buildings: unknown; satellites: number; overpopulation: unknown; result: number | null }>();
 
 function fleetOverflowAt(target: FleetProductionTarget): number | null {
-  const cached = overflowByTarget.get(target);
-  if (cached !== undefined) return cached;
+  const key = target.fleetProduction;
+  const cached = key ? overflowByQueue.get(key) : undefined;
+  if (cached && cached.fleet === target.fleet && cached.buildings === target.buildings
+    && cached.satellites === satelliteCount(target) && cached.overpopulation === target.overpopulation) return cached.result;
   let result: number | null = null;
   const state = target.fleetProduction;
   if (state && !target.overpopulation && (state.shipQueue.length || state.commanderQueue.length)) {
@@ -350,7 +354,7 @@ function fleetOverflowAt(target: FleetProductionTarget): number | null {
       if (population > capacity) { result = unit.at; break; }
     }
   }
-  overflowByTarget.set(target, result);
+  if (key) overflowByQueue.set(key, { fleet: target.fleet, buildings: target.buildings, satellites: satelliteCount(target), overpopulation: target.overpopulation, result });
   return result;
 }
 

@@ -124,7 +124,7 @@ import {
   resolveAttackAtTarget,
 } from './attack.ts';
 import { dispatchPirateFlight, resolvePirateFlightAtTarget } from './pirates.ts';
-import { resolveNpcMissionArrival, settleNpcMissionReturn } from './npc-missions.ts';
+import { resolveNpcMissionArrival, resolveNpcRecycleArrival, settleNpcMissionReturn } from './npc-missions.ts';
 import { resolveNpcPirateArrival } from './npc-pirates.ts';
 import { resolveNpcAidArrival, settleNpcAidReturn } from './npc-aid.ts';
 import { getOwnerRelation } from './owner-relations.ts';
@@ -2626,6 +2626,12 @@ export function reconcileFlights(
         next = result.state;
         changed = true;
         if (result.flight) events.push({ flight: result.flight, status: result.ok ? 'delivered' : 'target-unavailable', notice: 'Результат доставки союзной помощи NPC сохранён.' });
+        continue;
+      }
+      if (current.missionId === 'recycle' && current.phase === 'outbound' && current.arrivalAt <= now) {
+        const result = resolveNpcRecycleArrival(next, current, current.arrivalAt);
+        changed ||= result.state !== next;
+        next = result.state;
         continue;
       }
       if ((current.missionId === 'espionage' || current.missionId === 'colonize')
