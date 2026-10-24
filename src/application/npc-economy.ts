@@ -183,6 +183,20 @@ function incomeFor(target: SpyTargetState, timeScale: number, buildings = target
   return result;
 }
 
+/** Canonical income per hour (metal + minerals + gas) this planet earns now. */
+export function getNpcPlanetIncomePerHour(target: SpyTargetState, timeScale: number): number {
+  const income = incomeFor(target, timeScale);
+  return income.metal + income.minerals + income.gas;
+}
+
+/** Extra canonical income per hour the next level of `role` would add (0 for non-producing buildings). */
+export function estimateNpcBuildingIncomeGain(target: SpyTargetState, role: BuildingRole, nextLevel: number, timeScale: number): number {
+  const buildings = targetBuildingLevels(target);
+  const before = incomeFor(target, timeScale, buildings);
+  const after = incomeFor(target, timeScale, { ...buildings, [role]: nextLevel });
+  return Math.max(0, (after.metal + after.minerals + after.gas) - (before.metal + before.minerals + before.gas));
+}
+
 function accrueInterval(target: SpyTargetState, to: number, timeScale: number, derivedBuildings?: BuildingLevels): SpyTargetState {
   const clock = target.resourceClock ?? {
     lastReconciledAt: to,
