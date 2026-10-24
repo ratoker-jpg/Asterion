@@ -386,9 +386,12 @@ export function buildReportsFeed(
       .map((operation) => [operation.battleReportId, operation]),
   );
 
+  // Battles between other owners (NPC vs NPC, pirates vs NPC) are not the
+  // player's mail; "mine" matches ReportsView, so local-player aliases count.
+  const mine = (id?: string) => isAsterionLocalPlayerId(playerOwnerId) ? isAsterionLocalPlayerId(id) : id === playerOwnerId;
   const battleItems = battleReports
     .filter((report) => report.missionType !== 'simulation' && report.missionType !== 'arena')
-    .filter((report) => !playerOwnerId || report.attacker.playerId === playerOwnerId || report.defender.playerId === playerOwnerId)
+    .filter((report) => !playerOwnerId || mine(report.attacker.playerId) || mine(report.defender.playerId))
     .map((report) => battleReportToReportItem(report, operationByBattleId.get(report.id)));
 
   const espionageItems = [

@@ -422,8 +422,9 @@ async function runViewport(win, width, height) {
   if (!gasDossier.visible || !gasDossier.title || !gasDossier.zeroGas || !gasDossier.zeroScrap || gasDossier.leaksHiddenState) {
     throw new Error(`Gas extraction report dossier contract failed at ${label}: ${JSON.stringify(gasDossier)}`);
   }
+  // An empty badge is not rendered, exactly as the recycler loop above expects.
   const gasUnreadAfter = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-navigation="primary"] [data-qa-route="reports"] .asterion-header__nav-badge')?.textContent?.trim() ?? ''`);
-  if (gasUnreadAfter !== String(initialUnreadBadge)) throw new Error(`Gas extraction report did not clear its unread count at ${label}: expected ${initialUnreadBadge}, got ${gasUnreadAfter || 'none'}`);
+  if (gasUnreadAfter !== (initialUnreadBadge === 0 ? '' : String(initialUnreadBadge))) throw new Error(`Gas extraction report did not clear its unread count at ${label}: expected ${initialUnreadBadge}, got ${gasUnreadAfter || 'none'}`);
   await win.webContents.executeJavaScript(`new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
   await capture(win, directory, 'gas-extraction-arrival');
   await clickPrimary(win, 'universe', `document.querySelector('[data-qa-universe]')`);
