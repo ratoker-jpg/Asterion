@@ -130,14 +130,15 @@ export function getNpcEndgameChoices(state: SaveState, profile: NpcProfile, util
       .some((relation) => relation.id === raid.allianceId && relation.status === 'war') : false;
     const ownSystem = local.some((planet) => planet.coordinate.system === raid.system);
     // Stop an alliance close to the Gate, an enemy, or a raid that dims this owner's own Sun.
+    // A raid far from home by an alliance with few crystals is someone else's business.
     const motive = 0.25 * raiderCrystals + (atWar ? 0.6 : 0) + (ownSystem ? 0.7 : 0);
-    if (motive <= 0) continue;
+    if (motive < 0.5) continue;
     const origin = local.sort((left, right) => sunFleetPopulation(sunForce(state, ownerId, right.id, right.raceId, 1, Infinity), right.raceId as never)
       - sunFleetPopulation(sunForce(state, ownerId, left.id, left.raceId, 1, Infinity), left.raceId as never) || left.id.localeCompare(right.id))[0]!;
-    const ships = sunForce(state, ownerId, origin.id, origin.raceId, 0.35 + 0.4 * unit(traits.riskTolerance), room);
+    const ships = sunForce(state, ownerId, origin.id, origin.raceId, 0.2 + 0.35 * unit(traits.riskTolerance), room);
     if (!Object.keys(ships).length) continue;
     const id = `sun-support:${ownerId}:${raid.id}`;
-    const estimate = -0.7 + motive + 0.4 * unit(traits.cooperation) + 0.3 * drives.military;
+    const estimate = -1 + motive + 0.4 * unit(traits.cooperation) + 0.3 * drives.military;
     choices.push({ candidate: { id, kind: 'pve', weight: scored(id, estimate), payload: { planetId: origin.id } }, run: (current, key) => {
       const result = sendNpcSunSupport(current, ownerId, { raidId: raid.id, originPlanetId: origin.id, ships, requestId: key }, sunOptions(at, timeScale));
       return result.ok ? { state: result.state, started: true, reason: null, planetId: origin.id } : { state: current, started: false, reason: result.error, planetId: origin.id };

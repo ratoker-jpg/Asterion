@@ -103,6 +103,7 @@ export type SunActionResult =
 
 export type SunRaidNotice = { tone: 'info' | 'success' | 'error'; text: string; galaxy?: number; system?: number };
 
+const SUN_RAID_RECORD_LIMIT = 200;
 const ACTIVE_PHASES = new Set<FlightRecord['phase']>(['outbound', 'arrived', 'returning']);
 const SUN_MISSIONS = new Set<FlightRecord['missionId']>(['sun-attack', 'sun-support']);
 
@@ -1381,6 +1382,11 @@ export function reconcileSunRaids(state: SaveState, options: SunRuntimeOptions):
     return { ...raid, closedAt: Math.max(raid.result?.resolvedAt ?? raid.arrivesAt, ...attackers.map((flight) => flight.completedAt ?? 0)) };
   });
   if (closedAny) next = withSunRaid(next, { ...sunRaid, raids });
+  // The save keeps the last 200 raid records (repository); the live world
+  // keeps the same, so a reload never changes what the world remembers.
+  if (currentSunRaidState(next).raids.length > SUN_RAID_RECORD_LIMIT) {
+    next = withSunRaid(next, { ...currentSunRaidState(next), raids: currentSunRaidState(next).raids.slice(-SUN_RAID_RECORD_LIMIT) });
+  }
 
   // Fold finished recovery steps into stored records so the save stays compact.
   const suns = currentSunRaidState(next).suns;
