@@ -846,3 +846,59 @@ test('a saved spy report roll is normalized into the canonical 0..99 range', () 
   const migrated = migrateEspionageState({ missions: [], hunterNotices: [], reports: [report(450), report(-3), report(57.9), report('x')] });
   assert.deepEqual(migrated.reports.map((item) => item.roll), [99, 0, 57, 0]);
 });
+
+test('a repeated report from orbit loses the probe on 0..29 and keeps it on 30..99 (owner rule 25.10.2026)', () => {
+  const initial = createInitialSaveState('test', 1_000);
+  const targetId = Object.keys(initial.espionage!.bot01Planets!)[1];
+  const state = withTargets(initial, { ...getEspionageTargets(initial.espionage), [targetId]: { ...getEspionageTargets(initial.espionage)[targetId]!, hunterLevel: 0 } });
+  const dispatched = dispatchFlight(state, spyCommand(state, 'spy-repeat-loss', targetId), { now: 1_000, mode: 'test', testTimeScale: 15 });
+  assert.equal(dispatched.ok, true);
+  if (!dispatched.ok) return;
+  const arrived = reconcileFlights(dispatched.state, dispatched.flight.arrivalAt, () => 99);
+  const mission = arrived.state.espionage!.missions[0];
+  assert.equal(mission.status, 'orbiting');
+  const at = dispatched.flight.arrivalAt + 5_000;
+
+  const lost = requestSpyReport(arrived.state, mission.id, { now: at, rng: () => 29 });
+  assert.equal(lost.ok, true);
+  if (!lost.ok) return;
+  assert.equal(lost.report, undefined);
+  assert.equal(lost.state.espionage!.missions[0].status, 'destroyed');
+  assert.equal(lost.state.espionage!.reports.length, arrived.state.espionage!.reports.length);
+  assert.equal(lost.state.flights.records.find((flight) => flight.id === mission.flightId)?.completionReason, 'spy-destroyed');
+  // Only the probe's owner learns of the loss: the target gets no Hunter notice.
+  assert.equal(lost.state.espionage!.hunterNotices.length, arrived.state.espionage!.hunterNotices.length);
+
+  const kept = requestSpyReport(arrived.state, mission.id, { now: at, rng: () => 30 });
+  assert.equal(kept.ok, true);
+  if (!kept.ok) return;
+  assert.ok(kept.report);
+  assert.equal(kept.state.espionage!.missions[0].status, 'orbiting');
+});
+
+test('a full spy report counts the fleet away in flight in the population, not in the fleet list', () => {
+  const initial = createInitialSaveState('test', 1_000);
+  const targetId = Object.keys(initial.espionage!.bot01Planets!)[1];
+  const target = getEspionageTargets(initial.espionage)[targetId]!;
+  const skilled = { ...initial, science: { ...initial.science, levels: { ...initial.science.levels, 5: 20 } } };
+  const state = withTargets(skilled, { ...getEspionageTargets(initial.espionage), [targetId]: { ...target, hunterLevel: 0 } });
+  const dispatched = dispatchFlight(state, spyCommand(state, 'spy-away-fleet', targetId), { now: 1_000, mode: 'test', testTimeScale: 15 });
+  assert.equal(dispatched.ok, true);
+  if (!dispatched.ok) return;
+  // The target's whole fleet is away on «Космический рейс» when the probe arrives.
+  const awayShips = Object.fromEntries(Object.entries(target.fleet.ships).filter(([, count]) => (count ?? 0) > 0));
+  const away = {
+    ...dispatched.flight, id: 'away-space-flight', requestId: 'away-space-flight', missionId: 'space-flight' as const, ownerSide: 'npc' as const,
+    ownerId: target.ownerId, originPlanetId: targetId, selectedShips: awayShips, selectedCommanders: {}, phase: 'outbound' as const,
+  };
+  const emptied = withTargets({ ...dispatched.state, flights: { ...dispatched.state.flights, records: [...dispatched.state.flights.records, away] } }, {
+    ...getEspionageTargets(dispatched.state.espionage),
+    [targetId]: { ...getEspionageTargets(dispatched.state.espionage)[targetId]!, fleet: { ...target.fleet, ships: Object.fromEntries(Object.keys(target.fleet.ships).map((id) => [id, 0])) as typeof target.fleet.ships } },
+  });
+  const arrived = reconcileFlights(emptied, dispatched.flight.arrivalAt, () => 0);
+  const report = arrived.state.espionage!.reports.at(-1);
+  assert.equal(report?.quality, 'full');
+  assert.deepEqual(Object.values(report!.fleet ?? {}).filter((count) => (count ?? 0) > 0), []);
+  assert.equal(report!.population!.total, target.population.total);
+  assert.equal(report!.population!.fleet, target.population.fleet);
+});

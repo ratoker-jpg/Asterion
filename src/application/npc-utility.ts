@@ -415,9 +415,9 @@ export const MIN_RAID_DAY_SHARE = 0.05;
 
 /**
  * What one raid is expected to bring against what it costs, from the owner's
- * own latest report. A raid is worth a flight only when the haul clearly beats
- * its price: the gas, the expected losses and a noticeable share of the
- * owner's day (owner rule 25.10.2026).
+ * own latest report. A raid is worth a flight only when the haul at least
+ * doubles the gas and, after the gas and the expected losses, still brings a
+ * noticeable share of the owner's day (owner rule 25.10.2026).
  */
 export function estimateRaidEconomics(context: NpcUtilityContext, origin: SpyTargetState, report: SpyReportSnapshot,
   selectedShips: Readonly<Partial<Record<ShipId, number>>>): { net: number; worthFlight: boolean } {
@@ -432,7 +432,7 @@ export function estimateRaidEconomics(context: NpcUtilityContext, origin: SpyTar
   const fuel = calculateFlightFuel(origin.raceId as CombatFactionId, selectedShips,
     calculateRouteDistance(origin.coordinate, report.targetCoordinate));
   const net = gain - fuel - expectedLoss - risk;
-  return { net, worthFlight: gain >= 2 * (fuel + expectedLoss) && net >= MIN_RAID_DAY_SHARE * context.dayValue };
+  return { net, worthFlight: gain >= 2 * fuel && net >= MIN_RAID_DAY_SHARE * context.dayValue };
 }
 
 /** Defender strength the owner believes in: the report, inflated by its age; unknown is feared. */

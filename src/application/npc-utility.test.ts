@@ -4,7 +4,8 @@ import { createBot01Planets } from '../domain/espionage/fixtures.ts';
 import type { SpyReportSnapshot, SpyTargetState } from '../domain/espionage/types.ts';
 import { createNpcState } from '../domain/npc/state.ts';
 import {
-  estimateAttackUtility, estimateBuildingUtility, estimateEspionageUtility, estimateProductionUtility, type NpcUtilityContext,
+  estimateAttackUtility, estimateBuildingUtility, estimateEspionageUtility, estimateProductionUtility, estimateRaidEconomics,
+  type NpcUtilityContext,
 } from './npc-utility.ts';
 
 const HOUR = 3_600_000;
@@ -37,16 +38,28 @@ test('an attack the owner expects to win is attractive; one it expects to lose i
   assert.ok(hopeless < -0.5, `hopeless ${hopeless}`);
 });
 
+test('a raid for a handful of resources is never worth the flight, however warlike the owner (25.10.2026)', () => {
+  const ships = { cruiser: 20 };
+  const crumbs = [report('crumbs', {}, AT - HOUR, 63)];
+  const warlike = context({ aggression: 1, riskTolerance: 1 }, crumbs);
+  assert.equal(estimateRaidEconomics(warlike, origin, crumbs[0]!, ships).worthFlight, false);
+  assert.ok(estimateAttackUtility(warlike, origin, 'crumbs', ships) <= -2);
+  const rich = [report('rich', {}, AT - HOUR, 200_000)];
+  assert.equal(estimateRaidEconomics(context({}, rich), origin, rich[0]!, ships).worthFlight, true);
+  assert.ok(estimateAttackUtility(context({}, rich), origin, 'rich', ships) > 0.5);
+});
+
 test('without own intelligence an attack is feared, and stale intelligence is trusted less', () => {
   const ships = { cruiser: 20 };
   assert.ok(estimateAttackUtility(context(), origin, 'unknown', ships) < -0.8);
-  const fresh = estimateAttackUtility(context({}, [report('t', { cruiser: 12 })]), origin, 't', ships);
-  const stale = estimateAttackUtility(context({}, [report('t', { cruiser: 12 }, AT - 70 * HOUR)]), origin, 't', ships);
+  const fresh = estimateAttackUtility(context({}, [report('t', { cruiser: 12 }, AT - HOUR, 5_000_000)]), origin, 't', ships);
+  const stale = estimateAttackUtility(context({}, [report('t', { cruiser: 12 }, AT - 70 * HOUR, 5_000_000)]), origin, 't', ships);
   assert.ok(fresh > stale, `fresh ${fresh} stale ${stale}`);
 });
 
 test('risk-averse and peaceful owners value the same attack lower', () => {
-  const reports = [report('even', { cruiser: 18 })];
+  // A rich enough haul that both owners consider the raid at all.
+  const reports = [report('even', { cruiser: 18 }, AT - HOUR, 5_000_000)];
   const ships = { cruiser: 20 };
   const bold = estimateAttackUtility(context({ riskTolerance: 1, aggression: 1 }, reports), origin, 'even', ships);
   const careful = estimateAttackUtility(context({ riskTolerance: 0, aggression: 0 }, reports), origin, 'even', ships);
