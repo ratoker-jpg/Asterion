@@ -757,7 +757,7 @@ export type SunLaunchPreview = {
 /** Live numbers of the launch dialog: population counter, travel time, fuel and the blocking reason. */
 export function previewSunLaunch(
   state: SaveState,
-  input: { kind: 'attack' | 'support'; galaxy: number; system: number; raidId?: string; originPlanetId: string; ships: Partial<Record<ShipId, number>>; commanders?: Partial<Record<CommanderId, number>> },
+  input: { kind: 'attack' | 'support' | 'join'; galaxy: number; system: number; raidId?: string; originPlanetId: string; ships: Partial<Record<ShipId, number>>; commanders?: Partial<Record<CommanderId, number>> },
   options: SunRuntimeOptions,
 ): SunLaunchPreview {
   const owner = playerOwner(state, input.originPlanetId);
@@ -767,10 +767,14 @@ export function previewSunLaunch(
   if (!owner) return { population: 0, cap, committed: 0, remaining: cap, oneWayMs: 0, arrivesAt: options.now, gasCost: 0, error: 'Планета отправления не найдена.' };
   const population = sunFleetPopulation(ships, owner.factionId, commanders);
   const raid = input.raidId ? currentSunRaidState(state).raids.find((item) => item.id === input.raidId) : undefined;
-  const committed = input.kind === 'support' && raid ? selectRaidSides(state, raid.id).defenders.population : 0;
+  const committed = input.kind === 'support' && raid ? selectRaidSides(state, raid.id).defenders.population
+    : input.kind === 'join' && raid ? selectRaidSides(state, raid.id).attackers.population : 0;
+  // A participant's own room in a raid: its 75 000 and what the gathering still needs.
+  const ownRoom = input.kind === 'attack' ? SUN_RAID_CONFIG.participantPopulationCap
+    : input.kind === 'join' && raid ? raidPledgeRoom(state, raid, owner.ownerId) : Math.max(0, cap - committed);
   const flight = Object.keys(ships).length || Object.keys(commanders).length
     ? createSunFlight(owner, {
-      missionId: input.kind === 'attack' ? 'sun-attack' : 'sun-support', raidId: raid?.id ?? 'preview',
+      missionId: input.kind === 'support' ? 'sun-support' : 'sun-attack', raidId: raid?.id ?? 'preview',
       galaxy: input.galaxy, system: input.system, ships, commanders, requestId: 'preview', departedAt: options.now, allianceId: null,
     }, options)
     : null;
@@ -784,15 +788,20 @@ export function previewSunLaunch(
     error = check.ok ? null : check.message;
   }
   if (!error && input.kind === 'support') error = supportCheck(state, owner, raid, ships, options, false, commanders);
+  if (!error && input.kind === 'join') {
+    if (!raid || raid.status !== 'gathering' || (raid.gatherEndsAt ?? 0) <= options.now) error = 'Сбор этого рейда уже закрыт.';
+    else if (allianceOf(state, owner.ownerId)?.alliance.id !== raid.allianceId) error = 'В рейд вступают только участники союза, который его объявил.';
+    else if (population > ownRoom) error = `Свободно ${ownRoom.toLocaleString('ru-RU')} населения: один участник вносит не больше ${SUN_RAID_CONFIG.participantPopulationCap.toLocaleString('ru-RU')}.`;
+  }
   if (!error && flight && getPlanetResources(state, owner.planetId).gas < flight.gasCost) error = `Недостаточно газа: нужно ${flight.gasCost.toLocaleString('ru-RU')}.`;
-  const oneWayMs = input.kind === 'attack'
+  const oneWayMs = input.kind !== 'support'
     ? scaleSunDuration(SUN_RAID_CONFIG.flightOneWayMs, options)
     : flight?.oneWayDurationMs ?? 0;
   return {
     population,
     cap,
     committed,
-    remaining: Math.max(0, cap - committed),
+    remaining: Math.max(0, Math.min(ownRoom, cap - committed)),
     oneWayMs,
     arrivesAt: options.now + oneWayMs,
     gasCost: flight?.gasCost ?? 0,
