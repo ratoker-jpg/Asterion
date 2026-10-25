@@ -12,8 +12,18 @@ export const SUN_RAID_CONFIG = Object.freeze({
   /** Recovery after a freeze: +step every stepMs up to the Sun's base efficiency. */
   recoverStepPercent: 5,
   recoverStepMs: 2 * 60 * 60 * 1000,
-  /** Population cap of each side (attack and defence) of one Sun battle. */
+  /**
+   * Population cap of each side (attack and defence) of one Sun battle. For the
+   * attackers it is also the minimum (owner rule 25.10.2026): a raid flies only
+   * once its gathering holds the full 225 000.
+   */
   populationCapPerSide: 225_000,
+  /** One participant (player or NPC) adds at most this much, from any of its planets. */
+  participantPopulationCap: 75_000,
+  /** The gathering after a raid is declared; not full by then, the raid disbands. */
+  raidGatherMs: 30 * 60 * 1000,
+  /** Hull sizes rarely add up to the exact number: the raid flies once this close to the cap. */
+  raidLaunchTolerance: 100,
   /** Fixed one-way travel to any Sun, independent of distance and ship speed. */
   flightOneWayMs: 3 * 60 * 60 * 1000,
   /** Gate construction (scaled by campaign / Test Mode speed like every timer). */

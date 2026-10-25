@@ -194,6 +194,11 @@ export function incomingRaidsOnSun(state: SunRaidState, galaxy: number, system: 
   return state.raids.filter((raid) => raid.status === 'incoming' && raid.galaxy === galaxy && raid.system === system);
 }
 
+/** Raids gathering for or flying to one Sun: only one at a time. */
+export function liveRaidsOnSun(state: SunRaidState, galaxy: number, system: number): SunRaidRecord[] {
+  return state.raids.filter((raid) => (raid.status === 'incoming' || raid.status === 'gathering') && raid.galaxy === galaxy && raid.system === system);
+}
+
 export type RaidLaunchCheck =
   | { ok: true }
   | { ok: false; code: 'no-alliance' | 'not-leadership' | 'sun-frozen' | 'raid-active' | 'sun-under-attack' | 'population-cap' | 'no-ships' | 'campaign-finished'; message: string };
@@ -216,14 +221,14 @@ export function checkRaidLaunch(input: {
   if (!allianceId) return { ok: false, code: 'no-alliance', message: 'Рейд на Солнце — командная операция: нужен союз (Командование → Союз).' };
   if (role !== 'leader' && role !== 'deputy') return { ok: false, code: 'not-leadership', message: 'Рейд объявляет лидер или заместитель союза.' };
   if (population <= 0) return { ok: false, code: 'no-ships', message: 'Выберите боевые корабли для рейда.' };
-  if (population > SUN_RAID_CONFIG.populationCapPerSide) {
-    return { ok: false, code: 'population-cap', message: `Лимит стороны — ${SUN_RAID_CONFIG.populationCapPerSide.toLocaleString('ru-RU')} населения: уберите ${(population - SUN_RAID_CONFIG.populationCapPerSide).toLocaleString('ru-RU')}.` };
+  if (population > SUN_RAID_CONFIG.participantPopulationCap) {
+    return { ok: false, code: 'population-cap', message: `Один участник вносит не больше ${SUN_RAID_CONFIG.participantPopulationCap.toLocaleString('ru-RU')} населения: уберите ${(population - SUN_RAID_CONFIG.participantPopulationCap).toLocaleString('ru-RU')}.` };
   }
   const active = activeRaidOfAlliance(state, allianceId);
   if (active) return { ok: false, code: 'raid-active', message: `Союз уже ведёт рейд на Солнце [${active.galaxy}:${active.system}]. Новый — после возвращения флота.` };
   const projection = projectSun(readSun(state, galaxy, system), now);
   if (projection.frozen) return { ok: false, code: 'sun-frozen', message: 'Солнце заморожено и восстанавливается: атаковать нельзя.' };
-  if (incomingRaidsOnSun(state, galaxy, system).length) return { ok: false, code: 'sun-under-attack', message: 'К этому Солнцу уже летит другой рейд.' };
+  if (liveRaidsOnSun(state, galaxy, system).length) return { ok: false, code: 'sun-under-attack', message: 'На это Солнце уже собирается или летит другой рейд.' };
   return { ok: true };
 }
 

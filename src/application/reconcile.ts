@@ -361,10 +361,10 @@ function reconcileRuntimeSlice(
 
   // Flight times are pure of the records and exploration contacts; both are
   // immutable, so the sorted list is rebuilt only when either changes.
-  let flightTimes: { records: unknown; exploration: unknown; times: number[] } | null = null;
+  let flightTimes: { records: unknown; exploration: unknown; sunRaid: unknown; times: number[] } | null = null;
   const nextDueFlightCheckpoint = (after: number): number | undefined => {
-    if (!flightTimes || flightTimes.records !== next.flights.records || flightTimes.exploration !== next.exploration) {
-      flightTimes = { records: next.flights.records, exploration: next.exploration, times: collectFlightTimes() };
+    if (!flightTimes || flightTimes.records !== next.flights.records || flightTimes.exploration !== next.exploration || flightTimes.sunRaid !== next.sunRaid) {
+      flightTimes = { records: next.flights.records, exploration: next.exploration, sunRaid: next.sunRaid, times: collectFlightTimes() };
     }
     const times = flightTimes.times;
     let low = 0;
@@ -397,6 +397,8 @@ function reconcileRuntimeSlice(
       if (checkpoint === undefined || !Number.isFinite(checkpoint)) continue;
       times.push(checkpoint);
     }
+    // A Sun raid gathering ends at its own moment: disbanded, its ships go home.
+    for (const raid of next.sunRaid?.raids ?? []) if (raid.status === 'gathering' && raid.gatherEndsAt !== undefined) times.push(raid.gatherEndsAt);
     return times.sort((left, right) => left - right);
   };
 

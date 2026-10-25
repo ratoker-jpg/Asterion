@@ -108,7 +108,7 @@ test('raid launch rules: alliance leadership, population cap, frozen Sun, one ra
   assert.equal(checkRaidLaunch({ ...base, allianceId: 'a', role: 'member' }).ok, false);
   assert.equal(checkRaidLaunch({ ...base, allianceId: 'a', role: 'leader' }).ok, true);
   assert.equal(checkRaidLaunch({ ...base, allianceId: 'a', role: 'deputy' }).ok, true);
-  const over = checkRaidLaunch({ ...base, allianceId: 'a', role: 'leader', population: 225_001 });
+  const over = checkRaidLaunch({ ...base, allianceId: 'a', role: 'leader', population: 75_001 });
   assert.equal(over.ok, false);
   assert.match(over.ok ? '' : over.message, /уберите 1\./);
   let frozenSun = readSun(state, 1, 3);

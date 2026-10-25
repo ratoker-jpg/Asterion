@@ -67,7 +67,8 @@ function migrateRaid(value: unknown): SunRaidRecord | null {
   if (!id || !allianceId || !initiatorOwnerId) return null;
   if (!Number.isSafeInteger(source.galaxy) || !Number.isSafeInteger(source.system)) return null;
   if (!finite(source.launchedAt) || !finite(source.arrivesAt) || source.arrivesAt < source.launchedAt) return null;
-  if (source.status !== 'incoming' && source.status !== 'resolved') return null;
+  if (source.status !== 'incoming' && source.status !== 'resolved' && source.status !== 'gathering' && source.status !== 'disbanded') return null;
+  if (source.status === 'gathering' && !finite(source.gatherEndsAt)) return null;
   const result = record(source.result);
   const winner = result?.winner;
   const migratedResult = result && (winner === 'attacker' || winner === 'defender' || winner === 'draw') && finite(result.resolvedAt)
@@ -98,6 +99,7 @@ function migrateRaid(value: unknown): SunRaidRecord | null {
     launchedAt: source.launchedAt,
     arrivesAt: source.arrivesAt,
     status: source.status,
+    ...(finite(source.gatherEndsAt) ? { gatherEndsAt: source.gatherEndsAt } : {}),
     ...(migratedResult ? { result: migratedResult } : {}),
     ...(finite(source.closedAt) ? { closedAt: source.closedAt } : {}),
   };

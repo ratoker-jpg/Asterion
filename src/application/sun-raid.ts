@@ -442,7 +442,7 @@ function detachNpcShips(state: SaveState, owner: SunOwner, ships: Partial<Record
 
 /** Charges an autonomous NPC the flight's gas on its own planet; false when it cannot pay. */
 function chargeNpcGas(state: SaveState, owner: SunOwner, gasCost: number): SaveState | null {
-  if (!owner.autonomous || gasCost <= 0) return state;
+  if (!owner.autonomous || gasCost === 0) return state;
   const target = getEspionageTargets(state.espionage)[owner.planetId];
   if (!target || !state.espionage || target.resources.gas < gasCost) return null;
   const targets = { ...getEspionageTargets(state.espionage), [target.id]: { ...target, resources: { ...target.resources, gas: target.resources.gas - gasCost } } };
@@ -476,6 +476,103 @@ export function launchSunRaid(state: SaveState, input: RaidLaunchInput, options:
   return launchRaidFor(state, owner, input, options);
 }
 
+/** Population an owner already pledged to a raid, over all of its planets. */
+export function ownerRaidPledge(state: SaveState, raidId: string, ownerId: string): number {
+  return flightsOfRaid(state, raidId, 'attacker')
+    .filter((flight) => flight.sunRaid?.ownerId === ownerId && ACTIVE_PHASES.has(flight.phase))
+    .reduce((total, flight) => total + (flight.sunRaid?.population ?? 0), 0);
+}
+
+/** Room left for one more pledge: the participant's 75 000 and the side's 225 000. */
+export function raidPledgeRoom(state: SaveState, raid: SunRaidRecord, ownerId: string): number {
+  const committed = selectRaidSides(state, raid.id).attackers.population;
+  return Math.max(0, Math.min(SUN_RAID_CONFIG.participantPopulationCap - ownerRaidPledge(state, raid.id, ownerId),
+    SUN_RAID_CONFIG.populationCapPerSide - committed));
+}
+
+/**
+ * Puts one participant's ships into a gathering raid: they leave the planet
+ * and wait for the launch; gas is paid now and returned if the raid disbands.
+ */
+function pledgeToRaid(state: SaveState, owner: SunOwner, raid: SunRaidRecord, ships: Partial<Record<ShipId, number>>,
+  commanders: Partial<Record<CommanderId, number>>, requestId: string, options: SunRuntimeOptions): { ok: true; state: SaveState; flight: FlightRecord } | { ok: false; error: string } {
+  const population = sunFleetPopulation(ships, owner.factionId, commanders);
+  if (population <= 0) return { ok: false, error: 'Выберите боевые корабли для рейда.' };
+  const room = raidPledgeRoom(state, raid, owner.ownerId);
+  if (population > room) {
+    return { ok: false, error: `Свободно ${room.toLocaleString('ru-RU')} населения: один участник вносит не больше ${SUN_RAID_CONFIG.participantPopulationCap.toLocaleString('ru-RU')}, рейд — ровно ${SUN_RAID_CONFIG.populationCapPerSide.toLocaleString('ru-RU')}.` };
+  }
+  const shipError = validateShips(owner, ships, commanders);
+  if (shipError) return { ok: false, error: shipError };
+  const created = createSunFlight(owner, {
+    missionId: 'sun-attack', raidId: raid.id, galaxy: raid.galaxy, system: raid.system, ships, commanders,
+    requestId, departedAt: options.now, allianceId: raid.allianceId,
+  }, options);
+  // Until the gathering is full the fleet waits: its arrival is only provisional.
+  const flight: FlightRecord = { ...created, arrivalAt: (raid.gatherEndsAt ?? options.now) + created.oneWayDurationMs };
+  let next: SaveState = state;
+  if (owner.ownerSide === 'player') {
+    const resources = getPlanetResources(next, owner.planetId);
+    if (resources.gas < flight.gasCost) return { ok: false, error: `Недостаточно газа: нужно ${flight.gasCost.toLocaleString('ru-RU')}.` };
+    next = replacePlanetResources(next, owner.planetId, { ...resources, gas: resources.gas - flight.gasCost });
+  }
+  if (owner.autonomous) {
+    const charged = chargeNpcGas(next, owner, flight.gasCost);
+    if (!charged) return { ok: false, error: 'Недостаточно газа.' };
+    next = charged;
+  }
+  next = { ...next, flights: appendFlight(next.flights, flight) };
+  next = detachNpcShips(next, owner, ships, -1);
+  return { ok: true, state: next, flight };
+}
+
+/** The gathering holds the full side: every pledged fleet takes off together now. */
+function launchIfGathered(state: SaveState, raidId: string, at: number): SaveState {
+  const sunRaid = currentSunRaidState(state);
+  const raid = sunRaid.raids.find((item) => item.id === raidId);
+  if (!raid || raid.status !== 'gathering') return state;
+  const committed = selectRaidSides(state, raid.id).attackers.population;
+  if (committed < SUN_RAID_CONFIG.populationCapPerSide - SUN_RAID_CONFIG.raidLaunchTolerance) return state;
+  const pledged = flightsOfRaid(state, raid.id, 'attacker').filter((flight) => flight.phase === 'outbound');
+  const oneWay = pledged[0]?.oneWayDurationMs ?? 0;
+  const arrivesAt = at + oneWay;
+  const ids = new Set(pledged.map((flight) => flight.id));
+  const records = state.flights.records.map((flight) => ids.has(flight.id) ? { ...flight, departedAt: at, arrivalAt: arrivesAt } : flight);
+  const participants = new Set(pledged.map((flight) => flight.sunRaid?.ownerId)).size;
+  const event: SunRaidEvent = {
+    id: `${raid.id}:launched`, at, kind: 'raid-launched', galaxy: raid.galaxy, system: raid.system,
+    text: `[${raid.allianceTag}] рейд на Солнце ${formatSun(raid.galaxy, raid.system)} собран (${participants} участн., ${committed.toLocaleString('ru-RU')}) и вылетел.`,
+  };
+  return withSunRaid({ ...state, flights: { ...state.flights, records } }, appendSunEvents({
+    ...sunRaid, raids: sunRaid.raids.map((item) => item.id === raid.id ? { ...raid, status: 'incoming' as const, arrivesAt } : item),
+  }, [event]));
+}
+
+/** Not full in 30 minutes: the raid disbands, every ship and its gas go back. */
+function disbandRaid(state: SaveState, raid: SunRaidRecord, at: number): SaveState {
+  let next = state;
+  for (const flight of flightsOfRaid(state, raid.id, 'attacker').filter((item) => item.phase === 'outbound')) {
+    const owner = ownerOfFlight(next, flight);
+    if (owner) {
+      next = detachNpcShips(next, owner, flight.selectedShips, 1);
+      if (owner.autonomous && flight.gasCost > 0) next = chargeNpcGas(next, owner, -flight.gasCost) ?? next;
+    } else if ((flight.ownerSide === undefined || flight.ownerSide === 'player') && next.planets[flight.originPlanetId] && flight.gasCost > 0) {
+      const resources = getPlanetResources(next, flight.originPlanetId);
+      next = replacePlanetResources(next, flight.originPlanetId, { ...resources, gas: resources.gas + flight.gasCost });
+    }
+    next = { ...next, flights: { ...next.flights, records: next.flights.records.map((item) => item.id === flight.id
+      ? { ...item, phase: 'completed' as const, completedAt: at, completionReason: 'recalled' as const } : item) } };
+  }
+  const sunRaid = currentSunRaidState(next);
+  const event: SunRaidEvent = {
+    id: `${raid.id}:disbanded`, at, kind: 'raid-defended', galaxy: raid.galaxy, system: raid.system,
+    text: `[${raid.allianceTag}] сбор рейда на Солнце ${formatSun(raid.galaxy, raid.system)} не набрал ${SUN_RAID_CONFIG.populationCapPerSide.toLocaleString('ru-RU')} — рейд распущен.`,
+  };
+  return withSunRaid(next, appendSunEvents({
+    ...sunRaid, raids: sunRaid.raids.map((item) => item.id === raid.id ? { ...raid, status: 'disbanded' as const, closedAt: at } : item),
+  }, [event]));
+}
+
 function launchRaidFor(state: SaveState, owner: SunOwner, input: RaidLaunchInput, options: SunRuntimeOptions): SunActionResult {
   const sunRaid = currentSunRaidState(state);
   const existing = state.flights.records.find((flight) => flight.requestId === input.requestId);
@@ -494,18 +591,9 @@ function launchRaidFor(state: SaveState, owner: SunOwner, input: RaidLaunchInput
     now: options.now,
   });
   if (!check.ok) return { ok: false, state, error: check.message };
-  const shipError = validateShips(owner, ships, commanders);
-  if (shipError) return { ok: false, state, error: shipError };
   const alliance = membership!.alliance;
   const raidId = raidIdFor(input.requestId);
-  const flight = createSunFlight(owner, {
-    missionId: 'sun-attack', raidId, galaxy: input.galaxy, system: input.system, ships, commanders,
-    requestId: input.requestId, departedAt: options.now, allianceId: alliance.id,
-  }, options);
-  if (owner.ownerSide === 'player') {
-    const resources = getPlanetResources(state, owner.planetId);
-    if (resources.gas < flight.gasCost) return { ok: false, state, error: `Недостаточно газа: нужно ${flight.gasCost.toLocaleString('ru-RU')}.` };
-  }
+  const gatherEndsAt = options.now + scaleSunDuration(SUN_RAID_CONFIG.raidGatherMs, options);
   const raid: SunRaidRecord = {
     id: raidId,
     galaxy: input.galaxy,
@@ -516,26 +604,62 @@ function launchRaidFor(state: SaveState, owner: SunOwner, input: RaidLaunchInput
     initiatorOwnerId: owner.ownerId,
     initiatorName: owner.ownerName,
     launchedAt: options.now,
-    arrivesAt: flight.arrivalAt,
-    status: 'incoming',
+    arrivesAt: gatherEndsAt + scaleSunDuration(SUN_RAID_CONFIG.flightOneWayMs, options),
+    status: 'gathering',
+    gatherEndsAt,
   };
-  let next: SaveState = { ...state, flights: appendFlight(state.flights, flight) };
-  if (owner.ownerSide === 'player') {
-    const resources = getPlanetResources(next, owner.planetId);
-    next = replacePlanetResources(next, owner.planetId, { ...resources, gas: resources.gas - flight.gasCost });
-  }
-  if (owner.autonomous) {
-    const charged = chargeNpcGas(next, owner, flight.gasCost);
-    if (!charged) return { ok: false, state, error: 'Недостаточно газа.' };
-    next = charged;
-  }
-  next = detachNpcShips(next, owner, ships, -1);
   const event: SunRaidEvent = {
-    id: `${raidId}:launched`, at: options.now, kind: 'raid-launched', galaxy: input.galaxy, system: input.system,
-    text: `[${alliance.tag}] ${owner.ownerName} объявил рейд на Солнце ${formatSun(input.galaxy, input.system)}.`,
+    id: `${raidId}:declared`, at: options.now, kind: 'raid-launched', galaxy: input.galaxy, system: input.system,
+    text: `[${alliance.tag}] ${owner.ownerName} объявил сбор рейда на Солнце ${formatSun(input.galaxy, input.system)}: 30 мин на ${SUN_RAID_CONFIG.populationCapPerSide.toLocaleString('ru-RU')} населения.`,
   };
-  next = withSunRaid(next, appendSunEvents({ ...sunRaid, raids: [...sunRaid.raids, raid] }, [event]));
-  return { ok: true, state: next, notice: `Рейд на Солнце ${formatSun(input.galaxy, input.system)} объявлен. Прибытие через 3 ч.`, raidId, flightId: flight.id };
+  const declared = withSunRaid(state, appendSunEvents({ ...sunRaid, raids: [...sunRaid.raids, raid] }, [event]));
+  const pledge = pledgeToRaid(declared, owner, raid, ships, commanders, input.requestId, options);
+  if (!pledge.ok) return { ok: false, state, error: pledge.error };
+  return {
+    ok: true,
+    state: launchIfGathered(pledge.state, raidId, options.now),
+    notice: `Сбор рейда на Солнце ${formatSun(input.galaxy, input.system)} объявлен: 30 мин, нужно ${SUN_RAID_CONFIG.populationCapPerSide.toLocaleString('ru-RU')} населения от союза (до ${SUN_RAID_CONFIG.participantPopulationCap.toLocaleString('ru-RU')} от каждого).`,
+    raidId,
+    flightId: pledge.flight.id,
+  };
+}
+
+export type RaidJoinInput = { raidId: string; originPlanetId: string; ships: Partial<Record<ShipId, number>>; commanders?: Partial<Record<CommanderId, number>>; requestId: string };
+
+/** A member of the raiding alliance adds ships from one of its planets to the gathering. */
+function joinRaidFor(state: SaveState, owner: SunOwner, input: RaidJoinInput, options: SunRuntimeOptions): SunActionResult {
+  const existing = state.flights.records.find((flight) => flight.requestId === input.requestId);
+  if (existing) return { ok: true, state, notice: 'Флот уже в сборе.', raidId: existing.sunRaid?.raidId, flightId: existing.id };
+  const raid = currentSunRaidState(state).raids.find((item) => item.id === input.raidId);
+  if (!raid || raid.status !== 'gathering' || (raid.gatherEndsAt ?? 0) <= options.now) return { ok: false, state, error: 'Сбор этого рейда уже закрыт.' };
+  if (allianceOf(state, owner.ownerId)?.alliance.id !== raid.allianceId) return { ok: false, state, error: 'В рейд вступают только участники союза, который его объявил.' };
+  const pledge = pledgeToRaid(state, owner, raid, normalizeSelection(input.ships), normalizeCommanders(input.commanders), input.requestId, options);
+  if (!pledge.ok) return { ok: false, state, error: pledge.error };
+  const next = launchIfGathered(pledge.state, raid.id, options.now);
+  const launched = currentSunRaidState(next).raids.find((item) => item.id === raid.id)?.status === 'incoming';
+  return {
+    ok: true,
+    state: next,
+    raidId: raid.id,
+    flightId: pledge.flight.id,
+    notice: launched
+      ? `Рейд на Солнце ${formatSun(raid.galaxy, raid.system)} собран и вылетел. Прибытие через 3 ч.`
+      : `${owner.ownerName}: флот вступил в сбор рейда на Солнце ${formatSun(raid.galaxy, raid.system)}.`,
+  };
+}
+
+/** The player joins the gathering raid of its alliance from one of its planets. */
+export function joinSunRaid(state: SaveState, input: RaidJoinInput, options: SunRuntimeOptions): SunActionResult {
+  const owner = playerOwner(state, input.originPlanetId);
+  if (!owner) return { ok: false, state, error: 'Планета отправления не найдена.' };
+  return joinRaidFor(state, owner, input, options);
+}
+
+/** An autonomous NPC member joins the gathering raid of its alliance. */
+export function joinNpcSunRaid(state: SaveState, ownerId: string, input: RaidJoinInput, options: SunRuntimeOptions): SunActionResult {
+  const owner = sunOwnerForNpcPlanet(state, ownerId, input.originPlanetId);
+  if (!owner) return { ok: false, state, error: 'Планета отправления не найдена.' };
+  return joinRaidFor(state, owner, input, options);
 }
 
 /** An autonomous NPC leader or deputy declares a raid from one of its planets, by the player's rules. */
@@ -1362,6 +1486,10 @@ export function reconcileSunRaids(state: SaveState, options: SunRuntimeOptions):
       }
     }
     for (const raid of sunRaid.raids) {
+      // A gathering that did not fill up by its deadline disbands first.
+      if (raid.status === 'gathering' && raid.gatherEndsAt !== undefined && raid.gatherEndsAt <= now) {
+        due.push({ at: raid.gatherEndsAt, order: -1, apply: () => { next = disbandRaid(next, raid, raid.gatherEndsAt!); } });
+      }
       if (raid.status === 'incoming' && raid.arrivesAt <= now) {
         due.push({ at: raid.arrivesAt, order: 2, apply: () => { next = resolveRaid(next, raid, raid.arrivesAt, options, notices); } });
       }
@@ -1474,7 +1602,10 @@ export function testBot01RaidSun(state: SaveState, galaxy: number, system: numbe
   const ships = pickFixtureShips(owner, 30_000);
   if (!Object.keys(ships).length) return { ok: false, state, error: 'У Бота 01 нет боевых кораблей.' };
   const result = launchRaidFor(state, owner, { galaxy, system, originPlanetId: source.id, ships, requestId: `bot01-sun-raid-${galaxy}-${system}-${options.now}` }, options);
-  return result.ok ? { ...result, notice: `Тест: Бот 01 объявил рейд на Солнце ${formatSun(galaxy, system)}. Отправьте поддержку.` } : result;
+  // The fixture skips the 30-minute gathering so the defence can be tested at once.
+  return result.ok && result.raidId
+    ? { ...result, state: forceRaidLaunch(result.state, result.raidId, options.now), notice: `Тест: Бот 01 объявил рейд на Солнце ${formatSun(galaxy, system)}. Отправьте поддержку.` }
+    : result;
 }
 
 /** Test: Bot 01 sends defenders to the Sun the player's alliance is raiding. */
@@ -1519,21 +1650,34 @@ export function testIraJoinRaid(state: SaveState, raidId: string, options: SunRu
   const denied = requireTest(state, options);
   if (denied) return denied;
   const raid = currentSunRaidState(state).raids.find((item) => item.id === raidId);
-  if (!raid || raid.status !== 'incoming') return { ok: false, state, error: 'Активного рейда нет.' };
+  if (!raid || raid.status !== 'gathering') return { ok: false, state, error: 'Идущего сбора рейда нет.' };
   if (allianceOf(state, TEST_ALLY_OWNER_ID)?.alliance.id !== raid.allianceId) return { ok: false, state, error: 'Ира Вель не состоит в союзе рейда.' };
   const seeded = ensureIraFleet(state);
   const owner = allyOwner(seeded)!;
-  const committed = selectRaidSides(seeded, raid.id).attackers.population;
-  const ships = pickFixtureShips(owner, Math.min(20_000, SUN_RAID_CONFIG.populationCapPerSide - committed));
-  if (!Object.keys(ships).length) return { ok: false, state, error: 'Лимит атакующей стороны исчерпан.' };
-  const flight = createSunFlight(owner, {
-    missionId: 'sun-attack', raidId: raid.id, galaxy: raid.galaxy, system: raid.system, ships,
-    requestId: `ira-sun-join-${raid.id}`, departedAt: raid.launchedAt, allianceId: raid.allianceId,
-  }, options);
-  if (seeded.flights.records.some((item) => item.requestId === flight.requestId)) return { ok: true, state, notice: 'Ира Вель уже в рейде.' };
-  let next: SaveState = { ...seeded, flights: appendFlight(seeded.flights, flight) };
-  next = detachNpcShips(next, owner, ships, -1);
-  return { ok: true, state: next, notice: 'Тест: Ира Вель присоединилась к рейду (общая точка сбора).', flightId: flight.id };
+  const ships = pickFixtureShips(owner, Math.min(20_000, raidPledgeRoom(seeded, raid, owner.ownerId)));
+  if (!Object.keys(ships).length) return { ok: false, state, error: 'Лимит участника или рейда исчерпан.' };
+  const result = joinRaidFor(seeded, owner, { raidId, originPlanetId: owner.planetId, ships, requestId: `ira-sun-join-${raid.id}` }, options);
+  return result.ok ? { ...result, notice: 'Тест: Ира Вель вступила в сбор рейда.' } : result;
+}
+
+/** Test only: the gathering takes off now, whatever it holds (QA of the battle path). */
+export function testLaunchRaidNow(state: SaveState, raidId: string, options: SunRuntimeOptions): SunActionResult {
+  const denied = requireTest(state, options);
+  if (denied) return denied;
+  const raid = currentSunRaidState(state).raids.find((item) => item.id === raidId);
+  if (!raid || raid.status !== 'gathering') return { ok: false, state, error: 'Идущего сбора рейда нет.' };
+  return { ok: true, state: forceRaidLaunch(state, raidId, options.now), notice: 'Тест: сбор завершён досрочно, рейд вылетел.' };
+}
+
+function forceRaidLaunch(state: SaveState, raidId: string, at: number): SaveState {
+  const sunRaid = currentSunRaidState(state);
+  const raid = sunRaid.raids.find((item) => item.id === raidId);
+  if (!raid || raid.status !== 'gathering') return state;
+  const pledged = flightsOfRaid(state, raid.id, 'attacker').filter((flight) => flight.phase === 'outbound');
+  const arrivesAt = at + (pledged[0]?.oneWayDurationMs ?? 0);
+  const ids = new Set(pledged.map((flight) => flight.id));
+  return withSunRaid({ ...state, flights: { ...state.flights, records: state.flights.records.map((flight) => ids.has(flight.id) ? { ...flight, departedAt: at, arrivalAt: arrivesAt } : flight) } },
+    { ...sunRaid, raids: sunRaid.raids.map((item) => item.id === raid.id ? { ...raid, status: 'incoming' as const, arrivesAt } : item) });
 }
 
 /** Test: hands one missing crystal to the player's holder (to check the Gate path quickly). */

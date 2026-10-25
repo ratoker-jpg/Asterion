@@ -80,9 +80,12 @@ export type SunRaidRecord = {
   initiatorOwnerId: string;
   initiatorName: string;
   launchedAt: number;
-  /** Battle moment: the initiator fleet's arrival. */
+  /** Battle moment: the gathered fleet's arrival (provisional while gathering). */
   arrivesAt: number;
-  status: 'incoming' | 'resolved';
+  /** 'gathering' waits for 225 000 population; 'disbanded' never flew. */
+  status: 'gathering' | 'incoming' | 'resolved' | 'disbanded';
+  /** End of the 30-minute gathering. */
+  gatherEndsAt?: number;
   result?: SunRaidResult;
   /** When every attacker fleet of the raid is back home: the alliance may raid again. */
   closedAt?: number;
