@@ -4,8 +4,10 @@ import type { TargetRelation } from '../domain/flights/types.ts';
 import type { SaveState } from './contracts.ts';
 
 // Relations are pure of the (immutable) command state; one decision asks for
-// hundreds of pairs against the same command.
-const relationCache = new WeakMap<object, Map<string, TargetRelation>>();
+// hundreds of pairs against the same command. Nested by owner: flight
+// reconciliation asks per orbiting probe and step, where joining a string
+// key per call dominated the lookup.
+const relationCache = new WeakMap<object, Map<string, Map<string, TargetRelation>>>();
 
 /** Same public ownership/alliance/war rules as the map, from the acting owner. */
 export function getOwnerRelation(state: SaveState, ownerId: string, targetOwnerId: string): TargetRelation {
@@ -15,11 +17,12 @@ export function getOwnerRelation(state: SaveState, ownerId: string, targetOwnerI
     cache = new Map();
     relationCache.set(state.command, cache);
   }
-  const key = `${ownerId}\u0000${targetOwnerId}`;
-  const cached = cache.get(key);
+  let byTarget = cache.get(ownerId);
+  if (!byTarget) cache.set(ownerId, byTarget = new Map());
+  const cached = byTarget.get(targetOwnerId);
   if (cached) return cached;
   const relation = computeOwnerRelation(state, ownerId, targetOwnerId);
-  cache.set(key, relation);
+  byTarget.set(targetOwnerId, relation);
   return relation;
 }
 
