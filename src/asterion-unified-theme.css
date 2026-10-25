@@ -38,20 +38,27 @@
   --ut-font-close:18px;
   --ut-close-size:40px;
   --ut-focus:2px solid var(--ut-accent);
-  --ut-motion-fast:160ms;
+  --ut-motion-fast:180ms;
   /* Motion system (src/motion.css, docs/ui/motion-system.md) */
   --ut-ease-out:cubic-bezier(0.23, 1, 0.32, 1);      /* entrances, presses */
+  --ut-ease-expo:cubic-bezier(0.16, 1, 0.3, 1);      /* long entrances: fast arrival, very soft landing */
   --ut-ease-in-out:cubic-bezier(0.77, 0, 0.175, 1);  /* on-screen movement */
   --ut-ease-drawer:cubic-bezier(0.32, 0.72, 0, 1);   /* sheets, drawers */
-  --ut-ease-hero:cubic-bezier(.22, 1, .36, 1);       /* menu / campaign result only */
-  --ut-motion-press:120ms;   /* button press */
-  --ut-motion-base:200ms;    /* tabs, selection plates */
-  --ut-motion-modal:240ms;   /* dialogs and backdrops */
-  --ut-motion-item:260ms;    /* catalog cards */
-  --ut-motion-screen:280ms;  /* a screen or section entering */
-  --ut-stagger:40ms;         /* gap between siblings in an entrance */
-  --ut-rise:10px;            /* screen entrance offset */
-  --ut-rise-small:6px;       /* card entrance offset */
+  --ut-ease-hero:cubic-bezier(.22, 1, .36, 1);       /* menu / campaign result */
+  /* Springs as CSS linear(): smooth = 2 % settle, pop = 9 % overshoot (dialogs, selections, badges). */
+  --ut-spring:linear(0, 0.051, 0.169, 0.315, 0.464, 0.6, 0.716, 0.81, 0.882, 0.935, 0.972, 0.996, 1.01, 1.017, 1.02, 1.019, 1.017, 1.015, 1.012, 1.009, 1.006, 1.004, 1.003, 1.002, 1.001, 1, 1, 1, 1, 1, 1);
+  --ut-spring-pop:linear(0, 0.078, 0.258, 0.471, 0.675, 0.842, 0.965, 1.043, 1.083, 1.095, 1.088, 1.072, 1.051, 1.032, 1.016, 1.004, 0.996, 0.992, 0.991, 0.992, 0.993, 0.995, 0.997, 0.998, 1, 1, 1.001, 1.001, 1.001, 1.001, 1);
+  --ut-motion-press:140ms;   /* button press */
+  --ut-motion-base:240ms;    /* tabs, selection plates, hover lifts */
+  --ut-motion-modal:420ms;   /* dialogs (spring) */
+  --ut-motion-item:460ms;    /* catalog cards */
+  --ut-motion-screen:560ms;  /* a screen or section entering */
+  --ut-motion-sweep:760ms;   /* the holographic scan over a new screen */
+  --ut-stagger:55ms;         /* gap between siblings in an entrance */
+  --ut-rise:22px;            /* screen entrance offset */
+  --ut-rise-small:14px;      /* card entrance offset */
+  --ut-blur-in:8px;          /* screens and cards come into focus */
+  --ut-lift:-4px;            /* hover lift of a card */
 }
 
 /* === 1. GLOBAL PRIMITIVES =================================== */

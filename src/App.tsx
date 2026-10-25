@@ -2438,6 +2438,12 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         </button>
 
         <section className={`workspace workspace-v4 workspace--${workspaceKind}`}>
+          {/* A new key per screen replays the holographic scan over it (motion.css §2, sound «screen»). */}
+          <i
+            key={`${workspaceKind}:${activeRoute}:${planetViewMode}:${buildingInterior?.buildingRole ?? ''}:${buildingInteriorTarget?.kind ?? ''}`}
+            className="route-sweep"
+            aria-hidden="true"
+          />
           {/* Command shows its own «Назад» inside its top bar instead of this overlay (it would cover the tabs). */}
           {buildingInterior && buildingInteriorTarget && buildingInteriorTarget.kind !== 'host' && buildingInteriorTarget.kind !== 'fleet-construction' && buildingInteriorTarget.kind !== 'command' && buildingInteriorDefinition ? (
             <button

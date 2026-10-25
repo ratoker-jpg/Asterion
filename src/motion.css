@@ -1,101 +1,289 @@
-/* ASTERION MOTION SYSTEM
+/* ASTERION MOTION SYSTEM v2 — «голографическое проявление»
    ---------------------------------------------------------------------------
    One motion language for the whole game. Contract and recipes:
    docs/ui/motion-system.md. Tokens live in asterion-unified-theme.css (:root).
 
    Rules (do not break them in new screens):
-   - Only opacity and the individual transform properties `translate` / `scale`
-     are animated. They compose with any existing `transform` (centring,
-     floating planets, scaled stage), never cause layout and run on the GPU.
-   - Entrances use --ut-ease-out. Nothing uses ease-in. In-game UI stays under
-     300 ms; the menu and the campaign result are the only "delight" screens.
-   - Frequent actions (resource ticks, timers, list navigation, keyboard
-     shortcuts, typing) do not animate.
+   - Animate only opacity, filter (blur/brightness) and the individual
+     `translate` / `scale` / `rotate` properties. They compose with an existing
+     `transform`, never cause layout and run on the compositor. An element that
+     is centred with `transform: translate(-50%,-50%)` never gets `scale`
+     (it would scale around its pre-transform box and drift): it animates
+     translate/opacity/filter only, or its inner art scales instead.
+   - Things *arrive*: they come into focus (blur → 0), rise and settle on a
+     spring. Panels of a screen follow each other (`sibling-index()` stagger).
    - Entrances are mount-only CSS animations with `backwards` fill: once they
-     finish, the element carries no transform, so geometry, `position: fixed`
-     descendants and the long-page measurements are exactly as without motion.
-   - prefers-reduced-motion keeps the fades and drops every movement.
+     finish, the element carries no transform or filter, so geometry,
+     `position: fixed` descendants and the long-page measurements are exactly
+     as without motion (GlobalPageScrollController re-measures on animationend).
+   - Hover is for the mouse only and answers with a lift, a glow and focus on
+     the art. Press sinks to 96 % and springs back.
+   - Frequent changes (resource ticks, timers, typing, list keyboard
+     navigation) do not animate.
+   - prefers-reduced-motion keeps short fades and drops every movement,
+     blur, scale and ambient loop (section 12).
    --------------------------------------------------------------------------- */
 
-/* A screen starts at .35, not 0: the previous one vanished instantly, a fade from black reads as a blink. */
-@keyframes ut-screen-in { from { opacity: .35; translate: 0 var(--ut-rise); } }
-@keyframes ut-item-in { from { opacity: 0; translate: 0 var(--ut-rise-small); } }
+@keyframes ut-screen-in {
+  from { opacity: 0; translate: 0 var(--ut-rise); scale: .985; filter: blur(var(--ut-blur-in)) brightness(1.35); }
+  60% { filter: blur(0) brightness(1.06); }
+}
+@keyframes ut-item-in { from { opacity: 0; translate: 0 var(--ut-rise-small); scale: .97; filter: blur(4px); } }
+@keyframes ut-rise-in { from { opacity: 0; translate: 0 var(--ut-rise-small); filter: blur(4px); } }
 @keyframes ut-fade-in { from { opacity: 0; } }
-@keyframes ut-pop-in { from { opacity: 0; scale: .96; } }
-@keyframes ut-slide-in-left { from { opacity: 0; translate: -16px 0; } }
+@keyframes ut-focus-in { from { opacity: 0; filter: blur(var(--ut-blur-in)); } }
+@keyframes ut-pop-in { from { opacity: 0; scale: .9; translate: 0 18px; filter: blur(6px) brightness(1.4); } }
+@keyframes ut-slide-in-left { from { opacity: 0; translate: -36px 0; filter: blur(6px); } }
+@keyframes ut-slide-in-right { from { opacity: 0; translate: 36px 0; filter: blur(6px); } }
+@keyframes ut-slide-in-up { from { opacity: 0; translate: 0 40px; filter: blur(6px); } }
+@keyframes ut-slide-in-down { from { opacity: 0; translate: 0 -24px; filter: blur(4px); } }
+@keyframes ut-zoom-in { from { opacity: 0; scale: 1.08; filter: blur(12px) brightness(1.4); } }
+/* Objects on a map or a building plot: they warp in bright and settle. */
+@keyframes ut-materialize {
+  from { opacity: 0; scale: .6; filter: blur(10px) brightness(2.4); }
+  55% { opacity: 1; filter: blur(0) brightness(1.5); }
+}
+@keyframes ut-construct {
+  from { opacity: 0; translate: 0 26px; filter: blur(8px) brightness(2.2) saturate(.4); }
+  60% { opacity: 1; filter: blur(0) brightness(1.35) saturate(1); }
+}
+@keyframes ut-icon-pop { from { scale: .72; filter: brightness(2); } }
+@keyframes ut-sweep { from { translate: 0 -100%; opacity: 1; } 70% { opacity: .9; } to { translate: 0 0; opacity: 0; } }
+@keyframes ut-flash { from { opacity: .55; } to { opacity: 0; } }
+@keyframes ut-sheen { from { translate: -130% 0; } to { translate: 230% 0; } }
+@keyframes ut-life { from { scale: 1 1; } to { scale: 0 1; } }
 @keyframes ut-twinkle { from { opacity: .35; } to { opacity: .9; } }
 @keyframes ut-drift { from { translate: 0 0; } to { translate: -24px 10px; } }
+@keyframes ut-float { 50% { translate: 0 -8px; } }
 @keyframes ut-attention { 0%, 100% { scale: 1; } 50% { scale: 1.06; } }
+@keyframes ut-ring-in-centred { from { opacity: 0; transform: translate(-50%, -50%) scale(.82) rotate(-25deg); } }
+@keyframes ut-ring-spin { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
+@keyframes ut-planet-in-centred {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(.86); filter: blur(14px) brightness(1.9); }
+  65% { filter: blur(0) brightness(1.08); }
+}
+@keyframes ut-orbit-sheen { from { rotate: 0deg; } to { rotate: 360deg; } }
 
 /* ---------------------------------------------------------------- 1. Screens
-   A route (Planet, Universe, Fleets, Operations, Command, Messages, Rating,
-   Settings, Science), a Fleets section, a building interior or a planet zone
-   rises 10px and fades in. Sibling panels of a screen follow 40ms apart. */
-.workspace > :not(.module-placeholder-v3),
+   A route, a Fleets section, a building interior or a planet zone comes into
+   focus: 22px rise, 98.5 % → 100 %, blur 8px → 0 on a smooth spring. */
+.workspace > :not(.module-placeholder-v3, .route-sweep),
 .fleet-main-v1 > *,
 .utility-screen-host > *,
 .building-interior-host > * {
-  animation: ut-screen-in var(--ut-motion-screen) var(--ut-ease-out) backwards;
+  animation: ut-screen-in var(--ut-motion-screen) var(--ut-spring) backwards;
 }
-/* The Universe map is spatial: it only fades in, the systems never travel. */
-.workspace > .universe-view { animation: ut-fade-in var(--ut-motion-screen) var(--ut-ease-out) backwards; }
-.fleet-workspace-v1 > .fleet-sidebar-v1 { animation: ut-slide-in-left var(--ut-motion-screen) var(--ut-ease-out) backwards; }
-.fleet-main-v1 > :nth-child(2),
-.science-view-v2 > :nth-child(2),
-.spaceport-upgrades-v2 > :nth-child(2) { animation-delay: calc(var(--ut-stagger) * 1); }
-.fleet-main-v1 > :nth-child(3) { animation-delay: calc(var(--ut-stagger) * 2); }
-.fleet-main-v1 > :nth-child(n + 4) { animation-delay: calc(var(--ut-stagger) * 3); }
-.science-view-v2 > *,
-.spaceport-upgrades-v2 > * { animation: ut-screen-in var(--ut-motion-screen) var(--ut-ease-out) backwards; }
+.fleet-workspace-v1 > .fleet-sidebar-v1 { animation: ut-slide-in-left var(--ut-motion-screen) var(--ut-spring) backwards; }
 
-/* ---------------------------------------------------------------- 2. Catalog items
-   Cards of a catalog arrive one after another (first eight staggered, the rest
-   together). Mount-only: re-renders of the same card never replay it. */
+/* Panels inside a screen follow one another (first eight staggered). */
+:is(.cmdA, .opsA, .reports-view, .science-view-v2, .spaceport-upgrades-v2, .settings-view-v2, .rating-view-v2, .fleet-main-v1 > *) > *,
+:is(.cmdA-content, .opsA-grid, .reports-profile-view) > * {
+  animation: ut-rise-in var(--ut-motion-item) var(--ut-spring) backwards;
+  animation-delay: calc(min(sibling-index(), 8) * var(--ut-stagger) + 60ms);
+}
+.cmdA-content > *, .opsA-grid > *, .reports-profile-view > * { animation-delay: calc(min(sibling-index(), 8) * var(--ut-stagger) + 160ms); }
+
+/* ---------------------------------------------------------------- 2. Holographic sweep
+   A scan line passes over each newly opened screen (App renders a keyed
+   `.route-sweep` per screen). Pointer-transparent, composited, one-shot. */
+.workspace > .route-sweep {
+  position: absolute !important;
+  inset: 0;
+  z-index: 60;
+  overflow: hidden;
+  pointer-events: none;
+}
+/* The scan line with its fading trail. */
+.workspace > .route-sweep::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg,
+    transparent 0%,
+    color-mix(in srgb, var(--race-accent, #56d9f2) 4%, transparent) 72%,
+    color-mix(in srgb, var(--race-accent, #56d9f2) 20%, transparent) 97.4%,
+    color-mix(in srgb, #ffffff 75%, var(--race-accent, #56d9f2)) 99.7%,
+    transparent 100%);
+  translate: 0 -100%;
+  animation: ut-sweep var(--ut-motion-sweep) cubic-bezier(.45, .05, .25, 1) forwards;
+  will-change: translate, opacity;
+}
+/* A faint accent wash from the top edge that the line leaves behind. */
+.workspace > .route-sweep::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: radial-gradient(120% 70% at 50% 0%, color-mix(in srgb, var(--race-accent, #56d9f2) 12%, transparent), transparent 70%);
+  animation: ut-flash var(--ut-motion-sweep) var(--ut-ease-out);
+}
+
+/* ---------------------------------------------------------------- 3. Catalog items
+   Cards of a catalog arrive one after another. Mount-only: re-renders of the
+   same card never replay it. */
 .shipyard-card-v1,
 .repair-card-v1,
 .science-row-v2,
 .spaceport-row-v2,
 .srp-card,
-.command-card,
+.cmdA-tile,
+.opsA-tile,
+.report-card,
 .rating-row-v2,
 .universe-debris-finder__list > li,
-.menu-slot {
-  animation: ut-item-in var(--ut-motion-item) var(--ut-ease-out) backwards;
+.universe-radar__row,
+.resource-zone-queue-card,
+.owned-planet-row-v4 {
+  animation: ut-item-in var(--ut-motion-item) var(--ut-spring) backwards;
+  animation-delay: calc(min(sibling-index(), 10) * var(--ut-stagger) + 80ms);
 }
-:is(.shipyard-card-v1, .repair-card-v1, .science-row-v2, .spaceport-row-v2, .srp-card, .command-card, .rating-row-v2, .universe-debris-finder__list > li, .menu-slot):nth-child(2) { animation-delay: calc(var(--ut-stagger) * 1); }
-:is(.shipyard-card-v1, .repair-card-v1, .science-row-v2, .spaceport-row-v2, .srp-card, .command-card, .rating-row-v2, .universe-debris-finder__list > li, .menu-slot):nth-child(3) { animation-delay: calc(var(--ut-stagger) * 2); }
-:is(.shipyard-card-v1, .repair-card-v1, .science-row-v2, .spaceport-row-v2, .srp-card, .command-card, .rating-row-v2, .universe-debris-finder__list > li, .menu-slot):nth-child(4) { animation-delay: calc(var(--ut-stagger) * 3); }
-:is(.shipyard-card-v1, .repair-card-v1, .science-row-v2, .spaceport-row-v2, .srp-card, .command-card, .rating-row-v2, .universe-debris-finder__list > li, .menu-slot):nth-child(5) { animation-delay: calc(var(--ut-stagger) * 4); }
-:is(.shipyard-card-v1, .repair-card-v1, .science-row-v2, .spaceport-row-v2, .srp-card, .command-card, .rating-row-v2, .universe-debris-finder__list > li, .menu-slot):nth-child(6) { animation-delay: calc(var(--ut-stagger) * 5); }
-:is(.shipyard-card-v1, .repair-card-v1, .science-row-v2, .spaceport-row-v2, .srp-card, .command-card, .rating-row-v2, .universe-debris-finder__list > li, .menu-slot):nth-child(n + 7) { animation-delay: calc(var(--ut-stagger) * 6); }
-
 /* Fleets roster and mission tiles are seen many times a day: shorter, closer. */
 .fleet-ship-tile-v2,
 .fleet-mission-icons-v1 > button {
-  animation: ut-item-in var(--ut-motion-fast) var(--ut-ease-out) backwards;
+  animation: ut-item-in 320ms var(--ut-spring) backwards;
+  animation-delay: calc(min(sibling-index(), 10) * 26ms);
 }
-:is(.fleet-ship-tile-v2, .fleet-mission-icons-v1 > button):nth-child(2) { animation-delay: 20ms; }
-:is(.fleet-ship-tile-v2, .fleet-mission-icons-v1 > button):nth-child(3) { animation-delay: 40ms; }
-:is(.fleet-ship-tile-v2, .fleet-mission-icons-v1 > button):nth-child(4) { animation-delay: 60ms; }
-:is(.fleet-ship-tile-v2, .fleet-mission-icons-v1 > button):nth-child(n + 5) { animation-delay: 80ms; }
 
-/* ---------------------------------------------------------------- 3. Dialogs
-   Backdrop fades, panel grows from 96% at its own centre (modals are not
-   anchored to their trigger). `scale` composes with translate(-50%,-50%). */
+/* Hover (mouse only): the card lifts on a spring, gains depth and a rim glow. */
+:is(.shipyard-card-v1, .repair-card-v1, .srp-card, .cmdA-tile, .opsA-tile, .report-card, .fleet-ship-tile-v2,
+  .resource-zone-queue-card, .science-row-v2, .spaceport-row-v2, .owned-planet-row-v4, .universe-radar__row, .planet-orbit__vitals > div) {
+  transition:
+    translate var(--ut-motion-base) var(--ut-spring),
+    filter var(--ut-motion-base) var(--ut-ease-out),
+    border-color var(--ut-motion-fast) ease,
+    background-color var(--ut-motion-fast) ease,
+    box-shadow var(--ut-motion-base) var(--ut-ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  :is(.shipyard-card-v1, .repair-card-v1, .srp-card, .cmdA-tile, .opsA-tile, .report-card, .fleet-ship-tile-v2, .resource-zone-queue-card):hover {
+    translate: 0 var(--ut-lift);
+    filter: brightness(1.08) drop-shadow(0 12px 22px rgba(0, 0, 0, .45)) drop-shadow(0 0 14px color-mix(in srgb, var(--race-accent, #56d9f2) 22%, transparent));
+  }
+  /* Long rows only slide a little: a 4px jump of a full-width row reads as a glitch. */
+  :is(.science-row-v2, .spaceport-row-v2, .owned-planet-row-v4, .universe-radar__row, .planet-orbit__vitals > div):hover {
+    translate: 4px 0;
+    filter: brightness(1.1);
+  }
+  /* Art inside a card comes forward. */
+  :is(.shipyard-card-v1, .repair-card-v1, .cmdA-tile, .srp-card) img { transition: scale 600ms var(--ut-spring), filter var(--ut-motion-base) ease; }
+  :is(.shipyard-card-v1, .repair-card-v1, .cmdA-tile, .srp-card):hover img { scale: 1.06; filter: brightness(1.12); }
+}
+
+/* ---------------------------------------------------------------- 4. Planet overview
+   The world assembles: orbits sweep in, the planet comes out of a bright
+   blur, the zone plates ignite one by one, the side panels slide in. */
+.planet-orbit > .planet-orbit__ring {
+  animation:
+    ut-ring-in-centred 1100ms var(--ut-ease-expo) backwards,
+    ut-ring-spin 360s linear 1100ms infinite;
+}
+.planet-orbit > .planet-orbit__ring--outer {
+  animation:
+    ut-ring-in-centred 1300ms var(--ut-ease-expo) 80ms backwards,
+    ut-ring-spin 240s linear 1380ms infinite reverse;
+}
+.planet-page-v3.planet-orbit > .planet-orbit__planet {
+  animation: ut-planet-in-centred 1100ms var(--ut-ease-expo) backwards;
+}
+.planet-orbit > .planet-orbit__name { animation: ut-slide-in-left 640ms var(--ut-spring) 120ms backwards; }
+.planet-orbit > .planet-orbit__vitals > div { animation: ut-slide-in-left 560ms var(--ut-spring) backwards; animation-delay: calc(160ms + sibling-index() * 60ms); }
+.planet-orbit > .planet-orbit__worlds { animation: ut-slide-in-right 640ms var(--ut-spring) 180ms backwards; }
+.planet-orbit > .planet-orbit__dock { animation: ut-slide-in-up 640ms var(--ut-spring) 260ms backwards; }
+.planet-page-v3.planet-orbit > .zone-hotspot { animation: ut-pop-in 620ms var(--ut-spring-pop) backwards; }
+.planet-page-v3.planet-orbit > .zone-hotspot--resource { animation-delay: 380ms; }
+.planet-page-v3.planet-orbit > .zone-hotspot--industry { animation-delay: 470ms; }
+.planet-page-v3.planet-orbit > .zone-hotspot--military { animation-delay: 560ms; }
+.planet-page-v3.planet-orbit .zone-hotspot.planet-orbit__zone {
+  transition: transform 420ms var(--ut-spring), box-shadow var(--ut-motion-base) ease, border-color var(--ut-motion-fast) ease, background-color var(--ut-motion-fast) ease;
+}
+.planet-page-v3.planet-orbit .zone-hotspot.planet-orbit__zone img { transition: scale 520ms var(--ut-spring-pop), filter var(--ut-motion-base) ease; }
+@media (hover: hover) and (pointer: fine) {
+  .planet-page-v3.planet-orbit .zone-hotspot.planet-orbit__zone:hover { transform: translateY(-4px) scale(1.04); }
+  .planet-page-v3.planet-orbit .zone-hotspot.planet-orbit__zone:hover img { scale: 1.16; filter: brightness(1.2) drop-shadow(0 0 10px var(--zone-accent)); }
+}
+
+/* ---------------------------------------------------------------- 5. Universe
+   The camera arrives at the system (zoom from 108 % out of a blur), worlds
+   warp in along their orbits, the radar panels dock from the edges. */
+.workspace > .universe-view { animation: ut-focus-in var(--ut-motion-screen) var(--ut-ease-out) backwards; }
+.universe-radar > .system-scene { animation: ut-zoom-in 900ms var(--ut-ease-expo) backwards; }
+.universe-radar .system-scene .system-planet > img {
+  animation: ut-materialize 760ms var(--ut-spring) backwards;
+  animation-delay: calc(200ms + min(sibling-index(), 24) * 28ms);
+}
+/* Empty slots are centred by transform: they only come into focus. */
+.universe-radar .system-scene .empty-slot {
+  animation: ut-focus-in 600ms var(--ut-ease-out) backwards;
+  animation-delay: calc(260ms + min(sibling-index(), 24) * 20ms);
+}
+.universe-radar .system-star-button > img { animation: ut-materialize 1000ms var(--ut-ease-expo) 80ms backwards; }
+.universe-radar > .universe-radar__list { animation: ut-slide-in-left 620ms var(--ut-spring) 160ms backwards; }
+.universe-radar > :is(.universe-radar__rail, .universe-radar__nav) { animation: ut-slide-in-right 620ms var(--ut-spring) 200ms backwards; }
+.universe-radar > .universe-radar__dock { animation: ut-slide-in-up 620ms var(--ut-spring) 260ms backwards; }
+.universe-radar > .universe-radar__crumb { animation: ut-slide-in-down 520ms var(--ut-spring) 120ms backwards; }
+.universe-radar .system-planet > img,
+.universe-radar .system-star-button > img { transition: scale 520ms var(--ut-spring-pop), filter var(--ut-motion-base) ease; }
+@media (hover: hover) and (pointer: fine) {
+  .universe-radar .system-planet:hover > img { scale: 1.14; filter: brightness(1.2) drop-shadow(0 0 16px color-mix(in srgb, var(--race-accent, #56d9f2) 60%, transparent)); }
+  .universe-radar .system-star-button:hover > img { scale: 1.05; filter: brightness(1.15); }
+}
+
+/* ---------------------------------------------------------------- 6. Planet zones
+   Buildings are constructed in front of the player: each plot warps up from
+   the ground in a bright flash, one after another. Hover lifts the building
+   on a spring (the node itself is centred by transform: only its art moves). */
+.resource-zone-building-layer > .resource-building-node {
+  animation: ut-construct 720ms var(--ut-spring) backwards;
+  animation-delay: calc(140ms + min(sibling-index(), 16) * 45ms);
+}
+.resource-building-node .resource-building-art {
+  transition: transform 460ms var(--ut-spring-pop), filter var(--ut-motion-base) ease, opacity var(--ut-motion-base) ease;
+}
+.resource-building-node .resource-building-ground-shadow { transition: scale 460ms var(--ut-spring), background var(--ut-motion-base) ease; }
+.resource-building-node .resource-building-caption { transition: translate 360ms var(--ut-spring), border-color var(--ut-motion-fast) ease, background var(--ut-motion-fast) ease, box-shadow var(--ut-motion-base) ease; }
+@media (hover: hover) and (pointer: fine) {
+  .resource-building-node:hover .resource-building-art { transform: translateY(-8px) scale(1.08); }
+  .resource-building-node:hover .resource-building-ground-shadow {
+    scale: 1.25 1.1;
+    background: radial-gradient(ellipse, color-mix(in srgb, var(--race-accent, #56d9f2) 34%, transparent) 0%, rgba(2, 10, 12, .3) 50%, transparent 76%);
+  }
+  .resource-building-node:hover .resource-building-caption { translate: 0 2px; box-shadow: 0 8px 20px rgba(0, 0, 0, .4), 0 0 18px color-mix(in srgb, var(--race-accent, #56d9f2) 26%, transparent); }
+}
+
+/* ---------------------------------------------------------------- 7. Header
+   On entering the campaign the HUD powers up from the centre outward. The
+   route under the pointer lifts its icon; a newly active route pops. */
+.asterion-header .hdr-cell { animation: ut-slide-in-down 560ms var(--ut-spring) backwards; animation-delay: calc(min(sibling-index(), 8) * 50ms + 120ms); }
+.asterion-header .hdr-route { animation: ut-slide-in-down 560ms var(--ut-spring) backwards; animation-delay: calc(min(sibling-index(), 6) * 45ms + 260ms); }
+.asterion-header .hdr-core__planet img { animation: ut-materialize 900ms var(--ut-ease-expo) backwards; }
+.asterion-header .hdr-route__icon { transition: translate 420ms var(--ut-spring-pop), scale 420ms var(--ut-spring-pop), filter var(--ut-motion-base) ease, box-shadow var(--ut-motion-base) ease; }
+.asterion-header .hdr-route.active .hdr-route__icon { animation: ut-icon-pop 520ms var(--ut-spring-pop); }
+.asterion-header .hdr-route.hdr-route--alert .hdr-route__icon { animation: hdr-route-alert 1.4s ease-in-out infinite; }
+.asterion-header .hdr-zone img { transition: scale 420ms var(--ut-spring-pop), filter var(--ut-motion-base) ease; }
+@media (hover: hover) and (pointer: fine) {
+  .asterion-header .hdr-route:hover .hdr-route__icon { translate: 0 -3px; scale: 1.1; filter: brightness(1.25) drop-shadow(0 0 10px color-mix(in srgb, var(--race-accent, #56d9f2) 70%, transparent)); }
+  .asterion-header .hdr-zone:hover img { scale: 1.14; filter: brightness(1.25); }
+}
+
+/* ---------------------------------------------------------------- 8. Dialogs
+   Backdrop fades in while it gains its blur; the panel springs up from 90 %
+   out of a bright blur (all game dialogs are grid-centred, so `scale` is safe). */
 .resource-building-action-confirm-backdrop,
 .resource-building-dialog-backdrop,
 .universe-modal-backdrop,
 .gate-backdrop,
 .command-dialog-backdrop,
 .skin-picker-backdrop,
+.ship-info-overlay-v1,
 .srp-modal,
 .menu-modal,
 .igo-backdrop {
-  animation: ut-fade-in var(--ut-motion-modal) var(--ut-ease-out) backwards;
+  animation: ut-fade-in 320ms var(--ut-ease-out) backwards;
 }
 .resource-building-action-confirm,
 .resource-building-dialog,
 .universe-debris-finder,
+.universe-inspector,
 .gate-dialog,
 .srp-launch,
 .ship-info-modal-v1,
@@ -105,40 +293,69 @@
 .igo-confirm,
 .command-dialog-backdrop > *,
 .menu-modal > * {
-  animation: ut-pop-in var(--ut-motion-modal) var(--ut-ease-out) backwards;
+  animation: ut-pop-in var(--ut-motion-modal) var(--ut-spring-pop) backwards;
+}
+/* The content of a dialog follows the panel. */
+:is(.resource-building-dialog, .gate-dialog, .srp-launch, .skin-picker-modal, .igo-pause) > * {
+  animation: ut-rise-in 420ms var(--ut-spring) backwards;
+  animation-delay: calc(min(sibling-index(), 6) * 45ms + 90ms);
 }
 
-/* ---------------------------------------------------------------- 4. Buttons
-   Press: every enabled button sinks to 97% (the label and icon come along).
-   Hover (mouse only): primary actions lift 1px; everything else keeps the
-   theme's colour/border change. Disabled controls never move. */
+/* ---------------------------------------------------------------- 9. Toasts
+   A notice slides in from the edge it lives on, out of a blur, and shows the
+   time it has left as a thin line draining under it (3 s, TOAST_AUTO_CLOSE_MS). */
+.runtime-toast-stack .runtime-toast {
+  position: relative;
+  overflow: hidden;
+  animation: ut-toast-in 560ms var(--ut-spring-pop) backwards;
+}
+.runtime-toast-stack .runtime-toast::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(90deg, currentColor, transparent);
+  opacity: .55;
+  transform-origin: left center;
+  animation: ut-life 3000ms linear forwards;
+}
+.runtime-toast-stack .runtime-toast--success::after { color: #3ee6a4; }
+.runtime-toast-stack .runtime-toast--error::after { color: #ff6f78; }
+@keyframes ut-toast-in { from { opacity: 0; translate: -44px 0; scale: .94; filter: blur(6px) brightness(1.6); } }
+
+/* ---------------------------------------------------------------- 10. Buttons
+   Press: every enabled button sinks to 96 % and springs back on release (the
+   label and icon come along). Hover (mouse only): primary actions lift 2px and
+   glow. Disabled controls never move. */
 body button:not([disabled]) {
   transition:
     transform var(--ut-motion-fast) ease,
-    scale var(--ut-motion-press) var(--ut-ease-out),
-    translate var(--ut-motion-fast) var(--ut-ease-out),
+    scale var(--ut-motion-base) var(--ut-spring-pop),
+    translate var(--ut-motion-base) var(--ut-spring),
     color var(--ut-motion-fast) ease,
     border-color var(--ut-motion-fast) ease,
     background var(--ut-motion-fast) ease,
     background-color var(--ut-motion-fast) ease,
-    box-shadow var(--ut-motion-fast) ease,
+    box-shadow var(--ut-motion-base) ease,
     filter var(--ut-motion-fast) ease,
     opacity var(--ut-motion-fast) ease;
 }
-body button:not([disabled]):active { scale: .97; }
-/* Large map objects and building plots press less: a 3% shrink of a 200px node reads as a jump. */
-body :is(.system-planet, .resource-building-node, .zone-hotspot, .universe-radar__row, .system-star-button):not([disabled]):active { scale: .99; }
+body button:not([disabled]):active { scale: .96; transition-duration: var(--ut-motion-fast), 90ms; }
+/* Large map objects and building plots press less: a 4% shrink of a 200px node reads as a jump. */
+body :is(.system-planet, .resource-building-node, .zone-hotspot, .universe-radar__row, .system-star-button, .menu-race, .menu-nav__item):not([disabled]):active { scale: .985; }
 
 @media (hover: hover) and (pointer: fine) {
   :is(
-    .igo-btn--primary, .menu-btn--primary, .uw-btn--primary, .opsA-btn--primary,
+    .igo-btn--primary, .uw-btn--primary, .opsA-btn--primary,
     .resource-building-build-button, .resource-building-enter-button,
     .spaceport-upgrade-cta-v2, [data-qa-science-action], [data-qa-flight-preview-open],
     [data-qa-flight-dispatch-confirm], [data-qa-sun-launch-confirm], [data-qa-gate-start],
     .shipyard-build-button-v1, .srp-cta
   ):not([disabled]):hover {
-    translate: 0 -1px;
-    filter: brightness(1.08);
+    translate: 0 -2px;
+    filter: brightness(1.14) drop-shadow(0 6px 14px color-mix(in srgb, var(--race-accent, #56d9f2) 34%, transparent));
   }
 }
 
@@ -146,8 +363,11 @@ body :is(.system-planet, .resource-building-node, .zone-hotspot, .universe-radar
 :is(.fleet-menu-group-v1 button, .science-sections-v2 button, .spaceport-sections-v2 button, .settings-nav-v2 nav button, .command-tabs button, .fleet-ship-filter-v2 button, .universe-radar__seg button) {
   transition-duration: var(--ut-motion-base);
 }
+@media (hover: hover) and (pointer: fine) {
+  :is(.fleet-menu-group-v1 button, .science-sections-v2 button, .spaceport-sections-v2 button, .settings-nav-v2 nav button):not([disabled]):hover { translate: 3px 0; }
+}
 
-/* ---------------------------------------------------------------- 5. Living stage
+/* ---------------------------------------------------------------- 11. Living stage
    Two layers of stars slowly drift and twinkle behind every screen
    (composited: opacity + translate only, ~0 main-thread cost). */
 .stage-ambient {
@@ -188,19 +408,54 @@ body :is(.system-planet, .resource-building-node, .zone-hotspot, .universe-radar
 /* Something needs the player (incoming attack, Sun under attack): one calm pulse. */
 .ut-attention { animation: ut-attention 1.6s var(--ut-ease-in-out) 2; }
 
-/* ---------------------------------------------------------------- 6. Reduced motion
-   Fewer and gentler, not zero: fades stay (they explain what changed), every
-   movement, scale and ambient loop goes. */
+/* Progress of running work (build queue, research, upgrades): a light passes
+   along the filled part every 2.4 s, so a running timer reads as alive. */
+:is(.resource-zone-queue-card.busy, .science-row-v2.is-active, .spaceport-row-v2.is-active) :is([class*="progress"] > i, [class*="progress"] > span, [class*="progress-fill"]) {
+  position: relative;
+  overflow: hidden;
+}
+:is(.resource-zone-queue-card.busy, .science-row-v2.is-active, .spaceport-row-v2.is-active) :is([class*="progress"] > i, [class*="progress"] > span, [class*="progress-fill"])::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .45), transparent);
+  animation: ut-sheen 2.4s var(--ut-ease-in-out) infinite;
+}
+
+/* ---------------------------------------------------------------- 12. Reduced motion
+   Fewer and gentler, not zero: fades stay (they explain what changed); every
+   movement, blur, scale, sweep and ambient loop goes. */
 @media (prefers-reduced-motion: reduce) {
   .workspace > *, .fleet-main-v1 > *, .utility-screen-host > *, .building-interior-host > *,
-  .fleet-workspace-v1 > .fleet-sidebar-v1, .science-view-v2 > *, .spaceport-upgrades-v2 > *,
-  .shipyard-card-v1, .repair-card-v1, .science-row-v2, .spaceport-row-v2, .srp-card, .command-card, .rating-row-v2,
-  .universe-debris-finder__list > li, .menu-slot, .fleet-ship-tile-v2, .fleet-mission-icons-v1 > button,
-  .resource-building-action-confirm, .resource-building-dialog, .universe-debris-finder, .gate-dialog, .srp-launch,
+  .fleet-workspace-v1 > .fleet-sidebar-v1,
+  :is(.cmdA, .opsA, .reports-view, .science-view-v2, .spaceport-upgrades-v2, .settings-view-v2, .rating-view-v2) > *,
+  :is(.cmdA-content, .opsA-grid, .reports-profile-view) > *,
+  .shipyard-card-v1, .repair-card-v1, .science-row-v2, .spaceport-row-v2, .srp-card, .cmdA-tile, .opsA-tile, .report-card, .rating-row-v2,
+  .universe-debris-finder__list > li, .universe-radar__row, .resource-zone-queue-card, .owned-planet-row-v4,
+  .fleet-ship-tile-v2, .fleet-mission-icons-v1 > button,
+  .planet-orbit > *, .planet-orbit__vitals > div, .universe-radar > *, .universe-radar .system-scene .system-planet > img,
+  .universe-radar .system-scene .empty-slot, .universe-radar .system-star-button > img,
+  .resource-zone-building-layer > .resource-building-node, .asterion-header .hdr-cell, .asterion-header .hdr-route,
+  .asterion-header .hdr-core__planet img,
+  .resource-building-action-confirm, .resource-building-dialog, .universe-debris-finder, .universe-inspector, .gate-dialog, .srp-launch,
   .ship-info-modal-v1, .battle-report-modal-v1, .skin-picker-modal, .igo-pause, .igo-confirm,
-  .command-dialog-backdrop > *, .menu-modal > * {
+  .command-dialog-backdrop > *, .menu-modal > *,
+  :is(.resource-building-dialog, .gate-dialog, .srp-launch, .skin-picker-modal, .igo-pause) > *,
+  .runtime-toast-stack .runtime-toast {
     animation: ut-fade-in var(--ut-motion-fast) ease backwards !important;
   }
+  .planet-orbit > .planet-orbit__ring, .planet-page-v3.planet-orbit > .planet-orbit__planet { animation: ut-fade-in var(--ut-motion-fast) ease backwards !important; }
+  .workspace > .route-sweep, .runtime-toast-stack .runtime-toast::after { display: none; }
   body button:not([disabled]):active { scale: 1; }
-  .stage-ambient i, .ut-attention { animation: none !important; }
+  .stage-ambient i, .ut-attention, .asterion-header .hdr-route.active .hdr-route__icon,
+  :is(.resource-zone-queue-card.busy, .science-row-v2.is-active, .spaceport-row-v2.is-active) *::after { animation: none !important; }
+  :is(.shipyard-card-v1, .repair-card-v1, .srp-card, .cmdA-tile, .opsA-tile, .report-card, .fleet-ship-tile-v2, .resource-zone-queue-card,
+    .science-row-v2, .spaceport-row-v2, .owned-planet-row-v4, .universe-radar__row, .planet-orbit__vitals > div):hover,
+  :is(.shipyard-card-v1, .repair-card-v1, .cmdA-tile, .srp-card):hover img,
+  .universe-radar .system-planet:hover > img, .asterion-header .hdr-route:hover .hdr-route__icon, .asterion-header .hdr-zone:hover img,
+  .planet-page-v3.planet-orbit .zone-hotspot.planet-orbit__zone:hover img, .resource-building-node:hover .resource-building-ground-shadow {
+    translate: none !important;
+    scale: none !important;
+  }
 }

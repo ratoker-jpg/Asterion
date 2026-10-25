@@ -255,15 +255,16 @@ export const SOUNDS = {
       bell(k, { freq: 1976, at: 0.11, dur: 1, gain: 0.03, ratio: 3.5, reverb: 0.6 });
     },
   },
-  /** Entering a campaign: a riser into a deep landing. */
+  /** Entering a campaign (with the jump-in overlay): deep impact, warp rush, a long crystal tail. */
   launch: {
     bus: 'effects',
     play: (k) => {
-      noise(k, { dur: 1.1, gain: 0.09, attack: 0.9, filter: { type: 'bandpass', freq: 200, to: 5200, q: 1.5 } });
-      voice(k, { freq: 55, to: 110, dur: 1.1, gain: 0.12, attack: 0.6 });
-      voice(k, { freq: 82, to: 41, at: 1.02, dur: 0.9, gain: 0.24 });
-      noise(k, { at: 1.02, dur: 0.8, gain: 0.13, filter: { type: 'lowpass', freq: 2200, to: 110 }, reverb: 0.5 });
-      bell(k, { freq: 659, at: 1.04, dur: 1.8, gain: 0.045, ratio: 2, reverb: 0.7 });
+      voice(k, { freq: 82, to: 38, dur: 0.95, gain: 0.26 });
+      noise(k, { dur: 0.8, gain: 0.14, filter: { type: 'lowpass', freq: 2400, to: 110 }, reverb: 0.5 });
+      noise(k, { dur: 1.1, gain: 0.08, attack: 0.02, filter: { type: 'bandpass', freq: 5200, to: 260, q: 1.4 } });
+      voice(k, { type: 'triangle', freq: 330, to: 660, at: 0.04, dur: 0.5, gain: 0.04, reverb: 0.4 });
+      bell(k, { freq: 659, at: 0.08, dur: 1.9, gain: 0.05, ratio: 2, reverb: 0.7 });
+      bell(k, { freq: 988, at: 0.2, dur: 1.6, gain: 0.03, ratio: 2, reverb: 0.7 });
     },
   },
 } satisfies Record<string, Sound>;

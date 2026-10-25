@@ -45,8 +45,8 @@ const DIALOGS = [
 ].join(', ');
 
 /** Containers whose direct child is "the screen": a new child means a new screen. */
-const SCREEN_HOSTS = '.workspace, .utility-screen-host, .fleet-main-v1, .building-interior-host, .menu-stage';
-const SCREEN_CHILD_SKIP = '.stage-ambient, .menu-bg, .menu-stars, .menu-modal, .building-interior-return-overlay, .route-sweep';
+const SCREEN_HOSTS = '.utility-screen-host, .fleet-main-v1, .building-interior-host, .menu-stage';
+const SCREEN_CHILD_SKIP = '.menu-bg, .menu-stars, .menu-modal, .menu-launch';
 
 const TOAST_SOUND: Record<string, SoundId> = {
   'runtime-toast--success': 'success',
@@ -112,6 +112,8 @@ function soundForAdded(element: Element): SoundId | null {
     for (const [className, sound] of Object.entries(TOAST_SOUND)) if (element.classList.contains(className)) return sound;
     return 'info';
   }
+  // In the game workspace the keyed scan line marks a new screen; elsewhere a new host child does.
+  if (element.classList.contains('route-sweep')) return 'screen';
   const parent = element.parentElement;
   if (parent?.matches(SCREEN_HOSTS) && !element.matches(SCREEN_CHILD_SKIP)) return 'screen';
   return null;
