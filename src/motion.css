@@ -203,20 +203,18 @@
 }
 
 /* ---------------------------------------------------------------- 5. Universe
-   The camera arrives at the system (zoom from 108 % out of a blur), worlds
-   warp in along their orbits, the radar panels dock from the edges. */
+   The map is spatial: map objects never travel (universe-planet-qa). The
+   system comes into focus out of a bright blur, worlds warp in on their own
+   art, the radar panels dock from the edges. */
 .workspace > .universe-view { animation: ut-focus-in var(--ut-motion-screen) var(--ut-ease-out) backwards; }
-.universe-radar > .system-scene { animation: ut-zoom-in 900ms var(--ut-ease-expo) backwards; }
+.universe-radar > .system-scene { animation: ut-scene-focus 900ms var(--ut-ease-expo) backwards; }
+@keyframes ut-scene-focus { from { opacity: 0; filter: blur(12px) brightness(1.5); } }
 .universe-radar .system-scene .system-planet > img {
   animation: ut-materialize 760ms var(--ut-spring) backwards;
   animation-delay: calc(200ms + min(sibling-index(), 24) * 28ms);
 }
-/* Empty slots are centred by transform: they only come into focus. */
-.universe-radar .system-scene .empty-slot {
-  animation: ut-focus-in 600ms var(--ut-ease-out) backwards;
-  animation-delay: calc(260ms + min(sibling-index(), 24) * 20ms);
-}
-.universe-radar .system-star-button > img { animation: ut-materialize 1000ms var(--ut-ease-expo) 80ms backwards; }
+/* Map wrappers (.system-star, .empty-slot, .system-asteroid) stay static
+   (universe-planet-qa contract): the camera zoom of the scene brings them in. */
 .universe-radar > .universe-radar__list { animation: ut-slide-in-left 620ms var(--ut-spring) 160ms backwards; }
 .universe-radar > :is(.universe-radar__rail, .universe-radar__nav) { animation: ut-slide-in-right 620ms var(--ut-spring) 200ms backwards; }
 .universe-radar > .universe-radar__dock { animation: ut-slide-in-up 620ms var(--ut-spring) 260ms backwards; }
@@ -440,7 +438,6 @@ body :is(.system-planet, .resource-building-node, .zone-hotspot, .universe-radar
   .universe-debris-finder__list > li, .universe-radar__row, .resource-zone-queue-card, .owned-planet-row-v4,
   .fleet-ship-tile-v2, .fleet-mission-icons-v1 > button,
   .planet-orbit > *, .planet-orbit__vitals > div, .universe-radar > *, .universe-radar .system-scene .system-planet > img,
-  .universe-radar .system-scene .empty-slot, .universe-radar .system-star-button > img,
   .resource-zone-building-layer > .resource-building-node, .asterion-header .hdr-cell, .asterion-header .hdr-route,
   .asterion-header .hdr-core__planet img,
   .resource-building-action-confirm, .resource-building-dialog, .universe-debris-finder, .universe-inspector, .gate-dialog, .srp-launch,

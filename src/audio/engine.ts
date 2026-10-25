@@ -5,7 +5,9 @@ import {
   readAudioPreferences,
   type AudioPreferencesV1,
 } from '../domain/settings/audio.ts';
-import { startMusic, type MusicHandle, type MusicTheme } from './music.ts';
+import { startMusic, startTrack, type MusicHandle, type MusicTheme } from './music.ts';
+import menuTrack from '../assets/audio/music-menu.ogg?url';
+import gameTrack from '../assets/audio/music-game.ogg?url';
 import { SOUNDS, type SoundId } from './sounds.ts';
 
 /**
@@ -33,6 +35,9 @@ export type SoundKit = {
 };
 
 type Listener = (preferences: AudioPreferencesV1) => void;
+
+/** Recorded scores (CC0, see src/assets/audio/CREDITS.md); the synthesised score covers a failed file. */
+const MUSIC_TRACKS: Record<MusicTheme, string> = { menu: menuTrack, game: gameTrack };
 
 /** The same sound fired again within this window is dropped (hover sweeps, double events). */
 const MIN_REPEAT_MS: Partial<Record<SoundId, number>> = {
@@ -76,6 +81,7 @@ class AudioEngine {
   private lastPlayed = new Map<SoundId, number>();
   private wantedTheme: MusicTheme | null = null;
   private music: { theme: MusicTheme; handle: MusicHandle } | null = null;
+  private failedTracks = new Set<MusicTheme>();
 
   getPreferences() {
     return this.preferences;
@@ -160,8 +166,13 @@ class AudioEngine {
     // A hidden window keeps nothing playing and costs no CPU.
     document.addEventListener('visibilitychange', () => {
       if (!this.ctx) return;
-      if (document.visibilityState === 'hidden') void this.ctx.suspend();
-      else void this.ctx.resume();
+      if (document.visibilityState === 'hidden') {
+        this.music?.handle.pause?.();
+        void this.ctx.suspend();
+      } else {
+        void this.ctx.resume();
+        this.music?.handle.resume?.();
+      }
     });
   }
 
@@ -182,7 +193,19 @@ class AudioEngine {
     if (this.music?.theme === theme) return;
     // Crossfade: the old loop fades for 3 s while the new one swells in.
     this.music?.handle.stop(3);
-    this.music = theme ? { theme, handle: startMusic(ctx, this.buses.get('music')!, this.reverb, theme) } : null;
+    this.music = theme ? { theme, handle: this.createMusic(ctx, theme) } : null;
+  }
+
+  private createMusic(ctx: AudioContext, theme: MusicTheme): MusicHandle {
+    const bus = this.buses.get('music')!;
+    const synthesised = () => startMusic(ctx, bus, this.reverb!, theme);
+    if (this.failedTracks.has(theme)) return synthesised();
+    return startTrack(ctx, bus, MUSIC_TRACKS[theme], () => {
+      this.failedTracks.add(theme);
+      if (this.music?.theme !== theme) return;
+      this.music.handle.stop(0.2);
+      this.music = { theme, handle: synthesised() };
+    });
   }
 }
 

@@ -21,9 +21,34 @@ function getPageContainer(workspace: HTMLElement) {
 }
 
 function getPageRoots(container: HTMLElement) {
+  // The holographic scan (.route-sweep, motion.css) covers the workspace, it is not page content.
   return Array.from(container.children).filter(
-    (child): child is HTMLElement => child instanceof HTMLElement && isVisible(child),
+    (child): child is HTMLElement => child instanceof HTMLElement && !child.classList.contains('route-sweep') && isVisible(child),
   );
+}
+
+/**
+ * Entrances (src/motion.css) rise, slide and scale panels for up to ~1 s, and a
+ * transformed descendant inflates scrollHeight: a page measured mid-entrance
+ * would switch to the long shell and keep it (a stretched root then always
+ * "fills" it). Waiting is no option — a hidden or background window does not
+ * advance animations — so the measurement seeks every finite animation of the
+ * page to its end, measures, and seeks back in the same task (never painted).
+ */
+function measureSettled<T>(container: HTMLElement, measure: () => T): T {
+  const entrances = container.getAnimations({ subtree: true }).filter((animation) => animation instanceof CSSAnimation
+    && animation.playState !== 'finished'
+    && animation.effect?.getTiming().iterations !== Infinity);
+  const saved = entrances.map((animation) => animation.currentTime);
+  for (const animation of entrances) {
+    const end = animation.effect?.getComputedTiming().endTime;
+    if (typeof end === 'number') animation.currentTime = end;
+  }
+  try {
+    return measure();
+  } finally {
+    entrances.forEach((animation, index) => { animation.currentTime = saved[index] ?? null; });
+  }
 }
 
 function isUtilityRoot(roots: readonly HTMLElement[]) {
@@ -151,7 +176,7 @@ export function GlobalPageScrollController() {
         : isFleetPage
           ? fleetContentHeight
           : baseWorkspaceHeight;
-      const contentHeight = measureContentHeight(pageContainer, stageScale, pageRoots);
+      const contentHeight = measureSettled(pageContainer, () => measureContentHeight(pageContainer, stageScale, pageRoots));
       const needsScroll = contentHeight > availableHeight + OVERFLOW_EPSILON;
 
       // A root stretched to its container (min-height: 100%) always measures the
@@ -205,7 +230,7 @@ export function GlobalPageScrollController() {
     });
 
     window.addEventListener('resize', schedule);
-    // Entrances (src/motion.css) translate a screen for ~300 ms: re-measure once they settle.
+    // Entrances (src/motion.css) move a screen for up to ~1 s: re-measure once they settle.
     document.addEventListener('animationend', schedule);
     schedule();
 

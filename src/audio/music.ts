@@ -1,5 +1,5 @@
 /**
- * Generative ambient score. No loop file: a slow chord pad (two detuned voices
+ * Generative ambient score (the fallback when a recorded track cannot play). No loop file: a slow chord pad (two detuned voices
  * per note, 3–4 s swells) under a breathing low-pass, a sub drone on the root
  * and sparse crystal bells through a feedback delay. Chord order and bell
  * notes are drawn anew every cycle, so the score never repeats exactly.
@@ -9,7 +9,55 @@
  */
 
 export type MusicTheme = 'menu' | 'game';
-export type MusicHandle = { stop: (fadeSeconds: number) => void };
+export type MusicHandle = {
+  stop: (fadeSeconds: number) => void;
+  /** Hidden window: stop decoding a streamed track (the synthesised score needs nothing). */
+  pause?: () => void;
+  resume?: () => void;
+};
+
+/** Level of a recorded track (mastered at about −20 LUFS) on the music bus. */
+const TRACK_LEVEL = 0.8;
+
+/**
+ * A recorded score, streamed by an <audio> element into the music bus (a
+ * decoded 3–4 min track would hold 60+ MB of samples). Swells in over 3 s,
+ * loops, and calls `onFail` if the file cannot play so the engine can fall
+ * back to the synthesised score.
+ */
+export function startTrack(ctx: AudioContext, out: AudioNode, url: string, onFail: () => void): MusicHandle {
+  const element = new Audio(url);
+  element.loop = true;
+  element.preload = 'auto';
+  const source = ctx.createMediaElementSource(element);
+  const level = ctx.createGain();
+  const begin = ctx.currentTime;
+  level.gain.setValueAtTime(0.0001, begin);
+  level.gain.exponentialRampToValueAtTime(TRACK_LEVEL, begin + 3);
+  source.connect(level).connect(out);
+  let stopped = false;
+  const fail = () => { if (!stopped) onFail(); };
+  element.addEventListener('error', fail, { once: true });
+  element.play().catch(fail);
+  return {
+    stop(fadeSeconds) {
+      stopped = true;
+      const at = ctx.currentTime;
+      level.gain.cancelScheduledValues(at);
+      level.gain.setValueAtTime(Math.max(0.0001, level.gain.value), at);
+      level.gain.exponentialRampToValueAtTime(0.0001, at + Math.max(0.05, fadeSeconds));
+      window.setTimeout(() => {
+        element.pause();
+        element.removeAttribute('src');
+        element.load();
+        source.disconnect();
+        level.disconnect();
+      }, Math.max(0.05, fadeSeconds) * 1000 + 100);
+    },
+    pause: () => element.pause(),
+    resume: () => { if (!stopped) element.play().catch(() => {}); },
+  };
+}
 
 type ThemeSpec = {
   /** MIDI notes per chord; the first one is the root. */
