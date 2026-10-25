@@ -18,6 +18,7 @@ import { ZONE_VIEW_META, ZoneView } from './ZoneView';
 import { PlanetOrbitView } from './ui/planet/PlanetOrbitView';
 import { BuildingInteriorHost } from './BuildingInteriorHost';
 import { FLEET_ROOT_REQUEST_EVENT } from './FleetRootNavigationController';
+import { useSoundOnIncrease } from './audio/hooks.ts';
 import {
   APP_ROUTE_LABELS,
   useNavigation,
@@ -1218,6 +1219,9 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   // Same rule as the Fleet screen alert: hostile fleets still on their way in.
   const incomingAttackCount = state.flights.records.filter((flight) => isHostileFlightIncomingToPlayer(flight, state.profile.playerId)).length;
   const sunAlerts = useMemo(() => selectIncomingSunAlerts(state, now), [state, now]);
+  // Audible cues for news that may arrive on any screen: a new hostile fleet, a new report.
+  useSoundOnIncrease(incomingAttackCount + sunAlerts.length, 'alarm');
+  useSoundOnIncrease(reportsUnreadCount, 'notify');
   const uiFactionId = HEADER_FACTION_PREVIEW ?? state.profile.factionId;
   useEffect(() => {
     document.documentElement.dataset.faction = uiFactionId;

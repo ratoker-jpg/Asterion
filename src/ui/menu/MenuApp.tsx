@@ -26,6 +26,7 @@ import { RACE_CARDS, raceCard } from './race-catalog.ts';
 import { NewGameWizard } from './NewGameWizard.tsx';
 import { isDesktopShell, quitDesktopApp, type MenuScreen } from './session.ts';
 import type { SolarCrystalId } from '../../domain/sun-raid/config.ts';
+import { useMusic } from '../../audio/hooks.ts';
 import './menu.css';
 
 function useMenuScale() {
@@ -58,6 +59,7 @@ type MenuAppProps = {
 /** Main menu, «Новая игра», «Загрузить игру» and settings, on the same 1920×1080 stage as the game. */
 export function MenuApp({ initialScreen, onEnterSlot, entryProblem = null, onDismissEntryProblem }: MenuAppProps) {
   const scale = useMenuScale();
+  useMusic('menu');
   const [screen, setScreen] = useState<MenuScreen>(initialScreen);
   const [index, setIndex] = useState<SaveSlotIndex>(() => readSlotIndex());
   const continueSlot = selectContinueSlot(index);

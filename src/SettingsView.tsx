@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { downloadJournal, getActiveJournalCampaign, readJournal } from './ui/player-journal-store.ts';
 import { getDesktopBridge } from './domain/settings/desktop.ts';
+import { AUDIO_VOLUME_MAX, AUDIO_VOLUME_MIN, createDefaultAudioPreferences, type AudioChannel } from './domain/settings/audio.ts';
+import { audio, playSound } from './audio/engine.ts';
+import { useAudioPreferences } from './audio/hooks.ts';
+import type { SoundId } from './audio/sounds.ts';
 import {
   TYPOGRAPHY_MAX,
   TYPOGRAPHY_MIN,
@@ -132,7 +136,7 @@ export function SettingsView({ preferences, onPreferencesChange, onReset }: Sett
         ) : section === 'controls' ? (
           <UnavailablePanel eyebrow="УПРАВЛЕНИЕ" title="КЛАВИШИ" body="Текущие системные клавиши продолжают работать. Полное переназначение клавиш будет подключено отдельным этапом." />
         ) : section === 'sound' ? (
-          <UnavailablePanel eyebrow="АУДИО" title="ЗВУК" body="Звуковая система пока недоступна. Настройки появятся после её подключения." />
+          <SoundPanel />
         ) : section === 'journal' ? (
           <JournalPanel />
         ) : section === 'notifications' ? (
@@ -216,6 +220,59 @@ function TypographyPanel({
           <div className="preview-secondary-v2">{typographyMeta.secondary.sample}</div>
           <div className="preview-helper-v2">{typographyMeta.helper.sample}</div>
         </aside>
+      </div>
+    </section>
+  );
+}
+
+const audioChannelMeta: Record<AudioChannel, { label: string; hint: string; sample: SoundId }> = {
+  master: { label: 'Общая громкость', hint: 'Все звуки игры', sample: 'confirm' },
+  music: { label: 'Музыка', hint: 'Фоновая партитура меню и кампании', sample: 'info' },
+  effects: { label: 'События', hint: 'Экраны, окна, отчёты, тревоги', sample: 'success' },
+  interface: { label: 'Интерфейс', hint: 'Клики, вкладки, наведение', sample: 'tab' },
+};
+
+/** Sound settings apply at once and are stored apart from the interface preferences. */
+function SoundPanel() {
+  const preferences = useAudioPreferences();
+  const update = (patch: Partial<typeof preferences>) => audio.setPreferences({ ...preferences, ...patch });
+  return (
+    <section className="settings-panel-v2" data-qa-sound-settings>
+      <PanelHeading eyebrow="АУДИО" title="ЗВУК" description="Все звуки и музыка синтезируются игрой на лету. Громкость применяется сразу и хранится отдельно от кампании." />
+      <div className="settings-presets-v2">
+        <span className="utility-secondary">{preferences.muted ? 'ЗВУК ВЫКЛЮЧЕН' : 'ЗВУК ВКЛЮЧЁН'}</span>
+        <button type="button" className={`utility-control ${preferences.muted ? 'active' : ''}`} data-sfx="none" onClick={() => update({ muted: !preferences.muted })} data-qa-sound-mute>
+          {preferences.muted ? 'ВКЛЮЧИТЬ ЗВУК' : 'ВЫКЛЮЧИТЬ ЗВУК'}
+        </button>
+        <button type="button" className="utility-control" data-sfx="none" onClick={() => playSound('success')}>ПРОВЕРИТЬ</button>
+        <button type="button" className="utility-control" onClick={() => audio.setPreferences(createDefaultAudioPreferences())}>ПО УМОЛЧАНИЮ</button>
+      </div>
+      <div className="typography-controls-v2 sound-controls-v2">
+        {(Object.keys(audioChannelMeta) as AudioChannel[]).map((channel) => {
+          const meta = audioChannelMeta[channel];
+          const value = preferences[channel];
+          return (
+            <div className="typography-row-v2 sound-row-v2" key={channel} data-qa-sound-channel={channel}>
+              <div>
+                <strong className="utility-section-title">{meta.label}</strong>
+                <small className="utility-helper">{meta.hint}</small>
+              </div>
+              <output className="utility-data-text">{value}%</output>
+              <input
+                aria-label={`Громкость: ${meta.label}`}
+                type="range"
+                min={AUDIO_VOLUME_MIN}
+                max={AUDIO_VOLUME_MAX}
+                step={5}
+                value={value}
+                disabled={preferences.muted}
+                onChange={(event: { target: { value: string } }) => update({ [channel]: Number(event.target.value) })}
+                onPointerUp={() => playSound(meta.sample)}
+              />
+              <button type="button" className="utility-control typography-reset-v2" data-sfx="none" disabled={preferences.muted} onClick={() => playSound(meta.sample)}>ТЕСТ</button>
+            </div>
+          );
+        })}
       </div>
     </section>
   );

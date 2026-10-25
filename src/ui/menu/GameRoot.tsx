@@ -9,6 +9,7 @@ import { ShipInfoController } from '../../ShipInfoController';
 import { DefenseInfoController } from '../../DefenseInfoController';
 import { UtilityScreensPortal } from '../../UtilityScreensPortal';
 import { NavigationProvider } from '../navigation.tsx';
+import { useMusic } from '../../audio/hooks.ts';
 import { ACTIVE_RUNTIME_MODE } from '../../domain/runtime/mode.ts';
 import { LEGACY_PRODUCTION_SAVE_KEY, selectContinueSlot, type SaveSlotMeta } from '../../domain/session/slots.ts';
 import { createInitialSaveState } from '../../application/persistence.ts';
@@ -19,6 +20,7 @@ import { applySlotRuntime, consumeNextScreen, wantsAutostart, type ActiveSession
 
 /** The running campaign: the game screen and its global controllers. */
 function GameShell({ session }: { session: ActiveSession | null }) {
+  useMusic('game');
   return (
     <NavigationProvider>
       <App session={session} />
