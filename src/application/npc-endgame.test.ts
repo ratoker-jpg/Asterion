@@ -17,7 +17,7 @@ import { getNpcEndgameChoices } from './npc-endgame.ts';
 import { dispatchNpcTransport, resolveNpcTransportArrival } from './npc-missions.ts';
 import { getNpcSpaceportCandidates, settleNpcSpaceport, startNpcSpaceportUpgrade, syncNpcOwnerShipLevels } from './npc-spaceport.ts';
 import { createNpcUtilityContext, npcFlagshipPlan } from './npc-utility.ts';
-import { createInitialSaveState } from './persistence.ts';
+import { createInitialSaveState, createPersistenceFacade } from './persistence.ts';
 import { currentSunRaidState, reconcileSunRaids } from './sun-raid.ts';
 
 const NOW = Date.UTC(2026, 9, 26);
@@ -219,4 +219,31 @@ test('the planet-destroyer rush is about one NPC in twenty and its path reaches 
   assert.ok(plan.sciences.has(15), 'Parallel universes is on the path');
   assert.ok(plan.sciences.has(14) && plan.sciences.has(9), 'with every prerequisite of Hyperspace');
   assert.ok(plan.laboratoryLevel >= 15);
+});
+
+test('a returning NPC fleet whose manifest lists a hull type lost to zero survives a save and load', () => {
+  const { state: initial, owners } = world();
+  const ownerId = owners[0]!;
+  const main = home(initial, ownerId);
+  const colony: SpyTargetState = { ...main, id: 'planet-1-7-7', coordinate: { galaxy: 1, system: 7, position: 7 },
+    fleet: { ...main.fleet, ships: { ...main.fleet.ships, transporter: 10 } }, resources: { ...main.resources, metal: 20_000, gas: 50_000 } };
+  let state = withTarget(initial, colony);
+  const sent = dispatchNpcTransport(state, {
+    requestId: `npc-autonomy:${JSON.stringify([ownerId, 'zero-manifest'])}`, ownerId, originPlanetId: colony.id, destinationPlanetId: main.id,
+    selectedShips: { transporter: 10 }, cargo: { metal: 1_000, minerals: 0, gas: 0, debris: 0 },
+  }, NOW, 1);
+  assert.equal(sent.ok, true, sent.reason ?? undefined);
+  const arrived = resolveNpcTransportArrival(sent.state, sent.flight!, sent.flight!.arrivalAt);
+  // A battle that wiped out one hull type leaves it in the manifest as zero.
+  const manifest = { ...arrived.flight!, selectedShips: { transporter: 10, 'mega-transporter': 0 } };
+  state = { ...arrived.state, flights: { ...arrived.state.flights, records: arrived.state.flights.records.map((item) => item.id === manifest.id ? manifest : item) } };
+  const data = new Map<string, string>();
+  const storage = { getItem: (key: string) => data.get(key) ?? null, setItem: (key: string, value: string) => { data.set(key, value); }, removeItem: (key: string) => { data.delete(key); } };
+  const facade = createPersistenceFacade({ mode: 'production', storage, saveKey: 'zero-manifest', now: () => NOW });
+  assert.equal(facade.write(state).ok, true);
+  const loaded = facade.read();
+  const kept = loaded.flights.records.find((item) => item.id === manifest.id);
+  assert.ok(kept, 'the returning fleet is not dropped');
+  assert.equal(kept.phase, 'returning');
+  assert.equal(kept.selectedShips.transporter, 10);
 });

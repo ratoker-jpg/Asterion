@@ -1168,7 +1168,7 @@ function reconcileGates(state: SaveState, now: number, notices: SunRaidNotice[])
       const where = `${gate.hostPlanetName} (${gate.hostOwnerName})`;
       for (const milestone of reached) {
         if (milestone === 0) continue; // the start itself is already in the history as «gate-started»
-        events.push({ id: `${gate.id}:m${milestone}`, at: now, kind: 'gate-progress', text: `Врата ${gate.holderName}: построено ${milestone}%.` });
+        events.push({ id: `${gate.id}:m${milestone}`, at: Math.round(gate.startedAt + (gate.completesAt - gate.startedAt) * milestone / 100), kind: 'gate-progress', text: `Врата ${gate.holderName}: построено ${milestone}%.` });
       }
       const last = reached.at(-1)!;
       notices.push({ tone: 'info', text: last === 0 ? `${gate.holderName} начал строить Врата на ${where}.` : `Врата ${gate.holderName} на ${where}: ${last}%.` });

@@ -913,11 +913,14 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
       || item.operationId !== destinationRecord.operationId) return false;
   }
 
+  // A hull type wiped out in battle may remain in the survivor manifest as
+  // zero; that is a legitimate record, never a reason to drop the fleet.
   for (const [shipId, quantity] of shipEntries) {
     if (!SHIP_IDS.includes(shipId as (typeof SHIP_IDS)[number])
-      || !isNonNegativeInteger(quantity)
-      || quantity <= 0) return false;
+      || !isNonNegativeInteger(quantity)) return false;
   }
+  if (item.phase === 'outbound' && shipEntries.length > 0 && !shipEntries.some(([, quantity]) => Number(quantity) > 0)
+    && !Object.values((item.selectedCommanders ?? {}) as Record<string, unknown>).some((quantity) => Number(quantity) > 0)) return false;
   if (item.selectedCommanders !== undefined) {
     if (!item.selectedCommanders || typeof item.selectedCommanders !== 'object' || Array.isArray(item.selectedCommanders)) return false;
     for (const [commanderId, quantity] of Object.entries(item.selectedCommanders)) {

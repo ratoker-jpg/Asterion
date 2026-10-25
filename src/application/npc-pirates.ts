@@ -327,7 +327,11 @@ export function resolveNpcPirateArrival(state: SaveState, flight: FlightRecord, 
     if (report) {
       for (const [id, raw] of Object.entries(flight.selectedShips) as [ShipId, number][]) {
         const destroyed = report.attackerForce.stacks.find((stack) => stack.entityId === id)?.destroyed ?? 0;
-        survivors[id] = Math.max(0, safeCount(raw) - safeCount(destroyed));
+        const left = Math.max(0, safeCount(raw) - safeCount(destroyed));
+        // A hull type the battle wiped out leaves the manifest: a zero count
+        // made the save reject the whole returning fleet.
+        if (left > 0) survivors[id] = left;
+        else delete survivors[id];
       }
     }
   }
