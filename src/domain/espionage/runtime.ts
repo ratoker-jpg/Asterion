@@ -5,8 +5,10 @@ import type { SpyOwnerProfile } from './types.ts';
 
 export const SPY_REPORT_COOLDOWN_MS = 5_000;
 export const SPY_HUNTER_RATE_PER_LEVEL_PERCENT = 1.75;
+/** Owner rule (25.10.2026): every repeated report from orbit risks the probe. */
+export const SPY_REPEAT_REPORT_LOSS_PERCENT = 30;
 
-export type EspionageRollKind = 'hunter' | 'report';
+export type EspionageRollKind = 'hunter' | 'report' | 'repeat-loss';
 
 export function createDefaultEspionageState(): EspionageState {
   return { missions: [], reports: [], hunterNotices: [], orbitalDebris: {} };
@@ -121,6 +123,11 @@ function hunterDetectionChancePercent(hunterLevel: number): number {
 /** Hunter checks use the same 0..99 RNG contract; e.g. 35% means 0..34. */
 export function hunterDetects(hunterLevel: number, roll: number): boolean {
   return normalizeRngRoll(roll) < hunterDetectionChancePercent(hunterLevel);
+}
+
+/** A repeated report request loses the probe on 0..29 of the canonical 0..99 roll. */
+export function repeatReportLosesProbe(roll: number): boolean {
+  return normalizeRngRoll(roll) < SPY_REPEAT_REPORT_LOSS_PERCENT;
 }
 
 // Mission arrays are immutable; an NPC decision asks once per candidate

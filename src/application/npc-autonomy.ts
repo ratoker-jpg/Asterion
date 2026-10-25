@@ -26,7 +26,7 @@ import { estimationError, NPC_MAX_UTILITY, utilityToWeight } from '../domain/npc
 import { getFactionShipCatalog, getFactionDefenseCatalog } from '../domain/combat/faction-catalog.ts';
 import {
   chooseNpcAttackForce, chooseNpcStrategy, combatEfficiency, createNpcUtilityContext, describeNpcPlanet,
-  estimateAttackUtility, estimateBuildingUtility, estimateColonizeUtility, estimateEspionageUtility,
+  estimateAttackUtility, estimateBuildingUtility, estimateRaidEconomics, estimateColonizeUtility, estimateEspionageUtility,
   estimateOperationUtility, estimateProductionItemUtility, flightRemoteness, estimateScienceUtility, npcProductionBatch,
   npcProductionPurpose, NPC_STRATEGY_FAMILY, strategyOf, type NpcStrategyDrives,
   estimateFleetSaveUtility, npcFleetValue, spaceFlightLegFor,
@@ -302,10 +302,14 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
   for (const mission of getNpcMissionCandidates(state, profile, at)) {
     // An attack the owner does not believe it wins with its own margin, even
     // with everything at hand, is not an option (a lone ship against a
-    // defended planet was).
+    // defended planet was); nor is one whose haul does not pay for the flight
+    // (a raid for 63 resources every few minutes was).
     if (mission.kind === 'attack') {
-      attackShips(mission);
+      const force = attackShips(mission);
       if (!attackForces.get(mission.id)) continue;
+      const origin = state.espionage?.targets?.[String(mission.payload.originPlanetId)];
+      const report = utility.latestReports.get(String(mission.payload.destinationPlanetId ?? ''));
+      if (!origin || !report || !estimateRaidEconomics(utility, origin, report, force).worthFlight) continue;
     }
     choices.push({
       candidate: { ...mission, weight: mission.weight * scored(mission.id, missionUtility(mission)),
