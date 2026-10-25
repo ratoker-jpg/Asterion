@@ -10,8 +10,8 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# Jobs run in parallel on separate Windows runners: logical tests, four
-# balanced Electron QA shards and the installer. Wall time is the slowest job
+# Jobs run in parallel on separate Windows runners: logical tests, NPC
+# replay tests, balanced Electron QA shards and the installer. Wall time is the slowest job
 # instead of the sum of every step.
 jobs:
   logic:
@@ -84,8 +84,6 @@ jobs:
         run: npm run test:sun-raid
       - name: New game and save slot tests
         run: npm run test:new-game
-      - name: NPC foundation contracts and persistence
-        run: npm run test:npc
       - name: Type-check and build renderer
         run: npm run build
       - name: Upload balance evidence
@@ -100,6 +98,23 @@ jobs:
             artifacts/pr91-adaptive-c/**/*
           if-no-files-found: warn
           retention-days: 14
+
+  # The NPC replay suite runs multi-day catch-ups (about 10 minutes), so it
+  # has its own runner instead of lengthening the logical job.
+  npc:
+    name: NPC replay tests
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: NPC foundation contracts and persistence
+        run: npm run test:npc
 
   electron:
     name: Electron QA (${{ matrix.shard }})
@@ -123,7 +138,10 @@ jobs:
           # state consistency. Long-horizon durations are measured by the
           # npc-full-world job.
           - shard: campaign-command
-            suites: "test:new-game-ui:skip test:npc-replay-ui-1d test:pirate-operations-ui test:command-ui:skip test:command-aid-ui:skip test:command-journal-ui:skip"
+            suites: "test:new-game-ui:skip test:pirate-operations-ui test:command-ui:skip test:command-aid-ui:skip test:command-journal-ui:skip"
+          # One catch-up day takes about 13 minutes on its own runner.
+          - shard: npc-replay
+            suites: "test:npc-replay-ui-1d"
           - shard: fleet-universe
             suites: "test:fleet-ui:skip test:universe-ui:skip test:energy-ui:skip test:repair-ui:skip"
     steps:
@@ -160,6 +178,7 @@ jobs:
             artifacts/universe-planet-qa/**/*
             artifacts/pirate-operations-qa/**/*
             artifacts/save-safety-qa/**/*
+            artifacts/npc-replay-qa*/**/*
           if-no-files-found: warn
           retention-days: 14
 
