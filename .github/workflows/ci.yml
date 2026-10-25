@@ -4,6 +4,11 @@ on:
   pull_request:
   push:
     branches: [main]
+  # The full-world catch-up measurement runs on demand and nightly, not on
+  # every PR push (it holds a runner for about 15 minutes and gates nothing).
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * *'
 
 # A newer push to the same PR makes the older run pointless.
 concurrency:
@@ -16,6 +21,7 @@ concurrency:
 jobs:
   logic:
     name: Logical tests and evidence
+    if: github.event_name != 'schedule'
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -103,6 +109,7 @@ jobs:
   # has its own runner instead of lengthening the logical job.
   npc:
     name: NPC replay tests
+    if: github.event_name != 'schedule'
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -118,6 +125,7 @@ jobs:
 
   electron:
     name: Electron QA (${{ matrix.shard }})
+    if: github.event_name != 'schedule'
     runs-on: windows-latest
     timeout-minutes: 25
     strategy:
@@ -191,6 +199,7 @@ jobs:
   # without gating the PR.
   npc-full-world:
     name: NPC full-world catch-up (measurement)
+    if: github.event_name != 'pull_request'
     runs-on: windows-latest
     timeout-minutes: 75
     continue-on-error: true
@@ -226,6 +235,7 @@ jobs:
 
   package:
     name: Windows installer
+    if: github.event_name != 'schedule'
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
