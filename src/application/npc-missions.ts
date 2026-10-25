@@ -10,7 +10,7 @@ import { createColonyPlanetRuntime } from './owned-planets.ts';
 import { getOwnerRelation } from './owner-relations.ts';
 import { getExplorationTarget } from './exploration.ts';
 import { creditNpcExplorationReturn } from './exploration-bot01.ts';
-import { getEspionageTargets, activeSpyMissionForTarget, createSeededEspionageRng, espionageRollSeed, hunterDetects, normalizeRngRoll, resolveSpyReportQuality, SPY_REPORT_COOLDOWN_MS } from '../domain/espionage/runtime.ts';
+import { getEspionageTargets, activeSpyMissionForTarget, createSeededEspionageRng, espionageRollSeed, hunterDetects, normalizeRngRoll, repeatReportLosesProbe, resolveSpyReportQuality, SPY_REPORT_COOLDOWN_MS } from '../domain/espionage/runtime.ts';
 import { addDebris, getCappedDelivery, getCargoUsed, getFleetCargoCapacity, normalizeTransportCargo, type TransportCargo } from '../domain/flights/cargo.ts';
 import { collectOrbitalDebrisAtCoordinate, getOrbitalDebrisAtCoordinate } from '../domain/espionage/orbital-debris.ts';
 import { getFlightSlotUsage, isFlightLimitExempt } from '../domain/flights/limit.ts';
@@ -18,6 +18,7 @@ import { beginFlightReturn, dispatchFlight, getFlightByRequestId, MAX_SPACE_FLIG
 import { isFlightCoordinate } from '../domain/flights/distance.ts';
 import { createUniverseSystem, MAX_PLANETS_PER_OWNER, nextColonyPointThreshold } from '../domain/universe/runtime.ts';
 import { createDefaultEspionageState } from '../domain/espionage/runtime.ts';
+import { spyReportPopulation } from '../domain/espionage/population.ts';
 import { getOwnerShipUpgradeLevels, getPlanetResources } from './contracts.ts';
 import type { CombatFactionId } from '../domain/combat/factions.ts';
 import { SHIP_IDS, type ShipId } from '../domain/combat/ids.ts';
@@ -614,6 +615,15 @@ export function resolveNpcMissionArrival(
   if (flight.phase === 'arrived' && mission.status === 'orbiting') {
     if (!requestReport) return { state, ok: true, reason: null, flight };
     if (mission.nextReportAt !== undefined && at < mission.nextReportAt) return fail(state, 'spy-report-cooldown');
+    // The player's rule: a repeated report from orbit costs the probe 30% of the time.
+    const lossRoll = normalizeRngRoll(Math.floor(createSeededEspionageRng(espionageRollSeed(mission.id, 'repeat-loss', attempt))() * 100));
+    if (repeatReportLosesProbe(lossRoll)) {
+      const lost: SpyMission = { ...mission, status: 'destroyed', destroyedAt: at, nextReportAt: undefined };
+      const completed: FlightRecord = { ...flight, phase: 'completed', arrivedAt: flight.arrivalAt, completedAt: at, completionReason: 'spy-destroyed' };
+      const espionage = state.espionage ?? createDefaultEspionageState();
+      const next = setFlight({ ...state, espionage: { ...espionage, missions: espionage.missions.map((item) => item.id === mission.id ? lost : item) } }, completed);
+      return { state: next, ok: true, reason: null, flight: completed };
+    }
   }
   const hunterRoll = normalizeRngRoll(Math.floor(createSeededEspionageRng(espionageRollSeed(mission.id, 'hunter', attempt))() * 100));
   const espionage = state.espionage ?? createDefaultEspionageState();
@@ -646,8 +656,6 @@ export function resolveNpcMissionArrival(
   const delta = spyLevel - targetEspionageLevel;
   const quality = resolveSpyReportQuality(delta, roll);
   const reportId = `spy-report-${mission.id}-${attempt}`;
-  const fleetPopulation = calculateFleetPopulation(target.fleet, target.raceId);
-  const defensePopulation = calculateDefensePopulation(target.defense, target.raceId);
   const report: SpyReportSnapshot & { ownerId: string } = {
     id: reportId,
     missionId: mission.id,
@@ -676,7 +684,7 @@ export function resolveNpcMissionArrival(
         id,
         commander ? { ...commander, level: targetProfile.commanderLevels[id as keyof SpyOwnerProfile['commanderLevels']] ?? commander.level } : commander,
       ])),
-      population: { total: fleetPopulation + defensePopulation, fleet: fleetPopulation, defense: defensePopulation },
+      population: spyReportPopulation(target, state.flights.records),
     } : {}),
   };
   const updatedMission: SpyMission = {

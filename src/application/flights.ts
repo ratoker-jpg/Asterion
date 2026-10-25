@@ -85,10 +85,12 @@ import {
   espionageRollSeed,
   hunterDetects,
   normalizeRngRoll,
+  repeatReportLosesProbe,
   resolveSpyReportQuality,
   syncSpyTargetCommanderCounts,
   SPY_REPORT_COOLDOWN_MS,
 } from '../domain/espionage/runtime.ts';
+import { spyReportPopulation } from '../domain/espionage/population.ts';
 import type { EspionageRollKind } from '../domain/espionage/runtime.ts';
 import type {
   EspionageState,
@@ -786,9 +788,8 @@ function createSpyReport(
   roll: number,
   firstReport: boolean,
   spyLevel: number,
+  flights: readonly FlightRecord[],
 ): SpyReportSnapshot {
-  const targetFleetPopulation = calculateFleetPopulation(target.fleet, target.raceId);
-  const targetDefensePopulation = calculateDefensePopulation(target.defense, target.raceId);
   const targetCommanders = Object.fromEntries(
     Object.entries(target.commanders).map(([id, commander]) => [
       id,
@@ -827,11 +828,7 @@ function createSpyReport(
         fleet: { ...target.fleet.ships },
         fleetLevels: buildSnapshotFleetLevels(target.fleet.ships, ownerProfile?.shipLevels, mission.id),
         commanders: targetCommanders,
-        population: {
-          total: targetFleetPopulation + targetDefensePopulation,
-          fleet: targetFleetPopulation,
-          defense: targetDefensePopulation,
-        },
+        population: spyReportPopulation(target, flights),
       }
       : {}),
   };
@@ -866,6 +863,26 @@ function resolveSpyAtTarget(
     targetEspionageLevel: targetEspionageLevel(state, target),
   };
   const attempt = mission.reportIds.length + 1;
+  // A repeated report from orbit is a fresh pass over the planet: 30% of them
+  // cost the probe. Only the probe's owner learns of it.
+  if (!firstReport && repeatReportLosesProbe(materializeSpyRoll(rng, mission.id, 'repeat-loss', attempt))) {
+    const lostMission: SpyMission = { ...missionAtTarget, status: 'destroyed', destroyedAt: now, nextReportAt: undefined };
+    const lostFlight: FlightRecord = {
+      ...flight,
+      phase: 'completed',
+      arrivedAt: flight.arrivedAt ?? flight.arrivalAt,
+      completedAt: now,
+      completionReason: 'spy-destroyed',
+    };
+    let next = removeSpyProbeFromOrigin(state, mission);
+    next = withEspionageState(next, updateSpyMission(currentEspionageState(next), lostMission));
+    next = { ...next, flights: updateFlight(currentFlightState(next), lostFlight) };
+    return {
+      state: next,
+      flight: lostFlight,
+      event: { flight: lostFlight, status: 'spy-detected', notice: `Шпионский зонд потерян над планетой ${target.name} при повторном отчёте.` },
+    };
+  }
   const hunterRoll = materializeSpyRoll(rng, mission.id, 'hunter', attempt);
   if (hunterDetects(target.hunterLevel, hunterRoll)) {
     const destroyedMission: SpyMission = {
@@ -911,6 +928,7 @@ function resolveSpyAtTarget(
     materializeSpyRoll(rng, mission.id, 'report', attempt),
     firstReport,
     currentSpyLevel,
+    currentFlightState(state).records,
   );
   const nextMission: SpyMission = {
     ...missionAtTarget,
