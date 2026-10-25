@@ -248,8 +248,20 @@ async function productionScenario(win, label) {
   let state = await journal(win);
   assert(state.entries.length === 0 && !state.overflowX && !state.contentOverflow, `${label}: production journal is locked and fits`, state);
   await capture(win, label, 'production-journal-locked');
-  await patchSave(win, PRODUCTION_KEY, `(save) => { save.command.alliances[0].members[0].joinedAt = Date.now() - 3 * 3600000; }`);
-  await reload(win, 'production');
+  // The running game may autosave over a direct storage patch before the
+  // reload lands (the NPC replay writes the save too), so confirm the backdated
+  // join survived the reload and repeat the patch if it did not.
+  const backdateJoin = `(save) => { const own = save.command.alliances.find((alliance) => alliance.members.some((member) => member.ownerId === save.profile.playerId));
+    own.members.find((member) => member.ownerId === save.profile.playerId).joinedAt = Date.now() - 3 * 3600000; }`;
+  const joinBackdated = `(() => { const save = JSON.parse(localStorage.getItem(${JSON.stringify(PRODUCTION_KEY)}) || '{}');
+    const own = save.command?.alliances?.find((alliance) => alliance.members.some((member) => member.ownerId === save.profile.playerId));
+    const me = own?.members.find((member) => member.ownerId === save.profile.playerId);
+    return Boolean(me && Date.now() - me.joinedAt >= 2 * 3600000); })()`;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await patchSave(win, PRODUCTION_KEY, backdateJoin);
+    await reload(win, 'production');
+    if (await run(win, joinBackdated)) break;
+  }
   await openJournal(win);
   state = await journal(win);
   assert(state.state === 'empty' && /пока нет/.test(state.text), `${label}: production journal is empty and invents nothing`, state);
