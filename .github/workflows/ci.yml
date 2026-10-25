@@ -163,14 +163,17 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-  # Full campaign catch-up: 10 galaxies, 100 NPC, 30 offline days with asteroid,
-  # exploration and pirate timelines (no isolation). A measurement on shared
-  # runners whose speed varies, so it reports without gating the PR; the local
-  # result in docs/reports is the reviewed evidence.
+  # Full campaign catch-up: 10 galaxies, 100 NPC with asteroid, exploration
+  # and pirate timelines (no isolation). Owner decision (25.10.2026): a long
+  # absence is replayed in full behind a progress bar, so this job measures
+  # how long a catch-up takes instead of gating a duration. One full-world day
+  # costs about 20 minutes of CPU today, so it measures six game hours in Node
+  # and one game day in Electron. Shared runner speed varies, hence it reports
+  # without gating the PR.
   npc-full-world:
     name: NPC full-world catch-up (measurement)
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: 75
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
@@ -180,15 +183,17 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: Node full-world benchmark (1/7/14 days)
+      - name: Node full-world benchmark (6 game hours)
         shell: bash
         run: |
           mkdir -p artifacts/npc-full-world
-          npm run --silent benchmark:npc-full-world -- 1 7 14 > artifacts/npc-full-world/benchmark.json
+          npm run --silent benchmark:npc-full-world -- 0.25 > artifacts/npc-full-world/benchmark.json
       - name: Build renderer
         run: npm run build
-      - name: Electron full-world QA (14 days, 120 s limit)
-        run: npm run test:npc-replay-full-world-ui
+      - name: Electron full-world QA (1 game day, progress banner)
+        env:
+          ASTERION_QA_CATCHUP_TIMEOUT_MS: '3000000'
+        run: npm run test:npc-replay-full-world-ui -- --days=1
       - name: Upload full-world results
         if: always()
         uses: actions/upload-artifact@v6
