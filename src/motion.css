@@ -408,18 +408,23 @@ body :is(.system-planet, .resource-building-node, .zone-hotspot, .universe-radar
 /* Something needs the player (incoming attack, Sun under attack): one calm pulse. */
 .ut-attention { animation: ut-attention 1.6s var(--ut-ease-in-out) 2; }
 
-/* Progress of running work (build queue, research, upgrades): a light passes
-   along the filled part every 2.4 s, so a running timer reads as alive. */
-:is(.resource-zone-queue-card.busy, .science-row-v2.is-active, .spaceport-row-v2.is-active) :is([class*="progress"] > i, [class*="progress"] > span, [class*="progress-fill"]) {
+/* Progress of running work (build queue, recycling, the Gate, fleet orders):
+   a light passes along the filled part every 2.4 s, so a running timer reads
+   as alive. The fill element is `width`-driven by the game; the light is its
+   own composited layer. */
+:is(.resource-zone-queue-card.busy .resource-zone-queue-card-main > i > span, .queue-progress-v2 > i, .recycling-job-progress > i, .gate-node__bar > i, .fleet-production-order-progress-v1 > *) {
   position: relative;
   overflow: hidden;
 }
-:is(.resource-zone-queue-card.busy, .science-row-v2.is-active, .spaceport-row-v2.is-active) :is([class*="progress"] > i, [class*="progress"] > span, [class*="progress-fill"])::after {
+:is(.resource-zone-queue-card.busy .resource-zone-queue-card-main > i > span, .queue-progress-v2 > i, .recycling-job-progress > i, .gate-node__bar > i, .fleet-production-order-progress-v1 > *)::after {
   content: '';
   position: absolute;
-  inset: 0;
-  width: 40%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .45), transparent);
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 60%;
+  min-width: 24px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .55), transparent);
   animation: ut-sheen 2.4s var(--ut-ease-in-out) infinite;
 }
 
@@ -449,7 +454,7 @@ body :is(.system-planet, .resource-building-node, .zone-hotspot, .universe-radar
   .workspace > .route-sweep, .runtime-toast-stack .runtime-toast::after { display: none; }
   body button:not([disabled]):active { scale: 1; }
   .stage-ambient i, .ut-attention, .asterion-header .hdr-route.active .hdr-route__icon,
-  :is(.resource-zone-queue-card.busy, .science-row-v2.is-active, .spaceport-row-v2.is-active) *::after { animation: none !important; }
+  :is(.resource-zone-queue-card.busy .resource-zone-queue-card-main > i > span, .queue-progress-v2 > i, .recycling-job-progress > i, .gate-node__bar > i, .fleet-production-order-progress-v1 > *)::after { animation: none !important; display: none; }
   :is(.shipyard-card-v1, .repair-card-v1, .srp-card, .cmdA-tile, .opsA-tile, .report-card, .fleet-ship-tile-v2, .resource-zone-queue-card,
     .science-row-v2, .spaceport-row-v2, .owned-planet-row-v4, .universe-radar__row, .planet-orbit__vitals > div):hover,
   :is(.shipyard-card-v1, .repair-card-v1, .cmdA-tile, .srp-card):hover img,

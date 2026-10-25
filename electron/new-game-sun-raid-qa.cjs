@@ -33,7 +33,7 @@ async function load(win, search) {
 async function capture(win, label, name) {
   const directory = path.join(OUTPUT, label);
   fs.mkdirSync(directory, { recursive: true });
-  await sleep(900); // menu entrance animations
+  await sleep(1700); // menu entrance animations (the race cards land at ~1.6 s)
   // A hidden window may hand back its last composited frame: force a fresh one.
   win.webContents.invalidate();
   await run(win, 'new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
