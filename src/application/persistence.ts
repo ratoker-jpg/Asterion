@@ -1084,7 +1084,10 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
  * `sun:G:S`) with a frozen side snapshot. NPC participants exist in Test Mode only.
  */
 function isPersistedSunFlight(item: Record<string, unknown>, mode: RuntimeMode): boolean {
-  if (item.ownerSide !== undefined && item.ownerSide !== 'player'
+  // Autonomous NPC owners raid and defend Suns by the player's rules (production replay).
+  const autonomousNpc = item.ownerSide === 'npc' && isNonEmptyPersistedString(item.ownerId)
+    && mode === 'production' && String(item.requestId).startsWith('npc-autonomy:');
+  if (item.ownerSide !== undefined && item.ownerSide !== 'player' && !autonomousNpc
     && !(mode === 'test' && (item.ownerSide === 'bot01' || item.ownerSide === 'npc'))) return false;
   const destination = objectRecord(item.destination);
   if (!destination || destination.kind !== 'operation' || typeof destination.operationId !== 'string'

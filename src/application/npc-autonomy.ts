@@ -17,6 +17,7 @@ import { getNpcMissionCandidates, candidateToNpcMissionCommand } from './npc-mis
 import { dispatchNpcMission, dispatchNpcSpaceFlight, getNpcMissionAvailableFleet, NPC_SPACE_FLIGHT_GAS_FEE, resolveNpcMissionArrival } from './npc-missions.ts';
 import { beginFlightReturn } from '../domain/flights/runtime.ts';
 import { getNpcPirateCandidates, dispatchNpcPirateMission } from './npc-pirates.ts';
+import { getNpcEndgameChoices } from './npc-endgame.ts';
 import { getNpcAidCandidates, dispatchNpcAid } from './npc-aid.ts';
 import { getStorageCapacities } from '../domain/buildings/balance-v1.ts';
 import { migrateBuildingLevels } from '../domain/buildings/resource-zone.ts';
@@ -275,6 +276,8 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     && profile.session.sessionEndsAt - at <= NPC_REPLAY_LAST_LOOK_MS;
   const nextVisit = leaving ? nextNpcSessionStartAfter(profile, profile.session.sessionEndsAt!) : null;
   for (const target of planets) {
+    // The fleet guarding this owner's own Gate stays to fight; hiding it loses the Gate.
+    if (utility.ownGateHosts?.has(target.id)) continue;
     const free = getNpcMissionAvailableFleet(state, ownerId, target.id) ?? {};
     const ships = Object.fromEntries(Object.entries(free).filter(([shipId, count]) => shipId !== 'solar-satellite' && (count ?? 0) > 0)) as Record<string, number>;
     const value = npcFleetValue(target.raceId, ships);
@@ -309,7 +312,9 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
       if (!attackForces.get(mission.id)) continue;
       const origin = state.espionage?.targets?.[String(mission.payload.originPlanetId)];
       const report = utility.latestReports.get(String(mission.payload.destinationPlanetId ?? ''));
-      if (!origin || !report || !estimateRaidEconomics(utility, origin, report, force).worthFlight) continue;
+      if (!origin || !report) continue;
+      const destination = String(mission.payload.destinationPlanetId ?? '');
+      if (!utility.rivalGateHosts?.has(destination) && !estimateRaidEconomics(utility, origin, report, force).worthFlight) continue;
     }
     choices.push({
       candidate: { ...mission, weight: mission.weight * scored(mission.id, missionUtility(mission)),
@@ -333,6 +338,8 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
       return { state: result.state, started: result.ok, reason: result.reason };
     },
   });
+  // The endgame by the player's rules: Gates, Sun raids, Sun defence.
+  for (const choice of getNpcEndgameChoices(state, profile, utility, at, timeScale, scored)) choices.push(choice);
   for (const aid of getNpcAidCandidates(state, profile, at)) choices.push({ candidate: aid, run: (current, key) => {
     const result = dispatchNpcAid(current, ownerId, aid, at, key, timeScale);
     return { state: result.state, started: result.ok, reason: result.reason };

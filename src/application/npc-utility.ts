@@ -14,6 +14,7 @@ import { nextColonyPointThreshold } from '../domain/universe/runtime.ts';
 import { findDebrisNearSystem } from '../domain/espionage/orbital-debris.ts';
 import { calculateRouteDistance } from '../domain/flights/distance.ts';
 import { calculateFlightFuel } from '../domain/flights/fuel.ts';
+import { selectOwnerMembership } from '../domain/command/selectors.ts';
 
 /**
  * Owner-scoped utility estimates for NPC candidate actions. Every input is
@@ -89,7 +90,24 @@ export type NpcUtilityContext = Readonly<{
   colonyOpen?: boolean;
   /** Debris on the public map around the owner's planets (the player's «Найти обломки»). */
   nearbyDebris?: number;
+  /** Planets where someone else's Gate is being built: the whole world is told, and breaking it is worth more than any haul. */
+  rivalGateHosts?: ReadonlySet<string>;
+  /** This owner's planets hosting its own side's Gate: held at all costs. */
+  ownGateHosts?: ReadonlySet<string>;
 }>;
+
+/** Public Gate announcements as seen by one owner: rival Gates to break and its own side's to hold. */
+export function npcGateHosts(state: SaveState, ownerId: string): { rival: Set<string>; own: Set<string> } {
+  const rival = new Set<string>();
+  const own = new Set<string>();
+  const membership = selectOwnerMembership(state.command, ownerId);
+  for (const gate of state.sunRaid?.gates ?? []) {
+    if (gate.status !== 'building') continue;
+    const mine = gate.holder.kind === 'alliance' ? membership?.alliance.id === gate.holder.id : gate.holder.id === ownerId;
+    (mine ? own : rival).add(gate.hostPlanetId);
+  }
+  return { rival, own };
+}
 
 /**
  * What one planet's own state says right now: how full its stores are and
@@ -133,8 +151,11 @@ export function createNpcUtilityContext(state: SaveState, profile: NpcProfile, a
   for (const planet of ownPlanets) {
     for (const entry of findDebrisNearSystem(debrisMap, planet.coordinate)) nearby.set(`${entry.coordinate.galaxy}:${entry.coordinate.system}:${entry.coordinate.position}`, entry.debris);
   }
+  const gates = npcGateHosts(state, ownerId);
   const base = {
     profile, at, timeScale,
+    rivalGateHosts: gates.rival,
+    ownGateHosts: gates.own,
     nearbyDebris: [...nearby.values()].reduce((sum, value) => sum + value, 0),
     colonyOpen: threshold !== null && (selectOwnerScore(state, ownerId)?.totalPoints ?? 0) >= threshold,
     dayValue: Math.max(2_000, income * 24),
@@ -360,9 +381,11 @@ export function estimateProductionItemUtility(context: NpcUtilityContext, target
   const price = pricePenalty(context, cost, situation) * 0.5;
   const push = 0.4 * spendingPressure(situation);
   const efficiency = 0.5 * Math.log(Math.max(0.05, Math.min(1, relativeEfficiency)));
+  // The planet hosting this owner's own Gate expects the whole world at its door.
+  const threat = context.ownGateHosts?.has(target.id) ? 1 : context.threat;
   switch (purpose) {
-    case 'combat': return -0.5 + 1.5 * Math.max(drives.military, drives.war) + 0.5 * context.threat + efficiency - price + push;
-    case 'defense': return -0.8 + 1.4 * context.threat + 0.5 * drives.military + efficiency - price + push * 0.75;
+    case 'combat': return -0.5 + 1.5 * Math.max(drives.military, drives.war) + 0.5 * threat + efficiency - price + push;
+    case 'defense': return -0.8 + 1.4 * threat + 0.5 * drives.military + efficiency - price + push * 0.75;
     case 'energy': return -0.6 + 1.5 * (situation?.energyNeed ?? 0) - price;
     case 'spy': return (fleet[itemId] ?? 0) >= 2 ? -2 : -0.3 + 0.9 * Math.max(drives.war, drives.operations, drives.military * 0.6) - price;
     case 'colony': return owned(itemId) > 0 || drives.expansion <= 0 || context.colonyOpen === false ? -2.5 : -0.4 + 1.6 * drives.expansion - price;
@@ -404,6 +427,9 @@ export function estimateAttackUtility(context: NpcUtilityContext, origin: SpyTar
   const report = context.latestReports.get(targetPlanetId);
   if (!report) return -1.2 + 0.6 * (unit(traits.aggression) - 0.5);
   const raid = estimateRaidEconomics(context, origin, report, selectedShips);
+  // A rival Gate under construction ends the campaign if it stands: breaking
+  // it is worth more than any haul, and distance does not matter.
+  if (context.rivalGateHosts?.has(targetPlanetId)) return 2.5 + 0.5 * unit(traits.aggression) + Math.min(1, Math.max(0, raid.net) / context.dayValue);
   // Taste for war never turns a pointless raid (63 resources) into a good one.
   if (!raid.worthFlight) return -2;
   return raid.net / context.dayValue + 0.5 * (unit(traits.aggression) - 0.5)
@@ -465,6 +491,8 @@ export function chooseNpcAttackForce(context: NpcUtilityContext, origin: SpyTarg
   const enemy = estimateReportedPower(context, report, estimateForcePower(stacks(catalog, all)));
   const wanted = 0.6 + 0.3 * (1 - unit(context.profile.traits.riskTolerance));
   if (estimateWinProbability(estimateForcePower(stacks(catalog, all)), enemy) < wanted) return null;
+  // Against a Gate the owner throws everything it has: the campaign is at stake.
+  if (context.rivalGateHosts?.has(targetPlanetId)) return all;
   // Smallest share of the available force (in tenths) that still meets the margin.
   for (let tenths = 1; tenths <= 10; tenths += 1) {
     const force: Record<string, number> = {};
@@ -489,6 +517,11 @@ export function flightRemoteness(from: Readonly<{ galaxy: number; system: number
 export function estimateEspionageUtility(context: NpcUtilityContext, targetPlanetId: string, remoteness = 0): number {
   const traits = context.profile.traits;
   const report = context.latestReports.get(targetPlanetId);
+  // Everyone hears of a Gate; whoever wants to break it must see its defence first.
+  if (context.rivalGateHosts?.has(targetPlanetId)) {
+    const age = report ? (context.at - report.createdAt) / HOUR : Infinity;
+    return age > 1 ? 2 : -1;
+  }
   const staleness = report ? Math.min(1, (context.at - report.createdAt) / (48 * HOUR)) : 1;
   return -0.25 + 0.6 * staleness * (unit(traits.aggression) + unit(traits.militaryFocus)) / 2
     + 0.4 * staleness * (strategyOf(context).war - 0.3) - 0.6 * remoteness;

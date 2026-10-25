@@ -70,7 +70,18 @@ import { getAvailableFleetForPlanet } from './flights.ts';
 /** UI event: open «Командование → Операции» (from the fleet mission tile). */
 export const OPEN_SUN_OPERATIONS_EVENT = 'asterion:open-sun-operations';
 
-export type SunRuntimeOptions = { now: number; mode: RuntimeMode; testTimeScale?: number };
+/**
+ * `timeScale` is the NPC replay's campaign scale: NPC commands pass it so their
+ * Sun flights and Gates run on the same clock as every other NPC flight.
+ */
+export type SunRuntimeOptions = { now: number; mode: RuntimeMode; testTimeScale?: number; timeScale?: number };
+
+function scaleSunDuration(durationMs: number, options: SunRuntimeOptions): number {
+  if (options.timeScale !== undefined && Number.isFinite(options.timeScale) && options.timeScale > 0) {
+    return Math.max(1, Math.round(Math.max(1, Math.round(durationMs)) / options.timeScale));
+  }
+  return scaleRuntimeDuration(durationMs, options.mode, options.testTimeScale);
+}
 
 /** Reason codes shared with FlightErrorCode, so the Fleets screen gets the real cause. */
 export type SunFailureCode =
@@ -354,8 +365,8 @@ function createSunFlight(
   // A raid always takes exactly 3 h each way (scaled like every timer); support
   // uses the ordinary route so defenders inside the galaxy can arrive in time.
   const oneWayDurationMs = input.missionId === 'sun-attack'
-    ? scaleRuntimeDuration(SUN_RAID_CONFIG.flightOneWayMs, options.mode, options.testTimeScale)
-    : scaleRuntimeDuration(base.oneWayDurationMs, options.mode, options.testTimeScale);
+    ? scaleSunDuration(SUN_RAID_CONFIG.flightOneWayMs, options)
+    : scaleSunDuration(base.oneWayDurationMs, options);
   const snapshot: SunFlightSnapshot = {
     version: 1,
     raidId: input.raidId,
@@ -444,6 +455,14 @@ function ownerHasPlanetInGalaxy(state: SaveState, owner: SunOwner, galaxy: numbe
 
 /* ------------------------------------------------------------ launch rules */
 
+/** Raid ids stay short enough for the save (NPC request ids are long JSON keys). */
+function raidIdFor(requestId: string): string {
+  if (requestId.length <= 100) return `sun-raid-${requestId}`;
+  let hash = 2_166_136_261;
+  for (let index = 0; index < requestId.length; index += 1) hash = Math.imul(hash ^ requestId.charCodeAt(index), 16_777_619) >>> 0;
+  return `sun-raid-npc-${hash.toString(36)}-${requestId.length}`;
+}
+
 export type RaidLaunchInput = { galaxy: number; system: number; originPlanetId: string; ships: Partial<Record<ShipId, number>>; commanders?: Partial<Record<CommanderId, number>>; requestId: string };
 
 /**
@@ -477,7 +496,7 @@ function launchRaidFor(state: SaveState, owner: SunOwner, input: RaidLaunchInput
   const shipError = validateShips(owner, ships, commanders);
   if (shipError) return { ok: false, state, error: shipError };
   const alliance = membership!.alliance;
-  const raidId = `sun-raid-${input.requestId}`;
+  const raidId = raidIdFor(input.requestId);
   const flight = createSunFlight(owner, {
     missionId: 'sun-attack', raidId, galaxy: input.galaxy, system: input.system, ships, commanders,
     requestId: input.requestId, departedAt: options.now, allianceId: alliance.id,
@@ -642,7 +661,7 @@ export function previewSunLaunch(
   if (!error && input.kind === 'support') error = supportCheck(state, owner, raid, ships, options, false, commanders);
   if (!error && flight && getPlanetResources(state, owner.planetId).gas < flight.gasCost) error = `Недостаточно газа: нужно ${flight.gasCost.toLocaleString('ru-RU')}.`;
   const oneWayMs = input.kind === 'attack'
-    ? scaleRuntimeDuration(SUN_RAID_CONFIG.flightOneWayMs, options.mode, options.testTimeScale)
+    ? scaleSunDuration(SUN_RAID_CONFIG.flightOneWayMs, options)
     : flight?.oneWayDurationMs ?? 0;
   return {
     population,
@@ -860,7 +879,7 @@ function resolveRaid(state: SaveState, raid: SunRaidRecord, at: number, options:
   let crystalRoll: NonNullable<SunRaidRecord['result']>['crystalRoll'] = undefined;
   const events: SunRaidEvent[] = [];
   if (winner === 'attacker') {
-    const dimmed = applyRaidVictoryToSun(sun, at, scaleRuntimeDuration(SUN_RAID_CONFIG.recoverStepMs, options.mode, options.testTimeScale));
+    const dimmed = applyRaidVictoryToSun(sun, at, scaleSunDuration(SUN_RAID_CONFIG.recoverStepMs, options));
     sunRaid = { ...sunRaid, suns: { ...sunRaid.suns, [sunKey(raid.galaxy, raid.system)]: dimmed } };
     after = projectSun(dimmed, at).brightness;
     frozen = projectSun(dimmed, at).frozen;
@@ -1099,7 +1118,7 @@ function startGateFor(state: SaveState, host: GateHost, options: SunRuntimeOptio
     hostPlanetId: host.planetId,
     hostPlanetName: host.planetName,
     startedAt: options.now,
-    completesAt: options.now + scaleRuntimeDuration(SUN_RAID_CONFIG.gateBuildMs, options.mode, options.testTimeScale),
+    completesAt: options.now + scaleSunDuration(SUN_RAID_CONFIG.gateBuildMs, options),
     status: 'building',
     crystals: [...context.crystals],
     announcedMilestones: [],
@@ -1206,7 +1225,7 @@ function reconcileGateAssaults(state: SaveState, now: number, options: SunRuntim
       : { kind: 'kept' as const };
     if (outcome.kind !== 'kept') sunRaid = removeCrystal(sunRaid, gate.holder, outcome.crystal);
     if (outcome.kind === 'stolen' && attacker) sunRaid = addCrystal(sunRaid, attacker.holder, outcome.crystal);
-    sunRaid = { ...sunRaid, gateCooldowns: { ...sunRaid.gateCooldowns, [holderKey(gate.holder)]: now + scaleRuntimeDuration(SUN_RAID_CONFIG.gateRestartCooldownMs, options.mode, options.testTimeScale) } };
+    sunRaid = { ...sunRaid, gateCooldowns: { ...sunRaid.gateCooldowns, [holderKey(gate.holder)]: now + scaleSunDuration(SUN_RAID_CONFIG.gateRestartCooldownMs, options) } };
     const attackerName = !assault ? 'неизвестный враг' : assault.ownerSide === 'bot01' ? 'Бот 01' : ownerDisplayName(state, attackerId);
     const crystalText = outcome.kind === 'stolen' ? ` ${attackerName} похитил ${SOLAR_CRYSTALS[outcome.crystal].name}.`
       : outcome.kind === 'destroyed' ? ` ${SOLAR_CRYSTALS[outcome.crystal].name} уничтожен.`

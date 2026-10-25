@@ -21,6 +21,8 @@ const AUTONOMY_MISSIONS = new Set([
   'aid',
   'space-flight',
   'recycle',
+  'sun-attack',
+  'sun-support',
 ]);
 
 const FLIGHT_PHASES = new Set(['outbound', 'returning', 'arrived', 'completed', 'failed']);
