@@ -195,7 +195,7 @@ test('the Gate follows the alliance leader: the leader leaves, the successor car
   assert.equal(currentSunRaidState(state).campaignResult?.playerWon, false, 'the player left the winning alliance');
 });
 
-test('a won assault on the Gate host destroys the Gate and hands one crystal to the attacker', () => {
+test('a won assault by an alliance member destroys the Gate and one crystal, never steals it (25.10.2026)', () => {
   let state = createInitialSaveState('test', T0);
   for (let index = 0; index < 4; index += 1) state = ok(testGrantCrystal(state, options(T0))).state;
   state = ok(startGateConstruction(state, 'helion-01', options(T0))).state;
@@ -213,7 +213,8 @@ test('a won assault on the Gate host destroys the Gate and hands one crystal to 
     const playerHolder = `alliance:${selectOwnerMembership(state.command, state.profile.playerId)!.alliance.id}`;
     const botHolder = `alliance:${selectOwnerMembership(state.command, TEST_BOT_OWNER_ID)!.alliance.id}`;
     assert.equal((sunRaid.crystals[playerHolder] ?? []).length, 3);
-    assert.equal((sunRaid.crystals[botHolder] ?? []).length, 1);
+    assert.equal((sunRaid.crystals[botHolder] ?? []).length, 0);
+    assert.equal(gate.destroyedBy?.outcome, 'destroyed');
     assert.ok(sunRaid.gateCooldowns[playerHolder]! > flight.arrivalAt);
     assert.equal(selectGateContext(state, flight.arrivalAt + 2).canStart, false);
   } else {
@@ -311,4 +312,18 @@ test('«Поддержка солнца» from Fleets: no alliance needed, civil
   assert.ok(getSunDebris(state, 1, 1) < debris, 'recyclers took Sun debris');
   const arrival = state.reports.recyclerArrivalReports?.find((item) => item.collectedDebris > 0);
   assert.deepEqual(arrival?.coordinate, { galaxy: 1, system: 1, position: 0 });
+});
+
+test('solo crystals are personal: joining an alliance makes them vanish (25.10.2026)', () => {
+  let state = createInitialSaveState('test', T0);
+  assert.ok(selectOwnerMembership(state.command, state.profile.playerId), 'the Test Mode player starts in an alliance');
+  const soloKey = `owner:${state.profile.playerId}`;
+  const sunRaid = currentSunRaidState(state);
+  state = { ...state, sunRaid: { ...sunRaid, crystals: { ...sunRaid.crystals, [soloKey]: ['crystal-1', 'crystal-3'] } } };
+  const reconciled = reconcileSunRaids(state, options(T0 + 1_000));
+  assert.deepEqual(currentSunRaidState(reconciled.state).crystals[soloKey], []);
+  assert.ok(reconciled.notices.some((notice) => /рассыпались/.test(notice.text)));
+  // Alliance crystals are untouched.
+  const allianceKey = `alliance:${selectOwnerMembership(state.command, state.profile.playerId)!.alliance.id}`;
+  assert.deepEqual(currentSunRaidState(reconciled.state).crystals[allianceKey] ?? [], sunRaid.crystals[allianceKey] ?? []);
 });

@@ -33,7 +33,8 @@ import {
   materializeSun,
   mergeSideShipLevels,
   mergeSideTechnologies,
-  pickStolenCrystal,
+  parseHolderKey,
+  resolveGateBreach,
   projectSun,
   readSun,
   removeCrystal,
@@ -186,6 +187,8 @@ type SunOwner = {
   ownerId: string;
   ownerName: string;
   ownerSide: 'player' | 'bot01' | 'npc';
+  /** An autonomous NPC owner: its own planet in espionage targets, the same gas price as the player's. */
+  autonomous?: boolean;
   factionId: CombatFactionId;
   planetId: string;
   planetName: string;
@@ -239,6 +242,34 @@ function bot01Owner(state: SaveState, target: SpyTargetState): SunOwner {
     availableCommanders: {},
     commanderLevels: { ...(profile?.commanderLevels ?? {}) },
   };
+}
+
+/** A real autonomous NPC on one of its own planets: its own science, ship levels and free hangar. */
+function npcTargetOwner(target: SpyTargetState): SunOwner {
+  const profile = target.ownerProfile;
+  // Ships in flight are already off the planet: NPC dispatch detaches them.
+  return {
+    ownerId: target.ownerId,
+    ownerName: target.ownerName,
+    ownerSide: 'npc',
+    autonomous: true,
+    factionId: target.raceId,
+    planetId: target.id,
+    planetName: target.name,
+    coordinate: { ...target.coordinate },
+    technologies: technologiesFromScience(profile?.scienceLevels ?? {}),
+    shipLevels: { ...(profile?.shipLevels ?? {}) },
+    scienceLevels: profile?.scienceLevels ?? {},
+    available: { ...target.fleet.ships },
+    availableCommanders: {},
+    commanderLevels: { ...(profile?.commanderLevels ?? {}) },
+  };
+}
+
+/** The Sun-raid view of an autonomous NPC planet, or null when it is not that owner's. */
+export function sunOwnerForNpcPlanet(state: SaveState, ownerId: string, planetId: string): SunOwner | null {
+  const target = getEspionageTargets(state.espionage)[planetId];
+  return target && target.kind === 'npc' && target.ownerId === ownerId ? npcTargetOwner(target) : null;
 }
 
 function allyOwner(state: SaveState): SunOwner | null {
@@ -308,6 +339,7 @@ function createSunFlight(
     requestId: input.requestId,
     missionId: input.missionId,
     ...(owner.ownerSide === 'player' ? {} : { ownerSide: owner.ownerSide }),
+    ...(owner.autonomous ? { ownerId: owner.ownerId } : {}),
     originPlanetId: owner.planetId,
     originCoordinate: owner.coordinate,
     destination,
@@ -342,7 +374,7 @@ function createSunFlight(
     routeDistance: Math.max(1, base.routeDistance),
     oneWayDurationMs,
     arrivalAt: input.departedAt + oneWayDurationMs,
-    gasCost: owner.ownerSide === 'player' ? base.gasCost : 0,
+    gasCost: owner.ownerSide === 'player' || owner.autonomous ? base.gasCost : 0,
     sunRaid: snapshot,
   };
 }
@@ -381,7 +413,7 @@ function detachNpcShips(state: SaveState, owner: SunOwner, ships: Partial<Record
     for (const [id, count] of Object.entries(ships) as [ShipId, number][]) next[id] = Math.max(0, (next[id] ?? 0) + sign * safeCount(count));
     return next;
   };
-  if (owner.ownerSide === 'bot01') {
+  if (owner.ownerSide === 'bot01' || owner.autonomous) {
     const target = getEspionageTargets(state.espionage)[owner.planetId];
     if (!target || !state.espionage) return state;
     const fleet = { ...target.fleet, ships: apply(target.fleet.ships) as typeof target.fleet.ships };
@@ -394,6 +426,20 @@ function detachNpcShips(state: SaveState, owner: SunOwner, ships: Partial<Record
   const planet = state.alliedPlanets?.[owner.planetId];
   if (!planet) return state;
   return replaceAlliedPlanetState(state, owner.planetId, { ...planet, fleet: { ...planet.fleet, ships: apply(planet.fleet.ships) as typeof planet.fleet.ships } });
+}
+
+/** Charges an autonomous NPC the flight's gas on its own planet; false when it cannot pay. */
+function chargeNpcGas(state: SaveState, owner: SunOwner, gasCost: number): SaveState | null {
+  if (!owner.autonomous || gasCost <= 0) return state;
+  const target = getEspionageTargets(state.espionage)[owner.planetId];
+  if (!target || !state.espionage || target.resources.gas < gasCost) return null;
+  const targets = { ...getEspionageTargets(state.espionage), [target.id]: { ...target, resources: { ...target.resources, gas: target.resources.gas - gasCost } } };
+  return { ...state, espionage: { ...state.espionage, targets } };
+}
+
+function ownerHasPlanetInGalaxy(state: SaveState, owner: SunOwner, galaxy: number): boolean {
+  if (owner.ownerSide === 'player') return Object.values(state.planets).some((planet) => (planet.universeGalaxy ?? 1) === galaxy);
+  return Object.values(getEspionageTargets(state.espionage)).some((target) => target.ownerId === owner.ownerId && target.coordinate.galaxy === galaxy);
 }
 
 /* ------------------------------------------------------------ launch rules */
@@ -458,6 +504,11 @@ function launchRaidFor(state: SaveState, owner: SunOwner, input: RaidLaunchInput
     const resources = getPlanetResources(next, owner.planetId);
     next = replacePlanetResources(next, owner.planetId, { ...resources, gas: resources.gas - flight.gasCost });
   }
+  if (owner.autonomous) {
+    const charged = chargeNpcGas(next, owner, flight.gasCost);
+    if (!charged) return { ok: false, state, error: 'Недостаточно газа.' };
+    next = charged;
+  }
   next = detachNpcShips(next, owner, ships, -1);
   const event: SunRaidEvent = {
     id: `${raidId}:launched`, at: options.now, kind: 'raid-launched', galaxy: input.galaxy, system: input.system,
@@ -467,13 +518,20 @@ function launchRaidFor(state: SaveState, owner: SunOwner, input: RaidLaunchInput
   return { ok: true, state: next, notice: `Рейд на Солнце ${formatSun(input.galaxy, input.system)} объявлен. Прибытие через 3 ч.`, raidId, flightId: flight.id };
 }
 
+/** An autonomous NPC leader or deputy declares a raid from one of its planets, by the player's rules. */
+export function launchNpcSunRaid(state: SaveState, ownerId: string, input: RaidLaunchInput, options: SunRuntimeOptions): SunActionResult {
+  const owner = sunOwnerForNpcPlanet(state, ownerId, input.originPlanetId);
+  if (!owner) return { ok: false, state, error: 'Планета отправления не найдена.' };
+  return launchRaidFor(state, owner, input, options);
+}
+
 export type SupportInput = { raidId: string; originPlanetId: string; ships: Partial<Record<ShipId, number>>; commanders?: Partial<Record<CommanderId, number>>; requestId: string; departedAt?: number };
 
 function supportCheckDetailed(state: SaveState, owner: SunOwner, raid: SunRaidRecord | undefined, ships: Partial<Record<ShipId, number>>, options: SunRuntimeOptions, fixture: boolean, commanders: Partial<Record<CommanderId, number>> = {}): SunFailure | null {
   if (!raid || raid.status !== 'incoming') return { code: 'target-not-available', message: 'Входящей атаки на это Солнце уже нет.' };
   const membership = allianceOf(state, owner.ownerId);
   if (membership?.alliance.id === raid.allianceId) return { code: 'target-not-available', message: 'Нельзя защищать Солнце от рейда собственного союза.' };
-  if (!fixture && !Object.values(state.planets).some((planet) => (planet.universeGalaxy ?? 1) === raid.galaxy)) {
+  if (!fixture && !ownerHasPlanetInGalaxy(state, owner, raid.galaxy)) {
     return { code: 'target-not-available', message: 'Защищать Солнце может только владелец планеты в этой галактике.' };
   }
   const population = sunFleetPopulation(ships, owner.factionId, commanders);
@@ -502,6 +560,13 @@ export function sendSunSupport(state: SaveState, input: SupportInput, options: S
   return sendSupportFor(state, owner, input, options, false);
 }
 
+/** An autonomous NPC sends «Поддержка солнца» from one of its planets, by the player's rules. */
+export function sendNpcSunSupport(state: SaveState, ownerId: string, input: SupportInput, options: SunRuntimeOptions): SunActionResult {
+  const owner = sunOwnerForNpcPlanet(state, ownerId, input.originPlanetId);
+  if (!owner) return { ok: false, state, error: 'Планета отправления не найдена.', code: 'invalid-command' };
+  return sendSupportFor(state, owner, input, options, false);
+}
+
 function sendSupportFor(state: SaveState, owner: SunOwner, input: SupportInput, options: SunRuntimeOptions, fixture: boolean): SunActionResult {
   const existing = state.flights.records.find((flight) => flight.requestId === input.requestId);
   if (existing) return { ok: true, state, notice: 'Флот поддержки уже отправлен.', flightId: existing.id };
@@ -524,6 +589,11 @@ function sendSupportFor(state: SaveState, owner: SunOwner, input: SupportInput, 
     const resources = getPlanetResources(next, owner.planetId);
     if (resources.gas < flight.gasCost) return { ok: false, state, error: `Недостаточно газа: нужно ${flight.gasCost.toLocaleString('ru-RU')}.`, code: 'insufficient-gas' };
     next = replacePlanetResources(next, owner.planetId, { ...resources, gas: resources.gas - flight.gasCost });
+  }
+  if (owner.autonomous) {
+    const charged = chargeNpcGas(next, owner, flight.gasCost);
+    if (!charged) return { ok: false, state, error: 'Недостаточно газа.', code: 'insufficient-gas' };
+    next = charged;
   }
   next = detachNpcShips(next, owner, ships, -1);
   return { ok: true, state: next, notice: `${owner.ownerName}: флот поддержки летит к Солнцу ${formatSun(raid!.galaxy, raid!.system)}.`, flightId: flight.id };
@@ -921,7 +991,11 @@ function ownerOfFlight(state: SaveState, flight: FlightRecord): SunOwner | null 
     const target = getEspionageTargets(state.espionage)[flight.originPlanetId];
     return target ? bot01Owner(state, target) : null;
   }
-  if (flight.ownerSide === 'npc') return allyOwner(state);
+  if (flight.ownerSide === 'npc') {
+    const target = getEspionageTargets(state.espionage)[flight.originPlanetId];
+    if (flight.ownerId && target?.kind === 'npc' && target.ownerId === flight.ownerId) return npcTargetOwner(target);
+    return flight.ownerId && flight.ownerId !== TEST_ALLY_OWNER_ID ? null : allyOwner(state);
+  }
   return null;
 }
 
@@ -939,8 +1013,31 @@ function hostFor(state: SaveState, ownerId: string, preferredPlanetId?: string):
   }
   const allied = Object.values(state.alliedPlanets ?? {}).find((planet) => planet.ownerId === ownerId);
   if (allied) return { ownerId, ownerName: allied.displayName, planetId: allied.id, planetName: allied.name };
-  const target = Object.values(getEspionageTargets(state.espionage)).filter((item) => item.ownerId === ownerId).sort((a, b) => a.id.localeCompare(b.id))[0];
+  // The Gate stands on the owner's main planet: an NPC's home world, else its oldest planet.
+  const targets = getEspionageTargets(state.espionage);
+  const owned = Object.values(targets).filter((item) => item.ownerId === ownerId).sort((a, b) => a.id.localeCompare(b.id));
+  const target = (preferredPlanetId ? owned.find((item) => item.id === preferredPlanetId) : undefined)
+    ?? owned.find((item) => item.id === `${ownerId}-planet`) ?? owned[0];
   return target ? { ownerId, ownerName: target.ownerName, planetId: target.id, planetName: target.name } : null;
+}
+
+function ownerDisplayName(state: SaveState, ownerId: string): string {
+  if (ownerId === state.profile.playerId) return state.profile.displayName;
+  return Object.values(getEspionageTargets(state.espionage)).find((item) => item.ownerId === ownerId)?.ownerName ?? ownerId;
+}
+
+/** The crystal holder an owner plays for: its alliance, or itself when solo. */
+export function crystalHolderOf(state: SaveState, ownerId: string): { holder: CrystalHolder; holderName: string; isLeaderOrSolo: boolean } {
+  const membership = allianceOf(state, ownerId);
+  return membership
+    ? { holder: { kind: 'alliance', id: membership.alliance.id }, holderName: `[${membership.alliance.tag}] ${membership.alliance.name}`, isLeaderOrSolo: membership.role === 'leader' }
+    : { holder: { kind: 'owner', id: ownerId }, holderName: ownerDisplayName(state, ownerId), isLeaderOrSolo: true };
+}
+
+function hostPlanetExists(state: SaveState, gate: GateProject): boolean {
+  if (gate.hostOwnerId === state.profile.playerId) return Boolean(state.planets[gate.hostPlanetId]);
+  if (gate.hostOwnerId === TEST_ALLY_OWNER_ID || state.alliedPlanets?.[gate.hostPlanetId]) return true;
+  return getEspionageTargets(state.espionage)[gate.hostPlanetId]?.ownerId === gate.hostOwnerId;
 }
 
 export type GateContext = {
@@ -955,14 +1052,17 @@ export type GateContext = {
 
 /** What the Gate card shows for the local player on one of their planets. */
 export function selectGateContext(state: SaveState, now: number): GateContext {
+  return selectOwnerGateContext(state, state.profile.playerId, now);
+}
+
+/** The same Gate rules for any owner (the player or an autonomous NPC). */
+export function selectOwnerGateContext(state: SaveState, ownerId: string, now: number): GateContext {
   const sunRaid = currentSunRaidState(state);
-  const membership = allianceOf(state, state.profile.playerId);
-  const holder: CrystalHolder = membership ? { kind: 'alliance', id: membership.alliance.id } : { kind: 'owner', id: state.profile.playerId };
-  const isLeaderOrSolo = !membership || membership.role === 'leader';
+  const { holder, holderName, isLeaderOrSolo } = crystalHolderOf(state, ownerId);
   const check = checkGateStart({ state: sunRaid, holder, isLeaderOrSolo, now });
   return {
     holder,
-    holderName: membership ? `[${membership.alliance.tag}] ${membership.alliance.name}` : state.profile.displayName,
+    holderName,
     crystals: getHolderCrystals(sunRaid, holder),
     canStart: check.ok,
     reason: check.ok ? null : check.message,
@@ -975,17 +1075,29 @@ export function selectGateContext(state: SaveState, now: number): GateContext {
 export function startGateConstruction(state: SaveState, planetId: string, options: SunRuntimeOptions): SunActionResult {
   const planet = state.planets[planetId];
   if (!planet) return { ok: false, state, error: 'Врата строятся только на своей планете.' };
-  const context = selectGateContext(state, options.now);
+  return startGateFor(state, { ownerId: state.profile.playerId, ownerName: state.profile.displayName, planetId, planetName: planet.name }, options);
+}
+
+/** An autonomous NPC (solo, or its alliance's leader) lays the Gate on its main planet. */
+export function startNpcGateConstruction(state: SaveState, ownerId: string, options: SunRuntimeOptions): SunActionResult {
+  const host = hostFor(state, ownerId);
+  if (!host || ownerId === state.profile.playerId) return { ok: false, state, error: 'Главная планета не найдена.' };
+  return startGateFor(state, host, options);
+}
+
+function startGateFor(state: SaveState, host: GateHost, options: SunRuntimeOptions): SunActionResult {
+  const context = selectOwnerGateContext(state, host.ownerId, options.now);
   if (!context.canStart) return { ok: false, state, error: context.reason ?? 'Строительство недоступно.' };
   const sunRaid = currentSunRaidState(state);
+  const planet = { name: host.planetName };
   const gate: GateProject = {
     id: `gate-${holderKey(context.holder).replace(':', '-')}-${options.now}`,
     holder: context.holder,
     holderName: context.holderName,
-    hostOwnerId: state.profile.playerId,
-    hostOwnerName: state.profile.displayName,
-    hostPlanetId: planetId,
-    hostPlanetName: planet.name,
+    hostOwnerId: host.ownerId,
+    hostOwnerName: host.ownerName,
+    hostPlanetId: host.planetId,
+    hostPlanetName: host.planetName,
     startedAt: options.now,
     completesAt: options.now + scaleRuntimeDuration(SUN_RAID_CONFIG.gateBuildMs, options.mode, options.testTimeScale),
     status: 'building',
@@ -1058,8 +1170,10 @@ function reconcileGates(state: SaveState, now: number, notices: SunRaidNotice[])
 }
 
 /**
- * A won attack on the Gate's host planet destroys the Gate: the destroyer
- * takes one crystal it lacks, the rest stay with the holder, restart waits.
+ * A won attack on the Gate's host planet destroys the Gate, whoever attacked
+ * (player, NPC or Test Mode Bot 01). What happens to the crystals follows the
+ * owner rules of 25.10.2026 (`resolveGateBreach`): a solo attacker may steal
+ * one, an alliance attacker destroys one, a solo holder keeps them half the time.
  */
 function reconcileGateAssaults(state: SaveState, now: number, options: SunRuntimeOptions, notices: SunRaidNotice[]): SaveState {
   let sunRaid = currentSunRaidState(state);
@@ -1068,36 +1182,77 @@ function reconcileGateAssaults(state: SaveState, now: number, options: SunRuntim
   let changed = false;
   const events: SunRaidEvent[] = [];
   const reports = new Map(state.combat.reports.map((report) => [report.id, report]));
+  const hostIds = new Set(building.map((gate) => gate.hostPlanetId));
+  const assaults = state.flights.records.filter((flight) => flight.missionId === 'attack' && flight.attackResolution
+    && flight.destinationPlanetId !== undefined && hostIds.has(flight.destinationPlanetId));
+  const playerId = state.profile.playerId;
   const gates = sunRaid.gates.map((gate) => {
     if (gate.status !== 'building') return gate;
-    const hostLost = gate.hostOwnerId === state.profile.playerId && !state.planets[gate.hostPlanetId];
-    const assault = state.flights.records.find((flight) => flight.missionId === 'attack' && flight.ownerSide === 'bot01'
-      && flight.destinationPlanetId === gate.hostPlanetId && flight.attackResolution
-      && flight.attackResolution.resolvedAt >= gate.startedAt && flight.attackResolution.resolvedAt <= now
-      && reports.get(flight.attackResolution.reportId)?.winner === 'attacker');
+    const hostLost = !hostPlanetExists(state, gate);
+    const assault = assaults
+      .filter((flight) => flight.destinationPlanetId === gate.hostPlanetId
+        && flight.attackResolution!.resolvedAt >= gate.startedAt && flight.attackResolution!.resolvedAt <= now
+        && (reports.get(flight.attackResolution!.reportId)?.winner === 'attacker' || flight.attackResolution!.planetDestroyed))
+      .sort((left, right) => left.attackResolution!.resolvedAt - right.attackResolution!.resolvedAt || left.id.localeCompare(right.id))[0];
     if (!assault && !hostLost) return gate;
-    const attackerId = assault ? TEST_BOT_OWNER_ID : 'unknown';
-    const attackerMembership = assault ? allianceOf(state, attackerId) : null;
-    const attackerHolder: CrystalHolder = attackerMembership ? { kind: 'alliance', id: attackerMembership.alliance.id } : { kind: 'owner', id: attackerId };
-    let stolen: import('../domain/sun-raid/config.ts').SolarCrystalId | undefined;
-    if (assault) {
-      const pick = pickStolenCrystal(gate.id, getHolderCrystals(sunRaid, gate.holder), getHolderCrystals(sunRaid, attackerHolder));
-      if (pick) {
-        stolen = pick;
-        sunRaid = addCrystal(removeCrystal(sunRaid, gate.holder, pick), attackerHolder, pick);
-      }
-    }
+    const attackerId = !assault ? 'unknown'
+      : assault.ownerSide === 'bot01' ? TEST_BOT_OWNER_ID
+      : assault.ownerSide === 'npc' ? assault.ownerId ?? 'unknown'
+      : playerId;
+    const attacker = assault ? crystalHolderOf(state, attackerId) : null;
+    const attackerSolo = attacker?.holder.kind === 'owner';
+    const outcome = attacker
+      ? resolveGateBreach(gate.id, gate.holder, getHolderCrystals(sunRaid, gate.holder), attackerSolo, getHolderCrystals(sunRaid, attacker.holder))
+      : { kind: 'kept' as const };
+    if (outcome.kind !== 'kept') sunRaid = removeCrystal(sunRaid, gate.holder, outcome.crystal);
+    if (outcome.kind === 'stolen' && attacker) sunRaid = addCrystal(sunRaid, attacker.holder, outcome.crystal);
     sunRaid = { ...sunRaid, gateCooldowns: { ...sunRaid.gateCooldowns, [holderKey(gate.holder)]: now + scaleRuntimeDuration(SUN_RAID_CONFIG.gateRestartCooldownMs, options.mode, options.testTimeScale) } };
-    const attackerName = assault ? 'Бот 01' : 'неизвестный враг';
-    events.push({ id: `${gate.id}:destroyed`, at: now, kind: 'gate-destroyed', text: `Врата ${gate.holderName} разрушены (${attackerName}).${stolen ? ` Похищен ${SOLAR_CRYSTALS[stolen].name}.` : ''}` });
-    notices.push({ tone: 'error', text: `Врата ${gate.holderName} разрушены.${stolen ? ` ${attackerName} забрал ${SOLAR_CRYSTALS[stolen].name}.` : ''}` });
+    const attackerName = !assault ? 'неизвестный враг' : assault.ownerSide === 'bot01' ? 'Бот 01' : ownerDisplayName(state, attackerId);
+    const crystalText = outcome.kind === 'stolen' ? ` ${attackerName} похитил ${SOLAR_CRYSTALS[outcome.crystal].name}.`
+      : outcome.kind === 'destroyed' ? ` ${SOLAR_CRYSTALS[outcome.crystal].name} уничтожен.`
+      : assault ? ' Кристаллы уцелели.' : '';
+    events.push({ id: `${gate.id}:destroyed`, at: now, kind: 'gate-destroyed', text: `Врата ${gate.holderName} разрушены (${attackerName}).${crystalText}` });
+    const playerSide = playerHolders(state).some((holder) => sameHolder(holder, gate.holder));
+    notices.push({ tone: playerSide ? 'error' : 'info', text: `Врата ${gate.holderName} разрушены.${crystalText}` });
     changed = true;
     return {
       ...gate,
       status: 'destroyed' as const,
       endedAt: now,
-      destroyedBy: { ownerId: attackerId, ownerName: attackerName, holder: attackerHolder, ...(stolen ? { crystal: stolen } : {}), ...(assault?.attackResolution ? { reportId: assault.attackResolution.reportId } : {}) },
+      destroyedBy: {
+        ownerId: attackerId, ownerName: attackerName, holder: attacker?.holder ?? { kind: 'owner' as const, id: attackerId },
+        ...(outcome.kind === 'stolen' ? { crystal: outcome.crystal } : {}),
+        ...(outcome.kind !== 'kept' ? { outcome: outcome.kind, lostCrystal: outcome.crystal } : { outcome: 'kept' as const }),
+        ...(assault?.attackResolution ? { reportId: assault.attackResolution.reportId } : {}),
+      },
     };
+  });
+  if (!changed) return state;
+  return withSunRaid(state, appendSunEvents({ ...sunRaid, gates }, events));
+}
+
+/**
+ * Solo crystals are personal (owner rule 25.10.2026): an owner who joins an
+ * alliance loses them, and a solo Gate it was building is cancelled.
+ */
+function burnSoloCrystalsOfAllianceMembers(state: SaveState, now: number, notices: SunRaidNotice[]): SaveState {
+  let sunRaid = currentSunRaidState(state);
+  let changed = false;
+  const events: SunRaidEvent[] = [];
+  for (const [key, crystals] of Object.entries(sunRaid.crystals)) {
+    const holder = parseHolderKey(key);
+    if (!holder || holder.kind !== 'owner' || !crystals.length || !allianceOf(state, holder.id)) continue;
+    sunRaid = { ...sunRaid, crystals: { ...sunRaid.crystals, [key]: [] } };
+    const name = ownerDisplayName(state, holder.id);
+    events.push({ id: `crystals-burned:${holder.id}:${now}`, at: now, kind: 'gate-cancelled', text: `${name} вступил в союз: его кристаллы одиночки (${crystals.length}) рассыпались.` });
+    if (holder.id === state.profile.playerId) notices.push({ tone: 'error', text: `Вы вступили в союз: кристаллы одиночки (${crystals.length}) рассыпались.` });
+    changed = true;
+  }
+  const gates = sunRaid.gates.map((gate) => {
+    if (gate.status !== 'building' || gate.holder.kind !== 'owner' || !allianceOf(state, gate.holder.id)) return gate;
+    changed = true;
+    events.push({ id: `${gate.id}:cancelled`, at: now, kind: 'gate-cancelled', text: `Врата ${gate.holderName} отменены: владелец вступил в союз.` });
+    return { ...gate, status: 'cancelled' as const, endedAt: now };
   });
   if (!changed) return state;
   return withSunRaid(state, appendSunEvents({ ...sunRaid, gates }, events));
@@ -1213,6 +1368,7 @@ export function reconcileSunRaids(state: SaveState, options: SunRuntimeOptions):
   }));
   if (sunsChanged) next = withSunRaid(next, { ...currentSunRaidState(next), suns: materialized });
 
+  next = burnSoloCrystalsOfAllianceMembers(next, now, notices);
   next = reconcileGateAssaults(next, now, options, notices);
   next = reconcileGates(next, now, notices);
   next = resyncSolarEnergy(next, startSignature, now);

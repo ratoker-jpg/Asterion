@@ -138,6 +138,8 @@ function migrateGate(value: unknown): GateProject | null {
         holder: destroyer,
         ...(SOLAR_CRYSTAL_IDS.includes(destroyedBy.crystal as SolarCrystalId) ? { crystal: destroyedBy.crystal as SolarCrystalId } : {}),
         ...(text(destroyedBy.reportId) ? { reportId: text(destroyedBy.reportId)! } : {}),
+        ...(destroyedBy.outcome === 'kept' || destroyedBy.outcome === 'stolen' || destroyedBy.outcome === 'destroyed' ? { outcome: destroyedBy.outcome } : {}),
+        ...(SOLAR_CRYSTAL_IDS.includes(destroyedBy.lostCrystal as SolarCrystalId) ? { lostCrystal: destroyedBy.lostCrystal as SolarCrystalId } : {}),
       },
     } : {}),
   };

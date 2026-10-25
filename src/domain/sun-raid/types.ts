@@ -103,7 +103,12 @@ export type GateProject = {
   crystals: SolarCrystalId[];
   announcedMilestones: number[];
   endedAt?: number;
-  destroyedBy?: { ownerId: string; ownerName: string; holder: CrystalHolder; crystal?: SolarCrystalId; reportId?: string };
+  /**
+   * `crystal` is the stolen one (kept for old saves); `outcome` and
+   * `lostCrystal` describe the breach under the 25.10.2026 rules.
+   */
+  destroyedBy?: { ownerId: string; ownerName: string; holder: CrystalHolder; crystal?: SolarCrystalId; reportId?: string;
+    outcome?: 'kept' | 'stolen' | 'destroyed'; lostCrystal?: SolarCrystalId };
 };
 
 export type SunRaidEventKind =

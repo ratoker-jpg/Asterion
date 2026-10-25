@@ -141,6 +141,30 @@ export function pickStolenCrystal(seed: string, ownerCrystals: readonly SolarCry
   return candidates[Math.floor(random() * candidates.length)]!;
 }
 
+export type GateBreachOutcome =
+  | { kind: 'kept' }
+  | { kind: 'stolen'; crystal: SolarCrystalId }
+  | { kind: 'destroyed'; crystal: SolarCrystalId };
+
+/**
+ * What a won assault on a Gate under construction does to the holder's
+ * crystals (owner rules 25.10.2026). A solo holder keeps them all half the
+ * time. Otherwise one crystal is lost: a solo attacker steals it (one he
+ * lacks) 70% of the time and destroys it otherwise; an alliance attacker
+ * always destroys it, so the alliance must raid Suns again.
+ */
+export function resolveGateBreach(seed: string, holder: CrystalHolder, holderCrystals: readonly SolarCrystalId[],
+  attackerSolo: boolean, attackerCrystals: readonly SolarCrystalId[]): GateBreachOutcome {
+  if (!holderCrystals.length) return { kind: 'kept' };
+  const random = createSeededRandom(`gate-breach:${seed}`);
+  if (holder.kind === 'owner' && random() < SUN_RAID_CONFIG.soloGateKeepChance) return { kind: 'kept' };
+  const stealable = holderCrystals.filter((id) => !attackerCrystals.includes(id));
+  if (attackerSolo && stealable.length && random() < SUN_RAID_CONFIG.soloStealChance) {
+    return { kind: 'stolen', crystal: stealable[Math.floor(random() * stealable.length)]! };
+  }
+  return { kind: 'destroyed', crystal: holderCrystals[Math.floor(random() * holderCrystals.length)]! };
+}
+
 /** Highest level of every technology among one side's participants. */
 export function mergeSideTechnologies(levels: readonly CombatTechnologyLevels[]): CombatTechnologyLevels {
   const merged = createDefaultCombatTechnologies();
