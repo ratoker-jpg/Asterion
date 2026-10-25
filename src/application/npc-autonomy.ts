@@ -19,7 +19,7 @@ import { beginFlightReturn } from '../domain/flights/runtime.ts';
 import { getNpcPirateCandidates, dispatchNpcPirateMission } from './npc-pirates.ts';
 import { getNpcEndgameChoices } from './npc-endgame.ts';
 import { getNpcSpaceportCandidates, startNpcSpaceportUpgrade } from './npc-spaceport.ts';
-import { getNpcAidCandidates, dispatchNpcAid } from './npc-aid.ts';
+import { createNpcAidRequest, getNpcAidCandidates, getNpcAidRequestCandidates, dispatchNpcAid } from './npc-aid.ts';
 import { getStorageCapacities } from '../domain/buildings/balance-v1.ts';
 import { migrateBuildingLevels } from '../domain/buildings/resource-zone.ts';
 import { collectRecyclingJob, getRecyclingLevel, getRecyclingMaxConcurrentJobs, startRecyclingJob } from '../domain/buildings/recycling.ts';
@@ -385,6 +385,10 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
       return { state: result.state, started: result.ok, reason: result.reason };
     },
   });
+  for (const request of getNpcAidRequestCandidates(state, profile, at)) choices.push({ candidate: request, run: (current) => {
+    const result = createNpcAidRequest(current, ownerId, request, at, timeScale);
+    return { state: result.state, started: result.ok, reason: result.reason };
+  } });
   // The endgame by the player's rules: Gates, Sun raids, Sun defence.
   for (const choice of getNpcEndgameChoices(state, profile, utility, at, timeScale, scored)) choices.push(choice);
   for (const aid of getNpcAidCandidates(state, profile, at)) choices.push({ candidate: aid, run: (current, key) => {

@@ -110,7 +110,12 @@ export function getNpcDiplomacyCandidates(
   const social = clamp01(profile.traits.socialStyle);
   const riskTolerance = clamp01(profile.traits.riskTolerance);
 
-  if (!ownMembership) {
+  // Not everyone wants an alliance (owner rule 25.10.2026: a solo player can
+  // win). A loner by temperament stays solo; so does an owner holding solo
+  // crystals, which would crumble on joining.
+  const loner = cooperation + social < 0.6;
+  const holdsSoloCrystals = (state.sunRaid?.crystals[`owner:${ownerId}`]?.length ?? 0) > 0;
+  if (!ownMembership && !loner && !holdsSoloCrystals) {
     if (!pendingOwnApplication && !selectReapplyBlock(command, ownerId, null, at)) {
       const settings = uniqueAllianceSettings(command, publicOwnerName(state, ownerId));
       candidates.push(makeCandidate('create-alliance', `create-alliance:${ownerId}`, 0.18 + cooperation * 0.35 + social * 0.12, {

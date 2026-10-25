@@ -6,6 +6,7 @@ import { DEFAULT_ALLIANCE_EMBLEM } from '../domain/command/catalog.ts';
 import { createResourceRequest, grantAidChargesForTest } from '../domain/command/aid.ts';
 import { beginFlightReturn } from '../domain/flights/runtime.ts';
 import { createDefaultNewGameConfig } from '../domain/world/config.ts';
+import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
 import { createInitialSaveState } from './persistence.ts';
 import type { SaveState } from './contracts.ts';
 import { dispatchNpcAid, getNpcAidCandidates, resolveNpcAidArrival, settleNpcAidReturn } from './npc-aid.ts';
@@ -20,8 +21,11 @@ function setup() {
   const origin = {
     ...source,
     fleet: { ...source.fleet, ships: { ...source.fleet.ships, transporter: 100, 'mega-transporter': 20 } },
-    resources: { ...source.resources, metal: 75_000, minerals: 75_000, gas: 75_000, debris: 75_000 },
+    // Full stores with room to grow: the free surplus above the owner's reserve covers a 50 000 request.
+    buildings: { ...source.buildings, 'metal-storage': Math.max(Number(source.buildings['metal-storage'] ?? 0), 8) },
+    resources: { ...source.resources, metal: 0, minerals: 75_000, gas: 75_000, debris: 75_000 },
   };
+  origin.resources.metal = getStorageCapacities(origin.buildings).metal;
   let state: SaveState = {
     ...initial,
     espionage: { ...initial.espionage!, targets: { ...(initial.espionage?.targets ?? {}), [origin.id]: origin } },
@@ -73,6 +77,14 @@ test('NPC aid candidates are limited to open same-alliance requests and own carg
   assert.equal(candidates[0]!.payload.requestId, requestId);
   assert.equal(candidates[0]!.payload.originPlanetId, originId);
   assert.equal(candidates[0]!.payload.units, 50_000);
+  // Owner rule 25.10.2026: an ally gives only what it can spare. With a store
+  // near empty the same request gets nothing.
+  const poor = { ...state.espionage!.targets![originId]!, resources: { ...state.espionage!.targets![originId]!.resources, metal: 60_000 } };
+  const poorState = { ...state, espionage: { ...state.espionage!, targets: { ...state.espionage!.targets, [originId]: poor } } };
+  const capacity = getStorageCapacities(poor.buildings).metal;
+  const keeps = (0.65 - 0.3 * (profile.traits.cooperation ?? 0.5)) * capacity;
+  const offered = getNpcAidCandidates(poorState, profile, NOW + 10)[0]?.payload.units ?? 0;
+  assert.equal(offered, Math.max(0, Math.min(50_000, Math.floor(60_000 - keeps))));
   assert.ok(candidates[0]!.payload.transporter + candidates[0]!.payload.megaTransporter > 0);
   assert.deepEqual(getNpcAidCandidates(state, { ...profile, ownerId: state.profile.playerId }, NOW + 10), []);
 });

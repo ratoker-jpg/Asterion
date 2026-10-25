@@ -12,8 +12,17 @@ import {
   requestOpenRemainder,
   selectFulfillableRequests,
   selectRequestById,
+  AID_MIN_REQUEST,
+  MAX_OPEN_REQUESTS,
+  applyAidRegime,
+  createResourceRequest,
+  maxRequestAmount,
+  selectActiveAidLedger,
+  selectOpenRequestsOf,
+  settleAidLedger,
 } from '../domain/command/aid.ts';
-import { selectOwnerMembership } from '../domain/command/selectors.ts';
+import { selectCommandHallLevel, selectOwnerMembership } from '../domain/command/selectors.ts';
+import { selectOwnerScore } from '../domain/rating/scoring.ts';
 import { calculateRouteDistance, isFlightCoordinate } from '../domain/flights/distance.ts';
 import { addDebris, emptyTransportCargo, getCappedDelivery, getFleetCargoCapacity, normalizeTransportCargo, type TransportCargo } from '../domain/flights/cargo.ts';
 import { aidInFlightUnits } from '../domain/flights/aid-mission.ts';
@@ -97,19 +106,17 @@ function sameCoordinate(left: { galaxy: number; system: number; position: number
   return left.galaxy === right.galaxy && left.system === right.system && left.position === right.position;
 }
 
-function activeNpcShips(state: SaveState, ownerId: string, planetId: string): Partial<Record<ShipId, number>> {
-  const reserved: Partial<Record<ShipId, number>> = {};
-  for (const flight of (state.flights ?? createFlightState()).records) {
-    if (flight.ownerSide !== 'npc' || flight.ownerId !== ownerId || flight.originPlanetId !== planetId
-      || (flight.phase !== 'outbound' && flight.phase !== 'returning' && flight.phase !== 'arrived')) continue;
-    for (const [id, count] of Object.entries(flight.selectedShips) as [ShipId, number][]) {
-      if (Number.isSafeInteger(count) && count > 0) reserved[id] = (reserved[id] ?? 0) + count;
-    }
-  }
-  return reserved;
+/**
+ * What an owner keeps for its own plans before it gives anything away (owner
+ * rule 25.10.2026: an ally sends what is free, never to its own harm). A
+ * generous owner keeps a third of a store, a tight-fisted one most of it.
+ */
+function aidReserveShare(cooperation: number | undefined): number {
+  const value = Number.isFinite(cooperation) ? Math.min(1, Math.max(0, cooperation!)) : 0.5;
+  return 0.65 - 0.3 * value;
 }
 
-function aidPlan(state: SaveState, ownerId: string, request: ResourceRequest, source: AidSource): NpcAidPayload | null {
+function aidPlan(state: SaveState, ownerId: string, request: ResourceRequest, source: AidSource, cooperation?: number): NpcAidPayload | null {
   if (!isRequestOpen(request) || request.authorOwnerId === ownerId || !source.fleet?.ships) return null;
   if (!isAidPairValid(state.command, { allianceId: request.allianceId, senderOwnerId: ownerId, recipientOwnerId: request.authorOwnerId })) return null;
   const destination = requestPlanet(state, request);
@@ -119,20 +126,23 @@ function aidPlan(state: SaveState, ownerId: string, request: ResourceRequest, so
   const records = state.flights?.records ?? [];
   const remainder = requestOpenRemainder(request, aidInFlightUnits(records, request.id));
   const stock = request.resource === 'debris' ? source.resources.debris : source.resources[request.resource];
-  let wanted = Math.min(remainder, Math.max(0, Math.floor(stock)));
+  // Debris lies in the recycling store; resources are judged against the store they fill.
+  const store = request.resource === 'debris' ? stock : getStorageCapacities(source.buildings)[request.resource];
+  const free = Math.max(0, Math.floor(stock - aidReserveShare(cooperation) * store));
+  let wanted = Math.min(remainder, free);
   if (!Number.isSafeInteger(wanted) || wanted <= 0) return null;
 
-  const reserved = activeNpcShips(state, ownerId, source.id);
+  // Launches physically debit the planet fleet: what is on the planet is free.
   const fleet = source.fleet.ships;
   const ships: Partial<Record<ShipId, number>> = {};
   const catalog = getFactionShipCatalog(source.raceId);
   const shipCatalog = Object.fromEntries(catalog.map((entity) => [entity.id, { cargo: entity.ship?.cargo ?? 0 }]));
   let capacity = 0;
   for (const id of ['mega-transporter', 'transporter'] as const) {
-    const free = Math.max(0, (fleet[id] ?? 0) - (reserved[id] ?? 0));
+    const idle = Math.max(0, fleet[id] ?? 0);
     const cargo = catalog.find((entity) => entity.id === id)?.ship?.cargo ?? 0;
-    if (!free || cargo <= 0) continue;
-    const count = Math.min(free, Math.ceil(Math.max(0, wanted - capacity) / cargo));
+    if (!idle || cargo <= 0) continue;
+    const count = Math.min(idle, Math.ceil(Math.max(0, wanted - capacity) / cargo));
     if (!count) continue;
     ships[id] = count;
     capacity += count * cargo;
@@ -168,7 +178,7 @@ export function getNpcAidCandidates(state: SaveState, profile: NpcProfile, at: n
   for (const request of selectFulfillableRequests(state.command, ownerId)) {
     if (request.allianceId !== membership.alliance.id || !requestPlanet(state, request)) continue;
     for (const source of sources) {
-      const payload = aidPlan(state, ownerId, request, source);
+      const payload = aidPlan(state, ownerId, request, source, profile.traits.cooperation);
       if (!payload) continue;
       candidates.push({
         id: `aid:${ownerId}:${request.id}:${source.id}`,
@@ -227,7 +237,7 @@ export function dispatchNpcAid(
   })) return failure(state, 'Aid request or alliance changed.');
 
   // Recompute the candidate using the explicit campaign scale supplied by the owner-wide runtime.
-  const fresh = aidPlan(state, ownerId, request, source);
+  const fresh = aidPlan(state, ownerId, request, source, state.npc?.profiles[ownerId]?.traits.cooperation);
   if (!fresh || fresh.originPlanetId !== payload.originPlanetId || fresh.units !== payload.units
     || fresh.transporter !== payload.transporter || fresh.megaTransporter !== payload.megaTransporter) return failure(state, 'Aid cargo or transporter capacity changed.');
   const selectedShips: Partial<Record<ShipId, number>> = {
@@ -406,4 +416,65 @@ export function resolveNpcAidArrival(state: SaveState, flight: FlightRecord, at:
   const returning = flights.records.find((item) => item.id === delivered.id) ?? delivered;
   next = updateFlight({ ...deliveredState, flights }, returning);
   return { state: next, ok: true, reason: null, flight: returning };
+}
+
+export type NpcAidRequestCandidate = Readonly<{
+  id: string;
+  kind: 'aid';
+  weight: number;
+  payload: Readonly<{ planetId: string; resource: 'metal' | 'minerals' | 'gas'; amount: number }>;
+}>;
+
+/**
+ * An NPC in an alliance asks its allies for the resource its main planet is
+ * shortest of, by the player's request rules (Hall, charges, size limit). The
+ * request is open to every member alike; nobody is told to answer.
+ */
+export function getNpcAidRequestCandidates(state: SaveState, profile: NpcProfile, at: number): NpcAidRequestCandidate[] {
+  const ownerId = profile.ownerId;
+  const membership = selectOwnerMembership(state.command, ownerId);
+  if (!membership || ownerId === state.profile.playerId) return [];
+  const planets = npcSources(state, ownerId);
+  const hallLevel = selectCommandHallLevel(Object.fromEntries(planets.map((planet) => [planet.id, planet])));
+  if (hallLevel < 1 || selectOpenRequestsOf(state.command, ownerId).length >= MAX_OPEN_REQUESTS) return [];
+  const ledger = selectActiveAidLedger(state.command, ownerId);
+  // A ledger not yet on this owner's Hall regime restores nothing; the first
+  // request attempt puts it on the clock, as the player's Command screen does.
+  if (!ledger || (ledger.hallLevel === Math.min(10, hallLevel) && settleAidLedger(ledger, at).charges < 1)) return [];
+  const main = planets.find((planet) => planet.id === `${ownerId}-planet`) ?? planets[0];
+  if (!main) return [];
+  const capacity = getStorageCapacities(main.buildings);
+  const resource = (['metal', 'minerals', 'gas'] as const)
+    .map((key) => ({ key, fill: capacity[key] > 0 ? main.resources[key] / capacity[key] : 1 }))
+    .sort((left, right) => left.fill - right.fill || left.key.localeCompare(right.key))[0]!;
+  if (resource.fill >= 0.15) return [];
+  const limit = maxRequestAmount(selectOwnerScore(state, ownerId)?.resourcePoints ?? 0);
+  const amount = Math.min(limit, Math.floor(capacity[resource.key] * 0.5 / 1_000) * 1_000);
+  if (amount < AID_MIN_REQUEST) return [];
+  const cooperation = Number.isFinite(profile.traits.cooperation) ? profile.traits.cooperation : 0.5;
+  return [{
+    id: `aid-request:${ownerId}:${resource.key}`,
+    kind: 'aid',
+    weight: Math.max(0.05, Math.min(1, 0.2 + 0.6 * cooperation + 0.6 * (0.15 - resource.fill))),
+    payload: { planetId: main.id, resource: resource.key, amount },
+  }];
+}
+
+export function createNpcAidRequest(state: SaveState, ownerId: string, candidate: NpcAidRequestCandidate, at: number, timeScale: number): NpcAidResult {
+  const planet = npcSources(state, ownerId).find((item) => item.id === candidate.payload.planetId);
+  if (!planet) return failure(state, 'invalid-planet');
+  const hallLevel = selectCommandHallLevel(Object.fromEntries(npcSources(state, ownerId).map((item) => [item.id, item])));
+  const command = applyAidRegime(state.command, ownerId, { hallLevel, timeScale }, at);
+  const regimed: SaveState = command === state.command ? state : { ...state, command };
+  const result = createResourceRequest(regimed.command, {
+    ownerId,
+    authorName: planet.ownerName,
+    planet: { id: planet.id, name: planet.name, coordinate: { ...planet.coordinate } },
+    resource: candidate.payload.resource,
+    amount: candidate.payload.amount,
+    resourcePoints: selectOwnerScore(state, ownerId)?.resourcePoints ?? 0,
+    hallLevel,
+  }, at);
+  if (!result.ok) return { state: regimed, ok: false, reason: result.code };
+  return { state: { ...regimed, command: result.state }, ok: true, reason: null };
 }
