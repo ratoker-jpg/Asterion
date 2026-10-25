@@ -87,7 +87,24 @@ async function reload(win) {
 
 async function rendererMutationAndReload(win, source, label) {
   const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-  const execution = win.webContents.executeJavaScript(source)
+  // location.reload() is asynchronous: the running game's once-a-second save
+  // could overwrite the fixture before the page unloads. In the same task as
+  // the mutation, the save key accepts only the fixture's own (first) write
+  // until this document goes away (same idea as fixture-reload.cjs).
+  const guarded = `(() => {
+    const saveKey = ${JSON.stringify(SAVE_KEY)};
+    const originalSetItem = Storage.prototype.setItem;
+    let fixtureWritten = false;
+    Storage.prototype.setItem = function (key, value) {
+      if (this === window.localStorage && String(key) === saveKey) {
+        if (fixtureWritten) return;
+        fixtureWritten = true;
+      }
+      return originalSetItem.call(this, key, value);
+    };
+    return ${source};
+  })()`;
+  const execution = win.webContents.executeJavaScript(guarded)
     .then((value) => ({ value }))
     .catch((error) => ({ error: String(error?.stack || error) }));
   const first = await Promise.race([
