@@ -26,9 +26,7 @@
 - Все логические наборы CI, кроме `test:npc`, зелёные: inventory, buildings, combat, pirates, pirate-operations, operations, application, command, energy, exploration, fleet, new-game, repair, resources, runtime, science, settings, sun-raid, universe, flights, reports, rating, espionage, attack. `test:universe` закончился с кодом 0, но его строку итога сводный лог обрезал.
 - `test:fleet-ui` до правки формы прошёл 3 раза из 3. Сбой в CI на `de4efeb` локально не воспроизвёлся.
 
-## Не доделано (остановлено владельцем)
+## Доделано после остановки
 
-- `npm run test:npc` целиком (около 15 мин) прерван. Риск: изменённые атаки NPC могут сдвинуть ожидания в тестах полного мира.
-- После правки формы не прогнаны Electron-наборы `test:fleet-ui`, `test:universe-ui`, `test:energy-ui`, `test:repair-ui`.
-- Нет отдельного теста NPC-ветки потери зонда: правило общее и проверено на игроке, код NPC отдельный.
-- CI на ветке не смотрели.
+- CI на `72e5c28` полностью зелёный: Logical tests, NPC replay tests (весь `test:npc`), Electron QA — npc-replay, science-reports, campaign-command, visual, fleet-universe (включая `test:fleet-ui` после правки формы) — и Windows installer.
+- Добавлен тест NPC-ветки потери зонда (`npc-missions.test.ts`): тот же сид `repeat-loss`, на броске < 30 зонд теряется без нового отчёта, на остальных зонд остаётся на орбите и присылает отчёт.

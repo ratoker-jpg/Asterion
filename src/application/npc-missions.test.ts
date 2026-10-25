@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createInitialSaveState } from './persistence.ts';
-import { createDefaultEspionageState, getEspionageTargets } from '../domain/espionage/runtime.ts';
+import {
+  createDefaultEspionageState, createSeededEspionageRng, espionageRollSeed, getEspionageTargets, normalizeRngRoll, SPY_REPORT_COOLDOWN_MS,
+} from '../domain/espionage/runtime.ts';
 import { createNpcState } from '../domain/npc/state.ts';
 import { createEmptyFleetState } from '../domain/fleet/runtime.ts';
 import { createBot01Planets } from '../domain/espionage/fixtures.ts';
@@ -178,6 +180,47 @@ test('spy probe arrival records an owner-scoped canonical report and is idempote
   assert.equal(arrived.state.planets, beforePlayerPlanets, 'spy arrival reads the real target without mutating player state');
   const duplicate = resolveNpcMissionArrival(arrived.state, arrived.flight!, arrived.flight!.arrivalAt, TIME_SCALE);
   assert.equal(duplicate.state.espionage?.reports.length, arrived.state.espionage?.reports.length);
+});
+
+test('an NPC repeated report from orbit loses the probe on the same seeded 30% roll as the player (25.10.2026)', () => {
+  const player = createInitialSaveState('test', 0);
+  const origin = target(ORIGIN_ID, OWNER, ORIGIN_COORDINATE);
+  const home = { ...player.planets['helion-01']!, universeGalaxy: 1, universeSystem: 1, universePosition: 2 };
+  const state = {
+    ...player,
+    planets: { ...player.planets, 'helion-01': home },
+    npc: createNpcState([OWNER], 'npc-spy-repeat', 0),
+    espionage: { ...createDefaultEspionageState(), targets: { [origin.id]: origin } },
+  };
+  const sent = dispatchNpcMission(state, {
+    ownerId: OWNER, originPlanetId: ORIGIN_ID, requestId: 'npc-spy-repeat-1', missionId: 'espionage',
+    selectedShips: { 'spy-probe': 1 }, destination: { kind: 'planet', planetId: 'helion-01', coordinate: { galaxy: 1, system: 1, position: 2 } },
+    targetPlanetId: 'helion-01', targetRelation: 'neutral',
+  }, 1_000, TIME_SCALE);
+  assert.equal(sent.ok, true, sent.reason ?? undefined);
+  let current = resolveNpcMissionArrival(sent.state, sent.flight!, sent.flight!.arrivalAt, TIME_SCALE);
+  assert.equal(current.flight?.phase, 'arrived');
+  let at = sent.flight!.arrivalAt;
+  let lost = false;
+  for (let request = 0; request < 40 && !lost; request += 1) {
+    at += SPY_REPORT_COOLDOWN_MS;
+    const mission = current.state.espionage!.missions.find((item) => item.id === sent.flight!.spyMissionId)!;
+    const attempt = mission.reportIds.length + 1;
+    const roll = normalizeRngRoll(Math.floor(createSeededEspionageRng(espionageRollSeed(mission.id, 'repeat-loss', attempt))() * 100));
+    const reports = current.state.espionage!.reports.length;
+    current = resolveNpcMissionArrival(current.state, current.flight!, at, TIME_SCALE, true);
+    const after = current.state.espionage!.missions.find((item) => item.id === mission.id)!;
+    if (roll < 30) {
+      assert.equal(after.status, 'destroyed');
+      assert.equal(current.flight?.completionReason, 'spy-destroyed');
+      assert.equal(current.state.espionage!.reports.length, reports);
+      lost = true;
+    } else {
+      assert.equal(after.status, 'orbiting');
+      assert.equal(current.state.espionage!.reports.length, reports + 1);
+    }
+  }
+  assert.equal(lost, true, 'forty repeated reports never risked the probe');
 });
 
 test('colonization creates an owner target with canonical start resources and consumes its colonizer', () => {
