@@ -413,7 +413,7 @@ async function runViewport(width, height) {
     })()`);
     if (!incomingUi.hostile || !incomingUi.icon || incomingUi.recall || !incomingUi.noRecall
       || !incomingUi.row.includes('ПИРАТСКИЙ НАЛЁТ') || !incomingUi.status.includes('ВХОДЯЩАЯ АТАКА')
-      || !incomingUi.source.includes('ПИРАТЫ') || !incomingUi.target.includes('Helion')
+      || !incomingUi.source.toUpperCase().includes('ПИРАТЫ') || !incomingUi.target.includes('Helion')
       || !incomingUi.force.includes('Гончий') || incomingUi.clock==='—' || incomingUi.overflow) {
       throw new Error(`Incoming pirate warning/presentation invalid at ${label}: ${JSON.stringify(incomingUi)}`);
     }
