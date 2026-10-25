@@ -18,11 +18,13 @@ import { dispatchNpcMission, dispatchNpcSpaceFlight, getNpcMissionAvailableFleet
 import { beginFlightReturn } from '../domain/flights/runtime.ts';
 import { getNpcPirateCandidates, dispatchNpcPirateMission } from './npc-pirates.ts';
 import { getNpcEndgameChoices } from './npc-endgame.ts';
+import { getNpcSpaceportCandidates, startNpcSpaceportUpgrade } from './npc-spaceport.ts';
 import { getNpcAidCandidates, dispatchNpcAid } from './npc-aid.ts';
 import { getStorageCapacities } from '../domain/buildings/balance-v1.ts';
 import { migrateBuildingLevels } from '../domain/buildings/resource-zone.ts';
 import { collectRecyclingJob, getRecyclingLevel, getRecyclingMaxConcurrentJobs, startRecyclingJob } from '../domain/buildings/recycling.ts';
 import { creditResources } from '../domain/resources/credit.ts';
+import type { ShipId } from '../domain/combat/ids.ts';
 import { estimationError, NPC_MAX_UTILITY, utilityToWeight } from '../domain/npc/utility.ts';
 import { getFactionShipCatalog, getFactionDefenseCatalog } from '../domain/combat/faction-catalog.ts';
 import {
@@ -30,7 +32,7 @@ import {
   estimateAttackUtility, estimateBuildingUtility, estimateRaidEconomics, estimateColonizeUtility, estimateEspionageUtility,
   estimateOperationUtility, estimateProductionItemUtility, flightRemoteness, estimateScienceUtility, npcProductionBatch,
   npcProductionPurpose, NPC_STRATEGY_FAMILY, strategyOf, type NpcStrategyDrives,
-  estimateFleetSaveUtility, npcFleetValue, spaceFlightLegFor,
+  estimateFleetSaveUtility, npcFleetValue, spaceFlightLegFor, estimateSpaceportUpgradeUtility, NPC_FLAGSHIP_ID,
 } from './npc-utility.ts';
 
 /** A look within this long of the session end is the owner's last before leaving. */
@@ -198,7 +200,7 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     if (science && at >= state.npcScience!.activatedAt) for (const preview of getNpcScienceCandidates(target, science, at, timeScale)) {
       if (!preview.canStart) continue;
       const scienceCandidateId = `science:${target.id}:${preview.scienceId}`;
-      choices.push({ candidate: { id: scienceCandidateId, kind: 'science', weight: scored(scienceCandidateId, estimateScienceUtility(utility, preview.cost, situation)), payload: { scienceId: preview.scienceId } }, run: (current, key) => {
+      choices.push({ candidate: { id: scienceCandidateId, kind: 'science', weight: scored(scienceCandidateId, estimateScienceUtility(utility, preview.cost, situation, preview.scienceId)), payload: { scienceId: preview.scienceId } }, run: (current, key) => {
         const result = startNpcScience(current.espionage!.targets![target.id]!, current.npcScience!.owners[ownerId]!, preview.scienceId, at, timeScale, key);
         return { state: { ...withTarget(current, result.target), npcScience: { ...current.npcScience!, owners: { ...current.npcScience!.owners, [ownerId]: result.science } } }, started: result.ok, reason: result.reason, planetId: target.id, ...(result.ok ? { economyActionId: key } : {}) };
       } });
@@ -234,6 +236,23 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
           result = startNpcFleetProduction(planet, ownerId, preview.queueKind, preview.itemId, at, timeScale, key, reservedPopulation, quantity);
         }
         return { state: withTarget(current, result.target), started: result.ok, reason: result.reason, planetId: target.id, ...(result.ok && result.orderId ? { economyActionId: result.orderId } : {}) };
+      } });
+    }
+  }
+  // Spaceport: ship upgrades by the player's catalog; levels are owner-wide.
+  const ownedShips: Partial<Record<string, number>> = {};
+  for (const target of planets) for (const [id, count] of Object.entries(target.fleet.ships)) ownedShips[id] = (ownedShips[id] ?? 0) + (count ?? 0);
+  if (utility.flagship?.unlocked) ownedShips[NPC_FLAGSHIP_ID] = Math.max(1, ownedShips[NPC_FLAGSHIP_ID] ?? 0);
+  const scienceLevels = state.npcScience?.owners[ownerId]?.levels;
+  for (const target of planets) {
+    const levels = scienceLevels ?? target.ownerProfile?.scienceLevels ?? {};
+    for (const preview of getNpcSpaceportCandidates(target, levels, timeScale, ownedShips)) {
+      const upgradeId = `spaceport:${target.id}:${preview.shipId}`;
+      const estimate = estimateSpaceportUpgradeUtility(utility, preview.shipId, ownedShips[preview.shipId] ?? 0, preview.cost, describeNpcPlanet(target, 0, 0, false));
+      choices.push({ candidate: { id: upgradeId, kind: 'production', weight: scored(upgradeId, estimate), payload: { planetId: target.id, shipId: preview.shipId } }, run: (current, key) => {
+        const planet = current.espionage!.targets![target.id]!;
+        const result = startNpcSpaceportUpgrade(planet, preview.shipId as ShipId, levels, at, timeScale, key);
+        return { state: withTarget(current, result.target), started: result.ok, reason: result.reason, planetId: target.id, ...(result.ok ? { economyActionId: key } : {}) };
       } });
     }
   }

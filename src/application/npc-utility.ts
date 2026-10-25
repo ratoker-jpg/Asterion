@@ -15,6 +15,11 @@ import { findDebrisNearSystem } from '../domain/espionage/orbital-debris.ts';
 import { calculateRouteDistance } from '../domain/flights/distance.ts';
 import { calculateFlightFuel } from '../domain/flights/fuel.ts';
 import { selectOwnerMembership } from '../domain/command/selectors.ts';
+import { getFleetProductionEntity } from '../domain/fleet/production.ts';
+import { evaluateProductionRequirements } from '../domain/fleet/requirements.ts';
+import { findScience } from '../domain/science/catalog.ts';
+import type { ScienceId } from '../domain/science/types.ts';
+import { npcFlagshipOwners } from '../domain/npc/doctrine.ts';
 
 /**
  * Owner-scoped utility estimates for NPC candidate actions. Every input is
@@ -94,7 +99,41 @@ export type NpcUtilityContext = Readonly<{
   rivalGateHosts?: ReadonlySet<string>;
   /** This owner's planets hosting its own side's Gate: held at all costs. */
   ownGateHosts?: ReadonlySet<string>;
+  /** Present for the planet-destroyer rush doctrine: what still stands between the owner and its strongest hull. */
+  flagship?: NpcFlagshipPlan;
 }>;
+
+/** The path to the faction's strongest hull: shipyard level, laboratory level and every science level on the way. */
+export type NpcFlagshipPlan = Readonly<{
+  shipyardLevel: number;
+  laboratoryLevel: number;
+  sciences: ReadonlyMap<ScienceId, number>;
+  /** All requirements met: the hull itself can be ordered. */
+  unlocked: boolean;
+}>;
+
+export const NPC_FLAGSHIP_ID = 'death-star';
+
+/** Requirements of the strongest hull for this owner, with every prerequisite science closed over. */
+export function npcFlagshipPlan(raceId: string, scienceLevels: Readonly<Partial<Record<number, number>>>, shipyardLevel: number): NpcFlagshipPlan | undefined {
+  const entity = getFleetProductionEntity('ships', NPC_FLAGSHIP_ID, raceId as CombatFactionId);
+  if (!entity) return undefined;
+  const evaluation = evaluateProductionRequirements(entity, { scienceLevels: scienceLevels as never, shipyardLevel, hangarLevel: 0, advancedFactoryLevel: 0 });
+  const sciences = new Map<ScienceId, number>();
+  let laboratoryLevel = 0;
+  const need = (id: ScienceId, level: number) => {
+    if ((scienceLevels[id] ?? 0) >= level || (sciences.get(id) ?? 0) >= level) return;
+    sciences.set(id, level);
+    const science = findScience(id);
+    if (!science) return;
+    laboratoryLevel = Math.max(laboratoryLevel, science.laboratoryLevel);
+    for (const prerequisite of science.prerequisites) need(prerequisite.scienceId, prerequisite.level);
+  };
+  for (const requirement of evaluation.requirements) {
+    if (requirement.kind === 'science' && requirement.scienceId !== undefined && requirement.requiredLevel !== null) need(requirement.scienceId, requirement.requiredLevel);
+  }
+  return { shipyardLevel: entity.construction.requiredShipyardLevel, laboratoryLevel, sciences, unlocked: evaluation.met };
+}
 
 /** Public Gate announcements as seen by one owner: rival Gates to break and its own side's to hold. */
 export function npcGateHosts(state: SaveState, ownerId: string): { rival: Set<string>; own: Set<string> } {
@@ -152,7 +191,13 @@ export function createNpcUtilityContext(state: SaveState, profile: NpcProfile, a
     for (const entry of findDebrisNearSystem(debrisMap, planet.coordinate)) nearby.set(`${entry.coordinate.galaxy}:${entry.coordinate.system}:${entry.coordinate.position}`, entry.debris);
   }
   const gates = npcGateHosts(state, ownerId);
+  const home = ownPlanets.find((planet) => planet.id === `${ownerId}-planet`) ?? ownPlanets[0];
+  const flagship = home && npcFlagshipOwners(state.npc).has(ownerId)
+    ? npcFlagshipPlan(home.raceId, state.npcScience?.owners[ownerId]?.levels ?? home.ownerProfile?.scienceLevels ?? {},
+      Math.max(0, ...ownPlanets.map((planet) => Math.floor(Number(planet.buildings.shipyard ?? 0)))))
+    : undefined;
   const base = {
+    ...(flagship ? { flagship } : {}),
     profile, at, timeScale,
     rivalGateHosts: gates.rival,
     ownGateHosts: gates.own,
@@ -311,10 +356,12 @@ export function estimateBuildingUtility(context: NpcUtilityContext, target: SpyT
   }
   const enabler = (() => {
     switch (role) {
-      case 'shipyard': return firstLevel ? -0.3 + 1.6 * Math.max(drives.military, drives.war) : -0.6 + 1.1 * drives.military;
+      case 'shipyard': return (firstLevel ? -0.3 + 1.6 * Math.max(drives.military, drives.war) : -0.6 + 1.1 * drives.military)
+        + (context.flagship && nextLevel <= context.flagship.shipyardLevel ? flagshipDrive(context) : 0);
       case 'hangar': return situation?.populationBlocked ? 0.3 + 0.6 * drives.military : -1 + 0.4 * drives.military;
       case 'construction': return -0.3 + 0.6 * drives.economy + (firstLevel ? 0.9 * drives.science : 0.2 * drives.science);
-      case 'research': return firstLevel ? -0.3 + 1.5 * drives.science : -0.5 + 0.9 * drives.science;
+      case 'research': return (firstLevel ? -0.3 + 1.5 * drives.science : -0.5 + 0.9 * drives.science)
+        + (context.flagship && nextLevel <= context.flagship.laboratoryLevel ? 0.8 * flagshipDrive(context) : 0);
       case 'planetary-government': return firstLevel ? -0.4 + 1.4 * drives.diplomacy : -0.8 + 0.6 * drives.diplomacy;
       case 'spaceport': return -0.5 + 0.5 * Math.max(drives.war, drives.expansion, drives.operations);
       // The recycling centre turns collected debris into the resource the owner lacks.
@@ -327,10 +374,30 @@ export function estimateBuildingUtility(context: NpcUtilityContext, target: SpyT
   return enabler - pricePenalty(context, cost, situation) - energyCost + 0.3 * spendingPressure(situation);
 }
 
-export function estimateScienceUtility(context: NpcUtilityContext, cost: Resources | null, situation?: NpcPlanetSituation): number {
+export function estimateScienceUtility(context: NpcUtilityContext, cost: Resources | null, situation?: NpcPlanetSituation,
+  scienceId?: ScienceId): number {
   const drives = strategyOf(context);
+  const onFlagshipPath = scienceId !== undefined && context.flagship?.sciences.has(scienceId) === true;
   return -0.4 + 1.4 * drives.science + 0.2 * unit(context.profile.traits.planningHorizon)
-    - pricePenalty(context, cost, situation) + 0.3 * spendingPressure(situation);
+    - pricePenalty(context, cost, situation) + 0.3 * spendingPressure(situation)
+    + (onFlagshipPath ? 1.2 * flagshipDrive(context) : 0);
+}
+
+/**
+ * How hard a rush owner pushes its path: a skilled one goes straight there,
+ * a weak one drifts (owner rule: the smart do it fast, the weak slowly).
+ */
+function flagshipDrive(context: NpcUtilityContext): number {
+  return 0.4 + 0.9 * unit(context.profile.traits.mechanicsKnowledge);
+}
+
+/** A Spaceport upgrade: worth it for ships the owner flies in numbers; the rush owner upgrades its flagship first. */
+export function estimateSpaceportUpgradeUtility(context: NpcUtilityContext, shipId: string, ownedCount: number,
+  cost: Resources | null, situation?: NpcPlanetSituation): number {
+  const drives = strategyOf(context);
+  const flagship = context.flagship && shipId === NPC_FLAGSHIP_ID ? 2 * flagshipDrive(context) : 0;
+  return -1 + 0.9 * Math.max(drives.military, drives.war) + 0.25 * Math.log1p(ownedCount) + flagship
+    - pricePenalty(context, cost, situation);
 }
 
 /** Ships and defence are worth more after being attacked and to military owners. */
@@ -383,8 +450,13 @@ export function estimateProductionItemUtility(context: NpcUtilityContext, target
   const efficiency = 0.5 * Math.log(Math.max(0.05, Math.min(1, relativeEfficiency)));
   // The planet hosting this owner's own Gate expects the whole world at its door.
   const threat = context.ownGateHosts?.has(target.id) ? 1 : context.threat;
+  // The rush owner wants its strongest hull, not the best price ratio, and
+  // saves for it instead of spreading resources over lesser hulls.
+  const rush = context.flagship && purpose === 'combat'
+    ? itemId === NPC_FLAGSHIP_ID ? 2.5 * flagshipDrive(context) - efficiency : -0.4 * flagshipDrive(context)
+    : 0;
   switch (purpose) {
-    case 'combat': return -0.5 + 1.5 * Math.max(drives.military, drives.war) + 0.5 * threat + efficiency - price + push;
+    case 'combat': return -0.5 + 1.5 * Math.max(drives.military, drives.war) + 0.5 * threat + efficiency - price + push + rush;
     case 'defense': return -0.8 + 1.4 * threat + 0.5 * drives.military + efficiency - price + push * 0.75;
     case 'energy': return -0.6 + 1.5 * (situation?.energyNeed ?? 0) - price;
     case 'spy': return (fleet[itemId] ?? 0) >= 2 ? -2 : -0.3 + 0.9 * Math.max(drives.war, drives.operations, drives.military * 0.6) - price;
@@ -457,8 +529,23 @@ export function estimateRaidEconomics(context: NpcUtilityContext, origin: SpyTar
   const risk = (1 - unit(traits.riskTolerance)) * win * (1 - win) * risked;
   const fuel = calculateFlightFuel(origin.raceId as CombatFactionId, selectedShips,
     calculateRouteDistance(origin.coordinate, report.targetCoordinate));
-  const net = gain - fuel - expectedLoss - risk;
-  return { net, worthFlight: gain >= 2 * fuel && net >= MIN_RAID_DAY_SHARE * context.dayValue };
+  // A full report showing more fleet population than ships on orbit means a
+  // fleet hidden in flight: a planet-destroyer siege that breaks the planet
+  // burns that fleet with it, so it is worth something to the attacker.
+  const hiddenPopulation = Math.max(0, (report.population?.fleet ?? 0) - visibleFleetPopulation(report));
+  const sendsFlagship = ((selectedShips as Readonly<Partial<Record<string, number>>>)[NPC_FLAGSHIP_ID] ?? 0) > 0;
+  const gainWithSiege = sendsFlagship ? win * 0.05 * hiddenPopulation * HIDDEN_FLEET_VALUE_PER_POPULATION : 0;
+  const net = gain + gainWithSiege - fuel - expectedLoss - risk;
+  return { net, worthFlight: gain + gainWithSiege >= 2 * fuel && net >= MIN_RAID_DAY_SHARE * context.dayValue };
+}
+
+/** Rough price of one population unit of fleet, for judging a fleet nobody can see. */
+const HIDDEN_FLEET_VALUE_PER_POPULATION = 1_500;
+
+function visibleFleetPopulation(report: SpyReportSnapshot): number {
+  if (!report.fleet) return 0;
+  const catalog = getFactionShipCatalog(report.targetRaceId as CombatFactionId) as ReadonlyArray<{ id: string; population?: number }>;
+  return catalog.reduce((sum, entity) => sum + (report.fleet?.[entity.id as ShipId] ?? 0) * (entity.population ?? 0), 0);
 }
 
 /** Defender strength the owner believes in: the report, inflated by its age; unknown is feared. */

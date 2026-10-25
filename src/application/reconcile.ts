@@ -1,3 +1,4 @@
+import { settleNpcSpaceport, syncNpcOwnerShipLevels } from './npc-spaceport.ts';
 import {
   completeBuilding,
   reconcileRecycling,
@@ -168,7 +169,7 @@ function reconcileRuntimeSlice(
     for (const [id, target] of Object.entries(targets)) {
       if (!replayOwners.has(target.ownerId) || (ownerIds && !ownerIds.has(target.ownerId))) continue;
       const settledPlanet = settleNpcPlanet(target, at, { timeScale });
-      const result = { ...settledPlanet, target: settleNpcRecycling(settledPlanet.target, at) };
+      const result = { ...settledPlanet, target: settleNpcSpaceport(settleNpcRecycling(settledPlanet.target, at), at) };
       settled.add(target.ownerId);
       const production = settleNpcFleetProduction(result.target, target.ownerId, at);
       if (production.completed.length) events.push({ kind: 'npc-fleet-production', ownerId: target.ownerId, planetId: id, at, completed: production.completed });
@@ -180,6 +181,8 @@ function reconcileRuntimeSlice(
       changed ||= targets[id] !== target;
       for (const assetRole of result.completedRoles) events.push({ kind: 'npc-building', planetId: id, assetRole, at });
     }
+    // Upgrade levels are owner-wide: a finished upgrade reaches all of the owner's planets now.
+    if (syncNpcOwnerShipLevels(targets, settled)) changed = true;
     if (changed) next = { ...next, espionage: { ...next.espionage, targets } };
     const science = pauseNpcScienceForSettlement(next.npcScience, before, settled, at, targets);
     if (science !== next.npcScience) next = { ...next, npcScience: science };
