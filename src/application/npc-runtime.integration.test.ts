@@ -287,13 +287,17 @@ test('a frozen 30-day replay target survives intermediate save/reload and does n
     'each planet retains the bounded canonical receipts of its most recent paid decisions after reload');
 });
 
-// Owner target (24.10.2026): the longest realistic absence is two weeks.
-// Correctness beyond it is covered by the single-NPC 30-day equivalence tests.
-test('100 real NPC owners finish a 14-day production replay with their own bounded economy state', () => {
+// Owner decision (25.10.2026): a long absence is replayed in full behind a
+// progress bar, however long it takes. Today 100 very active owners replay
+// one game day in tens of minutes of CPU, so a CI run covers the first six
+// hours of the full world; long-horizon correctness is covered by the
+// single-NPC 30-day equivalence tests, and the long 100-owner duration is
+// measured (not gated) by the npc-full-world CI job.
+test('100 real NPC owners finish a 6-hour production replay with their own bounded economy state', () => {
   const initial = campaign(100, 'NPC-REPLAY-100');
   assert.equal(npcTargets(initial).length, 100);
   assert.equal(Object.keys(initial.npc!.profiles).length, 100);
-  const targetAt = START + 14 * DAY;
+  const targetAt = START + 6 * HOUR;
   const completed = advanceTo(clone(initial), targetAt, [targetAt]);
 
   assert.equal(completed.state.npcReplay?.processedThroughAt, targetAt);
@@ -309,7 +313,7 @@ test('100 real NPC owners finish a 14-day production replay with their own bound
   for (const target of npcTargets(completed.state)) {
     assert.ok(target.resources.metal >= 0 && target.resources.minerals >= 0 && target.resources.gas >= 0);
     assert.ok(target.buildingQueue!.length <= 3);
-    assert.ok(target.resourceClock!.lastReconciledAt >= targetAt - DAY,
+    assert.ok(target.resourceClock!.lastReconciledAt >= targetAt - HOUR,
       `owner ${target.ownerId} is economically settled through the bounded replay prefix`);
   }
 });
