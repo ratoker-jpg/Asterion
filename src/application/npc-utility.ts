@@ -12,6 +12,8 @@ import { ownerBattleReports, ownerFlights, ownerSpyReports, publicDebrisEntries 
 import { selectOwnerScore } from '../domain/rating/scoring.ts';
 import { nextColonyPointThreshold } from '../domain/universe/runtime.ts';
 import { findDebrisNearSystem } from '../domain/espionage/orbital-debris.ts';
+import { calculateRouteDistance } from '../domain/flights/distance.ts';
+import { calculateFlightFuel } from '../domain/flights/fuel.ts';
 
 /**
  * Owner-scoped utility estimates for NPC candidate actions. Every input is
@@ -399,18 +401,38 @@ export function npcProductionBatch(context: NpcUtilityContext, target: SpyTarget
 export function estimateAttackUtility(context: NpcUtilityContext, origin: SpyTargetState, targetPlanetId: string,
   selectedShips: Readonly<Partial<Record<ShipId, number>>>, remoteness = 0): number {
   const traits = context.profile.traits;
+  const report = context.latestReports.get(targetPlanetId);
+  if (!report) return -1.2 + 0.6 * (unit(traits.aggression) - 0.5);
+  const raid = estimateRaidEconomics(context, origin, report, selectedShips);
+  // Taste for war never turns a pointless raid (63 resources) into a good one.
+  if (!raid.worthFlight) return -2;
+  return raid.net / context.dayValue + 0.5 * (unit(traits.aggression) - 0.5)
+    + 0.4 * (strategyOf(context).war - 0.3) - 0.5 * remoteness;
+}
+
+/** Smallest net haul, as a share of the owner's daily income, that justifies a raid. */
+export const MIN_RAID_DAY_SHARE = 0.05;
+
+/**
+ * What one raid is expected to bring against what it costs, from the owner's
+ * own latest report. A raid is worth a flight only when the haul clearly beats
+ * its price: the gas, the expected losses and a noticeable share of the
+ * owner's day (owner rule 25.10.2026).
+ */
+export function estimateRaidEconomics(context: NpcUtilityContext, origin: SpyTargetState, report: SpyReportSnapshot,
+  selectedShips: Readonly<Partial<Record<ShipId, number>>>): { net: number; worthFlight: boolean } {
+  const traits = context.profile.traits;
   const ownCatalog = getFactionShipCatalog(origin.raceId) as Catalog;
   const ownPower = estimateForcePower(stacks(ownCatalog, selectedShips));
   const risked = fleetCost(ownCatalog, selectedShips);
-  const report = context.latestReports.get(targetPlanetId);
-  if (!report) return -1.2 + 0.6 * (unit(traits.aggression) - 0.5);
-  const enemyPower = estimateReportedPower(context, report, ownPower);
-  const win = estimateWinProbability(ownPower, enemyPower);
-  const loot = 0.5 * costValue(report.resources);
+  const win = estimateWinProbability(ownPower, estimateReportedPower(context, report, ownPower));
+  const gain = win * 0.5 * costValue(report.resources);
   const expectedLoss = (1 - win) * risked * 0.85 + win * risked * 0.1;
   const risk = (1 - unit(traits.riskTolerance)) * win * (1 - win) * risked;
-  return (win * loot - expectedLoss - risk) / context.dayValue + 0.5 * (unit(traits.aggression) - 0.5)
-    + 0.4 * (strategyOf(context).war - 0.3) - 0.5 * remoteness;
+  const fuel = calculateFlightFuel(origin.raceId as CombatFactionId, selectedShips,
+    calculateRouteDistance(origin.coordinate, report.targetCoordinate));
+  const net = gain - fuel - expectedLoss - risk;
+  return { net, worthFlight: gain >= 2 * (fuel + expectedLoss) && net >= MIN_RAID_DAY_SHARE * context.dayValue };
 }
 
 /** Defender strength the owner believes in: the report, inflated by its age; unknown is feared. */
