@@ -168,7 +168,7 @@ test('four crystals → Gate (12 h) → campaign victory, which survives a reloa
   const gate = currentSunRaidState(state).gates[0]!;
   assert.equal(gate.completesAt - gate.startedAt, 12 * HOUR);
   state = tick(state, T0 + 6 * HOUR);
-  assert.deepEqual(currentSunRaidState(state).gates[0]!.announcedMilestones, [25, 50]);
+  assert.deepEqual(currentSunRaidState(state).gates[0]!.announcedMilestones, [0, 25, 50]);
   assert.equal(currentSunRaidState(state).campaignResult, undefined);
   state = tick(state, T0 + 12 * HOUR);
   const result = currentSunRaidState(state).campaignResult!;

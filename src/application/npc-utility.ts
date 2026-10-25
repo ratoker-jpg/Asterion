@@ -514,7 +514,7 @@ export function estimateAttackUtility(context: NpcUtilityContext, origin: SpyTar
 }
 
 /** Smallest net haul, as a share of the owner's daily income, that justifies a raid. */
-export const MIN_RAID_DAY_SHARE = 0.05;
+export const MIN_RAID_DAY_SHARE = 0.01;
 
 /**
  * What one raid is expected to bring against what it costs, from the owner's

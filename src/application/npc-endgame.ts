@@ -35,6 +35,9 @@ import {
 type Outcome = { state: SaveState; started: boolean; reason: string | null; planetId?: string };
 export type NpcEndgameChoice = { candidate: NpcAutonomyCandidate; run: (state: SaveState, key: string) => Outcome };
 
+/** Smallest raiding force worth three hours each way: a Sun nobody defends falls to any real fleet. */
+export const NPC_SUN_RAID_MIN_POPULATION = 300;
+
 const CIVIL_SHIPS = new Set<ShipId>(['spy-probe', 'colonizer', 'transporter', 'mega-transporter', 'recycler', 'solar-satellite']);
 
 function unit(value: number | undefined): number {
@@ -94,9 +97,8 @@ export function getNpcEndgameChoices(state: SaveState, profile: NpcProfile, util
     // Bold owners commit more of the fleet; the rest guards home.
     const ships = sunForce(state, ownerId, origin.id, origin.raceId, 0.45 + 0.45 * unit(traits.riskTolerance), SUN_RAID_CONFIG.populationCapPerSide);
     const population = sunFleetPopulation(ships, origin.raceId as never);
-    const value = getFactionShipCatalog(origin.raceId).reduce((sum, entity) => sum + ((ships[entity.id as ShipId] ?? 0)
-      * ((entity.cost?.metal ?? 0) + (entity.cost?.minerals ?? 0) + (entity.cost?.gas ?? 0))), 0);
-    if (population > 0 && value >= 0.5 * utility.dayValue) {
+    // A raid needs a real battle fleet; the side's population cap is the yardstick.
+    if (population >= NPC_SUN_RAID_MIN_POPULATION) {
       const random = createSeededRandom(`npc-sun:${ownerId}:${at}`);
       const galaxy = origin.coordinate.galaxy;
       // A few Suns this owner looks at this time; the first one open to a raid is chosen.
@@ -106,7 +108,7 @@ export function getNpcEndgameChoices(state: SaveState, profile: NpcProfile, util
       if (system !== undefined) {
         const id = `sun-raid:${ownerId}:${galaxy}:${system}`;
         const estimate = -0.4 + 0.9 * drives.operations + 0.7 * drives.war + 0.3 * (4 - missing) / 4
-          + 0.4 * Math.min(1, value / (3 * utility.dayValue)) + 0.3 * (unit(traits.riskTolerance) - 0.5);
+          + 0.6 * Math.min(1, population / (0.25 * SUN_RAID_CONFIG.populationCapPerSide)) + 0.3 * (unit(traits.riskTolerance) - 0.5);
         choices.push({ candidate: { id, kind: 'pve', weight: scored(id, estimate), payload: { planetId: origin.id } }, run: (current, key) => {
           const result = launchNpcSunRaid(current, ownerId, { galaxy, system, originPlanetId: origin.id, ships, requestId: key }, sunOptions(at, timeScale));
           return result.ok ? { state: result.state, started: true, reason: null, planetId: origin.id } : { state: current, started: false, reason: result.error, planetId: origin.id };

@@ -20,7 +20,8 @@ export const SUN_RAID_CONFIG = Object.freeze({
   gateBuildMs: 12 * 60 * 60 * 1000,
   /** Delay before a holder may restart a destroyed Gate. */
   gateRestartCooldownMs: 24 * 60 * 60 * 1000,
-  gateMilestones: [25, 50, 75, 90] as readonly number[],
+  /** 0 is the start itself: the whole world is told who lays a Gate and where (owner rule 25.10.2026). */
+  gateMilestones: [0, 25, 50, 75, 90] as readonly number[],
   /** Owner rules 25.10.2026 for a broken Gate. A solo holder keeps every crystal with this chance. */
   soloGateKeepChance: 0.5,
   /** A solo attacker steals the lost crystal with this chance; otherwise it is destroyed. An alliance attacker always destroys it. */
