@@ -74,8 +74,12 @@ function measureContentHeight(container: HTMLElement, stageScale: number, roots:
 function pageIdentity(roots: readonly HTMLElement[]) {
   const primary = roots[0];
   if (!primary) return 'empty';
-  const title = primary.querySelector('h2')?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
-  return `${primary.className}|${title}`;
+  const title = primary.querySelector('h1, h2')?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+  // Ships, defense and commander ships share one root class and no heading: their
+  // construction mode tells them apart, so switching sections re-measures the page.
+  const mode = primary.getAttribute('data-qa-construction-mode')
+    ?? primary.querySelector('[data-qa-construction-header]')?.getAttribute('data-qa-construction-header') ?? '';
+  return `${primary.className}|${mode}|${title}`;
 }
 
 function sameRoots(left: readonly HTMLElement[], right: readonly HTMLElement[]) {

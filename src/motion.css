@@ -48,7 +48,7 @@
   60% { opacity: 1; filter: blur(0) brightness(1.35) saturate(1); }
 }
 @keyframes ut-icon-pop { from { scale: .72; filter: brightness(2); } }
-@keyframes ut-sweep { from { translate: 0 -100%; opacity: 1; } 70% { opacity: .9; } to { translate: 0 0; opacity: 0; } }
+@keyframes ut-sweep { from { translate: 0 -100%; opacity: .75; } 55% { opacity: .55; } to { translate: 0 0; opacity: 0; } }
 @keyframes ut-flash { from { opacity: .55; } to { opacity: 0; } }
 @keyframes ut-sheen { from { translate: -130% 0; } to { translate: 230% 0; } }
 @keyframes ut-life { from { scale: 1 1; } to { scale: 0 1; } }
@@ -100,9 +100,9 @@
   inset: 0;
   background: linear-gradient(180deg,
     transparent 0%,
-    color-mix(in srgb, var(--race-accent, #56d9f2) 4%, transparent) 72%,
-    color-mix(in srgb, var(--race-accent, #56d9f2) 20%, transparent) 97.4%,
-    color-mix(in srgb, #ffffff 75%, var(--race-accent, #56d9f2)) 99.7%,
+    color-mix(in srgb, var(--race-accent, #56d9f2) 2%, transparent) 80%,
+    color-mix(in srgb, var(--race-accent, #56d9f2) 7%, transparent) 98%,
+    color-mix(in srgb, var(--race-accent, #56d9f2) 26%, transparent) 99.75%,
     transparent 100%);
   translate: 0 -100%;
   animation: ut-sweep var(--ut-motion-sweep) cubic-bezier(.45, .05, .25, 1) forwards;
@@ -114,7 +114,7 @@
   position: absolute;
   inset: 0;
   opacity: 0;
-  background: radial-gradient(120% 70% at 50% 0%, color-mix(in srgb, var(--race-accent, #56d9f2) 12%, transparent), transparent 70%);
+  background: radial-gradient(120% 70% at 50% 0%, color-mix(in srgb, var(--race-accent, #56d9f2) 6%, transparent), transparent 70%);
   animation: ut-flash var(--ut-motion-sweep) var(--ut-ease-out);
 }
 
@@ -368,16 +368,18 @@ body :is(.system-planet, .resource-building-node, .zone-hotspot, .universe-radar
 /* ---------------------------------------------------------------- 11. Living stage
    Two layers of stars slowly drift and twinkle behind every screen
    (composited: opacity + translate only, ~0 main-thread cost). */
+/* The container stays inside the stage (an inset below 0 made #root scroll a
+   second time on long pages); the drifting layers overhang inside its clip. */
 .stage-ambient {
   position: absolute;
-  inset: -40px;
+  inset: 0;
   z-index: 0;
   pointer-events: none;
   overflow: hidden;
 }
 .stage-ambient i {
   position: absolute;
-  inset: 0;
+  inset: -40px;
   background-repeat: repeat;
   will-change: opacity, translate;
 }

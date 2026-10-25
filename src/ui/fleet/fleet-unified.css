@@ -1,0 +1,192 @@
+/* ==========================================================================
+   FLEETS — one skin for every section (ships, defense, commander ships,
+   repair, combat priority, battles, simulator), matching Operations,
+   Command and Planet: graphite panels (--ut-surface), inner cards
+   (--ut-surface-2), one thin border, 18/13 px radii, small caps labels,
+   race colour only on selected/owned states, cyan only on the main action.
+   Loaded last (main.tsx), scoped under .fleet-workspace-v1; the legacy
+   teal gradients are declared with !important in several older files,
+   so the overrides here carry it too.
+   ========================================================================== */
+
+.fleet-workspace-v1 {
+  --fu-panel: var(--ut-surface);
+  --fu-card: var(--ut-surface-2);
+  --fu-well: rgba(4, 9, 12, .55);
+  --fu-line: var(--ut-border);
+  --fu-line-strong: var(--ut-border-strong);
+  --fu-head: linear-gradient(90deg, color-mix(in srgb, var(--race-accent-strong) 12%, transparent), transparent 72%);
+}
+
+/* ---------- panels: one surface, one border ---------- */
+.fleet-workspace-v1 :is(
+  .fleet-sidebar-v1,
+  .fleet-construction-card-v1, .fleet-defense-population-v1,
+  .shipyard-card-v1, .repair-card-v1, .repair-notice-v1,
+  .combat-priority-rule-v1, .combat-priority-column-v1, .battle-tabs-v1,
+  .simulator-toolbar-v1, .sim-presets-v1, .sim-side-v1, .sim-validation-v1
+) {
+  border: 1px solid var(--fu-line) !important;
+  border-radius: var(--ut-r-panel) !important;
+  background: var(--fu-panel) !important;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, .22) !important;
+  clip-path: none !important;
+}
+.fleet-workspace-v1 :is(.shipyard-card-v1, .repair-card-v1, .combat-priority-column-v1) { overflow: hidden; }
+.fleet-workspace-v1 .shipyard-card-v1:hover { overflow: visible; }
+/* A notice strip is a slim panel, not a full card. */
+.fleet-workspace-v1 :is(.repair-notice-v1, .combat-priority-rule-v1, .fleet-defense-population-v1) { border-radius: var(--ut-r-card) !important; box-shadow: none !important; }
+
+/* The summary row holds cards itself: no second frame behind them. */
+.fleet-workspace-v1 .repair-summary-v1 {
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* ---------- page heads (repair, priority, battles, simulator) ----------
+   They paint themselves with two pseudo layers (::before = frame, ::after =
+   fill, fleet-ui-standard.css); the layers get the panel recipe and lose
+   the clipped corner. */
+html body .fleet-workspace-v1 :is(.fleet-page-head-v1, .repair-page-head-v1, .combat-priority-page-head-v1, .battle-page-head-v1, .shipyard-page-head-v1) {
+  border-radius: var(--ut-r-panel) !important;
+}
+html body .fleet-workspace-v1 :is(.fleet-page-head-v1, .repair-page-head-v1, .combat-priority-page-head-v1, .battle-page-head-v1, .shipyard-page-head-v1)::before {
+  inset: 0 !important;
+  border-radius: var(--ut-r-panel) !important;
+  background: var(--fu-line) !important;
+  clip-path: none !important;
+}
+html body .fleet-workspace-v1 :is(.fleet-page-head-v1, .repair-page-head-v1, .combat-priority-page-head-v1, .battle-page-head-v1, .shipyard-page-head-v1)::after {
+  inset: 1px !important;
+  border-radius: calc(var(--ut-r-panel) - 1px) !important;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--race-accent-strong) 10%, #0c1418), #0c1418 60%) !important;
+  box-shadow: none !important;
+  clip-path: none !important;
+}
+
+/* ---------- card heads: a soft race wash and a hairline ---------- */
+.fleet-workspace-v1 :is(.shipyard-card-title-v1, .repair-card-title-v1, .combat-priority-column-head-v1) {
+  background: var(--fu-head) !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--fu-line) !important;
+  box-shadow: none !important;
+}
+
+/* ---------- inner cards and wells ---------- */
+.fleet-workspace-v1 :is(
+  .shipyard-cost-row-v1, .repair-cost-row-v1, .shipyard-tooltip-level-v1, .shipyard-tooltip-ability-v1,
+  .repair-summary-card-v1, .sim-race-v1, .sim-population-v1, .sim-commander-select-v1, .sim-unit-section-v1,
+  .combat-priority-column-v1 li, .bcard-side
+) {
+  border: 1px solid var(--fu-line) !important;
+  border-radius: var(--ut-r-card) !important;
+  background: var(--fu-card) !important;
+  box-shadow: none !important;
+}
+.fleet-workspace-v1 :is(.shipyard-owned-v1, .repair-available-v1, .fleet-commander-level-v1) {
+  border: 1px solid var(--fu-line-strong) !important;
+  border-radius: var(--ut-r-card) !important;
+  background: var(--fu-well) !important;
+  box-shadow: none !important;
+}
+/* Owning ships is the one state that takes the race colour. */
+.fleet-workspace-v1 .shipyard-owned-v1.has-ships,
+.fleet-workspace-v1 .repair-available-v1 {
+  border-color: var(--race-border) !important;
+  background: linear-gradient(90deg, var(--race-fill), var(--fu-well)) !important;
+}
+.fleet-workspace-v1 .shipyard-visible-level-v1 {
+  border: 1px solid var(--race-border-soft) !important;
+  border-radius: var(--ut-r-chip) !important;
+  background: var(--race-fill-soft) !important;
+}
+
+/* ---------- section headers ---------- */
+.fleet-workspace-v1 :is(.fleet-construction-card-v1, .fleet-yard-card-v1) {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--race-accent-strong) 10%, var(--fu-panel)), var(--fu-panel) 60%) !important;
+}
+.fleet-workspace-v1 .fleet-yard-card-v1 {
+  border: 1px solid var(--fu-line) !important;
+  border-radius: var(--ut-r-card) !important;
+  box-shadow: none !important;
+}
+/* Every section starts on the same line as the sidebar (the shipyard header carried a 14 px margin). */
+.fleet-workspace-v1 .shipyard-view-v1 > .fleet-construction-card-v1 { margin-top: 0 !important; }
+
+/* ---------- sidebar navigation (same recipe as Settings / Science) ---------- */
+.fleet-workspace-v1 .fleet-menu-group-v1 h3 {
+  margin: 0 0 6px !important;
+  padding: 10px 12px 6px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+  color: var(--ut-label) !important;
+  font-size: 11px !important;
+  letter-spacing: .16em !important;
+}
+.fleet-workspace-v1 .fleet-menu-group-v1 button {
+  border: 1px solid transparent !important;
+  border-radius: var(--ut-r-btn) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #c9dde3 !important;
+}
+.fleet-workspace-v1 .fleet-menu-group-v1 button:hover:not(.active) {
+  border-color: var(--fu-line) !important;
+  background: rgba(255, 255, 255, .03) !important;
+  color: #fff !important;
+}
+:root[data-faction] .fleet-workspace-v1 .fleet-menu-group-v1 button.active {
+  border-color: var(--race-border) !important;
+  background: linear-gradient(90deg, var(--race-fill), transparent) !important;
+  box-shadow: inset 3px 0 0 var(--race-accent-strong) !important;
+  color: #fff !important;
+}
+.fleet-workspace-v1 .fleet-production-queue-v1 {
+  border: 1px solid var(--fu-line) !important;
+  border-radius: var(--ut-r-card) !important;
+  background: var(--fu-card) !important;
+}
+
+/* ---------- secondary buttons, inputs ---------- */
+.fleet-workspace-v1 :is(.fleet-page-back-v1, .repair-back-v1, .combat-priority-back-v1, .battle-back-v1, .sim-clear-v1, .sim-copy-tech-v1, .repair-shortcut-v1, .sim-section-toggle-v1) {
+  border: 1px solid var(--fu-line-strong) !important;
+  border-radius: var(--ut-r-btn) !important;
+  background: rgba(86, 217, 242, .05) !important;
+  box-shadow: none !important;
+  color: #dcecf0 !important;
+}
+.fleet-workspace-v1 :is(.fleet-page-back-v1, .repair-back-v1, .combat-priority-back-v1, .battle-back-v1, .sim-clear-v1, .sim-copy-tech-v1, .repair-shortcut-v1, .sim-section-toggle-v1):hover:not(:disabled) {
+  border-color: var(--ut-accent) !important;
+  color: #fff !important;
+}
+.fleet-workspace-v1 .sim-section-toggle-v1 { border: 0 !important; border-radius: var(--ut-r-card) !important; background: transparent !important; }
+.fleet-workspace-v1 :is(input:not([type="range"]):not([type="checkbox"]), select) {
+  border: 1px solid var(--fu-line-strong) !important;
+  border-radius: var(--ut-r-input, 10px) !important;
+  background: rgba(2, 8, 12, .9) !important;
+}
+
+/* ---------- main actions: the cyan action of Operations ---------- */
+.fleet-workspace-v1 :is(.repair-button-v1--tokens, .sim-run-v1, .shipyard-build-button-v1):not(:disabled) {
+  border: 1px solid #8cefff !important;
+  border-radius: var(--ut-r-btn) !important;
+  background: linear-gradient(180deg, #5fe2f8, #2bb6d6) !important;
+  box-shadow: 0 0 22px rgba(86, 217, 242, .3) !important;
+  color: #03222b !important;
+}
+.fleet-workspace-v1 :is(.repair-button-v1--tokens, .sim-run-v1, .shipyard-build-button-v1):not(:disabled):hover {
+  background: linear-gradient(180deg, #7ae9fb, #36c2e0) !important;
+  box-shadow: 0 0 30px rgba(86, 217, 242, .45) !important;
+}
+
+/* ---------- battles list ---------- */
+.fleet-workspace-v1 .battle-card-v1 {
+  border: 1px solid var(--fu-line) !important;
+  border-radius: var(--ut-r-card) !important;
+  background: var(--fu-panel) !important;
+}
+.fleet-workspace-v1 .battle-tabs-v1 { border-radius: var(--ut-r-card) !important; box-shadow: none !important; }
