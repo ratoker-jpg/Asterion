@@ -170,6 +170,7 @@ import { getEffectiveResourceIncomePerHour } from './application/resource-clock.
 import { publishApplicationRuntimeSnapshot } from './application/runtime.ts';
 import { reconcileRuntime, type RuntimeReconcileEvent } from './application/reconcile.ts';
 import { freezeNpcCatchupTarget, isNpcCatchupPending, needsNpcCatchupBefore } from './application/npc-catchup.ts';
+import { NpcCatchupBanner } from './NpcCatchupBanner.tsx';
 import {
   FLIGHT_COMMAND_RESULT_EVENT,
   FLIGHT_DISPATCH_REQUEST_EVENT,
@@ -2419,6 +2420,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
           onPlanetChange={(planetId) => selectPlanet(planetId)}
           onPlanetMenuToggle={() => setPlanetMenuOpen((open) => !open)}
          />
+        <NpcCatchupBanner replay={state.npcReplay} />
 
         <button
           className="shell-reset-control shell-pause-control"

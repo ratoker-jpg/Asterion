@@ -116,12 +116,12 @@ jobs:
             suites: "qa:visual test:test-mode-ui:skip test:header-ui test:resource-assets-ui test:save-safety-ui:skip"
           - shard: science-reports
             suites: "test:science-ui:skip test:building-actions-ui test:reports-ui test:battle-reports-ui:skip test:simulator-ui:skip test:space-flight-ui:skip test:production-test-isolation-ui:skip"
-          # The scoped replay QA runs one catch-up day: at the current replay
-          # speed (owner decision on the catch-up horizon is pending, see the
-          # PR report) 14 days cannot finish within the 120 s gate on a shared
-          # runner. The shard still verifies the pending-command gate, replay
-          # completion and state consistency; the 14-day duration target is
-          # measured by the separate npc-full-world job (continue-on-error).
+          # Owner decision (25.10.2026): a long absence is caught up in full
+          # behind a progress bar and the player waits; there is no 14-day /
+          # 120 s limit any more. The scoped replay QA runs one catch-up day and
+          # checks the progress banner, the pending-command gate, completion and
+          # state consistency. Long-horizon durations are measured by the
+          # npc-full-world job.
           - shard: campaign-command
             suites: "test:new-game-ui:skip test:npc-replay-ui-1d test:pirate-operations-ui test:command-ui:skip test:command-aid-ui:skip test:command-journal-ui:skip"
           - shard: fleet-universe
