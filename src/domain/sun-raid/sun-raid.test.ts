@@ -14,6 +14,7 @@ import {
   mergeSideShipLevels,
   mergeSideTechnologies,
   pickStolenCrystal,
+  resolveGateBreach,
   projectSun,
   readSun,
   rollCrystal,
@@ -107,7 +108,7 @@ test('raid launch rules: alliance leadership, population cap, frozen Sun, one ra
   assert.equal(checkRaidLaunch({ ...base, allianceId: 'a', role: 'member' }).ok, false);
   assert.equal(checkRaidLaunch({ ...base, allianceId: 'a', role: 'leader' }).ok, true);
   assert.equal(checkRaidLaunch({ ...base, allianceId: 'a', role: 'deputy' }).ok, true);
-  const over = checkRaidLaunch({ ...base, allianceId: 'a', role: 'leader', population: 225_001 });
+  const over = checkRaidLaunch({ ...base, allianceId: 'a', role: 'leader', population: 75_001 });
   assert.equal(over.ok, false);
   assert.match(over.ok ? '' : over.message, /уберите 1\./);
   let frozenSun = readSun(state, 1, 3);
@@ -145,4 +146,30 @@ test('Sun raid state survives a JSON round trip and rejects garbage', () => {
   assert.deepEqual(migrateSunRaidState({ version: 7 }), createDefaultSunRaidState());
   const dirty = migrateSunRaidState({ ...state, crystals: { 'owner:p': ['crystal-3', 'crystal-3', 'bogus'], nonsense: ['crystal-1'] } });
   assert.deepEqual(dirty.crystals, { 'owner:p': ['crystal-3'] });
+});
+
+test('Gate breach follows the owner rules of 25.10.2026 over many seeds', () => {
+  const four = [...SOLAR_CRYSTAL_IDS];
+  const count = (holder: { kind: 'alliance' | 'owner'; id: string }, attackerSolo: boolean) => {
+    const tally = { kept: 0, stolen: 0, destroyed: 0 };
+    for (let index = 0; index < 4_000; index += 1) tally[resolveGateBreach(`seed-${index}`, holder, four, attackerSolo, []).kind] += 1;
+    return tally;
+  };
+  const allianceByAlliance = count({ kind: 'alliance', id: 'a' }, false);
+  assert.deepEqual([allianceByAlliance.kept, allianceByAlliance.stolen], [0, 0], 'an alliance attacker always destroys one crystal');
+  const allianceBySolo = count({ kind: 'alliance', id: 'a' }, true);
+  assert.equal(allianceBySolo.kept, 0);
+  assert.ok(Math.abs(allianceBySolo.stolen / 4_000 - 0.7) < 0.03, `solo steals ~70%: ${allianceBySolo.stolen}`);
+  const soloBySolo = count({ kind: 'owner', id: 'o' }, true);
+  assert.ok(Math.abs(soloBySolo.kept / 4_000 - 0.5) < 0.03, `a solo holder keeps ~50%: ${soloBySolo.kept}`);
+  assert.ok(Math.abs(soloBySolo.stolen / 4_000 - 0.35) < 0.03, `then 70% of the rest is stolen: ${soloBySolo.stolen}`);
+  const soloByAlliance = count({ kind: 'owner', id: 'o' }, false);
+  assert.equal(soloByAlliance.stolen, 0);
+  assert.ok(Math.abs(soloByAlliance.destroyed / 4_000 - 0.5) < 0.03);
+  // A solo attacker steals only a crystal he lacks; with all four he destroys one.
+  const full = resolveGateBreach('seed-x', { kind: 'alliance', id: 'a' }, four, true, four);
+  assert.equal(full.kind, 'destroyed');
+  const stolen = resolveGateBreach('seed-1', { kind: 'alliance', id: 'a' }, ['crystal-1', 'crystal-2'], true, ['crystal-1']);
+  if (stolen.kind === 'stolen') assert.equal(stolen.crystal, 'crystal-2');
+  assert.deepEqual(resolveGateBreach('s', { kind: 'owner', id: 'o' }, [], true, []), { kind: 'kept' });
 });

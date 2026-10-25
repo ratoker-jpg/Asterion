@@ -18,7 +18,10 @@ import {
   formatSun,
   getSunDebris,
   isSunCombatHull,
+  joinSunRaid,
   launchSunRaid,
+  ownerRaidPledge,
+  raidPledgeRoom,
   previewSunLaunch,
   selectIncomingSunAlerts,
   selectPlayerRaidRole,
@@ -29,6 +32,7 @@ import {
   testGrantCrystal,
   testIraJoinRaid,
   testIraSupportSun,
+  testLaunchRaidNow,
   type SunActionResult,
 } from '../../application/sun-raid.ts';
 import { CrystalSet, SunBrightnessBar, SunOrb } from './SunRaidArt.tsx';
@@ -73,7 +77,7 @@ export function SunRaidPanel({ state, now, mode, testTimeScale, selected, onSele
   const alerts = selectIncomingSunAlerts(state, now);
   const ownRaids = role.allianceId ? sunRaid.raids.filter((raid) => raid.allianceId === role.allianceId).slice(-6).reverse() : [];
   const [galaxy, setGalaxy] = useState(selected.galaxy);
-  const [launch, setLaunch] = useState<null | { kind: 'attack' }>(null);
+  const [launch, setLaunch] = useState<null | { kind: 'attack' } | { kind: 'join'; raid: SunRaidRecord }>(null);
   const galaxyCount = getActiveGalaxyCount();
   const options = { now, mode, testTimeScale };
 
@@ -92,6 +96,8 @@ export function SunRaidPanel({ state, now, mode, testTimeScale, selected, onSele
       ? 'Рейд объявляют лидер или заместитель союза.'
       : sunRaid.campaignResult
         ? 'Кампания завершена.'
+        : activeOwnRaid?.status === 'gathering'
+          ? `Союз собирает рейд на Солнце ${formatSun(activeOwnRaid.galaxy, activeOwnRaid.system)}: вступите в него в списке рейдов союза.`
         : activeOwnRaid
           ? `Союз уже ведёт рейд на Солнце ${formatSun(activeOwnRaid.galaxy, activeOwnRaid.system)}. Новый — после возвращения флота.`
           : projection.frozen
@@ -129,7 +135,12 @@ export function SunRaidPanel({ state, now, mode, testTimeScale, selected, onSele
               <p>Рейды на Солнца ведут союзы: создайте союз или вступите в него на вкладке «Союз». Одиночка может защищать Солнца своей галактики и строить Врата, если добудет 4 кристалла.</p>
               <button type="button" className="opsA-btn" onClick={onOpenCommand}>К ВКЛАДКЕ «СОЮЗ»</button>
             </div>
-          ) : ownRaids.length ? ownRaids.map((raid) => <RaidRow key={raid.id} raid={raid} now={now} onSelect={() => onSelect({ galaxy: raid.galaxy, system: raid.system })} onReport={onOpenReport} />)
+          ) : ownRaids.length ? ownRaids.map((raid) => <RaidRow key={raid.id} raid={raid} now={now}
+            gathered={raid.status === 'gathering' ? selectRaidSides(state, raid.id).attackers.population : 0}
+            ownPledge={raid.status === 'gathering' ? ownerRaidPledge(state, raid.id, state.profile.playerId) : 0}
+            canJoin={raid.status === 'gathering' && (raid.gatherEndsAt ?? 0) > now && raidPledgeRoom(state, raid, state.profile.playerId) > 0}
+            onJoin={() => setLaunch({ kind: 'join', raid })}
+            onSelect={() => onSelect({ galaxy: raid.galaxy, system: raid.system })} onReport={onOpenReport} />)
             : <p className="srp-empty">Союз ещё не водил рейдов. Выберите Солнце справа.</p>}
         </section>
         <section className="srp-block srp-block--grid">
@@ -201,9 +212,10 @@ export function SunRaidPanel({ state, now, mode, testTimeScale, selected, onSele
 
         <div className="srp-cards">
           <article className="srp-card">
-            <header><img src={SUN_RAID_MISSION_ICON} alt="" /><span><b>Командный рейд</b><small>Командование → Операции · союз · 3 ч туда и 3 ч обратно</small></span></header>
+            <header><img src={SUN_RAID_MISSION_ICON} alt="" /><span><b>Командный рейд</b><small>Командование → Операции · союз · сбор 30 мин · 3 ч туда и 3 ч обратно</small></span></header>
             <ul className="srp-rules">
-              <li>Лимит стороны — {SUN_RAID_CONFIG.populationCapPerSide.toLocaleString('ru-RU')} населения</li>
+              <li>Рейд вылетает только с полными {SUN_RAID_CONFIG.populationCapPerSide.toLocaleString('ru-RU')} населения: 30 минут на сбор, иначе распускается</li>
+              <li>Один участник вносит не больше {SUN_RAID_CONFIG.participantPopulationCap.toLocaleString('ru-RU')} — только боевой флот, с любых своих планет</li>
               <li>Технологии и уровни кораблей — лучшие среди участников стороны</li>
               <li>Один рейд союза одновременно</li>
             </ul>
@@ -246,7 +258,8 @@ export function SunRaidPanel({ state, now, mode, testTimeScale, selected, onSele
                 <button type="button" className="opsA-btn opsA-btn--small" onClick={() => onCommit(testBot01RaidSun(state, selected.galaxy, selected.system, options))} data-qa-test="bot01-raid">Бот 01: рейд на это Солнце</button>
                 <button type="button" className="opsA-btn opsA-btn--small" disabled={!raidHere || Boolean(ownIncoming)} onClick={() => raidHere && onCommit(testIraSupportSun(state, raidHere.id, options))} data-qa-test="ira-support">Ира Вель: защита</button>
                 <button type="button" className="opsA-btn opsA-btn--small" disabled={!raidHere || !ownIncoming} onClick={() => raidHere && onCommit(testBot01DefendSun(state, raidHere.id, options))} data-qa-test="bot01-defend">Бот 01: защита цели</button>
-                <button type="button" className="opsA-btn opsA-btn--small" disabled={!raidHere || !ownIncoming} onClick={() => raidHere && onCommit(testIraJoinRaid(state, raidHere.id, options))} data-qa-test="ira-join">Ира Вель: в рейд</button>
+                <button type="button" className="opsA-btn opsA-btn--small" disabled={activeOwnRaid?.status !== 'gathering'} onClick={() => activeOwnRaid && onCommit(testIraJoinRaid(state, activeOwnRaid.id, options))} data-qa-test="ira-join">Ира Вель: в сбор</button>
+                <button type="button" className="opsA-btn opsA-btn--small" disabled={activeOwnRaid?.status !== 'gathering'} onClick={() => activeOwnRaid && onCommit(testLaunchRaidNow(state, activeOwnRaid.id, options))} data-qa-test="launch-now">Сбор: вылет сейчас</button>
                 <button type="button" className="opsA-btn opsA-btn--small" disabled={crystals.length >= 4} onClick={() => onCommit(testGrantCrystal(state, options))} data-qa-test="grant-crystal">Выдать кристалл</button>
                 {onTestGateAssault ? <button type="button" className="opsA-btn opsA-btn--small" onClick={onTestGateAssault} data-qa-test="gate-assault">Бот 01: штурм Врат</button> : null}
               </div>
@@ -261,12 +274,14 @@ export function SunRaidPanel({ state, now, mode, testTimeScale, selected, onSele
           now={now}
           options={options}
           kind={launch.kind}
-          raid={null}
-          galaxy={selected.galaxy}
-          system={selected.system}
+          raid={launch.kind === 'join' ? launch.raid : null}
+          galaxy={launch.kind === 'join' ? launch.raid.galaxy : selected.galaxy}
+          system={launch.kind === 'join' ? launch.raid.system : selected.system}
           onClose={() => setLaunch(null)}
           onSubmit={(originPlanetId, ships, commanders) => {
-            const result = launchSunRaid(state, { galaxy: selected.galaxy, system: selected.system, originPlanetId, ships, commanders, requestId: `sun-raid-${selected.galaxy}-${selected.system}-${Date.now()}` }, { ...options, now: Date.now() });
+            const result = launch.kind === 'join'
+              ? joinSunRaid(state, { raidId: launch.raid.id, originPlanetId, ships, commanders, requestId: `sun-raid-join-${launch.raid.id}-${Date.now()}` }, { ...options, now: Date.now() })
+              : launchSunRaid(state, { galaxy: selected.galaxy, system: selected.system, originPlanetId, ships, commanders, requestId: `sun-raid-${selected.galaxy}-${selected.system}-${Date.now()}` }, { ...options, now: Date.now() });
             onCommit(result);
             if (result.ok) setLaunch(null);
             return result.ok ? null : result.error;
@@ -277,14 +292,25 @@ export function SunRaidPanel({ state, now, mode, testTimeScale, selected, onSele
   );
 }
 
-function RaidRow({ raid, now, onSelect, onReport }: { raid: SunRaidRecord; now: number; onSelect: () => void; onReport: (id: string) => void }) {
+type RaidRowProps = {
+  raid: SunRaidRecord; now: number; gathered: number; ownPledge: number; canJoin: boolean;
+  onJoin: () => void; onSelect: () => void; onReport: (id: string) => void;
+};
+
+function RaidRow({ raid, now, gathered, ownPledge, canJoin, onJoin, onSelect, onReport }: RaidRowProps) {
   const result = raid.result;
+  const status = raid.status === 'gathering'
+    ? `Сбор · ${gathered.toLocaleString('ru-RU')} / ${SUN_RAID_CONFIG.populationCapPerSide.toLocaleString('ru-RU')} · осталось ${countdown((raid.gatherEndsAt ?? now) - now)}${ownPledge ? ` · ваш вклад ${ownPledge.toLocaleString('ru-RU')}` : ''}`
+    : raid.status === 'disbanded' ? 'Сбор не набран · рейд распущен'
+      : raid.status === 'incoming' ? `В пути · бой через ${countdown(raid.arrivesAt - now)}`
+        : result?.winner === 'attacker' ? `Победа · ${result.brightnessBefore}% → ${result.brightnessAfter}%` : 'Рейд отражён';
   return (
-    <div className={`srp-raid ${raid.status === 'incoming' ? 'is-live' : result?.winner === 'attacker' ? 'is-won' : 'is-lost'}`} data-qa-own-raid={raid.id}>
+    <div className={`srp-raid ${raid.status === 'incoming' || raid.status === 'gathering' ? 'is-live' : result?.winner === 'attacker' ? 'is-won' : 'is-lost'}`} data-qa-own-raid={raid.id}>
       <button type="button" onClick={onSelect}>
         <b>Солнце {formatSun(raid.galaxy, raid.system)}</b>
-        <small>{raid.status === 'incoming' ? `В пути · бой через ${countdown(raid.arrivesAt - now)}` : result?.winner === 'attacker' ? `Победа · ${result.brightnessBefore}% → ${result.brightnessAfter}%` : 'Рейд отражён'}{raid.closedAt === undefined && raid.status === 'resolved' ? ' · флот возвращается' : ''}</small>
+        <small>{status}{raid.closedAt === undefined && raid.status === 'resolved' ? ' · флот возвращается' : ''}</small>
       </button>
+      {canJoin ? <button type="button" className="opsA-chip opsA-chip--link" onClick={onJoin} data-qa-raid-join={raid.id}>ПРИСОЕДИНИТЬСЯ</button> : null}
       {result?.reportId ? <button type="button" className="opsA-chip opsA-chip--link" onClick={() => onReport(result.reportId!)}>ОТЧЁТ</button> : null}
     </div>
   );
@@ -316,7 +342,7 @@ type LaunchProps = {
   state: SaveState;
   now: number;
   options: { now: number; mode: RuntimeMode; testTimeScale: number };
-  kind: 'attack' | 'support';
+  kind: 'attack' | 'support' | 'join';
   raid: SunRaidRecord | null;
   galaxy: number;
   system: number;
@@ -372,10 +398,10 @@ function SunLaunchDialog({ state, now, options, kind, raid, galaxy, system, onCl
   const host = document.querySelector('.stage') ?? document.body;
   return createPortal(
     <div className="opsA srp-portal"><div className="srp-modal" role="presentation" onMouseDown={onClose}>
-      <section className="srp-launch" role="dialog" aria-modal="true" aria-label={kind === 'attack' ? 'Объявить рейд' : 'Отправить защиту'} onMouseDown={(event) => event.stopPropagation()} data-qa-sun-launch={kind}>
+      <section className="srp-launch" role="dialog" aria-modal="true" aria-label={kind === 'attack' ? 'Объявить рейд' : kind === 'join' ? 'Вступить в рейд' : 'Отправить защиту'} onMouseDown={(event) => event.stopPropagation()} data-qa-sun-launch={kind}>
         <header>
-          <img src={kind === 'attack' ? SUN_RAID_MISSION_ICON : sunSupportIcon} alt="" />
-          <div><small>{kind === 'attack' ? 'КОМАНДНЫЙ РЕЙД' : 'ПОДДЕРЖКА СОЛНЦА'}</small><h2>Солнце {formatSun(galaxy, system)}</h2></div>
+          <img src={kind === 'support' ? sunSupportIcon : SUN_RAID_MISSION_ICON} alt="" />
+          <div><small>{kind === 'attack' ? 'КОМАНДНЫЙ РЕЙД · СБОР 30 МИН' : kind === 'join' ? 'СБОР РЕЙДА' : 'ПОДДЕРЖКА СОЛНЦА'}</small><h2>Солнце {formatSun(galaxy, system)}</h2></div>
           <button ref={closeRef} type="button" className="srp-close" data-asterion-close aria-label="Закрыть" onClick={onClose}>×</button>
         </header>
         <div className="srp-launch__origin">
@@ -430,7 +456,7 @@ function SunLaunchDialog({ state, now, options, kind, raid, galaxy, system, onCl
         ) : null}
         <div className="srp-cap" data-qa-sun-population={`${used}/${preview.cap}`}>
           <div className="srp-cap__head">
-            <small>НАСЕЛЕНИЕ СТОРОНЫ{preview.committed ? ` · уже в пути ${preview.committed.toLocaleString('ru-RU')}` : ''}</small>
+            <small>{kind === 'support' ? 'НАСЕЛЕНИЕ СТОРОНЫ' : `СБОР РЕЙДА · ВАШ ВКЛАД ДО ${SUN_RAID_CONFIG.participantPopulationCap.toLocaleString('ru-RU')}`}{preview.committed ? ` · уже собрано ${preview.committed.toLocaleString('ru-RU')}` : ''}</small>
             <b className={used > preview.cap ? 'is-over' : ''}>{used.toLocaleString('ru-RU')} / {preview.cap.toLocaleString('ru-RU')}</b>
           </div>
           <i><span style={{ width: `${percent}%` }} className={used > preview.cap ? 'is-over' : ''} /></i>
@@ -439,13 +465,13 @@ function SunLaunchDialog({ state, now, options, kind, raid, galaxy, system, onCl
           <div><dt>В пути</dt><dd>{preview.oneWayMs ? countdown(preview.oneWayMs) : '—'}</dd></div>
           <div><dt>Прибытие</dt><dd>{preview.oneWayMs ? new Date(preview.arrivesAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '—'}</dd></div>
           <div><dt>Газ</dt><dd>{preview.gasCost.toLocaleString('ru-RU')}</dd></div>
-          <div><dt>{kind === 'attack' ? 'Бой' : 'Атака прибудет'}</dt><dd>{kind === 'attack' ? 'по прибытию' : raid ? countdown(raid.arrivesAt - now) : '—'}</dd></div>
+          <div><dt>{kind === 'support' ? 'Атака прибудет' : 'Вылет'}</dt><dd>{kind === 'support' ? (raid ? countdown(raid.arrivesAt - now) : '—') : kind === 'join' && raid ? `сбор ещё ${countdown((raid.gatherEndsAt ?? now) - now)}` : 'при 225 000 за 30 мин'}</dd></div>
         </dl>
         {(error ?? preview.error) && preview.population > 0 ? <p className="srp-block-reason" role="alert">{error ?? preview.error}</p> : null}
         <footer>
           <button type="button" className="opsA-btn" onClick={onClose}>ОТМЕНА</button>
           <button type="button" className="opsA-btn opsA-btn--primary" disabled={Boolean(preview.error) || preview.population <= 0} onClick={() => setError(onSubmit(originPlanetId, ships, commanders))} data-qa-sun-launch-confirm>
-            {kind === 'attack' ? 'ОБЪЯВИТЬ РЕЙД' : 'ОТПРАВИТЬ ЗАЩИТУ'} · {sunFleetPopulation(ships, factionId, commanders).toLocaleString('ru-RU')}
+            {kind === 'attack' ? 'ОБЪЯВИТЬ СБОР' : kind === 'join' ? 'ВСТУПИТЬ В СБОР' : 'ОТПРАВИТЬ ЗАЩИТУ'} · {sunFleetPopulation(ships, factionId, commanders).toLocaleString('ru-RU')}
           </button>
         </footer>
       </section>

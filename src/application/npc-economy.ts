@@ -1,3 +1,4 @@
+import { getNextNpcSpaceportCheckpoint } from './npc-spaceport.ts';
 import { advanceRecyclingState, RECYCLING_STORAGE_MS } from '../domain/buildings/recycling.ts';
 import {
   completeBuildingProject,
@@ -431,6 +432,9 @@ export function getNextNpcEconomyCheckpoint(target: SpyTargetState, at: number):
     const burnEnd = target.overpopulation.episodeStartedAt + OVERPOPULATION_WINDOW_MS;
     if (burnEnd >= at) due.push(burnEnd);
   }
+  // A Spaceport upgrade raises a ship's level at its finish: battles after it see the new level.
+  const upgrade = getNextNpcSpaceportCheckpoint(target, at);
+  if (upgrade !== null) due.push(upgrade);
   return due.length ? Math.min(...due) : null;
 }
 

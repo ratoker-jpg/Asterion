@@ -119,7 +119,8 @@ test('NPC elimination arrival runs canonical combat and isolates player-owned sa
   const report = resolved.state.combat.reports.find((item) => item.id === `battle-pirate-${sent.flight!.id}`)!;
   for (const shipId of ['cruiser', 'battleship'] as const) {
     const destroyed = report.attackerForce.stacks?.find((stack) => stack.entityId === shipId)?.destroyed ?? 0;
-    assert.equal(resolved.flight!.selectedShips[shipId], sent.flight!.selectedShips[shipId]! - destroyed,
+    // A hull type wiped out leaves the manifest instead of staying as zero.
+    assert.equal(resolved.flight!.selectedShips[shipId] ?? 0, sent.flight!.selectedShips[shipId]! - destroyed,
       `return manifest carries only canonical ${shipId} survivors`);
     assert.equal(npcOriginAfter.fleet.ships[shipId], 0, 'flight survivors remain in transit until the return time');
   }

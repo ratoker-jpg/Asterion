@@ -141,6 +141,30 @@ export function pickStolenCrystal(seed: string, ownerCrystals: readonly SolarCry
   return candidates[Math.floor(random() * candidates.length)]!;
 }
 
+export type GateBreachOutcome =
+  | { kind: 'kept' }
+  | { kind: 'stolen'; crystal: SolarCrystalId }
+  | { kind: 'destroyed'; crystal: SolarCrystalId };
+
+/**
+ * What a won assault on a Gate under construction does to the holder's
+ * crystals (owner rules 25.10.2026). A solo holder keeps them all half the
+ * time. Otherwise one crystal is lost: a solo attacker steals it (one he
+ * lacks) 70% of the time and destroys it otherwise; an alliance attacker
+ * always destroys it, so the alliance must raid Suns again.
+ */
+export function resolveGateBreach(seed: string, holder: CrystalHolder, holderCrystals: readonly SolarCrystalId[],
+  attackerSolo: boolean, attackerCrystals: readonly SolarCrystalId[]): GateBreachOutcome {
+  if (!holderCrystals.length) return { kind: 'kept' };
+  const random = createSeededRandom(`gate-breach:${seed}`);
+  if (holder.kind === 'owner' && random() < SUN_RAID_CONFIG.soloGateKeepChance) return { kind: 'kept' };
+  const stealable = holderCrystals.filter((id) => !attackerCrystals.includes(id));
+  if (attackerSolo && stealable.length && random() < SUN_RAID_CONFIG.soloStealChance) {
+    return { kind: 'stolen', crystal: stealable[Math.floor(random() * stealable.length)]! };
+  }
+  return { kind: 'destroyed', crystal: holderCrystals[Math.floor(random() * holderCrystals.length)]! };
+}
+
 /** Highest level of every technology among one side's participants. */
 export function mergeSideTechnologies(levels: readonly CombatTechnologyLevels[]): CombatTechnologyLevels {
   const merged = createDefaultCombatTechnologies();
@@ -170,6 +194,11 @@ export function incomingRaidsOnSun(state: SunRaidState, galaxy: number, system: 
   return state.raids.filter((raid) => raid.status === 'incoming' && raid.galaxy === galaxy && raid.system === system);
 }
 
+/** Raids gathering for or flying to one Sun: only one at a time. */
+export function liveRaidsOnSun(state: SunRaidState, galaxy: number, system: number): SunRaidRecord[] {
+  return state.raids.filter((raid) => (raid.status === 'incoming' || raid.status === 'gathering') && raid.galaxy === galaxy && raid.system === system);
+}
+
 export type RaidLaunchCheck =
   | { ok: true }
   | { ok: false; code: 'no-alliance' | 'not-leadership' | 'sun-frozen' | 'raid-active' | 'sun-under-attack' | 'population-cap' | 'no-ships' | 'campaign-finished'; message: string };
@@ -192,14 +221,14 @@ export function checkRaidLaunch(input: {
   if (!allianceId) return { ok: false, code: 'no-alliance', message: 'Рейд на Солнце — командная операция: нужен союз (Командование → Союз).' };
   if (role !== 'leader' && role !== 'deputy') return { ok: false, code: 'not-leadership', message: 'Рейд объявляет лидер или заместитель союза.' };
   if (population <= 0) return { ok: false, code: 'no-ships', message: 'Выберите боевые корабли для рейда.' };
-  if (population > SUN_RAID_CONFIG.populationCapPerSide) {
-    return { ok: false, code: 'population-cap', message: `Лимит стороны — ${SUN_RAID_CONFIG.populationCapPerSide.toLocaleString('ru-RU')} населения: уберите ${(population - SUN_RAID_CONFIG.populationCapPerSide).toLocaleString('ru-RU')}.` };
+  if (population > SUN_RAID_CONFIG.participantPopulationCap) {
+    return { ok: false, code: 'population-cap', message: `Один участник вносит не больше ${SUN_RAID_CONFIG.participantPopulationCap.toLocaleString('ru-RU')} населения: уберите ${(population - SUN_RAID_CONFIG.participantPopulationCap).toLocaleString('ru-RU')}.` };
   }
   const active = activeRaidOfAlliance(state, allianceId);
   if (active) return { ok: false, code: 'raid-active', message: `Союз уже ведёт рейд на Солнце [${active.galaxy}:${active.system}]. Новый — после возвращения флота.` };
   const projection = projectSun(readSun(state, galaxy, system), now);
   if (projection.frozen) return { ok: false, code: 'sun-frozen', message: 'Солнце заморожено и восстанавливается: атаковать нельзя.' };
-  if (incomingRaidsOnSun(state, galaxy, system).length) return { ok: false, code: 'sun-under-attack', message: 'К этому Солнцу уже летит другой рейд.' };
+  if (liveRaidsOnSun(state, galaxy, system).length) return { ok: false, code: 'sun-under-attack', message: 'На это Солнце уже собирается или летит другой рейд.' };
   return { ok: true };
 }
 

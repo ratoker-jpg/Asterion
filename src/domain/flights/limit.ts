@@ -43,3 +43,15 @@ export function getFlightSlotUsage(
   const limit = concurrentFlightLimit(computerSystemsLevel);
   return { used, limit, free: Math.max(0, limit - used) };
 }
+
+/**
+ * Free slots of one autonomous NPC owner, by the player's rule, counted over
+ * that owner's own flights without copying them.
+ */
+export function npcFreeFlightSlots(ownerFlights: readonly FlightRecord[], computerSystemsLevel: unknown): number {
+  let used = 0;
+  for (const flight of ownerFlights) {
+    if (flight.ownerSide === 'npc' && OCCUPYING_PHASES.has(flight.phase) && !isFlightLimitExempt(flight.missionId)) used += 1;
+  }
+  return Math.max(0, concurrentFlightLimit(computerSystemsLevel) - used);
+}

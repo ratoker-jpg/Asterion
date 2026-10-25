@@ -1,3 +1,4 @@
+import { settleNpcSpaceport, syncNpcOwnerShipLevels } from './npc-spaceport.ts';
 import {
   completeBuilding,
   reconcileRecycling,
@@ -18,7 +19,8 @@ import { reconcileResourceIncome } from './resource-clock.ts';
 import type { ResourceCreditResult } from '../domain/resources/credit.ts';
 import type { FleetProductionCompletion } from '../domain/fleet/production.ts';
 import { reconcileFlights, type FlightReconcileEvent } from './flights.ts';
-import { reconcileSunRaids, type SunRaidNotice } from './sun-raid.ts';
+import { currentSunRaidState, publishSunBrightness, reconcileSunRaids, type SunRaidNotice } from './sun-raid.ts';
+import { projectSun } from '../domain/sun-raid/rules.ts';
 import { reconcileAidMembership, syncAidState } from './alliance-aid.ts';
 import { selectDuePirateRolls, resolveDuePirateRoll, type PirateDueRoll, type PirateRollWriteScope } from './pirate-raids.ts';
 import { advanceExplorationNpcProgress, selectDueExplorationNpcRolls, resolveDueExplorationNpcRoll } from './exploration-npc.ts';
@@ -168,7 +170,7 @@ function reconcileRuntimeSlice(
     for (const [id, target] of Object.entries(targets)) {
       if (!replayOwners.has(target.ownerId) || (ownerIds && !ownerIds.has(target.ownerId))) continue;
       const settledPlanet = settleNpcPlanet(target, at, { timeScale });
-      const result = { ...settledPlanet, target: settleNpcRecycling(settledPlanet.target, at) };
+      const result = { ...settledPlanet, target: settleNpcSpaceport(settleNpcRecycling(settledPlanet.target, at), at) };
       settled.add(target.ownerId);
       const production = settleNpcFleetProduction(result.target, target.ownerId, at);
       if (production.completed.length) events.push({ kind: 'npc-fleet-production', ownerId: target.ownerId, planetId: id, at, completed: production.completed });
@@ -180,6 +182,8 @@ function reconcileRuntimeSlice(
       changed ||= targets[id] !== target;
       for (const assetRole of result.completedRoles) events.push({ kind: 'npc-building', planetId: id, assetRole, at });
     }
+    // Upgrade levels are owner-wide: a finished upgrade reaches all of the owner's planets now.
+    if (syncNpcOwnerShipLevels(targets, settled)) changed = true;
     if (changed) next = { ...next, espionage: { ...next.espionage, targets } };
     const science = pauseNpcScienceForSettlement(next.npcScience, before, settled, at, targets);
     if (science !== next.npcScience) next = { ...next, npcScience: science };
@@ -230,6 +234,9 @@ function reconcileRuntimeSlice(
   };
   // Establish legacy overpopulation episodes at the committed prefix, never at
   // a later caller-dependent decision time. Existing clocks/queues are retained.
+  // NPC solar income reads the published Sun brightness: start from the
+  // brightness of the slice's first moment, never the wall clock's.
+  if (replay) publishSunBrightness(next, replay.from);
   if (replay) settleNpcEconomies(replay.from);
   if (replay) completeNpcScience(replay.from);
   const startingPirate = next.pirate ?? createDefaultPirateState();
@@ -354,10 +361,10 @@ function reconcileRuntimeSlice(
 
   // Flight times are pure of the records and exploration contacts; both are
   // immutable, so the sorted list is rebuilt only when either changes.
-  let flightTimes: { records: unknown; exploration: unknown; times: number[] } | null = null;
+  let flightTimes: { records: unknown; exploration: unknown; sunRaid: unknown; times: number[] } | null = null;
   const nextDueFlightCheckpoint = (after: number): number | undefined => {
-    if (!flightTimes || flightTimes.records !== next.flights.records || flightTimes.exploration !== next.exploration) {
-      flightTimes = { records: next.flights.records, exploration: next.exploration, times: collectFlightTimes() };
+    if (!flightTimes || flightTimes.records !== next.flights.records || flightTimes.exploration !== next.exploration || flightTimes.sunRaid !== next.sunRaid) {
+      flightTimes = { records: next.flights.records, exploration: next.exploration, sunRaid: next.sunRaid, times: collectFlightTimes() };
     }
     const times = flightTimes.times;
     let low = 0;
@@ -390,6 +397,8 @@ function reconcileRuntimeSlice(
       if (checkpoint === undefined || !Number.isFinite(checkpoint)) continue;
       times.push(checkpoint);
     }
+    // A Sun raid gathering ends at its own moment: disbanded, its ships go home.
+    for (const raid of next.sunRaid?.raids ?? []) if (raid.status === 'gathering' && raid.gatherEndsAt !== undefined) times.push(raid.gatherEndsAt);
     return times.sort((left, right) => left - right);
   };
 
@@ -515,6 +524,31 @@ function reconcileRuntimeSlice(
     return (flights.changed || sun.changed) && beforeSystems !== raidSystemFootprint(next);
   };
 
+  /**
+   * Sun brightness moves at recovery steps (and at raid battles, which are
+   * flight arrivals). Each step is a moment of its own: owners in that system
+   * earn up to it at the old brightness, the new one applies from it on.
+   */
+  const nextSunStepAt = (after: number): number | undefined => {
+    if (!replay) return undefined;
+    let earliest: number | undefined;
+    for (const sun of Object.values(currentSunRaidState(next).suns)) {
+      const step = projectSun(sun, after).nextStepAt;
+      if (step !== undefined && step > after && step <= context.now) earliest = Math.min(earliest ?? step, step);
+    }
+    return earliest;
+  };
+  const sunSystemsChangingAt = (at: number, after: number): Set<string> => {
+    const systems = new Set<string>();
+    for (const [key, sun] of Object.entries(currentSunRaidState(next).suns)) if (projectSun(sun, after).nextStepAt === at) systems.add(key);
+    for (const flight of next.flights.records) {
+      if (flight.missionId === 'sun-attack' && flight.phase === 'outbound' && flight.arrivalAt === at) {
+        systems.add(`${flight.destinationCoordinate.galaxy}:${flight.destinationCoordinate.system}`);
+      }
+    }
+    return systems;
+  };
+
   let processedThrough = Number.NEGATIVE_INFINITY;
   while (true) {
     const flightCheckpoint = nextDueFlightCheckpoint(processedThrough);
@@ -561,7 +595,8 @@ function reconcileRuntimeSlice(
     }
     const scienceCheckpoint = replay ? getNextNpcScienceCheckpoint(next, processedThrough, context.now) : undefined;
     const leadershipCheckpoint = nextLeadershipCheckpoint(processedThrough);
-    const checkpoint = [flightCheckpoint, asteroidCheckpoint, pirateCheckpoint, npcCheckpoint, workCheckpoint, sessionCheckpoint, economyCheckpoint, scienceCheckpoint, leadershipCheckpoint]
+    const sunCheckpoint = nextSunStepAt(processedThrough);
+    const checkpoint = [flightCheckpoint, asteroidCheckpoint, pirateCheckpoint, npcCheckpoint, workCheckpoint, sessionCheckpoint, economyCheckpoint, scienceCheckpoint, leadershipCheckpoint, sunCheckpoint]
       .filter((point): point is number => point !== undefined)
       .reduce<number | undefined>((min, point) => min === undefined ? point : Math.min(min,point), undefined);
     if (checkpoint === undefined) break;
@@ -570,7 +605,7 @@ function reconcileRuntimeSlice(
       break;
     }
     processedGroups++;
-    const otherCheckpoint = [flightCheckpoint, pirateCheckpoint, npcCheckpoint, workCheckpoint, sessionCheckpoint, economyCheckpoint, scienceCheckpoint, leadershipCheckpoint]
+    const otherCheckpoint = [flightCheckpoint, pirateCheckpoint, npcCheckpoint, workCheckpoint, sessionCheckpoint, economyCheckpoint, scienceCheckpoint, leadershipCheckpoint, sunCheckpoint]
       .reduce<number | undefined>((min, point) => point === undefined ? min : min === undefined ? point : Math.min(min, point), undefined);
     if (asteroidCheckpoint === checkpoint && (otherCheckpoint === undefined || otherCheckpoint > checkpoint)) {
       // Asteroid-only moments change nothing the other clocks read (their next
@@ -610,6 +645,10 @@ function reconcileRuntimeSlice(
         if (getNextNpcFleetOverflowCheckpoint(target, target.ownerId, processedThrough, context.now) === checkpoint) dueOwners.add(target.ownerId);
       }
       for (let index = economicIndex; economicEvents[index]?.at === checkpoint; index++) dueOwners.add(economicEvents[index]!.ownerId);
+      const sunSystems = sunCheckpoint === checkpoint || flightIsDue ? sunSystemsChangingAt(checkpoint, processedThrough) : null;
+      if (sunSystems?.size) for (const target of Object.values(next.espionage?.targets ?? {})) {
+        if (sunSystems.has(`${target.coordinate.galaxy}:${target.coordinate.system}`)) dueOwners.add(target.ownerId);
+      }
       if (flightIsDue || pirateIsDue || npcIsDue) {
         for (const ownerId of ownersTouchedAtCheckpoint(checkpoint)) dueOwners.add(ownerId);
         if (npcIsDue) for (const ownerId of replayOwners) dueOwners.add(ownerId);
@@ -617,6 +656,11 @@ function reconcileRuntimeSlice(
       settleNpcOwnersAt(checkpoint, dueOwners, settledOwners);
       // Old income ends here; owner knowledge changes before arrivals, raids and decisions.
       if (scienceCheckpoint === checkpoint) completeNpcScience(checkpoint);
+      if (sunCheckpoint === checkpoint) {
+        // A recovery step: the new brightness applies from this moment on.
+        publishSunBrightness(next, checkpoint);
+        settleNpcEconomies(checkpoint, settledOwners);
+      }
     }
     // Advancing the cursor before processing prevents a due-but-unmodified
     // record at this timestamp from creating a zero-progress loop. Flights

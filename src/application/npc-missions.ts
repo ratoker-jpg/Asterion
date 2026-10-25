@@ -1,3 +1,4 @@
+import { ownerFlights } from './npc-knowledge-index.ts';
 import { calculateFleetPopulation, resolveSavedFleetState } from '../domain/fleet/runtime.ts';
 import { calculateDefensePopulation } from '../domain/fleet/production.ts';
 import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
@@ -13,7 +14,7 @@ import { creditNpcExplorationReturn } from './exploration-bot01.ts';
 import { getEspionageTargets, activeSpyMissionForTarget, createSeededEspionageRng, espionageRollSeed, hunterDetects, normalizeRngRoll, repeatReportLosesProbe, resolveSpyReportQuality, SPY_REPORT_COOLDOWN_MS } from '../domain/espionage/runtime.ts';
 import { addDebris, getCappedDelivery, getCargoUsed, getFleetCargoCapacity, normalizeTransportCargo, type TransportCargo } from '../domain/flights/cargo.ts';
 import { collectOrbitalDebrisAtCoordinate, getOrbitalDebrisAtCoordinate } from '../domain/espionage/orbital-debris.ts';
-import { getFlightSlotUsage, isFlightLimitExempt } from '../domain/flights/limit.ts';
+import { isFlightLimitExempt, npcFreeFlightSlots } from '../domain/flights/limit.ts';
 import { beginFlightReturn, dispatchFlight, getFlightByRequestId, MAX_SPACE_FLIGHT_DURATION_MS, MIN_SPACE_FLIGHT_DURATION_MS, SPACE_FLIGHT_DURATION_STEP_MS } from '../domain/flights/runtime.ts';
 import { isFlightCoordinate } from '../domain/flights/distance.ts';
 import { createUniverseSystem, MAX_PLANETS_PER_OWNER, nextColonyPointThreshold } from '../domain/universe/runtime.ts';
@@ -138,13 +139,14 @@ function normalizeShips(
 }
 
 function activeFlightsForOwner(state: SaveState, ownerId: string): FlightRecord[] {
-  return state.flights.records.filter((flight) => flight.ownerSide === 'npc' && flight.ownerId === ownerId);
+  // The owner index is built once per flight list; scanning every record on
+  // each launch attempt grew with the whole world's traffic.
+  return ownerFlights(state.flights.records, ownerId).filter((flight) => flight.ownerSide === 'npc');
 }
 
 function flightSlotsAvailable(state: SaveState, ownerId: string, profile: SpyOwnerProfile, missionId: MissionId): boolean {
   if (isFlightLimitExempt(missionId)) return true;
-  const ownerFlights = activeFlightsForOwner(state, ownerId).map((flight) => ({ ...flight, ownerSide: 'player' as const }));
-  return getFlightSlotUsage(ownerFlights, profile.scienceLevels[6]).free > 0;
+  return npcFreeFlightSlots(ownerFlights(state.flights.records, ownerId), profile.scienceLevels[6]) > 0;
 }
 
 function registeredTargets(state: SaveState) {
@@ -518,6 +520,115 @@ export function dispatchNpcSpaceFlight(state: SaveState, command: NpcSpaceFlight
   return { state: next, ok: true, reason: null, flight, created: true };
 }
 
+export type NpcTransportCommand = Readonly<{
+  requestId: string;
+  ownerId: string;
+  originPlanetId: string;
+  destinationPlanetId: string;
+  selectedShips: Partial<Record<ShipId, number>>;
+  cargo: TransportCargo;
+}>;
+
+/**
+ * Transport between two of the owner's own planets, by the player's rules:
+ * cargo holds, route time and gas; the cargo lands in the destination's
+ * stores (what does not fit stays aboard and comes back) and the ships return.
+ */
+export function dispatchNpcTransport(state: SaveState, command: NpcTransportCommand, at: number, timeScale: number): NpcMissionResult {
+  if (!Number.isSafeInteger(at) || at < 0 || !Number.isFinite(timeScale) || timeScale <= 0) return fail(state, 'invalid-time');
+  if (!command.requestId.trim()) return fail(state, 'request-id-required');
+  const existing = getFlightByRequestId(state.flights, command.requestId);
+  if (existing) {
+    return existing.ownerSide === 'npc' && existing.ownerId === command.ownerId && existing.originPlanetId === command.originPlanetId
+      ? { state, ok: true, reason: null, flight: existing, created: false }
+      : fail(state, 'request-id-owned-by-another-flight');
+  }
+  const origin = validNpcOrigin(state, command.ownerId, command.originPlanetId);
+  const target = validNpcOrigin(state, command.ownerId, command.destinationPlanetId);
+  if (!origin) return fail(state, 'npc-origin-not-found');
+  if (!target || target.id === origin.id) return fail(state, 'target-not-available');
+  const profile = ownerProfile(state, origin);
+  if (!flightSlotsAvailable(state, command.ownerId, profile, 'transport')) return fail(state, 'flight-limit-reached');
+  const selectedShips = normalizeShips(command.selectedShips, origin.raceId);
+  if (!selectedShips || Object.keys(selectedShips).some((id) => id !== 'transporter' && id !== 'mega-transporter')) return fail(state, 'invalid-ship-selection');
+  const freeShips = getNpcMissionAvailableFleet(state, command.ownerId, origin.id);
+  for (const [shipId, count] of Object.entries(selectedShips) as [ShipId, number][]) {
+    if ((freeShips[shipId] ?? 0) < count) return fail(state, 'insufficient-ships');
+  }
+  const cargo = normalizeTransportCargo(command.cargo);
+  const catalog = Object.fromEntries(getFactionShipCatalog(origin.raceId).map((entity) => [entity.id, { cargo: entity.ship?.cargo ?? 0 }]));
+  if (getCargoUsed(cargo) <= 0 || getCargoUsed(cargo) > getFleetCargoCapacity(selectedShips, catalog)) return fail(state, 'insufficient-cargo-capacity');
+  if (cargo.debris > 0 || cargo.metal > origin.resources.metal || cargo.minerals > origin.resources.minerals) return fail(state, 'invalid-cargo');
+  const domainResult = dispatchFlight(state.flights, {
+    requestId: command.requestId,
+    missionId: 'transport',
+    ownerSide: 'npc',
+    ownerId: command.ownerId,
+    originPlanetId: origin.id,
+    originCoordinate: origin.coordinate,
+    destination: { kind: 'planet', planetId: target.id, coordinate: { ...target.coordinate } },
+    destinationPlanetId: target.id,
+    destinationOwnerId: target.ownerId,
+    targetPlanetName: target.name,
+    targetOwnerName: target.ownerName,
+    targetRelation: 'self',
+    targetKind: 'npc',
+    selectedShips,
+    departedAt: at,
+    factionId: origin.raceId,
+    science: profile.scienceLevels as FlightScienceLevels,
+    cargo,
+    speedCommanderLevels: { typhoon: profile.commanderLevels.typhoon ?? 0 },
+  });
+  const duration = Math.max(1, Math.round(domainResult.flight.oneWayDurationMs / timeScale));
+  const flight: FlightRecord = { ...domainResult.flight, oneWayDurationMs: duration, arrivalAt: at + duration, cargoState: 'loaded' };
+  if (origin.resources.gas < cargo.gas + flight.gasCost) return fail(state, 'insufficient-gas');
+  const ships = { ...origin.fleet.ships };
+  for (const [shipId, count] of Object.entries(selectedShips) as [ShipId, number][]) ships[shipId] = Math.max(0, (ships[shipId] ?? 0) - count);
+  const debitedOrigin: SpyTargetState = {
+    ...origin,
+    fleet: { ...origin.fleet, ships },
+    resources: {
+      ...origin.resources,
+      metal: origin.resources.metal - cargo.metal,
+      minerals: origin.resources.minerals - cargo.minerals,
+      gas: origin.resources.gas - cargo.gas - flight.gasCost,
+    },
+  };
+  return { state: setFlight(setTarget({ ...state, flights: domainResult.state }, debitedOrigin), flight), ok: true, reason: null, flight, created: true };
+}
+
+/** Unloads an NPC transport into its own destination planet; anything that does not fit flies back. */
+export function resolveNpcTransportArrival(state: SaveState, flight: FlightRecord, at: number): NpcMissionResult {
+  if (flight.ownerSide !== 'npc' || !flight.ownerId || flight.missionId !== 'transport' || flight.phase !== 'outbound' || at < flight.arrivalAt) {
+    return fail(state, 'invalid-arrival');
+  }
+  const target = flight.destinationPlanetId ? validNpcOrigin(state, flight.ownerId, flight.destinationPlanetId) : undefined;
+  let next = state;
+  let remaining: TransportCargo = { ...(flight.cargo ?? { metal: 0, minerals: 0, gas: 0, debris: 0 }) };
+  if (target) {
+    const delivery = getCappedDelivery({ metal: target.resources.metal, minerals: target.resources.minerals, gas: target.resources.gas },
+      getStorageCapacities(target.buildings), remaining);
+    next = setTarget(next, { ...target, resources: { ...target.resources, ...delivery.resources } });
+    remaining = { metal: remaining.metal - (delivery.resources.metal - target.resources.metal),
+      minerals: remaining.minerals - (delivery.resources.minerals - target.resources.minerals),
+      gas: remaining.gas - (delivery.resources.gas - target.resources.gas), debris: 0 };
+  }
+  const returning = beginFlightReturn(next.flights, flight.id, flight.arrivalAt, target ? 'normal-return' : 'target-unavailable');
+  const turned = returning.records.find((record) => record.id === flight.id)!;
+  const leftover = getCargoUsed(remaining) > 0;
+  const arrived: FlightRecord = {
+    ...turned,
+    arrivedAt: flight.arrivalAt,
+    cargo: remaining,
+    // Leftover cargo rides home and is credited by the ordinary NPC return.
+    cargoState: leftover ? 'loaded' : 'delivered',
+    deliveredAt: flight.arrivalAt,
+    completionReason: target ? 'normal-return' : 'target-unavailable',
+  };
+  return { state: setFlight({ ...next, flights: returning }, arrived), ok: Boolean(target), reason: target ? null : 'target-unavailable', flight: arrived };
+}
+
 /** Apply an NPC probe arrival or colony landing at the canonical event time. */
 export function resolveNpcMissionArrival(
   state: SaveState,
@@ -759,7 +870,7 @@ export function settleNpcMissionReturn(
     let resources = { metal: source.resources.metal, minerals: source.resources.minerals, gas: source.resources.gas };
     // A space flight brings its own loaded cargo home, recyclers their debris;
     // loot comes from attacks.
-    const loot = flight.missionId === 'space-flight' && flight.cargoState === 'loaded' && flight.cargo
+    const loot = (flight.missionId === 'space-flight' || flight.missionId === 'transport') && flight.cargoState === 'loaded' && flight.cargo
       ? { ...flight.cargo, debris: 0 }
       : flight.missionId === 'recycle' && flight.cargo
         ? { metal: 0, minerals: 0, gas: 0, debris: flight.cargo.debris }
@@ -793,7 +904,10 @@ export function settleNpcMissionReturn(
     // called only after owner validation, then this adapter adds the ship receipt.
     next = creditNpcExplorationReturn(next, flight, flight.returnAt);
   }
-  const settled: FlightRecord = { ...flight, npcReturnCreditedAt: flight.returnAt };
+  // Cargo that rode home is back in the stores: the record no longer holds it.
+  const carriedHome = (flight.missionId === 'space-flight' || flight.missionId === 'transport') && flight.cargoState === 'loaded' && source !== undefined;
+  const settled: FlightRecord = { ...flight, npcReturnCreditedAt: flight.returnAt,
+    ...(carriedHome ? { cargoState: 'returned' as const, cargoResolvedAt: flight.returnAt } : {}) };
   return { state: setFlight(next, settled), flight: settled };
 }
 

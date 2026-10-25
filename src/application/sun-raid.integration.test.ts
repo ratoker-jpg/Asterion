@@ -26,6 +26,7 @@ import {
   testGrantCrystal,
   testIraJoinRaid,
   testIraSupportSun,
+  testLaunchRaidNow,
 } from './sun-raid.ts';
 
 const HOUR = 60 * 60 * 1000;
@@ -49,6 +50,12 @@ function armed(state: SaveState, ships: Partial<Record<ShipId, number>> = { crui
 
 function tick(state: SaveState, now: number): SaveState {
   return reconcileRuntime(state, { planetId: state.currentPlanetId, now, mode: 'test', testTimeScale: 1 }).state;
+}
+
+/** Test Mode: the player's gathering raid takes off at once (the battle path under test). */
+function launchNow(state: SaveState, at: number): SaveState {
+  const raid = currentSunRaidState(state).raids.find((item) => item.status === 'gathering');
+  return raid ? ok(testLaunchRaidNow(state, raid.id, options(at))).state : state;
 }
 
 function ok<T extends { ok: boolean }>(result: T): Extract<T, { ok: true }> {
@@ -95,7 +102,7 @@ test('Bot 01 raids the home Sun: the galaxy is warned, the player defends and ge
 test('the player alliance raids an undefended Sun: automatic victory, -5 brightness, deterministic crystal, one raid at a time', () => {
   let state = armed(createInitialSaveState('test', T0));
   const ships = { cruiser: 100 };
-  state = ok(launchSunRaid(state, { galaxy: 1, system: 20, originPlanetId: 'helion-01', ships, requestId: 'raid-1' }, options(T0))).state;
+  state = launchNow(ok(launchSunRaid(state, { galaxy: 1, system: 20, originPlanetId: 'helion-01', ships, requestId: 'raid-1' }, options(T0))).state, T0);
   const blocked = launchSunRaid(state, { galaxy: 1, system: 21, originPlanetId: 'helion-01', ships, requestId: 'raid-2' }, options(T0 + 1));
   assert.equal(blocked.ok, false, 'one alliance, one raid');
 
@@ -119,7 +126,7 @@ test('nine wins freeze a Sun at 25%, attacks are refused, recovery returns it to
   let state = armed(createInitialSaveState('test', T0));
   let now = T0;
   for (let index = 0; index < 9; index += 1) {
-    state = ok(launchSunRaid(state, { galaxy: 1, system: 3, originPlanetId: 'helion-01', ships: { cruiser: 50 }, requestId: `freeze-${index}` }, options(now))).state;
+    state = launchNow(ok(launchSunRaid(state, { galaxy: 1, system: 3, originPlanetId: 'helion-01', ships: { cruiser: 50 }, requestId: `freeze-${index}` }, options(now))).state, now);
     now += 6 * HOUR;
     state = tick(state, now);
   }
@@ -143,8 +150,9 @@ test('nine wins freeze a Sun at 25%, attacks are refused, recovery returns it to
 test('Ira joins the raid, Bot 01 defends: one battle, both sides merged, max technologies', () => {
   let state = armed(createInitialSaveState('test', T0));
   state = ok(launchSunRaid(state, { galaxy: 1, system: 5, originPlanetId: 'helion-01', ships: { cruiser: 200 }, requestId: 'joint' }, options(T0))).state;
+  state = ok(testIraJoinRaid(state, currentSunRaidState(state).raids[0]!.id, options(T0 + 10))).state;
+  state = launchNow(state, T0 + 15);
   const raid = currentSunRaidState(state).raids[0]!;
-  state = ok(testIraJoinRaid(state, raid.id, options(T0 + 10))).state;
   state = ok(testBot01DefendSun(state, raid.id, options(T0 + 20))).state;
   const attackers = state.flights.records.filter((flight) => flight.sunRaid?.raidId === raid.id && flight.sunRaid.side === 'attacker');
   assert.equal(attackers.length, 2);
@@ -168,7 +176,7 @@ test('four crystals → Gate (12 h) → campaign victory, which survives a reloa
   const gate = currentSunRaidState(state).gates[0]!;
   assert.equal(gate.completesAt - gate.startedAt, 12 * HOUR);
   state = tick(state, T0 + 6 * HOUR);
-  assert.deepEqual(currentSunRaidState(state).gates[0]!.announcedMilestones, [25, 50]);
+  assert.deepEqual(currentSunRaidState(state).gates[0]!.announcedMilestones, [0, 25, 50]);
   assert.equal(currentSunRaidState(state).campaignResult, undefined);
   state = tick(state, T0 + 12 * HOUR);
   const result = currentSunRaidState(state).campaignResult!;
@@ -195,7 +203,7 @@ test('the Gate follows the alliance leader: the leader leaves, the successor car
   assert.equal(currentSunRaidState(state).campaignResult?.playerWon, false, 'the player left the winning alliance');
 });
 
-test('a won assault on the Gate host destroys the Gate and hands one crystal to the attacker', () => {
+test('a won assault by an alliance member destroys the Gate and one crystal, never steals it (25.10.2026)', () => {
   let state = createInitialSaveState('test', T0);
   for (let index = 0; index < 4; index += 1) state = ok(testGrantCrystal(state, options(T0))).state;
   state = ok(startGateConstruction(state, 'helion-01', options(T0))).state;
@@ -213,7 +221,8 @@ test('a won assault on the Gate host destroys the Gate and hands one crystal to 
     const playerHolder = `alliance:${selectOwnerMembership(state.command, state.profile.playerId)!.alliance.id}`;
     const botHolder = `alliance:${selectOwnerMembership(state.command, TEST_BOT_OWNER_ID)!.alliance.id}`;
     assert.equal((sunRaid.crystals[playerHolder] ?? []).length, 3);
-    assert.equal((sunRaid.crystals[botHolder] ?? []).length, 1);
+    assert.equal((sunRaid.crystals[botHolder] ?? []).length, 0);
+    assert.equal(gate.destroyedBy?.outcome, 'destroyed');
     assert.ok(sunRaid.gateCooldowns[playerHolder]! > flight.arrivalAt);
     assert.equal(selectGateContext(state, flight.arrivalAt + 2).canStart, false);
   } else {
@@ -241,7 +250,7 @@ test('a support fleet that would arrive after the attackers is refused', () => {
 
 test('reconcile is idempotent', () => {
   let state = armed(createInitialSaveState('test', T0));
-  state = ok(launchSunRaid(state, { galaxy: 1, system: 30, originPlanetId: 'helion-01', ships: { cruiser: 30 }, requestId: 'idem' }, options(T0))).state;
+  state = launchNow(ok(launchSunRaid(state, { galaxy: 1, system: 30, originPlanetId: 'helion-01', ships: { cruiser: 30 }, requestId: 'idem' }, options(T0))).state, T0);
   const once = reconcileSunRaids(state, options(T0 + 3 * HOUR)).state;
   const twice = reconcileSunRaids(once, options(T0 + 3 * HOUR));
   assert.equal(twice.changed, false);
@@ -311,4 +320,18 @@ test('«Поддержка солнца» from Fleets: no alliance needed, civil
   assert.ok(getSunDebris(state, 1, 1) < debris, 'recyclers took Sun debris');
   const arrival = state.reports.recyclerArrivalReports?.find((item) => item.collectedDebris > 0);
   assert.deepEqual(arrival?.coordinate, { galaxy: 1, system: 1, position: 0 });
+});
+
+test('solo crystals are personal: joining an alliance makes them vanish (25.10.2026)', () => {
+  let state = createInitialSaveState('test', T0);
+  assert.ok(selectOwnerMembership(state.command, state.profile.playerId), 'the Test Mode player starts in an alliance');
+  const soloKey = `owner:${state.profile.playerId}`;
+  const sunRaid = currentSunRaidState(state);
+  state = { ...state, sunRaid: { ...sunRaid, crystals: { ...sunRaid.crystals, [soloKey]: ['crystal-1', 'crystal-3'] } } };
+  const reconciled = reconcileSunRaids(state, options(T0 + 1_000));
+  assert.deepEqual(currentSunRaidState(reconciled.state).crystals[soloKey], []);
+  assert.ok(reconciled.notices.some((notice) => /рассыпались/.test(notice.text)));
+  // Alliance crystals are untouched.
+  const allianceKey = `alliance:${selectOwnerMembership(state.command, state.profile.playerId)!.alliance.id}`;
+  assert.deepEqual(currentSunRaidState(reconciled.state).crystals[allianceKey] ?? [], sunRaid.crystals[allianceKey] ?? []);
 });

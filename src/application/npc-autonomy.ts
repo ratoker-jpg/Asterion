@@ -14,14 +14,17 @@ import { getNpcFleetProductionCandidates, startNpcFleetProduction } from './npc-
 import { applyNpcDiplomacyAction, getNpcDiplomacyCandidates } from './npc-diplomacy.ts';
 import { calculateFleetPopulation, createEmptyFleetState } from '../domain/fleet/runtime.ts';
 import { getNpcMissionCandidates, candidateToNpcMissionCommand } from './npc-mission-policy.ts';
-import { dispatchNpcMission, dispatchNpcSpaceFlight, getNpcMissionAvailableFleet, NPC_SPACE_FLIGHT_GAS_FEE, resolveNpcMissionArrival } from './npc-missions.ts';
+import { dispatchNpcMission, dispatchNpcSpaceFlight, dispatchNpcTransport, getNpcMissionAvailableFleet, NPC_SPACE_FLIGHT_GAS_FEE, resolveNpcMissionArrival } from './npc-missions.ts';
 import { beginFlightReturn } from '../domain/flights/runtime.ts';
 import { getNpcPirateCandidates, dispatchNpcPirateMission } from './npc-pirates.ts';
-import { getNpcAidCandidates, dispatchNpcAid } from './npc-aid.ts';
+import { getNpcEndgameChoices } from './npc-endgame.ts';
+import { getNpcSpaceportCandidates, startNpcSpaceportUpgrade } from './npc-spaceport.ts';
+import { createNpcAidRequest, getNpcAidCandidates, getNpcAidRequestCandidates, dispatchNpcAid } from './npc-aid.ts';
 import { getStorageCapacities } from '../domain/buildings/balance-v1.ts';
 import { migrateBuildingLevels } from '../domain/buildings/resource-zone.ts';
 import { collectRecyclingJob, getRecyclingLevel, getRecyclingMaxConcurrentJobs, startRecyclingJob } from '../domain/buildings/recycling.ts';
 import { creditResources } from '../domain/resources/credit.ts';
+import type { ShipId } from '../domain/combat/ids.ts';
 import { estimationError, NPC_MAX_UTILITY, utilityToWeight } from '../domain/npc/utility.ts';
 import { getFactionShipCatalog, getFactionDefenseCatalog } from '../domain/combat/faction-catalog.ts';
 import {
@@ -29,7 +32,7 @@ import {
   estimateAttackUtility, estimateBuildingUtility, estimateRaidEconomics, estimateColonizeUtility, estimateEspionageUtility,
   estimateOperationUtility, estimateProductionItemUtility, flightRemoteness, estimateScienceUtility, npcProductionBatch,
   npcProductionPurpose, NPC_STRATEGY_FAMILY, strategyOf, type NpcStrategyDrives,
-  estimateFleetSaveUtility, npcFleetValue, spaceFlightLegFor,
+  estimateFleetSaveUtility, npcFleetValue, spaceFlightLegFor, estimateSpaceportUpgradeUtility, NPC_FLAGSHIP_ID,
 } from './npc-utility.ts';
 
 /** A look within this long of the session end is the owner's last before leaving. */
@@ -77,6 +80,9 @@ function familyDrive(drives: NpcStrategyDrives, kind: string): number {
     default: return 0.5;
   }
 }
+
+/** A planet sends its surplus home every six game hours at most. */
+const NPC_TRANSPORT_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 const STRATEGIC_GOAL_KINDS: ReadonlySet<string> = new Set(Object.values(NPC_STRATEGY_FAMILY));
 const ENERGY_SHORT_REASON = 'Недостаточно энергии.';
@@ -197,7 +203,7 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     if (science && at >= state.npcScience!.activatedAt) for (const preview of getNpcScienceCandidates(target, science, at, timeScale)) {
       if (!preview.canStart) continue;
       const scienceCandidateId = `science:${target.id}:${preview.scienceId}`;
-      choices.push({ candidate: { id: scienceCandidateId, kind: 'science', weight: scored(scienceCandidateId, estimateScienceUtility(utility, preview.cost, situation)), payload: { scienceId: preview.scienceId } }, run: (current, key) => {
+      choices.push({ candidate: { id: scienceCandidateId, kind: 'science', weight: scored(scienceCandidateId, estimateScienceUtility(utility, preview.cost, situation, preview.scienceId)), payload: { scienceId: preview.scienceId } }, run: (current, key) => {
         const result = startNpcScience(current.espionage!.targets![target.id]!, current.npcScience!.owners[ownerId]!, preview.scienceId, at, timeScale, key);
         return { state: { ...withTarget(current, result.target), npcScience: { ...current.npcScience!, owners: { ...current.npcScience!.owners, [ownerId]: result.science } } }, started: result.ok, reason: result.reason, planetId: target.id, ...(result.ok ? { economyActionId: key } : {}) };
       } });
@@ -233,6 +239,77 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
           result = startNpcFleetProduction(planet, ownerId, preview.queueKind, preview.itemId, at, timeScale, key, reservedPopulation, quantity);
         }
         return { state: withTarget(current, result.target), started: result.ok, reason: result.reason, planetId: target.id, ...(result.ok && result.orderId ? { economyActionId: result.orderId } : {}) };
+      } });
+    }
+  }
+  // Logistics, as a player runs it daily: a colony whose stores fill up ships
+  // its surplus to the main planet, and the main planet supplies a colony that
+  // has run dry. Whichever planet has the transporters makes the trip.
+  const main = planets.find((planet) => planet.id === `${ownerId}-planet`) ?? planets[0];
+  if (main && planets.length > 1) for (const source of planets) {
+    const free = getNpcMissionAvailableFleet(state, ownerId, source.id) ?? {};
+    const holds = { transporter: free.transporter ?? 0, 'mega-transporter': free['mega-transporter'] ?? 0 };
+    const catalog = getFactionShipCatalog(source.raceId);
+    const capacityOf = (id: string) => catalog.find((entity) => entity.id === id)?.ship?.cargo ?? 0;
+    const capacity = holds.transporter * capacityOf('transporter') + holds['mega-transporter'] * capacityOf('mega-transporter');
+    if (capacity <= 0) continue;
+    const fill = describeNpcPlanet(source, 0, 0, false).fill;
+    const fullest = Math.max(fill.metal, fill.minerals, fill.gas);
+    let destination: typeof main | undefined;
+    let keep = 0.2;
+    let urgency = 0;
+    // One transport from a planet at a time, and a few trips a day at most.
+    if (source.lastTransportAt !== undefined && at - source.lastTransportAt < NPC_TRANSPORT_INTERVAL_MS / Math.max(1, timeScale)) continue;
+    if (ownerFlights(state.flights.records, ownerId).some((flight) => flight.missionId === 'transport' && flight.originPlanetId === source.id
+      && (flight.phase === 'outbound' || flight.phase === 'arrived'))) continue;
+    if (source.id !== main.id) {
+      if (fullest < 0.75) continue;
+      destination = main;
+      urgency = fullest - 0.5;
+    } else {
+      const dry = planets.filter((planet) => planet.id !== main.id)
+        .map((planet) => ({ planet, fill: describeNpcPlanet(planet, 0, 0, false).fill }))
+        .map((item) => ({ ...item, lowest: Math.min(item.fill.metal, item.fill.minerals, item.fill.gas) }))
+        .filter((item) => item.lowest < 0.15)
+        .sort((left, right) => left.lowest - right.lowest || left.planet.id.localeCompare(right.planet.id))[0];
+      if (!dry || fullest < 0.35) continue;
+      destination = dry.planet;
+      keep = 0.6;
+      urgency = 0.3 - dry.lowest;
+    }
+    // Keep part of each store for the source's own work; gas also pays the flight.
+    const surplus = { metal: Math.floor(source.resources.metal * (1 - keep)), minerals: Math.floor(source.resources.minerals * (1 - keep)),
+      gas: Math.floor(source.resources.gas * (1 - keep) * 0.75) };
+    const total = surplus.metal + surplus.minerals + surplus.gas;
+    if (total < 0.02 * utility.dayValue) continue;
+    const share = Math.min(1, capacity / total);
+    const cargo = { metal: Math.floor(surplus.metal * share), minerals: Math.floor(surplus.minerals * share), gas: Math.floor(surplus.gas * share), debris: 0 };
+    const to = destination;
+    const transportId = `transport:${source.id}:${to.id}`;
+    const estimate = -0.4 + 1.6 * urgency + 0.4 * strategyOf(utility).economy + 0.3 * Math.min(1, total / (0.05 * utility.dayValue));
+    const selected = Object.fromEntries(Object.entries(holds).filter(([, count]) => count > 0)) as Partial<Record<ShipId, number>>;
+    choices.push({ candidate: { id: transportId, kind: 'economy', weight: scored(transportId, estimate), payload: { planetId: source.id } }, run: (current, key) => {
+      const result = dispatchNpcTransport(current, { requestId: key, ownerId, originPlanetId: source.id, destinationPlanetId: to.id, selectedShips: selected, cargo }, at, timeScale);
+      const sent = result.ok ? withTarget(result.state, { ...result.state.espionage!.targets![source.id]!, lastTransportAt: at }) : result.state;
+      return { state: sent, started: result.ok, reason: result.reason, planetId: source.id };
+    } });
+  }
+  // Spaceport: ship upgrades by the player's catalog; levels are owner-wide.
+  const ownedShips: Partial<Record<string, number>> = {};
+  for (const target of planets) for (const [id, count] of Object.entries(target.fleet.ships)) ownedShips[id] = (ownedShips[id] ?? 0) + (count ?? 0);
+  if (utility.flagship?.unlocked) ownedShips[NPC_FLAGSHIP_ID] = Math.max(1, ownedShips[NPC_FLAGSHIP_ID] ?? 0);
+  const scienceLevels = state.npcScience?.owners[ownerId]?.levels;
+  // One upgrade queue per owner, as the player's: it runs at the main planet's Spaceport.
+  const spaceportHome = planets.find((planet) => planet.id === `${ownerId}-planet`) ?? planets[0];
+  for (const target of spaceportHome ? [spaceportHome] : []) {
+    const levels = scienceLevels ?? target.ownerProfile?.scienceLevels ?? {};
+    for (const preview of getNpcSpaceportCandidates(target, levels, timeScale, ownedShips)) {
+      const upgradeId = `spaceport:${target.id}:${preview.shipId}`;
+      const estimate = estimateSpaceportUpgradeUtility(utility, preview.shipId, ownedShips[preview.shipId] ?? 0, preview.cost, describeNpcPlanet(target, 0, 0, false));
+      choices.push({ candidate: { id: upgradeId, kind: 'production', weight: scored(upgradeId, estimate), payload: { planetId: target.id, shipId: preview.shipId } }, run: (current, key) => {
+        const planet = current.espionage!.targets![target.id]!;
+        const result = startNpcSpaceportUpgrade(planet, preview.shipId as ShipId, levels, at, timeScale, key);
+        return { state: withTarget(current, result.target), started: result.ok, reason: result.reason, planetId: target.id, ...(result.ok ? { economyActionId: key } : {}) };
       } });
     }
   }
@@ -275,6 +352,8 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     && profile.session.sessionEndsAt - at <= NPC_REPLAY_LAST_LOOK_MS;
   const nextVisit = leaving ? nextNpcSessionStartAfter(profile, profile.session.sessionEndsAt!) : null;
   for (const target of planets) {
+    // The fleet guarding this owner's own Gate stays to fight; hiding it loses the Gate.
+    if (utility.ownGateHosts?.has(target.id)) continue;
     const free = getNpcMissionAvailableFleet(state, ownerId, target.id) ?? {};
     const ships = Object.fromEntries(Object.entries(free).filter(([shipId, count]) => shipId !== 'solar-satellite' && (count ?? 0) > 0)) as Record<string, number>;
     const value = npcFleetValue(target.raceId, ships);
@@ -309,7 +388,9 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
       if (!attackForces.get(mission.id)) continue;
       const origin = state.espionage?.targets?.[String(mission.payload.originPlanetId)];
       const report = utility.latestReports.get(String(mission.payload.destinationPlanetId ?? ''));
-      if (!origin || !report || !estimateRaidEconomics(utility, origin, report, force).worthFlight) continue;
+      if (!origin || !report) continue;
+      const destination = String(mission.payload.destinationPlanetId ?? '');
+      if (!utility.rivalGateHosts?.has(destination) && !estimateRaidEconomics(utility, origin, report, force).worthFlight) continue;
     }
     choices.push({
       candidate: { ...mission, weight: mission.weight * scored(mission.id, missionUtility(mission)),
@@ -333,6 +414,12 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
       return { state: result.state, started: result.ok, reason: result.reason };
     },
   });
+  for (const request of getNpcAidRequestCandidates(state, profile, at)) choices.push({ candidate: request, run: (current) => {
+    const result = createNpcAidRequest(current, ownerId, request, at, timeScale);
+    return { state: result.state, started: result.ok, reason: result.reason };
+  } });
+  // The endgame by the player's rules: Gates, Sun raids, Sun defence.
+  for (const choice of getNpcEndgameChoices(state, profile, utility, at, timeScale, scored)) choices.push(choice);
   for (const aid of getNpcAidCandidates(state, profile, at)) choices.push({ candidate: aid, run: (current, key) => {
     const result = dispatchNpcAid(current, ownerId, aid, at, key, timeScale);
     return { state: result.state, started: result.ok, reason: result.reason };
