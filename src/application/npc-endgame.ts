@@ -16,7 +16,9 @@ import { strategyOf, type NpcUtilityContext } from './npc-utility.ts';
 import {
   crystalHolderOf,
   currentSunRaidState,
+  joinNpcSunRaid,
   launchNpcSunRaid,
+  raidPledgeRoom,
   selectOwnerGateContext,
   selectRaidSides,
   sendNpcSunSupport,
@@ -35,8 +37,6 @@ import {
 type Outcome = { state: SaveState; started: boolean; reason: string | null; planetId?: string };
 export type NpcEndgameChoice = { candidate: NpcAutonomyCandidate; run: (state: SaveState, key: string) => Outcome };
 
-/** Smallest raiding force worth three hours each way: a Sun nobody defends falls to any real fleet. */
-export const NPC_SUN_RAID_MIN_POPULATION = 300;
 
 const CIVIL_SHIPS = new Set<ShipId>(['spy-probe', 'colonizer', 'transporter', 'mega-transporter', 'recycler', 'solar-satellite']);
 
@@ -62,8 +62,49 @@ function sunForce(state: SaveState, ownerId: string, planetId: string, raceId: s
   if (population > room && population > 0) {
     const scale = room / population;
     ships = Object.fromEntries(Object.entries(ships).map(([id, count]) => [id, Math.floor((count ?? 0) * scale)]).filter(([, count]) => (count as number) > 0));
+    // Rounding down leaves a gap; the smallest hulls still at hand close it.
+    let left = room - sunFleetPopulation(ships, raceId as never);
+    const bySize = getFactionShipCatalog(raceId as never).filter((entity) => combat.has(entity.id) && !CIVIL_SHIPS.has(entity.id as ShipId))
+      .sort((a, b) => a.population - b.population || a.id.localeCompare(b.id));
+    for (const entity of bySize) {
+      const id = entity.id as ShipId;
+      const spare = Math.max(0, Math.floor((free[id] ?? 0) * share) - (ships[id] ?? 0));
+      const add = Math.min(spare, Math.floor(left / Math.max(1, entity.population)));
+      if (add > 0) { ships[id] = (ships[id] ?? 0) + add; left -= add * entity.population; }
+    }
   }
   return ships;
+}
+
+/** What one owner can put into a raid: combat hulls from its planets, strongest first, up to its 75 000. */
+function pledgeablePopulation(state: SaveState, ownerId: string, share: number): number {
+  let total = 0;
+  for (const target of Object.values(state.espionage?.targets ?? {})) {
+    if (target.kind !== 'npc' || target.ownerId !== ownerId) continue;
+    total += sunFleetPopulation(sunForce(state, ownerId, target.id, target.raceId, share, Infinity), target.raceId as never);
+  }
+  return Math.min(SUN_RAID_CONFIG.participantPopulationCap, total);
+}
+
+/** Pledges this owner's share of combat hulls, planet by planet, into a gathering raid. */
+function pledgeFromPlanets(state: SaveState, ownerId: string, raidId: string, share: number, key: string, options: SunRuntimeOptions): { state: SaveState; pledged: number } {
+  let next = state;
+  let pledged = 0;
+  const planets = Object.values(next.espionage?.targets ?? {}).filter((target) => target.kind === 'npc' && target.ownerId === ownerId)
+    .sort((left, right) => left.id.localeCompare(right.id));
+  for (const planet of planets) {
+    const raid = currentSunRaidState(next).raids.find((item) => item.id === raidId);
+    if (!raid || raid.status !== 'gathering') break;
+    const room = raidPledgeRoom(next, raid, ownerId);
+    if (room <= 0) break;
+    const ships = sunForce(next, ownerId, planet.id, planet.raceId, share, room);
+    if (!Object.keys(ships).length) continue;
+    const result = joinNpcSunRaid(next, ownerId, { raidId, originPlanetId: planet.id, ships, requestId: `${key}:${planet.id}` }, options);
+    if (!result.ok) continue;
+    next = result.state;
+    pledged += sunFleetPopulation(ships, planet.raceId as never);
+  }
+  return { state: next, pledged };
 }
 
 export function getNpcEndgameChoices(state: SaveState, profile: NpcProfile, utility: NpcUtilityContext, at: number, timeScale: number,
@@ -87,31 +128,50 @@ export function getNpcEndgameChoices(state: SaveState, profile: NpcProfile, util
     } });
   }
 
-  // 2. Alliance leadership raids a Sun while the alliance still lacks crystals.
+  // 2. Sun raids are gathered (owner rule 25.10.2026): exactly 225 000 population,
+  // at most 75 000 from any one participant, 30 minutes to fill up.
   const membership = selectOwnerMembership(state.command, ownerId);
   const { holder } = crystalHolderOf(state, ownerId);
   const missing = missingCrystals(getHolderCrystals(sunRaid, holder)).length;
+  // A participant brings all it can within its 75 000: the risk of an empty
+  // home is weighed when deciding to raid, not by sending a token force.
+  const share = 1;
+  const options = sunOptions(at, timeScale);
+  // 2a. A member answers the call of its own alliance's gathering.
+  for (const raid of sunRaid.raids) {
+    if (!membership || raid.status !== 'gathering' || raid.allianceId !== membership.alliance.id || (raid.gatherEndsAt ?? 0) <= at) continue;
+    if (raidPledgeRoom(state, raid, ownerId) <= 0 || pledgeablePopulation(state, ownerId, share) <= 0) continue;
+    const id = `sun-raid-join:${ownerId}:${raid.id}`;
+    const estimate = 0.3 + 0.8 * unit(traits.cooperation) + 0.4 * drives.operations + 0.3 * (4 - missing) / 4;
+    choices.push({ candidate: { id, kind: 'pve', weight: scored(id, estimate), payload: { raidId: raid.id } }, run: (current, key) => {
+      const result = pledgeFromPlanets(current, ownerId, raid.id, 1, key, options);
+      return { state: result.state, started: result.pledged > 0, reason: result.pledged > 0 ? null : 'nothing-to-pledge' };
+    } });
+  }
+  // 2b. Leadership declares a gathering only when the alliance can fill it.
   if (membership && (membership.role === 'leader' || membership.role === 'deputy') && missing > 0) {
-    const origin = [...planets].sort((left, right) => sunFleetPopulation(sunForce(state, ownerId, right.id, right.raceId, 1, Infinity), right.raceId as never)
-      - sunFleetPopulation(sunForce(state, ownerId, left.id, left.raceId, 1, Infinity), left.raceId as never) || left.id.localeCompare(right.id))[0]!;
-    // Bold owners commit more of the fleet; the rest guards home.
-    const ships = sunForce(state, ownerId, origin.id, origin.raceId, 0.45 + 0.45 * unit(traits.riskTolerance), SUN_RAID_CONFIG.populationCapPerSide);
-    const population = sunFleetPopulation(ships, origin.raceId as never);
-    // A raid needs a real battle fleet; the side's population cap is the yardstick.
-    if (population >= NPC_SUN_RAID_MIN_POPULATION) {
+    const alliance = state.command.alliances.find((item) => item.id === membership.alliance.id);
+    const reachable = (alliance?.members ?? []).reduce((total, member) => total + pledgeablePopulation(state, member.ownerId, share), 0);
+    const own = pledgeablePopulation(state, ownerId, share);
+    if (own > 0 && reachable >= SUN_RAID_CONFIG.populationCapPerSide) {
+      const origin = [...planets].sort((left, right) => sunFleetPopulation(sunForce(state, ownerId, right.id, right.raceId, 1, Infinity), right.raceId as never)
+        - sunFleetPopulation(sunForce(state, ownerId, left.id, left.raceId, 1, Infinity), left.raceId as never) || left.id.localeCompare(right.id))[0]!;
+      const ships = sunForce(state, ownerId, origin.id, origin.raceId, share, SUN_RAID_CONFIG.participantPopulationCap);
+      const population = sunFleetPopulation(ships, origin.raceId as never);
       const random = createSeededRandom(`npc-sun:${ownerId}:${at}`);
       const galaxy = origin.coordinate.galaxy;
       // A few Suns this owner looks at this time; the first one open to a raid is chosen.
       const systems = Array.from({ length: 6 }, () => 1 + Math.floor(random() * WORLD_LIMITS.systemsPerGalaxy));
-      const system = systems.find((candidate) => checkRaidLaunch({ state: sunRaid, allianceId: membership.alliance.id, role: membership.role,
-        galaxy, system: candidate, population, now: at }).ok);
+      const system = population > 0 ? systems.find((candidate) => checkRaidLaunch({ state: sunRaid, allianceId: membership.alliance.id, role: membership.role,
+        galaxy, system: candidate, population, now: at }).ok) : undefined;
       if (system !== undefined) {
         const id = `sun-raid:${ownerId}:${galaxy}:${system}`;
-        const estimate = -0.4 + 0.9 * drives.operations + 0.7 * drives.war + 0.3 * (4 - missing) / 4
-          + 0.6 * Math.min(1, population / (0.25 * SUN_RAID_CONFIG.populationCapPerSide)) + 0.3 * (unit(traits.riskTolerance) - 0.5);
+        const estimate = -0.2 + 0.9 * drives.operations + 0.7 * drives.war + 0.3 * (4 - missing) / 4 + 0.3 * (unit(traits.riskTolerance) - 0.5);
         choices.push({ candidate: { id, kind: 'pve', weight: scored(id, estimate), payload: { planetId: origin.id } }, run: (current, key) => {
-          const result = launchNpcSunRaid(current, ownerId, { galaxy, system, originPlanetId: origin.id, ships, requestId: key }, sunOptions(at, timeScale));
-          return result.ok ? { state: result.state, started: true, reason: null, planetId: origin.id } : { state: current, started: false, reason: result.error, planetId: origin.id };
+          const result = launchNpcSunRaid(current, ownerId, { galaxy, system, originPlanetId: origin.id, ships, requestId: key }, options);
+          if (!result.ok || !result.raidId) return { state: current, started: false, reason: result.ok ? 'no-raid' : result.error, planetId: origin.id };
+          // The leader tops its own share up from its other planets.
+          return { state: pledgeFromPlanets(result.state, ownerId, result.raidId, 1, key, options).state, started: true, reason: null, planetId: origin.id };
         } });
       }
     }

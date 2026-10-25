@@ -4,7 +4,7 @@ import test from 'node:test';
 import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
 import { DEFAULT_ALLIANCE_EMBLEM } from '../domain/command/catalog.ts';
 import { selectOpenRequestsOf } from '../domain/command/aid.ts';
-import { createAlliance } from '../domain/command/membership.ts';
+import { acceptApplication, applyToAlliance, createAlliance } from '../domain/command/membership.ts';
 import type { SpyTargetState } from '../domain/espionage/types.ts';
 import { npcFlagshipOwners } from '../domain/npc/doctrine.ts';
 import { createNpcState } from '../domain/npc/state.ts';
@@ -48,44 +48,103 @@ function leaderOf(state: SaveState, ownerId: string): SaveState {
   return { ...state, command: created.state };
 }
 
-function armed(state: SaveState, ownerId: string): SaveState {
+function armed(state: SaveState, ownerId: string, cruisers = 300): SaveState {
   const planet = home(state, ownerId);
   return withTarget(state, {
     ...planet,
-    fleet: { ...planet.fleet, ships: { ...planet.fleet.ships, cruiser: 300 } },
-    resources: { ...planet.resources, gas: 500_000 },
+    fleet: { ...planet.fleet, ships: { ...planet.fleet.ships, cruiser: cruisers } },
+    resources: { ...planet.resources, gas: 500_000_000 },
   });
+}
+
+/** One alliance of the given owners, the first one its leader. */
+function allianceOf(state: SaveState, owners: readonly string[]): SaveState {
+  let next = leaderOf(state, owners[0]!);
+  const allianceId = next.command.alliances.find((alliance) => alliance.leaderOwnerId === owners[0])!.id;
+  for (const ownerId of owners.slice(1)) {
+    const applied = applyToAlliance(next.command, { ownerId, displayName: home(next, ownerId).ownerName, allianceId }, { now: NOW, random: () => 0.4 });
+    assert.ok(applied.ok);
+    const accepted = acceptApplication(applied.state, owners[0]!, applied.applicationId, { now: NOW, random: () => 0.4 });
+    assert.ok(accepted.ok);
+    next = { ...next, command: accepted.state };
+  }
+  return next;
 }
 
 const scored = (_id: string, estimate: number) => utilityToWeight(estimate);
 
-test('an NPC alliance leader raids a Sun by the player rules: gas paid, ships away, survivors home again', () => {
+test('NPC raid gathering: the leader declares, two allies join, 225 000 takes off together and comes home (25.10.2026)', () => {
   const { state: initial, owners } = world();
-  const ownerId = owners[0]!;
-  let state = armed(leaderOf(initial, ownerId), ownerId);
-  const profile = state.npc!.profiles[ownerId]!;
-  const choices = getNpcEndgameChoices(state, profile, createNpcUtilityContext(state, profile, NOW, 1), NOW, 1, scored);
-  const raidChoice = choices.find((choice) => choice.candidate.id.startsWith('sun-raid:'));
-  assert.ok(raidChoice, `a leader with a fleet considers a raid: ${choices.map((choice) => choice.candidate.id).join(', ')}`);
-  const before = home(state, ownerId);
-  const launched = raidChoice.run(state, `npc-autonomy:${JSON.stringify([ownerId, 'sun-1'])}`);
-  assert.equal(launched.started, true, launched.reason ?? undefined);
-  state = launched.state;
-  const flight = state.flights.records.find((item) => item.missionId === 'sun-attack' && item.ownerId === ownerId)!;
-  assert.ok(flight);
-  assert.equal(flight.ownerSide, 'npc');
-  assert.ok(flight.gasCost > 0, 'an NPC pays the same gas as the player');
-  assert.equal(home(state, ownerId).resources.gas, before.resources.gas - flight.gasCost);
-  assert.equal(home(state, ownerId).fleet.ships.cruiser, before.fleet.ships.cruiser - (flight.selectedShips.cruiser ?? 0));
+  // 20 000 cruisers × 7 population: any risk share still brings the full 75 000.
+  let state = allianceOf(initial, owners);
+  for (const ownerId of owners) state = armed(state, ownerId, 20_000);
+  const leader = owners[0]!;
+  const before = Object.fromEntries(owners.map((ownerId) => [ownerId, home(state, ownerId)]));
+  const leaderProfile = state.npc!.profiles[leader]!;
+  const declare = getNpcEndgameChoices(state, leaderProfile, createNpcUtilityContext(state, leaderProfile, NOW, 1), NOW, 1, scored)
+    .find((choice) => choice.candidate.id.startsWith('sun-raid:'));
+  assert.ok(declare, 'an alliance able to fill 225 000 declares a gathering');
+  const declared = declare.run(state, `npc-autonomy:${JSON.stringify([leader, 'sun-1'])}`);
+  assert.equal(declared.started, true, declared.reason ?? undefined);
+  state = declared.state;
+  let raid = currentSunRaidState(state).raids[0]!;
+  assert.equal(raid.status, 'gathering');
+  assert.equal(raid.gatherEndsAt, NOW + 30 * 60_000);
+  const leaderPledge = state.flights.records.filter((item) => item.sunRaid?.raidId === raid.id && item.ownerId === leader)
+    .reduce((total, item) => total + (item.sunRaid?.population ?? 0), 0);
+  assert.ok(leaderPledge > 0 && leaderPledge <= 75_000, `the leader brings at most 75 000: ${leaderPledge}`);
+  const leaderFlight = state.flights.records.find((item) => item.sunRaid?.raidId === raid.id && item.ownerId === leader)!;
+  assert.ok(leaderFlight.gasCost > 0, 'an NPC pays the same gas as the player');
 
-  const raid = currentSunRaidState(state).raids[0]!;
+  for (const [index, ownerId] of owners.slice(1).entries()) {
+    const at = NOW + (index + 1) * 60_000;
+    const profile = state.npc!.profiles[ownerId]!;
+    const join = getNpcEndgameChoices(state, profile, createNpcUtilityContext(state, profile, at, 1), at, 1, scored)
+      .find((choice) => choice.candidate.id.startsWith('sun-raid-join:'));
+    assert.ok(join, `${ownerId} answers the gathering`);
+    const joined = join.run(state, `npc-autonomy:${JSON.stringify([ownerId, 'join'])}`);
+    assert.equal(joined.started, true, joined.reason ?? undefined);
+    state = joined.state;
+  }
+  raid = currentSunRaidState(state).raids[0]!;
+  const attackers = state.flights.records.filter((item) => item.sunRaid?.raidId === raid.id && item.sunRaid.side === 'attacker');
+  const total = attackers.reduce((sum, item) => sum + (item.sunRaid?.population ?? 0), 0);
+  assert.equal(raid.status, 'incoming', `the full side takes off: ${total}`);
+  assert.ok(total >= 225_000 - 100 && total <= 225_000);
+  for (const ownerId of owners) {
+    const own = attackers.filter((item) => item.ownerId === ownerId).reduce((sum, item) => sum + (item.sunRaid?.population ?? 0), 0);
+    assert.ok(own <= 75_000, `${ownerId} stays within 75 000: ${own}`);
+  }
+  assert.ok(attackers.every((item) => item.arrivalAt === raid.arrivesAt), 'everyone leaves together');
+
   state = reconcileSunRaids(state, { now: raid.arrivesAt, mode: 'production', timeScale: 1 }).state;
-  assert.equal(currentSunRaidState(state).raids[0]!.status, 'resolved');
   assert.equal(currentSunRaidState(state).raids[0]!.result?.winner, 'attacker', 'an undefended Sun falls');
-  const returning = state.flights.records.find((item) => item.id === flight.id)!;
-  assert.equal(returning.phase, 'returning');
-  state = reconcileSunRaids(state, { now: returning.returnAt!, mode: 'production', timeScale: 1 }).state;
-  assert.equal(home(state, ownerId).fleet.ships.cruiser, before.fleet.ships.cruiser, 'the whole fleet is back');
+  const back = Math.max(...state.flights.records.filter((item) => item.sunRaid?.raidId === raid.id).map((item) => item.returnAt ?? 0));
+  state = reconcileSunRaids(state, { now: back, mode: 'production', timeScale: 1 }).state;
+  for (const ownerId of owners) assert.equal(home(state, ownerId).fleet.ships.cruiser, before[ownerId]!.fleet.ships.cruiser, 'the whole fleet is back');
+});
+
+test('a gathering that does not reach 225 000 in 30 minutes disbands: ships and gas return, a new one may start at once', () => {
+  const { state: initial, owners } = world();
+  let state = allianceOf(initial, owners);
+  for (const ownerId of owners) state = armed(state, ownerId, 20_000);
+  const leader = owners[0]!;
+  const before = home(state, leader);
+  const leaderProfile = state.npc!.profiles[leader]!;
+  const declare = getNpcEndgameChoices(state, leaderProfile, createNpcUtilityContext(state, leaderProfile, NOW, 1), NOW, 1, scored)
+    .find((choice) => choice.candidate.id.startsWith('sun-raid:'))!;
+  state = declare.run(state, 'npc-autonomy:lonely').state;
+  const raid = currentSunRaidState(state).raids[0]!;
+  assert.ok(home(state, leader).fleet.ships.cruiser < before.fleet.ships.cruiser);
+  state = reconcileSunRaids(state, { now: raid.gatherEndsAt!, mode: 'production', timeScale: 1 }).state;
+  const after = currentSunRaidState(state).raids[0]!;
+  assert.equal(after.status, 'disbanded');
+  assert.equal(after.closedAt, raid.gatherEndsAt);
+  assert.equal(home(state, leader).fleet.ships.cruiser, before.fleet.ships.cruiser, 'every ship is home');
+  assert.equal(home(state, leader).resources.gas, before.resources.gas, 'gas is returned');
+  const again = getNpcEndgameChoices(state, state.npc!.profiles[leader]!, createNpcUtilityContext(state, state.npc!.profiles[leader]!, raid.gatherEndsAt!, 1), raid.gatherEndsAt!, 1, scored)
+    .some((choice) => choice.candidate.id.startsWith('sun-raid:'));
+  assert.equal(again, true, 'a new gathering may be declared at once');
 });
 
 test('an NPC holding four crystals lays the Gate on its main planet; a solo attacker breaks it by the 25.10.2026 rules', () => {
