@@ -14,7 +14,7 @@ import { getNpcFleetProductionCandidates, startNpcFleetProduction } from './npc-
 import { applyNpcDiplomacyAction, getNpcDiplomacyCandidates } from './npc-diplomacy.ts';
 import { calculateFleetPopulation, createEmptyFleetState } from '../domain/fleet/runtime.ts';
 import { getNpcMissionCandidates, candidateToNpcMissionCommand } from './npc-mission-policy.ts';
-import { dispatchNpcMission, dispatchNpcSpaceFlight, getNpcMissionAvailableFleet, NPC_SPACE_FLIGHT_GAS_FEE, resolveNpcMissionArrival } from './npc-missions.ts';
+import { dispatchNpcMission, dispatchNpcSpaceFlight, dispatchNpcTransport, getNpcMissionAvailableFleet, NPC_SPACE_FLIGHT_GAS_FEE, resolveNpcMissionArrival } from './npc-missions.ts';
 import { beginFlightReturn } from '../domain/flights/runtime.ts';
 import { getNpcPirateCandidates, dispatchNpcPirateMission } from './npc-pirates.ts';
 import { getNpcEndgameChoices } from './npc-endgame.ts';
@@ -238,6 +238,34 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
         return { state: withTarget(current, result.target), started: result.ok, reason: result.reason, planetId: target.id, ...(result.ok && result.orderId ? { economyActionId: result.orderId } : {}) };
       } });
     }
+  }
+  // Logistics: a colony whose stores fill up ships its surplus to the main
+  // planet, where the owner builds most (a player's daily routine).
+  const main = planets.find((planet) => planet.id === `${ownerId}-planet`) ?? planets[0];
+  if (main && planets.length > 1) for (const colony of planets) {
+    if (colony.id === main.id) continue;
+    const free = getNpcMissionAvailableFleet(state, ownerId, colony.id) ?? {};
+    const holds = { transporter: free.transporter ?? 0, 'mega-transporter': free['mega-transporter'] ?? 0 };
+    const catalog = getFactionShipCatalog(colony.raceId);
+    const capacityOf = (id: string) => catalog.find((entity) => entity.id === id)?.ship?.cargo ?? 0;
+    const capacity = holds.transporter * capacityOf('transporter') + holds['mega-transporter'] * capacityOf('mega-transporter');
+    if (capacity <= 0) continue;
+    const fill = describeNpcPlanet(colony, 0, 0, false).fill;
+    const fullest = Math.max(fill.metal, fill.minerals, fill.gas);
+    if (fullest < 0.6) continue;
+    // Keep a fifth of each store at the colony for its own work; gas also pays the flight.
+    const surplus = { metal: Math.floor(colony.resources.metal * 0.8), minerals: Math.floor(colony.resources.minerals * 0.8), gas: Math.floor(colony.resources.gas * 0.6) };
+    const total = surplus.metal + surplus.minerals + surplus.gas;
+    if (total < 0.05 * utility.dayValue) continue;
+    const share = Math.min(1, capacity / total);
+    const cargo = { metal: Math.floor(surplus.metal * share), minerals: Math.floor(surplus.minerals * share), gas: Math.floor(surplus.gas * share), debris: 0 };
+    const transportId = `transport:${colony.id}:${main.id}`;
+    const estimate = -0.4 + 1.6 * (fullest - 0.5) + 0.4 * strategyOf(utility).economy + 0.3 * Math.min(1, total / utility.dayValue);
+    const selected = Object.fromEntries(Object.entries(holds).filter(([, count]) => count > 0)) as Partial<Record<ShipId, number>>;
+    choices.push({ candidate: { id: transportId, kind: 'economy', weight: scored(transportId, estimate), payload: { planetId: colony.id } }, run: (current, key) => {
+      const result = dispatchNpcTransport(current, { requestId: key, ownerId, originPlanetId: colony.id, destinationPlanetId: main.id, selectedShips: selected, cargo }, at, timeScale);
+      return { state: result.state, started: result.ok, reason: result.reason, planetId: colony.id };
+    } });
   }
   // Spaceport: ship upgrades by the player's catalog; levels are owner-wide.
   const ownedShips: Partial<Record<string, number>> = {};

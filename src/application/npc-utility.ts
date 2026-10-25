@@ -464,6 +464,11 @@ export function estimateProductionItemUtility(context: NpcUtilityContext, target
     case 'recycler': return owned(itemId) > 0 || !(context.nearbyDebris ?? 0) && !context.knownDebris?.size ? -2
       : -0.2 + 1.2 * drives.operations + 0.4 * Math.log1p((context.nearbyDebris ?? 0) / Math.max(1, context.dayValue)) - price;
     case 'commander': return -0.9 + 0.8 * drives.military - price;
+    // Holds for logistics: a colony away from the main planet needs a few
+    // transporters to ship its surplus home; beyond a couple they are idle.
+    case 'cargo': return context.ownPlanets.length > 1 && (fleet[itemId] ?? 0) < 2
+      ? -0.3 + 0.8 * drives.economy + 0.3 * unit(context.profile.traits.cooperation) - price
+      : -1.2 + 0.4 * unit(context.profile.traits.cooperation) - price;
     default: return -1.2 + 0.4 * unit(context.profile.traits.cooperation) - price;
   }
 }
