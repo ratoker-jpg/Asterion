@@ -1,0 +1,11 @@
+export function normalizeNames(value) {
+  if (Array.isArray(value)) return value.map(normalizeNames);
+  if (value && typeof value === 'object') {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) {
+      out[k] = (/Name$/.test(k) || k === 'name' || k === 'motto' || k === 'description' || k === 'title' || k === 'tag') ? '<name>' : normalizeNames(v);
+    }
+    return out;
+  }
+  return value;
+}

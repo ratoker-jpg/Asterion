@@ -11,7 +11,7 @@ import { createSeededRandom } from '../domain/world/random.ts';
 import type { SpyTargetState } from '../domain/espionage/types.ts';
 import type { SaveState } from './contracts.ts';
 import { UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
-import { isNpcPlanetBlocked, projectNpcScience, targetEnergyLedger } from './npc-economy.ts';
+import { isNpcPlanetBlocked, NPC_APPLIED_ID_LIMIT, projectNpcScience, targetEnergyLedger } from './npc-economy.ts';
 
 function scienceContext(target: SpyTargetState, science: ScienceState, at: number, timeScale: number): ScienceRuntimeContext {
   return { state: science, wallet: { metal: target.resources.metal, minerals: target.resources.minerals,
@@ -39,9 +39,9 @@ export function startNpcScience(target: SpyTargetState, science: ScienceState, s
   if (!charged.ok) return { target, science, ok: false, reason: charged.reason };
   return { ok: true, reason: null, science: transition.state, target: { ...target,
     resources: { ...target.resources, metal: transition.wallet.metal, minerals: transition.wallet.minerals,
-      gas: transition.wallet.gas, developmentEnergy: charged.ledger.availableEnergy },
+      gas: transition.wallet.gas, developmentEnergy: Math.max(0, charged.ledger.availableEnergy) },
     energyLedger: charged.ledger,
-    economyAppliedActionIds: [...(target.economyAppliedActionIds ?? []), idempotencyKey].slice(-256) } };
+    economyAppliedActionIds: [...(target.economyAppliedActionIds ?? []), idempotencyKey].slice(-NPC_APPLIED_ID_LIMIT) } };
 }
 
 export function projectNpcScienceLedger(state: SaveState): SaveState {

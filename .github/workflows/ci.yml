@@ -4,18 +4,24 @@ on:
   pull_request:
   push:
     branches: [main]
+  # The full-world catch-up measurement runs on demand and nightly, not on
+  # every PR push (it holds a runner for about 15 minutes and gates nothing).
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * *'
 
 # A newer push to the same PR makes the older run pointless.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# Jobs run in parallel on separate Windows runners: logical tests, four
-# balanced Electron QA shards and the installer. Wall time is the slowest job
+# Jobs run in parallel on separate Windows runners: logical tests, NPC
+# replay tests, balanced Electron QA shards and the installer. Wall time is the slowest job
 # instead of the sum of every step.
 jobs:
   logic:
     name: Logical tests and evidence
+    if: github.event_name != 'schedule'
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -84,8 +90,6 @@ jobs:
         run: npm run test:sun-raid
       - name: New game and save slot tests
         run: npm run test:new-game
-      - name: NPC foundation contracts and persistence
-        run: npm run test:npc
       - name: Type-check and build renderer
         run: npm run build
       - name: Upload balance evidence
@@ -101,8 +105,27 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  # The NPC replay suite runs multi-day catch-ups (about 10 minutes), so it
+  # has its own runner instead of lengthening the logical job.
+  npc:
+    name: NPC replay tests
+    if: github.event_name != 'schedule'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: NPC foundation contracts and persistence
+        run: npm run test:npc
+
   electron:
     name: Electron QA (${{ matrix.shard }})
+    if: github.event_name != 'schedule'
     runs-on: windows-latest
     timeout-minutes: 25
     strategy:
@@ -116,8 +139,17 @@ jobs:
             suites: "qa:visual test:test-mode-ui:skip test:header-ui test:resource-assets-ui test:save-safety-ui:skip"
           - shard: science-reports
             suites: "test:science-ui:skip test:building-actions-ui test:reports-ui test:battle-reports-ui:skip test:simulator-ui:skip test:space-flight-ui:skip test:production-test-isolation-ui:skip"
+          # Owner decision (25.10.2026): a long absence is caught up in full
+          # behind a progress bar and the player waits; there is no 14-day /
+          # 120 s limit any more. The scoped replay QA runs one catch-up day and
+          # checks the progress banner, the pending-command gate, completion and
+          # state consistency. Long-horizon durations are measured by the
+          # npc-full-world job.
           - shard: campaign-command
-            suites: "test:new-game-ui:skip test:npc-replay-ui test:pirate-operations-ui test:command-ui:skip test:command-aid-ui:skip test:command-journal-ui:skip"
+            suites: "test:new-game-ui:skip test:pirate-operations-ui test:command-ui:skip test:command-aid-ui:skip test:command-journal-ui:skip"
+          # One catch-up day takes about 13 minutes on its own runner.
+          - shard: npc-replay
+            suites: "test:npc-replay-ui-1d"
           - shard: fleet-universe
             suites: "test:fleet-ui:skip test:universe-ui:skip test:energy-ui:skip test:repair-ui:skip"
     steps:
@@ -154,17 +186,22 @@ jobs:
             artifacts/universe-planet-qa/**/*
             artifacts/pirate-operations-qa/**/*
             artifacts/save-safety-qa/**/*
+            artifacts/npc-replay-qa*/**/*
           if-no-files-found: warn
           retention-days: 14
 
-  # Full campaign catch-up: 10 galaxies, 100 NPC, 30 offline days with asteroid,
-  # exploration and pirate timelines (no isolation). A measurement on shared
-  # runners whose speed varies, so it reports without gating the PR; the local
-  # result in docs/reports is the reviewed evidence.
+  # Full campaign catch-up: 10 galaxies, 100 NPC with asteroid, exploration
+  # and pirate timelines (no isolation). Owner decision (25.10.2026): a long
+  # absence is replayed in full behind a progress bar, so this job measures
+  # how long a catch-up takes instead of gating a duration. One full-world day
+  # costs about 20 minutes of CPU today, so it measures six game hours in Node
+  # and one game day in Electron. Shared runner speed varies, hence it reports
+  # without gating the PR.
   npc-full-world:
     name: NPC full-world catch-up (measurement)
+    if: github.event_name != 'pull_request'
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: 75
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
@@ -174,15 +211,17 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: Node full-world benchmark (1/7/30 days)
+      - name: Node full-world benchmark (6 game hours)
         shell: bash
         run: |
           mkdir -p artifacts/npc-full-world
-          npm run --silent benchmark:npc-full-world -- 1 7 30 > artifacts/npc-full-world/benchmark.json
+          npm run --silent benchmark:npc-full-world -- 0.25 > artifacts/npc-full-world/benchmark.json
       - name: Build renderer
         run: npm run build
-      - name: Electron full-world QA (30 days, 120 s limit)
-        run: npm run test:npc-replay-full-world-ui
+      - name: Electron full-world QA (1 game day, progress banner)
+        env:
+          ASTERION_QA_CATCHUP_TIMEOUT_MS: '3000000'
+        run: npm run test:npc-replay-full-world-ui -- --days=1
       - name: Upload full-world results
         if: always()
         uses: actions/upload-artifact@v6
@@ -196,6 +235,7 @@ jobs:
 
   package:
     name: Windows installer
+    if: github.event_name != 'schedule'
     runs-on: windows-latest
     timeout-minutes: 20
     steps:

@@ -71,6 +71,8 @@ export type FlightRecord = {
   requestId: string;
   /** Older records omit this and are treated as player-owned. */
   ownerSide?: 'player' | 'bot01' | 'npc' | 'pirate';
+  /** Stable launch owner; retained even if the origin planet is destroyed. */
+  ownerId?: string;
   missionId: MissionId;
   operationId?: string;
   /** Frozen resource-score snapshot at expedition departure. */
@@ -131,6 +133,8 @@ export type FlightRecord = {
   cargoResolvedAt?: number;
   /** Test Mode Bot 01 survivors/loot were restored exactly once. */
   bot01ReturnCreditedAt?: number;
+  /** Physical autonomous NPC fleet/cargo restoration has been applied. */
+  npcReturnCreditedAt?: number;
   phase: FlightPhase;
   completionReason?: FlightCompletionReason;
   recalledAt?: number;

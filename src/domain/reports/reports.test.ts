@@ -576,3 +576,13 @@ test('live player Moves canonical gas and recycler arrivals to Flights without d
   const bothRead = markAllReportsRead(createDefaultReportsState(),[recycler.id,gas.id]);
   assert.equal(getReportUnreadCounts(feed,bothRead).flights,0);
 });
+
+test('the mailbox keeps only the player\'s own pirate recon and pirate-hunt results', () => {
+  const recon = (id: string, ownerId: string) => ({
+    id: `pirate-recon:${id}`, missionId: id, ownerId, contactCycleKey: 'pirate-cycle-v1:1:2:1', coordinate: { galaxy: 1, system: 2, position: 24 },
+    dispatchedAt: 1, arrivedAt: 2, outcome: 'success',
+  }) as unknown as NonNullable<Parameters<typeof buildReportsFeed>[7]>[number];
+  const feed = buildReportsFeed([], createDefaultOperationsState(), commandWithoutJointOperations(), undefined, [], [], [],
+    [recon('mine', 'player-current'), recon('npc', 'npc-gen-01')], [], undefined, 'player-current');
+  assert.deepEqual(feed.filter((item) => item.id.startsWith('pirate-recon')).map((item) => item.id), ['pirate-recon:mine']);
+});

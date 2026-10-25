@@ -1,0 +1,51 @@
+(node:17980) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ save health distinguishes missing, valid, corrupt, newer and malformed payloads (7.2041ms)
+✔ F-01: Continue/Load/autostart refuse broken JSON and the bytes stay untouched (4.3529ms)
+✔ F-01: Continue/Load/autostart refuse a newer schema and the bytes stay untouched (2.3453ms)
+✔ F-01: Continue/Load/autostart refuse a null homeworld and the bytes stay untouched (2.2703ms)
+✔ F-01: only an explicit replace overwrites an unreadable save (34.3183ms)
+✔ F-01: a valid slot, a legacy partial save and a fresh campaign still load and autosave (97.0673ms)
+✔ F-01: unreadable storage is a load problem, not a fresh campaign (9.2398ms)
+✔ F-01: import refuses a structurally malformed save instead of resetting it (1.2783ms)
+✔ F-04: a broken slot index is rebuilt from the stored payloads and kept for rescue (2.8207ms)
+✔ F-04: wrong-shape index entries and orphaned payloads are listed again; duplicates are not (1.1994ms)
+✔ F-04: an unreadable legacy save is listed as broken, never re-seeded or hidden (0.2431ms)
+(node:18736) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ Reports does not fabricate non-combat runtime history (2.2357ms)
+✔ Доклады uses BattleReport and excludes simulator and Arena output (0.4303ms)
+✔ overpopulation final report uses one stable episode id and projects summary plus ordinary ship losses (1.3051ms)
+✔ recycler arrival report projects coordinates and debris totals into System with a stable id (0.475ms)
+✔ recycler arrival upserts retain the full arrival history and replace a repeated flight (2.7896ms)
+✔ zero-debris recycler arrival still produces a System report with explicit empty-result copy (0.2255ms)
+✔ gas extraction arrivals have a distinct stable report schema and show complete found/missed results (0.5953ms)
+✔ gas extraction reports flow through unread counts and keep persistent records across read/hide metadata changes (0.8412ms)
+✔ report metadata read/hide transitions preserve recycler arrival records (0.3916ms)
+✔ unread recycler arrival reports contribute to the aggregate unread count and decrement when read (0.5005ms)
+✔ overpopulation episode report survives save hydration with read/hidden metadata compatibility (155.017ms)
+✔ save hydration accepts empty ordinary fleet only for deployment with a valid commander (3.1494ms)
+✔ local player aliases produce attack-specific report labels and results (0.203ms)
+✔ operation battle remains canonical BattleReport but receives operation context (0.6717ms)
+✔ Reports feed has no Operations system items: demo signal reveals were removed (0.1038ms)
+✔ Reports feed never fabricates alliance invitations or joint operations from Command state (0.1265ms)
+✔ saved filter uses canonical BattleHistory saved ids, not Reports metadata (0.2261ms)
+✔ saved battle projection follows passed combat state and clears immediately on reset (0.104ms)
+✔ save and unsave stay in canonical BattleHistoryState (0.0891ms)
+✔ read/unread metadata is explicit and legacy favorites/archive are ignored (0.1832ms)
+✔ read metadata keeps the newest 500 ids (0.2691ms)
+✔ reports persistence preserves unrelated Asterion save envelope fields and writes report metadata (0.2464ms)
+✔ reports migration normalizes hidden ids and drops unknown ids when current feed is supplied (0.098ms)
+✔ delete all and selected are limited to one folder and do not mutate canonical reports (0.1585ms)
+✔ hidden reports disappear from counts and regenerated feed without hiding future ids (0.1381ms)
+✔ live player Moves canonical gas and recycler arrivals to Flights without doubling unread messages (0.2749ms)
+ℹ tests 37
+ℹ suites 0
+ℹ pass 37
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 572.1074

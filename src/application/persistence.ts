@@ -153,11 +153,13 @@ export const WORLD_CONFIG_SCHEMA_VERSION = 24;
 export const NPC_FOUNDATION_SCHEMA_VERSION = 25;
 export const NPC_ECONOMY_SCHEMA_VERSION = 26;
 export const NPC_SCIENCE_SCHEMA_VERSION = 27;
+export const NPC_AUTONOMY_SCHEMA_VERSION = 28;
 
 export const SAVE_SCHEMA_VERSION = Math.max(
   NPC_FOUNDATION_SCHEMA_VERSION,
   NPC_ECONOMY_SCHEMA_VERSION,
   NPC_SCIENCE_SCHEMA_VERSION,
+  NPC_AUTONOMY_SCHEMA_VERSION,
   WORLD_CONFIG_SCHEMA_VERSION,
   COMBAT_SAVE_SCHEMA_VERSION,
   SCIENCE_SAVE_SCHEMA_VERSION,
@@ -745,6 +747,9 @@ function isPersistedAidFlight(
     || !isNonEmptyPersistedString(item.destinationPlanetId)
     || (item.targetRelation !== 'ally' && item.targetRelation !== 'self')) return false;
   if (item.ownerSide === 'npc') {
+    if (isNonEmptyPersistedString(item.ownerId)) return mode === 'production'
+      && snapshot.senderOwnerId === item.ownerId && String(item.requestId).startsWith('npc-autonomy:')
+      && (item.targetRelation === 'ally' || item.targetRelation === 'self');
     return mode === 'test'
       && snapshot.senderOwnerId === TEST_ALLY_OWNER_ID
       && String(item.requestId).startsWith('aid-npc:')
@@ -763,6 +768,9 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const item = value as Record<string, unknown>;
   const isSpaceFlight = item.missionId === 'space-flight';
+  const autonomousNpc = item.ownerSide === 'npc' && isNonEmptyPersistedString(item.ownerId);
+  if (item.ownerId !== undefined && !isNonEmptyPersistedString(item.ownerId)) return false;
+  if (item.npcReturnCreditedAt !== undefined && (item.ownerSide !== 'npc' || !isFinitePersistedNumber(item.npcReturnCreditedAt))) return false;
   if (!isNonEmptyPersistedString(item.id)
     || !isNonEmptyPersistedString(item.requestId)
     || !isNonEmptyPersistedString(item.originPlanetId)
@@ -788,7 +796,7 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
 
   if ((item.ownerSide !== undefined && item.ownerSide !== 'player' && item.ownerSide !== 'bot01' && item.ownerSide !== 'npc' && item.ownerSide !== 'pirate')
     || (item.ownerSide === 'bot01' && item.missionId !== 'attack' && !(mode === 'test' && item.missionId === 'expedition'))
-    || (item.ownerSide === 'npc' && item.missionId !== 'expedition' && item.missionId !== 'aid' && !(item.missionId === 'attack' && item.explorationAttack === true))
+    || (item.ownerSide === 'npc' && !autonomousNpc && item.missionId !== 'expedition' && item.missionId !== 'aid' && !(item.missionId === 'attack' && item.explorationAttack === true))
     || (item.ownerSide === 'pirate' && item.missionId !== 'pirate-raid')
     || (item.missionId === 'pirate-raid' && item.ownerSide !== 'pirate')) return false;
 
@@ -797,7 +805,8 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
       mode !== 'test' || !String(item.requestId).startsWith('bot01-exploration:')
       || !['aegis','synod','veyra'].includes(String(item.explorationFactionId)) || item.targetRelation !== 'neutral'
       || item.gasCost !== 0)) return false;
-  if (item.ownerSide === 'npc' && item.missionId !== 'aid' && (mode !== 'production' || !String(item.requestId).startsWith('npc-exploration:')
+  if (autonomousNpc && (mode !== 'production' || !String(item.requestId).startsWith('npc-autonomy:'))) return false;
+  if (item.ownerSide === 'npc' && !autonomousNpc && item.missionId !== 'aid' && (mode !== 'production' || !String(item.requestId).startsWith('npc-exploration:')
     || !['aegis','synod','veyra'].includes(String(item.explorationFactionId))
     || item.targetRelation !== 'neutral' || item.gasCost !== 0)) return false;
   if ((item.missionId === 'expedition' || item.missionId === 'exploration-recon')

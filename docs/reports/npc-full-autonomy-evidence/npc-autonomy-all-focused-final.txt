@@ -1,0 +1,83 @@
+(node:29076) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ NPC aid candidates are limited to open same-alliance requests and own cargo capacity (51.826ms)
+✔ denied owner and source requests do not debit NPC resources or ships (23.8596ms)
+✔ aid dispatch and arrival are idempotent and credit only the recipient accepted amount (19.8958ms)
+✔ return handler restores loaded cargo to its NPC source once and leaves ship restoration to flight runtime (16.004ms)
+(node:34684) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ NPC founding uses its public name and persists one real owner membership (48.6415ms)
+✔ NPC alliance application stays pending and replaying its action id changes nothing (26.3476ms)
+✔ full alliances and active cooldowns do not produce illegal join or create candidates (18.1713ms)
+✔ NPC leaders leave player applications and truce offers pending, but can decide NPC applications (20.522ms)
+(node:25332) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ fleet candidates and paid starts are faction legal and replay idempotently (10.7577ms)
+✔ settlement completes exactly at the saved due time once and exposes the next timer (2.3458ms)
+✔ an owner mismatch and a denied catalog action cannot debit the target wallet (1.6719ms)
+✔ candidate catalog is limited to the target faction catalog (1.6813ms)
+✔ campaign duration scale is explicit and independent of the global player runtime scale (2.3364ms)
+(node:37476) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ mission candidates are deterministic and ignore hidden target fleet changes (19.7226ms)
+✔ attack eligibility is owner-scoped and respects the observation time (5.2479ms)
+✔ colonization only proposes canonical public empty coordinates and respects the owner cap (5.0711ms)
+✔ candidate adapter emits a real mission command with canonical target/contact payload (2.5609ms)
+(node:18928) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ neutral NPC-to-player attack survives production reload and settles once at exact arrival and return times (84.1355ms)
+✔ NPC-to-NPC attack uses the real defender planet and conserves both garrisons through return (11.9481ms)
+✔ arrival revalidates live relations and target ownership before any combat (21.9781ms)
+✔ competing NPC colonizers resolve by arrival order across save reload without double-claiming a coordinate (82.5747ms)
+✔ NPC exploration recon dispatch uses a canonical live contact and shared arrival settlement (47.7996ms)
+(node:7896) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ dispatch debits only the NPC owner, uses canonical flight timing, and is request-idempotent (16.3312ms)
+✔ attack dispatch accepts a neutral owner through the current relation rules (3.3718ms)
+✔ spy probe arrival records an owner-scoped canonical report and is idempotent (2.4008ms)
+✔ colonization creates an owner target with canonical start resources and consumes its colonizer (3.4469ms)
+✔ return credits only surviving ships and owner loot once, and rejects an origin now owned by someone else (3.7632ms)
+(node:29532) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ NPC pirate candidates use an owned public contact, own fleet, and canonical recon availability (15.6064ms)
+✔ NPC elimination arrival runs canonical combat and isolates player-owned save fields (12.4363ms)
+(node:29640) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ action selection is stable across reloads and candidate enumeration order (3.3777ms)
+✔ selection only uses supplied legal candidates and wait shares the draw (1.923ms)
+✔ matching personalities favor different supplied strategies reproducibly (7.0566ms)
+✔ memory learns only explicit fact references and records event outcomes once (0.8168ms)
+✔ a fact-backed battle loss changes attack weight and forces timely goal reconsideration (0.7917ms)
+✔ adaptability, persistence, and risk tolerance scale the effect of fact-backed outcomes (0.3077ms)
+✔ recon and diplomacy observations also invalidate a still-live goal (0.3676ms)
+✔ saved memory and long-term goals remain bounded through repeated outcomes (2.9268ms)
+✔ v1 validation rejects out-of-range policy values and unsafe reconsideration timestamps (2.2999ms)
+(node:14164) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./")); register("./src/domain/combat/test-asset-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ accepts canonical owner fleet queues and a flight bound to its live NPC origin (4.116ms)
+✔ accepts legacy payloads with absent autonomy queues and unbound NPC flights (0.2664ms)
+✔ rejects malformed queue shape, catalog identity, timing, duplicate IDs, costs, and commander levels (0.4961ms)
+✔ rejects cross-queue duplicate order IDs and wrong owner faction (0.2337ms)
+✔ rejects malformed owner-bound flight identity, mission, destination, ships, and attack snapshot (0.5385ms)
+✔ preserves owner-bound flights when the origin is destroyed or captured (0.862ms)
+✔ validates NPC return receipts and rejects receipts on other owners or invalid timestamps (0.1938ms)
+✔ rejects a new owner-bound flight whose identity collides with a legacy flight record (0.1471ms)
+✔ enforces mission-specific frozen snapshots and owner binding (0.5893ms)
+✔ accepts canonical expeditions without an attack snapshot and rejects a malformed supplied snapshot (0.2512ms)
+ℹ tests 48
+ℹ suites 0
+ℹ pass 48
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1143.4585

@@ -11,6 +11,7 @@ import {
   initializeNpcReplaySessionsAt,
   NPC_REPLAY_DECISION_MAX_DELAY_MS,
   NPC_REPLAY_DECISION_MIN_DELAY_MS,
+  NPC_REPLAY_MAX_ATTEMPTS_PER_SESSION,
 } from './npc-replay.ts';
 
 const DAY = NPC_CALENDAR_DAY_MS;
@@ -52,7 +53,8 @@ test('replay interval partitions preserve boundary and decision events with opaq
   for (const group of grouped.values()) {
     group.sort((left, right) => left.at - right.at);
     assert.equal(group[0]!.attempt, 0);
-    assert.ok(group.length <= 36);
+    // Looks are bounded by the session itself (owner rule: no per-session action cap).
+    assert.ok(group.length <= NPC_REPLAY_MAX_ATTEMPTS_PER_SESSION);
     for (let index = 1; index < group.length; index += 1) {
       const delay = group[index]!.at - group[index - 1]!.at;
       assert.ok(delay >= NPC_REPLAY_DECISION_MIN_DELAY_MS && delay <= NPC_REPLAY_DECISION_MAX_DELAY_MS);

@@ -11,7 +11,7 @@ import { createPirateContactCycleKey } from '../domain/pirates/contact-schedule.
 import { planPirateRaidFleet, type RaidDefenseComposition } from '../domain/pirates/raid.ts';
 import { createPirateProfile } from '../domain/pirates/profile.ts';
 import { createDefaultPirateState, type PirateState } from '../domain/pirates/mission.ts';
-import { advancePirateThreat, pirateCounterFleetChance, pirateRaidChance, pirateSeededDraw } from '../domain/pirates/threat.ts';
+import { advancePirateThreat, isOwnerProtectedFromPirates, pirateCounterFleetChance, pirateRaidChance, pirateSeededDraw } from '../domain/pirates/threat.ts';
 import { PIRATE_CATALOG_BY_ID } from '../domain/pirates/catalog.ts';
 import { selectOwnerScore } from '../domain/rating/scoring.ts';
 import { scaleRuntimeDuration, type RuntimeMode, type TestTimeScale } from '../domain/runtime/mode.ts';
@@ -150,11 +150,16 @@ export function resolveDuePirateRoll(
   const current = pirate.ownerThreats?.[event.ownerId] ?? {
     version: 1 as const, ageHours: 0, integratedAt: pirate.raidProcessedAt ?? event.at,
   };
-  const threat = advancePirateThreat(current, event.at);
   const points = selectOwnerScore(state, event.ownerId);
   const resourcePoints = safe(points?.resourcePoints ?? 0);
   const battlePoints = safe(points?.battlePoints ?? 0);
-  const chance = pirateRaidChance(resourcePoints, battlePoints, threat.ageHours);
+  const protectedOwner = isOwnerProtectedFromPirates(resourcePoints, battlePoints);
+  // A protected owner's threat clock moves on without ageing, so crossing the
+  // threshold later starts from the threat they already had, not a backlog.
+  const threat = protectedOwner
+    ? (event.at > current.integratedAt ? { ...current, integratedAt: event.at } : current)
+    : advancePirateThreat(current, event.at);
+  const chance = protectedOwner ? 0 : pirateRaidChance(resourcePoints, battlePoints, threat.ageHours);
   const qualified = pirateSeededDraw(seed) < chance;
   const allTargets = targetsByOwner(state, event.ownerId);
   const candidates = allTargets.get(event.ownerId)?.get(`${event.galaxy}:${event.system}`) ?? [];

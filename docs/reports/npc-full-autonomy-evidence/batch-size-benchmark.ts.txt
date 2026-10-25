@@ -1,0 +1,41 @@
+import { createDefaultNewGameConfig } from './src/domain/world/config.ts';
+import { createNpcState } from './src/domain/npc/state.ts';
+import { isNpcCatchupPending } from './src/application/npc-catchup.ts';
+import { reconcileRuntime } from './src/application/reconcile.ts';
+import { createInitialSaveState } from './src/application/persistence.ts';
+import type { SaveState } from './src/application/contracts.ts';
+
+const START = Date.UTC(2026, 9, 20, 12);
+const DAY = 24 * 60 * 60 * 1_000;
+const DAYS = Number(process.argv[2] ?? 1);
+const MAXGROUPS = process.argv[3] === 'big' ? 4096 : undefined;
+
+function campaign() {
+  const base = createDefaultNewGameConfig({ seed: 'NPCREPLAYQA2026', campaignName: 'bench' });
+  const setup = { ...base, world: { ...base.world, galaxyCount: 2, npcCount: 100, maxNpcPerSystem: 2, randomPlayerStart: false } };
+  const state = createInitialSaveState('production', START, setup);
+  const ownerIds = Object.keys(state.npc!.profiles);
+  return {
+    ...state,
+    npc: createNpcState(ownerIds, 'npc-replay-benchmark-persona-salt-v1', START),
+    asteroidSimulation: undefined,
+    exploration: { ...state.exploration!, npcProcessedAt: START + DAYS * DAY },
+    pirate: { ...state.pirate!, raidProcessedAt: START + DAYS * DAY },
+  } satisfies SaveState;
+}
+
+let state: SaveState = campaign();
+const targetAt = START + DAYS * DAY;
+const started = performance.now();
+let calls = 0;
+while (true) {
+  const result = reconcileRuntime(state, {
+    planetId: state.currentPlanetId, now: targetAt, mode: 'production', testTimeScale: 1,
+    ...(MAXGROUPS ? { replayMaxGroups: MAXGROUPS } : {}),
+  });
+  state = result.state;
+  calls += 1;
+  if (!isNpcCatchupPending(state) && (state.npcReplay?.processedThroughAt ?? START) >= targetAt) break;
+  if (calls > 100000) { console.log('GUARD'); break; }
+}
+console.log(`days=${DAYS} maxGroups=${MAXGROUPS ?? 64} calls=${calls} wall=${Math.round(performance.now() - started)}ms save=${JSON.stringify(state).length}`);

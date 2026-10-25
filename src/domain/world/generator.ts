@@ -1,4 +1,5 @@
 import { calculateDefensePopulation, createEmptyDefenseState } from '../fleet/production.ts';
+import { generateNpcNicknames } from './nicknames.ts';
 import { calculateFleetPopulation, createCanonicalStartingFleet, createEmptyFleetState } from '../fleet/runtime.ts';
 import { getFactionDefenseCatalog, getFactionShipCatalog } from '../combat/faction-catalog.ts';
 import type { ShipId } from '../combat/ids.ts';
@@ -16,14 +17,6 @@ export const GENERATED_NPC_OWNER_PREFIX = 'npc-gen-';
 export function isGeneratedNpcOwnerId(ownerId: string): boolean {
   return ownerId.startsWith(GENERATED_NPC_OWNER_PREFIX);
 }
-
-const NPC_NAMES = [
-  'Варг Тессел', 'Мира Кальдер', 'Остин Рейв', 'Кайра Вольт', 'Деймос Хард', 'Лиара Сенн', 'Торвальд Икс', 'Нея Арвен',
-  'Сайрус Марр', 'Ильва Корт', 'Брам Делейн', 'Эсса Новак', 'Корвин Блэйз', 'Талия Ферн', 'Рикс Орион', 'Хельга Вейл',
-  'Юстас Крейн', 'Ада Стрейн', 'Мэйсон Кор', 'Сола Тирн', 'Гаррет Фолк', 'Ивора Ракс', 'Зейн Окуро', 'Вера Лумен',
-  'Кассий Дрейк', 'Номи Шарп', 'Арлен Пайк', 'Селин Морау', 'Тэо Бракс', 'Фрея Кинн', 'Лукан Сорр', 'Ора Вистер',
-  'Дамир Хольт', 'Эйла Трэс', 'Марек Зонн', 'Рина Галло', 'Вольф Энгер', 'Кира Остел', 'Сет Варро', 'Лана Мирск',
-] as const;
 
 const PLANET_NAMES = [
   'Ортана', 'Келлис', 'Зефирия', 'Арго', 'Тирон', 'Мелора', 'Скайфол', 'Нерида', 'Валтар', 'Ксенон-4',
@@ -43,7 +36,10 @@ function coordinateKey(coordinate: UniverseCoordinate): string {
   return `${coordinate.galaxy}:${coordinate.system}:${coordinate.position}`;
 }
 
-/** A small, believable garrison: the stub can be spied on and attacked, it never acts. */
+/**
+ * Legacy stub garrison roll. New campaigns discard its result (NPCs start with the
+ * player's canonical package); it is still called only to keep seeded placement stable.
+ */
 function createStubGarrison(raceId: PlayerFactionId, random: () => number) {
   const fleet = createEmptyFleetState();
   const defense = createEmptyDefenseState();
@@ -75,8 +71,9 @@ function createStubGarrison(raceId: PlayerFactionId, random: () => number) {
 
 /**
  * Builds the world of a new campaign from its seed. Pure: the same config
- * always yields the same player start and the same NPC stubs. NPC stubs are
- * owners with exactly one planet and no behaviour (no flights, no growth).
+ * always yields the same player start and the same NPC starts. Each NPC begins
+ * with one planet and the player's canonical package for its race (wallet,
+ * buildings, starting fleet, no defense); its later growth is its own.
  */
 export function generateWorld(config: NewGameConfig, now: number): GeneratedWorld {
   const random = createSeededRandom(`world:${config.seed}`);
@@ -115,6 +112,8 @@ export function generateWorld(config: NewGameConfig, now: number): GeneratedWorl
     }
   }
   const npcPlanets: SpyTargetState[] = [];
+  // One-word nicknames from their own stream: placement draws are unchanged.
+  const nicknames = generateNpcNicknames(config.seed, npcCount, [config.playerName ?? '']);
   for (let index = 0; index < npcCount; index += 1) {
     const candidates = systems.filter((entry) => (perSystem.get(`${entry.galaxy}:${entry.system}`) ?? 0) < maxNpcPerSystem);
     if (!candidates.length) break;
@@ -137,8 +136,8 @@ export function generateWorld(config: NewGameConfig, now: number): GeneratedWorl
     const number = String(index + 1).padStart(2, '0');
     const rolledRace = pickRandom(random, FACTIONS);
     const raceId = mix ? raceQueue[index] ?? rolledRace : rolledRace;
-    const cycle = Math.floor(index / NPC_NAMES.length);
-    const ownerName = `${NPC_NAMES[index % NPC_NAMES.length]}${cycle ? ` ${cycle + 1}` : ''}`;
+    const cycle = Math.floor(index / PLANET_NAMES.length);
+    const ownerName = nicknames[index]!;
     const planetName = `${PLANET_NAMES[(index * 7) % PLANET_NAMES.length]}${cycle ? `-${cycle + 1}` : ''}`;
     // Keep the legacy random draws in place so changing NPC starting fleets
     // and economy does not shift seeded world placement or other map details.

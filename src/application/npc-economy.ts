@@ -1,3 +1,4 @@
+import { advanceRecyclingState, RECYCLING_STORAGE_MS } from '../domain/buildings/recycling.ts';
 import {
   completeBuildingProject,
   evaluateBuildingBuild,
@@ -32,6 +33,15 @@ import { accrueResourceCredits } from './resource-clock.ts';
 import type { SpyTargetState } from '../domain/espionage/types.ts';
 
 const RESOURCE_KEYS = ['metal', 'minerals', 'gas'] as const;
+/**
+ * Replay guards kept per NPC planet. An action id is only ever re-presented
+ * while its own decision is being applied (the cursor never revisits it), so
+ * a short tail is enough; 256 long keys per planet made a 100-NPC save huge.
+ */
+export const NPC_APPLIED_ID_LIMIT = 64;
+export const NPC_AUTONOMY_BUILDING_ROLES: readonly BuildingRole[] = [
+  ...NPC_ECONOMY_ROLES, 'shipyard', 'hangar', 'spaceport', 'planetary-government', 'recycling',
+];
 
 export type NpcEconomyContext = {
   /** Explicit campaign/test scale snapshot for deterministic historical replay. */
@@ -150,11 +160,14 @@ function withEconomy(target: SpyTargetState, economy: BuildingEconomyState, ener
       metal: economy.resources.metal,
       minerals: economy.resources.minerals,
       gas: economy.resources.gas,
-      developmentEnergy: energyLedger.availableEnergy,
+      // The mirror never shows a debt (the ledger keeps it), exactly as a load normalizes it.
+      developmentEnergy: Math.max(0, energyLedger.availableEnergy),
     },
     buildings: economy.buildings,
     buildingQueue: economy.queue,
-    energyLedger,
+    energyLedger: energyLedger.appliedTransactionIds.length > NPC_APPLIED_ID_LIMIT
+      ? { ...energyLedger, appliedTransactionIds: energyLedger.appliedTransactionIds.slice(-NPC_APPLIED_ID_LIMIT) }
+      : energyLedger,
   };
 }
 
@@ -178,6 +191,20 @@ function incomeFor(target: SpyTargetState, timeScale: number, buildings = target
   };
   derivedIncome.set(buildings, { science, bots: target.productionBots, timeScale, income: result });
   return result;
+}
+
+/** Canonical income per hour (metal + minerals + gas) this planet earns now. */
+export function getNpcPlanetIncomePerHour(target: SpyTargetState, timeScale: number): number {
+  const income = incomeFor(target, timeScale);
+  return income.metal + income.minerals + income.gas;
+}
+
+/** Extra canonical income per hour the next level of `role` would add (0 for non-producing buildings). */
+export function estimateNpcBuildingIncomeGain(target: SpyTargetState, role: BuildingRole, nextLevel: number, timeScale: number): number {
+  const buildings = targetBuildingLevels(target);
+  const before = incomeFor(target, timeScale, buildings);
+  const after = incomeFor(target, timeScale, { ...buildings, [role]: nextLevel });
+  return Math.max(0, (after.metal + after.minerals + after.gas) - (before.metal + before.minerals + before.gas));
 }
 
 function accrueInterval(target: SpyTargetState, to: number, timeScale: number, derivedBuildings?: BuildingLevels): SpyTargetState {
@@ -215,10 +242,18 @@ function accrueInterval(target: SpyTargetState, to: number, timeScale: number, d
 }
 
 function shiftQueue(target: SpyTargetState, delta: number, blockedSince: number): SpyTargetState {
-  if (delta <= 0 || !target.buildingQueue?.length) return target;
+  if (delta <= 0) return target;
+  const shiftProduction = (queue: NonNullable<SpyTargetState['fleetProduction']>['shipQueue']) => queue.map((item) => item.finishAt <= blockedSince ? item : ({
+    ...item, enqueuedAt: item.enqueuedAt + delta, startedAt: item.startedAt + delta, finishAt: item.finishAt + delta,
+  }));
   return {
     ...target,
-    buildingQueue: target.buildingQueue.map((item) => item.finishAt <= blockedSince ? item : ({
+    ...(target.fleetProduction ? { fleetProduction: {
+      shipQueue: shiftProduction(target.fleetProduction.shipQueue),
+      defenseQueue: shiftProduction(target.fleetProduction.defenseQueue),
+      commanderQueue: shiftProduction(target.fleetProduction.commanderQueue),
+    } } : {}),
+    buildingQueue: (target.buildingQueue ?? []).map((item) => item.finishAt <= blockedSince ? item : ({
       ...item,
       enqueuedAt: item.enqueuedAt + delta,
       startedAt: item.startedAt + delta,
@@ -254,11 +289,20 @@ function settleOverpopulation(target: SpyTargetState, at: number): SpyTargetStat
   };
 }
 
+// Targets are immutable; replay checkpoints ask every planet this per group.
+const blockedByTarget = new WeakMap<SpyTargetState, boolean>();
+
 export function isNpcPlanetBlocked(target: SpyTargetState, buildings?: BuildingLevels): boolean {
   if (target.overpopulation?.blocked === true) return true;
+  if (!buildings) {
+    const cached = blockedByTarget.get(target);
+    if (cached !== undefined) return cached;
+  }
   const normalizedFleet = removeSolarSatellitesFromFleet(target.fleet).fleet;
   const actualFleetPopulation = calculatePlanetPopulation(normalizedFleet, targetSatelliteCount(target), target.raceId);
-  return actualFleetPopulation > calculatePlanetCapacity((buildings ?? targetBuildingLevels(target)).hangar ?? 0);
+  const blocked = actualFleetPopulation > calculatePlanetCapacity((buildings ?? targetBuildingLevels(target)).hangar ?? 0);
+  if (!buildings) blockedByTarget.set(target, blocked);
+  return blocked;
 }
 
 const isBlocked = isNpcPlanetBlocked;
@@ -278,7 +322,7 @@ export function projectNpcScience(target: SpyTargetState, levels: import('../dom
   const ledger = targetEnergyLedger(target);
   const rebuilt = rebuildEnergyLedger(ledger, energySources(projected, targetBuildingLevels(projected)));
   return { ...projected, energyLedger: rebuilt,
-    resources: { ...projected.resources, developmentEnergy: rebuilt.availableEnergy } };
+    resources: { ...projected.resources, developmentEnergy: Math.max(0, rebuilt.availableEnergy) } };
 }
 
 function rebuildEnergyAfterCompletion(target: SpyTargetState, role: BuildingRole): SpyTargetState {
@@ -291,7 +335,7 @@ function rebuildEnergyAfterCompletion(target: SpyTargetState, role: BuildingRole
   });
   return {
     ...target,
-    resources: { ...target.resources, developmentEnergy: rebuilt.availableEnergy },
+    resources: { ...target.resources, developmentEnergy: Math.max(0, rebuilt.availableEnergy) },
     energyLedger: rebuilt,
   };
 }
@@ -303,12 +347,12 @@ export function previewNpcBuilding(target: SpyTargetState, role: BuildingRole): 
   return availability;
 }
 
-export function getNpcBuildingCandidates(target: SpyTargetState): Array<{ role: BuildingRole; availability: BuildAvailability }> {
+export function getNpcBuildingCandidates(target: SpyTargetState, autonomous = false): Array<{ role: BuildingRole; availability: BuildAvailability }> {
   // Each candidate observes the same owner snapshot. Hydrate the persisted
   // ledger and queue once rather than once per catalogue role.
   const economy = economyFor(target);
   const blocked = isBlocked(target);
-  return [...NPC_ECONOMY_ROLES].map((role) => ({
+  return [...(autonomous ? NPC_AUTONOMY_BUILDING_ROLES : NPC_ECONOMY_ROLES)].map((role) => ({
     role,
     availability: blocked
       ? { ...evaluateBuildingBuild(economy, role), canBuild: false, reason: 'Планета заблокирована из-за перенаселения.' }
@@ -325,7 +369,7 @@ export function startNpcBuilding(
 ): NpcBuildingStartResult {
   if (target.economyAppliedActionIds?.includes(idempotencyKey)) return { target, ok: true, reason: null };
   if (isBlocked(target)) return { target, ok: false, reason: 'Планета заблокирована из-за перенаселения.' };
-  if (!NPC_ECONOMY_ROLES.includes(role)) return { target, ok: false, reason: 'Это здание вне доступных экономических решений NPC.' };
+  if (!NPC_AUTONOMY_BUILDING_ROLES.includes(role)) return { target, ok: false, reason: 'Это здание вне доступных решений NPC.' };
   const economy = economyFor(target);
   const availability = evaluateBuildingBuild(economy, role);
   if (!availability.canBuild || availability.timeMs == null || !availability.cost) {
@@ -337,7 +381,7 @@ export function startNpcBuilding(
   if (!transition.ok) return { target, ok: false, reason: transition.reason };
   const chargedEnergy = consumeEnergy(energyLedger, availability.cost.energy, idempotencyKey);
   if (!chargedEnergy.ok) return { target, ok: false, reason: chargedEnergy.reason };
-  const actionIds = [...(target.economyAppliedActionIds ?? []), idempotencyKey].slice(-256);
+  const actionIds = [...(target.economyAppliedActionIds ?? []), idempotencyKey].slice(-NPC_APPLIED_ID_LIMIT);
   const next = withEconomy(target, transition.state, chargedEnergy.ledger);
   return {
     target: {
@@ -350,9 +394,39 @@ export function startNpcBuilding(
   };
 }
 
+/**
+ * Recycling jobs ready for a day are collected into the stores, capped as
+ * any income (the player's centre does the same); the rest of the store is
+ * untouched. Pure; the same target and time give the same result.
+ */
+export function settleNpcRecycling(target: SpyTargetState, at: number): SpyTargetState {
+  if (!target.recycling?.jobs.length) return target;
+  const transition = advanceRecyclingState(target.recycling, at);
+  // Only a collection changes the planet; a job merely turning "ready" is
+  // left as stored, so the state never depends on when it was settled.
+  if (!transition.autoCollectedJobIds.length) return target;
+  const collectedIds = new Set(transition.autoCollectedJobIds);
+  const capacities = getStorageCapacities(migrateBuildingLevels(target.buildings));
+  const credited = creditResources(
+    { metal: target.resources.metal, minerals: target.resources.minerals, gas: target.resources.gas, energy: 0 },
+    capacities,
+    transition.autoCollectedOutput,
+  );
+  return {
+    ...target,
+    recycling: { ...target.recycling, jobs: target.recycling.jobs.filter((job) => !collectedIds.has(job.id)) },
+    resources: { ...target.resources, metal: credited.wallet.metal, minerals: credited.wallet.minerals, gas: credited.wallet.gas },
+  };
+}
+
 export function getNextNpcEconomyCheckpoint(target: SpyTargetState, at: number): number | null {
   const due = [target.buildingQueue?.[0]?.finishAt]
     .filter((value): value is number => typeof value === 'number' && value >= at);
+  // Recycling output left uncollected is collected a day after it is ready.
+  for (const job of target.recycling?.jobs ?? []) {
+    const autoCollectAt = job.finishAt + RECYCLING_STORAGE_MS;
+    if (autoCollectAt >= at) due.push(autoCollectAt);
+  }
   if (target.overpopulation?.blocked) {
     const burnEnd = target.overpopulation.episodeStartedAt + OVERPOPULATION_WINDOW_MS;
     if (burnEnd >= at) due.push(burnEnd);

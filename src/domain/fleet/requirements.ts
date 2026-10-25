@@ -48,14 +48,30 @@ export type ProductionRequirementsEvaluation = {
   reason: string | null;
 };
 
-function normalizeLabel(value: string): string {
-  return value
+const REQUIREMENT_CACHE_LIMIT = 1024;
+
+/**
+ * Catalog requirement strings are revisited for every production eligibility
+ * check. Memoize only pure string transforms/parses; the bounded maps also
+ * avoid retaining arbitrary caller-provided catalog strings indefinitely.
+ */
+function memoizeString<T>(compute: (value: string) => T): (value: string) => T {
+  const cache = new Map<string, T>();
+  return (value) => {
+    if (cache.has(value)) return cache.get(value)!;
+    const result = compute(value);
+    if (cache.size >= REQUIREMENT_CACHE_LIMIT) cache.clear();
+    cache.set(value, result);
+    return result;
+  };
+}
+
+const normalizeLabel = memoizeString((value: string): string => value
     .trim()
     .toLocaleLowerCase('ru-RU')
     .replaceAll('ё', 'е')
     .replace(/[·—–-].*$/, '')
-    .replace(/\s+/g, ' ');
-}
+    .replace(/\s+/g, ' '));
 
 const scienceByLabel = new Map<string, { scienceId: ScienceId; label: string }>(
   SCIENCE_CATALOG.flatMap((science) => [
@@ -64,24 +80,28 @@ const scienceByLabel = new Map<string, { scienceId: ScienceId; label: string }>(
   ]),
 );
 
-function parseLevelRequirement(source: string): { label: string; level: number } | null {
+const parseLevelRequirement = memoizeString((source: string): { label: string; level: number } | null => {
   const match = source.match(/^(.+?)\s*[·—–-]\s*уровень\s*(\d+)\s*$/iu);
   if (!match) return null;
   const level = Number(match[2]);
   return Number.isFinite(level) && level >= 0 ? { label: match[1].trim(), level } : null;
-}
+});
 
-function parseShipQuantityRequirement(source: string): { label: string; quantity: number } | null {
+const parseShipQuantityRequirement = memoizeString((source: string): { label: string; quantity: number } | null => {
   const match = source.match(/^(.+) · количество (\d+)$/u);
   if (!match) return null;
   const label = match[1];
   const quantity = Number(match[2]);
   if (!label || label !== label.trim() || !Number.isSafeInteger(quantity)) return null;
   return { label, quantity };
-}
+});
 
-function normalizeShipName(value: string): string {
-  return value.trim().toLocaleLowerCase('ru-RU').replaceAll('ё', 'е').replace(/\s+/g, ' ');
+const normalizeShipName = memoizeString((value: string): string =>
+  value.trim().toLocaleLowerCase('ru-RU').replaceAll('ё', 'е').replace(/\s+/g, ' '));
+
+const scienceById = new Map<ScienceId, (typeof SCIENCE_CATALOG)[number]>();
+for (const science of SCIENCE_CATALOG) {
+  if (!scienceById.has(science.id)) scienceById.set(science.id, science);
 }
 
 function unresolvedRequirement(source: string, label: string): ProductionRequirementState {
@@ -177,7 +197,7 @@ function scienceRequirementStates(
 
   for (const requirement of explicit) {
     if (states.some((state) => state.kind === 'science' && state.scienceId === requirement.scienceId)) continue;
-    const science = SCIENCE_CATALOG.find((candidate) => candidate.id === requirement.scienceId);
+    const science = scienceById.get(requirement.scienceId);
     if (!science) continue;
     const currentLevel = Math.max(0, Math.floor(scienceLevels[requirement.scienceId] ?? 0));
     states.push({

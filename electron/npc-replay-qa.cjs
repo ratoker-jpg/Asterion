@@ -19,7 +19,7 @@ const ROOT = path.join(__dirname, '..');
 // timelines running from its start. The default stays the scoped economy run.
 const FULL_WORLD = process.argv.includes('--full-world');
 function parseCatchupDays(args) {
-  const value = args.find((arg) => arg.startsWith('--days='))?.slice('--days='.length) ?? '30';
+  const value = args.find((arg) => arg.startsWith('--days='))?.slice('--days='.length) ?? '14';
   if (!/^\d+$/.test(value)) throw new Error(`Invalid --days value ${JSON.stringify(value)}; expected an integer from 1 to 30.`);
   const days = Number(value);
   if (!Number.isSafeInteger(days) || days < 1 || days > 30) throw new Error(`Invalid --days value ${JSON.stringify(value)}; expected an integer from 1 to 30.`);
@@ -27,8 +27,14 @@ function parseCatchupDays(args) {
 }
 const CATCHUP_DAYS = parseCatchupDays(process.argv.slice(2));
 const OUTPUT = process.env.ASTERION_QA_OUTPUT
-  || path.join(ROOT, 'artifacts', `${FULL_WORLD ? 'npc-replay-full-world-qa' : 'npc-replay-qa'}${CATCHUP_DAYS === 30 ? '' : `-${CATCHUP_DAYS}d`}`);
-const CATCHUP_TIMEOUT_MS = 120_000;
+  || path.join(ROOT, 'artifacts', `${FULL_WORLD ? 'npc-replay-full-world-qa' : 'npc-replay-qa'}${CATCHUP_DAYS === 14 ? '' : `-${CATCHUP_DAYS}d`}`);
+// Owner decision (25.10.2026): a long absence is caught up in full behind a
+// progress bar and the player waits, so there is no fixed duration limit.
+// One catch-up day of 100 owners takes several minutes of renderer compute;
+// the wait bound only catches a stalled catch-up. The gate asserts that the
+// banner reports progress, the catch-up completes, commands are refused while
+// it runs and the player state stays intact.
+const CATCHUP_TIMEOUT_MS = Number(process.env.ASTERION_QA_CATCHUP_TIMEOUT_MS) || 900_000;
 const FIXTURE_ISOLATION = FULL_WORLD
   ? 'None: 10 galaxies, 100 NPC, asteroid simulation, exploration and pirate timelines run from campaign start.'
   : 'NPC economy replay only; exploration and pirate cursors are frozen at the fixed horizon and asteroid simulation is absent. Not a full-campaign replay.';
@@ -158,12 +164,13 @@ async function runScenario() {
     show: false,
     width: 1280,
     height: 720,
-    // The QA window is hidden; Chromium budget-throttles a hidden page's timers
-    // after ~10 s, which would throttle the catch-up continuation and the gap
-    // probe alike. The game window is shown fullscreen, so the full-world run
-    // measures it unthrottled. ASTERION_QA_THROTTLED=1 keeps the default.
+    // The QA window is hidden; Chromium budget-throttles a hidden page's
+    // timers after ~10 s, which would throttle the catch-up continuation and
+    // the gap probe alike. Throttling is a property of the hidden QA harness,
+    // not of the game, so both scenarios measure unthrottled by default.
+    // ASTERION_QA_THROTTLED=1 restores the hidden-window default.
     webPreferences: { contextIsolation: true, sandbox: true,
-      backgroundThrottling: !(FULL_WORLD && process.env.ASTERION_QA_THROTTLED !== '1') },
+      backgroundThrottling: process.env.ASTERION_QA_THROTTLED === '1' },
   });
   win.webContents.on('console-message', (_event, _level, message) => {
     if (/\berror\b/i.test(message)) console.warn(`[renderer] ${message}`);
@@ -191,6 +198,24 @@ async function runScenario() {
       catch { return false; }
     })()`;
     await waitFor(win, pendingExpression, 30_000);
+    // Owner decision (25.10.2026): a long catch-up shows its progress and
+    // the player waits. The banner must appear, report a real percentage and
+    // leave clicks to the command gate below.
+    await waitFor(win, `Boolean(document.querySelector('[data-qa-npc-catchup] [role="progressbar"]'))`, 15_000);
+    const catchupBanner = await run(win, `(() => {
+      const banner = document.querySelector('[data-qa-npc-catchup]');
+      const bar = banner?.querySelector('[role="progressbar"]');
+      return { text: banner?.textContent || '', percent: Number(bar?.getAttribute('aria-valuenow')),
+        pointerEvents: banner ? getComputedStyle(banner).pointerEvents : null };
+    })()`);
+    if (!catchupBanner.text.includes('Мир догоняет') || !Number.isFinite(catchupBanner.percent)
+      || catchupBanner.percent < 0 || catchupBanner.percent > 100 || catchupBanner.pointerEvents !== 'none') {
+      throw new Error(`NPC catch-up progress banner invalid: ${JSON.stringify(catchupBanner)}`);
+    }
+    fs.mkdirSync(OUTPUT, { recursive: true });
+    if (process.env.ASTERION_SKIP_SCREENSHOTS !== '1') {
+      fs.writeFileSync(path.join(OUTPUT, 'catchup-progress.png'), (await win.webContents.capturePage()).toPNG());
+    }
 
     const initial = await run(win, `(() => {
       const save = JSON.parse(localStorage.getItem(${JSON.stringify(saveKey)}) || '{}');
@@ -335,6 +360,9 @@ async function runScenario() {
     const elapsedMs = Date.now() - catchupStartedAt;
     if (cpuProfileDone) await cpuProfileDone;
     const measurement = await readMeasurement(win, saveKey);
+    const bannerGone = catchupWaitError ? null : await waitFor(win, `!document.querySelector('[data-qa-npc-catchup]')`, 10_000)
+      .then(() => true, () => false);
+    if (bannerGone === false) throw new Error('NPC catch-up progress banner stayed visible after the catch-up completed.');
     if (catchupWaitError) {
       const failedResults = {
         status: 'timeout',

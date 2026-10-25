@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  createOwnerRatingEntries,
   CURRENT_PLAYER_ID,
   CURRENT_PLAYER_DISPLAY_NAME,
   createDefaultRatingPrototypeState,
@@ -116,4 +117,17 @@ test('production rating exposes only the current player and no alliance rows', (
   assert.equal(players[0].rank, 1);
   assert.equal(players[0].totalPoints, 900_001);
   assert.deepEqual(alliances, []);
+});
+
+test('production standings list every real owner by canonical total points, the player included', () => {
+  const entries = createOwnerRatingEntries(
+    { 'player-current': { resourcePoints: 107, battlePoints: 0 }, 'npc-gen-01': { resourcePoints: 147, battlePoints: 20 }, 'npc-gen-02': { resourcePoints: 1, battlePoints: 0 } },
+    { 'player-current': { name: 'QA', factionId: 'aegis' }, 'npc-gen-01': { name: 'Лана Мирск', factionId: 'synod' }, 'npc-gen-02': { name: 'Ада Стрейн', factionId: 'veyra' } },
+    'player-current',
+  );
+  assert.deepEqual(entries.map((entry) => [entry.rank, entry.id, entry.totalPoints, entry.race, entry.isCurrentPlayer]), [
+    [1, 'npc-gen-01', 167, 'cyber', false],
+    [2, 'player-current', 107, 'aster', true],
+    [3, 'npc-gen-02', 1, 'xeno', false],
+  ]);
 });

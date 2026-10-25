@@ -76,6 +76,13 @@ export type BuildingApplicationContext = {
   mode: RuntimeMode;
   testTimeScale: TestTimeScale;
   rng?: () => number;
+  /**
+   * Offline catch-up contexts (tests, benchmarks, QA, migration tools) may
+   * apply more replay groups per reconcileRuntime call than the interactive
+   * NPC_REPLAY_MAX_GROUPS budget. The group sequence and every resulting
+   * state are identical; only the batching of the same work changes.
+   */
+  replayMaxGroups?: number;
 };
 
 export type BuildingActionResult = {

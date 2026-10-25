@@ -93,8 +93,10 @@ export function explorationMailboxReports(ledger?: ExplorationState, flights: re
 
   // Every landed/returned canonical flight with a completed record gets a flight-mailbox trail.
   // Expedition deliveries have the exact escrow receipt above, avoiding duplicate reporting.
+  // Only the player's own flights: NPC flights are private to their owners
+  // (an NPC attack on the player reaches the mailbox as its battle report).
   const generic: ReportItem[] = flights.filter(f => (f.phase === 'completed' || f.phase === 'failed')
-    && f.ownerSide !== 'pirate' && f.ownerSide !== 'bot01'
+    && f.ownerSide !== 'pirate' && f.ownerSide !== 'bot01' && f.ownerSide !== 'npc'
     && f.missionId !== 'expedition' && f.missionId !== 'exploration-recon'
     && f.missionId !== 'espionage').map(flight => {
       const location = coords(flight.destinationCoordinate);

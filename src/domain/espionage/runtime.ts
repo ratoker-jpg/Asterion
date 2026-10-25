@@ -123,14 +123,27 @@ export function hunterDetects(hunterLevel: number, roll: number): boolean {
   return normalizeRngRoll(roll) < hunterDetectionChancePercent(hunterLevel);
 }
 
+// Mission arrays are immutable; an NPC decision asks once per candidate
+// target, so the first live mission per (owner, target) is indexed per array.
+const activeMissionIndex = new WeakMap<readonly SpyMission[], Map<string, Map<string, SpyMission>>>();
+
 export function activeSpyMissionForTarget(
   missions: readonly SpyMission[],
   ownerId: string,
   targetPlanetId: string,
 ): SpyMission | undefined {
-  return missions.find((mission) => mission.ownerId === ownerId
-    && mission.targetPlanetId === targetPlanetId
-    && (mission.status === 'transit' || mission.status === 'orbiting' || mission.status === 'returning'));
+  let index = activeMissionIndex.get(missions);
+  if (!index) {
+    index = new Map();
+    for (const mission of missions) {
+      if (mission.status !== 'transit' && mission.status !== 'orbiting' && mission.status !== 'returning') continue;
+      let byTarget = index.get(mission.ownerId);
+      if (!byTarget) index.set(mission.ownerId, byTarget = new Map());
+      if (!byTarget.has(mission.targetPlanetId)) byTarget.set(mission.targetPlanetId, mission);
+    }
+    activeMissionIndex.set(missions, index);
+  }
+  return index.get(ownerId)?.get(targetPlanetId);
 }
 
 export function canRequestSpyReport(mission: SpyMission, now: number): boolean {

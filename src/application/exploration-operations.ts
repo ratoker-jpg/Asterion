@@ -35,7 +35,9 @@ export function resolveExplorationProbeArrival(state: SaveState, flight: FlightR
   if (ledger.reconReports?.some(r => r.flightId === flight.id)) {
     return { state, notice: 'Результат исследования этого полёта уже сохранён.' };
   }
-  const report = resolveExplorationRecon(ledger.contacts[id]!, state.profile.playerId, flight.id,
+  const observerId = flight.ownerSide === 'npc' ? flight.ownerId : state.profile.playerId;
+  if (!observerId) return { state, notice: 'Неизвестный владелец разведки.' };
+  const report = resolveExplorationRecon(ledger.contacts[id]!, observerId, flight.id,
     arrivedAt, ledger.reconReports ?? []);
   return {
     state: { ...state, exploration: {

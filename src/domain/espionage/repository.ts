@@ -13,7 +13,7 @@ import type {
 import { createDefaultEspionageState } from './runtime.ts';
 import { createBot01Planets, createDefaultBot01Profile } from './fixtures.ts';
 import { migrateFleetState } from '../fleet/runtime.ts';
-import { migrateDefenseState } from '../fleet/production.ts';
+import { migrateDefenseState, createDefaultFleetProductionState } from '../fleet/production.ts';
 import { migrateRepairWorkshopState } from '../repair/workshop.ts';
 import { createDefaultBuildingLevels, migrateBuildingQueue } from '../buildings/resource-zone.ts';
 import { migrateProductionBotAssignment } from '../buildings/production-bots.ts';
@@ -113,6 +113,7 @@ function migrateReport(value: unknown): SpyReportSnapshot | null {
   const population = record(source.population);
   const base: SpyReportSnapshot = {
     id,
+    ...(text(source.ownerId) ? { ownerId: text(source.ownerId) } : {}),
     missionId,
     createdAt: nonNegative(source.createdAt),
     sourcePlanetId: text(source.sourcePlanetId, 'helion-01'),
@@ -204,6 +205,7 @@ function migrateNotice(value: unknown): SpyHunterNotice | null {
   if (!text(source.id) || !text(source.missionId) || !text(source.targetPlanetId)
     || ![coordinate.galaxy, coordinate.system, coordinate.position].every((part) => Number.isInteger(part) && Number(part) >= 1)) return null;
   return {
+    ...(text(source.ownerId) ? { ownerId: text(source.ownerId) } : {}),
     id: text(source.id),
     missionId: text(source.missionId),
     createdAt: nonNegative(source.createdAt),
@@ -234,7 +236,8 @@ function migrateSpyTarget(value: unknown, now: number): SpyTargetState | null {
       : undefined);
   const buildingLevels = numericRecord(source.buildings);
   const buildingQueue = Array.isArray(source.buildingQueue)
-    ? migrateBuildingQueue(source.buildingQueue, text(source.id), { ...createDefaultBuildingLevels(), ...buildingLevels })
+    // Queued prices depend on the owner's science, exactly as when they were paid.
+    ? migrateBuildingQueue(source.buildingQueue, text(source.id), { ...createDefaultBuildingLevels(), ...buildingLevels }, ownerProfile?.scienceLevels ?? {})
     : undefined;
   const productionBots = source.productionBots && typeof source.productionBots === 'object'
     ? migrateProductionBotAssignment(source.productionBots, { ...createDefaultBuildingLevels(), ...buildingLevels })
@@ -279,6 +282,9 @@ function migrateSpyTarget(value: unknown, now: number): SpyTargetState | null {
     },
     buildings: buildingLevels,
     fleet: migrateFleetState(source.fleet),
+    // Present autonomous queues pass the pre-migration health gate. Preserve
+    // paid snapshots and completion counters; load never settles future work.
+    fleetProduction: source.fleetProduction === undefined ? createDefaultFleetProductionState() : source.fleetProduction as SpyTargetState['fleetProduction'],
     defense: migrateDefenseState(source.defense),
     commanders: migratedCommanders as SpyTargetState['commanders'],
     ...(ownerProfile ? { ownerProfile } : {}),
