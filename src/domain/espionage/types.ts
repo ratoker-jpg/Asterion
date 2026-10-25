@@ -106,6 +106,8 @@ export type SpyTargetState = {
   solarSatellites?: number;
   /** An NPC owner's recycling store and jobs (the player's «Центр переработки»); absent means empty. */
   recycling?: RecyclingState;
+  /** When this NPC planet last sent a transport of its own resources (logistics rhythm). */
+  lastTransportAt?: number;
   /** An autonomous NPC planet's Spaceport ship-upgrade queue (owner-wide levels live in ownerProfile). */
   spaceportUpgrades?: import('../buildings/spaceport-upgrades.ts').SpaceportUpgradeState;
   /** Persisted fleet-only capacity burn episode. Defense population is excluded. */

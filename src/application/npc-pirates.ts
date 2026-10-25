@@ -1,9 +1,10 @@
+import { ownerFlights as ownerFlightIndex } from './npc-knowledge-index.ts';
 import { calculateFleetPopulation, createEmptyFleetState, resolveSavedFleetState } from '../domain/fleet/runtime.ts';
 import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
 import type { ShipId } from '../domain/combat/ids.ts';
 import { createBot01IncomingAttackSnapshot } from './attack.ts';
 import { getHangarCapacity } from '../domain/buildings/balance-v1.ts';
-import { getFlightSlotUsage, isFlightLimitExempt } from '../domain/flights/limit.ts';
+import { isFlightLimitExempt, npcFreeFlightSlots } from '../domain/flights/limit.ts';
 import { dispatchFlight, getFlightByRequestId } from '../domain/flights/runtime.ts';
 import { isFlightCoordinate } from '../domain/flights/distance.ts';
 import type { FlightRecord, FlightScienceLevels, MissionId } from '../domain/flights/types.ts';
@@ -79,17 +80,14 @@ function pirateOwnerProfile(state: SaveState, ownerId: string, cycleKey: string)
 }
 
 function activePirateFlights(state: SaveState, ownerId: string, cycleKey: string): FlightRecord[] {
-  return state.flights.records.filter((flight) => flight.ownerSide === 'npc'
-    && flight.ownerId === ownerId
+  return ownerFlightIndex(state.flights.records, ownerId).filter((flight) => flight.ownerSide === 'npc'
     && flight.pirateSnapshot?.contactCycleKey === cycleKey
     && ['outbound', 'arrived', 'returning'].includes(flight.phase));
 }
 
 function ownerCanUseFlightSlot(state: SaveState, ownerId: string, profile: SpyOwnerProfile, missionId: MissionId): boolean {
   if (isFlightLimitExempt(missionId)) return true;
-  const ownerFlights = state.flights.records.filter((flight) => flight.ownerSide === 'npc' && flight.ownerId === ownerId)
-    .map((flight) => ({ ...flight, ownerSide: 'player' as const }));
-  return getFlightSlotUsage(ownerFlights, profile.scienceLevels[6]).free > 0;
+  return npcFreeFlightSlots(ownerFlightIndex(state.flights.records, ownerId), profile.scienceLevels[6]) > 0;
 }
 
 function sameCoordinate(left: { galaxy: number; system: number; position: number }, right: { galaxy: number; system: number; position: number }): boolean {

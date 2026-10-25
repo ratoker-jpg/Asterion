@@ -1,3 +1,4 @@
+import { ownerFlights } from './npc-knowledge-index.ts';
 import { calculateFleetPopulation, resolveSavedFleetState } from '../domain/fleet/runtime.ts';
 import { calculateDefensePopulation } from '../domain/fleet/production.ts';
 import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
@@ -13,7 +14,7 @@ import { creditNpcExplorationReturn } from './exploration-bot01.ts';
 import { getEspionageTargets, activeSpyMissionForTarget, createSeededEspionageRng, espionageRollSeed, hunterDetects, normalizeRngRoll, repeatReportLosesProbe, resolveSpyReportQuality, SPY_REPORT_COOLDOWN_MS } from '../domain/espionage/runtime.ts';
 import { addDebris, getCappedDelivery, getCargoUsed, getFleetCargoCapacity, normalizeTransportCargo, type TransportCargo } from '../domain/flights/cargo.ts';
 import { collectOrbitalDebrisAtCoordinate, getOrbitalDebrisAtCoordinate } from '../domain/espionage/orbital-debris.ts';
-import { getFlightSlotUsage, isFlightLimitExempt } from '../domain/flights/limit.ts';
+import { isFlightLimitExempt, npcFreeFlightSlots } from '../domain/flights/limit.ts';
 import { beginFlightReturn, dispatchFlight, getFlightByRequestId, MAX_SPACE_FLIGHT_DURATION_MS, MIN_SPACE_FLIGHT_DURATION_MS, SPACE_FLIGHT_DURATION_STEP_MS } from '../domain/flights/runtime.ts';
 import { isFlightCoordinate } from '../domain/flights/distance.ts';
 import { createUniverseSystem, MAX_PLANETS_PER_OWNER, nextColonyPointThreshold } from '../domain/universe/runtime.ts';
@@ -138,13 +139,14 @@ function normalizeShips(
 }
 
 function activeFlightsForOwner(state: SaveState, ownerId: string): FlightRecord[] {
-  return state.flights.records.filter((flight) => flight.ownerSide === 'npc' && flight.ownerId === ownerId);
+  // The owner index is built once per flight list; scanning every record on
+  // each launch attempt grew with the whole world's traffic.
+  return ownerFlights(state.flights.records, ownerId).filter((flight) => flight.ownerSide === 'npc');
 }
 
 function flightSlotsAvailable(state: SaveState, ownerId: string, profile: SpyOwnerProfile, missionId: MissionId): boolean {
   if (isFlightLimitExempt(missionId)) return true;
-  const ownerFlights = activeFlightsForOwner(state, ownerId).map((flight) => ({ ...flight, ownerSide: 'player' as const }));
-  return getFlightSlotUsage(ownerFlights, profile.scienceLevels[6]).free > 0;
+  return npcFreeFlightSlots(ownerFlights(state.flights.records, ownerId), profile.scienceLevels[6]) > 0;
 }
 
 function registeredTargets(state: SaveState) {
@@ -902,7 +904,10 @@ export function settleNpcMissionReturn(
     // called only after owner validation, then this adapter adds the ship receipt.
     next = creditNpcExplorationReturn(next, flight, flight.returnAt);
   }
-  const settled: FlightRecord = { ...flight, npcReturnCreditedAt: flight.returnAt };
+  // Cargo that rode home is back in the stores: the record no longer holds it.
+  const carriedHome = (flight.missionId === 'space-flight' || flight.missionId === 'transport') && flight.cargoState === 'loaded' && source !== undefined;
+  const settled: FlightRecord = { ...flight, npcReturnCreditedAt: flight.returnAt,
+    ...(carriedHome ? { cargoState: 'returned' as const, cargoResolvedAt: flight.returnAt } : {}) };
   return { state: setFlight(next, settled), flight: settled };
 }
 

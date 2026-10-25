@@ -81,6 +81,9 @@ function familyDrive(drives: NpcStrategyDrives, kind: string): number {
   }
 }
 
+/** A planet sends its surplus home every six game hours at most. */
+const NPC_TRANSPORT_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
 const STRATEGIC_GOAL_KINDS: ReadonlySet<string> = new Set(Object.values(NPC_STRATEGY_FAMILY));
 const ENERGY_SHORT_REASON = 'Недостаточно энергии.';
 
@@ -255,8 +258,12 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     let destination: typeof main | undefined;
     let keep = 0.2;
     let urgency = 0;
+    // One transport from a planet at a time, and a few trips a day at most.
+    if (source.lastTransportAt !== undefined && at - source.lastTransportAt < NPC_TRANSPORT_INTERVAL_MS / Math.max(1, timeScale)) continue;
+    if (ownerFlights(state.flights.records, ownerId).some((flight) => flight.missionId === 'transport' && flight.originPlanetId === source.id
+      && (flight.phase === 'outbound' || flight.phase === 'arrived'))) continue;
     if (source.id !== main.id) {
-      if (fullest < 0.6) continue;
+      if (fullest < 0.75) continue;
       destination = main;
       urgency = fullest - 0.5;
     } else {
@@ -274,7 +281,7 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     const surplus = { metal: Math.floor(source.resources.metal * (1 - keep)), minerals: Math.floor(source.resources.minerals * (1 - keep)),
       gas: Math.floor(source.resources.gas * (1 - keep) * 0.75) };
     const total = surplus.metal + surplus.minerals + surplus.gas;
-    if (total < 0.005 * utility.dayValue) continue;
+    if (total < 0.02 * utility.dayValue) continue;
     const share = Math.min(1, capacity / total);
     const cargo = { metal: Math.floor(surplus.metal * share), minerals: Math.floor(surplus.minerals * share), gas: Math.floor(surplus.gas * share), debris: 0 };
     const to = destination;
@@ -283,7 +290,8 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     const selected = Object.fromEntries(Object.entries(holds).filter(([, count]) => count > 0)) as Partial<Record<ShipId, number>>;
     choices.push({ candidate: { id: transportId, kind: 'economy', weight: scored(transportId, estimate), payload: { planetId: source.id } }, run: (current, key) => {
       const result = dispatchNpcTransport(current, { requestId: key, ownerId, originPlanetId: source.id, destinationPlanetId: to.id, selectedShips: selected, cargo }, at, timeScale);
-      return { state: result.state, started: result.ok, reason: result.reason, planetId: source.id };
+      const sent = result.ok ? withTarget(result.state, { ...result.state.espionage!.targets![source.id]!, lastTransportAt: at }) : result.state;
+      return { state: sent, started: result.ok, reason: result.reason, planetId: source.id };
     } });
   }
   // Spaceport: ship upgrades by the player's catalog; levels are owner-wide.
