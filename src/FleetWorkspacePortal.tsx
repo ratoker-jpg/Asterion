@@ -398,6 +398,11 @@ function FleetWorkspace({
   const [gasPreviewNeedsReconfirmation, setGasPreviewNeedsReconfirmation] = useState(false);
   const [editingPreviewTarget, setEditingPreviewTarget] = useState(false);
   const [previewTargetDraft, setPreviewTargetDraft] = useState<FlightCoordinateDraft>({ galaxy: '', system: '', position: '' });
+  // Once the player types a target, the planet the flight was launched at is
+  // no longer a fallback: an unfinished entry is an error, never the own planet.
+  const [previewTargetTyped, setPreviewTargetTyped] = useState(false);
+  const launchDestination = previewTargetTyped ? undefined : launchContext?.destination;
+  const launchTargetRelation = previewTargetTyped ? undefined : launchContext?.targetRelation;
   const [previewTargetError, setPreviewTargetError] = useState<string | null>(null);
   const [selectedPirateTargetKey, setSelectedPirateTargetKey] = useState<string | null>(null);
   /** «Поддержка солнца»: the `sun:G:S` operation of the Sun under attack. */
@@ -568,6 +573,7 @@ function FleetWorkspace({
     setGasPreviewNeedsReconfirmation(false);
     setEditingPreviewTarget(false);
     setPreviewTargetDraft({ galaxy: '', system: '', position: '' });
+    setPreviewTargetTyped(false);
     setPreviewTargetError(null);
     setSelectedPirateTargetKey(null);
     setSelectedSunOperationId(null);
@@ -631,6 +637,7 @@ function FleetWorkspace({
     setPreviewSubmittedTargetKind(null);
     setEditingPreviewTarget(false);
     setPreviewTargetDraft(launchContext.destination ? flightCoordinateDraft(launchContext.destination.coordinate) : { galaxy: '', system: '', position: '' });
+    setPreviewTargetTyped(false);
     setPreviewTargetError(null);
     setSelectedPirateTargetKey(launchContext.missionId === 'pirate-elimination' ? launchContext.contactCycleKey ?? null : null);
     setSelectedSunOperationId(launchContext.missionId === 'sun-support' ? launchContext.operationId ?? null : null);
@@ -771,7 +778,7 @@ function FleetWorkspace({
           position: origin.universePosition ?? 1,
         },
       } : undefined
-      : draft?.destination ?? previewDestination ?? launchContext?.destination;
+      : draft?.destination ?? previewDestination ?? launchDestination;
     const departedAt = draft?.departedAt ?? Date.now();
     const targetKind = missionId === 'pirate-elimination' ? 'pirate'
       : missionId === 'expedition' ? expeditionTarget!.kind
@@ -845,7 +852,7 @@ function FleetWorkspace({
       ? aidRequestForPreview && aidRequestForPreview.status === 'open'
         ? { kind: 'planet' as const, planetId: aidRequestForPreview.planetId, coordinate: { ...aidRequestForPreview.coordinate } }
         : undefined
-      : previewDestination ?? launchContext?.destination;
+      : previewDestination ?? launchDestination;
     const sunTargets = missionId === 'sun-support' ? selectSunSupportTargets(runtimeState, Date.now()) : [];
     const requestedSun = sunTargets.find((item) => item.operationId === selectedSunOperationId)
       ?? (!selectedSunOperationId && sunTargets.length === 1 ? sunTargets[0] : null);
@@ -858,7 +865,7 @@ function FleetWorkspace({
       : missionId === 'space-flight'
       ? createFlightCommand(`preview-${Date.now()}`, { originPlanetId }, runtimeState)?.destination
       : requestedDestination;
-    const targetRelation = missionId === 'pirate-elimination' || missionId === 'expedition' || missionId === 'sun-support' ? 'neutral' : missionId === 'space-flight' ? undefined : missionId === 'aid' ? 'ally' : previewTargetRelation ?? launchContext?.targetRelation;
+    const targetRelation = missionId === 'pirate-elimination' || missionId === 'expedition' || missionId === 'sun-support' ? 'neutral' : missionId === 'space-flight' ? undefined : missionId === 'aid' ? 'ally' : previewTargetRelation ?? launchTargetRelation;
     if (requestedSun) setSelectedSunOperationId(requestedSun.operationId);
     const command = missionId === 'space-flight'
       ? createFlightCommand(`preview-${Date.now()}`, { originPlanetId }, runtimeState)
@@ -1010,7 +1017,8 @@ function FleetWorkspace({
 
   const changePreviewTargetField = (field: keyof FlightCoordinateDraft, value: string) => {
     const nextDraft = { ...previewTargetDraft, [field]: value };
-    setPreviewTargetDraft(nextDraft);
+    setPreviewTargetDraft((current) => ({ ...current, [field]: value }));
+    setPreviewTargetTyped(true);
     setPreviewTargetRelation(undefined);
     const draftError = coordinateDraftError(nextDraft);
     if (draftError) {
@@ -1108,7 +1116,7 @@ function FleetWorkspace({
 
       const departedAt = Date.now();
       const runtimeState = saveState;
-      const destination = previewDestination ?? launchContext?.destination;
+      const destination = previewDestination ?? launchDestination;
       if (!destination || destination.kind !== 'coordinate') return;
       const command = createFlightCommand(requestId, {
         originPlanetId: previewOriginPlanetId ?? runtimeState.currentPlanetId,
@@ -1284,7 +1292,7 @@ function FleetWorkspace({
   const previewRuntimeState = previewOpen ? saveState : null;
   const previewSourceId = previewOriginPlanetId ?? previewRuntimeState?.currentPlanetId ?? null;
   const previewSource = previewSourceId ? previewRuntimeState?.planets[previewSourceId] : null;
-  const previewCoordinate = previewDestination?.coordinate ?? launchContext?.destination?.coordinate ?? null;
+  const previewCoordinate = previewDestination?.coordinate ?? launchDestination?.coordinate ?? null;
   const previewFlightRecord = previewResult?.ok ? previewResult.flight : null;
   const arrivalAsteroidPreview = useMemo(() => {
     if (missionId !== 'gas' || !previewFlightRecord || !previewCoordinate) return null;
@@ -1354,7 +1362,7 @@ function FleetWorkspace({
     ? currentPirateTarget ? { kind: 'coordinate' as const, coordinate: currentPirateTarget.coordinate } : null
     : missionId === 'sun-support'
     ? currentSunTarget ? { kind: 'operation' as const, operationId: currentSunTarget.operationId, coordinate: currentSunTarget.coordinate } : null
-    : previewDestination ?? launchContext?.destination;
+    : previewDestination ?? launchDestination;
   /** Sun-debris recycling: the route ends at the Sun, position 0 of the system. */
   const sunDebrisTarget = missionId === 'recycle' && previewTargetDestination?.kind === 'operation' && previewTargetDestination.operationId?.startsWith('sun:')
     ? previewTargetDestination.coordinate : null;
