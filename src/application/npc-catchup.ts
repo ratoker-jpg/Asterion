@@ -1,6 +1,7 @@
 import type { SaveState } from './contracts.ts';
 import { getNpcOwnerIds } from './npc-foundation.ts';
 import { UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
+import { startWorldCatchupSummary } from './world-catchup-summary.ts';
 export { isNpcReplayMetadata } from '../domain/npc/replay-state.ts';
 
 export const NPC_REPLAY_MAX_GROUPS = 64;
@@ -48,5 +49,8 @@ export function freezeNpcCatchupTarget(state: SaveState, now: number): SaveState
   if (!replay || isNpcCatchupPending(state)) return state;
   const targetAt = Math.max(replay.processedThroughAt, Math.floor(now));
   if (targetAt === replay.targetAt) return state;
-  return { ...state, npcReplay: { ...replay, targetAt } };
+  // The catch-up starts here, so its world news starts here too (complete).
+  const summary = targetAt - replay.processedThroughAt > NPC_CATCHUP_COMMAND_GRACE_MS
+    ? startWorldCatchupSummary(state, replay.processedThroughAt) : replay.summary;
+  return { ...state, npcReplay: { ...replay, targetAt, ...(summary ? { summary } : {}) } };
 }

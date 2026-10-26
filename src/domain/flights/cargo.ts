@@ -22,6 +22,18 @@ export type TransportCargoCredit = CappedCargoDelivery & {
   burnedDebris: number;
 };
 
+/**
+ * One cargo hand-over to a planet: what storage accepted and what burned on
+ * overflow. `lost` is cargo that had no planet to land on (origin destroyed).
+ */
+export type FlightCargoSettlement = {
+  stage: 'delivered' | 'returned';
+  at: number;
+  credited: TransportCargo;
+  burned: TransportCargo;
+  lost?: TransportCargo;
+};
+
 const CAPPED_CARGO_KEYS = ['metal', 'minerals', 'gas'] as const satisfies readonly CappedResourceKey[];
 
 export function normalizeCargoAmount(value: unknown): number {
@@ -152,4 +164,42 @@ export function getOverflowWarning(
 ): boolean {
   const delivery = getCappedDelivery(destinationResources, caps, cargo);
   return CAPPED_CARGO_KEYS.some((key) => delivery.burned[key] > 0);
+}
+
+/** Settlement of a capped credit; debris has no storage cap and never burns. */
+export function cargoSettlementFromDelivery(
+  stage: FlightCargoSettlement['stage'],
+  at: number,
+  delivery: CappedCargoDelivery,
+  debris: unknown,
+): FlightCargoSettlement {
+  return {
+    stage,
+    at,
+    credited: { ...delivery.accepted, debris: normalizeCargoAmount(debris) },
+    burned: { ...delivery.burned, debris: 0 },
+  };
+}
+
+/** Cargo that could not land anywhere because its planet is gone. */
+export function lostCargoSettlement(stage: FlightCargoSettlement['stage'], at: number, cargo: unknown): FlightCargoSettlement {
+  return { stage, at, credited: emptyTransportCargo(), burned: emptyTransportCargo(), lost: normalizeTransportCargo(cargo) };
+}
+
+/** Untrusted persisted settlement; anything malformed is dropped, never repaired. */
+export function normalizePersistedCargoSettlement(value: unknown): FlightCargoSettlement | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const item = value as Record<string, unknown>;
+  if (item.stage !== 'delivered' && item.stage !== 'returned') return undefined;
+  if (typeof item.at !== 'number' || !Number.isFinite(item.at)) return undefined;
+  const cargo = (raw: unknown) => raw && typeof raw === 'object' && !Array.isArray(raw)
+    && TRANSPORT_CARGO_KEYS.every((key) => {
+      const amount = (raw as Record<string, unknown>)[key];
+      return amount === undefined || (typeof amount === 'number' && Number.isSafeInteger(amount) && amount >= 0);
+    }) ? normalizeTransportCargo(raw) : undefined;
+  const credited = cargo(item.credited);
+  const burned = cargo(item.burned);
+  const lost = item.lost === undefined ? undefined : cargo(item.lost);
+  if (!credited || !burned || (item.lost !== undefined && !lost)) return undefined;
+  return { stage: item.stage, at: item.at, credited, burned, ...(lost ? { lost } : {}) };
 }

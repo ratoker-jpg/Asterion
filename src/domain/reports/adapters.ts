@@ -7,7 +7,7 @@ import {
 } from '../combat/report.ts';
 import type { CommandState } from '../command/types.ts';
 import type { FlightRecord } from '../flights/types.ts';
-import { explorationMailboxReports } from '../exploration/report-items.ts';
+import { explorationMailboxReports, type FlightReportContext } from '../exploration/report-items.ts';
 import type { ExplorationState } from '../exploration/ledger.ts';
 import { pirateFlightAbsenceReports } from '../pirates/flight-report.ts';
 import type { OperationInstance, OperationsState } from '../operations/types.ts';
@@ -23,6 +23,7 @@ import type {
 } from './types.ts';
 import type { EspionageState, SpyHunterNotice, SpyReportSnapshot } from '../espionage/types.ts';
 import { getCombatFactionName } from '../combat/factions.ts';
+import { noCombatVerdict } from '../combat/battle-report-view-model.ts';
 import { pirateReconReportToReportItem } from '../pirates/recon-report.ts';
 import type { PirateReconReport } from '../pirates/recon-report.ts';
 
@@ -58,7 +59,21 @@ function battleTargetName(report: BattleReport, side: BattleSide | null) {
   return report.defender.planetName ?? report.defender.playerName;
 }
 
+const NO_COMBAT_LOOT_LABELS = { metal: 'Металл', minerals: 'Минералы', gas: 'Газ' } as const;
+
+function battleNoCombat(report: BattleReport) {
+  const loot = (['metal', 'minerals', 'gas'] as const)
+    .map((kind) => ({ label: NO_COMBAT_LOOT_LABELS[kind], value: Number(report.resources?.[kind] ?? 0) }));
+  return noCombatVerdict(report.roundCount, report.winner, report.missionType, loot);
+}
+
 function battleStatus(report: BattleReport) {
+  const noCombat = battleNoCombat(report);
+  const status = battleStatusByResult(report);
+  return noCombat ? { ...status, label: noCombat.label } : status;
+}
+
+function battleStatusByResult(report: BattleReport) {
   const side = localSide(report);
   const result = getBattleResultForPlayer(report, ASTERION_LOCAL_PLAYER_ID);
   if (side) {
@@ -92,6 +107,11 @@ function battleTitle(report: BattleReport, operation?: OperationInstance) {
   const target = battleTargetName(report, side);
   const result = getBattleResultForPlayer(report, ASTERION_LOCAL_PLAYER_ID);
   if (!side) return `Бой: ${report.attacker.playerName} → ${report.defender.playerName}`;
+  const noCombat = battleNoCombat(report);
+  if (noCombat) {
+    if (report.winner !== 'attacker') return `Бой не состоялся: ${target}`;
+    return side === 'attacker' ? `Захват без боя: ${target}` : `Планета захвачена без боя: ${target}`;
+  }
   if (result === 'draw') return `Ничья: бой за ${target}`;
   if (side === 'attacker') return `${result === 'victory' ? 'Победа' : 'Поражение'} при атаке ${target}`;
   return `${result === 'victory' ? 'Победа' : 'Поражение'} при обороне ${target}`;
@@ -99,6 +119,7 @@ function battleTitle(report: BattleReport, operation?: OperationInstance) {
 
 export function battleReportToReportItem(report: BattleReport, operation?: OperationInstance): ReportItem {
   const status = battleStatus(report);
+  const noCombat = battleNoCombat(report);
   const coordinates = [report.attacker.coordinates, report.defender.coordinates].filter((value): value is string => Boolean(value));
   const planetNames = [report.attacker.planetName, report.defender.planetName].filter((value): value is string => Boolean(value));
   return {
@@ -108,10 +129,10 @@ export function battleReportToReportItem(report: BattleReport, operation?: Opera
     typeLabel: operation ? 'Доклад операции' : CATEGORY_TYPE_LABEL.battle,
     title: battleTitle(report, operation),
     preview: operation
-      ? `${operation.objective.label}. Бой завершён за ${report.roundCount} раундов.`
-      : `Бой завершён за ${report.roundCount} раундов. Откройте полный журнал боя.`,
+      ? `${operation.objective.label}. ${noCombat?.summary ?? `Бой завершён за ${report.roundCount} раундов.`}`
+      : noCombat?.summary ?? `Бой завершён за ${report.roundCount} раундов. Откройте полный журнал боя.`,
     body: operation
-      ? `Боевой результат операции «${operation.title}» связан с каноническим BattleReport ${report.id}.`
+      ? `Боевой результат операции «${operation.title}» сохранён в журнале боя.`
       : `Боевой журнал ${report.attacker.playerName} против ${report.defender.playerName}.`,
     timestamp: report.timestamp,
     statusLabel: status.label,
@@ -231,6 +252,11 @@ export function upsertOverpopulationEpisodeReport(
   return { ...state, overpopulationReports: nextReports };
 }
 
+const reportDateTimeFormat = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+function reportDateTime(at: number) {
+  return reportDateTimeFormat.format(new Date(at));
+}
+
 export function overpopulationEpisodeReportToReportItem(report: OverpopulationEpisodeReport): ReportItem {
   const removedCount = report.removedShips.reduce((total, loss) => total + loss.count, 0);
   const timestamp = new Date(report.episodeEndedAt).toISOString();
@@ -253,8 +279,8 @@ export function overpopulationEpisodeReportToReportItem(report: OverpopulationEp
       { label: 'Население до эпизода', value: String(report.populationBefore) },
       { label: 'Население после эпизода', value: String(report.populationAfter) },
       { label: 'Вместимость', value: String(report.capacity) },
-      { label: 'Начало эпизода', value: new Date(report.episodeStartedAt).toISOString() },
-      { label: 'Разблокировка', value: timestamp },
+      { label: 'Начало эпизода', value: reportDateTime(report.episodeStartedAt) },
+      { label: 'Разблокировка', value: reportDateTime(report.episodeEndedAt) },
       { label: 'Уничтожено обычных кораблей', value: String(removedCount) },
     ],
     overpopulationReport: report,
@@ -379,6 +405,7 @@ export function buildReportsFeed(
   pirateFlights: readonly FlightRecord[] = [],
   exploration?: ExplorationState,
   playerOwnerId?: string,
+  flightContext: Omit<FlightReportContext, 'battleReports'> = {},
 ): ReportItem[] {
   const operationByBattleId = new Map(
     operations.items
@@ -414,7 +441,7 @@ export function buildReportsFeed(
     typeLabel: 'Прибытие добывающего флота',
   })) : [];
 
-  return [...battleItems, ...espionageItems, ...overpopulationItems, ...extractionSystemItems, ...pirateReconItems, ...pirateFlightAbsenceReports(pirateFlights.filter((flight) => flight.ownerSide !== 'npc')), ...explorationMailboxReports(exploration, pirateFlights, playerOwnerId), ...arrivalFlightItems].sort((a, b) => {
+  return [...battleItems, ...espionageItems, ...overpopulationItems, ...extractionSystemItems, ...pirateReconItems, ...pirateFlightAbsenceReports(pirateFlights.filter((flight) => flight.ownerSide !== 'npc')), ...explorationMailboxReports(exploration, pirateFlights, playerOwnerId, { ...flightContext, battleReports }), ...arrivalFlightItems].sort((a, b) => {
     if (a.timestamp && b.timestamp) return Date.parse(b.timestamp) - Date.parse(a.timestamp);
     if (!a.timestamp && b.timestamp) return -1;
     if (a.timestamp && !b.timestamp) return 1;

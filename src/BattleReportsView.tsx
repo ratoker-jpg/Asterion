@@ -30,6 +30,7 @@ import {
   BATTLE_MISSING_DATA,
   createBattleReportViewModel,
   getBattlePointAwardDisplay,
+  noCombatVerdict,
   type BattleEntityKind,
   type BattleEventViewModel,
   type BattleParticipantViewModel,
@@ -117,6 +118,18 @@ function resultIcon(tone: BattleResultTone) {
 }
 
 function resultLabel(viewModel: BattleReportViewModel) {
+  const noCombat = noCombatVerdict(viewModel.roundCount, viewModel.winner, viewModel.missionType, viewModel.resources);
+  const label = baseResultLabel(viewModel);
+  return noCombat ? { ...label, label: noCombat.label } : label;
+}
+
+function roundsOrNoCombat(viewModel: BattleReportViewModel) {
+  return viewModel.roundCount
+    ? roundsLabel(viewModel.roundCount)
+    : noCombatVerdict(viewModel.roundCount, viewModel.winner, viewModel.missionType, viewModel.resources)!.summary;
+}
+
+function baseResultLabel(viewModel: BattleReportViewModel) {
   const localSide = isAsterionLocalPlayerId(viewModel.attacker.participant.playerId)
     ? 'attacker'
     : isAsterionLocalPlayerId(viewModel.defender.participant.playerId)
@@ -316,7 +329,7 @@ function BattleCardSummaryBody({ viewModel, saved, onToggleSaved, onOpen }: Batt
         <div>
           <small>ИТОГ БОЯ · {missionLabel(viewModel.missionType)}</small>
           <strong>{result.label}</strong>
-          <span>{viewModel.roundCount ? roundsLabel(viewModel.roundCount) : 'Бой не состоялся: у одной из сторон не было сил'}</span>
+          <span>{roundsOrNoCombat(viewModel)}</span>
         </div>
         <div className="bcard-verdict__actions">
           <SaveButton saved={saved} onToggle={onToggleSaved} reportId={viewModel.id} />

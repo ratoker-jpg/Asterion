@@ -65,6 +65,8 @@ import {
 import { calculateFlightFuel } from '../domain/flights/fuel.ts';
 import {
   addDebris,
+  cargoSettlementFromDelivery,
+  lostCargoSettlement,
   clampCargoToSourceAndCapacity,
   getCappedDelivery,
   getCargoUsed,
@@ -2313,7 +2315,7 @@ function returnTransportCargo(
   if (!origin) {
     return {
       state,
-      flight: { ...flight, cargoState: 'returned', cargoResolvedAt: now },
+      flight: { ...flight, cargoState: 'returned', cargoResolvedAt: now, cargoSettlement: lostCargoSettlement('returned', now, cargo) },
     };
   }
   const currentResources = getPlanetResources(state, flight.originPlanetId);
@@ -2331,7 +2333,7 @@ function returnTransportCargo(
   }
   return {
     state: next,
-    flight: { ...flight, cargoState: 'returned', cargoResolvedAt: now },
+    flight: { ...flight, cargoState: 'returned', cargoResolvedAt: now, cargoSettlement: cargoSettlementFromDelivery('returned', now, credit, cargo.debris) },
   };
 }
 
@@ -2353,6 +2355,10 @@ function aidArrivalTarget(state: SaveState, flight: FlightRecord): ResolvedTrans
     runtime: planet,
     acceptsTransport: true,
   };
+}
+
+function coordinateLabel(coordinate: UniverseCoordinate): string {
+  return `[${coordinate.galaxy}:${coordinate.system}:${coordinate.position}]`;
 }
 
 /** Return leg of a mission resolved on arrival starts at the arrival time (never in the future). */
@@ -2971,7 +2977,9 @@ export function reconcileFlights(
         events.push({
           flight: returning,
           status: 'incoming-attack',
-          notice: `Бой с Bot 01 завершён: ${resolvedAttack.report.winner === 'attacker' ? 'поражение защитника' : resolvedAttack.report.winner === 'defender' ? 'атака отражена' : 'ничья'}${resolvedAttack.resolution.planetDestroyed ? ' · планета уничтожена' : ''}. Создан боевой отчёт; выживший флот возвращается.`,
+          notice: current.ownerSide === 'npc'
+            ? `Планета ${current.targetPlanetName ?? coordinateLabel(current.destinationCoordinate)} атакована: ${resolvedAttack.report.winner === 'attacker' ? 'оборона прорвана' : resolvedAttack.report.winner === 'defender' ? 'атака отражена' : 'ничья'}${resolvedAttack.resolution.planetDestroyed ? ' · планета уничтожена' : ''}. Боевой отчёт — в сообщениях.`
+            : `Бой с Bot 01 завершён: ${resolvedAttack.report.winner === 'attacker' ? 'поражение защитника' : resolvedAttack.report.winner === 'defender' ? 'атака отражена' : 'ничья'}${resolvedAttack.resolution.planetDestroyed ? ' · планета уничтожена' : ''}. Создан боевой отчёт; выживший флот возвращается.`,
         });
         for (const flightId of affectedSpaceFlightIds) {
           const burned = next.flights.records.find((flight) => flight.id === flightId);
@@ -2979,7 +2987,7 @@ export function reconcileFlights(
           events.push({
             flight: burned,
             status: 'destroyed',
-            notice: `Космический рейс потерян: ${burned.originPlanetId} уничтожена, корабли и груз сгорели.`,
+            notice: `Космический рейс потерян: планета ${coordinateLabel(burned.originCoordinate)} уничтожена, корабли и груз сгорели.`,
           });
         }
         continue;
@@ -3146,6 +3154,7 @@ export function reconcileFlights(
             cargoState: 'delivered',
             deliveredAt: arrivalAt,
             cargoResolvedAt: now,
+            cargoSettlement: cargoSettlementFromDelivery('delivered', arrivalAt, delivery, cargo.debris),
           };
           const returning = beginTransportReturn(next, delivered, now, 'normal-return');
           next = { ...next, flights: updateFlight(next.flights, returning) };

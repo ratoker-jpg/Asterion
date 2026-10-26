@@ -15,7 +15,7 @@ export function pirateFlightAbsenceReports(flights: readonly FlightRecord[]): Re
       body: 'По указанным координатам планеты пиратов не обнаружено',
       timestamp: new Date(flight.arrivedAt!).toISOString(), statusLabel: 'ЦЕЛЬ ИСЧЕЗЛА', statusTone: 'neutral',
       participantNames: [], planetNames: ['Пираты'], coordinates: [label],
-      details: [{ label: 'Цикл контакта', value: flight.pirateSnapshot!.contactCycleKey },
+      details: [{ label: 'Координаты', value: label },
         { label: 'Результат', value: 'Бой не состоялся. Флот направлен обратно.' }],
     };
   });

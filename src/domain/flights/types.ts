@@ -1,7 +1,7 @@
 import type { ShipId } from '../combat/ids.ts';
 import type { CommanderId } from '../combat/commanders.ts';
 import type { UniverseCoordinate, UniverseObjectKind } from '../universe/types.ts';
-import type { TransportCargo } from './cargo.ts';
+import type { FlightCargoSettlement, TransportCargo } from './cargo.ts';
 import type { AttackLaunchSnapshot, AttackResolution } from '../attack/types.ts';
 import type { PirateMissionSnapshot, PirateRaidSnapshot } from '../pirates/mission.ts';
 import type { AidResource } from '../command/types.ts';
@@ -131,6 +131,8 @@ export type FlightRecord = {
   overflowWarning?: boolean;
   deliveredAt?: number;
   cargoResolvedAt?: number;
+  /** What actually landed in storage (and burned on overflow). Absent on older saves. */
+  cargoSettlement?: FlightCargoSettlement;
   /** Test Mode Bot 01 survivors/loot were restored exactly once. */
   bot01ReturnCreditedAt?: number;
   /** Physical autonomous NPC fleet/cargo restoration has been applied. */

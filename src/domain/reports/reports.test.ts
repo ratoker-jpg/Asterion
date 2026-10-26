@@ -6,6 +6,9 @@ import { DEMO_BATTLE_REPORTS } from '../combat/battle-fixtures.ts';
 import { ASTERION_SAVE_KEY } from '../combat/priority.ts';
 import { getBattleResultForPlayer } from '../combat/report.ts';
 import type { BattleReport } from '../combat/report.ts';
+import { noCombatVerdict } from '../combat/battle-report-view-model.ts';
+import { explorationMailboxReports } from '../exploration/report-items.ts';
+import type { FlightRecord } from '../flights/types.ts';
 import { createDefaultCommandState } from '../command/repository.ts';
 import { createDefaultOperationsState, migrateOperationsState } from '../operations/repository.ts';
 import {
@@ -585,4 +588,95 @@ test('the mailbox keeps only the player\'s own pirate recon and pirate-hunt resu
   const feed = buildReportsFeed([], createDefaultOperationsState(), commandWithoutJointOperations(), undefined, [], [], [],
     [recon('mine', 'player-current'), recon('npc', 'npc-gen-01')], [], undefined, 'player-current');
   assert.deepEqual(feed.filter((item) => item.id.startsWith('pirate-recon')).map((item) => item.id), ['pirate-recon:mine']);
+});
+
+function finishedFlight(fields: Partial<FlightRecord>): FlightRecord {
+  return {
+    id: 'summary-flight', requestId: 'summary-request', ownerSide: 'player', missionId: 'transport',
+    originPlanetId: 'helion-01', originCoordinate: { galaxy: 1, system: 3, position: 2 },
+    destination: { kind: 'coordinate', coordinate: { galaxy: 1, system: 11, position: 4 } },
+    destinationCoordinate: { galaxy: 1, system: 11, position: 4 }, selectedShips: { scout: 3 },
+    populationReserved: 3, routeDistance: 10, effectiveSpeed: 10, oneWayDurationMs: 1_000,
+    departedAt: 1_000, arrivalAt: 2_000, returnAt: 3_000, gasCost: 1,
+    phase: 'completed', completedAt: 3_000, completionReason: 'normal-return', ...fields,
+  };
+}
+
+function summaryDetails(flight: FlightRecord, context = {}) {
+  const [item] = explorationMailboxReports(undefined, [flight], undefined, context);
+  assert.ok(item);
+  return { item, details: Object.fromEntries(item.details.map((row) => [row.label, row.value])) };
+}
+
+// Audit 26.10 M2.
+test('flight summary names every completion reason in Russian and never calls a failure «completed»', () => {
+  const expected: Array<[FlightRecord['completionReason'], FlightRecord['phase'], string, string]> = [
+    ['normal-return', 'completed', 'Штатный возврат', 'ЗАВЕРШЕНО'],
+    ['recalled', 'completed', 'Отозван', 'ОТОЗВАН'],
+    ['target-unavailable', 'completed', 'Цель недоступна', 'ЦЕЛЬ НЕДОСТУПНА'],
+    ['colonized', 'completed', 'Колонизировано', 'КОЛОНИЗИРОВАНО'],
+    ['deployed', 'completed', 'Дислоцировано', 'ДИСЛОЦИРОВАНО'],
+    ['spy-destroyed', 'completed', 'Зонд уничтожен', 'ЗОНД УНИЧТОЖЕН'],
+    ['origin-destroyed', 'failed', 'Исходная планета потеряна', 'ФЛОТ ПОТЕРЯН'],
+    ['mission-failed', 'completed', 'Миссия провалена', 'ПРОВАЛ'],
+  ];
+  for (const [reason, phase, label, status] of expected) {
+    const { item, details } = summaryDetails(finishedFlight({ completionReason: reason, phase, missionId: 'deployment' }));
+    assert.equal(details['Исход'], label, reason);
+    assert.equal(item.statusLabel, status, reason);
+    if (reason !== 'normal-return' && reason !== 'colonized' && reason !== 'deployed') {
+      assert.notEqual(item.title, 'Рейс завершён', reason);
+      assert.notEqual(item.statusTone, 'success', reason);
+    }
+    assert.doesNotMatch(JSON.stringify({ ...item, id: '' }), new RegExp(`${reason}|helion-01|summary-flight`));
+  }
+});
+
+test('flight summary of an attack shows real loot, what storage took, what burned and the battle survivors', () => {
+  const battle: BattleReport = {
+    ...DEMO_BATTLE_REPORTS[0]!, id: 'battle-attack-summary-flight',
+    attackerForce: { ...DEMO_BATTLE_REPORTS[0]!.attackerForce, stacks: [
+      { entityId: 'scout', countBefore: 3, countAfter: 2, destroyed: 1 },
+    ] },
+  };
+  const flight = finishedFlight({
+    missionId: 'attack', targetPlanetName: 'Колония 11-4',
+    attackResolution: { reportId: battle.id, resolvedAt: 2_000, debris: 300, loot: { metal: 5_000, minerals: 0, gas: 20, debris: 0 }, lootCreditedAt: 3_000 },
+    cargoSettlement: { stage: 'returned', at: 3_000, credited: { metal: 4_000, minerals: 0, gas: 20, debris: 0 }, burned: { metal: 1_000, minerals: 0, gas: 0, debris: 0 } },
+  });
+  const { item, details } = summaryDetails(flight, { planetNames: { 'helion-01': 'Гелион' }, battleReports: [battle] });
+  assert.equal(details['Планета отправления'], 'Гелион [1:3:2]');
+  assert.equal(details['Цель'], 'Колония 11-4 [1:11:4]');
+  assert.equal(details['Бой'], 'Победа');
+  assert.equal(details['Вернувшийся флот'], 'Скаут × 2');
+  assert.equal(details['Добыча · Металл'], '5\u00a0000');
+  assert.equal(details['Зачислено · Металл'], '4\u00a0000');
+  assert.equal(details['Сгорело при переполнении склада · Металл'], '1\u00a0000');
+  assert.equal(details['Обломки на орбите цели'], '300');
+  assert.doesNotMatch(JSON.stringify(item), /normal-return|helion-01|при отправлении/);
+});
+
+test('flight summary of an old save says the data is unavailable instead of inventing it', () => {
+  const oldAttack = finishedFlight({ missionId: 'attack',
+    attackResolution: { reportId: 'battle-attack-gone', resolvedAt: 2_000, debris: 0, loot: { metal: 10, minerals: 0, gas: 0, debris: 0 }, lootCreditedAt: 3_000 } });
+  const attack = summaryDetails(oldAttack).details;
+  assert.equal(attack['Вернувшийся флот'], 'данные недоступны');
+  assert.equal(attack['Зачислено на склад'], 'данные недоступны');
+  assert.equal(attack['Планета отправления'], 'Планета [1:3:2]');
+  const oldTransport = summaryDetails(finishedFlight({ cargo: { metal: 99, minerals: 0, gas: 0, debris: 0 }, cargoState: 'delivered' })).details;
+  assert.equal(oldTransport['Зачислено на склад'], 'данные недоступны');
+  assert.equal(Object.keys(oldTransport).some((label) => /при отправлении|На борту/.test(label)), false);
+});
+
+// Audit 26.10 M3 (screenshot 25).
+test('a battle with no rounds reads as one capture-without-a-fight sentence with its loot', () => {
+  const report: BattleReport = { ...DEMO_BATTLE_REPORTS[0]!, id: 'battle-no-rounds', roundCount: 0, rounds: [], winner: 'attacker',
+    resources: { metal: 5_000, minerals: 0, gas: 0 } };
+  const item = battleReportToReportItem(report);
+  assert.equal(item.statusLabel, 'ЗАХВАТ БЕЗ БОЯ');
+  assert.match(item.title, /^Захват без боя: /);
+  assert.equal(item.preview, 'Планета захвачена без боя: обороны не было. Добыча: Металл 5\u00a0000.');
+  assert.doesNotMatch(JSON.stringify(item), /ПОБЕДА ПРИ АТАКЕ|0 раундов|Бой не состоялся/);
+  assert.equal(noCombatVerdict(3, 'attacker', 'attack'), null);
+  assert.equal(noCombatVerdict(0, 'defender', 'attack')?.summary, 'Бой не состоялся: у атакующего не было сил.');
 });

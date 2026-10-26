@@ -121,7 +121,7 @@ import type {
   TargetRelation,
   TransportCargoState,
 } from '../domain/flights/types.ts';
-import { normalizePersistedTransportCargo } from '../domain/flights/cargo.ts';
+import { normalizePersistedCargoSettlement, normalizePersistedTransportCargo } from '../domain/flights/cargo.ts';
 import type { UniverseObjectKind } from '../domain/universe/types.ts';
 import type { UniverseAsteroidSimulationState, UniverseAsteroidRuntimeState, UniverseCoordinate } from '../domain/universe/types.ts';
 import { createUniverseAsteroidSimulationState } from '../domain/universe/asteroid-simulation.ts';
@@ -145,6 +145,8 @@ import { migrateNpcScienceState } from '../domain/npc/science-state.ts';
 import { projectNpcScienceLedger } from './npc-science.ts';
 import { assignNpcDisplayNames, createNpcPersonaSalt, deriveLegacyNpcSalt, getNpcOwnerIds } from './npc-foundation.ts';
 import { isNpcReplayMetadata } from './npc-catchup.ts';
+import type { NpcReplayState } from '../domain/npc/replay-state.ts';
+import { normalizeWorldCatchupSummary } from '../domain/npc/world-catchup-summary.ts';
 import { CANONICAL_STARTING_WALLET } from '../domain/world/start.ts';
 
 /** Schema 24: save slots, `worldConfig`, the saved race is authoritative, Sun raid state. */
@@ -1122,11 +1124,25 @@ function isPersistedSunFlight(item: Record<string, unknown>, mode: RuntimeMode):
 
 function normalizePersistedFlightRecord(value: unknown): unknown {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
-  const source = value as Record<string, unknown>;
+  let source = value as Record<string, unknown>;
+  // Report-only history: a damaged settlement is dropped, the flight stays.
+  if (source.cargoSettlement !== undefined) {
+    const { cargoSettlement: rawSettlement, ...rest } = source;
+    const cargoSettlement = normalizePersistedCargoSettlement(rawSettlement);
+    source = cargoSettlement ? { ...rest, cargoSettlement } : rest;
+    value = source;
+  }
   if (source.missionId !== 'transport' && source.missionId !== 'recycle' && source.missionId !== 'gas' && source.missionId !== 'space-flight') return value;
   const cargo = normalizePersistedTransportCargo(source.cargo);
   if (!cargo) return value;
   return { ...source, cargo };
+}
+
+/** Replay cursor as saved; a damaged world summary is dropped, the cursor stays. */
+function migrateNpcReplayState(replay: NpcReplayState): NpcReplayState {
+  const { summary: rawSummary, ...cursor } = replay;
+  const summary = normalizeWorldCatchupSummary(rawSummary);
+  return { version: 1, processedThroughAt: cursor.processedThroughAt, targetAt: cursor.targetAt, ...(summary ? { summary } : {}) };
 }
 
 function migrateFlightState(value: unknown, mode: RuntimeMode = 'test'): FlightState {
@@ -1757,7 +1773,7 @@ function migrateParsedSave(
       Math.max(0, numberOr(objectRecord(parsed.resourceClock)?.lastReconciledAt, 0))),
     npcScience: migrateNpcScienceState(parsed.npcScience, espionage.targets, activationBaseline),
     ...(mode === 'production' ? { npcReplay: isNpcReplayMetadata(parsed.npcReplay)
-      ? parsed.npcReplay
+      ? migrateNpcReplayState(parsed.npcReplay)
       : { version: 1 as const,
         processedThroughAt: Math.max(0, Math.floor(numberOr(objectRecord(parsed.resourceClock)?.lastReconciledAt, 0))),
         targetAt: Math.max(0, Math.floor(numberOr(objectRecord(parsed.resourceClock)?.lastReconciledAt, 0))) } } : {}),
