@@ -705,13 +705,27 @@ async function runRecycleUiCycle(win, label) {
   await setFleetShipQuantity(win, 'recycler', 1);
   await click(win, '[data-qa-flight-preview-open]');
   await waitFor(win, `document.querySelector('[data-qa-flight-preview-backdrop]')`);
-  await click(win, '[data-qa-flight-target-step] .flight-timeline-edit');
-  await waitFor(win, `document.querySelector('[data-qa-flight-target-inputs]')`);
-  await setFlightCoordinate(win, 'galaxy', alternate.coordinate[0]);
-  await setFlightCoordinate(win, 'system', alternate.coordinate[1]);
-  await setFlightCoordinate(win, 'position', alternate.coordinate[2]);
-  await click(win, '[data-qa-flight-preview-open]');
-  await waitFor(win, `document.querySelector('[data-qa-flight-target-status].is-invalid')`);
+  // On CI the typed coordinate was sometimes dropped before the send click and
+  // the preview validated the launch target instead (27.10.2026, cause not
+  // reproduced locally). Retype a bounded number of times; the rejection of
+  // the debris-free coordinate itself stays mandatory.
+  for (let attempt = 1; ; attempt += 1) {
+    if (!(await win.webContents.executeJavaScript(`Boolean(document.querySelector('[data-qa-flight-target-inputs]'))`))) {
+      await click(win, '[data-qa-flight-target-step] .flight-timeline-edit');
+      await waitFor(win, `document.querySelector('[data-qa-flight-target-inputs]')`);
+    }
+    await setFlightCoordinate(win, 'galaxy', alternate.coordinate[0]);
+    await setFlightCoordinate(win, 'system', alternate.coordinate[1]);
+    await setFlightCoordinate(win, 'position', alternate.coordinate[2]);
+    await click(win, '[data-qa-flight-preview-open]');
+    try {
+      await waitFor(win, `document.querySelector('[data-qa-flight-target-status].is-invalid')`, attempt < 3 ? 4_000 : 10_000);
+      break;
+    } catch (error) {
+      if (attempt >= 3) throw error;
+      console.warn(`${label}: recycle validation attempt ${attempt} lost the typed coordinate, retyping`);
+    }
+  }
   const rejectedTarget = await win.webContents.executeJavaScript(`({
     sendDisabled: Boolean(document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled),
     message: document.querySelector('[data-qa-flight-target-status]')?.textContent?.trim() || '',

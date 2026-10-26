@@ -18,16 +18,27 @@ const ROOT = path.join(__dirname, '..');
 // --full-world: a real 10-galaxy campaign with asteroid, exploration and pirate
 // timelines running from its start. The default stays the scoped economy run.
 const FULL_WORLD = process.argv.includes('--full-world');
-function parseCatchupDays(args) {
+// --days=N (1-30, default 14) or --hours=N (1-720). The PR gate replays a few
+// hours: the banner, command gate and completion checks do not need a full
+// day, and the nightly job replays whole days.
+function parseCatchupHorizon(args) {
+  const hours = args.find((arg) => arg.startsWith('--hours='))?.slice('--hours='.length);
+  if (hours !== undefined) {
+    if (!/^\d+$/.test(hours) || Number(hours) < 1 || Number(hours) > 720) {
+      throw new Error(`Invalid --hours value ${JSON.stringify(hours)}; expected an integer from 1 to 720.`);
+    }
+    return { hours: Number(hours), label: `-${hours}h` };
+  }
   const value = args.find((arg) => arg.startsWith('--days='))?.slice('--days='.length) ?? '14';
   if (!/^\d+$/.test(value)) throw new Error(`Invalid --days value ${JSON.stringify(value)}; expected an integer from 1 to 30.`);
   const days = Number(value);
   if (!Number.isSafeInteger(days) || days < 1 || days > 30) throw new Error(`Invalid --days value ${JSON.stringify(value)}; expected an integer from 1 to 30.`);
-  return days;
+  return { hours: days * 24, label: days === 14 ? '' : `-${days}d` };
 }
-const CATCHUP_DAYS = parseCatchupDays(process.argv.slice(2));
+const CATCHUP_HORIZON = parseCatchupHorizon(process.argv.slice(2));
+const CATCHUP_DAYS = CATCHUP_HORIZON.hours / 24;
 const OUTPUT = process.env.ASTERION_QA_OUTPUT
-  || path.join(ROOT, 'artifacts', `${FULL_WORLD ? 'npc-replay-full-world-qa' : 'npc-replay-qa'}${CATCHUP_DAYS === 14 ? '' : `-${CATCHUP_DAYS}d`}`);
+  || path.join(ROOT, 'artifacts', `${FULL_WORLD ? 'npc-replay-full-world-qa' : 'npc-replay-qa'}${CATCHUP_HORIZON.label}`);
 // Owner decision (25.10.2026): a long absence is caught up in full behind a
 // progress bar and the player waits, so there is no fixed duration limit.
 // One catch-up day of 100 owners takes about 14 minutes of renderer compute on
@@ -43,8 +54,7 @@ const FIXTURE_ISOLATION = FULL_WORLD
   : 'NPC economy replay only; exploration and pirate cursors are frozen at the fixed horizon and asteroid simulation is absent. Not a full-campaign replay.';
 const LEGACY_KEY = 'asterion.vertical-slice.v1';
 const SLOT_INDEX_KEY = 'asterion.slots.index.v1';
-const DAY_MS = 24 * 60 * 60 * 1_000;
-const CATCHUP_MS = CATCHUP_DAYS * DAY_MS;
+const CATCHUP_MS = CATCHUP_HORIZON.hours * 60 * 60 * 1_000;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const run = (win, source) => win.webContents.executeJavaScript(source);
 

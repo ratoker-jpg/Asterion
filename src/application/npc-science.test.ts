@@ -14,6 +14,7 @@ import { isNpcCatchupPending } from './npc-catchup.ts';
 import type { ScienceState } from '../domain/science/runtime.ts';
 import type { SpyTargetState } from '../domain/espionage/types.ts';
 import type { SaveState } from './contracts.ts';
+import { NPC_LONG_HORIZON_ONLY, npcReplayDays } from './npc-horizon.test-support.ts';
 
 const START = Date.UTC(2026, 9, 20, 12);
 const HOUR = 60 * 60 * 1_000;
@@ -136,7 +137,7 @@ function replayWithFrozenTarget(initial: SaveState, targetAt: number, reloadAfte
     events.push(...keepScienceEvents(result.events));
     slices += 1;
     if (reloadAfterFirstSlice && slices === 1) {
-      assert.ok(isNpcCatchupPending(state), 'first bounded slice should leave the 30-day replay pending');
+      assert.ok(isNpcCatchupPending(state), 'first bounded slice should leave the frozen replay pending');
       assert.equal(facade.write(state).ok, true);
       const loaded = facade.load();
       assert.equal(loaded.status, 'loaded');
@@ -318,7 +319,7 @@ test('building a production research lab pays its exact resource and energy cost
   assert.equal(settled.target.energyLedger?.availableEnergy, energyBefore - preview.availability.cost.energy);
 });
 
-test('a generated zero-lab NPC campaign earns its lab and completes paid research within 30 days', () => {
+test('a generated zero-lab NPC campaign earns its lab and completes paid research within 30 days', { skip: NPC_LONG_HORIZON_ONLY }, () => {
   const initial = campaign(1, 'NPC-SCIENCE-NATURAL-30D');
   const target = npcTargets(initial)[0]!;
   const ownerId = target.ownerId;
@@ -420,12 +421,16 @@ test('Mathematics takes effect at its paid finish boundary without retroactive o
   assert.equal(oneHour.resources.metal, completedTarget.resources.metal + afterRate.metal);
 });
 
+// Pull requests check partitions up to 7 days; main and nightly up to 30.
+const PARITY_DAYS = npcReplayDays([1, 3, 7, 30]);
+const PARITY_HORIZON = START + PARITY_DAYS[PARITY_DAYS.length - 1]! * DAY;
+
 test('canonical owner science and completion events match across replay partitions, reloads, speeds, and seeds', () => {
   for (const [seed, speed] of [['NPC-SCIENCE-PARITY-A', 'standard'], ['NPC-SCIENCE-PARITY-B', 'fast']] as const) {
     const initial = campaign(1, seed, speed);
-    const reloadReplay = replayWithFrozenTarget(clone(initial), START + 30 * DAY, true);
-    const irregular = replayIrregularly(clone(initial), START + 30 * DAY);
-    for (const days of [1, 3, 7, 30]) {
+    const reloadReplay = replayWithFrozenTarget(clone(initial), PARITY_HORIZON, true);
+    const irregular = replayIrregularly(clone(initial), PARITY_HORIZON);
+    for (const days of PARITY_DAYS) {
       const horizon = START + days * DAY;
       const continuous = advanceTo(clone(initial), horizon);
       const expected = { state: scienceSnapshot(continuous.state), events: clone(continuous.events) };
@@ -437,7 +442,7 @@ test('canonical owner science and completion events match across replay partitio
         { state: scienceSnapshot(continuousAtSnapshot.state), events: clone(continuousAtSnapshot.events) },
         `${seed} ${speed} ${days}-day reload replay`);
     }
-    assert.equal(reloadReplay.state.npcReplay?.processedThroughAt, START + 30 * DAY);
+    assert.equal(reloadReplay.state.npcReplay?.processedThroughAt, PARITY_HORIZON);
     assert.equal(isNpcCatchupPending(reloadReplay.state), false);
   }
 });

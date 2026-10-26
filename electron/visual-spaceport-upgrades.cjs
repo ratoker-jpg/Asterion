@@ -413,7 +413,26 @@ async function enqueueThree(win, shipId) {
   }
 }
 
+const maxLevelsLoadedExpression = `(() => {
+  const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+  const state = save.planets?.['helion-01']?.spaceportUpgrades;
+  return Boolean(state && state.shipQueue?.length === 0 && state.commanderQueue?.length === 0
+    && save.shipUpgradeLevels?.transporter === 10 && save.shipUpgradeLevels?.corsair === 40);
+})()`;
+
 async function seedMaxLevels(win) {
+  // Even with injection and navigation in one renderer turn, the old page keeps
+  // running until the reload commits, and its autosave can still write the
+  // preceding 3-item queue over the fixture (seen on CI, 26.10.2026). The
+  // fixture is accepted only once the reloaded game holds it.
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    await seedMaxLevelsOnce(win);
+    if (await win.webContents.executeJavaScript(maxLevelsLoadedExpression)) return;
+  }
+  throw new Error('Max-level fixture was overwritten by the running game three times');
+}
+
+async function seedMaxLevelsOnce(win) {
   // Fixture injection and navigation must share one renderer turn. A separate
   // localStorage write followed by a host-side delay/reload races React autosave
   // and can revive the preceding 3-item queue on the second viewport.

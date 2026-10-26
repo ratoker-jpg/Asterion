@@ -15,6 +15,7 @@ import { reconcileRuntime, type RuntimeReconcileEvent } from './reconcile.ts';
 import { generateNpcReplayEvents, type NpcReplayEmission } from './npc-replay.ts';
 import { getNpcFleetProductionCandidates, settleNpcFleetProduction, startNpcFleetProduction } from './npc-fleet-production.ts';
 import { getNpcBuildingCandidates, settleNpcPlanet } from './npc-economy.ts';
+import { npcReplayDays } from './npc-horizon.test-support.ts';
 
 const START = Date.UTC(2026, 9, 20, 12);
 const HOUR = 60 * 60 * 1_000;
@@ -209,9 +210,9 @@ function findStartedShip(state: SaveState, ownerId: string, eventIdempotencyKey:
   return matches[0];
 }
 
-test('full-world NPC replay matches at 1/3/7/30 days across continuous, irregular, and reloaded slices', () => {
+test('full-world NPC replay matches at 1/3/7 days (30 on main and nightly) across continuous, irregular, and reloaded slices', () => {
   const initial = campaign(1, 'NPC-AUTONOMY-REPLAY-EQUIVALENCE');
-  for (const days of [1, 3, 7, 30]) {
+  for (const days of npcReplayDays([1, 3, 7, 30])) {
     const targetAt = START + days * DAY;
     const continuous = advanceTo(clone(initial), targetAt, [targetAt]);
     const chunked = advanceTo(clone(initial), targetAt, irregularSteps(targetAt), true);
