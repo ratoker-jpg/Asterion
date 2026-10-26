@@ -127,7 +127,7 @@ jobs:
     name: Electron QA (${{ matrix.shard }})
     if: github.event_name != 'schedule'
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: ${{ matrix.timeout-minutes || 25 }}
     strategy:
       fail-fast: false
       # Shards are balanced by measured CI step times (about 5-6 minutes each).
@@ -147,9 +147,12 @@ jobs:
           # npc-full-world job.
           - shard: campaign-command
             suites: "test:new-game-ui:skip test:pirate-operations-ui test:command-ui:skip test:command-aid-ui:skip test:command-journal-ui:skip"
-          # One catch-up day takes about 13 minutes on its own runner.
+          # One catch-up day takes about 14 minutes on its own runner since the
+          # NPC endgame (PR #107). The test fails on a stalled replay cursor, not
+          # on duration, so the shard gets its own job bound.
           - shard: npc-replay
             suites: "test:npc-replay-ui-1d"
+            timeout-minutes: 45
           - shard: fleet-universe
             suites: "test:fleet-ui:skip test:universe-ui:skip test:energy-ui:skip test:repair-ui:skip"
     steps:
@@ -221,6 +224,7 @@ jobs:
       - name: Electron full-world QA (1 game day, progress banner)
         env:
           ASTERION_QA_CATCHUP_TIMEOUT_MS: '3000000'
+          ASTERION_QA_CATCHUP_STALL_MS: '600000'
         run: npm run test:npc-replay-full-world-ui -- --days=1
       - name: Upload full-world results
         if: always()
