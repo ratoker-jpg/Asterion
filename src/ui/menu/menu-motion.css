@@ -317,3 +317,15 @@
   .menu-launch__streaks, .menu-launch__ring { display: none; }
   .menu-launch__flash { animation-duration: .4s; }
 }
+
+/* ------------------------------------------------------------ world atlas (SVG galaxy) */
+.menu-atlas__disc { fill: rgba(4, 10, 18, .55); stroke: rgba(126, 200, 220, .12); }
+.menu-atlas__dust { fill: #dcecff; }
+.menu-atlas__arms path { fill: none; stroke: color-mix(in srgb, var(--race-accent-strong) 55%, #9fc7ff); stroke-width: 9; stroke-linecap: round; opacity: .22; }
+.menu-atlas__arm-line { fill: none; stroke: rgba(200, 225, 255, .14); stroke-width: 1; stroke-dasharray: 2 5; }
+.menu-atlas__core { mix-blend-mode: screen; }
+.menu-atlas__star { fill: rgba(225, 240, 255, .8); }
+.menu-atlas__halo { opacity: .22; filter: url(#menu-atlas-soft); }
+.menu-atlas__galaxy .menu-atlas__core { animation: menu-atlas-breathe 6s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: center; }
+@keyframes menu-atlas-breathe { from { opacity: .8; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .menu-atlas__galaxy .menu-atlas__core { animation: none; } }
