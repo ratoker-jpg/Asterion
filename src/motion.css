@@ -467,3 +467,9 @@ body :is(.system-planet, .resource-building-node, .zone-hotspot, .universe-radar
     scale: none !important;
   }
 }
+
+/* NPC catch-up running (NpcCatchupBanner): decorative loops hold still. */
+.npc-catchup-active :is(.stage-ambient i, .planet-orbit__ring, .ui-empty-art, .resource-building-art, .asterion-header__resource-fill i),
+.npc-catchup-active :is(.resource-zone-queue-card.busy .resource-zone-queue-card-main > i > span, .queue-progress-v2 > i, .recycling-job-progress > i, .gate-node__bar > i, .fleet-production-order-progress-v1 > *)::after {
+  animation-play-state: paused !important;
+}

@@ -2061,7 +2061,9 @@ function FleetWorkspace({
                   </div>
                 </> : <>
                   {previewResult && !previewResult.ok ? <p className="flight-timeline-error" data-qa-flight-preview-error>{previewResult.error.message}</p> : null}
-                  {routeEstimate ? <>
+                  {routeEstimate && (missionId === 'transport' || missionId === 'aid') ? <p className="flight-draft-v3__line" data-qa-flight-estimate data-qa-flight-draft-hint>
+                    {flightNumberLabel(routeEstimate.routeDistance)} ед. · туда <b>{flightDurationLabel(routeEstimate.oneWayDurationMs)}</b> · газ <b>{flightNumberLabel(routeEstimate.gasCost)}</b> · прибытие <b>{flightArrivalLabel(clockNow + routeEstimate.oneWayDurationMs)} МСК</b>, если отправить сейчас
+                  </p> : routeEstimate ? <>
                   <div className="flight-timeline-metrics" data-qa-flight-estimate>
                     <div><small>РАССТОЯНИЕ</small><strong>{flightNumberLabel(routeEstimate.routeDistance)} ед.</strong></div>
                     <div><small>ЭФФ. СКОРОСТЬ</small><strong>{flightNumberLabel(routeEstimate.effectiveSpeed)}</strong></div>

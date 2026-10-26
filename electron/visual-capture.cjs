@@ -449,7 +449,7 @@ async function enqueueResourceBuilding(win, role, expectedQueueRoles) {
         return Array.isArray(queue)
           && JSON.stringify(queue.map((task) => task.assetRole)) === ${JSON.stringify(expected)};
       } catch { return false; }
-    })()`);
+    })()`, 30_000); // the save is throttled while the NPC catch-up runs (slow CI runners)
   } catch (error) {
     const diagnostics = await readResourceQueueDiagnostics(win);
     const notice = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-runtime-notice]')?.textContent?.trim() || ''`);
