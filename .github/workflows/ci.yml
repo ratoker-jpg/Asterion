@@ -105,8 +105,9 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-  # The NPC replay suite runs multi-day catch-ups (about 10 minutes), so it
-  # has its own runner instead of lengthening the logical job.
+  # The NPC replay suite runs multi-day catch-ups (up to 7 game days on pull
+  # requests; 30-day horizons run in the long-horizon job), so it has its own
+  # runner instead of lengthening the logical job.
   npc:
     name: NPC replay tests
     if: github.event_name != 'schedule'
@@ -130,7 +131,7 @@ jobs:
     timeout-minutes: ${{ matrix.timeout-minutes || 25 }}
     strategy:
       fail-fast: false
-      # Shards are balanced by measured CI step times (about 5-6 minutes each).
+      # Shards are balanced by measured CI step times (about 4-6 minutes each, 27.10.2026).
       # Entry format: npm-script[:skip] where :skip sets ASTERION_SKIP_SCREENSHOTS=1
       # (GitHub's hidden Windows compositor can block captures on long pages).
       matrix:
@@ -141,18 +142,18 @@ jobs:
             suites: "test:science-ui:skip test:building-actions-ui test:reports-ui test:battle-reports-ui:skip test:simulator-ui:skip test:space-flight-ui:skip test:production-test-isolation-ui:skip"
           # Owner decision (25.10.2026): a long absence is caught up in full
           # behind a progress bar and the player waits; there is no 14-day /
-          # 120 s limit any more. The scoped replay QA runs one catch-up day and
-          # checks the progress banner, the pending-command gate, completion and
-          # state consistency. Long-horizon durations are measured by the
-          # npc-full-world job.
+          # 120 s limit any more. The scoped replay QA checks the progress
+          # banner, the pending-command gate, completion and state consistency.
+          # Long-horizon durations are measured by the npc-full-world job.
           - shard: campaign-command
-            suites: "test:new-game-ui:skip test:pirate-operations-ui test:command-ui:skip test:command-aid-ui:skip test:command-journal-ui:skip"
-          # One catch-up day takes about 14 minutes on its own runner since the
-          # NPC endgame (PR #107). The test fails on a stalled replay cursor, not
-          # on duration, so the shard gets its own job bound.
+            suites: "test:new-game-ui:skip test:command-ui:skip test:command-aid-ui:skip test:command-journal-ui:skip"
+          # The PR gate replays six game hours: the banner, command gate,
+          # completion and state checks need no full day, which took about
+          # 14 minutes. Whole days run in the long-horizon job (main and nightly).
+          # The test fails on a stalled replay cursor, not on duration.
+          # Pirate operations (about 1.5 minutes) ride along with the short replay.
           - shard: npc-replay
-            suites: "test:npc-replay-ui-1d"
-            timeout-minutes: 45
+            suites: "test:npc-replay-ui-6h test:pirate-operations-ui"
           - shard: fleet-universe
             suites: "test:fleet-ui:skip test:universe-ui:skip test:energy-ui:skip test:repair-ui:skip"
     steps:
@@ -190,6 +191,39 @@ jobs:
             artifacts/pirate-operations-qa/**/*
             artifacts/save-safety-qa/**/*
             artifacts/npc-replay-qa*/**/*
+          if-no-files-found: warn
+          retention-days: 14
+
+  # 30-day NPC replay horizons and the one-day Electron catch-up hold a runner
+  # for about 25 minutes, so pull requests run 1-7 day horizons and six game
+  # hours; this job runs the long ones on every push to main and nightly.
+  long-horizon:
+    name: NPC long-horizon checks (30 days, 1-day catch-up)
+    if: github.event_name != 'pull_request'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: NPC tests with 30-day horizons
+        env:
+          ASTERION_NPC_LONG_HORIZON: '1'
+        run: npm run test:npc
+      - name: Build renderer
+        run: npm run build
+      - name: Electron NPC catch-up (1 game day)
+        run: npm run test:npc-replay-ui-1d
+      - name: Upload catch-up QA artifact
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: Asterion-QA-npc-long-horizon
+          path: artifacts/npc-replay-qa*/**/*
           if-no-files-found: warn
           retention-days: 14
 
