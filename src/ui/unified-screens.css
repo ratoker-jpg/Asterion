@@ -64,7 +64,7 @@ html body .rating-view-v2 .rating-self-separator-v2 { background: transparent !i
 :root[data-faction] .rating-view-v2 .rating-row-v2.current { background: linear-gradient(90deg, var(--race-fill), transparent 60%) !important; box-shadow: inset 3px 0 0 var(--race-accent-strong) !important; }
 
 /* ---------- controls ---------- */
-html body .utility-view .utility-control:not(.active):not(.danger),
+html body .utility-view .utility-control:not(.active):not(.danger):not([data-qa-science-cancel]):not([data-qa-spaceport-cancel]):not([aria-label^="Отменить"]),
 html body .typography-stepper-v2 button,
 html body .preview-control-v2 {
   border: 1px solid var(--ut-border-strong) !important;
@@ -73,7 +73,7 @@ html body .preview-control-v2 {
   box-shadow: none !important;
   color: #dcecf0 !important;
 }
-html body .utility-view .utility-control:not(.active):not(.danger):hover:not(:disabled) { border-color: var(--ut-accent) !important; color: #fff !important; }
+html body .utility-view .utility-control:not(.active):not(.danger):not([data-qa-science-cancel]):not([data-qa-spaceport-cancel]):not([aria-label^="Отменить"]):hover:not(:disabled) { border-color: var(--ut-accent) !important; color: #fff !important; }
 html body .typography-stepper-v2 { border: 1px solid var(--ut-border) !important; border-radius: var(--ut-r-btn) !important; overflow: hidden; }
 html body .typography-stepper-v2 button { border: 0 !important; border-radius: 0 !important; }
 /* The research / upgrade order is the main action of its row. */

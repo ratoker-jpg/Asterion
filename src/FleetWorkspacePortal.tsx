@@ -1979,7 +1979,7 @@ function FleetWorkspace({
                       const entity = shipDefinitions.find((item) => item.id === ship.id);
                       return <article className="flight-timeline-ship-card flight-composition-v3__row" key={ship.id}>
                         <img src={ship.art} alt="" />
-                        <div><strong>{ship.name}</strong><small>нас. {flightNumberLabel(quantity * ship.population)} · трюм {flightNumberLabel((entity?.ship?.cargo ?? 0) * quantity)} · скор. {flightNumberLabel(entity?.ship?.speed ?? 0)}</small></div>
+                        <div><strong>{ship.name}</strong><small>Население: {quantity * ship.population} · трюм {flightNumberLabel((entity?.ship?.cargo ?? 0) * quantity)} · скор. {flightNumberLabel(entity?.ship?.speed ?? 0)}</small></div>
                         <b>×{flightNumberLabel(quantity)}<small>{shipCountLabel(quantity)}</small></b>
                       </article>;
                     })}
