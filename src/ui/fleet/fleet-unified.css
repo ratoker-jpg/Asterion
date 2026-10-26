@@ -268,12 +268,16 @@ html body .fleet-workspace-v1 :is(.fleet-page-head-v1, .repair-page-head-v1, .co
 .flight-details-v3__actions .is-danger { height: 40px; padding: 0 18px; border: 1px solid rgba(240, 68, 94, .5); border-radius: var(--ut-r-btn); background: rgba(240, 68, 94, .08); color: #ff8c9c; font-weight: 800; letter-spacing: .12em; cursor: pointer; }
 .flight-details-v3__actions .fleet-expedition-close { margin: 0 !important; }
 .fleet-flight-mission-cell .fleet-expedition-details-trigger { text-transform: uppercase; }
-/* The briefing's two-column ship grid (fleet-root-v2.css) cramps the rows: one column, scrolling. */
+/* The briefing shows the whole composition without an inner scroller (fleet-production-qa
+   contract): two columns of compact rows, the total across both. */
 html body .flight-briefing-v2 .flight-timeline-ship-list.flight-composition-v3 {
-  grid-template-columns: minmax(0, 1fr) !important;
-  max-height: 330px !important;
-  overflow-y: auto !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  max-height: none !important;
+  overflow: visible !important;
 }
+html body .flight-briefing-v2 .flight-composition-v3__total { grid-column: 1 / -1; }
+html body .flight-briefing-v2 .flight-composition-v3__row { grid-template-columns: 36px minmax(0, 1fr) auto; min-height: 48px; }
+html body .flight-briefing-v2 .flight-composition-v3__row > img { width: 36px; height: 32px; }
 html body .flight-briefing-v2 .flight-composition-v3__row > b { flex-direction: column; }
 .flight-details-v3 .flight-composition-v3__row, .flight-details-v3 .flight-composition-v3__row * { text-align: left; }
 .flight-details-v3 .flight-composition-v3__row > b { text-align: right; }

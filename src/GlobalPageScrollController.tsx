@@ -4,6 +4,8 @@ import { readHeaderGeometry } from './ui/header/geometry.ts';
 const BASE_FLEET_VERTICAL_PADDING = 22 + 30;
 const PAGE_BOTTOM_PADDING = 52;
 const OVERFLOW_EPSILON = 2;
+/** Screen entrances (motion.css) settle within this window after a page change. */
+const ENTRANCE_SETTLE_MS = 1_400;
 
 function isVisible(element: HTMLElement) {
   const style = window.getComputedStyle(element);
@@ -94,6 +96,10 @@ export function GlobalPageScrollController() {
     let resizeObserver: ResizeObserver | null = null;
     let observedRoots: HTMLElement[] = [];
     let lastPageIdentity = '';
+    // Seeking animations forces a style pass over the whole page; it is only
+    // needed while a new page is still entering, not on every later mutation
+    // (the NPC catch-up mutates the DOM continuously).
+    let settleUntil = 0;
 
     const clearGeometry = () => {
       root.style.removeProperty('--asterion-scroll-workspace-height');
@@ -141,6 +147,7 @@ export function GlobalPageScrollController() {
       const identity = pageIdentity(pageRoots);
       const pageChanged = identity !== lastPageIdentity;
       lastPageIdentity = identity;
+      if (pageChanged) settleUntil = performance.now() + ENTRANCE_SETTLE_MS;
 
       // A long page may have already enlarged .workspace when navigation swaps its
       // contents. Measure the incoming page from the normal shell first; otherwise
@@ -180,7 +187,9 @@ export function GlobalPageScrollController() {
         : isFleetPage
           ? fleetContentHeight
           : baseWorkspaceHeight;
-      const contentHeight = measureSettled(pageContainer, () => measureContentHeight(pageContainer, stageScale, pageRoots));
+      const contentHeight = performance.now() < settleUntil
+        ? measureSettled(pageContainer, () => measureContentHeight(pageContainer, stageScale, pageRoots))
+        : measureContentHeight(pageContainer, stageScale, pageRoots);
       const needsScroll = contentHeight > availableHeight + OVERFLOW_EPSILON;
 
       // A root stretched to its container (min-height: 100%) always measures the

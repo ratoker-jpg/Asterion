@@ -407,6 +407,10 @@ async function readResourceQueueDiagnostics(win) {
 }
 
 async function enqueueResourceBuilding(win, role, expectedQueueRoles) {
+  // Commands are refused while the NPC catch-up after a load is still running
+  // («Команда отклонена: дождитесь завершения обработки событий NPC»); on a slow
+  // runner the click could land before it ends and the task never reaches the queue.
+  await waitFor(win, `!document.querySelector('[data-qa-npc-catchup]')`, 180_000);
   await openResourceBuilding(win, role);
   const clicked = await win.webContents.executeJavaScript(`(() => {
     const dialog=document.querySelector('[data-qa-building-dialog="${role}"]');
@@ -448,7 +452,8 @@ async function enqueueResourceBuilding(win, role, expectedQueueRoles) {
     })()`);
   } catch (error) {
     const diagnostics = await readResourceQueueDiagnostics(win);
-    throw new Error(`Build queue did not persist after ${role}; expected=${expected}; actual=${JSON.stringify(diagnostics)}; error=${String(error)}`);
+    const notice = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-runtime-notice]')?.textContent?.trim() || ''`);
+    throw new Error(`Build queue did not persist after ${role}; expected=${expected}; actual=${JSON.stringify(diagnostics)}; lastNotice=${JSON.stringify(notice)}; error=${String(error)}`);
   }
   await waitFor(win, `JSON.stringify(Array.from(document.querySelectorAll('[data-qa-queue-role]')).map((item) => item.getAttribute('data-qa-queue-role')))===${JSON.stringify(expected)}`);
   await settle(win);
