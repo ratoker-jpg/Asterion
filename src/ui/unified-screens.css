@@ -1,0 +1,156 @@
+/* ==========================================================================
+   UTILITY SCREENS — Rating, Settings, Science, Spaceport and the other
+   building interiors in the Operations / Command style:
+   - the work area starts where Command and Operations start (no extra
+     18 px inset that made Rating look shifted down and inward);
+   - graphite panels (--ut-surface / --ut-surface-2), one thin border,
+     18/13 px radii; race colour only on selected states (race-theme.css);
+   - neutral secondary buttons, cyan only for the main action.
+   Loaded last (main.tsx); legacy rules use !important in places.
+   ========================================================================== */
+
+/* ---------- one work-area edge for every screen ---------- */
+html body .utility-view.rating-view-v2,
+html body .utility-view.science-view-v2,
+html body .utility-view.settings-view-v2 { padding: 0 !important; }
+html body .reports-view.reports-v2 { padding-top: 0 !important; padding-left: 0 !important; padding-right: 0 !important; }
+
+/* ---------- panels ---------- */
+html body :is(
+  .settings-nav-v2, .settings-content-v2, .typography-preview-v2,
+  .science-sidebar-v2, .science-lab-card-v2, .science-main-heading-v2,
+  .spaceport-sidebar-v2,
+  .rating-mode-tabs-v2, .reports-profile-identity
+) {
+  border: 1px solid var(--ut-border) !important;
+  border-radius: var(--ut-r-panel) !important;
+  background: var(--ut-surface) !important;
+  box-shadow: none !important;
+  clip-path: none !important;
+}
+html body :is(.science-lab-card-v2, .science-main-heading-v2, .rating-mode-tabs-v2) { border-radius: var(--ut-r-card) !important; }
+
+/* ---------- rows and inner cards ---------- */
+html body :is(
+  .typography-row-v2, .settings-card-v2, .settings-reset-card-v2, .settings-disabled-card-v2,
+  .science-row-v2, .spaceport-row-v2, .science-art-v2, .science-level-progress-v2, .spaceport-level-progress-v2,
+  .science-cost-v2, .science-time-v2
+) {
+  border: 1px solid var(--ut-border) !important;
+  border-radius: var(--ut-r-card) !important;
+  background: var(--ut-surface-2) !important;
+  box-shadow: none !important;
+  clip-path: none !important;
+}
+html body :is(.science-cost-v2, .science-time-v2) { border-radius: var(--ut-r-chip) !important; }
+html body .science-row-v2.is-blocked { background: color-mix(in srgb, var(--ut-surface-2) 85%, rgba(240, 68, 94, .12)) !important; }
+
+/* ---------- rating table ---------- */
+html body .rating-view-v2 .rating-row-v2 {
+  border: 0 !important;
+  border-bottom: 1px solid var(--ut-border) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html body .rating-view-v2 .rating-row-v2:hover:not(.rating-head-v2) { background: rgba(255, 255, 255, .03) !important; }
+html body .rating-view-v2 .rating-head-v2 {
+  border-radius: var(--ut-r-card) var(--ut-r-card) 0 0 !important;
+  background: var(--ut-surface-2) !important;
+}
+html body .rating-view-v2 :is(.rating-row-v2.top-1, .rating-row-v2.top-2, .rating-row-v2.top-3) { background: linear-gradient(90deg, rgba(230, 173, 80, .08), transparent 40%) !important; }
+html body .rating-view-v2 .rating-self-separator-v2 { background: transparent !important; border: 0 !important; }
+:root[data-faction] html body .rating-view-v2 .rating-row-v2.current,
+:root[data-faction] .rating-view-v2 .rating-row-v2.current { background: linear-gradient(90deg, var(--race-fill), transparent 60%) !important; box-shadow: inset 3px 0 0 var(--race-accent-strong) !important; }
+
+/* ---------- controls ---------- */
+html body .utility-view .utility-control:not(.active):not(.danger),
+html body .typography-stepper-v2 button,
+html body .preview-control-v2 {
+  border: 1px solid var(--ut-border-strong) !important;
+  border-radius: var(--ut-r-btn) !important;
+  background: rgba(86, 217, 242, .05) !important;
+  box-shadow: none !important;
+  color: #dcecf0 !important;
+}
+html body .utility-view .utility-control:not(.active):not(.danger):hover:not(:disabled) { border-color: var(--ut-accent) !important; color: #fff !important; }
+html body .typography-stepper-v2 { border: 1px solid var(--ut-border) !important; border-radius: var(--ut-r-btn) !important; overflow: hidden; }
+html body .typography-stepper-v2 button { border: 0 !important; border-radius: 0 !important; }
+/* The research / upgrade order is the main action of its row. */
+html body :is(.science-ready-action-v2, .spaceport-upgrade-cta-v2):not(:disabled) {
+  border: 1px solid #8cefff !important;
+  border-radius: var(--ut-r-btn) !important;
+  background: linear-gradient(180deg, #5fe2f8, #2bb6d6) !important;
+  color: #03222b !important;
+  box-shadow: 0 0 18px rgba(86, 217, 242, .25) !important;
+}
+html body :is(.settings-nav-v2 nav button):not(.active) {
+  border: 1px solid transparent !important;
+  border-radius: var(--ut-r-btn) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html body :is(.settings-nav-v2 nav button):not(.active):hover { border-color: var(--ut-border) !important; background: rgba(255, 255, 255, .03) !important; }
+html body .settings-nav-v2 nav button { border-radius: var(--ut-r-btn) !important; }
+
+/* ==========================================================================
+   Building interiors and planet zones: Spaceport, Trade, Recycling,
+   Production bots, the zone side panels and the building dialog.
+   States (active / selected / valid), art and progress fills keep their
+   own colours; only the frames and surfaces join the graphite system.
+   ========================================================================== */
+html body :is(
+  .spaceport-main-v2, .spaceport-main-heading-v2,
+  .trade-workspace, .trade-workspace-header, .trade-info-panel, .trade-ratio-panel, .trade-resource-panel, .trade-amount-panel,
+  .recycling-info-panel, .recycling-section,
+  .production-bots-building-panel, .production-bots-targets, .production-bots-pool,
+  .building-interior-header,
+  .resource-zone-summary, .resource-zone-economy, .resource-zone-queue,
+  .resource-building-dialog
+) {
+  border: 1px solid var(--ut-border) !important;
+  border-radius: var(--ut-r-panel) !important;
+  background: var(--ut-surface) !important;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, .22) !important;
+  clip-path: none !important;
+}
+html body :is(.spaceport-main-heading-v2, .trade-workspace-header, .building-interior-header) {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--race-accent-strong) 10%, #0c1418), #0c1418 60%) !important;
+}
+html body :is(
+  .spaceport-queue-task, .spaceport-queue-empty, .spaceport-row-time-v2, .spaceport-row-art-v2, .spaceport-level-line-v2, .spaceport-requirement-line-v2,
+  .trade-resource-card:not(.selected), .trade-refill, .trade-summary-grid > *,
+  .recycling-job-row, .recycling-target-row, .recycling-debris-field, .recycling-target-preview, .recycling-section-header, .recycling-job-table__header,
+  .production-bots-targets-header, .production-bots-targets-footer,
+  .resource-building-effect-card, .resource-building-time-panel, .resource-building-levels, .resource-zone-income-row,
+  .resource-zone-selector-tile:not(.active):not(.selected), .resource-building-availability
+) {
+  border: 1px solid var(--ut-border) !important;
+  border-radius: var(--ut-r-card) !important;
+  background: var(--ut-surface-2) !important;
+  box-shadow: none !important;
+  clip-path: none !important;
+}
+html body :is(.spaceport-cost-chip-v2, .resource-building-cost-grid > *) {
+  border: 1px solid var(--ut-border) !important;
+  border-radius: var(--ut-r-chip) !important;
+  background: var(--ut-surface-2) !important;
+  clip-path: none !important;
+}
+html body :is(.spaceport-back-v2, .trade-back, .recycling-back, .production-bots-back, .building-interior-back, .building-interior-return-overlay, .recycling-job-action) {
+  border: 1px solid var(--ut-border-strong) !important;
+  border-radius: var(--ut-r-btn) !important;
+  background: rgba(8, 16, 20, .9) !important;
+  box-shadow: none !important;
+  clip-path: none !important;
+  color: #dcecf0 !important;
+}
+html body :is(.spaceport-back-v2, .trade-back, .recycling-back, .production-bots-back, .building-interior-back, .building-interior-return-overlay, .recycling-job-action):hover:not(:disabled) { border-color: var(--ut-accent) !important; color: #fff !important; }
+html body :is(.trade-submit, .recycling-start, .production-bots-distribute, .resource-building-build-button, .resource-building-enter-button):not(:disabled) {
+  border: 1px solid #8cefff !important;
+  border-radius: var(--ut-r-btn) !important;
+  background: linear-gradient(180deg, #5fe2f8, #2bb6d6) !important;
+  color: #03222b !important;
+  box-shadow: 0 0 20px rgba(86, 217, 242, .28) !important;
+  clip-path: none !important;
+}
