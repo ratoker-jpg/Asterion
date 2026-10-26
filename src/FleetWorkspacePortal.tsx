@@ -2062,12 +2062,6 @@ function FleetWorkspace({
                 </> : <>
                   {previewResult && !previewResult.ok ? <p className="flight-timeline-error" data-qa-flight-preview-error>{previewResult.error.message}</p> : null}
                   {routeEstimate ? <>
-                  <div className="flight-briefing-v2__axis" aria-hidden="true">
-                    <i />
-                    <span style={{ left: '8%' }}><b /><small>ВЫЛЕТ · <em>сейчас</em></small></span>
-                    <span style={{ left: '50%' }}><b /><small>ПРИБЫТИЕ · <em>через {flightDurationLabel(routeEstimate.oneWayDurationMs)}</em></small></span>
-                    <span style={{ left: '90%' }}><b /><small>{missionId === 'deployment' || missionId === 'colonize' ? 'БЕЗ ВОЗВРАТА' : <>ВОЗВРАТ · <em>через {flightDurationLabel(routeEstimate.oneWayDurationMs * 2)}</em></>}</small></span>
-                  </div>
                   <div className="flight-timeline-metrics" data-qa-flight-estimate>
                     <div><small>РАССТОЯНИЕ</small><strong>{flightNumberLabel(routeEstimate.routeDistance)} ед.</strong></div>
                     <div><small>ЭФФ. СКОРОСТЬ</small><strong>{flightNumberLabel(routeEstimate.effectiveSpeed)}</strong></div>
@@ -2078,10 +2072,7 @@ function FleetWorkspace({
                     <div><small>НАСЕЛЕНИЕ</small><strong>{flightNumberLabel(selectedPopulation)}</strong></div>
                     <div><small>{holdLabel}</small><strong>{flightNumberLabel(previewHoldCapacity)}</strong></div>
                   </div>
-                  <div className="flight-draft-v3__hint" data-qa-flight-draft-hint>
-                    <strong>Прибытие {flightArrivalLabel(clockNow + routeEstimate.oneWayDurationMs)} МСК</strong>
-                    <span>Если отправить сейчас. Расчёт по координатам; занятость и владелец цели проверяются при отправке.</span>
-                  </div>
+                  <p className="flight-draft-v3__line" data-qa-flight-draft-hint>Прибытие <b>{flightArrivalLabel(clockNow + routeEstimate.oneWayDurationMs)} МСК</b>, если отправить сейчас · цель проверяется при отправке</p>
                   </> : <>
                   <div className="flight-timeline-metrics flight-draft-v3" data-qa-flight-draft>
                     <div><small>КОРАБЛЕЙ</small><strong>{flightNumberLabel(draftFleetStats.count)}</strong></div>

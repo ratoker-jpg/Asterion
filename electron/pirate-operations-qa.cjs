@@ -342,7 +342,9 @@ async function runViewport(width, height) {
     // Use the real recon contact/profile to create a valid persisted *incoming*
     // pirate mission fixture. Only the hostile presentation is under test here;
     // remove it before continuing the rest of the recon/battle E2E scenario.
-    const incomingFixture = await win.webContents.executeJavaScript(`(() => {
+    // The running app may autosave over the injected flight between setItem and the
+    // reload (slow CI): re-inject until the reloaded save still carries it.
+    const seedIncoming = () => win.webContents.executeJavaScript(`(() => {
       const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
       const recon = save?.flights?.records?.find(x => x.id === ${JSON.stringify(reconFlight.id)});
       const planetId = save?.currentPlanetId;
@@ -376,8 +378,14 @@ async function runViewport(width, height) {
       localStorage.setItem(${JSON.stringify(SAVE_KEY)},JSON.stringify(save));
       return {ok:true,id:flight.id,requestId};
     })()`);
-    if (!incomingFixture?.ok) throw new Error(`Cannot seed hostile fleet presentation: ${JSON.stringify(incomingFixture)}`);
-    await reload(win);
+    let incomingFixture = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      incomingFixture = await seedIncoming();
+      if (!incomingFixture?.ok) throw new Error(`Cannot seed hostile fleet presentation: ${JSON.stringify(incomingFixture)}`);
+      await reload(win);
+      const kept = await win.webContents.executeJavaScript(`(() => { const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null'); return Boolean(save?.flights?.records?.some((x) => x.id === ${JSON.stringify(incomingFixture.id)})); })()`);
+      if (kept) break;
+    }
     await clickPrimary(win,'fleets',`document.querySelector('.fleet-workspace-v1')`);
     // Keep the strict UI assertion. On a slow CI compositor, distinguish
     // a dropped persisted fixture from an unrendered row before failing.

@@ -282,3 +282,9 @@ html body .flight-briefing-v2 .flight-composition-v3__row > b { flex-direction: 
 .flight-details-v3 .flight-composition-v3__row, .flight-details-v3 .flight-composition-v3__row * { text-align: left; }
 .flight-details-v3 .flight-composition-v3__row > b { text-align: right; }
 .flight-timeline-eta-note { display: block; margin-top: 2px; color: var(--ut-label); font-size: 10px; font-style: normal; letter-spacing: .08em; text-transform: uppercase; }
+/* The plan stays short enough that the cargo editor fits the window (fleet-production-qa). */
+html body .flight-briefing-v2 .flight-composition-v3__total { display: none; }
+html body .flight-briefing-v2 .flight-composition-v3__row { min-height: 0; padding: 4px 8px 4px 4px !important; }
+.flight-draft-v3__line { margin: 8px 0 0; color: #a9c3cb; font-size: 12px; }
+.flight-draft-v3__line b { color: #eaf6f9; }
+html body .flight-draft-v3__hint { margin-top: 8px; padding: 10px 14px; }
