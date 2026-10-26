@@ -25,10 +25,12 @@
    --------------------------------------------------------------------------- */
 
 @keyframes ut-screen-in {
-  from { opacity: 0; translate: 0 var(--ut-rise); scale: .985; filter: blur(var(--ut-blur-in)) brightness(1.35); }
+  /* No scale: QA measures screen geometry during the entrance (qa:visual page-geometry checks). */
+  from { opacity: 0; translate: 0 var(--ut-rise); filter: blur(var(--ut-blur-in)) brightness(1.35); }
   60% { filter: blur(0) brightness(1.06); }
 }
-@keyframes ut-item-in { from { opacity: 0; translate: 0 var(--ut-rise-small); scale: .97; filter: blur(4px); } }
+/* Cards never scale on entry either: QA checks catalog rows for full width while they arrive. */
+@keyframes ut-item-in { from { opacity: 0; translate: 0 var(--ut-rise-small); filter: blur(4px); } }
 @keyframes ut-rise-in { from { opacity: 0; translate: 0 var(--ut-rise-small); filter: blur(4px); } }
 @keyframes ut-fade-in { from { opacity: 0; } }
 @keyframes ut-focus-in { from { opacity: 0; filter: blur(var(--ut-blur-in)); } }
@@ -66,7 +68,7 @@
 
 /* ---------------------------------------------------------------- 1. Screens
    A route, a Fleets section, a building interior or a planet zone comes into
-   focus: 22px rise, 98.5 % → 100 %, blur 8px → 0 on a smooth spring. */
+   focus: 22px rise, blur 8px → 0 on a smooth spring (no scale: QA measures it). */
 .workspace > :not(.module-placeholder-v3, .route-sweep),
 .fleet-main-v1 > *,
 .utility-screen-host > *,
@@ -439,7 +441,7 @@ body :is(.system-planet, .resource-building-node, .zone-hotspot, .universe-radar
   .shipyard-card-v1, .repair-card-v1, .science-row-v2, .spaceport-row-v2, .srp-card, .cmdA-tile, .opsA-tile, .report-card, .rating-row-v2,
   .universe-debris-finder__list > li, .universe-radar__row, .resource-zone-queue-card, .owned-planet-row-v4,
   .fleet-ship-tile-v2, .fleet-mission-icons-v1 > button,
-  .planet-orbit > *, .planet-orbit__vitals > div, .universe-radar > *, .universe-radar .system-scene .system-planet > img,
+  .planet-orbit > *, .planet-orbit__vitals > div, .universe-radar > *,
   .resource-zone-building-layer > .resource-building-node, .asterion-header .hdr-cell, .asterion-header .hdr-route,
   .asterion-header .hdr-core__planet img,
   .resource-building-action-confirm, .resource-building-dialog, .universe-debris-finder, .universe-inspector, .gate-dialog, .srp-launch,
@@ -451,6 +453,8 @@ body :is(.system-planet, .resource-building-node, .zone-hotspot, .universe-radar
   }
   .planet-orbit > .planet-orbit__ring, .planet-page-v3.planet-orbit > .planet-orbit__planet { animation: ut-fade-in var(--ut-motion-fast) ease backwards !important; }
   .workspace > .route-sweep, .runtime-toast-stack .runtime-toast::after { display: none; }
+  /* Map objects carry no animation at all under reduced motion (universe-planet-qa contract). */
+  .universe-radar .system-scene .system-planet > img { animation: none !important; }
   body button:not([disabled]):active { scale: 1; }
   .stage-ambient i, .ut-attention, .asterion-header .hdr-route.active .hdr-route__icon,
   :is(.resource-zone-queue-card.busy .resource-zone-queue-card-main > i > span, .queue-progress-v2 > i, .recycling-job-progress > i, .gate-node__bar > i, .fleet-production-order-progress-v1 > *)::after { animation: none !important; display: none; }
