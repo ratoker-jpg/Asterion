@@ -107,15 +107,23 @@ async function waitFor(win, expression, timeoutMs = 30_000) {
   throw new Error(`Timed out waiting for: ${expression}`);
 }
 
-// Waits for the published replay cursor to reach its target. Fails when the
-// cursor has not moved for CATCHUP_STALL_MS or the overall bound runs out.
-async function waitForCatchup(win) {
+// Same bound as NPC_CATCHUP_COMMAND_GRACE_MS: a cursor this close to `now`
+// no longer blocks player commands.
+const CATCHUP_CONVERGED_MS = 2 * 60 * 1_000;
+
+// Waits for the published replay cursor to converge on `now` with no target
+// pending. The catch-up itself takes minutes of wall time, so the next clock
+// tick opens one more window for that time; closing the seeded window alone
+// is not completion. Fails when the cursor has not moved for CATCHUP_STALL_MS
+// or the overall bound runs out.
+async function waitForCatchup(win, endAt) {
   const started = Date.now();
   let lastCursor = null;
   let lastAdvanceAt = started;
   while (Date.now() - started < CATCHUP_TIMEOUT_MS) {
-    const replay = await run(win, 'window.__npcReplayQa?.latest ?? null');
-    if (replay && replay.targetAt <= replay.processedThroughAt) return;
+    const replay = await run(win, '(() => { const r = window.__npcReplayQa?.latest; return r ? { ...r, now: Date.now() } : null; })()');
+    if (replay && replay.processedThroughAt >= endAt && replay.targetAt <= replay.processedThroughAt
+      && replay.now - replay.processedThroughAt <= CATCHUP_CONVERGED_MS) return;
     const cursor = replay?.processedThroughAt ?? null;
     if (cursor !== lastCursor) {
       lastCursor = cursor;
@@ -355,13 +363,15 @@ async function runScenario() {
     })() : null;
     let catchupWaitError = null;
     try {
-      await waitForCatchup(win);
+      await waitForCatchup(win, endAt);
       // Completion is written at once; give the write and its storage read a moment.
       await waitFor(win, `(() => {
         try { const save = JSON.parse(localStorage.getItem(${JSON.stringify(saveKey)}) || 'null');
-          return save?.npcReplay?.targetAt <= save?.npcReplay?.processedThroughAt; }
+          return save?.npcReplay?.processedThroughAt >= ${endAt}
+            && save.npcReplay.targetAt <= save.npcReplay.processedThroughAt
+            && Date.now() - save.npcReplay.processedThroughAt <= ${CATCHUP_CONVERGED_MS}; }
         catch { return false; }
-      })()`, 15_000);
+      })()`, 60_000);
     } catch (error) {
       catchupWaitError = error instanceof Error ? error.message : String(error);
     }
