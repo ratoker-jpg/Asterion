@@ -1441,9 +1441,13 @@ function FleetWorkspace({
     ? previewResult.flight.recycleCapacity ?? previewResult.flight.gasCapacity ?? draftFleetStats.cargo
     : draftFleetStats.cargo;
   /** Distance, speed, time and gas for typed coordinates; the target itself is checked on Send. */
-  const routeEstimate = !previewResult?.ok && missionId !== 'space-flight' && targetIsLocallyValid && previewSourceId && coordinateDraftError(previewTargetDraft) === null
-    ? estimateFlightRoute(saveState, previewSourceId, selectedQuantities, selectedCommanders, coordinateFromDraft(previewTargetDraft), { mode: ACTIVE_RUNTIME_MODE, testTimeScale: resolveTestTimeScale() })
+  const estimateCoordinate = previewTargetDestination?.coordinate
+    ?? (coordinateDraftError(previewTargetDraft) === null ? coordinateFromDraft(previewTargetDraft) : null);
+  const routeEstimate = !previewResult?.ok && missionId !== 'space-flight' && previewSourceId && estimateCoordinate
+    ? estimateFlightRoute(saveState, previewSourceId, selectedQuantities, selectedCommanders, estimateCoordinate, { mode: ACTIVE_RUNTIME_MODE, testTimeScale: resolveTestTimeScale() })
     : null;
+  /** Missions with the cargo editor keep the summary to one line: the editor must stay on screen. */
+  const compactSummary = missionId === 'transport' || missionId === 'aid' || missionId === 'space-flight';
   const holdLabel = missionId === 'recycle' ? 'ТРЮМ ОБЛОМКОВ' : missionId === 'gas' ? 'ТРЮМ ГАЗА' : 'ГРУЗОПОДЪЁМНОСТЬ';
   const previewTargetLabel = previewTargetError
     ? `[${previewTargetDraft.galaxy || '—'}:${previewTargetDraft.system || '—'}:${previewTargetDraft.position || '—'}]`
@@ -2018,10 +2022,9 @@ function FleetWorkspace({
                   </div>
                   <section className="flight-timeline-eta" data-qa-flight-eta aria-label="Расписание рейса">
                     <div className="flight-timeline-eta-card is-arrival">
-                      <small>{missionId === 'space-flight' ? 'ТОЧКА РАЗВОРОТА' : 'ПРИБЫТИЕ'}</small>
+                      <small>{missionId === 'space-flight' ? 'ТОЧКА РАЗВОРОТА' : missionId === 'gas' ? 'ПРИБЫТИЕ' : 'ПРИБЫТИЕ · ЕСЛИ ОТПРАВИТЬ СЕЙЧАС'}</small>
                       <strong>через {flightDurationLabel(previewResult.flight.oneWayDurationMs)}</strong>
                       <span>{flightArrivalLabel(missionId === 'gas' || missionId === 'space-flight' ? previewResult.flight.arrivalAt : clockNow + previewResult.flight.oneWayDurationMs)} МСК</span>
-                      {missionId === 'gas' || missionId === 'space-flight' ? null : <i className="flight-timeline-eta-note">если отправить сейчас</i>}
                       <em>{missionId === 'space-flight' ? 'начало обратного участка' : missionId === 'aid' ? 'зачисление принятого груза на планету запроса' : missionId === 'recycle' ? 'сбор обломков с орбиты' : missionId === 'gas' ? 'проверка позиции астероида' : 'проверка цели и создание планеты'}</em>
                     </div>
                     <div className="flight-timeline-eta-card is-return">
@@ -2061,8 +2064,10 @@ function FleetWorkspace({
                   </div>
                 </> : <>
                   {previewResult && !previewResult.ok ? <p className="flight-timeline-error" data-qa-flight-preview-error>{previewResult.error.message}</p> : null}
-                  {routeEstimate && (missionId === 'transport' || missionId === 'aid') ? <p className="flight-draft-v3__line" data-qa-flight-estimate data-qa-flight-draft-hint>
-                    {flightNumberLabel(routeEstimate.routeDistance)} ед. · туда <b>{flightDurationLabel(routeEstimate.oneWayDurationMs)}</b> · газ <b>{flightNumberLabel(routeEstimate.gasCost)}</b> · прибытие <b>{flightArrivalLabel(clockNow + routeEstimate.oneWayDurationMs)} МСК</b>, если отправить сейчас
+                  {compactSummary ? <p className="flight-draft-v3__line" data-qa-flight-estimate={routeEstimate ? true : undefined} data-qa-flight-draft-hint>
+                    {routeEstimate
+                      ? <>{flightNumberLabel(routeEstimate.routeDistance)} ед. · туда <b>{flightDurationLabel(routeEstimate.oneWayDurationMs)}</b> · газ <b>{flightNumberLabel(routeEstimate.gasCost)}</b> · прибытие <b>{flightArrivalLabel(clockNow + routeEstimate.oneWayDurationMs)} МСК</b>, если отправить сейчас</>
+                      : <>Флот: {flightNumberLabel(draftFleetStats.count)} {shipCountLabel(draftFleetStats.count)} · нас. {flightNumberLabel(selectedPopulation)} · трюм {flightNumberLabel(previewHoldCapacity)} · время и газ появятся после выбора цели</>}
                   </p> : routeEstimate ? <>
                   <div className="flight-timeline-metrics" data-qa-flight-estimate>
                     <div><small>РАССТОЯНИЕ</small><strong>{flightNumberLabel(routeEstimate.routeDistance)} ед.</strong></div>

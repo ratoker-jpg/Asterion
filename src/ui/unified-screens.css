@@ -164,9 +164,8 @@ html body :is(.trade-submit, .recycling-start, .production-bots-distribute, .res
    the art sits right, the left side fades to the panel for the title. */
 html body :is(.flight-briefing-v2.has-banner .flight-timeline-head, .flight-details-v3.has-banner > header) {
   position: relative;
-  min-height: 132px;
+  /* Same height as the plain head: the plan must keep its cargo editor on screen (fleet-production-qa). */
   align-items: flex-start;
-  padding: 18px 20px !important;
   border: 1px solid var(--ut-border) !important;
   border-radius: var(--ut-r-card) !important;
   background:
@@ -175,7 +174,7 @@ html body :is(.flight-briefing-v2.has-banner .flight-timeline-head, .flight-deta
     var(--mission-banner) right center / cover no-repeat !important;
   overflow: hidden;
 }
-html body .flight-details-v3.has-banner > header { min-height: 150px; margin: -2px -2px 0; }
+html body .flight-details-v3.has-banner > header { min-height: 150px; margin: -2px -2px 0; padding: 18px 20px !important; }
 html body .flight-details-v3.has-banner > header h3 { font-size: 22px; text-shadow: 0 2px 12px rgba(0, 0, 0, .8); }
 
 /* Empty states: one calm illustration above the copy. */
