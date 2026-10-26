@@ -190,3 +190,86 @@ html body .fleet-workspace-v1 :is(.fleet-page-head-v1, .repair-page-head-v1, .co
   background: var(--fu-panel) !important;
 }
 .fleet-workspace-v1 .battle-tabs-v1 { border-radius: var(--ut-r-card) !important; box-shadow: none !important; }
+
+/* ==========================================================================
+   Flight plan and flight details (portaled to <body>, so not under the
+   workspace scope): fleet composition rows, the fleet card shown before the
+   target is known, the details timeline.
+   ========================================================================== */
+.flight-composition-v3 { display: grid !important; grid-template-columns: minmax(0, 1fr) !important; gap: 6px !important; }
+.flight-composition-v3 .flight-composition-v3__row {
+  display: grid !important;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 6px 12px 6px 6px !important;
+  border: 1px solid var(--ut-border) !important;
+  border-left: 3px solid var(--race-accent-strong, var(--ut-accent)) !important;
+  border-radius: var(--ut-r-card) !important;
+  background: var(--ut-surface-2) !important;
+  box-shadow: none !important;
+}
+.flight-composition-v3__row > img { width: 44px; height: 40px; object-fit: contain; }
+.flight-composition-v3__row > div { display: grid; gap: 3px; min-width: 0; }
+.flight-composition-v3__row strong { color: #eaf6f9; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.flight-composition-v3__row small { color: var(--ut-label); font-size: 11px; letter-spacing: .02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.flight-composition-v3__row > b { display: grid; justify-items: end; color: #fff; font-size: 18px; line-height: 1; font-variant-numeric: tabular-nums; }
+.flight-composition-v3__row > b small { margin-top: 3px; color: var(--ut-label); font-size: 10px; font-weight: 600; }
+.flight-composition-v3__total {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+  margin-top: 2px;
+  padding: 8px 12px;
+  border-radius: var(--ut-r-card);
+  border: 1px dashed var(--ut-border-strong);
+  color: var(--ut-label);
+  font-size: 11px;
+  letter-spacing: .06em;
+}
+.flight-composition-v3__total span:first-child { color: var(--ut-label); font-weight: 800; letter-spacing: .16em; }
+.flight-composition-v3__total b { color: #fff; font-size: 13px; }
+
+/* Before a target: four fleet figures and a calm hint, no red banner. */
+.flight-briefing-v2 .flight-draft-v3 { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+.flight-draft-v3__hint {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 16px 18px;
+  border: 1px solid var(--ut-border);
+  border-left: 3px solid var(--ut-accent);
+  border-radius: var(--ut-r-card);
+  background: rgba(86, 217, 242, .05);
+}
+.flight-draft-v3__hint strong { color: #eaf6f9; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; }
+.flight-draft-v3__hint span { color: #a9c3cb; font-size: 13px; line-height: 1.5; }
+.flight-briefing-v2 .flight-timeline-error { border-left-color: var(--ut-amber, #e6ad50) !important; }
+
+/* Flight details */
+.flight-details-v3 { width: min(760px, calc(100vw - 48px)) !important; gap: 14px !important; }
+.flight-details-v3__timeline { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.flight-details-v3__timeline li { position: relative; display: grid; gap: 3px; padding: 12px 14px 12px 30px; border: 1px solid var(--ut-border); border-radius: var(--ut-r-card); background: var(--ut-surface-2); }
+.flight-details-v3__timeline li b { position: absolute; left: 12px; top: 16px; width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--ut-border-strong); }
+.flight-details-v3__timeline li.is-done b { border-color: var(--race-accent-strong, var(--ut-accent)); background: var(--race-accent-strong, var(--ut-accent)); box-shadow: 0 0 10px var(--race-glow, rgba(86, 217, 242, .4)); }
+.flight-details-v3__timeline small { color: var(--ut-label); font-size: 10px; font-weight: 800; letter-spacing: .16em; }
+.flight-details-v3__timeline strong { color: #eaf6f9; font-size: 13px; font-variant-numeric: tabular-nums; }
+.flight-details-v3__timeline em { color: var(--ut-label); font-size: 11px; font-style: normal; }
+.flight-details-v3__metrics { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; }
+.flight-details-v3__ships { max-height: 260px; overflow: auto; padding-right: 2px; }
+.flight-details-v3__actions { display: flex; justify-content: flex-end; gap: 10px; }
+.flight-details-v3__actions .is-danger { height: 40px; padding: 0 18px; border: 1px solid rgba(240, 68, 94, .5); border-radius: var(--ut-r-btn); background: rgba(240, 68, 94, .08); color: #ff8c9c; font-weight: 800; letter-spacing: .12em; cursor: pointer; }
+.flight-details-v3__actions .fleet-expedition-close { margin: 0 !important; }
+.fleet-flight-mission-cell .fleet-expedition-details-trigger { text-transform: uppercase; }
+/* The briefing's two-column ship grid (fleet-root-v2.css) cramps the rows: one column, scrolling. */
+html body .flight-briefing-v2 .flight-timeline-ship-list.flight-composition-v3 {
+  grid-template-columns: minmax(0, 1fr) !important;
+  max-height: 330px !important;
+  overflow-y: auto !important;
+}
+html body .flight-briefing-v2 .flight-composition-v3__row > b { flex-direction: column; }
+.flight-details-v3 .flight-composition-v3__row, .flight-details-v3 .flight-composition-v3__row * { text-align: left; }
+.flight-details-v3 .flight-composition-v3__row > b { text-align: right; }
+.flight-timeline-eta-note { display: block; margin-top: 2px; color: var(--ut-label); font-size: 10px; font-style: normal; letter-spacing: .08em; text-transform: uppercase; }

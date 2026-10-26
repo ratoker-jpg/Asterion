@@ -46,6 +46,7 @@ import {
   SPY_REPORT_REQUEST_EVENT,
   SPY_REPORT_RESULT_EVENT,
   getTransportCargoSummary,
+  estimateFlightRoute,
   getAvailableFleetForPlanet,
   getPlayerFlightSlotUsage,
   resolveTransportTarget,
@@ -409,6 +410,7 @@ function FleetWorkspace({
   const [selectedSunOperationId, setSelectedSunOperationId] = useState<string | null>(null);
   const [selectedExplorationTargetKey, setSelectedExplorationTargetKey] = useState<string | null>(null);
   const [selectedExpeditionFlightId, setSelectedExpeditionFlightId] = useState<string | null>(null);
+  const [selectedFlightDetailsId, setSelectedFlightDetailsId] = useState<string | null>(null);
   const [selectedAidRequestId, setSelectedAidRequestId] = useState<string | null>(null);
   const [transportCargoDraft, setTransportCargoDraft] = useState<TransportCargo>(emptyTransportCargo);
   const [pendingRecall, setPendingRecall] = useState<FlightRecord | null>(null);
@@ -1420,6 +1422,28 @@ function FleetWorkspace({
       ? targetIsLocallyValid && Boolean(previewResult?.ok) && hasLaunchableComposition && previewTargetDestination?.kind === 'planet' && previewTargetRelation === 'self' && !transportTargetOptions.find((target) => target.id === previewTargetDestination.planetId)?.blocked
     : missionId !== 'colonize'
       || (targetIsLocallyValid && (!previewResult || previewResult.ok));
+  /** Fleet figures that do not depend on the target: shown before the route is known. */
+  const draftFleetStats = (() => {
+    let speed = Infinity;
+    let cargo = 0;
+    let count = 0;
+    for (const ship of shipDefinitions) {
+      const quantity = selectedQuantities[ship.id as ShipId] ?? 0;
+      if (quantity <= 0) continue;
+      count += quantity;
+      cargo += (ship.ship?.cargo ?? 0) * quantity;
+      if ((ship.ship?.speed ?? 0) > 0) speed = Math.min(speed, ship.ship!.speed!);
+    }
+    return { speed: Number.isFinite(speed) ? speed : 0, cargo, count };
+  })();
+  const previewHoldCapacity = previewResult?.ok
+    ? previewResult.flight.recycleCapacity ?? previewResult.flight.gasCapacity ?? draftFleetStats.cargo
+    : draftFleetStats.cargo;
+  /** Distance, speed, time and gas for typed coordinates; the target itself is checked on Send. */
+  const routeEstimate = !previewResult?.ok && missionId !== 'space-flight' && targetIsLocallyValid && previewSourceId && coordinateDraftError(previewTargetDraft) === null
+    ? estimateFlightRoute(saveState, previewSourceId, selectedQuantities, selectedCommanders, coordinateFromDraft(previewTargetDraft), { mode: ACTIVE_RUNTIME_MODE, testTimeScale: resolveTestTimeScale() })
+    : null;
+  const holdLabel = missionId === 'recycle' ? 'ТРЮМ ОБЛОМКОВ' : missionId === 'gas' ? 'ТРЮМ ГАЗА' : 'ГРУЗОПОДЪЁМНОСТЬ';
   const previewTargetLabel = previewTargetError
     ? `[${previewTargetDraft.galaxy || '—'}:${previewTargetDraft.system || '—'}:${previewTargetDraft.position || '—'}]`
     : previewCoordinate
@@ -1535,7 +1559,7 @@ function FleetWorkspace({
                         : 'ПРИБЫЛ';
                   const attackOrder = attackOrderByFlightId.get(flight.id);
                   return <div className={`fleet-flight-row-v1${isHostileIncoming ? ' fleet-flight-row-v1--incoming-attack' : ''}`} key={flight.id} data-qa-flight-row={flight.id} data-qa-flight-phase={flight.phase} data-qa-flight-owner-side={flight.ownerSide ?? 'player'} data-qa-flight-incoming-attack={isHostileIncoming || undefined} data-qa-flight-pirate-raid={isIncomingPirateRaid || undefined}>
-                  <span className="fleet-flight-mission-cell"><img className="fleet-flight-mission-icon" src={flightMissionIcon(flight.missionId)} alt="" /><span>{(flight.ownerSide !== 'bot01' && flight.ownerSide !== 'npc' && (flight.missionId === 'expedition' || flight.explorationAttack)) ? <button type="button" className="fleet-expedition-details-trigger" onClick={() => setSelectedExpeditionFlightId(flight.id)} data-qa-expedition-flight-details={flight.id}>ЭКСПЕДИЦИЯ · ПОДРОБНЕЕ ↗</button> : flight.explorationAttack ? 'БОЕВОЙ ЗАХВАТ · ЭКСПЕДИЦИЯ' : flightMissionLabel(flight.missionId)}{isIncomingPirateRaid ? <small data-qa-pirate-raid-force title={pirateComposition || 'Состав неизвестен'}>УГРОЗА {flightNumberLabel(piratePopulation)} НАС. · {pirateComposition || 'СОСТАВ НЕИЗВЕСТЕН'}</small> : null}{isIncomingBotAttack && flight.ownerSide === 'bot01' ? <small data-qa-flight-bot01-label>BOT 01</small> : null}{attackOrder && !isHostileIncoming ? <small data-qa-flight-attack-order>АТАКА #{attackOrder}</small> : null}</span>{liveTransportState.overflowWarning ? <b className="fleet-flight-overflow-warning" aria-label="Часть груза может сгореть: склады цели заполнены" data-qa-flight-overflow-warning>!</b> : null}</span>
+                  <span className="fleet-flight-mission-cell"><img className="fleet-flight-mission-icon" src={flightMissionIcon(flight.missionId)} alt="" /><span>{(flight.ownerSide !== 'bot01' && flight.ownerSide !== 'npc' && (flight.missionId === 'expedition' || flight.explorationAttack)) ? <button type="button" className="fleet-expedition-details-trigger" onClick={() => setSelectedExpeditionFlightId(flight.id)} data-qa-expedition-flight-details={flight.id}>ЭКСПЕДИЦИЯ · ПОДРОБНЕЕ ↗</button> : flight.explorationAttack ? 'БОЕВОЙ ЗАХВАТ · ЭКСПЕДИЦИЯ' : !isHostileIncoming && flight.ownerSide !== 'npc' ? <button type="button" className="fleet-expedition-details-trigger" onClick={() => setSelectedFlightDetailsId(flight.id)} data-qa-flight-details={flight.id}>{flightMissionLabel(flight.missionId)} · ПОДРОБНЕЕ ↗</button> : flightMissionLabel(flight.missionId)}{isIncomingPirateRaid ? <small data-qa-pirate-raid-force title={pirateComposition || 'Состав неизвестен'}>УГРОЗА {flightNumberLabel(piratePopulation)} НАС. · {pirateComposition || 'СОСТАВ НЕИЗВЕСТЕН'}</small> : null}{isIncomingBotAttack && flight.ownerSide === 'bot01' ? <small data-qa-flight-bot01-label>BOT 01</small> : null}{attackOrder && !isHostileIncoming ? <small data-qa-flight-attack-order>АТАКА #{attackOrder}</small> : null}</span>{liveTransportState.overflowWarning ? <b className="fleet-flight-overflow-warning" aria-label="Часть груза может сгореть: склады цели заполнены" data-qa-flight-overflow-warning>!</b> : null}</span>
                   <span className="fleet-flight-route-cell">
                     <span data-qa-flight-origin>{flight.ownerSide === 'npc' && flight.missionId === 'aid' ? <><strong>СОЮЗНИК</strong><small>помощь по запросу</small></> : isIncomingBotAttack || isBot01Explorer || isIncomingPirateRaid ? <><strong>{flightOwnerLabel(flight, saveState.espionage?.targets)}</strong><CoordinateLink coordinate={flight.originCoordinate} /></> : <><strong>{saveState.planets[flight.originPlanetId]?.name ?? 'Ваша планета'}</strong><CoordinateLink coordinate={flight.originCoordinate} /></>}</span>
                     <b className="fleet-flight-route-arrow" aria-hidden="true">→</b>
@@ -1767,6 +1791,59 @@ function FleetWorkspace({
           </section>
         </div>,document.body);
       })()}
+      {selectedFlightDetailsId && (() => {
+        const flight = flightRecords.find((item) => item.id === selectedFlightDetailsId);
+        if (!flight) return null;
+        const close = () => setSelectedFlightDetailsId(null);
+        const ships = Object.entries(flight.selectedShips).filter(([, count]) => (count ?? 0) > 0).map(([id, count]) => {
+          const entity = shipDefinitions.find((ship) => ship.id === id);
+          return { id, count: count ?? 0, name: entity?.name ?? id, art: entity?.art, cargo: (entity?.ship?.cargo ?? 0) * (count ?? 0) };
+        });
+        const commanders = Object.values(flight.selectedCommanders ?? {}).reduce((sum, count) => sum + (count ?? 0), 0);
+        const hold = flight.recycleCapacity ?? flight.gasCapacity ?? ships.reduce((sum, ship) => sum + ship.cargo, 0);
+        const cargo = flight.cargo ? (['metal', 'minerals', 'gas', 'debris'] as const).filter((kind) => (flight.cargo?.[kind as keyof typeof flight.cargo] ?? 0) > 0) : [];
+        const cargoLabels = { metal: 'Металл', minerals: 'Минералы', gas: 'Газ', debris: 'Обломки' } as const;
+        const recallable = flight.phase === 'outbound';
+        const phaseLabel = flight.phase === 'outbound' ? 'В ПУТИ К ЦЕЛИ' : flight.phase === 'returning' ? 'ВОЗВРАЩАЕТСЯ' : flight.phase === 'arrived' ? 'НА МЕСТЕ' : 'ЗАВЕРШЁН';
+        const phaseAt = flight.phase === 'outbound' ? flight.arrivalAt : flight.phase === 'returning' ? flight.returnAt : undefined;
+        const steps = [
+          { label: 'ВЫЛЕТ', at: flight.departedAt, done: true },
+          { label: flight.missionId === 'space-flight' ? 'РАЗВОРОТ' : 'ПРИБЫТИЕ', at: flight.arrivalAt, done: flight.phase !== 'outbound' },
+          ...(flight.returnAt ? [{ label: 'ВОЗВРАТ', at: flight.returnAt, done: flight.phase === 'completed' }] : []),
+        ];
+        return createPortal(<div className="resource-building-action-confirm-backdrop" data-qa-flight-details-backdrop onMouseDown={close}>
+          <section className="resource-building-action-confirm fleet-expedition-details flight-details-v3" role="dialog" aria-modal="true" aria-label="Подробности рейса" data-qa-flight-details-dialog onMouseDown={(event) => event.stopPropagation()}>
+            <header>
+              <div>
+                <small>АКТИВНЫЙ РЕЙС · {flightMissionLabel(flight.missionId).toUpperCase()}</small>
+                <h3>{flight.missionId === 'space-flight' ? 'Космический рейс' : flight.targetPlanetName ?? flightCoordinateLabel(flight.destinationCoordinate)}</h3>
+                <span>{saveState.planets[flight.originPlanetId]?.name ?? 'Ваша планета'} {flightCoordinateLabel(flight.originCoordinate)} → {flight.missionId === 'space-flight' ? 'без цели' : flightCoordinateLabel(flight.destinationCoordinate)}{flight.targetOwnerName ? ` · ${flight.targetOwnerName}` : ''}</span>
+              </div>
+              <button type="button" aria-label="Закрыть подробности рейса" onClick={close}>×</button>
+            </header>
+            <div className="fleet-expedition-status"><span>{phaseLabel}</span><strong>{phaseAt ? flightCountdown(phaseAt, clockNow) : '—'}</strong></div>
+            <ol className="flight-details-v3__timeline">
+              {steps.map((step) => <li key={step.label} className={step.done ? 'is-done' : ''}><b /><small>{step.label}</small><strong>{flightArrivalLabel(step.at)}</strong><em>{step.at > clockNow ? `через ${flightCountdown(step.at, clockNow)}` : 'пройдено'}</em></li>)}
+            </ol>
+            <div className="fleet-expedition-metrics flight-details-v3__metrics">
+              <div><small>РАССТОЯНИЕ</small><strong>{flight.routeDistance ? `${flightNumberLabel(flight.routeDistance)} ед.` : '—'}</strong></div>
+              <div><small>СКОРОСТЬ</small><strong>{flight.effectiveSpeed ? flightNumberLabel(flight.effectiveSpeed) : '—'}</strong></div>
+              <div><small>НАСЕЛЕНИЕ</small><strong>{flightNumberLabel(flight.populationReserved)}</strong></div>
+              <div><small>ГАЗ</small><strong>{flightNumberLabel(flight.gasCost)}</strong></div>
+              <div><small>{flight.recycleCapacity !== undefined ? 'ТРЮМ ОБЛОМКОВ' : flight.gasCapacity !== undefined ? 'ТРЮМ ГАЗА' : 'ТРЮМ'}</small><strong>{flightNumberLabel(hold)}</strong></div>
+            </div>
+            {cargo.length ? <div className="fleet-expedition-resources">{cargo.map((kind) => <div key={kind}><ResourceIcon kind={kind} /><span><b>{cargoLabels[kind]}</b><small>в трюме</small></span><strong>{flightNumberLabel(flight.cargo?.[kind as keyof typeof flight.cargo] ?? 0)}</strong></div>)}</div> : null}
+            <div className="flight-composition-v3 flight-details-v3__ships" data-qa-flight-details-ships>
+              {ships.map((ship) => <article className="flight-timeline-ship-card flight-composition-v3__row" key={ship.id}>{ship.art ? <img src={ship.art} alt="" /> : <span />}<div><strong>{ship.name}</strong><small>трюм {flightNumberLabel(ship.cargo)}</small></div><b>×{flightNumberLabel(ship.count)}</b></article>)}
+              {commanders ? <footer className="flight-composition-v3__total"><span>КОМАНДИРСКИЕ КОРАБЛИ</span><b>{commanders}</b></footer> : null}
+            </div>
+            <div className="flight-details-v3__actions">
+              {recallable ? <button type="button" className="is-danger" data-qa-flight-details-recall onClick={() => { close(); setPendingRecall(flight); }}>ОТОЗВАТЬ</button> : null}
+              <button type="button" className="fleet-expedition-close" onClick={close}>ЗАКРЫТЬ</button>
+            </div>
+          </section>
+        </div>, document.body);
+      })()}
       {pendingSatelliteDismantle != null ? createPortal(
         <div
           className="resource-building-action-confirm-backdrop"
@@ -1897,10 +1974,17 @@ function FleetWorkspace({
                   <span aria-hidden="true">03</span>
                   <div>
                     <small>СОСТАВ ФЛОТА</small>
-                    <div className="flight-timeline-ship-list" data-qa-flight-ships>{visibleShipDefinitions.filter((ship) => (selectedQuantities[ship.id] ?? 0) > 0).map((ship) => {
+                    <div className="flight-timeline-ship-list flight-composition-v3" data-qa-flight-ships>{visibleShipDefinitions.filter((ship) => (selectedQuantities[ship.id] ?? 0) > 0).map((ship) => {
                       const quantity = selectedQuantities[ship.id] ?? 0;
-                      return <article className="flight-timeline-ship-card" key={ship.id}><img src={ship.art} alt="" /><div><strong>{ship.name}</strong><small>Население: {quantity * ship.population}</small></div><b>{quantity}<small>{shipCountLabel(quantity)}</small></b></article>;
-                    })}</div>
+                      const entity = shipDefinitions.find((item) => item.id === ship.id);
+                      return <article className="flight-timeline-ship-card flight-composition-v3__row" key={ship.id}>
+                        <img src={ship.art} alt="" />
+                        <div><strong>{ship.name}</strong><small>нас. {flightNumberLabel(quantity * ship.population)} · трюм {flightNumberLabel((entity?.ship?.cargo ?? 0) * quantity)} · скор. {flightNumberLabel(entity?.ship?.speed ?? 0)}</small></div>
+                        <b>×{flightNumberLabel(quantity)}<small>{shipCountLabel(quantity)}</small></b>
+                      </article>;
+                    })}
+                    <footer className="flight-composition-v3__total" data-qa-flight-composition-total><span>ИТОГО</span><b>{flightNumberLabel(draftFleetStats.count)} {shipCountLabel(draftFleetStats.count)}</b><span>нас. {flightNumberLabel(selectedPopulation)}</span><span>{holdLabel.toLowerCase()} {flightNumberLabel(previewHoldCapacity)}</span></footer>
+                    </div>
                   </div>
                 </li>
               </ol>
@@ -1927,13 +2011,15 @@ function FleetWorkspace({
                     <div><small>ПОЛНЫЙ ЦИКЛ</small><strong>{flightDurationLabel(previewResult.flight.oneWayDurationMs * 2)}</strong></div>
                     <div><small>ГАЗ</small><strong>{previewResult.flight.gasCost}</strong></div>
                     <div data-qa-flight-metric="population"><small>НАСЕЛЕНИЕ</small><strong>{flightNumberLabel(selectedPopulation)}</strong></div>
+                    {!((missionId === 'transport' || missionId === 'space-flight' || missionId === 'aid') && transportSummary) ? <div data-qa-flight-metric="hold"><small>{holdLabel}</small><strong>{flightNumberLabel(previewHoldCapacity)}</strong></div> : null}
                     {(missionId === 'transport' || missionId === 'space-flight' || missionId === 'aid') && transportSummary ? <div data-qa-flight-metric="cargo-capacity"><small>ГРУЗ</small><strong>{flightNumberLabel(transportSummary.capacity.used)} / {flightNumberLabel(transportSummary.capacity.total)}</strong></div> : null}
                   </div>
                   <section className="flight-timeline-eta" data-qa-flight-eta aria-label="Расписание рейса">
                     <div className="flight-timeline-eta-card is-arrival">
                       <small>{missionId === 'space-flight' ? 'ТОЧКА РАЗВОРОТА' : 'ПРИБЫТИЕ'}</small>
-                      <strong>через {missionId === 'gas' ? flightDurationLabel(previewResult.flight.oneWayDurationMs) : flightCountdown(previewResult.flight.arrivalAt, clockNow)}</strong>
-                      <span>{flightArrivalLabel(previewResult.flight.arrivalAt)} МСК</span>
+                      <strong>через {flightDurationLabel(previewResult.flight.oneWayDurationMs)}</strong>
+                      <span>{flightArrivalLabel(missionId === 'gas' || missionId === 'space-flight' ? previewResult.flight.arrivalAt : clockNow + previewResult.flight.oneWayDurationMs)} МСК</span>
+                      {missionId === 'gas' || missionId === 'space-flight' ? null : <i className="flight-timeline-eta-note">если отправить сейчас</i>}
                       <em>{missionId === 'space-flight' ? 'начало обратного участка' : missionId === 'aid' ? 'зачисление принятого груза на планету запроса' : missionId === 'recycle' ? 'сбор обломков с орбиты' : missionId === 'gas' ? 'проверка позиции астероида' : 'проверка цели и создание планеты'}</em>
                     </div>
                     <div className="flight-timeline-eta-card is-return">
@@ -1971,7 +2057,42 @@ function FleetWorkspace({
                           ? 'Координата назначения не меняется; астероид может переместиться до прибытия.'
                           : 'При отзыве колонизатор возвращается, но газ не возвращается.'}</p>
                   </div>
-                </> : <p className="flight-timeline-error" data-qa-flight-preview-error>{previewResult && !previewResult.ok ? previewResult.error.message : targetIsLocallyValid ? 'Проверка цели будет выполнена при отправке.' : 'Укажите координаты цели. Проверка доступности выполняется при отправке.'}</p>}
+                </> : <>
+                  {previewResult && !previewResult.ok ? <p className="flight-timeline-error" data-qa-flight-preview-error>{previewResult.error.message}</p> : null}
+                  {routeEstimate ? <>
+                  <div className="flight-briefing-v2__axis" aria-hidden="true">
+                    <i />
+                    <span style={{ left: '8%' }}><b /><small>ВЫЛЕТ · <em>сейчас</em></small></span>
+                    <span style={{ left: '50%' }}><b /><small>ПРИБЫТИЕ · <em>через {flightDurationLabel(routeEstimate.oneWayDurationMs)}</em></small></span>
+                    <span style={{ left: '90%' }}><b /><small>{missionId === 'deployment' || missionId === 'colonize' ? 'БЕЗ ВОЗВРАТА' : <>ВОЗВРАТ · <em>через {flightDurationLabel(routeEstimate.oneWayDurationMs * 2)}</em></>}</small></span>
+                  </div>
+                  <div className="flight-timeline-metrics" data-qa-flight-estimate>
+                    <div><small>РАССТОЯНИЕ</small><strong>{flightNumberLabel(routeEstimate.routeDistance)} ед.</strong></div>
+                    <div><small>ЭФФ. СКОРОСТЬ</small><strong>{flightNumberLabel(routeEstimate.effectiveSpeed)}</strong></div>
+                    <div><small>ТУДА</small><strong>{flightDurationLabel(routeEstimate.oneWayDurationMs)}</strong></div>
+                    <div><small>ОБРАТНО</small><strong>{flightDurationLabel(routeEstimate.oneWayDurationMs)}</strong></div>
+                    <div><small>ПОЛНЫЙ ЦИКЛ</small><strong>{flightDurationLabel(routeEstimate.oneWayDurationMs * 2)}</strong></div>
+                    <div><small>ГАЗ</small><strong>{flightNumberLabel(routeEstimate.gasCost)}</strong></div>
+                    <div><small>НАСЕЛЕНИЕ</small><strong>{flightNumberLabel(selectedPopulation)}</strong></div>
+                    <div><small>{holdLabel}</small><strong>{flightNumberLabel(previewHoldCapacity)}</strong></div>
+                  </div>
+                  <div className="flight-draft-v3__hint" data-qa-flight-draft-hint>
+                    <strong>Прибытие {flightArrivalLabel(clockNow + routeEstimate.oneWayDurationMs)} МСК</strong>
+                    <span>Если отправить сейчас. Расчёт по координатам; занятость и владелец цели проверяются при отправке.</span>
+                  </div>
+                  </> : <>
+                  <div className="flight-timeline-metrics flight-draft-v3" data-qa-flight-draft>
+                    <div><small>КОРАБЛЕЙ</small><strong>{flightNumberLabel(draftFleetStats.count)}</strong></div>
+                    <div><small>БАЗОВАЯ СКОРОСТЬ</small><strong>{draftFleetStats.speed ? flightNumberLabel(draftFleetStats.speed) : '—'}</strong></div>
+                    <div data-qa-flight-metric="population"><small>НАСЕЛЕНИЕ</small><strong>{flightNumberLabel(selectedPopulation)}</strong></div>
+                    <div data-qa-flight-metric="hold"><small>{holdLabel}</small><strong>{flightNumberLabel(previewHoldCapacity)}</strong></div>
+                  </div>
+                  <div className="flight-draft-v3__hint" data-qa-flight-draft-hint>
+                    <strong>{targetIsLocallyValid ? 'Цель задана' : 'Выберите цель'}</strong>
+                    <span>{targetIsLocallyValid ? 'Время в пути и газ появятся, как только координаты будут заполнены. Доступность цели проверяется при отправке.' : 'Введите галактику, систему и позицию — время в пути, газ и прибытие появятся здесь сразу.'}</span>
+                  </div>
+                  </>}
+                </>}
               </section>
               {(missionId === 'transport' || missionId === 'space-flight' || missionId === 'aid') && transportSummary ? <section className="flight-timeline-cargo" data-qa-flight-cargo data-qa-cargo-capacity={`${transportSummary.capacity.used}/${transportSummary.capacity.total}`} aria-label="Загрузка ресурсов">
                 <div className="flight-timeline-cargo-head">
@@ -2006,7 +2127,7 @@ function FleetWorkspace({
               </section> : null}
               </div>
             </div>
-            <div className="flight-timeline-meta">{previewResult?.ok && previewFlightRecord ? <>РАСЧЁТ РЕЙСА · ПРИБЫТИЕ: {flightArrivalLabel(previewFlightRecord.arrivalAt)} · МОСКОВСКОЕ ВРЕМЯ · {flightMissionLabel(missionId).toUpperCase()}</> : 'РАСЧЁТ БУДЕТ ВЫПОЛНЕН ПРИ ОТПРАВКЕ'}</div>
+            <div className="flight-timeline-meta">{previewResult?.ok && previewFlightRecord ? <>РАСЧЁТ РЕЙСА · ПРИБЫТИЕ: {flightArrivalLabel(missionId === 'gas' || missionId === 'space-flight' ? previewFlightRecord.arrivalAt : clockNow + previewFlightRecord.oneWayDurationMs)} · МОСКОВСКОЕ ВРЕМЯ · {flightMissionLabel(missionId).toUpperCase()}</> : routeEstimate ? <>ОЦЕНКА ПО КООРДИНАТАМ · ПРИБЫТИЕ: {flightArrivalLabel(clockNow + routeEstimate.oneWayDurationMs)} · МОСКОВСКОЕ ВРЕМЯ · ЦЕЛЬ ПРОВЕРЯЕТСЯ ПРИ ОТПРАВКЕ</> : 'РАСЧЁТ ПОЯВИТСЯ ПОСЛЕ ВЫБОРА ЦЕЛИ'}</div>
             <div className="resource-building-action-confirm-actions flight-timeline-actions">
               <button type="button" data-qa-flight-preview-cancel onClick={closeFlightPreview}>ОТМЕНА</button>
               <button type="button" data-qa-flight-dispatch-confirm disabled={!canDispatchPreview} onClick={confirmFlightDispatch}>ОТПРАВИТЬ</button>

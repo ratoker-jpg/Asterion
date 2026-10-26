@@ -54,7 +54,15 @@ import {
   MIN_SPACE_FLIGHT_DURATION_MS,
   SPACE_FLIGHT_DURATION_STEP_MS,
 } from '../domain/flights/runtime.ts';
-import { isFlightCoordinate } from '../domain/flights/distance.ts';
+import { calculateRouteDistance, isFlightCoordinate } from '../domain/flights/distance.ts';
+import {
+  calculateEffectiveFleetSpeed,
+  calculateOneWayDurationMs,
+  isReconOnlyFleet,
+  MIN_ONE_WAY_DURATION_MS,
+  MIN_RECON_ONE_WAY_DURATION_MS,
+} from '../domain/flights/speed.ts';
+import { calculateFlightFuel } from '../domain/flights/fuel.ts';
 import {
   addDebris,
   clampCargoToSourceAndCapacity,
@@ -1307,8 +1315,16 @@ function planPlayerAidLaunch(
   };
 }
 
+/** Player-facing mission names for notices (the ids are internal). */
+const MISSION_NOTICE_LABELS: Partial<Record<FlightRecord['missionId'], string>> = {
+  transport: 'Транспортировка', espionage: 'Шпионаж', attack: 'Атака', expedition: 'Экспедиция', deployment: 'Дислокация',
+  colonize: 'Колонизация', recycle: 'Переработка', gas: 'Добыча газа', 'sun-support': 'Поддержка Солнца',
+  'sun-attack': 'Рейд на Солнце', 'space-flight': 'Космический рейс', aid: 'Помощь союзу', 'pirate-elimination': 'Уничтожение пиратов',
+  'pirate-recon': 'Разведка пиратов', 'exploration-recon': 'Исследование объекта',
+};
+
 function noticeForDispatch(flight: FlightRecord): string {
-  return `Рейс ${flight.missionId} отправлен: прибытие ${new Date(flight.arrivalAt).toLocaleString('ru-RU')} · газ ${flight.gasCost}.`;
+  return `Рейс «${MISSION_NOTICE_LABELS[flight.missionId] ?? flight.missionId}» отправлен: прибытие ${new Date(flight.arrivalAt).toLocaleString('ru-RU')} · газ ${flight.gasCost}.`;
 }
 
 export function dispatchFlight(
@@ -2113,6 +2129,43 @@ export function dispatchNpcAidFlight(
 }
 
 /** Read-only preview using the same application validation and calculator path as dispatch. */
+/**
+ * Route figures for a typed coordinate before the target is checked: the
+ * flight plan shows distance, speed, time and gas at once, while ownership,
+ * occupancy and the rest are still validated only on Send (dispatchFlight).
+ * Same formulas as createFlightRecord, same runtime time scale.
+ */
+export function estimateFlightRoute(
+  state: SaveState,
+  originPlanetId: PlanetId,
+  selectedShips: Partial<Record<ShipId, number>>,
+  selectedCommanders: Partial<Record<CommanderId, number>>,
+  destination: UniverseCoordinate,
+  options: FlightRuntimeOptions = {},
+): { routeDistance: number; effectiveSpeed: number; oneWayDurationMs: number; gasCost: number } | null {
+  const origin = state.planets[originPlanetId];
+  if (!origin || !isFlightCoordinate(destination)) return null;
+  const ships = Object.fromEntries(Object.entries(selectedShips).filter(([, count]) => Math.floor(count ?? 0) > 0)) as Partial<Record<ShipId, number>>;
+  if (Object.keys(ships).length === 0) return null;
+  const originCoordinate = coordinateOfPlanet(origin);
+  const factionId = state.profile.factionId as CombatFactionId;
+  const science = state.science.levels;
+  try {
+    const routeDistance = calculateRouteDistance(originCoordinate, destination);
+    const effectiveSpeed = calculateEffectiveFleetSpeed(factionId, ships, science, selectedCommanders, { typhoon: getOwnerShipUpgradeLevel(state, 'typhoon') });
+    const minimum = isReconOnlyFleet(ships, selectedCommanders) ? MIN_RECON_ONE_WAY_DURATION_MS : MIN_ONE_WAY_DURATION_MS;
+    const oneWayDurationMs = scaleRuntimeDuration(
+      calculateOneWayDurationMs(originCoordinate, destination, effectiveSpeed, minimum),
+      options.mode ?? 'production',
+      options.testTimeScale,
+    );
+    const gasCost = calculateFlightFuel(factionId, ships, routeDistance, science, selectedCommanders);
+    return { routeDistance, effectiveSpeed, oneWayDurationMs, gasCost };
+  } catch {
+    return null;
+  }
+}
+
 export function previewFlight(
   state: SaveState,
   command: DispatchFlightCommand,
