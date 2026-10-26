@@ -289,7 +289,8 @@ async function verifyMilitaryDeepLinks(win, directory) {
     && visual.header.gridFirstColumn === (visual.viewportWidth <= 1040 ? '62px' : visual.viewportWidth <= 1440 ? '72px' : '84px')
     && !visual.hasHeaderBack
     && !visual.header.gridColumns.includes('128px')
-    && visual.header.margin === '14px 0px'
+    // Owner request 26.10.2026: the section header starts on the sidebar's top line (no top margin).
+    && visual.header.margin === '0px 0px 14px'
     && visual.header.gap === '12px'
     && visual.header.padding === '10px 12px'
     && visual.header.borderWidth === '1px'

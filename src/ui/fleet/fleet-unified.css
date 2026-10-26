@@ -1,0 +1,290 @@
+/* ==========================================================================
+   FLEETS — one skin for every section (ships, defense, commander ships,
+   repair, combat priority, battles, simulator), matching Operations,
+   Command and Planet: graphite panels (--ut-surface), inner cards
+   (--ut-surface-2), one thin border, 18/13 px radii, small caps labels,
+   race colour only on selected/owned states, cyan only on the main action.
+   Loaded last (main.tsx), scoped under .fleet-workspace-v1; the legacy
+   teal gradients are declared with !important in several older files,
+   so the overrides here carry it too.
+   ========================================================================== */
+
+.fleet-workspace-v1 {
+  --fu-panel: var(--ut-surface);
+  --fu-card: var(--ut-surface-2);
+  --fu-well: rgba(4, 9, 12, .55);
+  --fu-line: var(--ut-border);
+  --fu-line-strong: var(--ut-border-strong);
+  --fu-head: linear-gradient(90deg, color-mix(in srgb, var(--race-accent-strong) 12%, transparent), transparent 72%);
+}
+
+/* ---------- panels: one surface, one border ---------- */
+.fleet-workspace-v1 :is(
+  .fleet-sidebar-v1,
+  .fleet-construction-card-v1, .fleet-defense-population-v1,
+  .shipyard-card-v1, .repair-card-v1, .repair-notice-v1,
+  .combat-priority-rule-v1, .combat-priority-column-v1, .battle-tabs-v1,
+  .simulator-toolbar-v1, .sim-presets-v1, .sim-side-v1, .sim-validation-v1
+) {
+  border: 1px solid var(--fu-line) !important;
+  border-radius: var(--ut-r-panel) !important;
+  /* A barely visible top light keeps the graphite from looking flat (and the QA card contract wants a gradient). */
+  background: linear-gradient(180deg, rgba(17, 27, 32, .96), var(--fu-panel)) !important;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, .22), inset 0 1px 0 rgba(255, 255, 255, .04) !important;
+  clip-path: none !important;
+}
+.fleet-workspace-v1 :is(.shipyard-card-v1, .repair-card-v1, .combat-priority-column-v1) { overflow: hidden; }
+.fleet-workspace-v1 .shipyard-card-v1:hover { overflow: visible; }
+/* A notice strip is a slim panel, not a full card. */
+.fleet-workspace-v1 :is(.repair-notice-v1, .combat-priority-rule-v1, .fleet-defense-population-v1) { border-radius: var(--ut-r-card) !important; box-shadow: none !important; }
+
+/* The summary row holds cards itself: no second frame behind them. */
+.fleet-workspace-v1 .repair-summary-v1 {
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* ---------- page heads (repair, priority, battles, simulator) ----------
+   They paint themselves with two pseudo layers (::before = frame, ::after =
+   fill, fleet-ui-standard.css); the layers get the panel recipe and lose
+   the clipped corner. */
+html body .fleet-workspace-v1 :is(.fleet-page-head-v1, .repair-page-head-v1, .combat-priority-page-head-v1, .battle-page-head-v1, .shipyard-page-head-v1) {
+  border-radius: var(--ut-r-panel) !important;
+}
+html body .fleet-workspace-v1 :is(.fleet-page-head-v1, .repair-page-head-v1, .combat-priority-page-head-v1, .battle-page-head-v1, .shipyard-page-head-v1)::before {
+  inset: 0 !important;
+  border-radius: var(--ut-r-panel) !important;
+  background: var(--fu-line) !important;
+  clip-path: none !important;
+}
+html body .fleet-workspace-v1 :is(.fleet-page-head-v1, .repair-page-head-v1, .combat-priority-page-head-v1, .battle-page-head-v1, .shipyard-page-head-v1)::after {
+  inset: 1px !important;
+  border-radius: calc(var(--ut-r-panel) - 1px) !important;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--race-accent-strong) 10%, #0c1418), #0c1418 60%) !important;
+  box-shadow: none !important;
+  clip-path: none !important;
+}
+
+/* ---------- card heads: a soft race wash and a hairline ---------- */
+.fleet-workspace-v1 :is(.shipyard-card-title-v1, .repair-card-title-v1, .combat-priority-column-head-v1) {
+  background: var(--fu-head) !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--fu-line) !important;
+  box-shadow: none !important;
+}
+
+/* ---------- inner cards and wells ---------- */
+.fleet-workspace-v1 :is(
+  .shipyard-cost-row-v1, .repair-cost-row-v1, .shipyard-tooltip-level-v1, .shipyard-tooltip-ability-v1,
+  .repair-summary-card-v1, .sim-race-v1, .sim-population-v1, .sim-commander-select-v1, .sim-unit-section-v1,
+  .combat-priority-column-v1 li, .bcard-side
+) {
+  border: 1px solid var(--fu-line) !important;
+  border-radius: var(--ut-r-card) !important;
+  background: var(--fu-card) !important;
+  box-shadow: none !important;
+}
+.fleet-workspace-v1 :is(.shipyard-owned-v1, .repair-available-v1, .fleet-commander-level-v1) {
+  border: 1px solid var(--fu-line-strong) !important;
+  border-radius: var(--ut-r-card) !important;
+  background: var(--fu-well) !important;
+  box-shadow: none !important;
+}
+/* Owning ships is the one state that takes the race colour. */
+.fleet-workspace-v1 .shipyard-owned-v1.has-ships,
+.fleet-workspace-v1 .repair-available-v1 {
+  border-color: var(--race-border) !important;
+  background: linear-gradient(90deg, var(--race-fill), var(--fu-well)) !important;
+}
+.fleet-workspace-v1 .shipyard-visible-level-v1 {
+  border: 1px solid var(--race-border-soft) !important;
+  border-radius: var(--ut-r-chip) !important;
+  background: var(--race-fill-soft) !important;
+}
+
+/* ---------- section headers ---------- */
+.fleet-workspace-v1 :is(.fleet-construction-card-v1, .fleet-yard-card-v1) {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--race-accent-strong) 10%, var(--fu-panel)), var(--fu-panel) 60%) !important;
+}
+.fleet-workspace-v1 .fleet-construction-card-v1 {
+  box-shadow: 0 18px 40px rgba(0, 0, 0, .22), inset 0 0 0 1px rgba(86, 217, 242, .08), inset 0 1px 0 rgba(255, 255, 255, .04) !important;
+}
+.fleet-workspace-v1 .fleet-yard-card-v1 {
+  border: 1px solid var(--fu-line) !important;
+  border-radius: var(--ut-r-card) !important;
+  /* The shared compact card keeps its cyan inner rim (visual-building-interiors contract). */
+  box-shadow: inset 0 0 0 1px rgba(86, 217, 242, .08), inset 0 1px 0 rgba(255, 255, 255, .04) !important;
+}
+/* Every section starts on the same line as the sidebar (the shipyard header carried a 14 px margin). */
+.fleet-workspace-v1 .shipyard-view-v1 > .fleet-construction-card-v1 { margin-top: 0 !important; }
+
+/* ---------- sidebar navigation (same recipe as Settings / Science) ---------- */
+.fleet-workspace-v1 .fleet-menu-group-v1 h3 {
+  margin: 0 0 6px !important;
+  padding: 10px 12px 6px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+  color: var(--ut-label) !important;
+  font-size: 11px !important;
+  letter-spacing: .16em !important;
+}
+.fleet-workspace-v1 .fleet-menu-group-v1 button {
+  border: 1px solid transparent !important;
+  border-radius: var(--ut-r-btn) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #c9dde3 !important;
+}
+.fleet-workspace-v1 .fleet-menu-group-v1 button:hover:not(.active) {
+  border-color: var(--fu-line) !important;
+  background: rgba(255, 255, 255, .03) !important;
+  color: #fff !important;
+}
+:root[data-faction] .fleet-workspace-v1 .fleet-menu-group-v1 button.active {
+  border-color: var(--race-border) !important;
+  background: linear-gradient(90deg, var(--race-fill), transparent) !important;
+  box-shadow: inset 3px 0 0 var(--race-accent-strong) !important;
+  color: #fff !important;
+}
+.fleet-workspace-v1 .fleet-production-queue-v1 {
+  border: 1px solid var(--fu-line) !important;
+  border-radius: var(--ut-r-card) !important;
+  background: var(--fu-card) !important;
+}
+
+/* ---------- secondary buttons, inputs ---------- */
+.fleet-workspace-v1 :is(.fleet-page-back-v1, .repair-back-v1, .combat-priority-back-v1, .battle-back-v1, .sim-clear-v1, .sim-copy-tech-v1, .repair-shortcut-v1, .sim-section-toggle-v1) {
+  border: 1px solid var(--fu-line-strong) !important;
+  border-radius: var(--ut-r-btn) !important;
+  background: rgba(86, 217, 242, .05) !important;
+  box-shadow: none !important;
+  color: #dcecf0 !important;
+}
+.fleet-workspace-v1 :is(.fleet-page-back-v1, .repair-back-v1, .combat-priority-back-v1, .battle-back-v1, .sim-clear-v1, .sim-copy-tech-v1, .repair-shortcut-v1, .sim-section-toggle-v1):hover:not(:disabled) {
+  border-color: var(--ut-accent) !important;
+  color: #fff !important;
+}
+.fleet-workspace-v1 .sim-section-toggle-v1 { border: 0 !important; border-radius: var(--ut-r-card) !important; background: transparent !important; }
+.fleet-workspace-v1 :is(input:not([type="range"]):not([type="checkbox"]), select) {
+  border: 1px solid var(--fu-line-strong) !important;
+  border-radius: var(--ut-r-input, 10px) !important;
+  background: rgba(2, 8, 12, .9) !important;
+}
+
+/* ---------- main actions: the cyan action of Operations ---------- */
+.fleet-workspace-v1 :is(.repair-button-v1--tokens, .sim-run-v1, .shipyard-build-button-v1):not(:disabled) {
+  border: 1px solid #8cefff !important;
+  border-radius: var(--ut-r-btn) !important;
+  background: linear-gradient(180deg, #5fe2f8, #2bb6d6) !important;
+  box-shadow: 0 0 22px rgba(86, 217, 242, .3) !important;
+  color: #03222b !important;
+}
+.fleet-workspace-v1 :is(.repair-button-v1--tokens, .sim-run-v1, .shipyard-build-button-v1):not(:disabled):hover {
+  background: linear-gradient(180deg, #7ae9fb, #36c2e0) !important;
+  box-shadow: 0 0 30px rgba(86, 217, 242, .45) !important;
+}
+
+/* ---------- battles list ---------- */
+.fleet-workspace-v1 .battle-card-v1 {
+  border: 1px solid var(--fu-line) !important;
+  border-radius: var(--ut-r-card) !important;
+  background: var(--fu-panel) !important;
+}
+.fleet-workspace-v1 .battle-tabs-v1 { border-radius: var(--ut-r-card) !important; box-shadow: none !important; }
+
+/* ==========================================================================
+   Flight plan and flight details (portaled to <body>, so not under the
+   workspace scope): fleet composition rows, the fleet card shown before the
+   target is known, the details timeline.
+   ========================================================================== */
+.flight-composition-v3 { display: grid !important; grid-template-columns: minmax(0, 1fr) !important; gap: 6px !important; }
+.flight-composition-v3 .flight-composition-v3__row {
+  display: grid !important;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 6px 12px 6px 6px !important;
+  border: 1px solid var(--ut-border) !important;
+  border-left: 3px solid var(--race-accent-strong, var(--ut-accent)) !important;
+  border-radius: var(--ut-r-card) !important;
+  background: var(--ut-surface-2) !important;
+  box-shadow: none !important;
+}
+.flight-composition-v3__row > img { width: 44px; height: 40px; object-fit: contain; }
+.flight-composition-v3__row > div { display: grid; gap: 3px; min-width: 0; }
+.flight-composition-v3__row strong { color: #eaf6f9; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.flight-composition-v3__row small { color: var(--ut-label); font-size: 11px; letter-spacing: .02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.flight-composition-v3__row > b { display: grid; justify-items: end; color: #fff; font-size: 18px; line-height: 1; font-variant-numeric: tabular-nums; }
+.flight-composition-v3__row > b small { margin-top: 3px; color: var(--ut-label); font-size: 10px; font-weight: 600; }
+.flight-composition-v3__total {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+  margin-top: 2px;
+  padding: 8px 12px;
+  border-radius: var(--ut-r-card);
+  border: 1px dashed var(--ut-border-strong);
+  color: var(--ut-label);
+  font-size: 11px;
+  letter-spacing: .06em;
+}
+.flight-composition-v3__total span:first-child { color: var(--ut-label); font-weight: 800; letter-spacing: .16em; }
+.flight-composition-v3__total b { color: #fff; font-size: 13px; }
+
+/* Before a target: four fleet figures and a calm hint, no red banner. */
+.flight-briefing-v2 .flight-draft-v3 { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+.flight-draft-v3__hint {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 16px 18px;
+  border: 1px solid var(--ut-border);
+  border-left: 3px solid var(--ut-accent);
+  border-radius: var(--ut-r-card);
+  background: rgba(86, 217, 242, .05);
+}
+.flight-draft-v3__hint strong { color: #eaf6f9; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; }
+.flight-draft-v3__hint span { color: #a9c3cb; font-size: 13px; line-height: 1.5; }
+.flight-briefing-v2 .flight-timeline-error { border-left-color: var(--ut-amber, #e6ad50) !important; }
+
+/* Flight details */
+.flight-details-v3 { width: min(760px, calc(100vw - 48px)) !important; gap: 14px !important; }
+.flight-details-v3__timeline { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.flight-details-v3__timeline li { position: relative; display: grid; gap: 3px; padding: 12px 14px 12px 30px; border: 1px solid var(--ut-border); border-radius: var(--ut-r-card); background: var(--ut-surface-2); }
+.flight-details-v3__timeline li b { position: absolute; left: 12px; top: 16px; width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--ut-border-strong); }
+.flight-details-v3__timeline li.is-done b { border-color: var(--race-accent-strong, var(--ut-accent)); background: var(--race-accent-strong, var(--ut-accent)); box-shadow: 0 0 10px var(--race-glow, rgba(86, 217, 242, .4)); }
+.flight-details-v3__timeline small { color: var(--ut-label); font-size: 10px; font-weight: 800; letter-spacing: .16em; }
+.flight-details-v3__timeline strong { color: #eaf6f9; font-size: 13px; font-variant-numeric: tabular-nums; }
+.flight-details-v3__timeline em { color: var(--ut-label); font-size: 11px; font-style: normal; }
+.flight-details-v3__metrics { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; }
+.flight-details-v3__ships { max-height: 260px; overflow: auto; padding-right: 2px; }
+.flight-details-v3__actions { display: flex; justify-content: flex-end; gap: 10px; }
+.flight-details-v3__actions .is-danger { height: 40px; padding: 0 18px; border: 1px solid rgba(240, 68, 94, .5); border-radius: var(--ut-r-btn); background: rgba(240, 68, 94, .08); color: #ff8c9c; font-weight: 800; letter-spacing: .12em; cursor: pointer; }
+.flight-details-v3__actions .fleet-expedition-close { margin: 0 !important; }
+.fleet-flight-mission-cell .fleet-expedition-details-trigger { text-transform: uppercase; }
+/* The briefing shows the whole composition without an inner scroller (fleet-production-qa
+   contract): two columns of compact rows, the total across both. */
+html body .flight-briefing-v2 .flight-timeline-ship-list.flight-composition-v3 {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+html body .flight-briefing-v2 .flight-composition-v3__total { grid-column: 1 / -1; }
+html body .flight-briefing-v2 .flight-composition-v3__row { grid-template-columns: 36px minmax(0, 1fr) auto; min-height: 48px; }
+html body .flight-briefing-v2 .flight-composition-v3__row > img { width: 36px; height: 32px; }
+html body .flight-briefing-v2 .flight-composition-v3__row > b { flex-direction: column; }
+.flight-details-v3 .flight-composition-v3__row, .flight-details-v3 .flight-composition-v3__row * { text-align: left; }
+.flight-details-v3 .flight-composition-v3__row > b { text-align: right; }
+.flight-timeline-eta-note { display: block; margin-top: 2px; color: var(--ut-label); font-size: 10px; font-style: normal; letter-spacing: .08em; text-transform: uppercase; }
+/* The plan stays short enough that the cargo editor fits the window (fleet-production-qa). */
+html body .flight-briefing-v2 .flight-composition-v3__total { display: none; }
+html body .flight-briefing-v2 .flight-composition-v3__row { min-height: 0; padding: 4px 8px 4px 4px !important; }
+.flight-draft-v3__line { margin: 8px 0 0; color: #a9c3cb; font-size: 12px; }
+.flight-draft-v3__line b { color: #eaf6f9; }
+html body .flight-draft-v3__hint { margin-top: 8px; padding: 10px 14px; }

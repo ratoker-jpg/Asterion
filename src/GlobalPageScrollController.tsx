@@ -4,6 +4,8 @@ import { readHeaderGeometry } from './ui/header/geometry.ts';
 const BASE_FLEET_VERTICAL_PADDING = 22 + 30;
 const PAGE_BOTTOM_PADDING = 52;
 const OVERFLOW_EPSILON = 2;
+/** Screen entrances (motion.css) settle within this window after a page change. */
+const ENTRANCE_SETTLE_MS = 1_400;
 
 function isVisible(element: HTMLElement) {
   const style = window.getComputedStyle(element);
@@ -21,9 +23,34 @@ function getPageContainer(workspace: HTMLElement) {
 }
 
 function getPageRoots(container: HTMLElement) {
+  // The holographic scan (.route-sweep, motion.css) covers the workspace, it is not page content.
   return Array.from(container.children).filter(
-    (child): child is HTMLElement => child instanceof HTMLElement && isVisible(child),
+    (child): child is HTMLElement => child instanceof HTMLElement && !child.classList.contains('route-sweep') && isVisible(child),
   );
+}
+
+/**
+ * Entrances (src/motion.css) rise, slide and scale panels for up to ~1 s, and a
+ * transformed descendant inflates scrollHeight: a page measured mid-entrance
+ * would switch to the long shell and keep it (a stretched root then always
+ * "fills" it). Waiting is no option — a hidden or background window does not
+ * advance animations — so the measurement seeks every finite animation of the
+ * page to its end, measures, and seeks back in the same task (never painted).
+ */
+function measureSettled<T>(container: HTMLElement, measure: () => T): T {
+  const entrances = container.getAnimations({ subtree: true }).filter((animation) => animation instanceof CSSAnimation
+    && animation.playState !== 'finished'
+    && animation.effect?.getTiming().iterations !== Infinity);
+  const saved = entrances.map((animation) => animation.currentTime);
+  for (const animation of entrances) {
+    const end = animation.effect?.getComputedTiming().endTime;
+    if (typeof end === 'number') animation.currentTime = end;
+  }
+  try {
+    return measure();
+  } finally {
+    entrances.forEach((animation, index) => { animation.currentTime = saved[index] ?? null; });
+  }
 }
 
 function isUtilityRoot(roots: readonly HTMLElement[]) {
@@ -49,8 +76,12 @@ function measureContentHeight(container: HTMLElement, stageScale: number, roots:
 function pageIdentity(roots: readonly HTMLElement[]) {
   const primary = roots[0];
   if (!primary) return 'empty';
-  const title = primary.querySelector('h2')?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
-  return `${primary.className}|${title}`;
+  const title = primary.querySelector('h1, h2')?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+  // Ships, defense and commander ships share one root class and no heading: their
+  // construction mode tells them apart, so switching sections re-measures the page.
+  const mode = primary.getAttribute('data-qa-construction-mode')
+    ?? primary.querySelector('[data-qa-construction-header]')?.getAttribute('data-qa-construction-header') ?? '';
+  return `${primary.className}|${mode}|${title}`;
 }
 
 function sameRoots(left: readonly HTMLElement[], right: readonly HTMLElement[]) {
@@ -65,6 +96,10 @@ export function GlobalPageScrollController() {
     let resizeObserver: ResizeObserver | null = null;
     let observedRoots: HTMLElement[] = [];
     let lastPageIdentity = '';
+    // Seeking animations forces a style pass over the whole page; it is only
+    // needed while a new page is still entering, not on every later mutation
+    // (the NPC catch-up mutates the DOM continuously).
+    let settleUntil = 0;
 
     const clearGeometry = () => {
       root.style.removeProperty('--asterion-scroll-workspace-height');
@@ -112,6 +147,7 @@ export function GlobalPageScrollController() {
       const identity = pageIdentity(pageRoots);
       const pageChanged = identity !== lastPageIdentity;
       lastPageIdentity = identity;
+      if (pageChanged) settleUntil = performance.now() + ENTRANCE_SETTLE_MS;
 
       // A long page may have already enlarged .workspace when navigation swaps its
       // contents. Measure the incoming page from the normal shell first; otherwise
@@ -151,7 +187,9 @@ export function GlobalPageScrollController() {
         : isFleetPage
           ? fleetContentHeight
           : baseWorkspaceHeight;
-      const contentHeight = measureContentHeight(pageContainer, stageScale, pageRoots);
+      const contentHeight = performance.now() < settleUntil
+        ? measureSettled(pageContainer, () => measureContentHeight(pageContainer, stageScale, pageRoots))
+        : measureContentHeight(pageContainer, stageScale, pageRoots);
       const needsScroll = contentHeight > availableHeight + OVERFLOW_EPSILON;
 
       // A root stretched to its container (min-height: 100%) always measures the
@@ -205,7 +243,7 @@ export function GlobalPageScrollController() {
     });
 
     window.addEventListener('resize', schedule);
-    // Entrances (src/motion.css) translate a screen for ~300 ms: re-measure once they settle.
+    // Entrances (src/motion.css) move a screen for up to ~1 s: re-measure once they settle.
     document.addEventListener('animationend', schedule);
     schedule();
 

@@ -26,7 +26,10 @@ import { RACE_CARDS, raceCard } from './race-catalog.ts';
 import { NewGameWizard } from './NewGameWizard.tsx';
 import { isDesktopShell, quitDesktopApp, type MenuScreen } from './session.ts';
 import type { SolarCrystalId } from '../../domain/sun-raid/config.ts';
+import { useMusic } from '../../audio/hooks.ts';
+import { usePointerDepth } from './pointer-depth.ts';
 import './menu.css';
+import './menu-motion.css';
 
 function useMenuScale() {
   const calc = () => Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
@@ -58,6 +61,9 @@ type MenuAppProps = {
 /** Main menu, «Новая игра», «Загрузить игру» and settings, on the same 1920×1080 stage as the game. */
 export function MenuApp({ initialScreen, onEnterSlot, entryProblem = null, onDismissEntryProblem }: MenuAppProps) {
   const scale = useMenuScale();
+  useMusic('menu');
+  const viewportRef = useRef<HTMLDivElement>(null);
+  usePointerDepth(viewportRef);
   const [screen, setScreen] = useState<MenuScreen>(initialScreen);
   const [index, setIndex] = useState<SaveSlotIndex>(() => readSlotIndex());
   const continueSlot = selectContinueSlot(index);
@@ -86,7 +92,7 @@ export function MenuApp({ initialScreen, onEnterSlot, entryProblem = null, onDis
   }, []);
 
   return (
-    <div className="menu-viewport" data-qa-menu={screen}>
+    <div className="menu-viewport" ref={viewportRef} data-qa-menu={screen}>
       <div className="menu-stage" style={{ '--menu-scale': scale } as CSSProperties} data-faction={themeFaction}>
         {/* Key art per race: the planet horizon and the crystal-ringed star are part of the image. */}
         <div className="menu-bg" aria-hidden="true" style={{ backgroundImage: `url(${menuBackground(themeFaction)})` }} data-qa-menu-bg={themeFaction} />

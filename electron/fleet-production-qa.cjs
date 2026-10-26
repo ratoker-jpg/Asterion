@@ -471,9 +471,14 @@ async function runTransportUiCycle(win, label, directory) {
       list: list ? { overflowY: listStyle?.overflowY || '', clientHeight: list.clientHeight, scrollHeight: list.scrollHeight } : null,
       cards,
       cargoFits: Boolean(cargoRect && cargoRect.left >= -1 && cargoRect.top >= -1 && cargoRect.right <= innerWidth + 1 && cargoRect.bottom <= innerHeight + 1),
+      cargoRect: cargoRect ? { top: Math.round(cargoRect.top), bottom: Math.round(cargoRect.bottom), left: Math.round(cargoRect.left), right: Math.round(cargoRect.right) } : null,
+      modalRect: (() => { const r = document.querySelector('.flight-briefing-v2')?.getBoundingClientRect(); return r ? { top: Math.round(r.top), bottom: Math.round(r.bottom), height: Math.round(r.height) } : null; })(),
+      viewport: { innerWidth, innerHeight },
+      rightColumn: Array.from(document.querySelector('.flight-briefing-v2__right')?.querySelectorAll(':scope > *, :scope > .flight-timeline-summary > *') ?? []).map((node) => (node.className || node.tagName) + ':' + Math.round(node.getBoundingClientRect().height)),
     };
   })()`);
   // Flight briefing v2 shows the whole composition (no inner scroller): every card keeps its content inside.
+  console.log(`[fleet-production-qa] ${label} briefing geometry ${JSON.stringify({ cargoRect: layout.cargoRect, modalRect: layout.modalRect, viewport: layout.viewport, rightColumn: layout.rightColumn })}`);
   if (!layout.list || layout.cards.length !== 5 || layout.cards.some((card) => card.height > 96 || !card.contentFits) || !layout.cargoFits) {
     throw new Error(`${label}: transport composition/cargo geometry contract failed ${JSON.stringify(layout)}`);
   }

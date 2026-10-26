@@ -40,6 +40,13 @@ export function NpcCatchupBanner({ replay }: { replay: NpcReplayProgress }) {
   }
   if (!pending) baseline.current = null;
 
+  // While the world catches up, decorative loops (motion.css) pause: with software
+  // rendering every animated layer repaints each frame and steals time from the replay.
+  useEffect(() => {
+    document.documentElement.classList.toggle('npc-catchup-active', pending);
+    return () => document.documentElement.classList.remove('npc-catchup-active');
+  }, [pending]);
+
   useEffect(() => {
     if (!pending) { setVisible(false); return; }
     const timer = window.setTimeout(() => setVisible(true), SHOW_AFTER_MS);

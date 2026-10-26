@@ -1,5 +1,6 @@
 import { createPortal } from 'react-dom';
 import { SunReportStrip } from './ui/sun-raid/SunReportStrip.tsx';
+import { EMPTY_ART } from './ui/ui-art.ts';
 import {
   useCallback,
   useEffect,
@@ -1296,7 +1297,7 @@ export function BattleReportsView({ planetName, coords, onBack }: { planetName: 
             expiresInMs={mode === 'recent' && !isDemoBattleReport(viewModel.id) ? Date.parse(viewModel.timestamp) + BATTLE_RECENT_RETENTION_MS - nowMs : null}
           />
         )) : (
-          <div className="battle-empty-v1"><span>◇</span><strong>{mode === 'recent' ? 'За последние 8 часов боёв не было.' : 'Нет сохранённых боевых отчётов.'}</strong><p>{mode === 'saved' ? 'Отметь нужный отчёт звездой во вкладке «Последние».' : 'Здесь появляются бои за последние 8 часов. Отметь отчёт звездой, чтобы сохранить его навсегда.'}</p></div>
+          <div className="battle-empty-v1"><img className="ui-empty-art" src={EMPTY_ART.battles} alt="" draggable={false} /><strong>{mode === 'recent' ? 'За последние 8 часов боёв не было.' : 'Нет сохранённых боевых отчётов.'}</strong><p>{mode === 'saved' ? 'Отметь нужный отчёт звездой во вкладке «Последние».' : 'Здесь появляются бои за последние 8 часов. Отметь отчёт звездой, чтобы сохранить его навсегда.'}</p></div>
         )}
       </div>
 

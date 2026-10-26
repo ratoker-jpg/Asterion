@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { GameRoot } from './ui/menu/GameRoot.tsx';
+import { installUiSounds } from './audio/ui-bindings.ts';
 import './ui/race/race-tokens.css';
 import './styles.css';
 import './universe-nav.css';
@@ -33,6 +34,8 @@ import './asterion-unified-theme.css';
 import './ui/race/race-theme.css';
 import './motion.css';
 import './final-polish.css';
+import './ui/fleet/fleet-unified.css';
+import './ui/unified-screens.css';
 
 const isElectron = navigator.userAgent.includes('Electron');
 
@@ -97,6 +100,8 @@ if (!isElectron) {
   updateWebStageFit();
   window.addEventListener('resize', updateWebStageFit);
 }
+
+installUiSounds();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -1,9 +1,10 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useMemo, useState, type CSSProperties } from 'react';
 import { describeOwnerPresence } from './application/owner-presence.ts';
 import { UNIVERSE_COORDINATE_OPEN_EVENT } from './application/flights.ts';
 import { getFactionGeneralAsset } from './domain/profile/faction-assets.ts';
 import type { RatedAllianceDetails, RatedOwnerIdentity } from './domain/runtime/state-store.ts';
 import { EmblemGlyph } from './CommandView';
+import { RATING_BACKDROP, RATING_MEDALS } from './ui/ui-art.ts';
 import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
 import { CURRENT_PLAYER_ID, createOwnerRatingEntries, createPlayerRatingEntries, withTestOwnerScoreFixtures } from './domain/rating/fixtures.ts';
 import { createAllianceRatingEntries } from './domain/rating/alliances.ts';
@@ -150,7 +151,7 @@ export function RatingView({
 
   return (
     <div className="utility-view rating-view-v2">
-      <header className="rating-heading-v2">
+      <header className="rating-heading-v2" style={{ '--rating-backdrop': `url("${RATING_BACKDROP}")` } as CSSProperties}>
         <div>
           <small className="utility-secondary">СТАТИСТИКА ГАЛАКТИКИ</small>
           <h1 className="utility-page-title">РЕЙТИНГ</h1>
@@ -316,7 +317,7 @@ function PlayerRow({
       aria-expanded={expanded}
       data-qa-rating-player-row={entry.id}
     >
-      <span className="rank-v2"><b>{entry.rank}</b></span>
+      <span className="rank-v2">{entry.rank <= 3 ? <img className="rating-medal-v2" src={RATING_MEDALS[entry.rank - 1]} alt="" draggable={false} /> : null}<b>{entry.rank}</b></span>
       <span className="identity-v2"><strong className="utility-data-text">{entry.name}</strong><i className="rating-expand-mark-v2" aria-hidden="true">{expanded ? '▴' : '▾'}</i></span>
       <span className={`race-label-v2 race-${entry.race}`}>{RACE_LABELS[entry.race]}</span>
       <span className="alliance-tag-v2">{entry.allianceTag ? `[${entry.allianceTag}]` : '—'}</span>
@@ -371,7 +372,7 @@ function AllianceTable({
           aria-expanded={expandedId === entry.id}
           data-qa-rating-alliance-row={entry.id}
         >
-          <span className="rank-v2"><b>{entry.rank}</b></span>
+          <span className="rank-v2">{entry.rank <= 3 ? <img className="rating-medal-v2" src={RATING_MEDALS[entry.rank - 1]} alt="" draggable={false} /> : null}<b>{entry.rank}</b></span>
           <span className="identity-v2"><span className="alliance-emblem-v2">{entry.emblem ? <EmblemGlyph compact emblem={entry.emblem} /> : entry.tag.slice(0, 1)}</span><strong className="utility-data-text">{entry.name}</strong><i className="rating-expand-mark-v2" aria-hidden="true">{expandedId === entry.id ? '▴' : '▾'}</i></span>
           <span className="alliance-tag-v2">[{entry.tag}]</span>
           <span className="utility-data-text">{entry.memberCount}/15</span>

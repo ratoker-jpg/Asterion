@@ -101,3 +101,9 @@
   .typography-layout-v2{grid-template-columns:1fr 280px}
   .typography-row-v2{grid-template-columns:210px 116px minmax(150px,1fr) 50px}
 }
+
+/* Sound settings reuse the typography rows: label · value · slider · test. */
+.sound-row-v2{grid-template-columns:minmax(180px,260px) 64px minmax(160px,1fr) 70px}
+.sound-row-v2 output{text-align:right;color:#e8fbff;font-weight:700;font-variant-numeric:tabular-nums}
+.sound-row-v2 input[type="range"]:disabled{opacity:.35}
+.settings-presets-v2 button.active{border-color:#ff8a8a;color:#ffd0d0}

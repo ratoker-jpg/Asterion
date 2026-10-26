@@ -1,0 +1,335 @@
+/* MENU MOTION — the «delight» screens: main menu, «Новая игра», load, settings.
+   Rare screens, so motion may be cinematic (up to ~1.4 s), but every effect
+   still uses only opacity, filter and the individual translate/scale/rotate
+   properties, and the reduced-motion rule at the end of menu.css switches all
+   of it off. Pointer-driven variables come from pointer-depth.ts:
+   --px/--py on .menu-viewport (window, −1…1), --mx/--my/--rx/--ry on the card
+   under the pointer. */
+
+.menu-stage {
+  --menu-spring: var(--ut-spring);
+  --menu-pop: var(--ut-spring-pop);
+}
+
+@keyframes menu-focus-up { from { opacity: 0; translate: 0 28px; filter: blur(10px); } }
+@keyframes menu-focus-left { from { opacity: 0; translate: -56px 0; filter: blur(10px); } }
+@keyframes menu-focus-right { from { opacity: 0; translate: 56px 0; filter: blur(12px); } }
+@keyframes menu-focus-down { from { opacity: 0; translate: 0 -22px; filter: blur(6px); } }
+@keyframes menu-card-rise { from { opacity: 0; translate: 0 90px; scale: .94; filter: blur(14px) brightness(1.6); } 70% { filter: blur(0) brightness(1.05); } }
+@keyframes menu-brand-in {
+  from { opacity: 0; letter-spacing: .5em; filter: blur(18px) drop-shadow(0 6px 30px rgba(0, 0, 0, 0)) drop-shadow(0 0 80px var(--race-glow)); }
+  60% { opacity: 1; }
+}
+@keyframes menu-brand-sheen { from { background-position: 160% 0, 0 0; } to { background-position: -60% 0, 0 0; } }
+@keyframes menu-line-draw { from { scale: 0 1; opacity: 0; } }
+@keyframes menu-line-run { from { translate: -100% 0; } to { translate: 420px 0; } }
+@keyframes menu-pop { from { scale: .6; opacity: 0; } }
+@keyframes menu-lock-in { 0% { filter: brightness(2.2) saturate(1.4); scale: 1.05; } 100% { filter: brightness(1) saturate(1); scale: 1; } }
+@keyframes menu-flash { from { opacity: .7; } to { opacity: 0; } }
+@keyframes menu-shock { from { scale: .2; opacity: .9; } to { scale: 2.6; opacity: 0; } }
+@keyframes menu-border-run { to { --menu-angle: 360deg; } }
+@keyframes menu-kenburns { from { scale: 1.02; translate: 0 0; } to { scale: 1.12; translate: -2% -1%; } }
+@keyframes menu-sheen-loop { 0%, 62% { translate: -160% 0; } 100% { translate: 360% 0; } }
+@keyframes menu-glow-breathe { 50% { box-shadow: 0 8px 46px var(--race-glow), inset 0 1px 0 rgba(255, 255, 255, .28); } }
+
+@property --menu-angle { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+
+/* ------------------------------------------------------------ depth: parallax */
+
+.menu-bg { translate: calc(var(--px, 0) * -18px) calc(var(--py, 0) * -12px); transition: translate 1.4s var(--menu-ease), background-image .8s ease; }
+.menu-stars { translate: calc(var(--px, 0) * -34px) calc(var(--py, 0) * -22px); transition: translate 1.6s var(--menu-ease); }
+.menu-teaser__row { translate: calc(var(--px, 0) * 10px) calc(var(--py, 0) * 6px); transition: translate 1.2s var(--menu-ease); }
+.menu-teaser__figure:nth-child(2) { translate: calc(var(--px, 0) * 8px) 0; transition: translate 1.2s var(--menu-ease); }
+
+/* ------------------------------------------------------------ spotlight
+   A soft light follows the pointer across the card under it. */
+.menu-viewport :is(.menu-race, .menu-nav__item, .menu-slot, .menu-showcase)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(420px circle at var(--mx, 50%) var(--my, 50%), color-mix(in srgb, var(--card-accent, var(--race-accent)) 22%, transparent), transparent 60%);
+  mix-blend-mode: screen;
+  transition: opacity 420ms var(--menu-ease);
+}
+.menu-viewport .menu-nav__item::after { background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), color-mix(in srgb, var(--race-accent) 26%, transparent), transparent 65%); }
+@media (hover: hover) and (pointer: fine) {
+  .menu-viewport :is(.menu-race, .menu-nav__item, .menu-slot, .menu-showcase):hover::after { opacity: 1; }
+}
+
+/* ------------------------------------------------------------ brand */
+
+.menu-brand { animation: none; }
+.menu-brand small { animation: menu-focus-down .9s var(--menu-ease) .25s backwards; }
+.menu-brand strong {
+  /* A light passes over the title once after it lands, then every 9 s. */
+  background:
+    linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, .95) 50%, transparent 62%) no-repeat,
+    linear-gradient(180deg, #ffffff 0%, #d9ecff 45%, var(--race-accent) 100%);
+  background-size: 40% 100%, 100% 100%;
+  background-position: 160% 0, 0 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  filter: blur(0) drop-shadow(0 6px 30px rgba(0, 0, 0, .65)) drop-shadow(0 0 40px var(--race-glow));
+  animation:
+    menu-brand-in 1.4s var(--menu-ease) backwards,
+    menu-brand-sheen 1.6s var(--ut-ease-in-out) 1.3s backwards,
+    menu-brand-sheen 1.6s var(--ut-ease-in-out) 10s infinite;
+}
+.menu-brand--compact strong { animation: menu-brand-in .9s var(--menu-ease) backwards; }
+.menu-brand i { position: relative; overflow: hidden; transform-origin: left center; animation: menu-line-draw 1.1s var(--menu-ease) .55s backwards; }
+.menu-brand i::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 90px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .95), transparent);
+  translate: -100% 0;
+  animation: menu-line-run 2.2s var(--ut-ease-in-out) 1.6s 1 both, menu-line-run 2.2s var(--ut-ease-in-out) 8s infinite;
+}
+
+/* ------------------------------------------------------------ main menu */
+
+.menu-viewport .menu-nav__item {
+  animation: menu-focus-left .9s var(--menu-spring) backwards;
+  animation-delay: calc(380ms + sibling-index() * 90ms);
+  transition: transform 520ms var(--menu-pop), border-color 220ms, background 220ms, box-shadow 320ms;
+}
+.menu-viewport .menu-nav__item:hover:not(:disabled),
+.menu-viewport .menu-nav__item:focus-visible {
+  transform: translateX(14px);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, .35), 0 0 30px color-mix(in srgb, var(--race-accent-strong) 18%, transparent);
+}
+.menu-viewport .menu-nav__item::before { transform-origin: center; transition: transform 420ms var(--menu-pop); }
+.menu-nav__index { transition: scale 420ms var(--menu-pop), color 220ms, opacity 220ms, text-shadow 220ms; }
+.menu-nav__copy b { transition: letter-spacing 520ms var(--menu-ease), color 220ms; }
+.menu-viewport .menu-nav__item:hover:not(:disabled) .menu-nav__index { scale: 1.3; opacity: 1; color: #fff; text-shadow: 0 0 14px var(--race-accent); }
+.menu-viewport .menu-nav__item:hover:not(:disabled) .menu-nav__copy b { letter-spacing: .12em; color: #fff; }
+.menu-nav__item:hover .menu-nav__chevron { transform: translateX(8px) rotate(45deg); }
+
+.menu-foot { animation: menu-focus-up .9s var(--menu-ease) 1s backwards; }
+
+/* Showcase (continue card): the frame rises, the general steps in from the right, the copy follows. */
+.menu-showcase { animation: menu-focus-right 1.1s var(--menu-ease) .3s backwards; }
+.menu-showcase__bg { animation: menu-kenburns 28s ease-in-out infinite alternate; }
+.menu-showcase__general {
+  animation: menu-focus-right 1.2s var(--menu-ease) .55s backwards;
+  translate: calc(var(--rx, 0) * -10px) calc(var(--ry, 0) * -6px);
+  transition: translate 1s var(--menu-ease), filter .4s;
+}
+.menu-showcase__copy > * { animation: menu-focus-up .8s var(--menu-spring) backwards; animation-delay: calc(500ms + sibling-index() * 70ms); }
+.menu-showcase:hover .menu-showcase__general { filter: drop-shadow(0 0 60px var(--race-glow)) brightness(1.06); }
+
+/* Teaser (no campaign yet): the three generals rise one after another; the one under the pointer steps forward, the others recede. */
+.menu-teaser { animation: none; }
+.menu-teaser__figure { animation: menu-card-rise 1.2s var(--menu-ease) backwards; animation-delay: calc(250ms + sibling-index() * 140ms); }
+.menu-teaser__figure figcaption { animation: menu-pop .6s var(--menu-pop) backwards; animation-delay: calc(900ms + sibling-index() * 140ms); }
+.menu-teaser__copy > * { animation: menu-focus-up .9s var(--menu-spring) backwards; animation-delay: calc(750ms + sibling-index() * 90ms); }
+.menu-teaser__figure img { transition: filter .5s, transform .7s var(--menu-pop), opacity .5s; }
+.menu-teaser__figure:hover img { transform: translateY(-14px) scale(1.03); }
+.menu-teaser__row:has(.menu-teaser__figure:hover) .menu-teaser__figure:not(:hover) img { filter: drop-shadow(0 0 20px var(--race-glow)) brightness(.55) saturate(.6); }
+
+/* ------------------------------------------------------------ buttons */
+
+.menu-viewport .menu-btn { transition: background var(--ut-motion-fast), border-color var(--ut-motion-fast), color var(--ut-motion-fast), transform 420ms var(--menu-pop), box-shadow 320ms, scale 320ms var(--menu-pop); }
+.menu-viewport .menu-btn:hover:not(:disabled) { transform: translateY(-2px); }
+.menu-viewport .menu-btn:active:not(:disabled) { transform: translateY(1px); scale: .96; transition-duration: 80ms; }
+.menu-viewport .menu-btn--primary { position: relative; overflow: hidden; isolation: isolate; }
+/* A blade of light crosses a primary button when the pointer arrives. */
+.menu-viewport .menu-btn--primary::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 45%;
+  z-index: -1;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .42), transparent);
+  translate: -160% 0;
+  pointer-events: none;
+}
+.menu-viewport .menu-btn--primary:hover:not(:disabled)::after { translate: 360% 0; transition: translate .9s var(--menu-ease); }
+.menu-viewport .menu-btn--primary:hover:not(:disabled) { box-shadow: 0 12px 40px var(--race-glow), inset 0 1px 0 rgba(255, 255, 255, .35); }
+.menu-viewport .menu-back { transition: transform 420ms var(--menu-pop), color 200ms, border-color 200ms; }
+.menu-viewport .menu-back span { display: inline-block; transition: translate 420ms var(--menu-pop); }
+.menu-viewport .menu-back:hover span { translate: -5px 0; }
+
+/* ------------------------------------------------------------ screen frame */
+
+.menu-screen-head > * { animation: menu-focus-down .8s var(--menu-spring) backwards; animation-delay: calc(sibling-index() * 70ms); }
+.menu-stepper li { transition: background .4s var(--menu-ease), border-color .4s, color .4s, box-shadow .4s; }
+.menu-stepper li span { transition: background .4s, border-color .4s, color .4s; }
+.menu-stepper li.is-current span { animation: menu-pop .55s var(--menu-pop) backwards; }
+.menu-stepper li.is-current { box-shadow: 0 0 24px color-mix(in srgb, var(--race-accent-strong) 30%, transparent); }
+.menu-actionbar { animation: menu-focus-up .9s var(--menu-spring) .45s backwards; }
+.menu-message { animation: menu-focus-down .5s var(--menu-pop) backwards; }
+
+/* ------------------------------------------------------------ race step (the reference)
+   Cards rise out of a bright blur one by one. Under the pointer: the column
+   widens (flex-grow, menu.css), the backdrop drifts against the pointer, the
+   general leans toward it, the roster reports for duty. Choosing a race
+   locks in: a shock ring, a flash of the card and a power-up of the general;
+   the chosen card keeps a light running around its frame. */
+.menu-viewport .menu-race { animation: menu-card-rise 1.1s var(--menu-ease) backwards; animation-delay: calc(120ms + sibling-index() * 120ms); }
+.menu-race__bg {
+  translate: calc(var(--rx, 0) * -14px) calc(var(--ry, 0) * -10px);
+  transition: transform 900ms var(--menu-ease), opacity .4s, translate 1.1s var(--menu-ease);
+}
+.menu-race__general { translate: calc(var(--rx, 0) * 10px) 0; transition: transform 620ms var(--menu-pop), filter 320ms, translate 1s var(--menu-ease); }
+.menu-race:hover .menu-race__general { transform: translateY(-10px) scale(1.025); }
+.menu-race.is-selected .menu-race__general { transform: translateY(-8px); }
+.menu-race__info { transition: translate 520ms var(--menu-spring); }
+.menu-race:hover .menu-race__info { translate: 0 -4px; }
+.menu-race__ability { transition: border-color .3s, box-shadow .4s, background .3s; }
+.menu-race:hover .menu-race__ability,
+.menu-race.is-selected .menu-race__ability { border-color: color-mix(in srgb, var(--card-accent) 70%, transparent); box-shadow: 0 0 22px color-mix(in srgb, var(--card-accent) 22%, transparent); }
+.menu-race__traits i { transition: scale .4s var(--menu-pop), box-shadow .3s; }
+.menu-race:hover .menu-race__traits i { scale: 1.35; box-shadow: 0 0 12px var(--card-accent); }
+.menu-race:hover .menu-race__roster span { animation: menu-pop .5s var(--menu-pop) backwards; animation-delay: calc(sibling-index() * 55ms); }
+.menu-race__badge { transition: background .3s, color .3s, box-shadow .3s; }
+.menu-race:hover .menu-race__badge { box-shadow: 0 0 18px color-mix(in srgb, var(--card-accent) 50%, transparent); }
+
+/* Lock-in. */
+.menu-race.is-selected .menu-race__general { animation: menu-lock-in .9s var(--menu-ease); }
+.menu-race.is-selected .menu-race__badge { animation: menu-pop .55s var(--menu-pop); box-shadow: 0 0 24px color-mix(in srgb, var(--card-accent) 60%, transparent); }
+.menu-race.is-selected .menu-race__vignette::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: 520px;
+  height: 520px;
+  margin: -260px 0 0 -260px;
+  border-radius: 50%;
+  border: 2px solid var(--card-accent);
+  box-shadow: 0 0 60px var(--card-accent), inset 0 0 60px var(--card-accent);
+  opacity: 0;
+  pointer-events: none;
+  animation: menu-shock .9s var(--ut-ease-expo);
+}
+.menu-race.is-selected .menu-race__vignette::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(70% 55% at 50% 45%, color-mix(in srgb, var(--card-accent) 55%, transparent), transparent 70%);
+  opacity: 0;
+  pointer-events: none;
+  animation: menu-flash .9s var(--menu-ease);
+}
+/* A light runs around the chosen frame. */
+.menu-viewport .menu-race::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  border-radius: inherit;
+  padding: 2px;
+  background: conic-gradient(from var(--menu-angle), transparent 0deg 250deg, color-mix(in srgb, var(--card-accent) 40%, transparent) 290deg, #fff 330deg, var(--card-accent) 345deg, transparent 360deg);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .5s;
+}
+.menu-viewport .menu-race.is-selected::before { opacity: 1; animation: menu-border-run 4.5s linear infinite; }
+
+/* ------------------------------------------------------------ world step */
+
+.menu-world-form { animation: menu-focus-left .9s var(--menu-spring) .1s backwards; }
+.menu-world-preview { animation: menu-focus-right .9s var(--menu-spring) .2s backwards; }
+.menu-world-form > * { animation: menu-focus-up .7s var(--menu-spring) backwards; animation-delay: calc(150ms + min(sibling-index(), 10) * 50ms); }
+.menu-world-summary div { animation: menu-focus-up .7s var(--menu-spring) backwards; animation-delay: calc(450ms + sibling-index() * 60ms); transition: border-color .3s, translate .4s var(--menu-pop); }
+.menu-world-summary div:hover { border-color: var(--race-border); translate: 0 -3px; }
+.menu-atlas > g { animation: menu-atlas-in 1s var(--menu-ease) backwards; animation-delay: calc(300ms + sibling-index() * 110ms); }
+@keyframes menu-atlas-in { from { opacity: 0; filter: blur(8px) brightness(2); } }
+.menu-viewport .menu-seg button { transition: background .3s var(--menu-ease), color .2s, box-shadow .3s; }
+.menu-viewport .menu-seg button.is-on { animation: menu-pop .4s var(--menu-pop); }
+.menu-race-mix__bar i { transition: width .5s var(--menu-spring); }
+
+/* ------------------------------------------------------------ confirm step */
+
+.menu-confirm-hero { animation: menu-focus-left 1s var(--menu-spring) .05s backwards; }
+.menu-confirm-hero__bg { animation: menu-kenburns 30s ease-in-out infinite alternate; }
+.menu-confirm-hero__general { animation: menu-card-rise 1.3s var(--menu-ease) .25s backwards; }
+.menu-confirm-hero__ship { animation: menu-focus-right 1.4s var(--menu-ease) .4s backwards, menu-float 9s ease-in-out 1.8s infinite; }
+.menu-confirm-hero__copy > * { animation: menu-focus-up .9s var(--menu-spring) backwards; animation-delay: calc(600ms + sibling-index() * 90ms); }
+.menu-confirm-summary { animation: menu-focus-right 1s var(--menu-spring) .15s backwards; }
+.menu-confirm-summary > *, .menu-confirm-summary dl div { animation: menu-focus-up .7s var(--menu-spring) backwards; animation-delay: calc(260ms + min(sibling-index(), 10) * 55ms); }
+.menu-confirm-roster span { animation: menu-pop .55s var(--menu-pop) backwards; animation-delay: calc(700ms + sibling-index() * 70ms); }
+.menu-viewport .menu-btn--start:not(:disabled) { animation: menu-focus-up .8s var(--menu-spring) .7s backwards, menu-glow-breathe 3.2s ease-in-out 1.6s infinite; }
+.menu-viewport .menu-btn--start:not(:disabled)::after { animation: menu-sheen-loop 4.2s var(--ut-ease-in-out) 1.6s infinite; }
+
+/* ------------------------------------------------------------ load screen */
+
+.menu-slot { animation: menu-card-rise .9s var(--menu-ease) backwards; animation-delay: calc(100ms + min(sibling-index(), 8) * 80ms); transition: border-color .3s, box-shadow .4s, translate .5s var(--menu-pop); }
+.menu-slot:hover { translate: 0 -4px; }
+.menu-slot__bg { transition: scale 1.2s var(--menu-ease), opacity .4s; }
+.menu-slot:hover .menu-slot__bg { scale: 1.08; opacity: .8; }
+.menu-slot__general { transition: translate .9s var(--menu-pop), filter .4s; }
+.menu-slot:hover .menu-slot__general { translate: calc(var(--rx, 0) * 6px) -10px; filter: drop-shadow(0 0 26px var(--race-glow)) brightness(1.08); }
+.menu-empty { animation: menu-focus-up 1s var(--menu-spring) .2s backwards; }
+
+/* ------------------------------------------------------------ launch: entering a campaign
+   GameRoot shows this overlay for 1.5 s over the freshly mounted game: a
+   flash, a shock ring and star streaks rushing past — the jump in. */
+.menu-launch { position: fixed; inset: 0; z-index: 40000; pointer-events: none; overflow: hidden; }
+.menu-launch__flash {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 45%, #ffffff 0%, color-mix(in srgb, var(--race-accent, #56d9f2) 80%, #fff) 18%, color-mix(in srgb, var(--race-accent, #56d9f2) 35%, #01040a) 45%, #01040a 80%);
+  animation: menu-launch-flash 1.5s var(--ut-ease-expo) forwards;
+}
+.menu-launch__streaks {
+  position: absolute;
+  left: 50%;
+  top: 45%;
+  width: 260vmax;
+  height: 260vmax;
+  margin: -130vmax 0 0 -130vmax;
+  /* Three periods that never line up (5.3°, 3.7°, 11.9°) read as random streaks, not a sunburst. */
+  background:
+    repeating-conic-gradient(from 0deg, rgba(255, 255, 255, .6) 0deg .3deg, transparent .3deg 5.3deg),
+    repeating-conic-gradient(from 2deg, rgba(200, 240, 255, .38) 0deg .2deg, transparent .2deg 3.7deg),
+    repeating-conic-gradient(from 1deg, rgba(255, 255, 255, .3) 0deg .5deg, transparent .5deg 11.9deg);
+  -webkit-mask: radial-gradient(circle, transparent 7%, #000 24%, rgba(0, 0, 0, .45) 42%, transparent 62%);
+  mask: radial-gradient(circle, transparent 7%, #000 24%, rgba(0, 0, 0, .45) 42%, transparent 62%);
+  animation: menu-launch-streaks 1.3s cubic-bezier(.3, 0, .2, 1) forwards;
+}
+.menu-launch__ring {
+  position: absolute;
+  left: 50%;
+  top: 45%;
+  width: 60vmin;
+  height: 60vmin;
+  margin: -30vmin 0 0 -30vmin;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  box-shadow: 0 0 80px var(--race-accent, #56d9f2), inset 0 0 80px var(--race-accent, #56d9f2);
+  animation: menu-shock 1.1s var(--ut-ease-expo) .05s both;
+}
+@keyframes menu-launch-flash { 0% { opacity: 1; } 25% { opacity: .85; } 100% { opacity: 0; } }
+@keyframes menu-launch-streaks { from { scale: .25; opacity: 1; } to { scale: 1.6; opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .menu-launch__streaks, .menu-launch__ring { display: none; }
+  .menu-launch__flash { animation-duration: .4s; }
+}
+
+/* ------------------------------------------------------------ world atlas (SVG galaxy) */
+.menu-atlas__disc { fill: rgba(4, 10, 18, .55); stroke: rgba(126, 200, 220, .12); }
+.menu-atlas__dust { fill: #dcecff; }
+.menu-atlas__arms path { fill: none; stroke: color-mix(in srgb, var(--race-accent-strong) 55%, #9fc7ff); stroke-width: 9; stroke-linecap: round; opacity: .22; }
+.menu-atlas__arm-line { fill: none; stroke: rgba(200, 225, 255, .14); stroke-width: 1; stroke-dasharray: 2 5; }
+.menu-atlas__core { mix-blend-mode: screen; }
+.menu-atlas__star { fill: rgba(225, 240, 255, .8); }
+.menu-atlas__halo { opacity: .22; filter: url(#menu-atlas-soft); }
+.menu-atlas__galaxy .menu-atlas__core { animation: menu-atlas-breathe 6s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: center; }
+@keyframes menu-atlas-breathe { from { opacity: .8; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .menu-atlas__galaxy .menu-atlas__core { animation: none; } }
+/* The generated galaxy art carries the look; the dotted guide shows where the systems sit. */
+.menu-atlas__art { opacity: .95; }
+.menu-atlas__arm-line { stroke: rgba(210, 232, 255, .22); stroke-dasharray: 2 6; }
+.menu-atlas__disc { fill: none; stroke: rgba(126, 200, 220, .08); }

@@ -49,7 +49,7 @@ Buttons and inputs use the shared radius tokens and 12px control text, with 14px
 
 ## Motion
 
-All motion follows `docs/ui/motion-system.md` (tokens `--ut-ease-*` / `--ut-motion-*`, recipes in `src/motion.css`): opacity plus the individual `translate`/`scale` properties only, `--ut-ease-out` entrances under 300 ms in game, mount-only entrances with `backwards` fill, press feedback at 97%, mouse-only hover lift for primary actions, and a reduced-motion variant for everything. Frequently updated values (resources, timers) never animate.
+All motion follows `docs/ui/motion-system.md` (tokens `--ut-ease-*` / `--ut-spring*` / `--ut-motion-*`, recipes in `src/motion.css` and `src/ui/menu/menu-motion.css`): composited properties only (opacity, filter, individual `translate`/`scale`/`rotate`), screens and cards come into focus from a blur on a spring with staggered panels, a holographic sweep marks every new screen, mount-only entrances with `backwards` fill, press feedback at 96% with a spring back, mouse-only hover lift and glow, and a reduced-motion variant for everything. Frequently updated values (resources, timers) never animate. Sound follows `docs/ui/sound-system.md`.
 
 ## Layout and overflow
 

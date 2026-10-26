@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { SunReportStrip } from './ui/sun-raid/SunReportStrip.tsx';
 import { BattleReportModal } from './BattleReportsView';
 import { FactionGeneralPortrait } from './ui/FactionGeneralPortrait.tsx';
+import { EMPTY_ART } from './ui/ui-art.ts';
 import { EmblemGlyph } from './ui/command/EmblemGlyph.tsx';
 import pirateWarlordArt from '../assets/source/characters/pirates/pirate_warlord.png';
 import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
@@ -501,13 +502,13 @@ function BattleDossier({ item, report, saved, rating, playerOwnerId, onToggleSav
 
 function EmptyDossier({ category, savedOnly }: { category: ReportCategory; savedOnly: boolean }) {
   const copy = EMPTY_COPY[category];
-  return <div className="reports-empty-dossier"><span className="reports-v2-art reports-v2-empty-art"><ReportGlyph kind={category} /></span><strong>{savedOnly ? 'СОХРАНЁННЫХ БОЁВ НЕТ' : copy.title.toUpperCase()}</strong><span>{savedOnly ? 'Сохрани нужный бой звездой в «Докладах» или во вкладке Флоты → Битвы.' : copy.body}</span></div>;
+  return <div className="reports-empty-dossier"><img className="ui-empty-art" src={savedOnly ? EMPTY_ART.battles : EMPTY_ART.reports} alt="" draggable={false} /><strong>{savedOnly ? 'СОХРАНЁННЫХ БОЁВ НЕТ' : copy.title.toUpperCase()}</strong><span>{savedOnly ? 'Сохрани нужный бой звездой в «Докладах» или во вкладке Флоты → Битвы.' : copy.body}</span></div>;
 }
 
 function EmptyFolder({ folder }: { folder: MessageFolder }) {
   const title = folder.category ? EMPTY_COPY[folder.category].title : folder.emptyTitle ?? 'Раздел пока пуст';
   const body = folder.category ? EMPTY_COPY[folder.category].body : folder.emptyBody ?? 'Для этого раздела пока нет подключённого источника данных.';
-  return <div className="reports-empty-dossier reports-empty-folder" data-qa-empty-folder><span className="reports-v2-art reports-v2-empty-art"><ReportGlyph kind={folder.glyph} /></span><strong>{title.toUpperCase()}</strong><span>{body}</span></div>;
+  return <div className="reports-empty-dossier reports-empty-folder" data-qa-empty-folder><img className="ui-empty-art" src={EMPTY_ART.reports} alt="" draggable={false} /><strong>{title.toUpperCase()}</strong><span>{body}</span></div>;
 }
 
 function ProfileAvatar({ displayName, factionId }: { displayName: string; factionId: string }) {

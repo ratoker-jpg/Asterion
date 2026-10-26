@@ -9,6 +9,8 @@ import { ShipInfoController } from '../../ShipInfoController';
 import { DefenseInfoController } from '../../DefenseInfoController';
 import { UtilityScreensPortal } from '../../UtilityScreensPortal';
 import { NavigationProvider } from '../navigation.tsx';
+import { useMusic } from '../../audio/hooks.ts';
+import { LaunchOverlay } from './LaunchOverlay.tsx';
 import { ACTIVE_RUNTIME_MODE } from '../../domain/runtime/mode.ts';
 import { LEGACY_PRODUCTION_SAVE_KEY, selectContinueSlot, type SaveSlotMeta } from '../../domain/session/slots.ts';
 import { createInitialSaveState } from '../../application/persistence.ts';
@@ -18,9 +20,11 @@ import { TestSaveGuard } from './SaveProblemScreen.tsx';
 import { applySlotRuntime, consumeNextScreen, wantsAutostart, type ActiveSession } from './session.ts';
 
 /** The running campaign: the game screen and its global controllers. */
-function GameShell({ session }: { session: ActiveSession | null }) {
+function GameShell({ session, launched = false }: { session: ActiveSession | null; launched?: boolean }) {
+  useMusic('game');
   return (
     <NavigationProvider>
+      {launched ? <LaunchOverlay /> : null}
       <App session={session} />
       <PrototypeResetController />
       <GlobalPageScrollController />
@@ -76,6 +80,8 @@ function ProductionRoot() {
   });
   const [session, setSession] = useState<ActiveSession | null>(start.session);
   const [entryProblem, setEntryProblem] = useState<SlotEntryProblem | null>(start.problem);
+  // Entered from the menu (not autostart): the game opens with the jump-in overlay.
+  const [launched, setLaunched] = useState(false);
   // Continue, Load and a freshly created slot all pass the same health gate.
   const tryEnter = (slot: SaveSlotMeta) => {
     const check = checkSlotEntry(slot);
@@ -83,9 +89,10 @@ function ProductionRoot() {
       setEntryProblem({ slotName: slot.name, message: check.message });
       return;
     }
+    setLaunched(true);
     setSession(enter(slot));
   };
-  if (session) return <GameShell session={session} />;
+  if (session) return <GameShell session={session} launched={launched} />;
   return (
     <MenuApp
       initialScreen={initialScreen}
