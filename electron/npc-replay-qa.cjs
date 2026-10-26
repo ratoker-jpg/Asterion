@@ -30,11 +30,14 @@ const OUTPUT = process.env.ASTERION_QA_OUTPUT
   || path.join(ROOT, 'artifacts', `${FULL_WORLD ? 'npc-replay-full-world-qa' : 'npc-replay-qa'}${CATCHUP_DAYS === 14 ? '' : `-${CATCHUP_DAYS}d`}`);
 // Owner decision (25.10.2026): a long absence is caught up in full behind a
 // progress bar and the player waits, so there is no fixed duration limit.
-// One catch-up day of 100 owners takes several minutes of renderer compute;
-// the wait bound only catches a stalled catch-up. The gate asserts that the
-// banner reports progress, the catch-up completes, commands are refused while
-// it runs and the player state stays intact.
-const CATCHUP_TIMEOUT_MS = Number(process.env.ASTERION_QA_CATCHUP_TIMEOUT_MS) || 900_000;
+// One catch-up day of 100 owners takes about 14 minutes of renderer compute on
+// a CI runner since the NPC endgame. The gate asserts that the banner reports
+// progress, the catch-up completes, commands are refused while it runs and the
+// player state stays intact. Duration is not a gate: the run fails when the
+// replay cursor stops advancing for CATCHUP_STALL_MS, and the overall bound
+// only stops a run that never ends.
+const CATCHUP_TIMEOUT_MS = Number(process.env.ASTERION_QA_CATCHUP_TIMEOUT_MS) || 1_800_000;
+const CATCHUP_STALL_MS = Number(process.env.ASTERION_QA_CATCHUP_STALL_MS) || 120_000;
 const FIXTURE_ISOLATION = FULL_WORLD
   ? 'None: 10 galaxies, 100 NPC, asteroid simulation, exploration and pirate timelines run from campaign start.'
   : 'NPC economy replay only; exploration and pirate cursors are frozen at the fixed horizon and asteroid simulation is absent. Not a full-campaign replay.';
@@ -102,6 +105,27 @@ async function waitFor(win, expression, timeoutMs = 30_000) {
     await sleep(60);
   }
   throw new Error(`Timed out waiting for: ${expression}`);
+}
+
+// Waits for the published replay cursor to reach its target. Fails when the
+// cursor has not moved for CATCHUP_STALL_MS or the overall bound runs out.
+async function waitForCatchup(win) {
+  const started = Date.now();
+  let lastCursor = null;
+  let lastAdvanceAt = started;
+  while (Date.now() - started < CATCHUP_TIMEOUT_MS) {
+    const replay = await run(win, 'window.__npcReplayQa?.latest ?? null');
+    if (replay && replay.targetAt <= replay.processedThroughAt) return;
+    const cursor = replay?.processedThroughAt ?? null;
+    if (cursor !== lastCursor) {
+      lastCursor = cursor;
+      lastAdvanceAt = Date.now();
+    } else if (Date.now() - lastAdvanceAt > CATCHUP_STALL_MS) {
+      throw new Error(`NPC catch-up stalled: cursor ${cursor} did not advance for ${CATCHUP_STALL_MS} ms`);
+    }
+    await sleep(1_000);
+  }
+  throw new Error(`NPC catch-up did not finish within ${CATCHUP_TIMEOUT_MS} ms`);
 }
 
 async function load(win, search) {
@@ -247,9 +271,10 @@ async function runScenario() {
         new PerformanceObserver((list) => { for (const entry of list.getEntries()) qa.longTasks.push(entry.duration); })
           .observe({ type: 'longtask', buffered: false });
       } catch { /* longtask timing unavailable */ }
-      // Full world: the save grows to tens of MB, so parsing it every 16 ms
-      // would measure the probe. Read the published runtime state instead.
-      if (${FULL_WORLD}) window.addEventListener('asterion:runtime-state-changed', (event) => {
+      // The save grows to tens of MB (about 18 MB even in the scoped world), so
+      // parsing it every 16 ms on the renderer thread would measure the probe
+      // and starve the catch-up itself. Read the published runtime state instead.
+      window.addEventListener('asterion:runtime-state-changed', (event) => {
         const replay = event.detail?.npcReplay;
         if (!replay) return;
         qa.publications += 1;
@@ -259,22 +284,11 @@ async function runScenario() {
         const now = performance.now();
         qa.gaps.push(now - qa.last);
         qa.last = now;
-        if (${FULL_WORLD}) {
-          const replay = qa.latest;
-          if (replay && replay.processedThroughAt !== qa.lastCursor) {
-            qa.lastCursor = replay.processedThroughAt;
-            qa.progress.push({ processedThroughAt: replay.processedThroughAt, targetAt: replay.targetAt, at: now });
-          }
-          return;
+        const replay = qa.latest;
+        if (replay && replay.processedThroughAt !== qa.lastCursor) {
+          qa.lastCursor = replay.processedThroughAt;
+          qa.progress.push({ processedThroughAt: replay.processedThroughAt, targetAt: replay.targetAt, at: now });
         }
-        try {
-          const save = JSON.parse(localStorage.getItem(${JSON.stringify(saveKey)}) || 'null');
-          const replay = save?.npcReplay;
-          if (replay && replay.processedThroughAt !== qa.lastCursor) {
-            qa.lastCursor = replay.processedThroughAt;
-            qa.progress.push({ processedThroughAt: replay.processedThroughAt, targetAt: replay.targetAt });
-          }
-        } catch { /* surface a missing final save through the final assertion */ }
       }, 16);
     })()`);
 
@@ -341,15 +355,9 @@ async function runScenario() {
     })() : null;
     let catchupWaitError = null;
     try {
-      await waitFor(win, FULL_WORLD
-        ? `(() => { const r = window.__npcReplayQa?.latest; return Boolean(r && r.targetAt <= r.processedThroughAt); })()`
-        : `(() => {
-      try { const save = JSON.parse(localStorage.getItem(${JSON.stringify(saveKey)}) || 'null');
-        return save?.npcReplay?.targetAt <= save?.npcReplay?.processedThroughAt; }
-      catch { return false; }
-      })()`, CATCHUP_TIMEOUT_MS);
+      await waitForCatchup(win);
       // Completion is written at once; give the write and its storage read a moment.
-      if (FULL_WORLD) await waitFor(win, `(() => {
+      await waitFor(win, `(() => {
         try { const save = JSON.parse(localStorage.getItem(${JSON.stringify(saveKey)}) || 'null');
           return save?.npcReplay?.targetAt <= save?.npcReplay?.processedThroughAt; }
         catch { return false; }
