@@ -82,6 +82,7 @@ import {
 } from './ui/navigation.tsx';
 import { AmountSlider } from './ui/AmountSlider';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
+import { EMPTY_ART, MISSION_BANNERS } from './ui/ui-art.ts';
 import './building-card.css';
 import './fleet-workspace.css';
 import './ui/fleet/fleet-root-v2.css';
@@ -1531,6 +1532,7 @@ function FleetWorkspace({
                   <span>МИССИЯ</span><span>МАРШРУТ</span><span>СТАТУС</span><span>ОСТАЛОСЬ</span><span>ДЕЙСТВИЕ</span>
                 </div>
                 {activeFlightRecords.length === 0 ? <div className="fleet-flight-empty-v1" data-qa-flight-empty>
+                  <img className="ui-empty-art" src={EMPTY_ART.flights} alt="" draggable={false} />
                   <strong>Активных полётов нет</strong>
                   <span>Флоты, находящиеся в пути, будут отображаться здесь.</span>
                 </div> : activeFlightRecords.map((flight) => {
@@ -1812,7 +1814,7 @@ function FleetWorkspace({
           ...(flight.returnAt ? [{ label: 'ВОЗВРАТ', at: flight.returnAt, done: flight.phase === 'completed' }] : []),
         ];
         return createPortal(<div className="resource-building-action-confirm-backdrop" data-qa-flight-details-backdrop onMouseDown={close}>
-          <section className="resource-building-action-confirm fleet-expedition-details flight-details-v3" role="dialog" aria-modal="true" aria-label="Подробности рейса" data-qa-flight-details-dialog onMouseDown={(event) => event.stopPropagation()}>
+          <section className={`resource-building-action-confirm fleet-expedition-details flight-details-v3${MISSION_BANNERS[flight.missionId] ? ' has-banner' : ''}`} style={MISSION_BANNERS[flight.missionId] ? { '--mission-banner': `url("${MISSION_BANNERS[flight.missionId]}")` } as CSSProperties : undefined} role="dialog" aria-modal="true" aria-label="Подробности рейса" data-qa-flight-details-dialog onMouseDown={(event) => event.stopPropagation()}>
             <header>
               <div>
                 <small>АКТИВНЫЙ РЕЙС · {flightMissionLabel(flight.missionId).toUpperCase()}</small>
@@ -1874,7 +1876,7 @@ function FleetWorkspace({
       ) : null}
       {previewOpen ? createPortal(
         <div className="resource-building-action-confirm-backdrop" data-qa-flight-preview-backdrop onMouseDown={closeFlightPreview}>
-          <section className="resource-building-action-confirm flight-preview-modal flight-timeline-modal flight-briefing-v2" role="dialog" aria-modal="true" aria-labelledby="flight-preview-title" onMouseDown={(event) => event.stopPropagation()}>
+          <section className={`resource-building-action-confirm flight-preview-modal flight-timeline-modal flight-briefing-v2${MISSION_BANNERS[missionId] ? ' has-banner' : ''}`} style={MISSION_BANNERS[missionId] ? { '--mission-banner': `url("${MISSION_BANNERS[missionId]}")` } as CSSProperties : undefined} role="dialog" aria-modal="true" aria-labelledby="flight-preview-title" onMouseDown={(event) => event.stopPropagation()}>
             <header className="flight-timeline-head">
               <div>
                 <small>ПЛАН ПЕРЕЛЁТА · {selectedMission.label.toUpperCase()}</small>

@@ -4,6 +4,7 @@ import { getDesktopBridge } from './domain/settings/desktop.ts';
 import { AUDIO_VOLUME_MAX, AUDIO_VOLUME_MIN, createDefaultAudioPreferences, type AudioChannel } from './domain/settings/audio.ts';
 import { audio, playSound } from './audio/engine.ts';
 import { useAudioPreferences } from './audio/hooks.ts';
+import { SETTINGS_ICONS } from './ui/ui-art.ts';
 import type { SoundId } from './audio/sounds.ts';
 import {
   TYPOGRAPHY_MAX,
@@ -96,6 +97,7 @@ export function SettingsView({ preferences, onPreferencesChange, onReset }: Sett
               className={`utility-control ${section === item.id ? 'active' : ''}`}
               onClick={() => setSection(item.id)}
             >
+              <img className="settings-nav-icon-v2" src={SETTINGS_ICONS[item.id]} alt="" draggable={false} />
               <span>{item.label}</span>
               <small className="utility-secondary">{item.subtitle}</small>
               <b>›</b>

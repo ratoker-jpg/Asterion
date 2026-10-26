@@ -19,6 +19,7 @@ import type { SaveSlotMeta } from '../../domain/session/slots.ts';
 import { createInitialSaveState } from '../../application/persistence.ts';
 import { createSlot } from '../../application/slots.ts';
 import { RACE_CARDS, raceCard, type RaceCard } from './race-catalog.ts';
+import { ATLAS_GALAXIES } from '../ui-art.ts';
 
 type Step = 'race' | 'world' | 'confirm';
 const STEPS: ReadonlyArray<{ id: Step; label: string }> = [
@@ -381,38 +382,16 @@ function WorldAtlas({ config }: { config: NewGameConfig }) {
     const key = `${planet.coordinate.galaxy}:${planet.coordinate.system}`;
     npcBySystem.set(key, [...(npcBySystem.get(key) ?? []), planet.raceId as PlayerFactionId]);
   }
-  // Spiral arms follow the real system layout; dust and nebula tint are seeded by the galaxy number.
-  const armPath = (offset: number) => Array.from({ length: 60 }, (_, step) => {
+  // The dotted guide follows the real system layout over the generated galaxy art.
+  const armPath = Array.from({ length: 60 }, (_, step) => {
     const t = step / 59;
-    const angle = t * Math.PI * 4.2 + offset;
+    const angle = t * Math.PI * 4.2;
     const radius = 0.05 + t * 0.43;
     return `${step ? 'L' : 'M'}${((0.5 + Math.cos(angle) * radius) * cell).toFixed(1)} ${((0.5 + Math.sin(angle) * radius * 0.82) * cell).toFixed(1)}`;
   }).join(' ');
-  const dust = (galaxy: number) => {
-    let seed = galaxy * 9301 + 49297;
-    const next = () => { seed = (seed * 233280 + 49297) % 2147483647; return seed / 2147483647; };
-    return Array.from({ length: 70 }, () => {
-      const angle = next() * Math.PI * 2;
-      const radius = Math.sqrt(next()) * 0.46;
-      return { x: 0.5 + Math.cos(angle) * radius, y: 0.5 + Math.sin(angle) * radius * 0.86, r: 0.4 + next() * 1.1, o: 0.15 + next() * 0.5 };
-    });
-  };
-  const NEBULA = ['#3f6dff', '#8b5cff', '#2fd3c4', '#ff5d8f', '#f2a64a'];
   return (
     <svg className="menu-atlas" viewBox={`0 0 ${columns * cell} ${rows * cell}`} role="img" aria-label={`Атлас: ${count} галактик, ${world.npcPlanets.length} NPC`} data-qa-world-atlas>
       <defs>
-        <radialGradient id="menu-atlas-core">
-          <stop offset="0%" stopColor="#fff7e6" stopOpacity=".95" />
-          <stop offset="18%" stopColor="#ffd49a" stopOpacity=".55" />
-          <stop offset="55%" stopColor="var(--race-accent-strong)" stopOpacity=".12" />
-          <stop offset="100%" stopColor="#000" stopOpacity="0" />
-        </radialGradient>
-        {NEBULA.map((color, index) => (
-          <radialGradient key={color} id={`menu-atlas-nebula-${index}`}>
-            <stop offset="0%" stopColor={color} stopOpacity=".32" />
-            <stop offset="100%" stopColor={color} stopOpacity="0" />
-          </radialGradient>
-        ))}
         <filter id="menu-atlas-soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation={Math.max(2, cell * 0.012)} /></filter>
       </defs>
       {Array.from({ length: count }, (_, index) => {
@@ -422,15 +401,8 @@ function WorldAtlas({ config }: { config: NewGameConfig }) {
         return (
           <g key={galaxy} transform={`translate(${ox} ${oy})`} className="menu-atlas__galaxy">
             <circle cx={cell / 2} cy={cell / 2} r={cell * 0.46} className="menu-atlas__disc" />
-            <ellipse cx={cell * (0.38 + (galaxy % 3) * 0.08)} cy={cell * 0.42} rx={cell * 0.3} ry={cell * 0.2} fill={`url(#menu-atlas-nebula-${galaxy % NEBULA.length})`} />
-            <ellipse cx={cell * 0.6} cy={cell * (0.56 + (galaxy % 2) * 0.06)} rx={cell * 0.22} ry={cell * 0.15} fill={`url(#menu-atlas-nebula-${(galaxy + 2) % NEBULA.length})`} />
-            {dust(galaxy).map((point, dustIndex) => <circle key={dustIndex} cx={point.x * cell} cy={point.y * cell} r={point.r} className="menu-atlas__dust" opacity={point.o} />)}
-            <g className="menu-atlas__arms" filter="url(#menu-atlas-soft)">
-              <path d={armPath(0)} />
-              <path d={armPath(Math.PI)} />
-            </g>
-            <path d={armPath(0)} className="menu-atlas__arm-line" />
-            <circle cx={cell / 2} cy={cell / 2} r={cell * 0.16} fill="url(#menu-atlas-core)" className="menu-atlas__core" />
+            <image href={ATLAS_GALAXIES[(galaxy - 1) % ATLAS_GALAXIES.length]} x={cell * 0.03} y={cell * 0.03} width={cell * 0.94} height={cell * 0.94} preserveAspectRatio="xMidYMid meet" className="menu-atlas__art" />
+            <path d={armPath} className="menu-atlas__arm-line" />
             <text x={cell / 2} y={cell * 0.97} className="menu-atlas__label" textAnchor="middle">ГАЛАКТИКА {String(galaxy).padStart(2, '0')}</text>
             {Array.from({ length: 40 }, (_, systemIndex) => {
               const system = systemIndex + 1;

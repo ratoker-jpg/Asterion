@@ -154,3 +154,73 @@ html body :is(.trade-submit, .recycling-start, .production-bots-distribute, .res
   box-shadow: 0 0 20px rgba(86, 217, 242, .28) !important;
   clip-path: none !important;
 }
+
+/* ==========================================================================
+   Generated interface art (src/ui/ui-art.ts): mission banners, empty states,
+   rating medals and backdrop, settings icons.
+   ========================================================================== */
+
+/* Mission banner behind the head of the flight plan and the flight details:
+   the art sits right, the left side fades to the panel for the title. */
+html body :is(.flight-briefing-v2.has-banner .flight-timeline-head, .flight-details-v3.has-banner > header) {
+  position: relative;
+  min-height: 132px;
+  align-items: flex-start;
+  padding: 18px 20px !important;
+  border: 1px solid var(--ut-border) !important;
+  border-radius: var(--ut-r-card) !important;
+  background:
+    linear-gradient(90deg, rgba(6, 12, 16, .97) 0%, rgba(6, 12, 16, .82) 34%, rgba(6, 12, 16, .15) 68%, rgba(6, 12, 16, 0) 100%),
+    linear-gradient(0deg, rgba(6, 12, 16, .55), transparent 55%),
+    var(--mission-banner) right center / cover no-repeat !important;
+  overflow: hidden;
+}
+html body .flight-details-v3.has-banner > header { min-height: 150px; margin: -2px -2px 0; }
+html body .flight-details-v3.has-banner > header h3 { font-size: 22px; text-shadow: 0 2px 12px rgba(0, 0, 0, .8); }
+
+/* Empty states: one calm illustration above the copy. */
+html body .ui-empty-art {
+  display: block;
+  width: min(420px, 72%);
+  height: auto;
+  margin: 0 auto 8px;
+  opacity: .92;
+  filter: drop-shadow(0 18px 30px rgba(0, 0, 0, .45));
+  pointer-events: none;
+  user-select: none;
+  animation: ui-empty-float 9s ease-in-out infinite;
+}
+@keyframes ui-empty-float { 50% { translate: 0 -6px; } }
+html body :is(.repair-empty-v1, .battle-empty-v1, .fleet-flight-empty-v1, .reports-empty-dossier) {
+  display: grid !important;
+  justify-items: center;
+  align-content: center;
+  gap: 6px;
+  text-align: center;
+}
+html body .fleet-flight-empty-v1 .ui-empty-art { width: min(300px, 60%); }
+
+/* Rating: medals for the top three, a hall-of-fame band behind the title. */
+html body .rating-view-v2 .rank-v2 { display: inline-flex; align-items: center; gap: 6px; }
+html body .rating-medal-v2 { width: 30px; height: 30px; object-fit: contain; filter: drop-shadow(0 0 8px rgba(230, 173, 80, .35)); }
+html body .rating-view-v2 .rating-heading-v2 {
+  padding: 0 18px !important;
+  border: 1px solid var(--ut-border) !important;
+  border-radius: var(--ut-r-card) !important;
+  background:
+    linear-gradient(90deg, rgba(8, 14, 18, .96) 0%, rgba(8, 14, 18, .6) 40%, rgba(8, 14, 18, .25) 100%),
+    var(--rating-backdrop) center / cover no-repeat !important;
+}
+
+/* Settings: icon, title over subtitle, chevron. */
+html body .settings-nav-v2 nav button {
+  grid-template-columns: 40px minmax(0, 1fr) 22px !important;
+  grid-template-rows: 1fr 1fr !important;
+  column-gap: 10px;
+}
+html body .settings-nav-v2 nav button .settings-nav-icon-v2 { grid-column: 1; grid-row: 1 / 3; width: 40px; height: 40px; object-fit: contain; }
+html body .settings-nav-v2 nav button span { grid-column: 2; grid-row: 1; }
+html body .settings-nav-v2 nav button small { grid-column: 2; grid-row: 2; }
+html body .settings-nav-v2 nav button b { grid-column: 3 !important; grid-row: 1 / 3 !important; }
+
+@media (prefers-reduced-motion: reduce) { html body .ui-empty-art { animation: none; } }

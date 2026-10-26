@@ -21,6 +21,7 @@ import {
   type RepairWorkshopSnapshot,
 } from './application/repair.ts';
 import { ResourceIcon as CanonicalResourceIcon } from './ui/resources/ResourceIcon';
+import { EMPTY_ART } from './ui/ui-art.ts';
 import './repair-workshop.css';
 import './repair-workshop-feedback-v2.css';
 
@@ -461,6 +462,7 @@ export function RepairWorkshopView({
 
       {totalUnits === 0 ? (
         <section className="repair-empty-v1">
+          <img className="ui-empty-art" src={EMPTY_ART.repair} alt="" draggable={false} />
           <strong>РЕМОНТНАЯ МАСТЕРСКАЯ ПУСТА</strong>
           <span>После следующего оборонительного боя доступная для восстановления техника появится здесь.</span>
         </section>
