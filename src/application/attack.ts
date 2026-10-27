@@ -427,10 +427,17 @@ function resolveTargetForFlight(state: SaveState, flight: FlightRecord): SpyTarg
   return resolved?.target ?? null;
 }
 
+/** The defence order the planet's owner set: the player's own, an NPC's own, otherwise the default. */
+function defensePriorityOf(state: SaveState, ownerId: string | undefined): CommanderId[] {
+  if (ownerId && ownerId === state.profile.playerId) return [...(state.combatPriority?.defense ?? DEFAULT_PRIORITY.defense)];
+  const npc = ownerId ? state.npc?.profiles[ownerId]?.combatPriority?.defense : undefined;
+  return npc ? [...npc] : [...DEFAULT_PRIORITY.defense];
+}
+
 function createAttackInput(state: SaveState, flight: FlightRecord, target: SpyTargetState): CombatInput {
   const snapshot = flight.attackSnapshot!;
   const targetProfile = resolveSpyOwnerProfile(target, state.espionage?.bot01Profile);
-  const defenderPriority = [...DEFAULT_PRIORITY.defense];
+  const defenderPriority = defensePriorityOf(state, target.ownerId);
   const attackerShips = shipStacks(snapshot.attackerFactionId, flight.selectedShips, snapshot.attackerShipLevels);
   const attackerCommanders = selectedCommanderStacks(flight.selectedCommanders, snapshot.attackerCommanderLevels, snapshot.attackerPriority);
   const defenderShips = targetShipStacksWithProfile(state, target);
@@ -649,6 +656,7 @@ export function resolveAttackAtTarget(state: SaveState, flight: FlightRecord, no
 export function createBot01IncomingAttackSnapshot(
   source: SpyTargetState,
   profile: { scienceLevels: Partial<Record<number, number>>; shipLevels: Partial<Record<ShipId, number>>; commanderLevels: Partial<Record<CommanderId, number>> },
+  attackPriority?: readonly CommanderId[],
 ): AttackLaunchSnapshot {
   return {
     version: 1,
@@ -657,7 +665,7 @@ export function createBot01IncomingAttackSnapshot(
     attackerTechnologies: technologiesFromScience(profile.scienceLevels),
     attackerShipLevels: Object.fromEntries(Object.entries(profile.shipLevels).map(([id, level]) => [id, safeLevel(level)])),
     attackerCommanderLevels: Object.fromEntries(Object.entries(profile.commanderLevels).map(([id, level]) => [id, safeLevel(level)])),
-    attackerPriority: [...DEFAULT_PRIORITY.attack],
+    attackerPriority: [...(attackPriority ?? DEFAULT_PRIORITY.attack)],
     defenderPriority: [...DEFAULT_PRIORITY.defense],
   };
 }
@@ -687,7 +695,7 @@ function createBot01IncomingAttackInput(
   target: PlanetRuntime,
 ): CombatInput {
   const snapshot = flight.attackSnapshot!;
-  const defenderPriority = [...DEFAULT_PRIORITY.defense];
+  const defenderPriority = defensePriorityOf(state, state.profile.playerId);
   const defenderFleet = availableOwnedFleetForCombat(state, flight.destinationPlanetId!, target);
   const defenderCommanderLevels = Object.fromEntries(COMMANDER_IDS.map((id) => [id, getOwnerShipUpgradeLevel(state, id)])) as Partial<Record<CommanderId, number>>;
   const defenderShipLevels = getOwnerShipUpgradeLevels(state) as Partial<Record<ShipId, number>>;
@@ -1028,7 +1036,7 @@ export function resolvePirateIncomingRaid(state: SaveState, flight: FlightRecord
     || coordinate.system !== flight.destinationCoordinate.system
     || coordinate.position !== flight.destinationCoordinate.position) return null;
   const factionId = playerTarget ? state.profile.factionId as CombatFactionId : npcTarget!.raceId;
-  const defenderPriority = [...DEFAULT_PRIORITY.defense];
+  const defenderPriority = defensePriorityOf(state, playerTarget ? state.profile.playerId : npcTarget!.ownerId);
   const targetFleet = playerTarget
     ? availableOwnedFleetForCombat(state, flight.destinationPlanetId, playerTarget)
     : npcTarget!.fleet;

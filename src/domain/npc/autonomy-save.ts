@@ -25,6 +25,7 @@ const AUTONOMY_MISSIONS = new Set([
   'sun-support',
   'transport',
   'deployment',
+  'gas',
 ]);
 
 const FLIGHT_PHASES = new Set(['outbound', 'returning', 'arrived', 'completed', 'failed']);
@@ -183,7 +184,10 @@ function validBoundNpcFlight(value: unknown): boolean {
   const selectedShips = flight.selectedShips as UnknownRecord;
   // A launch always carries ships; after a battle the survivor manifest may be
   // empty (total loss) and the flight still completes as a legitimate record.
-  if (flight.phase === 'outbound'
+  // A deployment may carry only commanders, as the player's may.
+  const carriesCommanders = flight.missionId === 'deployment'
+    && Object.values(record(flight.selectedCommanders) ?? {}).some((quantity) => typeof quantity === 'number' && quantity > 0);
+  if (flight.phase === 'outbound' && !carriesCommanders
     && !Object.values(selectedShips).some((quantity) => typeof quantity === 'number' && quantity > 0)) return false;
   if (flight.selectedCommanders !== undefined && !entriesAreNonNegativeIntegers(flight.selectedCommanders, COMMANDER_IDS)) return false;
   if (flight.completionReason !== undefined && !FLIGHT_COMPLETION_REASONS.has(String(flight.completionReason))) return false;
@@ -216,7 +220,7 @@ function validBoundNpcFlight(value: unknown): boolean {
     if (!isPirateMissionSnapshot(flight.pirateSnapshot, missionId)
       || (flight.pirateSnapshot as UnknownRecord).ownerId !== flight.ownerId) return false;
   }
-  if ((missionId === 'space-flight' || missionId === 'recycle') && !validCargo(flight.cargo)) return false;
+  if ((missionId === 'space-flight' || missionId === 'recycle' || missionId === 'gas') && !validCargo(flight.cargo)) return false;
   if (missionId === 'aid') {
     const aid = record(flight.aid);
     if (!aid || aid.senderOwnerId !== flight.ownerId || !nonEmptyString(aid.requestId)

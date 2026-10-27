@@ -1,4 +1,5 @@
 import { getFactionDefenseCatalog, getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
+import { COMMANDER_COMBAT_CATALOG } from '../domain/combat/catalog.ts';
 import type { CombatFactionId } from '../domain/combat/factions.ts';
 import type { ShipId } from '../domain/combat/ids.ts';
 import type { BuildingRole } from '../domain/buildings/resource-zone.ts';
@@ -21,6 +22,8 @@ import { findScience } from '../domain/science/catalog.ts';
 import type { ScienceId } from '../domain/science/types.ts';
 import { npcFlagshipOwners } from '../domain/npc/doctrine.ts';
 import { npcGrudgeIntensity } from '../domain/npc/grudges.ts';
+import { NPC_COMMANDER_BALANCE, npcMainCommander } from './npc-commanders.ts';
+import type { CommanderId } from '../domain/combat/commanders.ts';
 
 /**
  * Owner-scoped utility estimates for NPC candidate actions. Every input is
@@ -98,6 +101,8 @@ export type NpcUtilityContext = Readonly<{
   nearbyDebris?: number;
   /** Debris all of the owner's recyclers carry in one trip, at home and in flight. */
   recyclerCapacity?: number;
+  /** A planet short of gas has an asteroid within reach: recyclers can mine it. */
+  gasAsteroidNearby?: boolean;
   /** Planets where someone else's Gate is being built: the whole world is told, and breaking it is worth more than any haul. */
   rivalGateHosts?: ReadonlySet<string>;
   /** This owner's planets hosting its own side's Gate: held at all costs. */
@@ -216,6 +221,9 @@ export function createNpcUtilityContext(state: SaveState, profile: NpcProfile, a
     ownGateHosts: gates.own,
     nearbyDebris: [...nearby.values()].reduce((sum, value) => sum + value, 0),
     recyclerCapacity,
+    gasAsteroidNearby: (state.asteroidSimulation?.processedThroughAt ?? Number.POSITIVE_INFINITY) <= at
+      && ownPlanets.some((planet) => storeFill(planet).gas < 0.45 && (state.asteroidSimulation?.asteroids ?? [])
+      .some((asteroid) => asteroid.coordinate.galaxy === planet.coordinate.galaxy && Math.abs(asteroid.coordinate.system - planet.coordinate.system) <= 3)),
     colonyOpen: threshold !== null && (selectOwnerScore(state, ownerId)?.totalPoints ?? 0) >= threshold,
     dayValue: Math.max(2_000, income * 24),
     ownPlanets,
@@ -414,6 +422,23 @@ export function estimateSpaceportUpgradeUtility(context: NpcUtilityContext, ship
     - pricePenalty(context, cost, situation);
 }
 
+/**
+ * A commander upgrade in the Spaceport: the main commander's levels are the
+ * owner's first investment; the others only from spare money and only up to a
+ * share of the main commander's level.
+ */
+export function estimateCommanderUpgradeUtility(context: NpcUtilityContext, commanderId: CommanderId, level: number,
+  mainLevel: number, cost: Resources | null, situation?: NpcPlanetSituation): number {
+  const drives = strategyOf(context);
+  const price = pricePenalty(context, cost, situation);
+  if (commanderId === npcMainCommander(context.profile.traits)) {
+    return -0.6 + NPC_COMMANDER_BALANCE.upgradeMain + 0.4 * Math.max(drives.military, drives.war) - price;
+  }
+  const pressure = spendingPressure(situation);
+  if (pressure < NPC_COMMANDER_BALANCE.sparePressure || level >= Math.max(1, NPC_COMMANDER_BALANCE.othersShareOfMain * mainLevel)) return -2.5;
+  return -0.6 + 0.8 * pressure + 0.3 * drives.military - price;
+}
+
 /** Ships and defence are worth more after being attacked and to military owners. */
 export function estimateProductionUtility(context: NpcUtilityContext, queueKind: string, cost: Resources | null,
   situation?: NpcPlanetSituation): number {
@@ -480,11 +505,17 @@ export function estimateProductionItemUtility(context: NpcUtilityContext, target
     // collectable per trip and fields piled up).
     case 'recycler': {
       const deficit = npcRecyclerDeficit(context);
-      return deficit <= 0 ? -2
+      return deficit <= 0 || (!(context.nearbyDebris ?? 0) && !context.knownDebris?.size && !context.gasAsteroidNearby) ? -2
         : -0.2 + 1.2 * drives.operations + 0.4 * Math.log1p((context.nearbyDebris ?? 0) / Math.max(1, context.dayValue))
           + 0.5 * Math.min(1, deficit / Math.max(1, npcRecyclerWanted(context))) - price;
     }
-    case 'commander': return -0.9 + 0.8 * drives.military - price;
+    // The main commander first (owner request 27.10.2026): one of it, then upgrades; others rarely.
+    case 'commander': {
+      const main = npcMainCommander(context.profile.traits);
+      const ownedCommander = (id: string) => context.ownPlanets.reduce((sum, planet) => sum + Math.max(0, planet.fleet?.commanders?.[id as CommanderId] ?? 0), 0);
+      if (itemId === main) return ownedCommander(main) > 0 ? -2.5 : -0.4 + NPC_COMMANDER_BALANCE.buildMain + 0.4 * Math.max(drives.military, drives.war) - price;
+      return ownedCommander(itemId) > 0 || ownedCommander(main) === 0 ? -2.5 : -1.2 + 0.6 * drives.military + 0.4 * spendingPressure(situation) - price;
+    }
     // Holds for logistics: a colony away from the main planet needs a few
     // transporters to ship its surplus home; beyond a couple they are idle.
     case 'cargo': return context.ownPlanets.length > 1 && (fleet[itemId] ?? 0) < 2
@@ -534,12 +565,15 @@ export function npcProductionBatch(context: NpcUtilityContext, target: SpyTarget
 export const NPC_RECYCLE_BALANCE = {
   tripsToClear: 4,
   maxBatch: 40,
+  /** Holds kept for asteroid gas while a planet is short of gas and an asteroid is near. */
+  gasHolds: 200_000,
 } as const;
 
 /** Recycler capacity the owner wants for the debris it sees around its planets. */
 export function npcRecyclerWanted(context: NpcUtilityContext): number {
   const known = [...(context.knownDebris?.values() ?? [])].reduce((sum, value) => sum + value, 0);
-  return Math.max(context.nearbyDebris ?? 0, known) / NPC_RECYCLE_BALANCE.tripsToClear;
+  return Math.max(Math.max(context.nearbyDebris ?? 0, known) / NPC_RECYCLE_BALANCE.tripsToClear,
+    context.gasAsteroidNearby ? NPC_RECYCLE_BALANCE.gasHolds : 0);
 }
 
 /** How much recycler capacity is missing; zero or less means enough. */
@@ -765,12 +799,13 @@ export function estimateFleetSaveUtility(context: NpcUtilityContext, fleetValue:
     : -0.9 + 1.3 * knows * (0.5 + 0.5 * careful) + 0.3 * worth + 0.5 * context.threat;
 }
 
-/** Lanchester strength of ships (and turrets) of one race, by the catalog's combat stats. */
+/** Lanchester strength of ships (and turrets, and commanders) of one race, by the catalog's combat stats. */
 export function npcForcePower(raceId: CombatFactionId, ships: Readonly<Partial<Record<string, number>>> | undefined,
-  defenses?: Readonly<Partial<Record<string, number>>>): number {
+  defenses?: Readonly<Partial<Record<string, number>>>, commanders?: Readonly<Partial<Record<string, number>>>): number {
   return estimateForcePower([
     ...stacks(getFactionShipCatalog(raceId) as Catalog, ships),
     ...stacks(getFactionDefenseCatalog(raceId) as Catalog, defenses),
+    ...stacks(COMMANDER_COMBAT_CATALOG as Catalog, commanders),
   ]);
 }
 

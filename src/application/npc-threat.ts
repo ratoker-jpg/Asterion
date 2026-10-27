@@ -5,6 +5,7 @@ import { PIRATE_CATALOG_BY_ID } from '../domain/pirates/catalog.ts';
 import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
 import type { CombatFactionId } from '../domain/combat/factions.ts';
 import type { ShipId } from '../domain/combat/ids.ts';
+import type { CommanderId } from '../domain/combat/commanders.ts';
 import { selectOwnerScore } from '../domain/rating/scoring.ts';
 import { calculateFleetPopulation, createEmptyFleetState } from '../domain/fleet/runtime.ts';
 import { calculatePlanetCapacity, OVERPOPULATION_WINDOW_MS } from '../domain/fleet/overpopulation.ts';
@@ -94,15 +95,19 @@ export type NpcIncomingEstimate = Readonly<{
   basis: 'composition' | 'intel' | 'rating' | 'pirate-prior';
   power: number;
   uncertainty: number;
+  /** Enemy ships the defender is allowed to know (composition from espionage 10, or its own reports and battles). */
+  knownShips?: Readonly<{ raceId: CombatFactionId; ships: Readonly<Partial<Record<string, number>>> }>;
 }>;
 
-/** Force on and coming back to the planet before `by`, as its owner sees it. */
+/** Force on and coming back to the planet before `by`, as its owner sees it: ships and commanders. */
 function defenderForce(state: SaveState, ownerId: string, planet: SpyTargetState, by: number) {
   const ships: Record<string, number> = {};
-  const add = (source: Readonly<Partial<Record<string, number>>>) => {
-    for (const [id, count] of Object.entries(source)) if (id !== 'solar-satellite' && (count ?? 0) > 0) ships[id] = (ships[id] ?? 0) + count!;
+  const commanders: Record<string, number> = {};
+  const add = (into: Record<string, number>, source: Readonly<Partial<Record<string, number>>> | undefined) => {
+    for (const [id, count] of Object.entries(source ?? {})) if (id !== 'solar-satellite' && (count ?? 0) > 0) into[id] = (into[id] ?? 0) + count!;
   };
-  add(planet.fleet.ships);
+  add(ships, planet.fleet.ships);
+  add(commanders, planet.fleet.commanders);
   for (const flight of ownerFlights(state.flights.records, ownerId)) {
     if (flight.ownerSide !== 'npc') continue;
     // Fleets already on their way home or here (a deployment) that land in time.
@@ -110,14 +115,19 @@ function defenderForce(state: SaveState, ownerId: string, planet: SpyTargetState
       && flight.returnAt !== undefined && flight.returnAt <= by;
     const deployed = flight.missionId === 'deployment' && flight.phase === 'outbound'
       && flight.destinationPlanetId === planet.id && flight.arrivalAt <= by;
-    if (home || deployed) add(flight.selectedShips);
+    if (home || deployed) {
+      add(ships, flight.selectedShips);
+      add(commanders, flight.selectedCommanders);
+    }
   }
-  return ships;
+  return { ships, commanders };
 }
 
-function fleetPopulation(raceId: CombatFactionId, ships: Readonly<Partial<Record<string, number>>>): number {
+function fleetPopulation(raceId: CombatFactionId, ships: Readonly<Partial<Record<string, number>>>,
+  commanders: Readonly<Partial<Record<string, number>>> = {}): number {
   const empty = createEmptyFleetState();
-  return calculateFleetPopulation({ ships: { ...empty.ships, ...ships } as typeof empty.ships, commanders: empty.commanders }, raceId);
+  return calculateFleetPopulation({ ships: { ...empty.ships, ...ships } as typeof empty.ships,
+    commanders: { ...empty.commanders, ...commanders } as typeof empty.commanders }, raceId);
 }
 
 /**
@@ -132,7 +142,8 @@ export function estimateIncomingAttack(state: SaveState, context: NpcUtilityCont
   const b = NPC_THREAT_BALANCE;
   const composition = knowledge.composition;
   if (composition?.kind === 'pirate') return { ...base, basis: 'composition', power: estimateForcePower(pirateStacks(composition.ships)), uncertainty: b.uncertaintyKnown };
-  if (composition?.kind === 'fleet') return { ...base, basis: 'composition', power: npcForcePower(attackerRace(state, flight), composition.ships), uncertainty: b.uncertaintyKnown };
+  if (composition?.kind === 'fleet') return { ...base, basis: 'composition', power: npcForcePower(attackerRace(state, flight), composition.ships),
+    uncertainty: b.uncertaintyKnown, knownShips: { raceId: attackerRace(state, flight), ships: composition.ships } };
   const ownerId = context.profile.ownerId;
   const ageFactor = (createdAt: number) => 1 + Math.min(1, Math.max(0, context.at - createdAt) / (72 * HOUR));
   if (knowledge.kind === 'pirate-raid') {
@@ -152,10 +163,12 @@ export function estimateIncomingAttack(state: SaveState, context: NpcUtilityCont
   const attacker = knowledge.attackerOwnerId;
   const race = attackerRace(state, flight);
   let intel = 0;
+  let knownShips: NpcIncomingEstimate['knownShips'];
   if (attacker) {
     for (const report of context.latestReports.values()) {
       if (report.targetOwnerId !== attacker || !report.fleet) continue;
-      intel = Math.max(intel, npcForcePower(report.targetRaceId as CombatFactionId, report.fleet) * ageFactor(report.createdAt));
+      const power = npcForcePower(report.targetRaceId as CombatFactionId, report.fleet) * ageFactor(report.createdAt);
+      if (power > intel) { intel = power; knownShips = { raceId: report.targetRaceId as CombatFactionId, ships: report.fleet }; }
     }
     for (const report of ownerBattleReports(state.combat.reports, ownerId)) {
       const side = report.attacker.playerId === attacker ? report.attackerForce : report.defender.playerId === attacker ? report.defenderForce : null;
@@ -163,20 +176,23 @@ export function estimateIncomingAttack(state: SaveState, context: NpcUtilityCont
       const when = Date.parse(report.timestamp);
       if (!Number.isFinite(when) || when > context.at) continue;
       const ships = Object.fromEntries(side.stacks.map((stack) => [stack.entityId, stack.countBefore]));
-      intel = Math.max(intel, npcForcePower(race, ships) * ageFactor(when));
+      const power = npcForcePower(race, ships) * ageFactor(when);
+      if (power > intel) { intel = power; knownShips = { raceId: race, ships }; }
     }
   }
   const score = attacker ? selectOwnerScore(state, attacker) : undefined;
   const battleShare = score && score.totalPoints > 0 ? score.battlePoints / score.totalPoints : 0;
   const fleetShare = Math.min(b.scoreFleetShareMax, b.scoreFleetShareMin + battleShare);
   const rated = (score?.resourcePoints ?? 0) * 1_000 * fleetShare * npcPowerPerResource(race);
-  if (intel > 0) return { ...base, basis: 'intel', power: Math.max(intel, 0.5 * rated), uncertainty: b.uncertaintyIntel };
+  if (intel > 0) return { ...base, basis: 'intel', power: Math.max(intel, 0.5 * rated), uncertainty: b.uncertaintyIntel, ...(knownShips ? { knownShips } : {}) };
   return { ...base, basis: 'rating', power: rated, uncertainty: b.uncertaintyBlind };
 }
 
 export type NpcReinforcement = Readonly<{
   originPlanetId: string;
   ships: Partial<Record<ShipId, number>>;
+  /** Commanders at the source fly along when the hangar room allows (their ability counts in battle). */
+  commanders: Partial<Record<CommanderId, number>>;
   arrivalAt: number;
 }>;
 
@@ -218,8 +234,8 @@ export function assessNpcPlanetThreat(state: SaveState, context: NpcUtilityConte
   const arrivalAt = hostile[0]!.knowledge.arrivalAt;
   const wave = hostile.filter((item) => item.knowledge.arrivalAt <= arrivalAt + b.waveWindowMs);
   const by = arrivalAt - b.arrivalMarginMs;
-  const ships = defenderForce(state, ownerId, planet, by);
-  const defence = npcForcePower(planet.raceId, ships, planet.defense.defenses);
+  const { ships, commanders } = defenderForce(state, ownerId, planet, by);
+  const defence = npcForcePower(planet.raceId, ships, planet.defense.defenses, commanders);
   const incoming = wave.map(({ flight, knowledge }) => estimateIncomingAttack(state, context, planet, knowledge, flight, defence));
   const caution = 1 - unit(context.profile.traits.riskTolerance);
   // Separate fleets add up as one force (strength is not additive, firepower and hull are).
@@ -243,12 +259,16 @@ export function assessNpcPlanetThreat(state: SaveState, context: NpcUtilityConte
         const catalog = getFactionShipCatalog(source.raceId);
         const combat = Object.fromEntries(Object.entries(available).filter(([id, count]) => count > 0 && !SKIPPED_HULLS.has(id)
           && catalog.find((entity) => entity.id === id)?.category === 'Боевой корабль')) as Partial<Record<ShipId, number>>;
-        // A deployment carries at most the room the target hangar has now.
+        // A deployment carries at most the room the target hangar has now; commanders first, they lead the battle.
+        const home = Object.fromEntries(Object.entries(source.fleet.commanders ?? {}).filter(([, count]) => (count ?? 0) > 0)) as Partial<Record<CommanderId, number>>;
+        const commanderPopulation = fleetPopulation(source.raceId, {}, home);
+        const flyingCommanders = commanderPopulation <= free ? home : {};
+        const room = free - (commanderPopulation <= free ? commanderPopulation : 0);
         const population = fleetPopulation(source.raceId, combat);
-        const share = population > free ? free / population : 1;
+        const share = population > room ? Math.max(0, room) / population : 1;
         const fitted = Object.fromEntries(Object.entries(combat).map(([id, count]) => [id, Math.floor(count! * share)])
           .filter(([, count]) => (count as number) > 0)) as Partial<Record<ShipId, number>>;
-        return { source, ships: fitted, power: npcForcePower(source.raceId, fitted) };
+        return { source, ships: fitted, commanders: flyingCommanders, power: npcForcePower(source.raceId, fitted, {}, flyingCommanders) };
       })
       .filter((option) => option.power > 0)
       .sort((left, right) => right.power - left.power || (left.source.id < right.source.id ? -1 : 1));
@@ -256,23 +276,28 @@ export function assessNpcPlanetThreat(state: SaveState, context: NpcUtilityConte
       if (sources.length >= b.maxReinforcementSources) break;
       // A dry run of the real command gives the arrival time and every launch check.
       const trial = dispatchNpcDeployment(state, { requestId: `npc-threat-trial:${option.source.id}`, ownerId, originPlanetId: option.source.id,
-        destinationPlanetId: planet.id, selectedShips: option.ships }, at, timeScale);
+        destinationPlanetId: planet.id, selectedShips: option.ships, selectedCommanders: option.commanders }, at, timeScale);
       if (!trial.ok || !trial.flight || trial.flight.arrivalAt > by) continue;
-      sources.push({ originPlanetId: option.source.id, ships: option.ships, arrivalAt: trial.flight.arrivalAt });
+      sources.push({ originPlanetId: option.source.id, ships: option.ships, commanders: option.commanders, arrivalAt: trial.flight.arrivalAt });
     }
   }
   if (sources.length) {
     const added: Record<string, number> = { ...ships };
-    for (const source of sources) for (const [id, count] of Object.entries(source.ships)) added[id] = (added[id] ?? 0) + (count ?? 0);
+    const addedCommanders: Record<string, number> = { ...commanders };
+    for (const source of sources) {
+      for (const [id, count] of Object.entries(source.ships)) added[id] = (added[id] ?? 0) + (count ?? 0);
+      for (const [id, count] of Object.entries(source.commanders)) addedCommanders[id] = (addedCommanders[id] ?? 0) + (count ?? 0);
+    }
     const capacity = calculatePlanetCapacity(migrateBuildingLevels(planet.buildings).hangar ?? 0);
-    const population = fleetPopulation(planet.raceId, added);
+    const population = fleetPopulation(planet.raceId, added, addedCommanders);
     const excess = Math.max(0, population - capacity);
     // The linear burn runs from the first landing to the battle.
     const firstLanding = Math.min(...sources.map((source) => source.arrivalAt));
     const burnedShare = excess > 0 ? Math.min(1, (arrivalAt - firstLanding) / OVERPOPULATION_WINDOW_MS) : 0;
     const atBattle = population > 0 ? (population - excess * burnedShare) / population : 1;
-    const shipsPower = npcForcePower(planet.raceId, added) * atBattle;
-    const reinforced = Math.hypot(shipsPower, npcForcePower(planet.raceId, {}, planet.defense.defenses));
+    // Commanders never burn; ships burn cheapest first, read here as a share of the fleet.
+    const shipsAtBattle = Object.fromEntries(Object.entries(added).map(([id, count]) => [id, count * atBattle]));
+    const reinforced = npcForcePower(planet.raceId, shipsAtBattle, planet.defense.defenses, addedCommanders);
     const reinforcedWinProbability = estimateWinProbability(reinforced, feared);
     const survivors = Math.sqrt(Math.max(0, 1 - (feared / Math.max(1, reinforced)) ** 2));
     const expectedBurnPopulation = Math.max(0, population * atBattle * survivors - capacity);

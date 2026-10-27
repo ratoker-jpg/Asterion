@@ -117,8 +117,6 @@ import { createUniverseSystem, MAX_PLANETS_PER_OWNER, nextColonyPointThreshold, 
 import { selectOwnerScore } from '../domain/rating/scoring.ts';
 import { evaluatePlanetAttackEligibility } from './attack-eligibility.ts';
 import type { UniverseCoordinate, UniverseObjectKind, UniversePersistedPlayerPlanet, UniverseRegisteredPlanet } from '../domain/universe/types.ts';
-import { findUniverseAsteroidAtCoordinate } from '../domain/universe/asteroid-simulation.ts';
-import { advanceAsteroidGasAt } from '../domain/universe/asteroid-gas.ts';
 import { upsertGasExtractionArrivalReport, upsertRecyclerArrivalReport } from '../domain/reports/adapters.ts';
 import { initializePlanetResourceClock, reconcileTestEspionageTargetResources } from './resource-clock.ts';
 import { createColonyPlanetRuntime, destroyOwnedPlanet } from './owned-planets.ts';
@@ -137,7 +135,8 @@ import {
   resolveAttackAtTarget,
 } from './attack.ts';
 import { dispatchPirateFlight, resolvePirateFlightAtTarget } from './pirates.ts';
-import { resolveNpcDeploymentArrival, resolveNpcMissionArrival, resolveNpcRecycleArrival, resolveNpcTransportArrival, settleNpcMissionReturn } from './npc-missions.ts';
+import { collectAsteroidGas } from './asteroid-gas-collection.ts';
+import { resolveNpcDeploymentArrival, resolveNpcGasArrival, resolveNpcMissionArrival, resolveNpcRecycleArrival, resolveNpcTransportArrival, settleNpcMissionReturn } from './npc-missions.ts';
 import { resolveNpcPirateArrival } from './npc-pirates.ts';
 import { resolveNpcAidArrival, settleNpcAidReturn } from './npc-aid.ts';
 import { getOwnerRelation } from './owner-relations.ts';
@@ -2717,6 +2716,12 @@ export function reconcileFlights(
         next = result.state;
         continue;
       }
+      if (current.missionId === 'gas' && current.phase === 'outbound' && current.arrivalAt <= now) {
+        const result = resolveNpcGasArrival(next, current, current.arrivalAt);
+        changed ||= result.state !== next;
+        next = result.state;
+        continue;
+      }
       if (current.missionId === 'deployment' && current.phase === 'outbound' && current.arrivalAt <= now) {
         const result = resolveNpcDeploymentArrival(next, current, current.arrivalAt);
         changed ||= result.state !== next;
@@ -3238,43 +3243,12 @@ export function reconcileFlights(
       }
       if (current.missionId === 'gas') {
         if (current.cargoState !== 'delivered' && current.cargoState !== 'returned') {
-          const simulation = next.asteroidSimulation;
-          const asteroidAtCoordinate = simulation
-            ? findUniverseAsteroidAtCoordinate(simulation.asteroids, current.destinationCoordinate)
-            : undefined;
-          const asteroidIndex = simulation && asteroidAtCoordinate
-            ? simulation.asteroids.indexOf(asteroidAtCoordinate)
-            : -1;
-          const found = asteroidIndex >= 0 && simulation !== undefined;
-          let gasCollected = 0;
-          let scrapCollected = 0;
-
-          if (found && simulation) {
-            const asteroid = advanceAsteroidGasAt(simulation.asteroids[asteroidIndex], arrivalAt);
-            const capacity = Number.isSafeInteger(current.gasCapacity) && (current.gasCapacity ?? 0) > 0
-              ? current.gasCapacity!
-              : 0;
-            const availableGas = Math.max(0, Math.floor(asteroid.gasYield));
-            gasCollected = Math.min(Math.floor(availableGas / 2), capacity);
-            const spawnKey = String(asteroid.spawnIndex);
-            const storedScrap = next.asteroidDebrisBySpawnIndex?.[spawnKey] ?? 0;
-            const carriedScrap = Number.isFinite(storedScrap) && storedScrap > 0 ? Math.floor(storedScrap) : 0;
-            scrapCollected = Math.min(carriedScrap, Math.max(0, capacity - gasCollected));
-            const remainingGas = availableGas - gasCollected;
-            const remainingScrap = carriedScrap - scrapCollected;
-            const depleted = remainingGas < 1_000;
-            const asteroids = depleted
-              ? simulation.asteroids.filter((_, index) => index !== asteroidIndex)
-              : simulation.asteroids.map((item, index) => index === asteroidIndex
-                ? { ...asteroid, gasYield: remainingGas }
-                : item);
-            next = { ...next, asteroidSimulation: { ...simulation, asteroids } };
-
-            const asteroidDebrisBySpawnIndex = { ...(next.asteroidDebrisBySpawnIndex ?? {}) };
-            if (depleted || remainingScrap <= 0) delete asteroidDebrisBySpawnIndex[spawnKey];
-            else asteroidDebrisBySpawnIndex[spawnKey] = remainingScrap;
-            next = { ...next, asteroidDebrisBySpawnIndex };
-          }
+          const capacity = Number.isSafeInteger(current.gasCapacity) && (current.gasCapacity ?? 0) > 0
+            ? current.gasCapacity!
+            : 0;
+          const collection = collectAsteroidGas(next, current.destinationCoordinate, arrivalAt, capacity);
+          next = collection.state;
+          const { found, gasCollected, scrapCollected } = collection;
 
           const cargo: TransportCargo = {
             ...normalizeTransportCargo(current.cargo),

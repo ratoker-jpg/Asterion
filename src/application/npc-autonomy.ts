@@ -1,5 +1,6 @@
 import { chooseNpcAutonomyAction, updateNpcAutonomyMemory, type NpcAutonomyCandidate } from '../domain/npc/autonomy-policy.ts';
-import { ownerFlights } from './npc-knowledge-index.ts';
+import { flightsToPlanet, ownerFlights } from './npc-knowledge-index.ts';
+import { NPC_REPAIR_BALANCE, npcRepairPoolValue, repairNpcPlanet } from './npc-repair.ts';
 import { findNextNpcSessionEvent } from '../domain/npc/calendar.ts';
 import { MAX_SPACE_FLIGHT_DURATION_MS, MIN_SPACE_FLIGHT_DURATION_MS } from '../domain/flights/runtime.ts';
 import { getFleetCargoCapacity, type TransportCargo } from '../domain/flights/cargo.ts';
@@ -16,11 +17,15 @@ import { calculateFleetPopulation, createEmptyFleetState } from '../domain/fleet
 import { getNpcMissionCandidates, candidateToNpcMissionCommand } from './npc-mission-policy.ts';
 import { assessNpcPlanetThreat, estimateReinforcementUtility } from './npc-threat.ts';
 import { applyNpcAllianceHeraldry } from './npc-identity.ts';
-import { dispatchNpcDeployment, dispatchNpcMission, dispatchNpcSpaceFlight, dispatchNpcTransport, getNpcMissionAvailableFleet, NPC_SPACE_FLIGHT_GAS_FEE, resolveNpcMissionArrival } from './npc-missions.ts';
+import { planNpcGasMission } from './npc-gas.ts';
+import { dispatchNpcDeployment, dispatchNpcGas, dispatchNpcMission, dispatchNpcSpaceFlight, dispatchNpcTransport, getNpcMissionAvailableFleet, NPC_SPACE_FLIGHT_GAS_FEE, resolveNpcMissionArrival } from './npc-missions.ts';
 import { beginFlightReturn } from '../domain/flights/runtime.ts';
 import { getNpcPirateCandidates, dispatchNpcPirateMission } from './npc-pirates.ts';
 import { getNpcEndgameChoices } from './npc-endgame.ts';
-import { getNpcSpaceportCandidates, startNpcSpaceportUpgrade } from './npc-spaceport.ts';
+import { getNpcSpaceportCandidates, getNpcSpaceportCommanderCandidates, startNpcSpaceportUpgrade } from './npc-spaceport.ts';
+import { npcCombatPriority, npcEnemyShape, npcMainCommander } from './npc-commanders.ts';
+import { COMMANDER_IDS, type CommanderId } from '../domain/combat/commanders.ts';
+import type { CombatFactionId } from '../domain/combat/factions.ts';
 import { createNpcAidRequest, getNpcAidCandidates, getNpcAidRequestCandidates, dispatchNpcAid } from './npc-aid.ts';
 import { getStorageCapacities } from '../domain/buildings/balance-v1.ts';
 import { migrateBuildingLevels } from '../domain/buildings/resource-zone.ts';
@@ -34,7 +39,7 @@ import {
   estimateAttackUtility, estimateBuildingUtility, estimateRaidEconomics, estimateRevengeEconomics, estimateColonizeUtility, estimateEspionageUtility,
   estimateOperationUtility, estimateProductionItemUtility, flightRemoteness, estimateScienceUtility, npcProductionBatch,
   npcProductionPurpose, NPC_STRATEGY_FAMILY, strategyOf, type NpcStrategyDrives,
-  estimateFleetSaveUtility, npcFleetValue, spaceFlightLegFor, estimateSpaceportUpgradeUtility, NPC_FLAGSHIP_ID,
+  estimateFleetSaveUtility, estimateCommanderUpgradeUtility, npcFleetValue, spaceFlightLegFor, estimateSpaceportUpgradeUtility, NPC_FLAGSHIP_ID,
 } from './npc-utility.ts';
 
 /** A look within this long of the session end is the owner's last before leaving. */
@@ -147,6 +152,17 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     if (command !== state.command) state = { ...state, command };
   }
   const choices: Choice[] = [];
+  // A planet with an attack on its way repairs what waits in its workshop
+  // first, by the player's prices and room: the next fight meets the fleet
+  // restored (and the threat below is judged with it).
+  for (const target of Object.values(state.espionage?.targets ?? {})) {
+    if (target.kind !== 'npc' || target.ownerId !== ownerId || npcRepairPoolValue(target) <= 0) continue;
+    const underAttack = flightsToPlanet(state.flights.records, target.id).some((flight) => flight.phase === 'outbound'
+      && flight.arrivalAt > at && flight.ownerId !== ownerId && (flight.missionId === 'attack' || flight.missionId === 'pirate-raid'));
+    if (!underAttack) continue;
+    const repaired = repairNpcPlanet(target, 1);
+    if (repaired.repaired > 0) state = { ...state, espionage: { ...state.espionage!, targets: { ...state.espionage!.targets, [target.id]: repaired.target } } };
+  }
   const utility = createNpcUtilityContext(state, profile, at, timeScale);
   // Concept U: estimated benefit − cost − risk + goal, plus this owner's seeded misjudgement.
   const scored = (candidateId: string, estimate: number) => utilityToWeight(estimate + estimationError(profile, eventId, candidateId));
@@ -183,6 +199,23 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
   const drives = strategyOf(utility);
   const planets = Object.values(state.espionage?.targets ?? {}).filter((target) => target.kind === 'npc' && target.ownerId === ownerId)
     .sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  // «Боевой приоритет» for defence, set like a player does before a fight:
+  // the main commander first, then by what the owner knows of the nearest
+  // attack (its composition only from espionage 10, else its own reports).
+  if (state.npc?.profiles[ownerId]) {
+    let shape: ReturnType<typeof npcEnemyShape> = null;
+    for (const target of planets) {
+      const known = assessNpcPlanetThreat(state, utility, target, timeScale)?.incoming.find((item) => item.knownShips)?.knownShips;
+      if (known) { shape = npcEnemyShape(known.raceId, known.ships); break; }
+    }
+    const levels = planets[0]?.ownerProfile?.commanderLevels ?? {};
+    const current = state.npc.profiles[ownerId]!;
+    const defense = npcCombatPriority(profile.traits, levels, shape, COMMANDER_IDS);
+    const attack = current.combatPriority?.attack ?? npcCombatPriority(profile.traits, levels, null, COMMANDER_IDS);
+    if (JSON.stringify(current.combatPriority?.defense) !== JSON.stringify(defense)) {
+      state = { ...state, npc: { ...state.npc, profiles: { ...state.npc.profiles, [ownerId]: { ...current, combatPriority: { attack, defense } } } } };
+    }
+  }
   const withTarget = (current: SaveState, target: (typeof planets)[number]): SaveState => ({
     ...current, espionage: { ...current.espionage!, targets: { ...current.espionage!.targets, [target.id]: target } },
   });
@@ -305,6 +338,16 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
       return { state: sent, started: result.ok, reason: result.reason, planetId: source.id };
     } });
   }
+  // Gas from an asteroid when a planet runs low, aimed where the asteroid will be at arrival.
+  const gasPlan = planNpcGasMission(state, utility, timeScale);
+  if (gasPlan) {
+    const gasId = `gas:${gasPlan.originPlanetId}`;
+    choices.push({ candidate: { id: gasId, kind: 'economy', weight: scored(gasId, gasPlan.estimate), payload: { planetId: gasPlan.originPlanetId } }, run: (current, key) => {
+      const result = dispatchNpcGas(current, { requestId: key, ownerId, originPlanetId: gasPlan.originPlanetId, coordinate: gasPlan.coordinate,
+        selectedShips: gasPlan.ships }, at, timeScale);
+      return { state: result.state, started: result.ok, reason: result.reason, planetId: gasPlan.originPlanetId };
+    } });
+  }
   // Spaceport: ship upgrades by the player's catalog; levels are owner-wide.
   const ownedShips: Partial<Record<string, number>> = {};
   for (const target of planets) for (const [id, count] of Object.entries(target.fleet.ships)) ownedShips[id] = (ownedShips[id] ?? 0) + (count ?? 0);
@@ -320,6 +363,37 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
       choices.push({ candidate: { id: upgradeId, kind: 'production', weight: scored(upgradeId, estimate), payload: { planetId: target.id, shipId: preview.shipId } }, run: (current, key) => {
         const planet = current.espionage!.targets![target.id]!;
         const result = startNpcSpaceportUpgrade(planet, preview.shipId as ShipId, levels, at, timeScale, key);
+        return { state: withTarget(current, result.target), started: result.ok, reason: result.reason, planetId: target.id, ...(result.ok ? { economyActionId: key } : {}) };
+      } });
+    }
+  }
+  // Without a visible attack the workshop is a purchase like any other: worth
+  // it for a real fleet waiting there, paid from part of the stores.
+  for (const target of planets) {
+    const pool = npcRepairPoolValue(target);
+    if (pool <= 0) continue;
+    const repairId = `repair:${target.id}`;
+    const estimate = -0.2 + 0.6 * Math.log1p(pool / Math.max(1, 0.1 * utility.dayValue)) + 0.3 * strategyOf(utility).military;
+    choices.push({ candidate: { id: repairId, kind: 'production', weight: scored(repairId, estimate), payload: { planetId: target.id } }, run: (current) => {
+      const result = repairNpcPlanet(current.espionage!.targets![target.id]!, NPC_REPAIR_BALANCE.calmSpendShare);
+      return { state: result.repaired > 0 ? withTarget(current, result.target) : current, started: result.repaired > 0,
+        reason: result.repaired > 0 ? null : 'nothing-repairable', planetId: target.id };
+    } });
+  }
+  // Commander upgrades on the same Spaceport queue rules: the main commander first.
+  const ownedCommanders: Partial<Record<string, number>> = {};
+  for (const target of planets) for (const [id, count] of Object.entries(target.fleet.commanders ?? {})) ownedCommanders[id] = (ownedCommanders[id] ?? 0) + (count ?? 0);
+  const commanderLevels = spaceportHome?.ownerProfile?.commanderLevels ?? {};
+  const mainLevel = commanderLevels[npcMainCommander(profile.traits)] ?? 0;
+  for (const target of spaceportHome ? [spaceportHome] : []) {
+    const levels = scienceLevels ?? target.ownerProfile?.scienceLevels ?? {};
+    for (const preview of getNpcSpaceportCommanderCandidates(target, levels, timeScale, ownedCommanders)) {
+      const upgradeId = `spaceport-commander:${target.id}:${preview.shipId}`;
+      const estimate = estimateCommanderUpgradeUtility(utility, preview.shipId as CommanderId, commanderLevels[preview.shipId as CommanderId] ?? 0,
+        mainLevel, preview.cost, describeNpcPlanet(target, 0, 0, false));
+      choices.push({ candidate: { id: upgradeId, kind: 'production', weight: scored(upgradeId, estimate), payload: { planetId: target.id, shipId: preview.shipId } }, run: (current, key) => {
+        const planet = current.espionage!.targets![target.id]!;
+        const result = startNpcSpaceportUpgrade(planet, preview.shipId as CommanderId, levels, at, timeScale, key, 'commanders');
         return { state: withTarget(current, result.target), started: result.ok, reason: result.reason, planetId: target.id, ...(result.ok ? { economyActionId: key } : {}) };
       } });
     }
@@ -378,7 +452,7 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
         let reason: string | null = null;
         for (const source of threat.reinforcements) {
           const result = dispatchNpcDeployment(next, { requestId: `${key}:${source.originPlanetId}`, ownerId, originPlanetId: source.originPlanetId,
-            destinationPlanetId: target.id, selectedShips: source.ships }, at, timeScale);
+            destinationPlanetId: target.id, selectedShips: source.ships, selectedCommanders: source.commanders }, at, timeScale);
           next = result.state;
           if (result.ok) sent += 1; else reason ??= result.reason;
         }
@@ -432,8 +506,20 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
         const sent = chosen ? { ...mission, payload: { ...mission.payload, selectedShips: JSON.stringify(Object.fromEntries(Object.entries(chosen).sort(([a], [b]) => a < b ? -1 : 1))) } } : mission;
         const command = candidateToNpcMissionCommand(sent, ownerId, key);
         if (!command) return { state: current, started: false, reason: 'invalid-mission-candidate' };
-        const result = dispatchNpcMission(current, command, at, timeScale);
-        return { state: result.state, started: result.ok, reason: result.reason };
+        let armed = command;
+        if (mission.kind === 'attack') {
+          // The main commander leads the attack when it is at home; the order follows the target's known fleet.
+          const origin = current.espionage?.targets?.[command.originPlanetId];
+          const main = npcMainCommander(profile.traits);
+          const report = utility.latestReports.get(String(mission.payload.destinationPlanetId ?? ''));
+          const shape = report?.fleet ? npcEnemyShape(report.targetRaceId as CombatFactionId, report.fleet) : null;
+          armed = { ...command,
+            ...((origin?.fleet.commanders?.[main] ?? 0) > 0 ? { selectedCommanders: { [main]: 1 } } : {}),
+            attackPriority: npcCombatPriority(profile.traits, origin?.ownerProfile?.commanderLevels ?? {}, shape, COMMANDER_IDS) };
+        }
+        const result = dispatchNpcMission(current, armed, at, timeScale);
+        // The planet the fleet leaves is touched by this action (its gas pays the flight).
+        return { state: result.state, started: result.ok, reason: result.reason, planetId: armed.originPlanetId };
       },
     });
   }

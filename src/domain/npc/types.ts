@@ -1,3 +1,5 @@
+import type { CommanderId } from '../combat/commanders.ts';
+
 /** Persisted NPC domain contracts. This module contains no runtime integrations. */
 
 export const NPC_STATE_VERSION = 1 as const;
@@ -115,6 +117,12 @@ export type NpcProfile = Readonly<{
    * reports the save still holds.
    */
   grudges?: Readonly<Record<string, NpcGrudge>>;
+  /**
+   * The owner's «Боевой приоритет»: which present commander leads in attack and
+   * in defence. Absent in older saves (the default order applies until the
+   * owner next looks at the game and sets it).
+   */
+  combatPriority?: Readonly<{ attack: readonly CommanderId[]; defense: readonly CommanderId[] }>;
 }>;
 
 /** What one offender did to this NPC: attacks suffered and their cost in resources. */

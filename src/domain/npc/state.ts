@@ -1,4 +1,5 @@
 import { isNpcGrudge } from './grudges.ts';
+import { isCommanderId } from '../combat/commanders.ts';
 import { createSeededRandom, randomInteger } from '../world/random.ts';
 import {
   NPC_STATE_VERSION,
@@ -119,7 +120,9 @@ export function isNpcProfile(value: unknown): value is NpcProfile {
     || !isCursor(value.cursor)
     || (value.campaignStartedAt !== undefined && !isTimestamp(value.campaignStartedAt))
     || (value.grudges !== undefined && (!isRecord(value.grudges) || !Object.entries(value.grudges)
-      .every(([offenderId, grudge]) => offenderId.length > 0 && isNpcGrudge(grudge))))) return false;
+      .every(([offenderId, grudge]) => offenderId.length > 0 && isNpcGrudge(grudge))))
+    || (value.combatPriority !== undefined && (!isRecord(value.combatPriority)
+      || !isCommanderOrder(value.combatPriority.attack) || !isCommanderOrder(value.combatPriority.defense)))) return false;
   return true;
 }
 
@@ -205,6 +208,9 @@ function isGoal(value: unknown): value is NpcLongTermGoal {
     && typeof value.kind === 'string' && value.kind.length > 0 && isTimestamp(value.createdAt)
     && inUnitRange(value.priority) && ['active', 'paused', 'completed', 'abandoned'].includes(String(value.status))
     && inUnitRange(value.progress);
+}
+function isCommanderOrder(value: unknown): boolean {
+  return Array.isArray(value) && new Set(value).size === value.length && value.every((id) => isCommanderId(id));
 }
 function inUnitRange(value: unknown): value is number { return isFiniteNumber(value) && value >= 0 && value <= 1; }
 function isFiniteNumber(value: unknown): value is number { return typeof value === 'number' && Number.isFinite(value); }
