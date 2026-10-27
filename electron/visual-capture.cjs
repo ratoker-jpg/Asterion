@@ -53,9 +53,9 @@ const INITIAL_STATUS = {
   'metal-production-2': 'requirements-unmet',
   'metal-production-3': 'requirements-unmet',
   'mineral-production-1': 'available',
-  'mineral-production-2': 'available',
+  'mineral-production-2': 'requirements-unmet',
   'gas-production-1': 'available',
-  'gas-production-2': 'available',
+  'gas-production-2': 'requirements-unmet',
   'basic-energy': 'available',
   'advanced-energy': 'requirements-unmet',
   hangar: 'available',
@@ -818,7 +818,8 @@ async function verifyResourceZoneFlow(win, directory, label) {
   if(JSON.stringify(queued.roles)!==JSON.stringify(['basic-energy','gas-production-1','hangar']) || !queueWalletRetainsExpectedMinimum || !queued.full || !queued.slots[0]?.text.includes('Осталось')) throw new Error(`Three-slot queue state failed: ${JSON.stringify(queued)}`);
   await capture(win,directory,'resource-zone-queue-3');
 
-  await openResourceBuilding(win,'gas-production-2');
+  // Mine II / Well II need level 10 of the first one, which outranks queue-full; probe a building without requirements.
+  await openResourceBuilding(win,'mineral-production-1');
   const fullDialog=await win.webContents.executeJavaScript(`(() => ({status:document.querySelector('[data-qa-build-status]')?.getAttribute('data-qa-build-status')??'',disabled:Boolean(document.querySelector('[data-qa-build-button]')?.disabled),text:document.querySelector('[data-qa-build-status]')?.textContent?.replace(/\s+/g,' ').trim()??''}))()`);
   if(fullDialog.status!=='queue-full' || !fullDialog.disabled || !fullDialog.text.includes('Очередь заполнена')) throw new Error(`Queue-full dialog failed: ${JSON.stringify(fullDialog)}`);
   await closeResourceBuilding(win);
