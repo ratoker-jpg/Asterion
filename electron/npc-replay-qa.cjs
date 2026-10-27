@@ -155,6 +155,16 @@ async function load(win, search) {
   await done;
 }
 
+// The hidden QA window paints on demand: a capture returns the frame painted
+// for the previous request, so the first capture only asks for a fresh one.
+async function freshCapture(win) {
+  win.webContents.invalidate();
+  await win.webContents.capturePage();
+  await sleep(900); // past the window's entrance animation
+  await win.webContents.capturePage();
+  return win.webContents.capturePage();
+}
+
 async function click(win, selector) {
   const clicked = await run(win, `(() => {
     const node = document.querySelector(${JSON.stringify(selector)});
@@ -271,9 +281,7 @@ async function runScenario() {
     fs.mkdirSync(OUTPUT, { recursive: true });
     if (process.env.ASTERION_SKIP_SCREENSHOTS !== '1') {
       // The hidden QA window paints lazily: let the window's entrance settle into a frame first.
-      win.webContents.invalidate();
-      await sleep(800);
-      fs.writeFileSync(path.join(OUTPUT, 'catchup-progress.png'), (await win.webContents.capturePage()).toPNG());
+      fs.writeFileSync(path.join(OUTPUT, 'catchup-progress.png'), (await freshCapture(win)).toPNG());
     }
 
     const initial = await run(win, `(() => {
@@ -426,9 +434,7 @@ async function runScenario() {
       }
       if (process.env.ASTERION_SKIP_SCREENSHOTS !== '1') {
         fs.mkdirSync(OUTPUT, { recursive: true });
-        win.webContents.invalidate();
-        await sleep(800);
-        fs.writeFileSync(path.join(OUTPUT, 'catchup-summary.png'), (await win.webContents.capturePage()).toPNG());
+        fs.writeFileSync(path.join(OUTPUT, 'catchup-summary.png'), (await freshCapture(win)).toPNG());
       }
       await click(win, '[data-qa-npc-catchup-close]');
     }
