@@ -696,15 +696,27 @@ test('Defender upgrade uses the same shipyard, ion science and fuel-cell require
 test('unknown catalog requirement is explicit and never represented as a fake current level zero', () => {
   const buildings = createDefaultBuildingLevels();
   buildings.shipyard = 20;
-  const requirements = evaluateSpaceportUpgradeRequirements('commanders', 'reanimator', buildings, {});
-  const unresolved = requirements.filter((item) => item.kind === 'unresolved-catalog-requirement');
-  assert.equal(unresolved.length >= 1, true);
-  for (const requirement of unresolved) {
-    assert.equal(requirement.currentLevel, null);
-    assert.equal(requirement.met, false);
-    assert.equal(requirement.scienceId, undefined);
-    assert.equal(requirement.buildingRole, undefined);
+  // The live catalog no longer names a missing science (the Reanimator needs only Shipyard 10),
+  // so stage the pre-fix entry on the catalog object for this check and restore it afterwards.
+  const reanimator = getSpaceportUpgradeEntity('commanders', 'reanimator') as { construction: { requirements: readonly string[] } } | null;
+  assert.ok(reanimator);
+  const liveConstruction = reanimator.construction;
+  reanimator.construction = { ...liveConstruction, requirements: ['Верфь · уровень 10', 'Энергетика · уровень 8', 'Нанотехнологии · уровень 5'] };
+  try {
+    const requirements = evaluateSpaceportUpgradeRequirements('commanders', 'reanimator', buildings, {});
+    const unresolved = requirements.filter((item) => item.kind === 'unresolved-catalog-requirement');
+    assert.equal(unresolved.length, 2);
+    for (const requirement of unresolved) {
+      assert.equal(requirement.currentLevel, null);
+      assert.equal(requirement.met, false);
+      assert.equal(requirement.scienceId, undefined);
+      assert.equal(requirement.buildingRole, undefined);
+    }
+  } finally {
+    reanimator.construction = liveConstruction;
   }
+  assert.equal(evaluateSpaceportUpgradeRequirements('commanders', 'reanimator', buildings, {})
+    .some((item) => item.kind === 'unresolved-catalog-requirement'), false);
 });
 
 test('failed enqueue is atomic and does not deduct prototype resources', () => {

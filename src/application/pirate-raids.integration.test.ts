@@ -14,6 +14,7 @@ import { createPirateContactCycleKey } from '../domain/pirates/contact-schedule.
 import { getUniverseTimedObjectSchedule } from '../domain/universe/runtime.ts';
 import { PIRATE_PROTECTION_TOTAL_POINTS, pirateSeededDraw } from '../domain/pirates/threat.ts';
 import { normalizePirateRaidSnapshot } from '../domain/pirates/mission.ts';
+import { selectOwnerScore } from '../domain/rating/scoring.ts';
 
 // Pinned wall clock so schedules and rolls do not depend on the run date (audit A4).
 const PINNED_START_MS=Date.UTC(2026,9,21,12);
@@ -57,6 +58,8 @@ test('owner-cycle roll dispatches one persisted real pirate flight, resolves no-
         [baseline.profile.playerId]:{version:1 as const,ageHours:10_000,integratedAt:fixture!.startAt}},
     },
   };
+  // Pirate raids are outside the attack points rule: a new player under 300 points is still raided.
+  assert.ok((selectOwnerScore(seeded,seeded.profile.playerId)?.totalPoints??0)<300);
   const due=selectDuePirateRolls(seeded,fixture!.startAt,now,'production');
   const event=due.find(x=>x.contactCycleKey===cycleKey&&x.ownerId===baseline.profile.playerId);
   assert.ok(event);

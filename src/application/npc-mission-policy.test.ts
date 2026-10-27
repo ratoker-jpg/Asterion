@@ -8,6 +8,7 @@ import { createEmptyFleetState } from '../domain/fleet/runtime.ts';
 import { createEmptyDefenseState } from '../domain/fleet/production.ts';
 import { createNpcState } from '../domain/npc/state.ts';
 import type { SaveState } from './contracts.ts';
+import { withAttackEligiblePoints } from './attack-eligibility.test-support.ts';
 import { candidateToNpcMissionCommand, getNpcMissionCandidates } from './npc-mission-policy.ts';
 
 const OWNER = 'npc-policy-owner';
@@ -69,14 +70,15 @@ function baseState(reportOwner?: string, reportAt = AT): SaveState {
     firstReport: true,
   }] : [];
   const targets = { ...getEspionageTargets(state.espionage), [origin.id]: origin, [enemy.id]: enemy };
-  return {
+  // The player, the owner and the other NPC start mutually admissible under the attack points rule.
+  return withAttackEligiblePoints({
     ...state,
     npc: createNpcState([OWNER, OTHER_OWNER], 'npc-policy-tests', 0),
     espionage: { ...createDefaultEspionageState(), ...state.espionage, targets, reports },
     // The first colony opens at 500 total points (owner rule).
     rating: { ...state.rating, battleAwardsByReportId: { ...state.rating.battleAwardsByReportId,
       'qa-first-colony-points': { [OWNER]: 500 } } },
-  };
+  }, [OWNER, OTHER_OWNER, state.profile.playerId]);
 }
 
 function candidates(state: SaveState) {
@@ -96,7 +98,8 @@ test('mission candidates are deterministic and ignore hidden target fleet change
       ...espionage,
       targets: {
         ...espionage.targets,
-        [TARGET_ID]: { ...changedTarget, fleet: { ...changedTarget.fleet, ships: { ...changedTarget.fleet.ships, battleship: 999_999 } } },
+        // Total points are public (rating); the hidden change keeps the target inside the attack band.
+        [TARGET_ID]: { ...changedTarget, fleet: { ...changedTarget.fleet, ships: { ...changedTarget.fleet.ships, battleship: 100 } } },
       },
     },
   };
@@ -109,6 +112,18 @@ test('attack eligibility is owner-scoped and respects the observation time', () 
   const futureReport = candidates(baseState(OWNER, AT + 1));
   assert.equal(otherOwnerReport.some((candidate) => candidate.kind === 'attack'), false);
   assert.equal(futureReport.some((candidate) => candidate.kind === 'attack'), false);
+});
+
+test('an inadmissible attack target is never a candidate, so the NPC spends no attempt on it', () => {
+  const observed = baseState(OWNER);
+  const hasAttack = (state: SaveState) => candidates(state).some((candidate) => candidate.kind === 'attack' && candidate.payload.destinationPlanetId === TARGET_ID);
+  assert.equal(hasAttack(observed), true);
+  // OWNER has 50 000 resource + 500 battle points; 101 001 total is just outside ×2, 101 000 is the edge.
+  assert.equal(hasAttack(withAttackEligiblePoints(observed, [OTHER_OWNER], 101_000)), true);
+  const farTarget = withAttackEligiblePoints(observed, [OTHER_OWNER], 101_001);
+  assert.equal(hasAttack(farTarget), false);
+  assert.ok(candidates(farTarget).some((candidate) => candidate.kind === 'espionage' && candidate.payload.destinationPlanetId === TARGET_ID),
+    'other missions to the same owner stay open');
 });
 
 test('colonization only proposes canonical public empty coordinates and respects the owner cap', () => {

@@ -10,6 +10,7 @@ import { createBot01Planets } from '../domain/espionage/fixtures.ts';
 import { createUniverseSystem } from '../domain/universe/runtime.ts';
 import type { SpyTargetState } from '../domain/espionage/types.ts';
 import type { SaveState } from './contracts.ts';
+import { withAttackEligiblePoints } from './attack-eligibility.test-support.ts';
 import {
   dispatchNpcMission,
   getNpcMissionAvailableFleet,
@@ -127,12 +128,12 @@ test('attack dispatch accepts a neutral owner through the current relation rules
   const playerCoordinate = { galaxy: 1, system: 1, position: 2 };
   const espionage = { ...createDefaultEspionageState(), targets: { [origin.id]: origin } };
   const home = { ...state.planets['helion-01']!, universeGalaxy: 1, universeSystem: 1, universePosition: 2 };
-  const withNpc = {
+  const withNpc = withAttackEligiblePoints({
     ...state,
     planets: { ...state.planets, 'helion-01': home },
     npc: createNpcState([OWNER], 'npc-attack-tests', 0),
     espionage,
-  };
+  }, [OWNER, state.profile.playerId], 100_000);
   const sent = dispatchNpcMission(withNpc, {
     ownerId: OWNER,
     originPlanetId: ORIGIN_ID,

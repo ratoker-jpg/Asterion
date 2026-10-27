@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { getFactionShipCatalog } from './domain/combat/faction-catalog.ts';
 import { PIRATE_CATALOG_BY_ID, type PirateBaseShipId } from './domain/pirates/catalog.ts';
+import { describeIncomingAttack, INCOMING_ATTACK_COMPOSITION_ESPIONAGE_LEVEL } from './domain/flights/incoming-attack-knowledge.ts';
 import { COMMANDER_COMBAT_CATALOG } from './domain/combat/catalog.ts';
 import { getCombatFactionName } from './domain/combat/factions.ts';
 import { COMMANDER_IDS, getCommanderPresentedAbility, type CommanderId } from './domain/combat/commanders.ts';
@@ -233,7 +234,7 @@ function shipCountLabel(count: number) {
 
 function targetErrorFromFlightResult(result: FlightCommandResult): string | null {
   if (result.ok) return null;
-  if (result.error.code === 'invalid-coordinate' || result.error.code === 'target-occupied' || result.error.code === 'target-not-colonizable' || result.error.code === 'target-not-available' || result.error.code === 'target-is-origin' || result.error.code === 'spy-target-blocked' || result.error.code === 'spy-mission-not-found') {
+  if (result.error.code === 'invalid-coordinate' || result.error.code === 'target-occupied' || result.error.code === 'target-not-colonizable' || result.error.code === 'target-not-available' || result.error.code === 'target-is-origin' || result.error.code === 'spy-target-blocked' || result.error.code === 'spy-mission-not-found' || result.error.code === 'attack-not-allowed') {
     return result.error.message;
   }
   return null;
@@ -516,6 +517,8 @@ function FleetWorkspace({
     [flightRecords, saveState.profile.playerId],
   );
   // Hostile flights heading to the player light up the whole Fleet screen.
+  // Read at the moment of viewing: researching espionage 10 reveals fleets already on the way.
+  const playerEspionageLevel = saveState.science.levels[5] ?? 0;
   const hostileIncomingFlights = useMemo(() => activeFlightRecords
     .filter((flight) => isHostileFlightIncomingToPlayer(flight, saveState.profile.playerId))
     .map((flight) => ({ flight, originLabel: flightOwnerLabel(flight, saveState.espionage?.targets) })), [activeFlightRecords, saveState.espionage?.targets, saveState.profile.playerId]);
@@ -1544,14 +1547,19 @@ function FleetWorkspace({
                   const isBot01Explorer = (flight.ownerSide === 'bot01' || flight.ownerSide === 'npc') && (flight.missionId === 'expedition'||flight.explorationAttack);
                   const isIncomingPirateRaid = flight.ownerSide === 'pirate' && flight.missionId === 'pirate-raid';
                   const isHostileIncoming = isIncomingBotAttack || isIncomingPirateRaid || isBot01Explorer;
-                  const pirateComposition = isIncomingPirateRaid ? Object.entries(flight.pirateRaidSnapshot?.composition ?? {})
-                    .filter(([id, count]) => count > 0 && id in PIRATE_CATALOG_BY_ID)
-                    .map(([id,count]) => `${PIRATE_CATALOG_BY_ID[id as PirateBaseShipId].name} ×${flightNumberLabel(count)}`)
-                    .join(' · ') : '';
-                  const piratePopulation = isIncomingPirateRaid
-                    ? Object.entries(flight.pirateRaidSnapshot?.composition ?? {}).reduce((population,[id,count]) =>
-                      population + (PIRATE_CATALOG_BY_ID[id as PirateBaseShipId]?.population ?? 0) * count,0)
-                    : 0;
+                  // Composition only from espionage 10 at the moment of viewing (owner rule); below it only the fact of the attack.
+                  const incomingKnowledge = isIncomingBotAttack || isIncomingPirateRaid ? describeIncomingAttack(flight, playerEspionageLevel) : null;
+                  const incomingComposition = incomingKnowledge?.composition ?? null;
+                  const incomingCompositionLabel = incomingComposition?.kind === 'pirate'
+                    ? `УГРОЗА ${flightNumberLabel(incomingComposition.population)} НАС. · ${(Object.entries(incomingComposition.ships) as [PirateBaseShipId, number][])
+                      .map(([id, count]) => `${PIRATE_CATALOG_BY_ID[id].name} ×${flightNumberLabel(count)}`).join(' · ') || 'КОРАБЛЕЙ НЕТ'}`
+                    : incomingComposition?.kind === 'fleet'
+                      ? [
+                        ...(Object.entries(incomingComposition.ships) as [ShipId, number][]).map(([id, count]) =>
+                          `${getFactionShipCatalog(flight.attackSnapshot?.attackerFactionId ?? factionId).find((ship) => ship.id === id)?.name ?? id} ×${flightNumberLabel(count)}`),
+                        ...(Object.keys(incomingComposition.commanders) as CommanderId[]).map((id) => `Командир ${getCommanderPresentedAbility(id).commanderName}`),
+                      ].join(' · ') || 'КОРАБЛЕЙ НЕТ'
+                      : '';
                   const liveTransportState = getActiveTransportState(flight);
                   const targetUnavailable = flight.completionReason === 'target-unavailable' || liveTransportState.targetUnavailable;
                   const statusLabel = isBot01Explorer ? (flight.phase === 'outbound' ? 'NPC · К ОБЪЕКТУ' : flight.phase === 'arrived' ? 'ЗАНЯТО NPC' : 'NPC · ВОЗВРАЩАЕТСЯ') : (flight.missionId === 'expedition' || flight.explorationAttack) && flight.phase === 'arrived' ? '⛏ ДОБЫВАЕТ РЕСУРСЫ' : targetUnavailable
@@ -1565,7 +1573,9 @@ function FleetWorkspace({
                         : 'ПРИБЫЛ';
                   const attackOrder = attackOrderByFlightId.get(flight.id);
                   return <div className={`fleet-flight-row-v1${isHostileIncoming ? ' fleet-flight-row-v1--incoming-attack' : ''}`} key={flight.id} data-qa-flight-row={flight.id} data-qa-flight-phase={flight.phase} data-qa-flight-owner-side={flight.ownerSide ?? 'player'} data-qa-flight-incoming-attack={isHostileIncoming || undefined} data-qa-flight-pirate-raid={isIncomingPirateRaid || undefined}>
-                  <span className="fleet-flight-mission-cell"><img className="fleet-flight-mission-icon" src={flightMissionIcon(flight.missionId)} alt="" /><span>{(flight.ownerSide !== 'bot01' && flight.ownerSide !== 'npc' && (flight.missionId === 'expedition' || flight.explorationAttack)) ? <button type="button" className="fleet-expedition-details-trigger" onClick={() => setSelectedExpeditionFlightId(flight.id)} data-qa-expedition-flight-details={flight.id}>ЭКСПЕДИЦИЯ · ПОДРОБНЕЕ ↗</button> : flight.explorationAttack ? 'БОЕВОЙ ЗАХВАТ · ЭКСПЕДИЦИЯ' : !isHostileIncoming && flight.ownerSide !== 'npc' ? <button type="button" className="fleet-expedition-details-trigger" onClick={() => setSelectedFlightDetailsId(flight.id)} data-qa-flight-details={flight.id}>{flightMissionLabel(flight.missionId)} · ПОДРОБНЕЕ ↗</button> : flightMissionLabel(flight.missionId)}{isIncomingPirateRaid ? <small data-qa-pirate-raid-force title={pirateComposition || 'Состав неизвестен'}>УГРОЗА {flightNumberLabel(piratePopulation)} НАС. · {pirateComposition || 'СОСТАВ НЕИЗВЕСТЕН'}</small> : null}{isIncomingBotAttack && flight.ownerSide === 'bot01' ? <small data-qa-flight-bot01-label>BOT 01</small> : null}{attackOrder && !isHostileIncoming ? <small data-qa-flight-attack-order>АТАКА #{attackOrder}</small> : null}</span>{liveTransportState.overflowWarning ? <b className="fleet-flight-overflow-warning" aria-label="Часть груза может сгореть: склады цели заполнены" data-qa-flight-overflow-warning>!</b> : null}</span>
+                  <span className="fleet-flight-mission-cell"><img className="fleet-flight-mission-icon" src={flightMissionIcon(flight.missionId)} alt="" /><span>{(flight.ownerSide !== 'bot01' && flight.ownerSide !== 'npc' && (flight.missionId === 'expedition' || flight.explorationAttack)) ? <button type="button" className="fleet-expedition-details-trigger" onClick={() => setSelectedExpeditionFlightId(flight.id)} data-qa-expedition-flight-details={flight.id}>ЭКСПЕДИЦИЯ · ПОДРОБНЕЕ ↗</button> : flight.explorationAttack ? 'БОЕВОЙ ЗАХВАТ · ЭКСПЕДИЦИЯ' : !isHostileIncoming && flight.ownerSide !== 'npc' ? <button type="button" className="fleet-expedition-details-trigger" onClick={() => setSelectedFlightDetailsId(flight.id)} data-qa-flight-details={flight.id}>{flightMissionLabel(flight.missionId)} · ПОДРОБНЕЕ ↗</button> : flightMissionLabel(flight.missionId)}{incomingKnowledge ? incomingComposition
+                    ? <small data-qa-incoming-composition data-qa-pirate-raid-force={isIncomingPirateRaid || undefined} title={incomingCompositionLabel}>{incomingCompositionLabel}</small>
+                    : <small data-qa-incoming-composition-hidden title={`Состав входящего флота виден со Шпионажа ${INCOMING_ATTACK_COMPOSITION_ESPIONAGE_LEVEL}`}>СОСТАВ СКРЫТ · ШПИОНАЖ {INCOMING_ATTACK_COMPOSITION_ESPIONAGE_LEVEL}</small> : null}{isIncomingBotAttack && flight.ownerSide === 'bot01' ? <small data-qa-flight-bot01-label>BOT 01</small> : null}{attackOrder && !isHostileIncoming ? <small data-qa-flight-attack-order>АТАКА #{attackOrder}</small> : null}</span>{liveTransportState.overflowWarning ? <b className="fleet-flight-overflow-warning" aria-label="Часть груза может сгореть: склады цели заполнены" data-qa-flight-overflow-warning>!</b> : null}</span>
                   <span className="fleet-flight-route-cell">
                     <span data-qa-flight-origin>{flight.ownerSide === 'npc' && flight.missionId === 'aid' ? <><strong>СОЮЗНИК</strong><small>помощь по запросу</small></> : isIncomingBotAttack || isBot01Explorer || isIncomingPirateRaid ? <><strong>{flightOwnerLabel(flight, saveState.espionage?.targets)}</strong><CoordinateLink coordinate={flight.originCoordinate} /></> : <><strong>{saveState.planets[flight.originPlanetId]?.name ?? 'Ваша планета'}</strong><CoordinateLink coordinate={flight.originCoordinate} /></>}</span>
                     <b className="fleet-flight-route-arrow" aria-hidden="true">→</b>

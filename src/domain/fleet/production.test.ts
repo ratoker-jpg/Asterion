@@ -34,7 +34,7 @@ function context(overrides: Partial<FleetProductionContext> = {}): FleetProducti
     wallet: { metal: 1_000_000_000, minerals: 1_000_000_000, gas: 1_000_000_000 },
     capacities,
     hangarLevel: 1,
-    shipyardLevel: 1,
+    shipyardLevel: 2, // the Ballistic turret needs Shipyard 2 (Nemexia table)
     advancedFactoryLevel: 0,
     scienceLevels: unlockedScienceLevels,
     now: 0,
@@ -277,12 +277,18 @@ test('fleet and defense capacity are separate pools and limited commanders/shiel
   const commander = enqueueFleetProduction(current, 'commanders', 'corsair', 1, 'commander-limit-1');
   assert.equal(commander.ok, false, 'fleet population is already full');
 
-  const empty = context({ shipyardLevel: 20 });
+  // The Tower shield needs Ship armor 6 (Nemexia table); one level short is refused atomically.
+  const empty = context({ shipyardLevel: 20, hangarLevel: 1_000, scienceLevels: { ...unlockedScienceLevels, 7: 5 } });
   const shield = enqueueFleetProduction(empty, 'defense', 'tower-shield', 1, 'shield-1');
   assert.equal(shield.ok, false);
-  assert.match(shield.reason ?? '', /Щитовые системы/);
+  assert.match(shield.reason ?? '', /Броня кораблей/);
   assert.strictEqual(shield.state, empty.state);
   assert.deepEqual(shield.wallet, empty.wallet);
+  const ready = context({ shipyardLevel: 20, hangarLevel: 1_000 });
+  const firstShield = enqueueFleetProduction(ready, 'defense', 'tower-shield', 1, 'shield-ok');
+  assert.equal(firstShield.ok, true, firstShield.reason ?? '');
+  const secondShield = enqueueFleetProduction(after(ready, firstShield), 'defense', 'tower-shield', 1, 'shield-duplicate');
+  assert.equal(secondShield.ok, false, 'a shield cannot be duplicated');
 });
 
 test('Planeto-lom production requires the catalog science levels and unlocks without reload', () => {
@@ -335,11 +341,11 @@ test('the same typed evaluator gates defense and commander science requirements'
   const defenseContext = context({
     shipyardLevel: 5,
     hangarLevel: 1_000,
-    scienceLevels: { ...unlockedScienceLevels, 10: 0 },
+    scienceLevels: { ...unlockedScienceLevels, 1: 1 },
   });
   const blockedDefense = enqueueFleetProduction(defenseContext, 'defense', 'laser-turret', 1, 'laser-defense-blocked');
   assert.equal(blockedDefense.ok, false);
-  assert.equal(blockedDefense.reason, 'Требуется Лазерная наука уровня 2.');
+  assert.equal(blockedDefense.reason, 'Требуется Физика уровня 2.');
   assert.strictEqual(blockedDefense.state, defenseContext.state);
   assert.deepEqual(blockedDefense.wallet, defenseContext.wallet);
 

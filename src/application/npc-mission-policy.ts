@@ -8,6 +8,7 @@ import { getFlightSlotUsage, isFlightLimitExempt } from '../domain/flights/limit
 import type { FlightDestination, TargetRelation } from '../domain/flights/types.ts';
 import { createUniverseSystem, MAX_PLANETS_PER_OWNER, nextColonyPointThreshold, SYSTEM_COUNT } from '../domain/universe/runtime.ts';
 import { selectOwnerScore } from '../domain/rating/scoring.ts';
+import { evaluatePlanetAttackEligibility } from './attack-eligibility.ts';
 import type { UniverseCoordinate, UniverseObjectKind, UniversePersistedPlayerPlanet, UniverseRegisteredPlanet } from '../domain/universe/types.ts';
 import { explorationNodeId, visibleExplorationContacts } from '../domain/exploration/model.ts';
 import { EXPLORATION_ARTS } from '../exploration-art.ts';
@@ -293,6 +294,7 @@ export function getNpcMissionCandidates(
     const threshold = nextColonyPointThreshold(ownerPlanetCount + reservedColonize.size);
     return threshold !== null && (selectOwnerScore(state, ownerId)?.totalPoints ?? 0) >= threshold;
   })();
+  const attackScoreCache = new Map<string, { totalPoints: number; resourcePoints: number } | undefined>();
   for (const origin of ownerTargets) {
     const available = getNpcMissionAvailableFleet(state, ownerId, origin.id);
     if (!available) continue;
@@ -332,6 +334,8 @@ export function getNpcMissionCandidates(
         if (!observed.has(target.id) || (target.kind !== 'player' && target.kind !== 'npc')) continue;
         const relation = legalRelation(state, ownerId, target);
         if (!relation) continue;
+        // The same launch gate as dispatch: an inadmissible target is never a candidate.
+        if (!evaluatePlanetAttackEligibility(state, ownerId, target.ownerId, attackScoreCache).allowed) continue;
         addCandidate(candidateList, ownerId, 'attack', origin.id, target.coordinate, attackShips, {
           destinationPlanetId: target.id,
           targetRelation: relation,
