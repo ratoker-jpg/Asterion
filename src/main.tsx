@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { GameRoot } from './ui/menu/GameRoot.tsx';
 import { installUiSounds } from './audio/ui-bindings.ts';
+import { installSelectionGuard } from './ui/selection-guard.ts';
 import './ui/race/race-tokens.css';
 import './styles.css';
 import './universe-nav.css';
@@ -36,6 +37,7 @@ import './motion.css';
 import './final-polish.css';
 import './ui/fleet/fleet-unified.css';
 import './ui/unified-screens.css';
+import './ui/ui-polish.css';
 
 const isElectron = navigator.userAgent.includes('Electron');
 
@@ -102,6 +104,7 @@ if (!isElectron) {
 }
 
 installUiSounds();
+installSelectionGuard();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

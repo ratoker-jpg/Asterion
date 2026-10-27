@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getBuildingDefinition } from './domain/buildings/resource-zone.ts';
+import type { BuildingFaction } from './domain/buildings/balance-v1.ts';
 import {
   MAX_PRODUCTION_BOTS_PER_RESOURCE,
   PRODUCTION_BOT_BONUSES,
@@ -18,6 +19,7 @@ import './production-bots.css';
 
 type ProductionBotsViewProps = {
   buildingRole: ProductionBotBuildingRole;
+  factionId: BuildingFaction;
   planetName: string;
   buildingLevel: number;
   availableBots: number;
@@ -26,12 +28,10 @@ type ProductionBotsViewProps = {
   onBack: () => void;
 };
 
-function backLabel(role: ProductionBotBuildingRole) {
-  return role === 'construction' ? 'Назад в Фабрику' : 'Назад в Промышленный комплекс';
-}
 
 export function ProductionBotsView({
   buildingRole,
+  factionId,
   planetName,
   buildingLevel,
   availableBots,
@@ -39,7 +39,7 @@ export function ProductionBotsView({
   onApply,
   onBack,
 }: ProductionBotsViewProps) {
-  const building = getBuildingDefinition(buildingRole);
+  const building = getBuildingDefinition(buildingRole, factionId);
   const [draft, setDraft] = useState<BotAssignment>(() => ({ ...appliedAssignment }));
   const [toastVisible, setToastVisible] = useState(false);
 
@@ -92,7 +92,7 @@ export function ProductionBotsView({
           onClick={onBack}
         >
           <span aria-hidden="true">←</span>
-          {backLabel(buildingRole)}
+          Назад в {building.name}
         </button>
       </header>
 

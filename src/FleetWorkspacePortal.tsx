@@ -1473,10 +1473,10 @@ function FleetWorkspace({
           data-qa-building-faction={factionId}
           data-qa-building-asset={shipyardPresentation.art}
         >
-          <img src={shipyardPresentation.art} alt="Верфь" draggable={false} />
+          <img src={shipyardPresentation.art} alt={shipyardPresentation.name} draggable={false} />
           <div>
             <small>{planetName}</small>
-            <strong>Верфь</strong>
+            <strong>{shipyardPresentation.name}</strong>
             <span className="fleet-yard-level-v1">УРОВЕНЬ {fleetSnapshot.shipyardLevel}</span>
             <p>Ангар {fleetSnapshot.hangarLevel} · производство флота и обороны.</p>
           </div>

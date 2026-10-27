@@ -72,6 +72,7 @@ export function BuildingInteriorHost<PlanetId extends string>({
   if (context.buildingRole === 'recycling') {
     return (
       <RecyclingCenterView
+        factionId={factionId}
         planetName={planetName}
         buildingLevel={buildings.recycling}
         recycling={recycling}
@@ -86,6 +87,7 @@ export function BuildingInteriorHost<PlanetId extends string>({
   if (context.buildingRole === 'trade-center') {
     return (
       <TradeCenterView
+        factionId={factionId}
         planetName={planetName}
         buildingLevel={buildings['trade-center']}
         trade={trade}
@@ -121,6 +123,7 @@ export function BuildingInteriorHost<PlanetId extends string>({
     return (
       <ProductionBotsView
         buildingRole={context.buildingRole}
+        factionId={factionId}
         planetName={planetName}
         buildingLevel={buildings[context.buildingRole]}
         availableBots={getAvailableProductionBots(buildings)}

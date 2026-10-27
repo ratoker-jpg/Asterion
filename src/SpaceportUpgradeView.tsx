@@ -393,11 +393,11 @@ export function SpaceportUpgradeView({
       <aside className="spaceport-sidebar-v2" data-qa-spaceport-sidebar>
         <header className="spaceport-sidebar-title-v2">
           <small>ASTERION // ВОЕННАЯ ЗОНА</small>
-          <h1>КОСМОДРОМ</h1>
+          <h1>{spaceport.name.toUpperCase()}</h1>
         </header>
 
         <section className="building-card-v2 spaceport-building-card-v2">
-          <img src={spaceport.art} alt="Космодром" draggable={false} />
+          <img src={spaceport.art} alt={spaceport.name} draggable={false} />
           <div>
             <small>{planetName}</small>
             <strong>УРОВЕНЬ {buildingLevel} / 10</strong>
@@ -405,7 +405,7 @@ export function SpaceportUpgradeView({
           </div>
         </section>
 
-        <nav className="spaceport-sections-v2" aria-label="Разделы Космодрома">
+        <nav className="spaceport-sections-v2" aria-label={`Разделы: ${spaceport.name}`}>
           {(['ships', 'commanders'] as const).map((track) => {
             const queue = queueOf(upgrades, track);
             return (
@@ -428,7 +428,7 @@ export function SpaceportUpgradeView({
 
         <button type="button" className="spaceport-back-v2" data-qa-building-interior-back onClick={onBack}>
           <span aria-hidden="true">←</span>
-          Назад в Космодром
+          Назад в {spaceport.name}
         </button>
       </aside>
 
@@ -592,7 +592,7 @@ export function SpaceportUpgradeView({
                   <div className="spaceport-row-time-v2">
                     <small>ВРЕМЯ НОВОЙ ЗАДАЧИ</small>
                     <time>{formatTaskTime(preview.effectiveDurationMs)}</time>
-                    <em>Космодром ур. {buildingLevel}</em>
+                    <em>{spaceport.name} ур. {buildingLevel}</em>
                   </div>
                   <button
                     type="button"

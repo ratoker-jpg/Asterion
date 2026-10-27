@@ -1,0 +1,45 @@
+/* UI polish v2 — loaded last. Global interface behaviour first, then the
+   per-screen corrections that bring older surfaces to the rounded graphite
+   standard of «Операции», «Планета» and «Командование». */
+
+/* ---- 1. Selection and drag ------------------------------------------------
+   The interface is not a document: nothing is selectable by default. Fields
+   and the copyable regions listed in `src/ui/selection-guard.ts` opt back in. */
+html,
+body,
+#root {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+input:not([type="button"], [type="checkbox"], [type="radio"], [type="range"], [type="submit"], [type="reset"]),
+textarea,
+[contenteditable]:not([contenteditable="false"]),
+.ut-selectable,
+.reports-preview-scroll,
+.command-journal__list,
+.command-dialog-body,
+.cmdA-dossier-body,
+.cmdA-desc,
+.uw-coord,
+.uw-owner-copy h3 {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Controls inside a copyable region stay controls. */
+:is(.reports-preview-scroll, .cmdA-dossier-body, .ut-selectable) :is(button, [role="button"], [role="tab"]) {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+img,
+svg,
+a {
+  -webkit-user-drag: none;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--ut-accent, #4fd8ff) 34%, transparent);
+  color: #f4fbff;
+}
