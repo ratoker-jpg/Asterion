@@ -47,22 +47,18 @@ a {
 /* ---- 3. One close icon ------------------------------------------------------
    Every [data-asterion-close] draws the same 18 px cross inside its 40 px red
    hit area; the text glyphs (×, ✕) differed in size and weight per window. */
-body button[data-asterion-close] {
-  position: relative;
-  font-size: 0 !important;
-}
+body button[data-asterion-close]:not([hidden]) { display: inline-grid !important; place-items: center; font-size: 0 !important; }
 body button[data-asterion-close] > * { display: none; }
+/* Both strokes sit in the button's single grid cell: no positioning, so the
+   button keeps whatever placement its window gives it. */
 body button[data-asterion-close]::before,
 body button[data-asterion-close]::after {
   content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
+  grid-area: 1 / 1;
   width: 18px;
   height: 2px;
   border-radius: 2px;
   background: currentColor;
-  translate: -50% -50%;
   rotate: 45deg;
 }
 body button[data-asterion-close]::after { rotate: -45deg; }
@@ -217,8 +213,11 @@ html body .flight-briefing-v2 .flight-timeline-error::before {
 }
 html body .flight-briefing-v2 .flight-draft-v3__line { margin-top: 10px; color: #a9c3cb; font-size: var(--ut-font-body); }
 html body .flight-briefing-v2 .flight-timeline-target-status.is-invalid { border-radius: var(--ut-r-chip); }
-/* Composition rows: the stats line wraps instead of «Населени…». */
-html body .flight-briefing-v2 .flight-timeline-ship-card div small { white-space: normal; line-height: 1.35; }
+/* Composition: up to three ship types take the full column width (the stats
+   line was cut to «Населени…»); four and more keep the two-column contract
+   that holds the plan on screen (fleet-production-qa). */
+html body .flight-briefing-v2 .flight-timeline-ship-list.flight-composition-v3:not(:has(> article:nth-of-type(4))) { grid-template-columns: minmax(0, 1fr) !important; }
+html body .flight-briefing-v2 .flight-timeline-ship-card div small { line-height: 1.35; }
 
 /* Ship tile: a quiet rounded number field without browser spinners. */
 html body .fleet-root-v2 .fleet-ship-tile-v2__input {
@@ -462,3 +461,8 @@ html body .npc-catchup-tile > strong {
 html body .npc-catchup-leaders { border-radius: var(--ut-r-card); }
 html body .npc-catchup-leaders li { padding: 3px 0; border-bottom: 1px solid rgba(126, 200, 220, .07); }
 html body .npc-catchup-leaders li:last-child { border-bottom: 0; }
+
+/* ---- 8. Zone map captions: no orphaned «I», no wrapped status line ----------- */
+html body .resource-building-caption { max-width: 210px; text-align: center; }
+html body .resource-building-caption strong { font-size: var(--ut-font-secondary) !important; text-wrap: balance; }
+html body .resource-building-caption small { font-size: var(--ut-font-secondary) !important; white-space: nowrap; }

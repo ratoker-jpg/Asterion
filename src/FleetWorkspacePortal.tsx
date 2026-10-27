@@ -1464,7 +1464,7 @@ function FleetWorkspace({
         <div className="fleet-sidebar-title-v1">
           <small>ASTERION // ВОЕННАЯ ЗОНА</small>
           <span>ФЛОТЫ</span>
-          <em>ФЛОТ {factionName.toUpperCase()}</em>
+          <em>ФЛОТ · {factionName.toUpperCase()}</em>
         </div>
 
         <div

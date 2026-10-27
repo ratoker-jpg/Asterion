@@ -219,6 +219,9 @@ async function longAllianceScene(win) {
   await click(win, '[data-qa-alliance-submit]');
   await settle(win, 800);
   await capture(win, '07-command-alliance-long', 'Командование after creating the long-named alliance');
+  await clickText(win, '.cmdA-tabs button', 'СОЮЗЫ');
+  await settle(win, 600);
+  await capture(win, '07-command-alliances-crests', 'Командование → Союзы: NPC alliance crests in the catalog');
   await clickUtility(win, 'rating');
   await waitFor(win, `document.querySelector('.rating-view-v2 [data-qa-rating-player-row]')`);
   await clickText(win, '.rating-view-v2 button', 'ПОКАЗАТЬ МОЮ ПОЗИЦИЮ');
@@ -289,6 +292,33 @@ async function flightScenes(win, objectId, npc) {
   await capture(win, '05-flight-plan-attack', `План перелёта · атака on ${npc.ownerName}: header, close button, refusal «${refusal}»`);
   await run(win, `document.querySelector('[data-qa-flight-preview-close], .flight-preview-close, [aria-label="Закрыть"]')?.click()`);
   await settle(win, 300);
+}
+
+// V6 per race: a new game has these buildings at level 0 (interior closed).
+// Save edit (stated): construction, recycling and trade-center set to level 1
+// on the home planet, then the interiors and Science are opened normally.
+async function raceInteriorsScenes(win) {
+  await run(win, saveExpr(`const b = save.planets[save.currentPlanetId].buildings; for (const role of ['construction', 'recycling', 'trade-center']) b[role] = Math.max(1, b[role] || 0); localStorage.setItem(key, JSON.stringify(save));`));
+  await reloadGame(win);
+  await clickPrimary(win, 'planet');
+  await click(win, '[data-qa-zone="industry"]');
+  await waitFor(win, `document.querySelector('[data-qa-zone-view][data-zone="industry"]')`);
+  for (const role of ['construction', 'recycling', 'trade-center']) {
+    await click(win, `[data-zone-building-role="${role}"]`);
+    await waitFor(win, `document.querySelector('[data-qa-building-dialog="${role}"]')`);
+    await click(win, `[data-qa-enter-building="${role}"]`);
+    await settle(win, 900);
+    const art = await run(win, `[...document.querySelectorAll('main img, section img, aside img')].map((img) => img.getAttribute('src') || '').filter((src) => src.includes('/buildings/')).map((src) => src.split('/').pop())`);
+    await capture(win, `08-interior-${role}-${RACE}`, `${RACE}: interior of ${role}; building art: ${art.join(', ')}. Save edit: construction/recycling/trade-center level 1.`);
+    await run(win, `document.querySelector('[data-qa-building-interior-back]')?.click()`);
+    await settle(win, 600);
+    await run(win, `document.querySelector('.resource-building-dialog-close')?.click()`);
+    await settle(win, 300);
+  }
+  await clickUtility(win, 'science');
+  await settle(win, 800);
+  const lab = await run(win, `(document.querySelector('.science-lab-art-v2')?.getAttribute('src') || '').split('/').pop()`);
+  await capture(win, `08-science-${RACE}`, `${RACE}: Наука, laboratory art ${lab}`);
 }
 
 async function interiorsScenes(win) {
@@ -401,7 +431,7 @@ app.whenReady().then(async () => {
     await newGame(win);
     const steps = [
       ['catchup', catchupScene], ['selection', selectionScene], ['rating', ratingScenes], ['planet-editor', planetEditorScene], ['queue', navAndQueueScene],
-      ['universe', universeScenes], ['interiors', interiorsScenes], ['screens', otherScreens], ['long-alliance', longAllianceScene],
+      ['universe', universeScenes], ['interiors', interiorsScenes], ['race-interiors', raceInteriorsScenes], ['screens', otherScreens], ['long-alliance', longAllianceScene],
     ];
     for (const [scene, fn] of steps) {
       if (!wants(scene)) continue;
