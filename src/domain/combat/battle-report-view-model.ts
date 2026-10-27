@@ -1024,3 +1024,25 @@ export function createBattleReportViewModel(
     timestampAvailable: readString(record.timestamp) != null,
   };
 }
+
+const noCombatNumber = new Intl.NumberFormat('ru-RU');
+
+/**
+ * A battle with zero rounds never started: one side had nothing to fight with.
+ * It reads as one plain sentence instead of «victory» next to «no battle».
+ */
+export function noCombatVerdict(
+  roundCount: number,
+  winner: BattleWinner,
+  missionType: BattleMissionType,
+  loot: readonly { label: string; value: number }[] = [],
+): { label: string; summary: string } | null {
+  if (roundCount > 0) return null;
+  if (winner === 'draw') return { label: 'БОЙ НЕ СОСТОЯЛСЯ', summary: 'Бой не состоялся: ни у одной из сторон не было сил.' };
+  if (winner === 'defender') return { label: 'БОЙ НЕ СОСТОЯЛСЯ', summary: 'Бой не состоялся: у атакующего не было сил.' };
+  const taken = loot.filter((item) => item.value > 0).map((item) => `${item.label} ${noCombatNumber.format(item.value)}`);
+  const lootText = taken.length ? ` Добыча: ${taken.join(' · ')}.` : ' Добычи нет.';
+  return missionType === 'attack' || missionType === 'pirate-raid'
+    ? { label: 'ЗАХВАТ БЕЗ БОЯ', summary: `Планета захвачена без боя: обороны не было.${lootText}` }
+    : { label: 'ПОБЕДА БЕЗ БОЯ', summary: `Противнику нечем было сражаться.${lootText}` };
+}

@@ -40,7 +40,9 @@ import { compareNpcEvents } from '../domain/npc/events.ts';
 import type { NpcProfile } from '../domain/npc/types.ts';
 import { settleNpcRecycling, getNextNpcEconomyCheckpoint, settleNpcPlanet } from './npc-economy.ts';
 import { getNextNpcScienceCheckpoint, pauseNpcScienceForSettlement, projectNpcScienceLedger, reconcileNpcScienceAt } from './npc-science.ts';
-import { getReplayNpcOwnerIds, NPC_REPLAY_GENERATION_STEP_MS, NPC_REPLAY_MAX_GROUPS, NPC_REPLAY_WINDOW_MS } from './npc-catchup.ts';
+import { getReplayNpcOwnerIds, isNpcCatchupPending, NPC_CATCHUP_COMMAND_GRACE_MS, NPC_REPLAY_GENERATION_STEP_MS, NPC_REPLAY_MAX_GROUPS, NPC_REPLAY_WINDOW_MS } from './npc-catchup.ts';
+import { accumulateWorldCatchupSummary, countNewWorldBattles, startWorldCatchupSummary } from './world-catchup-summary.ts';
+import type { WorldCatchupSummary } from '../domain/npc/world-catchup-summary.ts';
 import { CAMPAIGN_SPEED_SCALE } from '../domain/runtime/mode.ts';
 import { LEADER_ABSENCE_MS } from '../domain/command/catalog.ts';
 import { settleLeadership } from '../domain/command/membership.ts';
@@ -101,7 +103,8 @@ export function reconcileRuntime(
       if (cleaned !== result.state) { result.state = cleaned; result.changed = true; }
     }
     if (context.mode === 'production' && state.npcReplay && state.npcReplay.targetAt > state.npcReplay.processedThroughAt) {
-      result.state = { ...result.state, npcReplay: { version: 1, processedThroughAt: context.now, targetAt: context.now } };
+      result.state = { ...result.state, npcReplay: { version: 1, processedThroughAt: context.now, targetAt: context.now,
+        ...(state.npcReplay.summary ? { summary: { ...state.npcReplay.summary, finishedAt: state.npcReplay.summary.finishedAt ?? context.now } } : {}) } };
       result.changed = true;
     }
     return result;
@@ -110,14 +113,33 @@ export function reconcileRuntime(
   const frozen = state.npcReplay && state.npcReplay.targetAt > from ? state.npcReplay.targetAt : context.now;
   const targetAt = Math.max(from, Math.floor(frozen));
   const windowEnd = Math.min(targetAt, from + NPC_REPLAY_WINDOW_MS);
-  const result = reconcileRuntimeSlice(state, { ...context, now: windowEnd }, { from, owners, targetAt });
+  const summary = catchupSummaryFor(state, from, targetAt);
+  const result = reconcileRuntimeSlice(state, { ...context, now: windowEnd }, { from, owners, targetAt, summary });
+  const replay = result.state.npcReplay;
+  if (replay?.summary && replay.summary.finishedAt === undefined && replay.processedThroughAt >= replay.targetAt) {
+    result.state = { ...result.state, npcReplay: { ...replay, summary: { ...replay.summary, finishedAt: replay.processedThroughAt } } };
+  }
   return result;
+}
+
+/**
+ * The world news a replay slice adds to. Live play (gaps under the command
+ * grace) collects nothing; a real catch-up starts a fresh summary unless one
+ * is already running. A save that resumes a catch-up with no summary began it
+ * in an older version, so its news is marked incomplete.
+ */
+function catchupSummaryFor(state: SaveState, from: number, targetAt: number): WorldCatchupSummary | undefined {
+  const current = state.npcReplay?.summary;
+  if (current && current.finishedAt === undefined) return current;
+  const pending = isNpcCatchupPending(state);
+  if (!pending && targetAt - from <= NPC_CATCHUP_COMMAND_GRACE_MS) return current;
+  return startWorldCatchupSummary(state, from, !pending);
 }
 
 function reconcileRuntimeSlice(
   state: SaveState,
   context: BuildingApplicationContext,
-  replay?: { from: number; owners: string[]; targetAt: number },
+  replay?: { from: number; owners: string[]; targetAt: number; summary?: WorldCatchupSummary },
 ): RuntimeReconcileResult {
   // Aid flights whose sender, recipient or request no longer stand turn back before anything else settles.
   let next = projectNpcScienceLedger(reconcileAidMembership(state, context.now));
@@ -130,6 +152,16 @@ function reconcileRuntimeSlice(
     ? Math.max(1, Math.floor(context.replayMaxGroups ?? NPC_REPLAY_MAX_GROUPS))
     : NPC_REPLAY_MAX_GROUPS;
   if (replay && next.npc) next = { ...next, npc: initializeNpcReplaySessionsAt(next.npc, replay.from, replay.owners) };
+  // World news of a running catch-up. Battle reports are archived after every
+  // replay group, so each group's new reports are counted just before that.
+  let worldSummary = replay?.summary && replay.summary.finishedAt === undefined ? replay.summary : undefined;
+  const countedBattles = worldSummary ? new Set(state.combat.reports.map((report) => report.id)) : undefined;
+  let lastCountedReports: SaveState['combat']['reports'] | undefined;
+  const countWorldBattles = () => {
+    if (!worldSummary || !countedBattles || next.combat.reports === lastCountedReports) return;
+    lastCountedReports = next.combat.reports;
+    worldSummary = countNewWorldBattles(worldSummary, next.combat.reports, countedBattles, next.profile.playerId);
+  };
   // NPC sessions and decisions in [from, now + 1), generated on demand an hour
   // at a time: a bounded slice usually consumes minutes of a 24-hour window.
   // Generation is a pure function of the slice-start profiles and the
@@ -751,7 +783,10 @@ function reconcileRuntimeSlice(
     }
     // Archive limits hold after every group, so what NPCs can still read never
     // depends on where a catch-up slice ended.
-    if (replay) next = pruneCampaignHistory(next, checkpoint);
+    if (replay) {
+      countWorldBattles();
+      next = pruneCampaignHistory(next, checkpoint);
+    }
   }
 
   const finalOverpopulation = reconcileAllPlanetOverpopulation(next, context.now);
@@ -785,7 +820,12 @@ function reconcileRuntimeSlice(
   if (next.pirate?.raidProcessedAt !== completedCursor) {
     next = {...next, pirate: {...(next.pirate ?? createDefaultPirateState()),raidProcessedAt:completedCursor}};
   }
-  if (replay) next = { ...next, npcReplay: { version: 1, processedThroughAt: context.now, targetAt: replay.targetAt } };
+  if (replay) {
+    // World news is counted before pruning, so nothing archived in this slice is lost.
+    countWorldBattles();
+    const summary = worldSummary ? accumulateWorldCatchupSummary(worldSummary, state, next) : replay.summary;
+    next = { ...next, npcReplay: { version: 1, processedThroughAt: context.now, targetAt: replay.targetAt, ...(summary ? { summary } : {}) } };
+  }
   // Archive records nothing reads any more leave the save after each pass.
   next = pruneCampaignHistory(next);
 

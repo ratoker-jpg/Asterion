@@ -22,6 +22,7 @@ import { reconcileRuntime } from './reconcile.ts';
 import { getOwnerShipUpgradeLevel, getPlanetResources, replaceAlliedPlanetState, replacePlanetResources, replacePlanetState, type SaveState } from './contracts.ts';
 import { reconcilePlanetOverpopulation } from './overpopulation.ts';
 import { destroyOwnedPlanet } from './owned-planets.ts';
+import { explorationMailboxReports } from '../domain/exploration/report-items.ts';
 import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
 import { createEmptyFleetState } from '../domain/fleet/runtime.ts';
 import type { CommanderId } from '../domain/combat/commanders.ts';
@@ -3163,4 +3164,98 @@ test('a colony opens at its total-point threshold: 500 for the first, 100 000 fo
   assert.equal(nextColonyPointThreshold(1), 500);
   assert.equal(nextColonyPointThreshold(6), 100_000);
   assert.equal(nextColonyPointThreshold(7), null);
+});
+
+// Audit 26.10 M2: the flight summary shows what really landed, never the departure cargo.
+test('flight summary reports delivered and overflow-burned cargo by planet name, and survives reload', () => {
+  const initial = createInitialSaveState('test', 1_000);
+  const destination = { kind: 'planet' as const, planetId: 'test-mode-ally-ira-vel-v1', coordinate: { galaxy: 1, system: 1, position: 2 } };
+  const ally = initial.alliedPlanets![destination.planetId]!;
+  const capacities = getStorageCapacities(ally.buildings);
+  const nearlyFull = replaceAlliedPlanetState(initial, destination.planetId, {
+    ...ally, resources: { metal: capacities.metal - 40, minerals: capacities.minerals, gas: capacities.gas },
+  });
+  const sent = dispatchFlight(nearlyFull, {
+    requestId: 'transport-summary-overflow', missionId: 'transport', originPlanetId: 'helion-01', destination,
+    targetRelation: 'ally', selectedShips: { scout: 1 }, cargo: { metal: 100, minerals: 0, gas: 0, debris: 0 }, departedAt: 1_000,
+  }, { now: 1_000, mode: 'test' });
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  const arrived = reconcileFlights(sent.state, sent.flight.arrivalAt);
+  const settlement = arrived.state.flights.records[0]!.cargoSettlement;
+  assert.deepEqual(settlement, { stage: 'delivered', at: sent.flight.arrivalAt,
+    credited: { metal: 40, minerals: 0, gas: 0, debris: 0 }, burned: { metal: 60, minerals: 0, gas: 0, debris: 0 } });
+
+  const values = new Map<string, string>();
+  const persistence = createPersistenceFacade({ mode: 'test', now: () => 1_000, storage: {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => { values.set(key, value); },
+    removeItem: (key: string) => { values.delete(key); },
+  } });
+  const done = reconcileFlights(arrived.state, arrived.state.flights.records[0]!.returnAt!).state;
+  assert.equal(persistence.write(done).ok, true);
+  const reloaded = persistence.read();
+  assert.deepEqual(reloaded.flights.records[0]!.cargoSettlement, settlement);
+
+  const planetNames = Object.fromEntries(Object.entries(reloaded.planets).map(([id, planet]) => [id, planet.name]));
+  const [item] = explorationMailboxReports(undefined, reloaded.flights.records, undefined, { planetNames, factionId: reloaded.profile.factionId });
+  assert.ok(item);
+  const details = Object.fromEntries(item.details.map((row) => [row.label, row.value]));
+  assert.equal(item.title, 'Груз доставлен');
+  assert.equal(details['Исход'], 'Штатный возврат');
+  assert.equal(details['Планета отправления'], `${reloaded.planets['helion-01']!.name} [${sent.flight.originCoordinate.galaxy}:${sent.flight.originCoordinate.system}:${sent.flight.originCoordinate.position}]`);
+  assert.equal(details['Доставлено · Металл'], '40');
+  assert.equal(details['Сгорело при переполнении склада · Металл'], '60');
+  const text = JSON.stringify(item);
+  assert.doesNotMatch(text, /helion-01|normal-return|при отправлении/);
+});
+
+test('a recalled transport is reported as recalled with the cargo credited back home', () => {
+  const initial = createInitialSaveState('test', 1_000);
+  const sent = dispatchFlight(initial, {
+    requestId: 'transport-summary-recall', missionId: 'transport',
+    destination: { kind: 'planet', planetId: 'test-mode-ally-ira-vel-v1', coordinate: { galaxy: 1, system: 1, position: 2 } },
+    targetRelation: 'ally', selectedShips: { scout: 1 }, cargo: { metal: 100, minerals: 0, gas: 0, debris: 25 }, departedAt: 1_000,
+  }, { now: 1_000, mode: 'test' });
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  const recalled = recallFlight(sent.state, sent.flight.id, sent.flight.departedAt + 1_000);
+  assert.equal(recalled.ok, true);
+  if (!recalled.ok) return;
+  const returned = reconcileFlights(recalled.state, recalled.flight.returnAt!).state;
+  const flight = returned.flights.records[0]!;
+  assert.equal(flight.cargoSettlement?.stage, 'returned');
+  assert.equal(flight.cargoSettlement?.credited.metal, 100);
+  assert.equal(flight.cargoSettlement?.credited.debris, 25);
+  const [item] = explorationMailboxReports(undefined, returned.flights.records);
+  assert.equal(item?.title, 'Рейс отозван');
+  assert.equal(item?.statusLabel, 'ОТОЗВАН');
+  const details = Object.fromEntries(item!.details.map((row) => [row.label, row.value]));
+  assert.equal(details['Исход'], 'Отозван');
+  assert.equal(details['Зачислено · Металл'], '100');
+  assert.equal(details['Вернувшийся флот'], 'Скаут × 1');
+});
+
+test('a damaged cargo settlement is dropped on load without dropping the flight', () => {
+  const initial = createInitialSaveState('test', 1_000);
+  const sent = dispatchFlight(initial, {
+    requestId: 'transport-summary-damaged', missionId: 'transport',
+    destination: { kind: 'planet', planetId: 'test-mode-ally-ira-vel-v1', coordinate: { galaxy: 1, system: 1, position: 2 } },
+    targetRelation: 'ally', selectedShips: { scout: 1 }, cargo: { metal: 10, minerals: 0, gas: 0, debris: 0 }, departedAt: 1_000,
+  }, { now: 1_000, mode: 'test' });
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  const values = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => { values.set(key, value); },
+    removeItem: (key: string) => { values.delete(key); },
+  };
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => 1_000 });
+  const damaged = { ...sent.state, flights: { ...sent.state.flights, records: [{ ...sent.flight,
+    cargoSettlement: { stage: 'delivered', at: 1, credited: { metal: -5 }, burned: {} } }] } } as unknown as SaveState;
+  assert.equal(persistence.write(damaged).ok, true);
+  const reloaded = persistence.read();
+  assert.equal(reloaded.flights.records.length, 1);
+  assert.equal(reloaded.flights.records[0]!.cargoSettlement, undefined);
 });

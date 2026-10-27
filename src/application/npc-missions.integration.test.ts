@@ -11,6 +11,7 @@ import { selectExplorationTargets } from './exploration.ts';
 import { createInitialSaveState, createPersistenceFacade } from './persistence.ts';
 import { dispatchNpcMission } from './npc-missions.ts';
 import { reconcileFlights } from './flights.ts';
+import { isFlightEventForPlayer, isFlightVisibleToPlayer } from './flight-visibility.ts';
 import type { SaveState } from './contracts.ts';
 
 const START = Date.UTC(2026, 9, 23, 12);
@@ -341,4 +342,71 @@ test('NPC recyclers collect public debris and bring it home to the recycling sto
   assert.ok((store?.availableDebris ?? 0) > 0, 'the debris reached the owner\'s recycling store');
   assert.equal(getEspionageTargets(home.espionage)[owner.id]!.resources.debris ?? 0, getEspionageTargets(seeded.espionage)[owner.id]!.resources.debris ?? 0,
     'nothing was dumped into the owner\'s own orbit');
+});
+
+function withGarrison(state: SaveState, targetId: string, ships: Partial<SpyTargetState['fleet']['ships']>): SaveState {
+  const targets = getEspionageTargets(state.espionage);
+  const current = targets[targetId]!;
+  return { ...state, espionage: { ...state.espionage!, targets: { ...targets,
+    [targetId]: { ...current, fleet: { ...current.fleet, ships: { ...current.fleet.ships, ...ships } } } } } };
+}
+
+function playerHomeTarget(state: SaveState) {
+  const home = state.planets['helion-01']!;
+  return { id: 'helion-01', coordinate: { galaxy: home.universeGalaxy!, system: home.universeSystem!, position: home.universePosition! } };
+}
+
+// Audit 26.10 M1: the NPC's return home and saved intelligence surfaced as the player's toasts.
+test('NPC flights reach the player only as fights on the player\'s own planets', () => {
+  const state = makeCampaign('npc-mission-player-notices');
+  const [origin, other] = npcTargets(state);
+  assert.ok(origin && other);
+  const playerId = state.profile.playerId;
+  const forPlayer = (events: ReturnType<typeof advance>['events']) => events.filter((event) => isFlightEventForPlayer(event, playerId));
+
+  // NPC attack on the player: the fight is the player's news, the trip home is not.
+  const attack = launchAttack(state, origin, playerHomeTarget(state), 'npc-autonomy:integration:notice-attack');
+  const arrived = advance(attack.state, attack.flight.arrivalAt);
+  const attackNews = forPlayer(arrived.events);
+  assert.deepEqual(attackNews.map((event) => event.status), ['incoming-attack']);
+  assert.match(attackNews[0]!.notice, /атакована/);
+  assert.doesNotMatch(attackNews[0]!.notice, /Bot 01/);
+  const returnAt = arrived.state.flights.records.find((item) => item.id === attack.flight.id)!.returnAt!;
+  const returned = advance(arrived.state, returnAt);
+  assert.ok(returned.events.some((event) => event.notice === 'Флот NPC вернулся к владельцу.' && isFlightVisibleToPlayer(event.flight, playerId)),
+    'reproduction: the NPC return passes the Fleet visibility filter that used to drive toasts');
+  assert.deepEqual(forPlayer(returned.events), []);
+
+  // NPC espionage on the player: the report is the NPC's intelligence.
+  const spying = withGarrison(state, origin.id, { 'spy-probe': 1 });
+  const spy = dispatchNpcMission(spying, {
+    ownerId: origin.ownerId, originPlanetId: origin.id, requestId: 'npc-autonomy:integration:notice-spy', missionId: 'espionage',
+    selectedShips: { 'spy-probe': 1 }, destination: { kind: 'planet', planetId: 'helion-01', coordinate: playerHomeTarget(state).coordinate },
+    targetPlanetId: 'helion-01',
+  }, START, FLIGHT_SCALE);
+  assert.equal(spy.ok, true, spy.reason ?? undefined);
+  const observed = advance(spy.state, spy.flight!.arrivalAt);
+  assert.ok(observed.events.some((event) => event.notice === 'Наблюдение NPC сохранено у владельца.' && isFlightVisibleToPlayer(event.flight, playerId)),
+    'reproduction: the NPC spy report passes the Fleet visibility filter that used to drive toasts');
+  assert.deepEqual(forPlayer(observed.events), []);
+
+  // NPC colonization and NPC-vs-NPC fights are never the player's toasts.
+  const coordinate = emptyCoordinate(state);
+  const colonizing = { ...state, rating: { ...state.rating, battleAwardsByReportId: { ...state.rating.battleAwardsByReportId,
+    'qa-notice-colony-points': { [origin.ownerId]: 500 } } } };
+  const colony = dispatchNpcMission(colonizing, {
+    ownerId: origin.ownerId, originPlanetId: origin.id, requestId: 'npc-autonomy:integration:notice-colony', missionId: 'colonize',
+    selectedShips: { colonizer: 1 }, destination: { kind: 'coordinate', coordinate }, targetKind: 'empty',
+  }, START, FLIGHT_SCALE);
+  assert.equal(colony.ok, true, colony.reason ?? undefined);
+  const colonized = advance(colony.state, colony.flight!.arrivalAt);
+  assert.ok(colonized.events.some((event) => event.status === 'colonized'));
+  assert.deepEqual(forPlayer(colonized.events), []);
+
+  const npcWar = launchAttack(state, origin, other, 'npc-autonomy:integration:notice-npc-war');
+  const fought = advance(npcWar.state, npcWar.flight.arrivalAt);
+  assert.ok(fought.events.length > 0);
+  assert.deepEqual(forPlayer(fought.events), []);
+  const foughtReturn = fought.state.flights.records.find((item) => item.id === npcWar.flight.id)!.returnAt!;
+  assert.deepEqual(forPlayer(advance(fought.state, foughtReturn).events), []);
 });

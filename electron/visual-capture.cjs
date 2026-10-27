@@ -410,7 +410,10 @@ async function enqueueResourceBuilding(win, role, expectedQueueRoles) {
   // Commands are refused while the NPC catch-up after a load is still running
   // («Команда отклонена: дождитесь завершения обработки событий NPC»); on a slow
   // runner the click could land before it ends and the task never reaches the queue.
-  await waitFor(win, `!document.querySelector('[data-qa-npc-catchup]')`, 180_000);
+  // When it ends it turns into the world summary, which waits to be closed.
+  await waitFor(win, `!document.querySelector('[data-qa-npc-catchup="progress"]')`, 180_000);
+  await win.webContents.executeJavaScript(`document.querySelector('[data-qa-npc-catchup-close]')?.click()`);
+  await waitFor(win, `!document.querySelector('[data-qa-npc-catchup]')`, 10_000);
   await openResourceBuilding(win, role);
   const clicked = await win.webContents.executeJavaScript(`(() => {
     const dialog=document.querySelector('[data-qa-building-dialog="${role}"]');

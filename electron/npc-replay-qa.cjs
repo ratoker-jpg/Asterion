@@ -64,6 +64,7 @@ function createProductionSave(startAt, endAt) {
     import { createDefaultNewGameConfig } from './src/domain/world/config.ts';
     import { getNpcOwnerIds } from './src/application/npc-foundation.ts';
     import { createNpcState } from './src/domain/npc/state.ts';
+    import { freezeNpcCatchupTarget } from './src/application/npc-catchup.ts';
     const fullWorld = ${FULL_WORLD};
     const config = createDefaultNewGameConfig({ seed: 'NPCREPLAYQA2026', campaignName: fullWorld ? 'NPC full-world QA' : 'NPC replay QA' });
     config.world = fullWorld
@@ -73,7 +74,9 @@ function createProductionSave(startAt, endAt) {
     const ownerIds = getNpcOwnerIds(base.espionage?.targets, base.profile.playerId);
     if (ownerIds.length !== 100) throw new Error('Expected exactly 100 generated NPC owners.');
     if (fullWorld && !base.asteroidSimulation) throw new Error('Full-world fixture lost its asteroid simulation.');
-    const replay = { version: 1, processedThroughAt: ${startAt}, targetAt: ${endAt} };
+    // Settled up to startAt; the catch-up target is frozen below exactly as
+    // the game freezes it, which also starts the catch-up's world summary.
+    const replay = { version: 1, processedThroughAt: ${startAt}, targetAt: ${startAt} };
     const npc = createNpcState(ownerIds, 'npc-replay-benchmark-persona-salt-v1', ${startAt});
     // Full world keeps every other timeline exactly as the new campaign made it.
     const state = fullWorld ? { ...base, npc, npcReplay: replay } : {
@@ -84,7 +87,7 @@ function createProductionSave(startAt, endAt) {
       pirate: { ...base.pirate, raidProcessedAt: ${endAt} },
       asteroidSimulation: undefined,
     };
-    console.log(JSON.stringify(state));
+    console.log(JSON.stringify(freezeNpcCatchupTarget(state, ${endAt})));
   `;
   const child = spawnSync(process.execPath, [
     '--experimental-strip-types',
@@ -150,6 +153,16 @@ async function load(win, search) {
   const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
   await win.loadFile(path.join(ROOT, 'dist', 'index.html'), search ? { search } : undefined);
   await done;
+}
+
+// The hidden QA window paints on demand: a capture returns the frame painted
+// for the previous request, so the first capture only asks for a fresh one.
+async function freshCapture(win) {
+  win.webContents.invalidate();
+  await win.webContents.capturePage();
+  await sleep(900); // past the window's entrance animation
+  await win.webContents.capturePage();
+  return win.webContents.capturePage();
 }
 
 async function click(win, selector) {
@@ -241,22 +254,34 @@ async function runScenario() {
     })()`;
     await waitFor(win, pendingExpression, 30_000);
     // Owner decision (25.10.2026): a long catch-up shows its progress and
-    // the player waits. The banner must appear, report a real percentage and
-    // leave clicks to the command gate below.
-    await waitFor(win, `Boolean(document.querySelector('[data-qa-npc-catchup] [role="progressbar"]'))`, 15_000);
+    // the player waits. Audit 26.10 M4: the progress is a central modal over
+    // the whole interface, header included, that says orders are locked. The
+    // command gate below is still probed directly: the modal is not the gate.
+    await waitFor(win, `Boolean(document.querySelector('[data-qa-npc-catchup="progress"] [role="progressbar"]'))`, 15_000);
     const catchupBanner = await run(win, `(() => {
-      const banner = document.querySelector('[data-qa-npc-catchup]');
-      const bar = banner?.querySelector('[role="progressbar"]');
-      return { text: banner?.textContent || '', percent: Number(bar?.getAttribute('aria-valuenow')),
-        pointerEvents: banner ? getComputedStyle(banner).pointerEvents : null };
+      const backdrop = document.querySelector('[data-qa-npc-catchup="progress"]');
+      const dialog = backdrop?.querySelector('[role="dialog"]');
+      const bar = backdrop?.querySelector('[role="progressbar"]');
+      const rect = dialog?.getBoundingClientRect();
+      const header = document.querySelector('[data-qa-navigation="primary"]')?.getBoundingClientRect();
+      const probe = header ? document.elementFromPoint(header.left + header.width / 2, header.top + header.height / 2) : null;
+      return { text: dialog?.textContent || '', percent: Number(bar?.getAttribute('aria-valuenow')),
+        modal: dialog?.getAttribute('aria-modal'),
+        centreOffset: rect ? { x: Math.round(rect.left + rect.width / 2 - innerWidth / 2), y: Math.round(rect.top + rect.height / 2 - innerHeight / 2) } : null,
+        headerCovered: Boolean(probe && backdrop.contains(probe)),
+        pointerEvents: backdrop ? getComputedStyle(backdrop).pointerEvents : null };
     })()`);
-    if (!catchupBanner.text.includes('Мир догоняет') || !Number.isFinite(catchupBanner.percent)
-      || catchupBanner.percent < 0 || catchupBanner.percent > 100 || catchupBanner.pointerEvents !== 'none') {
-      throw new Error(`NPC catch-up progress banner invalid: ${JSON.stringify(catchupBanner)}`);
+    if (!catchupBanner.text.includes('Мир догоняет') || !catchupBanner.text.includes('Приказы заблокированы')
+      || !Number.isFinite(catchupBanner.percent) || catchupBanner.percent < 0 || catchupBanner.percent > 100
+      || catchupBanner.modal !== 'true' || !catchupBanner.centreOffset
+      || Math.abs(catchupBanner.centreOffset.x) > 4 || Math.abs(catchupBanner.centreOffset.y) > 4
+      || !catchupBanner.headerCovered || catchupBanner.pointerEvents === 'none') {
+      throw new Error(`NPC catch-up progress window invalid: ${JSON.stringify(catchupBanner)}`);
     }
     fs.mkdirSync(OUTPUT, { recursive: true });
     if (process.env.ASTERION_SKIP_SCREENSHOTS !== '1') {
-      fs.writeFileSync(path.join(OUTPUT, 'catchup-progress.png'), (await win.webContents.capturePage()).toPNG());
+      // The hidden QA window paints lazily: let the window's entrance settle into a frame first.
+      fs.writeFileSync(path.join(OUTPUT, 'catchup-progress.png'), (await freshCapture(win)).toPNG());
     }
 
     const initial = await run(win, `(() => {
@@ -388,9 +413,37 @@ async function runScenario() {
     const elapsedMs = Date.now() - catchupStartedAt;
     if (cpuProfileDone) await cpuProfileDone;
     const measurement = await readMeasurement(win, saveKey);
-    const bannerGone = catchupWaitError ? null : await waitFor(win, `!document.querySelector('[data-qa-npc-catchup]')`, 10_000)
+    // When the world has caught up the progress turns into the world summary;
+    // it closes only by the player's hand and leaves the save with it.
+    let worldSummary = null;
+    if (!catchupWaitError) {
+      const summaryShown = await waitFor(win, `Boolean(document.querySelector('[data-qa-npc-catchup="summary"] [data-qa-npc-catchup-stats]'))
+        && !document.querySelector('[data-qa-npc-catchup] [role="progressbar"]')`, 10_000).then(() => true, () => false);
+      if (!summaryShown) throw new Error('NPC catch-up did not turn into the world summary after it completed.');
+      worldSummary = await run(win, `(() => {
+        const dialog = document.querySelector('[data-qa-npc-catchup="summary"] [role="dialog"]');
+        const save = JSON.parse(localStorage.getItem(${JSON.stringify(saveKey)}) || '{}');
+        const summary = save.npcReplay?.summary ?? null;
+        return { text: dialog?.textContent || '', saved: summary && { finishedAt: summary.finishedAt, complete: summary.complete,
+          battles: summary.battles, colonies: summary.colonies, alliancesFounded: summary.alliancesFounded } };
+      })()`);
+      if (!worldSummary.text.includes('Мир за время вашего отсутствия') || !worldSummary.saved
+        || worldSummary.saved.finishedAt < endAt || worldSummary.saved.complete !== true
+        || !worldSummary.text.includes(new Intl.NumberFormat('ru-RU').format(worldSummary.saved.battles))) {
+        throw new Error(`NPC catch-up world summary invalid: ${JSON.stringify(worldSummary)}`);
+      }
+      if (process.env.ASTERION_SKIP_SCREENSHOTS !== '1') {
+        fs.mkdirSync(OUTPUT, { recursive: true });
+        fs.writeFileSync(path.join(OUTPUT, 'catchup-summary.png'), (await freshCapture(win)).toPNG());
+      }
+      await click(win, '[data-qa-npc-catchup-close]');
+    }
+    const bannerGone = catchupWaitError ? null : await waitFor(win, `!document.querySelector('[data-qa-npc-catchup]') && (() => {
+        try { return JSON.parse(localStorage.getItem(${JSON.stringify(saveKey)}) || '{}').npcReplay?.summary === undefined; }
+        catch { return false; }
+      })()`, 10_000)
       .then(() => true, () => false);
-    if (bannerGone === false) throw new Error('NPC catch-up progress banner stayed visible after the catch-up completed.');
+    if (bannerGone === false) throw new Error('NPC catch-up window stayed open (or its summary stayed saved) after it was closed.');
     if (catchupWaitError) {
       const failedResults = {
         status: 'timeout',
@@ -425,6 +478,7 @@ async function runScenario() {
         scenario: FULL_WORLD ? 'full-world' : 'scoped', isolation: initial.isolation, fixtureIsolation: FIXTURE_ISOLATION },
       commandGate: { pendingBeforeUiAction: beforeClickPending, requestEventPrevented: eventPrevented, buildButtonWasEnabled: buildButtonEnabled, playerStateUnchanged: true },
       catchup: { elapsedMs, ...measurement },
+      worldSummary: worldSummary?.saved ?? null,
       measurementNote: 'Renderer event-loop timer gaps; does not measure Node proxy latency.',
       hiddenWindowBackgroundThrottling: win.webContents.getBackgroundThrottling(),
     };

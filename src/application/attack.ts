@@ -14,7 +14,7 @@ import { resolveSpyOwnerProfile } from '../domain/espionage/owner-profile.ts';
 import { calculateDefensePopulation } from '../domain/fleet/production.ts';
 import { calculateFleetPopulation, removeSolarSatellitesFromFleet, resolveSavedFleetState, type OwnedFleetState } from '../domain/fleet/runtime.ts';
 import { migrateProductionBotAssignment } from '../domain/buildings/production-bots.ts';
-import { addDebris, getCappedDelivery, getFleetCargoCapacity, type TransportCargo } from '../domain/flights/cargo.ts';
+import { addDebris, cargoSettlementFromDelivery, getCappedDelivery, getFleetCargoCapacity, lostCargoSettlement, type TransportCargo } from '../domain/flights/cargo.ts';
 import { getStorageCapacities, isBuildingRole } from '../domain/buildings/resource-zone.ts';
 import { createDefaultRepairWorkshopState, claimDefensiveBattleRepair, annotateBattleReportRepair } from '../domain/repair/workshop.ts';
 import type { FlightRecord } from '../domain/flights/types.ts';
@@ -881,13 +881,15 @@ export function creditAttackLoot(state: SaveState, flight: FlightRecord, now: nu
   const resolution = flight.attackResolution;
   if (!resolution || resolution.lootCreditedAt !== undefined) return { state, flight };
   const origin = state.planets[flight.originPlanetId];
-  if (!origin) return { state, flight: { ...flight, attackResolution: { ...resolution, lootCreditedAt: now } } };
   const cargo: TransportCargo = { ...resolution.loot };
+  if (!origin) return { state, flight: { ...flight, attackResolution: { ...resolution, lootCreditedAt: now }, cargoSettlement: lostCargoSettlement('returned', now, cargo) } };
   const credit = getCappedDelivery(getPlanetResources(state, flight.originPlanetId), getStorageCapacities(origin.buildings), cargo);
   const nextState = replacePlanetResources(state, flight.originPlanetId, credit.resources);
   const nextFlight: FlightRecord = {
     ...flight,
     attackResolution: { ...resolution, lootCreditedAt: now },
+    // Loot debris is not credited anywhere: attacks carry only capped resources.
+    cargoSettlement: cargoSettlementFromDelivery('returned', now, credit, 0),
   };
   return { state: nextState, flight: nextFlight };
 }

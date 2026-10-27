@@ -1,79 +1,215 @@
-/* NPC catch-up progress: informs only, never intercepts clicks (the command
-   gate refuses actions with its own notice). */
-.npc-catchup-banner {
-  position: absolute;
-  top: 146px; /* below the 58 + 76 px header */
-  left: 50%;
-  z-index: 60;
-  width: min(560px, calc(100% - 32px));
-  transform: translateX(-50%);
-  padding: 12px 16px;
-  border: 1px solid var(--ut-border-strong);
-  border-radius: var(--ut-r-card);
-  background: var(--ut-surface);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, .45);
+/* World catch-up window (audit 26.10 M4): a central modal over the whole
+   interface, header included. While the world catches up it holds the
+   input (orders are refused by App's command gate anyway); when it is done
+   it shows the world summary and a close button. Final polish is a later PR. */
+.npc-catchup-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10040; /* above the shell header; the pause menu (10050) stays reachable */
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  overflow-y: auto;
+  background: rgba(1, 4, 8, .74);
+  backdrop-filter: blur(4px);
+  font-family: Montserrat, Arial, sans-serif;
   color: #e8f6fa;
-  font-size: var(--ut-font-body);
-  pointer-events: none;
-  animation: npc-catchup-enter var(--ut-motion-modal) var(--ut-ease-out);
+  animation: npc-catchup-fade var(--ut-motion-base) var(--ut-ease-out) backwards;
 }
 
-.npc-catchup-banner__head {
+.npc-catchup-window {
+  width: min(640px, 100%);
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 8px;
+  flex-direction: column;
+  gap: 18px;
+  padding: 28px 32px;
+  border: 1px solid var(--ut-border-strong);
+  border-radius: var(--ut-r-panel);
+  background: linear-gradient(180deg, rgba(13, 22, 28, .98), rgba(7, 12, 16, .99));
+  box-shadow: 0 30px 90px rgba(0, 0, 0, .65);
+  font-size: var(--ut-font-body);
+  animation: npc-catchup-enter var(--ut-motion-modal) var(--ut-spring) backwards;
 }
 
-.npc-catchup-banner__title {
-  font-size: var(--ut-font-section-title);
-  font-weight: 600;
-}
+.npc-catchup-window--summary { width: min(880px, 100%); }
 
-.npc-catchup-banner__percent {
+.npc-catchup-window__head small {
   color: var(--ut-accent);
-  font-size: var(--ut-font-section-title);
+  font-size: var(--ut-font-secondary);
   font-weight: 700;
-  font-variant-numeric: tabular-nums;
+  letter-spacing: .2em;
 }
 
-.npc-catchup-banner__track {
-  height: 6px;
+body .npc-catchup-window__head h2 {
+  margin: 6px 0 0;
+  font-size: var(--ut-font-page-title) !important;
+  font-weight: 800;
+  letter-spacing: .04em;
+}
+
+.npc-catchup-window__progress {
+  display: grid;
+  gap: 10px;
+}
+
+.npc-catchup-window__percent {
+  color: var(--ut-accent);
+  font-size: 32px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.npc-catchup-window__track {
+  height: 8px;
   overflow: hidden;
-  border-radius: 3px;
+  border-radius: 4px;
   background: rgba(126, 200, 220, .14);
 }
 
-.npc-catchup-banner__fill {
+.npc-catchup-window__fill {
   height: 100%;
   background: var(--ut-accent);
   transform-origin: left center;
   transition: transform var(--ut-motion-base) linear;
 }
 
-.npc-catchup-banner__meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 8px;
+.npc-catchup-window__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.npc-catchup-window__facts div,
+.npc-catchup-tile {
+  padding: 12px 14px;
+  border: 1px solid var(--ut-border);
+  border-radius: var(--ut-r-card);
+  background: var(--ut-surface-2);
+}
+
+.npc-catchup-window__facts dt {
   color: var(--ut-label);
   font-size: var(--ut-font-secondary);
+}
+
+.npc-catchup-window__facts dd {
+  margin: 4px 0 0;
+  font-size: var(--ut-font-section-title);
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
-.npc-catchup-banner__hint {
-  margin-top: 4px;
+.npc-catchup-window__lock {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--ut-amber) 45%, transparent);
+  border-radius: var(--ut-r-card);
+  background: color-mix(in srgb, var(--ut-amber) 10%, transparent);
   color: var(--ut-amber);
-  font-size: var(--ut-font-helper);
+  font-size: var(--ut-font-body);
+  line-height: 1.5;
+}
+
+.npc-catchup-window__quiet,
+.npc-catchup-window__partial {
+  margin: 0;
+  color: var(--ut-label);
+  line-height: 1.5;
+}
+
+.npc-catchup-window__partial { color: var(--ut-amber); }
+
+.npc-catchup-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.npc-catchup-tile {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+}
+
+.npc-catchup-tile span { color: var(--ut-label); font-size: var(--ut-font-secondary); }
+.npc-catchup-tile strong { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.npc-catchup-tile small { color: var(--ut-label); font-size: var(--ut-font-helper); line-height: 1.4; }
+
+.npc-catchup-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.npc-catchup-leaders {
+  padding: 12px 14px;
+  border: 1px solid var(--ut-border);
+  border-radius: var(--ut-r-card);
+  background: var(--ut-surface-2);
+}
+
+body .npc-catchup-leaders h3 {
+  margin: 0 0 8px;
+  font-size: var(--ut-font-section-title) !important;
+  font-weight: 700;
+}
+
+.npc-catchup-leaders ol { display: grid; gap: 6px; margin: 0; padding-left: 20px; }
+.npc-catchup-leaders li { font-variant-numeric: tabular-nums; }
+.npc-catchup-leaders li span { display: inline-block; max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+.npc-catchup-leaders li b { float: right; color: var(--ut-accent); }
+.npc-catchup-leaders li.is-player span { color: var(--ut-amber); }
+.npc-catchup-leaders p { margin: 0; color: var(--ut-label); }
+
+.npc-catchup-window__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.npc-catchup-window__primary,
+.npc-catchup-window__secondary {
+  min-width: 140px;
+  height: 40px;
+  padding: 0 20px;
+  border-radius: var(--ut-r-btn);
+  font: inherit;
+  font-size: var(--ut-font-control);
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.npc-catchup-window__primary {
+  border: 1px solid var(--ut-accent);
+  background: var(--ut-accent);
+  color: #04141a;
+}
+
+.npc-catchup-window__secondary {
+  border: 1px solid var(--ut-border-strong);
+  background: transparent;
+  color: #e8f6fa;
+}
+
+.npc-catchup-window__primary:focus-visible,
+.npc-catchup-window__secondary:focus-visible { outline: var(--ut-focus); outline-offset: 2px; }
+
+@keyframes npc-catchup-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes npc-catchup-enter {
-  from { opacity: 0; transform: translate(-50%, -6px); }
-  to { opacity: 1; transform: translate(-50%, 0); }
+  from { opacity: 0; transform: scale(.97); }
+  to { opacity: 1; transform: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .npc-catchup-banner { animation: none; }
-  .npc-catchup-banner__fill { transition: none; }
+  .npc-catchup-backdrop,
+  .npc-catchup-window { animation: none; }
+  .npc-catchup-window__fill { transition: none; }
 }

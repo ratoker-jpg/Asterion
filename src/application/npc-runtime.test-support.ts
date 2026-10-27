@@ -130,7 +130,9 @@ export function irregularSteps(targetAt: number): number[] {
 export function economySnapshot(state: SaveState) {
   return {
     npc: clone(state.npc),
-    npcReplay: clone(state.npcReplay),
+    // The world summary is news about one absence, not physical state: it
+    // depends on where the player was away, which these chunkings vary on purpose.
+    npcReplay: clone(state.npcReplay && { ...state.npcReplay, summary: undefined }),
     targets: Object.fromEntries(npcTargets(state).map((target) => [target.id, {
       ownerId: target.ownerId,
       resources: target.resources,

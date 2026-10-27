@@ -1,4 +1,4 @@
-import { isFlightVisibleToPlayer, isHostileFlightIncomingToPlayer } from './application/flight-visibility.ts';
+import { isFlightEventForPlayer, isHostileFlightIncomingToPlayer } from './application/flight-visibility.ts';
 import { diffPlayerActions, PLAYER_JOURNAL_SNAPSHOT_INTERVAL_MS, snapshotPlayer } from './application/player-journal.ts';
 import { appendJournalEntries, setActiveJournalCampaign } from './ui/player-journal-store.ts';
 import { selectOwnerPresence } from './application/owner-presence.ts';
@@ -1055,7 +1055,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       } else if (event.kind === 'sun-raid') {
         event.notices.forEach((notice) => setNotice(notice.text, notice.tone));
       } else if (event.kind === 'flight') {
-        event.events.filter((flightEvent) => isFlightVisibleToPlayer(flightEvent.flight, result.state.profile.playerId)).forEach((flightEvent) => setNotice(
+        event.events.filter((flightEvent) => isFlightEventForPlayer(flightEvent, result.state.profile.playerId)).forEach((flightEvent) => setNotice(
           flightEvent.status === 'spy-report' || flightEvent.status === 'spy-detected'
             ? `Проверьте системные сообщения. ${flightEvent.notice}`
             : flightEvent.notice,
@@ -1209,6 +1209,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   }, [state, persistence]);
   // NPC sessions advance only with replay, so this follows state.npc.
   const ownerPresence = useMemo(() => selectOwnerPresence(state), [state.npc, state.profile.playerId]);
+  const reportPlanetNames = useMemo(() => Object.fromEntries(Object.entries(state.planets).map(([id, planet]) => [id, planet.name])), [state.planets]);
   const reportsUnreadCount = useMemo(() => {
     const items = buildReportsFeed(state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.pirate?.reconReports, state.flights.records, state.exploration, state.profile.playerId);
     return Object.values(getReportUnreadCounts(items, state.reports)).reduce((total, count) => total + count, 0);
@@ -2170,6 +2171,16 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const [selectedSun, setSelectedSun] = useState<SunSelection>(() => ({ galaxy: homePlanet?.universeGalaxy ?? 1, system: homePlanet?.universeSystem ?? 1 }));
   const [gateDialogPlanetId, setGateDialogPlanetId] = useState<string | null>(null);
   const [pauseOpen, setPauseOpen] = useState(false);
+  const openPauseMenu = useCallback(() => setPauseOpen(true), []);
+  // The world summary stays in the save until the player closes it.
+  const dismissWorldSummary = useCallback(() => {
+    const current = stateRef.current;
+    if (!current.npcReplay?.summary) return;
+    const { summary: _summary, ...replay } = current.npcReplay;
+    const next = { ...current, npcReplay: replay };
+    stateRef.current = next;
+    setState(next);
+  }, []);
   const [resultDismissed, setResultDismissed] = useState(false);
   const sunRaidState = currentSunRaidState(state);
   const gateContext = useMemo(() => selectGateContext(state, now), [state, now]);
@@ -2424,7 +2435,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
           onPlanetChange={(planetId) => selectPlanet(planetId)}
           onPlanetMenuToggle={() => setPlanetMenuOpen((open) => !open)}
          />
-        <NpcCatchupBanner replay={state.npcReplay} />
+        <NpcCatchupBanner replay={state.npcReplay} state={state} onDismissSummary={dismissWorldSummary} onOpenMenu={openPauseMenu} />
 
         <button
           className="shell-reset-control shell-pause-control"
@@ -2617,6 +2628,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               exploration={state.exploration}
               initialSelectedReportId={pirateReportId}
               battleReports={state.combat.reports}
+              planetNames={reportPlanetNames}
               savedBattleReportIds={state.combat.savedReportIds}
               operations={state.operations}
               command={state.command}

@@ -8,7 +8,7 @@ import { EmblemGlyph } from './ui/command/EmblemGlyph.tsx';
 import pirateWarlordArt from '../assets/source/characters/pirates/pirate_warlord.png';
 import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
 import { isAsterionLocalPlayerId, type BattleReport } from './domain/combat/report.ts';
-import { createBattleReportViewModel } from './domain/combat/battle-report-view-model.ts';
+import { createBattleReportViewModel, noCombatVerdict } from './domain/combat/battle-report-view-model.ts';
 import type { BattleSideViewModel } from './domain/combat/battle-report-view-model.ts';
 import type { CommandState } from './domain/command/types.ts';
 import { selectOwnerMembership, toAllianceIdentity } from './domain/command/selectors.ts';
@@ -249,7 +249,8 @@ function GenericDossier({ item, exploration, onOpenUniverseTarget }: {
 }) {
   const openCoordinate = onOpenUniverseTarget ? (coordinate: UniverseCoordinate) => onOpenUniverseTarget({ coordinate }) : undefined;
   const route: { label: string; value: string }[] = [];
-  const resources: { kind: ResourceKind; label: string; value: string }[] = [];
+  // Rows «Добыча · Металл», «Зачислено · Металл» … become one section per prefix.
+  const resources: { group: string; kind: ResourceKind; label: string; value: string }[] = [];
   const losses: { kind: ResourceKind; label: string; value: string }[] = [];
   const facts: { label: string; value: string }[] = [];
   const notes: string[] = [];
@@ -267,7 +268,8 @@ function GenericDossier({ item, exploration, onOpenUniverseTarget }: {
     if (kind && amount !== null) {
       const caption = label.replace(/^[^·]*·\s*/, '').trim();
       if (/сгорел|потерян|сожжен/i.test(label)) { if (amount !== 0) losses.push({ kind, label: caption, value }); continue; }
-      resources.push({ kind, label: caption === label ? label : caption, value });
+      const group = caption === label ? 'Ресурсы' : label.slice(0, label.indexOf('·')).trim();
+      resources.push({ group, kind, label: caption === label ? label : caption, value });
       continue;
     }
     if (value.length > 34) { notes.push(`${label}: ${value}`); continue; }
@@ -283,16 +285,16 @@ function GenericDossier({ item, exploration, onOpenUniverseTarget }: {
           <small>{entry.label}</small><strong><CoordinateLink value={entry.value} onOpen={openCoordinate} /></strong>
         </div>)}
       </section> : null}
-      {resources.length ? <section className="reports-v3-section">
-        <header><strong>РЕСУРСЫ</strong></header>
+      {[...new Set(resources.map((entry) => entry.group))].map((group) => <section className="reports-v3-section" key={group}>
+        <header><strong>{group.toLocaleUpperCase('ru-RU')}</strong></header>
         <div className="reports-v3-resources">
-          {resources.map((entry) => <div className={`reports-v3-res reports-v3-res--${entry.kind}`} key={`${entry.kind}-${entry.label}`}>
+          {resources.filter((entry) => entry.group === group).map((entry) => <div className={`reports-v3-res reports-v3-res--${entry.kind}`} key={`${entry.kind}-${entry.label}`}>
             <ResourceIcon kind={entry.kind} /><span><small>{entry.label}</small><b>{entry.value}</b></span>
           </div>)}
         </div>
-      </section> : null}
+      </section>)}
       {losses.length ? <section className="reports-v3-section reports-v3-section--loss">
-        <header><strong>ПОТЕРЯНО ПРИ ПЕРЕПОЛНЕНИИ ТРЮМА</strong></header>
+        <header><strong>СГОРЕЛО ПРИ ПЕРЕПОЛНЕНИИ СКЛАДА</strong></header>
         <div className="reports-v3-resources">
           {losses.map((entry) => <div className={`reports-v3-res reports-v3-res--${entry.kind}`} key={`loss-${entry.kind}`}>
             <ResourceIcon kind={entry.kind} /><span><small>{entry.label}</small><b>−{entry.value.replace(/^[+−-]/, '')}</b></span>
@@ -479,7 +481,7 @@ function BattleDossier({ item, report, saved, rating, playerOwnerId, onToggleSav
         <BattleSideOverview side={viewModel.defender} outcome={viewModel.winner === 'draw' ? 'draw' : viewModel.winner === 'defender' ? 'winner' : 'loser'} />
       </section>
       <section className={`reports-v3-verdict reports-v2-tone-${item.statusTone}`} aria-label="Итог боя">
-        <div><small>ИТОГ БОЯ</small><strong>{item.statusLabel}</strong><span>{viewModel.roundCount ? `${viewModel.roundCount} ${viewModel.roundCount === 1 ? 'раунд' : viewModel.roundCount < 5 ? 'раунда' : 'раундов'}` : 'Бой не состоялся: у одной из сторон не было сил'}</span></div>
+        <div><small>ИТОГ БОЯ</small><strong>{item.statusLabel}</strong><span>{viewModel.roundCount ? `${viewModel.roundCount} ${viewModel.roundCount === 1 ? 'раунд' : viewModel.roundCount < 5 ? 'раунда' : 'раундов'}` : noCombatVerdict(viewModel.roundCount, viewModel.winner, viewModel.missionType, viewModel.resources)!.summary}</span></div>
         <div className="reports-v3-verdict-actions">
           <button type="button" className={`reports-v3-star ${saved ? 'active' : ''}`} aria-pressed={saved} aria-label={saved ? 'Убрать бой из сохранённых' : 'Сохранить бой'} onClick={onToggleSaved}><ActionGlyph kind="save" /></button>
           <button type="button" className="reports-primary-action" onClick={onOpen}>ПОЛНЫЙ БОЕВОЙ ОТЧЁТ</button>
@@ -567,8 +569,10 @@ function FolderActions({ folder, items, selectedIds, onSelectAll, onDeleteAll, o
   );
 }
 
-export function ReportsView({ battleReports, savedBattleReportIds, operations, command, espionage, pirateReconReports, pirateFlights, exploration, initialSelectedReportId, profile, score, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy, onOpenUniverseTarget, onOpenPirateUniverse }: {
+export function ReportsView({ battleReports, planetNames, savedBattleReportIds, operations, command, espionage, pirateReconReports, pirateFlights, exploration, initialSelectedReportId, profile, score, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy, onOpenUniverseTarget, onOpenPirateUniverse }: {
   battleReports: readonly BattleReport[];
+  /** Live names of the player's planets, so flight summaries never show ids. */
+  planetNames?: Readonly<Record<string, string>>;
   savedBattleReportIds: readonly string[];
   operations: OperationsState;
   command: CommandState;
@@ -601,7 +605,7 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
   const pendingInitialReportId = useRef<string | null>(null);
   const handledInitialReportId = useRef<string | null>(null);
 
-  const items = useMemo(() => buildReportsFeed(battleReports, operations, command, espionage, state.overpopulationReports, state.recyclerArrivalReports, state.gasExtractionArrivalReports, pirateReconReports, pirateFlights, exploration, profile.playerId)
+  const items = useMemo(() => buildReportsFeed(battleReports, operations, command, espionage, state.overpopulationReports, state.recyclerArrivalReports, state.gasExtractionArrivalReports, pirateReconReports, pirateFlights, exploration, profile.playerId, { planetNames, factionId: profile.factionId })
     // Battles between third parties (e.g. pirates raiding Bot 01) are not the player's mail.
     .filter((item) => {
       if (!item.battleReportId) return true;
@@ -609,7 +613,7 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
       if (!report) return true;
       const mine = (id?: string) => isAsterionLocalPlayerId(profile.playerId) ? isAsterionLocalPlayerId(id) : id === profile.playerId;
       return mine(report.attacker.playerId) || mine(report.defender.playerId);
-    }), [battleReports, operations, command, espionage, state.overpopulationReports, state.recyclerArrivalReports, state.gasExtractionArrivalReports, pirateReconReports, pirateFlights, exploration, profile.playerId]);
+    }), [battleReports, operations, command, espionage, state.overpopulationReports, state.recyclerArrivalReports, state.gasExtractionArrivalReports, pirateReconReports, pirateFlights, exploration, profile.playerId, planetNames, profile.factionId]);
   const counts = useMemo(() => getReportCategoryCounts(items, state), [items, state]);
   const unreadCounts = useMemo(() => getReportUnreadCounts(items, state), [items, state]);
   const activeFolderMeta = MESSAGE_FOLDERS.find((folder) => folder.id === activeFolder) ?? MESSAGE_FOLDERS[0];
