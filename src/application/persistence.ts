@@ -947,9 +947,15 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
     const terminalWreck = (item.phase === 'completed' || item.phase === 'failed')
       && item.completionReason === 'mission-failed'
       && (item.explorationAttack === true || item.missionId === 'expedition' && item.attackSnapshot !== undefined);
+    // An autonomous NPC pirate hunt carries its survivors in the flight; when
+    // the pirates destroy them all, the resolved flight still flies home empty
+    // and completes. Dropping it on load made a reloaded catch-up diverge.
+    const wreckedNpcPirateHunt = autonomousNpc && item.missionId === 'pirate-elimination'
+      && item.attackResolution !== undefined
+      && (item.phase === 'returning' || item.phase === 'completed' || item.phase === 'failed');
     if (!hasValidCommanderOnlyDeployment && !hasValidCommanderOnlySpaceFlight
       && !hasValidCommanderOnlyExpedition && !hasValidCommanderOnlyExplorationAttack
-      && item.missionId !== 'pirate-raid' && !terminalWreck) return false;
+      && item.missionId !== 'pirate-raid' && !terminalWreck && !wreckedNpcPirateHunt) return false;
   }
   if (item.selectedCommanderLevels !== undefined) {
     if (!item.selectedCommanderLevels || typeof item.selectedCommanderLevels !== 'object' || Array.isArray(item.selectedCommanderLevels)) return false;
