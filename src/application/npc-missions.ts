@@ -1,5 +1,8 @@
 import { ownerFlights } from './npc-knowledge-index.ts';
-import { calculateFleetPopulation, resolveSavedFleetState } from '../domain/fleet/runtime.ts';
+import { calculateFleetPopulation, createEmptyFleetState, getSolarSatelliteFleetCount, removeSolarSatellitesFromFleet, resolveSavedFleetState } from '../domain/fleet/runtime.ts';
+import { calculatePlanetCapacity, calculatePlanetPopulation } from '../domain/fleet/overpopulation.ts';
+import { migrateBuildingLevels } from '../domain/buildings/resource-zone.ts';
+import { isNpcPlanetBlocked, startNpcOverpopulationAt } from './npc-economy.ts';
 import { calculateDefensePopulation } from '../domain/fleet/production.ts';
 import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
 import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
@@ -9,9 +12,13 @@ import { selectOwnerScore } from '../domain/rating/scoring.ts';
 import { evaluatePlanetAttackEligibility } from './attack-eligibility.ts';
 import { isAttackCombatShip, normalizeAttackRounds, createBot01IncomingAttackSnapshot } from './attack.ts';
 import { createColonyPlanetRuntime } from './owned-planets.ts';
+import { npcColonyIdentity } from './npc-identity.ts';
+import { collectAsteroidGas } from './asteroid-gas-collection.ts';
 import { getOwnerRelation } from './owner-relations.ts';
 import { getExplorationTarget } from './exploration.ts';
 import { creditNpcExplorationReturn } from './exploration-bot01.ts';
+import { syncSpyTargetCommanderCounts } from '../domain/espionage/runtime.ts';
+import { COMMANDER_IDS, type CommanderId } from '../domain/combat/commanders.ts';
 import { getEspionageTargets, activeSpyMissionForTarget, createSeededEspionageRng, espionageRollSeed, hunterDetects, normalizeRngRoll, repeatReportLosesProbe, resolveSpyReportQuality, SPY_REPORT_COOLDOWN_MS } from '../domain/espionage/runtime.ts';
 import { addDebris, getCappedDelivery, getCargoUsed, getFleetCargoCapacity, normalizeTransportCargo, type TransportCargo } from '../domain/flights/cargo.ts';
 import { collectOrbitalDebrisAtCoordinate, getOrbitalDebrisAtCoordinate } from '../domain/espionage/orbital-debris.ts';
@@ -45,6 +52,10 @@ export type NpcMissionDispatchCommand = Readonly<{
   targetKind?: UniverseObjectKind;
   targetRelation?: TargetRelation;
   maxRounds?: SimulatorMaxRounds;
+  /** Attack only: commanders flown along (the leading one's ability applies). */
+  selectedCommanders?: Partial<Record<CommanderId, number>>;
+  /** Attack only: the owner's «Боевой приоритет» for this attack. */
+  attackPriority?: readonly CommanderId[];
 }>;
 
 export type NpcMissionResult = Readonly<{
@@ -269,6 +280,7 @@ export function dispatchNpcMission(
       if (!evaluatePlanetAttackEligibility(state, command.ownerId, target.ownerId).allowed) return fail(state, 'attack-not-allowed');
       if (Object.keys(selectedShips).some((shipId) => !isAttackCombatShip(shipId as ShipId, origin.raceId))) return fail(state, 'invalid-attack-composition');
       if (command.maxRounds !== undefined && ![5, 8, 12].includes(command.maxRounds)) return fail(state, 'invalid-round-limit');
+      if (!takeCommanders(origin, command.selectedCommanders)) return fail(state, 'insufficient-commanders');
     }
   }
   let recycleCapacity: number | undefined;
@@ -319,9 +331,10 @@ export function dispatchNpcMission(
   }
 
   const science = profile.scienceLevels;
+  const attackCommanders = command.missionId === 'attack' ? takeCommanders(origin, command.selectedCommanders) ?? {} : {};
   const snapshot = command.missionId === 'attack'
     ? {
-      ...createBot01IncomingAttackSnapshot(origin, profile),
+      ...createBot01IncomingAttackSnapshot(origin, profile, command.attackPriority),
       maxRounds: normalizeAttackRounds(command.maxRounds),
     }
     : undefined;
@@ -351,6 +364,7 @@ export function dispatchNpcMission(
     } : {}),
     ...(command.missionId === 'espionage' ? { spyMissionId: `spy-${command.requestId}` } : {}),
     ...(snapshot ? { attackSnapshot: snapshot } : {}),
+    ...(Object.keys(attackCommanders).length ? { selectedCommanders: attackCommanders } : {}),
     ...(command.missionId === 'colonize' ? { populationReserved: 12 } : {}),
     ...(command.missionId === 'recycle' ? { recycleCapacity, cargo: { metal: 0, minerals: 0, gas: 0, debris: 0 } } : {}),
     speedCommanderLevels: { typhoon: profile.commanderLevels.typhoon ?? 0 },
@@ -375,9 +389,10 @@ export function dispatchNpcMission(
   for (const [shipId, count] of Object.entries(selectedShips) as [ShipId, number][]) {
     ships[shipId] = Math.max(0, (ships[shipId] ?? 0) - count);
   }
+  const commanders = { ...origin.fleet.commanders };
+  for (const [id, count] of Object.entries(attackCommanders) as [CommanderId, number][]) commanders[id] = Math.max(0, (commanders[id] ?? 0) - count);
   const debitedOrigin: SpyTargetState = {
-    ...origin,
-    fleet: { ...origin.fleet, ships },
+    ...syncSpyTargetCommanderCounts(origin, { ...origin.fleet, ships, commanders }, origin.ownerProfile),
     resources: { ...origin.resources, gas: gasAvailable - flight.gasCost },
   };
   let next = setTarget({ ...state, flights: domainResult.state }, debitedOrigin);
@@ -600,6 +615,234 @@ export function dispatchNpcTransport(state: SaveState, command: NpcTransportComm
   return { state: setFlight(setTarget({ ...state, flights: domainResult.state }, debitedOrigin), flight), ok: true, reason: null, flight, created: true };
 }
 
+export type NpcDeploymentCommand = Readonly<{
+  requestId: string;
+  ownerId: string;
+  originPlanetId: string;
+  destinationPlanetId: string;
+  selectedShips: Partial<Record<ShipId, number>>;
+  /** Commanders flown with the fleet, as the player's deployment carries them. */
+  selectedCommanders?: Partial<Record<CommanderId, number>>;
+}>;
+
+/** Valid positive commander counts the planet has at home, or null for an impossible request. */
+function takeCommanders(origin: SpyTargetState, raw: Partial<Record<CommanderId, number>> | undefined): Partial<Record<CommanderId, number>> | null {
+  const selected: Partial<Record<CommanderId, number>> = {};
+  for (const [id, count] of Object.entries(raw ?? {}) as [CommanderId, number][]) {
+    if (!COMMANDER_IDS.includes(id) || !Number.isSafeInteger(count) || count < 0) return null;
+    if (count === 0) continue;
+    if ((origin.fleet.commanders?.[id] ?? 0) < count) return null;
+    selected[id] = count;
+  }
+  return selected;
+}
+
+/** Population the destination hangar has free right now, the only room a deployment is checked against. */
+export function npcDeploymentFreeCapacity(target: SpyTargetState): number {
+  const fleet = removeSolarSatellitesFromFleet(target.fleet).fleet;
+  const satellites = Math.max(Math.max(0, Math.floor(target.solarSatellites ?? 0)), getSolarSatelliteFleetCount(target.fleet));
+  const population = calculatePlanetPopulation(fleet, satellites, target.raceId);
+  return Math.max(0, calculatePlanetCapacity(migrateBuildingLevels(target.buildings).hangar ?? 0) - population);
+}
+
+/**
+ * «Дислокация» between two of the owner's own planets, by the player's rules
+ * (`dispatchFlightCommand`): no solar satellites, the destination must not be
+ * in an overpopulation episode, and the fleet must fit the destination's free
+ * hangar room at dispatch. Room is checked against the planet as it is now,
+ * not against other deployments already on their way, exactly as for the
+ * player: several parallel deployments may land together and overfill it.
+ */
+export function dispatchNpcDeployment(state: SaveState, command: NpcDeploymentCommand, at: number, timeScale: number): NpcMissionResult {
+  if (!Number.isSafeInteger(at) || at < 0 || !Number.isFinite(timeScale) || timeScale <= 0) return fail(state, 'invalid-time');
+  if (!command.requestId.trim()) return fail(state, 'request-id-required');
+  const existing = getFlightByRequestId(state.flights, command.requestId);
+  if (existing) {
+    return existing.ownerSide === 'npc' && existing.ownerId === command.ownerId && existing.originPlanetId === command.originPlanetId
+      ? { state, ok: true, reason: null, flight: existing, created: false }
+      : fail(state, 'request-id-owned-by-another-flight');
+  }
+  const origin = validNpcOrigin(state, command.ownerId, command.originPlanetId);
+  const target = validNpcOrigin(state, command.ownerId, command.destinationPlanetId);
+  if (!origin) return fail(state, 'npc-origin-not-found');
+  if (!target || target.id === origin.id) return fail(state, 'target-not-available');
+  const profile = ownerProfile(state, origin);
+  if (!flightSlotsAvailable(state, command.ownerId, profile, 'deployment')) return fail(state, 'flight-limit-reached');
+  const selectedCommanders = takeCommanders(origin, command.selectedCommanders);
+  if (!selectedCommanders) return fail(state, 'insufficient-commanders');
+  const hasCommanders = Object.keys(selectedCommanders).length > 0;
+  // Ships, commanders or both, as the player's deployment allows.
+  const selectedShips = Object.keys(command.selectedShips).length || !hasCommanders ? normalizeShips(command.selectedShips, origin.raceId) : {};
+  if (!selectedShips || selectedShips['solar-satellite']) return fail(state, 'invalid-ship-selection');
+  const freeShips = getNpcMissionAvailableFleet(state, command.ownerId, origin.id);
+  for (const [shipId, count] of Object.entries(selectedShips) as [ShipId, number][]) {
+    if ((freeShips[shipId] ?? 0) < count) return fail(state, 'insufficient-ships');
+  }
+  if (isNpcPlanetBlocked(target)) return fail(state, 'target-overpopulated');
+  const empty = createEmptyFleetState();
+  const population = calculateFleetPopulation({ ships: { ...empty.ships, ...selectedShips }, commanders: { ...empty.commanders, ...selectedCommanders } }, origin.raceId);
+  if (population > npcDeploymentFreeCapacity(target)) return fail(state, 'capacity-exceeded');
+  const domainResult = dispatchFlight(state.flights, {
+    requestId: command.requestId,
+    missionId: 'deployment',
+    ownerSide: 'npc',
+    ownerId: command.ownerId,
+    originPlanetId: origin.id,
+    originCoordinate: origin.coordinate,
+    destination: { kind: 'planet', planetId: target.id, coordinate: { ...target.coordinate } },
+    destinationPlanetId: target.id,
+    destinationOwnerId: target.ownerId,
+    targetPlanetName: target.name,
+    targetOwnerName: target.ownerName,
+    targetRelation: 'self',
+    targetKind: 'npc',
+    selectedShips,
+    ...(hasCommanders ? {
+      selectedCommanders,
+      // Levels are owner-wide; the flight keeps the snapshot like the player's.
+      selectedCommanderLevels: Object.fromEntries(Object.keys(selectedCommanders).map((id) => [id, Math.max(0, Math.floor(profile.commanderLevels[id as CommanderId] ?? 0))])),
+    } : {}),
+    departedAt: at,
+    factionId: origin.raceId,
+    science: profile.scienceLevels as FlightScienceLevels,
+    populationReserved: population,
+    speedCommanderLevels: { typhoon: profile.commanderLevels.typhoon ?? 0 },
+  });
+  const duration = Math.max(1, Math.round(domainResult.flight.oneWayDurationMs / timeScale));
+  const flight: FlightRecord = { ...domainResult.flight, oneWayDurationMs: duration, arrivalAt: at + duration };
+  if (origin.resources.gas < flight.gasCost) return fail(state, 'insufficient-gas');
+  const ships = { ...origin.fleet.ships };
+  for (const [shipId, count] of Object.entries(selectedShips) as [ShipId, number][]) ships[shipId] = Math.max(0, (ships[shipId] ?? 0) - count);
+  const commanders = { ...origin.fleet.commanders };
+  for (const [id, count] of Object.entries(selectedCommanders) as [CommanderId, number][]) commanders[id] = Math.max(0, (commanders[id] ?? 0) - count);
+  const debitedOrigin: SpyTargetState = {
+    ...syncSpyTargetCommanderCounts(origin, { ...origin.fleet, ships, commanders }, origin.ownerProfile),
+    resources: { ...origin.resources, gas: origin.resources.gas - flight.gasCost },
+  };
+  return { state: setFlight(setTarget({ ...state, flights: domainResult.state }, debitedOrigin), flight), ok: true, reason: null, flight, created: true };
+}
+
+/**
+ * The deployed fleet joins its destination at arrival. Any excess over the
+ * hangar starts the overpopulation window at that very moment (the player's
+ * linear 10-minute burn), not at whenever the planet is settled next.
+ * A destination lost on the way sends the fleet home.
+ */
+export function resolveNpcDeploymentArrival(state: SaveState, flight: FlightRecord, at: number): NpcMissionResult {
+  if (flight.ownerSide !== 'npc' || !flight.ownerId || flight.missionId !== 'deployment' || flight.phase !== 'outbound' || at < flight.arrivalAt) {
+    return fail(state, 'invalid-arrival');
+  }
+  const target = flight.destinationPlanetId ? validNpcOrigin(state, flight.ownerId, flight.destinationPlanetId) : undefined;
+  if (!target || !sameCoordinate(target.coordinate, flight.destinationCoordinate)) {
+    const returningState = beginFlightReturn(state.flights, flight.id, flight.arrivalAt, 'target-unavailable');
+    const returning = returningState.records.find((item) => item.id === flight.id)!;
+    const updated: FlightRecord = { ...returning, arrivedAt: flight.arrivalAt, completionReason: 'target-unavailable' };
+    return { state: setFlight({ ...state, flights: returningState }, updated), ok: false, reason: 'target-unavailable', flight: updated };
+  }
+  const ships = { ...target.fleet.ships };
+  for (const [id, raw] of Object.entries(flight.selectedShips) as [ShipId, number][]) {
+    const count = safeCount(raw);
+    if (count) ships[id] = (ships[id] ?? 0) + count;
+  }
+  const commanders = { ...target.fleet.commanders };
+  for (const [id, raw] of Object.entries(flight.selectedCommanders ?? {}) as [CommanderId, number][]) {
+    const count = safeCount(raw);
+    if (count) commanders[id] = (commanders[id] ?? 0) + count;
+  }
+  // Levels are owner-wide; a destination profile behind the flight's snapshot takes the higher one.
+  const levels = { ...(target.ownerProfile?.commanderLevels ?? {}) } as Partial<Record<CommanderId, number>>;
+  for (const [id, level] of Object.entries(flight.selectedCommanderLevels ?? {}) as [CommanderId, number][]) levels[id] = Math.max(levels[id] ?? 0, level ?? 0);
+  const ownerProfile = { scienceLevels: {}, shipLevels: {}, ...(target.ownerProfile ?? {}), commanderLevels: levels };
+  const landed = startNpcOverpopulationAt(syncSpyTargetCommanderCounts({ ...target, ownerProfile }, { ...target.fleet, ships, commanders }, ownerProfile), flight.arrivalAt);
+  const completed: FlightRecord = { ...flight, phase: 'completed', arrivedAt: flight.arrivalAt, completedAt: flight.arrivalAt, completionReason: 'deployed' };
+  return { state: setFlight(setTarget(state, landed), completed), ok: true, reason: null, flight: completed };
+}
+
+export type NpcGasCommand = Readonly<{
+  requestId: string;
+  ownerId: string;
+  originPlanetId: string;
+  coordinate: UniverseCoordinate;
+  selectedShips: Partial<Record<ShipId, number>>;
+}>;
+
+/**
+ * «Добыча газа» for an NPC, by the player's rules: recyclers only, to a
+ * coordinate (the asteroid must be there at arrival, checked only then), a
+ * slot, route time and gas. The owner aims where its forecast puts the asteroid.
+ */
+export function dispatchNpcGas(state: SaveState, command: NpcGasCommand, at: number, timeScale: number): NpcMissionResult {
+  if (!Number.isSafeInteger(at) || at < 0 || !Number.isFinite(timeScale) || timeScale <= 0) return fail(state, 'invalid-time');
+  if (!command.requestId.trim()) return fail(state, 'request-id-required');
+  const existing = getFlightByRequestId(state.flights, command.requestId);
+  if (existing) {
+    return existing.ownerSide === 'npc' && existing.ownerId === command.ownerId && existing.originPlanetId === command.originPlanetId
+      ? { state, ok: true, reason: null, flight: existing, created: false }
+      : fail(state, 'request-id-owned-by-another-flight');
+  }
+  const origin = validNpcOrigin(state, command.ownerId, command.originPlanetId);
+  if (!origin) return fail(state, 'npc-origin-not-found');
+  if (!isFlightCoordinate(command.coordinate)) return fail(state, 'invalid-coordinate');
+  const profile = ownerProfile(state, origin);
+  if (!flightSlotsAvailable(state, command.ownerId, profile, 'gas')) return fail(state, 'flight-limit-reached');
+  const selectedShips = normalizeShips(command.selectedShips, origin.raceId);
+  if (!selectedShips || Object.keys(selectedShips).some((shipId) => !isNpcRecyclerShip(shipId as ShipId, origin.raceId))) return fail(state, 'invalid-gas-composition');
+  const freeShips = getNpcMissionAvailableFleet(state, command.ownerId, origin.id);
+  for (const [shipId, count] of Object.entries(selectedShips) as [ShipId, number][]) {
+    if ((freeShips[shipId] ?? 0) < count) return fail(state, 'insufficient-ships');
+  }
+  const catalog = Object.fromEntries(getFactionShipCatalog(origin.raceId).map((entity) => [entity.id, { cargo: entity.ship?.cargo ?? 0 }]));
+  const gasCapacity = getFleetCargoCapacity(selectedShips, catalog);
+  if (gasCapacity <= 0) return fail(state, 'invalid-gas-composition');
+  const domainResult = dispatchFlight(state.flights, {
+    requestId: command.requestId,
+    missionId: 'gas',
+    ownerSide: 'npc',
+    ownerId: command.ownerId,
+    originPlanetId: origin.id,
+    originCoordinate: origin.coordinate,
+    destination: { kind: 'coordinate', coordinate: { ...command.coordinate } },
+    targetKind: 'asteroid',
+    selectedShips,
+    departedAt: at,
+    factionId: origin.raceId,
+    science: profile.scienceLevels as FlightScienceLevels,
+    cargo: { metal: 0, minerals: 0, gas: 0, debris: 0 },
+    gasCapacity,
+    speedCommanderLevels: { typhoon: profile.commanderLevels.typhoon ?? 0 },
+  });
+  const duration = Math.max(1, Math.round(domainResult.flight.oneWayDurationMs / timeScale));
+  const flight: FlightRecord = { ...domainResult.flight, oneWayDurationMs: duration, arrivalAt: at + duration, cargoState: 'loaded' };
+  if (origin.resources.gas < flight.gasCost) return fail(state, 'insufficient-gas');
+  const ships = { ...origin.fleet.ships };
+  for (const [shipId, count] of Object.entries(selectedShips) as [ShipId, number][]) ships[shipId] = Math.max(0, (ships[shipId] ?? 0) - count);
+  const debitedOrigin: SpyTargetState = {
+    ...origin,
+    fleet: { ...origin.fleet, ships },
+    resources: { ...origin.resources, gas: origin.resources.gas - flight.gasCost },
+  };
+  return { state: setFlight(setTarget({ ...state, flights: domainResult.state }, debitedOrigin), flight), ok: true, reason: null, flight, created: true };
+}
+
+/** Recyclers reach the coordinate: gas and scrap from the asteroid there (if any) ride home. */
+export function resolveNpcGasArrival(state: SaveState, flight: FlightRecord, at: number): NpcMissionResult {
+  if (flight.ownerSide !== 'npc' || !flight.ownerId || flight.missionId !== 'gas' || flight.phase !== 'outbound' || at < flight.arrivalAt) {
+    return fail(state, 'invalid-arrival');
+  }
+  const collection = collectAsteroidGas(state, flight.destinationCoordinate, flight.arrivalAt, flight.gasCapacity ?? 0);
+  const returning = beginFlightReturn(collection.state.flights, flight.id, flight.arrivalAt, 'normal-return');
+  const turned = returning.records.find((record) => record.id === flight.id)!;
+  const arrived: FlightRecord = {
+    ...turned,
+    arrivedAt: flight.arrivalAt,
+    cargo: { metal: 0, minerals: 0, gas: collection.gasCollected, debris: collection.scrapCollected },
+    cargoState: 'loaded',
+    completionReason: collection.found ? 'normal-return' : 'target-unavailable',
+  };
+  return { state: setFlight({ ...collection.state, flights: returning }, arrived), ok: collection.found,
+    reason: collection.found ? null : 'target-unavailable', flight: arrived };
+}
+
 /** Unloads an NPC transport into its own destination planet; anything that does not fit flies back. */
 export function resolveNpcTransportArrival(state: SaveState, flight: FlightRecord, at: number): NpcMissionResult {
   if (flight.ownerSide !== 'npc' || !flight.ownerId || flight.missionId !== 'transport' || flight.phase !== 'outbound' || at < flight.arrivalAt) {
@@ -666,9 +909,12 @@ export function resolveNpcMissionArrival(
       shipLevels: { ...profile.shipLevels },
       commanderLevels: { ...profile.commanderLevels },
     };
+    // The owner names its colony and picks its look, as a player does in the planet editor.
+    const identity = npcColonyIdentity(state, flight.ownerId, coordinate);
     const colony: SpyTargetState = {
       id: planetId,
-      name: colonyBase.name,
+      name: identity?.name ?? colonyBase.name,
+      ...(identity ? { skin: identity.skin } : {}),
       coordinate: { ...coordinate },
       ownerId: flight.ownerId,
       ownerName: origin.ownerName,
@@ -869,10 +1115,20 @@ export function settleNpcMissionReturn(
       const count = safeCount(raw);
       if (count) ships[id] = (ships[id] ?? 0) + count;
     }
+    // Commanders flown along come home too; after a battle only those that survived it.
+    const commanders = { ...source.fleet.commanders };
+    for (const [id, raw] of Object.entries(flight.selectedCommanders ?? {}) as [CommanderId, number][]) {
+      const survived = battleReport ? battleReport.attackerForce.stacks.find((stack) => stack.entityId === id)?.countAfter ?? 0 : safeCount(raw);
+      if (survived > 0) commanders[id] = (commanders[id] ?? 0) + survived;
+    }
+    const homeFleet = { ...source.fleet, ships, commanders };
     let resources = { metal: source.resources.metal, minerals: source.resources.minerals, gas: source.resources.gas };
     // A space flight brings its own loaded cargo home, recyclers their debris;
     // loot comes from attacks.
-    const loot = (flight.missionId === 'space-flight' || flight.missionId === 'transport') && flight.cargoState === 'loaded' && flight.cargo
+    // Gas from an asteroid rides home with its scrap (the scrap goes to the recycling store).
+    const loot = flight.missionId === 'gas' && flight.cargoState === 'loaded' && flight.cargo
+      ? { ...flight.cargo }
+      : (flight.missionId === 'space-flight' || flight.missionId === 'transport') && flight.cargoState === 'loaded' && flight.cargo
       ? { ...flight.cargo, debris: 0 }
       : flight.missionId === 'recycle' && flight.cargo
         ? { metal: 0, minerals: 0, gas: 0, debris: flight.cargo.debris }
@@ -891,14 +1147,13 @@ export function settleNpcMissionReturn(
       // the orbit field (resources.debris) is debris anyone may collect.
       const recycling = source.recycling ?? { availableDebris: 0, jobs: [] };
       const updated: SpyTargetState = {
-        ...source,
-        fleet: { ...source.fleet, ships },
+        ...syncSpyTargetCommanderCounts(source, homeFleet, source.ownerProfile),
         resources: { ...source.resources, ...resources },
         ...(loot.debris > 0 ? { recycling: { ...recycling, availableDebris: addDebris(recycling.availableDebris, loot.debris) } } : {}),
       };
       next = setTarget(next, updated);
     } else {
-      next = setTarget(next, { ...source, fleet: { ...source.fleet, ships } });
+      next = setTarget(next, syncSpyTargetCommanderCounts(source, homeFleet, source.ownerProfile));
     }
   }
   if (flight.missionId === 'expedition' && source) {
@@ -907,7 +1162,8 @@ export function settleNpcMissionReturn(
     next = creditNpcExplorationReturn(next, flight, flight.returnAt);
   }
   // Cargo that rode home is back in the stores: the record no longer holds it.
-  const carriedHome = (flight.missionId === 'space-flight' || flight.missionId === 'transport') && flight.cargoState === 'loaded' && source !== undefined;
+  const carriedHome = (flight.missionId === 'space-flight' || flight.missionId === 'transport' || flight.missionId === 'gas')
+    && flight.cargoState === 'loaded' && source !== undefined;
   const settled: FlightRecord = { ...flight, npcReturnCreditedAt: flight.returnAt,
     ...(carriedHome ? { cargoState: 'returned' as const, cargoResolvedAt: flight.returnAt } : {}) };
   return { state: setFlight(next, settled), flight: settled };

@@ -290,6 +290,15 @@ function settleOverpopulation(target: SpyTargetState, at: number): SpyTargetStat
   };
 }
 
+/**
+ * Units that arrived at `at` (a deployment) may overfill the hangar: the
+ * overpopulation episode starts at that moment, as the player's does. The
+ * caller has settled the planet's economy up to `at` already.
+ */
+export function startNpcOverpopulationAt(target: SpyTargetState, at: number): SpyTargetState {
+  return settleOverpopulation(target, Math.max(0, Math.floor(at)));
+}
+
 // Targets are immutable; replay checkpoints ask every planet this per group.
 const blockedByTarget = new WeakMap<SpyTargetState, boolean>();
 

@@ -96,6 +96,7 @@ import type { PirateContactState } from './domain/pirates/contact.ts';
 import type { PirateContactPresentation, PirateSystemSelection } from './pirate-ui.ts';
 import type { TargetRelation } from './domain/flights/types.ts';
 import type { SpyTargetState } from './domain/espionage/types.ts';
+import { planetSkinMapArt } from './planet-skin-art.ts';
 
 const planetArts = [
   planet01, planet02, planet03, planet04, planet05, planet06, planet07, planet08, planet09, planet10, planet11, planet12,
@@ -720,6 +721,8 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
       name: target.name,
       kind: target.kind ?? 'npc',
       ownerId: target.ownerId,
+      // The look its owner picked (NPC colonies choose one, as a player does in the editor).
+      ...(planetSkinMapArt(target.skin) ? { art: planetSkinMapArt(target.skin) } : {}),
     })),
   }), [asteroidStates, galaxyCount, mode, ownedPlanetArt, ownedPlanetName, owner.id, pirateContactState?.defeatedCycles, playerPlanets, spyTargets]);
   // Only the open system follows the 1 s clock. The whole galaxy (40 systems)

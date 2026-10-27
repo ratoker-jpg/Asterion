@@ -15,6 +15,7 @@ import { EXPLORATION_ARTS } from '../exploration-art.ts';
 import { getOwnerRelation } from './owner-relations.ts';
 import { getNpcMissionAvailableFleet, isNpcRecyclerShip, type NpcMissionDispatchCommand, type NpcMissionId } from './npc-missions.ts';
 import { findDebrisNearSystem } from '../domain/espionage/orbital-debris.ts';
+import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
 import type { SaveState } from './contracts.ts';
 import { productionExplorationNpcSources } from './exploration-npc.ts';
 
@@ -243,6 +244,24 @@ function availableExpeditionShip(available: Partial<Record<ShipId, number>>, fac
   return preferred ? { [preferred]: 1 } : null;
 }
 
+/** Just enough recyclers (largest holds first) to carry `debris`, or all that are left. */
+function recyclersForDebris(available: Partial<Record<ShipId, number>>, raceId: SpyTargetState['raceId'], debris: number): Partial<Record<ShipId, number>> {
+  const catalog = getFactionShipCatalog(raceId);
+  const hulls = (Object.entries(available) as [ShipId, number][]).filter(([, count]) => count > 0)
+    .map(([id, count]) => ({ id, count, cargo: catalog.find((entity) => entity.id === id)?.ship?.cargo ?? 0 }))
+    .filter((hull) => hull.cargo > 0)
+    .sort((left, right) => right.cargo - left.cargo || compareIds(left.id, right.id));
+  const chosen: Partial<Record<ShipId, number>> = {};
+  let left = debris;
+  for (const hull of hulls) {
+    if (left <= 0) break;
+    const count = Math.min(hull.count, Math.ceil(left / hull.cargo));
+    chosen[hull.id] = count;
+    left -= count * hull.cargo;
+  }
+  return chosen;
+}
+
 /** Enumerates only missions that can be grounded in this owner's assets and observations. */
 export function getNpcMissionCandidates(
   state: SaveState,
@@ -358,8 +377,14 @@ export function getNpcMissionCandidates(
       const nearby = findDebrisNearSystem(publicDebrisEntries(state.espionage), origin.coordinate)
         .sort((left, right) => right.debris - left.debris || compareIds(coordinateKey(left.coordinate), coordinateKey(right.coordinate)))
         .slice(0, 3);
+      // Each field gets the recyclers it needs, richest first, so one look can
+      // clear several fields instead of sending every hull to one.
+      const remaining: Partial<Record<ShipId, number>> = { ...recyclers };
       for (const { coordinate, debris } of nearby) {
-        addCandidate(candidateList, ownerId, 'recycle', origin.id, coordinate, recyclers, { debris });
+        const assigned = recyclersForDebris(remaining, origin.raceId, debris);
+        if (!Object.keys(assigned).length) break;
+        for (const [id, count] of Object.entries(assigned) as [ShipId, number][]) remaining[id] = (remaining[id] ?? 0) - count;
+        addCandidate(candidateList, ownerId, 'recycle', origin.id, coordinate, assigned, { debris });
       }
     }
 
