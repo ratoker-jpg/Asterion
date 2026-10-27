@@ -115,6 +115,7 @@ import { resolveSpyOwnerProfile } from '../domain/espionage/owner-profile.ts';
 import { collectOrbitalDebrisAtCoordinate, getOrbitalDebrisAtCoordinate } from '../domain/espionage/orbital-debris.ts';
 import { createUniverseSystem, MAX_PLANETS_PER_OWNER, nextColonyPointThreshold, UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 import { selectOwnerScore } from '../domain/rating/scoring.ts';
+import { evaluatePlanetAttackEligibility } from './attack-eligibility.ts';
 import type { UniverseCoordinate, UniverseObjectKind, UniversePersistedPlayerPlanet, UniverseRegisteredPlanet } from '../domain/universe/types.ts';
 import { findUniverseAsteroidAtCoordinate } from '../domain/universe/asteroid-simulation.ts';
 import { advanceAsteroidGasAt } from '../domain/universe/asteroid-gas.ts';
@@ -209,6 +210,7 @@ export type FlightErrorCode =
   | 'flight-limit-reached'
   | 'planet-limit-reached'
   | 'colony-points-required'
+  | 'attack-not-allowed'
   | 'invalid-command';
 
 export type FlightError = {
@@ -1647,6 +1649,9 @@ export function dispatchFlight(
       || (command.destination.kind === 'planet' && command.targetRelation !== attackTarget.relation)) {
       return failure(state, 'spy-target-blocked', 'Атака разрешена только против вражеской или нейтральной планеты.');
     }
+    // Owner points rule, checked only at launch: a flight already in the air arrives.
+    const eligibility = evaluatePlanetAttackEligibility(state, state.profile.playerId, attackTarget.target.ownerId);
+    if (!eligibility.allowed) return failure(state, 'attack-not-allowed', eligibility.message);
     if (Object.keys(selectedShips).some((shipId) => !isAttackCombatShip(shipId as ShipId, state.profile.factionId as CombatFactionId))) {
       return failure(state, 'wrong-ship-composition', 'В атакующий флот можно отправить любой корабль, кроме солнечного спутника.');
     }

@@ -1,0 +1,38 @@
+[
+  {
+    "file": "01-attack-refused-protected-player.png",
+    "width": 1904,
+    "height": 1001,
+    "note": "New game through the wizard, Вселенная → Даректор25 [1:25:9] → Атаковать, 20 scouts. Preview: «У вас 147 общих очков: атаковать можно с 300.», send disabled."
+  },
+  {
+    "file": "02-mineral-mine-2-requirement.png",
+    "width": 1904,
+    "height": 1001,
+    "note": "Test Mode start, resource zone → Минеральная шахта II: «ТРЕБОВАНИЯМинеральная шахта I — ур. 10сейчас 1»"
+  },
+  {
+    "file": "03-defense-requirements.png",
+    "width": 1904,
+    "height": 1001,
+    "note": "Test Mode, Флот → Оборона, Башенный щит: «»"
+  },
+  {
+    "file": "04-reanimator-requirement.png",
+    "width": 1904,
+    "height": 1001,
+    "note": "Test Mode, Флот → Командирские корабли, Реаниматор: «»"
+  },
+  {
+    "file": "05-incoming-attack-espionage-below-10.png",
+    "width": 1904,
+    "height": 1001,
+    "note": "Test Mode «ЗАПУСТИТЬ АТАКУ BOT 01», player Espionage 0: АтакаСОСТАВ СКРЫТ · ШПИОНАЖ 10BOT 01Bot 01[1:28:24]→Мир проверки Bot 01[1:1:3]Dendrilion · СВОЯ⚠ ВХОДЯЩАЯ АТАКАдо прибытия00:35——"
+  },
+  {
+    "file": "06-incoming-attack-espionage-10.png",
+    "width": 1904,
+    "height": 1001,
+    "note": "Same Bot 01 flight after setting the save's Espionage (science 5) to 10: «Шмель ×1 295 · Пожиратель ×1»"
+  }
+]

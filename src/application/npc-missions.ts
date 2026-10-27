@@ -6,6 +6,7 @@ import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
 import { selectOwnerAlliance } from '../domain/command/selectors.ts';
 import { createExplorationState, getOrMaterializeExplorationContact, launchExplorationScore, recordHighestExplorationScore } from '../domain/exploration/ledger.ts';
 import { selectOwnerScore } from '../domain/rating/scoring.ts';
+import { evaluatePlanetAttackEligibility } from './attack-eligibility.ts';
 import { isAttackCombatShip, normalizeAttackRounds, createBot01IncomingAttackSnapshot } from './attack.ts';
 import { createColonyPlanetRuntime } from './owned-planets.ts';
 import { getOwnerRelation } from './owner-relations.ts';
@@ -265,6 +266,7 @@ export function dispatchNpcMission(
         || Object.keys(selectedShips).length !== 1 || selectedShips['spy-probe'] !== 1) return fail(state, 'invalid-espionage-composition');
       if (activeSpyMissionForTarget(state.espionage?.missions ?? [], command.ownerId, target.id)) return fail(state, 'spy-target-already-active');
     } else {
+      if (!evaluatePlanetAttackEligibility(state, command.ownerId, target.ownerId).allowed) return fail(state, 'attack-not-allowed');
       if (Object.keys(selectedShips).some((shipId) => !isAttackCombatShip(shipId as ShipId, origin.raceId))) return fail(state, 'invalid-attack-composition');
       if (command.maxRounds !== undefined && ![5, 8, 12].includes(command.maxRounds)) return fail(state, 'invalid-round-limit');
     }

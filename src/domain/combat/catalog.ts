@@ -140,47 +140,47 @@ export const DEFENSE_COMBAT_CATALOG: readonly CatalogEntity<DefenseId>[] = [
   {
     id: 'ballistic-turret', kind: 'defense', name: 'Защитная матрица', role: 'Базовая оборонная установка', art: ballisticTurretArt, population: 1,
     cost: { metal: 2_500, minerals: 1_000, gas: 0 }, combat: { attack: 140, life: 1_500, weaponType: 'Лазер', armorType: 'Лёгкая Броня', armorStrength: 3 }, category: 'Оборона Астеров',
-    tactical: { specialization: 'Лёгкие цели', range: 'Орбита', priority: 'Перехват' }, construction: { time: '00:04:00', requiredShipyardLevel: 1, requirements: ['Верфь · уровень 1'] },
+    tactical: { specialization: 'Лёгкие цели', range: 'Орбита', priority: 'Перехват' }, construction: { time: '00:04:00', requiredShipyardLevel: 2, requirements: ['Верфь · уровень 2'] },
   },
   {
     id: 'laser-turret', kind: 'defense', name: 'Лазерная матрица', role: 'Лазерная оборонная установка', art: laserTurretArt, population: 1,
     cost: { metal: 2_000, minerals: 2_500, gas: 0 }, combat: { attack: 180, life: 2_400, weaponType: 'Лазер', armorType: 'Средняя Броня', armorStrength: 6 }, category: 'Оборона Астеров',
-    tactical: { specialization: 'Универсальная', range: 'Орбита', priority: 'Флот' }, construction: { time: '00:05:00', requiredShipyardLevel: 2, requirements: ['Верфь · уровень 2', 'Лазерная наука · уровень 2'] },
+    tactical: { specialization: 'Универсальная', range: 'Орбита', priority: 'Флот' }, construction: { time: '00:05:00', requiredShipyardLevel: 3, requirements: ['Верфь · уровень 3', 'Физика · уровень 2'] },
   },
   {
     id: 'ion-turret', kind: 'defense', name: 'Ионная матрица', role: 'Ионная оборонная установка', art: ionTurretArt, population: 2,
     cost: { metal: 3_500, minerals: 4_500, gas: 500 }, combat: { attack: 840, life: 12_600, weaponType: 'Ион', armorType: 'Тяжёлая Броня', armorStrength: 9 }, category: 'Оборона Астеров',
-    tactical: { specialization: 'Щиты и броня', range: 'Орбита', priority: 'Крейсеры' }, construction: { time: '00:08:00', requiredShipyardLevel: 3, requirements: ['Верфь · уровень 3', 'Ионная наука · уровень 2'] },
+    tactical: { specialization: 'Щиты и броня', range: 'Орбита', priority: 'Крейсеры' }, construction: { time: '00:08:00', requiredShipyardLevel: 5, requirements: ['Верфь · уровень 5', 'Физика · уровень 5'] },
   },
   {
     id: 'plasma-turret', kind: 'defense', name: 'Плазменная матрица', role: 'Плазменная оборонная установка', art: plasmaTurretArt, population: 3,
     cost: { metal: 6_000, minerals: 7_500, gas: 2_000 }, combat: { attack: 3_800, life: 62_700, weaponType: 'Плазма', armorType: 'Средняя Броня', armorStrength: 6 }, category: 'Оборона Астеров',
-    tactical: { specialization: 'Тяжёлые цели', range: 'Дальняя орбита', priority: 'Линкоры' }, construction: { time: '00:12:00', requiredShipyardLevel: 4, requirements: ['Верфь · уровень 4', 'Плазменная наука · уровень 2'] },
+    tactical: { specialization: 'Тяжёлые цели', range: 'Дальняя орбита', priority: 'Линкоры' }, construction: { time: '00:12:00', requiredShipyardLevel: 7, requirements: ['Верфь · уровень 7', 'Плазменная наука · уровень 3'] },
   },
   {
     id: 'laser-ion-battery', kind: 'defense', name: 'Лазер-ионная матрица', role: 'Комбинированная батарея', art: laserIonBatteryArt, population: 5,
     cost: { metal: 9_500, minerals: 12_000, gas: 2_500 }, combat: { attack: 8_820, life: 128_800, weaponType: 'Лазер / Ион', armorType: 'Средняя Броня', armorStrength: 6 }, category: 'Оборона Астеров',
-    tactical: { specialization: 'Универсальная', range: 'Дальняя орбита', priority: 'Флот' }, construction: { time: '00:20:00', requiredShipyardLevel: 6, requirements: ['Верфь · уровень 6', 'Лазерная наука · уровень 5', 'Ионная наука · уровень 4'] },
+    tactical: { specialization: 'Универсальная', range: 'Дальняя орбита', priority: 'Флот' }, construction: { time: '00:20:00', requiredShipyardLevel: 8, requirements: ['Верфь · уровень 8', 'Ионная наука · уровень 5', 'Средняя броня · уровень 5'] },
   },
   {
     id: 'plasma-laser-battery', kind: 'defense', name: 'Плазма-лазерная матрица', role: 'Тяжёлая комбинированная батарея', art: plasmaLaserBatteryArt, population: 8,
     cost: { metal: 18_000, minerals: 22_000, gas: 6_000 }, combat: { attack: 24_200, life: 263_000, weaponType: 'Лазер / Плазма', armorType: 'Тяжёлая Броня', armorStrength: 9 }, category: 'Оборона Астеров',
-    tactical: { specialization: 'Тяжёлые корабли', range: 'Дальняя орбита', priority: 'Линкоры' }, construction: { time: '00:32:00', requiredShipyardLevel: 8, requirements: ['Верфь · уровень 8', 'Плазменная наука · уровень 5', 'Лазерная наука · уровень 7'] },
+    tactical: { specialization: 'Тяжёлые корабли', range: 'Дальняя орбита', priority: 'Линкоры' }, construction: { time: '00:32:00', requiredShipyardLevel: 10, requirements: ['Верфь · уровень 10', 'Плазменная наука · уровень 5', 'Тяжёлая броня · уровень 5'] },
   },
   {
     id: 'ion-plasma-battery', kind: 'defense', name: 'Ион-плазменная матрица', role: 'Штурмовая оборонная батарея', art: ionPlasmaBatteryArt, population: 12,
     cost: { metal: 26_000, minerals: 31_000, gas: 10_000 }, combat: { attack: 34_250, life: 407_000, weaponType: 'Ион / Плазма', armorType: 'Средняя Броня', armorStrength: 6 }, category: 'Оборона Астеров',
-    tactical: { specialization: 'Капитальные цели', range: 'Дальняя орбита', priority: 'Капитальные' }, construction: { time: '00:45:00', requiredShipyardLevel: 9, requirements: ['Верфь · уровень 9', 'Ионная наука · уровень 7', 'Плазменная наука · уровень 6'] },
+    tactical: { specialization: 'Капитальные цели', range: 'Дальняя орбита', priority: 'Капитальные' }, construction: { time: '00:45:00', requiredShipyardLevel: 12, requirements: ['Верфь · уровень 12', 'Ионная наука · уровень 10', 'Плазменная наука · уровень 10', 'Средняя броня · уровень 5'] },
   },
   {
     id: 'tower-shield', kind: 'defense', name: 'Матричный щит', role: 'Локальный генератор защиты', art: towerShieldArt, population: 14,
     cost: { metal: 34_000, minerals: 40_000, gas: 14_000 }, combat: { attack: 1, life: 600_000, weaponType: 'Лазер', armorType: 'Лёгкая Броня', armorStrength: 3 }, category: 'Оборона Астеров',
-    tactical: { specialization: 'Прикрытие обороны', range: 'Локальная', priority: 'Защита' }, construction: { time: '01:00:00', requiredShipyardLevel: 10, requirements: ['Верфь · уровень 10', 'Щитовые системы · уровень 7'] },
+    tactical: { specialization: 'Прикрытие обороны', range: 'Локальная', priority: 'Защита' }, construction: { time: '01:00:00', requiredShipyardLevel: 5, requirements: ['Верфь · уровень 5', 'Броня кораблей · уровень 6'] },
   },
   {
     id: 'planetary-shield', kind: 'defense', name: 'Планетарная матрица', role: 'Стратегический планетарный комплекс', art: planetaryShieldArt, population: 30,
     cost: { metal: 90_000, minerals: 110_000, gas: 45_000 }, combat: { attack: 1, life: 2_640_000, weaponType: 'Лазер', armorType: 'Средняя Броня', armorStrength: 6 }, category: 'Оборона Астеров',
-    tactical: { specialization: 'Планетарная защита', range: 'Планета', priority: 'Защита' }, construction: { time: '03:00:00', requiredShipyardLevel: 12, requirements: ['Верфь · уровень 12', 'Щитовые системы · уровень 10', 'Энергетика · уровень 10'] },
+    tactical: { specialization: 'Планетарная защита', range: 'Планета', priority: 'Защита' }, construction: { time: '03:00:00', requiredShipyardLevel: 8, requirements: ['Верфь · уровень 8', 'Броня кораблей · уровень 9'] },
   },
 ];
 
@@ -297,7 +297,7 @@ export const COMMANDER_COMBAT_CATALOG: readonly CatalogEntity<CommanderId>[] = [
   commander({
     id: 'reanimator', name: 'Реаниматор', role: 'Командирский корабль поддержки', art: reanimatorArt, population: 10,
     cost: { metal: 3_500, minerals: 3_500, gas: 0 }, combat: { attack: 2_000, life: 20_000, weaponType: 'Лазер', armorType: 'Средняя Броня', armorStrength: 6 },
-    sourceRequirements: ['Адмирал Уровень: 15'], requiredShipyardLevel: 10, requirements: ['Верфь · уровень 10', 'Энергетика · уровень 8', 'Нанотехнологии · уровень 5'],
+    sourceRequirements: ['Адмирал Уровень: 15'], requiredShipyardLevel: 10, requirements: ['Верфь · уровень 10'],
     tactical: { specialization: 'Поддержка', range: 'Средняя', priority: 'Союзный флот' }, time: '00:04:40',
   }),
   commander({

@@ -403,29 +403,57 @@ async function runViewport(width, height) {
         reason:String(error),
       }));
     }
-    const incomingUi=await win.webContents.executeJavaScript(`(() => {
+    // Owner rule (26.10.2026): the raid's composition and population are visible only from Espionage 10.
+    const setEspionage=async(level)=>{
+      const previous=await win.webContents.executeJavaScript(`(() => {
+        const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'null');
+        if (!save?.science?.levels) return null;
+        const before=save.science.levels[5]??0;
+        save.science.levels[5]=${level};
+        localStorage.setItem(${JSON.stringify(SAVE_KEY)},JSON.stringify(save));
+        return before;
+      })()`);
+      if (previous===null) throw new Error('Cannot set the QA espionage level');
+      await reload(win);
+      await clickPrimary(win,'fleets',`document.querySelector('[data-qa-flight-pirate-raid]')`);
+      return previous;
+    };
+    const readIncomingUi=()=>win.webContents.executeJavaScript(`(() => {
       const row=document.querySelector('[data-qa-flight-pirate-raid]');
       const art=row?.querySelector('img.fleet-flight-mission-icon');
       return {
         row:row?.textContent||'',hostile:row?.getAttribute('data-qa-flight-incoming-attack')==='true',
+        html:row?.outerHTML||'',
         source:row?.querySelector('[data-qa-flight-origin]')?.textContent||'',
         target:row?.querySelector('[data-qa-flight-target]')?.textContent||'',
         status:row?.querySelector('[data-qa-flight-status]')?.textContent||'',
         clock:row?.querySelector('[data-qa-flight-arrival]')?.textContent||'',
         force:row?.querySelector('[data-qa-pirate-raid-force]')?.textContent||'',
+        hidden:Boolean(row?.querySelector('[data-qa-incoming-composition-hidden]')),
         icon:Boolean(art?.complete&&art.naturalWidth>0),
         recall:Boolean(row?.querySelector('[data-qa-flight-recall]')),
         noRecall:Boolean(row?.querySelector('[data-qa-flight-no-recall]')),
         overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+2,
       };
     })()`);
-    if (!incomingUi.hostile || !incomingUi.icon || incomingUi.recall || !incomingUi.noRecall
+    const originalEspionage=await setEspionage(9);
+    const hiddenUi=await readIncomingUi();
+    // Below 10 nothing of the composition reaches the row, its tooltips or data attributes.
+    if (!hiddenUi.hostile || !hiddenUi.hidden || hiddenUi.force || /Гончий|НАС\./.test(hiddenUi.html)
+      || !hiddenUi.status.includes('ВХОДЯЩАЯ АТАКА') || !hiddenUi.target.includes('Helion') || hiddenUi.clock==='—') {
+      throw new Error(`Incoming pirate composition leaked below Espionage 10 at ${label}: ${JSON.stringify(hiddenUi)}`);
+    }
+    await capture(win,directory,'pirate-incoming-espionage-9');
+    await setEspionage(10);
+    const incomingUi=await readIncomingUi();
+    if (!incomingUi.hostile || !incomingUi.icon || incomingUi.recall || !incomingUi.noRecall || incomingUi.hidden
       || !incomingUi.row.includes('ПИРАТСКИЙ НАЛЁТ') || !incomingUi.status.includes('ВХОДЯЩАЯ АТАКА')
       || !incomingUi.source.toUpperCase().includes('ПИРАТЫ') || !incomingUi.target.includes('Helion')
-      || !incomingUi.force.includes('Гончий') || incomingUi.clock==='—' || incomingUi.overflow) {
+      || !incomingUi.force.includes('Гончий ×2') || incomingUi.clock==='—' || incomingUi.overflow) {
       throw new Error(`Incoming pirate warning/presentation invalid at ${label}: ${JSON.stringify(incomingUi)}`);
     }
     await capture(win,directory,'pirate-incoming-warning');
+    await setEspionage(originalEspionage);
     const removedIncoming=await win.webContents.executeJavaScript(`(() => {
       const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'null');
       if (!save?.flights) return false;

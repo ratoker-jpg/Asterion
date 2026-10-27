@@ -10,6 +10,7 @@ import { reconcileRuntime } from './reconcile.ts';
 import { createInitialSaveState } from './persistence.ts';
 import type { SaveState } from './contracts.ts';
 import type { SpyTargetState } from '../domain/espionage/types.ts';
+import { withAttackEligiblePoints } from './attack-eligibility.test-support.ts';
 
 const START = Date.UTC(2026, 9, 23, 12);
 
@@ -82,7 +83,8 @@ test('NPC science completing exactly at an attack arrival updates that battle be
     },
   };
 
-  const dispatched = dispatchFlight(prepared, {
+  // The battle timing is the subject here, not the points rule: both owners start mutually admissible.
+  const dispatched = dispatchFlight(withAttackEligiblePoints(prepared, [prepared.profile.playerId, distantTarget.ownerId], 5_000), {
     requestId: 'npc-science-combat-tie',
     missionId: 'attack',
     originPlanetId: prepared.currentPlanetId,

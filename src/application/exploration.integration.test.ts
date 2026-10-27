@@ -20,6 +20,7 @@ import type { FlightRecord } from '../domain/flights/types.ts';
 import { getCombatFactionName } from '../domain/combat/factions.ts';
 import { resolveCombat } from '../domain/combat/resolver.ts';
 import type { CombatInput, CombatStackInput } from '../domain/combat/simulator.ts';
+import { selectOwnerScore } from '../domain/rating/scoring.ts';
 
 const MINUTE = 60_000;
 const baseTime = 1_790_000_000_000;
@@ -520,6 +521,9 @@ test('defending expedition keeps launch technologies and ship upgrades through s
   assert.equal(reloaded.science.levels[10], 0);
 
   const attackAt = dispatched.flight.arrivalAt + MINUTE;
+  // The battle for an exploration object is outside the attack points rule: the
+  // claim owner has no rating points, which would protect a planet below 300.
+  assert.equal(selectOwnerScore(reloaded, 'qa-foreign-owner'), undefined);
   const attack = dispatchFlight(reloaded, {
     requestId: 'pr92-attacker-upgraded-after-defender-launch', missionId: 'attack',
     contactCycleKey: fixture.target.id, operationId: fixture.target.id,

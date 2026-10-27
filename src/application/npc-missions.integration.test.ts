@@ -13,6 +13,7 @@ import { dispatchNpcMission } from './npc-missions.ts';
 import { reconcileFlights } from './flights.ts';
 import { isFlightEventForPlayer, isFlightVisibleToPlayer } from './flight-visibility.ts';
 import type { SaveState } from './contracts.ts';
+import { withAttackEligiblePoints } from './attack-eligibility.test-support.ts';
 
 const START = Date.UTC(2026, 9, 23, 12);
 const FLIGHT_SCALE = 1;
@@ -70,7 +71,9 @@ function emptyCoordinate(state: SaveState) {
   return empty.coordinate;
 }
 
-function launchAttack(state: SaveState, origin: SpyTargetState, target: SpyTargetState | { id: string; coordinate: SpyTargetState['coordinate'] }, requestId: string) {
+function launchAttack(fixture: SaveState, origin: SpyTargetState, target: SpyTargetState | { id: string; coordinate: SpyTargetState['coordinate'] }, requestId: string) {
+  // These scenarios are about arrival and settlement, not the points rule: both owners start mutually admissible.
+  const state = withAttackEligiblePoints(fixture, [origin.ownerId, 'ownerId' in target ? target.ownerId : fixture.profile.playerId], 1_000);
   const sent = dispatchNpcMission(state, {
     ownerId: origin.ownerId,
     originPlanetId: origin.id,
