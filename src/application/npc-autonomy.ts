@@ -1,5 +1,5 @@
 import { chooseNpcAutonomyAction, updateNpcAutonomyMemory, type NpcAutonomyCandidate } from '../domain/npc/autonomy-policy.ts';
-import { flightsToPlanet, ownerFlights } from './npc-knowledge-index.ts';
+import { ownerFlights } from './npc-knowledge-index.ts';
 import { findNextNpcSessionEvent } from '../domain/npc/calendar.ts';
 import { MAX_SPACE_FLIGHT_DURATION_MS, MIN_SPACE_FLIGHT_DURATION_MS } from '../domain/flights/runtime.ts';
 import { getFleetCargoCapacity, type TransportCargo } from '../domain/flights/cargo.ts';
@@ -14,7 +14,9 @@ import { getNpcFleetProductionCandidates, startNpcFleetProduction } from './npc-
 import { applyNpcDiplomacyAction, getNpcDiplomacyCandidates } from './npc-diplomacy.ts';
 import { calculateFleetPopulation, createEmptyFleetState } from '../domain/fleet/runtime.ts';
 import { getNpcMissionCandidates, candidateToNpcMissionCommand } from './npc-mission-policy.ts';
-import { dispatchNpcMission, dispatchNpcSpaceFlight, dispatchNpcTransport, getNpcMissionAvailableFleet, NPC_SPACE_FLIGHT_GAS_FEE, resolveNpcMissionArrival } from './npc-missions.ts';
+import { assessNpcPlanetThreat, estimateReinforcementUtility } from './npc-threat.ts';
+import { applyNpcAllianceHeraldry } from './npc-identity.ts';
+import { dispatchNpcDeployment, dispatchNpcMission, dispatchNpcSpaceFlight, dispatchNpcTransport, getNpcMissionAvailableFleet, NPC_SPACE_FLIGHT_GAS_FEE, resolveNpcMissionArrival } from './npc-missions.ts';
 import { beginFlightReturn } from '../domain/flights/runtime.ts';
 import { getNpcPirateCandidates, dispatchNpcPirateMission } from './npc-pirates.ts';
 import { getNpcEndgameChoices } from './npc-endgame.ts';
@@ -29,7 +31,7 @@ import { estimationError, NPC_MAX_UTILITY, utilityToWeight } from '../domain/npc
 import { getFactionShipCatalog, getFactionDefenseCatalog } from '../domain/combat/faction-catalog.ts';
 import {
   chooseNpcAttackForce, chooseNpcStrategy, combatEfficiency, createNpcUtilityContext, describeNpcPlanet,
-  estimateAttackUtility, estimateBuildingUtility, estimateRaidEconomics, estimateColonizeUtility, estimateEspionageUtility,
+  estimateAttackUtility, estimateBuildingUtility, estimateRaidEconomics, estimateRevengeEconomics, estimateColonizeUtility, estimateEspionageUtility,
   estimateOperationUtility, estimateProductionItemUtility, flightRemoteness, estimateScienceUtility, npcProductionBatch,
   npcProductionPurpose, NPC_STRATEGY_FAMILY, strategyOf, type NpcStrategyDrives,
   estimateFleetSaveUtility, npcFleetValue, spaceFlightLegFor, estimateSpaceportUpgradeUtility, NPC_FLAGSHIP_ID,
@@ -138,6 +140,12 @@ function actionSlot(candidate: NpcAutonomyCandidate): string {
 export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile, eventId: string, at: number, timeScale: number,
   maxActions: number): NpcAutonomyDecision[] {
   const ownerId = profile.ownerId;
+  // A leadership that looks at the game keeps its alliance crest in line with
+  // its reasons (a new leader, a war, a change of course); usually a no-op.
+  if (state.npc) {
+    const command = applyNpcAllianceHeraldry(state.command, ownerId, state.npc.profiles);
+    if (command !== state.command) state = { ...state, command };
+  }
   const choices: Choice[] = [];
   const utility = createNpcUtilityContext(state, profile, at, timeScale);
   // Concept U: estimated benefit − cost − risk + goal, plus this owner's seeded misjudgement.
@@ -148,7 +156,7 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     const destinationPlanetId = String(mission.payload.destinationPlanetId ?? '');
     const remoteness = flightRemoteness(origin.coordinate, { galaxy: Number(mission.payload.destinationGalaxy), system: Number(mission.payload.destinationSystem) });
     if (mission.kind === 'attack') return estimateAttackUtility(utility, origin, destinationPlanetId, attackShips(mission), remoteness);
-    if (mission.kind === 'espionage') return estimateEspionageUtility(utility, destinationPlanetId, remoteness);
+    if (mission.kind === 'espionage') return estimateEspionageUtility(utility, destinationPlanetId, remoteness, ownerOfPlanet(destinationPlanetId));
     if (mission.kind === 'colonize') return estimateColonizeUtility(utility, origin,
       { galaxy: Number(mission.payload.destinationGalaxy), system: Number(mission.payload.destinationSystem) });
     if (mission.kind === 'expedition') return estimateOperationUtility(utility, 'expedition');
@@ -158,6 +166,9 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     if (mission.kind === 'exploration-recon') return estimateOperationUtility(utility, 'recon');
     return 0;
   };
+  // Planet owners are public (the map shows them).
+  const ownerOfPlanet = (planetId: string): string | undefined => state.espionage?.targets?.[planetId]?.ownerId
+    ?? (state.planets[planetId] ? state.profile.playerId : undefined);
   // An attack sends the force the owner believes is enough, not everything.
   const attackForces = new Map<string, Record<string, number> | null>();
   function attackShips(mission: { id: string; payload: Readonly<Record<string, string | number | boolean | null>> }): Record<string, number> {
@@ -354,13 +365,32 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
   for (const target of planets) {
     // The fleet guarding this owner's own Gate stays to fight; hiding it loses the Gate.
     if (utility.ownGateHosts?.has(target.id)) continue;
+    // An attack on its way is judged first: fight it, reinforce the planet with
+    // parallel deployments, or take the fleet away (see npc-threat.ts).
+    const threat = assessNpcPlanetThreat(state, utility, target, timeScale);
+    if (threat?.decision === 'fight') continue;
+    if (threat?.decision === 'reinforce') {
+      const reinforceId = `reinforce:${target.id}`;
+      const estimate = estimateReinforcementUtility(utility, threat);
+      choices.push({ candidate: { id: reinforceId, kind: 'fleetsave', weight: scored(reinforceId, estimate), payload: { planetId: target.id } }, run: (current, key) => {
+        let next = current;
+        let sent = 0;
+        let reason: string | null = null;
+        for (const source of threat.reinforcements) {
+          const result = dispatchNpcDeployment(next, { requestId: `${key}:${source.originPlanetId}`, ownerId, originPlanetId: source.originPlanetId,
+            destinationPlanetId: target.id, selectedShips: source.ships }, at, timeScale);
+          next = result.state;
+          if (result.ok) sent += 1; else reason ??= result.reason;
+        }
+        return { state: next, started: sent > 0, reason: sent > 0 ? null : reason, planetId: target.id };
+      } });
+      continue;
+    }
     const free = getNpcMissionAvailableFleet(state, ownerId, target.id) ?? {};
     const ships = Object.fromEntries(Object.entries(free).filter(([shipId, count]) => shipId !== 'solar-satellite' && (count ?? 0) > 0)) as Record<string, number>;
     const value = npcFleetValue(target.raceId, ships);
     if (!Object.keys(ships).length || value < 0.3 * utility.dayValue) continue;
-    const incoming = flightsToPlanet(state.flights.records, target.id).filter((flight) => flight.phase === 'outbound' && flight.arrivalAt > at
-      && ((flight.missionId === 'attack' && flight.ownerId !== ownerId) || flight.missionId === 'pirate-raid'))
-      .reduce<number | null>((first, flight) => first === null || flight.arrivalAt < first ? flight.arrivalAt : first, null);
+    const incoming = threat?.decision === 'evacuate' ? threat.arrivalAt : null;
     const dodgeLeg = incoming === null ? null : spaceFlightLegFor(at, incoming + 10 * 60_000, MIN_SPACE_FLIGHT_DURATION_MS, MAX_SPACE_FLIGHT_DURATION_MS);
     const leaveLeg = nextVisit === null ? null : spaceFlightLegFor(at, nextVisit, MIN_SPACE_FLIGHT_DURATION_MS, MAX_SPACE_FLIGHT_DURATION_MS)
       ?? MAX_SPACE_FLIGHT_DURATION_MS;
@@ -390,7 +420,9 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
       const report = utility.latestReports.get(String(mission.payload.destinationPlanetId ?? ''));
       if (!origin || !report) continue;
       const destination = String(mission.payload.destinationPlanetId ?? '');
-      if (!utility.rivalGateHosts?.has(destination) && !estimateRaidEconomics(utility, origin, report, force).worthFlight) continue;
+      // A raid must pay; a revenge on an offender may cost (owner rule 26.10.2026), the attack rule still applies.
+      if (!utility.rivalGateHosts?.has(destination) && !estimateRaidEconomics(utility, origin, report, force).worthFlight
+        && !estimateRevengeEconomics(utility, origin, report, force).worthFlight) continue;
     }
     choices.push({
       candidate: { ...mission, weight: mission.weight * scored(mission.id, missionUtility(mission)),

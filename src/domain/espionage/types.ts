@@ -104,6 +104,8 @@ export type SpyTargetState = {
   productionBots?: BotAssignment;
   /** Canonical orbital satellite count; legacy fleet entries are promoted when settled. */
   solarSatellites?: number;
+  /** Look the owner picked for this planet (a planet-editor skin id); absent means the map's default art. */
+  skin?: string;
   /** An NPC owner's recycling store and jobs (the player's «Центр переработки»); absent means empty. */
   recycling?: RecyclingState;
   /** When this NPC planet last sent a transport of its own resources (logistics rhythm). */

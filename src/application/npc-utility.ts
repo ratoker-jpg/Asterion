@@ -20,6 +20,7 @@ import { evaluateProductionRequirements } from '../domain/fleet/requirements.ts'
 import { findScience } from '../domain/science/catalog.ts';
 import type { ScienceId } from '../domain/science/types.ts';
 import { npcFlagshipOwners } from '../domain/npc/doctrine.ts';
+import { npcGrudgeIntensity } from '../domain/npc/grudges.ts';
 
 /**
  * Owner-scoped utility estimates for NPC candidate actions. Every input is
@@ -95,6 +96,8 @@ export type NpcUtilityContext = Readonly<{
   colonyOpen?: boolean;
   /** Debris on the public map around the owner's planets (the player's «Найти обломки»). */
   nearbyDebris?: number;
+  /** Debris all of the owner's recyclers carry in one trip, at home and in flight. */
+  recyclerCapacity?: number;
   /** Planets where someone else's Gate is being built: the whole world is told, and breaking it is worth more than any haul. */
   rivalGateHosts?: ReadonlySet<string>;
   /** This owner's planets hosting its own side's Gate: held at all costs. */
@@ -190,6 +193,16 @@ export function createNpcUtilityContext(state: SaveState, profile: NpcProfile, a
   for (const planet of ownPlanets) {
     for (const entry of findDebrisNearSystem(debrisMap, planet.coordinate)) nearby.set(`${entry.coordinate.galaxy}:${entry.coordinate.system}:${entry.coordinate.position}`, entry.debris);
   }
+  let recyclerCapacity = 0;
+  for (const planet of ownPlanets) {
+    const catalog = getFactionShipCatalog(planet.raceId);
+    for (const entity of catalog) {
+      if (entity.role.toLocaleLowerCase().includes('переработчик')) recyclerCapacity += (planet.fleet?.ships?.[entity.id as ShipId] ?? 0) * (entity.ship?.cargo ?? 0);
+    }
+  }
+  for (const flight of ownerFlights(state.flights.records, ownerId)) {
+    if (flight.missionId === 'recycle' && (flight.phase === 'outbound' || flight.phase === 'returning')) recyclerCapacity += flight.recycleCapacity ?? 0;
+  }
   const gates = npcGateHosts(state, ownerId);
   const home = ownPlanets.find((planet) => planet.id === `${ownerId}-planet`) ?? ownPlanets[0];
   const flagship = home && npcFlagshipOwners(state.npc).has(ownerId)
@@ -202,6 +215,7 @@ export function createNpcUtilityContext(state: SaveState, profile: NpcProfile, a
     rivalGateHosts: gates.rival,
     ownGateHosts: gates.own,
     nearbyDebris: [...nearby.values()].reduce((sum, value) => sum + value, 0),
+    recyclerCapacity,
     colonyOpen: threshold !== null && (selectOwnerScore(state, ownerId)?.totalPoints ?? 0) >= threshold,
     dayValue: Math.max(2_000, income * 24),
     ownPlanets,
@@ -461,8 +475,15 @@ export function estimateProductionItemUtility(context: NpcUtilityContext, target
     case 'energy': return -0.6 + 1.5 * (situation?.energyNeed ?? 0) - price;
     case 'spy': return (fleet[itemId] ?? 0) >= 2 ? -2 : -0.3 + 0.9 * Math.max(drives.war, drives.operations, drives.military * 0.6) - price;
     case 'colony': return owned(itemId) > 0 || drives.expansion <= 0 || context.colonyOpen === false ? -2.5 : -0.4 + 1.6 * drives.expansion - price;
-    case 'recycler': return owned(itemId) > 0 || !(context.nearbyDebris ?? 0) && !context.knownDebris?.size ? -2
-      : -0.2 + 1.2 * drives.operations + 0.4 * Math.log1p((context.nearbyDebris ?? 0) / Math.max(1, context.dayValue)) - price;
+    // Recyclers are wanted while the debris around outgrows what they carry
+    // (measured 26.10.2026: one hull at a time left ~2% of the map's debris
+    // collectable per trip and fields piled up).
+    case 'recycler': {
+      const deficit = npcRecyclerDeficit(context);
+      return deficit <= 0 ? -2
+        : -0.2 + 1.2 * drives.operations + 0.4 * Math.log1p((context.nearbyDebris ?? 0) / Math.max(1, context.dayValue))
+          + 0.5 * Math.min(1, deficit / Math.max(1, npcRecyclerWanted(context))) - price;
+    }
     case 'commander': return -0.9 + 0.8 * drives.military - price;
     // Holds for logistics: a colony away from the main planet needs a few
     // transporters to ship its surplus home; beyond a couple they are idle.
@@ -481,7 +502,18 @@ export function estimateProductionItemUtility(context: NpcUtilityContext, target
 export function npcProductionBatch(context: NpcUtilityContext, target: SpyTargetState, purpose: NpcProductionPurpose,
   cost: Resources | null, situation?: NpcPlanetSituation): number {
   if (!cost) return 1;
-  if (purpose === 'spy' || purpose === 'colony' || purpose === 'recycler' || purpose === 'commander') return 1;
+  if (purpose === 'spy' || purpose === 'colony' || purpose === 'commander') return 1;
+  if (purpose === 'recycler') {
+    const cargo = (getFactionShipCatalog(target.raceId) as ReadonlyArray<{ id: string; role: string; ship?: { cargo: number } }>)
+      .find((entity) => entity.role.toLocaleLowerCase().includes('переработчик'))?.ship?.cargo ?? 0;
+    const wanted = cargo > 0 ? Math.ceil(npcRecyclerDeficit(context) / cargo) : 1;
+    let affordable = Number.POSITIVE_INFINITY;
+    for (const key of STORE_KEYS) {
+      const price = Math.max(0, cost[key] ?? 0);
+      if (price > 0) affordable = Math.min(affordable, Math.floor((target.resources[key] ?? 0) * 0.5 / price));
+    }
+    return Math.max(1, Math.min(NPC_RECYCLE_BALANCE.maxBatch, wanted, Number.isFinite(affordable) ? affordable : wanted));
+  }
   const drives = strategyOf(context);
   const share = purpose === 'energy' ? 0.35 : 0.25 + 0.45 * Math.max(drives.military, drives.war) + 0.25 * spendingPressure(situation);
   let affordable = Number.POSITIVE_INFINITY;
@@ -492,6 +524,27 @@ export function npcProductionBatch(context: NpcUtilityContext, target: SpyTarget
   if (!Number.isFinite(affordable)) return 1;
   const cap = purpose === 'energy' ? 20 : 500;
   return Math.max(1, Math.min(cap, affordable));
+}
+
+/**
+ * Recycling balance (measured 26.10.2026; the owner may change these): the
+ * owner keeps recyclers able to clear the debris around its planets in this
+ * many trips, ordering the shortfall in batches up to `maxBatch`.
+ */
+export const NPC_RECYCLE_BALANCE = {
+  tripsToClear: 4,
+  maxBatch: 40,
+} as const;
+
+/** Recycler capacity the owner wants for the debris it sees around its planets. */
+export function npcRecyclerWanted(context: NpcUtilityContext): number {
+  const known = [...(context.knownDebris?.values() ?? [])].reduce((sum, value) => sum + value, 0);
+  return Math.max(context.nearbyDebris ?? 0, known) / NPC_RECYCLE_BALANCE.tripsToClear;
+}
+
+/** How much recycler capacity is missing; zero or less means enough. */
+export function npcRecyclerDeficit(context: NpcUtilityContext): number {
+  return npcRecyclerWanted(context) - (context.recyclerCapacity ?? 0);
 }
 
 /**
@@ -507,10 +560,63 @@ export function estimateAttackUtility(context: NpcUtilityContext, origin: SpyTar
   // A rival Gate under construction ends the campaign if it stands: breaking
   // it is worth more than any haul, and distance does not matter.
   if (context.rivalGateHosts?.has(targetPlanetId)) return 2.5 + 0.5 * unit(traits.aggression) + Math.min(1, Math.max(0, raid.net) / context.dayValue);
+  const revenge = estimateRevengeEconomics(context, origin, report, selectedShips);
+  // Revenge (owner rule 26.10.2026): hurting an offender is worth a loss, and it comes first.
+  const revengeValue = revenge.worthFlight
+    ? revenge.net / context.dayValue + NPC_REVENGE_BALANCE.priority * revenge.intensity + 0.5 * (unit(traits.aggression) - 0.5) - 0.3 * remoteness
+    : Number.NEGATIVE_INFINITY;
   // Taste for war never turns a pointless raid (63 resources) into a good one.
-  if (!raid.worthFlight) return -2;
-  return raid.net / context.dayValue + 0.5 * (unit(traits.aggression) - 0.5)
-    + 0.4 * (strategyOf(context).war - 0.3) - 0.5 * remoteness;
+  if (!raid.worthFlight) return Number.isFinite(revengeValue) ? revengeValue : -2;
+  return Math.max(revengeValue, raid.net / context.dayValue + 0.5 * (unit(traits.aggression) - 0.5)
+    + 0.4 * (strategyOf(context).war - 0.3) - 0.5 * remoteness);
+}
+
+/**
+ * Revenge balance (owner rule 26.10.2026, decision 10; the owner may change these):
+ * the memory lasts the whole match and the NPC accepts a noticeable loss to
+ * hurt an offender, but only a target the PR 2 attack rule allows.
+ */
+export const NPC_REVENGE_BALANCE = {
+  /** At full grudge one resource of damage dealt is worth this much of the owner's own expected loss. */
+  weight: 1.5,
+  /** The win belief an attack needs drops by this times the grudge intensity. */
+  marginDrop: 0.45,
+  /** Below this win belief even revenge does not attack. */
+  minWin: 0.1,
+  /** Damage worth a revenge flight, as a share of the owner's daily income. */
+  minDamageDayShare: 0.05,
+  /** Utility bonus of a revenge attack at full grudge: offenders come first. */
+  priority: 0.8,
+  /** Extra wish to spy on an offender at full grudge. */
+  spyBonus: 0.9,
+} as const;
+
+/** 0..1 grudge against the owner of a target, from this owner's lasting memory. */
+export function npcRevengeIntensity(context: NpcUtilityContext, targetOwnerId: string | undefined): number {
+  return targetOwnerId ? npcGrudgeIntensity(context.profile.grudges?.[targetOwnerId], context.dayValue) : 0;
+}
+
+/**
+ * A revenge attack judged by the damage it does, from the owner's own report:
+ * enemy fleet and turrets destroyed (all on a win, the Lanchester share on a
+ * loss) times the grudge, against the raid's own net. Worth a flight while
+ * that sum is not negative, i.e. a loss up to `weight` per resource of damage.
+ */
+export function estimateRevengeEconomics(context: NpcUtilityContext, origin: SpyTargetState, report: SpyReportSnapshot,
+  selectedShips: Readonly<Partial<Record<ShipId, number>>>): { intensity: number; damage: number; net: number; worthFlight: boolean } {
+  const intensity = npcRevengeIntensity(context, report.targetOwnerId);
+  if (intensity <= 0) return { intensity: 0, damage: 0, net: 0, worthFlight: false };
+  const ownPower = estimateForcePower(stacks(getFactionShipCatalog(origin.raceId) as Catalog, selectedShips));
+  const enemyPower = estimateReportedPower(context, report, ownPower);
+  const win = estimateWinProbability(ownPower, enemyPower);
+  const race = report.targetRaceId as CombatFactionId;
+  const enemyValue = (report.fleet ? fleetCost(getFactionShipCatalog(race) as Catalog, report.fleet) : 0)
+    + (report.defense ? fleetCost(getFactionDefenseCatalog(race) as Catalog, report.defense) : 0);
+  const destroyedShare = win + (1 - win) * Math.min(1, (ownPower / Math.max(1, enemyPower)) ** 2);
+  const damage = enemyValue * destroyedShare;
+  const net = estimateRaidEconomics(context, origin, report, selectedShips).net + NPC_REVENGE_BALANCE.weight * intensity * damage;
+  return { intensity, damage, net,
+    worthFlight: win >= NPC_REVENGE_BALANCE.minWin && damage >= NPC_REVENGE_BALANCE.minDamageDayShare * context.dayValue && net >= 0 };
 }
 
 /** Smallest net haul, as a share of the owner's daily income, that justifies a raid. */
@@ -581,8 +687,12 @@ export function chooseNpcAttackForce(context: NpcUtilityContext, origin: SpyTarg
   if (!catalog.length) return null;
   const all: Record<string, number> = Object.fromEntries(catalog.map((entity) => [entity.id, Math.max(0, Math.floor(available[entity.id] ?? 0))]));
   const enemy = estimateReportedPower(context, report, estimateForcePower(stacks(catalog, all)));
-  const wanted = 0.6 + 0.3 * (1 - unit(context.profile.traits.riskTolerance));
-  if (estimateWinProbability(estimateForcePower(stacks(catalog, all)), enemy) < wanted) return null;
+  // Revenge lowers the margin the owner asks for: it will trade ships to hurt an offender.
+  const grudge = npcRevengeIntensity(context, report.targetOwnerId);
+  const wanted = Math.max(NPC_REVENGE_BALANCE.minWin, 0.6 + 0.3 * (1 - unit(context.profile.traits.riskTolerance))
+    - NPC_REVENGE_BALANCE.marginDrop * grudge);
+  const winWithAll = estimateWinProbability(estimateForcePower(stacks(catalog, all)), enemy);
+  if (winWithAll < wanted) return grudge > 0 && winWithAll >= NPC_REVENGE_BALANCE.minWin ? all : null;
   // Against a Gate the owner throws everything it has: the campaign is at stake.
   if (context.rivalGateHosts?.has(targetPlanetId)) return all;
   // Smallest share of the available force (in tenths) that still meets the margin.
@@ -606,7 +716,7 @@ export function flightRemoteness(from: Readonly<{ galaxy: number; system: number
 }
 
 /** Intelligence is worth more when the owner has none or it has gone stale. */
-export function estimateEspionageUtility(context: NpcUtilityContext, targetPlanetId: string, remoteness = 0): number {
+export function estimateEspionageUtility(context: NpcUtilityContext, targetPlanetId: string, remoteness = 0, targetOwnerId?: string): number {
   const traits = context.profile.traits;
   const report = context.latestReports.get(targetPlanetId);
   // Everyone hears of a Gate; whoever wants to break it must see its defence first.
@@ -616,7 +726,8 @@ export function estimateEspionageUtility(context: NpcUtilityContext, targetPlane
   }
   const staleness = report ? Math.min(1, (context.at - report.createdAt) / (48 * HOUR)) : 1;
   return -0.25 + 0.6 * staleness * (unit(traits.aggression) + unit(traits.militaryFocus)) / 2
-    + 0.4 * staleness * (strategyOf(context).war - 0.3) - 0.6 * remoteness;
+    + 0.4 * staleness * (strategyOf(context).war - 0.3) - 0.6 * remoteness
+    + NPC_REVENGE_BALANCE.spyBonus * staleness * npcRevengeIntensity(context, targetOwnerId);
 }
 
 /** Closer free slots are cheaper to reach and defend. */
@@ -652,6 +763,26 @@ export function estimateFleetSaveUtility(context: NpcUtilityContext, fleetValue:
   return reason === 'dodge'
     ? -0.4 + 1.0 * careful + 0.9 * knows + 0.4 * worth
     : -0.9 + 1.3 * knows * (0.5 + 0.5 * careful) + 0.3 * worth + 0.5 * context.threat;
+}
+
+/** Lanchester strength of ships (and turrets) of one race, by the catalog's combat stats. */
+export function npcForcePower(raceId: CombatFactionId, ships: Readonly<Partial<Record<string, number>>> | undefined,
+  defenses?: Readonly<Partial<Record<string, number>>>): number {
+  return estimateForcePower([
+    ...stacks(getFactionShipCatalog(raceId) as Catalog, ships),
+    ...stacks(getFactionDefenseCatalog(raceId) as Catalog, defenses),
+  ]);
+}
+
+/** Resources spent on these turrets, at catalog prices. */
+export function npcDefenseValue(raceId: CombatFactionId, defenses: Readonly<Partial<Record<string, number>>> | undefined): number {
+  return defenses ? fleetCost(getFactionDefenseCatalog(raceId) as Catalog, defenses) : 0;
+}
+
+/** Strength one resource buys in this race's best-value warship: turns a public score into a force estimate. */
+export function npcPowerPerResource(raceId: CombatFactionId): number {
+  const catalog = (getFactionShipCatalog(raceId) as Catalog).filter((entity) => entity.category === 'Боевой корабль');
+  return catalog.reduce((best, entity) => Math.max(best, combatEfficiency(entity)), 0);
 }
 
 /** Fleet value that a fleet save protects: resources spent on the ships. */

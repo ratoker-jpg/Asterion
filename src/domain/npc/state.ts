@@ -1,3 +1,4 @@
+import { isNpcGrudge } from './grudges.ts';
 import { createSeededRandom, randomInteger } from '../world/random.ts';
 import {
   NPC_STATE_VERSION,
@@ -116,7 +117,9 @@ export function isNpcProfile(value: unknown): value is NpcProfile {
     || !value.memory.every(isMemoryEntry) || !Array.isArray(value.longTermGoals)
     || !value.longTermGoals.every(isGoal) || !isActivity(value.activity) || !isSession(value.session)
     || !isCursor(value.cursor)
-    || (value.campaignStartedAt !== undefined && !isTimestamp(value.campaignStartedAt))) return false;
+    || (value.campaignStartedAt !== undefined && !isTimestamp(value.campaignStartedAt))
+    || (value.grudges !== undefined && (!isRecord(value.grudges) || !Object.entries(value.grudges)
+      .every(([offenderId, grudge]) => offenderId.length > 0 && isNpcGrudge(grudge))))) return false;
   return true;
 }
 

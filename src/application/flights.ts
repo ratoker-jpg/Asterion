@@ -137,7 +137,7 @@ import {
   resolveAttackAtTarget,
 } from './attack.ts';
 import { dispatchPirateFlight, resolvePirateFlightAtTarget } from './pirates.ts';
-import { resolveNpcMissionArrival, resolveNpcRecycleArrival, resolveNpcTransportArrival, settleNpcMissionReturn } from './npc-missions.ts';
+import { resolveNpcDeploymentArrival, resolveNpcMissionArrival, resolveNpcRecycleArrival, resolveNpcTransportArrival, settleNpcMissionReturn } from './npc-missions.ts';
 import { resolveNpcPirateArrival } from './npc-pirates.ts';
 import { resolveNpcAidArrival, settleNpcAidReturn } from './npc-aid.ts';
 import { getOwnerRelation } from './owner-relations.ts';
@@ -2622,10 +2622,11 @@ export function reconcileFlights(
     && flight.missionId === 'attack'
     && (flight.phase === 'outbound' || flight.phase === 'arrived');
   const compareFlightEvents = (left: FlightRecord, right: FlightRecord) => {
-    const leftMissingOrigin = (left.missionId === 'deployment' || left.missionId === 'space-flight' || left.missionId === 'pirate-recon' || left.missionId === 'pirate-elimination' || (left.missionId === 'expedition' && left.ownerSide !== 'bot01' && left.ownerSide !== 'npc') || (left.explorationAttack && left.ownerSide !== 'npc'))
+    // NPC flights check their own origin in the owner registry at their own event time.
+    const leftMissingOrigin = left.ownerSide !== 'npc' && (left.missionId === 'deployment' || left.missionId === 'space-flight' || left.missionId === 'pirate-recon' || left.missionId === 'pirate-elimination' || (left.missionId === 'expedition' && left.ownerSide !== 'bot01') || left.explorationAttack)
       && ACTIVE_FLIGHT_PHASES.has(left.phase)
       && !next.planets[left.originPlanetId];
-    const rightMissingOrigin = (right.missionId === 'deployment' || right.missionId === 'space-flight' || right.missionId === 'pirate-recon' || right.missionId === 'pirate-elimination' || (right.missionId === 'expedition' && right.ownerSide !== 'bot01' && right.ownerSide !== 'npc') || (right.explorationAttack && right.ownerSide !== 'npc'))
+    const rightMissingOrigin = right.ownerSide !== 'npc' && (right.missionId === 'deployment' || right.missionId === 'space-flight' || right.missionId === 'pirate-recon' || right.missionId === 'pirate-elimination' || (right.missionId === 'expedition' && right.ownerSide !== 'bot01') || right.explorationAttack)
       && ACTIVE_FLIGHT_PHASES.has(right.phase)
       && !next.planets[right.originPlanetId];
     const leftAt = leftMissingOrigin ? Number.NEGATIVE_INFINITY : scheduledFlightEventAt(left);
@@ -2661,7 +2662,7 @@ export function reconcileFlights(
         }
         const eventKey = flightEventKey(flight);
         if (processedFlightEvents.has(eventKey)) return false;
-        const hasMissingOrigin = (flight.missionId === 'deployment' || flight.missionId === 'space-flight' || flight.missionId === 'pirate-recon' || flight.missionId === 'pirate-elimination' || (flight.missionId === 'expedition' && flight.ownerSide !== 'bot01' && flight.ownerSide !== 'npc') || (flight.explorationAttack && flight.ownerSide !== 'npc'))
+        const hasMissingOrigin = flight.ownerSide !== 'npc' && (flight.missionId === 'deployment' || flight.missionId === 'space-flight' || flight.missionId === 'pirate-recon' || flight.missionId === 'pirate-elimination' || (flight.missionId === 'expedition' && flight.ownerSide !== 'bot01') || flight.explorationAttack)
           && !next.planets[flight.originPlanetId];
         const spyMission = flight.missionId === 'espionage' ? spyMissionForFlight(next, flight) : undefined;
         const needsSpyRevalidation = Boolean(
@@ -2712,6 +2713,12 @@ export function reconcileFlights(
       }
       if (current.missionId === 'transport' && current.phase === 'outbound' && current.arrivalAt <= now) {
         const result = resolveNpcTransportArrival(next, current, current.arrivalAt);
+        changed ||= result.state !== next;
+        next = result.state;
+        continue;
+      }
+      if (current.missionId === 'deployment' && current.phase === 'outbound' && current.arrivalAt <= now) {
+        const result = resolveNpcDeploymentArrival(next, current, current.arrivalAt);
         changed ||= result.state !== next;
         next = result.state;
         continue;

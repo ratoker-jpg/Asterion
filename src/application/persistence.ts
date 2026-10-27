@@ -141,8 +141,11 @@ import { migrateSunRaidState } from '../domain/sun-raid/repository.ts';
 import { isCombatFactionId } from '../domain/combat/factions.ts';
 import { inspectSavePayload, isSaveProblem, type SaveProblem } from '../domain/session/save-health.ts';
 import { createNpcState, migrateNpcState } from '../domain/npc/state.ts';
+import { PLANET_SKIN_IDS } from '../domain/universe/planet-skins.ts';
 import { migrateNpcScienceState } from '../domain/npc/science-state.ts';
 import { projectNpcScienceLedger } from './npc-science.ts';
+import { seedNpcGrudgesFromReports } from './npc-grudges.ts';
+import { migrateNpcSelfChosenIdentity } from './npc-identity.ts';
 import { assignNpcDisplayNames, createNpcPersonaSalt, deriveLegacyNpcSalt, getNpcOwnerIds } from './npc-foundation.ts';
 import { isNpcReplayMetadata } from './npc-catchup.ts';
 import type { NpcReplayState } from '../domain/npc/replay-state.ts';
@@ -174,13 +177,7 @@ const CURRENT_PLANET_ROOT_WALLET_SCHEMA_VERSION = 21;
 export const DEFAULT_PLANET_NAME = 'Helion 01';
 export const TEST_MODE_RESOURCE_AMOUNT = 999_999_999;
 
-const KNOWN_PLANET_SKINS = new Set([
-  'colonized', 'terran', 'oceanic', 'desert', 'ice', 'volcanic', 'toxic', 'barren', 'gas',
-  'skin-002', 'skin-003', 'skin-005', 'skin-011', 'skin-012', 'skin-015', 'skin-016',
-  'skin-026', 'skin-027', 'skin-028', 'skin-030', 'skin-032',
-  'skin-asterion-01', 'skin-asterion-02', 'skin-asterion-03', 'skin-asterion-04', 'skin-asterion-05',
-  'skin-asterion-06', 'skin-asterion-07', 'skin-asterion-08', 'skin-asterion-09',
-]);
+const KNOWN_PLANET_SKINS: ReadonlySet<string> = new Set(PLANET_SKIN_IDS);
 
 export type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
@@ -1816,7 +1813,8 @@ function migrateParsedSave(
     sunRaid: migrateSunRaidState(parsed.sunRaid),
     playTimeMs: Math.max(0, numberOr(parsed.playTimeMs, 0)),
   };
-  return projectNpcScienceLedger(migratedState);
+  // Memory of offenders, colony names/looks and alliance crests that older saves lack.
+  return migrateNpcSelfChosenIdentity(seedNpcGrudgesFromReports(projectNpcScienceLedger(migratedState)));
 }
 
 /**

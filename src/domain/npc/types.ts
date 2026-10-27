@@ -109,6 +109,23 @@ export type NpcProfile = Readonly<{
   cursor: NpcEventCursor | null;
   /** Campaign start this owner joined at (absent in older saves): the opening days are played harder. */
   campaignStartedAt?: number;
+  /**
+   * Owners who attacked this NPC, kept until the end of the match (owner rule
+   * 26.10.2026). Absent in older saves; persistence seeds it from the battle
+   * reports the save still holds.
+   */
+  grudges?: Readonly<Record<string, NpcGrudge>>;
+}>;
+
+/** What one offender did to this NPC: attacks suffered and their cost in resources. */
+export type NpcGrudge = Readonly<{
+  attacks: number;
+  /** Resources lost: destroyed ships and turrets at catalog prices plus the loot taken. */
+  damage: number;
+  firstAt: number;
+  lastAt: number;
+  /** Guards against counting one battle twice. */
+  lastReportId?: string;
 }>;
 
 export type NpcStateV1 = Readonly<{

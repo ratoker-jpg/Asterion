@@ -26,6 +26,8 @@ import { UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 import { resolveSpyTarget } from './espionage-targets.ts';
 import { getOwnerRelation } from './owner-relations.ts';
 import { updateNpcAutonomyMemory } from '../domain/npc/autonomy-policy.ts';
+import { recordNpcGrievance } from '../domain/npc/grudges.ts';
+import { defenderBattleLoss, isGrievanceBattle } from './npc-grudges.ts';
 import type { AttackLaunchSnapshot, AttackLoot, AttackResolution } from '../domain/attack/types.ts';
 import { recordBattleScoreAward } from '../domain/rating/scoring.ts';
 import { isPirateShipId } from '../domain/combat/side-entity.ts';
@@ -398,8 +400,14 @@ function rememberNpcBattle(state: SaveState, report: BattleReport, at: number): 
     const profile = ownerId ? profiles[ownerId] : undefined;
     if (!profile || !ownerId) continue;
     const won = report.winner === side;
-    profiles = { ...profiles, [ownerId]: updateNpcAutonomyMemory(profile, report.id, at,
-      won ? 'battle-victory' : 'battle-loss', won, [report.id]) };
+    let remembered = updateNpcAutonomyMemory(profile, report.id, at,
+      won ? 'battle-victory' : 'battle-loss', won, [report.id]);
+    // The defender remembers who attacked it and what it cost, for the whole match.
+    if (side === 'defender' && isGrievanceBattle(report)) {
+      const raceId = Object.values(getEspionageTargets(state.espionage)).find((target) => target.ownerId === ownerId)?.raceId;
+      remembered = recordNpcGrievance(remembered, report.attacker.playerId!, defenderBattleLoss(report, raceId), at, report.id);
+    }
+    profiles = { ...profiles, [ownerId]: remembered };
   }
   return profiles === state.npc.profiles ? state : { ...state, npc: { ...state.npc, profiles } };
 }

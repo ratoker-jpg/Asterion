@@ -1,5 +1,8 @@
 import { ownerFlights } from './npc-knowledge-index.ts';
-import { calculateFleetPopulation, resolveSavedFleetState } from '../domain/fleet/runtime.ts';
+import { calculateFleetPopulation, createEmptyFleetState, getSolarSatelliteFleetCount, removeSolarSatellitesFromFleet, resolveSavedFleetState } from '../domain/fleet/runtime.ts';
+import { calculatePlanetCapacity, calculatePlanetPopulation } from '../domain/fleet/overpopulation.ts';
+import { migrateBuildingLevels } from '../domain/buildings/resource-zone.ts';
+import { isNpcPlanetBlocked, startNpcOverpopulationAt } from './npc-economy.ts';
 import { calculateDefensePopulation } from '../domain/fleet/production.ts';
 import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
 import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
@@ -9,6 +12,7 @@ import { selectOwnerScore } from '../domain/rating/scoring.ts';
 import { evaluatePlanetAttackEligibility } from './attack-eligibility.ts';
 import { isAttackCombatShip, normalizeAttackRounds, createBot01IncomingAttackSnapshot } from './attack.ts';
 import { createColonyPlanetRuntime } from './owned-planets.ts';
+import { npcColonyIdentity } from './npc-identity.ts';
 import { getOwnerRelation } from './owner-relations.ts';
 import { getExplorationTarget } from './exploration.ts';
 import { creditNpcExplorationReturn } from './exploration-bot01.ts';
@@ -600,6 +604,115 @@ export function dispatchNpcTransport(state: SaveState, command: NpcTransportComm
   return { state: setFlight(setTarget({ ...state, flights: domainResult.state }, debitedOrigin), flight), ok: true, reason: null, flight, created: true };
 }
 
+export type NpcDeploymentCommand = Readonly<{
+  requestId: string;
+  ownerId: string;
+  originPlanetId: string;
+  destinationPlanetId: string;
+  selectedShips: Partial<Record<ShipId, number>>;
+}>;
+
+/** Population the destination hangar has free right now, the only room a deployment is checked against. */
+export function npcDeploymentFreeCapacity(target: SpyTargetState): number {
+  const fleet = removeSolarSatellitesFromFleet(target.fleet).fleet;
+  const satellites = Math.max(Math.max(0, Math.floor(target.solarSatellites ?? 0)), getSolarSatelliteFleetCount(target.fleet));
+  const population = calculatePlanetPopulation(fleet, satellites, target.raceId);
+  return Math.max(0, calculatePlanetCapacity(migrateBuildingLevels(target.buildings).hangar ?? 0) - population);
+}
+
+/**
+ * «Дислокация» between two of the owner's own planets, by the player's rules
+ * (`dispatchFlightCommand`): no solar satellites, the destination must not be
+ * in an overpopulation episode, and the fleet must fit the destination's free
+ * hangar room at dispatch. Room is checked against the planet as it is now,
+ * not against other deployments already on their way, exactly as for the
+ * player: several parallel deployments may land together and overfill it.
+ */
+export function dispatchNpcDeployment(state: SaveState, command: NpcDeploymentCommand, at: number, timeScale: number): NpcMissionResult {
+  if (!Number.isSafeInteger(at) || at < 0 || !Number.isFinite(timeScale) || timeScale <= 0) return fail(state, 'invalid-time');
+  if (!command.requestId.trim()) return fail(state, 'request-id-required');
+  const existing = getFlightByRequestId(state.flights, command.requestId);
+  if (existing) {
+    return existing.ownerSide === 'npc' && existing.ownerId === command.ownerId && existing.originPlanetId === command.originPlanetId
+      ? { state, ok: true, reason: null, flight: existing, created: false }
+      : fail(state, 'request-id-owned-by-another-flight');
+  }
+  const origin = validNpcOrigin(state, command.ownerId, command.originPlanetId);
+  const target = validNpcOrigin(state, command.ownerId, command.destinationPlanetId);
+  if (!origin) return fail(state, 'npc-origin-not-found');
+  if (!target || target.id === origin.id) return fail(state, 'target-not-available');
+  const profile = ownerProfile(state, origin);
+  if (!flightSlotsAvailable(state, command.ownerId, profile, 'deployment')) return fail(state, 'flight-limit-reached');
+  const selectedShips = normalizeShips(command.selectedShips, origin.raceId);
+  if (!selectedShips || selectedShips['solar-satellite']) return fail(state, 'invalid-ship-selection');
+  const freeShips = getNpcMissionAvailableFleet(state, command.ownerId, origin.id);
+  for (const [shipId, count] of Object.entries(selectedShips) as [ShipId, number][]) {
+    if ((freeShips[shipId] ?? 0) < count) return fail(state, 'insufficient-ships');
+  }
+  if (isNpcPlanetBlocked(target)) return fail(state, 'target-overpopulated');
+  const population = calculateFleetPopulation({ ships: { ...createEmptyFleetState().ships, ...selectedShips }, commanders: createEmptyFleetState().commanders }, origin.raceId);
+  if (population > npcDeploymentFreeCapacity(target)) return fail(state, 'capacity-exceeded');
+  const domainResult = dispatchFlight(state.flights, {
+    requestId: command.requestId,
+    missionId: 'deployment',
+    ownerSide: 'npc',
+    ownerId: command.ownerId,
+    originPlanetId: origin.id,
+    originCoordinate: origin.coordinate,
+    destination: { kind: 'planet', planetId: target.id, coordinate: { ...target.coordinate } },
+    destinationPlanetId: target.id,
+    destinationOwnerId: target.ownerId,
+    targetPlanetName: target.name,
+    targetOwnerName: target.ownerName,
+    targetRelation: 'self',
+    targetKind: 'npc',
+    selectedShips,
+    departedAt: at,
+    factionId: origin.raceId,
+    science: profile.scienceLevels as FlightScienceLevels,
+    populationReserved: population,
+    speedCommanderLevels: { typhoon: profile.commanderLevels.typhoon ?? 0 },
+  });
+  const duration = Math.max(1, Math.round(domainResult.flight.oneWayDurationMs / timeScale));
+  const flight: FlightRecord = { ...domainResult.flight, oneWayDurationMs: duration, arrivalAt: at + duration };
+  if (origin.resources.gas < flight.gasCost) return fail(state, 'insufficient-gas');
+  const ships = { ...origin.fleet.ships };
+  for (const [shipId, count] of Object.entries(selectedShips) as [ShipId, number][]) ships[shipId] = Math.max(0, (ships[shipId] ?? 0) - count);
+  const debitedOrigin: SpyTargetState = {
+    ...origin,
+    fleet: { ...origin.fleet, ships },
+    resources: { ...origin.resources, gas: origin.resources.gas - flight.gasCost },
+  };
+  return { state: setFlight(setTarget({ ...state, flights: domainResult.state }, debitedOrigin), flight), ok: true, reason: null, flight, created: true };
+}
+
+/**
+ * The deployed fleet joins its destination at arrival. Any excess over the
+ * hangar starts the overpopulation window at that very moment (the player's
+ * linear 10-minute burn), not at whenever the planet is settled next.
+ * A destination lost on the way sends the fleet home.
+ */
+export function resolveNpcDeploymentArrival(state: SaveState, flight: FlightRecord, at: number): NpcMissionResult {
+  if (flight.ownerSide !== 'npc' || !flight.ownerId || flight.missionId !== 'deployment' || flight.phase !== 'outbound' || at < flight.arrivalAt) {
+    return fail(state, 'invalid-arrival');
+  }
+  const target = flight.destinationPlanetId ? validNpcOrigin(state, flight.ownerId, flight.destinationPlanetId) : undefined;
+  if (!target || !sameCoordinate(target.coordinate, flight.destinationCoordinate)) {
+    const returningState = beginFlightReturn(state.flights, flight.id, flight.arrivalAt, 'target-unavailable');
+    const returning = returningState.records.find((item) => item.id === flight.id)!;
+    const updated: FlightRecord = { ...returning, arrivedAt: flight.arrivalAt, completionReason: 'target-unavailable' };
+    return { state: setFlight({ ...state, flights: returningState }, updated), ok: false, reason: 'target-unavailable', flight: updated };
+  }
+  const ships = { ...target.fleet.ships };
+  for (const [id, raw] of Object.entries(flight.selectedShips) as [ShipId, number][]) {
+    const count = safeCount(raw);
+    if (count) ships[id] = (ships[id] ?? 0) + count;
+  }
+  const landed = startNpcOverpopulationAt({ ...target, fleet: { ...target.fleet, ships } }, flight.arrivalAt);
+  const completed: FlightRecord = { ...flight, phase: 'completed', arrivedAt: flight.arrivalAt, completedAt: flight.arrivalAt, completionReason: 'deployed' };
+  return { state: setFlight(setTarget(state, landed), completed), ok: true, reason: null, flight: completed };
+}
+
 /** Unloads an NPC transport into its own destination planet; anything that does not fit flies back. */
 export function resolveNpcTransportArrival(state: SaveState, flight: FlightRecord, at: number): NpcMissionResult {
   if (flight.ownerSide !== 'npc' || !flight.ownerId || flight.missionId !== 'transport' || flight.phase !== 'outbound' || at < flight.arrivalAt) {
@@ -666,9 +779,12 @@ export function resolveNpcMissionArrival(
       shipLevels: { ...profile.shipLevels },
       commanderLevels: { ...profile.commanderLevels },
     };
+    // The owner names its colony and picks its look, as a player does in the planet editor.
+    const identity = npcColonyIdentity(state, flight.ownerId, coordinate);
     const colony: SpyTargetState = {
       id: planetId,
-      name: colonyBase.name,
+      name: identity?.name ?? colonyBase.name,
+      ...(identity ? { skin: identity.skin } : {}),
       coordinate: { ...coordinate },
       ownerId: flight.ownerId,
       ownerName: origin.ownerName,

@@ -24,6 +24,7 @@ const AUTONOMY_MISSIONS = new Set([
   'sun-attack',
   'sun-support',
   'transport',
+  'deployment',
 ]);
 
 const FLIGHT_PHASES = new Set(['outbound', 'returning', 'arrived', 'completed', 'failed']);
@@ -199,6 +200,8 @@ function validBoundNpcFlight(value: unknown): boolean {
   const missionId = flight.missionId;
   if (missionId === 'attack' && !validAttackSnapshot(flight.attackSnapshot)) return false;
   if (missionId === 'espionage' && !nonEmptyString(flight.spyMissionId)) return false;
+  if (missionId === 'deployment' && (flight.targetRelation !== 'self' || (flight.destination as UnknownRecord).kind !== 'planet'
+    || (typeof selectedShips['solar-satellite'] === 'number' && selectedShips['solar-satellite'] > 0))) return false;
   if (missionId === 'colonize' && (typeof selectedShips.colonizer !== 'number' || selectedShips.colonizer < 1)) return false;
   if (missionId === 'expedition') {
     if (!nonEmptyString(flight.operationId) || !isCombatFactionId(flight.explorationFactionId)

@@ -24,6 +24,7 @@ import {
 } from '../domain/command/selectors.ts';
 import type { AllianceSettingsInput, CommandState } from '../domain/command/types.ts';
 import type { SaveState } from './contracts.ts';
+import { applyNpcAllianceHeraldry } from './npc-identity.ts';
 
 export type NpcDiplomacyPayload = Readonly<Record<string, string | number | boolean | null>>;
 export type NpcDiplomacyCandidate = Readonly<{
@@ -249,5 +250,7 @@ export function applyNpcDiplomacyAction(
   if (!result) return { state, ok: false, reason: 'candidate_no_longer_legal' };
   const nextState = result.state === command ? state : { ...state, command: result.state };
   if (!result.ok || result.state === command) return { state: nextState, ok: false, reason: result.code ?? 'no_change' };
-  return { state: nextState, ok: true, reason: 'applied' };
+  // A new alliance, a war or a truce is a reason for the leadership to redraw its crest.
+  const crested = state.npc ? applyNpcAllianceHeraldry(nextState.command, ownerId, state.npc.profiles) : nextState.command;
+  return { state: crested === nextState.command ? nextState : { ...nextState, command: crested }, ok: true, reason: 'applied' };
 }
