@@ -1513,7 +1513,8 @@ async function runViewport(width, height) {
     await click(win, '[data-qa-test-speed="1"]');
     await waitFor(win, `document.querySelector('[data-qa-test-time-scale]')?.textContent?.includes('×1')`);
     await seedProductionSave(win, (_save, planetState) => {
-      planetState.buildings.shipyard = 1;
+      // Shipyard 2: the lowest level that builds the Ballistic turret (Nemexia defense table).
+      planetState.buildings.shipyard = 2;
       planetState.buildings['advanced-factory'] = 0;
       _save.science.levels[4] = 1;
     });
