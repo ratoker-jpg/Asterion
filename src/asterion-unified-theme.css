@@ -800,22 +800,7 @@ html.asterion-repair-page .repair-page-head-v1::after{
   border:1px solid var(--ut-border);
 }
 
-/* --- rating --- */
-.rating-mode-tabs-v2{ border-radius:var(--ut-r-chip); }
-.rating-search-v2{
-  border-radius:var(--ut-r-chip);
-  background:var(--ut-surface-2);
-  border:1px solid var(--ut-border);
-}
-.rating-panel-v2{
-  border-radius:var(--ut-r-panel);
-  background:var(--ut-surface);
-  border:1px solid var(--ut-border);
-  overflow:hidden;
-}
-.rating-row-v2{ border-radius:var(--ut-r-chip) !important; }
-.race-emblem-v2{ border-radius:8px; }
-.rating-bottom-v2{ border-radius:var(--ut-r-chip); }
+/* --- rating: src/rating.css --- */
 
 /* --- production bots interior --- */
 .production-bots-building-panel{
@@ -1189,8 +1174,6 @@ html.asterion-repair-page .repair-page-head-v1::after{
 .fleet-production-order-v1,
 .fleet-defense-population-v1,
 .production-bots-pool > div,
-.rating-self-v2,
-.rating-head-v2 .score-head-v2,
 .universe-inspector-header,
 .planet-skin-menu,
 .asterion-header__planet-list,
@@ -1324,7 +1307,6 @@ html.asterion-repair-page .repair-page-head-v1::after{
 .sim-result-head-v1 button,
 .sim-number-stepper-arrows-v1 button,
 .sim-copy-tech-v1,
-.rating-pagination-v2 button,
 .planet-skin-menu button,
 .trade-amount-controls button,
 .universe-tools button,
@@ -1366,8 +1348,7 @@ html.asterion-repair-page .repair-page-head-v1::after{
 .asterion-header__resource-fill,
 .stability i,
 .stability-v2 i,
-.recycling-job-progress,
-.rating-self-separator-v2{
+.recycling-job-progress{
   border-radius:4px;
 }
 .command-operation-glyph,
@@ -1727,7 +1708,6 @@ body button[disabled]{ cursor:not-allowed; }
 .utility-screen-host .utility-control{ font-size:calc(var(--ut-font-control) * var(--text-scale-control)); }
 .utility-screen-host .utility-secondary{ font-size:calc(var(--ut-font-secondary) * var(--text-scale-secondary)); }
 .utility-screen-host .utility-helper{ font-size:calc(var(--ut-font-helper) * var(--text-scale-helper)); }
-.utility-screen-host .rating-head-v2 > span,
 .utility-screen-host .science-level-progress-meta-v2,
 .utility-screen-host .science-lab-speed-v2{ font-size:var(--ut-font-secondary); }
 .utility-screen-host .science-requirements-v2::before{ font-size:var(--ut-font-secondary); }

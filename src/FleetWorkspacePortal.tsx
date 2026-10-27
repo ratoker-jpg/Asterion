@@ -1835,7 +1835,7 @@ function FleetWorkspace({
                 <h3>{flight.missionId === 'space-flight' ? 'Космический рейс' : flight.targetPlanetName ?? flightCoordinateLabel(flight.destinationCoordinate)}</h3>
                 <span>{saveState.planets[flight.originPlanetId]?.name ?? 'Ваша планета'} {flightCoordinateLabel(flight.originCoordinate)} → {flight.missionId === 'space-flight' ? 'без цели' : flightCoordinateLabel(flight.destinationCoordinate)}{flight.targetOwnerName ? ` · ${flight.targetOwnerName}` : ''}</span>
               </div>
-              <button type="button" aria-label="Закрыть подробности рейса" onClick={close}>×</button>
+              <button type="button" data-asterion-close aria-label="Закрыть подробности рейса" onClick={close}>×</button>
             </header>
             <div className="fleet-expedition-status"><span>{phaseLabel}</span><strong>{phaseAt ? flightCountdown(phaseAt, clockNow) : '—'}</strong></div>
             <ol className="flight-details-v3__timeline">
@@ -1893,7 +1893,7 @@ function FleetWorkspace({
           <section className={`resource-building-action-confirm flight-preview-modal flight-timeline-modal flight-briefing-v2${MISSION_BANNERS[missionId] ? ' has-banner' : ''}`} style={MISSION_BANNERS[missionId] ? { '--mission-banner': `url("${MISSION_BANNERS[missionId]}")` } as CSSProperties : undefined} role="dialog" aria-modal="true" aria-labelledby="flight-preview-title" onMouseDown={(event) => event.stopPropagation()}>
             <header className="flight-timeline-head">
               <div>
-                <small>ПЛАН ПЕРЕЛЁТА · {selectedMission.label.toUpperCase()}</small>
+                <small>ФЛОТЫ · {selectedMission.label.toUpperCase()}</small>
                 <h3 id="flight-preview-title">ПЛАН ПЕРЕЛЁТА</h3>
                 <p>Последовательность подготовки: источник → цель → состав флота → подтверждение.</p>
               </div>

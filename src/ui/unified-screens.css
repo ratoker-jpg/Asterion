@@ -20,7 +20,7 @@ html body :is(
   .settings-nav-v2, .settings-content-v2, .typography-preview-v2,
   .science-sidebar-v2, .science-lab-card-v2, .science-main-heading-v2,
   .spaceport-sidebar-v2,
-  .rating-mode-tabs-v2, .reports-profile-identity
+  .reports-profile-identity
 ) {
   border: 1px solid var(--ut-border) !important;
   border-radius: var(--ut-r-panel) !important;
@@ -28,7 +28,7 @@ html body :is(
   box-shadow: none !important;
   clip-path: none !important;
 }
-html body :is(.science-lab-card-v2, .science-main-heading-v2, .rating-mode-tabs-v2) { border-radius: var(--ut-r-card) !important; }
+html body :is(.science-lab-card-v2, .science-main-heading-v2) { border-radius: var(--ut-r-card) !important; }
 
 /* ---------- rows and inner cards ---------- */
 html body :is(
@@ -45,26 +45,10 @@ html body :is(
 html body :is(.science-cost-v2, .science-time-v2) { border-radius: var(--ut-r-chip) !important; }
 html body .science-row-v2.is-blocked { background: color-mix(in srgb, var(--ut-surface-2) 85%, rgba(240, 68, 94, .12)) !important; }
 
-/* ---------- rating table ---------- */
-html body .rating-view-v2 .rating-row-v2 {
-  border: 0 !important;
-  border-bottom: 1px solid var(--ut-border) !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-  box-shadow: none !important;
-}
-html body .rating-view-v2 .rating-row-v2:hover:not(.rating-head-v2) { background: rgba(255, 255, 255, .03) !important; }
-html body .rating-view-v2 .rating-head-v2 {
-  border-radius: var(--ut-r-card) var(--ut-r-card) 0 0 !important;
-  background: var(--ut-surface-2) !important;
-}
-html body .rating-view-v2 :is(.rating-row-v2.top-1, .rating-row-v2.top-2, .rating-row-v2.top-3) { background: linear-gradient(90deg, rgba(230, 173, 80, .08), transparent 40%) !important; }
-html body .rating-view-v2 .rating-self-separator-v2 { background: transparent !important; border: 0 !important; }
-:root[data-faction] html body .rating-view-v2 .rating-row-v2.current,
-:root[data-faction] .rating-view-v2 .rating-row-v2.current { background: linear-gradient(90deg, var(--race-fill), transparent 60%) !important; box-shadow: inset 3px 0 0 var(--race-accent-strong) !important; }
+/* ---------- rating: src/rating.css ---------- */
 
 /* ---------- controls ---------- */
-html body .utility-view .utility-control:not(.active):not(.danger):not([data-qa-science-cancel]):not([data-qa-spaceport-cancel]):not([aria-label^="Отменить"]),
+html body .utility-view:not(.rating-view-v2) .utility-control:not(.active):not(.danger):not([data-qa-science-cancel]):not([data-qa-spaceport-cancel]):not([aria-label^="Отменить"]),
 html body .typography-stepper-v2 button,
 html body .preview-control-v2 {
   border: 1px solid var(--ut-border-strong) !important;
@@ -73,7 +57,7 @@ html body .preview-control-v2 {
   box-shadow: none !important;
   color: #dcecf0 !important;
 }
-html body .utility-view .utility-control:not(.active):not(.danger):not([data-qa-science-cancel]):not([data-qa-spaceport-cancel]):not([aria-label^="Отменить"]):hover:not(:disabled) { border-color: var(--ut-accent) !important; color: #fff !important; }
+html body .utility-view:not(.rating-view-v2) .utility-control:not(.active):not(.danger):not([data-qa-science-cancel]):not([data-qa-spaceport-cancel]):not([aria-label^="Отменить"]):hover:not(:disabled) { border-color: var(--ut-accent) !important; color: #fff !important; }
 html body .typography-stepper-v2 { border: 1px solid var(--ut-border) !important; border-radius: var(--ut-r-btn) !important; overflow: hidden; }
 html body .typography-stepper-v2 button { border: 0 !important; border-radius: 0 !important; }
 /* The research / upgrade order is the main action of its row. */
@@ -198,18 +182,6 @@ html body :is(.repair-empty-v1, .battle-empty-v1, .fleet-flight-empty-v1, .repor
   text-align: center;
 }
 html body .fleet-flight-empty-v1 .ui-empty-art { width: min(300px, 60%); }
-
-/* Rating: medals for the top three, a hall-of-fame band behind the title. */
-html body .rating-view-v2 .rank-v2 { display: inline-flex; align-items: center; gap: 6px; }
-html body .rating-medal-v2 { width: 30px; height: 30px; object-fit: contain; filter: drop-shadow(0 0 8px rgba(230, 173, 80, .35)); }
-html body .rating-view-v2 .rating-heading-v2 {
-  padding: 0 18px !important;
-  border: 1px solid var(--ut-border) !important;
-  border-radius: var(--ut-r-card) !important;
-  background:
-    linear-gradient(90deg, rgba(8, 14, 18, .96) 0%, rgba(8, 14, 18, .6) 40%, rgba(8, 14, 18, .25) 100%),
-    var(--rating-backdrop) center / cover no-repeat !important;
-}
 
 /* Settings: icon, title over subtitle, chevron. */
 html body .settings-nav-v2 nav button {

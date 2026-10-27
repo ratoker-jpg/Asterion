@@ -411,6 +411,9 @@ export function getUniverseNodeCaption(node: UniversePlanetNode, currentPlayerNa
   if (node.isHomeworld && (currentOwnerId === undefined || node.ownerId === currentOwnerId)) return `★ ${currentPlayerName}`;
   if (node.isHomeworld) return `★ ${ownerDisplayName}`;
   if (node.kind === 'npc') return ownerDisplayName;
+  // Another player's colony is captioned with its owner as well; only the
+  // player's own colonies keep their planet names (they tell them apart).
+  if (node.kind === 'player' && currentOwnerId !== undefined && node.ownerId !== undefined && node.ownerId !== currentOwnerId) return ownerDisplayName;
   if (node.kind === 'uninhabited') return 'Необитаемая';
   if (node.kind === 'unique') return 'Уникальная';
   if (node.kind === 'pirate') return 'Отступник';

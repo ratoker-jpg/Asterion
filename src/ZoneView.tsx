@@ -701,11 +701,11 @@ export function ZoneView({
                       </div>
                       <div className="resource-building-time-breakdown">
                         <div>
-                          <small>БАЗОВОЕ ВРЕМЯ (RAW)</small>
+                          <small>БАЗОВОЕ ВРЕМЯ</small>
                           <b data-qa-building-time-raw>{formatDurationLabel(availability.rawTimeMs)}</b>
                         </div>
                         <div>
-                          <small>ФАБРИКА</small>
+                          <small>{getBuildingDefinition('construction', factionId).name.toUpperCase()}</small>
                           <b className={constructionBonusPercent > 0 ? 'bonus' : ''} data-qa-building-time-bonus>
                             {constructionBonusPercent > 0 ? `−${constructionBonusPercent}%` : 'НЕТ'}
                           </b>

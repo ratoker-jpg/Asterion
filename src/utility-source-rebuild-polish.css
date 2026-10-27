@@ -28,13 +28,7 @@
 .settings-nav-v2,.settings-content-v2{height:auto;overflow:visible}
 .typography-preview-v2{position:static}
 
-/* Rating keeps pagination, but the page itself can now continue below the baseline when
-   twelve readable rows need more vertical room. This makes the common global scrollbar
-   available instead of clipping rows inside the fixed workspace. */
-.rating-view-v2{min-height:846px;height:auto;grid-template-rows:74px 58px auto;overflow:visible}
-.rating-panel-v2{min-height:0;height:auto;grid-template-rows:44px auto 54px;overflow:visible}
-.rating-table-v2{min-height:0;height:auto;overflow:visible}
-.rating-row-v2,.rating-head-v2{height:50px;min-height:50px}
+/* Rating: page-level scroll and row heights live in src/rating.css. */
 
 /* Science uses the same page-level scroll contract. The laboratory sidebar keeps the
    baseline workspace height while the science catalog contributes its full natural height. */

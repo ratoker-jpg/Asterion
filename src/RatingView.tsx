@@ -318,7 +318,7 @@ function PlayerRow({
       data-qa-rating-player-row={entry.id}
     >
       <span className="rank-v2">{entry.rank <= 3 ? <img className="rating-medal-v2" src={RATING_MEDALS[entry.rank - 1]} alt="" draggable={false} /> : null}<b>{entry.rank}</b></span>
-      <span className="identity-v2"><strong className="utility-data-text">{entry.name}</strong><i className="rating-expand-mark-v2" aria-hidden="true">{expanded ? '▴' : '▾'}</i></span>
+      <span className="identity-v2"><strong className="utility-data-text" title={entry.name}>{entry.name}</strong><i className="rating-expand-mark-v2" aria-hidden="true">{expanded ? '▴' : '▾'}</i></span>
       <span className={`race-label-v2 race-${entry.race}`}>{RACE_LABELS[entry.race]}</span>
       <span className="alliance-tag-v2">{entry.allianceTag ? `[${entry.allianceTag}]` : '—'}</span>
       <Value value={entry.totalPoints} lead />
@@ -373,7 +373,7 @@ function AllianceTable({
           data-qa-rating-alliance-row={entry.id}
         >
           <span className="rank-v2">{entry.rank <= 3 ? <img className="rating-medal-v2" src={RATING_MEDALS[entry.rank - 1]} alt="" draggable={false} /> : null}<b>{entry.rank}</b></span>
-          <span className="identity-v2"><span className="alliance-emblem-v2">{entry.emblem ? <EmblemGlyph compact emblem={entry.emblem} /> : entry.tag.slice(0, 1)}</span><strong className="utility-data-text">{entry.name}</strong><i className="rating-expand-mark-v2" aria-hidden="true">{expandedId === entry.id ? '▴' : '▾'}</i></span>
+          <span className="identity-v2"><span className="alliance-emblem-v2">{entry.emblem ? <EmblemGlyph compact emblem={entry.emblem} /> : entry.tag.slice(0, 1)}</span><strong className="utility-data-text" title={entry.name}>{entry.name}</strong><i className="rating-expand-mark-v2" aria-hidden="true">{expandedId === entry.id ? '▴' : '▾'}</i></span>
           <span className="alliance-tag-v2">[{entry.tag}]</span>
           <span className="utility-data-text">{entry.memberCount}/15</span>
           <Value value={entry.totalPoints} lead />
@@ -437,7 +437,7 @@ function PlayerCard({ entry, owner, alliance, exactPresence, onOpenAlliance }: {
     <div className="rating-card-v2" role="row" data-qa-rating-player-card={entry.id}>
       <div className="rating-card-v2__art">{general ? <img src={general} alt="" draggable={false} /> : null}</div>
       <div className="rating-card-v2__who">
-        <strong>{entry.name}</strong>
+        <strong className="ut-selectable">{entry.name}</strong>
         <span>{RACE_LABELS[entry.race]}</span>
         <em className={`rating-presence-v2 is-${presence.tone}`}><i aria-hidden="true" />{presence.text}</em>
         {alliance ? <button type="button" className="rating-card-v2__link" onClick={() => onOpenAlliance(alliance.id)}>Союз [{alliance.tag}] {alliance.name} ↗</button> : <span>Без союза</span>}
