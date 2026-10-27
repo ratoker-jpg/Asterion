@@ -249,7 +249,8 @@ function GenericDossier({ item, exploration, onOpenUniverseTarget }: {
 }) {
   const openCoordinate = onOpenUniverseTarget ? (coordinate: UniverseCoordinate) => onOpenUniverseTarget({ coordinate }) : undefined;
   const route: { label: string; value: string }[] = [];
-  const resources: { kind: ResourceKind; label: string; value: string }[] = [];
+  // Rows «Добыча · Металл», «Зачислено · Металл» … become one section per prefix.
+  const resources: { group: string; kind: ResourceKind; label: string; value: string }[] = [];
   const losses: { kind: ResourceKind; label: string; value: string }[] = [];
   const facts: { label: string; value: string }[] = [];
   const notes: string[] = [];
@@ -267,7 +268,8 @@ function GenericDossier({ item, exploration, onOpenUniverseTarget }: {
     if (kind && amount !== null) {
       const caption = label.replace(/^[^·]*·\s*/, '').trim();
       if (/сгорел|потерян|сожжен/i.test(label)) { if (amount !== 0) losses.push({ kind, label: caption, value }); continue; }
-      resources.push({ kind, label: caption === label ? label : caption, value });
+      const group = caption === label ? 'Ресурсы' : label.slice(0, label.indexOf('·')).trim();
+      resources.push({ group, kind, label: caption === label ? label : caption, value });
       continue;
     }
     if (value.length > 34) { notes.push(`${label}: ${value}`); continue; }
@@ -283,16 +285,16 @@ function GenericDossier({ item, exploration, onOpenUniverseTarget }: {
           <small>{entry.label}</small><strong><CoordinateLink value={entry.value} onOpen={openCoordinate} /></strong>
         </div>)}
       </section> : null}
-      {resources.length ? <section className="reports-v3-section">
-        <header><strong>РЕСУРСЫ</strong></header>
+      {[...new Set(resources.map((entry) => entry.group))].map((group) => <section className="reports-v3-section" key={group}>
+        <header><strong>{group.toLocaleUpperCase('ru-RU')}</strong></header>
         <div className="reports-v3-resources">
-          {resources.map((entry) => <div className={`reports-v3-res reports-v3-res--${entry.kind}`} key={`${entry.kind}-${entry.label}`}>
+          {resources.filter((entry) => entry.group === group).map((entry) => <div className={`reports-v3-res reports-v3-res--${entry.kind}`} key={`${entry.kind}-${entry.label}`}>
             <ResourceIcon kind={entry.kind} /><span><small>{entry.label}</small><b>{entry.value}</b></span>
           </div>)}
         </div>
-      </section> : null}
+      </section>)}
       {losses.length ? <section className="reports-v3-section reports-v3-section--loss">
-        <header><strong>ПОТЕРЯНО ПРИ ПЕРЕПОЛНЕНИИ ТРЮМА</strong></header>
+        <header><strong>СГОРЕЛО ПРИ ПЕРЕПОЛНЕНИИ СКЛАДА</strong></header>
         <div className="reports-v3-resources">
           {losses.map((entry) => <div className={`reports-v3-res reports-v3-res--${entry.kind}`} key={`loss-${entry.kind}`}>
             <ResourceIcon kind={entry.kind} /><span><small>{entry.label}</small><b>−{entry.value.replace(/^[+−-]/, '')}</b></span>
