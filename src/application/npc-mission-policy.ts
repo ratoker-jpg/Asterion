@@ -1,5 +1,5 @@
 import type { NpcProfile } from '../domain/npc/types.ts';
-import { ownerBattleReports, ownerSpyReports, publicDebrisEntries } from './npc-knowledge-index.ts';
+import { ownerBattleReports, ownerFlights, ownerSpyReports, publicDebrisEntries } from './npc-knowledge-index.ts';
 import { SHIP_IDS, type ShipId } from '../domain/combat/ids.ts';
 import { isAttackCombatShip } from './attack.ts';
 import { activeSpyMissionForTarget, getEspionageTargets } from '../domain/espionage/runtime.ts';
@@ -35,15 +35,29 @@ function compareIds(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
+// Each owner's planets by id, built once per immutable targets object.
+const npcTargetsByOwner = new WeakMap<object, Map<string, SpyTargetState[]>>();
+
 function ownNpcTargets(state: SaveState, ownerId: string): SpyTargetState[] {
-  return Object.values(getEspionageTargets(state.espionage))
-    .filter((target) => target.kind === 'npc' && target.ownerId === ownerId)
-    .sort((left, right) => compareIds(left.id, right.id));
+  const targets = getEspionageTargets(state.espionage);
+  let byOwner = npcTargetsByOwner.get(targets);
+  if (!byOwner) {
+    byOwner = new Map();
+    for (const target of Object.values(targets)) {
+      if (target.kind !== 'npc') continue;
+      const owned = byOwner.get(target.ownerId);
+      if (owned) owned.push(target);
+      else byOwner.set(target.ownerId, [target]);
+    }
+    for (const owned of byOwner.values()) owned.sort((left, right) => compareIds(left.id, right.id));
+    npcTargetsByOwner.set(targets, byOwner);
+  }
+  return [...(byOwner.get(ownerId) ?? [])];
 }
 
 function activeNpcFlights(state: SaveState, ownerId: string) {
-  return state.flights.records.filter((flight) => flight.ownerSide === 'npc'
-    && flight.ownerId === ownerId && ACTIVE_FLIGHT_PHASES.has(flight.phase));
+  return ownerFlights(state.flights.records, ownerId).filter((flight) => flight.ownerSide === 'npc'
+    && ACTIVE_FLIGHT_PHASES.has(flight.phase));
 }
 
 function hasFlightSlot(state: SaveState, ownerId: string, missionId: NpcMissionId): boolean {
@@ -128,17 +142,7 @@ function observedPlanetIds(state: SaveState, ownerId: string, at: number): Set<s
     observed.add(report.targetPlanetId);
   }
 
-  const targetsByCoordinate = new Map<string, string[]>();
-  for (const target of Object.values(getEspionageTargets(state.espionage))) {
-    const key = coordinateKey(target.coordinate);
-    const bucket = targetsByCoordinate.get(key) ?? [];
-    bucket.push(target.id);
-    targetsByCoordinate.set(key, bucket);
-  }
-  for (const planet of publicPlayerPlanets(state)) {
-    const key = coordinateKey(planet.coordinate);
-    targetsByCoordinate.set(key, [...(targetsByCoordinate.get(key) ?? []), planet.id]);
-  }
+  const { targetsByCoordinate } = publicMapInputs(state);
   for (const report of ownerBattleReports(state.combat.reports, ownerId)) {
     if (!OBSERVABLE_BATTLE_TYPES.has(report.missionType)) continue;
     const timestamp = Date.parse(report.timestamp);
@@ -197,16 +201,21 @@ function ownerSystems(targets: readonly SpyTargetState[]): Map<string, { galaxy:
  * a build is shared by every decision with the same inputs, at this moment
  * or a later one, instead of rebuilding ten systems per look every second.
  */
+type PublicTarget = Pick<SpyTargetState, 'id' | 'ownerId' | 'coordinate' | 'kind'>;
 type PublicMapInputs = { playerPlanets: UniversePersistedPlayerPlanet[]; registered: UniverseRegisteredPlanet[];
-  defeats: unknown[]; signature: string };
-let mapInputs: { planets: unknown; targets: unknown; defeats: unknown; value: PublicMapInputs } | null = null;
+  defeats: unknown[]; signature: string;
+  /** Every planet's public identity, by id (policy never sees force or wallets). */
+  allTargets: PublicTarget[];
+  /** Planet ids at each coordinate (battle reports name coordinates). */
+  targetsByCoordinate: Map<string, string[]> };
+let mapInputs: { planets: unknown; targets: unknown; defeats: unknown; playerId: string; value: PublicMapInputs } | null = null;
 let systemCache: { signature: string; systems: Map<string, ReturnType<typeof createUniverseSystem>> } | null = null;
 const SYSTEM_CACHE_LIMIT = 4_096;
 
 function publicMapInputs(state: SaveState): PublicMapInputs {
   const targets = getEspionageTargets(state.espionage);
   const defeatedCycles = state.pirate?.contact.defeatedCycles;
-  if (mapInputs && mapInputs.planets === state.planets && mapInputs.defeats === defeatedCycles
+  if (mapInputs && mapInputs.planets === state.planets && mapInputs.defeats === defeatedCycles && mapInputs.playerId === state.profile.playerId
     && (mapInputs.targets === targets || samePublicTargets(mapInputs.targets as typeof targets, targets))) {
     mapInputs.targets = targets;
     return mapInputs.value;
@@ -216,8 +225,23 @@ function publicMapInputs(state: SaveState): PublicMapInputs {
   const defeats = Object.values(defeatedCycles ?? {});
   const signature = JSON.stringify([playerPlanets.map((planet) => [planet.id, planet.name, coordinateKey(planet.coordinate)]),
     registered.map((planet) => [planet.id, planet.ownerId, planet.name, planet.kind, coordinateKey(planet.coordinate)]), defeats]);
-  const value = { playerPlanets, registered, defeats, signature };
-  mapInputs = { planets: state.planets, targets, defeats: defeatedCycles, value };
+  const allTargets: PublicTarget[] = [
+    ...Object.values(targets).map(({ id, ownerId, coordinate, kind }) => ({ id, ownerId, coordinate, kind })),
+    ...playerPlanets.map(({ id, coordinate }) => ({ id, coordinate, ownerId: state.profile.playerId, kind: 'player' as const })),
+  ].sort((left, right) => compareIds(left.id, right.id));
+  const targetsByCoordinate = new Map<string, string[]>();
+  for (const target of Object.values(targets)) {
+    const key = coordinateKey(target.coordinate);
+    const bucket = targetsByCoordinate.get(key) ?? [];
+    bucket.push(target.id);
+    targetsByCoordinate.set(key, bucket);
+  }
+  for (const planet of playerPlanets) {
+    const key = coordinateKey(planet.coordinate);
+    targetsByCoordinate.set(key, [...(targetsByCoordinate.get(key) ?? []), planet.id]);
+  }
+  const value = { playerPlanets, registered, defeats, signature, allTargets, targetsByCoordinate };
+  mapInputs = { planets: state.planets, targets, defeats: defeatedCycles, playerId: state.profile.playerId, value };
   return value;
 }
 
@@ -312,10 +336,7 @@ export function getNpcMissionCandidates(
 
   // Policy receives public identity/coordinates only. Actual force and wallet
   // remain exclusively in execution and the owner's observation snapshots.
-  const allTargets: Pick<SpyTargetState, 'id' | 'ownerId' | 'coordinate' | 'kind'>[] = [
-    ...Object.values(getEspionageTargets(state.espionage)).map(({ id, ownerId, coordinate, kind }) => ({ id, ownerId, coordinate, kind })),
-    ...publicPlayerPlanets(state).map(({ id, coordinate }) => ({ id, coordinate, ownerId: state.profile.playerId, kind: 'player' as const })),
-  ].sort((left, right) => compareIds(left.id, right.id));
+  const { allTargets } = publicMapInputs(state);
   const observed = observedPlanetIds(state, ownerId, at);
   const systems = publicSystems(state, ownerTargets, at);
   const realSources = productionExplorationNpcSources(state).filter((source) => source.ownerId === ownerId);
@@ -371,8 +392,8 @@ export function getNpcMissionCandidates(
 
     if ((available['spy-probe'] ?? 0) > 0 && hasFlightSlot(state, ownerId, 'exploration-recon')) {
       for (const { node, id } of contactById) {
-        const reconAlreadyActive = state.flights.records.some((flight) => flight.ownerSide === 'npc'
-          && flight.ownerId === ownerId && flight.missionId === 'exploration-recon'
+        const reconAlreadyActive = ownerFlights(state.flights.records, ownerId).some((flight) => flight.ownerSide === 'npc'
+          && flight.missionId === 'exploration-recon'
           && flight.operationId === id && ACTIVE_FLIGHT_PHASES.has(flight.phase));
         if (reconAlreadyActive) continue;
         addCandidate(candidateList, ownerId, 'exploration-recon', origin.id, node.coordinate, { 'spy-probe': 1 }, {

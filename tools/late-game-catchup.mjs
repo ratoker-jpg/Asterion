@@ -29,7 +29,7 @@ function option(args, name, fallback) {
 }
 
 /** Drives reconcileRuntime to the frozen target like App's catch-up loop. */
-export function catchUp(state, targetAt, { maxGroups, serialize = false } = {}) {
+export function catchUp(state, targetAt, { maxGroups, serialize = false, progressEveryMs = 0 } = {}) {
   let current = freezeNpcCatchupTarget(state, targetAt);
   let chunks = 0;
   let computeMs = 0;
@@ -37,6 +37,7 @@ export function catchUp(state, targetAt, { maxGroups, serialize = false } = {}) 
   let longestChunkMs = 0;
   let maxSaveChars = 0;
   const started = process.hrtime.bigint();
+  let lastReport = started;
   while (isNpcCatchupPending(current)) {
     const before = current.npcReplay.processedThroughAt;
     const t0 = process.hrtime.bigint();
@@ -54,6 +55,11 @@ export function catchUp(state, targetAt, { maxGroups, serialize = false } = {}) 
       serializeMs += Number(process.hrtime.bigint() - s0) / 1e6;
     }
     if (isNpcCatchupPending(current) && current.npcReplay.processedThroughAt <= before) throw new Error(`No replay progress at ${before}`);
+    if (progressEveryMs && Number(process.hrtime.bigint() - lastReport) / 1e6 >= progressEveryMs) {
+      lastReport = process.hrtime.bigint();
+      process.stderr.write(`  at ${new Date(current.npcReplay.processedThroughAt).toISOString()} after ${(Number(process.hrtime.bigint() - started) / 1e9).toFixed(0)} s
+`);
+    }
   }
   return { state: current, chunks, computeMs, serializeMs, longestChunkMs, maxSaveChars, wallMs: Number(process.hrtime.bigint() - started) / 1e6 };
 }
@@ -65,7 +71,7 @@ function generate(args) {
   fs.mkdirSync(out, { recursive: true });
   let state = createFullWorldFixture();
   for (const day of days) {
-    const run = catchUp(state, FULL_WORLD_START_AT + day * DAY_MS, { maxGroups });
+    const run = catchUp(state, FULL_WORLD_START_AT + day * DAY_MS, { maxGroups, progressEveryMs: 60_000 });
     state = run.state;
     const file = path.join(out, `late-game-day-${day}.json`);
     const raw = JSON.stringify(state);
