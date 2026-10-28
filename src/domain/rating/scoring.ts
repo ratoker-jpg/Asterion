@@ -389,6 +389,13 @@ const targetsByOwnerIndex = new WeakMap<object, Map<string, unknown[]>>();
 type SpyTargetLike = { kind: unknown; raceId: unknown; buildings: unknown; fleet: unknown; defense: unknown; buildingQueue: unknown; ownerProfile: unknown };
 const activeFlightsByOwnerIndex = new WeakMap<readonly unknown[], Map<string, SaveState['flights']['records']>>();
 
+const reportIndexes = new WeakMap<object, Map<string, SaveState['combat']['reports'][number]>>();
+function reportById(reports: SaveState['combat']['reports']): Map<string, SaveState['combat']['reports'][number]> {
+  let index = reportIndexes.get(reports);
+  if (!index) reportIndexes.set(reports, index = new Map(reports.map((report) => [report.id, report])));
+  return index;
+}
+
 function sameInputs(left: readonly unknown[], right: readonly unknown[]): boolean {
   if (left.length !== right.length) return false;
   for (let index = 0; index < left.length; index += 1) if (left[index] !== right[index]) return false;
@@ -438,8 +445,12 @@ function ownerScoreInputs(state: SaveState, ownerId: string): unknown[] | null {
     activeFlightsByOwnerIndex.set(records, flights);
   }
   const ownFlights = flights.get(ownerId) ?? [];
-  if (ownFlights.some((flight) => flight.attackResolution)) deps.push(state.combat.reports);
-  for (const flight of ownFlights) deps.push(flight);
+  // A resolved attack counts its surviving ships from its report: that report
+  // (not the whole archive, which every battle replaces) is an input.
+  for (const flight of ownFlights) {
+    deps.push(flight);
+    if (flight.attackResolution) deps.push(reportById(state.combat.reports).get(flight.attackResolution.reportId));
+  }
   return deps;
 }
 

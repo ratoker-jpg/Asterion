@@ -127,6 +127,13 @@ export function isFinishedForeignPirateFlight(flight: FlightRecord, playerId: st
 const flightArchiveInfo = new WeakMap<FlightRecord, { playerId: string; pirateFinished: boolean; candidateAt: number }>();
 const recordsArchiveSummary = new WeakMap<readonly FlightRecord[], { playerId: string; pirateFinished: boolean; firstCandidateAt: number }>();
 
+const flightIdSets = new WeakMap<readonly FlightRecord[], Set<string>>();
+function flightIdSet(records: readonly FlightRecord[]): Set<string> {
+  let ids = flightIdSets.get(records);
+  if (!ids) flightIdSets.set(records, ids = new Set(records.map((flight) => flight.id)));
+  return ids;
+}
+
 function flightArchiveSummary(records: readonly FlightRecord[], playerId: string) {
   const cached = recordsArchiveSummary.get(records);
   if (cached?.playerId === playerId) return cached;
@@ -167,22 +174,26 @@ export function pruneCampaignHistory(state: SaveState, at: number | undefined = 
   const liveMissionFlights = flightsClean ? new Set<string>() : new Set((state.espionage?.missions ?? [])
     .filter((mission) => mission.status === 'transit' || mission.status === 'orbiting' || mission.status === 'returning')
     .map((mission) => mission.flightId));
-  const finished = flightsClean ? [] : flights.records.filter((flight) => isFinishedForeignPirateFlight(flight, playerId)
-    || (isArchivedNpcFlight(flight, archiveBefore) && !liveMissionFlights.has(flight.id)));
+  // flightArchiveSummary filled flightArchiveInfo for every record.
+  const info = (flight: FlightRecord) => flightArchiveInfo.get(flight)!;
+  const finished = flightsClean ? [] : flights.records.filter((flight) => info(flight).pirateFinished
+    || (info(flight).candidateAt < archiveBefore && !liveMissionFlights.has(flight.id)));
   if (!flightsClean && !finished.length) {
     let firstArchivableAfter = Number.POSITIVE_INFINITY;
     for (const flight of flights.records) {
-      if (isArchivedNpcFlight(flight, Number.POSITIVE_INFINITY) && !liveMissionFlights.has(flight.id)) {
-        firstArchivableAfter = Math.min(firstArchivableAfter, flight.completedAt!);
-      }
+      const candidateAt = info(flight).candidateAt;
+      if (candidateAt < firstArchivableAfter && !liveMissionFlights.has(flight.id)) firstArchivableAfter = candidateAt;
     }
     cleanFlights.set(flights.records, { missions: state.espionage?.missions, playerId, firstArchivableAfter });
   }
   if (finished.length) {
     const removed = new Set(finished.map((flight) => flight.id));
-    const requestIndex = { ...flights.requestIndex };
+    // The request index holds thousands of entries late in a campaign: copy it only to drop one.
+    let requestIndex = flights.requestIndex;
     for (const flight of finished) {
-      if (requestIndex[flight.requestId] === flight.id) delete requestIndex[flight.requestId];
+      if (requestIndex[flight.requestId] !== flight.id) continue;
+      if (requestIndex === flights.requestIndex) requestIndex = { ...requestIndex };
+      delete requestIndex[flight.requestId];
     }
     next = { ...next, flights: { ...flights, records: flights.records.filter((flight) => !removed.has(flight.id)), requestIndex } };
   }
@@ -191,10 +202,11 @@ export function pruneCampaignHistory(state: SaveState, at: number | undefined = 
   // read by nothing: reports carry their owner, live missions are kept.
   const missions = next.espionage?.missions ?? [];
   if (missions.length && cleanMissions.get(missions) !== next.flights.records) {
-    const flightIds = new Set(next.flights.records.map((flight) => flight.id));
-    const kept = missions.filter((mission) => mission.ownerId === playerId
-      || mission.status === 'transit' || mission.status === 'orbiting' || mission.status === 'returning'
-      || flightIds.has(mission.flightId));
+    const keptAnyway = (mission: (typeof missions)[number]) => mission.ownerId === playerId
+      || mission.status === 'transit' || mission.status === 'orbiting' || mission.status === 'returning';
+    // Only ended NPC missions depend on the flights; most groups have none whose flight left.
+    const flightIds = missions.some((mission) => !keptAnyway(mission)) ? flightIdSet(next.flights.records) : null;
+    const kept = flightIds ? missions.filter((mission) => keptAnyway(mission) || flightIds.has(mission.flightId)) : missions;
     if (kept.length !== missions.length) next = { ...next, espionage: { ...next.espionage!, missions: kept } };
     cleanMissions.set(kept.length !== missions.length ? kept : missions, next.flights.records);
   }

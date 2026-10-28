@@ -2647,33 +2647,35 @@ export function reconcileFlights(
   };
 
   while (true) {
-    const original = next.flights.records
+    // The first due flight in event order. The checks are pure, so the cheap
+    // ones run first: a late world holds thousands of live flights and this
+    // runs once per resolved event.
+    let original: FlightRecord | undefined;
+    for (const flight of next.flights.records) {
       // Sun raid flights are owned by application/sun-raid.ts (fixed routes, side battles).
-      .filter((flight) => ACTIVE_FLIGHT_PHASES.has(flight.phase) && flight.missionId !== 'sun-attack' && flight.missionId !== 'sun-support')
-      .filter((flight) => {
-        // Autonomous orbiting probes await the owner's next explicit decision;
-        // they have no automatic report timer. Revalidate when a publicly
-        // observable owner/alliance change makes their station illegal.
-        if (flight.ownerSide === 'npc' && flight.ownerId && flight.missionId === 'espionage' && flight.phase === 'arrived') {
-          const owner = flight.destinationPlanetId && getEspionageTargets(next.espionage)[flight.destinationPlanetId]?.ownerId;
-          const actualOwner = owner || (next.planets[flight.destinationPlanetId ?? ''] ? next.profile.playerId : undefined);
-          if (actualOwner === flight.destinationOwnerId && ['neutral', 'enemy'].includes(getOwnerRelation(next, flight.ownerId, actualOwner!))) return false;
-        }
-        const eventKey = flightEventKey(flight);
-        if (processedFlightEvents.has(eventKey)) return false;
-        const hasMissingOrigin = flight.ownerSide !== 'npc' && (flight.missionId === 'deployment' || flight.missionId === 'space-flight' || flight.missionId === 'pirate-recon' || flight.missionId === 'pirate-elimination' || (flight.missionId === 'expedition' && flight.ownerSide !== 'bot01') || flight.explorationAttack)
-          && !next.planets[flight.originPlanetId];
-        const spyMission = flight.missionId === 'espionage' ? spyMissionForFlight(next, flight) : undefined;
-        const needsSpyRevalidation = Boolean(
-          spyMission
-          && (flight.phase === 'outbound' || flight.phase === 'arrived')
-          && spyMission.status !== 'returning'
-          && spyMission.status !== 'returned'
-          && spyMission.status !== 'destroyed',
-        );
-        return hasMissingOrigin || needsSpyRevalidation || scheduledFlightEventAt(flight) <= now;
-      })
-      .sort(compareFlightEvents)[0];
+      if (!ACTIVE_FLIGHT_PHASES.has(flight.phase) || flight.missionId === 'sun-attack' || flight.missionId === 'sun-support') continue;
+      const hasMissingOrigin = flight.ownerSide !== 'npc' && (flight.missionId === 'deployment' || flight.missionId === 'space-flight' || flight.missionId === 'pirate-recon' || flight.missionId === 'pirate-elimination' || (flight.missionId === 'expedition' && flight.ownerSide !== 'bot01') || flight.explorationAttack)
+        && !next.planets[flight.originPlanetId];
+      const spyMission = flight.missionId === 'espionage' ? spyMissionForFlight(next, flight) : undefined;
+      const needsSpyRevalidation = Boolean(
+        spyMission
+        && (flight.phase === 'outbound' || flight.phase === 'arrived')
+        && spyMission.status !== 'returning'
+        && spyMission.status !== 'returned'
+        && spyMission.status !== 'destroyed',
+      );
+      if (!hasMissingOrigin && !needsSpyRevalidation && !(scheduledFlightEventAt(flight) <= now)) continue;
+      // Autonomous orbiting probes await the owner's next explicit decision;
+      // they have no automatic report timer. Revalidate when a publicly
+      // observable owner/alliance change makes their station illegal.
+      if (flight.ownerSide === 'npc' && flight.ownerId && flight.missionId === 'espionage' && flight.phase === 'arrived') {
+        const owner = flight.destinationPlanetId && getEspionageTargets(next.espionage)[flight.destinationPlanetId]?.ownerId;
+        const actualOwner = owner || (next.planets[flight.destinationPlanetId ?? ''] ? next.profile.playerId : undefined);
+        if (actualOwner === flight.destinationOwnerId && ['neutral', 'enemy'].includes(getOwnerRelation(next, flight.ownerId, actualOwner!))) continue;
+      }
+      if (processedFlightEvents.has(flightEventKey(flight))) continue;
+      if (!original || compareFlightEvents(flight, original) < 0) original = flight;
+    }
     if (!original) break;
     processedFlightEvents.add(flightEventKey(original));
     const current = next.flights.records.find((flight) => flight.id === original.id);
