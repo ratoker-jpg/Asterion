@@ -145,7 +145,7 @@ export function RecyclingCenterView({
         </dl>
 
         <button className="recycling-back" type="button" data-qa-building-interior-back data-qa-recycling-back onClick={onBack}>
-          <span aria-hidden="true">←</span> Назад в {building.name}
+          <span aria-hidden="true">←</span> Назад: {building.name}
         </button>
       </aside>
 

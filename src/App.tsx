@@ -1664,7 +1664,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     if (rejectNpcCatchupCommand()) return { ok: false, message: NPC_CATCHUP_COMMAND_BLOCKED_MESSAGE };
     const current = stateRef.current;
     if (selectCommandHallLevel(current.planets) <= 0) {
-      return { ok: false, message: 'Командование недоступно: на планетах нет здания «Палата управления».' };
+      return { ok: false, message: `Командование недоступно: на планетах нет здания «${getBuildingDefinition('planetary-government', current.profile.factionId).name}».` };
     }
     const at = Date.now();
     const result = action(current.command, at, current.profile.playerId, current.profile.displayName);
@@ -1690,7 +1690,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     if (rejectNpcCatchupCommand()) return { ok: false, message: NPC_CATCHUP_COMMAND_BLOCKED_MESSAGE };
     const current = stateRef.current;
     if (selectCommandHallLevel(current.planets) <= 0) {
-      return { ok: false, message: 'Командование недоступно: на планетах нет здания «Палата управления».' };
+      return { ok: false, message: `Командование недоступно: на планетах нет здания «${getBuildingDefinition('planetary-government', current.profile.factionId).name}».` };
     }
     const result = action(current, Date.now());
     if (result.state !== current) {
@@ -2416,7 +2416,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               onClick={returnToBuilding}
             >
               <span aria-hidden="true">←</span>
-              Назад в {buildingInteriorDefinition.name}
+              Назад: {buildingInteriorDefinition.name}
             </button>
           ) : null}
 
@@ -2547,7 +2547,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               ownerFactions={commandOwnerFactions}
               playerFactionId={state.profile.factionId}
               returnToBuilding={buildingInterior && buildingInteriorTarget?.kind === 'command' && buildingInteriorDefinition
-                ? { label: `Назад в ${buildingInteriorDefinition.name}`, onBack: returnToBuilding }
+                ? { label: `Назад: ${buildingInteriorDefinition.name}`, onBack: returnToBuilding }
                 : undefined}
               testTimeScale={RUNTIME_MODE === 'test' ? testTimeScale : 1}
               aid={selectAidOverview(state, { now, mode: RUNTIME_MODE, testTimeScale })}
@@ -2715,7 +2715,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         {foreignWriterAt ? (
           <div className="save-conflict-banner" role="alert" data-qa-save-conflict>
             <strong>Игра открыта в другой вкладке со старой версией</strong>
-            <span>Она каждую секунду перезаписывает сохранение (так пропадала построенная Палата управления). Закройте другие вкладки Asterion этого сайта — эта вкладка сохранит ваш прогресс.</span>
+            <span>Она каждую секунду перезаписывает сохранение (так пропадали построенные здания). Закройте другие вкладки Asterion этого сайта — эта вкладка сохранит ваш прогресс.</span>
             <button type="button" onClick={() => { persistence.write(stateRef.current); setForeignWriterAt(null); }}>ЗАКРЫЛ — СОХРАНИТЬ ЗДЕСЬ</button>
           </div>
         ) : null}

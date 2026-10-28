@@ -334,6 +334,27 @@ export function getBuildingPresentation(role: BuildingRole, faction: BuildingFac
   };
 }
 
+/**
+ * Display text in the player's race. Requirement labels and reasons are built
+ * (and matched) with the Aster names — «Верфь — ур. 5», «Требуется: Лаборатория
+ * — уровень 1» — so the rules stay untouched and only the text the player
+ * reads is translated, longest name first («Металлическая шахта III» before
+ * «… I»). Aster text comes back unchanged.
+ */
+const ASTER_NAME_PATTERN = new RegExp(
+  Object.values(FACTION_NAMES.aegis)
+    .sort((a, b) => b.length - a.length)
+    .map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|'),
+  'g',
+);
+const ROLE_BY_ASTER_NAME = new Map(Object.entries(FACTION_NAMES.aegis).map(([role, name]) => [name, role as BuildingRole]));
+
+export function localizeBuildingNames(text: string, faction: string | undefined): string {
+  if (faction !== 'synod' && faction !== 'veyra') return text;
+  return text.replace(ASTER_NAME_PATTERN, (name) => FACTION_NAMES[faction][ROLE_BY_ASTER_NAME.get(name)!]);
+}
+
 export function getBuildingResourceIncomePerHour(
   buildings: Partial<Record<BuildingRole, number>>,
   scienceLevels?: BuildingScienceLevels,

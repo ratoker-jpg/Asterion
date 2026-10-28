@@ -166,7 +166,7 @@ export function BuildingInteriorHost<PlanetId extends string>({
         onClick={onBack}
       >
         <span aria-hidden="true">←</span>
-        Назад в {building.name}
+        Назад: {building.name}
       </button>
     </main>
   );

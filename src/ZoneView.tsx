@@ -1,3 +1,4 @@
+import { localizeBuildingNames } from './domain/buildings/balance-v1.ts';
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { getPlanetZoneTerrainUrl } from './assets/planetZoneTerrainAssets.ts';
@@ -663,7 +664,7 @@ export function ZoneView({
                       <small>ТРЕБОВАНИЯ</small>
                       {availability.requirements.map((requirement) => (
                         <div key={`${requirement.kind}-${requirement.label}`} className={requirement.met ? 'met' : 'missing'}>
-                          <strong>{requirement.label} — ур. {requirement.requiredLevel}</strong>
+                          <strong>{localizeBuildingNames(requirement.label, factionId)} — ур. {requirement.requiredLevel}</strong>
                           <span>сейчас {requirement.currentLevel}</span>
                         </div>
                       ))}
@@ -733,7 +734,7 @@ export function ZoneView({
 
                   <div className={`resource-building-availability ${availability.status}`} data-qa-build-status={availability.status}>
                     <strong>{availability.canBuild ? 'МОЖНО ДОБАВИТЬ В ОЧЕРЕДЬ' : 'ДЕЙСТВИЕ НЕДОСТУПНО'}</strong>
-                    <span>{availability.reason ?? `Свободно слотов: ${BUILDING_QUEUE_CAPACITY - queue.length}.`}</span>
+                    <span>{availability.reason ? localizeBuildingNames(availability.reason, factionId) : `Свободно слотов: ${BUILDING_QUEUE_CAPACITY - queue.length}.`}</span>
                   </div>
 
                   <button

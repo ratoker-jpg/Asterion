@@ -46,7 +46,7 @@ import { sciencesForSection } from './domain/science/selectors.ts';
 import type { ScienceCatalogDefinition, ScienceSectionId } from './domain/science/types.ts';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
 import { getBuildingDefinition } from './domain/buildings/resource-zone.ts';
-import type { BuildingFaction } from './domain/buildings/balance-v1.ts';
+import { localizeBuildingNames, type BuildingFaction } from './domain/buildings/balance-v1.ts';
 import type { ResourceIconKind } from './ui/resources/resource-assets.ts';
 
 const SCIENCE_ARTS: Record<string, string> = {
@@ -218,7 +218,7 @@ export function ScienceView({ factionId = 'aegis' }: { factionId?: BuildingFacti
 
         <div className="science-catalog-v2" data-qa-scroll="science-catalog">
           {sciences.map((science) => (
-            <ScienceRow key={science.id} science={science} runtime={effectiveRuntime} laboratoryArt={laboratory.art} onStart={startResearch} />
+            <ScienceRow key={science.id} science={science} runtime={effectiveRuntime} laboratoryArt={laboratory.art} factionId={factionId} onStart={startResearch} />
           ))}
         </div>
       </main>
@@ -291,11 +291,13 @@ function ScienceRow({
   science,
   runtime,
   laboratoryArt,
+  factionId,
   onStart,
 }: {
   science: ScienceCatalogDefinition;
   runtime: ScienceRuntimeSnapshot;
   laboratoryArt: string;
+  factionId: BuildingFaction;
   onStart: (scienceId: ScienceId) => void;
 }) {
   const preview = previewScience({ state: runtime.science, wallet: runtime.wallet, laboratoryLevel: runtime.laboratoryLevel, now: runtime.now, mode: runtime.mode, testTimeScale: runtime.testTimeScale }, science.id);
@@ -311,7 +313,7 @@ function ScienceRow({
           : `ПОВЫСИТЬ УРОВЕНЬ (${preview.nextLevel ?? currentLevel + 1})`;
   const note = preview.canStart
     ? `Условия выполнены · очередь ${preview.queuedCount}/${SCIENCE_QUEUE_CAPACITY}`
-    : preview.reason ?? 'Исследование недоступно.';
+    : preview.reason ? localizeBuildingNames(preview.reason, factionId) : 'Исследование недоступно.';
 
   return (
     <article className={`science-row-v2 ${preview.canStart ? 'is-available' : 'is-blocked'}`} data-qa-science-id={science.id} data-qa-science-status={preview.status}>
@@ -344,7 +346,7 @@ function ScienceRow({
           aria-live="polite"
         >
           {preview.reason && preview.status !== 'max-level' ? (
-            <div className="science-missing-banner-v2" role="note">{preview.reason}</div>
+            <div className="science-missing-banner-v2" role="note">{localizeBuildingNames(preview.reason, factionId)}</div>
           ) : <span aria-hidden="true" />}
         </div>
 
@@ -360,7 +362,7 @@ function ScienceRow({
           {preview.requirements.map((requirement) => (
             <RequirementBadge
               key={`${requirement.kind}-${requirement.scienceId ?? 'laboratory'}`}
-              label={requirement.label}
+              label={localizeBuildingNames(requirement.label, factionId)}
               art={requirement.kind === 'laboratory-level' ? laboratoryArt : SCIENCE_ARTS[SCIENCE_CATALOG.find((item) => item.id === requirement.scienceId)?.artSlug ?? '']}
               requiredLevel={requirement.requiredLevel}
               currentLevel={requirement.currentLevel}

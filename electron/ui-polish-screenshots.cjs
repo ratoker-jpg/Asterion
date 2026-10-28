@@ -523,7 +523,76 @@ async function incomingScenes() {
   }
 }
 
+// The map pair is taken on one and the same save in both builds (the world
+// after a catch-up differs between runs). --export-save: new game, 12 h
+// catch-up, then the nearest system of the home galaxy with an NPC colony
+// (an NPC planet that is not a homeworld: no «★» caption) is found and the
+// save is written to a file. --import-save: that file is loaded into the
+// build under test and the same system is captured.
+async function selectSystem(win, system) {
+  await setField(win, '.universe-jump select', String(system));
+  await waitFor(win, `document.querySelector('[data-qa-universe]')?.getAttribute('data-qa-universe-system') === ${JSON.stringify(String(system))}`);
+  await settle(win, 500);
+}
+
+async function exportMapSave(win, file) {
+  await catchupScene(win);
+  await clickPrimary(win, 'universe');
+  await waitFor(win, `document.querySelector('[data-qa-universe]')`);
+  const home = Number(await run(win, `document.querySelector('[data-qa-universe]').getAttribute('data-qa-universe-system')`));
+  const order = Array.from({ length: 40 }, (_, i) => i + 1).sort((a, b) => Math.abs(a - home) - Math.abs(b - home));
+  for (const system of order) {
+    await selectSystem(win, system);
+    const colony = await run(win, `[...document.querySelectorAll('[data-qa-universe-object][data-qa-universe-kind="npc"]')].map((node) => node.querySelector('[data-qa-map-caption]')?.textContent?.trim() || '').find((caption) => caption && !caption.startsWith('★')) || ''`);
+    if (!colony) continue;
+    const dump = await run(win, `(() => { const index = localStorage.getItem('asterion.slots.index.v1'); const parsed = JSON.parse(index); const key = parsed.slots.find((slot) => slot.id === parsed.activeSlotId)?.storageKey ?? parsed.slots[0].storageKey; return { index, key, save: localStorage.getItem(key) }; })()`);
+    fs.writeFileSync(file, JSON.stringify({ system, colonyOwner: colony, ...dump }));
+    console.log(`exported save: system ${system}, colony of ${colony}`);
+    return;
+  }
+  throw new Error('No NPC colony in the home galaxy');
+}
+
+async function importMapSave(win, file) {
+  const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+  await load(win);
+  await run(win, 'localStorage.clear(); sessionStorage.clear();');
+  const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
+  await run(win, `(() => {
+    localStorage.setItem('asterion.slots.index.v1', ${JSON.stringify(data.index)});
+    localStorage.setItem(${JSON.stringify(data.key)}, ${JSON.stringify(data.save)});
+    const setItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (k, v) { if (this === localStorage && String(k) === ${JSON.stringify(data.key)}) return; return setItem.call(this, k, v); };
+    location.replace('?autostart=continue');
+    return true;
+  })()`).catch(() => undefined);
+  await done;
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`, 60_000);
+  await settle(win, 1500);
+  await waitFor(win, `!document.querySelector('[data-qa-npc-catchup="progress"]')`, 120_000);
+  await run(win, `document.querySelector('[data-qa-npc-catchup-close]')?.click()`);
+  await settle(win, 500);
+  await clickPrimary(win, 'universe');
+  await waitFor(win, `document.querySelector('[data-qa-universe]')`);
+  await selectSystem(win, data.system);
+  await settle(win, 800);
+  const captions = await run(win, `[...document.querySelectorAll('[data-qa-map-caption]')].map((node) => node.textContent.trim())`);
+  await capture(win, '06-map-npc-colony', `Same save in both builds (12 h catch-up world exported once), system ${data.system}: NPC colony of «${data.colonyOwner}». Captions: ${captions.join(' | ')}`);
+}
+
 app.whenReady().then(async () => {
+  if (args['export-save'] || args['import-save']) {
+    const win = openWindow();
+    try {
+      fs.mkdirSync(OUTPUT, { recursive: true });
+      if (args['export-save']) { await newGame(win); await exportMapSave(win, args['export-save']); }
+      else await importMapSave(win, args['import-save']);
+    } catch (error) { console.error(error); }
+    fs.writeFileSync(path.join(OUTPUT, 'manifest-map.json'), JSON.stringify(manifest, null, 2));
+    win.destroy();
+    app.exit(0);
+    return;
+  }
   if (args.incoming) {
     fs.mkdirSync(OUTPUT, { recursive: true });
     try { await incomingScenes(); } catch (error) { console.error(error); }

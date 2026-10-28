@@ -168,12 +168,12 @@ export function TradeCenterView({
           <p className="trade-refill-note">Каждый уровень даёт 3 сделки. Один слот восстанавливается каждые 15 минут.</p>
         </section>
 
-        <button className="trade-back" type="button" data-qa-trade-back onClick={onBack}><span>←</span> Назад в {building.name}</button>
+        <button className="trade-back" type="button" data-qa-trade-back onClick={onBack}><span>←</span> Назад: {building.name}</button>
       </aside>
 
       <section className="trade-workspace">
         <header className="trade-workspace-header">
-          <div><small>МГНОВЕННЫЙ ОБМЕН РЕСУРСОВ</small><h2>ТОРГОВЫЙ ЦЕНТР</h2></div>
+          <div><small>МГНОВЕННЫЙ ОБМЕН РЕСУРСОВ</small><h2>{building.name.toUpperCase()}</h2></div>
           <strong>{refill.availableSlots} / {refill.maxSlots} СДЕЛОК</strong>
         </header>
 

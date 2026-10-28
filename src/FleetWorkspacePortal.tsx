@@ -1478,7 +1478,7 @@ function FleetWorkspace({
             <small>{planetName}</small>
             <strong>{shipyardPresentation.name}</strong>
             <span className="fleet-yard-level-v1">УРОВЕНЬ {fleetSnapshot.shipyardLevel}</span>
-            <p>Ангар {fleetSnapshot.hangarLevel} · производство флота и обороны.</p>
+            <p>{getBuildingPresentation('hangar', factionId).name} {fleetSnapshot.hangarLevel} · производство флота и обороны.</p>
           </div>
         </div>
 

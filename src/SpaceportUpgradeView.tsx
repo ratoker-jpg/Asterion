@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { localizeBuildingNames } from './domain/buildings/balance-v1.ts';
 
 import {
   SPACEPORT_UPGRADE_QUEUE_CAPACITY,
@@ -106,16 +107,17 @@ function requirementRequiredLabel(requirement: SpaceportRequirementState) {
   return 'Требуется';
 }
 
-function requirementBlocker(requirement: SpaceportRequirementState) {
+function requirementBlocker(requirement: SpaceportRequirementState, factionId: CombatFactionId) {
+  const label = localizeBuildingNames(requirement.label, factionId);
   const valueLabel = requirementValueLabel(requirement);
   if (requirement.valueKind === 'level') {
-    if (requirement.currentLevel == null) return `Нужна ${requirement.label} ур. ${requirement.requiredLevel} · текущий уровень не подключён`;
-    return `Нужна ${requirement.label} ур. ${requirement.requiredLevel} · сейчас ${requirement.currentLevel}`;
+    if (requirement.currentLevel == null) return `Нужна ${label} ур. ${requirement.requiredLevel} · текущий уровень не подключён`;
+    return `Нужна ${label} ур. ${requirement.requiredLevel} · сейчас ${requirement.currentLevel}`;
   }
   if (requirement.currentLevel == null) {
-    return `Нужна ${requirement.label} · ${valueLabel} ${requirement.requiredLevel} · текущее ${valueLabel} не подключено`;
+    return `Нужна ${label} · ${valueLabel} ${requirement.requiredLevel} · текущее ${valueLabel} не подключено`;
   }
-  return `Нужна ${requirement.label} · ${valueLabel} ${requirement.requiredLevel} · сейчас ${requirement.currentLevel}`;
+  return `Нужна ${label} · ${valueLabel} ${requirement.requiredLevel} · сейчас ${requirement.currentLevel}`;
 }
 
 function requirementArt(requirement: SpaceportRequirementState, factionId: CombatFactionId): string | null {
@@ -135,7 +137,8 @@ function RequirementBadge({ requirement, factionId }: { requirement: SpaceportRe
   const valueLabel = requirementValueLabel(requirement);
   const currentLabel = requirementCurrentLabel(requirement);
   const requiredLabel = requirementRequiredLabel(requirement);
-  const tooltip = `${requirement.label}\n${currentLabel}: ${current}\n${requiredLabel}: ${requirement.requiredLevel}\nСтатус: ${status}`;
+  const label = localizeBuildingNames(requirement.label, factionId);
+  const tooltip = `${label}\n${currentLabel}: ${current}\n${requiredLabel}: ${requirement.requiredLevel}\nСтатус: ${status}`;
 
   useEffect(() => {
     const badge = badgeRef.current;
@@ -171,7 +174,7 @@ function RequirementBadge({ requirement, factionId }: { requirement: SpaceportRe
         className="spaceport-requirement-fallback-v2"
         data-qa-spaceport-requirement-fallback={requirement.label}
       >
-        {requirement.label} · {valueLabel} {requirement.requiredLevel} · asset не найден
+        {label} · {valueLabel} {requirement.requiredLevel} · asset не найден
       </span>
     );
   }
@@ -184,7 +187,7 @@ function RequirementBadge({ requirement, factionId }: { requirement: SpaceportRe
       data-qa-spaceport-requirement-status={requirement.met ? 'met' : 'missing'}
       data-tooltip={tooltip}
       tabIndex={0}
-      aria-label={`${requirement.label}. ${currentLabel} ${current}. ${requiredLabel} ${requirement.requiredLevel}. Статус: ${status}.`}
+      aria-label={`${label}. ${currentLabel} ${current}. ${requiredLabel} ${requirement.requiredLevel}. Статус: ${status}.`}
     >
       <img src={art} alt="" draggable={false} />
       <b>{requirement.requiredLevel}</b>
@@ -194,7 +197,7 @@ function RequirementBadge({ requirement, factionId }: { requirement: SpaceportRe
         role="tooltip"
         aria-hidden={false}
       >
-        <strong>{requirement.label}</strong>
+        <strong>{label}</strong>
         <span>{currentLabel}: {current}</span>
         <span>{requiredLabel}: {requirement.requiredLevel}</span>
         <span>Статус: {status}</span>
@@ -428,7 +431,7 @@ export function SpaceportUpgradeView({
 
         <button type="button" className="spaceport-back-v2" data-qa-building-interior-back onClick={onBack}>
           <span aria-hidden="true">←</span>
-          Назад в {spaceport.name}
+          Назад: {spaceport.name}
         </button>
       </aside>
 
@@ -472,7 +475,7 @@ export function SpaceportUpgradeView({
                 ? 'ОЧЕРЕДЬ УЛУЧШЕНИЙ ЗАПОЛНЕНА'
                 : `ЗАКАЗАТЬ УРОВЕНЬ ${preview.nextLevel ?? preview.currentLevel}`;
             const actionReason = missingRequirements.length > 0
-              ? missingRequirements.map(requirementBlocker).join('. ')
+              ? missingRequirements.map((requirement) => requirementBlocker(requirement, factionId)).join('. ')
               : missingResources.length > 0
                 ? missingResources.map((key) => `Недостаточно ${RESOURCE_LABELS[key]}`).join('. ')
                 : preview.reason ?? undefined;
@@ -563,9 +566,9 @@ export function SpaceportUpgradeView({
                         className="spaceport-state-strip-v2 blocked"
                         data-qa-spaceport-blocker="requirement"
                         key={`${entity.id}-block-${requirement.kind}-${requirement.label}`}
-                        title={requirementBlocker(requirement)}
+                        title={requirementBlocker(requirement, factionId)}
                       >
-                        {requirementBlocker(requirement)}
+                        {requirementBlocker(requirement, factionId)}
                       </span>
                     ))}
 
