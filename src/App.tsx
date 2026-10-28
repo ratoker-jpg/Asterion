@@ -267,6 +267,14 @@ const NPC_CATCHUP_TASK_BUDGET_MS = 40;
  * this often; completion is written at once.
  */
 const NPC_CATCHUP_PERSIST_INTERVAL_MS = 2_000;
+/**
+ * States that only a clock tick changed are written at most once per this
+ * many times the last write's cost (about 2% of the UI thread), and at least
+ * every LIVE_TICK_PERSIST_MAX_INTERVAL_MS: a small save is still written
+ * every tick, a late-game world of tens of MB every few seconds.
+ */
+const LIVE_TICK_PERSIST_COST_FACTOR = 50;
+const LIVE_TICK_PERSIST_MAX_INTERVAL_MS = 10_000;
 /** A worker catch-up hands the save its consistent prefix this often (serialized off the UI thread). */
 const NPC_CATCHUP_WORKER_PERSIST_INTERVAL_MS = 15_000;
 
@@ -915,8 +923,12 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
   }, [persistence]);
+  // How long the last full save write took on this thread (serialize + store).
+  const lastWriteCostMs = useRef(0);
   const writeSave = useCallback((value: SaveState) => {
+    const startedAt = performance.now();
     const result = persistence.write(value);
+    lastWriteCostMs.current = performance.now() - startedAt;
     if (!result.ok) {
       // A save near the storage limit can alternate between failing and
       // succeeding; tell the player once in a while, not on every write.
@@ -932,32 +944,56 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     const result = persistence.writeSerialized(text);
     if (!result.ok) console.warn(`NPC catch-up progress was not saved: ${result.error}`);
   }, [persistence]);
-  const lastCatchupWriteAt = useRef(0);
-  const deferredCatchupWrite = useRef<number | null>(null);
+  const lastThrottledWriteAt = useRef(0);
+  // The last state a clock tick produced (see the autosave below).
+  const clockTickState = useRef<SaveState | null>(null);
+  // A deferred tick write must not be lost when the window closes.
+  useEffect(() => {
+    const flush = () => {
+      if (deferredThrottledWrite.current === null || catchupWorker.current) return;
+      window.clearTimeout(deferredThrottledWrite.current);
+      deferredThrottledWrite.current = null;
+      writeSave(stateRef.current);
+    };
+    window.addEventListener('pagehide', flush);
+    window.addEventListener('beforeunload', flush);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      window.removeEventListener('beforeunload', flush);
+    };
+  }, [writeSave]);
+  const deferredThrottledWrite = useRef<number | null>(null);
   useEffect(() => () => {
-    if (deferredCatchupWrite.current !== null) window.clearTimeout(deferredCatchupWrite.current);
+    if (deferredThrottledWrite.current !== null) window.clearTimeout(deferredThrottledWrite.current);
   }, []);
   useEffect(() => {
     if (adoptedFromOtherWindow.current === state) {
       adoptedFromOtherWindow.current = null;
       return;
     }
-    if (deferredCatchupWrite.current !== null) {
-      window.clearTimeout(deferredCatchupWrite.current);
-      deferredCatchupWrite.current = null;
+    if (deferredThrottledWrite.current !== null) {
+      window.clearTimeout(deferredThrottledWrite.current);
+      deferredThrottledWrite.current = null;
     }
-    if (isNpcCatchupPending(state)) {
-      const wait = lastCatchupWriteAt.current + NPC_CATCHUP_PERSIST_INTERVAL_MS - Date.now();
+    // A worker catch-up writes its own progress; App's copy is the frozen start.
+    if (catchupWorker.current) return;
+    // Clock ticks only advance time, which a reload replays identically, so a
+    // late-game world (tens of MB of JSON) is not re-serialized every second.
+    // Player commands and everything else are written at once.
+    const interval = isNpcCatchupPending(state) ? NPC_CATCHUP_PERSIST_INTERVAL_MS
+      : state === clockTickState.current ? Math.min(LIVE_TICK_PERSIST_MAX_INTERVAL_MS, lastWriteCostMs.current * LIVE_TICK_PERSIST_COST_FACTOR) : 0;
+    if (interval > 0) {
+      const wait = lastThrottledWriteAt.current + interval - Date.now();
       if (wait > 0) {
         // Trailing write of this prefix unless a newer state replaces it first.
-        deferredCatchupWrite.current = window.setTimeout(() => {
-          deferredCatchupWrite.current = null;
-          lastCatchupWriteAt.current = Date.now();
+        deferredThrottledWrite.current = window.setTimeout(() => {
+          deferredThrottledWrite.current = null;
+          lastThrottledWriteAt.current = Date.now();
           writeSave(state);
         }, wait);
         return;
       }
-      lastCatchupWriteAt.current = Date.now();
+      lastThrottledWriteAt.current = Date.now();
     }
     writeSave(state);
   }, [persistence, state, writeSave]);
@@ -1108,6 +1144,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     if (current === initial) return;
     const result = { state: current };
     stateRef.current = result.state;
+    clockTickState.current = result.state;
     setState(result.state);
     announceRuntimeEvents(events, result.state);
   }, [announceRuntimeEvents, startWorkerCatchup, testTimeScale]);
