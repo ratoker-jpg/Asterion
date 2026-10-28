@@ -3,7 +3,7 @@
 // and pirate timelines) played by its NPCs for N days, then an absence of H
 // hours caught up exactly as App does (frozen target, chunks until done).
 //
-//   npm run benchmark:late-game -- generate --days=3,7 --out=DIR [--max-groups=N]
+//   npm run benchmark:late-game -- generate --days=3,7 --out=DIR [--max-groups=N] [--from=F]
 //       writes DIR/late-game-day-<N>.json (plain SaveState JSON, tens of MB:
 //       generated, never committed; day 7 takes tens of minutes)
 //   npm run benchmark:late-game -- measure --fixture=F --hours=1,12,24 [--serialize] [--max-groups=N] [--state-out=F]
@@ -68,8 +68,10 @@ function generate(args) {
   const days = option(args, 'days', '3,7').split(',').map(Number).sort((a, b) => a - b);
   const out = option(args, 'out', 'late-game-fixtures');
   const maxGroups = Number(option(args, 'max-groups', '4096'));
+  const from = option(args, 'from');
   fs.mkdirSync(out, { recursive: true });
-  let state = createFullWorldFixture();
+  // --from=F continues an earlier fixture (same campaign, later days).
+  let state = from ? JSON.parse(fs.readFileSync(from, 'utf8')) : createFullWorldFixture();
   for (const day of days) {
     const run = catchUp(state, FULL_WORLD_START_AT + day * DAY_MS, { maxGroups, progressEveryMs: 60_000 });
     state = run.state;

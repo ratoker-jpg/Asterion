@@ -5,7 +5,7 @@ import { SHIP_IDS, type ShipId } from '../domain/combat/ids.ts';
 import type { BattleReport } from '../domain/combat/report.ts';
 import { calculateFleetPopulation } from '../domain/fleet/runtime.ts';
 import { createEmptyFleetState } from '../domain/fleet/runtime.ts';
-import { createUniverseSystem } from '../domain/universe/runtime.ts';
+import { createUniverseSystem, isUniverseTimedObjectUp } from '../domain/universe/runtime.ts';
 import type {
   UniverseCoordinate,
   UniversePersistedPlayerPlanet,
@@ -165,6 +165,8 @@ export function getCurrentPirateContact(
   mode?: RuntimeMode,
 ): CurrentPirateContact | null {
   if (!isFlightCoordinate(coordinate) || !Number.isSafeInteger(now) || now < 0) return null;
+  // No pirate cycle up in this system now: no contact, without building the system.
+  if (!isUniverseTimedObjectUp('pirate', coordinate.galaxy, coordinate.system, now, Object.values(statePirate(state).contact.defeatedCycles))) return null;
   const system = systemForState(state, coordinate.galaxy, coordinate.system, now, mode, true);
   const node = system.positions.find((candidate) => candidate.kind === 'pirate');
   const pirate = node?.pirate;

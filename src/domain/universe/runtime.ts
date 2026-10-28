@@ -1154,6 +1154,20 @@ export function createUniverseSystem(options: CreateUniverseSystemOptions): Univ
   };
 }
 
+/** Whether a timed object of this kind is on the system's map at `nowMs` (createUniverseSystem would place it if a slot is free). */
+export function isUniverseTimedObjectUp(
+  kind: TimedObjectKind,
+  galaxy: number,
+  system: number,
+  nowMs: number,
+  pirateContactDefeats: readonly PirateContactDefeatRecord[] = [],
+): boolean {
+  const now = normalizeNow(nowMs);
+  const schedule = activeTimedObjectSchedule(kind, Math.max(1, Math.floor(galaxy)), Math.min(SYSTEM_COUNT, Math.max(1, Math.floor(system))), now,
+    kind === 'pirate' ? pirateContactDefeats : []);
+  return Boolean(schedule?.present && now < schedule.expiresAt);
+}
+
 /**
  * What of a system changes with time (asteroids aside): which pirate, unique
  * and anomaly cycles are on the map at `nowMs`. createUniverseSystem with
