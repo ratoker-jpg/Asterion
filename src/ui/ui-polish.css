@@ -47,7 +47,17 @@ a {
 /* ---- 3. One close icon ------------------------------------------------------
    Every [data-asterion-close] draws the same 18 px cross inside its 40 px red
    hit area; the text glyphs (×, ✕) differed in size and weight per window. */
-body button[data-asterion-close]:not([hidden]) { display: inline-grid !important; place-items: center; font-size: 0 !important; }
+body button[data-asterion-close]:not([hidden]) {
+  display: inline-grid !important;
+  /* One full-size cell for the strokes; the hidden glyph (an anonymous grid
+     item) falls into a zero-size implicit track and takes no room. */
+  grid-template: 1fr / 1fr !important;
+  grid-auto-rows: 0 !important;
+  grid-auto-columns: 0 !important;
+  place-items: center !important;
+  overflow: hidden;
+  font-size: 0 !important;
+}
 body button[data-asterion-close] > * { display: none; }
 /* Both strokes sit in the button's single grid cell: no positioning, so the
    button keeps whatever placement its window gives it. */

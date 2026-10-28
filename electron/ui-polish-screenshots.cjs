@@ -146,6 +146,27 @@ function saveExpr(body) {
   })()`;
 }
 
+// A save edit and the reload in one renderer task. The running game saves
+// every second: an edit written in one call and a reload in the next could be
+// overwritten in between (that is what lost the Aster interiors on one run).
+// After the edit the save key accepts no further writes from this document.
+async function editSaveAndReload(win, body) {
+  const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
+  await run(win, `(() => {
+    const index = JSON.parse(localStorage.getItem('asterion.slots.index.v1'));
+    const key = index.slots.find((slot) => slot.id === index.activeSlotId)?.storageKey ?? index.slots[0].storageKey;
+    const save = JSON.parse(localStorage.getItem(key));
+    const edited = (() => { ${body} })() ?? save;
+    const setItem = Storage.prototype.setItem;
+    setItem.call(localStorage, key, JSON.stringify(edited));
+    Storage.prototype.setItem = function (k, v) { if (this === localStorage && String(k) === key) return; return setItem.call(this, k, v); };
+    location.replace('?autostart=continue');
+    return true;
+  })()`).catch(() => undefined);
+  await done;
+  await sleep(300);
+}
+
 async function reloadGame(win) {
   await load(win, '?autostart=continue');
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`, 60_000);
@@ -155,14 +176,13 @@ async function reloadGame(win) {
 const SHIFT_MS = 12 * 3600_000;
 
 async function catchupScene(win) {
-  await run(win, saveExpr(`
+  await editSaveAndReload(win, `
     const shift = (value) => {
       if (Array.isArray(value)) return value.map(shift);
       if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, shift(v)]));
       return typeof value === 'number' && value > 1.7e12 && value < 2.2e12 ? value - ${SHIFT_MS} : value;
     };
-    localStorage.setItem(key, JSON.stringify(shift(save)));`));
-  await load(win, '?autostart=continue');
+    return shift(save);`);
   await waitFor(win, `document.querySelector('[data-qa-npc-catchup="progress"] [role="progressbar"]')`, 30_000);
   // The progress window lasts a few seconds: one frame at the current size, no settle.
   fs.mkdirSync(OUTPUT, { recursive: true });
@@ -193,6 +213,81 @@ async function selectionScene(win) {
   manifest[manifest.length - 1].note += `; selected after sweep: ${afterSweep} chars`;
 }
 
+const key = (win, keyCode, modifiers = []) => {
+  win.webContents.sendInputEvent({ type: 'keyDown', keyCode, modifiers });
+  if (keyCode.length === 1 && !modifiers.length) win.webContents.sendInputEvent({ type: 'char', keyCode, modifiers });
+  if (keyCode === 'Return') win.webContents.sendInputEvent({ type: 'char', keyCode: String.fromCharCode(13), modifiers });
+  win.webContents.sendInputEvent({ type: 'keyUp', keyCode, modifiers });
+};
+const focused = (win) => run(win, `(() => { const el = document.activeElement; if (!el || el === document.body) return null;
+  const cs = getComputedStyle(el); return { tag: el.tagName, text: (el.textContent || el.value || '').replace(/\s+/g, ' ').trim().slice(0, 40),
+  route: el.getAttribute('data-qa-route'), focusVisible: el.matches(':focus-visible'), outline: cs.outlineStyle + ' ' + cs.outlineWidth }; })()`);
+
+// Real keyboard input: Tab focus is visible on navigation and rating controls,
+// Enter activates them, Ctrl+A works in a field and in a report text only.
+async function keyboardScene(win) {
+  const log = [];
+  await clickPrimary(win, 'planet');
+  await run(win, `document.activeElement?.blur()`);
+  await win.webContents.focus();
+  let route = null;
+  for (let i = 0; i < 40 && !route; i += 1) {
+    key(win, 'Tab'); await sleep(60);
+    const f = await focused(win);
+    if (f?.route === 'universe') route = f;
+  }
+  log.push({ step: 'Tab to «Вселенная»', focus: route });
+  await capture(win, '10-keyboard-nav-focus', `Keyboard: Tab from the page start to «Вселенная»: ${JSON.stringify(route)}`);
+  key(win, 'Return'); await settle(win, 800);
+  log.push({ step: 'Enter on «Вселенная»', universeOpen: await run(win, `Boolean(document.querySelector('[data-qa-universe]'))`) });
+
+  await clickUtility(win, 'rating');
+  await waitFor(win, `document.querySelector('.rating-view-v2 [data-qa-rating-player-row]')`);
+  await run(win, `document.querySelector('.rating-search-v2 input').focus()`);
+  for (const ch of 'Abc') key(win, ch);
+  await sleep(100);
+  key(win, 'A', ['control']); await sleep(100);
+  log.push({ step: 'Ctrl+A in the rating search field', value: await run(win, `document.querySelector('.rating-search-v2 input').value`),
+    selected: await run(win, `(() => { const i = document.querySelector('.rating-search-v2 input'); return i.value.slice(i.selectionStart, i.selectionEnd); })()`) });
+  await setField(win, '.rating-search-v2 input', '');
+  let head = null;
+  for (let i = 0; i < 12 && !head; i += 1) {
+    key(win, 'Tab'); await sleep(60);
+    const f = await focused(win);
+    if (f && /ОБЩИЕ|РЕСУРС|БОЕВЫЕ|ДОСТИЖ/.test(f.text)) head = f;
+  }
+  log.push({ step: 'Tab to a sortable rating header', focus: head });
+  key(win, 'Tab'); await sleep(60);
+  const next = await focused(win);
+  await capture(win, '10-keyboard-rating-focus', `Keyboard: Tab in Рейтинг, focus on ${JSON.stringify(next)}`);
+  key(win, 'Return'); await settle(win, 400);
+  log.push({ step: 'Enter on the focused control', focus: next, sortChanged: await run(win, `document.querySelector('.score-head-v2.selected')?.textContent || ''`) });
+  let row = null;
+  for (let i = 0; i < 6 && !row; i += 1) {
+    key(win, 'Tab'); await sleep(60);
+    const f = await focused(win);
+    if (f && (await run(win, `Boolean(document.activeElement?.matches('[data-qa-rating-player-row]'))`))) row = f;
+  }
+  key(win, 'Return'); await settle(win, 400);
+  log.push({ step: 'Enter on a rating row', row, cardOpen: await run(win, `Boolean(document.querySelector('[data-qa-rating-player-card]'))`) });
+  key(win, 'A', ['control']); await sleep(100);
+  log.push({ step: 'Ctrl+A on the rating screen', selectedChars: await run(win, `window.getSelection()?.toString().length ?? 0`) });
+
+  await clickPrimary(win, 'reports');
+  await settle(win, 800);
+  const opened = await run(win, `(() => { const item = document.querySelector('.reports-list-item, [data-qa-report-item], .reports-message-nav button'); item?.click(); return Boolean(item); })()`);
+  await settle(win, 600);
+  const hasText = await run(win, `Boolean(document.querySelector('.reports-preview-scroll')?.textContent?.trim())`);
+  if (hasText) {
+    await run(win, `(() => { const r = document.createRange(); const n = document.querySelector('.reports-preview-scroll'); r.setStart(n, 0); r.collapse(true); const s = getSelection(); s.removeAllRanges(); s.addRange(r); })()`);
+    key(win, 'A', ['control']); await sleep(100);
+    log.push({ step: 'Ctrl+A inside a report text', opened, selectedChars: await run(win, `window.getSelection()?.toString().length ?? 0`),
+      regionChars: await run(win, `document.querySelector('.reports-preview-scroll').textContent.length`) });
+  } else log.push({ step: 'Ctrl+A inside a report text', opened, note: 'no report text on this screen' });
+  manifest.push({ name: '10-keyboard-probe', race: RACE, note: JSON.stringify(log) });
+  console.log(JSON.stringify(log, null, 1));
+}
+
 async function ratingScenes(win) {
   await clickUtility(win, 'rating');
   await waitFor(win, `document.querySelector('.rating-view-v2 [data-qa-rating-player-row]')`);
@@ -208,8 +303,9 @@ async function ratingScenes(win) {
 async function longAllianceScene(win) {
   // Save edit (stated): Command hall level 1 on the home planet, so the
   // alliance form is available. Everything else goes through the real form.
-  await run(win, saveExpr(`save.planets[save.currentPlanetId].buildings['planetary-government'] = Math.max(1, save.planets[save.currentPlanetId].buildings['planetary-government'] || 0); localStorage.setItem(key, JSON.stringify(save));`));
-  await reloadGame(win);
+  await editSaveAndReload(win, `save.planets[save.currentPlanetId].buildings['planetary-government'] = Math.max(1, save.planets[save.currentPlanetId].buildings['planetary-government'] || 0);`);
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`, 60_000);
+  await settle(win, 1200);
   await clickPrimary(win, 'command');
   await waitFor(win, `document.querySelector('[data-qa-create-alliance]')`);
   await click(win, '[data-qa-create-alliance]');
@@ -298,8 +394,9 @@ async function flightScenes(win, objectId, npc) {
 // Save edit (stated): construction, recycling and trade-center set to level 1
 // on the home planet, then the interiors and Science are opened normally.
 async function raceInteriorsScenes(win) {
-  await run(win, saveExpr(`const b = save.planets[save.currentPlanetId].buildings; for (const role of ['construction', 'recycling', 'trade-center']) b[role] = Math.max(1, b[role] || 0); localStorage.setItem(key, JSON.stringify(save));`));
-  await reloadGame(win);
+  await editSaveAndReload(win, `const b = save.planets[save.currentPlanetId].buildings; for (const role of ['construction', 'recycling', 'trade-center']) b[role] = Math.max(1, b[role] || 0);`);
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`, 60_000);
+  await settle(win, 1200);
   await clickPrimary(win, 'planet');
   await click(win, '[data-qa-zone="industry"]');
   await waitFor(win, `document.querySelector('[data-qa-zone-view][data-zone="industry"]')`);
@@ -382,8 +479,17 @@ async function incomingScenes() {
     await click(win, '[data-qa-bot01-scenario]');
     await showRow();
     await capture(win, '07-incoming-composition-hidden', 'Test Mode «ЗАПУСТИТЬ АТАКУ BOT 01», player Espionage below 10: «СОСТАВ СКРЫТ»');
-    await run(win, `(() => { const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)})); save.science.levels[5] = 10; localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save)); })()`);
-    await load(win, '?mode=test');
+    const reloaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
+    await run(win, `(() => {
+      const key = ${JSON.stringify(TEST_KEY)};
+      const save = JSON.parse(localStorage.getItem(key)); save.science.levels[5] = 10;
+      const setItem = Storage.prototype.setItem;
+      setItem.call(localStorage, key, JSON.stringify(save));
+      Storage.prototype.setItem = function (k, v) { if (this === localStorage && String(k) === key) return; return setItem.call(this, k, v); };
+      location.replace('?mode=test');
+      return true;
+    })()`).catch(() => undefined);
+    await reloaded;
     await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`, 60_000);
     await clickPrimary(win, 'fleets');
     await showRow();
@@ -430,7 +536,7 @@ app.whenReady().then(async () => {
     fs.mkdirSync(OUTPUT, { recursive: true });
     await newGame(win);
     const steps = [
-      ['catchup', catchupScene], ['selection', selectionScene], ['rating', ratingScenes], ['planet-editor', planetEditorScene], ['queue', navAndQueueScene],
+      ['catchup', catchupScene], ['selection', selectionScene], ['keyboard', keyboardScene], ['rating', ratingScenes], ['planet-editor', planetEditorScene], ['queue', navAndQueueScene],
       ['universe', universeScenes], ['interiors', interiorsScenes], ['race-interiors', raceInteriorsScenes], ['screens', otherScreens], ['long-alliance', longAllianceScene],
     ];
     for (const [scene, fn] of steps) {
