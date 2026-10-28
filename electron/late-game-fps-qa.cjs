@@ -5,9 +5,11 @@
 //   npm run test:late-game-fps-ui -- [--fixture=F] [--catchup-hours=H] [--seconds=N] [--software] [--out=DIR]
 //
 // --fixture: a plain SaveState JSON from `npm run benchmark:late-game -- generate`
-//   (day 3 / day 7 of the full world). It is moved in time so that its replay
-//   cursor sits H hours before now (H = 0: idle at once); only timestamps move.
-//   Without it a fresh full-world campaign (day 0) is used, which CI can afford.
+//   (day 3 / day 7 of the full world). The save is loaded as is; the page
+//   clock is moved so that its replay cursor sits H hours before "now"
+//   (H = 0: idle at once).
+//   Without it a fresh full-world campaign (day 0, 2026-01-01) is used, which
+//   CI can afford; --catchup-hours=H then makes the game itself catch up H hours.
 // --software: CPU rendering, as the other Electron QA jobs (the game itself uses the GPU).
 // --max-p95-ms=X: fail when an idle screen's p95 frame interval exceeds X (CI: 150).
 const { app, BrowserWindow } = require('electron');
@@ -60,7 +62,7 @@ const SCREENS = [
 function freshCampaign() {
   const source = `
     import { createFullWorldFixture } from './tools/benchmark-npc-full-world.mjs';
-    console.log(JSON.stringify(createFullWorldFixture(${Date.now()})));
+    console.log(JSON.stringify(createFullWorldFixture()));
   `;
   const child = spawnSync(process.execPath, [
     '--experimental-strip-types',
@@ -72,28 +74,32 @@ function freshCampaign() {
 }
 
 /**
- * Moves every epoch-millisecond value of the save by `delta` (numbers within
- * a year of the replay cursor). Ids that embed times stay as they are; the
- * world only has to run, this is a frame-time measurement, not a replay check.
+ * The save stays as generated; the page clock is moved instead so that the
+ * replay cursor sits CATCHUP_HOURS before "now" (a whole number of minutes,
+ * which App passes on to the catch-up worker).
  */
-function shiftTimes(value, delta, low, high) {
-  if (typeof value === 'number') return Number.isInteger(value) && value >= low && value <= high ? value + delta : value;
-  if (Array.isArray(value)) return value.map((item) => shiftTimes(item, delta, low, high));
-  if (value && typeof value === 'object') {
-    const out = {};
-    for (const [key, item] of Object.entries(value)) out[key] = shiftTimes(item, delta, low, high);
-    return out;
-  }
-  return value;
-}
-
 function prepareSave() {
   const state = FIXTURE ? JSON.parse(fs.readFileSync(FIXTURE, 'utf8')) : freshCampaign();
   const cursor = state.npcReplay?.processedThroughAt ?? state.resourceClock.lastReconciledAt;
-  const year = 365 * 86_400_000;
-  const delta = Date.now() - CATCHUP_HOURS * 3_600_000 - cursor;
-  const shifted = shiftTimes(state, delta, cursor - year, cursor + year);
-  return { raw: JSON.stringify(shifted), delta, sourceCursor: cursor };
+  const target = cursor + CATCHUP_HOURS * 3_600_000;
+  const delta = Math.round((target - Date.now()) / 60_000) * 60_000;
+  return { raw: JSON.stringify(state), delta, sourceCursor: cursor };
+}
+
+async function movePageClock(win, offsetMs) {
+  if (!offsetMs) return;
+  const dbg = win.webContents.debugger;
+  if (!dbg.isAttached()) dbg.attach('1.3');
+  await dbg.sendCommand('Page.enable');
+  await dbg.sendCommand('Page.addScriptToEvaluateOnNewDocument', { source: `(() => {
+    const RealDate = Date;
+    const offset = ${offsetMs};
+    class MovedDate extends RealDate {
+      constructor(...args) { if (args.length === 0) super(RealDate.now() + offset); else super(...args); }
+      static now() { return RealDate.now() + offset; }
+    }
+    globalThis.Date = MovedDate;
+  })();` });
 }
 
 async function waitFor(win, expression, timeoutMs = 30_000) {
@@ -176,12 +182,19 @@ async function main() {
     return slot?.storageKey || ${JSON.stringify(LEGACY_KEY)};
   })()`);
   await run(win, `localStorage.setItem(${JSON.stringify(saveKey)}, ${JSON.stringify(save.raw)})`);
+  await movePageClock(win, save.delta);
   const loadStarted = Date.now();
   await load(win, '?autostart=continue');
-  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`, 120_000);
+  try {
+    await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`, 180_000);
+  } catch (error) {
+    const screen = await run(win, `JSON.stringify({ text: (document.body?.innerText || '').slice(-260), index: localStorage.getItem(${JSON.stringify(SLOT_INDEX_KEY)}), saved: (localStorage.getItem(${JSON.stringify(saveKey)}) || '').length, key: ${JSON.stringify(saveKey)} })`).catch((e) => String(e));
+    throw new Error(`${error.message}
+On screen: ${screen}`);
+  }
   const result = {
     fixture: FIXTURE ? path.basename(FIXTURE) : 'fresh full-world campaign (day 0)',
-    saveChars: save.raw.length, timeShiftMs: save.delta, catchupHours: CATCHUP_HOURS,
+    saveChars: save.raw.length, pageClockOffsetMs: save.delta, catchupHours: CATCHUP_HOURS,
     rendering: SOFTWARE ? 'software (disable-gpu)' : 'gpu', viewport: [1920, 1080], secondsPerScreen: SECONDS,
     loadMs: Date.now() - loadStarted, catchup: null, screens: {},
   };
@@ -201,13 +214,12 @@ async function main() {
   if (CPU_PROFILE) {
     await openScreen(win, 'planet', '.planet-page-v3');
     const dbg = win.webContents.debugger;
-    dbg.attach('1.3');
+    if (!dbg.isAttached()) dbg.attach('1.3');
     await dbg.sendCommand('Profiler.enable');
     await dbg.sendCommand('Profiler.start');
     await sleep(SECONDS * 1_000);
     const { profile } = await dbg.sendCommand('Profiler.stop');
     fs.writeFileSync(CPU_PROFILE, JSON.stringify(profile));
-    dbg.detach();
   }
   for (const [route, selector] of SCREENS) {
     await openScreen(win, route, selector);

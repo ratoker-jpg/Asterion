@@ -3,7 +3,8 @@ import type { RuntimeReconcileEvent } from './reconcile.ts';
 
 /** Messages between App and the NPC catch-up worker (src/npc-catchup.worker.ts). */
 export type NpcCatchupWorkerRequest =
-  | { type: 'start'; runId: number; state: SaveState; persistEveryMs: number }
+  /** clockOffsetMs: the page clock minus wall time (0 in the game; QA may move the page clock). */
+  | { type: 'start'; runId: number; state: SaveState; persistEveryMs: number; clockOffsetMs: number }
   | { type: 'cancel'; runId: number };
 
 export type NpcCatchupWorkerResponse =

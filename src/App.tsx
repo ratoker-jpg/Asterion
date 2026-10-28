@@ -1121,7 +1121,9 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       setNow(Date.now());
     };
     setNpcCatchupProgress({ processedThroughAt: replay.processedThroughAt, targetAt: replay.targetAt });
-    const request: NpcCatchupWorkerRequest = { type: 'start', runId, state: frozen, persistEveryMs: NPC_CATCHUP_WORKER_PERSIST_INTERVAL_MS };
+    // The worker's clock is wall time; the page's may differ by a whole (rounded) offset only under QA.
+    const clockOffsetMs = Math.round((Date.now() - (performance.timeOrigin + performance.now())) / 60_000) * 60_000;
+    const request: NpcCatchupWorkerRequest = { type: 'start', runId, state: frozen, persistEveryMs: NPC_CATCHUP_WORKER_PERSIST_INTERVAL_MS, clockOffsetMs };
     worker.postMessage(request);
     return true;
   }, [announceRuntimeEvents, writeSerializedSave]);

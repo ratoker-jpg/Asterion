@@ -18,10 +18,11 @@ scope.onmessage = async (event: MessageEvent<NpcCatchupWorkerRequest>) => {
     return;
   }
   const { runId, state: initial } = message;
+  const now = () => Date.now() + message.clockOffsetMs;
   try {
-    applyCampaignRuntimeForCatchup(initial, Date.now());
+    applyCampaignRuntimeForCatchup(initial, now());
     const result = await runNpcCatchup(initial, {
-      now: () => Date.now(),
+      now,
       onProgress: (progress) => post({ type: 'progress', runId, ...progress }),
       onPersist: (state) => post({ type: 'persist', runId, text: serializeSaveForStorage(state, 'production') }),
       persistEveryMs: message.persistEveryMs,
