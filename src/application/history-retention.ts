@@ -122,6 +122,31 @@ export function isFinishedForeignPirateFlight(flight: FlightRecord, playerId: st
  * Game state (wallets, fleets, ownership, ratings, cursors) is untouched.
  * Returns the same object when nothing is pruned.
  */
+// Per flight (records keep unchanged flights' objects): whether it is a
+// finished foreign pirate raid, and when it became an archive candidate.
+const flightArchiveInfo = new WeakMap<FlightRecord, { playerId: string; pirateFinished: boolean; candidateAt: number }>();
+const recordsArchiveSummary = new WeakMap<readonly FlightRecord[], { playerId: string; pirateFinished: boolean; firstCandidateAt: number }>();
+
+function flightArchiveSummary(records: readonly FlightRecord[], playerId: string) {
+  const cached = recordsArchiveSummary.get(records);
+  if (cached?.playerId === playerId) return cached;
+  let pirateFinished = false;
+  let firstCandidateAt = Number.POSITIVE_INFINITY;
+  for (const flight of records) {
+    let info = flightArchiveInfo.get(flight);
+    if (info?.playerId !== playerId) {
+      info = { playerId, pirateFinished: isFinishedForeignPirateFlight(flight, playerId),
+        candidateAt: isArchivedNpcFlight(flight, Number.POSITIVE_INFINITY) ? flight.completedAt! : Number.POSITIVE_INFINITY };
+      flightArchiveInfo.set(flight, info);
+    }
+    pirateFinished ||= info.pirateFinished;
+    if (info.candidateAt < firstCandidateAt) firstCandidateAt = info.candidateAt;
+  }
+  const summary = { playerId, pirateFinished, firstCandidateAt };
+  recordsArchiveSummary.set(records, summary);
+  return summary;
+}
+
 export function pruneCampaignHistory(state: SaveState, at: number | undefined = state.npcReplay?.processedThroughAt): SaveState {
   const playerId = state.profile.playerId;
   let next = state;
@@ -132,8 +157,12 @@ export function pruneCampaignHistory(state: SaveState, at: number | undefined = 
   // Clean records stay clean until the earliest finished NPC flight ages past
   // the margin; until then (same arrays, earlier cursor) nothing is scanned.
   const flightMemo = cleanFlights.get(flights.records);
-  const flightsClean = flightMemo !== undefined && flightMemo.missions === state.espionage?.missions
-    && flightMemo.playerId === playerId && archiveBefore <= flightMemo.firstArchivableAfter;
+  const summary = flightArchiveSummary(flights.records, playerId);
+  // Without a finished pirate raid and before the earliest finished NPC flight
+  // ages past the margin nothing can leave, whatever the spy missions hold.
+  const flightsClean = (!summary.pirateFinished && archiveBefore <= summary.firstCandidateAt)
+    || (flightMemo !== undefined && flightMemo.missions === state.espionage?.missions
+      && flightMemo.playerId === playerId && archiveBefore <= flightMemo.firstArchivableAfter);
   // A spy mission that is still live keeps its flight.
   const liveMissionFlights = flightsClean ? new Set<string>() : new Set((state.espionage?.missions ?? [])
     .filter((mission) => mission.status === 'transit' || mission.status === 'orbiting' || mission.status === 'returning')
