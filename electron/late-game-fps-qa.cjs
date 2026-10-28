@@ -9,7 +9,7 @@
 //   cursor sits H hours before now (H = 0: idle at once); only timestamps move.
 //   Without it a fresh full-world campaign (day 0) is used, which CI can afford.
 // --software: CPU rendering, as the other Electron QA jobs (the game itself uses the GPU).
-// --max-p95-ms=X: fail when an idle screen's p95 frame interval exceeds X (CI budget).
+// --max-p95-ms=X: fail when an idle screen's p95 frame interval exceeds X (CI: 150).
 const { app, BrowserWindow } = require('electron');
 const { spawnSync } = require('child_process');
 const fs = require('fs');
@@ -22,7 +22,8 @@ const option = (name, fallback) => {
   const raw = args.find((arg) => arg.startsWith(`--${name}=`));
   return raw ? raw.slice(name.length + 3) : fallback;
 };
-const SOFTWARE = args.includes('--software');
+// CI runners have no GPU worth measuring: CPU rendering there, as the other Electron QA jobs.
+const SOFTWARE = args.includes('--software') || process.env.CI === 'true';
 if (SOFTWARE) {
   app.disableHardwareAcceleration();
   app.commandLine.appendSwitch('disable-gpu');
@@ -36,7 +37,10 @@ const ROOT = path.join(__dirname, '..');
 const FIXTURE = option('fixture');
 const CATCHUP_HOURS = Number(option('catchup-hours', '0'));
 const SECONDS = Number(option('seconds', '6'));
-const MAX_P95_MS = option('max-p95-ms') ? Number(option('max-p95-ms')) : null;
+// CI budget: a screen that blocks the UI thread every second shows in p95 at once.
+const MAX_P95_MS = option('max-p95-ms') ? Number(option('max-p95-ms')) : process.env.CI === 'true' ? 150 : null;
+// --cpu-profile=F: a renderer CPU profile of the idle planet screen (diagnostics).
+const CPU_PROFILE = option('cpu-profile');
 const OUTPUT = option('out', path.join(ROOT, 'artifacts', 'late-game-fps-qa'));
 const LEGACY_KEY = 'asterion.vertical-slice.v1';
 const SLOT_INDEX_KEY = 'asterion.slots.index.v1';
@@ -193,6 +197,17 @@ async function main() {
       frames: await run(win, 'window.__fpsQa.stop()') };
     await run(win, `document.querySelector('[data-qa-npc-catchup-close]')?.click()`);
     await sleep(500);
+  }
+  if (CPU_PROFILE) {
+    await openScreen(win, 'planet', '.planet-page-v3');
+    const dbg = win.webContents.debugger;
+    dbg.attach('1.3');
+    await dbg.sendCommand('Profiler.enable');
+    await dbg.sendCommand('Profiler.start');
+    await sleep(SECONDS * 1_000);
+    const { profile } = await dbg.sendCommand('Profiler.stop');
+    fs.writeFileSync(CPU_PROFILE, JSON.stringify(profile));
+    dbg.detach();
   }
   for (const [route, selector] of SCREENS) {
     await openScreen(win, route, selector);

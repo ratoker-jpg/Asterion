@@ -152,8 +152,10 @@ jobs:
           # 14 minutes. Whole days run in the long-horizon job (main and nightly).
           # The test fails on a stalled replay cursor, not on duration.
           # Pirate operations (about 1.5 minutes) ride along with the short replay.
+          # Frame pacing (CPU rendering, fresh full world): a loose p95 budget
+          # catches a screen that blocks the UI thread every second again.
           - shard: npc-replay
-            suites: "test:npc-replay-ui-6h test:pirate-operations-ui"
+            suites: "test:npc-replay-ui-6h test:pirate-operations-ui test:late-game-fps-ui:skip"
           - shard: fleet-universe
             suites: "test:fleet-ui:skip test:universe-ui:skip test:energy-ui:skip test:repair-ui:skip"
     steps:
