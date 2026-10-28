@@ -197,7 +197,60 @@ const KIND_DESCRIPTIONS: Record<UniversePlanetNode['kind'], string> = {
 
 export type TimedObjectKind = 'pirate' | 'unique' | 'anomaly';
 type TimedObjectSchedule = UniverseTimedObjectState & { startAt: number; present: boolean };
-type TimedScheduleCache = { cycles: TimedObjectSchedule[]; nextStartAt: number; nextSpawnChance: number };
+type TimedScheduleCache = { cycles: TimedCycleList; nextStartAt: number; nextSpawnChance: number };
+
+/**
+ * Append-only cycles of one system's timed object, stored by column. A real
+ * campaign asks for every cycle since the 2026-01-01 epoch (about 7 000 per
+ * system and kind by late 2026); as objects with boxed timestamps that was
+ * about 1 GB of heap for the whole map, on the UI thread and in the catch-up
+ * worker alike. `get` returns the same values the objects held.
+ */
+class TimedCycleList {
+  length = 0;
+  private startAt = new Float64Array(256);
+  private lifetimeMs = new Int32Array(256);
+  private spawnChance = new Float64Array(256);
+  private present = new Uint8Array(256);
+  private materialized: TimedObjectSchedule[] = [];
+  private materializedView: TimedObjectSchedule[] | undefined;
+  private readonly quietMs: number;
+
+  constructor(quietMs: number) { this.quietMs = quietMs; }
+
+  push(startAt: number, lifetimeMs: number, spawnChance: number, present: boolean): void {
+    if (this.length === this.startAt.length) {
+      const size = this.length * 2;
+      const startAtNext = new Float64Array(size); startAtNext.set(this.startAt); this.startAt = startAtNext;
+      const lifetimeNext = new Int32Array(size); lifetimeNext.set(this.lifetimeMs); this.lifetimeMs = lifetimeNext;
+      const chanceNext = new Float64Array(size); chanceNext.set(this.spawnChance); this.spawnChance = chanceNext;
+      const presentNext = new Uint8Array(size); presentNext.set(this.present); this.present = presentNext;
+    }
+    this.startAt[this.length] = startAt;
+    this.lifetimeMs[this.length] = lifetimeMs;
+    this.spawnChance[this.length] = spawnChance;
+    this.present[this.length] = present ? 1 : 0;
+    this.length += 1;
+  }
+
+  startAtOf(index: number): number { return this.startAt[index]!; }
+
+  get(index: number): TimedObjectSchedule | undefined {
+    if (index < 0 || index >= this.length) return undefined;
+    const startAt = this.startAt[index]!;
+    const lifetimeMs = this.lifetimeMs[index]!;
+    const present = this.present[index] === 1;
+    const expiresAt = present ? startAt + lifetimeMs : startAt;
+    return { cycleIndex: index, startAt, expiresAt, respawnAt: expiresAt + this.quietMs, lifetimeMs, spawnChance: this.spawnChance[index]!, present };
+  }
+
+  /** Every cycle as objects (defeat-shifted pirate schedules only); a new array whenever the list grew. */
+  toArray(): readonly TimedObjectSchedule[] {
+    while (this.materialized.length < this.length) this.materialized.push(this.get(this.materialized.length)!);
+    if (this.materializedView?.length !== this.length) this.materializedView = this.materialized.slice();
+    return this.materializedView;
+  }
+}
 const timedScheduleCaches = new Map<string, TimedScheduleCache>();
 const TEST_UNIVERSE_LAYOUT_SEED_KEY = 'asterion.test-universe-layout-seed.v1';
 
@@ -834,7 +887,7 @@ function ensureTimedCycles(kind: TimedObjectKind, galaxy: number, system: number
   if (!cache) {
     const offsetRandom = layoutSeededRandom(config.seed, galaxy, system, 0);
     cache = {
-      cycles: [],
+      cycles: new TimedCycleList(config.quietMs),
       nextStartAt: config.epoch + randomInt(offsetRandom, 0, 60 * 60 * 1_000),
       nextSpawnChance: config.initialChance,
     };
@@ -849,7 +902,7 @@ function ensureTimedCycles(kind: TimedObjectKind, galaxy: number, system: number
     const present = random() < spawnChance;
     const expiresAt = present ? startAt + lifetimeMs : startAt;
     const respawnAt = (present ? expiresAt : startAt) + config.quietMs;
-    cache.cycles.push({ cycleIndex, startAt, expiresAt, respawnAt, lifetimeMs, spawnChance, present });
+    cache.cycles.push(startAt, lifetimeMs, spawnChance, present);
     cache.nextSpawnChance = present || config.chanceStep === 0
       ? config.initialChance
       : Math.min(1, spawnChance + config.chanceStep);
@@ -878,13 +931,13 @@ export function getUniverseTimedObjectCyclesBetween(
   let hi = cycles.length;
   while (lo < hi) {
     const mid = (lo + hi) >>> 1;
-    if (cycles[mid]!.startAt < earliestRelevantStart) lo = mid + 1;
+    if (cycles.startAtOf(mid) < earliestRelevantStart) lo = mid + 1;
     else hi = mid;
   }
   const result: UniverseTimedObjectSchedule[] = [];
   for (let index = lo; index < cycles.length; index += 1) {
-    const cycle = cycles[index]!;
-    if (cycle.startAt > throughMs) break;
+    if (cycles.startAtOf(index) > throughMs) break;
+    const cycle = cycles.get(index)!;
     if (cycle.present && cycle.expiresAt > afterMs) result.push(cycle);
   }
   return result;
@@ -903,10 +956,9 @@ export function getUniverseTimedObjectSchedule(
   const relevantDefeats = kind === 'pirate'
     ? pirateContactDefeats.filter((record) => record.galaxy === galaxy && record.system === system)
     : [];
-  const cycles = relevantDefeats.length
-    ? applyPirateContactDefeatsToSchedules(baseCycles, galaxy, system, relevantDefeats)
-    : baseCycles;
-  return cycles[safeIndex] ?? cycles[0];
+  if (!relevantDefeats.length) return (baseCycles.get(safeIndex) ?? baseCycles.get(0))!;
+  const cycles = applyPirateContactDefeatsToSchedules(baseCycles.toArray(), galaxy, system, relevantDefeats);
+  return cycles[safeIndex] ?? cycles[0]!;
 }
 
 /**
@@ -930,21 +982,24 @@ export function getPirateContactCyclesBetween(
   // directly. Scanning and cloning every cycle since 2026-01-01 on every
   // render delayed first Test Mode reconciliation past its first UI paint.
   const corrected = relevantDefeats.length
-    ? applyPirateContactDefeatsToSchedules(base, galaxy, system, relevantDefeats)
-    : base;
+    ? applyPirateContactDefeatsToSchedules(base.toArray(), galaxy, system, relevantDefeats)
+    : null;
+  const count = corrected ? corrected.length : base.length;
+  const startAtOf = (index: number) => corrected ? corrected[index]!.startAt : base.startAtOf(index);
   // Contact starts are strictly increasing, even after defeat shifts.
   // Binary search avoids O(history) scans when only the latest few minutes
   // contain a due check; no artificial offline horizon or event count cap.
   let lo = 0;
-  let hi = corrected.length;
+  let hi = count;
   while (lo < hi) {
     const mid = (lo + hi) >>> 1;
-    if (corrected[mid]!.startAt + checkDelayMs <= afterMs) lo = mid + 1;
+    if (startAtOf(mid) + checkDelayMs <= afterMs) lo = mid + 1;
     else hi = mid;
   }
   const due: UniverseTimedObjectSchedule[] = [];
-  for (let index = lo; index < corrected.length; index += 1) {
-    const cycle = corrected[index]!;
+  for (let index = lo; index < count; index += 1) {
+    if (startAtOf(index) + checkDelayMs > throughMs) break;
+    const cycle = corrected ? corrected[index]! : base.get(index)!;
     const at = cycle.startAt + checkDelayMs;
     if (at > throughMs) break;
     if (cycle.present && cycle.expiresAt > at) due.push(cycle);
@@ -966,12 +1021,18 @@ function activeTimedObjectSchedule(
   // Without defeats in this system the canonical schedule is already final:
   // re-mapping every cycle since the epoch on each 1 s render was the
   // Universe screen's main-thread hitch (see getPirateContactCyclesBetween).
-  const cycles = relevantDefeats.length
-    ? applyPirateContactDefeatsToSchedules(baseCycles, galaxy, system, relevantDefeats)
-    : baseCycles;
-  for (let index = cycles.length - 1; index >= 0; index -= 1) {
-    const cycle = cycles[index];
-    if (cycle.startAt > nowMs) continue;
+  if (relevantDefeats.length) {
+    const cycles = applyPirateContactDefeatsToSchedules(baseCycles.toArray(), galaxy, system, relevantDefeats);
+    for (let index = cycles.length - 1; index >= 0; index -= 1) {
+      const cycle = cycles[index]!;
+      if (cycle.startAt > nowMs) continue;
+      if (nowMs < cycle.respawnAt) return cycle;
+    }
+    return null;
+  }
+  for (let index = baseCycles.length - 1; index >= 0; index -= 1) {
+    if (baseCycles.startAtOf(index) > nowMs) continue;
+    const cycle = baseCycles.get(index)!;
     if (nowMs < cycle.respawnAt) return cycle;
   }
   return null;
