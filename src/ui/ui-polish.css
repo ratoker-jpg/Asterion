@@ -228,6 +228,7 @@ html body .flight-briefing-v2 .flight-timeline-target-status.is-invalid { border
    that holds the plan on screen (fleet-production-qa). */
 html body .flight-briefing-v2 .flight-timeline-ship-list.flight-composition-v3:not(:has(> article:nth-of-type(4))) { grid-template-columns: minmax(0, 1fr) !important; }
 html body .flight-briefing-v2 .flight-timeline-ship-card div small { line-height: 1.35; }
+html body .flight-briefing-v2 .flight-composition-v3:not(:has(> article:nth-of-type(4))) .flight-timeline-ship-card div small { white-space: normal; overflow: visible; text-overflow: clip; }
 
 /* Ship tile: a quiet rounded number field without browser spinners. */
 html body .fleet-root-v2 .fleet-ship-tile-v2__input {
