@@ -269,6 +269,7 @@ export function rerollTestUniverseLayout(): number {
   const next = (testUniverseLayoutSeed() % 1_000_000_000) + 1;
   window.localStorage.setItem(TEST_UNIVERSE_LAYOUT_SEED_KEY, String(next));
   timedScheduleCaches.clear();
+  warmCursor = 0;
   return next;
 }
 
@@ -912,6 +913,26 @@ function ensureTimedCycles(kind: TimedObjectKind, galaxy: number, system: number
 }
 
 export type UniverseTimedObjectSchedule = TimedObjectSchedule;
+
+let warmCursor = 0;
+/**
+ * Builds the timed-object schedules of the whole map up to `throughMs` a few
+ * systems at a time while `hasTime()` holds; true once all are built. The
+ * schedules start at the 2026-01-01 epoch, so the first system an NPC looks
+ * at would otherwise build its history in the middle of a frame.
+ */
+export function warmUniverseTimedSchedules(galaxyCount: number, throughMs: number, hasTime: () => boolean): boolean {
+  const kinds: TimedObjectKind[] = ['pirate', 'unique', 'anomaly'];
+  const total = Math.max(1, Math.floor(galaxyCount)) * SYSTEM_COUNT * kinds.length;
+  while (warmCursor < total) {
+    if (!hasTime()) return false;
+    const kind = kinds[warmCursor % kinds.length]!;
+    const index = Math.floor(warmCursor / kinds.length);
+    ensureTimedCycles(kind, Math.floor(index / SYSTEM_COUNT) + 1, (index % SYSTEM_COUNT) + 1, throughMs);
+    warmCursor += 1;
+  }
+  return true;
+}
 
 /** Canonical timed-object cycles that could have generated risk rolls during an interval.
  * A cycle beginning before `afterMs` is included only while its contact could

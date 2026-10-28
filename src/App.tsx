@@ -229,7 +229,7 @@ import {
 import { refreshSlotMeta } from './application/slots.ts';
 import { gateProgressPercent } from './domain/sun-raid/rules.ts';
 import { getCampaignTimeScale, setCampaignTimeScale, CAMPAIGN_SPEED_SCALE } from './domain/runtime/mode.ts';
-import { setActiveGalaxyCount } from './domain/universe/runtime.ts';
+import { setActiveGalaxyCount, warmUniverseTimedSchedules } from './domain/universe/runtime.ts';
 import { SunRaidPanel, type SunSelection } from './ui/sun-raid/SunRaidPanel.tsx';
 import { GateDialog } from './ui/sun-raid/GateDialog.tsx';
 import { CampaignResultOverlay, PauseMenu } from './ui/menu/InGameOverlays.tsx';
@@ -819,6 +819,21 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, []);
+  // The map's timed-object schedules (pirates, unique worlds, anomalies) run
+  // from the 2026-01-01 epoch; build them in idle time instead of inside the
+  // frame of the first NPC decision or system view that needs them.
+  const galaxyCount = state.worldConfig?.world.galaxyCount ?? 1;
+  useEffect(() => {
+    if (typeof window.requestIdleCallback !== 'function') return;
+    let handle = 0;
+    const step = (deadline: IdleDeadline) => {
+      if (!warmUniverseTimedSchedules(galaxyCount, Date.now() + 3_600_000, () => deadline.timeRemaining() > 2)) {
+        handle = window.requestIdleCallback(step);
+      }
+    };
+    handle = window.requestIdleCallback(step);
+    return () => window.cancelIdleCallback(handle);
+  }, [galaxyCount]);
   useEffect(() => bindScienceEventBridge({
     target: window,
     getState: () => stateRef.current,
