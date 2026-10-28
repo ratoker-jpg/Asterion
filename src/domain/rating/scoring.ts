@@ -166,11 +166,17 @@ function safeOwnedCount(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
 }
 
-function battlePointTotals(rating: RatingPrototypeState): Record<string, number> {
+const battlePointTotalsCache = new WeakMap<object, Readonly<Record<string, number>>>();
+
+/** Built once per awards object (a new battle replaces it); callers only read it. */
+function battlePointTotals(rating: RatingPrototypeState): Readonly<Record<string, number>> {
+  const cached = battlePointTotalsCache.get(rating.battleAwardsByReportId);
+  if (cached) return cached;
   const totals: Record<string, number> = {};
   for (const awards of Object.values(rating.battleAwardsByReportId)) {
     for (const [ownerId, points] of Object.entries(awards)) totals[ownerId] = (totals[ownerId] ?? 0) + safeOwnedCount(points);
   }
+  battlePointTotalsCache.set(rating.battleAwardsByReportId, totals);
   return totals;
 }
 
@@ -336,10 +342,26 @@ function flightCommanderCounts(state: SaveState, ownerId: string) {
 
 /** Calculates one authoritative score per owner represented in the save. */
 export function selectOwnerScores(state: SaveState): Record<string, OwnerScore> {
-  const { owners, battlePoints } = collectOwnerRegistrations(state);
+  // Owners in registration order (player, planet owners in save order, then
+  // battle-only owners); each one's score is selectOwnerScore's, which keeps
+  // unchanged owners from being priced again every second.
   const scores: Record<string, OwnerScore> = {};
-  for (const [ownerId, owner] of owners) scores[ownerId] = scoreOwner(state, owner, battlePoints);
+  for (const ownerId of registeredOwnerIds(state)) {
+    const score = selectOwnerScore(state, ownerId);
+    if (score) scores[ownerId] = score;
+  }
   return scores;
+}
+
+function registeredOwnerIds(state: SaveState): string[] {
+  const playerOwnerId = state.profile.playerId || CURRENT_PLAYER_ID;
+  const ids = new Set<string>([playerOwnerId]);
+  for (const target of Object.values(state.espionage?.targets ?? state.espionage?.bot01Planets ?? {})) {
+    if (!target.ownerId || target.ownerId === playerOwnerId || target.ownerId === 'player-aster') continue;
+    ids.add(target.ownerId);
+  }
+  for (const ownerId of Object.keys(battlePointTotals(state.rating))) ids.add(ownerId);
+  return [...ids];
 }
 
 /**
@@ -347,9 +369,72 @@ export function selectOwnerScores(state: SaveState): Record<string, OwnerScore> 
  * every other owner. Merge only matching planets and profiles.
  */
 export function selectOwnerScore(state: SaveState, ownerId: string): OwnerScore | undefined {
+  const deps = ownerScoreInputs(state, ownerId);
+  const cached = deps ? ownerScoreCache.get(ownerId) : undefined;
+  if (cached && deps && sameInputs(cached.deps, deps)) return cached.score;
   const { owners, battlePoints } = collectOwnerRegistrations(state, ownerId);
   const owner = owners.get(ownerId);
-  return owner ? scoreOwner(state, owner, battlePoints) : undefined;
+  const score = owner ? scoreOwner(state, owner, battlePoints) : undefined;
+  if (deps) ownerScoreCache.set(ownerId, { deps, score });
+  return score;
+}
+
+/**
+ * One owner's score is a pure function of the save objects listed by
+ * ownerScoreInputs; saves are immutable, so the same objects give the same
+ * score. Many decisions at one moment ask for the same owners' points.
+ */
+const ownerScoreCache = new Map<string, { deps: readonly unknown[]; score: OwnerScore | undefined }>();
+const targetsByOwnerIndex = new WeakMap<object, Map<string, unknown[]>>();
+const activeFlightsByOwnerIndex = new WeakMap<readonly unknown[], Map<string, SaveState['flights']['records']>>();
+
+function sameInputs(left: readonly unknown[], right: readonly unknown[]): boolean {
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index += 1) if (left[index] !== right[index]) return false;
+  return true;
+}
+
+function ownerScoreInputs(state: SaveState, ownerId: string): unknown[] | null {
+  const playerOwnerId = state.profile.playerId || CURRENT_PLAYER_ID;
+  // Bot 01 reads its own flights and profile; it stays uncached.
+  if (ownerId === UNIVERSE_NPC_OWNER_ID) return null;
+  const awards = battlePointTotals(state.rating);
+  const deps: unknown[] = [playerOwnerId, state.profile.factionId, state.rating.unrecoveredCostsByOwnerId[ownerId], awards[ownerId]];
+  if (ownerId === playerOwnerId) {
+    deps.push(state.planets, state.queues, state.science, state.shipUpgradeLevels);
+    return deps;
+  }
+  const targets = state.espionage?.targets ?? state.espionage?.bot01Planets ?? {};
+  let byOwner = targetsByOwnerIndex.get(targets);
+  if (!byOwner) {
+    byOwner = new Map();
+    for (const target of Object.values(targets)) {
+      const bucket = byOwner.get(target.ownerId);
+      if (bucket) bucket.push(target);
+      else byOwner.set(target.ownerId, [target]);
+    }
+    targetsByOwnerIndex.set(targets, byOwner);
+  }
+  deps.push(state.npcScience?.owners[ownerId], '|');
+  for (const target of byOwner.get(ownerId) ?? []) deps.push(target);
+  deps.push('|');
+  const records = state.flights.records;
+  let flights = activeFlightsByOwnerIndex.get(records);
+  if (!flights) {
+    flights = new Map();
+    for (const flight of records) {
+      if (flight.ownerSide !== 'npc' || !flight.ownerId) continue;
+      if (flight.phase !== 'outbound' && flight.phase !== 'returning' && flight.phase !== 'arrived') continue;
+      const bucket = flights.get(flight.ownerId);
+      if (bucket) bucket.push(flight);
+      else flights.set(flight.ownerId, [flight]);
+    }
+    activeFlightsByOwnerIndex.set(records, flights);
+  }
+  const ownFlights = flights.get(ownerId) ?? [];
+  if (ownFlights.some((flight) => flight.attackResolution)) deps.push(state.combat.reports);
+  for (const flight of ownFlights) deps.push(flight);
+  return deps;
 }
 
 function collectOwnerRegistrations(state: SaveState, selectedOwnerId?: string): { owners: Map<string, OwnerRegistration>; battlePoints: Record<string, number> } {

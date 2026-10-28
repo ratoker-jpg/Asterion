@@ -10,6 +10,7 @@ import { reconcileScience } from './science.ts';
 import { pruneCampaignHistory } from './history-retention.ts';
 import { reconcileFleetProduction } from './fleet-production.ts';
 import type { FlightRecord } from '../domain/flights/types.ts';
+import type { SpyTargetState } from '../domain/espionage/types.ts';
 import { getNextNpcFleetOverflowCheckpoint, getNextNpcSatelliteCheckpoint, settleNpcFleetProduction } from './npc-fleet-production.ts';
 import type { BuildingRole } from '../domain/buildings/resource-zone.ts';
 import type { ScienceId } from '../domain/science/types.ts';
@@ -63,6 +64,72 @@ function cachedOwnerStepEvents(profile: NpcProfile, ownerId: string, stepStart: 
     steps.set(stepStart, events);
   }
   return events;
+}
+
+/**
+ * Where each planet sits in the targets object and which planets each owner
+ * holds, built once per immutable targets object: settling a few owners
+ * visits their planets only, in the order a full scan would.
+ */
+type TargetOwnerIndex = { position: Map<string, number>; byOwner: Map<string, string[]> };
+const targetOwnerIndexCache = new WeakMap<object, TargetOwnerIndex>();
+function targetOwnerIndex(targets: Readonly<Record<string, { ownerId: string }>>): TargetOwnerIndex {
+  let index = targetOwnerIndexCache.get(targets);
+  if (index) return index;
+  index = { position: new Map(), byOwner: new Map() };
+  let position = 0;
+  for (const id in targets) {
+    index.position.set(id, position++);
+    const ownerId = targets[id]!.ownerId;
+    const owned = index.byOwner.get(ownerId);
+    if (owned) owned.push(id);
+    else index.byOwner.set(ownerId, [id]);
+  }
+  targetOwnerIndexCache.set(targets, index);
+  return index;
+}
+
+/**
+ * A planet's next own replay moment after `after` (up to `through`): its
+ * economy checkpoint (a building, recycling pickup, burn end or Spaceport
+ * upgrade), its next solar satellite, or the unit that overfills its hangar.
+ * Ship, defence and commander units are not moments of their own: a queue
+ * completes by time and every reader (a battle or spy probe at the planet,
+ * the owner's decision, the end of the slice) settles the owner first.
+ * Solar satellites add energy that can start a waiting building, so they keep
+ * theirs; overpopulation starts at the overfilling unit.
+ *
+ * Each part is a fixed set of times, so the next one after `after` stays the
+ * same while `after` moves up to it: kept per immutable planet.
+ */
+type TargetCheckpointMemo = {
+  economyAfter: number; economy: number | null;
+  satelliteAfter: number; satelliteThrough: number; satellite: number | undefined;
+  overflow: number | undefined;
+};
+const targetCheckpointMemo = new WeakMap<SpyTargetState, TargetCheckpointMemo>();
+function nextNpcTargetCheckpoint(target: SpyTargetState, after: number, through: number): number | undefined {
+  let memo = targetCheckpointMemo.get(target);
+  if (!memo) {
+    memo = { economyAfter: Number.NaN, economy: null, satelliteAfter: Number.NaN, satelliteThrough: Number.NaN, satellite: undefined,
+      overflow: getNextNpcFleetOverflowCheckpoint(target, target.ownerId, Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY) };
+    targetCheckpointMemo.set(target, memo);
+  }
+  // The economy time is the first one at or after `after` (getNextNpcEconomyCheckpoint).
+  if (!(memo.economyAfter <= after && (memo.economy === null || memo.economy >= after))) {
+    memo.economy = getNextNpcEconomyCheckpoint(target, after);
+    memo.economyAfter = after;
+  }
+  if (!(memo.satelliteAfter <= after && memo.satelliteThrough === through && (memo.satellite === undefined || memo.satellite > after))) {
+    memo.satellite = getNextNpcSatelliteCheckpoint(target, target.ownerId, after, through);
+    memo.satelliteAfter = after;
+    memo.satelliteThrough = through;
+  }
+  let next: number | undefined;
+  if (memo.economy !== null && memo.economy > after && memo.economy <= through) next = memo.economy;
+  if (memo.satellite !== undefined) next = Math.min(next ?? memo.satellite, memo.satellite);
+  if (memo.overflow !== undefined && memo.overflow > after && memo.overflow <= through) next = Math.min(next ?? memo.overflow, memo.overflow);
+  return next;
 }
 
 export type RuntimeReconcileEvent =
@@ -200,11 +267,21 @@ function reconcileRuntimeSlice(
   const settleNpcEconomies = (at: number, ownerIds?: ReadonlySet<string>) => {
     if (!replay || !next.espionage?.targets) return;
     const before = next.espionage.targets;
+    const index = targetOwnerIndex(before);
     const targets = { ...before };
     const settled = new Set<string>();
     let changed = false;
-    for (const [id, target] of Object.entries(targets)) {
-      if (!replayOwners.has(target.ownerId) || (ownerIds && !ownerIds.has(target.ownerId))) continue;
+    // Planets in save order, as a scan of every target would visit them.
+    const ids: string[] = [];
+    if (ownerIds) {
+      for (const ownerId of ownerIds) if (replayOwners.has(ownerId)) for (const id of index.byOwner.get(ownerId) ?? []) ids.push(id);
+      if (ownerIds.size > 1) ids.sort((left, right) => index.position.get(left)! - index.position.get(right)!);
+    } else {
+      for (const [ownerId, owned] of index.byOwner) if (replayOwners.has(ownerId)) for (const id of owned) ids.push(id);
+      ids.sort((left, right) => index.position.get(left)! - index.position.get(right)!);
+    }
+    for (const id of ids) {
+      const target = targets[id]!;
       const settledPlanet = settleNpcPlanet(target, at, { timeScale });
       const result = { ...settledPlanet, target: settleNpcSpaceport(settleNpcRecycling(settledPlanet.target, at), at) };
       settled.add(target.ownerId);
@@ -219,7 +296,7 @@ function reconcileRuntimeSlice(
       for (const assetRole of result.completedRoles) events.push({ kind: 'npc-building', planetId: id, assetRole, at });
     }
     // Upgrade levels are owner-wide: a finished upgrade reaches all of the owner's planets now.
-    if (syncNpcOwnerShipLevels(targets, settled)) changed = true;
+    if (syncNpcOwnerShipLevels(targets, settled, (ownerId) => index.byOwner.get(ownerId) ?? [])) changed = true;
     if (changed) next = { ...next, espionage: { ...next.espionage, targets } };
     const science = pauseNpcScienceForSettlement(next.npcScience, before, settled, at, targets);
     if (science !== next.npcScience) next = { ...next, npcScience: science };
@@ -631,18 +708,8 @@ function reconcileRuntimeSlice(
     let economyCheckpoint: number | undefined;
     if (replay) for (const target of Object.values(next.espionage?.targets ?? {})) {
       if (!replayOwners.has(target.ownerId)) continue;
-      const due = getNextNpcEconomyCheckpoint(target, processedThrough);
-      if (due !== null && due > processedThrough && due <= context.now) economyCheckpoint = Math.min(economyCheckpoint ?? due, due);
-      // Ship, defence and commander units are not moments of their own: a
-      // queue completes by time and every reader (a battle or spy probe at the
-      // planet, the owner's decision, the end of the slice) settles the owner
-      // first. A batch of hundreds of units no longer makes hundreds of steps.
-      // Solar satellites add energy that can start a waiting building, so they keep theirs.
-      // So does the unit that would overfill the hangar: overpopulation starts there.
-      const satelliteDue = getNextNpcSatelliteCheckpoint(target, target.ownerId, processedThrough, context.now);
-      if (satelliteDue !== undefined) economyCheckpoint = Math.min(economyCheckpoint ?? satelliteDue, satelliteDue);
-      const overflowDue = getNextNpcFleetOverflowCheckpoint(target, target.ownerId, processedThrough, context.now);
-      if (overflowDue !== undefined) economyCheckpoint = Math.min(economyCheckpoint ?? overflowDue, overflowDue);
+      const due = nextNpcTargetCheckpoint(target, processedThrough, context.now);
+      if (due !== undefined) economyCheckpoint = Math.min(economyCheckpoint ?? due, due);
     }
     const scienceCheckpoint = replay ? getNextNpcScienceCheckpoint(next, processedThrough, context.now) : undefined;
     const leadershipCheckpoint = nextLeadershipCheckpoint(processedThrough);
@@ -689,11 +756,10 @@ function reconcileRuntimeSlice(
       if (scienceCheckpoint === checkpoint) for (const [ownerId, science] of Object.entries(next.npcScience?.owners ?? {})) {
         if (science.queue[0]?.finishAt === checkpoint) dueOwners.add(ownerId);
       }
-      for (const target of Object.values(next.espionage?.targets ?? {})) {
-        const due = getNextNpcEconomyCheckpoint(target, processedThrough);
-        if (due === checkpoint) dueOwners.add(target.ownerId);
-        if (getNextNpcSatelliteCheckpoint(target, target.ownerId, processedThrough, context.now) === checkpoint) dueOwners.add(target.ownerId);
-        if (getNextNpcFleetOverflowCheckpoint(target, target.ownerId, processedThrough, context.now) === checkpoint) dueOwners.add(target.ownerId);
+      // Only replay owners are settled, and each of their planet times is at
+      // or after the checkpoint, so the earliest one names the due owners.
+      if (economyCheckpoint === checkpoint) for (const target of Object.values(next.espionage?.targets ?? {})) {
+        if (replayOwners.has(target.ownerId) && nextNpcTargetCheckpoint(target, processedThrough, context.now) === checkpoint) dueOwners.add(target.ownerId);
       }
       for (let index = economicIndex; economicEvents[index]?.at === checkpoint; index++) dueOwners.add(economicEvents[index]!.ownerId);
       // A repeated report from orbit reads the target planet as it stands at

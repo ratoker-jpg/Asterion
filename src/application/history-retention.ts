@@ -1,6 +1,7 @@
 import { isAsterionLocalPlayerId, type BattleReport } from '../domain/combat/report.ts';
 import type { FlightRecord } from '../domain/flights/types.ts';
 import type { SaveState } from './contracts.ts';
+import type { ExplorationContact } from '../domain/exploration/ledger.ts';
 
 /**
  * Owner rule: the save keeps the newest 200 pirate-vs-NPC battle reports in
@@ -243,7 +244,45 @@ export function pruneCampaignHistory(state: SaveState, at: number | undefined = 
     }
   }
 
+  const exploration = boundExplorationLedger(next.exploration);
+  if (exploration !== next.exploration) next = { ...next, exploration };
+
   return next;
+}
+
+/**
+ * The exploration ledger keeps the newest entries load keeps (see
+ * migrateExplorationState): a world that is saved and loaded between two
+ * replay groups must go on exactly like one that was never saved.
+ */
+const boundedLedgers = new WeakSet<object>();
+function boundExplorationLedger(ledger: SaveState['exploration']): SaveState['exploration'] {
+  if (!ledger || boundedLedgers.has(ledger)) return ledger;
+  const bounded = boundExplorationLedgerOnce(ledger);
+  boundedLedgers.add(bounded);
+  return bounded;
+}
+
+function boundExplorationLedgerOnce(ledger: NonNullable<SaveState['exploration']>): NonNullable<SaveState['exploration']> {
+  const contactIds = Object.keys(ledger.contacts);
+  const oversizedContact = (contact: ExplorationContact) => (contact.rareUsedByOwner?.length ?? 0) > 64 || (contact.events?.length ?? 0) > 100;
+  const contactsOver = contactIds.length > 256 || contactIds.some((id) => oversizedContact(ledger.contacts[id]!));
+  if (!contactsOver && Object.keys(ledger.highestScoresByOwner).length <= 256 && (ledger.acceptedContactIds?.length ?? 0) <= 256
+    && (ledger.reconReports?.length ?? 0) <= 256 && ledger.completed.length <= 200) return ledger;
+  const contacts = contactsOver ? Object.fromEntries(contactIds.slice(-256).map((id) => {
+    const contact = ledger.contacts[id]!;
+    return [id, oversizedContact(contact)
+      ? { ...contact, rareUsedByOwner: contact.rareUsedByOwner.slice(-64), events: contact.events.slice(-100) } : contact];
+  })) : ledger.contacts;
+  const scores = Object.entries(ledger.highestScoresByOwner);
+  return {
+    ...ledger,
+    contacts,
+    highestScoresByOwner: scores.length > 256 ? Object.fromEntries(scores.slice(-256)) : ledger.highestScoresByOwner,
+    acceptedContactIds: (ledger.acceptedContactIds?.length ?? 0) > 256 ? ledger.acceptedContactIds!.slice(-256) : ledger.acceptedContactIds,
+    reconReports: (ledger.reconReports?.length ?? 0) > 256 ? ledger.reconReports!.slice(-256) : ledger.reconReports,
+    completed: ledger.completed.length > 200 ? ledger.completed.slice(-200) : ledger.completed,
+  };
 }
 
 function pruneForeignReports(
