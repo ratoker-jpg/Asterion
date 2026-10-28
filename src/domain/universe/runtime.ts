@@ -1133,6 +1133,26 @@ export function createUniverseSystem(options: CreateUniverseSystemOptions): Univ
   };
 }
 
+/**
+ * What of a system changes with time (asteroids aside): which pirate, unique
+ * and anomaly cycles are on the map at `nowMs`. createUniverseSystem with
+ * skipAsteroids gives the same system for two moments with the same key.
+ */
+export function getUniverseSystemTimedKey(
+  galaxy: number,
+  system: number,
+  nowMs: number,
+  pirateContactDefeats: readonly PirateContactDefeatRecord[] = [],
+): string {
+  const now = normalizeNow(nowMs);
+  const safeGalaxy = Math.max(1, Math.floor(galaxy));
+  const safeSystem = Math.min(SYSTEM_COUNT, Math.max(1, Math.floor(system)));
+  return (['pirate', 'unique', 'anomaly'] as const).map((kind) => {
+    const schedule = activeTimedObjectSchedule(kind, safeGalaxy, safeSystem, now, kind === 'pirate' ? pirateContactDefeats : []);
+    return schedule?.present && now < schedule.expiresAt ? `${schedule.cycleIndex}@${schedule.startAt}-${schedule.expiresAt}` : '-';
+  }).join('|');
+}
+
 export function createUniverseMap(options: Omit<CreateUniverseSystemOptions, 'system'> = {}): UniverseMap {
   const galaxy = Math.max(1, Math.floor(options.galaxy ?? GALAXY));
   const nowMs = normalizeNow(options.nowMs);

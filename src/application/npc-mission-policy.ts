@@ -6,7 +6,7 @@ import { activeSpyMissionForTarget, getEspionageTargets } from '../domain/espion
 import type { SpyReportSnapshot, SpyTargetState } from '../domain/espionage/types.ts';
 import { getFlightSlotUsage, isFlightLimitExempt } from '../domain/flights/limit.ts';
 import type { FlightDestination, TargetRelation } from '../domain/flights/types.ts';
-import { createUniverseSystem, MAX_PLANETS_PER_OWNER, nextColonyPointThreshold, SYSTEM_COUNT } from '../domain/universe/runtime.ts';
+import { createUniverseSystem, getUniverseSystemTimedKey, MAX_PLANETS_PER_OWNER, nextColonyPointThreshold, SYSTEM_COUNT } from '../domain/universe/runtime.ts';
 import { selectOwnerScore } from '../domain/rating/scoring.ts';
 import { evaluatePlanetAttackEligibility } from './attack-eligibility.ts';
 import type { UniverseCoordinate, UniverseObjectKind, UniversePersistedPlayerPlanet, UniverseRegisteredPlanet } from '../domain/universe/types.ts';
@@ -192,23 +192,40 @@ function ownerSystems(targets: readonly SpyTargetState[]): Map<string, { galaxy:
 }
 
 /**
- * Systems are pure of the map inputs and time. Within the decisions of one
- * timestamp those inputs are fixed (arrivals, landings and battles resolve
- * before decisions; a decision only launches flights), so every owner
- * deciding at that moment shares one build per system.
+ * Systems are pure of the map inputs and of which timed objects (pirates,
+ * unique worlds, anomalies) are up at the moment (getUniverseSystemTimedKey):
+ * a build is shared by every decision with the same inputs, at this moment
+ * or a later one, instead of rebuilding ten systems per look every second.
  */
-let systemCache: { at: number; signature: string; systems: Map<string, ReturnType<typeof createUniverseSystem>> } | null = null;
+type PublicMapInputs = { playerPlanets: UniversePersistedPlayerPlanet[]; registered: UniverseRegisteredPlanet[];
+  defeats: unknown[]; signature: string };
+let mapInputs: { planets: unknown; targets: unknown; defeats: unknown; value: PublicMapInputs } | null = null;
+let systemCache: { signature: string; systems: Map<string, ReturnType<typeof createUniverseSystem>> } | null = null;
+const SYSTEM_CACHE_LIMIT = 4_096;
 
-function publicSystems(state: SaveState, ownerTargets: readonly SpyTargetState[], at: number) {
+function publicMapInputs(state: SaveState): PublicMapInputs {
+  const targets = getEspionageTargets(state.espionage);
+  const defeatedCycles = state.pirate?.contact.defeatedCycles;
+  if (mapInputs && mapInputs.planets === state.planets && mapInputs.targets === targets && mapInputs.defeats === defeatedCycles) return mapInputs.value;
   const playerPlanets = publicPlayerPlanets(state);
   const registered = registeredPlanets(state);
-  const defeats = Object.values(state.pirate?.contact.defeatedCycles ?? {});
-  const signature = JSON.stringify([playerPlanets.map((planet) => [planet.id, coordinateKey(planet.coordinate)]),
-    registered.map((planet) => [planet.id, planet.ownerId, coordinateKey(planet.coordinate)]), defeats]);
-  if (!systemCache || systemCache.at !== at || systemCache.signature !== signature) systemCache = { at, signature, systems: new Map() };
+  const defeats = Object.values(defeatedCycles ?? {});
+  const signature = JSON.stringify([playerPlanets.map((planet) => [planet.id, planet.name, coordinateKey(planet.coordinate)]),
+    registered.map((planet) => [planet.id, planet.ownerId, planet.name, planet.kind, coordinateKey(planet.coordinate)]), defeats]);
+  const value = { playerPlanets, registered, defeats, signature };
+  mapInputs = { planets: state.planets, targets, defeats: defeatedCycles, value };
+  return value;
+}
+
+function publicSystems(state: SaveState, ownerTargets: readonly SpyTargetState[], at: number) {
+  const { playerPlanets, registered, defeats, signature } = publicMapInputs(state);
+  if (!systemCache || systemCache.signature !== signature || systemCache.systems.size > SYSTEM_CACHE_LIMIT) {
+    systemCache = { signature, systems: new Map() };
+  }
   const cache = systemCache.systems;
   return [...ownerSystems(ownerTargets).values()].map(({ galaxy, system }) => {
-    const key = `${galaxy}:${system}`;
+    const key = `${galaxy}:${system}:${getUniverseSystemTimedKey(galaxy, system, at,
+      defeats as Parameters<typeof getUniverseSystemTimedKey>[3])}`;
     const hit = cache.get(key);
     if (hit) return hit;
     const built = buildPublicSystem(state, galaxy, system, at, playerPlanets, registered, defeats);
