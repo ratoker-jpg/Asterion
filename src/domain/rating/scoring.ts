@@ -428,7 +428,10 @@ function ownerScoreInputs(state: SaveState, ownerId: string): unknown[] | null {
   // makes a new target object every time but keeps these.
   for (const target of byOwner.get(ownerId) ?? []) {
     const planet = target as SpyTargetLike;
-    deps.push(planet.kind, planet.raceId, planet.buildings, planet.fleet, planet.defense, planet.buildingQueue, planet.ownerProfile);
+    // Settling rebuilds the queue array every time; the score reads only its costs.
+    let queueValue = 0;
+    for (const item of (planet.buildingQueue ?? []) as readonly BuildingQueueItem[]) queueValue += resourceValue(item.cost);
+    deps.push(planet.kind, planet.raceId, planet.buildings, planet.fleet, planet.defense, queueValue, planet.ownerProfile);
   }
   deps.push('|');
   const records = state.flights.records;
