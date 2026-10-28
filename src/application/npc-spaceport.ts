@@ -11,6 +11,7 @@ import {
 } from '../domain/buildings/spaceport-upgrades.ts';
 import type { CommanderId } from '../domain/combat/commanders.ts';
 import { syncSpyTargetCommanderCounts } from '../domain/espionage/runtime.ts';
+import { NPC_APPLIED_ID_LIMIT } from './npc-economy.ts';
 import type { ShipId } from '../domain/combat/ids.ts';
 import type { SpyTargetState } from '../domain/espionage/types.ts';
 import { ACTIVE_RUNTIME_MODE } from '../domain/runtime/mode.ts';
@@ -81,7 +82,8 @@ export function startNpcSpaceportUpgrade(target: SpyTargetState, shipId: ShipId 
       ...target,
       spaceportUpgrades: transition.state,
       resources: { ...target.resources, ...transition.wallet },
-      economyAppliedActionIds: [...(target.economyAppliedActionIds ?? []), key].slice(-256),
+      // The same receipt window as every other NPC action.
+      economyAppliedActionIds: [...(target.economyAppliedActionIds ?? []), key].slice(-NPC_APPLIED_ID_LIMIT),
     },
   };
 }
