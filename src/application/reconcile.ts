@@ -39,7 +39,7 @@ import { createExplorationState, recordHighestExplorationScore } from '../domain
 import { generateNpcOwnerReplayEvents, applyNpcReplayEventsAt, initializeNpcReplaySessionsAt, isNpcDecisionIdle, type NpcReplayEmission, type NpcReplayEvent } from './npc-replay.ts';
 import { compareNpcEvents } from '../domain/npc/events.ts';
 import type { NpcProfile } from '../domain/npc/types.ts';
-import { settleNpcRecycling, getNextNpcEconomyCheckpoint, settleNpcPlanet } from './npc-economy.ts';
+import { settleNpcRecycling, getNextNpcEconomyCheckpoint, getNpcOverpopulationUnlockAt, settleNpcPlanet } from './npc-economy.ts';
 import { getNextNpcScienceCheckpoint, pauseNpcScienceForSettlement, projectNpcScienceLedger, reconcileNpcScienceAt } from './npc-science.ts';
 import { getReplayNpcOwnerIds, isNpcCatchupPending, NPC_CATCHUP_COMMAND_GRACE_MS, NPC_REPLAY_GENERATION_STEP_MS, NPC_REPLAY_MAX_GROUPS, NPC_REPLAY_WINDOW_MS } from './npc-catchup.ts';
 import { accumulateWorldCatchupSummary, countNewWorldBattles, startWorldCatchupSummary } from './world-catchup-summary.ts';
@@ -97,7 +97,8 @@ function targetOwnerIndex(targets: Readonly<Record<string, { ownerId: string }>>
  * completes by time and every reader (a battle or spy probe at the planet,
  * the owner's decision, the end of the slice) settles the owner first.
  * Solar satellites add energy that can start a waiting building, so they keep
- * theirs; overpopulation starts at the overfilling unit.
+ * theirs; overpopulation starts at the overfilling unit and ends at the burn
+ * that clears it.
  *
  * Each part is a fixed set of times, so the next one after `after` stays the
  * same while `after` moves up to it: kept per immutable planet.
@@ -106,13 +107,15 @@ type TargetCheckpointMemo = {
   economyAfter: number; economy: number | null;
   satelliteAfter: number; satelliteThrough: number; satellite: number | undefined;
   overflow: number | undefined;
+  unlock: number | null;
 };
 const targetCheckpointMemo = new WeakMap<SpyTargetState, TargetCheckpointMemo>();
 function nextNpcTargetCheckpoint(target: SpyTargetState, after: number, through: number): number | undefined {
   let memo = targetCheckpointMemo.get(target);
   if (!memo) {
     memo = { economyAfter: Number.NaN, economy: null, satelliteAfter: Number.NaN, satelliteThrough: Number.NaN, satellite: undefined,
-      overflow: getNextNpcFleetOverflowCheckpoint(target, target.ownerId, Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY) };
+      overflow: getNextNpcFleetOverflowCheckpoint(target, target.ownerId, Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY),
+      unlock: getNpcOverpopulationUnlockAt(target) };
     targetCheckpointMemo.set(target, memo);
   }
   // The economy time is the first one at or after `after` (getNextNpcEconomyCheckpoint).
@@ -129,6 +132,7 @@ function nextNpcTargetCheckpoint(target: SpyTargetState, after: number, through:
   if (memo.economy !== null && memo.economy > after && memo.economy <= through) next = memo.economy;
   if (memo.satellite !== undefined) next = Math.min(next ?? memo.satellite, memo.satellite);
   if (memo.overflow !== undefined && memo.overflow > after && memo.overflow <= through) next = Math.min(next ?? memo.overflow, memo.overflow);
+  if (memo.unlock !== null && memo.unlock > after && memo.unlock <= through) next = Math.min(next ?? memo.unlock, memo.unlock);
   return next;
 }
 
