@@ -136,6 +136,23 @@ function nextNpcTargetCheckpoint(target: SpyTargetState, after: number, through:
   return next;
 }
 
+let footprintMemo: { planets: unknown; targets: Readonly<Record<string, SpyTargetState>>; playerId: string; footprint: string } | null = null;
+
+/** Same planets, owners and coordinate objects in the same order (what a raid footprint reads). */
+function sameTargetPlaces(left: Readonly<Record<string, SpyTargetState>>, right: Readonly<Record<string, SpyTargetState>>): boolean {
+  const leftIds = Object.keys(left);
+  const rightIds = Object.keys(right);
+  if (leftIds.length !== rightIds.length) return false;
+  for (let index = 0; index < leftIds.length; index += 1) {
+    const id = leftIds[index]!;
+    if (rightIds[index] !== id) return false;
+    const a = left[id]!;
+    const b = right[id]!;
+    if (a !== b && (a.ownerId !== b.ownerId || a.coordinate !== b.coordinate)) return false;
+  }
+  return true;
+}
+
 export type RuntimeReconcileEvent =
   | { kind: 'npc-economy'; events: readonly NpcReplayEmission[] }
   | { kind: 'npc-building'; planetId: string; assetRole: BuildingRole; at: number }
@@ -413,6 +430,20 @@ function reconcileRuntimeSlice(
   // remaining due events only when that footprint changes during flight arrivals
   // (e.g. colonization or the destruction of an owner's last planet in a system).
   const raidSystemFootprint = (value: SaveState): string => {
+    // Pure of planet coordinates and target owners/coordinates, which income
+    // settlement keeps: reuse the last footprint while those are unchanged.
+    const targets = getEspionageTargets(value.espionage);
+    const memo = footprintMemo;
+    if (memo && memo.planets === value.planets && memo.playerId === value.profile.playerId
+      && (memo.targets === targets || sameTargetPlaces(memo.targets, targets))) {
+      memo.targets = targets;
+      return memo.footprint;
+    }
+    const footprint = computeRaidSystemFootprint(value);
+    footprintMemo = { planets: value.planets, targets, playerId: value.profile.playerId, footprint };
+    return footprint;
+  };
+  const computeRaidSystemFootprint = (value: SaveState): string => {
     const systems = new Set<string>();
     for (const planet of Object.values(value.planets)) {
       systems.add(JSON.stringify([value.profile.playerId, planet.universeGalaxy ?? 1, planet.universeSystem ?? 1]));
