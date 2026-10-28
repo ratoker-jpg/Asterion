@@ -386,6 +386,7 @@ export function selectOwnerScore(state: SaveState, ownerId: string): OwnerScore 
  */
 const ownerScoreCache = new Map<string, { deps: readonly unknown[]; score: OwnerScore | undefined }>();
 const targetsByOwnerIndex = new WeakMap<object, Map<string, unknown[]>>();
+type SpyTargetLike = { kind: unknown; raceId: unknown; buildings: unknown; fleet: unknown; defense: unknown; buildingQueue: unknown; ownerProfile: unknown };
 const activeFlightsByOwnerIndex = new WeakMap<readonly unknown[], Map<string, SaveState['flights']['records']>>();
 
 function sameInputs(left: readonly unknown[], right: readonly unknown[]): boolean {
@@ -416,7 +417,12 @@ function ownerScoreInputs(state: SaveState, ownerId: string): unknown[] | null {
     targetsByOwnerIndex.set(targets, byOwner);
   }
   deps.push(state.npcScience?.owners[ownerId], '|');
-  for (const target of byOwner.get(ownerId) ?? []) deps.push(target);
+  // Only what collectOwnerRegistrations reads of a planet: settling income
+  // makes a new target object every time but keeps these.
+  for (const target of byOwner.get(ownerId) ?? []) {
+    const planet = target as SpyTargetLike;
+    deps.push(planet.kind, planet.raceId, planet.buildings, planet.fleet, planet.defense, planet.buildingQueue, planet.ownerProfile);
+  }
   deps.push('|');
   const records = state.flights.records;
   let flights = activeFlightsByOwnerIndex.get(records);

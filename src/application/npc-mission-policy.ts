@@ -206,7 +206,11 @@ const SYSTEM_CACHE_LIMIT = 4_096;
 function publicMapInputs(state: SaveState): PublicMapInputs {
   const targets = getEspionageTargets(state.espionage);
   const defeatedCycles = state.pirate?.contact.defeatedCycles;
-  if (mapInputs && mapInputs.planets === state.planets && mapInputs.targets === targets && mapInputs.defeats === defeatedCycles) return mapInputs.value;
+  if (mapInputs && mapInputs.planets === state.planets && mapInputs.defeats === defeatedCycles
+    && (mapInputs.targets === targets || samePublicTargets(mapInputs.targets as typeof targets, targets))) {
+    mapInputs.targets = targets;
+    return mapInputs.value;
+  }
   const playerPlanets = publicPlayerPlanets(state);
   const registered = registeredPlanets(state);
   const defeats = Object.values(defeatedCycles ?? {});
@@ -215,6 +219,22 @@ function publicMapInputs(state: SaveState): PublicMapInputs {
   const value = { playerPlanets, registered, defeats, signature };
   mapInputs = { planets: state.planets, targets, defeats: defeatedCycles, value };
   return value;
+}
+
+/** Income settlement replaces targets every moment; what the map shows of them rarely changes. */
+function samePublicTargets(left: Readonly<Record<string, SpyTargetState>>, right: Readonly<Record<string, SpyTargetState>>): boolean {
+  const leftIds = Object.keys(left);
+  const rightIds = Object.keys(right);
+  if (leftIds.length !== rightIds.length) return false;
+  for (let index = 0; index < leftIds.length; index += 1) {
+    const id = leftIds[index]!;
+    if (rightIds[index] !== id) return false;
+    const a = left[id]!;
+    const b = right[id]!;
+    if (a === b) continue;
+    if (a.kind !== b.kind || a.ownerId !== b.ownerId || a.name !== b.name || a.coordinate !== b.coordinate) return false;
+  }
+  return true;
 }
 
 function publicSystems(state: SaveState, ownerTargets: readonly SpyTargetState[], at: number) {

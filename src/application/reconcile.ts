@@ -330,22 +330,39 @@ function reconcileRuntimeSlice(
    * Owners whose targets flights, raids or burns may read or write at this
    * checkpoint: due pirate-roll owners (loot wallet, population, hangar),
    * owners with a stored overpopulation episode (burns move fleets that
-   * scores and raids read) and every owner a live flight names as origin or
-   * destination. Flights only change targets they name, so an owner outside
-   * this set is neither read nor written by arrivals, returns or battles.
+   * scores and raids read) and the owners the checkpoint's flights name as
+   * origin or destination: before it, of the flights that act now; after it,
+   * of every flight it created, changed or removed. Flights only change
+   * targets they name, so an owner outside this set is neither read nor
+   * written by arrivals, returns or battles (settling everyone with a flight
+   * in the air was most of a late-game catch-up).
    */
-  const ownersTouchedAtCheckpoint = (at: number): Set<string> => {
+  const ownersTouchedAtCheckpoint = (at: number, recordsBefore?: readonly FlightRecord[]): Set<string> => {
     const owners = new Set<string>();
     for (let index = raidIndex; raidDueEvents[index]?.at === at; index++) owners.add(raidDueEvents[index]!.ownerId);
     const targets = next.espionage?.targets ?? {};
     for (const target of Object.values(targets)) if (target.overpopulation) owners.add(target.ownerId);
-    for (const flight of next.flights.records) {
-      if (flight.phase !== 'outbound' && flight.phase !== 'arrived' && flight.phase !== 'returning') continue;
+    const name = (flight: FlightRecord) => {
       if (flight.destinationOwnerId) owners.add(flight.destinationOwnerId);
       const destination = flight.destinationPlanetId ? targets[flight.destinationPlanetId] : undefined;
       if (destination) owners.add(destination.ownerId);
       const origin = targets[flight.originPlanetId];
       if (origin) owners.add(origin.ownerId);
+    };
+    const live = (flight: FlightRecord) => flight.phase === 'outbound' || flight.phase === 'arrived' || flight.phase === 'returning';
+    // A Sun raid gathering that ends here sends ships home: every live flight may be one of them.
+    const gatheringEnds = (next.sunRaid?.raids ?? []).some((raid) => raid.status === 'gathering' && raid.gatherEndsAt === at);
+    if (gatheringEnds) {
+      for (const flight of next.flights.records) if (live(flight)) name(flight);
+    } else if (recordsBefore) {
+      // After the checkpoint: the owners of every flight it created, changed or removed.
+      const before = new Set(recordsBefore);
+      const after = new Set(next.flights.records);
+      for (const flight of next.flights.records) if (!before.has(flight)) name(flight);
+      for (const flight of recordsBefore) if (!after.has(flight)) name(flight);
+    } else {
+      // Before it: the owners of the flights that act now (arrive, return or leave an expedition).
+      for (const flight of next.flights.records) if (live(flight) && flightEventAt(flight) === at) name(flight);
     }
     return owners;
   };
@@ -751,6 +768,8 @@ function reconcileRuntimeSlice(
     const workIsDue = workCheckpoint === checkpoint;
     const economicIsDue = sessionCheckpoint === checkpoint;
     const dueOwners = new Set<string>();
+    // Flight records before this checkpoint's arrivals, raids and burns (see ownersTouchedAtCheckpoint).
+    let recordsAtCheckpoint: readonly FlightRecord[] | undefined;
     // Replay owners settled at this checkpoint. Only these can be read or
     // written below; see settleNpcOwnersAt for why the rest may wait.
     const settledOwners = new Set<string>();
@@ -779,6 +798,7 @@ function reconcileRuntimeSlice(
       }
       if (flightIsDue || pirateIsDue || npcIsDue) {
         for (const ownerId of ownersTouchedAtCheckpoint(checkpoint)) dueOwners.add(ownerId);
+        recordsAtCheckpoint = next.flights.records;
         if (npcIsDue) for (const ownerId of replayOwners) dueOwners.add(ownerId);
       }
       settleNpcOwnersAt(checkpoint, dueOwners, settledOwners);
@@ -853,7 +873,7 @@ function reconcileRuntimeSlice(
     if (replay && (flightIsDue || pirateIsDue || npcIsDue)) {
       // Re-settle everyone settled above plus owners named by flights created
       // here, so arrival effects (losses, returns) start their episodes now.
-      for (const ownerId of ownersTouchedAtCheckpoint(checkpoint)) settledOwners.add(ownerId);
+      for (const ownerId of ownersTouchedAtCheckpoint(checkpoint, recordsAtCheckpoint)) settledOwners.add(ownerId);
       settleNpcEconomies(checkpoint, settledOwners);
       // A battle can remove a payer. Drop its paid work before any new command.
       completeNpcScience(checkpoint, settledOwners);
