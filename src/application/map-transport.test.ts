@@ -89,3 +89,13 @@ test('F-03 / NPC readiness: a foreign homeworld is captioned with its owner and 
   assert.equal(getUniverseNodeCaption(foreignHome, 'Игрок', 'Владыка NPC', 'player-current'), '★ Владыка NPC');
   assert.equal(getUniverseNodeCaption({ ...foreignHome, ownerId: 'player-current' }, 'Игрок', 'x', 'player-current'), '★ Игрок');
 });
+
+test('Map captions name the owner where the player expects one; own colonies keep their planet names', () => {
+  const colony = { id: 'colony', coordinate: { galaxy: 1, system: 4, position: 6 }, kind: 'npc' as const,
+    name: 'Зефирия', art: '', ownerId: 'npc-gen-02', isHomeworld: false, statusLabel: '', description: '' };
+  assert.equal(getUniverseNodeCaption(colony, 'Игрок', 'Vexix', 'player-current'), 'Vexix');
+  const foreignPlayerColony = { ...colony, kind: 'player' as const, ownerId: 'player-other' };
+  assert.equal(getUniverseNodeCaption(foreignPlayerColony, 'Игрок', 'Соперник', 'player-current'), 'Соперник');
+  const ownColony = { ...colony, kind: 'player' as const, ownerId: 'player-current' };
+  assert.equal(getUniverseNodeCaption(ownColony, 'Игрок', 'Игрок', 'player-current'), 'Зефирия');
+});

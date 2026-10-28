@@ -517,7 +517,7 @@ function ProfileAvatar({ displayName, factionId }: { displayName: string; factio
   return (
     <div className="reports-profile-avatar">
       <div className="reports-profile-avatar__art"><FactionGeneralPortrait factionId={factionId} className="reports-profile-avatar__portrait faction-general-portrait--large" /></div>
-      <div className="reports-profile-avatar__caption"><small>{getCombatFactionName(factionId)} · ГЕНЕРАЛ</small><h3>{displayName}</h3></div>
+      <div className="reports-profile-avatar__caption"><small>{getCombatFactionName(factionId)} · ГЕНЕРАЛ</small><h3 className="ut-selectable" title={displayName}>{displayName}</h3></div>
     </div>
   );
 }

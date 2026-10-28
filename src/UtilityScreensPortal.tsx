@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { RatingView } from './RatingView';
 import { ScienceView } from './ScienceView';
 import { SettingsView } from './SettingsView';
+import type { BuildingFaction } from './domain/buildings/balance-v1.ts';
 import { getRuntimeStateSnapshot, subscribeRuntimeStateSnapshot, type RuntimeStateSnapshot } from './domain/runtime/state-store.ts';
 import {
   applyTypographyPreferences,
@@ -20,6 +21,11 @@ function presetForDisplayState(state: DesktopDisplayState, fallback: UiPreferenc
     const [width, height] = getWindowPresetDimensions(preset);
     return width === state.width && height === state.height;
   }) ?? fallback;
+}
+
+function playerFaction(state: RuntimeStateSnapshot | null): BuildingFaction {
+  const factionId = state?.owners[state.currentPlayerId]?.factionId;
+  return factionId === 'synod' || factionId === 'veyra' ? factionId : 'aegis';
 }
 
 export function UtilityScreensPortal() {
@@ -108,7 +114,7 @@ export function UtilityScreensPortal() {
           />
         ) : null
       ) : (
-        <ScienceView />
+        <ScienceView factionId={playerFaction(runtimeState)} />
       )}
     </div>,
     target,

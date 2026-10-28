@@ -987,7 +987,7 @@ function NoAlliance(props: CatalogProps & { hall: CommandHallInfo }) {
       <CatalogList {...props} entries={entries} query={query} setQuery={setQuery} />
       <Dossier
         footer={<>
-          <FootStatus label="Палата управления" value={`Уровень ${hall.level}`} />
+          <FootStatus label={hall.name} value={`Уровень ${hall.level}`} />
           <button type="button" className="primary cmdA-lg" disabled={Boolean(globalBlock)} title={globalBlock ? 'После выхода из союза создавать и вступать в союзы пока нельзя' : undefined} onClick={() => setCreating(true)} data-qa-create-alliance>
             {globalBlock ? `СОЗДАТЬ СОЮЗ · ЧЕРЕЗ ${formatCountdown(globalBlock.until - now)}` : 'СОЗДАТЬ СОЮЗ'}
           </button>

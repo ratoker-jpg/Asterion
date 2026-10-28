@@ -9,6 +9,7 @@ import { getCombatFactionName } from './domain/combat/factions.ts';
 import {
   formatClockDurationMs,
   getBuildingPresentation,
+  localizeBuildingNames,
 } from './domain/buildings/balance-v1.ts';
 import { calculateFleetProductionDurationMs } from './domain/fleet/production.ts';
 import { ACTIVE_RUNTIME_MODE, resolveTestTimeScale } from './domain/runtime/mode.ts';
@@ -294,8 +295,8 @@ function CatalogCard({
                 <div><small>{unavailableLabel}</small><strong>Требования для постройки</strong></div>
               </div>
               <div className="shipyard-requirements-list-v1">
-                {evaluated.reason ? <strong data-qa-production-requirement-error>{evaluated.reason}</strong> : null}
-                {item.requirements.map((requirement) => <span key={requirement}>{requirement}</span>)}
+                {evaluated.reason ? <strong data-qa-production-requirement-error>{localizeBuildingNames(evaluated.reason, budget.factionId)}</strong> : null}
+                {item.requirements.map((requirement) => <span key={requirement}>{localizeBuildingNames(requirement, budget.factionId)}</span>)}
               </div>
             </div>
           )}
@@ -373,7 +374,7 @@ export function ConstructionCatalogView({
       <FleetConstructionHeader
         viewId={mode}
         shipyardPresentation={shipyardPresentation}
-        kicker={`${mode === 'defense' ? `${config.kicker} ${factionName.toUpperCase()}` : config.kicker} · ВЕРФЬ УРОВНЯ ${budget.shipyardLevel}`}
+        kicker={`${mode === 'defense' ? `${config.kicker} ${factionName.toUpperCase()}` : config.kicker} · ${shipyardPresentation.name.toUpperCase()} УРОВНЯ ${budget.shipyardLevel}`}
         title={config.title}
         description={mode === 'defense' ? defenseDescription : config.description}
         planetName={planetName}

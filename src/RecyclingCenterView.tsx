@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getBuildingDefinition } from './domain/buildings/resource-zone.ts';
+import type { BuildingFaction } from './domain/buildings/balance-v1.ts';
 import {
   RECYCLING_RESOURCES,
   getRecyclingAllocationTotal,
@@ -17,6 +18,7 @@ import { ResourceIcon } from './ui/resources/ResourceIcon';
 import './recycling-center.css';
 
 type RecyclingCenterViewProps = {
+  factionId: BuildingFaction;
   planetName: string;
   buildingLevel: number;
   recycling: RecyclingState;
@@ -64,8 +66,9 @@ export function RecyclingCenterView({
   onStart,
   onCollect,
   onBack,
+  factionId,
 }: RecyclingCenterViewProps) {
-  const building = getBuildingDefinition('recycling');
+  const building = getBuildingDefinition('recycling', factionId);
   const [debrisAmount, setDebrisAmount] = useState(0);
   const [allocation, setAllocation] = useState<ResourceAllocationPercent>({ metal: 0, minerals: 0, gas: 0 });
   const [toast, setToast] = useState<string | null>(null);
@@ -142,7 +145,7 @@ export function RecyclingCenterView({
         </dl>
 
         <button className="recycling-back" type="button" data-qa-building-interior-back data-qa-recycling-back onClick={onBack}>
-          <span aria-hidden="true">←</span> Назад в Перерабатывающий центр
+          <span aria-hidden="true">←</span> Назад: {building.name}
         </button>
       </aside>
 

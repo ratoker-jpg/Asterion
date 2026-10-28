@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import laboratoryArt from '../assets/source/New assets/buildings/aegis/building.aegis.research.png';
 import astronomyArt from '../assets/source/New assets/technologies/technology.shared.astronomy.png';
 import chemistryArt from '../assets/source/New assets/technologies/technology.shared.chemistry.png';
 import computerSystemsArt from '../assets/source/New assets/technologies/technology.shared.computer-systems.png';
@@ -46,6 +45,8 @@ import { readScienceSnapshot } from './application/science.ts';
 import { sciencesForSection } from './domain/science/selectors.ts';
 import type { ScienceCatalogDefinition, ScienceSectionId } from './domain/science/types.ts';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
+import { getBuildingDefinition } from './domain/buildings/resource-zone.ts';
+import { localizeBuildingNames, type BuildingFaction } from './domain/buildings/balance-v1.ts';
 import type { ResourceIconKind } from './ui/resources/resource-assets.ts';
 
 const SCIENCE_ARTS: Record<string, string> = {
@@ -72,7 +73,9 @@ const SCIENCE_ARTS: Record<string, string> = {
   'technology.shared.ship-armor.png': shipArmorArt,
 };
 
-export function ScienceView() {
+export function ScienceView({ factionId = 'aegis' }: { factionId?: BuildingFaction }) {
+  // The laboratory belongs to the player's race: its art and name, never the Aster default.
+  const laboratory = getBuildingDefinition('research', factionId);
   const [section, setSection] = useState<ScienceSectionId>('basic');
   const [runtime, setRuntime] = useState<ScienceRuntimeSnapshot>(() => readScienceSnapshot());
   const [now, setNow] = useState(() => Date.now());
@@ -169,14 +172,14 @@ export function ScienceView() {
     <div className="utility-view science-view-v2" data-qa-science-root>
       <aside className="science-sidebar-v2">
         <header className="science-title-v2">
-          <small className="utility-secondary">ЛАБОРАТОРИЯ</small>
+          <small className="utility-secondary">{laboratory.name.toUpperCase()}</small>
           <h1 className="utility-page-title">НАУКИ</h1>
         </header>
 
         <div className="science-lab-card-v2">
-          <img className="science-lab-art-v2" src={laboratoryArt} alt="Лаборатория" draggable={false} />
+          <img className="science-lab-art-v2" src={laboratory.art} alt={laboratory.name} draggable={false} />
           <div>
-            <small className="utility-secondary">ЛАБОРАТОРИЯ</small>
+            <small className="utility-secondary">{laboratory.name.toUpperCase()}</small>
             <strong className="utility-section-title" data-qa-science-laboratory-level>УРОВЕНЬ {effectiveRuntime.laboratoryLevel} / {SCIENCE_LABORATORY_MAX_LEVEL}</strong>
             <small className="science-lab-speed-v2" data-qa-science-laboratory-speed>−{Math.round(SCIENCE_LABORATORY_TIME_REDUCTION_PER_LEVEL * 100)}% времени за уровень</small>
           </div>
@@ -215,7 +218,7 @@ export function ScienceView() {
 
         <div className="science-catalog-v2" data-qa-scroll="science-catalog">
           {sciences.map((science) => (
-            <ScienceRow key={science.id} science={science} runtime={effectiveRuntime} onStart={startResearch} />
+            <ScienceRow key={science.id} science={science} runtime={effectiveRuntime} laboratoryArt={laboratory.art} factionId={factionId} onStart={startResearch} />
           ))}
         </div>
       </main>
@@ -287,10 +290,14 @@ function ScienceQueueCard({ task, payerName, now, paused, onCancel }: { task: Sc
 function ScienceRow({
   science,
   runtime,
+  laboratoryArt,
+  factionId,
   onStart,
 }: {
   science: ScienceCatalogDefinition;
   runtime: ScienceRuntimeSnapshot;
+  laboratoryArt: string;
+  factionId: BuildingFaction;
   onStart: (scienceId: ScienceId) => void;
 }) {
   const preview = previewScience({ state: runtime.science, wallet: runtime.wallet, laboratoryLevel: runtime.laboratoryLevel, now: runtime.now, mode: runtime.mode, testTimeScale: runtime.testTimeScale }, science.id);
@@ -306,7 +313,7 @@ function ScienceRow({
           : `ПОВЫСИТЬ УРОВЕНЬ (${preview.nextLevel ?? currentLevel + 1})`;
   const note = preview.canStart
     ? `Условия выполнены · очередь ${preview.queuedCount}/${SCIENCE_QUEUE_CAPACITY}`
-    : preview.reason ?? 'Исследование недоступно.';
+    : preview.reason ? localizeBuildingNames(preview.reason, factionId) : 'Исследование недоступно.';
 
   return (
     <article className={`science-row-v2 ${preview.canStart ? 'is-available' : 'is-blocked'}`} data-qa-science-id={science.id} data-qa-science-status={preview.status}>
@@ -339,7 +346,7 @@ function ScienceRow({
           aria-live="polite"
         >
           {preview.reason && preview.status !== 'max-level' ? (
-            <div className="science-missing-banner-v2" role="note">{preview.reason}</div>
+            <div className="science-missing-banner-v2" role="note">{localizeBuildingNames(preview.reason, factionId)}</div>
           ) : <span aria-hidden="true" />}
         </div>
 
@@ -355,7 +362,7 @@ function ScienceRow({
           {preview.requirements.map((requirement) => (
             <RequirementBadge
               key={`${requirement.kind}-${requirement.scienceId ?? 'laboratory'}`}
-              label={requirement.label}
+              label={localizeBuildingNames(requirement.label, factionId)}
               art={requirement.kind === 'laboratory-level' ? laboratoryArt : SCIENCE_ARTS[SCIENCE_CATALOG.find((item) => item.id === requirement.scienceId)?.artSlug ?? '']}
               requiredLevel={requirement.requiredLevel}
               currentLevel={requirement.currentLevel}

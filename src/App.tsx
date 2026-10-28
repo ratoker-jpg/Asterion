@@ -281,8 +281,7 @@ const SILENT_NOTICE_PATTERNS: readonly RegExp[] = [
   /^Галактика \d+ · Солнечная система \d+/,
   /выбрана как текущая планета\.$/,
   /^Цель колонизации выбрана/,
-  /^Лаборатория: открыт существующий раздел/,
-  /^Палата управления: открыт существующий раздел/,
+  /: открыт существующий раздел «/,
   /: сцена открыта для /,
   /^Флоты: подготовьте состав/,
   /^(?:Своя|Союзная) цель выбрана/,
@@ -1368,7 +1367,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     }
     stateRef.current = result.state;
     setState(result.state);
-    setNotice(`Космодром: ${result.entityName} добавлен в очередь улучшений.`);
+    setNotice(`${getBuildingDefinition('spaceport', state.profile.factionId).name}: ${result.entityName} добавлен в очередь улучшений.`);
     return true;
   };
 
@@ -1392,7 +1391,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     const refundLabel = result.transition.refundPercents.length > 1
       ? `Возврат рассчитан отдельно для ${result.transition.refundPercents.length} заданий в диапазоне 60–80%.`
       : `Возвращено ${result.transition.refundPercent}% сохранённой стоимости.`;
-    setNotice(`Космодром: улучшение отменено. ${refundLabel}${cascadedCount > 0 ? ` Каскадно отменено ещё ${cascadedCount} зависимых заданий.` : ''}`);
+    setNotice(`${getBuildingDefinition('spaceport', state.profile.factionId).name}: улучшение отменено. ${refundLabel}${cascadedCount > 0 ? ` Каскадно отменено ещё ${cascadedCount} зависимых заданий.` : ''}`);
     return true;
   };
 
@@ -1665,7 +1664,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     if (rejectNpcCatchupCommand()) return { ok: false, message: NPC_CATCHUP_COMMAND_BLOCKED_MESSAGE };
     const current = stateRef.current;
     if (selectCommandHallLevel(current.planets) <= 0) {
-      return { ok: false, message: 'Командование недоступно: на планетах нет здания «Палата управления».' };
+      return { ok: false, message: `Командование недоступно: на планетах нет здания «${getBuildingDefinition('planetary-government', current.profile.factionId).name}».` };
     }
     const at = Date.now();
     const result = action(current.command, at, current.profile.playerId, current.profile.displayName);
@@ -1691,7 +1690,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     if (rejectNpcCatchupCommand()) return { ok: false, message: NPC_CATCHUP_COMMAND_BLOCKED_MESSAGE };
     const current = stateRef.current;
     if (selectCommandHallLevel(current.planets) <= 0) {
-      return { ok: false, message: 'Командование недоступно: на планетах нет здания «Палата управления».' };
+      return { ok: false, message: `Командование недоступно: на планетах нет здания «${getBuildingDefinition('planetary-government', current.profile.factionId).name}».` };
     }
     const result = action(current, Date.now());
     if (result.state !== current) {
@@ -2069,18 +2068,18 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     }
     if (target.kind === 'fleet-construction') {
       navigateTo('fleets');
-      setNotice('Верфь: открыт существующий раздел строительства флота.');
+      setNotice(`${getBuildingDefinition('shipyard', state.profile.factionId).name}: открыт существующий раздел строительства флота.`);
       window.setTimeout(() => window.dispatchEvent(new Event(FLEET_CONSTRUCTION_REQUEST_EVENT)), 0);
       return;
     }
     if (target.kind === 'science') {
       navigateTo('science');
-      setNotice('Лаборатория: открыт существующий раздел «Наука».');
+      setNotice(`${getBuildingDefinition('research', state.profile.factionId).name}: открыт существующий раздел «Наука».`);
       return;
     }
 
     navigateTo('command');
-    setNotice('Палата управления: открыт существующий раздел «Командование».');
+    setNotice(`${getBuildingDefinition('planetary-government', state.profile.factionId).name}: открыт существующий раздел «Командование».`);
   };
 
   const chooseRoute = (nextRoute: AppRoute) => {
@@ -2417,7 +2416,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               onClick={returnToBuilding}
             >
               <span aria-hidden="true">←</span>
-              Назад в {buildingInteriorDefinition.name}
+              Назад: {buildingInteriorDefinition.name}
             </button>
           ) : null}
 
@@ -2548,7 +2547,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               ownerFactions={commandOwnerFactions}
               playerFactionId={state.profile.factionId}
               returnToBuilding={buildingInterior && buildingInteriorTarget?.kind === 'command' && buildingInteriorDefinition
-                ? { label: `Назад в ${buildingInteriorDefinition.name}`, onBack: returnToBuilding }
+                ? { label: `Назад: ${buildingInteriorDefinition.name}`, onBack: returnToBuilding }
                 : undefined}
               testTimeScale={RUNTIME_MODE === 'test' ? testTimeScale : 1}
               aid={selectAidOverview(state, { now, mode: RUNTIME_MODE, testTimeScale })}
@@ -2716,7 +2715,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         {foreignWriterAt ? (
           <div className="save-conflict-banner" role="alert" data-qa-save-conflict>
             <strong>Игра открыта в другой вкладке со старой версией</strong>
-            <span>Она каждую секунду перезаписывает сохранение (так пропадала построенная Палата управления). Закройте другие вкладки Asterion этого сайта — эта вкладка сохранит ваш прогресс.</span>
+            <span>Она каждую секунду перезаписывает сохранение (так пропадали построенные здания). Закройте другие вкладки Asterion этого сайта — эта вкладка сохранит ваш прогресс.</span>
             <button type="button" onClick={() => { persistence.write(stateRef.current); setForeignWriterAt(null); }}>ЗАКРЫЛ — СОХРАНИТЬ ЗДЕСЬ</button>
           </div>
         ) : null}

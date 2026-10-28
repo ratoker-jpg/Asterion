@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getBuildingDefinition } from './domain/buildings/resource-zone.ts';
+import type { BuildingFaction } from './domain/buildings/balance-v1.ts';
 import {
   TRADE_REFILL_INTERVAL_MS,
   TRADE_RESOURCES,
@@ -51,6 +52,7 @@ function formatDuration(ms: number): string {
 }
 
 type TradeCenterViewProps = {
+  factionId: BuildingFaction;
   planetName: string;
   buildingLevel: number;
   trade: TradeState;
@@ -70,8 +72,9 @@ export function TradeCenterView({
   now,
   onTrade,
   onBack,
+  factionId,
 }: TradeCenterViewProps) {
-  const building = getBuildingDefinition('trade-center');
+  const building = getBuildingDefinition('trade-center', factionId);
   const [source, setSource] = useState<TradeResource>('metal');
   const [target, setTarget] = useState<TradeTargetResource>('minerals');
   const [amount, setAmount] = useState(0);
@@ -134,7 +137,7 @@ export function TradeCenterView({
         <div className="trade-info-art"><img src={building.art} alt="" draggable={false} /></div>
         <div className="trade-info-copy">
           <small>ASTERION // ПРОМЫШЛЕННЫЙ МОДУЛЬ</small>
-          <h1>Торговый центр</h1>
+          <h1>{building.name}</h1>
           <p>{planetName}</p>
           <span className="trade-level">УРОВЕНЬ <strong data-qa-trade-level={buildingLevel}>{buildingLevel}</strong></span>
         </div>
@@ -165,12 +168,12 @@ export function TradeCenterView({
           <p className="trade-refill-note">Каждый уровень даёт 3 сделки. Один слот восстанавливается каждые 15 минут.</p>
         </section>
 
-        <button className="trade-back" type="button" data-qa-trade-back onClick={onBack}><span>←</span> Назад в Торговый центр</button>
+        <button className="trade-back" type="button" data-qa-trade-back onClick={onBack}><span>←</span> Назад: {building.name}</button>
       </aside>
 
       <section className="trade-workspace">
         <header className="trade-workspace-header">
-          <div><small>МГНОВЕННЫЙ ОБМЕН РЕСУРСОВ</small><h2>ТОРГОВЫЙ ЦЕНТР</h2></div>
+          <div><small>МГНОВЕННЫЙ ОБМЕН РЕСУРСОВ</small><h2>{building.name.toUpperCase()}</h2></div>
           <strong>{refill.availableSlots} / {refill.maxSlots} СДЕЛОК</strong>
         </header>
 

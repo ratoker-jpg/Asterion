@@ -1,0 +1,479 @@
+/* UI polish v2 — loaded last. Global interface behaviour first, then the
+   per-screen corrections that bring older surfaces to the rounded graphite
+   standard of «Операции», «Планета» and «Командование». */
+
+/* ---- 1. Selection and drag ------------------------------------------------
+   The interface is not a document: nothing is selectable by default. Fields
+   and the copyable regions listed in `src/ui/selection-guard.ts` opt back in. */
+html,
+body,
+#root {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+input:not([type="button"], [type="checkbox"], [type="radio"], [type="range"], [type="submit"], [type="reset"]),
+textarea,
+[contenteditable]:not([contenteditable="false"]),
+.ut-selectable,
+.reports-preview-scroll,
+.command-journal__list,
+.command-dialog-body,
+.cmdA-dossier-body,
+.cmdA-desc,
+.uw-coord,
+.uw-owner-copy h3 {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Controls inside a copyable region stay controls. */
+:is(.reports-preview-scroll, .cmdA-dossier-body, .ut-selectable) :is(button, [role="button"], [role="tab"]) {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+img,
+svg,
+a {
+  -webkit-user-drag: none;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--ut-accent, #4fd8ff) 34%, transparent);
+  color: #f4fbff;
+}
+
+/* ---- 3. One close icon ------------------------------------------------------
+   Every [data-asterion-close] draws the same 18 px cross inside its 40 px red
+   hit area; the text glyphs (×, ✕) differed in size and weight per window. */
+body button[data-asterion-close]:not([hidden]) {
+  display: inline-grid !important;
+  /* One full-size cell for the strokes; the hidden glyph (an anonymous grid
+     item) falls into a zero-size implicit track and takes no room. */
+  grid-template: 1fr / 1fr !important;
+  grid-auto-rows: 0 !important;
+  grid-auto-columns: 0 !important;
+  place-items: center !important;
+  overflow: hidden;
+  font-size: 0 !important;
+}
+body button[data-asterion-close] > * { display: none; }
+/* Both strokes sit in the button's single grid cell: no positioning, so the
+   button keeps whatever placement its window gives it. */
+body button[data-asterion-close]::before,
+body button[data-asterion-close]::after {
+  content: "";
+  grid-area: 1 / 1;
+  width: 18px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  rotate: 45deg;
+}
+body button[data-asterion-close]::after { rotate: -45deg; }
+
+/* ---- 3. Planet editor: a rounded graphite dialog ----------------------------- */
+html body .skin-picker-backdrop { background: rgba(0, 4, 8, .7); backdrop-filter: blur(4px); }
+html body .skin-picker-modal.planet-editor-modal-v5 {
+  width: 960px;
+  max-height: 880px;
+  padding: 0;
+  border: 1px solid var(--ut-border-strong);
+  border-radius: var(--ut-r-panel);
+  background: linear-gradient(180deg, rgba(15, 25, 30, .985), rgba(8, 14, 18, .985));
+  box-shadow: 0 30px 90px rgba(0, 0, 0, .7), inset 0 1px 0 rgba(255, 255, 255, .04);
+  clip-path: none;
+  overflow: hidden;
+}
+html body .planet-editor-modal-v5 > header {
+  height: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 22px 18px;
+  border-bottom: 1px solid var(--ut-border);
+}
+html body .planet-editor-modal-v5 > header small { color: var(--ut-accent); font-size: var(--ut-font-secondary); font-weight: 800; letter-spacing: .16em; }
+html body .planet-editor-modal-v5 > header h2 { margin: 5px 0 3px; color: #f1fbff; font-weight: 800; letter-spacing: .02em; }
+html body .planet-editor-modal-v5 > header p { margin: 0; color: var(--ut-label); font-size: var(--ut-font-secondary); }
+html body .planet-editor-name-v5 {
+  margin: 18px 22px 4px;
+  padding: 16px 18px;
+  border: 1px solid var(--ut-border);
+  border-radius: var(--ut-r-card);
+  background: var(--ut-surface-2);
+}
+html body .planet-editor-name-v5 > label { margin-bottom: 10px; color: var(--ut-accent); font-size: var(--ut-font-secondary); font-weight: 800; letter-spacing: .14em; }
+html body .planet-editor-name-v5 > div { grid-template-columns: minmax(0, 1fr) 150px; gap: 10px; }
+html body .planet-editor-name-v5 input {
+  height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--ut-border-strong);
+  border-radius: var(--ut-r-input);
+  background: rgba(0, 0, 0, .35);
+  color: #effcff;
+  font: 700 14px/1 inherit;
+  box-shadow: none;
+}
+html body .planet-editor-name-v5 input:focus { border-color: var(--ut-accent); box-shadow: 0 0 0 3px rgba(86, 217, 242, .12); }
+html body .planet-editor-name-v5 button {
+  height: 44px;
+  border: 1px solid #8cefff;
+  border-radius: var(--ut-r-btn);
+  background: linear-gradient(180deg, #5fe2f8, #2bb6d6);
+  color: #03222b;
+  font-size: var(--ut-font-control);
+  font-weight: 800;
+  letter-spacing: .1em;
+  box-shadow: 0 0 18px rgba(86, 217, 242, .2);
+}
+html body .planet-editor-name-v5 button:hover { background: linear-gradient(180deg, #7deaff, #3cc4e2); box-shadow: 0 0 22px rgba(86, 217, 242, .32); }
+html body .planet-editor-name-v5 > small { margin-top: 9px; color: var(--ut-label); font-size: var(--ut-font-helper); }
+html body .planet-editor-skins-title-v5 { align-items: center; margin: 16px 22px 0; padding: 0 2px 10px; border-bottom: 1px solid var(--ut-border); }
+html body .planet-editor-skins-title-v5 strong { color: #e4f6fa; font-size: var(--ut-font-control); font-weight: 800; letter-spacing: .14em; }
+html body .planet-editor-skins-title-v5 small { color: var(--ut-label); font-size: var(--ut-font-secondary); }
+html body .planet-editor-modal-v5 .skin-picker-grid { margin: 0; max-height: none; padding: 14px 16px 22px 22px; gap: 12px; }
+html body .planet-editor-modal-v5 .skin-picker-grid button {
+  height: 176px;
+  padding: 10px 8px;
+  grid-template-rows: 112px 22px 20px;
+  border: 1px solid var(--ut-border);
+  border-radius: var(--ut-r-card);
+  background: var(--ut-surface-2);
+  color: #c9dde3;
+  transition: border-color var(--ut-motion-fast) var(--ut-ease-out), background-color var(--ut-motion-fast) var(--ut-ease-out);
+}
+html body .planet-editor-modal-v5 .skin-picker-grid button:hover:not(.active) { border-color: var(--ut-border-strong); background: rgba(255, 255, 255, .04); }
+html body .planet-editor-modal-v5 .skin-picker-grid button:focus-visible { outline: var(--ut-focus); outline-offset: 2px; }
+html body .planet-editor-modal-v5 .skin-picker-grid span { font-size: var(--ut-font-body); font-weight: 600; }
+html body .planet-editor-modal-v5 .skin-picker-grid small { color: var(--ut-label); font-size: var(--ut-font-secondary); font-weight: 800; letter-spacing: .1em; }
+html body .planet-editor-modal-v5 .skin-picker-grid button:hover small { color: var(--ut-accent); }
+
+/* ---- 3. Flight plan and fleet composition ------------------------------------
+   Head: the mission banner is a rounded card, the close button stands beside
+   it (it no longer sits on the art). The shared confirm-dialog rule that
+   centred every <p> at 520 px made the refusal and the arrival line float in
+   the middle of the parameters column; here they span the column. */
+html body .flight-briefing-v2 .flight-timeline-head,
+html body .flight-briefing-v2.has-banner .flight-timeline-head {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: none !important;
+  overflow: visible;
+}
+html body .flight-briefing-v2 .flight-timeline-head > div {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 64px;
+  padding: 12px 20px;
+  border: 1px solid var(--ut-border);
+  border-radius: var(--ut-r-card);
+  background: var(--ut-surface-2);
+}
+html body .flight-briefing-v2.has-banner .flight-timeline-head > div {
+  background:
+    linear-gradient(90deg, rgba(6, 12, 16, .97) 0%, rgba(6, 12, 16, .84) 34%, rgba(6, 12, 16, .2) 70%, rgba(6, 12, 16, .05) 100%),
+    var(--mission-banner) right center / cover no-repeat;
+}
+html body .flight-briefing-v2 .flight-timeline-head small { color: var(--ut-accent); font-size: var(--ut-font-secondary); font-weight: 800; letter-spacing: .16em; }
+html body .flight-briefing-v2 .flight-timeline-head h3 { margin: 4px 0 0; letter-spacing: .1em; text-shadow: 0 2px 12px rgba(0, 0, 0, .7); }
+html body .flight-briefing-v2 .flight-timeline-head > [data-asterion-close] { align-self: center; }
+
+html body .flight-briefing-v2 :is(.flight-timeline-error, .flight-draft-v3__line, .flight-timeline-notes p) {
+  max-width: none;
+  margin-left: 0;
+  margin-right: 0;
+}
+html body .flight-briefing-v2 .flight-timeline-error {
+  margin-top: 12px;
+  padding: 14px 16px 14px 46px;
+  position: relative;
+  border: 1px solid rgba(240, 68, 94, .42) !important;
+  border-radius: var(--ut-r-card);
+  background: rgba(240, 68, 94, .08);
+  color: #ffd0d6;
+  font-size: var(--ut-font-body);
+  font-weight: 600;
+  line-height: 1.5;
+}
+html body .flight-briefing-v2 .flight-timeline-error::before {
+  content: "!";
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--ut-danger);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+  translate: 0 -50%;
+}
+html body .flight-briefing-v2 .flight-draft-v3__line { margin-top: 10px; color: #a9c3cb; font-size: var(--ut-font-body); }
+html body .flight-briefing-v2 .flight-timeline-target-status.is-invalid { border-radius: var(--ut-r-chip); }
+/* Composition: up to three ship types take the full column width (the stats
+   line was cut to «Населени…»); four and more keep the two-column contract
+   that holds the plan on screen (fleet-production-qa). */
+html body .flight-briefing-v2 .flight-timeline-ship-list.flight-composition-v3:not(:has(> article:nth-of-type(4))) { grid-template-columns: minmax(0, 1fr) !important; }
+html body .flight-briefing-v2 .flight-timeline-ship-card div small { line-height: 1.35; }
+html body .flight-briefing-v2 .flight-composition-v3:not(:has(> article:nth-of-type(4))) .flight-timeline-ship-card div small { white-space: normal; overflow: visible; text-overflow: clip; }
+
+/* Ship tile: a quiet rounded number field without browser spinners. */
+html body .fleet-root-v2 .fleet-ship-tile-v2__input {
+  height: 34px;
+  border: 1px solid var(--ut-border-strong);
+  border-radius: var(--ut-r-input);
+  background: rgba(255, 255, 255, .035);
+  font-variant-numeric: tabular-nums;
+  appearance: textfield;
+  transition: border-color var(--ut-motion-fast) var(--ut-ease-out), box-shadow var(--ut-motion-fast) var(--ut-ease-out);
+}
+html body .fleet-root-v2 .fleet-ship-tile-v2__input::-webkit-inner-spin-button,
+html body .fleet-root-v2 .fleet-ship-tile-v2__input::-webkit-outer-spin-button { appearance: none; margin: 0; }
+html body .fleet-root-v2 .fleet-ship-tile-v2__input:focus { outline: 0; border-color: var(--ut-accent); box-shadow: 0 0 0 3px rgba(86, 217, 242, .12); }
+
+/* «Продолжить · план перелёта»: the screen's primary action, not a gradient slab. */
+html body .fleet-compose-footer-v1 { padding-top: 12px; border-top: 1px solid var(--ut-border); border-radius: 0; }
+html body .fleet-compose-footer-v1 > span { color: var(--ut-label); font-size: var(--ut-font-secondary); }
+html body .fleet-compose-footer-v1 button {
+  height: 46px;
+  border: 1px solid #8cefff;
+  border-radius: var(--ut-r-btn);
+  background: linear-gradient(180deg, #5fe2f8, #2bb6d6);
+  box-shadow: 0 0 18px rgba(86, 217, 242, .22);
+  color: #03222b;
+  font-size: var(--ut-font-control);
+  font-weight: 800;
+  letter-spacing: .1em;
+  transition: box-shadow var(--ut-motion-fast) var(--ut-ease-out), filter var(--ut-motion-fast) var(--ut-ease-out);
+}
+html body .fleet-compose-footer-v1 button:hover:not(:disabled) { filter: brightness(1.08); box-shadow: 0 0 24px rgba(86, 217, 242, .34); }
+html body .fleet-compose-footer-v1 button:disabled { border-color: var(--ut-border-strong); background: rgba(255, 255, 255, .05); box-shadow: none; color: var(--ut-label); opacity: 1; }
+html body .flight-details-v3.has-banner > header {
+  min-height: 0;
+  margin: 0;
+  padding: 0 !important;
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: none !important;
+  overflow: visible;
+}
+html body .flight-details-v3.has-banner > header > div {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 132px;
+  padding: 18px 20px;
+  border: 1px solid var(--ut-border);
+  border-radius: var(--ut-r-card);
+  background:
+    linear-gradient(90deg, rgba(6, 12, 16, .97) 0%, rgba(6, 12, 16, .82) 38%, rgba(6, 12, 16, .15) 72%, rgba(6, 12, 16, 0) 100%),
+    var(--mission-banner) right center / cover no-repeat;
+}
+html body .flight-details-v3.has-banner > header > [data-asterion-close] { align-self: flex-start; }
+
+/* ---- 3. Zone queue: slot numbers are round, as on the planet overview -------- */
+html body .resource-zone-queue-card.empty { gap: 12px; border-radius: var(--ut-r-card); }
+html body .resource-zone-queue-card.empty > span {
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  margin: 0 4px 0 6px;
+  border: 1px solid rgba(126, 200, 220, .3);
+  border-radius: 50%;
+  color: var(--ut-label);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ---- 3. Primary navigation: the active route is the lit icon and the
+   underline, not a framed rectangle around the whole 248 px cell. ---------- */
+html body .asterion-header .hdr-route { border-radius: 14px; }
+html body .asterion-header .hdr-route:hover,
+html body .asterion-header .hdr-route:focus-visible { background: none; }
+html body .asterion-header .hdr-route:focus-visible { outline: var(--ut-focus); outline-offset: -6px; }
+html body .asterion-header .hdr-route.active { background: none; box-shadow: none; }
+html body .asterion-header .hdr-route:not(.active) .hdr-route__label { color: #b9cdd4; transition: color var(--ut-motion-fast) var(--ut-ease-out); }
+html body .asterion-header .hdr-route:hover .hdr-route__label { color: #fff; }
+html body .asterion-header .hdr-route.active .hdr-route__label { text-shadow: 0 0 14px var(--header-glow); }
+html body .asterion-header .hdr-route.active .hdr-route__label::after { left: 0; right: 0; bottom: -9px; box-shadow: 0 0 10px var(--header-glow); }
+
+/* ---- 4. Universe dialogs are centred and fit the window ---------------------
+   The backdrop's implicit `auto` row grew with the content: a long debris list
+   made the row taller than the window, the dialog was centred in that row
+   (low on screen) and its `max-height: 100%` resolved against the row, so the
+   bottom was cut off. One definite row keeps it centred and clamped. */
+html body .universe-modal-backdrop {
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+}
+html body .universe-debris-finder {
+  max-height: min(720px, 100%);
+  min-height: 0;
+  padding: 20px 22px 18px;
+  border: 1px solid var(--ut-border-strong);
+  border-radius: var(--ut-r-panel);
+  background: linear-gradient(180deg, rgba(15, 25, 30, .985), rgba(8, 14, 18, .985));
+  box-shadow: 0 30px 90px rgba(0, 0, 0, .7);
+}
+html body .universe-debris-finder__head { padding-bottom: 14px; border-bottom: 1px solid var(--ut-border); }
+html body .universe-debris-finder__head small { color: var(--ut-accent); font-weight: 800; letter-spacing: .14em; }
+html body .universe-debris-finder__head h2 { font-size: var(--ut-font-section-title); font-weight: 800; letter-spacing: .02em; }
+html body .universe-debris-finder__list { min-height: 0; padding-right: 4px; }
+html body .universe-debris-finder__list li { border: 1px solid var(--ut-border); border-radius: var(--ut-r-card); background: var(--ut-surface-2); }
+html body .universe-debris-finder__coord b { font-size: 14px; }
+html body .universe-debris-finder__amount b { font-size: 14px; }
+html body .universe-debris-finder__note { padding-top: 2px; font-size: var(--ut-font-secondary); }
+
+/* ---- 6. Map captions: the owner's nickname is shown in full ------------------
+   The caption used the planet button's 104 px box and cut a 24-character
+   nickname («★ Звездоплавате…»); it now sizes to its text, centred under the
+   planet. */
+html body .workspace--universe .universe-view-v3 .system-planet .planet-name {
+  left: 50%;
+  right: auto;
+  width: max-content;
+  min-width: 92px;
+  max-width: 236px;
+  padding: 0 10px;
+  translate: -50% 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: .01em;
+}
+
+/* ---- 8. Fleets: the satellite card is a neutral card; dismantling is a
+   proper danger icon button (it was a Latin «X» in a dim red square). -------- */
+html body .fleet-satellite-presence-v1 {
+  border: 1px solid var(--ut-border) !important;
+  border-radius: var(--ut-r-card) !important;
+  background: var(--ut-surface-2) !important;
+  box-shadow: none !important;
+}
+html body .fleet-satellite-presence-v1 small { color: var(--ut-label) !important; }
+html body .fleet-satellite-dismantle-v1 {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid rgba(240, 68, 94, .55);
+  border-radius: var(--ut-r-btn);
+  background: rgba(240, 68, 94, .08);
+  color: #ff8c9c;
+  font-size: 0;
+}
+html body .fleet-satellite-dismantle-v1::before,
+html body .fleet-satellite-dismantle-v1::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  translate: -50% -50%;
+  rotate: 45deg;
+}
+html body .fleet-satellite-dismantle-v1::after { rotate: -45deg; }
+html body .fleet-satellite-dismantle-v1:disabled { border-color: var(--ut-border); background: transparent; color: var(--ut-label); opacity: .55; }
+
+/* ---- 8. Building dialog: rounded requirement chips and time cells ---------- */
+html body .resource-building-requirements { border-radius: var(--ut-r-card); }
+html body .resource-building-requirements span { border-radius: var(--ut-r-chip); font-weight: 700; }
+html body .resource-building-time-breakdown > div {
+  border: 1px solid var(--ut-border) !important;
+  border-radius: var(--ut-r-chip) !important;
+  background: rgba(0, 0, 0, .22) !important;
+}
+
+/* ---- 8. Profile: a 24-character nickname fits (it was cut to «…Севе…»). ---- */
+html body .reports-view.reports-v2 .reports-profile-avatar__caption h3 {
+  font-size: 22px !important;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+  line-height: 1.15;
+}
+
+/* ---- 7. Incoming attack row: composition and «СОСТАВ СКРЫТ» as readable
+   tags under the mission, not three loose lines of small caps. ------------- */
+html body .fleet-flight-mission-cell > span { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
+html body .fleet-flight-mission-cell small[data-qa-incoming-composition] {
+  max-width: 100%;
+  color: #ffd7dc;
+  font-size: var(--ut-font-secondary);
+  font-weight: 600;
+  letter-spacing: .01em;
+  line-height: 1.35;
+  white-space: normal;
+}
+html body .fleet-flight-mission-cell small[data-qa-incoming-composition-hidden] {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border: 1px dashed rgba(230, 173, 80, .6);
+  border-radius: var(--ut-r-chip);
+  background: rgba(230, 173, 80, .07);
+  color: var(--ut-amber);
+  font-size: var(--ut-font-secondary);
+  font-weight: 800;
+  letter-spacing: .08em;
+  white-space: nowrap;
+}
+html body .fleet-flight-mission-cell small[data-qa-flight-bot01-label],
+html body .fleet-flight-mission-cell small[data-qa-flight-attack-order] {
+  padding: 2px 7px;
+  border: 1px solid rgba(240, 68, 94, .45);
+  border-radius: 6px;
+  color: #ff9aa8;
+  font-size: var(--ut-font-secondary);
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+html body .fleet-flight-mission-cell small[data-qa-flight-attack-order] { border-color: var(--ut-border-strong); color: var(--ut-label); }
+
+/* ---- 7. World catch-up summary: figures read as figures ----------------------
+   The global typography pass tagged every <strong> as 12 px body text, so the
+   summary's numbers were the same size as their labels. */
+html body .npc-catchup-tile { gap: 6px; padding: 14px 16px; border-radius: var(--ut-r-card); }
+html body .npc-catchup-tile > span[data-asterion-typography],
+html body .npc-catchup-tile > span {
+  color: var(--ut-label);
+  font-size: var(--ut-font-secondary) !important;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+html body .npc-catchup-tile > strong[data-asterion-typography],
+html body .npc-catchup-tile > strong {
+  color: #f2fbff;
+  font-size: 24px !important;
+  font-weight: 800;
+  line-height: 1.1;
+}
+html body .npc-catchup-leaders { border-radius: var(--ut-r-card); }
+html body .npc-catchup-leaders li { padding: 3px 0; border-bottom: 1px solid rgba(126, 200, 220, .07); }
+html body .npc-catchup-leaders li:last-child { border-bottom: 0; }
+
+/* ---- 8. Zone map captions: no orphaned «I», no wrapped status line ----------- */
+html body .resource-building-caption { max-width: 210px; text-align: center; }
+html body .resource-building-caption strong { font-size: var(--ut-font-secondary) !important; text-wrap: balance; }
+html body .resource-building-caption small { font-size: var(--ut-font-secondary) !important; white-space: nowrap; }

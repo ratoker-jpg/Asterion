@@ -7,6 +7,7 @@ import type { CatalogEntity } from './domain/combat/catalog.ts';
 import {
   formatClockDurationMs,
   getBuildingPresentation,
+  localizeBuildingNames,
 } from './domain/buildings/balance-v1.ts';
 import {
   calculateFleetProductionDurationMs,
@@ -251,8 +252,8 @@ function ShipCard({
                 <div><small>КОРПУС НЕДОСТУПЕН</small><strong>Требования для постройки</strong></div>
               </div>
               <div className="shipyard-requirements-list-v1">
-                {requirements.reason ? <strong data-qa-production-requirement-error>{requirements.reason}</strong> : null}
-                {ship.requirements.map((requirement) => <span key={requirement}>{requirement}</span>)}
+                {requirements.reason ? <strong data-qa-production-requirement-error>{localizeBuildingNames(requirements.reason, budget.factionId)}</strong> : null}
+                {ship.requirements.map((requirement) => <span key={requirement}>{localizeBuildingNames(requirement, budget.factionId)}</span>)}
               </div>
             </div>
           )}
