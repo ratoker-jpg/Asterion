@@ -291,10 +291,13 @@ function applyDestroyedToTarget(state: SaveState, target: SpyTargetState, report
     const id = stack.entityId as DefenseId;
     defense.defenses[id] = Math.max(0, safeCount(defense.defenses[id]) - safeCount(stack.destroyed));
   }
-  const commanders = Object.fromEntries(Object.entries(target.commanders ?? {}).map(([id, snapshot]) => [
-    id,
-    { ...snapshot, count: Math.max(0, safeCount(snapshot.count) - safeCount(report.defenderForce.stacks.find((stack) => stack.entityId === id)?.destroyed)) },
-  ])) as SpyTargetState['commanders'];
+  // A commander lost to the last one leaves the snapshot, as in
+  // syncSpyTargetCommanderCounts and on load: a stale `count: 0` entry would
+  // keep an old level that only the uninterrupted world remembers.
+  const commanders = Object.fromEntries(Object.entries(target.commanders ?? {}).flatMap(([id, snapshot]) => {
+    const count = Math.max(0, safeCount(snapshot.count) - safeCount(report.defenderForce.stacks.find((stack) => stack.entityId === id)?.destroyed));
+    return count > 0 ? [[id, { ...snapshot, count }]] : [];
+  })) as SpyTargetState['commanders'];
   const fleetPopulation = calculateFleetPopulation(fleet, target.raceId);
   const defensePopulation = calculateDefensePopulation(defense, target.raceId);
   return {

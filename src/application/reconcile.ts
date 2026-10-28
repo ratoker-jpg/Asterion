@@ -132,6 +132,10 @@ function catchupSummaryFor(state: SaveState, from: number, targetAt: number): Wo
   const current = state.npcReplay?.summary;
   if (current && current.finishedAt === undefined) return current;
   const pending = isNpcCatchupPending(state);
+  // A target frozen over a finished summary covers only the minutes the last
+  // catch-up itself took (a longer gap starts a fresh summary when frozen):
+  // the player is still reading that summary, so it stays.
+  if (pending && current) return current;
   if (!pending && targetAt - from <= NPC_CATCHUP_COMMAND_GRACE_MS) return current;
   return startWorldCatchupSummary(state, from, !pending);
 }
@@ -581,6 +585,21 @@ function reconcileRuntimeSlice(
     return systems;
   };
 
+  /** Owners of planets that deciding NPC probes may report on again at `at`. */
+  const repeatSpyReportTargetOwners = (at: number): Set<string> => {
+    const owners = new Set<string>();
+    const deciding = new Set<string>();
+    for (let index = economicIndex; economicEvents[index]?.at === at; index++) deciding.add(economicEvents[index]!.ownerId);
+    for (const mission of next.espionage?.missions ?? []) {
+      if (mission.status !== 'orbiting' || !mission.ownerId || !deciding.has(mission.ownerId)
+        || mission.nextReportAt === undefined || at < mission.nextReportAt) continue;
+      const owner = next.planets[mission.targetPlanetId] ? next.profile.playerId : next.espionage?.targets?.[mission.targetPlanetId]?.ownerId;
+      if (owner) owners.add(owner);
+    }
+    return owners;
+  };
+  let spiedPlayerAt: number | undefined;
+
   let processedThrough = Number.NEGATIVE_INFINITY;
   while (true) {
     const flightCheckpoint = nextDueFlightCheckpoint(processedThrough);
@@ -677,6 +696,13 @@ function reconcileRuntimeSlice(
         if (getNextNpcFleetOverflowCheckpoint(target, target.ownerId, processedThrough, context.now) === checkpoint) dueOwners.add(target.ownerId);
       }
       for (let index = economicIndex; economicEvents[index]?.at === checkpoint; index++) dueOwners.add(economicEvents[index]!.ownerId);
+      // A repeated report from orbit reads the target planet as it stands at
+      // this decision, so its owner is settled here too: otherwise the report
+      // shows resources as of wherever a catch-up slice last settled them.
+      if (economicIsDue) for (const ownerId of repeatSpyReportTargetOwners(checkpoint)) {
+        if (ownerId === next.profile.playerId) spiedPlayerAt = checkpoint;
+        else dueOwners.add(ownerId);
+      }
       const sunSystems = sunCheckpoint === checkpoint || flightIsDue ? sunSystemsChangingAt(checkpoint, processedThrough) : null;
       if (sunSystems?.size) for (const target of Object.values(next.espionage?.targets ?? {})) {
         if (sunSystems.has(`${target.coordinate.galaxy}:${target.coordinate.system}`)) dueOwners.add(target.ownerId);
@@ -763,6 +789,12 @@ function reconcileRuntimeSlice(
       completeNpcScience(checkpoint, settledOwners);
     }
     if (economicIsDue && next.npc && next.espionage?.targets) {
+      // The player's planets are settled by the work branches above; a
+      // decision moment alone does not settle them unless a probe reads them.
+      if (spiedPlayerAt === checkpoint && !workIsDue && !flightIsDue && !pirateIsDue && !npcIsDue) {
+        reconcilePlanetWork(checkpoint, new Set(Object.entries(next.planets)
+          .filter(([, planet]) => planet.overpopulation?.blocked === true).map(([planetId]) => planetId)));
+      }
       const group = [];
       while (economicEvents[economicIndex]?.at === checkpoint) group.push(economicEvents[economicIndex++]!);
       const applied = applyNpcReplayEventsAt(next.npc, checkpoint, group, { targets: next.espionage.targets, timeScale, science: next.npcScience, world: next });

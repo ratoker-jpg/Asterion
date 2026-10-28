@@ -102,7 +102,12 @@ export function recordHighestExplorationScore(state: ExplorationState, ownerId: 
   if (!ownerId || !Number.isFinite(score) || score < 0) return state;
   const highest = Math.max(0, state.highestScoresByOwner[ownerId] ?? 0, score);
   if (highest === state.highestScoresByOwner[ownerId]) return state;
-  return { ...state, highestScoresByOwner: { ...state.highestScoresByOwner, [ownerId]: highest } };
+  if (ownerId in state.highestScoresByOwner) return { ...state, highestScoresByOwner: { ...state.highestScoresByOwner, [ownerId]: highest } };
+  // A new owner is filed in id order, so the save does not depend on which
+  // owner a catch-up slice happened to record first.
+  const highestScoresByOwner = Object.fromEntries(Object.entries({ ...state.highestScoresByOwner, [ownerId]: highest })
+    .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0));
+  return { ...state, highestScoresByOwner };
 }
 
 export function launchExplorationScore(state: ExplorationState, ownerId: string, currentResourceScore: number): number {
