@@ -4,6 +4,7 @@ import type { SaveState } from './application/contracts.ts';
 import { selectWorldSummaryLeaders, type WorldSummaryLeader } from './application/world-catchup-summary.ts';
 import type { NpcReplayState } from './domain/npc/replay-state.ts';
 import type { WorldCatchupSummary } from './domain/npc/world-catchup-summary.ts';
+import { useNpcCatchupProgress } from './ui/npc-catchup-progress-store.ts';
 import './npc-catchup-banner.css';
 
 /** Pending catch-ups shorter than this finish before the window would be read. */
@@ -35,12 +36,15 @@ function formatWait(ms: number): string {
  * up it turns into a summary of what happened in the world meanwhile.
  * The command gate itself stays in App; this window only reports.
  */
-export function NpcCatchupBanner({ replay, state, onDismissSummary, onOpenMenu }: {
+export function NpcCatchupBanner({ replay: savedReplay, state, onDismissSummary, onOpenMenu }: {
   replay: NpcReplayState | undefined;
   state: SaveState;
   onDismissSummary: () => void;
   onOpenMenu: () => void;
 }) {
+  // A catch-up in the worker reports its cursor here; the save stays frozen until it ends.
+  const live = useNpcCatchupProgress();
+  const replay = live && savedReplay ? { ...savedReplay, ...live } : savedReplay;
   const pending = Boolean(replay && replay.targetAt > replay.processedThroughAt);
   // Baseline of the current catch-up: where it started and when, in wall time.
   const baseline = useRef<{ targetAt: number; from: number; startedAt: number } | null>(null);

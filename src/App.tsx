@@ -172,6 +172,9 @@ import { publishApplicationRuntimeSnapshot } from './application/runtime.ts';
 import { reconcileRuntime, type RuntimeReconcileEvent } from './application/reconcile.ts';
 import { freezeNpcCatchupTarget, isNpcCatchupPending, needsNpcCatchupBefore } from './application/npc-catchup.ts';
 import { NpcCatchupBanner } from './NpcCatchupBanner.tsx';
+import NpcCatchupWorker from './npc-catchup.worker.ts?worker';
+import type { NpcCatchupWorkerRequest, NpcCatchupWorkerResponse } from './application/npc-catchup-worker-protocol.ts';
+import { setNpcCatchupProgress } from './ui/npc-catchup-progress-store.ts';
 import {
   FLIGHT_COMMAND_RESULT_EVENT,
   FLIGHT_DISPATCH_REQUEST_EVENT,
@@ -264,6 +267,8 @@ const NPC_CATCHUP_TASK_BUDGET_MS = 40;
  * this often; completion is written at once.
  */
 const NPC_CATCHUP_PERSIST_INTERVAL_MS = 2_000;
+/** A worker catch-up hands the save its consistent prefix this often (serialized off the UI thread). */
+const NPC_CATCHUP_WORKER_PERSIST_INTERVAL_MS = 15_000;
 
 /**
  * Navigation noise the plan explicitly silences: section/route openings, zone
@@ -371,6 +376,11 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   // When a save failure was last shown (null: never in this window).
   const persistenceFailureNotified = useRef<number | null>(null);
   const npcReplayContinuation = useRef<number | null>(null);
+  // A long catch-up runs in a Web Worker; without one (or after it fails) App
+  // replays in bounded chunks on this thread as before.
+  const catchupWorker = useRef<{ worker: Worker; runId: number; from: NonNullable<SaveState['npcReplay']> } | null>(null);
+  const catchupRunSeq = useRef(0);
+  const catchupWorkerUnavailable = useRef(RUNTIME_MODE !== 'production' || typeof Worker === 'undefined');
 
   /**
    * Keeps the QA notice layer in sync and emits a bottom-left toast. Silent
@@ -918,6 +928,10 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       }
     }
   }, [persistence, setNotice]);
+  const writeSerializedSave = useCallback((text: string) => {
+    const result = persistence.writeSerialized(text);
+    if (!result.ok) console.warn(`NPC catch-up progress was not saved: ${result.error}`);
+  }, [persistence]);
   const lastCatchupWriteAt = useRef(0);
   const deferredCatchupWrite = useRef<number | null>(null);
   useEffect(() => () => {
@@ -960,26 +974,9 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
    * publishes only the last consistent prefix: React and autosave see one
    * state per task instead of one per 64-event chunk.
    */
-  const runRuntimeReconcile = useCallback((at: number, budgetMs = 0) => {
-    const startedAt = performance.now();
-    const initial = stateRef.current;
-    let current = initial;
-    const events: RuntimeReconcileEvent[] = [];
-    do {
-      const result = reconcileRuntime(current, {
-        planetId: current.currentPlanetId,
-        now: at,
-        mode: RUNTIME_MODE,
-        testTimeScale,
-      });
-      if (!result.changed) break;
-      current = result.state;
-      for (const event of result.events) events.push(event);
-    } while (isNpcCatchupPending(current) && performance.now() - startedAt < budgetMs);
-    if (current === initial) return;
-    const result = { state: current };
-    stateRef.current = result.state;
-    setState(result.state);
+  /** Turns the player's runtime events (completions, arrivals, Sun raids) into notices. */
+  const announceRuntimeEvents = useCallback((events: readonly RuntimeReconcileEvent[], resultState: SaveState) => {
+    const result = { state: resultState };
     events.forEach((event) => {
       if (event.kind === 'science') {
         const names = event.scienceIds
@@ -1014,7 +1011,106 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         ));
       }
     });
-  }, [setNotice, testTimeScale]);
+  }, [setNotice]);
+  /**
+   * Starts the catch-up of a frozen world in the worker. The save stays as it
+   * is (commands refused) until the worker posts the caught-up world back;
+   * then only the fields the catch-up changed replace App's.
+   */
+  const startWorkerCatchup = useCallback((frozen: SaveState): boolean => {
+    const replay = frozen.npcReplay;
+    if (catchupWorkerUnavailable.current || !replay || !isNpcCatchupPending(frozen)) return false;
+    let worker: Worker;
+    try {
+      worker = new NpcCatchupWorker();
+    } catch (error) {
+      console.error('NPC catch-up worker unavailable; replaying on the UI thread.', error);
+      catchupWorkerUnavailable.current = true;
+      return false;
+    }
+    const runId = ++catchupRunSeq.current;
+    catchupWorker.current = { worker, runId, from: replay };
+    const finish = () => {
+      worker.terminate();
+      if (catchupWorker.current?.runId === runId) catchupWorker.current = null;
+      setNpcCatchupProgress(null);
+    };
+    // Still the world this run started from (App may have changed its own fields only)?
+    const sameWorld = () => {
+      const current = stateRef.current.npcReplay;
+      return catchupWorker.current?.runId === runId && current?.targetAt === replay.targetAt
+        && current.processedThroughAt === replay.processedThroughAt;
+    };
+    worker.onmessage = (event: MessageEvent<NpcCatchupWorkerResponse>) => {
+      const message = event.data;
+      if (message.runId !== runId) return;
+      if (!sameWorld()) { finish(); return; }
+      if (message.type === 'progress') {
+        setNpcCatchupProgress({ processedThroughAt: message.processedThroughAt, targetAt: message.targetAt });
+      } else if (message.type === 'persist') {
+        writeSerializedSave(message.text);
+      } else if (message.type === 'done') {
+        const merged = { ...stateRef.current, ...message.changed } as SaveState & Record<string, unknown>;
+        for (const key of message.removedKeys) delete merged[key];
+        finish();
+        stateRef.current = merged;
+        setState(merged);
+        announceRuntimeEvents(message.events, merged);
+      } else {
+        console.error(`NPC catch-up worker failed; replaying on the UI thread. ${message.message}`);
+        catchupWorkerUnavailable.current = true;
+        finish();
+        setNow(Date.now());
+      }
+    };
+    worker.onerror = (event) => {
+      console.error('NPC catch-up worker crashed; replaying on the UI thread.', event.message);
+      catchupWorkerUnavailable.current = true;
+      finish();
+      setNow(Date.now());
+    };
+    setNpcCatchupProgress({ processedThroughAt: replay.processedThroughAt, targetAt: replay.targetAt });
+    const request: NpcCatchupWorkerRequest = { type: 'start', runId, state: frozen, persistEveryMs: NPC_CATCHUP_WORKER_PERSIST_INTERVAL_MS };
+    worker.postMessage(request);
+    return true;
+  }, [announceRuntimeEvents, writeSerializedSave]);
+  useEffect(() => () => {
+    catchupWorker.current?.worker.terminate();
+    catchupWorker.current = null;
+    setNpcCatchupProgress(null);
+  }, []);
+  const runRuntimeReconcile = useCallback((at: number, budgetMs = 0) => {
+    // The worker owns the world until it hands it back.
+    if (catchupWorker.current) return;
+    if (!catchupWorkerUnavailable.current && needsNpcCatchupBefore(stateRef.current, at)) {
+      const frozen = freezeNpcCatchupTarget(stateRef.current, at);
+      if (frozen !== stateRef.current) {
+        stateRef.current = frozen;
+        setState(frozen);
+      }
+      if (startWorkerCatchup(frozen)) return;
+    }
+    const startedAt = performance.now();
+    const initial = stateRef.current;
+    let current = initial;
+    const events: RuntimeReconcileEvent[] = [];
+    do {
+      const result = reconcileRuntime(current, {
+        planetId: current.currentPlanetId,
+        now: at,
+        mode: RUNTIME_MODE,
+        testTimeScale,
+      });
+      if (!result.changed) break;
+      current = result.state;
+      for (const event of result.events) events.push(event);
+    } while (isNpcCatchupPending(current) && performance.now() - startedAt < budgetMs);
+    if (current === initial) return;
+    const result = { state: current };
+    stateRef.current = result.state;
+    setState(result.state);
+    announceRuntimeEvents(events, result.state);
+  }, [announceRuntimeEvents, startWorkerCatchup, testTimeScale]);
 
   useEffect(() => {
     runRuntimeReconcile(now);
@@ -1025,7 +1121,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   // depend on render frames. The replay target remains frozen by reconcileRuntime.
   useEffect(() => {
     const replay = state.npcReplay;
-    if (!isApplicationCommandBlocked(state) || !replay) return;
+    if (!isApplicationCommandBlocked(state) || !replay || catchupWorker.current) return;
 
     const continuationTarget = replay.targetAt;
     npcReplayContinuation.current = window.setTimeout(() => {

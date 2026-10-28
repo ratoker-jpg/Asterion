@@ -194,6 +194,7 @@ async function readMeasurement(win, saveKey) {
       },
       inMemoryReplay: qa.latest,
       runtimePublications: qa.publications,
+      workerProgressEvents: qa.workerProgress || 0,
       persistedSaveChars: (localStorage.getItem(${JSON.stringify(saveKey)}) || '').length,
       persistenceNotice: [...document.querySelectorAll('[data-qa-notice], [role="status"], [role="alert"]')]
         .map((node) => node.textContent || '').find((text) => text.includes('Не удалось сохранить')) || null,
@@ -321,6 +322,13 @@ async function runScenario() {
         const replay = event.detail?.npcReplay;
         if (!replay) return;
         qa.publications += 1;
+        qa.latest = { processedThroughAt: replay.processedThroughAt, targetAt: replay.targetAt };
+      });
+      // A catch-up in the worker reports its cursor here; the save stays frozen until it ends.
+      window.addEventListener('asterion:npc-catchup-progress', (event) => {
+        const replay = event.detail;
+        if (!replay) return;
+        qa.workerProgress = (qa.workerProgress || 0) + 1;
         qa.latest = { processedThroughAt: replay.processedThroughAt, targetAt: replay.targetAt };
       });
       window.__npcReplayQaTimer = window.setInterval(() => {
