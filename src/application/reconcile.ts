@@ -153,6 +153,9 @@ function sameTargetPlaces(left: Readonly<Record<string, SpyTargetState>>, right:
   return true;
 }
 
+/** Targets objects a full settlement produced, with its moment and owners. */
+const fullySettledTargets = new WeakMap<object, { at: number; owners: string }>();
+
 export type RuntimeReconcileEvent =
   | { kind: 'npc-economy'; events: readonly NpcReplayEmission[] }
   | { kind: 'npc-building'; planetId: string; assetRole: BuildingRole; at: number }
@@ -238,6 +241,7 @@ function reconcileRuntimeSlice(
   const events: RuntimeReconcileEvent[] = [];
   const timeScale = CAMPAIGN_SPEED_SCALE[state.worldConfig?.world.campaignSpeed ?? 'standard'];
   const replayOwners = new Set(replay?.owners);
+  const replayOwnersKey = replay ? [...replayOwners].sort().join(' ') : '';
   // Interactive calls keep the per-call NPC_REPLAY_MAX_GROUPS budget; offline
   // catch-up contexts may batch more groups into one call (same group order).
   const replayMaxGroups = replay
@@ -321,6 +325,7 @@ function reconcileRuntimeSlice(
     if (changed) next = { ...next, espionage: { ...next.espionage, targets } };
     const science = pauseNpcScienceForSettlement(next.npcScience, before, settled, at, targets);
     if (science !== next.npcScience) next = { ...next, npcScience: science };
+    if (!ownerIds && next.espionage?.targets) fullySettledTargets.set(next.espionage.targets, { at, owners: replayOwnersKey });
   };
   const completeNpcScience = (at: number, ownerIds?: ReadonlySet<string>) => {
     const result = reconcileNpcScienceAt(next, at, ownerIds);
@@ -397,7 +402,10 @@ function reconcileRuntimeSlice(
   // NPC solar income reads the published Sun brightness: start from the
   // brightness of the slice's first moment, never the wall clock's.
   if (replay) publishSunBrightness(next, replay.from);
-  if (replay) settleNpcEconomies(replay.from);
+  // The previous slice ended by settling every owner at this very moment; when
+  // nothing has touched the planets since, settling them again changes nothing.
+  const settledAtStart = replay && next.espionage?.targets ? fullySettledTargets.get(next.espionage.targets) : undefined;
+  if (replay && !(settledAtStart?.at === replay.from && settledAtStart.owners === replayOwnersKey)) settleNpcEconomies(replay.from);
   if (replay) completeNpcScience(replay.from);
   const startingPirate = next.pirate ?? createDefaultPirateState();
   let pirateCursor = startingPirate.raidProcessedAt ?? context.now;
