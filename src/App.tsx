@@ -271,10 +271,12 @@ const NPC_CATCHUP_PERSIST_INTERVAL_MS = 2_000;
  * States that only a clock tick changed are written at most once per this
  * many times the last write's cost (about 2% of the UI thread), and at least
  * every LIVE_TICK_PERSIST_MAX_INTERVAL_MS: a small save is still written
- * every tick, a late-game world of tens of MB every few seconds.
+ * every tick, a 40 MB late-game world (a half-second write) about every
+ * 20 s. Time a tick advanced is replayed identically on load, so nothing is
+ * lost in between; commands are written at once.
  */
 const LIVE_TICK_PERSIST_COST_FACTOR = 50;
-const LIVE_TICK_PERSIST_MAX_INTERVAL_MS = 10_000;
+const LIVE_TICK_PERSIST_MAX_INTERVAL_MS = 60_000;
 /** A worker catch-up hands the save its consistent prefix this often (serialized off the UI thread). */
 const NPC_CATCHUP_WORKER_PERSIST_INTERVAL_MS = 15_000;
 

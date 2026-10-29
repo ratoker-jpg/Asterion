@@ -2641,6 +2641,8 @@ export function reconcileFlights(
     return 0;
   };
   const processedFlightEvents = new Set<string>();
+  let candidateCache: { records: unknown; planets: unknown; espionage: unknown; command: unknown; exploration: unknown; profile: unknown;
+    list: FlightRecord[]; cursor: number } | null = null;
   const flightEventKey = (flight: FlightRecord) => {
     const spyStatus = flight.missionId === 'espionage' ? spyMissionForFlight(next, flight)?.status ?? 'missing' : '';
     return `${flight.id}\u0000${flight.phase}\u0000${scheduledFlightEventAt(flight)}\u0000${spyStatus}`;
@@ -2650,31 +2652,49 @@ export function reconcileFlights(
     // The first due flight in event order. The checks are pure, so the cheap
     // ones run first: a late world holds thousands of live flights and this
     // runs once per resolved event.
-    let original: FlightRecord | undefined;
-    for (const flight of next.flights.records) {
-      // Sun raid flights are owned by application/sun-raid.ts (fixed routes, side battles).
-      if (!ACTIVE_FLIGHT_PHASES.has(flight.phase) || flight.missionId === 'sun-attack' || flight.missionId === 'sun-support') continue;
-      const hasMissingOrigin = flight.ownerSide !== 'npc' && (flight.missionId === 'deployment' || flight.missionId === 'space-flight' || flight.missionId === 'pirate-recon' || flight.missionId === 'pirate-elimination' || (flight.missionId === 'expedition' && flight.ownerSide !== 'bot01') || flight.explorationAttack)
-        && !next.planets[flight.originPlanetId];
-      const spyMission = flight.missionId === 'espionage' ? spyMissionForFlight(next, flight) : undefined;
-      const needsSpyRevalidation = Boolean(
-        spyMission
-        && (flight.phase === 'outbound' || flight.phase === 'arrived')
-        && spyMission.status !== 'returning'
-        && spyMission.status !== 'returned'
-        && spyMission.status !== 'destroyed',
-      );
-      if (!hasMissingOrigin && !needsSpyRevalidation && !(scheduledFlightEventAt(flight) <= now)) continue;
-      // Autonomous orbiting probes await the owner's next explicit decision;
-      // they have no automatic report timer. Revalidate when a publicly
-      // observable owner/alliance change makes their station illegal.
-      if (flight.ownerSide === 'npc' && flight.ownerId && flight.missionId === 'espionage' && flight.phase === 'arrived') {
-        const owner = flight.destinationPlanetId && getEspionageTargets(next.espionage)[flight.destinationPlanetId]?.ownerId;
-        const actualOwner = owner || (next.planets[flight.destinationPlanetId ?? ''] ? next.profile.playerId : undefined);
-        if (actualOwner === flight.destinationOwnerId && ['neutral', 'enemy'].includes(getOwnerRelation(next, flight.ownerId, actualOwner!))) continue;
+    // Candidates in event order, rebuilt only when something they read
+    // changed: a pass that only revalidates a probe (most of them, every
+    // tick) changes nothing, and rescanning thousands of live flights per
+    // pass made each late-game clock tick cost tens of milliseconds.
+    const cacheValid = candidateCache !== null && candidateCache.records === next.flights.records
+      && candidateCache.planets === next.planets && candidateCache.espionage === next.espionage
+      && candidateCache.command === next.command && candidateCache.exploration === next.exploration
+      && candidateCache.profile === next.profile;
+    if (!cacheValid) {
+      const list: FlightRecord[] = [];
+      for (const flight of next.flights.records) {
+        // Sun raid flights are owned by application/sun-raid.ts (fixed routes, side battles).
+        if (!ACTIVE_FLIGHT_PHASES.has(flight.phase) || flight.missionId === 'sun-attack' || flight.missionId === 'sun-support') continue;
+        const hasMissingOrigin = flight.ownerSide !== 'npc' && (flight.missionId === 'deployment' || flight.missionId === 'space-flight' || flight.missionId === 'pirate-recon' || flight.missionId === 'pirate-elimination' || (flight.missionId === 'expedition' && flight.ownerSide !== 'bot01') || flight.explorationAttack)
+          && !next.planets[flight.originPlanetId];
+        const spyMission = flight.missionId === 'espionage' ? spyMissionForFlight(next, flight) : undefined;
+        const needsSpyRevalidation = Boolean(
+          spyMission
+          && (flight.phase === 'outbound' || flight.phase === 'arrived')
+          && spyMission.status !== 'returning'
+          && spyMission.status !== 'returned'
+          && spyMission.status !== 'destroyed',
+        );
+        if (!hasMissingOrigin && !needsSpyRevalidation && !(scheduledFlightEventAt(flight) <= now)) continue;
+        // Autonomous orbiting probes await the owner's next explicit decision;
+        // they have no automatic report timer. Revalidate when a publicly
+        // observable owner/alliance change makes their station illegal.
+        if (flight.ownerSide === 'npc' && flight.ownerId && flight.missionId === 'espionage' && flight.phase === 'arrived') {
+          const owner = flight.destinationPlanetId && getEspionageTargets(next.espionage)[flight.destinationPlanetId]?.ownerId;
+          const actualOwner = owner || (next.planets[flight.destinationPlanetId ?? ''] ? next.profile.playerId : undefined);
+          if (actualOwner === flight.destinationOwnerId && ['neutral', 'enemy'].includes(getOwnerRelation(next, flight.ownerId, actualOwner!))) continue;
+        }
+        list.push(flight);
       }
-      if (processedFlightEvents.has(flightEventKey(flight))) continue;
-      if (!original || compareFlightEvents(flight, original) < 0) original = flight;
+      candidateCache = { records: next.flights.records, planets: next.planets, espionage: next.espionage, command: next.command,
+        exploration: next.exploration, profile: next.profile, list: list.sort(compareFlightEvents), cursor: 0 };
+    }
+    // The first not yet processed (processed keys only accumulate).
+    let original: FlightRecord | undefined;
+    const cache = candidateCache!;
+    while (cache.cursor < cache.list.length) {
+      const flight = cache.list[cache.cursor++]!;
+      if (!processedFlightEvents.has(flightEventKey(flight))) { original = flight; break; }
     }
     if (!original) break;
     processedFlightEvents.add(flightEventKey(original));
