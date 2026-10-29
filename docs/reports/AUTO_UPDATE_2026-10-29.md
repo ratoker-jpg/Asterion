@@ -77,7 +77,7 @@
 | Логические наборы: buildings, combat, pirates, pirate-operations, attack, flights, operations, exploration, command, reports, settings, rating, science, universe, runtime, fleet, application, espionage, repair, resources, energy, sun-raid, new-game, npc | ✅ все |
 | `qa:visual` | ✅ |
 | `test:new-game-ui`, `test:save-store-ui`, `test:save-safety-ui` | ✅ |
-| `test:late-save-ui` (фикстуры дня 2 и дня 3) | см. ниже |
+| `test:late-save-ui` (свежие фикстуры: день 2 — 39,9 млн символов, день 3 — 57,7 млн) | ✅ все 6 фаз (миграция, перезапуск, закрытие посреди прогона, закрытие во время асинхронной записи) |
 | YAML workflow | `actionlint` на машине нет. Файл разобран парсером YAML, проверены `if`, `permissions`, `concurrency`, `outputs` и bash-скрипт публикации |
 
 Разметка меню изменилась только добавлением блока версии. В QA-окнах обработчиков обновлений нет, поэтому блок там не показывается, и QA-скрипты менять не понадобилось.
