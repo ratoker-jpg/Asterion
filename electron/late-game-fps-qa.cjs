@@ -121,7 +121,10 @@ async function load(win, search) {
 
 const PROBE = `(() => {
   if (window.__fpsQa) return;
-  const qa = { on: false, frames: [], longTasks: [], gaps: [], last: 0, lastTimer: 0 };
+  const qa = { on: false, frames: [], longTasks: [], gaps: [], last: 0, lastTimer: 0, replay: null };
+  // The replay cursor as the game publishes it (state ticks, or the worker's progress).
+  window.addEventListener('asterion:runtime-state-changed', (event) => { if (event.detail?.npcReplay) qa.replay = { ...event.detail.npcReplay }; });
+  window.addEventListener('asterion:npc-catchup-progress', (event) => { if (event.detail) qa.replay = { ...event.detail }; });
   // A 16 ms timer: its gaps are how long the UI thread was busy, whether or not
   // the compositor is producing frames (a locked screen stops rAF, not timers).
   setInterval(() => {
@@ -222,9 +225,10 @@ On screen: ${screen}`);
     // Frames while the world catches up (the progress window is over the planet screen).
     await run(win, 'window.__fpsQa.start()');
     const started = Date.now();
-    const pending = `(() => { try { const save = JSON.parse(localStorage.getItem(${JSON.stringify(saveKey)}) || 'null');
-      return save?.npcReplay?.targetAt > save?.npcReplay?.processedThroughAt; } catch { return true; } })()`;
-    await waitFor(win, `!${pending} && !document.querySelector('[data-qa-npc-catchup] [role="progressbar"]')`, 3_600_000);
+    // Done once the published cursor reaches the absence's end and nothing is pending.
+    const caughtUp = save.sourceCursor + CATCHUP_HOURS * 3_600_000;
+    await waitFor(win, `(() => { const r = window.__fpsQa.replay; return Boolean(r && r.processedThroughAt >= ${caughtUp}
+      && r.targetAt <= r.processedThroughAt) && !document.querySelector('[data-qa-npc-catchup] [role="progressbar"]'); })()`, 4 * 3_600_000);
     result.catchup = { wallMs: Date.now() - started, gameHoursPerSecond: CATCHUP_HOURS / ((Date.now() - started) / 1000),
       frames: await run(win, 'window.__fpsQa.stop()') };
     await run(win, `document.querySelector('[data-qa-npc-catchup-close]')?.click()`);
