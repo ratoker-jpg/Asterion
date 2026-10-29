@@ -203,7 +203,12 @@ async function main() {
     const slot = index?.slots?.find((item) => item.id === index.activeSlotId);
     return slot?.storageKey || ${JSON.stringify(LEGACY_KEY)};
   })()`);
+  // Back to the menu first: a running game autosaves every tick and would
+  // overwrite the seeded save before the reload.
+  await load(win, '');
+  await sleep(1_000);
   await run(win, `localStorage.setItem(${JSON.stringify(saveKey)}, ${JSON.stringify(save.raw)})`);
+  if ((await run(win, `(localStorage.getItem(${JSON.stringify(saveKey)}) || '').length`)) !== save.raw.length) throw new Error('Seeded save was not stored.');
   await movePageClock(win, save.delta);
   const loadStarted = Date.now();
   await load(win, '?autostart=continue');
