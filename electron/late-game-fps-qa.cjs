@@ -30,6 +30,10 @@ if (SOFTWARE) {
   app.disableHardwareAcceleration();
   app.commandLine.appendSwitch('disable-gpu');
 }
+// Keep producing frames when the window is covered or the screen is locked.
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-background-timer-throttling');
 app.on('window-all-closed', () => {});
 
 const PROFILE = fs.mkdtempSync(path.join(os.tmpdir(), 'asterion-fps-qa-'));
@@ -117,7 +121,14 @@ async function load(win, search) {
 
 const PROBE = `(() => {
   if (window.__fpsQa) return;
-  const qa = { on: false, frames: [], longTasks: [], last: 0 };
+  const qa = { on: false, frames: [], longTasks: [], gaps: [], last: 0, lastTimer: 0 };
+  // A 16 ms timer: its gaps are how long the UI thread was busy, whether or not
+  // the compositor is producing frames (a locked screen stops rAF, not timers).
+  setInterval(() => {
+    const now = performance.now();
+    if (qa.on && qa.lastTimer) qa.gaps.push(now - qa.lastTimer);
+    qa.lastTimer = now;
+  }, 16);
   window.__fpsQa = qa;
   try {
     new PerformanceObserver((list) => { if (qa.on) for (const entry of list.getEntries()) qa.longTasks.push(entry.duration); })
@@ -129,7 +140,7 @@ const PROBE = `(() => {
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
-  qa.start = () => { qa.frames = []; qa.longTasks = []; qa.last = 0; qa.on = true; };
+  qa.start = () => { qa.frames = []; qa.longTasks = []; qa.gaps = []; qa.last = 0; qa.lastTimer = 0; qa.on = true; };
   qa.stop = () => {
     qa.on = false;
     const sorted = [...qa.frames].sort((a, b) => a - b);
@@ -144,6 +155,11 @@ const PROBE = `(() => {
       over33Ms: sorted.filter((value) => value > 33.4).length,
       longTasks: { count: longTasks.length, totalMs: Math.round(longTasks.reduce((sum, value) => sum + value, 0)),
         worstMs: longTasks.length ? Math.round(longTasks[longTasks.length - 1]) : null },
+      timer: (() => {
+        const gaps = [...qa.gaps].sort((a, b) => a - b);
+        const at = (q) => gaps.length ? round(gaps[Math.min(gaps.length - 1, Math.ceil(gaps.length * q) - 1)]) : null;
+        return { samples: gaps.length, p50Ms: at(0.5), p95Ms: at(0.95), worstMs: gaps.length ? round(gaps[gaps.length - 1]) : null };
+      })(),
     };
   };
 })()`;
@@ -169,10 +185,13 @@ async function openScreen(win, route, selector) {
 
 async function main() {
   await app.whenReady();
+  // Never shown and never focused (it must not take over the desktop): the
+  // page renders offscreen at 60 fps, so rAF intervals still reflect the UI thread.
   const win = new BrowserWindow({
-    show: true, width: 1920, height: 1080, useContentSize: true,
-    webPreferences: { contextIsolation: true, sandbox: true, backgroundThrottling: false },
+    show: false, width: 1920, height: 1080, useContentSize: true, focusable: false, skipTaskbar: true,
+    webPreferences: { contextIsolation: true, sandbox: true, backgroundThrottling: false, offscreen: true },
   });
+  win.webContents.setFrameRate(60);
   const save = prepareSave();
   await load(win, '?autostart=continue');
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
