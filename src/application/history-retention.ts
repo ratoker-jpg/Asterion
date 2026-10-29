@@ -127,6 +127,22 @@ export function isFinishedForeignPirateFlight(flight: FlightRecord, playerId: st
 const flightArchiveInfo = new WeakMap<FlightRecord, { playerId: string; pirateFinished: boolean; candidateAt: number }>();
 const recordsArchiveSummary = new WeakMap<readonly FlightRecord[], { playerId: string; pirateFinished: boolean; firstCandidateAt: number }>();
 
+const LIVE_REPORT_PREFIXES = ['battle-pirate-raid-', 'battle-pirate-', 'battle-attack-'] as const;
+const liveReportIndexes = new WeakMap<readonly FlightRecord[], { flightIds: Set<string>; resolutions: Set<string> }>();
+function liveFlightReportIndex(records: readonly FlightRecord[]) {
+  let index = liveReportIndexes.get(records);
+  if (!index) {
+    index = { flightIds: new Set(), resolutions: new Set() };
+    for (const flight of records) {
+      if (TERMINAL_FLIGHT_PHASES.has(flight.phase)) continue;
+      index.flightIds.add(flight.id);
+      if (flight.attackResolution?.reportId) index.resolutions.add(flight.attackResolution.reportId);
+    }
+    liveReportIndexes.set(records, index);
+  }
+  return index;
+}
+
 // (owner, target) of each NPC spy report, built once per (immutable) report.
 const spyReportKeys = new WeakMap<object, string>();
 const flightIdSets = new WeakMap<readonly FlightRecord[], Set<string>>();
@@ -339,16 +355,13 @@ function pruneForeignReports(
   const reports = next.combat.reports;
   const foreignCount = reports.reduce((count, report) => count + Number(isForeign(report, playerId)), 0);
   if (foreignCount <= limit) return next;
-  const protectedIds = new Set<string>(state.combat.savedReportIds);
-  for (const flight of next.flights.records) {
-    if (TERMINAL_FLIGHT_PHASES.has(flight.phase)) continue;
-    // A live flight resolves (and re-finds) its report by these ids.
-    protectedIds.add(`battle-pirate-raid-${flight.id}`);
-    protectedIds.add(`battle-pirate-${flight.id}`);
-    protectedIds.add(`battle-attack-${flight.id}`);
-    if (flight.attackResolution?.reportId) protectedIds.add(flight.attackResolution.reportId);
-  }
-  for (const operation of state.operations.items) if (operation.battleReportId) protectedIds.add(operation.battleReportId);
+  const saved = new Set<string>(state.combat.savedReportIds);
+  for (const operation of state.operations.items) if (operation.battleReportId) saved.add(operation.battleReportId);
+  // A live flight resolves (and re-finds) its report by battle-pirate-raid-,
+  // battle-pirate- or battle-attack- plus its id, or its resolution's id.
+  const live = liveFlightReportIndex(next.flights.records);
+  const protectedIds = { has: (id: string) => saved.has(id) || live.resolutions.has(id)
+    || LIVE_REPORT_PREFIXES.some((prefix) => id.startsWith(prefix) && live.flightIds.has(id.slice(prefix.length))) };
   // Protected reports stay on top of the limit; the newest unprotected
   // foreign reports fill it. Reports are appended chronologically.
   const prunable = reports.filter((report) => isForeign(report, playerId) && !protectedIds.has(report.id)).length;
