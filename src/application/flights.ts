@@ -2594,6 +2594,18 @@ function isLegalStation(state: SaveState, flight: FlightRecord, owner: string): 
   return legal;
 }
 
+// First record per id, once per immutable records array (Array.find's answer).
+const recordsById = new WeakMap<readonly FlightRecord[], Map<string, FlightRecord>>();
+function flightById(records: readonly FlightRecord[], id: string): FlightRecord | undefined {
+  let index = recordsById.get(records);
+  if (!index) {
+    index = new Map();
+    for (const flight of records) if (!index.has(flight.id)) index.set(flight.id, flight);
+    recordsById.set(records, index);
+  }
+  return index.get(id);
+}
+
 // Live flights this resolver owns, once per immutable records array: a late
 // campaign keeps thousands of finished flights in its one-day archive.
 const liveReconcilable = new WeakMap<readonly FlightRecord[], FlightRecord[]>();
@@ -2722,7 +2734,7 @@ export function reconcileFlights(
     }
     if (!original) break;
     processedFlightEvents.add(flightEventKey(original));
-    const current = next.flights.records.find((flight) => flight.id === original.id);
+    const current = flightById(next.flights.records, original.id);
     if (!current) continue;
     if (current.ownerSide === 'npc' && current.ownerId) {
       const source = getEspionageTargets(next.espionage)[current.originPlanetId];
@@ -3524,7 +3536,7 @@ export function reconcileFlights(
       continue;
     }
 
-    const refreshed = next.flights.records.find((flight) => flight.id === original.id) ?? original;
+    const refreshed = flightById(next.flights.records, original.id) ?? original;
     if (refreshed.phase === 'returning' && refreshed.returnAt !== undefined && now >= refreshed.returnAt) {
       let returnedFlight = refreshed;
       if ((refreshed.ownerSide === 'bot01'||refreshed.ownerSide === 'npc')

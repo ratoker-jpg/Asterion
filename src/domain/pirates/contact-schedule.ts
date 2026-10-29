@@ -131,6 +131,7 @@ function isValidDefeatRecordCached(record: PirateContactDefeatRecord): boolean {
 // this system's defeats. Re-deriving every cycle since the epoch on each system
 // render dominated NPC decisions, so the latest few results per base are kept.
 const shiftedScheduleCache = new WeakMap<object, Map<string, readonly PirateScheduleCycle[]>>();
+const shiftedByInputs = new WeakMap<object, WeakMap<object, { galaxy: number; system: number; shifted: readonly PirateScheduleCycle[] }>>();
 
 export type PirateScheduleCycle = Readonly<{
   cycleIndex: number;
@@ -149,6 +150,11 @@ export function applyPirateContactDefeatsToSchedules<T extends PirateScheduleCyc
   system: number,
   defeats: readonly PirateContactDefeatRecord[] = [],
 ): T[] {
+  // The same schedule array and defeats list (callers keep both while
+  // nothing changes): the answer is the one computed last time.
+  const byDefeats = shiftedByInputs.get(schedules);
+  const known = byDefeats?.get(defeats);
+  if (known && known.galaxy === galaxy && known.system === system) return known.shifted as T[];
   const records = new Map<string, PirateContactDefeatRecord>();
   for (const record of defeats) {
     if (record.galaxy !== galaxy || record.system !== system || !isValidDefeatRecordCached(record)) continue;
@@ -158,8 +164,13 @@ export function applyPirateContactDefeatsToSchedules<T extends PirateScheduleCyc
   const signature = `${galaxy}:${system}:${schedules.length}:${[...records.values()]
     .map((record) => `${record.contactCycleKey}@${record.defeatedAt}`).sort().join('|')}`;
   let bySignature = shiftedScheduleCache.get(schedules);
+  const remember = (shifted: readonly PirateScheduleCycle[]) => {
+    let inputs = shiftedByInputs.get(schedules);
+    if (!inputs) shiftedByInputs.set(schedules, inputs = new WeakMap());
+    inputs.set(defeats, { galaxy, system, shifted });
+  };
   const cached = bySignature?.get(signature);
-  if (cached) return cached as T[];
+  if (cached) { remember(cached); return cached as T[]; }
   let nextStartAt: number | undefined;
   const shifted = schedules.map((schedule) => {
     const startAt = nextStartAt ?? schedule.startAt;
@@ -177,5 +188,6 @@ export function applyPirateContactDefeatsToSchedules<T extends PirateScheduleCyc
   if (!bySignature) { bySignature = new Map(); shiftedScheduleCache.set(schedules, bySignature); }
   if (bySignature.size >= 8) bySignature.clear();
   bySignature.set(signature, shifted);
+  remember(shifted);
   return shifted;
 }
