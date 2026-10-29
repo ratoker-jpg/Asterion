@@ -1,3 +1,4 @@
+import { getBrowserSaveStorage } from './save-storage.ts';
 import {
   SCIENCE_CANCEL_REQUEST_EVENT,
   SCIENCE_RUNTIME_CHANGED_EVENT,
@@ -279,7 +280,7 @@ export function readScienceSnapshot(options: PersistenceOptions = {}): ScienceRu
   const persistence = createPersistenceFacade(options);
   const storage = options.storage !== undefined
     ? options.storage
-    : typeof window === 'undefined' ? null : window.localStorage;
+    : getBrowserSaveStorage();
   const raw = storage?.getItem(persistence.saveKey);
   if (!raw) {
     return createScienceRuntimeSnapshot(

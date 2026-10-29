@@ -137,7 +137,7 @@ jobs:
       matrix:
         include:
           - shard: visual
-            suites: "qa:visual test:test-mode-ui:skip test:header-ui test:resource-assets-ui test:save-safety-ui:skip"
+            suites: "qa:visual test:test-mode-ui:skip test:header-ui test:resource-assets-ui test:save-safety-ui:skip test:save-store-ui"
           - shard: science-reports
             suites: "test:science-ui:skip test:building-actions-ui test:reports-ui test:battle-reports-ui:skip test:simulator-ui:skip test:space-flight-ui:skip test:production-test-isolation-ui:skip"
           # Owner decision (25.10.2026): a long absence is caught up in full

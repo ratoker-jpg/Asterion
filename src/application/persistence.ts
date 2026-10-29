@@ -1,3 +1,4 @@
+import { getBrowserSaveStorage } from './save-storage.ts';
 import {
   createDefaultBattleHistory,
   migrateBattleHistory,
@@ -275,7 +276,7 @@ export type SaveLoadResult =
 
 function resolveStorage(storage?: StorageLike | null): StorageLike | null {
   if (storage !== undefined) return storage;
-  return typeof window === 'undefined' ? null : window.localStorage;
+  return getBrowserSaveStorage();
 }
 
 function numberOr(value: unknown, fallback: number): number {

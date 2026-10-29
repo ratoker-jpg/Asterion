@@ -1,3 +1,4 @@
+import { getBrowserSaveStorage } from '../../application/save-storage.ts';
 import { getOperationDefinition } from './catalog.ts';
 import {
   OPERATION_ARCHETYPES,
@@ -158,8 +159,7 @@ function normalizeOperation(value: unknown): OperationInstance | null {
 
 function resolveStorage(storage?: StorageLike): StorageLike | null {
   if (storage) return storage;
-  if (typeof window === 'undefined') return null;
-  return window.localStorage;
+  return getBrowserSaveStorage();
 }
 
 export function createDefaultOperationsState(_mode: RuntimeMode = 'test'): OperationsState {

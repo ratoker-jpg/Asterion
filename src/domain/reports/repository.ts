@@ -1,3 +1,4 @@
+import { getBrowserSaveStorage } from '../../application/save-storage.ts';
 import { getRuntimeSaveKey, type RuntimeMode } from '../runtime/mode.ts';
 import type { ReportCategory, ReportItem, ReportsState } from './types.ts';
 
@@ -29,8 +30,7 @@ function appendNewestId(ids: readonly string[], id: string) {
 
 function resolveStorage(storage?: StorageLike): StorageLike | null {
   if (storage) return storage;
-  if (typeof window === 'undefined') return null;
-  return window.localStorage;
+  return getBrowserSaveStorage();
 }
 
 export function createDefaultReportsState(): ReportsState {

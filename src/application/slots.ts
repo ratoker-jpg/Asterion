@@ -1,3 +1,4 @@
+import { getBrowserSaveStorage } from './save-storage.ts';
 import {
   LEGACY_PRODUCTION_SAVE_KEY,
   LEGACY_SLOT_ID,
@@ -36,7 +37,7 @@ export type SlotWriteResult = { ok: true; index: SaveSlotIndex } | { ok: false; 
 
 function resolveStorage(storage?: SlotStorage | null): SlotStorage | null {
   if (storage !== undefined) return storage;
-  return typeof window === 'undefined' ? null : window.localStorage;
+  return getBrowserSaveStorage() as SlotStorage | null;
 }
 
 function errorText(error: unknown): string {

@@ -17,7 +17,7 @@
     "benchmark:npc-full-world": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs tools/benchmark-npc-full-world.mjs",
     "benchmark:late-game": "node --max-old-space-size=8192 --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs tools/late-game-catchup.mjs",
     "test:buildings": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/domain/buildings/balance-v1.test.ts src/domain/buildings/resource-zone.test.ts src/domain/buildings/production-bots.test.ts src/domain/buildings/production-bot-building-limits.test.ts src/domain/buildings/recycling.test.ts src/domain/buildings/recycling-building-limits.test.ts src/domain/buildings/trade.test.ts src/domain/buildings/spaceport-building-limits.test.ts src/domain/buildings/spaceport-upgrades.test.ts src/domain/buildings/requirements-integrity.test.ts src/building-interior-navigation.test.ts src/domain/buildings/faction-art.test.ts",
-    "test:application": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/application/application.test.ts src/application/ship-catalog-save-compatibility.test.ts src/application/offline-boundaries.test.ts src/application/science-refunds.test.ts src/application/building-refund-notice.test.ts src/application/player-journal.test.ts",
+    "test:application": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/application/application.test.ts src/application/ship-catalog-save-compatibility.test.ts src/application/offline-boundaries.test.ts src/application/science-refunds.test.ts src/application/building-refund-notice.test.ts src/application/player-journal.test.ts src/application/save-storage.test.ts",
     "test:flights": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/domain/flights/*.test.ts src/application/flights.test.ts src/application/alliance-aid.test.ts src/application/commander-deployment.test.ts src/application/map-transport.test.ts src/application/flight-visibility.test.ts src/application/owner-presence.test.ts",
     "test:attack": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/application/attack.test.ts src/application/satellite-defense.test.ts src/application/attack-eligibility.test.ts",
     "test:pirate-operations": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/application/pirate-battle-export.test.ts src/application/pirates.test.ts src/application/pirate-persistence.integration.test.ts src/application/pirate-presentation.test.ts src/application/pirate-operations.integration.test.ts src/application/pirate-combat.integration.test.ts src/application/pirate-raids.integration.test.ts",
@@ -74,7 +74,8 @@
     "test:npc-replay-ui-6h": "electron electron/npc-replay-qa.cjs --hours=6",
     "test:npc-replay-full-world-ui": "electron electron/npc-replay-qa.cjs --full-world",
     "test:save-safety-ui": "electron electron/save-safety-qa.cjs",
-    "test:late-game-fps-ui": "electron electron/late-game-fps-qa.cjs"
+    "test:late-game-fps-ui": "electron electron/late-game-fps-qa.cjs",
+    "test:save-store-ui": "electron electron/save-store-qa.cjs"
   },
   "dependencies": {
     "react": "19.2.8",

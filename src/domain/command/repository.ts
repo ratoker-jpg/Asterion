@@ -1,3 +1,4 @@
+import { getBrowserSaveStorage } from '../../application/save-storage.ts';
 import {
   DEFAULT_ALLIANCE_EMBLEM,
   MAX_ALLIANCE_MEMBERS,
@@ -613,8 +614,7 @@ export function migrateCommandState(
 
 function resolveStorage(storage?: StorageLike): StorageLike | null {
   if (storage) return storage;
-  if (typeof window === 'undefined') return null;
-  return window.localStorage;
+  return getBrowserSaveStorage();
 }
 
 export function readCommandState(storage?: StorageLike, mode?: RuntimeMode, context?: Partial<CommandOwnerContext>): CommandState {

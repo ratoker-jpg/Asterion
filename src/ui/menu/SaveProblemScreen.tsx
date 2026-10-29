@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { getBrowserSaveStorage } from '../../application/save-storage.ts';
 import { createPersistenceFacade, loadSavedState, SAVE_SCHEMA_VERSION } from '../../application/persistence.ts';
 import { describeSaveProblem, type SaveProblem } from '../../domain/session/save-health.ts';
 import './menu.css';
@@ -29,7 +30,7 @@ export function TestSaveGuard({ children }: { children: ReactNode }) {
   const facade = createPersistenceFacade({ mode: 'test' });
   const exportRaw = () => {
     let raw: string | null = null;
-    try { raw = window.localStorage.getItem(facade.saveKey); } catch { raw = null; }
+    try { raw = getBrowserSaveStorage()?.getItem(facade.saveKey) ?? null; } catch { raw = null; }
     if (raw !== null) downloadRaw(`asterion-test-save-${new Date().toISOString().slice(0, 10)}.json`, raw);
   };
   return (

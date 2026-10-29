@@ -1,3 +1,4 @@
+import { getBrowserSaveStorage } from '../../application/save-storage.ts';
 import { DEMO_BATTLE_REPORTS } from './battle-fixtures.ts';
 import { COMBAT_SAVE_SCHEMA_VERSION } from './priority.ts';
 import { normalizeBattleReport, type BattleReport } from './report.ts';
@@ -26,8 +27,7 @@ function isBattleReport(value: unknown): value is BattleReport {
 
 function resolveStorage(storage?: StorageLike): StorageLike | null {
   if (storage) return storage;
-  if (typeof window === 'undefined') return null;
-  return window.localStorage;
+  return getBrowserSaveStorage();
 }
 
 export function createDefaultBattleHistory(mode: RuntimeMode = 'test'): BattleHistoryState {
@@ -105,7 +105,7 @@ export function persistBattleHistory(
     };
     target.setItem(saveKey, JSON.stringify(nextSave));
 
-    if (typeof window !== 'undefined' && target === window.localStorage) {
+    if (typeof window !== 'undefined' && target === getBrowserSaveStorage()) {
       window.dispatchEvent(new CustomEvent<BattleHistoryState>(BATTLE_HISTORY_CHANGED_EVENT, { detail: normalized }));
     }
 

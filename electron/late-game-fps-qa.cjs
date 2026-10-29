@@ -18,6 +18,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { pathToFileURL } = require('url');
+const { registerSaveStore } = require('./save-store.cjs');
 
 const args = process.argv.slice(2);
 const option = (name, fallback) => {
@@ -188,11 +189,13 @@ async function openScreen(win, route, selector) {
 
 async function main() {
   await app.whenReady();
+  registerSaveStore();
   // Never shown and never focused (it must not take over the desktop): the
   // page renders offscreen at 60 fps, so rAF intervals still reflect the UI thread.
   const win = new BrowserWindow({
     show: false, width: 1920, height: 1080, useContentSize: true, focusable: false, skipTaskbar: true,
-    webPreferences: { contextIsolation: true, sandbox: true, backgroundThrottling: false, offscreen: true },
+    // The game's own preload and desktop save store: late saves outgrow localStorage.
+    webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, backgroundThrottling: false, offscreen: true },
   });
   win.webContents.setFrameRate(60);
   const save = prepareSave();
@@ -207,8 +210,12 @@ async function main() {
   // overwrite the seeded save before the reload.
   await load(win, '');
   await sleep(1_000);
-  await run(win, `localStorage.setItem(${JSON.stringify(saveKey)}, ${JSON.stringify(save.raw)})`);
-  if ((await run(win, `(localStorage.getItem(${JSON.stringify(saveKey)}) || '').length`)) !== save.raw.length) throw new Error('Seeded save was not stored.');
+  // As the game stores it: a long save goes to the desktop store behind a pointer.
+  const external = save.raw.length >= 8_000_000;
+  await run(win, external
+    ? `(() => { window.asterionDesktop.saveStore.write(${JSON.stringify(saveKey)}, 'qa-seed', ${JSON.stringify(save.raw)});
+        localStorage.setItem(${JSON.stringify(saveKey)}, JSON.stringify({ asterionExternalSave: { version: 1, writeId: 'qa-seed', chars: ${save.raw.length} }, saveWriter: 1 })); })()`
+    : `localStorage.setItem(${JSON.stringify(saveKey)}, ${JSON.stringify(save.raw)})`);
   await movePageClock(win, save.delta);
   const loadStarted = Date.now();
   await load(win, '?autostart=continue');
@@ -254,6 +261,11 @@ On screen: ${screen}`);
     result.screens[route] = await measure(win, SECONDS);
     process.stderr.write(`${route}: ${JSON.stringify(result.screens[route])}\n`);
   }
+  // Where the game keeps the save now (a late one: the desktop store behind a pointer).
+  result.storedSave = await run(win, `(() => { const raw = localStorage.getItem(${JSON.stringify(saveKey)}) || '';
+    try { const pointer = JSON.parse(raw).asterionExternalSave; if (pointer) return { external: true, writeId: pointer.writeId, chars: pointer.chars }; } catch {}
+    return { external: false, chars: raw.length }; })()`);
+  if (external && (!result.storedSave.external || result.storedSave.writeId === 'qa-seed')) throw new Error(`The game did not rewrite its late save: ${JSON.stringify(result.storedSave)}`);
   fs.mkdirSync(OUTPUT, { recursive: true });
   fs.writeFileSync(path.join(OUTPUT, 'fps.json'), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result, null, 2));
