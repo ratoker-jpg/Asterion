@@ -1,0 +1,17 @@
+/* Game version and update control (GameUpdateRow): main menu footer and pause menu. Tokens --ut-*, race accents --race-*. */
+
+.game-update { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.game-update__copy { display: grid; gap: 3px; min-width: 0; flex: 1; }
+.game-update__copy b { color: #cfe6ee; font: 700 12px Montserrat, sans-serif; letter-spacing: .12em; }
+.game-update__status { color: #7fa4b0; font-size: 11px; letter-spacing: .04em; overflow-wrap: anywhere; }
+.game-update__status.is-downloaded { color: var(--race-accent); }
+.game-update__status.is-error { color: #c99aa3; }
+.game-update__bar { position: relative; display: block; height: 3px; border-radius: 2px; background: var(--ut-border); overflow: hidden; }
+.game-update__bar i { position: absolute; inset: 0 auto 0 0; background: var(--race-accent); transition: width 240ms ease-out; }
+
+.game-update--menu { padding: 12px 14px; border: 1px solid var(--ut-border); border-radius: var(--ut-r-card); background: rgba(6, 14, 20, .62); letter-spacing: normal; }
+.game-update--menu .menu-btn { flex: none; letter-spacing: .12em; }
+
+.game-update--pause { margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--ut-border); }
+.game-update--pause .game-update__btn { flex: none; min-height: 36px; padding: 0 14px; font-size: 11px; }
+.game-update--pause .game-update__btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }

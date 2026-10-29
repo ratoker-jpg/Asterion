@@ -1,4 +1,5 @@
 import { isFlightEventForPlayer, isHostileFlightIncomingToPlayer } from './application/flight-visibility.ts';
+import { SAVE_FLUSH_EVENT } from './application/save-storage.ts';
 import { diffPlayerActions, PLAYER_JOURNAL_SNAPSHOT_INTERVAL_MS, snapshotPlayer } from './application/player-journal.ts';
 import { appendJournalEntries, setActiveJournalCampaign } from './ui/player-journal-store.ts';
 import { selectOwnerPresence } from './application/owner-presence.ts';
@@ -1006,9 +1007,11 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     };
     window.addEventListener('pagehide', flush);
     window.addEventListener('beforeunload', flush);
+    window.addEventListener(SAVE_FLUSH_EVENT, flush);
     return () => {
       window.removeEventListener('pagehide', flush);
       window.removeEventListener('beforeunload', flush);
+      window.removeEventListener(SAVE_FLUSH_EVENT, flush);
     };
   }, [writeSave]);
   const deferredThrottledWrite = useRef<number | null>(null);
@@ -2449,7 +2452,11 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       refreshSlotMeta(session.slotId, next);
     };
     window.addEventListener('beforeunload', onUnload);
-    return () => window.removeEventListener('beforeunload', onUnload);
+    window.addEventListener(SAVE_FLUSH_EVENT, onUnload);
+    return () => {
+      window.removeEventListener('beforeunload', onUnload);
+      window.removeEventListener(SAVE_FLUSH_EVENT, onUnload);
+    };
   }, [foldPlayTime, persistence, session]);
 
   const exportCurrentSave = () => {
