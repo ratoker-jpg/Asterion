@@ -993,6 +993,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const lastThrottledWriteAt = useRef(0);
   // The last state a clock tick produced (see the autosave below).
   const clockTickState = useRef<SaveState | null>(null);
+  // The world a worker catch-up handed back: written at once, but in slices (it is a whole late world).
+  const catchupResultState = useRef<SaveState | null>(null);
   // A deferred tick write must not be lost when the window closes.
   useEffect(() => {
     const flush = () => {
@@ -1024,6 +1026,12 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     }
     // A worker catch-up writes its own progress; App's copy is the frozen start.
     if (catchupWorker.current) return;
+    if (state === catchupResultState.current) {
+      catchupResultState.current = null;
+      lastThrottledWriteAt.current = Date.now();
+      writeSaveInSlices(state);
+      return;
+    }
     // Clock ticks only advance time, which a reload replays identically, so a
     // late-game world (tens of MB of JSON) is not re-serialized every second.
     // Player commands and everything else are written at once.
@@ -1141,6 +1149,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         for (const key of message.removedKeys) delete merged[key];
         finish();
         stateRef.current = merged;
+        catchupResultState.current = merged;
         setState(merged);
         announceRuntimeEvents(message.events, merged);
       } else {
