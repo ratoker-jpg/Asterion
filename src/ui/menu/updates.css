@@ -9,7 +9,7 @@
 .game-update__bar { position: relative; display: block; height: 3px; border-radius: 2px; background: var(--ut-border); overflow: hidden; }
 .game-update__bar i { position: absolute; inset: 0 auto 0 0; background: var(--race-accent); transition: width 240ms ease-out; }
 
-.game-update--menu { padding: 12px 14px; border: 1px solid var(--ut-border); border-radius: var(--ut-r-card); background: rgba(6, 14, 20, .62); letter-spacing: normal; }
+.game-update--menu { width: 560px; box-sizing: border-box; padding: 12px 14px; border: 1px solid var(--ut-border); border-radius: var(--ut-r-card); background: rgba(6, 14, 20, .62); letter-spacing: normal; }
 .game-update--menu .menu-btn { flex: none; letter-spacing: .12em; }
 
 .game-update--pause { margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--ut-border); }
