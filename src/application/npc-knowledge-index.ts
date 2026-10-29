@@ -27,6 +27,8 @@ function push<T>(map: Map<string, T[]>, key: string | undefined, value: T): void
 export function ownerSpyReports(reports: readonly SpyReportSnapshot[], missions: readonly SpyMission[], ownerId: string): readonly SpyReportSnapshot[] {
   const cached = spyByOwner.get(reports);
   if (cached && cached.missions === missions) return cached.index.get(ownerId) ?? [];
+  const extended = extendSpyIndex(reports, missions);
+  if (extended) return extended.get(ownerId) ?? [];
   const index = new Map<string, SpyReportSnapshot[]>();
   // First match, as Array.find over the missions would pick.
   const missionOwner = new Map<string, string>();
@@ -36,7 +38,33 @@ export function ownerSpyReports(reports: readonly SpyReportSnapshot[], missions:
     push(index, owner, report);
   }
   spyByOwner.set(reports, { missions, index });
+  lastSpyIndex = { reports, missions, index, ownerless: reports.some((report) => !(typeof report.ownerId === 'string' && report.ownerId.length > 0)) };
   return index.get(ownerId) ?? [];
+}
+
+/**
+ * A new report usually only appends to the archive. When the previous indexed
+ * array is an exact prefix and every report carries its owner (so missions are
+ * not consulted), the index is that one plus the new reports: buckets of
+ * untouched owners are shared, touched ones copied (older arrays keep theirs).
+ */
+let lastSpyIndex: { reports: readonly SpyReportSnapshot[]; missions: readonly SpyMission[]; index: Map<string, SpyReportSnapshot[]>; ownerless: boolean } | null = null;
+function extendSpyIndex(reports: readonly SpyReportSnapshot[], missions: readonly SpyMission[]): Map<string, SpyReportSnapshot[]> | null {
+  const last = lastSpyIndex;
+  if (!last || last.ownerless || reports.length < last.reports.length) return null;
+  for (let at = last.reports.length - 1; at >= 0; at -= 1) if (reports[at] !== last.reports[at]) return null;
+  const index = new Map(last.index);
+  const copied = new Set<string>();
+  for (let at = last.reports.length; at < reports.length; at += 1) {
+    const report = reports[at]!;
+    if (!(typeof report.ownerId === 'string' && report.ownerId.length > 0)) return null;
+    const owner = report.ownerId;
+    if (!copied.has(owner)) { copied.add(owner); index.set(owner, [...(index.get(owner) ?? [])]); }
+    index.get(owner)!.push(report);
+  }
+  spyByOwner.set(reports, { missions, index });
+  lastSpyIndex = { reports, missions, index, ownerless: false };
+  return index;
 }
 
 /** Battles an owner fought on either side, in save order. */

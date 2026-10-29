@@ -373,10 +373,19 @@ function reconcileRuntimeSlice(
       for (const flight of next.flights.records) if (live(flight)) name(flight);
     } else if (recordsBefore) {
       // After the checkpoint: the owners of every flight it created, changed or removed.
-      const before = new Set(recordsBefore);
-      const after = new Set(next.flights.records);
-      for (const flight of next.flights.records) if (!before.has(flight)) name(flight);
-      for (const flight of recordsBefore) if (!after.has(flight)) name(flight);
+      const records = next.flights.records;
+      if (records.length === recordsBefore.length) {
+        // Updated in place (the common case): compare slot by slot. A moved
+        // record would name a few owners more, which settling allows.
+        for (let index = 0; index < records.length; index += 1) {
+          if (records[index] !== recordsBefore[index]) { name(records[index]!); name(recordsBefore[index]!); }
+        }
+      } else {
+        const before = new Set(recordsBefore);
+        const after = new Set(records);
+        for (const flight of records) if (!before.has(flight)) name(flight);
+        for (const flight of recordsBefore) if (!after.has(flight)) name(flight);
+      }
     } else {
       // Before it: the owners of the flights that act now (arrive, return or leave an expedition).
       for (const flight of next.flights.records) if (live(flight) && flightEventAt(flight) === at) name(flight);

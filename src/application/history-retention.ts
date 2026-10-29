@@ -127,6 +127,8 @@ export function isFinishedForeignPirateFlight(flight: FlightRecord, playerId: st
 const flightArchiveInfo = new WeakMap<FlightRecord, { playerId: string; pirateFinished: boolean; candidateAt: number }>();
 const recordsArchiveSummary = new WeakMap<readonly FlightRecord[], { playerId: string; pirateFinished: boolean; firstCandidateAt: number }>();
 
+// (owner, target) of each NPC spy report, built once per (immutable) report.
+const spyReportKeys = new WeakMap<object, string>();
 const flightIdSets = new WeakMap<readonly FlightRecord[], Set<string>>();
 function flightIdSet(records: readonly FlightRecord[]): Set<string> {
   let ids = flightIdSets.get(records);
@@ -225,7 +227,8 @@ export function pruneCampaignHistory(state: SaveState, at: number | undefined = 
     const newestNpcReport = new Map<string, number>();
     spyReports.forEach((report, index) => {
       if (typeof report.ownerId !== 'string' || !report.ownerId || report.ownerId === playerId) return;
-      const key = `${report.ownerId}\u0000${report.targetPlanetId}`;
+      let key = spyReportKeys.get(report);
+      if (key === undefined) spyReportKeys.set(report, key = `${report.ownerId}\u0000${report.targetPlanetId}`);
       const previous = newestNpcReport.get(key);
       if (previous === undefined || spyReports[previous]!.createdAt <= report.createdAt) newestNpcReport.set(key, index);
     });

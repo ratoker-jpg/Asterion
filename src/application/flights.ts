@@ -2581,6 +2581,19 @@ export type FlightReconcileOptions = {
   reconcileTargetResources?: boolean;
 };
 
+// Live flights this resolver owns, once per immutable records array: a late
+// campaign keeps thousands of finished flights in its one-day archive.
+const liveReconcilable = new WeakMap<readonly FlightRecord[], FlightRecord[]>();
+function liveReconcilableFlights(records: readonly FlightRecord[]): readonly FlightRecord[] {
+  let live = liveReconcilable.get(records);
+  if (!live) {
+    // Sun raid flights are owned by application/sun-raid.ts (fixed routes, side battles).
+    live = records.filter((flight) => ACTIVE_FLIGHT_PHASES.has(flight.phase) && flight.missionId !== 'sun-attack' && flight.missionId !== 'sun-support');
+    liveReconcilable.set(records, live);
+  }
+  return live;
+}
+
 export function reconcileFlights(
   state: SaveState,
   now: number,
@@ -2662,9 +2675,7 @@ export function reconcileFlights(
       && candidateCache.profile === next.profile;
     if (!cacheValid) {
       const list: FlightRecord[] = [];
-      for (const flight of next.flights.records) {
-        // Sun raid flights are owned by application/sun-raid.ts (fixed routes, side battles).
-        if (!ACTIVE_FLIGHT_PHASES.has(flight.phase) || flight.missionId === 'sun-attack' || flight.missionId === 'sun-support') continue;
+      for (const flight of liveReconcilableFlights(next.flights.records)) {
         const hasMissingOrigin = flight.ownerSide !== 'npc' && (flight.missionId === 'deployment' || flight.missionId === 'space-flight' || flight.missionId === 'pirate-recon' || flight.missionId === 'pirate-elimination' || (flight.missionId === 'expedition' && flight.ownerSide !== 'bot01') || flight.explorationAttack)
           && !next.planets[flight.originPlanetId];
         const spyMission = flight.missionId === 'espionage' ? spyMissionForFlight(next, flight) : undefined;
