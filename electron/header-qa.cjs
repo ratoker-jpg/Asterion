@@ -23,6 +23,10 @@ const EXPECTED_ZONE_POSITIONS = {
   military: ['57px', '-18px'],
 };
 const TEST_SAVE_KEY = 'asterion.vertical-slice.test.v1';
+// The wallet keeps earning (Test Mode runs time faster) between seeding the save
+// and reading the header; a slow runner can add more than a 0.0001% rounding
+// margin. Only growth is allowed, far below any tone boundary.
+const RATIO_INCOME_ALLOWANCE = 0.01;
 const TEST_RESOURCE_CAPACITIES = {
   metal: 450_100_000,
   minerals: 300_100_000,
@@ -263,9 +267,10 @@ async function assertRepresentativeRatios(win, file, label) {
       ];
       await waitFor(win, `(() => {
         const expected = ${JSON.stringify(expectedRatios)};
+        const RATIO_INCOME_ALLOWANCE = ${RATIO_INCOME_ALLOWANCE};
         return expected.every(([kind, ratio]) => {
           const value = Number(document.querySelector('[data-qa-resource-chip="' + kind + '"]')?.getAttribute('data-qa-resource-ratio'));
-          return Number.isFinite(value) && Math.abs(value - ratio) < 0.0001;
+          return Number.isFinite(value) && value > ratio - 0.0001 && value < ratio + RATIO_INCOME_ALLOWANCE;
         });
       })()`);
       await settle(win);
@@ -283,7 +288,7 @@ async function assertRepresentativeRatios(win, file, label) {
         const pulseContract = expectedPulse
           ? (hasPulseAnimation || (reducedMotion && reducedMotionPulse))
           : !hasPulseAnimation;
-        if (!item || Math.abs(item.ratio - expectedRatio) > 0.0001 || item.tone !== expectedTone || item.pulse !== expectedPulse || !pulseContract || !item.fill || normalizedColor !== EXPECTED_RESOURCE_COLORS[expectedTone]) {
+        if (!item || item.ratio <= expectedRatio - 0.0001 || item.ratio >= expectedRatio + RATIO_INCOME_ALLOWANCE || item.tone !== expectedTone || item.pulse !== expectedPulse || !pulseContract || !item.fill || normalizedColor !== EXPECTED_RESOURCE_COLORS[expectedTone]) {
           throw new Error(`${label}: representative ${ratio}% ${kind} contract failed: ${JSON.stringify({ item, expectedRatio, expectedTone, expectedPulse, hasPulseAnimation, reducedMotion })}`);
         }
       }

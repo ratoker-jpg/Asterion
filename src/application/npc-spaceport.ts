@@ -11,6 +11,7 @@ import {
 } from '../domain/buildings/spaceport-upgrades.ts';
 import type { CommanderId } from '../domain/combat/commanders.ts';
 import { syncSpyTargetCommanderCounts } from '../domain/espionage/runtime.ts';
+import { NPC_APPLIED_ID_LIMIT } from './npc-economy.ts';
 import type { ShipId } from '../domain/combat/ids.ts';
 import type { SpyTargetState } from '../domain/espionage/types.ts';
 import { ACTIVE_RUNTIME_MODE } from '../domain/runtime/mode.ts';
@@ -81,7 +82,8 @@ export function startNpcSpaceportUpgrade(target: SpyTargetState, shipId: ShipId 
       ...target,
       spaceportUpgrades: transition.state,
       resources: { ...target.resources, ...transition.wallet },
-      economyAppliedActionIds: [...(target.economyAppliedActionIds ?? []), key].slice(-256),
+      // The same receipt window as every other NPC action.
+      economyAppliedActionIds: [...(target.economyAppliedActionIds ?? []), key].slice(-NPC_APPLIED_ID_LIMIT),
     },
   };
 }
@@ -115,10 +117,13 @@ export function settleNpcSpaceport(target: SpyTargetState, at: number): SpyTarge
 }
 
 /** One owner flies one set of upgrade levels on all of its planets: the highest each ship has reached. */
-export function syncNpcOwnerShipLevels(targets: Record<string, SpyTargetState>, ownerIds: ReadonlySet<string>): boolean {
+export function syncNpcOwnerShipLevels(targets: Record<string, SpyTargetState>, ownerIds: ReadonlySet<string>,
+  ownedIds?: (ownerId: string) => readonly string[]): boolean {
   let changed = false;
   for (const ownerId of ownerIds) {
-    const owned = Object.entries(targets).filter(([, target]) => target.kind === 'npc' && target.ownerId === ownerId);
+    // `ownedIds` lists the owner's planet ids in save order (a faster equal of the scan).
+    const owned = (ownedIds ? ownedIds(ownerId).map((id) => [id, targets[id]!] as const) : Object.entries(targets))
+      .filter(([, target]) => target.kind === 'npc' && target.ownerId === ownerId);
     if (owned.length < 2) continue;
     const best: Partial<Record<ShipId, number>> = {};
     const bestCommanders: Partial<Record<CommanderId, number>> = {};

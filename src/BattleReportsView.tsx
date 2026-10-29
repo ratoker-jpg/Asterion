@@ -17,6 +17,7 @@ import {
   BATTLE_HISTORY_CHANGED_EVENT,
   persistBattleHistory,
   readBattleHistory,
+  migrateBattleHistory,
   setBattleReportSaved,
   type BattleHistoryState,
 } from './domain/combat/battle-repository.ts';
@@ -43,6 +44,7 @@ import {
 } from './domain/combat/battle-report-view-model.ts';
 import { getFactionGeneralAsset } from './domain/profile/faction-assets.ts';
 import { createPersistenceFacade } from './application/persistence.ts';
+import type { SaveState } from './application/contracts.ts';
 import { selectRecordedBattlePointAwards } from './domain/rating/scoring.ts';
 import { ACTIVE_RUNTIME_MODE, RUNTIME_RESET_EVENT, RUNTIME_STATE_CHANGED_EVENT } from './domain/runtime/mode.ts';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
@@ -1229,9 +1231,21 @@ export function BattleReportsView({ planetName, coords, onBack }: { planetName: 
   const [openReportId, setOpenReportId] = useState<string | null>(null);
   const [saveNotice, setSaveNotice] = useState<SaveNotice>({ kind: 'saved', message: '✓ Автосохранение активно' });
   const closeReport = useCallback(() => setOpenReportId(null), []);
+  const syncedCombat = useRef<SaveState['combat'] | null>(null);
 
   useEffect(() => {
-    const sync = () => {
+    const sync = (event?: Event) => {
+      // The clock publishes the live state every second: take it as is
+      // instead of reading and parsing the whole save from storage again.
+      const live = event instanceof CustomEvent ? event.detail as SaveState | undefined : undefined;
+      if (live?.planets && live.combat) {
+        if (live.combat !== syncedCombat.current) {
+          syncedCombat.current = live.combat;
+          setHistory(migrateBattleHistory(live.combat, ACTIVE_RUNTIME_MODE));
+        }
+        setSaveState(live);
+        return;
+      }
       setHistory(readBattleHistory(undefined, ACTIVE_RUNTIME_MODE));
       setSaveState(createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read());
     };
@@ -1251,12 +1265,16 @@ export function BattleReportsView({ planetName, coords, onBack }: { planetName: 
     };
   }, []);
 
+  // View models depend on who is an NPC, the awards and the player only, not
+  // on the whole save the clock replaces every second.
+  const npcOwnerKey = Object.keys(saveState.npc?.profiles ?? {}).join(' ');
+  const npcOwners = useMemo(() => new Set(npcOwnerKey ? npcOwnerKey.split(' ') : []), [npcOwnerKey]);
   const viewModels = useMemo(
-    () => new Map(history.reports.filter((report) => !saveState.npc?.profiles[report.attacker.playerId ?? '']
-      || !saveState.npc?.profiles[report.defender.playerId ?? '']).map((report) => [report.id, createBattleReportViewModel(report, {
+    () => new Map(history.reports.filter((report) => !npcOwners.has(report.attacker.playerId ?? '')
+      || !npcOwners.has(report.defender.playerId ?? '')).map((report) => [report.id, createBattleReportViewModel(report, {
       awardedBattlePoints: selectRecordedBattlePointAwards(saveState.rating, report, saveState.profile.playerId),
     })])),
-    [history.reports, saveState],
+    [history.reports, npcOwners, saveState.rating, saveState.profile.playerId],
   );
   const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {

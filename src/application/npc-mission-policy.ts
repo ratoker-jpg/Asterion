@@ -1,12 +1,12 @@
 import type { NpcProfile } from '../domain/npc/types.ts';
-import { ownerBattleReports, ownerSpyReports, publicDebrisEntries } from './npc-knowledge-index.ts';
+import { ownerBattleReports, ownerFlights, ownerSpyReports, publicDebrisEntries, publicPlayerPlanetsKey } from './npc-knowledge-index.ts';
 import { SHIP_IDS, type ShipId } from '../domain/combat/ids.ts';
 import { isAttackCombatShip } from './attack.ts';
 import { activeSpyMissionForTarget, getEspionageTargets } from '../domain/espionage/runtime.ts';
 import type { SpyReportSnapshot, SpyTargetState } from '../domain/espionage/types.ts';
 import { getFlightSlotUsage, isFlightLimitExempt } from '../domain/flights/limit.ts';
 import type { FlightDestination, TargetRelation } from '../domain/flights/types.ts';
-import { createUniverseSystem, MAX_PLANETS_PER_OWNER, nextColonyPointThreshold, SYSTEM_COUNT } from '../domain/universe/runtime.ts';
+import { createUniverseSystem, getUniverseSystemTimedKey, MAX_PLANETS_PER_OWNER, nextColonyPointThreshold, SYSTEM_COUNT } from '../domain/universe/runtime.ts';
 import { selectOwnerScore } from '../domain/rating/scoring.ts';
 import { evaluatePlanetAttackEligibility } from './attack-eligibility.ts';
 import type { UniverseCoordinate, UniverseObjectKind, UniversePersistedPlayerPlanet, UniverseRegisteredPlanet } from '../domain/universe/types.ts';
@@ -35,15 +35,29 @@ function compareIds(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
+// Each owner's planets by id, built once per immutable targets object.
+const npcTargetsByOwner = new WeakMap<object, Map<string, SpyTargetState[]>>();
+
 function ownNpcTargets(state: SaveState, ownerId: string): SpyTargetState[] {
-  return Object.values(getEspionageTargets(state.espionage))
-    .filter((target) => target.kind === 'npc' && target.ownerId === ownerId)
-    .sort((left, right) => compareIds(left.id, right.id));
+  const targets = getEspionageTargets(state.espionage);
+  let byOwner = npcTargetsByOwner.get(targets);
+  if (!byOwner) {
+    byOwner = new Map();
+    for (const target of Object.values(targets)) {
+      if (target.kind !== 'npc') continue;
+      const owned = byOwner.get(target.ownerId);
+      if (owned) owned.push(target);
+      else byOwner.set(target.ownerId, [target]);
+    }
+    for (const owned of byOwner.values()) owned.sort((left, right) => compareIds(left.id, right.id));
+    npcTargetsByOwner.set(targets, byOwner);
+  }
+  return [...(byOwner.get(ownerId) ?? [])];
 }
 
 function activeNpcFlights(state: SaveState, ownerId: string) {
-  return state.flights.records.filter((flight) => flight.ownerSide === 'npc'
-    && flight.ownerId === ownerId && ACTIVE_FLIGHT_PHASES.has(flight.phase));
+  return ownerFlights(state.flights.records, ownerId).filter((flight) => flight.ownerSide === 'npc'
+    && ACTIVE_FLIGHT_PHASES.has(flight.phase));
 }
 
 function hasFlightSlot(state: SaveState, ownerId: string, missionId: NpcMissionId): boolean {
@@ -55,6 +69,20 @@ function hasFlightSlot(state: SaveState, ownerId: string, missionId: NpcMissionI
   const flights = activeNpcFlights(state, ownerId)
     .map((flight) => ({ ...flight, ownerSide: 'player' as const }));
   return getFlightSlotUsage(flights, science[6] ?? 0).free > 0;
+}
+
+const ONE_SPY_PROBE: Partial<Record<ShipId, number>> = Object.freeze({ 'spy-probe': 1 });
+// One origin offers the same ship selection to every target: serialize it once.
+const shipsPayloads = new WeakMap<object, string>();
+function shipsPayload(selectedShips: Partial<Record<ShipId, number>>): string {
+  let text = shipsPayloads.get(selectedShips);
+  if (text === undefined) {
+    text = JSON.stringify(Object.fromEntries(Object.entries(selectedShips)
+      .filter(([, count]) => Number.isSafeInteger(count) && Number(count) > 0)
+      .sort(([left], [right]) => compareIds(left, right))));
+    shipsPayloads.set(selectedShips, text);
+  }
+  return text;
 }
 
 function addCandidate(
@@ -78,9 +106,7 @@ function addCandidate(
     destinationGalaxy: destination.galaxy,
     destinationSystem: destination.system,
     destinationPosition: destination.position,
-    selectedShips: JSON.stringify(Object.fromEntries(Object.entries(selectedShips)
-      .filter(([, count]) => Number.isSafeInteger(count) && Number(count) > 0)
-      .sort(([left], [right]) => compareIds(left, right)))),
+    selectedShips: shipsPayload(selectedShips),
   };
   if (options.destinationPlanetId) payload.destinationPlanetId = options.destinationPlanetId;
   if (options.operationId) payload.operationId = options.operationId;
@@ -128,17 +154,7 @@ function observedPlanetIds(state: SaveState, ownerId: string, at: number): Set<s
     observed.add(report.targetPlanetId);
   }
 
-  const targetsByCoordinate = new Map<string, string[]>();
-  for (const target of Object.values(getEspionageTargets(state.espionage))) {
-    const key = coordinateKey(target.coordinate);
-    const bucket = targetsByCoordinate.get(key) ?? [];
-    bucket.push(target.id);
-    targetsByCoordinate.set(key, bucket);
-  }
-  for (const planet of publicPlayerPlanets(state)) {
-    const key = coordinateKey(planet.coordinate);
-    targetsByCoordinate.set(key, [...(targetsByCoordinate.get(key) ?? []), planet.id]);
-  }
+  const { targetsByCoordinate } = publicMapInputs(state);
   for (const report of ownerBattleReports(state.combat.reports, ownerId)) {
     if (!OBSERVABLE_BATTLE_TYPES.has(report.missionType)) continue;
     const timestamp = Date.parse(report.timestamp);
@@ -192,23 +208,82 @@ function ownerSystems(targets: readonly SpyTargetState[]): Map<string, { galaxy:
 }
 
 /**
- * Systems are pure of the map inputs and time. Within the decisions of one
- * timestamp those inputs are fixed (arrivals, landings and battles resolve
- * before decisions; a decision only launches flights), so every owner
- * deciding at that moment shares one build per system.
+ * Systems are pure of the map inputs and of which timed objects (pirates,
+ * unique worlds, anomalies) are up at the moment (getUniverseSystemTimedKey):
+ * a build is shared by every decision with the same inputs, at this moment
+ * or a later one, instead of rebuilding ten systems per look every second.
  */
-let systemCache: { at: number; signature: string; systems: Map<string, ReturnType<typeof createUniverseSystem>> } | null = null;
+type PublicTarget = Pick<SpyTargetState, 'id' | 'ownerId' | 'coordinate' | 'kind'>;
+type PublicMapInputs = { playerPlanets: UniversePersistedPlayerPlanet[]; registered: UniverseRegisteredPlanet[];
+  defeats: unknown[]; signature: string;
+  /** Every planet's public identity, by id (policy never sees force or wallets). */
+  allTargets: PublicTarget[];
+  /** Planet ids at each coordinate (battle reports name coordinates). */
+  targetsByCoordinate: Map<string, string[]> };
+let mapInputs: { planets: unknown; planetsKey: string; targets: unknown; defeats: unknown; playerId: string; value: PublicMapInputs } | null = null;
+let systemCache: { signature: string; systems: Map<string, ReturnType<typeof createUniverseSystem>> } | null = null;
+const SYSTEM_CACHE_LIMIT = 4_096;
 
-function publicSystems(state: SaveState, ownerTargets: readonly SpyTargetState[], at: number) {
+function publicMapInputs(state: SaveState): PublicMapInputs {
+  const targets = getEspionageTargets(state.espionage);
+  const defeatedCycles = state.pirate?.contact.defeatedCycles;
+  if (mapInputs && (mapInputs.planets === state.planets || mapInputs.planetsKey === publicPlayerPlanetsKey(state.planets))
+    && mapInputs.defeats === defeatedCycles && mapInputs.playerId === state.profile.playerId
+    && (mapInputs.targets === targets || samePublicTargets(mapInputs.targets as typeof targets, targets))) {
+    mapInputs.targets = targets;
+    mapInputs.planets = state.planets;
+    return mapInputs.value;
+  }
   const playerPlanets = publicPlayerPlanets(state);
   const registered = registeredPlanets(state);
-  const defeats = Object.values(state.pirate?.contact.defeatedCycles ?? {});
-  const signature = JSON.stringify([playerPlanets.map((planet) => [planet.id, coordinateKey(planet.coordinate)]),
-    registered.map((planet) => [planet.id, planet.ownerId, coordinateKey(planet.coordinate)]), defeats]);
-  if (!systemCache || systemCache.at !== at || systemCache.signature !== signature) systemCache = { at, signature, systems: new Map() };
+  const defeats = Object.values(defeatedCycles ?? {});
+  const signature = JSON.stringify([playerPlanets.map((planet) => [planet.id, planet.name, coordinateKey(planet.coordinate)]),
+    registered.map((planet) => [planet.id, planet.ownerId, planet.name, planet.kind, coordinateKey(planet.coordinate)]), defeats]);
+  const allTargets: PublicTarget[] = [
+    ...Object.values(targets).map(({ id, ownerId, coordinate, kind }) => ({ id, ownerId, coordinate, kind })),
+    ...playerPlanets.map(({ id, coordinate }) => ({ id, coordinate, ownerId: state.profile.playerId, kind: 'player' as const })),
+  ].sort((left, right) => compareIds(left.id, right.id));
+  const targetsByCoordinate = new Map<string, string[]>();
+  for (const target of Object.values(targets)) {
+    const key = coordinateKey(target.coordinate);
+    const bucket = targetsByCoordinate.get(key) ?? [];
+    bucket.push(target.id);
+    targetsByCoordinate.set(key, bucket);
+  }
+  for (const planet of playerPlanets) {
+    const key = coordinateKey(planet.coordinate);
+    targetsByCoordinate.set(key, [...(targetsByCoordinate.get(key) ?? []), planet.id]);
+  }
+  const value = { playerPlanets, registered, defeats, signature, allTargets, targetsByCoordinate };
+  mapInputs = { planets: state.planets, planetsKey: publicPlayerPlanetsKey(state.planets), targets, defeats: defeatedCycles, playerId: state.profile.playerId, value };
+  return value;
+}
+
+/** Income settlement replaces targets every moment; what the map shows of them rarely changes. */
+function samePublicTargets(left: Readonly<Record<string, SpyTargetState>>, right: Readonly<Record<string, SpyTargetState>>): boolean {
+  const leftIds = Object.keys(left);
+  const rightIds = Object.keys(right);
+  if (leftIds.length !== rightIds.length) return false;
+  for (let index = 0; index < leftIds.length; index += 1) {
+    const id = leftIds[index]!;
+    if (rightIds[index] !== id) return false;
+    const a = left[id]!;
+    const b = right[id]!;
+    if (a === b) continue;
+    if (a.kind !== b.kind || a.ownerId !== b.ownerId || a.name !== b.name || a.coordinate !== b.coordinate) return false;
+  }
+  return true;
+}
+
+function publicSystems(state: SaveState, ownerTargets: readonly SpyTargetState[], at: number) {
+  const { playerPlanets, registered, defeats, signature } = publicMapInputs(state);
+  if (!systemCache || systemCache.signature !== signature || systemCache.systems.size > SYSTEM_CACHE_LIMIT) {
+    systemCache = { signature, systems: new Map() };
+  }
   const cache = systemCache.systems;
   return [...ownerSystems(ownerTargets).values()].map(({ galaxy, system }) => {
-    const key = `${galaxy}:${system}`;
+    const key = `${galaxy}:${system}:${getUniverseSystemTimedKey(galaxy, system, at,
+      defeats as Parameters<typeof getUniverseSystemTimedKey>[3])}`;
     const hit = cache.get(key);
     if (hit) return hit;
     const built = buildPublicSystem(state, galaxy, system, at, playerPlanets, registered, defeats);
@@ -275,10 +350,7 @@ export function getNpcMissionCandidates(
 
   // Policy receives public identity/coordinates only. Actual force and wallet
   // remain exclusively in execution and the owner's observation snapshots.
-  const allTargets: Pick<SpyTargetState, 'id' | 'ownerId' | 'coordinate' | 'kind'>[] = [
-    ...Object.values(getEspionageTargets(state.espionage)).map(({ id, ownerId, coordinate, kind }) => ({ id, ownerId, coordinate, kind })),
-    ...publicPlayerPlanets(state).map(({ id, coordinate }) => ({ id, coordinate, ownerId: state.profile.playerId, kind: 'player' as const })),
-  ].sort((left, right) => compareIds(left.id, right.id));
+  const { allTargets } = publicMapInputs(state);
   const observed = observedPlanetIds(state, ownerId, at);
   const systems = publicSystems(state, ownerTargets, at);
   const realSources = productionExplorationNpcSources(state).filter((source) => source.ownerId === ownerId);
@@ -325,7 +397,7 @@ export function getNpcMissionCandidates(
         if (!relation) continue;
         if (nearestProbeOrigin(target.coordinate)?.id !== origin.id) continue;
         if (activeSpyMissionForTarget(state.espionage?.missions ?? [], ownerId, target.id)) continue;
-        addCandidate(candidateList, ownerId, 'espionage', origin.id, target.coordinate, { 'spy-probe': 1 }, {
+        addCandidate(candidateList, ownerId, 'espionage', origin.id, target.coordinate, ONE_SPY_PROBE, {
           destinationPlanetId: target.id,
           targetRelation: relation,
         });
@@ -334,11 +406,11 @@ export function getNpcMissionCandidates(
 
     if ((available['spy-probe'] ?? 0) > 0 && hasFlightSlot(state, ownerId, 'exploration-recon')) {
       for (const { node, id } of contactById) {
-        const reconAlreadyActive = state.flights.records.some((flight) => flight.ownerSide === 'npc'
-          && flight.ownerId === ownerId && flight.missionId === 'exploration-recon'
+        const reconAlreadyActive = ownerFlights(state.flights.records, ownerId).some((flight) => flight.ownerSide === 'npc'
+          && flight.missionId === 'exploration-recon'
           && flight.operationId === id && ACTIVE_FLIGHT_PHASES.has(flight.phase));
         if (reconAlreadyActive) continue;
-        addCandidate(candidateList, ownerId, 'exploration-recon', origin.id, node.coordinate, { 'spy-probe': 1 }, {
+        addCandidate(candidateList, ownerId, 'exploration-recon', origin.id, node.coordinate, ONE_SPY_PROBE, {
           operationId: id,
           targetKind: node.kind,
         });

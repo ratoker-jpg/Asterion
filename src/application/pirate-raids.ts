@@ -1,3 +1,5 @@
+import type { PirateContactDefeatRecord } from '../domain/pirates/contact-schedule.ts';
+import { publicPlayerPlanetsKey } from './npc-knowledge-index.ts';
 import { getFactionShipCatalog, getFactionDefenseCatalog } from '../domain/combat/faction-catalog.ts';
 import type { CombatFactionId } from '../domain/combat/factions.ts';
 import { getHangarCapacity } from '../domain/buildings/balance-v1.ts';
@@ -92,6 +94,73 @@ function targetsByOwner(state: SaveState, onlyOwnerId?: string): ReadonlyMap<str
   return all;
 }
 
+/**
+ * The systems of targetsByOwner, in its order, without describing every
+ * planet's defences: the roll calendar only needs who owns what where.
+ * Kept while no planet's owner or coordinate changed.
+ */
+let raidSystemsMemo: { planetsKey: string; playerId: string; targets: Readonly<Record<string, { ownerId: string; coordinate: unknown }>>; value: Map<string, string[]> } | null = null;
+function raidSystemsByOwner(state: SaveState): ReadonlyMap<string, readonly string[]> {
+  const targets = getEspionageTargets(state.espionage);
+  const planetsKey = publicPlayerPlanetsKey(state.planets);
+  const memo = raidSystemsMemo;
+  if (memo && memo.planetsKey === planetsKey && memo.playerId === state.profile.playerId
+    && (memo.targets === targets || sameOwnersAndPlaces(memo.targets, targets))) {
+    memo.targets = targets;
+    return memo.value;
+  }
+  const value = new Map<string, string[]>();
+  const add = (ownerId: string, galaxy: number, system: number) => {
+    let systems = value.get(ownerId);
+    if (!systems) value.set(ownerId, systems = []);
+    const key = `${galaxy}:${system}`;
+    if (!systems.includes(key)) systems.push(key);
+  };
+  for (const planet of Object.values(state.planets)) add(state.profile.playerId, planet.universeGalaxy ?? 1, planet.universeSystem ?? 1);
+  for (const target of Object.values(targets)) {
+    if (target.ownerId === state.profile.playerId) continue;
+    add(target.ownerId, target.coordinate.galaxy, target.coordinate.system);
+  }
+  raidSystemsMemo = { planetsKey, playerId: state.profile.playerId, targets, value };
+  return value;
+}
+
+function sameOwnersAndPlaces(left: Readonly<Record<string, { ownerId: string; coordinate: unknown }>>, right: Readonly<Record<string, { ownerId: string; coordinate: unknown }>>): boolean {
+  const leftIds = Object.keys(left);
+  const rightIds = Object.keys(right);
+  if (leftIds.length !== rightIds.length) return false;
+  for (let index = 0; index < leftIds.length; index += 1) {
+    const id = leftIds[index]!;
+    if (rightIds[index] !== id) return false;
+    const a = left[id]!;
+    const b = right[id]!;
+    if (a !== b && (a.ownerId !== b.ownerId || a.coordinate !== b.coordinate)) return false;
+  }
+  return true;
+}
+
+/**
+ * Per-system defeat lists, the same arrays while the defeat ledger is the
+ * same object: the defeat-shifted schedules are cached by these arrays, so
+ * fresh lists on every call re-derived each system's schedule key.
+ */
+const defeatListsByLedger = new WeakMap<object, Map<string, PirateContactDefeatRecord[]>>();
+const NO_DEFEATS: Readonly<Record<string, PirateContactDefeatRecord>> = {};
+function defeatListsBySystem(ledger: Readonly<Record<string, PirateContactDefeatRecord>> | undefined): ReadonlyMap<string, PirateContactDefeatRecord[]> {
+  const records = ledger ?? NO_DEFEATS;
+  let bySystem = defeatListsByLedger.get(records);
+  if (bySystem) return bySystem;
+  bySystem = new Map();
+  for (const record of Object.values(records)) {
+    const key = `${record.galaxy}:${record.system}`;
+    const bucket = bySystem.get(key);
+    if (bucket) bucket.push(record);
+    else bySystem.set(key, [record]);
+  }
+  defeatListsByLedger.set(records, bySystem);
+  return bySystem;
+}
+
 export type PirateDueRoll = Readonly<{
   at: number;
   ownerId: string;
@@ -105,13 +174,19 @@ export function selectDuePirateRolls(
   mode: RuntimeMode = 'production', testTimeScale?: TestTimeScale,
 ): readonly PirateDueRoll[] {
   const delay = scaleRuntimeDuration(15 * 60_000, mode, testTimeScale);
-  const targets = targetsByOwner(state);
-  const defeated = Object.values(state.pirate?.contact.defeatedCycles ?? {});
+  const targets = raidSystemsByOwner(state);
+  // Each system's defeats once, in save order (the schedule reads only its own),
+  // and each system's due cycles once for all owners in it.
+  const defeatsBySystem = defeatListsBySystem(state.pirate?.contact.defeatedCycles);
+  const cyclesBySystem = new Map<string, ReturnType<typeof getPirateContactCyclesBetween>>();
   const result: PirateDueRoll[] = [];
   for (const [ownerId, systems] of targets) {
-    for (const key of systems.keys()) {
+    for (const key of systems) {
       const [galaxy, system] = key.split(':').map(Number);
-      for (const cycle of getPirateContactCyclesBetween(galaxy!, system!, after, until, defeated, delay)) {
+      const systemKey = `${galaxy}:${system}`;
+      let cycles = cyclesBySystem.get(systemKey);
+      if (!cycles) cyclesBySystem.set(systemKey, cycles = getPirateContactCyclesBetween(galaxy!, system!, after, until, defeatsBySystem.get(systemKey) ?? [], delay));
+      for (const cycle of cycles) {
         result.push({
           at: cycle.startAt + delay, ownerId, galaxy: galaxy!, system: system!,
           contactCycleKey: createPirateContactCycleKey({

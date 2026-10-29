@@ -1,3 +1,4 @@
+import { getBrowserSaveStorage } from '../../application/save-storage.ts';
 import { COMMANDER_IDS, isCommanderId, type CommanderId } from './commanders.ts';
 import { getRuntimeSaveKey, type RuntimeMode } from '../runtime/mode.ts';
 
@@ -114,8 +115,7 @@ export function moveCommanderToEnd(
 
 function resolveStorage(storage?: StorageLike): StorageLike | null {
   if (storage) return storage;
-  if (typeof window === 'undefined') return null;
-  return window.localStorage;
+  return getBrowserSaveStorage();
 }
 
 export function readCombatPriority(storage?: StorageLike, mode?: RuntimeMode): CombatPriorityState {
@@ -158,7 +158,7 @@ export function persistCombatPriority(
     };
     target.setItem(saveKey, JSON.stringify(nextSave));
 
-    if (typeof window !== 'undefined' && target === window.localStorage) {
+    if (typeof window !== 'undefined' && target === getBrowserSaveStorage()) {
       window.dispatchEvent(new CustomEvent<CombatPriorityState>(COMBAT_PRIORITY_CHANGED_EVENT, { detail: normalized }));
     }
 

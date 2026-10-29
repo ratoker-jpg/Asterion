@@ -197,7 +197,60 @@ const KIND_DESCRIPTIONS: Record<UniversePlanetNode['kind'], string> = {
 
 export type TimedObjectKind = 'pirate' | 'unique' | 'anomaly';
 type TimedObjectSchedule = UniverseTimedObjectState & { startAt: number; present: boolean };
-type TimedScheduleCache = { cycles: TimedObjectSchedule[]; nextStartAt: number; nextSpawnChance: number };
+type TimedScheduleCache = { cycles: TimedCycleList; nextStartAt: number; nextSpawnChance: number };
+
+/**
+ * Append-only cycles of one system's timed object, stored by column. A real
+ * campaign asks for every cycle since the 2026-01-01 epoch (about 7 000 per
+ * system and kind by late 2026); as objects with boxed timestamps that was
+ * about 1 GB of heap for the whole map, on the UI thread and in the catch-up
+ * worker alike. `get` returns the same values the objects held.
+ */
+class TimedCycleList {
+  length = 0;
+  private startAt = new Float64Array(256);
+  private lifetimeMs = new Int32Array(256);
+  private spawnChance = new Float64Array(256);
+  private present = new Uint8Array(256);
+  private materialized: TimedObjectSchedule[] = [];
+  private materializedView: TimedObjectSchedule[] | undefined;
+  private readonly quietMs: number;
+
+  constructor(quietMs: number) { this.quietMs = quietMs; }
+
+  push(startAt: number, lifetimeMs: number, spawnChance: number, present: boolean): void {
+    if (this.length === this.startAt.length) {
+      const size = this.length * 2;
+      const startAtNext = new Float64Array(size); startAtNext.set(this.startAt); this.startAt = startAtNext;
+      const lifetimeNext = new Int32Array(size); lifetimeNext.set(this.lifetimeMs); this.lifetimeMs = lifetimeNext;
+      const chanceNext = new Float64Array(size); chanceNext.set(this.spawnChance); this.spawnChance = chanceNext;
+      const presentNext = new Uint8Array(size); presentNext.set(this.present); this.present = presentNext;
+    }
+    this.startAt[this.length] = startAt;
+    this.lifetimeMs[this.length] = lifetimeMs;
+    this.spawnChance[this.length] = spawnChance;
+    this.present[this.length] = present ? 1 : 0;
+    this.length += 1;
+  }
+
+  startAtOf(index: number): number { return this.startAt[index]!; }
+
+  get(index: number): TimedObjectSchedule | undefined {
+    if (index < 0 || index >= this.length) return undefined;
+    const startAt = this.startAt[index]!;
+    const lifetimeMs = this.lifetimeMs[index]!;
+    const present = this.present[index] === 1;
+    const expiresAt = present ? startAt + lifetimeMs : startAt;
+    return { cycleIndex: index, startAt, expiresAt, respawnAt: expiresAt + this.quietMs, lifetimeMs, spawnChance: this.spawnChance[index]!, present };
+  }
+
+  /** Every cycle as objects (defeat-shifted pirate schedules only); a new array whenever the list grew. */
+  toArray(): readonly TimedObjectSchedule[] {
+    while (this.materialized.length < this.length) this.materialized.push(this.get(this.materialized.length)!);
+    if (this.materializedView?.length !== this.length) this.materializedView = this.materialized.slice();
+    return this.materializedView;
+  }
+}
 const timedScheduleCaches = new Map<string, TimedScheduleCache>();
 const TEST_UNIVERSE_LAYOUT_SEED_KEY = 'asterion.test-universe-layout-seed.v1';
 
@@ -216,6 +269,7 @@ export function rerollTestUniverseLayout(): number {
   const next = (testUniverseLayoutSeed() % 1_000_000_000) + 1;
   window.localStorage.setItem(TEST_UNIVERSE_LAYOUT_SEED_KEY, String(next));
   timedScheduleCaches.clear();
+  warmCursor = 0;
   return next;
 }
 
@@ -834,7 +888,7 @@ function ensureTimedCycles(kind: TimedObjectKind, galaxy: number, system: number
   if (!cache) {
     const offsetRandom = layoutSeededRandom(config.seed, galaxy, system, 0);
     cache = {
-      cycles: [],
+      cycles: new TimedCycleList(config.quietMs),
       nextStartAt: config.epoch + randomInt(offsetRandom, 0, 60 * 60 * 1_000),
       nextSpawnChance: config.initialChance,
     };
@@ -849,7 +903,7 @@ function ensureTimedCycles(kind: TimedObjectKind, galaxy: number, system: number
     const present = random() < spawnChance;
     const expiresAt = present ? startAt + lifetimeMs : startAt;
     const respawnAt = (present ? expiresAt : startAt) + config.quietMs;
-    cache.cycles.push({ cycleIndex, startAt, expiresAt, respawnAt, lifetimeMs, spawnChance, present });
+    cache.cycles.push(startAt, lifetimeMs, spawnChance, present);
     cache.nextSpawnChance = present || config.chanceStep === 0
       ? config.initialChance
       : Math.min(1, spawnChance + config.chanceStep);
@@ -858,7 +912,45 @@ function ensureTimedCycles(kind: TimedObjectKind, galaxy: number, system: number
   return cache.cycles;
 }
 
+// A system's pirate defeats in list order, grouped once per (immutable) list.
+const defeatsBySystem = new WeakMap<readonly PirateContactDefeatRecord[], Map<string, PirateContactDefeatRecord[]>>();
+function defeatsInSystem(defeats: readonly PirateContactDefeatRecord[], galaxy: number, system: number): PirateContactDefeatRecord[] {
+  if (!defeats.length) return [];
+  let bySystem = defeatsBySystem.get(defeats);
+  if (!bySystem) {
+    bySystem = new Map();
+    for (const record of defeats) {
+      const key = `${record.galaxy}:${record.system}`;
+      const bucket = bySystem.get(key);
+      if (bucket) bucket.push(record);
+      else bySystem.set(key, [record]);
+    }
+    defeatsBySystem.set(defeats, bySystem);
+  }
+  return bySystem.get(`${galaxy}:${system}`) ?? [];
+}
+
 export type UniverseTimedObjectSchedule = TimedObjectSchedule;
+
+let warmCursor = 0;
+/**
+ * Builds the timed-object schedules of the whole map up to `throughMs` a few
+ * systems at a time while `hasTime()` holds; true once all are built. The
+ * schedules start at the 2026-01-01 epoch, so the first system an NPC looks
+ * at would otherwise build its history in the middle of a frame.
+ */
+export function warmUniverseTimedSchedules(galaxyCount: number, throughMs: number, hasTime: () => boolean): boolean {
+  const kinds: TimedObjectKind[] = ['pirate', 'unique', 'anomaly'];
+  const total = Math.max(1, Math.floor(galaxyCount)) * SYSTEM_COUNT * kinds.length;
+  while (warmCursor < total) {
+    if (!hasTime()) return false;
+    const kind = kinds[warmCursor % kinds.length]!;
+    const index = Math.floor(warmCursor / kinds.length);
+    ensureTimedCycles(kind, Math.floor(index / SYSTEM_COUNT) + 1, (index % SYSTEM_COUNT) + 1, throughMs);
+    warmCursor += 1;
+  }
+  return true;
+}
 
 /** Canonical timed-object cycles that could have generated risk rolls during an interval.
  * A cycle beginning before `afterMs` is included only while its contact could
@@ -878,13 +970,13 @@ export function getUniverseTimedObjectCyclesBetween(
   let hi = cycles.length;
   while (lo < hi) {
     const mid = (lo + hi) >>> 1;
-    if (cycles[mid]!.startAt < earliestRelevantStart) lo = mid + 1;
+    if (cycles.startAtOf(mid) < earliestRelevantStart) lo = mid + 1;
     else hi = mid;
   }
   const result: UniverseTimedObjectSchedule[] = [];
   for (let index = lo; index < cycles.length; index += 1) {
-    const cycle = cycles[index]!;
-    if (cycle.startAt > throughMs) break;
+    if (cycles.startAtOf(index) > throughMs) break;
+    const cycle = cycles.get(index)!;
     if (cycle.present && cycle.expiresAt > afterMs) result.push(cycle);
   }
   return result;
@@ -901,12 +993,11 @@ export function getUniverseTimedObjectSchedule(
   const safeIndex = Math.max(0, Math.floor(cycleIndex));
   const baseCycles = ensureTimedCycles(kind, galaxy, system, config.epoch + (safeIndex + 1) * (config.maxLifetimeMs + config.quietMs));
   const relevantDefeats = kind === 'pirate'
-    ? pirateContactDefeats.filter((record) => record.galaxy === galaxy && record.system === system)
+    ? defeatsInSystem(pirateContactDefeats, galaxy, system)
     : [];
-  const cycles = relevantDefeats.length
-    ? applyPirateContactDefeatsToSchedules(baseCycles, galaxy, system, relevantDefeats)
-    : baseCycles;
-  return cycles[safeIndex] ?? cycles[0];
+  if (!relevantDefeats.length) return (baseCycles.get(safeIndex) ?? baseCycles.get(0))!;
+  const cycles = applyPirateContactDefeatsToSchedules(baseCycles.toArray(), galaxy, system, relevantDefeats);
+  return cycles[safeIndex] ?? cycles[0]!;
 }
 
 /**
@@ -923,28 +1014,31 @@ export function getPirateContactCyclesBetween(
   checkDelayMs = PIRATE_RAID_CHECK_INTERVAL_MS,
 ): readonly UniverseTimedObjectSchedule[] {
   if (!Number.isSafeInteger(afterMs) || !Number.isSafeInteger(throughMs) || throughMs <= afterMs) return [];
-  const relevantDefeats = defeatedCycles.filter((record) => record.galaxy === galaxy && record.system === system);
+  const relevantDefeats = defeatsInSystem(defeatedCycles, galaxy, system);
   const base = ensureTimedCycles('pirate', galaxy, system, throughMs
     + relevantDefeats.length * PIRATE_MAX_LIFETIME_MS);
   // No defeat-shifted cycles in fresh saves: reuse the canonical schedule
   // directly. Scanning and cloning every cycle since 2026-01-01 on every
   // render delayed first Test Mode reconciliation past its first UI paint.
   const corrected = relevantDefeats.length
-    ? applyPirateContactDefeatsToSchedules(base, galaxy, system, relevantDefeats)
-    : base;
+    ? applyPirateContactDefeatsToSchedules(base.toArray(), galaxy, system, relevantDefeats)
+    : null;
+  const count = corrected ? corrected.length : base.length;
+  const startAtOf = (index: number) => corrected ? corrected[index]!.startAt : base.startAtOf(index);
   // Contact starts are strictly increasing, even after defeat shifts.
   // Binary search avoids O(history) scans when only the latest few minutes
   // contain a due check; no artificial offline horizon or event count cap.
   let lo = 0;
-  let hi = corrected.length;
+  let hi = count;
   while (lo < hi) {
     const mid = (lo + hi) >>> 1;
-    if (corrected[mid]!.startAt + checkDelayMs <= afterMs) lo = mid + 1;
+    if (startAtOf(mid) + checkDelayMs <= afterMs) lo = mid + 1;
     else hi = mid;
   }
   const due: UniverseTimedObjectSchedule[] = [];
-  for (let index = lo; index < corrected.length; index += 1) {
-    const cycle = corrected[index]!;
+  for (let index = lo; index < count; index += 1) {
+    if (startAtOf(index) + checkDelayMs > throughMs) break;
+    const cycle = corrected ? corrected[index]! : base.get(index)!;
     const at = cycle.startAt + checkDelayMs;
     if (at > throughMs) break;
     if (cycle.present && cycle.expiresAt > at) due.push(cycle);
@@ -960,19 +1054,29 @@ function activeTimedObjectSchedule(
   pirateContactDefeats: readonly PirateContactDefeatRecord[] = [],
 ) {
   const relevantDefeats = kind === 'pirate'
-    ? pirateContactDefeats.filter((record) => record.galaxy === galaxy && record.system === system)
+    ? defeatsInSystem(pirateContactDefeats, galaxy, system)
     : [];
   const baseCycles = ensureTimedCycles(kind, galaxy, system, nowMs + relevantDefeats.length * PIRATE_MAX_LIFETIME_MS);
   // Without defeats in this system the canonical schedule is already final:
   // re-mapping every cycle since the epoch on each 1 s render was the
   // Universe screen's main-thread hitch (see getPirateContactCyclesBetween).
-  const cycles = relevantDefeats.length
-    ? applyPirateContactDefeatsToSchedules(baseCycles, galaxy, system, relevantDefeats)
-    : baseCycles;
-  for (let index = cycles.length - 1; index >= 0; index -= 1) {
-    const cycle = cycles[index];
-    if (cycle.startAt > nowMs) continue;
-    if (nowMs < cycle.respawnAt) return cycle;
+  // Cycles form a chain (each starts at the previous one's respawn), so the
+  // latest cycle that has started is the only one that can still be up: once
+  // it has respawned, every earlier one has too. Scanning on from there walked
+  // the whole history since the epoch in every quiet gap.
+  if (relevantDefeats.length) {
+    const cycles = applyPirateContactDefeatsToSchedules(baseCycles.toArray(), galaxy, system, relevantDefeats);
+    for (let index = cycles.length - 1; index >= 0; index -= 1) {
+      const cycle = cycles[index]!;
+      if (cycle.startAt > nowMs) continue;
+      return nowMs < cycle.respawnAt ? cycle : null;
+    }
+    return null;
+  }
+  for (let index = baseCycles.length - 1; index >= 0; index -= 1) {
+    if (baseCycles.startAtOf(index) > nowMs) continue;
+    const cycle = baseCycles.get(index)!;
+    return nowMs < cycle.respawnAt ? cycle : null;
   }
   return null;
 }
@@ -1070,6 +1174,40 @@ export function createUniverseSystem(options: CreateUniverseSystemOptions): Univ
     ...system,
     asteroids: asteroidNodes ? asteroidNodes[system.system - 1] : [],
   };
+}
+
+/** Whether a timed object of this kind is on the system's map at `nowMs` (createUniverseSystem would place it if a slot is free). */
+export function isUniverseTimedObjectUp(
+  kind: TimedObjectKind,
+  galaxy: number,
+  system: number,
+  nowMs: number,
+  pirateContactDefeats: readonly PirateContactDefeatRecord[] = [],
+): boolean {
+  const now = normalizeNow(nowMs);
+  const schedule = activeTimedObjectSchedule(kind, Math.max(1, Math.floor(galaxy)), Math.min(SYSTEM_COUNT, Math.max(1, Math.floor(system))), now,
+    kind === 'pirate' ? pirateContactDefeats : []);
+  return Boolean(schedule?.present && now < schedule.expiresAt);
+}
+
+/**
+ * What of a system changes with time (asteroids aside): which pirate, unique
+ * and anomaly cycles are on the map at `nowMs`. createUniverseSystem with
+ * skipAsteroids gives the same system for two moments with the same key.
+ */
+export function getUniverseSystemTimedKey(
+  galaxy: number,
+  system: number,
+  nowMs: number,
+  pirateContactDefeats: readonly PirateContactDefeatRecord[] = [],
+): string {
+  const now = normalizeNow(nowMs);
+  const safeGalaxy = Math.max(1, Math.floor(galaxy));
+  const safeSystem = Math.min(SYSTEM_COUNT, Math.max(1, Math.floor(system)));
+  return (['pirate', 'unique', 'anomaly'] as const).map((kind) => {
+    const schedule = activeTimedObjectSchedule(kind, safeGalaxy, safeSystem, now, kind === 'pirate' ? pirateContactDefeats : []);
+    return schedule?.present && now < schedule.expiresAt ? `${schedule.cycleIndex}@${schedule.startAt}-${schedule.expiresAt}` : '-';
+  }).join('|');
 }
 
 export function createUniverseMap(options: Omit<CreateUniverseSystemOptions, 'system'> = {}): UniverseMap {

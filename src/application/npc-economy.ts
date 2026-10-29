@@ -263,6 +263,45 @@ function shiftQueue(target: SpyTargetState, delta: number, blockedSince: number)
   };
 }
 
+/**
+ * The first moment in (from, to] at which the episode's burn has cleared the
+ * lock, or `to`. Burning only grows with time and removes the same units
+ * whether it is applied once or step by step, so the moment is exact.
+ */
+function firstUnlockAt(target: SpyTargetState, from: number, to: number): number {
+  if (to <= from || isBlocked(settleOverpopulation(target, to))) return to;
+  if (!isBlocked(settleOverpopulation(target, from))) return from;
+  let low = from;
+  let high = to;
+  while (high - low > 1) {
+    const middle = Math.floor((low + high) / 2);
+    if (isBlocked(settleOverpopulation(target, middle))) low = middle;
+    else high = middle;
+  }
+  return high;
+}
+
+const unlockByTarget = new WeakMap<SpyTargetState, number | null>();
+
+/**
+ * When the stored episode's burn alone clears the lock (null: it does not
+ * within the window). Replay steps on it: queues resume there, and the next
+ * unit that overfills the hangar is then a moment of its own. Pure of the target.
+ */
+export function getNpcOverpopulationUnlockAt(target: SpyTargetState): number | null {
+  const cached = unlockByTarget.get(target);
+  if (cached !== undefined) return cached;
+  const episode = target.overpopulation;
+  let unlock: number | null = null;
+  if (episode?.blocked) {
+    const from = Math.max(episode.episodeStartedAt, episode.lastReconciledAt ?? episode.episodeStartedAt);
+    const to = episode.episodeStartedAt + OVERPOPULATION_WINDOW_MS;
+    if (to > from && !isBlocked(settleOverpopulation(target, to))) unlock = firstUnlockAt(target, from, to);
+  }
+  unlockByTarget.set(target, unlock);
+  return unlock;
+}
+
 function settleOverpopulation(target: SpyTargetState, at: number): SpyTargetState {
   const buildings = targetBuildingLevels(target);
   const normalizedFleet = removeSolarSatellitesFromFleet(target.fleet);
@@ -480,7 +519,9 @@ export function settleNpcPlanet(
   const startedBlocked = isBlocked(target);
   if (startedBlocked) {
     const burnEnd = (target.overpopulation?.episodeStartedAt ?? safeAt) + OVERPOPULATION_WINDOW_MS;
-    const resumeAt = Math.min(safeAt, Math.max(clockAtStart, burnEnd));
+    // The lock ends at the burn that clears it, not whenever the planet is
+    // settled next: otherwise queues resumed wherever a catch-up slice ended.
+    const resumeAt = firstUnlockAt(target, clockAtStart, Math.min(safeAt, Math.max(clockAtStart, burnEnd)));
     const blockedSince = target.overpopulation?.episodeStartedAt ?? safeAt;
     target = shiftQueue(target, Math.max(0, resumeAt - Math.max(clockAtStart, blockedSince)), blockedSince);
     target = {

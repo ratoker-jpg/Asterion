@@ -166,11 +166,17 @@ function safeOwnedCount(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
 }
 
-function battlePointTotals(rating: RatingPrototypeState): Record<string, number> {
+const battlePointTotalsCache = new WeakMap<object, Readonly<Record<string, number>>>();
+
+/** Built once per awards object (a new battle replaces it); callers only read it. */
+function battlePointTotals(rating: RatingPrototypeState): Readonly<Record<string, number>> {
+  const cached = battlePointTotalsCache.get(rating.battleAwardsByReportId);
+  if (cached) return cached;
   const totals: Record<string, number> = {};
   for (const awards of Object.values(rating.battleAwardsByReportId)) {
     for (const [ownerId, points] of Object.entries(awards)) totals[ownerId] = (totals[ownerId] ?? 0) + safeOwnedCount(points);
   }
+  battlePointTotalsCache.set(rating.battleAwardsByReportId, totals);
   return totals;
 }
 
@@ -294,7 +300,9 @@ function lazyReportLookup(state: SaveState): (id: string) => SaveState['combat']
 function flightShipCounts(state: SaveState, factionId: FactionId, ownerId: string) {
   const counts: Record<string, number> = {};
   const reports = lazyReportLookup(state);
-  for (const flight of state.flights.records) {
+  // An autonomous NPC reads only its own flights (same records, same order).
+  const records = ownerId === UNIVERSE_NPC_OWNER_ID ? state.flights.records : activeNpcFlightsOf(state.flights.records, ownerId);
+  for (const flight of records) {
     // Player dispatch reserves ships but keeps them in the source planet's
     // saved fleet until the mission applies its result. Bot 001 and the
     // autonomous NPCs remove their ships at launch, so their in-flight fleets
@@ -316,6 +324,8 @@ function flightShipCounts(state: SaveState, factionId: FactionId, ownerId: strin
 
 function flightCommanderCounts(state: SaveState, ownerId: string) {
   const counts: Record<string, number> = {};
+  // Only Bot 01 flights carry commanders.
+  if (ownerId !== UNIVERSE_NPC_OWNER_ID) return counts;
   const reports = lazyReportLookup(state);
   for (const flight of state.flights.records) {
     if (flight.ownerSide !== 'bot01') continue;
@@ -336,10 +346,26 @@ function flightCommanderCounts(state: SaveState, ownerId: string) {
 
 /** Calculates one authoritative score per owner represented in the save. */
 export function selectOwnerScores(state: SaveState): Record<string, OwnerScore> {
-  const { owners, battlePoints } = collectOwnerRegistrations(state);
+  // Owners in registration order (player, planet owners in save order, then
+  // battle-only owners); each one's score is selectOwnerScore's, which keeps
+  // unchanged owners from being priced again every second.
   const scores: Record<string, OwnerScore> = {};
-  for (const [ownerId, owner] of owners) scores[ownerId] = scoreOwner(state, owner, battlePoints);
+  for (const ownerId of registeredOwnerIds(state)) {
+    const score = selectOwnerScore(state, ownerId);
+    if (score) scores[ownerId] = score;
+  }
   return scores;
+}
+
+function registeredOwnerIds(state: SaveState): string[] {
+  const playerOwnerId = state.profile.playerId || CURRENT_PLAYER_ID;
+  const ids = new Set<string>([playerOwnerId]);
+  for (const target of Object.values(state.espionage?.targets ?? state.espionage?.bot01Planets ?? {})) {
+    if (!target.ownerId || target.ownerId === playerOwnerId || target.ownerId === 'player-aster') continue;
+    ids.add(target.ownerId);
+  }
+  for (const ownerId of Object.keys(battlePointTotals(state.rating))) ids.add(ownerId);
+  return [...ids];
 }
 
 /**
@@ -347,9 +373,96 @@ export function selectOwnerScores(state: SaveState): Record<string, OwnerScore> 
  * every other owner. Merge only matching planets and profiles.
  */
 export function selectOwnerScore(state: SaveState, ownerId: string): OwnerScore | undefined {
+  const deps = ownerScoreInputs(state, ownerId);
+  const cached = deps ? ownerScoreCache.get(ownerId) : undefined;
+  if (cached && deps && sameInputs(cached.deps, deps)) return cached.score;
   const { owners, battlePoints } = collectOwnerRegistrations(state, ownerId);
   const owner = owners.get(ownerId);
-  return owner ? scoreOwner(state, owner, battlePoints) : undefined;
+  const score = owner ? scoreOwner(state, owner, battlePoints) : undefined;
+  if (deps) ownerScoreCache.set(ownerId, { deps, score });
+  return score;
+}
+
+/**
+ * One owner's score is a pure function of the save objects listed by
+ * ownerScoreInputs; saves are immutable, so the same objects give the same
+ * score. Many decisions at one moment ask for the same owners' points.
+ */
+const ownerScoreCache = new Map<string, { deps: readonly unknown[]; score: OwnerScore | undefined }>();
+const targetsByOwnerIndex = new WeakMap<object, Map<string, unknown[]>>();
+type SpyTargetLike = { kind: unknown; raceId: unknown; buildings: unknown; fleet: unknown; defense: unknown; buildingQueue: unknown; ownerProfile: unknown };
+const activeFlightsByOwnerIndex = new WeakMap<readonly unknown[], Map<string, SaveState['flights']['records']>>();
+
+const reportIndexes = new WeakMap<object, Map<string, SaveState['combat']['reports'][number]>>();
+function reportById(reports: SaveState['combat']['reports']): Map<string, SaveState['combat']['reports'][number]> {
+  let index = reportIndexes.get(reports);
+  if (!index) reportIndexes.set(reports, index = new Map(reports.map((report) => [report.id, report])));
+  return index;
+}
+
+function sameInputs(left: readonly unknown[], right: readonly unknown[]): boolean {
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index += 1) if (left[index] !== right[index]) return false;
+  return true;
+}
+
+function ownerScoreInputs(state: SaveState, ownerId: string): unknown[] | null {
+  const playerOwnerId = state.profile.playerId || CURRENT_PLAYER_ID;
+  // Bot 01 reads its own flights and profile; it stays uncached.
+  if (ownerId === UNIVERSE_NPC_OWNER_ID) return null;
+  const awards = battlePointTotals(state.rating);
+  const deps: unknown[] = [playerOwnerId, state.profile.factionId, state.rating.unrecoveredCostsByOwnerId[ownerId], awards[ownerId]];
+  if (ownerId === playerOwnerId) {
+    deps.push(state.planets, state.queues, state.science, state.shipUpgradeLevels);
+    return deps;
+  }
+  const targets = state.espionage?.targets ?? state.espionage?.bot01Planets ?? {};
+  let byOwner = targetsByOwnerIndex.get(targets);
+  if (!byOwner) {
+    byOwner = new Map();
+    for (const target of Object.values(targets)) {
+      const bucket = byOwner.get(target.ownerId);
+      if (bucket) bucket.push(target);
+      else byOwner.set(target.ownerId, [target]);
+    }
+    targetsByOwnerIndex.set(targets, byOwner);
+  }
+  deps.push(state.npcScience?.owners[ownerId], '|');
+  // Only what collectOwnerRegistrations reads of a planet: settling income
+  // makes a new target object every time but keeps these.
+  for (const target of byOwner.get(ownerId) ?? []) {
+    const planet = target as SpyTargetLike;
+    // Settling rebuilds the queue array every time; the score reads only its costs.
+    let queueValue = 0;
+    for (const item of (planet.buildingQueue ?? []) as readonly BuildingQueueItem[]) queueValue += resourceValue(item.cost);
+    deps.push(planet.kind, planet.raceId, planet.buildings, planet.fleet, planet.defense, queueValue, planet.ownerProfile);
+  }
+  deps.push('|');
+  const ownFlights = activeNpcFlightsOf(state.flights.records, ownerId);
+  // A resolved attack counts its surviving ships from its report: that report
+  // (not the whole archive, which every battle replaces) is an input.
+  for (const flight of ownFlights) {
+    deps.push(flight);
+    if (flight.attackResolution) deps.push(reportById(state.combat.reports).get(flight.attackResolution.reportId));
+  }
+  return deps;
+}
+
+/** One autonomous NPC's outbound, returning or arrived flights, in record order. */
+function activeNpcFlightsOf(records: SaveState['flights']['records'], ownerId: string): SaveState['flights']['records'] {
+  let flights = activeFlightsByOwnerIndex.get(records);
+  if (!flights) {
+    flights = new Map();
+    for (const flight of records) {
+      if (flight.ownerSide !== 'npc' || !flight.ownerId) continue;
+      if (flight.phase !== 'outbound' && flight.phase !== 'returning' && flight.phase !== 'arrived') continue;
+      const bucket = flights.get(flight.ownerId);
+      if (bucket) bucket.push(flight);
+      else flights.set(flight.ownerId, [flight]);
+    }
+    activeFlightsByOwnerIndex.set(records, flights);
+  }
+  return flights.get(ownerId) ?? [];
 }
 
 function collectOwnerRegistrations(state: SaveState, selectedOwnerId?: string): { owners: Map<string, OwnerRegistration>; battlePoints: Record<string, number> } {

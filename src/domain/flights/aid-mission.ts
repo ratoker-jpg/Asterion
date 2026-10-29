@@ -23,9 +23,24 @@ const RESERVING_PHASES = new Set<FlightRecord['phase']>(['outbound', 'arrived'])
  * moment its cargo is settled (delivered, voided, or turned back), so a recalled
  * or failed flight frees its share without any separate bookkeeping.
  */
+// Aid flights by request, once per immutable records array: NPC aid
+// candidates ask for every open request from every source planet.
+const aidFlightsByRequest = new WeakMap<readonly FlightRecord[], Map<string, FlightRecord[]>>();
+
 export function aidInFlightUnits(records: readonly FlightRecord[], requestId: string): number {
+  let index = aidFlightsByRequest.get(records);
+  if (!index) {
+    index = new Map();
+    for (const flight of records) {
+      if (flight.missionId !== 'aid' || !flight.aid) continue;
+      const bucket = index.get(flight.aid.requestId);
+      if (bucket) bucket.push(flight);
+      else index.set(flight.aid.requestId, [flight]);
+    }
+    aidFlightsByRequest.set(records, index);
+  }
   let total = 0;
-  for (const flight of records) {
+  for (const flight of index.get(requestId) ?? []) {
     if (flight.missionId !== 'aid' || flight.aid?.requestId !== requestId) continue;
     if (!RESERVING_PHASES.has(flight.phase) || flight.cargoState !== 'loaded') continue;
     total += normalizeTransportCargo(flight.cargo)[flight.aid.resource];

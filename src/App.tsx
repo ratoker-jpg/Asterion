@@ -123,6 +123,7 @@ import {
   DEFAULT_PLANET_NAME,
   SAVE_SCHEMA_VERSION,
   isCurrentBuildSave,
+  serializeSaveForStorageInSlices,
 } from './application/persistence.ts';
 import {
   applyProductionBots as applyProductionBotsAction,
@@ -172,6 +173,9 @@ import { publishApplicationRuntimeSnapshot } from './application/runtime.ts';
 import { reconcileRuntime, type RuntimeReconcileEvent } from './application/reconcile.ts';
 import { freezeNpcCatchupTarget, isNpcCatchupPending, needsNpcCatchupBefore } from './application/npc-catchup.ts';
 import { NpcCatchupBanner } from './NpcCatchupBanner.tsx';
+import NpcCatchupWorker from './npc-catchup.worker.ts?worker';
+import type { NpcCatchupWorkerRequest, NpcCatchupWorkerResponse } from './application/npc-catchup-worker-protocol.ts';
+import { setNpcCatchupProgress } from './ui/npc-catchup-progress-store.ts';
 import {
   FLIGHT_COMMAND_RESULT_EVENT,
   FLIGHT_DISPATCH_REQUEST_EVENT,
@@ -226,7 +230,7 @@ import {
 import { refreshSlotMeta } from './application/slots.ts';
 import { gateProgressPercent } from './domain/sun-raid/rules.ts';
 import { getCampaignTimeScale, setCampaignTimeScale, CAMPAIGN_SPEED_SCALE } from './domain/runtime/mode.ts';
-import { setActiveGalaxyCount } from './domain/universe/runtime.ts';
+import { setActiveGalaxyCount, warmUniverseTimedSchedules } from './domain/universe/runtime.ts';
 import { SunRaidPanel, type SunSelection } from './ui/sun-raid/SunRaidPanel.tsx';
 import { GateDialog } from './ui/sun-raid/GateDialog.tsx';
 import { CampaignResultOverlay, PauseMenu } from './ui/menu/InGameOverlays.tsx';
@@ -264,6 +268,20 @@ const NPC_CATCHUP_TASK_BUDGET_MS = 40;
  * this often; completion is written at once.
  */
 const NPC_CATCHUP_PERSIST_INTERVAL_MS = 2_000;
+/**
+ * States that only a clock tick changed are written at most once per this
+ * many times the last write's cost (about 2% of the UI thread), and at least
+ * every LIVE_TICK_PERSIST_MAX_INTERVAL_MS: a small save is still written
+ * every tick, a 40 MB late-game world (a half-second write) about every
+ * 20 s. Time a tick advanced is replayed identically on load, so nothing is
+ * lost in between; commands are written at once.
+ */
+const LIVE_TICK_PERSIST_COST_FACTOR = 50;
+const LIVE_TICK_PERSIST_MAX_INTERVAL_MS = 60_000;
+/** A deferred clock-tick write is serialized in steps this long, so a late-game save does not freeze a frame. */
+const LIVE_TICK_PERSIST_SLICE_MS = 8;
+/** A worker catch-up hands the save its consistent prefix this often (serialized off the UI thread). */
+const NPC_CATCHUP_WORKER_PERSIST_INTERVAL_MS = 15_000;
 
 /**
  * Navigation noise the plan explicitly silences: section/route openings, zone
@@ -371,6 +389,11 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   // When a save failure was last shown (null: never in this window).
   const persistenceFailureNotified = useRef<number | null>(null);
   const npcReplayContinuation = useRef<number | null>(null);
+  // A long catch-up runs in a Web Worker; without one (or after it fails) App
+  // replays in bounded chunks on this thread as before.
+  const catchupWorker = useRef<{ worker: Worker; runId: number; from: NonNullable<SaveState['npcReplay']> } | null>(null);
+  const catchupRunSeq = useRef(0);
+  const catchupWorkerUnavailable = useRef(RUNTIME_MODE !== 'production' || typeof Worker === 'undefined');
 
   /**
    * Keeps the QA notice layer in sync and emits a bottom-left toast. Silent
@@ -801,6 +824,21 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, []);
+  // The map's timed-object schedules (pirates, unique worlds, anomalies) run
+  // from the 2026-01-01 epoch; build them in idle time instead of inside the
+  // frame of the first NPC decision or system view that needs them.
+  const galaxyCount = state.worldConfig?.world.galaxyCount ?? 1;
+  useEffect(() => {
+    if (typeof window.requestIdleCallback !== 'function') return;
+    let handle = 0;
+    const step = (deadline: IdleDeadline) => {
+      if (!warmUniverseTimedSchedules(galaxyCount, Date.now() + 3_600_000, () => deadline.timeRemaining() > 2)) {
+        handle = window.requestIdleCallback(step);
+      }
+    };
+    handle = window.requestIdleCallback(step);
+    return () => window.cancelIdleCallback(handle);
+  }, [galaxyCount]);
   useEffect(() => bindScienceEventBridge({
     target: window,
     getState: () => stateRef.current,
@@ -905,8 +943,12 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
   }, [persistence]);
-  const writeSave = useCallback((value: SaveState) => {
-    const result = persistence.write(value);
+  // How long the last full save write took on this thread (serialize + store).
+  const lastWriteCostMs = useRef(0);
+  // Every write takes a number; a sliced write is stored only if no write came after it started.
+  const writeSequence = useRef(0);
+  const slicedWriteRunning = useRef(false);
+  const reportWriteResult = useCallback((result: ReturnType<typeof persistence.write>) => {
     if (!result.ok) {
       // A save near the storage limit can alternate between failing and
       // succeeding; tell the player once in a while, not on every write.
@@ -917,36 +959,103 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         setNotice(reason ? `Не удалось сохранить игру: ${reason}` : 'Не удалось сохранить игру в браузере.', 'error');
       }
     }
-  }, [persistence, setNotice]);
-  const lastCatchupWriteAt = useRef(0);
-  const deferredCatchupWrite = useRef<number | null>(null);
+  }, [setNotice]);
+  const writeSave = useCallback((value: SaveState) => {
+    writeSequence.current += 1;
+    const startedAt = performance.now();
+    const result = persistence.write(value);
+    lastWriteCostMs.current = performance.now() - startedAt;
+    reportWriteResult(result);
+  }, [persistence, reportWriteResult]);
+  /** The same write with the text made in short steps between frames. */
+  const writeSaveInSlices = useCallback((value: SaveState) => {
+    const sequence = ++writeSequence.current;
+    slicedWriteRunning.current = true;
+    const pause = () => new Promise<void>((resolve) => { window.setTimeout(resolve, 0); });
+    void serializeSaveForStorageInSlices(value, persistence.mode, LIVE_TICK_PERSIST_SLICE_MS, pause).then(({ text, computeMs }) => {
+      if (writeSequence.current !== sequence) return;
+      slicedWriteRunning.current = false;
+      const startedAt = performance.now();
+      const result = persistence.writeSerialized(text);
+      lastWriteCostMs.current = computeMs + performance.now() - startedAt;
+      reportWriteResult(result);
+    }, (error: unknown) => {
+      if (writeSequence.current !== sequence) return;
+      slicedWriteRunning.current = false;
+      writeSave(value);
+      console.error('Sliced save serialization failed; saved at once.', error);
+    });
+  }, [persistence, reportWriteResult, writeSave]);
+  const writeSerializedSave = useCallback((text: string) => {
+    const result = persistence.writeSerialized(text);
+    if (!result.ok) console.warn(`NPC catch-up progress was not saved: ${result.error}`);
+  }, [persistence]);
+  const lastThrottledWriteAt = useRef(0);
+  // The last state a clock tick produced (see the autosave below).
+  const clockTickState = useRef<SaveState | null>(null);
+  // The world a worker catch-up handed back: written at once, but in slices (it is a whole late world).
+  const catchupResultState = useRef<SaveState | null>(null);
+  // A deferred tick write must not be lost when the window closes.
+  useEffect(() => {
+    const flush = () => {
+      if ((deferredThrottledWrite.current === null && !slicedWriteRunning.current) || catchupWorker.current) return;
+      if (deferredThrottledWrite.current !== null) window.clearTimeout(deferredThrottledWrite.current);
+      deferredThrottledWrite.current = null;
+      slicedWriteRunning.current = false;
+      writeSave(stateRef.current);
+    };
+    window.addEventListener('pagehide', flush);
+    window.addEventListener('beforeunload', flush);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      window.removeEventListener('beforeunload', flush);
+    };
+  }, [writeSave]);
+  const deferredThrottledWrite = useRef<number | null>(null);
   useEffect(() => () => {
-    if (deferredCatchupWrite.current !== null) window.clearTimeout(deferredCatchupWrite.current);
+    if (deferredThrottledWrite.current !== null) window.clearTimeout(deferredThrottledWrite.current);
   }, []);
   useEffect(() => {
     if (adoptedFromOtherWindow.current === state) {
       adoptedFromOtherWindow.current = null;
       return;
     }
-    if (deferredCatchupWrite.current !== null) {
-      window.clearTimeout(deferredCatchupWrite.current);
-      deferredCatchupWrite.current = null;
+    if (deferredThrottledWrite.current !== null) {
+      window.clearTimeout(deferredThrottledWrite.current);
+      deferredThrottledWrite.current = null;
     }
-    if (isNpcCatchupPending(state)) {
-      const wait = lastCatchupWriteAt.current + NPC_CATCHUP_PERSIST_INTERVAL_MS - Date.now();
+    // A worker catch-up writes its own progress; App's copy is the frozen start.
+    if (catchupWorker.current) return;
+    if (state === catchupResultState.current) {
+      catchupResultState.current = null;
+      lastThrottledWriteAt.current = Date.now();
+      writeSaveInSlices(state);
+      return;
+    }
+    // Clock ticks only advance time, which a reload replays identically, so a
+    // late-game world (tens of MB of JSON) is not re-serialized every second.
+    // Player commands and everything else are written at once.
+    const interval = isNpcCatchupPending(state) ? NPC_CATCHUP_PERSIST_INTERVAL_MS
+      : state === clockTickState.current ? Math.min(LIVE_TICK_PERSIST_MAX_INTERVAL_MS, lastWriteCostMs.current * LIVE_TICK_PERSIST_COST_FACTOR) : 0;
+    if (interval > 0) {
+      const wait = lastThrottledWriteAt.current + interval - Date.now();
       if (wait > 0) {
         // Trailing write of this prefix unless a newer state replaces it first.
-        deferredCatchupWrite.current = window.setTimeout(() => {
-          deferredCatchupWrite.current = null;
-          lastCatchupWriteAt.current = Date.now();
-          writeSave(state);
+        deferredThrottledWrite.current = window.setTimeout(() => {
+          deferredThrottledWrite.current = null;
+          lastThrottledWriteAt.current = Date.now();
+          writeSaveInSlices(state);
         }, wait);
         return;
       }
-      lastCatchupWriteAt.current = Date.now();
+      lastThrottledWriteAt.current = Date.now();
+      if (state === clockTickState.current) {
+        writeSaveInSlices(state);
+        return;
+      }
     }
     writeSave(state);
-  }, [persistence, state, writeSave]);
+  }, [persistence, state, writeSave, writeSaveInSlices]);
   useEffect(() => {
     publishApplicationRuntimeSnapshot(
       state,
@@ -960,26 +1069,9 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
    * publishes only the last consistent prefix: React and autosave see one
    * state per task instead of one per 64-event chunk.
    */
-  const runRuntimeReconcile = useCallback((at: number, budgetMs = 0) => {
-    const startedAt = performance.now();
-    const initial = stateRef.current;
-    let current = initial;
-    const events: RuntimeReconcileEvent[] = [];
-    do {
-      const result = reconcileRuntime(current, {
-        planetId: current.currentPlanetId,
-        now: at,
-        mode: RUNTIME_MODE,
-        testTimeScale,
-      });
-      if (!result.changed) break;
-      current = result.state;
-      for (const event of result.events) events.push(event);
-    } while (isNpcCatchupPending(current) && performance.now() - startedAt < budgetMs);
-    if (current === initial) return;
-    const result = { state: current };
-    stateRef.current = result.state;
-    setState(result.state);
+  /** Turns the player's runtime events (completions, arrivals, Sun raids) into notices. */
+  const announceRuntimeEvents = useCallback((events: readonly RuntimeReconcileEvent[], resultState: SaveState) => {
+    const result = { state: resultState };
     events.forEach((event) => {
       if (event.kind === 'science') {
         const names = event.scienceIds
@@ -1014,7 +1106,110 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         ));
       }
     });
-  }, [setNotice, testTimeScale]);
+  }, [setNotice]);
+  /**
+   * Starts the catch-up of a frozen world in the worker. The save stays as it
+   * is (commands refused) until the worker posts the caught-up world back;
+   * then only the fields the catch-up changed replace App's.
+   */
+  const startWorkerCatchup = useCallback((frozen: SaveState): boolean => {
+    const replay = frozen.npcReplay;
+    if (catchupWorkerUnavailable.current || !replay || !isNpcCatchupPending(frozen)) return false;
+    let worker: Worker;
+    try {
+      worker = new NpcCatchupWorker();
+    } catch (error) {
+      console.error('NPC catch-up worker unavailable; replaying on the UI thread.', error);
+      catchupWorkerUnavailable.current = true;
+      return false;
+    }
+    const runId = ++catchupRunSeq.current;
+    catchupWorker.current = { worker, runId, from: replay };
+    const finish = () => {
+      worker.terminate();
+      if (catchupWorker.current?.runId === runId) catchupWorker.current = null;
+      setNpcCatchupProgress(null);
+    };
+    // Still the world this run started from (App may have changed its own fields only)?
+    const sameWorld = () => {
+      const current = stateRef.current.npcReplay;
+      return catchupWorker.current?.runId === runId && current?.targetAt === replay.targetAt
+        && current.processedThroughAt === replay.processedThroughAt;
+    };
+    worker.onmessage = (event: MessageEvent<NpcCatchupWorkerResponse>) => {
+      const message = event.data;
+      if (message.runId !== runId) return;
+      if (!sameWorld()) { finish(); return; }
+      if (message.type === 'progress') {
+        setNpcCatchupProgress({ processedThroughAt: message.processedThroughAt, targetAt: message.targetAt });
+      } else if (message.type === 'persist') {
+        writeSerializedSave(message.text);
+      } else if (message.type === 'done') {
+        const merged = { ...stateRef.current, ...message.changed } as SaveState & Record<string, unknown>;
+        for (const key of message.removedKeys) delete merged[key];
+        finish();
+        stateRef.current = merged;
+        catchupResultState.current = merged;
+        setState(merged);
+        announceRuntimeEvents(message.events, merged);
+      } else {
+        console.error(`NPC catch-up worker failed; replaying on the UI thread. ${message.message}`);
+        catchupWorkerUnavailable.current = true;
+        finish();
+        setNow(Date.now());
+      }
+    };
+    worker.onerror = (event) => {
+      console.error('NPC catch-up worker crashed; replaying on the UI thread.', event.message);
+      catchupWorkerUnavailable.current = true;
+      finish();
+      setNow(Date.now());
+    };
+    setNpcCatchupProgress({ processedThroughAt: replay.processedThroughAt, targetAt: replay.targetAt });
+    // The worker's clock is wall time; the page's may differ by a whole (rounded) offset only under QA.
+    const clockOffsetMs = Math.round((Date.now() - (performance.timeOrigin + performance.now())) / 60_000) * 60_000;
+    const request: NpcCatchupWorkerRequest = { type: 'start', runId, state: frozen, persistEveryMs: NPC_CATCHUP_WORKER_PERSIST_INTERVAL_MS, clockOffsetMs };
+    worker.postMessage(request);
+    return true;
+  }, [announceRuntimeEvents, writeSerializedSave]);
+  useEffect(() => () => {
+    catchupWorker.current?.worker.terminate();
+    catchupWorker.current = null;
+    setNpcCatchupProgress(null);
+  }, []);
+  const runRuntimeReconcile = useCallback((at: number, budgetMs = 0) => {
+    // The worker owns the world until it hands it back.
+    if (catchupWorker.current) return;
+    if (!catchupWorkerUnavailable.current && needsNpcCatchupBefore(stateRef.current, at)) {
+      const frozen = freezeNpcCatchupTarget(stateRef.current, at);
+      if (frozen !== stateRef.current) {
+        stateRef.current = frozen;
+        setState(frozen);
+      }
+      if (startWorkerCatchup(frozen)) return;
+    }
+    const startedAt = performance.now();
+    const initial = stateRef.current;
+    let current = initial;
+    const events: RuntimeReconcileEvent[] = [];
+    do {
+      const result = reconcileRuntime(current, {
+        planetId: current.currentPlanetId,
+        now: at,
+        mode: RUNTIME_MODE,
+        testTimeScale,
+      });
+      if (!result.changed) break;
+      current = result.state;
+      for (const event of result.events) events.push(event);
+    } while (isNpcCatchupPending(current) && performance.now() - startedAt < budgetMs);
+    if (current === initial) return;
+    const result = { state: current };
+    stateRef.current = result.state;
+    clockTickState.current = result.state;
+    setState(result.state);
+    announceRuntimeEvents(events, result.state);
+  }, [announceRuntimeEvents, startWorkerCatchup, testTimeScale]);
 
   useEffect(() => {
     runRuntimeReconcile(now);
@@ -1025,7 +1220,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   // depend on render frames. The replay target remains frozen by reconcileRuntime.
   useEffect(() => {
     const replay = state.npcReplay;
-    if (!isApplicationCommandBlocked(state) || !replay) return;
+    if (!isApplicationCommandBlocked(state) || !replay || catchupWorker.current) return;
 
     const continuationTarget = replay.targetAt;
     npcReplayContinuation.current = window.setTimeout(() => {

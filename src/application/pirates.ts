@@ -1,3 +1,6 @@
+import type { PirateContactDefeatRecord } from '../domain/pirates/contact-schedule.ts';
+import type { SpyTargetState } from '../domain/espionage/types.ts';
+import { publicPlayerPlanetsKey } from './npc-knowledge-index.ts';
 import { COMMANDER_IDS, type CommanderId } from '../domain/combat/commanders.ts';
 import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
 import type { CombatFactionId } from '../domain/combat/factions.ts';
@@ -5,7 +8,7 @@ import { SHIP_IDS, type ShipId } from '../domain/combat/ids.ts';
 import type { BattleReport } from '../domain/combat/report.ts';
 import { calculateFleetPopulation } from '../domain/fleet/runtime.ts';
 import { createEmptyFleetState } from '../domain/fleet/runtime.ts';
-import { createUniverseSystem } from '../domain/universe/runtime.ts';
+import { createUniverseSystem, getUniverseSystemTimedKey, isUniverseTimedObjectUp } from '../domain/universe/runtime.ts';
 import type {
   UniverseCoordinate,
   UniversePersistedPlayerPlanet,
@@ -165,6 +168,69 @@ export function getCurrentPirateContact(
   mode?: RuntimeMode,
 ): CurrentPirateContact | null {
   if (!isFlightCoordinate(coordinate) || !Number.isSafeInteger(now) || now < 0) return null;
+  const defeats = defeatList(statePirate(state).contact.defeatedCycles);
+  // No pirate cycle up in this system now: no contact, without building the system.
+  if (!isUniverseTimedObjectUp('pirate', coordinate.galaxy, coordinate.system, now, defeats)) return null;
+  // The contact is pure of the map inputs and of which timed objects are up:
+  // NPC decisions ask for the same systems again and again.
+  const resolvedMode = mode ?? (Object.keys(state.alliedPlanets ?? {}).length > 0 ? 'test' : 'production');
+  const memo = contactMemoFor(state, resolvedMode);
+  const key = `${coordinate.galaxy}:${coordinate.system}:${getUniverseSystemTimedKey(coordinate.galaxy, coordinate.system, now, defeats)}`;
+  if (memo.contacts.has(key)) return memo.contacts.get(key)!;
+  const contact = buildCurrentPirateContact(state, coordinate, now, mode);
+  if (memo.contacts.size > 4_096) memo.contacts.clear();
+  memo.contacts.set(key, contact);
+  return contact;
+}
+
+const defeatLists = new WeakMap<object, PirateContactDefeatRecord[]>();
+/** The defeat records as a list, once per (immutable) defeats object. */
+function defeatList(defeatedCycles: Readonly<Record<string, PirateContactDefeatRecord>>): PirateContactDefeatRecord[] {
+  let list = defeatLists.get(defeatedCycles);
+  if (!list) defeatLists.set(defeatedCycles, list = Object.values(defeatedCycles));
+  return list;
+}
+
+type ContactMemo = { planets: unknown; planetsKey: string; targets: Readonly<Record<string, SpyTargetState>>; defeats: unknown; playerId: string; mode: RuntimeMode;
+  contacts: Map<string, CurrentPirateContact | null> };
+let contactMemo: ContactMemo | null = null;
+
+function contactMemoFor(state: SaveState, mode: RuntimeMode): ContactMemo {
+  const targets = getEspionageTargets(state.espionage);
+  const defeats = statePirate(state).contact.defeatedCycles;
+  const memo = contactMemo;
+  if (memo && (memo.planets === state.planets || memo.planetsKey === publicPlayerPlanetsKey(state.planets))
+    && memo.defeats === defeats && memo.playerId === state.profile.playerId && memo.mode === mode
+    && (memo.targets === targets || samePublicPlanets(memo.targets, targets))) {
+    memo.targets = targets;
+    memo.planets = state.planets;
+    return memo;
+  }
+  contactMemo = { planets: state.planets, planetsKey: publicPlayerPlanetsKey(state.planets), targets, defeats, playerId: state.profile.playerId, mode, contacts: new Map() };
+  return contactMemo;
+}
+
+/** Same planets with the same id, owner, name, kind and coordinate object, in order (what the system build reads). */
+function samePublicPlanets(left: Readonly<Record<string, SpyTargetState>>, right: Readonly<Record<string, SpyTargetState>>): boolean {
+  const leftIds = Object.keys(left);
+  const rightIds = Object.keys(right);
+  if (leftIds.length !== rightIds.length) return false;
+  for (let index = 0; index < leftIds.length; index += 1) {
+    const id = leftIds[index]!;
+    if (rightIds[index] !== id) return false;
+    const a = left[id]!;
+    const b = right[id]!;
+    if (a !== b && (a.ownerId !== b.ownerId || a.name !== b.name || a.kind !== b.kind || a.coordinate !== b.coordinate)) return false;
+  }
+  return true;
+}
+
+function buildCurrentPirateContact(
+  state: SaveState,
+  coordinate: UniverseCoordinate,
+  now: number,
+  mode?: RuntimeMode,
+): CurrentPirateContact | null {
   const system = systemForState(state, coordinate.galaxy, coordinate.system, now, mode, true);
   const node = system.positions.find((candidate) => candidate.kind === 'pirate');
   const pirate = node?.pirate;

@@ -106,12 +106,16 @@ export function evaluateAttackEligibility(
 
   const totalRange = attackPointRange(attacker.totalPoints);
   const resourceRange = attacker.resourcePoints > 0 ? attackPointRange(attacker.resourcePoints) : null;
-  const allowedText = `${formatPoints(totalRange.min)}–${formatPoints(totalRange.max)} общих`
-    + (resourceRange ? ` или ${formatPoints(resourceRange.min)}–${formatPoints(resourceRange.max)} ресурсных` : '');
   return {
     allowed: false,
     reason: 'out-of-range',
-    message: `Цель вне диапазона: у цели ${formatPoints(defender.totalPoints)} общих и ${formatPoints(defender.resourcePoints)} ресурсных, допустимо ${allowedText}.`,
+    // Built when read: NPC candidate filtering asks thousands of times a
+    // game hour and only reads `allowed`.
+    get message() {
+      const allowedText = `${formatPoints(totalRange.min)}–${formatPoints(totalRange.max)} общих`
+        + (resourceRange ? ` или ${formatPoints(resourceRange.min)}–${formatPoints(resourceRange.max)} ресурсных` : '');
+      return `Цель вне диапазона: у цели ${formatPoints(defender.totalPoints)} общих и ${formatPoints(defender.resourcePoints)} ресурсных, допустимо ${allowedText}.`;
+    },
     attacker,
     defender,
     totalRange,

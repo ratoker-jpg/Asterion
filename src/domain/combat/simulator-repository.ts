@@ -1,3 +1,4 @@
+import { getBrowserSaveStorage } from '../../application/save-storage.ts';
 import { COMBAT_ENTITY_BY_ID, getCombatEntity } from './catalog.ts';
 import { isCommanderId, type CommanderId } from './commanders.ts';
 import { normalizeCombatFactionId } from './factions.ts';
@@ -50,8 +51,7 @@ type SaveEnvelope = {
 
 function resolveStorage(storage?: StorageLike): StorageLike | null {
   if (storage) return storage;
-  if (typeof window === 'undefined') return null;
-  return window.localStorage;
+  return getBrowserSaveStorage();
 }
 
 function isMaxRounds(value: unknown): value is SimulatorMaxRounds {
@@ -281,7 +281,7 @@ export function persistSimulatorState(value: SimulatorState, storage?: StorageLi
     };
     target.setItem(saveKey, JSON.stringify(nextEnvelope));
 
-    if (typeof window !== 'undefined' && target === window.localStorage) {
+    if (typeof window !== 'undefined' && target === getBrowserSaveStorage()) {
       window.dispatchEvent(new CustomEvent<SimulatorState>(SIMULATOR_STATE_CHANGED_EVENT, { detail: normalized }));
     }
 

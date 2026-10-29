@@ -1,6 +1,7 @@
 import { isAsterionLocalPlayerId, type BattleReport } from '../domain/combat/report.ts';
 import type { FlightRecord } from '../domain/flights/types.ts';
 import type { SaveState } from './contracts.ts';
+import type { ExplorationContact } from '../domain/exploration/ledger.ts';
 
 /**
  * Owner rule: the save keeps the newest 200 pirate-vs-NPC battle reports in
@@ -121,6 +122,56 @@ export function isFinishedForeignPirateFlight(flight: FlightRecord, playerId: st
  * Game state (wallets, fleets, ownership, ratings, cursors) is untouched.
  * Returns the same object when nothing is pruned.
  */
+// Per flight (records keep unchanged flights' objects): whether it is a
+// finished foreign pirate raid, and when it became an archive candidate.
+const flightArchiveInfo = new WeakMap<FlightRecord, { playerId: string; pirateFinished: boolean; candidateAt: number }>();
+const recordsArchiveSummary = new WeakMap<readonly FlightRecord[], { playerId: string; pirateFinished: boolean; firstCandidateAt: number }>();
+
+const LIVE_REPORT_PREFIXES = ['battle-pirate-raid-', 'battle-pirate-', 'battle-attack-'] as const;
+const liveReportIndexes = new WeakMap<readonly FlightRecord[], { flightIds: Set<string>; resolutions: Set<string> }>();
+function liveFlightReportIndex(records: readonly FlightRecord[]) {
+  let index = liveReportIndexes.get(records);
+  if (!index) {
+    index = { flightIds: new Set(), resolutions: new Set() };
+    for (const flight of records) {
+      if (TERMINAL_FLIGHT_PHASES.has(flight.phase)) continue;
+      index.flightIds.add(flight.id);
+      if (flight.attackResolution?.reportId) index.resolutions.add(flight.attackResolution.reportId);
+    }
+    liveReportIndexes.set(records, index);
+  }
+  return index;
+}
+
+// (owner, target) of each NPC spy report, built once per (immutable) report.
+const spyReportKeys = new WeakMap<object, string>();
+const flightIdSets = new WeakMap<readonly FlightRecord[], Set<string>>();
+function flightIdSet(records: readonly FlightRecord[]): Set<string> {
+  let ids = flightIdSets.get(records);
+  if (!ids) flightIdSets.set(records, ids = new Set(records.map((flight) => flight.id)));
+  return ids;
+}
+
+function flightArchiveSummary(records: readonly FlightRecord[], playerId: string) {
+  const cached = recordsArchiveSummary.get(records);
+  if (cached?.playerId === playerId) return cached;
+  let pirateFinished = false;
+  let firstCandidateAt = Number.POSITIVE_INFINITY;
+  for (const flight of records) {
+    let info = flightArchiveInfo.get(flight);
+    if (info?.playerId !== playerId) {
+      info = { playerId, pirateFinished: isFinishedForeignPirateFlight(flight, playerId),
+        candidateAt: isArchivedNpcFlight(flight, Number.POSITIVE_INFINITY) ? flight.completedAt! : Number.POSITIVE_INFINITY };
+      flightArchiveInfo.set(flight, info);
+    }
+    pirateFinished ||= info.pirateFinished;
+    if (info.candidateAt < firstCandidateAt) firstCandidateAt = info.candidateAt;
+  }
+  const summary = { playerId, pirateFinished, firstCandidateAt };
+  recordsArchiveSummary.set(records, summary);
+  return summary;
+}
+
 export function pruneCampaignHistory(state: SaveState, at: number | undefined = state.npcReplay?.processedThroughAt): SaveState {
   const playerId = state.profile.playerId;
   let next = state;
@@ -131,28 +182,36 @@ export function pruneCampaignHistory(state: SaveState, at: number | undefined = 
   // Clean records stay clean until the earliest finished NPC flight ages past
   // the margin; until then (same arrays, earlier cursor) nothing is scanned.
   const flightMemo = cleanFlights.get(flights.records);
-  const flightsClean = flightMemo !== undefined && flightMemo.missions === state.espionage?.missions
-    && flightMemo.playerId === playerId && archiveBefore <= flightMemo.firstArchivableAfter;
+  const summary = flightArchiveSummary(flights.records, playerId);
+  // Without a finished pirate raid and before the earliest finished NPC flight
+  // ages past the margin nothing can leave, whatever the spy missions hold.
+  const flightsClean = (!summary.pirateFinished && archiveBefore <= summary.firstCandidateAt)
+    || (flightMemo !== undefined && flightMemo.missions === state.espionage?.missions
+      && flightMemo.playerId === playerId && archiveBefore <= flightMemo.firstArchivableAfter);
   // A spy mission that is still live keeps its flight.
   const liveMissionFlights = flightsClean ? new Set<string>() : new Set((state.espionage?.missions ?? [])
     .filter((mission) => mission.status === 'transit' || mission.status === 'orbiting' || mission.status === 'returning')
     .map((mission) => mission.flightId));
-  const finished = flightsClean ? [] : flights.records.filter((flight) => isFinishedForeignPirateFlight(flight, playerId)
-    || (isArchivedNpcFlight(flight, archiveBefore) && !liveMissionFlights.has(flight.id)));
+  // flightArchiveSummary filled flightArchiveInfo for every record.
+  const info = (flight: FlightRecord) => flightArchiveInfo.get(flight)!;
+  const finished = flightsClean ? [] : flights.records.filter((flight) => info(flight).pirateFinished
+    || (info(flight).candidateAt < archiveBefore && !liveMissionFlights.has(flight.id)));
   if (!flightsClean && !finished.length) {
     let firstArchivableAfter = Number.POSITIVE_INFINITY;
     for (const flight of flights.records) {
-      if (isArchivedNpcFlight(flight, Number.POSITIVE_INFINITY) && !liveMissionFlights.has(flight.id)) {
-        firstArchivableAfter = Math.min(firstArchivableAfter, flight.completedAt!);
-      }
+      const candidateAt = info(flight).candidateAt;
+      if (candidateAt < firstArchivableAfter && !liveMissionFlights.has(flight.id)) firstArchivableAfter = candidateAt;
     }
     cleanFlights.set(flights.records, { missions: state.espionage?.missions, playerId, firstArchivableAfter });
   }
   if (finished.length) {
     const removed = new Set(finished.map((flight) => flight.id));
-    const requestIndex = { ...flights.requestIndex };
+    // The request index holds thousands of entries late in a campaign: copy it only to drop one.
+    let requestIndex = flights.requestIndex;
     for (const flight of finished) {
-      if (requestIndex[flight.requestId] === flight.id) delete requestIndex[flight.requestId];
+      if (requestIndex[flight.requestId] !== flight.id) continue;
+      if (requestIndex === flights.requestIndex) requestIndex = { ...requestIndex };
+      delete requestIndex[flight.requestId];
     }
     next = { ...next, flights: { ...flights, records: flights.records.filter((flight) => !removed.has(flight.id)), requestIndex } };
   }
@@ -161,10 +220,11 @@ export function pruneCampaignHistory(state: SaveState, at: number | undefined = 
   // read by nothing: reports carry their owner, live missions are kept.
   const missions = next.espionage?.missions ?? [];
   if (missions.length && cleanMissions.get(missions) !== next.flights.records) {
-    const flightIds = new Set(next.flights.records.map((flight) => flight.id));
-    const kept = missions.filter((mission) => mission.ownerId === playerId
-      || mission.status === 'transit' || mission.status === 'orbiting' || mission.status === 'returning'
-      || flightIds.has(mission.flightId));
+    const keptAnyway = (mission: (typeof missions)[number]) => mission.ownerId === playerId
+      || mission.status === 'transit' || mission.status === 'orbiting' || mission.status === 'returning';
+    // Only ended NPC missions depend on the flights; most groups have none whose flight left.
+    const flightIds = missions.some((mission) => !keptAnyway(mission)) ? flightIdSet(next.flights.records) : null;
+    const kept = flightIds ? missions.filter((mission) => keptAnyway(mission) || flightIds.has(mission.flightId)) : missions;
     if (kept.length !== missions.length) next = { ...next, espionage: { ...next.espionage!, missions: kept } };
     cleanMissions.set(kept.length !== missions.length ? kept : missions, next.flights.records);
   }
@@ -183,7 +243,8 @@ export function pruneCampaignHistory(state: SaveState, at: number | undefined = 
     const newestNpcReport = new Map<string, number>();
     spyReports.forEach((report, index) => {
       if (typeof report.ownerId !== 'string' || !report.ownerId || report.ownerId === playerId) return;
-      const key = `${report.ownerId}\u0000${report.targetPlanetId}`;
+      let key = spyReportKeys.get(report);
+      if (key === undefined) spyReportKeys.set(report, key = `${report.ownerId}\u0000${report.targetPlanetId}`);
       const previous = newestNpcReport.get(key);
       if (previous === undefined || spyReports[previous]!.createdAt <= report.createdAt) newestNpcReport.set(key, index);
     });
@@ -243,7 +304,45 @@ export function pruneCampaignHistory(state: SaveState, at: number | undefined = 
     }
   }
 
+  const exploration = boundExplorationLedger(next.exploration);
+  if (exploration !== next.exploration) next = { ...next, exploration };
+
   return next;
+}
+
+/**
+ * The exploration ledger keeps the newest entries load keeps (see
+ * migrateExplorationState): a world that is saved and loaded between two
+ * replay groups must go on exactly like one that was never saved.
+ */
+const boundedLedgers = new WeakSet<object>();
+function boundExplorationLedger(ledger: SaveState['exploration']): SaveState['exploration'] {
+  if (!ledger || boundedLedgers.has(ledger)) return ledger;
+  const bounded = boundExplorationLedgerOnce(ledger);
+  boundedLedgers.add(bounded);
+  return bounded;
+}
+
+function boundExplorationLedgerOnce(ledger: NonNullable<SaveState['exploration']>): NonNullable<SaveState['exploration']> {
+  const contactIds = Object.keys(ledger.contacts);
+  const oversizedContact = (contact: ExplorationContact) => (contact.rareUsedByOwner?.length ?? 0) > 64 || (contact.events?.length ?? 0) > 100;
+  const contactsOver = contactIds.length > 256 || contactIds.some((id) => oversizedContact(ledger.contacts[id]!));
+  if (!contactsOver && Object.keys(ledger.highestScoresByOwner).length <= 256 && (ledger.acceptedContactIds?.length ?? 0) <= 256
+    && (ledger.reconReports?.length ?? 0) <= 256 && ledger.completed.length <= 200) return ledger;
+  const contacts = contactsOver ? Object.fromEntries(contactIds.slice(-256).map((id) => {
+    const contact = ledger.contacts[id]!;
+    return [id, oversizedContact(contact)
+      ? { ...contact, rareUsedByOwner: contact.rareUsedByOwner.slice(-64), events: contact.events.slice(-100) } : contact];
+  })) : ledger.contacts;
+  const scores = Object.entries(ledger.highestScoresByOwner);
+  return {
+    ...ledger,
+    contacts,
+    highestScoresByOwner: scores.length > 256 ? Object.fromEntries(scores.slice(-256)) : ledger.highestScoresByOwner,
+    acceptedContactIds: (ledger.acceptedContactIds?.length ?? 0) > 256 ? ledger.acceptedContactIds!.slice(-256) : ledger.acceptedContactIds,
+    reconReports: (ledger.reconReports?.length ?? 0) > 256 ? ledger.reconReports!.slice(-256) : ledger.reconReports,
+    completed: ledger.completed.length > 200 ? ledger.completed.slice(-200) : ledger.completed,
+  };
 }
 
 function pruneForeignReports(
@@ -256,16 +355,13 @@ function pruneForeignReports(
   const reports = next.combat.reports;
   const foreignCount = reports.reduce((count, report) => count + Number(isForeign(report, playerId)), 0);
   if (foreignCount <= limit) return next;
-  const protectedIds = new Set<string>(state.combat.savedReportIds);
-  for (const flight of next.flights.records) {
-    if (TERMINAL_FLIGHT_PHASES.has(flight.phase)) continue;
-    // A live flight resolves (and re-finds) its report by these ids.
-    protectedIds.add(`battle-pirate-raid-${flight.id}`);
-    protectedIds.add(`battle-pirate-${flight.id}`);
-    protectedIds.add(`battle-attack-${flight.id}`);
-    if (flight.attackResolution?.reportId) protectedIds.add(flight.attackResolution.reportId);
-  }
-  for (const operation of state.operations.items) if (operation.battleReportId) protectedIds.add(operation.battleReportId);
+  const saved = new Set<string>(state.combat.savedReportIds);
+  for (const operation of state.operations.items) if (operation.battleReportId) saved.add(operation.battleReportId);
+  // A live flight resolves (and re-finds) its report by battle-pirate-raid-,
+  // battle-pirate- or battle-attack- plus its id, or its resolution's id.
+  const live = liveFlightReportIndex(next.flights.records);
+  const protectedIds = { has: (id: string) => saved.has(id) || live.resolutions.has(id)
+    || LIVE_REPORT_PREFIXES.some((prefix) => id.startsWith(prefix) && live.flightIds.has(id.slice(prefix.length))) };
   // Protected reports stay on top of the limit; the newest unprotected
   // foreign reports fill it. Reports are appended chronologically.
   const prunable = reports.filter((report) => isForeign(report, playerId) && !protectedIds.has(report.id)).length;

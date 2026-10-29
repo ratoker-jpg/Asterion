@@ -1,3 +1,5 @@
+import { stringifySave, stringifySaveInSlices } from './save-json.ts';
+import { getBrowserSaveStorage } from './save-storage.ts';
 import {
   createDefaultBattleHistory,
   migrateBattleHistory,
@@ -275,7 +277,7 @@ export type SaveLoadResult =
 
 function resolveStorage(storage?: StorageLike | null): StorageLike | null {
   if (storage !== undefined) return storage;
-  return typeof window === 'undefined' ? null : window.localStorage;
+  return getBrowserSaveStorage();
 }
 
 function numberOr(value: unknown, fallback: number): number {
@@ -1836,6 +1838,35 @@ export type PersistenceWriteOptions = {
   replaceUnreadable?: boolean;
 };
 
+/**
+ * The exact bytes `write` stores for a state. Pure, so a catch-up worker can
+ * serialize its progress off the UI thread and hand over only the text.
+ */
+export function serializeSaveForStorage(state: SaveState, mode: RuntimeMode): string {
+  return stringifySave(persistedPayload(state, mode));
+}
+
+/** serializeSaveForStorage in steps of ~`budgetMs` (see stringifySaveInSlices). */
+export function serializeSaveForStorageInSlices(state: SaveState, mode: RuntimeMode, budgetMs: number, pause: () => Promise<void>) {
+  return stringifySaveInSlices(persistedPayload(state, mode), budgetMs, pause);
+}
+
+function persistedPayload(state: SaveState, mode: RuntimeMode): object {
+  const persistedState = mode === 'test' || !state.espionage
+    ? state
+    : {
+      ...state,
+      espionage: {
+        ...state.espionage,
+        targets: Object.fromEntries(Object.entries(state.espionage.targets ?? {}).filter(([, target]) => target.ownerId !== UNIVERSE_NPC_OWNER_ID)),
+        bot01Planets: undefined,
+        bot01Profile: undefined,
+        bot01IncomingScenario: undefined,
+      },
+    };
+  return { ...persistedState, [SAVE_WRITER_FIELD]: SAVE_WRITER_VERSION };
+}
+
 export function createPersistenceFacade(options: PersistenceOptions = {}) {
   const mode = options.mode ?? ACTIVE_RUNTIME_MODE;
   const storage = resolveStorage(options.storage);
@@ -1843,45 +1874,37 @@ export function createPersistenceFacade(options: PersistenceOptions = {}) {
   // The last bytes this facade wrote: an unchanged key needs no re-check, so
   // the per-tick autosave parses the stored save only after a foreign write.
   let lastWritten: string | null = null;
+  const writeText = (serialize: () => string, writeOptions: PersistenceWriteOptions): PersistenceWriteResult => {
+    if (!storage) return { ok: false, error: 'Storage is unavailable.' };
+    try {
+      if (!writeOptions.replaceUnreadable) {
+        // Never overwrite a corrupt, malformed or newer-schema save: its bytes
+        // are the player's only copy until they export or delete it.
+        const existing = storage.getItem(saveKey);
+        if (existing !== null && existing !== lastWritten) {
+          const health = inspectSavePayload(existing, SAVE_SCHEMA_VERSION);
+          if (isSaveProblem(health)) {
+            return { ok: false, error: 'Сохранение не читается этой версией игры и не перезаписано.', unreadableSave: health };
+          }
+        }
+      }
+      const text = serialize();
+      storage.setItem(saveKey, text);
+      lastWritten = text;
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  };
   return {
     mode,
     saveKey,
     read: () => readSavedState(options),
     load: () => loadSavedState(options),
-    write: (state: SaveState, writeOptions: PersistenceWriteOptions = {}): PersistenceWriteResult => {
-      if (!storage) return { ok: false, error: 'Storage is unavailable.' };
-      try {
-        if (!writeOptions.replaceUnreadable) {
-          // Never overwrite a corrupt, malformed or newer-schema save: its bytes
-          // are the player's only copy until they export or delete it.
-          const existing = storage.getItem(saveKey);
-          if (existing !== null && existing !== lastWritten) {
-            const health = inspectSavePayload(existing, SAVE_SCHEMA_VERSION);
-            if (isSaveProblem(health)) {
-              return { ok: false, error: 'Сохранение не читается этой версией игры и не перезаписано.', unreadableSave: health };
-            }
-          }
-        }
-        const persistedState = mode === 'test' || !state.espionage
-          ? state
-          : {
-            ...state,
-            espionage: {
-              ...state.espionage,
-              targets: Object.fromEntries(Object.entries(state.espionage.targets ?? {}).filter(([, target]) => target.ownerId !== UNIVERSE_NPC_OWNER_ID)),
-              bot01Planets: undefined,
-              bot01Profile: undefined,
-              bot01IncomingScenario: undefined,
-            },
-          };
-        const text = JSON.stringify({ ...persistedState, [SAVE_WRITER_FIELD]: SAVE_WRITER_VERSION });
-        storage.setItem(saveKey, text);
-        lastWritten = text;
-        return { ok: true };
-      } catch (error) {
-        return { ok: false, error: error instanceof Error ? error.message : String(error) };
-      }
-    },
+    write: (state: SaveState, writeOptions: PersistenceWriteOptions = {}): PersistenceWriteResult =>
+      writeText(() => serializeSaveForStorage(state, mode), writeOptions),
+    /** Stores text made by serializeSaveForStorage (a catch-up worker's progress). */
+    writeSerialized: (text: string): PersistenceWriteResult => writeText(() => text, {}),
     clear: (): PersistenceWriteResult => {
       if (!storage) return { ok: false, error: 'Storage is unavailable.' };
       try {
