@@ -1,3 +1,4 @@
+import type { PirateContactDefeatRecord } from '../domain/pirates/contact-schedule.ts';
 import type { SpyTargetState } from '../domain/espionage/types.ts';
 import { publicPlayerPlanetsKey } from './npc-knowledge-index.ts';
 import { COMMANDER_IDS, type CommanderId } from '../domain/combat/commanders.ts';
@@ -167,7 +168,7 @@ export function getCurrentPirateContact(
   mode?: RuntimeMode,
 ): CurrentPirateContact | null {
   if (!isFlightCoordinate(coordinate) || !Number.isSafeInteger(now) || now < 0) return null;
-  const defeats = Object.values(statePirate(state).contact.defeatedCycles);
+  const defeats = defeatList(statePirate(state).contact.defeatedCycles);
   // No pirate cycle up in this system now: no contact, without building the system.
   if (!isUniverseTimedObjectUp('pirate', coordinate.galaxy, coordinate.system, now, defeats)) return null;
   // The contact is pure of the map inputs and of which timed objects are up:
@@ -180,6 +181,14 @@ export function getCurrentPirateContact(
   if (memo.contacts.size > 4_096) memo.contacts.clear();
   memo.contacts.set(key, contact);
   return contact;
+}
+
+const defeatLists = new WeakMap<object, PirateContactDefeatRecord[]>();
+/** The defeat records as a list, once per (immutable) defeats object. */
+function defeatList(defeatedCycles: Readonly<Record<string, PirateContactDefeatRecord>>): PirateContactDefeatRecord[] {
+  let list = defeatLists.get(defeatedCycles);
+  if (!list) defeatLists.set(defeatedCycles, list = Object.values(defeatedCycles));
+  return list;
 }
 
 type ContactMemo = { planets: unknown; planetsKey: string; targets: Readonly<Record<string, SpyTargetState>>; defeats: unknown; playerId: string; mode: RuntimeMode;

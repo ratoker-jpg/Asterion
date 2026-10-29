@@ -912,6 +912,24 @@ function ensureTimedCycles(kind: TimedObjectKind, galaxy: number, system: number
   return cache.cycles;
 }
 
+// A system's pirate defeats in list order, grouped once per (immutable) list.
+const defeatsBySystem = new WeakMap<readonly PirateContactDefeatRecord[], Map<string, PirateContactDefeatRecord[]>>();
+function defeatsInSystem(defeats: readonly PirateContactDefeatRecord[], galaxy: number, system: number): PirateContactDefeatRecord[] {
+  if (!defeats.length) return [];
+  let bySystem = defeatsBySystem.get(defeats);
+  if (!bySystem) {
+    bySystem = new Map();
+    for (const record of defeats) {
+      const key = `${record.galaxy}:${record.system}`;
+      const bucket = bySystem.get(key);
+      if (bucket) bucket.push(record);
+      else bySystem.set(key, [record]);
+    }
+    defeatsBySystem.set(defeats, bySystem);
+  }
+  return bySystem.get(`${galaxy}:${system}`) ?? [];
+}
+
 export type UniverseTimedObjectSchedule = TimedObjectSchedule;
 
 let warmCursor = 0;
@@ -975,7 +993,7 @@ export function getUniverseTimedObjectSchedule(
   const safeIndex = Math.max(0, Math.floor(cycleIndex));
   const baseCycles = ensureTimedCycles(kind, galaxy, system, config.epoch + (safeIndex + 1) * (config.maxLifetimeMs + config.quietMs));
   const relevantDefeats = kind === 'pirate'
-    ? pirateContactDefeats.filter((record) => record.galaxy === galaxy && record.system === system)
+    ? defeatsInSystem(pirateContactDefeats, galaxy, system)
     : [];
   if (!relevantDefeats.length) return (baseCycles.get(safeIndex) ?? baseCycles.get(0))!;
   const cycles = applyPirateContactDefeatsToSchedules(baseCycles.toArray(), galaxy, system, relevantDefeats);
@@ -996,7 +1014,7 @@ export function getPirateContactCyclesBetween(
   checkDelayMs = PIRATE_RAID_CHECK_INTERVAL_MS,
 ): readonly UniverseTimedObjectSchedule[] {
   if (!Number.isSafeInteger(afterMs) || !Number.isSafeInteger(throughMs) || throughMs <= afterMs) return [];
-  const relevantDefeats = defeatedCycles.filter((record) => record.galaxy === galaxy && record.system === system);
+  const relevantDefeats = defeatsInSystem(defeatedCycles, galaxy, system);
   const base = ensureTimedCycles('pirate', galaxy, system, throughMs
     + relevantDefeats.length * PIRATE_MAX_LIFETIME_MS);
   // No defeat-shifted cycles in fresh saves: reuse the canonical schedule
@@ -1036,7 +1054,7 @@ function activeTimedObjectSchedule(
   pirateContactDefeats: readonly PirateContactDefeatRecord[] = [],
 ) {
   const relevantDefeats = kind === 'pirate'
-    ? pirateContactDefeats.filter((record) => record.galaxy === galaxy && record.system === system)
+    ? defeatsInSystem(pirateContactDefeats, galaxy, system)
     : [];
   const baseCycles = ensureTimedCycles(kind, galaxy, system, nowMs + relevantDefeats.length * PIRATE_MAX_LIFETIME_MS);
   // Without defeats in this system the canonical schedule is already final:
