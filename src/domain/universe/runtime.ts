@@ -1060,19 +1060,23 @@ function activeTimedObjectSchedule(
   // Without defeats in this system the canonical schedule is already final:
   // re-mapping every cycle since the epoch on each 1 s render was the
   // Universe screen's main-thread hitch (see getPirateContactCyclesBetween).
+  // Cycles form a chain (each starts at the previous one's respawn), so the
+  // latest cycle that has started is the only one that can still be up: once
+  // it has respawned, every earlier one has too. Scanning on from there walked
+  // the whole history since the epoch in every quiet gap.
   if (relevantDefeats.length) {
     const cycles = applyPirateContactDefeatsToSchedules(baseCycles.toArray(), galaxy, system, relevantDefeats);
     for (let index = cycles.length - 1; index >= 0; index -= 1) {
       const cycle = cycles[index]!;
       if (cycle.startAt > nowMs) continue;
-      if (nowMs < cycle.respawnAt) return cycle;
+      return nowMs < cycle.respawnAt ? cycle : null;
     }
     return null;
   }
   for (let index = baseCycles.length - 1; index >= 0; index -= 1) {
     if (baseCycles.startAtOf(index) > nowMs) continue;
     const cycle = baseCycles.get(index)!;
-    if (nowMs < cycle.respawnAt) return cycle;
+    return nowMs < cycle.respawnAt ? cycle : null;
   }
   return null;
 }
