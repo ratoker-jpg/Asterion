@@ -41,6 +41,22 @@ test('owner profiles freeze on first contact and remain independent across owner
   assert.equal(validatePirateContactState(otherOwner.state).valid, true);
 });
 
+test('a profile saved by another JavaScript engine (last-bit tier shares) still loads; a changed sample does not', () => {
+  const key = createPirateContactCycleKey({ galaxy: 8, system: 6, cycleIndex: 22, startAt: 1_767_306_755_425 });
+  const score = { resourcePoints: 14_175, battlePoints: 1_029, totalPoints: 15_204 };
+  const profile = createPirateProfile({ ownerId: 'npc-gen-63', contactCycleKey: key, score });
+  // Node 24 and Electron 44 round Math.pow differently in the last bit.
+  const otherEngine = { ...profile, expectedTierShares: Object.fromEntries(Object.entries(profile.expectedTierShares)
+    .map(([tier, share]) => [tier, share * (1 + Number.EPSILON * 4)])) };
+  assert.notDeepEqual(otherEngine.expectedTierShares, profile.expectedTierShares);
+  const load = (candidate: unknown) => migratePirateContactState({ version: 1, defeatedCycles: {},
+    ownerProfiles: { 'npc-gen-63': { [key]: candidate } } }).ownerProfiles['npc-gen-63']?.[key];
+  assert.ok(load(otherEngine), 'tier shares equal to 12 significant digits are the same profile');
+  const tier = Object.keys(profile.sampledTierShares)[0]!;
+  const changedSample = { ...profile, sampledTierShares: { ...profile.sampledTierShares, [tier]: profile.sampledTierShares[tier as '1'] + 1 } };
+  assert.equal(load(changedSample), undefined, 'the sampled composition is still checked exactly');
+});
+
 test('global defeat shortens the quiet interval from victory and advances the cycle schedule', () => {
   const schedules = [
     { cycleIndex: 0, startAt: 0, expiresAt: 60_000, respawnAt: 960_000, lifetimeMs: 60_000, spawnChance: 0.9, present: true },

@@ -68,6 +68,22 @@ function canonicalJson(value: unknown): string {
   return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}`;
 }
 
+/**
+ * A profile compared with the one its seed recreates. The expected tier
+ * shares come from Math.pow/exp, whose last bit differs between JavaScript
+ * engines (Node's V8 and Electron's give 82.27063208603401 and
+ * 82.270632086034): a save made by one engine must not read as corrupt in
+ * another, so those shares are compared to 12 significant digits. Everything
+ * else (sampled shares, tier, ships) stays exact.
+ */
+function profileJson(value: unknown): string {
+  if (!isRecord(value) || !isRecord(value.expectedTierShares)) return canonicalJson(value);
+  const shares = Object.fromEntries(Object.entries(value.expectedTierShares).map(([tier, share]) => [
+    tier, typeof share === 'number' && Number.isFinite(share) ? Number(share.toPrecision(12)) : share,
+  ]));
+  return canonicalJson({ ...value, expectedTierShares: shares });
+}
+
 function isPirateProfile(value: unknown, ownerId: string, cycleKey: string): value is PirateProfile {
   if (!isCanonicalPirateContactCycleKey(cycleKey) || !isRecord(value) || value.ownerId !== ownerId || value.contactCycleKey !== cycleKey) return false;
   if (!isOwnerScore(value.score)) return false;
@@ -80,13 +96,13 @@ function isPirateProfile(value: unknown, ownerId: string, cycleKey: string): val
     // Existing dispatched flights and contact profiles carry the original
     // tier-as-level technology contract. Validate it exactly, but never
     // silently recalculate a frozen profile when the new % scale is introduced.
-    if (canonicalJson(value) === canonicalJson(expected)) return true;
+    if (profileJson(value) === profileJson(expected)) return true;
     const legacyTier = expected.technologyLevel;
     const legacyTechnologies = Object.fromEntries(COMBAT_TECHNOLOGY_IDS.map((id) => [
       id, PIRATE_EXCLUSIVE_TECHNOLOGIES.includes(id as typeof PIRATE_EXCLUSIVE_TECHNOLOGIES[number])
         && id !== expected.exclusiveTechnologyId ? 0 : legacyTier,
     ]));
-    return canonicalJson(value) === canonicalJson({
+    return profileJson(value) === profileJson({
       ...expected, technologies: legacyTechnologies,
     });
   } catch {
