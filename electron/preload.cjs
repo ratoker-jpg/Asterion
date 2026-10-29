@@ -26,6 +26,18 @@ contextBridge.exposeInMainWorld('asterionDesktop', {
       if (!result || !result.ok) throw new Error(result && result.error || 'Save store remove failed.');
     },
   },
+  // Game updates (electron/updater.cjs). `install` only after the saves are flushed.
+  updates: {
+    get: () => ipcRenderer.invoke('asterion:update:get'),
+    check: () => ipcRenderer.invoke('asterion:update:check'),
+    install: () => ipcRenderer.invoke('asterion:update:install'),
+    onState: (listener) => {
+      if (typeof listener !== 'function') return () => undefined;
+      const handler = (_event, state) => listener(state);
+      ipcRenderer.on('asterion:update:state', handler);
+      return () => ipcRenderer.removeListener('asterion:update:state', handler);
+    },
+  },
   onDisplayState: (listener) => {
     if (typeof listener !== 'function') return () => undefined;
     const handler = (_event, state) => listener(state);
