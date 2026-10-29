@@ -1,4 +1,4 @@
-// F-08 gate: every *.test.ts under src/ runs in exactly one npm test script,
+// F-08 gate: every *.test.ts under src/ (and *.test.mjs under tools/) runs in exactly one npm test script,
 // and every logical (non-UI) test script runs in CI. Exits 1 with the gaps.
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
@@ -7,11 +7,11 @@ const root = process.cwd();
 const scripts = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).scripts;
 const ci = readFileSync(join(root, '.github/workflows/ci.yml'), 'utf8');
 
-function walk(dir) {
+function walk(dir, suffix) {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
-    if (entry.isDirectory()) return entry.name === 'node_modules' || entry.name === 'graphify-out' ? [] : walk(path);
-    return entry.name.endsWith('.test.ts') ? [relative(root, path).split(sep).join('/')] : [];
+    if (entry.isDirectory()) return entry.name === 'node_modules' || entry.name === 'graphify-out' ? [] : walk(path, suffix);
+    return entry.name.endsWith(suffix) ? [relative(root, path).split(sep).join('/')] : [];
   });
 }
 
@@ -21,11 +21,11 @@ function matches(pattern, file) {
   return new RegExp(`^${source}$`).test(file);
 }
 
-const files = walk(join(root, 'src')).sort();
+const files = [...walk(join(root, 'src'), '.test.ts'), ...walk(join(root, 'tools'), '.test.mjs')].sort();
 const logical = Object.entries(scripts).filter(([name, command]) => name.startsWith('test:') && !name.endsWith('-ui') && name !== 'test:inventory' && command.includes('--test'));
 const owners = new Map(files.map((file) => [file, []]));
 for (const [name, command] of logical) {
-  const patterns = command.split('--test')[1].trim().split(/\s+/).filter((token) => token.endsWith('.ts'));
+  const patterns = command.split('--test')[1].trim().split(/\s+/).filter((token) => token.endsWith('.ts') || token.endsWith('.mjs'));
   for (const pattern of patterns) {
     const hit = files.filter((file) => matches(pattern, file));
     if (!hit.length) {

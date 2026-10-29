@@ -24,6 +24,7 @@ import {
 import { CrystalSet } from '../sun-raid/SunRaidArt.tsx';
 import { RACE_CARDS, raceCard } from './race-catalog.ts';
 import { NewGameWizard } from './NewGameWizard.tsx';
+import { GameUpdateRow } from './GameUpdateRow.tsx';
 import { isDesktopShell, quitDesktopApp, type MenuScreen } from './session.ts';
 import type { SolarCrystalId } from '../../domain/sun-raid/config.ts';
 import { useMusic } from '../../audio/hooks.ts';
@@ -180,6 +181,7 @@ function MainMenuScreen({ continueSlot, slotCount, onNavigate, onContinue }: Mai
           ))}
         </nav>
         <footer className="menu-foot">
+          <GameUpdateRow variant="menu" />
           <span>Сохранения хранятся локально · схема {SAVE_SCHEMA_VERSION}</span>
           <span><kbd>↑</kbd><kbd>↓</kbd> выбор · <kbd>Enter</kbd> подтвердить</span>
         </footer>

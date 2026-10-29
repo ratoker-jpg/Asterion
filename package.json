@@ -35,6 +35,7 @@
     "test:reports": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/domain/reports/reports.test.ts src/domain/profile/profile.test.ts",
     "test:settings": "node --experimental-strip-types --test src/domain/settings/settings.test.ts src/domain/settings/audio.test.ts",
     "test:rating": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/domain/rating/rating.test.ts src/domain/rating/scoring.test.ts src/domain/rating/attack-eligibility.test.ts",
+    "test:release": "node --test tools/next-version.test.mjs",
     "test:runtime": "node --experimental-strip-types --test src/domain/runtime/mode.test.ts",
     "test:resources": "node --experimental-strip-types --test src/domain/resources/credit.test.ts",
     "test:energy": "node --experimental-strip-types --test src/domain/energy/runtime.test.ts",
@@ -79,6 +80,7 @@
     "test:late-save-ui": "electron electron/late-save-qa.cjs"
   },
   "dependencies": {
+    "electron-updater": "6.8.11",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
@@ -108,7 +110,16 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
-    }
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "ratoker-jpg",
+        "repo": "Asterion",
+        "releaseType": "release"
+      }
+    ]
   }
 }

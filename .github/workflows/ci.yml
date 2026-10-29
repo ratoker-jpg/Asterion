@@ -70,6 +70,8 @@ jobs:
         run: npm run test:rating
       - name: Science domain tests
         run: npm run test:science
+      - name: Release version rules
+        run: npm run test:release
       - name: Universe interaction domain tests
         run: npm run test:universe
       - name: Runtime mode domain tests
@@ -273,9 +275,11 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  # Pull requests (and manual runs) get the installer as a workflow artifact;
+  # a push to main builds it in the release job below instead.
   package:
     name: Windows installer
-    if: github.event_name != 'schedule'
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -292,6 +296,67 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: Asterion-Windows
+          path: release/*.exe
+          if-no-files-found: error
+          retention-days: 14
+
+  # Every push to main (a merged PR) becomes a GitHub Release vX.Y.Z that the
+  # installed game finds through electron-updater (docs/RELEASES.md). The
+  # version comes from the newest tag plus the merged PR's release:* label and
+  # is stamped into the build only: nothing is pushed back to main. The job
+  # depends on nothing but its own installer build, so a failing NPC check
+  # does not hold a release back.
+  release:
+    name: Release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write
+      pull-requests: read
+    # Two merges in a row: the second release waits for the first and sees its tag.
+    concurrency:
+      group: release-main
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Next version
+        id: version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node tools/next-version.mjs
+      - name: Build installer ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          npm run build
+          npx electron-builder --win nsis --publish never -c.extraMetadata.version=${{ steps.version.outputs.version }}
+      - name: Publish GitHub Release ${{ steps.version.outputs.tag }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+          TITLE: ${{ steps.version.outputs.title }}
+        run: |
+          installer="release/Asterion-Setup-$VERSION.exe"
+          for file in "$installer" "$installer.blockmap" release/latest.yml; do
+            [ -f "$file" ] || { echo "::error::missing $file"; ls release; exit 1; }
+          done
+          grep -q "^version: $VERSION$" release/latest.yml || { echo "::error::latest.yml is not $VERSION"; cat release/latest.yml; exit 1; }
+          gh release create "$TAG" "$installer" "$installer.blockmap" release/latest.yml \
+            --target "$GITHUB_SHA" --title "$TITLE" --notes-file release-notes.md --latest
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v6
+        with:
+          name: Asterion-Windows-${{ steps.version.outputs.version }}
           path: release/*.exe
           if-no-files-found: error
           retention-days: 14

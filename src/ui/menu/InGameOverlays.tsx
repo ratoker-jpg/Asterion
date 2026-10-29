@@ -6,6 +6,7 @@ import { formatPlayTime } from '../../domain/session/slots.ts';
 import type { PlayerFactionId } from '../../domain/profile/types.ts';
 import '../sun-raid/gate.css';
 import { raceCard } from './race-catalog.ts';
+import { GameUpdateRow } from './GameUpdateRow.tsx';
 import './overlays.css';
 
 type PauseMenuProps = {
@@ -84,6 +85,7 @@ export function PauseMenu({ variant, title, factionId, playTimeMs, onResume, onS
               {onMainMenu ? <button type="button" className="igo-btn" onClick={onMainMenu} data-qa-pause="menu">{isTest ? 'ВЫЙТИ ИЗ TEST MODE · ГЛАВНОЕ МЕНЮ' : 'В ГЛАВНОЕ МЕНЮ'}</button> : null}
             </nav>
           )}
+          {confirmRestart ? null : <GameUpdateRow variant="pause" />}
         </div>
       </section>
     </div>,

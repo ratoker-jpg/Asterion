@@ -186,6 +186,12 @@ export function createExternalizingStorage(local: SaveStorage, store: DesktopSav
   };
 }
 
+/**
+ * Window event: write every save to disk now, synchronously, as if the window
+ * were closing (a game update restarts the app right after it).
+ */
+export const SAVE_FLUSH_EVENT = 'asterion:save-flush';
+
 let browserStorage: SaveStorage | null | undefined;
 
 /** The storage every save repository uses by default in the browser/desktop game. */
@@ -201,5 +207,6 @@ export function getBrowserSaveStorage(): SaveStorage | null {
   const unload = () => storage.beginUnload();
   window.addEventListener('beforeunload', unload);
   window.addEventListener('pagehide', unload);
+  window.addEventListener(SAVE_FLUSH_EVENT, unload);
   return browserStorage = storage;
 }
