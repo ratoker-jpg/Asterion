@@ -139,7 +139,7 @@ import { collectAsteroidGas } from './asteroid-gas-collection.ts';
 import { resolveNpcDeploymentArrival, resolveNpcGasArrival, resolveNpcMissionArrival, resolveNpcRecycleArrival, resolveNpcTransportArrival, settleNpcMissionReturn } from './npc-missions.ts';
 import { resolveNpcPirateArrival } from './npc-pirates.ts';
 import { resolveNpcAidArrival, settleNpcAidReturn } from './npc-aid.ts';
-import { getOwnerRelation } from './owner-relations.ts';
+import { getOwnerRelation, relationStructure } from './owner-relations.ts';
 import { getExplorationTarget } from './exploration.ts';
 import { resolveExplorationProbeArrival } from './exploration-operations.ts';
 import {
@@ -2581,6 +2581,19 @@ export type FlightReconcileOptions = {
   reconcileTargetResources?: boolean;
 };
 
+// Whether an orbiting NPC probe may stay: per probe, while its target owner
+// and the alliance structure are the same (a late world holds over a thousand
+// probes in orbit, all rechecked at every flight event).
+const stationLegality = new WeakMap<FlightRecord, { owner: string; structure: string; legal: boolean }>();
+function isLegalStation(state: SaveState, flight: FlightRecord, owner: string): boolean {
+  const structure = relationStructure(state.command);
+  const cached = stationLegality.get(flight);
+  if (cached && cached.owner === owner && cached.structure === structure) return cached.legal;
+  const legal = ['neutral', 'enemy'].includes(getOwnerRelation(state, flight.ownerId!, owner));
+  stationLegality.set(flight, { owner, structure, legal });
+  return legal;
+}
+
 // Live flights this resolver owns, once per immutable records array: a late
 // campaign keeps thousands of finished flights in its one-day archive.
 const liveReconcilable = new WeakMap<readonly FlightRecord[], FlightRecord[]>();
@@ -2693,7 +2706,7 @@ export function reconcileFlights(
         if (flight.ownerSide === 'npc' && flight.ownerId && flight.missionId === 'espionage' && flight.phase === 'arrived') {
           const owner = flight.destinationPlanetId && getEspionageTargets(next.espionage)[flight.destinationPlanetId]?.ownerId;
           const actualOwner = owner || (next.planets[flight.destinationPlanetId ?? ''] ? next.profile.playerId : undefined);
-          if (actualOwner === flight.destinationOwnerId && ['neutral', 'enemy'].includes(getOwnerRelation(next, flight.ownerId, actualOwner!))) continue;
+          if (actualOwner === flight.destinationOwnerId && isLegalStation(next, flight, actualOwner!)) continue;
         }
         list.push(flight);
       }

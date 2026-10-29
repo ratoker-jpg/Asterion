@@ -14,7 +14,8 @@ const relationCache = new Map<string, Map<string, Map<string, TargetRelation>>>(
 const commandStructure = new WeakMap<object, string>();
 const RELATION_CACHE_LIMIT = 16;
 
-function relationStructure(command: SaveState['command']): string {
+/** What an owner relation reads of the command state (equal strings: equal relations). */
+export function relationStructure(command: SaveState['command']): string {
   let key = commandStructure.get(command);
   if (key === undefined) {
     key = JSON.stringify([
