@@ -71,6 +71,20 @@ function hasFlightSlot(state: SaveState, ownerId: string, missionId: NpcMissionI
   return getFlightSlotUsage(flights, science[6] ?? 0).free > 0;
 }
 
+const ONE_SPY_PROBE: Partial<Record<ShipId, number>> = Object.freeze({ 'spy-probe': 1 });
+// One origin offers the same ship selection to every target: serialize it once.
+const shipsPayloads = new WeakMap<object, string>();
+function shipsPayload(selectedShips: Partial<Record<ShipId, number>>): string {
+  let text = shipsPayloads.get(selectedShips);
+  if (text === undefined) {
+    text = JSON.stringify(Object.fromEntries(Object.entries(selectedShips)
+      .filter(([, count]) => Number.isSafeInteger(count) && Number(count) > 0)
+      .sort(([left], [right]) => compareIds(left, right))));
+    shipsPayloads.set(selectedShips, text);
+  }
+  return text;
+}
+
 function addCandidate(
   candidates: NpcMissionCandidate[],
   ownerId: string,
@@ -92,9 +106,7 @@ function addCandidate(
     destinationGalaxy: destination.galaxy,
     destinationSystem: destination.system,
     destinationPosition: destination.position,
-    selectedShips: JSON.stringify(Object.fromEntries(Object.entries(selectedShips)
-      .filter(([, count]) => Number.isSafeInteger(count) && Number(count) > 0)
-      .sort(([left], [right]) => compareIds(left, right)))),
+    selectedShips: shipsPayload(selectedShips),
   };
   if (options.destinationPlanetId) payload.destinationPlanetId = options.destinationPlanetId;
   if (options.operationId) payload.operationId = options.operationId;
@@ -385,7 +397,7 @@ export function getNpcMissionCandidates(
         if (!relation) continue;
         if (nearestProbeOrigin(target.coordinate)?.id !== origin.id) continue;
         if (activeSpyMissionForTarget(state.espionage?.missions ?? [], ownerId, target.id)) continue;
-        addCandidate(candidateList, ownerId, 'espionage', origin.id, target.coordinate, { 'spy-probe': 1 }, {
+        addCandidate(candidateList, ownerId, 'espionage', origin.id, target.coordinate, ONE_SPY_PROBE, {
           destinationPlanetId: target.id,
           targetRelation: relation,
         });
@@ -398,7 +410,7 @@ export function getNpcMissionCandidates(
           && flight.missionId === 'exploration-recon'
           && flight.operationId === id && ACTIVE_FLIGHT_PHASES.has(flight.phase));
         if (reconAlreadyActive) continue;
-        addCandidate(candidateList, ownerId, 'exploration-recon', origin.id, node.coordinate, { 'spy-probe': 1 }, {
+        addCandidate(candidateList, ownerId, 'exploration-recon', origin.id, node.coordinate, ONE_SPY_PROBE, {
           operationId: id,
           targetKind: node.kind,
         });
