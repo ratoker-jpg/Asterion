@@ -75,7 +75,8 @@
     "test:npc-replay-full-world-ui": "electron electron/npc-replay-qa.cjs --full-world",
     "test:save-safety-ui": "electron electron/save-safety-qa.cjs",
     "test:late-game-fps-ui": "electron electron/late-game-fps-qa.cjs",
-    "test:save-store-ui": "electron electron/save-store-qa.cjs"
+    "test:save-store-ui": "electron electron/save-store-qa.cjs",
+    "test:late-save-ui": "electron electron/late-save-qa.cjs"
   },
   "dependencies": {
     "react": "19.2.8",
