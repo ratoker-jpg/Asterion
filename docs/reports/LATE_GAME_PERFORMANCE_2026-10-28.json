@@ -1,0 +1,805 @@
+{
+  "machine": "AMD Ryzen 5 5600 (6c/12t), 17 GB, Windows 10, Node 24.16, Electron 44",
+  "notes": [
+    "before = main da25bba (+ only the pirate-profile load fix so it can open Node-made fixtures)",
+    "after = claude/late-game-performance",
+    "Electron runs offscreen at 60 fps; timer = 16 ms interval gaps (UI thread busy)"
+  ],
+  "inGame": {
+    "day1_absence1h": {
+      "before": {
+        "catchup": {
+          "wallMs": 122955,
+          "frames": {
+            "frames": 218,
+            "fps": 1.8,
+            "p50Ms": 666.7,
+            "p95Ms": 1033.3,
+            "worstMs": 1216.6,
+            "over33Ms": 190,
+            "longTasks": {
+              "count": 187,
+              "totalMs": 118245,
+              "worstMs": 1216
+            },
+            "timer": {
+              "samples": 116,
+              "p50Ms": 1022.3,
+              "p95Ms": 1625.6,
+              "worstMs": 2004.1
+            }
+          }
+        },
+        "screens": {
+          "planet": {
+            "frames": 301,
+            "fps": 36.7,
+            "p50Ms": 16.7,
+            "p95Ms": 100,
+            "worstMs": 300.1,
+            "over33Ms": 23,
+            "longTasks": {
+              "count": 15,
+              "totalMs": 3060,
+              "worstMs": 313
+            },
+            "timer": {
+              "samples": 286,
+              "p50Ms": 16,
+              "p95Ms": 117,
+              "worstMs": 402.1
+            }
+          },
+          "universe": {
+            "frames": 290,
+            "fps": 36.3,
+            "p50Ms": 16.7,
+            "p95Ms": 100,
+            "worstMs": 300,
+            "over33Ms": 24,
+            "longTasks": {
+              "count": 15,
+              "totalMs": 2686,
+              "worstMs": 293
+            },
+            "timer": {
+              "samples": 277,
+              "p50Ms": 16.1,
+              "p95Ms": 119.5,
+              "worstMs": 321.7
+            }
+          },
+          "fleets": {
+            "frames": 315,
+            "fps": 39.5,
+            "p50Ms": 16.7,
+            "p95Ms": 83.4,
+            "worstMs": 266.7,
+            "over33Ms": 21,
+            "longTasks": {
+              "count": 13,
+              "totalMs": 2483,
+              "worstMs": 285
+            },
+            "timer": {
+              "samples": 303,
+              "p50Ms": 16.1,
+              "p95Ms": 105.2,
+              "worstMs": 292.8
+            }
+          },
+          "rating": {
+            "frames": 304,
+            "fps": 38,
+            "p50Ms": 16.7,
+            "p95Ms": 83.4,
+            "worstMs": 283.4,
+            "over33Ms": 20,
+            "longTasks": {
+              "count": 13,
+              "totalMs": 2534,
+              "worstMs": 294
+            },
+            "timer": {
+              "samples": 296,
+              "p50Ms": 16.1,
+              "p95Ms": 114,
+              "worstMs": 304.9
+            }
+          },
+          "command": {
+            "frames": 281,
+            "fps": 34.8,
+            "p50Ms": 16.7,
+            "p95Ms": 100,
+            "worstMs": 283.4,
+            "over33Ms": 24,
+            "longTasks": {
+              "count": 15,
+              "totalMs": 2804,
+              "worstMs": 278
+            },
+            "timer": {
+              "samples": 266,
+              "p50Ms": 16.1,
+              "p95Ms": 119.9,
+              "worstMs": 314
+            }
+          },
+          "reports": {
+            "frames": 316,
+            "fps": 39.5,
+            "p50Ms": 16.7,
+            "p95Ms": 83.3,
+            "worstMs": 283.3,
+            "over33Ms": 22,
+            "longTasks": {
+              "count": 15,
+              "totalMs": 2423,
+              "worstMs": 280
+            },
+            "timer": {
+              "samples": 299,
+              "p50Ms": 16.1,
+              "p95Ms": 110.3,
+              "worstMs": 300.2
+            }
+          }
+        },
+        "saveChars": 18872568,
+        "loadMs": 1041,
+        "fixture": "day1.json"
+      },
+      "after": {
+        "catchup": {
+          "wallMs": 52028,
+          "frames": {
+            "frames": 3084,
+            "fps": 59.3,
+            "p50Ms": 16.7,
+            "p95Ms": 16.7,
+            "worstMs": 133.4,
+            "over33Ms": 7,
+            "longTasks": {
+              "count": 3,
+              "totalMs": 393,
+              "worstMs": 134
+            },
+            "timer": {
+              "samples": 3214,
+              "p50Ms": 16,
+              "p95Ms": 17.1,
+              "worstMs": 142.3
+            }
+          }
+        },
+        "screens": {
+          "planet": {
+            "frames": 471,
+            "fps": 58.9,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 83.3,
+            "over33Ms": 2,
+            "longTasks": {
+              "count": 3,
+              "totalMs": 223,
+              "worstMs": 103
+            },
+            "timer": {
+              "samples": 481,
+              "p50Ms": 16,
+              "p95Ms": 17.4,
+              "worstMs": 111.6
+            }
+          },
+          "universe": {
+            "frames": 472,
+            "fps": 59,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 50,
+            "over33Ms": 3,
+            "longTasks": {
+              "count": 4,
+              "totalMs": 236,
+              "worstMs": 64
+            },
+            "timer": {
+              "samples": 478,
+              "p50Ms": 16,
+              "p95Ms": 17.1,
+              "worstMs": 80.8
+            }
+          },
+          "fleets": {
+            "frames": 466,
+            "fps": 58.3,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 83.4,
+            "over33Ms": 4,
+            "longTasks": {
+              "count": 3,
+              "totalMs": 265,
+              "worstMs": 95
+            },
+            "timer": {
+              "samples": 477,
+              "p50Ms": 16,
+              "p95Ms": 17.2,
+              "worstMs": 101.6
+            }
+          },
+          "rating": {
+            "frames": 470,
+            "fps": 58.8,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 83.3,
+            "over33Ms": 3,
+            "longTasks": {
+              "count": 3,
+              "totalMs": 223,
+              "worstMs": 87
+            },
+            "timer": {
+              "samples": 481,
+              "p50Ms": 16,
+              "p95Ms": 17.4,
+              "worstMs": 87.1
+            }
+          },
+          "command": {
+            "frames": 456,
+            "fps": 56.5,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 250.1,
+            "over33Ms": 5,
+            "longTasks": {
+              "count": 5,
+              "totalMs": 499,
+              "worstMs": 261
+            },
+            "timer": {
+              "samples": 467,
+              "p50Ms": 16,
+              "p95Ms": 17.4,
+              "worstMs": 268.8
+            }
+          },
+          "reports": {
+            "frames": 494,
+            "fps": 59.6,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 33.4,
+            "over33Ms": 1,
+            "longTasks": {
+              "count": 0,
+              "totalMs": 0,
+              "worstMs": null
+            },
+            "timer": {
+              "samples": 508,
+              "p50Ms": 16,
+              "p95Ms": 17.2,
+              "worstMs": 57.9
+            }
+          }
+        },
+        "saveChars": 18872568,
+        "loadMs": 1037,
+        "fixture": "day1.json"
+      }
+    },
+    "day2_absence1h": {
+      "before": {
+        "catchup": {
+          "wallMs": 523474,
+          "frames": {
+            "frames": 291,
+            "fps": 0.6,
+            "p50Ms": 533.4,
+            "p95Ms": 4299.8,
+            "worstMs": 5249.8,
+            "over33Ms": 221,
+            "longTasks": {
+              "count": 148,
+              "totalMs": 509651,
+              "worstMs": 5254
+            },
+            "timer": {
+              "samples": 86,
+              "p50Ms": 6526,
+              "p95Ms": 8406.7,
+              "worstMs": 9013
+            }
+          }
+        },
+        "screens": {
+          "planet": {
+            "frames": 4,
+            "fps": 0.5,
+            "p50Ms": 166.7,
+            "p95Ms": 4466.4,
+            "worstMs": 4466.4,
+            "over33Ms": 3,
+            "longTasks": {
+              "count": 2,
+              "totalMs": 7642,
+              "worstMs": 4468
+            },
+            "timer": {
+              "samples": 0,
+              "p50Ms": null,
+              "p95Ms": null,
+              "worstMs": null
+            }
+          },
+          "universe": {
+            "frames": 4,
+            "fps": 0.4,
+            "p50Ms": 183.4,
+            "p95Ms": 4883.1,
+            "worstMs": 4883.1,
+            "over33Ms": 4,
+            "longTasks": {
+              "count": 3,
+              "totalMs": 9437,
+              "worstMs": 4711
+            },
+            "timer": {
+              "samples": 0,
+              "p50Ms": null,
+              "p95Ms": null,
+              "worstMs": null
+            }
+          },
+          "fleets": {
+            "frames": 3,
+            "fps": 0.4,
+            "p50Ms": 2216.6,
+            "p95Ms": 5733.1,
+            "worstMs": 5733.1,
+            "over33Ms": 3,
+            "longTasks": {
+              "count": 3,
+              "totalMs": 8914,
+              "worstMs": 5722
+            },
+            "timer": {
+              "samples": 0,
+              "p50Ms": null,
+              "p95Ms": null,
+              "worstMs": null
+            }
+          },
+          "rating": {
+            "frames": 32,
+            "fps": 3.9,
+            "p50Ms": 216.7,
+            "p95Ms": 849.9,
+            "worstMs": 966.5,
+            "over33Ms": 21,
+            "longTasks": {
+              "count": 13,
+              "totalMs": 6901,
+              "worstMs": 948
+            },
+            "timer": {
+              "samples": 14,
+              "p50Ms": 639.2,
+              "p95Ms": 1190.8,
+              "worstMs": 1190.8
+            }
+          },
+          "command": {
+            "frames": 26,
+            "fps": 3.3,
+            "p50Ms": 233.2,
+            "p95Ms": 749.9,
+            "worstMs": 1066.6,
+            "over33Ms": 26,
+            "longTasks": {
+              "count": 22,
+              "totalMs": 6747,
+              "worstMs": 1074
+            },
+            "timer": {
+              "samples": 12,
+              "p50Ms": 579.2,
+              "p95Ms": 1439.1,
+              "worstMs": 1439.1
+            }
+          },
+          "reports": {
+            "frames": 32,
+            "fps": 4.2,
+            "p50Ms": 133.3,
+            "p95Ms": 616.6,
+            "worstMs": 766.7,
+            "over33Ms": 27,
+            "longTasks": {
+              "count": 16,
+              "totalMs": 6526,
+              "worstMs": 1095
+            },
+            "timer": {
+              "samples": 16,
+              "p50Ms": 415,
+              "p95Ms": 822.5,
+              "worstMs": 822.5
+            }
+          }
+        },
+        "saveChars": 39877673,
+        "loadMs": 2116,
+        "fixture": "late-game-day-2.json"
+      },
+      "after": {
+        "catchup": {
+          "wallMs": 166171,
+          "frames": {
+            "frames": 9665,
+            "fps": 58.2,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 283.3,
+            "over33Ms": 30,
+            "longTasks": {
+              "count": 10,
+              "totalMs": 2744,
+              "worstMs": 301
+            },
+            "timer": {
+              "samples": 10082,
+              "p50Ms": 16,
+              "p95Ms": 17.1,
+              "worstMs": 309.4
+            }
+          }
+        },
+        "screens": {
+          "planet": {
+            "frames": 393,
+            "fps": 46.5,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 599.9,
+            "over33Ms": 5,
+            "longTasks": {
+              "count": 3,
+              "totalMs": 1278,
+              "worstMs": 613
+            },
+            "timer": {
+              "samples": 404,
+              "p50Ms": 16,
+              "p95Ms": 17.1,
+              "worstMs": 626.7
+            }
+          },
+          "universe": {
+            "frames": 403,
+            "fps": 50.3,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 400,
+            "over33Ms": 10,
+            "longTasks": {
+              "count": 8,
+              "totalMs": 1207,
+              "worstMs": 411
+            },
+            "timer": {
+              "samples": 402,
+              "p50Ms": 16.1,
+              "p95Ms": 17.4,
+              "worstMs": 412.6
+            }
+          },
+          "fleets": {
+            "frames": 407,
+            "fps": 51,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 416.7,
+            "over33Ms": 10,
+            "longTasks": {
+              "count": 8,
+              "totalMs": 1180,
+              "worstMs": 424
+            },
+            "timer": {
+              "samples": 416,
+              "p50Ms": 16.1,
+              "p95Ms": 17.6,
+              "worstMs": 425.7
+            }
+          },
+          "rating": {
+            "frames": 409,
+            "fps": 51.1,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 450,
+            "over33Ms": 8,
+            "longTasks": {
+              "count": 7,
+              "totalMs": 1187,
+              "worstMs": 469
+            },
+            "timer": {
+              "samples": 414,
+              "p50Ms": 16,
+              "p95Ms": 17.3,
+              "worstMs": 470.3
+            }
+          },
+          "command": {
+            "frames": 353,
+            "fps": 44.1,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 516.8,
+            "over33Ms": 13,
+            "longTasks": {
+              "count": 9,
+              "totalMs": 1885,
+              "worstMs": 529
+            },
+            "timer": {
+              "samples": 357,
+              "p50Ms": 16,
+              "p95Ms": 17.6,
+              "worstMs": 530.8
+            }
+          },
+          "reports": {
+            "frames": 404,
+            "fps": 50.6,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 416.6,
+            "over33Ms": 11,
+            "longTasks": {
+              "count": 9,
+              "totalMs": 1323,
+              "worstMs": 434
+            },
+            "timer": {
+              "samples": 408,
+              "p50Ms": 16,
+              "p95Ms": 17.2,
+              "worstMs": 435
+            }
+          }
+        },
+        "saveChars": 39877673,
+        "loadMs": 1970,
+        "fixture": "late-game-day-2.json"
+      },
+      "afterUnderHeavyExternalLoad": {
+        "catchup": {
+          "wallMs": 195921,
+          "frames": {
+            "frames": 11177,
+            "fps": 57,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 633.3,
+            "over33Ms": 44,
+            "longTasks": {
+              "count": 12,
+              "totalMs": 5021,
+              "worstMs": 634
+            },
+            "timer": {
+              "samples": 11668,
+              "p50Ms": 16,
+              "p95Ms": 17.6,
+              "worstMs": 666.5
+            }
+          }
+        },
+        "screens": {
+          "planet": {
+            "frames": 402,
+            "fps": 50.3,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 633.2,
+            "over33Ms": 5,
+            "longTasks": {
+              "count": 2,
+              "totalMs": 702,
+              "worstMs": 639
+            },
+            "timer": {
+              "samples": 420,
+              "p50Ms": 16,
+              "p95Ms": 20.2,
+              "worstMs": 658
+            }
+          },
+          "universe": {
+            "frames": 442,
+            "fps": 55.3,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 599.9,
+            "over33Ms": 2,
+            "longTasks": {
+              "count": 2,
+              "totalMs": 684,
+              "worstMs": 611
+            },
+            "timer": {
+              "samples": 453,
+              "p50Ms": 16,
+              "p95Ms": 20.8,
+              "worstMs": 629.1
+            }
+          },
+          "fleets": {
+            "frames": 176,
+            "fps": 22,
+            "p50Ms": 16.7,
+            "p95Ms": 100,
+            "worstMs": 1633.3,
+            "over33Ms": 12,
+            "longTasks": {
+              "count": 7,
+              "totalMs": 4134,
+              "worstMs": 1630
+            },
+            "timer": {
+              "samples": 180,
+              "p50Ms": 16.1,
+              "p95Ms": 35.5,
+              "worstMs": 1668.1
+            }
+          },
+          "rating": {
+            "frames": 426,
+            "fps": 53.3,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 200,
+            "over33Ms": 8,
+            "longTasks": {
+              "count": 8,
+              "totalMs": 1056,
+              "worstMs": 215
+            },
+            "timer": {
+              "samples": 429,
+              "p50Ms": 16,
+              "p95Ms": 22,
+              "worstMs": 234.4
+            }
+          },
+          "command": {
+            "frames": 387,
+            "fps": 48.8,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 383.3,
+            "over33Ms": 8,
+            "longTasks": {
+              "count": 7,
+              "totalMs": 1595,
+              "worstMs": 402
+            },
+            "timer": {
+              "samples": 389,
+              "p50Ms": 16,
+              "p95Ms": 24.9,
+              "worstMs": 419.1
+            }
+          },
+          "reports": {
+            "frames": 421,
+            "fps": 52.5,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 233.2,
+            "over33Ms": 11,
+            "longTasks": {
+              "count": 8,
+              "totalMs": 1045,
+              "worstMs": 240
+            },
+            "timer": {
+              "samples": 421,
+              "p50Ms": 16,
+              "p95Ms": 23.2,
+              "worstMs": 306.6
+            }
+          }
+        },
+        "saveChars": 39877673,
+        "loadMs": 4320,
+        "fixture": "late-game-day-2.json"
+      }
+    }
+  },
+  "node": {
+    "note": "logic only (tools/late-game-catchup.mjs measure); before = main da25bba with 64-group chunks, after = branch with 2048-group chunks (any chunking gives the same world)",
+    "day1_absence1h": {
+      "beforeWallMs": 259000,
+      "after": [
+        {
+          "hours": 1,
+          "wallMs": 72894,
+          "computeMs": 72456,
+          "chunks": 5,
+          "saveChars": 19568167,
+          "digest": "2c14af62482cb6bff28a19930582bd7ae540a731548a7743b715f3167a5e3dfa"
+        },
+        {
+          "hours": 12,
+          "wallMs": 1246538,
+          "computeMs": 1240099,
+          "chunks": 50,
+          "saveChars": 28300906,
+          "digest": "6e49c1a4655165d17c854cfd702322e028128e28d62a6c3610c6a50d1fad61d3"
+        }
+      ]
+    },
+    "day1_to_day2_24h": {
+      "afterWallMs": 3459000,
+      "note": "fixture generation leg, earlier branch code"
+    },
+    "day3_absence1h": {
+      "before": [
+        {
+          "hours": 1,
+          "wallMs": 2663979,
+          "computeMs": 2663978,
+          "chunks": 138,
+          "saveChars": 56210064,
+          "digest": "c8e39198faeaee741d4d110e0f28b563d05b22115d642ced7f302c4b3e75cce7"
+        }
+      ],
+      "after": [
+        {
+          "hours": 1,
+          "wallMs": 393691,
+          "computeMs": 393691,
+          "chunks": 5,
+          "saveChars": 56208417,
+          "digest": "49881e3cf387dfc99fd619c415c9802fca9fe7921253241d79dc592def7d8143"
+        }
+      ]
+    },
+    "parityDigests": {
+      "fullWorld6h": "8ce7cafe7019edd12a04ec5a7c9390378387dc75f62f319fa7d5fadc3eb0a94d",
+      "day1Plus30min": "cb6df9598dc5ee170fec63d40e725d402be3783674b32853e1223c561662f1b6",
+      "day2Plus30min": "7c97283bdcc1da7aff0951cbc715ba0a8061401e81db02500b1ee54096734f04",
+      "reference": "commit 4f6e30b (determinism fixes, before most optimizations)"
+    }
+  },
+  "saves": {
+    "day0": {
+      "chars": 271801,
+      "stringifyMs": 2
+    },
+    "day1": {
+      "chars": 18872583,
+      "stringifyMs": 88
+    },
+    "day2": {
+      "chars": 39877688,
+      "stringifyMs": 192
+    },
+    "day3": {
+      "chars": 57709737,
+      "stringifyMs": "350-460 under load"
+    },
+    "electronLocalStorageLimitChars": 52304687,
+    "note": "day 3 no longer fits localStorage (Electron 44, one origin): writes fail"
+  }
+}
