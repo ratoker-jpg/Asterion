@@ -300,7 +300,9 @@ function lazyReportLookup(state: SaveState): (id: string) => SaveState['combat']
 function flightShipCounts(state: SaveState, factionId: FactionId, ownerId: string) {
   const counts: Record<string, number> = {};
   const reports = lazyReportLookup(state);
-  for (const flight of state.flights.records) {
+  // An autonomous NPC reads only its own flights (same records, same order).
+  const records = ownerId === UNIVERSE_NPC_OWNER_ID ? state.flights.records : activeNpcFlightsOf(state.flights.records, ownerId);
+  for (const flight of records) {
     // Player dispatch reserves ships but keeps them in the source planet's
     // saved fleet until the mission applies its result. Bot 001 and the
     // autonomous NPCs remove their ships at launch, so their in-flight fleets
@@ -322,6 +324,8 @@ function flightShipCounts(state: SaveState, factionId: FactionId, ownerId: strin
 
 function flightCommanderCounts(state: SaveState, ownerId: string) {
   const counts: Record<string, number> = {};
+  // Only Bot 01 flights carry commanders.
+  if (ownerId !== UNIVERSE_NPC_OWNER_ID) return counts;
   const reports = lazyReportLookup(state);
   for (const flight of state.flights.records) {
     if (flight.ownerSide !== 'bot01') continue;
@@ -434,7 +438,18 @@ function ownerScoreInputs(state: SaveState, ownerId: string): unknown[] | null {
     deps.push(planet.kind, planet.raceId, planet.buildings, planet.fleet, planet.defense, queueValue, planet.ownerProfile);
   }
   deps.push('|');
-  const records = state.flights.records;
+  const ownFlights = activeNpcFlightsOf(state.flights.records, ownerId);
+  // A resolved attack counts its surviving ships from its report: that report
+  // (not the whole archive, which every battle replaces) is an input.
+  for (const flight of ownFlights) {
+    deps.push(flight);
+    if (flight.attackResolution) deps.push(reportById(state.combat.reports).get(flight.attackResolution.reportId));
+  }
+  return deps;
+}
+
+/** One autonomous NPC's outbound, returning or arrived flights, in record order. */
+function activeNpcFlightsOf(records: SaveState['flights']['records'], ownerId: string): SaveState['flights']['records'] {
   let flights = activeFlightsByOwnerIndex.get(records);
   if (!flights) {
     flights = new Map();
@@ -447,14 +462,7 @@ function ownerScoreInputs(state: SaveState, ownerId: string): unknown[] | null {
     }
     activeFlightsByOwnerIndex.set(records, flights);
   }
-  const ownFlights = flights.get(ownerId) ?? [];
-  // A resolved attack counts its surviving ships from its report: that report
-  // (not the whole archive, which every battle replaces) is an input.
-  for (const flight of ownFlights) {
-    deps.push(flight);
-    if (flight.attackResolution) deps.push(reportById(state.combat.reports).get(flight.attackResolution.reportId));
-  }
-  return deps;
+  return flights.get(ownerId) ?? [];
 }
 
 function collectOwnerRegistrations(state: SaveState, selectedOwnerId?: string): { owners: Map<string, OwnerRegistration>; battlePoints: Record<string, number> } {
