@@ -139,6 +139,28 @@ function sameOwnersAndPlaces(left: Readonly<Record<string, { ownerId: string; co
   return true;
 }
 
+/**
+ * Per-system defeat lists, the same arrays while the defeat ledger is the
+ * same object: the defeat-shifted schedules are cached by these arrays, so
+ * fresh lists on every call re-derived each system's schedule key.
+ */
+const defeatListsByLedger = new WeakMap<object, Map<string, PirateContactDefeatRecord[]>>();
+const NO_DEFEATS: Readonly<Record<string, PirateContactDefeatRecord>> = {};
+function defeatListsBySystem(ledger: Readonly<Record<string, PirateContactDefeatRecord>> | undefined): ReadonlyMap<string, PirateContactDefeatRecord[]> {
+  const records = ledger ?? NO_DEFEATS;
+  let bySystem = defeatListsByLedger.get(records);
+  if (bySystem) return bySystem;
+  bySystem = new Map();
+  for (const record of Object.values(records)) {
+    const key = `${record.galaxy}:${record.system}`;
+    const bucket = bySystem.get(key);
+    if (bucket) bucket.push(record);
+    else bySystem.set(key, [record]);
+  }
+  defeatListsByLedger.set(records, bySystem);
+  return bySystem;
+}
+
 export type PirateDueRoll = Readonly<{
   at: number;
   ownerId: string;
@@ -155,13 +177,7 @@ export function selectDuePirateRolls(
   const targets = raidSystemsByOwner(state);
   // Each system's defeats once, in save order (the schedule reads only its own),
   // and each system's due cycles once for all owners in it.
-  const defeatsBySystem = new Map<string, PirateContactDefeatRecord[]>();
-  for (const record of Object.values(state.pirate?.contact.defeatedCycles ?? {})) {
-    const key = `${record.galaxy}:${record.system}`;
-    const bucket = defeatsBySystem.get(key);
-    if (bucket) bucket.push(record);
-    else defeatsBySystem.set(key, [record]);
-  }
+  const defeatsBySystem = defeatListsBySystem(state.pirate?.contact.defeatedCycles);
   const cyclesBySystem = new Map<string, ReturnType<typeof getPirateContactCyclesBetween>>();
   const result: PirateDueRoll[] = [];
   for (const [ownerId, systems] of targets) {
