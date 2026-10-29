@@ -800,6 +800,720 @@
       "stringifyMs": "350-460 under load"
     },
     "electronLocalStorageLimitChars": 52304687,
-    "note": "day 3 no longer fits localStorage (Electron 44, one origin): writes fail"
+    "note": "day 3 does not fit localStorage (Electron 44, one origin); since 5423e84 saves of 8 M+ characters are files in the profile behind a localStorage pointer"
+  },
+  "head_2026_10_29": {
+    "note": "HEAD after live-play, autosave and NPC-decision work (commits 5ea6341..). Measured while one core generated day 5-7 worlds.",
+    "inGame": {
+      "day1_absence1h": {
+        "loadMs": 1143,
+        "catchup": {
+          "wallMs": 37585,
+          "gameHoursPerSecond": 0.026606358919781827,
+          "frames": {
+            "frames": 2238,
+            "fps": 59.6,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 233.3,
+            "over33Ms": 2,
+            "longTasks": {
+              "count": 0,
+              "totalMs": 0,
+              "worstMs": null
+            },
+            "timer": {
+              "samples": 2346,
+              "p50Ms": 16,
+              "p95Ms": 17.1,
+              "worstMs": 41.1
+            }
+          }
+        },
+        "screens": {
+          "planet": {
+            "frames": 471,
+            "fps": 58.9,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 83.3,
+            "over33Ms": 3,
+            "longTasks": {
+              "count": 3,
+              "totalMs": 226,
+              "worstMs": 104
+            },
+            "timer": {
+              "samples": 482,
+              "p50Ms": 16.1,
+              "p95Ms": 17.3,
+              "worstMs": 107.4
+            }
+          },
+          "universe": {
+            "frames": 472,
+            "fps": 59,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 50,
+            "over33Ms": 3,
+            "longTasks": {
+              "count": 3,
+              "totalMs": 171,
+              "worstMs": 63
+            },
+            "timer": {
+              "samples": 482,
+              "p50Ms": 16,
+              "p95Ms": 17.3,
+              "worstMs": 85.7
+            }
+          },
+          "fleets": {
+            "frames": 475,
+            "fps": 59.5,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 66.7,
+            "over33Ms": 1,
+            "longTasks": {
+              "count": 1,
+              "totalMs": 73,
+              "worstMs": 73
+            },
+            "timer": {
+              "samples": 491,
+              "p50Ms": 16,
+              "p95Ms": 17.1,
+              "worstMs": 95
+            }
+          },
+          "rating": {
+            "frames": 477,
+            "fps": 59.8,
+            "p50Ms": 16.7,
+            "p95Ms": 16.7,
+            "worstMs": 33.3,
+            "over33Ms": 0,
+            "longTasks": {
+              "count": 2,
+              "totalMs": 107,
+              "worstMs": 57
+            },
+            "timer": {
+              "samples": 489,
+              "p50Ms": 16,
+              "p95Ms": 17.2,
+              "worstMs": 65.1
+            }
+          },
+          "command": {
+            "frames": 479,
+            "fps": 59.9,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 33.4,
+            "over33Ms": 0,
+            "longTasks": {
+              "count": 1,
+              "totalMs": 57,
+              "worstMs": 57
+            },
+            "timer": {
+              "samples": 494,
+              "p50Ms": 16,
+              "p95Ms": 17.3,
+              "worstMs": 57.8
+            }
+          },
+          "reports": {
+            "frames": 477,
+            "fps": 59.6,
+            "p50Ms": 16.7,
+            "p95Ms": 16.7,
+            "worstMs": 50.1,
+            "over33Ms": 1,
+            "longTasks": {
+              "count": 2,
+              "totalMs": 122,
+              "worstMs": 68
+            },
+            "timer": {
+              "samples": 486,
+              "p50Ms": 16,
+              "p95Ms": 17.3,
+              "worstMs": 90.7
+            }
+          }
+        },
+        "storedSave": {
+          "external": true,
+          "writeId": "mjw655m0-i-f9vexn",
+          "chars": 19541998
+        },
+        "saveChars": 18872568
+      },
+      "day2_absence1h": {
+        "loadMs": 2294,
+        "catchup": {
+          "wallMs": 104403,
+          "gameHoursPerSecond": 0.009578268823692806,
+          "frames": {
+            "frames": 6240,
+            "fps": 59.8,
+            "p50Ms": 16.7,
+            "p95Ms": 16.7,
+            "worstMs": 183.3,
+            "over33Ms": 6,
+            "longTasks": {
+              "count": 6,
+              "totalMs": 397,
+              "worstMs": 97
+            },
+            "timer": {
+              "samples": 6502,
+              "p50Ms": 16,
+              "p95Ms": 17.1,
+              "worstMs": 109.6
+            }
+          }
+        },
+        "screens": {
+          "planet": {
+            "frames": 461,
+            "fps": 57.5,
+            "p50Ms": 16.7,
+            "p95Ms": 16.7,
+            "worstMs": 250,
+            "over33Ms": 3,
+            "longTasks": {
+              "count": 3,
+              "totalMs": 402,
+              "worstMs": 259
+            },
+            "timer": {
+              "samples": 464,
+              "p50Ms": 16,
+              "p95Ms": 17.4,
+              "worstMs": 269.9
+            }
+          },
+          "universe": {
+            "frames": 446,
+            "fps": 55.9,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 183.2,
+            "over33Ms": 6,
+            "longTasks": {
+              "count": 6,
+              "totalMs": 634,
+              "worstMs": 184
+            },
+            "timer": {
+              "samples": 443,
+              "p50Ms": 16,
+              "p95Ms": 17.4,
+              "worstMs": 189.7
+            }
+          },
+          "fleets": {
+            "frames": 469,
+            "fps": 58.6,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 83.4,
+            "over33Ms": 4,
+            "longTasks": {
+              "count": 4,
+              "totalMs": 301,
+              "worstMs": 105
+            },
+            "timer": {
+              "samples": 477,
+              "p50Ms": 16.1,
+              "p95Ms": 17.4,
+              "worstMs": 109.5
+            }
+          },
+          "rating": {
+            "frames": 453,
+            "fps": 56.6,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 200,
+            "over33Ms": 4,
+            "longTasks": {
+              "count": 5,
+              "totalMs": 561,
+              "worstMs": 214
+            },
+            "timer": {
+              "samples": 457,
+              "p50Ms": 16,
+              "p95Ms": 17.6,
+              "worstMs": 228
+            }
+          },
+          "command": {
+            "frames": 466,
+            "fps": 58.3,
+            "p50Ms": 16.7,
+            "p95Ms": 16.7,
+            "worstMs": 83.4,
+            "over33Ms": 3,
+            "longTasks": {
+              "count": 3,
+              "totalMs": 246,
+              "worstMs": 100
+            },
+            "timer": {
+              "samples": 472,
+              "p50Ms": 16,
+              "p95Ms": 17.4,
+              "worstMs": 105.8
+            }
+          },
+          "reports": {
+            "frames": 467,
+            "fps": 58.4,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 133.3,
+            "over33Ms": 2,
+            "longTasks": {
+              "count": 2,
+              "totalMs": 250,
+              "worstMs": 148
+            },
+            "timer": {
+              "samples": 476,
+              "p50Ms": 16,
+              "p95Ms": 17.2,
+              "worstMs": 162.5
+            }
+          }
+        },
+        "storedSave": {
+          "external": true,
+          "writeId": "mjxlm3ja-h-eef1ei",
+          "chars": 39741266
+        },
+        "saveChars": 39877673
+      },
+      "day3_absence1h_firstRun": {
+        "loadMs": 3001,
+        "catchup": {
+          "wallMs": 149853,
+          "gameHoursPerSecond": 0.006673206408947435,
+          "frames": {
+            "frames": 8953,
+            "fps": 59.7,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 150,
+            "over33Ms": 11,
+            "longTasks": {
+              "count": 9,
+              "totalMs": 801,
+              "worstMs": 118
+            },
+            "timer": {
+              "samples": 9318,
+              "p50Ms": 16,
+              "p95Ms": 17.1,
+              "worstMs": 122.5
+            }
+          }
+        },
+        "screens": {
+          "planet": {
+            "frames": 409,
+            "fps": 51.2,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 666.7,
+            "over33Ms": 6,
+            "longTasks": {
+              "count": 5,
+              "totalMs": 1188,
+              "worstMs": 666
+            },
+            "timer": {
+              "samples": 418,
+              "p50Ms": 16.1,
+              "p95Ms": 17.1,
+              "worstMs": 668.8
+            }
+          },
+          "universe": {
+            "frames": 448,
+            "fps": 56.1,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 150,
+            "over33Ms": 7,
+            "longTasks": {
+              "count": 6,
+              "totalMs": 549,
+              "worstMs": 166
+            },
+            "timer": {
+              "samples": 448,
+              "p50Ms": 16,
+              "p95Ms": 17.5,
+              "worstMs": 167.7
+            }
+          },
+          "fleets": {
+            "frames": 467,
+            "fps": 58.1,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 83.4,
+            "over33Ms": 4,
+            "longTasks": {
+              "count": 5,
+              "totalMs": 387,
+              "worstMs": 99
+            },
+            "timer": {
+              "samples": 478,
+              "p50Ms": 16,
+              "p95Ms": 17.3,
+              "worstMs": 109.4
+            }
+          },
+          "rating": {
+            "frames": 465,
+            "fps": 57.9,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 166.7,
+            "over33Ms": 4,
+            "longTasks": {
+              "count": 4,
+              "totalMs": 391,
+              "worstMs": 170
+            },
+            "timer": {
+              "samples": 477,
+              "p50Ms": 16,
+              "p95Ms": 17.3,
+              "worstMs": 184.4
+            }
+          },
+          "command": {
+            "frames": 460,
+            "fps": 57.5,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 150.1,
+            "over33Ms": 6,
+            "longTasks": {
+              "count": 6,
+              "totalMs": 476,
+              "worstMs": 166
+            },
+            "timer": {
+              "samples": 466,
+              "p50Ms": 16,
+              "p95Ms": 17.4,
+              "worstMs": 172
+            }
+          },
+          "reports": {
+            "frames": 443,
+            "fps": 55.4,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 200,
+            "over33Ms": 8,
+            "longTasks": {
+              "count": 6,
+              "totalMs": 708,
+              "worstMs": 217
+            },
+            "timer": {
+              "samples": 446,
+              "p50Ms": 16,
+              "p95Ms": 17.5,
+              "worstMs": 241.5
+            }
+          }
+        },
+        "storedSave": {
+          "external": true,
+          "writeId": "mjz13ix7-h-1o0hsd",
+          "chars": 56292283
+        },
+        "saveChars": 57714801
+      },
+      "day3_absence1h_afterSlicedCatchupWrite": {
+        "loadMs": 2935,
+        "catchup": {
+          "wallMs": 157343,
+          "gameHoursPerSecond": 0.006355541714598044,
+          "frames": {
+            "frames": 9402,
+            "fps": 59.8,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 149.9,
+            "over33Ms": 11,
+            "longTasks": {
+              "count": 10,
+              "totalMs": 822,
+              "worstMs": 90
+            },
+            "timer": {
+              "samples": 9786,
+              "p50Ms": 16,
+              "p95Ms": 17.1,
+              "worstMs": 100.1
+            }
+          }
+        },
+        "screens": {
+          "planet": {
+            "frames": 453,
+            "fps": 56.6,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 183.3,
+            "over33Ms": 4,
+            "longTasks": {
+              "count": 4,
+              "totalMs": 553,
+              "worstMs": 203
+            },
+            "timer": {
+              "samples": 462,
+              "p50Ms": 16,
+              "p95Ms": 17.3,
+              "worstMs": 217.4
+            }
+          },
+          "universe": {
+            "frames": 447,
+            "fps": 56,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 150,
+            "over33Ms": 6,
+            "longTasks": {
+              "count": 6,
+              "totalMs": 629,
+              "worstMs": 152
+            },
+            "timer": {
+              "samples": 444,
+              "p50Ms": 16,
+              "p95Ms": 17.4,
+              "worstMs": 186.9
+            }
+          },
+          "fleets": {
+            "frames": 456,
+            "fps": 57.1,
+            "p50Ms": 16.7,
+            "p95Ms": 16.7,
+            "worstMs": 116.7,
+            "over33Ms": 6,
+            "longTasks": {
+              "count": 6,
+              "totalMs": 597,
+              "worstMs": 145
+            },
+            "timer": {
+              "samples": 463,
+              "p50Ms": 16,
+              "p95Ms": 17.2,
+              "worstMs": 164.7
+            }
+          },
+          "rating": {
+            "frames": 433,
+            "fps": 54.2,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 300,
+            "over33Ms": 6,
+            "longTasks": {
+              "count": 6,
+              "totalMs": 951,
+              "worstMs": 302
+            },
+            "timer": {
+              "samples": 436,
+              "p50Ms": 16,
+              "p95Ms": 17.6,
+              "worstMs": 305.8
+            }
+          },
+          "command": {
+            "frames": 441,
+            "fps": 56.2,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 166.7,
+            "over33Ms": 7,
+            "longTasks": {
+              "count": 7,
+              "totalMs": 684,
+              "worstMs": 159
+            },
+            "timer": {
+              "samples": 445,
+              "p50Ms": 16,
+              "p95Ms": 17.4,
+              "worstMs": 175.5
+            }
+          },
+          "reports": {
+            "frames": 462,
+            "fps": 57.9,
+            "p50Ms": 16.7,
+            "p95Ms": 16.8,
+            "worstMs": 133.3,
+            "over33Ms": 4,
+            "longTasks": {
+              "count": 4,
+              "totalMs": 356,
+              "worstMs": 148
+            },
+            "timer": {
+              "samples": 469,
+              "p50Ms": 16.1,
+              "p95Ms": 17.2,
+              "worstMs": 165
+            }
+          }
+        },
+        "storedSave": {
+          "external": true,
+          "writeId": "mjz12nac-g-8lzoz5",
+          "chars": 56285586
+        },
+        "saveChars": 57714801
+      }
+    },
+    "node1h": {
+      "day1WallMs": 42515,
+      "day2WallMs": 109983,
+      "day3WallMs": 161856
+    },
+    "electronNpcReplay6h": {
+      "elapsedMs": 11127,
+      "timerP95GapMs": 17,
+      "timerWorstGapMs": 97
+    },
+    "liveTickDay3": {
+      "fixedCostPerCallMs": {
+        "before": 19,
+        "after": 11
+      },
+      "oneGameSecondMs": {
+        "p50": 76.6,
+        "p99": 217.3
+      },
+      "oneGameSecondDay2P50Ms": 54.3
+    },
+    "saveSerialization": {
+      "day1": {
+        "chars": 18870833,
+        "jsonStringifyMs": 101,
+        "firstMs": 129,
+        "afterTickMs": 46,
+        "longestSliceMs": 16
+      },
+      "day2": {
+        "chars": 39877263,
+        "jsonStringifyMs": 206,
+        "firstMs": 254,
+        "afterTickMs": 111,
+        "longestSliceMs": 32
+      },
+      "day3": {
+        "chars": 57708566,
+        "jsonStringifyMs": 287,
+        "firstMs": 416,
+        "afterTickMs": 175,
+        "longestSliceMs": 51
+      },
+      "asyncFileWriteRendererMs": {
+        "sync": 125,
+        "async": 20,
+        "chars": 58000000
+      }
+    },
+    "lateSaveQa": [
+      {
+        "phase": "migrate",
+        "seededPlainChars": 39877673,
+        "loaded": true,
+        "after": {
+          "external": true,
+          "writeId": "mjxjd97c-1-2kgjhg",
+          "chars": 39925828,
+          "fileExists": true,
+          "fileCursor": 1767398400000,
+          "fileCursorAfterClose": 1767398400000
+        }
+      },
+      {
+        "phase": "reload",
+        "loaded": true,
+        "problem": false,
+        "loadedCursor": 1767398400000,
+        "pointer": {
+          "external": true,
+          "writeId": "mjxjdfy2-1-boydxi",
+          "chars": 39926196
+        }
+      },
+      {
+        "phase": "catchup-close",
+        "seedCursor": 1767484800000,
+        "loaded": true,
+        "savedCursorBeforeClose": 1767485013531,
+        "progressAtClose": {
+          "processedThroughAt": 1767485026964,
+          "targetAt": 1767488411584
+        },
+        "progressSaved": true,
+        "closedMidCatchup": true,
+        "fileCursorAtClose": 1767485013531
+      },
+      {
+        "phase": "reload",
+        "loaded": true,
+        "problem": false,
+        "loadedCursor": 1767485013531,
+        "pointer": {
+          "external": true,
+          "writeId": "mjz0zc5a-1-cd7py",
+          "chars": 57888894
+        }
+      },
+      {
+        "phase": "async-close",
+        "loaded": true,
+        "closedDuringAsyncWrite": true,
+        "cursorAtClose": 1767485013531,
+        "fileCursorAfterClose": 1767485013531
+      },
+      {
+        "phase": "reload",
+        "loaded": true,
+        "problem": false,
+        "loadedCursor": 1767485013531,
+        "pointer": {
+          "external": true,
+          "writeId": "mjz0zpcj-1-g9q77f",
+          "chars": 57888894
+        }
+      }
+    ]
   }
 }
