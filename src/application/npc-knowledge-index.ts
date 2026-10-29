@@ -3,6 +3,7 @@ import type { EspionageState } from '../domain/espionage/types.ts';
 import type { BattleReport } from '../domain/combat/report.ts';
 import type { SpyMission, SpyReportSnapshot } from '../domain/espionage/types.ts';
 import type { FlightRecord } from '../domain/flights/types.ts';
+import type { SaveState } from './contracts.ts';
 
 /**
  * Per-owner views of the save's append-mostly archives. Each index is built
@@ -113,4 +114,20 @@ export function publicDebrisEntries(espionage: EspionageState | undefined): Retu
   let entries = debrisByEspionage.get(espionage);
   if (!entries) debrisByEspionage.set(espionage, entries = getOrbitalDebrisByCoordinate(espionage));
   return entries;
+}
+
+const playerPlanetPlaces = new WeakMap<object, string>();
+
+/**
+ * What the public map shows of the player's planets (id, name, coordinate).
+ * Income replaces the planets object at every settled moment; map caches
+ * compare this instead.
+ */
+export function publicPlayerPlanetsKey(planets: SaveState['planets']): string {
+  let key = playerPlanetPlaces.get(planets);
+  if (key === undefined) {
+    key = JSON.stringify(Object.entries(planets).map(([id, planet]) => [id, planet.name, planet.universeGalaxy, planet.universeSystem, planet.universePosition]));
+    playerPlanetPlaces.set(planets, key);
+  }
+  return key;
 }

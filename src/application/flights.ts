@@ -139,7 +139,7 @@ import { collectAsteroidGas } from './asteroid-gas-collection.ts';
 import { resolveNpcDeploymentArrival, resolveNpcGasArrival, resolveNpcMissionArrival, resolveNpcRecycleArrival, resolveNpcTransportArrival, settleNpcMissionReturn } from './npc-missions.ts';
 import { resolveNpcPirateArrival } from './npc-pirates.ts';
 import { resolveNpcAidArrival, settleNpcAidReturn } from './npc-aid.ts';
-import { getOwnerRelation, relationStructure } from './owner-relations.ts';
+import { getOwnerRelation, relationStructureToken } from './owner-relations.ts';
 import { getExplorationTarget } from './exploration.ts';
 import { resolveExplorationProbeArrival } from './exploration-operations.ts';
 import {
@@ -2584,9 +2584,9 @@ export type FlightReconcileOptions = {
 // Whether an orbiting NPC probe may stay: per probe, while its target owner
 // and the alliance structure are the same (a late world holds over a thousand
 // probes in orbit, all rechecked at every flight event).
-const stationLegality = new WeakMap<FlightRecord, { owner: string; structure: string; legal: boolean }>();
+const stationLegality = new WeakMap<FlightRecord, { owner: string; structure: object; legal: boolean }>();
 function isLegalStation(state: SaveState, flight: FlightRecord, owner: string): boolean {
-  const structure = relationStructure(state.command);
+  const structure = relationStructureToken(state.command);
   const cached = stationLegality.get(flight);
   if (cached && cached.owner === owner && cached.structure === structure) return cached.legal;
   const legal = ['neutral', 'enemy'].includes(getOwnerRelation(state, flight.ownerId!, owner));

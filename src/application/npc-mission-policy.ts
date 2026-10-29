@@ -1,5 +1,5 @@
 import type { NpcProfile } from '../domain/npc/types.ts';
-import { ownerBattleReports, ownerFlights, ownerSpyReports, publicDebrisEntries } from './npc-knowledge-index.ts';
+import { ownerBattleReports, ownerFlights, ownerSpyReports, publicDebrisEntries, publicPlayerPlanetsKey } from './npc-knowledge-index.ts';
 import { SHIP_IDS, type ShipId } from '../domain/combat/ids.ts';
 import { isAttackCombatShip } from './attack.ts';
 import { activeSpyMissionForTarget, getEspionageTargets } from '../domain/espionage/runtime.ts';
@@ -208,16 +208,18 @@ type PublicMapInputs = { playerPlanets: UniversePersistedPlayerPlanet[]; registe
   allTargets: PublicTarget[];
   /** Planet ids at each coordinate (battle reports name coordinates). */
   targetsByCoordinate: Map<string, string[]> };
-let mapInputs: { planets: unknown; targets: unknown; defeats: unknown; playerId: string; value: PublicMapInputs } | null = null;
+let mapInputs: { planets: unknown; planetsKey: string; targets: unknown; defeats: unknown; playerId: string; value: PublicMapInputs } | null = null;
 let systemCache: { signature: string; systems: Map<string, ReturnType<typeof createUniverseSystem>> } | null = null;
 const SYSTEM_CACHE_LIMIT = 4_096;
 
 function publicMapInputs(state: SaveState): PublicMapInputs {
   const targets = getEspionageTargets(state.espionage);
   const defeatedCycles = state.pirate?.contact.defeatedCycles;
-  if (mapInputs && mapInputs.planets === state.planets && mapInputs.defeats === defeatedCycles && mapInputs.playerId === state.profile.playerId
+  if (mapInputs && (mapInputs.planets === state.planets || mapInputs.planetsKey === publicPlayerPlanetsKey(state.planets))
+    && mapInputs.defeats === defeatedCycles && mapInputs.playerId === state.profile.playerId
     && (mapInputs.targets === targets || samePublicTargets(mapInputs.targets as typeof targets, targets))) {
     mapInputs.targets = targets;
+    mapInputs.planets = state.planets;
     return mapInputs.value;
   }
   const playerPlanets = publicPlayerPlanets(state);
@@ -241,7 +243,7 @@ function publicMapInputs(state: SaveState): PublicMapInputs {
     targetsByCoordinate.set(key, [...(targetsByCoordinate.get(key) ?? []), planet.id]);
   }
   const value = { playerPlanets, registered, defeats, signature, allTargets, targetsByCoordinate };
-  mapInputs = { planets: state.planets, targets, defeats: defeatedCycles, playerId: state.profile.playerId, value };
+  mapInputs = { planets: state.planets, planetsKey: publicPlayerPlanetsKey(state.planets), targets, defeats: defeatedCycles, playerId: state.profile.playerId, value };
   return value;
 }
 

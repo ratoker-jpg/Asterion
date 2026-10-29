@@ -14,6 +14,23 @@ const relationCache = new Map<string, Map<string, Map<string, TargetRelation>>>(
 const commandStructure = new WeakMap<object, string>();
 const RELATION_CACHE_LIMIT = 16;
 
+const structureTokens = new Map<string, object>();
+const commandTokens = new WeakMap<object, object>();
+/** One object per distinct relation structure: compare by identity, not by string. */
+export function relationStructureToken(command: SaveState['command']): object {
+  let token = commandTokens.get(command);
+  if (!token) {
+    const key = relationStructure(command);
+    token = structureTokens.get(key);
+    if (!token) {
+      if (structureTokens.size >= 256) structureTokens.clear();
+      structureTokens.set(key, token = {});
+    }
+    commandTokens.set(command, token);
+  }
+  return token;
+}
+
 /** What an owner relation reads of the command state (equal strings: equal relations). */
 export function relationStructure(command: SaveState['command']): string {
   let key = commandStructure.get(command);

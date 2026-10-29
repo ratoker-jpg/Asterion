@@ -1,4 +1,5 @@
 import type { SpyTargetState } from '../domain/espionage/types.ts';
+import { publicPlayerPlanetsKey } from './npc-knowledge-index.ts';
 import { COMMANDER_IDS, type CommanderId } from '../domain/combat/commanders.ts';
 import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
 import type { CombatFactionId } from '../domain/combat/factions.ts';
@@ -181,7 +182,7 @@ export function getCurrentPirateContact(
   return contact;
 }
 
-type ContactMemo = { planets: unknown; targets: Readonly<Record<string, SpyTargetState>>; defeats: unknown; playerId: string; mode: RuntimeMode;
+type ContactMemo = { planets: unknown; planetsKey: string; targets: Readonly<Record<string, SpyTargetState>>; defeats: unknown; playerId: string; mode: RuntimeMode;
   contacts: Map<string, CurrentPirateContact | null> };
 let contactMemo: ContactMemo | null = null;
 
@@ -189,12 +190,14 @@ function contactMemoFor(state: SaveState, mode: RuntimeMode): ContactMemo {
   const targets = getEspionageTargets(state.espionage);
   const defeats = statePirate(state).contact.defeatedCycles;
   const memo = contactMemo;
-  if (memo && memo.planets === state.planets && memo.defeats === defeats && memo.playerId === state.profile.playerId && memo.mode === mode
+  if (memo && (memo.planets === state.planets || memo.planetsKey === publicPlayerPlanetsKey(state.planets))
+    && memo.defeats === defeats && memo.playerId === state.profile.playerId && memo.mode === mode
     && (memo.targets === targets || samePublicPlanets(memo.targets, targets))) {
     memo.targets = targets;
+    memo.planets = state.planets;
     return memo;
   }
-  contactMemo = { planets: state.planets, targets, defeats, playerId: state.profile.playerId, mode, contacts: new Map() };
+  contactMemo = { planets: state.planets, planetsKey: publicPlayerPlanetsKey(state.planets), targets, defeats, playerId: state.profile.playerId, mode, contacts: new Map() };
   return contactMemo;
 }
 
