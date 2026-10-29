@@ -1,3 +1,4 @@
+import type { PirateContactDefeatRecord } from '../domain/pirates/contact-schedule.ts';
 import { getFactionShipCatalog, getFactionDefenseCatalog } from '../domain/combat/faction-catalog.ts';
 import type { CombatFactionId } from '../domain/combat/factions.ts';
 import { getHangarCapacity } from '../domain/buildings/balance-v1.ts';
@@ -106,12 +107,24 @@ export function selectDuePirateRolls(
 ): readonly PirateDueRoll[] {
   const delay = scaleRuntimeDuration(15 * 60_000, mode, testTimeScale);
   const targets = targetsByOwner(state);
-  const defeated = Object.values(state.pirate?.contact.defeatedCycles ?? {});
+  // Each system's defeats once, in save order (the schedule reads only its own),
+  // and each system's due cycles once for all owners in it.
+  const defeatsBySystem = new Map<string, PirateContactDefeatRecord[]>();
+  for (const record of Object.values(state.pirate?.contact.defeatedCycles ?? {})) {
+    const key = `${record.galaxy}:${record.system}`;
+    const bucket = defeatsBySystem.get(key);
+    if (bucket) bucket.push(record);
+    else defeatsBySystem.set(key, [record]);
+  }
+  const cyclesBySystem = new Map<string, ReturnType<typeof getPirateContactCyclesBetween>>();
   const result: PirateDueRoll[] = [];
   for (const [ownerId, systems] of targets) {
     for (const key of systems.keys()) {
       const [galaxy, system] = key.split(':').map(Number);
-      for (const cycle of getPirateContactCyclesBetween(galaxy!, system!, after, until, defeated, delay)) {
+      const systemKey = `${galaxy}:${system}`;
+      let cycles = cyclesBySystem.get(systemKey);
+      if (!cycles) cyclesBySystem.set(systemKey, cycles = getPirateContactCyclesBetween(galaxy!, system!, after, until, defeatsBySystem.get(systemKey) ?? [], delay));
+      for (const cycle of cycles) {
         result.push({
           at: cycle.startAt + delay, ownerId, galaxy: galaxy!, system: system!,
           contactCycleKey: createPirateContactCycleKey({
