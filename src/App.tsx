@@ -123,6 +123,7 @@ import {
   DEFAULT_PLANET_NAME,
   SAVE_SCHEMA_VERSION,
   isCurrentBuildSave,
+  serializeSaveForStorageInSlices,
 } from './application/persistence.ts';
 import {
   applyProductionBots as applyProductionBotsAction,
@@ -277,6 +278,8 @@ const NPC_CATCHUP_PERSIST_INTERVAL_MS = 2_000;
  */
 const LIVE_TICK_PERSIST_COST_FACTOR = 50;
 const LIVE_TICK_PERSIST_MAX_INTERVAL_MS = 60_000;
+/** A deferred clock-tick write is serialized in steps this long, so a late-game save does not freeze a frame. */
+const LIVE_TICK_PERSIST_SLICE_MS = 8;
 /** A worker catch-up hands the save its consistent prefix this often (serialized off the UI thread). */
 const NPC_CATCHUP_WORKER_PERSIST_INTERVAL_MS = 15_000;
 
@@ -942,10 +945,10 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   }, [persistence]);
   // How long the last full save write took on this thread (serialize + store).
   const lastWriteCostMs = useRef(0);
-  const writeSave = useCallback((value: SaveState) => {
-    const startedAt = performance.now();
-    const result = persistence.write(value);
-    lastWriteCostMs.current = performance.now() - startedAt;
+  // Every write takes a number; a sliced write is stored only if no write came after it started.
+  const writeSequence = useRef(0);
+  const slicedWriteRunning = useRef(false);
+  const reportWriteResult = useCallback((result: ReturnType<typeof persistence.write>) => {
     if (!result.ok) {
       // A save near the storage limit can alternate between failing and
       // succeeding; tell the player once in a while, not on every write.
@@ -956,7 +959,33 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         setNotice(reason ? `Не удалось сохранить игру: ${reason}` : 'Не удалось сохранить игру в браузере.', 'error');
       }
     }
-  }, [persistence, setNotice]);
+  }, [setNotice]);
+  const writeSave = useCallback((value: SaveState) => {
+    writeSequence.current += 1;
+    const startedAt = performance.now();
+    const result = persistence.write(value);
+    lastWriteCostMs.current = performance.now() - startedAt;
+    reportWriteResult(result);
+  }, [persistence, reportWriteResult]);
+  /** The same write with the text made in short steps between frames. */
+  const writeSaveInSlices = useCallback((value: SaveState) => {
+    const sequence = ++writeSequence.current;
+    slicedWriteRunning.current = true;
+    const pause = () => new Promise<void>((resolve) => { window.setTimeout(resolve, 0); });
+    void serializeSaveForStorageInSlices(value, persistence.mode, LIVE_TICK_PERSIST_SLICE_MS, pause).then(({ text, computeMs }) => {
+      if (writeSequence.current !== sequence) return;
+      slicedWriteRunning.current = false;
+      const startedAt = performance.now();
+      const result = persistence.writeSerialized(text);
+      lastWriteCostMs.current = computeMs + performance.now() - startedAt;
+      reportWriteResult(result);
+    }, (error: unknown) => {
+      if (writeSequence.current !== sequence) return;
+      slicedWriteRunning.current = false;
+      writeSave(value);
+      console.error('Sliced save serialization failed; saved at once.', error);
+    });
+  }, [persistence, reportWriteResult, writeSave]);
   const writeSerializedSave = useCallback((text: string) => {
     const result = persistence.writeSerialized(text);
     if (!result.ok) console.warn(`NPC catch-up progress was not saved: ${result.error}`);
@@ -967,9 +996,10 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   // A deferred tick write must not be lost when the window closes.
   useEffect(() => {
     const flush = () => {
-      if (deferredThrottledWrite.current === null || catchupWorker.current) return;
-      window.clearTimeout(deferredThrottledWrite.current);
+      if ((deferredThrottledWrite.current === null && !slicedWriteRunning.current) || catchupWorker.current) return;
+      if (deferredThrottledWrite.current !== null) window.clearTimeout(deferredThrottledWrite.current);
       deferredThrottledWrite.current = null;
+      slicedWriteRunning.current = false;
       writeSave(stateRef.current);
     };
     window.addEventListener('pagehide', flush);
@@ -1006,14 +1036,18 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         deferredThrottledWrite.current = window.setTimeout(() => {
           deferredThrottledWrite.current = null;
           lastThrottledWriteAt.current = Date.now();
-          writeSave(state);
+          writeSaveInSlices(state);
         }, wait);
         return;
       }
       lastThrottledWriteAt.current = Date.now();
+      if (state === clockTickState.current) {
+        writeSaveInSlices(state);
+        return;
+      }
     }
     writeSave(state);
-  }, [persistence, state, writeSave]);
+  }, [persistence, state, writeSave, writeSaveInSlices]);
   useEffect(() => {
     publishApplicationRuntimeSnapshot(
       state,

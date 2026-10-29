@@ -84,3 +84,85 @@ test('a save written through the desktop store loads back identical and keeps th
   // A second write passes the "do not overwrite an unreadable save" check.
   assert.equal(facade.write(loaded.state).ok, true);
 });
+
+function asyncStore() {
+  const base = memoryStore();
+  const writes: Array<{ key: string; writeId: string; text: string; finish: () => void; fail: (error: Error) => void }> = [];
+  const store: DesktopSaveStore = {
+    ...base.store,
+    writeAsync: (key, writeId, text) => new Promise<void>((resolve, reject) => {
+      writes.push({ key, writeId, text, finish: () => { base.files.set(`${key}.${writeId}`, text); resolve(); }, fail: reject });
+    }),
+  };
+  return { ...base, store, writes };
+}
+
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+test('an asynchronous write serves the new value at once and moves the pointer when the file is on disk', async () => {
+  const local = memoryLocal();
+  const { files, store, writes } = asyncStore();
+  const storage = createExternalizingStorage(local, store, 10);
+  storage.setItem('asterion.k', 'a'.repeat(20));
+  assert.equal(storage.getItem('asterion.k'), 'a'.repeat(20));
+  assert.equal(local.data.get('asterion.k'), undefined, 'no pointer before the file exists');
+  // Values written meanwhile wait; only the newest is written next.
+  storage.setItem('asterion.k', 'b'.repeat(20));
+  storage.setItem('asterion.k', 'c'.repeat(20));
+  assert.equal(storage.getItem('asterion.k'), 'c'.repeat(20));
+  assert.equal(writes.length, 1);
+  writes[0]!.finish();
+  await settle();
+  assert.equal(readSavePointer(local.data.get('asterion.k')!)?.writeId, writes[0]!.writeId);
+  assert.equal(writes.length, 2);
+  assert.equal(writes[1]!.text, 'c'.repeat(20));
+  writes[1]!.finish();
+  await settle();
+  assert.equal(createExternalizingStorage(local, store, 10).getItem('asterion.k'), 'c'.repeat(20));
+  assert.ok(files.size >= 1);
+});
+
+test('flush writes the pending value synchronously and an older asynchronous write does not move the pointer back', async () => {
+  const local = memoryLocal();
+  const { store, writes } = asyncStore();
+  const storage = createExternalizingStorage(local, store, 10);
+  storage.setItem('asterion.k', 'a'.repeat(20));
+  storage.setItem('asterion.k', 'b'.repeat(20));
+  storage.flush();
+  assert.equal(createExternalizingStorage(local, store, 10).getItem('asterion.k'), 'b'.repeat(20));
+  writes[0]!.finish();
+  await settle();
+  assert.equal(createExternalizingStorage(local, store, 10).getItem('asterion.k'), 'b'.repeat(20));
+  assert.equal(writes.length, 1, 'the waiting value was the flushed one');
+  // A short value written meanwhile also wins over a late file.
+  storage.setItem('asterion.k', 'c'.repeat(20));
+  storage.setItem('asterion.k', 'x');
+  writes[1]!.finish();
+  await settle();
+  assert.equal(local.data.get('asterion.k'), 'x');
+  assert.equal(storage.getItem('asterion.k'), 'x');
+  // Once the window starts closing every write is synchronous.
+  storage.beginUnload();
+  storage.setItem('asterion.k', 'd'.repeat(20));
+  assert.equal(writes.length, 2);
+  assert.equal(createExternalizingStorage(local, store, 10).getItem('asterion.k'), 'd'.repeat(20));
+});
+
+test('a failed asynchronous write switches to synchronous writes, whose failures reach the caller', async () => {
+  const local = memoryLocal();
+  const { store, writes } = asyncStore();
+  const storage = createExternalizingStorage(local, store, 10);
+  const errors = console.error;
+  console.error = () => {};
+  try {
+    storage.setItem('asterion.k', 'a'.repeat(20));
+    writes[0]!.fail(new Error('disk full'));
+    await settle();
+  } finally {
+    console.error = errors;
+  }
+  assert.equal(storage.getItem('asterion.k'), null, 'nothing was saved');
+  storage.setItem('asterion.k', 'b'.repeat(20));
+  assert.equal(writes.length, 1);
+  assert.equal(createExternalizingStorage(local, store, 10).getItem('asterion.k'), 'b'.repeat(20));
+});

@@ -25,6 +25,15 @@ function filesOf(key) {
     && WRITE_ID.test(name.slice(prefix.length, -'.save.json'.length)));
 }
 
+// Older versions stay until the renderer points at the new one; the one
+// before the previous is no longer referenced by anything.
+function dropStaleVersions(key, target) {
+  const others = filesOf(key).filter((name) => name !== path.basename(target))
+    .map((name) => ({ name, at: fs.statSync(path.join(savesDir(), name)).mtimeMs }))
+    .sort((left, right) => right.at - left.at);
+  for (const stale of others.slice(1)) fs.rmSync(path.join(savesDir(), stale.name), { force: true });
+}
+
 function registerSaveStore() {
   ipcMain.on('asterion:save-store:read', (event, key, writeId) => {
     try {
@@ -41,15 +50,23 @@ function registerSaveStore() {
       const temporary = `${target}.tmp`;
       fs.writeFileSync(temporary, text, 'utf8');
       fs.renameSync(temporary, target);
-      // Older versions stay until the renderer points at this one; the one
-      // before the previous is no longer referenced by anything.
-      const others = filesOf(key).filter((name) => name !== path.basename(target))
-        .map((name) => ({ name, at: fs.statSync(path.join(savesDir(), name)).mtimeMs }))
-        .sort((left, right) => right.at - left.at);
-      for (const stale of others.slice(1)) fs.rmSync(path.join(savesDir(), stale.name), { force: true });
+      dropStaleVersions(key, target);
       event.returnValue = { ok: true };
     } catch (error) {
       event.returnValue = { ok: false, error: String(error && error.message || error) };
+    }
+  });
+  ipcMain.handle('asterion:save-store:write-async', async (_event, key, writeId, text) => {
+    try {
+      if (!KEY.test(key) || !WRITE_ID.test(writeId) || typeof text !== 'string') throw new Error('Invalid save write.');
+      const target = fileFor(key, writeId);
+      const temporary = `${target}.tmp`;
+      await fs.promises.writeFile(temporary, text, 'utf8');
+      await fs.promises.rename(temporary, target);
+      dropStaleVersions(key, target);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: String(error && error.message || error) };
     }
   });
   ipcMain.on('asterion:save-store:remove', (event, key) => {

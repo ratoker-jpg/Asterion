@@ -16,6 +16,11 @@ contextBridge.exposeInMainWorld('asterionDesktop', {
       const result = ipcRenderer.sendSync('asterion:save-store:write', key, writeId, text);
       if (!result || !result.ok) throw new Error(result && result.error || 'Save store write failed.');
     },
+    // The renderer only copies the text out; the disk write runs in the main process.
+    writeAsync: async (key, writeId, text) => {
+      const result = await ipcRenderer.invoke('asterion:save-store:write-async', key, writeId, text);
+      if (!result || !result.ok) throw new Error(result && result.error || 'Save store write failed.');
+    },
     remove: (key) => {
       const result = ipcRenderer.sendSync('asterion:save-store:remove', key);
       if (!result || !result.ok) throw new Error(result && result.error || 'Save store remove failed.');

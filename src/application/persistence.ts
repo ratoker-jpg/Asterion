@@ -1,3 +1,4 @@
+import { stringifySave, stringifySaveInSlices } from './save-json.ts';
 import { getBrowserSaveStorage } from './save-storage.ts';
 import {
   createDefaultBattleHistory,
@@ -1842,6 +1843,15 @@ export type PersistenceWriteOptions = {
  * serialize its progress off the UI thread and hand over only the text.
  */
 export function serializeSaveForStorage(state: SaveState, mode: RuntimeMode): string {
+  return stringifySave(persistedPayload(state, mode));
+}
+
+/** serializeSaveForStorage in steps of ~`budgetMs` (see stringifySaveInSlices). */
+export function serializeSaveForStorageInSlices(state: SaveState, mode: RuntimeMode, budgetMs: number, pause: () => Promise<void>) {
+  return stringifySaveInSlices(persistedPayload(state, mode), budgetMs, pause);
+}
+
+function persistedPayload(state: SaveState, mode: RuntimeMode): object {
   const persistedState = mode === 'test' || !state.espionage
     ? state
     : {
@@ -1854,7 +1864,7 @@ export function serializeSaveForStorage(state: SaveState, mode: RuntimeMode): st
         bot01IncomingScenario: undefined,
       },
     };
-  return JSON.stringify({ ...persistedState, [SAVE_WRITER_FIELD]: SAVE_WRITER_VERSION });
+  return { ...persistedState, [SAVE_WRITER_FIELD]: SAVE_WRITER_VERSION };
 }
 
 export function createPersistenceFacade(options: PersistenceOptions = {}) {
