@@ -1,0 +1,19 @@
+# /etc/caddy/Caddyfile: HTTPS (Let's Encrypt, renewed by Caddy) in front of the
+# Asterion server on localhost. Uploads are gzip saves of a few MB; the limit
+# leaves room for very late worlds.
+# Caddy redacts the Authorization header in its logs (the access key never lands there).
+__DOMAIN__ {
+	encode zstd gzip
+	request_body {
+		max_size 170MB
+	}
+	# Caddy sets X-Forwarded-For to the client address; server.ts trusts it from localhost only.
+	reverse_proxy 127.0.0.1:8787 {
+		transport http {
+			read_timeout 10m
+			write_timeout 10m
+		}
+	}
+	# Access log to the journal (journalctl -u caddy).
+	log
+}

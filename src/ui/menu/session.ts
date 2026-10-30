@@ -8,7 +8,13 @@ const NEXT_SCREEN_KEY = 'asterion.session.next-screen.v1';
 
 export type MenuScreen = 'main' | 'load' | 'new' | 'settings';
 
-export type ActiveSession = { slotId: string; slotName: string; factionId: SaveSlotMeta['factionId'] };
+export type ActiveSession = {
+  slotId: string;
+  slotName: string;
+  factionId: SaveSlotMeta['factionId'];
+  /** What the cloud relay did on entry (src/ui/menu/cloud.ts), shown once the game is up. */
+  entryNotice?: { text: string; tone: 'info' | 'success' | 'error' };
+};
 
 /** Points every repository at the slot and applies its fixed campaign parameters. */
 export function applySlotRuntime(slot: Pick<SaveSlotMeta, 'id' | 'storageKey' | 'campaignSpeed' | 'summary'>): void {

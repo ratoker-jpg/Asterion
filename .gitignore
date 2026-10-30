@@ -7,3 +7,4 @@ Thumbs.db
 
 # Raw Codex generations (3 variants each, ~40 MB); the picked art ships as WebP in src/assets/ui.
 assets/source/New assets/ui/
+dist-server

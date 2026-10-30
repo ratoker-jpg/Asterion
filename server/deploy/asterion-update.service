@@ -1,0 +1,9 @@
+# Installs the newest asterion-server-X.Y.Z.tgz from the GitHub release (update.sh).
+[Unit]
+Description=Asterion cloud server update from GitHub Releases
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/asterion-update

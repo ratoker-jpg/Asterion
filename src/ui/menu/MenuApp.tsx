@@ -29,6 +29,8 @@ import { isDesktopShell, quitDesktopApp, type MenuScreen } from './session.ts';
 import type { SolarCrystalId } from '../../domain/sun-raid/config.ts';
 import { useMusic } from '../../audio/hooks.ts';
 import { usePointerDepth } from './pointer-depth.ts';
+import { CloudConflictDialog, CloudEntryBanner, ServerCampaigns } from './CloudMenu.tsx';
+import type { CloudConflict } from './cloud.ts';
 import './menu.css';
 import './menu-motion.css';
 
@@ -57,10 +59,15 @@ type MenuAppProps = {
   onEnterSlot: (slot: SaveSlotMeta) => void;
   entryProblem?: SlotEntryProblem | null;
   onDismissEntryProblem?: () => void;
+  /** The cloud relay is asking the server before a slot opens (banner text). */
+  cloudStage?: string | null;
+  cloudConflict?: { slotName: string; conflict: CloudConflict } | null;
+  onResolveCloudConflict?: (choice: 'server' | 'local') => void;
+  onCancelCloudConflict?: () => void;
 };
 
 /** Main menu, «Новая игра», «Загрузить игру» and settings, on the same 1920×1080 stage as the game. */
-export function MenuApp({ initialScreen, onEnterSlot, entryProblem = null, onDismissEntryProblem }: MenuAppProps) {
+export function MenuApp({ initialScreen, onEnterSlot, entryProblem = null, onDismissEntryProblem, cloudStage = null, cloudConflict = null, onResolveCloudConflict, onCancelCloudConflict }: MenuAppProps) {
   const scale = useMenuScale();
   useMusic('menu');
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -107,6 +114,15 @@ export function MenuApp({ initialScreen, onEnterSlot, entryProblem = null, onDis
         ) : (
           <MenuSettingsScreen onBack={() => setScreen('main')} />
         )}
+        {cloudStage ? <CloudEntryBanner text={cloudStage} /> : null}
+        {cloudConflict ? (
+          <CloudConflictDialog
+            slotName={cloudConflict.slotName}
+            conflict={cloudConflict.conflict}
+            onChoose={(choice) => onResolveCloudConflict?.(choice)}
+            onCancel={() => onCancelCloudConflict?.()}
+          />
+        ) : null}
         {entryProblem ? (
           <ConfirmDialog
             eyebrow="СОХРАНЕНИЕ НЕ ОТКРЫТО"
@@ -328,6 +344,7 @@ function LoadGameScreen({ index, onBack, onLoad, onChanged }: LoadGameScreenProp
       ) : (
         <div className="menu-empty"><h2>Сохранений пока нет</h2><p>Начните новую игру или импортируйте файл сохранения.</p></div>
       )}
+      <ServerCampaigns localIds={slots.map((slot) => slot.id)} onOpened={(slot) => { onChanged(); onLoad(slot); }} />
       {confirmDelete ? (
         <ConfirmDialog
           title="Удалить сохранение?"

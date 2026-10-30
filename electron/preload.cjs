@@ -38,6 +38,23 @@ contextBridge.exposeInMainWorld('asterionDesktop', {
       return () => ipcRenderer.removeListener('asterion:update:state', handler);
     },
   },
+  // Cloud world (electron/cloud.cjs, src/ui/menu/cloud.ts). Network and compression run in the main process.
+  cloud: {
+    get: () => ipcRenderer.invoke('asterion:cloud:get'),
+    set: (next) => ipcRenderer.invoke('asterion:cloud:set', next),
+    server: () => ipcRenderer.invoke('asterion:cloud:server'),
+    campaign: (id) => ipcRenderer.invoke('asterion:cloud:campaign', id),
+    record: (id) => ipcRenderer.invoke('asterion:cloud:record', id),
+    upload: (id, name, text, meta) => ipcRenderer.invoke('asterion:cloud:upload', id, name, text, meta),
+    // Synchronous on purpose (pagehide): the main process queues it and returns at once.
+    uploadOnExit: (id, name, text, meta) => ipcRenderer.sendSync('asterion:cloud:upload-exit', id, name, text, meta),
+    wait: (id) => ipcRenderer.invoke('asterion:cloud:wait', id),
+    claim: (id, baseRevision) => ipcRenderer.invoke('asterion:cloud:claim', id, baseRevision),
+    download: (id, snapshotId) => ipcRenderer.invoke('asterion:cloud:download', id, snapshotId),
+    release: (id) => ipcRenderer.invoke('asterion:cloud:release', id),
+    markSynced: (id, revision, digest) => ipcRenderer.invoke('asterion:cloud:mark-synced', id, revision, digest),
+    preferLocal: (id) => ipcRenderer.invoke('asterion:cloud:prefer-local', id),
+  },
   onDisplayState: (listener) => {
     if (typeof listener !== 'function') return () => undefined;
     const handler = (_event, state) => listener(state);

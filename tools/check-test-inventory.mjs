@@ -1,4 +1,4 @@
-// F-08 gate: every *.test.ts under src/ (and *.test.mjs under tools/) runs in exactly one npm test script,
+// F-08 gate: every *.test.ts under src/ and server/ (and *.test.mjs under tools/) runs in exactly one npm test script,
 // and every logical (non-UI) test script runs in CI. Exits 1 with the gaps.
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
@@ -21,7 +21,7 @@ function matches(pattern, file) {
   return new RegExp(`^${source}$`).test(file);
 }
 
-const files = [...walk(join(root, 'src'), '.test.ts'), ...walk(join(root, 'tools'), '.test.mjs')].sort();
+const files = [...walk(join(root, 'src'), '.test.ts'), ...walk(join(root, 'server'), '.test.ts'), ...walk(join(root, 'tools'), '.test.mjs')].sort();
 const logical = Object.entries(scripts).filter(([name, command]) => name.startsWith('test:') && !name.endsWith('-ui') && name !== 'test:inventory' && command.includes('--test'));
 const owners = new Map(files.map((file) => [file, []]));
 for (const [name, command] of logical) {

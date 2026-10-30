@@ -1,0 +1,137 @@
+{
+  "date": "2026-10-30",
+  "server": "VPS-4-RU Lite, 2 vCPU AMD EPYC Rome, 4 GB RAM; Node 24.22; bundle 1.0.0 (this branch)",
+  "client": "Ryzen 5 5600, Windows 10, Electron 44",
+  "parityRealServer": {
+    "day1": {
+      "livedGameMinutes": 12.96,
+      "claimMs": 2135,
+      "claimGzBytes": 1832712,
+      "localCatchupMs": 10773,
+      "steadyTickMsPer10s": 237,
+      "maxRssMB": 544,
+      "equal": true
+    },
+    "day2": {
+      "fixture": "late-game-day-2.json",
+      "campaign": "slot-qa-parity-day2",
+      "version": "1.0.0",
+      "saveChars": 39926621,
+      "uploadGzBytes": 4099942,
+      "uploadMs": 1170,
+      "behindMinutes": 30,
+      "livedGameMinutes": 40,
+      "wallMinutes": 10,
+      "catchUpWallSeconds": 123,
+      "steadyCpuShare": 0.3578,
+      "steadyTickMs": 499,
+      "maxRssMB": 751,
+      "claimMs": 4628,
+      "claimGzBytes": 4129530,
+      "localCatchupMs": 89072,
+      "serverDigest": "05a25a229845e7b891b9bedaf4b8852a95ae57ab170f93af1e5a36d227e6a018",
+      "localDigest": "05a25a229845e7b891b9bedaf4b8852a95ae57ab170f93af1e5a36d227e6a018",
+      "equal": true
+    },
+    "day3": {
+      "fixture": "late-game-day-3.json",
+      "campaign": "slot-qa-parity-day3",
+      "version": "1.0.0",
+      "saveChars": 57805565,
+      "uploadGzBytes": 6132842,
+      "uploadMs": 1470,
+      "behindMinutes": 30,
+      "livedGameMinutes": 40.05,
+      "wallMinutes": 10,
+      "catchUpWallSeconds": 170,
+      "steadyCpuShare": 0.4697,
+      "steadyTickMs": 927,
+      "maxRssMB": 877,
+      "claimMs": 3359,
+      "claimGzBytes": 6047046,
+      "localCatchupMs": 114420,
+      "serverDigest": "dc1c0d122f8f5609a3e4c353c3a2789d7af867e6b18c1ab18c3094ec5902f896",
+      "localDigest": "dc1c0d122f8f5609a3e4c353c3a2789d7af867e6b18c1ab18c3094ec5902f896",
+      "equal": true
+    },
+    "updateInTheMiddleDay1": {
+      "fixture": "late-game-day-1.json",
+      "campaign": "slot-qa-update-day1c",
+      "version": "1.0.0",
+      "saveChars": 18912024,
+      "uploadGzBytes": 1815637,
+      "uploadMs": 2446,
+      "behindMinutes": 5,
+      "livedGameMinutes": 8.95,
+      "wallMinutes": 4,
+      "catchUpWallSeconds": 15,
+      "steadyCpuShare": 0.0491,
+      "steadyTickMs": 266,
+      "maxRssMB": 546,
+      "claimMs": 1310,
+      "claimGzBytes": 1824798,
+      "localCatchupMs": 7597,
+      "serverDigest": "863e20efb54c1b290e97466274f642ee11e81321edda5e3e1c66052cc1105fce",
+      "localDigest": "a5affa13c5485f34dbb47f50c9b1d4100f7ff6c71f6890dd7eed02f938c4e928",
+      "equal": false,
+      "equalAfterLoad": true
+    }
+  },
+  "electronRealServer": {
+    "smallWorld": {
+      "entryFromServerMs": 6032,
+      "offlineQuitMs": [
+        34,
+        28
+      ]
+    },
+    "day2": {
+      "liveSeconds": 300,
+      "entryFromServerMs": 5574,
+      "cloudStageMs": 3300,
+      "gapAfterApplyMs": 3287,
+      "localReference": {
+        "absenceMs": 328018,
+        "totalMs": 13095
+      },
+      "uploadOnLeaveMs": 1816,
+      "uploadGzBytes": 4137470,
+      "offlineQuitMs": [
+        2703,
+        1468
+      ]
+    },
+    "day3": {
+      "liveSeconds": 300,
+      "entryFromServerMs": 7542,
+      "cloudStageMs": 4400,
+      "gapAfterApplyMs": 4481,
+      "localReference": {
+        "absenceMs": 337767,
+        "totalMs": 21495
+      },
+      "uploadOnLeaveMs": 3381,
+      "uploadGzBytes": 6071272
+    }
+  },
+  "liveCostSteady": {
+    "day1": {
+      "cpuOfOneCore": 0.024,
+      "runnerRssMB": 540
+    },
+    "day2": {
+      "cpuOfOneCore": 0.05,
+      "runnerRssMB": 740
+    },
+    "day3": {
+      "cpuOfOneCore": 0.093,
+      "runnerRssMB": 800,
+      "maxRssMB": 877
+    },
+    "supervisorRssMB": 85,
+    "day7Estimate": {
+      "cpuOfOneCore": "0.2-0.25",
+      "runnerRssMB": "1500-1600 steady, 2300-2500 peak while writing"
+    }
+  }
+}

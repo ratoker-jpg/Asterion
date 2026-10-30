@@ -236,6 +236,7 @@ import { SunRaidPanel, type SunSelection } from './ui/sun-raid/SunRaidPanel.tsx'
 import { GateDialog } from './ui/sun-raid/GateDialog.tsx';
 import { CampaignResultOverlay, PauseMenu } from './ui/menu/InGameOverlays.tsx';
 import { reloadToMenu, type ActiveSession } from './ui/menu/session.ts';
+import { useCampaignCloudUploads } from './ui/menu/cloud.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
 import { planetSkins } from './planet-skin-art.ts';
@@ -2458,6 +2459,14 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       window.removeEventListener(SAVE_FLUSH_EVENT, onUnload);
     };
   }, [foldPlayTime, persistence, session]);
+
+  // Cloud relay (src/ui/menu/cloud.ts): a copy every few minutes, and the
+  // hand-over on pagehide, registered after the writes above so it sends the final text.
+  useCampaignCloudUploads(RUNTIME_MODE === 'production' ? session : null, persistence.saveKey);
+  // What the cloud relay did on entry.
+  useEffect(() => {
+    if (session?.entryNotice) setNotice(session.entryNotice.text, session.entryNotice.tone);
+  }, [session, setNotice]);
 
   const exportCurrentSave = () => {
     const latest = foldPlayTime(true);
