@@ -121,22 +121,27 @@ test('a long absence is caught up in the worker exactly as the runner does it on
 });
 
 test('a command made on the world before the freeze reached App cancels the catch-up, which starts over from it', async () => {
-  const world = campaign(8);
+  const world = campaign(12);
   const start = world.npcReplay!.processedThroughAt;
   applyCampaignRuntimeForCatchup(world, start);
-  const now = start + 60 * 60 * 1_000;
+  const now = start + 24 * 60 * 60 * 1_000;
   const { ui, engine, worker } = setup(world, () => now);
   await engine.handle(structuredClone({ type: 'init', version: 0, state: world, clockOffsetMs: 0, persist: PERSIST }));
-  const ticking = ui.tick(now);
+  let ticked = false;
+  const ticking = ui.tick(now).then(() => { ticked = true; });
   const planet = ui.state.planets[ui.state.currentPlanetId]!;
   const committing = ui.commit({ ...ui.state, planets: { ...ui.state.planets, [ui.state.currentPlanetId]: { ...planet, name: 'Renamed' } } });
-  await Promise.all([ticking, committing]);
+  await committing;
+  assert.equal(ticked, false, 'the catch-up yields between chunks');
+  // App drops the freeze it never built on, and ticks again while the cancelled run still unwinds.
   ui.receive();
-  // App left the frozen world unseen; the next tick runs the whole catch-up from the renamed world.
   await ui.tick(now);
+  await ticking;
+  // The worker started over from the renamed world on its own: the caught-up world is on its way.
   ui.receive();
   assert.equal(isNpcCatchupPending(ui.state), false);
   assert.equal(ui.state.planets[ui.state.currentPlanetId]!.name, 'Renamed');
+  assert.ok(ui.state.npcReplay!.processedThroughAt >= now - 2_000, 'App has the caught-up world');
   // The worker learns App took the caught-up world from App's next message.
   await ui.tick(now);
   ui.receive();

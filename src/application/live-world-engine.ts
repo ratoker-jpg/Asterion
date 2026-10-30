@@ -131,7 +131,7 @@ export class LiveWorldEngine {
   private async tick(now: number, testTimeScale: Parameters<typeof reconcileRuntime>[1]['testTimeScale']): Promise<void> {
     const world = this.ui!;
     if (needsNpcCatchupBefore(world, now)) {
-      await this.runCatchup(world, now);
+      await this.runCatchup(world, now, testTimeScale);
       return;
     }
     const startedAt = this.clock();
@@ -144,7 +144,7 @@ export class LiveWorldEngine {
     this.scheduleSave(Math.max(0, this.lastSaveAt + interval - this.host.now()));
   }
 
-  private async runCatchup(world: SaveState, now: number): Promise<void> {
+  private async runCatchup(world: SaveState, now: number, testTimeScale: Parameters<typeof reconcileRuntime>[1]['testTimeScale']): Promise<void> {
     const frozen = freezeNpcCatchupTarget(world, now);
     const catchup = { rebase: [] as WorldPatch[], droppedFreeze: false };
     this.catchup = catchup;
@@ -170,7 +170,12 @@ export class LiveWorldEngine {
           return next;
         },
       });
-      if (catchup.droppedFreeze) return;
+      if (catchup.droppedFreeze) {
+        // App never saw the freeze (it changed its world first) and waits for this tick: start over from App's world.
+        this.catchup = null;
+        await this.tick(this.host.now(), testTimeScale);
+        return;
+      }
       this.post(result.state, result.events, this.clock() - startedAt);
       // The caught-up world is saved at once, as posted (the UI takes it unless it changed meanwhile).
       this.saveText(result.state, this.posted.at(-1)?.to ?? this.uiVersion);
