@@ -1,4 +1,5 @@
 const { app, BrowserWindow } = require('electron');
+const { PARSE_SAVE } = require('./qa-save.cjs');
 const fs = require('fs');
 const path = require('path');
 
@@ -64,11 +65,11 @@ async function capture(win, label, name) {
   fs.writeFileSync(path.join(directory, `${name}.png`), image.toPNG());
 }
 
-const readSave = (win, key) => run(win, `JSON.parse(localStorage.getItem(${JSON.stringify(key)}) || 'null')`);
+const readSave = (win, key) => run(win, `${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(key)}) || 'null')`);
 
 async function patchSave(win, key, patchSource) {
   await run(win, `(() => {
-    const save = JSON.parse(localStorage.getItem(${JSON.stringify(key)}) || '{}');
+    const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(key)}) || '{}');
     (${patchSource})(save);
     localStorage.setItem(${JSON.stringify(key)}, JSON.stringify(save));
   })()`);

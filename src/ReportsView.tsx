@@ -21,6 +21,7 @@ import {
   getReportUnreadCounts,
   getVisibleReportItems,
   preservePersistentReportCollections,
+  dropExpiredReportItems,
 } from './domain/reports/adapters.ts';
 import {
   deleteAllReports,
@@ -569,7 +570,9 @@ function FolderActions({ folder, items, selectedIds, onSelectAll, onDeleteAll, o
   );
 }
 
-export function ReportsView({ battleReports, planetNames, savedBattleReportIds, operations, command, espionage, pirateReconReports, pirateFlights, exploration, initialSelectedReportId, profile, score, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy, onOpenUniverseTarget, onOpenPirateUniverse }: {
+export function ReportsView({ retentionCutoff, battleReports, planetNames, savedBattleReportIds, operations, command, espionage, pirateReconReports, pirateFlights, exploration, initialSelectedReportId, profile, score, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy, onOpenUniverseTarget, onOpenPirateUniverse }: {
+  /** Letters older than this world time are gone (24-hour rule); absent in Test Mode. */
+  retentionCutoff?: number;
   battleReports: readonly BattleReport[];
   /** Live names of the player's planets, so flight summaries never show ids. */
   planetNames?: Readonly<Record<string, string>>;
@@ -605,7 +608,7 @@ export function ReportsView({ battleReports, planetNames, savedBattleReportIds, 
   const pendingInitialReportId = useRef<string | null>(null);
   const handledInitialReportId = useRef<string | null>(null);
 
-  const items = useMemo(() => buildReportsFeed(battleReports, operations, command, espionage, state.overpopulationReports, state.recyclerArrivalReports, state.gasExtractionArrivalReports, pirateReconReports, pirateFlights, exploration, profile.playerId, { planetNames, factionId: profile.factionId })
+  const items = useMemo(() => dropExpiredReportItems(buildReportsFeed(battleReports, operations, command, espionage, state.overpopulationReports, state.recyclerArrivalReports, state.gasExtractionArrivalReports, pirateReconReports, pirateFlights, exploration, profile.playerId, { planetNames, factionId: profile.factionId }), retentionCutoff, savedBattleReportIds)
     // Battles between third parties (e.g. pirates raiding Bot 01) are not the player's mail.
     .filter((item) => {
       if (!item.battleReportId) return true;
@@ -613,7 +616,7 @@ export function ReportsView({ battleReports, planetNames, savedBattleReportIds, 
       if (!report) return true;
       const mine = (id?: string) => isAsterionLocalPlayerId(profile.playerId) ? isAsterionLocalPlayerId(id) : id === profile.playerId;
       return mine(report.attacker.playerId) || mine(report.defender.playerId);
-    }), [battleReports, operations, command, espionage, state.overpopulationReports, state.recyclerArrivalReports, state.gasExtractionArrivalReports, pirateReconReports, pirateFlights, exploration, profile.playerId, planetNames, profile.factionId]);
+    }), [battleReports, operations, command, espionage, state.overpopulationReports, state.recyclerArrivalReports, state.gasExtractionArrivalReports, pirateReconReports, pirateFlights, exploration, profile.playerId, planetNames, profile.factionId, retentionCutoff, savedBattleReportIds]);
   const counts = useMemo(() => getReportCategoryCounts(items, state), [items, state]);
   const unreadCounts = useMemo(() => getReportUnreadCounts(items, state), [items, state]);
   const activeFolderMeta = MESSAGE_FOLDERS.find((folder) => folder.id === activeFolder) ?? MESSAGE_FOLDERS[0];

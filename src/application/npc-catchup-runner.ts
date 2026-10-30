@@ -32,6 +32,11 @@ export type NpcCatchupRunnerHooks = {
   /** Lets a worker yield to its message queue between chunks (cancellation). */
   yieldBetweenChunks?: () => Promise<void>;
   cancelled?: () => boolean;
+  /**
+   * After each yield: the world with what the player changed meanwhile
+   * (selections, settings; commands are refused during a catch-up).
+   */
+  rebase?: (state: SaveState) => SaveState;
 };
 
 export type NpcCatchupRunResult = {
@@ -100,6 +105,7 @@ export async function runNpcCatchup(initial: SaveState, hooks: NpcCatchupRunnerH
         hooks.onPersist(state);
       }
       if (hooks.yieldBetweenChunks) await hooks.yieldBetweenChunks();
+      if (hooks.rebase) state = hooks.rebase(state);
     }
     const replay = state.npcReplay;
     const now = Math.floor(hooks.now());

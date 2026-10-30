@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { stringifySave, stringifySaveInSlices } from './save-json.ts';
-import { createInitialSaveState, serializeSaveForStorage } from './persistence.ts';
+import { stringifyCompactSave, stringifyCompactSaveInSlices, stringifySave, stringifySaveInSlices } from './save-json.ts';
+import { createInitialSaveState, serializeSaveForStorage, serializeSaveForStorageInSlices } from './persistence.ts';
+import { decodeCompactSave } from '../domain/session/save-codec.ts';
 import { UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 
 const awkward = {
@@ -27,7 +28,13 @@ test('the sliced serialization gives the same text as the one-step one', async (
   const { text } = await stringifySaveInSlices(state, 0, async () => { pauses += 1; });
   assert.equal(text, JSON.stringify(state));
   assert.ok(pauses > 0, 'a zero budget pauses between steps');
-  assert.equal(serializeSaveForStorage(state, 'production'), JSON.stringify({ ...state, espionage: { ...state.espionage,
+  // Production saves are compact; decoded, they are the plain payload exactly.
+  const production = serializeSaveForStorage(state, 'production');
+  assert.equal(JSON.stringify(decodeCompactSave(JSON.parse(production))), JSON.stringify({ ...state, espionage: { ...state.espionage,
     targets: Object.fromEntries(Object.entries(state.espionage?.targets ?? {}).filter(([, target]) => target.ownerId !== UNIVERSE_NPC_OWNER_ID)),
     bot01Planets: undefined, bot01Profile: undefined, bot01IncomingScenario: undefined }, saveWriter: 1 }));
+  assert.equal((await serializeSaveForStorageInSlices(state, 'production', 0, async () => {})).text, production);
+  // Test Mode keeps plain JSON (its QA reads saves by hand).
+  assert.deepEqual(JSON.parse(serializeSaveForStorage(state, 'test')).flights, state.flights);
+  assert.equal((await stringifyCompactSaveInSlices(awkward, 0, async () => {})).text, stringifyCompactSave(awkward));
 });

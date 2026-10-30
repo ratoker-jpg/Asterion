@@ -1,3 +1,4 @@
+import { battleReportTime, reportRetentionCutoff } from './history-retention.ts';
 import { flightsToPlanet, ownerBattleReports, ownerFlights } from './npc-knowledge-index.ts';
 import { describeIncomingAttack, type IncomingAttackKnowledge } from '../domain/flights/incoming-attack-knowledge.ts';
 import { estimateForcePower, estimateWinProbability, type ForceStack } from '../domain/npc/utility.ts';
@@ -145,14 +146,16 @@ export function estimateIncomingAttack(state: SaveState, context: NpcUtilityCont
   if (composition?.kind === 'fleet') return { ...base, basis: 'composition', power: npcForcePower(attackerRace(state, flight), composition.ships),
     uncertainty: b.uncertaintyKnown, knownShips: { raceId: attackerRace(state, flight), ships: composition.ships } };
   const ownerId = context.profile.ownerId;
+  // Battles past the retention window are skipped, whether or not a prune has removed them yet.
+  const cutoff = reportRetentionCutoff(context.at);
   const ageFactor = (createdAt: number) => 1 + Math.min(1, Math.max(0, context.at - createdAt) / (72 * HOUR));
   if (knowledge.kind === 'pirate-raid') {
     // Pirates this owner already fought show what they bring.
     let seen = 0;
     for (const report of ownerBattleReports(state.combat.reports, ownerId)) {
       if (report.missionType !== 'pirate-raid' || report.defender.playerId !== ownerId) continue;
-      const when = Date.parse(report.timestamp);
-      if (!Number.isFinite(when) || when > context.at) continue;
+      const when = battleReportTime(report);
+      if (!Number.isFinite(when) || when > context.at || when < cutoff) continue;
       const stacks = report.attackerForce.stacks.flatMap((stack) => stack.countBefore > 0 && stack.attackPerUnit && stack.lifePerUnit
         ? [{ count: stack.countBefore, attack: stack.attackPerUnit, life: stack.lifePerUnit }] : []);
       seen = Math.max(seen, estimateForcePower(stacks) * ageFactor(when));
@@ -173,8 +176,8 @@ export function estimateIncomingAttack(state: SaveState, context: NpcUtilityCont
     for (const report of ownerBattleReports(state.combat.reports, ownerId)) {
       const side = report.attacker.playerId === attacker ? report.attackerForce : report.defender.playerId === attacker ? report.defenderForce : null;
       if (!side) continue;
-      const when = Date.parse(report.timestamp);
-      if (!Number.isFinite(when) || when > context.at) continue;
+      const when = battleReportTime(report);
+      if (!Number.isFinite(when) || when > context.at || when < cutoff) continue;
       const ships = Object.fromEntries(side.stacks.map((stack) => [stack.entityId, stack.countBefore]));
       const power = npcForcePower(race, ships) * ageFactor(when);
       if (power > intel) { intel = power; knownShips = { raceId: race, ships }; }

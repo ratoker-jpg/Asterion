@@ -9,6 +9,7 @@ import type { NpcProfile } from '../domain/npc/types.ts';
 import { estimateForcePower, estimateWinProbability, planningHorizonHours, type ForceStack } from '../domain/npc/utility.ts';
 import { estimateNpcBuildingIncomeGain, getNpcPlanetIncomePerHour } from './npc-economy.ts';
 import type { SaveState } from './contracts.ts';
+import { battleReportTime, reportRetentionCutoff } from './history-retention.ts';
 import { ownerBattleReports, ownerFlights, ownerSpyReports, publicDebrisEntries } from './npc-knowledge-index.ts';
 import { selectOwnerScore } from '../domain/rating/scoring.ts';
 import { nextColonyPointThreshold } from '../domain/universe/runtime.ts';
@@ -174,14 +175,16 @@ export function createNpcUtilityContext(state: SaveState, profile: NpcProfile, a
   const ownPlanets = Object.values(state.espionage?.targets ?? {}).filter((target) => target.kind === 'npc' && target.ownerId === ownerId);
   const income = ownPlanets.reduce((sum, target) => sum + getNpcPlanetIncomePerHour(target, timeScale), 0);
   let defended = 0;
+  // Reports past the retention window are skipped, whether or not a prune has removed them yet.
+  const cutoff = reportRetentionCutoff(at);
   for (const report of ownerBattleReports(state.combat.reports, ownerId)) {
     if (report.defender.playerId !== ownerId) continue;
-    const when = Date.parse(report.timestamp);
-    if (Number.isFinite(when) && when <= at && at - when <= 48 * HOUR) defended += 1;
+    const when = battleReportTime(report);
+    if (Number.isFinite(when) && when <= at && when >= cutoff && at - when <= 48 * HOUR) defended += 1;
   }
   const latestReports = new Map<string, SpyReportSnapshot>();
   for (const report of ownerSpyReports(state.espionage?.reports ?? [], state.espionage?.missions ?? [], ownerId)) {
-    if (report.ownerId !== ownerId || report.createdAt > at) continue;
+    if (report.ownerId !== ownerId || report.createdAt > at || report.createdAt < cutoff) continue;
     const previous = latestReports.get(report.targetPlanetId);
     if (!previous || previous.createdAt <= report.createdAt) latestReports.set(report.targetPlanetId, report);
   }

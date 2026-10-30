@@ -56,6 +56,27 @@ async function click(win, selector) {
 }
 
 async function seed(win, buildings) {
+  // The running game can still write its previous save between the fixture
+  // and the reload (seen on CI, 30.10.2026; the spaceport QA met the same in
+  // #110): the fixture is accepted only once the reloaded game holds it.
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    await seedOnce(win, buildings);
+    const held = await win.webContents.executeJavaScript(`(() => {
+      const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
+      const planet = save?.planets?.['helion-01'];
+      const expected = ${JSON.stringify(buildings)};
+      // Storage caps the seeded resources (hundreds of millions); a fresh save holds thousands.
+      return Boolean(planet && save.metal >= 100000000 && (save.queues?.['helion-01'] ?? []).length === 0
+        && Object.entries(expected).every(([role, level]) => planet.buildings?.[role] === level));
+    })()`);
+    if (held) return;
+  }
+  throw new Error('Building action fixture was overwritten by the running game three times');
+}
+
+async function seedOnce(win, buildings) {
+  // Fixture and navigation in one renderer turn, so no autosave of this page runs in between.
+  const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
   const ok = await win.webContents.executeJavaScript(`(() => {
     const raw = localStorage.getItem(${JSON.stringify(SAVE_KEY)});
     const save = raw ? JSON.parse(raw) : null;
@@ -75,10 +96,14 @@ async function seed(win, buildings) {
     save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 10);
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     localStorage.setItem('asterion.test-time-scale.v1', '1');
+    setTimeout(() => window.location.reload(), 0);
     return true;
   })()`);
   if (!ok) throw new Error('Could not seed building action scenario');
-  await reload(win);
+  await loaded;
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+  await win.webContents.executeJavaScript('document.fonts?.ready');
+  await settle(win);
 }
 
 async function activateZone(win, zone) {

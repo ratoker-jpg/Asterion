@@ -40,7 +40,7 @@ const PIRATE_OWNER_ID = 'pirates';
  * needs no rescan on the next group of a catch-up.
  */
 const cleanFlights = new WeakMap<readonly FlightRecord[], { missions: unknown; playerId: string; firstArchivableAfter: number }>();
-const cleanSpyReports = new WeakMap<readonly unknown[], { playerId: string; oldestNpcAt: number }>();
+const cleanSpyReports = new WeakMap<readonly unknown[], { playerId: string; oldestAt: number }>();
 const cleanBattleReports = new WeakMap<readonly BattleReport[], { playerId: string; flights: readonly FlightRecord[] | null }>();
 const rollChecks = new WeakMap<object, number>();
 const cleanMissions = new WeakMap<readonly unknown[], readonly FlightRecord[]>();
@@ -56,8 +56,46 @@ function earliestRollCheck(rolls: Readonly<Record<string, { checkAt: number }>>)
 }
 const TERMINAL_FLIGHT_PHASES = new Set<FlightRecord['phase']>(['completed', 'failed']);
 
-/** NPC spy reports this old are dropped: estimates already fear anything older than 72 hours. */
-export const NPC_SPY_REPORT_STALE_MS = 72 * 60 * 60_000;
+/**
+ * Owner rule (30.10.2026): a report of any kind (battle, spy, hunter notice,
+ * recon, arrival, overpopulation; the player's and NPCs') lives at most 24
+ * game hours. Only battle reports the player saved stay, plus reports a live
+ * flight or operation still names.
+ */
+export const REPORT_RETENTION_MS = 24 * 60 * 60_000;
+/** NPC spy reports this old are gone: an owner re-spies a target it wants to read again. */
+export const NPC_SPY_REPORT_STALE_MS = REPORT_RETENTION_MS;
+const HOUR_MS = 3_600_000;
+
+/**
+ * The oldest report time still kept at `at`. It moves by whole hours (so the
+ * archives are rescanned for age at most hourly) and rounds up, so nothing is
+ * older than 24 hours. Readers that decide anything (NPCs) skip reports older
+ * than the cutoff of their own moment: a prune made at any earlier time, e.g.
+ * where a catch-up slice or a live tick ended, removes only what they skip.
+ */
+export function reportRetentionCutoff(at: number): number {
+  return Math.ceil((at - REPORT_RETENTION_MS) / HOUR_MS) * HOUR_MS;
+}
+
+/** Whether a report made at `createdAt` is still within the retention window at `at`. */
+export function isReportRetained(createdAt: number, at: number): boolean {
+  return createdAt >= reportRetentionCutoff(at);
+}
+
+const battleTimes = new WeakMap<BattleReport, number>();
+/** A battle report's game time (its ISO timestamp), parsed once per report. */
+export function battleReportTime(report: BattleReport): number {
+  let time = battleTimes.get(report);
+  if (time === undefined) {
+    const parsed = Date.parse(report.timestamp);
+    battleTimes.set(report, time = Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY);
+  }
+  return time;
+}
+
+/** The player's read/hidden marks of reports long gone stop growing the save past this many. */
+export const REPORT_MARK_LIMIT = 5_000;
 
 function compactForeignReport(report: BattleReport): BattleReport {
   const { initialSnapshot: _initial, ...rest } = report;
@@ -231,15 +269,11 @@ export function pruneCampaignHistory(state: SaveState, at: number | undefined = 
 
   // NPC intelligence: only the newest spy report per (owner, target) is ever
   // read (the observed set and latest estimate), so older duplicates leave.
-  // Reports older than the stale window are no basis for a decision either.
+  // Any report (the player's too) older than the retention window leaves.
   const spyReports = next.espionage?.reports ?? [];
-  // The threshold moves by whole hours, a pure function of the time, so the
-  // archive is rescanned for age at most hourly however often it is pruned.
-  const staleBefore = typeof at === 'number'
-    ? Math.floor((at - NPC_SPY_REPORT_STALE_MS) / 3_600_000) * 3_600_000
-    : Number.NEGATIVE_INFINITY;
+  const cutoff = typeof at === 'number' ? reportRetentionCutoff(at) : Number.NEGATIVE_INFINITY;
   const spyMemo = cleanSpyReports.get(spyReports);
-  if (!spyMemo || spyMemo.playerId !== playerId || staleBefore > spyMemo.oldestNpcAt) {
+  if (!spyMemo || spyMemo.playerId !== playerId || cutoff > spyMemo.oldestAt) {
     const newestNpcReport = new Map<string, number>();
     spyReports.forEach((report, index) => {
       if (typeof report.ownerId !== 'string' || !report.ownerId || report.ownerId === playerId) return;
@@ -249,18 +283,18 @@ export function pruneCampaignHistory(state: SaveState, at: number | undefined = 
       if (previous === undefined || spyReports[previous]!.createdAt <= report.createdAt) newestNpcReport.set(key, index);
     });
     const keptSpyIndexes = new Set(newestNpcReport.values());
-    const spyKept = spyReports.filter((report, index) => typeof report.ownerId !== 'string' || !report.ownerId
-      || report.ownerId === playerId || (keptSpyIndexes.has(index) && report.createdAt >= staleBefore));
+    const spyKept = spyReports.filter((report, index) => report.createdAt >= cutoff && (typeof report.ownerId !== 'string' || !report.ownerId
+      || report.ownerId === playerId || keptSpyIndexes.has(index)));
     if (spyKept.length !== spyReports.length) next = { ...next, espionage: { ...next.espionage!, reports: spyKept } };
-    let oldestNpcAt = Number.POSITIVE_INFINITY;
-    for (const report of spyKept) {
-      if (typeof report.ownerId === 'string' && report.ownerId && report.ownerId !== playerId) oldestNpcAt = Math.min(oldestNpcAt, report.createdAt);
-    }
+    let oldestAt = Number.POSITIVE_INFINITY;
+    for (const report of spyKept) oldestAt = Math.min(oldestAt, report.createdAt);
     // When every report survives, the state keeps the original array. Cache
     // against that identity so the next replay group can reuse this scan.
-    cleanSpyReports.set(spyKept.length === spyReports.length ? spyReports : spyKept, { playerId, oldestNpcAt });
+    cleanSpyReports.set(spyKept.length === spyReports.length ? spyReports : spyKept, { playerId, oldestAt });
   }
+  next = pruneExpiredNotes(next, cutoff);
 
+  next = pruneExpiredBattleReports(next, state, cutoff);
   const battleMemo = cleanBattleReports.get(next.combat.reports);
   if (!battleMemo || battleMemo.playerId !== playerId || (battleMemo.flights !== null && battleMemo.flights !== next.flights.records)) {
     next = pruneForeignReports(next, state, playerId, isForeignPirateBattleReport, FOREIGN_PIRATE_BATTLE_REPORT_LIMIT);
@@ -307,7 +341,93 @@ export function pruneCampaignHistory(state: SaveState, at: number | undefined = 
   const exploration = boundExplorationLedger(next.exploration);
   if (exploration !== next.exploration) next = { ...next, exploration };
 
+  next = foldArchivedBattleAwards(next);
+  if (typeof at === 'number') next = pruneOldPirateProfiles(next, at);
+
   return next;
+}
+
+/**
+ * Pirate profiles are fixed per owner and contact cycle when the owner first
+ * meets that cycle; a cycle is up for at most 75 minutes and its raids are
+ * settled within hours, so a profile a day past its cycle's start is read by
+ * nothing. Cycle keys end with the cycle's start time.
+ */
+export const PIRATE_PROFILE_ARCHIVE_MS = REPORT_RETENTION_MS;
+const oldestProfileCycles = new WeakMap<object, number>();
+
+function cycleStartAt(cycleKey: string): number {
+  const start = Number(cycleKey.slice(cycleKey.lastIndexOf(':') + 1));
+  return Number.isFinite(start) ? start : Number.POSITIVE_INFINITY;
+}
+
+function pruneOldPirateProfiles(next: SaveState, at: number): SaveState {
+  const pirate = next.pirate;
+  const profiles = pirate?.contact.ownerProfiles;
+  if (!pirate || !profiles) return next;
+  // Whole hours, as the report window: a pure function of the time.
+  const before = Math.floor((at - PIRATE_PROFILE_ARCHIVE_MS) / HOUR_MS) * HOUR_MS;
+  let oldest = oldestProfileCycles.get(profiles);
+  if (oldest === undefined) {
+    oldest = Number.POSITIVE_INFINITY;
+    for (const cycles of Object.values(profiles)) for (const key of Object.keys(cycles)) oldest = Math.min(oldest, cycleStartAt(key));
+    oldestProfileCycles.set(profiles, oldest);
+  }
+  if (oldest >= before) return next;
+  let kept: Record<string, Readonly<Record<string, (typeof profiles)[string][string]>>> | null = null;
+  let keptOldest = Number.POSITIVE_INFINITY;
+  for (const [ownerId, cycles] of Object.entries(profiles)) {
+    const keys = Object.keys(cycles);
+    const recent = keys.filter((key) => cycleStartAt(key) >= before);
+    for (const key of recent) keptOldest = Math.min(keptOldest, cycleStartAt(key));
+    kept ??= {};
+    if (recent.length === keys.length) kept[ownerId] = cycles;
+    else if (recent.length) kept[ownerId] = Object.freeze(Object.fromEntries(recent.map((key) => [key, cycles[key]!])));
+  }
+  const ownerProfiles = Object.freeze(kept ?? {});
+  oldestProfileCycles.set(ownerProfiles, keptOldest);
+  return { ...next, pirate: Object.freeze({ ...pirate, contact: Object.freeze({ ...pirate.contact, ownerProfiles }) }) };
+}
+
+const foldedAwards = new WeakMap<object, readonly BattleReport[]>();
+
+/**
+ * A battle report that left the save takes its rating award along into the
+ * per-owner archive total: totals stay exact, the ledger stays as small as
+ * the reports. The archive is kept sorted by owner id, so its text does not
+ * depend on the order reports left in.
+ */
+function foldArchivedBattleAwards(next: SaveState): SaveState {
+  const rating = next.rating;
+  const awards = rating.battleAwardsByReportId;
+  if (foldedAwards.get(awards) === next.combat.reports) return next;
+  const live = new Set(next.combat.reports.map((report) => report.id));
+  let archive: Record<string, number> | null = null;
+  let kept: Record<string, Record<string, number>> | null = null;
+  for (const [reportId, owners] of Object.entries(awards)) {
+    if (live.has(reportId)) {
+      if (kept) kept[reportId] = owners;
+      continue;
+    }
+    if (!kept) {
+      kept = {};
+      for (const [id, entry] of Object.entries(awards)) {
+        if (id === reportId) break;
+        kept[id] = entry;
+      }
+    }
+    archive ??= { ...rating.archivedBattlePoints };
+    for (const [ownerId, points] of Object.entries(owners)) {
+      if (Number.isFinite(points) && points > 0) archive[ownerId] = (archive[ownerId] ?? 0) + Math.floor(points);
+    }
+  }
+  if (!kept) {
+    foldedAwards.set(awards, next.combat.reports);
+    return next;
+  }
+  const sorted = archive ? Object.fromEntries(Object.entries(archive).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))) : rating.archivedBattlePoints;
+  foldedAwards.set(kept, next.combat.reports);
+  return { ...next, rating: { ...rating, battleAwardsByReportId: kept, ...(sorted && Object.keys(sorted).length ? { archivedBattlePoints: sorted } : {}) } };
 }
 
 /**
@@ -345,6 +465,85 @@ function boundExplorationLedgerOnce(ledger: NonNullable<SaveState['exploration']
   };
 }
 
+/** Battle reports no rule may drop: saved by the player, named by an operation or a live flight. */
+function protectedBattleReportIds(next: SaveState, state: SaveState): { has: (id: string) => boolean } {
+  const saved = new Set<string>(state.combat.savedReportIds);
+  for (const operation of state.operations.items) if (operation.battleReportId) saved.add(operation.battleReportId);
+  // A live flight resolves (and re-finds) its report by battle-pirate-raid-,
+  // battle-pirate- or battle-attack- plus its id, or its resolution's id.
+  const live = liveFlightReportIndex(next.flights.records);
+  return { has: (id: string) => saved.has(id) || live.resolutions.has(id)
+    || LIVE_REPORT_PREFIXES.some((prefix) => id.startsWith(prefix) && live.flightIds.has(id.slice(prefix.length))) };
+}
+
+// The oldest unprotected battle time of a report array, by identity.
+const oldestBattles = new WeakMap<readonly BattleReport[], number>();
+
+/** Battle reports past the retention window leave unless protected (see protectedBattleReportIds). */
+function pruneExpiredBattleReports(next: SaveState, state: SaveState, cutoff: number): SaveState {
+  const reports = next.combat.reports;
+  let oldest = oldestBattles.get(reports);
+  if (oldest === undefined) {
+    oldest = Number.POSITIVE_INFINITY;
+    for (const report of reports) oldest = Math.min(oldest, battleReportTime(report));
+    oldestBattles.set(reports, oldest);
+  }
+  if (oldest >= cutoff) return next;
+  const protectedIds = protectedBattleReportIds(next, state);
+  const kept = reports.filter((report) => battleReportTime(report) >= cutoff || protectedIds.has(report.id));
+  // The true oldest, protected ones included: whether a report leaves never
+  // depends on which arrays were scanned before (a protection ends with a new
+  // flights array or saved list, so old protected reports are re-checked).
+  let oldestKept = Number.POSITIVE_INFINITY;
+  for (const report of kept) oldestKept = Math.min(oldestKept, battleReportTime(report));
+  const result = kept.length === reports.length ? reports : kept;
+  oldestBattles.set(result, oldestKept);
+  return result === reports ? next : { ...next, combat: { ...next.combat, reports: result } };
+}
+
+function keepRecent<T>(items: readonly T[] | undefined, time: (item: T) => number, cutoff: number): readonly T[] | undefined {
+  if (!items?.length) return items;
+  let expired = false;
+  for (const item of items) if (time(item) < cutoff) { expired = true; break; }
+  return expired ? items.filter((item) => time(item) >= cutoff) : items;
+}
+
+/**
+ * The other report archives under the same window: hunter notices,
+ * overpopulation, recycler and gas-extraction arrivals, pirate recon and
+ * exploration recon. Each is a pure function of its records and the cutoff.
+ */
+function pruneExpiredNotes(next: SaveState, cutoff: number): SaveState {
+  const reports = next.reports;
+  if (reports.readIds.length > REPORT_MARK_LIMIT || reports.hiddenIds.length > REPORT_MARK_LIMIT) {
+    next = { ...next, reports: { ...reports, readIds: reports.readIds.slice(-REPORT_MARK_LIMIT), hiddenIds: reports.hiddenIds.slice(-REPORT_MARK_LIMIT) } };
+  }
+  if (cutoff === Number.NEGATIVE_INFINITY) return next;
+  const espionage = next.espionage;
+  const notices = keepRecent(espionage?.hunterNotices, (notice) => notice.createdAt, cutoff);
+  if (espionage && notices !== espionage.hunterNotices) next = { ...next, espionage: { ...espionage, hunterNotices: [...notices!] } };
+  const mail = next.reports;
+  const overpopulationReports = keepRecent(mail.overpopulationReports, (report) => report.episodeEndedAt, cutoff);
+  const recyclerArrivalReports = keepRecent(mail.recyclerArrivalReports, (report) => report.arrivedAtMs, cutoff);
+  const gasExtractionArrivalReports = keepRecent(mail.gasExtractionArrivalReports, (report) => report.arrivalAt, cutoff);
+  if (overpopulationReports !== mail.overpopulationReports || recyclerArrivalReports !== mail.recyclerArrivalReports
+    || gasExtractionArrivalReports !== mail.gasExtractionArrivalReports) {
+    next = { ...next, reports: {
+      ...mail,
+      ...(overpopulationReports ? { overpopulationReports: [...overpopulationReports] } : {}),
+      ...(recyclerArrivalReports ? { recyclerArrivalReports: [...recyclerArrivalReports] } : {}),
+      ...(gasExtractionArrivalReports ? { gasExtractionArrivalReports: [...gasExtractionArrivalReports] } : {}),
+    } };
+  }
+  const pirate = next.pirate;
+  const reconReports = keepRecent(pirate?.reconReports, (report) => report.arrivedAt, cutoff);
+  if (pirate && reconReports !== pirate.reconReports) next = { ...next, pirate: Object.freeze({ ...pirate, reconReports: Object.freeze([...reconReports!]) }) };
+  const exploration = next.exploration;
+  const explorationRecon = keepRecent(exploration?.reconReports, (report) => report.resolvedAt, cutoff);
+  if (exploration && explorationRecon !== exploration.reconReports) next = { ...next, exploration: { ...exploration, reconReports: [...explorationRecon!] } };
+  return next;
+}
+
 function pruneForeignReports(
   next: SaveState,
   state: SaveState,
@@ -355,13 +554,7 @@ function pruneForeignReports(
   const reports = next.combat.reports;
   const foreignCount = reports.reduce((count, report) => count + Number(isForeign(report, playerId)), 0);
   if (foreignCount <= limit) return next;
-  const saved = new Set<string>(state.combat.savedReportIds);
-  for (const operation of state.operations.items) if (operation.battleReportId) saved.add(operation.battleReportId);
-  // A live flight resolves (and re-finds) its report by battle-pirate-raid-,
-  // battle-pirate- or battle-attack- plus its id, or its resolution's id.
-  const live = liveFlightReportIndex(next.flights.records);
-  const protectedIds = { has: (id: string) => saved.has(id) || live.resolutions.has(id)
-    || LIVE_REPORT_PREFIXES.some((prefix) => id.startsWith(prefix) && live.flightIds.has(id.slice(prefix.length))) };
+  const protectedIds = protectedBattleReportIds(next, state);
   // Protected reports stay on top of the limit; the newest unprotected
   // foreign reports fill it. Reports are appended chronologically.
   const prunable = reports.filter((report) => isForeign(report, playerId) && !protectedIds.has(report.id)).length;

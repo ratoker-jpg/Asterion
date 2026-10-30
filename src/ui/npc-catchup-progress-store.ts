@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import type { NpcCatchupProgress } from '../application/npc-catchup-runner.ts';
-import { NPC_CATCHUP_PROGRESS_EVENT } from '../application/npc-catchup-worker-protocol.ts';
+import { NPC_CATCHUP_PROGRESS_EVENT } from '../application/live-world-protocol.ts';
 
 /**
  * Live progress of a catch-up running in the worker. The save stays frozen

@@ -1,4 +1,5 @@
 const { app, BrowserWindow } = require('electron');
+const { PARSE_SAVE } = require('./qa-save.cjs');
 const fs = require('fs');
 const path = require('path');
 
@@ -65,11 +66,11 @@ async function capture(win, label, name) {
   fs.writeFileSync(path.join(directory, `${name}.png`), image.toPNG());
 }
 
-const readSave = (win, key) => run(win, `JSON.parse(localStorage.getItem(${JSON.stringify(key)}) || 'null')`);
+const readSave = (win, key) => run(win, `${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(key)}) || 'null')`);
 
 async function patchSave(win, key, patchSource) {
   await run(win, `(() => {
-    const save = JSON.parse(localStorage.getItem(${JSON.stringify(key)}) || '{}');
+    const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(key)}) || '{}');
     (${patchSource})(save);
     localStorage.setItem(${JSON.stringify(key)}, JSON.stringify(save));
   })()`);
@@ -171,11 +172,11 @@ async function testModeScenario(win, label) {
   // 3. Ira Vel helps the player through the real flight runtime (explicit QA action).
   await click(win, '[data-qa-test-ira-prepare]');
   await click(win, '[data-qa-test-ira-help]');
-  await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.flights?.records?.some((f) => f.missionId === 'aid' && f.ownerSide === 'npc')`);
+  await waitFor(win, `${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.flights?.records?.some((f) => f.missionId === 'aid' && f.ownerSide === 'npc')`);
   save = await readSave(win, TEST_KEY);
   const iraFlight = save.flights.records.find((f) => f.missionId === 'aid' && f.ownerSide === 'npc');
   assert(iraFlight.aid.requestId === first.id && iraFlight.destinationPlanetId === first.planetId && iraFlight.cargo.metal === 50000, `${label}: Ira flight is bound to the request and its planet`, iraFlight);
-  await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.command?.requests?.[0]?.delivered === 50000`);
+  await waitFor(win, `${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.command?.requests?.[0]?.delivered === 50000`);
   state = await view(win);
   assert(state.mine.length === 0 && state.closed >= 1, `${label}: a delivered request leaves the open list`, state);
   save = await readSave(win, TEST_KEY);
@@ -201,12 +202,12 @@ async function testModeScenario(win, label) {
   await waitFor(win, `!document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled`);
   await capture(win, label, 'aid-flight-preview');
   await click(win, '[data-qa-flight-dispatch-confirm]');
-  await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.flights?.records?.some((f) => f.missionId === 'aid' && f.ownerSide !== 'npc')`);
+  await waitFor(win, `${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.flights?.records?.some((f) => f.missionId === 'aid' && f.ownerSide !== 'npc')`);
   save = await readSave(win, TEST_KEY);
   const playerFlight = save.flights.records.find((f) => f.missionId === 'aid' && f.ownerSide !== 'npc');
   const iraRequest = save.command.requests.find((r) => r.authorOwnerId === 'member-ira-vel');
   assert(playerFlight.aid.requestId === iraRequest.id && playerFlight.cargo.metal === 60000 && playerFlight.cargo.minerals === 0 && playerFlight.targetRelation === 'ally' && iraRequest.helpStarted === true, `${label}: player aid flight is bound and reserved`, { playerFlight, iraRequest });
-  await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.command?.requests?.find((r) => r.authorOwnerId === 'member-ira-vel')?.delivered === 60000`);
+  await waitFor(win, `${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.command?.requests?.find((r) => r.authorOwnerId === 'member-ira-vel')?.delivered === 60000`);
   save = await readSave(win, TEST_KEY);
   const me = save.command.alliances[0].members.find((m) => m.ownerId === save.profile.playerId);
   assert(me.deliveredUnits === 60000, `${label}: the player's contribution counts only the delivered units`, me);
@@ -240,7 +241,7 @@ async function testModeScenario(win, label) {
   await setField(win, '[data-qa-cargo="metal"]', '10000');
   await waitFor(win, `!document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled`);
   await click(win, '[data-qa-flight-dispatch-confirm]');
-  await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.flights?.records?.filter((f) => f.missionId === 'aid' && f.ownerSide !== 'npc').length === 2`);
+  await waitFor(win, `${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.flights?.records?.filter((f) => f.missionId === 'aid' && f.ownerSide !== 'npc').length === 2`);
   save = await readSave(win, TEST_KEY);
   const manual = save.flights.records.filter((f) => f.missionId === 'aid' && f.ownerSide !== 'npc').at(-1);
   assert(manual.aid.requestId === choices[1].value && manual.cargo.metal === 10000, `${label}: the manually chosen request is the one that was served`, manual);

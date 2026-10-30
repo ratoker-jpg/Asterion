@@ -1,6 +1,7 @@
 // QA for the main menu, «Новая игра», save slots, «Операции → Солнца», the Gate and the campaign result.
 // Production flow uses a clean profile; the Sun raid is exercised in Test Mode with the fixtures.
 const { app, BrowserWindow } = require('electron');
+const { PARSE_SAVE } = require('./qa-save.cjs');
 const fs = require('fs');
 const path = require('path');
 
@@ -90,7 +91,7 @@ async function production(win, label) {
   await sleep(1200);
   await capture(win, label, '06-game-started');
 
-  const save = await run(win, `(() => { const index = JSON.parse(localStorage.getItem('asterion.slots.index.v1')); const slot = index.slots[0]; return { index, save: JSON.parse(localStorage.getItem(slot.storageKey)) }; })()`);
+  const save = await run(win, `(() => { const index = ${PARSE_SAVE}(localStorage.getItem('asterion.slots.index.v1')); const slot = index.slots[0]; return { index, save: ${PARSE_SAVE}(localStorage.getItem(slot.storageKey)) }; })()`);
   if (save.save.profile.factionId !== 'synod') throw new Error('Saved race is not Илары');
   if (save.save.worldConfig.world.galaxyCount !== 3) throw new Error('World config not stored');
   if (save.index.slots.length !== 1 || save.index.activeSlotId !== save.index.slots[0].id) throw new Error('Slot index mismatch');

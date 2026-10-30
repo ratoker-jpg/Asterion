@@ -6,7 +6,9 @@ import {
   FOREIGN_PIRATE_BATTLE_REPORT_LIMIT,
   NPC_FLIGHT_ARCHIVE_MARGIN_MS,
   PIRATE_ROLL_LEDGER_MARGIN_MS,
+  REPORT_RETENTION_MS,
   pruneCampaignHistory,
+  reportRetentionCutoff,
 } from './history-retention.ts';
 import type { SaveState } from './contracts.ts';
 import type { BattleReport } from '../domain/combat/report.ts';
@@ -19,7 +21,7 @@ function base(): SaveState {
 }
 
 function report(id: string, defender: string, missionType = 'pirate-raid', attacker = 'pirates'): BattleReport {
-  return { id, missionType, attacker: { playerId: attacker }, defender: { playerId: defender }, rounds: [] } as unknown as BattleReport;
+  return { id, missionType, timestamp: new Date(AT).toISOString(), attacker: { playerId: attacker }, defender: { playerId: defender }, rounds: [] } as unknown as BattleReport;
 }
 
 function raidFlight(id: string, phase: FlightRecord['phase'], targetKind: 'npc' | 'player', owner: string): FlightRecord {
@@ -161,4 +163,66 @@ test('NPC spy intelligence keeps the newest report per owner and target; player 
   const prepared: SaveState = { ...state, espionage: { ...state.espionage!, reports } };
   const ids = pruneCampaignHistory(prepared).espionage!.reports.map((item) => item.id);
   assert.deepEqual(ids, ['a2', 'b1', 'a3', 'mine1', 'mine2']);
+});
+
+test('24-hour rule: every report kind older than the window leaves; saved and live battles stay', () => {
+  const state = base();
+  const player = state.profile.playerId;
+  const cursor = AT;
+  const cutoff = reportRetentionCutoff(cursor);
+  assert.ok(cursor - cutoff <= REPORT_RETENTION_MS && cursor - cutoff > REPORT_RETENTION_MS - 3_600_000, 'kept between 23 and 24 hours');
+  const old = cutoff - 1;
+  const fresh = cutoff;
+  const battle = (id: string, at: number, attacker = 'npc-gen-1', defender: string = player) =>
+    ({ ...report(id, defender, 'attack', attacker), timestamp: new Date(at).toISOString() }) as BattleReport;
+  const live = npcFlight('live-attack', 'returning');
+  const spy = (id: string, ownerId: string, createdAt: number) => ({ id, ownerId, targetPlanetId: `t-${id}`, createdAt, missionId: `m-${id}` }) as never;
+  const prepared: SaveState = {
+    ...state,
+    npcReplay: { version: 1, processedThroughAt: cursor, targetAt: cursor },
+    combat: {
+      reports: [battle('old', old), battle('old-saved', old), battle('battle-attack-live-attack', old, player, 'npc-gen-2'),
+        battle('old-npc', old, 'npc-gen-1', 'npc-gen-2'), battle('fresh', fresh)],
+      savedReportIds: ['old-saved'],
+    },
+    flights: { records: [live], requestIndex: { [live.requestId]: live.id } },
+    espionage: {
+      ...state.espionage!,
+      reports: [spy('old-mine', player, old), spy('fresh-mine', player, fresh), spy('old-npc', 'npc-gen-1', old), spy('fresh-npc', 'npc-gen-2', fresh)],
+      hunterNotices: [{ id: 'n-old', createdAt: old } as never, { id: 'n-fresh', createdAt: fresh } as never],
+    },
+    reports: {
+      ...state.reports,
+      overpopulationReports: [{ id: 'o-old', episodeEndedAt: old } as never, { id: 'o-fresh', episodeEndedAt: fresh } as never],
+      recyclerArrivalReports: [{ id: 'r-old', arrivedAtMs: old } as never],
+      gasExtractionArrivalReports: [{ id: 'g-fresh', arrivalAt: fresh } as never],
+    },
+    pirate: { ...state.pirate!, reconReports: [{ id: 'p-old', arrivedAt: old } as never, { id: 'p-fresh', arrivedAt: fresh } as never] },
+    exploration: { ...state.exploration!, reconReports: [{ id: 'e-old', resolvedAt: old } as never, { id: 'e-fresh', resolvedAt: fresh } as never] },
+  };
+  const pruned = pruneCampaignHistory(prepared);
+  const ids = (items: readonly { id: string }[] | undefined) => (items ?? []).map((item) => item.id);
+  assert.deepEqual(ids(pruned.combat.reports), ['old-saved', 'battle-attack-live-attack', 'fresh']);
+  assert.deepEqual(pruned.combat.savedReportIds, ['old-saved']);
+  assert.deepEqual(ids(pruned.espionage!.reports), ['fresh-mine', 'fresh-npc']);
+  assert.deepEqual(ids(pruned.espionage!.hunterNotices), ['n-fresh']);
+  assert.deepEqual(ids(pruned.reports.overpopulationReports), ['o-fresh']);
+  assert.deepEqual(ids(pruned.reports.recyclerArrivalReports), []);
+  assert.deepEqual(ids(pruned.reports.gasExtractionArrivalReports), ['g-fresh']);
+  assert.deepEqual(ids(pruned.pirate!.reconReports), ['p-fresh']);
+  assert.deepEqual(ids(pruned.exploration!.reconReports), ['e-fresh']);
+  assert.equal(pruneCampaignHistory(pruned), pruned, 'nothing more to prune returns the same object');
+  // The flight lands: its old report is no longer protected and leaves.
+  const landed = { ...pruned, flights: { records: [{ ...live, phase: 'completed', completedAt: cursor } as FlightRecord], requestIndex: pruned.flights.requestIndex } };
+  assert.deepEqual(ids(pruneCampaignHistory(landed).combat.reports), ['old-saved', 'fresh']);
+  // Without a replay cursor (Test Mode fixtures) nothing expires by age.
+  assert.equal(pruneCampaignHistory({ ...prepared, npcReplay: undefined }).espionage!.reports.length, 4);
+});
+
+test('a prune at any earlier moment removes only what a reader at a later moment skips', () => {
+  for (let at = AT; at < AT + 3 * 3_600_000; at += 7 * 60_000 + 13) {
+    for (let earlier = at - 2 * 3_600_000; earlier <= at; earlier += 11 * 60_000 + 7) {
+      assert.ok(reportRetentionCutoff(earlier) <= reportRetentionCutoff(at));
+    }
+  }
 });

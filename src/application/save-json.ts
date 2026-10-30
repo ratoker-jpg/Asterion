@@ -8,6 +8,8 @@
  * hand. The output is byte-identical to JSON.stringify(value).
  */
 
+import { COMPACT_SECTIONS, encodeSection } from '../domain/session/save-codec.ts';
+
 /** state → section → collection → entry: the entries are cached. */
 const MEMO_DEPTH = 3;
 /** Entries between two chances to pause a sliced serialization. */
@@ -47,6 +49,41 @@ function* part(value: object, depth: number, step: { entries: number }): Generat
   return `{${fields.join(',')}}`;
 }
 
+/**
+ * The save with its big sections in the compact form (save-codec.ts); the
+ * other top-level fields stay plain JSON, so raw readers (slots, repositories)
+ * still find them. A compact section is one step of a sliced run.
+ */
+function* compactPart(value: object, step: { entries: number }): Generator<void, string> {
+  const fields: string[] = [];
+  for (const key of Object.keys(value)) {
+    const item = (value as Record<string, unknown>)[key];
+    let text: string | undefined;
+    if ((COMPACT_SECTIONS as readonly string[]).includes(key) && item !== null && typeof item === 'object') {
+      yield;
+      text = encodeSection(item);
+      yield;
+    } else {
+      text = !isPlain(item) || MEMO_DEPTH <= 1 ? entry(item) : yield* part(item, 1, step);
+    }
+    if (text !== undefined) fields.push(`${JSON.stringify(key)}:${text}`);
+  }
+  return `{${fields.join(',')}}`;
+}
+
+export function stringifyCompactSave(value: object): string {
+  const run = compactPart(value, { entries: 0 });
+  for (;;) {
+    const next = run.next();
+    if (next.done) return next.value;
+  }
+}
+
+/** stringifyCompactSave in steps (see stringifySaveInSlices). */
+export function stringifyCompactSaveInSlices(value: object, budgetMs: number, pause: () => Promise<void>): Promise<{ text: string; computeMs: number }> {
+  return runInSlices(compactPart(value, { entries: 0 }), budgetMs, pause);
+}
+
 export function stringifySave(value: object): string {
   const run = part(value, 0, { entries: 0 });
   for (;;) {
@@ -60,8 +97,11 @@ export function stringifySave(value: object): string {
  * them, so a late-game autosave does not hold the UI thread for one long task.
  * Safe because saves are immutable. `computeMs` is the time spent computing.
  */
-export async function stringifySaveInSlices(value: object, budgetMs: number, pause: () => Promise<void>): Promise<{ text: string; computeMs: number }> {
-  const run = part(value, 0, { entries: 0 });
+export function stringifySaveInSlices(value: object, budgetMs: number, pause: () => Promise<void>): Promise<{ text: string; computeMs: number }> {
+  return runInSlices(part(value, 0, { entries: 0 }), budgetMs, pause);
+}
+
+async function runInSlices(run: Generator<void, string>, budgetMs: number, pause: () => Promise<void>): Promise<{ text: string; computeMs: number }> {
   let computeMs = 0;
   for (;;) {
     const startedAt = performance.now();

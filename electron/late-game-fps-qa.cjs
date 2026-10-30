@@ -187,6 +187,53 @@ async function openScreen(win, route, selector) {
   await sleep(1_500);
 }
 
+/**
+ * Command response: the build button of the metal mine on the planet screen,
+ * clicked three times. Per click: the time until the dialog is gone and a
+ * frame is painted (the command applied and rendered), and the UI thread's
+ * long tasks in the 1.5 s after it (a save written on the UI thread shows here).
+ */
+async function commandProbe(win) {
+  await openScreen(win, 'planet', '.planet-page-v3');
+  const zone = await run(win, `(() => { const node = document.querySelector('[data-qa-zone="resource"]'); if (!node) return false; node.click(); return true; })()`);
+  if (!zone) return { measured: false, reason: 'no resource zone' };
+  await waitFor(win, `document.querySelector('[data-qa-zone-view][data-zone="resource"]')`, 20_000);
+  const clicks = [];
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await sleep(1_500);
+    const opened = await run(win, `(() => { const node = document.querySelector('[data-zone-building-role="metal-production-1"]'); if (!node) return false; node.click(); return true; })()`);
+    if (!opened) return { measured: false, reason: 'no metal mine', clicks };
+    await waitFor(win, `document.querySelector('[data-qa-building-dialog="metal-production-1"]')`, 20_000);
+    await sleep(800);
+    const outcome = await run(win, `new Promise((resolve) => {
+      const button = document.querySelector('[data-qa-build-button]');
+      if (!button || button.disabled) { resolve({ ok: false, reason: 'build button disabled' }); return; }
+      const longTasks = [];
+      const observer = new PerformanceObserver((list) => { for (const entry of list.getEntries()) longTasks.push(Math.round(entry.duration)); });
+      observer.observe({ entryTypes: ['longtask'] });
+      const startedAt = performance.now();
+      button.click();
+      let closedMs = null;
+      const frame = () => {
+        if (!document.querySelector('[data-qa-building-dialog]')) { closedMs = Math.round((performance.now() - startedAt) * 10) / 10; return; }
+        if (performance.now() - startedAt > 10_000) return;
+        requestAnimationFrame(frame);
+      };
+      requestAnimationFrame(frame);
+      setTimeout(() => { observer.disconnect(); resolve({ ok: closedMs !== null, closedMs, longTasks }); }, 1_500);
+    })`);
+    clicks.push(outcome);
+    if (!outcome.ok) {
+      await run(win, `document.querySelector('.resource-building-dialog-close')?.click()`);
+      break;
+    }
+  }
+  const done = clicks.filter((click) => click.ok);
+  return { measured: done.length > 0, clicks,
+    worstClosedMs: done.length ? Math.max(...done.map((click) => click.closedMs)) : null,
+    worstLongTaskMs: done.length ? Math.max(0, ...done.flatMap((click) => click.longTasks)) : null };
+}
+
 async function main() {
   await app.whenReady();
   registerSaveStore();
@@ -261,6 +308,9 @@ On screen: ${screen}`);
     result.screens[route] = await measure(win, SECONDS);
     process.stderr.write(`${route}: ${JSON.stringify(result.screens[route])}\n`);
   }
+  result.command = await commandProbe(win);
+  process.stderr.write(`command: ${JSON.stringify(result.command)}
+`);
   // Where the game keeps the save now (a late one: the desktop store behind a pointer).
   result.storedSave = await run(win, `(() => { const raw = localStorage.getItem(${JSON.stringify(saveKey)}) || '';
     try { const pointer = JSON.parse(raw).asterionExternalSave; if (pointer) return { external: true, writeId: pointer.writeId, chars: pointer.chars }; } catch {}

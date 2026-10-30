@@ -1,4 +1,5 @@
 import type { NpcProfile } from '../domain/npc/types.ts';
+import { battleReportTime, reportRetentionCutoff } from './history-retention.ts';
 import { ownerBattleReports, ownerFlights, ownerSpyReports, publicDebrisEntries, publicPlayerPlanetsKey } from './npc-knowledge-index.ts';
 import { SHIP_IDS, type ShipId } from '../domain/combat/ids.ts';
 import { isAttackCombatShip } from './attack.ts';
@@ -149,16 +150,18 @@ function coordinateKey(coordinate: UniverseCoordinate): string {
 function observedPlanetIds(state: SaveState, ownerId: string, at: number): Set<string> {
   const observed = new Set<string>();
   const missions = state.espionage?.missions ?? [];
+  // Reports past the retention window are skipped, whether or not a prune has removed them yet.
+  const cutoff = reportRetentionCutoff(at);
   for (const report of ownerSpyReports(state.espionage?.reports ?? [], missions, ownerId)) {
-    if (report.createdAt > at) continue;
+    if (report.createdAt > at || report.createdAt < cutoff) continue;
     observed.add(report.targetPlanetId);
   }
 
   const { targetsByCoordinate } = publicMapInputs(state);
   for (const report of ownerBattleReports(state.combat.reports, ownerId)) {
     if (!OBSERVABLE_BATTLE_TYPES.has(report.missionType)) continue;
-    const timestamp = Date.parse(report.timestamp);
-    if (!Number.isFinite(timestamp) || timestamp > at) continue;
+    const timestamp = battleReportTime(report);
+    if (!Number.isFinite(timestamp) || timestamp > at || timestamp < cutoff) continue;
     const isAttacker = report.attacker.playerId === ownerId;
     const isDefender = report.defender.playerId === ownerId;
     if (!isAttacker && !isDefender) continue;
