@@ -7,6 +7,7 @@
 //   level, stated in the manifest), plus the building and production cards.
 // Output: visual-qa/attack-rules (not committed).
 const { app, BrowserWindow } = require('electron');
+const { PARSE_SAVE } = require('./qa-save.cjs');
 const fs = require('fs');
 const path = require('path');
 
@@ -102,8 +103,8 @@ async function productionAttackRefusal() {
     await settle(win, 1500);
 
     const world = await run(win, `(() => {
-      const index = JSON.parse(localStorage.getItem('asterion.slots.index.v1'));
-      const save = JSON.parse(localStorage.getItem(index.slots[0].storageKey));
+      const index = ${PARSE_SAVE}(localStorage.getItem('asterion.slots.index.v1'));
+      const save = ${PARSE_SAVE}(localStorage.getItem(index.slots[0].storageKey));
       const home = save.planets[save.currentPlanetId];
       const npc = Object.values(save.espionage.targets).filter((target) => target.kind === 'npc' && target.coordinate.galaxy === home.universeGalaxy)
         .sort((a, b) => Math.abs(a.coordinate.system - home.universeSystem) - Math.abs(b.coordinate.system - home.universeSystem))[0];
@@ -197,13 +198,13 @@ async function testModeScreens() {
     await waitFor(win, `document.querySelector('[data-qa-bot01-scenario]')`);
     await click(win, '[data-qa-bot01-scenario]');
     await showIncomingRow(win);
-    const espionage = await run(win, `JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)})).science.levels[5] ?? 0`);
+    const espionage = await run(win, `${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(TEST_KEY)})).science.levels[5] ?? 0`);
     const hidden = await run(win, `(() => { const row = document.querySelector('[data-qa-flight-incoming-attack]'); return { text: row?.textContent?.replace(/\\s+/g, ' ').trim() || '', hidden: Boolean(row?.querySelector('[data-qa-incoming-composition-hidden]')), shown: Boolean(row?.querySelector('[data-qa-incoming-composition]')) }; })()`);
     if (!hidden.hidden || hidden.shown) throw new Error(`Composition visible below Espionage 10: ${JSON.stringify(hidden)}`);
     await capture(win, '05-incoming-attack-espionage-below-10', `Test Mode «ЗАПУСТИТЬ АТАКУ BOT 01», player Espionage ${espionage}: ${hidden.text}`);
 
     // The same flight, viewed after the player's Espionage is set to 10 (the only save edit).
-    await run(win, `(() => { const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)})); save.science.levels[5] = 10; localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save)); })()`);
+    await run(win, `(() => { const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(TEST_KEY)})); save.science.levels[5] = 10; localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save)); })()`);
     await reload(win);
     await clickPrimary(win, 'fleets');
     await showIncomingRow(win);

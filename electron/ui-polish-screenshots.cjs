@@ -12,6 +12,7 @@
 //
 // Each frame is taken at 1920×1080 and again at 1280×720. Output is not committed.
 const { app, BrowserWindow } = require('electron');
+const { PARSE_SAVE } = require('./qa-save.cjs');
 const fs = require('fs');
 const path = require('path');
 
@@ -139,9 +140,9 @@ async function newGame(win) {
 
 function saveExpr(body) {
   return `(() => {
-    const index = JSON.parse(localStorage.getItem('asterion.slots.index.v1'));
+    const index = ${PARSE_SAVE}(localStorage.getItem('asterion.slots.index.v1'));
     const key = index.slots.find((slot) => slot.id === index.activeSlotId)?.storageKey ?? index.slots[0].storageKey;
-    const save = JSON.parse(localStorage.getItem(key));
+    const save = ${PARSE_SAVE}(localStorage.getItem(key));
     ${body}
   })()`;
 }
@@ -153,9 +154,9 @@ function saveExpr(body) {
 async function editSaveAndReload(win, body) {
   const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
   await run(win, `(() => {
-    const index = JSON.parse(localStorage.getItem('asterion.slots.index.v1'));
+    const index = ${PARSE_SAVE}(localStorage.getItem('asterion.slots.index.v1'));
     const key = index.slots.find((slot) => slot.id === index.activeSlotId)?.storageKey ?? index.slots[0].storageKey;
-    const save = JSON.parse(localStorage.getItem(key));
+    const save = ${PARSE_SAVE}(localStorage.getItem(key));
     const edited = (() => { ${body} })() ?? save;
     const setItem = Storage.prototype.setItem;
     setItem.call(localStorage, key, JSON.stringify(edited));
@@ -482,7 +483,7 @@ async function incomingScenes() {
     const reloaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
     await run(win, `(() => {
       const key = ${JSON.stringify(TEST_KEY)};
-      const save = JSON.parse(localStorage.getItem(key)); save.science.levels[5] = 10;
+      const save = ${PARSE_SAVE}(localStorage.getItem(key)); save.science.levels[5] = 10;
       const setItem = Storage.prototype.setItem;
       setItem.call(localStorage, key, JSON.stringify(save));
       Storage.prototype.setItem = function (k, v) { if (this === localStorage && String(k) === key) return; return setItem.call(this, k, v); };

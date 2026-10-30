@@ -1,4 +1,5 @@
 const { app, BrowserWindow } = require('electron');
+const { PARSE_SAVE } = require('./qa-save.cjs');
 const fs = require('fs');
 const path = require('path');
 
@@ -124,7 +125,7 @@ async function capture(win, directory, name, { nativeCapture = false } = {}) {
 }
 
 async function readEnvelope(win, key) {
-  return win.webContents.executeJavaScript(`JSON.parse(localStorage.getItem(${JSON.stringify(key)}) || 'null')`);
+  return win.webContents.executeJavaScript(`${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(key)}) || 'null')`);
 }
 
 function hasRepairFixture(envelope, amount) {
@@ -165,7 +166,7 @@ async function seedTestRuntime(win, changes = {}) {
   // After writing the seed the old page may no longer write the save key.
   const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
   const ok = await win.webContents.executeJavaScript(`(() => {
-    const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
+    const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
     const planet = save?.planets?.['helion-01'];
     if (!save || !planet) return false;
     Object.assign(planet.buildings, ${JSON.stringify(changes.buildings || {})});
@@ -208,7 +209,7 @@ async function seedTestRuntime(win, changes = {}) {
     // backdated clock; the assertions themselves are unchanged. This applies
     // to both the zero-wallet case and the near-capacity case.
     await waitFor(win, `(() => {
-      const state=JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)})||'null');
+      const state=${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(TEST_KEY)})||'null');
       return Boolean(state?.resourceClock?.lastReconciledAt>Date.now()-30000
         && state.resourceClock?.byPlanet?.['helion-01']?.lastReconciledAt>Date.now()-30000);
     })()`,3000);
@@ -332,9 +333,9 @@ async function assertSpaceportPreviewMatchesQueuedTask(win, track, shipId, label
   }
 
   await click(win, `[data-qa-spaceport-upgrade="${shipId}"]`);
-  await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.planets?.['helion-01']?.spaceportUpgrades?.${queueKey}?.length === 1`);
+  await waitFor(win, `${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.planets?.['helion-01']?.spaceportUpgrades?.${queueKey}?.length === 1`);
   const task = await win.webContents.executeJavaScript(`(() => {
-    const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}');
+    const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}');
     return save?.planets?.['helion-01']?.spaceportUpgrades?.${queueKey}?.[0] ?? null;
   })()`);
   if (!task || task.effectiveDurationMs !== previewDurationMs || task.finishAt - task.startedAt !== previewDurationMs) {
@@ -358,7 +359,7 @@ async function seedTestFleet(win, ships, reset = false) {
   // renderer task to prevent the running state from overwriting it.
   const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
   const ok = await win.webContents.executeJavaScript(`(() => {
-    const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
+    const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
     const fleet = save?.planets?.['helion-01']?.fleet;
     if (!save || !fleet) return false;
     if (${reset ? 'true' : 'false'}) {
@@ -378,8 +379,8 @@ async function seedTestFleet(win, ships, reset = false) {
 
 async function readQaState(win) {
   return win.webContents.executeJavaScript(`(() => {
-    const test = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
-    const production = JSON.parse(localStorage.getItem(${JSON.stringify(PRODUCTION_KEY)}) || 'null');
+    const test = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
+    const production = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(PRODUCTION_KEY)}) || 'null');
     const mode = document.querySelector('[data-qa-runtime-mode]')?.getAttribute('data-qa-runtime-mode') ?? 'production';
     const active = mode === 'test' ? test : production;
     const planet = active?.planets?.['helion-01'];
@@ -574,7 +575,7 @@ async function runViewport(width, height) {
     }
     await capture(win, directory, 'test-overview');
     await clickTestModeReset(win, label);
-    await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}').metal === 450100000`);
+    await waitFor(win, `${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}').metal === 450100000`);
     const afterTestReset = await readQaState(win);
     const productionAfterReset = await readEnvelope(win, PRODUCTION_KEY);
     if (afterTestReset.testResources.metal !== 450_100_000 || afterTestReset.testResources.minerals !== 300_100_000 || afterTestReset.testResources.gas !== 189_382_930 || afterTestReset.buildings?.['metal-storage'] !== 20 || afterTestReset.buildings?.['mineral-storage'] !== 20 || afterTestReset.buildings?.['gas-storage'] !== 20 || productionAfterReset.metal !== productionBeforeTest.metal) throw new Error(`${label}: Test Mode reset/capacity/save-key contract failed ${JSON.stringify(afterTestReset)}`);
@@ -594,7 +595,7 @@ async function runViewport(width, height) {
     // fake QA credit) before checking its amount; a stalled runtime still
     // fails within 3 seconds and the original wallet assertions stay intact.
     await waitFor(win, `(() => {
-      const state=JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)})||'null');
+      const state=${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(TEST_KEY)})||'null');
       return Boolean(state?.planets?.['helion-01']?.resources?.metal>0
         && state.planets['helion-01'].resources.minerals>0
         && state.planets['helion-01'].resources.gas>0
@@ -622,7 +623,7 @@ async function runViewport(width, height) {
     }
 
     await win.webContents.executeJavaScript(`(() => {
-      const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
+      const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
       const fleet = save?.planets?.['helion-01']?.fleet;
       if (!fleet) return false;
       fleet.commanders = { ...(fleet.commanders || {}), corsair: 1 };
@@ -636,7 +637,7 @@ async function runViewport(width, height) {
     if (!commanderFleet.fleetPopulation.includes('68 / 120')) throw new Error(`${label}: commander population was not included in fleet capacity ${JSON.stringify(commanderFleet)}`);
 
     await win.webContents.executeJavaScript(`(() => {
-      const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
+      const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
       const fleet = save?.planets?.['helion-01']?.fleet;
       if (!fleet) return false;
       fleet.commanders = { ...(fleet.commanders || {}), corsair: 0 };
@@ -659,7 +660,7 @@ async function runViewport(width, height) {
     await openScience(win);
     for (let index = 0; index < 3; index += 1) await click(win, '[data-qa-science-id="1"] [data-qa-science-action]');
     await waitFor(win, `document.querySelector('[data-qa-science-queue-count]')?.textContent === '3/3'`);
-    await waitFor(win, `(() => { try { return JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.science?.queue?.length === 3; } catch { return false; } })()`);
+    await waitFor(win, `(() => { try { return ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.science?.queue?.length === 3; } catch { return false; } })()`);
     await capture(win, directory, 'test-science-queue-3of3', { nativeCapture: true });
     const scienceQueue = await readEnvelope(win, TEST_KEY);
     if (scienceQueue.science.queue.length !== 3) throw new Error(`${label}: Science queue did not persist three tasks`);
@@ -673,7 +674,7 @@ async function runViewport(width, height) {
     await openScience(win);
     await waitFor(win, `document.querySelector('[data-qa-science-queue-count]')?.textContent === '0/3'`);
     // The screen can show the completion one render before the autosave writes it.
-    await waitFor(win, `(() => { try { const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}'); return save?.science?.levels?.[1] === 1 && save?.science?.queue?.length === 0; } catch { return false; } })()`);
+    await waitFor(win, `(() => { try { const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}'); return save?.science?.levels?.[1] === 1 && save?.science?.queue?.length === 0; } catch { return false; } })()`);
     const scienceOffline = await readEnvelope(win, TEST_KEY);
     if (scienceOffline.science.levels[1] !== 1 || scienceOffline.science.queue.length !== 0) throw new Error(`${label}: Science offline completion failed`);
     await reload(win, 'test');
@@ -712,13 +713,13 @@ async function runViewport(width, height) {
     for (let index = 0; index < 2; index += 1) {
       await click(win, '[data-qa-spaceport-upgrade="corsair"]');
       const expectedLength = index + 1;
-      const queueStateExpression = `(() => { try { const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}'); const queues = save?.planets?.['helion-01']?.spaceportUpgrades; return queues?.shipQueue?.length === 3 && queues?.commanderQueue?.length === ${expectedLength}; } catch { return false; } })()`;
+      const queueStateExpression = `(() => { try { const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}'); const queues = save?.planets?.['helion-01']?.spaceportUpgrades; return queues?.shipQueue?.length === 3 && queues?.commanderQueue?.length === ${expectedLength}; } catch { return false; } })()`;
       const commanderCountExpression = `document.querySelector('[data-qa-spaceport-upgrades][data-qa-spaceport-track="commanders"] [data-qa-spaceport-queue-count]')?.getAttribute('data-qa-spaceport-queue-count') === '${expectedLength}/3'`;
       try {
         await waitFor(win, queueStateExpression);
         await waitFor(win, commanderCountExpression);
       } catch (error) {
-        const diagnostic = await win.webContents.executeJavaScript(`(() => { try { const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}'); const queues = save?.planets?.['helion-01']?.spaceportUpgrades; const root = document.querySelector('[data-qa-spaceport-upgrades]'); return { track: root?.getAttribute('data-qa-spaceport-track') || '', displayedCount: root?.querySelector('[data-qa-spaceport-queue-count]')?.getAttribute('data-qa-spaceport-queue-count') || '', shipQueueLength: queues?.shipQueue?.length ?? -1, commanderQueueLength: queues?.commanderQueue?.length ?? -1 }; } catch (cause) { return { diagnosticError: String(cause) }; } })()`);
+        const diagnostic = await win.webContents.executeJavaScript(`(() => { try { const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}'); const queues = save?.planets?.['helion-01']?.spaceportUpgrades; const root = document.querySelector('[data-qa-spaceport-upgrades]'); return { track: root?.getAttribute('data-qa-spaceport-track') || '', displayedCount: root?.querySelector('[data-qa-spaceport-queue-count]')?.getAttribute('data-qa-spaceport-queue-count') || '', shipQueueLength: queues?.shipQueue?.length ?? -1, commanderQueueLength: queues?.commanderQueue?.length ?? -1 }; } catch (cause) { return { diagnosticError: String(cause) }; } })()`);
         throw new Error(`${label}: Commander Spaceport queue did not reach ${expectedLength}/3: ${JSON.stringify(diagnostic)} (${error.message})`);
       }
     }

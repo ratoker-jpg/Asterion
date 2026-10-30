@@ -1,4 +1,5 @@
 const { app, BrowserWindow } = require('electron');
+const { PARSE_SAVE } = require('./qa-save.cjs');
 const fs = require('fs');
 const path = require('path');
 
@@ -66,11 +67,11 @@ async function capture(win, label, name) {
   fs.writeFileSync(path.join(directory, `${name}.png`), image.toPNG());
 }
 
-const readSave = (win, key) => run(win, `JSON.parse(localStorage.getItem(${JSON.stringify(key)}) || 'null')`);
+const readSave = (win, key) => run(win, `${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(key)}) || 'null')`);
 
 async function patchSave(win, key, patchSource) {
   await run(win, `(() => {
-    const save = JSON.parse(localStorage.getItem(${JSON.stringify(key)}) || '{}');
+    const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(key)}) || '{}');
     (${patchSource})(save);
     localStorage.setItem(${JSON.stringify(key)}, JSON.stringify(save));
   })()`);
@@ -190,7 +191,7 @@ async function testModeScenario(win, label) {
   await waitFor(win, `document.querySelectorAll('[data-qa-my-requests] > li').length === 1`);
   await click(win, '[data-qa-test-ira-prepare]');
   await click(win, '[data-qa-test-ira-help]');
-  await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.command?.requests?.[0]?.delivered === 50000`);
+  await waitFor(win, `${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.command?.requests?.[0]?.delivered === 50000`);
   await click(win, '[data-qa-command-tab="overview"]');
   await waitFor(win, `document.querySelector('[data-qa-journal-state="open"]')`);
   state = await journal(win);
@@ -253,7 +254,7 @@ async function productionScenario(win, label) {
   // join survived the reload and repeat the patch if it did not.
   const backdateJoin = `(save) => { const own = save.command.alliances.find((alliance) => alliance.members.some((member) => member.ownerId === save.profile.playerId));
     own.members.find((member) => member.ownerId === save.profile.playerId).joinedAt = Date.now() - 3 * 3600000; }`;
-  const joinBackdated = `(() => { const save = JSON.parse(localStorage.getItem(${JSON.stringify(PRODUCTION_KEY)}) || '{}');
+  const joinBackdated = `(() => { const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(PRODUCTION_KEY)}) || '{}');
     const own = save.command?.alliances?.find((alliance) => alliance.members.some((member) => member.ownerId === save.profile.playerId));
     const me = own?.members.find((member) => member.ownerId === save.profile.playerId);
     return Boolean(me && Date.now() - me.joinedAt >= 2 * 3600000); })()`;

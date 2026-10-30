@@ -1,4 +1,5 @@
 const { app, BrowserWindow } = require('electron');
+const { PARSE_SAVE } = require('./qa-save.cjs');
 const fs = require('fs');
 const path = require('path');
 const {
@@ -43,7 +44,7 @@ async function loadMode(win, mode) {
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await waitFor(win, mode === 'test'
     ? `localStorage.getItem(${JSON.stringify(TEST_KEY)})`
-    : `(() => { const index = JSON.parse(localStorage.getItem(${JSON.stringify(SLOT_INDEX_KEY)}) || 'null'); const slot = index?.slots?.find((item) => item.id === index.activeSlotId); return localStorage.getItem(slot?.storageKey || ${JSON.stringify(LEGACY_PRODUCTION_KEY)}) !== null; })()`);
+    : `(() => { const index = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(SLOT_INDEX_KEY)}) || 'null'); const slot = index?.slots?.find((item) => item.id === index.activeSlotId); return localStorage.getItem(slot?.storageKey || ${JSON.stringify(LEGACY_PRODUCTION_KEY)}) !== null; })()`);
   await settle(win);
 }
 
@@ -54,7 +55,7 @@ async function reload(win, mode) {
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await waitFor(win, mode === 'test'
     ? `localStorage.getItem(${JSON.stringify(TEST_KEY)})`
-    : `(() => { const index = JSON.parse(localStorage.getItem(${JSON.stringify(SLOT_INDEX_KEY)}) || 'null'); const slot = index?.slots?.find((item) => item.id === index.activeSlotId); return localStorage.getItem(slot?.storageKey || ${JSON.stringify(LEGACY_PRODUCTION_KEY)}) !== null; })()`);
+    : `(() => { const index = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(SLOT_INDEX_KEY)}) || 'null'); const slot = index?.slots?.find((item) => item.id === index.activeSlotId); return localStorage.getItem(slot?.storageKey || ${JSON.stringify(LEGACY_PRODUCTION_KEY)}) !== null; })()`);
   await settle(win);
 }
 
@@ -71,13 +72,13 @@ async function clickRoute(win, navigation, route, waitExpression) {
 }
 
 async function readEnvelope(win, key) {
-  return win.webContents.executeJavaScript(`JSON.parse(localStorage.getItem(${JSON.stringify(key)}) || 'null')`);
+  return win.webContents.executeJavaScript(`${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(key)}) || 'null')`);
 }
 
 async function modeSaveKey(win, mode) {
   if (mode === 'test') return TEST_KEY;
   return win.webContents.executeJavaScript(`(() => {
-    const index = JSON.parse(localStorage.getItem(${JSON.stringify(SLOT_INDEX_KEY)}) || 'null');
+    const index = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(SLOT_INDEX_KEY)}) || 'null');
     const slot = index?.slots?.find((item) => item.id === index.activeSlotId);
     return slot?.storageKey || ${JSON.stringify(LEGACY_PRODUCTION_KEY)};
   })()`);
