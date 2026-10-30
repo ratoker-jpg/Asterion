@@ -25,7 +25,7 @@ done
 
 if [ -z "$file" ]; then
   release=$(curl -fsSL --max-time 30 -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$REPO/releases/latest") || { log "GitHub is not reachable"; exit 0; }
-  asset=$(printf '%s' "$release" | jq -c '[.assets[] | select(.name | test("^asterion-server-[0-9]+\.[0-9]+\.[0-9]+\.tgz$"))][0] // empty')
+  asset=$(printf '%s' "$release" | jq -c '[.assets[] | select(.name | test("^asterion-server-[0-9]+[.][0-9]+[.][0-9]+[.]tgz$"))][0] // empty')
   if [ -z "$asset" ]; then log "the latest release has no server bundle"; exit 0; fi
   name=$(printf '%s' "$asset" | jq -r .name)
   version=${name#asterion-server-}; version=${version%.tgz}

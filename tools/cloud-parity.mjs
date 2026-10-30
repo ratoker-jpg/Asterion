@@ -5,6 +5,8 @@
 // how long taking the world back took compared to the local catch-up.
 //
 //   npm run cloud:parity -- --fixture=late-game-day-2.json --minutes=10 [--behind-minutes=30]
+//       (`equal`: the bytes; `equalAfterLoad`: both loaded as the game loads a save —
+//       the check that holds across a server restart in the middle)
 //       [--url=https://host] [--key-file=%APPDATA%/Asterion/cloud-key.txt] [--id=slot-qa-parity-day2]
 //
 // --behind-minutes leaves the save that far behind the (shifted) clock, so the
@@ -96,6 +98,11 @@ started = performance.now();
 const local = await runNpcCatchup(freezeNpcCatchupTarget(left, worldAt), { now: () => worldAt });
 const localMs = performance.now() - started;
 const localDigest = sha(serializeSaveForStorage(local.state, 'production'));
+// After a server restart in the middle (an update), the world resumed from a
+// checkpoint went through a load: compare both as the game reads them.
+const loadedDigest = (saveText) => sha(serializeSaveForStorage(load(saveText, worldAt), 'production'));
+const serverLoadedDigest = loadedDigest(serverText);
+const localLoadedDigest = loadedDigest(serializeSaveForStorage(local.state, 'production'));
 log(`local catch-up of the same ${((worldAt - leftAt) / 60_000).toFixed(1)} minutes: ${(localMs / 1000).toFixed(1)} s`);
 
 const steady = samples.filter((sample) => caughtUpAt !== null && sample.at >= caughtUpAt);
@@ -110,6 +117,7 @@ const result = {
   claimMs: Math.round(claimMs), claimGzBytes: claimedPacked.length,
   localCatchupMs: Math.round(localMs),
   serverDigest, localDigest, equal: serverDigest === localDigest,
+  equalAfterLoad: serverLoadedDigest === localLoadedDigest,
 };
 console.log(JSON.stringify(result));
-if (!result.equal) process.exitCode = 1;
+if (!result.equalAfterLoad) process.exitCode = 1;
