@@ -166,17 +166,17 @@ function safeOwnedCount(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
 }
 
-const battlePointTotalsCache = new WeakMap<object, Readonly<Record<string, number>>>();
+const battlePointTotalsCache = new WeakMap<object, { archive: unknown; totals: Readonly<Record<string, number>> }>();
 
 /** Built once per awards object (a new battle replaces it); callers only read it. */
 function battlePointTotals(rating: RatingPrototypeState): Readonly<Record<string, number>> {
   const cached = battlePointTotalsCache.get(rating.battleAwardsByReportId);
-  if (cached) return cached;
-  const totals: Record<string, number> = {};
+  if (cached && cached.archive === rating.archivedBattlePoints) return cached.totals;
+  const totals: Record<string, number> = { ...rating.archivedBattlePoints };
   for (const awards of Object.values(rating.battleAwardsByReportId)) {
     for (const [ownerId, points] of Object.entries(awards)) totals[ownerId] = (totals[ownerId] ?? 0) + safeOwnedCount(points);
   }
-  battlePointTotalsCache.set(rating.battleAwardsByReportId, totals);
+  battlePointTotalsCache.set(rating.battleAwardsByReportId, { archive: rating.archivedBattlePoints, totals });
   return totals;
 }
 

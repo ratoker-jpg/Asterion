@@ -14,7 +14,8 @@ import { createOperationsVariantAQaFixture, getOperationsVariantAQaStatus } from
 import { createUniverseNpcOwnerProfile, rerollTestUniverseLayout, TEST_MODE_ALLY_PLANET_FIXTURE, UNIVERSE_NPC_OWNER_ID } from './domain/universe/runtime.ts';
 import { CommandView, type CommandActionResult, type CommandActions } from './CommandView';
 import { ReportsView } from './ReportsView';
-import { buildReportsFeed, getReportUnreadCounts } from './domain/reports/adapters.ts';
+import { buildReportsFeed, dropExpiredReportItems, getReportUnreadCounts } from './domain/reports/adapters.ts';
+import { reportRetentionCutoff } from './application/history-retention.ts';
 import { ZONE_VIEW_META, ZoneView } from './ZoneView';
 import { PlanetOrbitView } from './ui/planet/PlanetOrbitView';
 import { BuildingInteriorHost } from './BuildingInteriorHost';
@@ -1361,10 +1362,13 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   // NPC sessions advance only with replay, so this follows state.npc.
   const ownerPresence = useMemo(() => selectOwnerPresence(state), [state.npc, state.profile.playerId]);
   const reportPlanetNames = useMemo(() => Object.fromEntries(Object.entries(state.planets).map(([id, planet]) => [id, planet.name])), [state.planets]);
+  // The mailbox follows the world's clock (the replay cursor); Test Mode keeps its fixtures.
+  const reportRetentionAt = state.npcReplay ? reportRetentionCutoff(state.npcReplay.processedThroughAt) : undefined;
   const reportsUnreadCount = useMemo(() => {
-    const items = buildReportsFeed(state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.pirate?.reconReports, state.flights.records, state.exploration, state.profile.playerId);
+    const items = dropExpiredReportItems(buildReportsFeed(state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.pirate?.reconReports, state.flights.records, state.exploration, state.profile.playerId),
+      reportRetentionAt, state.combat.savedReportIds);
     return Object.values(getReportUnreadCounts(items, state.reports)).reduce((total, count) => total + count, 0);
-  }, [state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.reports, state.pirate, state.flights, state.exploration]);
+  }, [state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.reports, state.pirate, state.flights, state.exploration, reportRetentionAt]);
   const commandHallLevel = useMemo(() => selectCommandHallLevel(state.planets), [state.planets]);
   const commandHallDefinition = getBuildingDefinition('planetary-government', state.profile.factionId);
   // The race theme lives on <html> so portals and dialogs outside the stage get it too.
@@ -2786,6 +2790,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
             />
           ) : activeRoute === 'reports' ? (
             <ReportsView
+              retentionCutoff={reportRetentionAt}
               pirateReconReports={state.pirate?.reconReports}
               pirateFlights={state.flights.records}
               exploration={state.exploration}

@@ -449,6 +449,21 @@ export function buildReportsFeed(
   });
 }
 
+/**
+ * Owner rule: no report is older than 24 game hours, letters projected from
+ * flights and contacts too. `cutoff` is reportRetentionCutoff of the world's
+ * time; battle reports the player saved stay.
+ */
+export function dropExpiredReportItems(items: readonly ReportItem[], cutoff: number | undefined, savedBattleReportIds: readonly string[] = []): ReportItem[] {
+  if (cutoff === undefined) return [...items];
+  const saved = new Set(savedBattleReportIds);
+  return items.filter((item) => {
+    if (item.battleReportId && saved.has(item.battleReportId)) return true;
+    const at = item.timestamp ? Date.parse(item.timestamp) : Number.NaN;
+    return !Number.isFinite(at) || at >= cutoff;
+  });
+}
+
 function searchableText(item: ReportItem) {
   return [
     item.title,

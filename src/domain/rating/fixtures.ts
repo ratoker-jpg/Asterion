@@ -11,6 +11,11 @@ export const CURRENT_PLAYER_DISPLAY_NAME = 'Dendrilion';
 export type RatingPrototypeState = {
   /** One immutable award record per real report ID; legacy reports are not backfilled. */
   battleAwardsByReportId: Record<string, Record<string, number>>;
+  /**
+   * Battle points of reports that left the save (24-hour rule), summed per
+   * owner and sorted by owner id. Totals are archive + live awards.
+   */
+  archivedBattlePoints?: Record<string, number>;
   /** Net M/M/G sunk costs after queue cancellation/refund. */
   unrecoveredCostsByOwnerId: Record<string, { metal: number; minerals: number; gas: number }>;
 };
@@ -46,9 +51,18 @@ export function migrateRatingPrototypeState(value: unknown): RatingPrototypeStat
       };
     }
   }
+  const archivedBattlePoints: Record<string, number> = {};
+  const rawArchived = source.archivedBattlePoints;
+  if (rawArchived && typeof rawArchived === 'object' && !Array.isArray(rawArchived)) {
+    for (const [ownerId, points] of Object.entries(rawArchived)) {
+      if (ownerId && typeof points === 'number' && Number.isFinite(points) && points > 0) archivedBattlePoints[ownerId] = Math.floor(points);
+    }
+  }
   return {
     battleAwardsByReportId,
     unrecoveredCostsByOwnerId,
+    // Last, where the archive pass adds it: a loaded save keeps the key order.
+    ...(Object.keys(archivedBattlePoints).length ? { archivedBattlePoints } : {}),
   };
 }
 
