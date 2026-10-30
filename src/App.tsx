@@ -175,8 +175,9 @@ import { publishApplicationRuntimeSnapshot } from './application/runtime.ts';
 import { reconcileRuntime, type RuntimeReconcileEvent } from './application/reconcile.ts';
 import { freezeNpcCatchupTarget, isNpcCatchupPending, needsNpcCatchupBefore } from './application/npc-catchup.ts';
 import { NpcCatchupBanner } from './NpcCatchupBanner.tsx';
-import NpcCatchupWorker from './npc-catchup.worker.ts?worker';
-import type { NpcCatchupWorkerRequest, NpcCatchupWorkerResponse } from './application/npc-catchup-worker-protocol.ts';
+import LiveWorldWorker from './live-world.worker.ts?worker';
+import type { LiveWorldRequest, LiveWorldResponse, LiveWorldVersion } from './application/live-world-protocol.ts';
+import { applyWorldPatch, diffWorld } from './application/world-diff.ts';
 import { setNpcCatchupProgress } from './ui/npc-catchup-progress-store.ts';
 import {
   FLIGHT_COMMAND_RESULT_EVENT,
@@ -283,8 +284,21 @@ const LIVE_TICK_PERSIST_COST_FACTOR = 50;
 const LIVE_TICK_PERSIST_MAX_INTERVAL_MS = 60_000;
 /** A deferred clock-tick write is serialized in steps this long, so a late-game save does not freeze a frame. */
 const LIVE_TICK_PERSIST_SLICE_MS = 8;
-/** A worker catch-up hands the save its consistent prefix this often (serialized off the UI thread). */
+/** A catch-up in the live world worker hands the save its consistent prefix this often. */
 const NPC_CATCHUP_WORKER_PERSIST_INTERVAL_MS = 15_000;
+
+/**
+ * App's side of the live world worker (live-world-protocol.ts): the world the
+ * worker knows App has (`synced`, at an even or worker-made odd version), the
+ * next version App gives its own changes, and whether a tick is on its way.
+ */
+type LiveWorldLink = {
+  worker: Worker;
+  synced: { version: LiveWorldVersion; state: SaveState };
+  nextVersion: LiveWorldVersion;
+  tickInFlight: boolean;
+  savedVersion: LiveWorldVersion;
+};
 
 /**
  * Navigation noise the plan explicitly silences: section/route openings, zone
@@ -392,11 +406,22 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   // When a save failure was last shown (null: never in this window).
   const persistenceFailureNotified = useRef<number | null>(null);
   const npcReplayContinuation = useRef<number | null>(null);
-  // A long catch-up runs in a Web Worker; without one (or after it fails) App
-  // replays in bounded chunks on this thread as before.
-  const catchupWorker = useRef<{ worker: Worker; runId: number; from: NonNullable<SaveState['npcReplay']> } | null>(null);
-  const catchupRunSeq = useRef(0);
-  const catchupWorkerUnavailable = useRef(RUNTIME_MODE !== 'production' || typeof Worker === 'undefined');
+  // The game's world lives in a Web Worker (ticks, NPC decisions, catch-ups,
+  // save text); App renders a mirror and computes commands on it. Without a
+  // worker (tests, or after it fails) App runs the world on this thread as before.
+  const liveWorld = useRef<LiveWorldLink | null>(null);
+  const liveWorldUnavailable = useRef(RUNTIME_MODE !== 'production' || typeof Worker === 'undefined');
+  /** Sends what App changed since the world the worker knows it has (commands, selections, settings). */
+  const commitToLiveWorld = useCallback(() => {
+    const link = liveWorld.current;
+    const current = stateRef.current;
+    if (!link || current === link.synced.state) return;
+    const to = link.nextVersion;
+    link.nextVersion += 2;
+    const request: LiveWorldRequest = { type: 'commit', from: link.synced.version, to, patch: diffWorld(link.synced.state, current), at: Date.now() };
+    link.worker.postMessage(request);
+    link.synced = { version: to, state: current };
+  }, []);
 
   /**
    * Keeps the QA notice layer in sync and emits a bottom-left toast. Silent
@@ -989,19 +1014,22 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       console.error('Sliced save serialization failed; saved at once.', error);
     });
   }, [persistence, reportWriteResult, writeSave]);
-  const writeSerializedSave = useCallback((text: string) => {
-    const result = persistence.writeSerialized(text);
-    if (!result.ok) console.warn(`NPC catch-up progress was not saved: ${result.error}`);
-  }, [persistence]);
   const lastThrottledWriteAt = useRef(0);
   // The last state a clock tick produced (see the autosave below).
   const clockTickState = useRef<SaveState | null>(null);
-  // The world a worker catch-up handed back: written at once, but in slices (it is a whole late world).
-  const catchupResultState = useRef<SaveState | null>(null);
+  // Restarts the live world worker on another world (set below, used by the autosave effect).
+  const restartLiveWorld = useRef<(state: SaveState) => void>(() => undefined);
   // A deferred tick write must not be lost when the window closes.
   useEffect(() => {
     const flush = () => {
-      if ((deferredThrottledWrite.current === null && !slicedWriteRunning.current) || catchupWorker.current) return;
+      const link = liveWorld.current;
+      if (link) {
+        // The worker saves its catch-up progress itself; App's copy is the frozen start.
+        if (isNpcCatchupPending(link.synced.state)) return;
+        if (stateRef.current !== link.synced.state || link.savedVersion !== link.synced.version) writeSave(stateRef.current);
+        return;
+      }
+      if (deferredThrottledWrite.current === null && !slicedWriteRunning.current) return;
       if (deferredThrottledWrite.current !== null) window.clearTimeout(deferredThrottledWrite.current);
       deferredThrottledWrite.current = null;
       slicedWriteRunning.current = false;
@@ -1023,19 +1051,18 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   useEffect(() => {
     if (adoptedFromOtherWindow.current === state) {
       adoptedFromOtherWindow.current = null;
+      // Another window's world: the worker starts over from it.
+      if (liveWorld.current) restartLiveWorld.current(state);
+      return;
+    }
+    // The live world worker writes the save; App sends it what changed.
+    if (liveWorld.current) {
+      commitToLiveWorld();
       return;
     }
     if (deferredThrottledWrite.current !== null) {
       window.clearTimeout(deferredThrottledWrite.current);
       deferredThrottledWrite.current = null;
-    }
-    // A worker catch-up writes its own progress; App's copy is the frozen start.
-    if (catchupWorker.current) return;
-    if (state === catchupResultState.current) {
-      catchupResultState.current = null;
-      lastThrottledWriteAt.current = Date.now();
-      writeSaveInSlices(state);
-      return;
     }
     // Clock ticks only advance time, which a reload replays identically, so a
     // late-game world (tens of MB of JSON) is not re-serialized every second.
@@ -1060,7 +1087,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       }
     }
     writeSave(state);
-  }, [persistence, state, writeSave, writeSaveInSlices]);
+  }, [commitToLiveWorld, persistence, state, writeSave, writeSaveInSlices]);
   useEffect(() => {
     publishApplicationRuntimeSnapshot(
       state,
@@ -1112,86 +1139,87 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       }
     });
   }, [setNotice]);
-  /**
-   * Starts the catch-up of a frozen world in the worker. The save stays as it
-   * is (commands refused) until the worker posts the caught-up world back;
-   * then only the fields the catch-up changed replace App's.
-   */
-  const startWorkerCatchup = useCallback((frozen: SaveState): boolean => {
-    const replay = frozen.npcReplay;
-    if (catchupWorkerUnavailable.current || !replay || !isNpcCatchupPending(frozen)) return false;
+  /** The worker cannot go on: App takes the world on its own thread from what it has. */
+  const stopLiveWorld = useCallback((reason: string) => {
+    const link = liveWorld.current;
+    if (!link) return;
+    console.error(`Live world worker stopped; the world runs on the UI thread. ${reason}`);
+    link.worker.terminate();
+    liveWorld.current = null;
+    liveWorldUnavailable.current = true;
+    setNpcCatchupProgress(null);
+    if (!isNpcCatchupPending(stateRef.current)) writeSave(stateRef.current);
+    setNow(Date.now());
+  }, [writeSave]);
+  /** Starts the live world worker on `initial` (a load, another window's world). */
+  const startLiveWorld = useCallback((initial: SaveState): boolean => {
+    liveWorld.current?.worker.terminate();
+    liveWorld.current = null;
     let worker: Worker;
     try {
-      worker = new NpcCatchupWorker();
+      worker = new LiveWorldWorker();
     } catch (error) {
-      console.error('NPC catch-up worker unavailable; replaying on the UI thread.', error);
-      catchupWorkerUnavailable.current = true;
+      console.error('Live world worker unavailable; the world runs on the UI thread.', error);
+      liveWorldUnavailable.current = true;
       return false;
     }
-    const runId = ++catchupRunSeq.current;
-    catchupWorker.current = { worker, runId, from: replay };
-    const finish = () => {
-      worker.terminate();
-      if (catchupWorker.current?.runId === runId) catchupWorker.current = null;
-      setNpcCatchupProgress(null);
-    };
-    // Still the world this run started from (App may have changed its own fields only)?
-    const sameWorld = () => {
-      const current = stateRef.current.npcReplay;
-      return catchupWorker.current?.runId === runId && current?.targetAt === replay.targetAt
-        && current.processedThroughAt === replay.processedThroughAt;
-    };
-    worker.onmessage = (event: MessageEvent<NpcCatchupWorkerResponse>) => {
+    const link: LiveWorldLink = { worker, synced: { version: 0, state: initial }, nextVersion: 2, tickInFlight: false, savedVersion: -1 };
+    liveWorld.current = link;
+    worker.onmessage = (event: MessageEvent<LiveWorldResponse>) => {
+      if (liveWorld.current !== link) return;
       const message = event.data;
-      if (message.runId !== runId) return;
-      if (!sameWorld()) { finish(); return; }
-      if (message.type === 'progress') {
+      if (message.type === 'ticked') {
+        link.tickInFlight = false;
+        // Made on a world App has left (a command meanwhile): the worker drops it too.
+        if (message.from !== link.synced.version || stateRef.current !== link.synced.state) return;
+        const base = link.synced.state;
+        const next = message.to === message.from ? base : applyWorldPatch(base, message.patch);
+        if (next !== base) {
+          link.synced = { version: message.to, state: next };
+          stateRef.current = next;
+          clockTickState.current = next;
+          // A functional update still queued wins; the autosave effect sends it on top of this world.
+          setState((previous) => (previous === base ? next : previous));
+        }
+        const replay = next.npcReplay;
+        setNpcCatchupProgress(replay && isNpcCatchupPending(next) ? { processedThroughAt: replay.processedThroughAt, targetAt: replay.targetAt } : null);
+        announceRuntimeEvents(message.events, next);
+      } else if (message.type === 'progress') {
         setNpcCatchupProgress({ processedThroughAt: message.processedThroughAt, targetAt: message.targetAt });
-      } else if (message.type === 'persist') {
-        writeSerializedSave(message.text);
-      } else if (message.type === 'done') {
-        const merged = { ...stateRef.current, ...message.changed } as SaveState & Record<string, unknown>;
-        for (const key of message.removedKeys) delete merged[key];
-        finish();
-        stateRef.current = merged;
-        catchupResultState.current = merged;
-        setState(merged);
-        announceRuntimeEvents(message.events, merged);
+      } else if (message.type === 'save') {
+        if (message.version >= 0) link.savedVersion = message.version;
+        reportWriteResult(persistence.writeSerialized(message.text));
       } else {
-        console.error(`NPC catch-up worker failed; replaying on the UI thread. ${message.message}`);
-        catchupWorkerUnavailable.current = true;
-        finish();
-        setNow(Date.now());
+        stopLiveWorld(message.message);
       }
     };
-    worker.onerror = (event) => {
-      console.error('NPC catch-up worker crashed; replaying on the UI thread.', event.message);
-      catchupWorkerUnavailable.current = true;
-      finish();
-      setNow(Date.now());
-    };
-    setNpcCatchupProgress({ processedThroughAt: replay.processedThroughAt, targetAt: replay.targetAt });
+    worker.onerror = (event) => stopLiveWorld(event.message);
     // The worker's clock is wall time; the page's may differ by a whole (rounded) offset only under QA.
     const clockOffsetMs = Math.round((Date.now() - (performance.timeOrigin + performance.now())) / 60_000) * 60_000;
-    const request: NpcCatchupWorkerRequest = { type: 'start', runId, state: frozen, persistEveryMs: NPC_CATCHUP_WORKER_PERSIST_INTERVAL_MS, clockOffsetMs };
+    const request: LiveWorldRequest = { type: 'init', version: 0, state: initial, clockOffsetMs, persist: {
+      tickMaxIntervalMs: LIVE_TICK_PERSIST_MAX_INTERVAL_MS, tickCostFactor: LIVE_TICK_PERSIST_COST_FACTOR,
+      catchupIntervalMs: NPC_CATCHUP_WORKER_PERSIST_INTERVAL_MS,
+    } };
     worker.postMessage(request);
     return true;
-  }, [announceRuntimeEvents, writeSerializedSave]);
+  }, [announceRuntimeEvents, persistence, reportWriteResult, stopLiveWorld]);
+  restartLiveWorld.current = (next) => { startLiveWorld(next); };
   useEffect(() => () => {
-    catchupWorker.current?.worker.terminate();
-    catchupWorker.current = null;
+    liveWorld.current?.worker.terminate();
+    liveWorld.current = null;
     setNpcCatchupProgress(null);
   }, []);
   const runRuntimeReconcile = useCallback((at: number, budgetMs = 0) => {
-    // The worker owns the world until it hands it back.
-    if (catchupWorker.current) return;
-    if (!catchupWorkerUnavailable.current && needsNpcCatchupBefore(stateRef.current, at)) {
-      const frozen = freezeNpcCatchupTarget(stateRef.current, at);
-      if (frozen !== stateRef.current) {
-        stateRef.current = frozen;
-        setState(frozen);
-      }
-      if (startWorkerCatchup(frozen)) return;
+    if (!liveWorld.current && !liveWorldUnavailable.current) startLiveWorld(stateRef.current);
+    const link = liveWorld.current;
+    if (link) {
+      // The worker ticks the world App has; one tick at a time (a late world's tick may outlast a second).
+      commitToLiveWorld();
+      if (link.tickInFlight) return;
+      link.tickInFlight = true;
+      const request: LiveWorldRequest = { type: 'tick', from: link.synced.version, now: at, testTimeScale };
+      link.worker.postMessage(request);
+      return;
     }
     const startedAt = performance.now();
     const initial = stateRef.current;
@@ -1214,7 +1242,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     clockTickState.current = result.state;
     setState(result.state);
     announceRuntimeEvents(events, result.state);
-  }, [announceRuntimeEvents, startWorkerCatchup, testTimeScale]);
+  }, [announceRuntimeEvents, commitToLiveWorld, startLiveWorld, testTimeScale]);
 
   useEffect(() => {
     runRuntimeReconcile(now);
@@ -1225,7 +1253,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   // depend on render frames. The replay target remains frozen by reconcileRuntime.
   useEffect(() => {
     const replay = state.npcReplay;
-    if (!isApplicationCommandBlocked(state) || !replay || catchupWorker.current) return;
+    if (!isApplicationCommandBlocked(state) || !replay || liveWorld.current) return;
 
     const continuationTarget = replay.targetAt;
     npcReplayContinuation.current = window.setTimeout(() => {

@@ -56,3 +56,6 @@ export type LiveWorldResponse =
   | { type: 'save'; version: LiveWorldVersion; text: string; computeMs: number }
   /** The worker cannot go on (a bug, a desync): App takes the world back on its own thread. */
   | { type: 'error'; message: string };
+
+/** Fired on window while a catch-up in the worker advances (the world itself arrives when it ends). */
+export const NPC_CATCHUP_PROGRESS_EVENT = 'asterion:npc-catchup-progress';

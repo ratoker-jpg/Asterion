@@ -32,8 +32,11 @@ const COMMIT_SAVE_DELAY_MS = 50;
 export class LiveWorldEngine {
   private ui: SaveState | null = null;
   private uiVersion: LiveWorldVersion = -1;
-  /** The tick posted from uiVersion, until the UI builds on it (or drops it). */
-  private posted: Posted | null = null;
+  /**
+   * Worlds posted since uiVersion, each made from the one before it (the
+   * first from uiVersion), until the UI builds on one (or drops them all).
+   */
+  private posted: Posted[] = [];
   private nextVersion = 1;
   private persist: LiveWorldPersistPolicy = { tickMaxIntervalMs: 60_000, tickCostFactor: 50, catchupIntervalMs: 15_000 };
   private lastSaveAt = Number.NEGATIVE_INFINITY;
@@ -43,7 +46,11 @@ export class LiveWorldEngine {
   private catchup: { rebase: WorldPatch[]; droppedFreeze: boolean } | null = null;
   private failed = false;
 
-  constructor(private readonly host: LiveWorldEngineHost) {}
+  private readonly host: LiveWorldEngineHost;
+
+  constructor(host: LiveWorldEngineHost) {
+    this.host = host;
+  }
 
   private readonly clock = () => (this.host.clock ?? (() => performance.now()))();
 
@@ -54,8 +61,8 @@ export class LiveWorldEngine {
       if (message.type === 'init') this.init(message);
       else if (message.type === 'commit') this.commit(message.from, message.to, message.patch);
       else if (message.type === 'save-now') this.save();
-      else if (this.catchup) this.resolve(message.from);
-      else await this.tick(message.from, message.now, message.testTimeScale);
+      // A tick during a catch-up, or before a world on its way reached the UI, only says where the UI is.
+      else if (this.resolve(message.from, false) && !this.catchup) await this.tick(message.now, message.testTimeScale);
     } catch (error) {
       this.failed = true;
       this.host.post({ type: 'error', message: error instanceof Error ? `${error.message}\n${error.stack ?? ''}` : String(error) });
@@ -71,28 +78,34 @@ export class LiveWorldEngine {
   private init(message: Extract<LiveWorldRequest, { type: 'init' }>): void {
     this.ui = message.state;
     this.uiVersion = message.version;
-    this.posted = null;
+    this.posted = [];
     this.persist = message.persist;
     applyCampaignRuntimeForCatchup(message.state, this.host.now());
   }
 
-  /** Settles which world the UI is at; `from` is the version a UI message was made on. */
-  private resolve(from: LiveWorldVersion): void {
-    const posted = this.posted;
-    if (posted && from === posted.to) {
-      this.ui = posted.state;
-      this.uiVersion = posted.to;
-      this.posted = null;
-    } else if (posted && from === posted.from) {
-      // The UI changed its world before this tick reached it: the tick is dropped.
-      this.posted = null;
-      if (this.catchup) this.catchup.droppedFreeze = true;
+  /**
+   * Settles which world the UI is at; `from` is the version a UI message was
+   * made on. False when worlds posted from there have not reached the UI yet
+   * (a tick waits for them; a commit, made without them, drops them).
+   */
+  private resolve(from: LiveWorldVersion, commit: boolean): boolean {
+    const reached = this.posted.findIndex((posted) => posted.to === from);
+    if (reached >= 0) {
+      this.ui = this.posted[reached]!.state;
+      this.uiVersion = from;
+      this.posted = this.posted.slice(reached + 1);
     }
     if (from !== this.uiVersion) throw new Error(`Live world out of step: the UI is at ${from}, the worker at ${this.uiVersion}.`);
+    if (!this.posted.length) return true;
+    if (!commit) return false;
+    // The UI changed its world before these reached it: they are dropped.
+    this.posted = [];
+    if (this.catchup) this.catchup.droppedFreeze = true;
+    return true;
   }
 
   private commit(from: LiveWorldVersion, to: LiveWorldVersion, patch: WorldPatch): void {
-    this.resolve(from);
+    this.resolve(from, true);
     const next = applyWorldPatch(this.ui!, patch);
     // A catch-up in progress takes the same records as the UI has them now.
     if (this.catchup) this.catchup.rebase.push(valuesOf(patch, next));
@@ -101,19 +114,21 @@ export class LiveWorldEngine {
     this.scheduleSave(COMMIT_SAVE_DELAY_MS);
   }
 
-  private post(from: LiveWorldVersion, next: SaveState, events: RuntimeReconcileEvent[], computeMs: number): void {
-    const before = this.ui!;
+  /** Posts `next` as made from the newest world the UI has or will have. */
+  private post(next: SaveState, events: RuntimeReconcileEvent[], computeMs: number): void {
+    const last = this.posted.at(-1);
+    const from = last ? last.to : this.uiVersion;
+    const before = last ? last.state : this.ui!;
     if (next === before) {
       this.host.post({ type: 'ticked', from, to: from, patch: [], events, computeMs });
       return;
     }
     const to = this.version();
-    this.posted = { from, to, state: next };
+    this.posted.push({ from, to, state: next });
     this.host.post({ type: 'ticked', from, to, patch: diffWorld(before, next), events, computeMs });
   }
 
-  private async tick(from: LiveWorldVersion, now: number, testTimeScale: Parameters<typeof reconcileRuntime>[1]['testTimeScale']): Promise<void> {
-    this.resolve(from);
+  private async tick(now: number, testTimeScale: Parameters<typeof reconcileRuntime>[1]['testTimeScale']): Promise<void> {
     const world = this.ui!;
     if (needsNpcCatchupBefore(world, now)) {
       await this.runCatchup(world, now);
@@ -122,7 +137,7 @@ export class LiveWorldEngine {
     const startedAt = this.clock();
     const result = reconcileRuntime(world, { planetId: world.currentPlanetId, now, mode: 'production', testTimeScale });
     const computeMs = this.clock() - startedAt;
-    this.post(this.uiVersion, result.state, playerFacingEvents(result.events, world.profile.playerId), computeMs);
+    this.post(result.state, playerFacingEvents(result.events, world.profile.playerId), computeMs);
     // Clock ticks only advance time, which a reload replays identically: a
     // late world is saved after a pause that grows with what a save costs.
     const interval = Math.min(this.persist.tickMaxIntervalMs, this.lastSaveCostMs * this.persist.tickCostFactor);
@@ -135,13 +150,14 @@ export class LiveWorldEngine {
     this.catchup = catchup;
     try {
       // The UI learns at once that commands wait (and shows the progress).
-      this.post(this.uiVersion, frozen, [], 0);
+      this.post(frozen, [], 0);
       if (!isNpcCatchupPending(frozen)) return;
       const startedAt = this.clock();
       const result = await runNpcCatchup(frozen, {
         now: this.host.now,
         onProgress: (progress) => this.host.post({ type: 'progress', ...progress }),
-        onPersist: (state) => this.saveText(state, this.uiVersion),
+        // Progress is no world the UI has: the next save() writes again.
+        onPersist: (state) => this.saveText(state, -1),
         persistEveryMs: this.persist.catchupIntervalMs,
         yieldBetweenChunks: this.host.yieldToMessages,
         // A command made on the world before the freeze reached the UI: start over from it.
@@ -153,8 +169,9 @@ export class LiveWorldEngine {
         },
       });
       if (catchup.droppedFreeze) return;
-      this.post(this.uiVersion, result.state, result.events, this.clock() - startedAt);
-      this.scheduleSave(0);
+      this.post(result.state, result.events, this.clock() - startedAt);
+      // The caught-up world is saved at once, as posted (the UI takes it unless it changed meanwhile).
+      this.saveText(result.state, this.posted.at(-1)?.to ?? this.uiVersion);
     } finally {
       this.catchup = null;
     }
