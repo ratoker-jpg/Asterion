@@ -243,6 +243,36 @@ NPC: в UI-потоке остались рендер нового мира и �
 - Electron QA читает сохранения схемы 29 через `electron/qa-save.cjs` (раскрытие компактных секций;
   сверено с JSON тестового режима на кампании 12 NPC).
 
+### После первого CI (PR #119): два красных Electron-скрипта
+
+Оба скрипта не входили в мой первый список проверок. Причины и исправления:
+
+- **`test:command-aid-ui` (campaign-command):** `save.flights.records` оказался `undefined` —
+  скрипт читал production-сохранение голым `JSON.parse`, а `flights` теперь компактный. Прошёл grep'ом
+  все `electron/*.cjs`, которые читают production-сохранение из `localStorage`. Восемь скриптов
+  переведены на `PARSE_SAVE` из `qa-save.cjs`: command-aid, command-journal, command, test-mode,
+  production-test-isolation, new-game-sun-raid, ui-polish-screenshots, attack-rules-screenshots.
+  Остальные либо работают в тестовом режиме (там сохранение — обычный JSON), либо читают только
+  указатель на файл или курсор регуляркой (late-save, late-game-fps, cloud-world).
+- **`test:building-actions-ui` (science-reports):** причина (а) не подходит — скрипт работает в
+  тестовом режиме: сохранение там обычный JSON, и воркера нет. Причина (б), гонка, подтвердилась, но
+  это гонка UI-потока, и она есть и на main. Старая страница успевает записать прежнее сохранение
+  между сидом и перезагрузкой: на паузе страницы `flush` пишет отложенную тиковую запись. На втором
+  CI-прогоне и локально скрипт проходил. Исправление двойное:
+  - в QA: сид и перезагрузка идут в одном ходе страницы, после перезагрузки проверяется, что игра
+    держит сид, иначе до 3 повторов (как `seedMaxLevels` в #110);
+  - в игре: на `beforeunload`/`pagehide` App делает `flush` и останавливает воркер. Страница на выходе
+    больше не принимает от воркера текст сохранения, который мог бы лечь поверх сида, сохранения
+    другого окна или времени игры, дописанного при выходе.
+- Локально прогнаны **все** скрипты шардов campaign-command и science-reports в порядке CI, с теми же
+  `:skip`. Зелёные: new-game, command, command-aid, command-journal, cloud-world, reports,
+  battle-reports, simulator, space-flight, building-actions (затем ещё 2 из 2). Падают только
+  локально, как и до этой правки: `test:science-ui` (Escape) и
+  `test:production-test-isolation-ui` («Регулятор»). На CI на втором прогоне шард science-reports
+  был зелёным целиком, с обоими этими скриптами — это особенность локального окружения, не PR.
+  После правки также зелёные `test:test-mode-ui`, `test:save-safety-ui`, `test:npc-replay-ui-6h`,
+  `test:save-store-ui`. Мигания `test:reports-ui` с main («Recycler unread badge») у себя не видел.
+
 ## Что не сделано или спорно
 
 - **Команды не «отправляются в воркер сообщениями».** Они, как и раньше, считаются в UI-потоке на
