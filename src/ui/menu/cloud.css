@@ -1,0 +1,28 @@
+/* Cloud world in the menu (CloudMenu.tsx): entry banner, conflict choice, server campaigns. */
+.cloud-entry { z-index: 60; }
+.cloud-entry__card { width: 620px; }
+.cloud-entry__bar { position: relative; display: block; height: 4px; overflow: hidden; border-radius: 999px; background: rgba(120, 200, 230, .14); }
+.cloud-entry__bar > i { position: absolute; inset: 0 auto 0 0; width: 38%; border-radius: inherit; background: var(--race-accent, #5fd4f0); animation: cloud-entry-sweep 1.4s ease-in-out infinite; }
+@keyframes cloud-entry-sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(270%); } }
+.cloud-conflict { width: 680px; }
+.cloud-conflict__copies { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 4px 0 0; }
+.cloud-conflict__copies div { padding: 12px 14px; border: 1px solid var(--ut-border, rgba(120, 200, 230, .2)); border-radius: var(--ut-r-card, 8px); background: rgba(255, 255, 255, .03); }
+.cloud-conflict__copies dt { color: #fff; font-size: 13px; font-weight: 700; }
+.cloud-conflict__copies dd { margin: 6px 0 0; color: #b6cfd8; font-size: 13px; line-height: 1.5; }
+.cloud-conflict__note { font-size: 12px !important; color: #8fb0bc !important; }
+.cloud-remote { display: grid; gap: 10px; margin-top: 18px; }
+.cloud-remote h2 { margin: 0; color: var(--ut-amber, #f0b453); font-size: 13px !important; letter-spacing: .2em; }
+.cloud-remote ul { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.cloud-remote li { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 18px; border: 1px solid var(--ut-border, rgba(120, 200, 230, .2)); border-radius: var(--ut-r-card, 8px); background: rgba(8, 16, 22, .82); }
+.cloud-remote li div { display: grid; gap: 4px; min-width: 0; }
+.cloud-remote li b { color: #fff; font-size: 16px; }
+.cloud-remote li span, .cloud-remote__hint { margin: 0; color: #a7c6d0; font-size: 13px; }
+@media (prefers-reduced-motion: reduce) { .cloud-entry__bar > i { animation: none; width: 100%; opacity: .5; } }
+/* Settings → «Облачный мир» (CloudSettingsPanel.tsx) */
+.cloud-settings__input { height: 40px; padding: 0 10px; border: 1px solid rgba(66, 187, 215, .2); background: #041d29; color: #dff9ff; font: inherit; }
+.cloud-settings__message.is-ok { color: #9fe8c2; }
+.cloud-settings__message.is-error { color: #ffb3bf; }
+.cloud-settings__facts { display: grid; gap: 10px; margin: 12px 0 0; }
+.cloud-settings__facts div { display: grid; gap: 3px; }
+.cloud-settings__facts dt { color: #668c98; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+.cloud-settings__facts dd { margin: 0; color: #dcf7fc; overflow-wrap: anywhere; }

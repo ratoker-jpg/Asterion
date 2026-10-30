@@ -2,6 +2,7 @@ const { app, BrowserWindow, Menu, ipcMain } = require('electron');
 const path = require('path');
 const { registerSaveStore } = require('./save-store.cjs');
 const { registerUpdater } = require('./updater.cjs');
+const { registerCloud } = require('./cloud.cjs');
 
 const WINDOW_PRESETS = {
   '1280x720': [1280, 720],
@@ -43,6 +44,7 @@ function applyDisplayRequest(win, request) {
 
 registerSaveStore();
 registerUpdater();
+registerCloud();
 
 // «Выход» from the main menu.
 ipcMain.on('asterion:app:quit', () => app.quit());

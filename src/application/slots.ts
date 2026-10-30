@@ -364,4 +364,36 @@ export function importSaveSlot(text: string, currentSchemaVersion: number, optio
   return written.ok ? { ...written, slot } : written;
 }
 
+/**
+ * A campaign from the cloud server under its own slot id (another computer
+ * made it): the save text is stored as it came, so it stays the exact server
+ * revision the cloud relay remembers. An existing slot of that id is refused.
+ */
+export function importRawSaveSlot(slotId: string, name: string, text: string, options: { storage?: SlotStorage | null; now?: number } = {}): SlotWriteResult & { slot?: SaveSlotMeta } {
+  const target = resolveStorage(options.storage);
+  const now = options.now ?? Date.now();
+  const index = readSlotIndex(target, now);
+  if (!target) return { ok: false, error: 'Хранилище недоступно.', index };
+  if (!/^slot-[a-z0-9-]{1,40}$/.test(slotId)) return { ok: false, error: 'Неверный слот.', index };
+  const existing = index.slots.find((slot) => slot.id === slotId);
+  const described = describeRaw(text, now);
+  if (!described) return { ok: false, error: 'Сохранение с сервера не читается.', index };
+  if (existing) {
+    // The payload is already the server text (written by the cloud entry); only the card is refreshed.
+    const recovered = existing.name === 'Восстановленная кампания' || existing.name === 'Восстановленный слот';
+    const slot = { ...existing, ...described, createdAt: existing.createdAt, ...(recovered ? { name: name.trim().slice(0, 40) || existing.name } : {}) };
+    const written = writeSlotIndex(upsertSlot(index, slot), target);
+    return written.ok ? { ...written, slot } : written;
+  }
+  if (index.slots.length >= MAX_SAVE_SLOTS) return { ok: false, error: `Достигнут предел слотов (${MAX_SAVE_SLOTS}).`, index };
+  const slot: SaveSlotMeta = { ...described, id: slotId, name: name.trim().slice(0, 40) || 'Кампания', storageKey: slotStorageKey(slotId), mode: 'production' };
+  try {
+    if (target.getItem(slot.storageKey) !== text) target.setItem(slot.storageKey, text);
+  } catch (error) {
+    return { ok: false, error: errorText(error), index };
+  }
+  const written = writeSlotIndex(upsertSlot(index, slot), target);
+  return written.ok ? { ...written, slot } : written;
+}
+
 export { LEGACY_SLOT_ID };

@@ -5,6 +5,8 @@ import { AUDIO_VOLUME_MAX, AUDIO_VOLUME_MIN, createDefaultAudioPreferences, type
 import { audio, playSound } from './audio/engine.ts';
 import { useAudioPreferences } from './audio/hooks.ts';
 import { SETTINGS_ICONS } from './ui/ui-art.ts';
+import { CloudSettingsPanel } from './ui/menu/CloudSettingsPanel.tsx';
+import './ui/menu/cloud.css';
 import type { SoundId } from './audio/sounds.ts';
 import {
   TYPOGRAPHY_MAX,
@@ -19,7 +21,7 @@ import {
   type UiPreferencesV2,
 } from './domain/settings/types.ts';
 
-type SettingsSection = 'screen' | 'interface' | 'controls' | 'sound' | 'notifications' | 'save' | 'journal';
+type SettingsSection = 'screen' | 'interface' | 'controls' | 'sound' | 'notifications' | 'save' | 'cloud' | 'journal';
 
 const sections: readonly { id: SettingsSection; label: string; subtitle: string }[] = [
   { id: 'screen', label: 'ЭКРАН', subtitle: 'Режим окна' },
@@ -28,6 +30,7 @@ const sections: readonly { id: SettingsSection; label: string; subtitle: string 
   { id: 'sound', label: 'ЗВУК', subtitle: 'Аудиосистема' },
   { id: 'notifications', label: 'УВЕДОМЛЕНИЯ', subtitle: 'Системные сигналы' },
   { id: 'save', label: 'СОХРАНЕНИЕ', subtitle: 'Настройки интерфейса' },
+  { id: 'cloud', label: 'ОБЛАЧНЫЙ МИР', subtitle: 'Сервер и резервные копии' },
   { id: 'journal', label: 'ЖУРНАЛ ИГРОКА', subtitle: 'Ваши действия в JSON' },
 ];
 
@@ -97,7 +100,7 @@ export function SettingsView({ preferences, onPreferencesChange, onReset }: Sett
               className={`utility-control ${section === item.id ? 'active' : ''}`}
               onClick={() => setSection(item.id)}
             >
-              <img className="settings-nav-icon-v2" src={SETTINGS_ICONS[item.id]} alt="" draggable={false} />
+              <img className="settings-nav-icon-v2" src={SETTINGS_ICONS[item.id] ?? SETTINGS_ICONS.save} alt="" draggable={false} />
               <span>{item.label}</span>
               <small className="utility-secondary">{item.subtitle}</small>
               <b>›</b>
@@ -141,6 +144,8 @@ export function SettingsView({ preferences, onPreferencesChange, onReset }: Sett
           <SoundPanel />
         ) : section === 'journal' ? (
           <JournalPanel />
+        ) : section === 'cloud' ? (
+          <CloudSettingsPanel heading={(props) => <PanelHeading {...props} />} />
         ) : section === 'notifications' ? (
           <UnavailablePanel eyebrow="СИСТЕМНЫЕ СИГНАЛЫ" title="УВЕДОМЛЕНИЯ" body="Системные уведомления пока недоступны. Настройки появятся после их подключения." />
         ) : (
