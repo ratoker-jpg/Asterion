@@ -78,7 +78,7 @@ test('schema 26 migration merges legacy science by owner and activates after pen
 
 test('fresh campaigns create an active owner science ledger at the creation timestamp', () => {
   const state = productionState();
-  assert.equal(SAVE_SCHEMA_VERSION, 28);
+  assert.equal(SAVE_SCHEMA_VERSION, 29);
   assert.equal(state.npcScience?.version, 1);
   assert.equal(state.npcScience?.activatedAt, NOW);
   assert.deepEqual(Object.keys(state.npcScience?.owners ?? {}).sort(), Object.keys(state.npc?.profiles ?? {}).sort());

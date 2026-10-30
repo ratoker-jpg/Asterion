@@ -1,6 +1,7 @@
 // Exercise long production NPC catch-up through the built Electron app. This
 // script uses a disposable userData directory and never opens a real profile.
 const { app, BrowserWindow } = require('electron');
+const { PARSE_SAVE } = require('./qa-save.cjs');
 const { spawnSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
@@ -181,7 +182,7 @@ async function readMeasurement(win, saveKey) {
     const qa = window.__npcReplayQa || { gaps: [], progress: [] };
     const sorted = [...qa.gaps].sort((a, b) => a - b);
     const p95 = sorted.length ? sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * .95) - 1)] : null;
-    const save = JSON.parse(localStorage.getItem(${JSON.stringify(saveKey)}) || 'null');
+    const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(saveKey)}) || 'null');
     const targets = Object.values(save?.espionage?.targets ?? {}).filter((target) => target.kind === 'npc');
     const progress = qa.progress;
     const longTasks = [...qa.longTasks].sort((a, b) => a - b);
@@ -249,7 +250,7 @@ async function runScenario() {
     await load(win, '?autostart=continue');
     await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
     const pendingExpression = `(() => {
-      try { const save = JSON.parse(localStorage.getItem(${JSON.stringify(saveKey)}) || 'null');
+      try { const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(saveKey)}) || 'null');
         return save?.npcReplay?.targetAt > save?.npcReplay?.processedThroughAt; }
       catch { return false; }
     })()`;
@@ -286,7 +287,7 @@ async function runScenario() {
     }
 
     const initial = await run(win, `(() => {
-      const save = JSON.parse(localStorage.getItem(${JSON.stringify(saveKey)}) || '{}');
+      const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(saveKey)}) || '{}');
       return {
         processedThroughAt: save.npcReplay?.processedThroughAt ?? null,
         targetAt: save.npcReplay?.targetAt ?? null,
@@ -367,7 +368,7 @@ async function runScenario() {
     const beforeClickPending = await run(win, pendingExpression);
     if (!beforeClickPending) throw new Error('The replay completed before the representative building action could be probed.');
     const beforePlayerAction = await run(win, `(() => {
-      const save = JSON.parse(localStorage.getItem(${JSON.stringify(saveKey)}) || '{}');
+      const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(saveKey)}) || '{}');
       return {
         buildingLevel: save.planets?.['helion-01']?.buildings?.['metal-production-1'] ?? null,
         queue: [...(save.queues?.['helion-01'] ?? [])],
@@ -377,7 +378,7 @@ async function runScenario() {
     await click(win, '[data-qa-building-dialog="metal-production-1"] [data-qa-build-button]');
     await sleep(100);
     const afterPlayerAction = await run(win, `(() => {
-      const save = JSON.parse(localStorage.getItem(${JSON.stringify(saveKey)}) || '{}');
+      const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(saveKey)}) || '{}');
       return {
         buildingLevel: save.planets?.['helion-01']?.buildings?.['metal-production-1'] ?? null,
         queue: [...(save.queues?.['helion-01'] ?? [])],
@@ -409,7 +410,7 @@ async function runScenario() {
       await waitForCatchup(win, endAt);
       // Completion is written at once; give the write and its storage read a moment.
       await waitFor(win, `(() => {
-        try { const save = JSON.parse(localStorage.getItem(${JSON.stringify(saveKey)}) || 'null');
+        try { const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(saveKey)}) || 'null');
           return save?.npcReplay?.processedThroughAt >= ${endAt}
             && save.npcReplay.targetAt <= save.npcReplay.processedThroughAt
             && Date.now() - save.npcReplay.processedThroughAt <= ${CATCHUP_CONVERGED_MS}; }
@@ -430,7 +431,7 @@ async function runScenario() {
       if (!summaryShown) throw new Error('NPC catch-up did not turn into the world summary after it completed.');
       worldSummary = await run(win, `(() => {
         const dialog = document.querySelector('[data-qa-npc-catchup="summary"] [role="dialog"]');
-        const save = JSON.parse(localStorage.getItem(${JSON.stringify(saveKey)}) || '{}');
+        const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(saveKey)}) || '{}');
         const summary = save.npcReplay?.summary ?? null;
         return { text: dialog?.textContent || '', saved: summary && { finishedAt: summary.finishedAt, complete: summary.complete,
           battles: summary.battles, colonies: summary.colonies, alliancesFounded: summary.alliancesFounded } };
@@ -447,7 +448,7 @@ async function runScenario() {
       await click(win, '[data-qa-npc-catchup-close]');
     }
     const bannerGone = catchupWaitError ? null : await waitFor(win, `!document.querySelector('[data-qa-npc-catchup]') && (() => {
-        try { return JSON.parse(localStorage.getItem(${JSON.stringify(saveKey)}) || '{}').npcReplay?.summary === undefined; }
+        try { return ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(saveKey)}) || '{}').npcReplay?.summary === undefined; }
         catch { return false; }
       })()`, 10_000)
       .then(() => true, () => false);

@@ -297,8 +297,26 @@ type LiveWorldLink = {
   synced: { version: LiveWorldVersion; state: SaveState };
   nextVersion: LiveWorldVersion;
   tickInFlight: boolean;
-  savedVersion: LiveWorldVersion;
+  /**
+   * Order of the worlds App had (version -> step), App's last commit's step
+   * and the step the worker last saved: a close writes at once only when a
+   * change of App's is not saved yet (clock ticks replay on load anyway).
+   */
+  steps: Map<LiveWorldVersion, number>;
+  step: number;
+  committedStep: number;
+  savedStep: number;
 };
+
+/** Versions remembered for matching the worker's saves to App's worlds. */
+const LIVE_WORLD_STEP_MEMORY = 256;
+
+function enterLiveWorldStep(link: LiveWorldLink, version: LiveWorldVersion): number {
+  link.step += 1;
+  link.steps.set(version, link.step);
+  if (link.steps.size > LIVE_WORLD_STEP_MEMORY) link.steps.delete(link.steps.keys().next().value!);
+  return link.step;
+}
 
 /**
  * Navigation noise the plan explicitly silences: section/route openings, zone
@@ -421,6 +439,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     const request: LiveWorldRequest = { type: 'commit', from: link.synced.version, to, patch: diffWorld(link.synced.state, current), at: Date.now() };
     link.worker.postMessage(request);
     link.synced = { version: to, state: current };
+    link.committedStep = enterLiveWorldStep(link, to);
   }, []);
 
   /**
@@ -1026,7 +1045,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       if (link) {
         // The worker saves its catch-up progress itself; App's copy is the frozen start.
         if (isNpcCatchupPending(link.synced.state)) return;
-        if (stateRef.current !== link.synced.state || link.savedVersion !== link.synced.version) writeSave(stateRef.current);
+        // As before the worker: only a change already made and not yet saved (the play time is folded in on unload).
+        if (link.committedStep > link.savedStep) writeSave(stateRef.current);
         return;
       }
       if (deferredThrottledWrite.current === null && !slicedWriteRunning.current) return;
@@ -1163,7 +1183,10 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       liveWorldUnavailable.current = true;
       return false;
     }
-    const link: LiveWorldLink = { worker, synced: { version: 0, state: initial }, nextVersion: 2, tickInFlight: false, savedVersion: -1 };
+    const link: LiveWorldLink = {
+      worker, synced: { version: 0, state: initial }, nextVersion: 2, tickInFlight: false,
+      steps: new Map([[0, 0]]), step: 0, committedStep: 0, savedStep: 0,
+    };
     liveWorld.current = link;
     worker.onmessage = (event: MessageEvent<LiveWorldResponse>) => {
       if (liveWorld.current !== link) return;
@@ -1176,6 +1199,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         const next = message.to === message.from ? base : applyWorldPatch(base, message.patch);
         if (next !== base) {
           link.synced = { version: message.to, state: next };
+          enterLiveWorldStep(link, message.to);
           stateRef.current = next;
           clockTickState.current = next;
           // A functional update still queued wins; the autosave effect sends it on top of this world.
@@ -1187,7 +1211,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       } else if (message.type === 'progress') {
         setNpcCatchupProgress({ processedThroughAt: message.processedThroughAt, targetAt: message.targetAt });
       } else if (message.type === 'save') {
-        if (message.version >= 0) link.savedVersion = message.version;
+        const step = link.steps.get(message.version);
+        if (step !== undefined) link.savedStep = Math.max(link.savedStep, step);
         reportWriteResult(persistence.writeSerialized(message.text));
       } else {
         stopLiveWorld(message.message);

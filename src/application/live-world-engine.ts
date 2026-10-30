@@ -152,6 +152,8 @@ export class LiveWorldEngine {
       // The UI learns at once that commands wait (and shows the progress).
       this.post(frozen, [], 0);
       if (!isNpcCatchupPending(frozen)) return;
+      // Saved at once: a reload in the middle resumes this absence (its news start here).
+      if (frozen !== world) this.saveText(frozen, this.posted.at(-1)?.to ?? this.uiVersion);
       const startedAt = this.clock();
       const result = await runNpcCatchup(frozen, {
         now: this.host.now,
