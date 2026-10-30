@@ -98,7 +98,9 @@ function assertMainSentinels(state: ReturnType<typeof withMainSaveSentinels>, ex
   assert.deepEqual(state.planets['colony-persistence']?.resources, expected.planets['colony-persistence']?.resources);
   assert.equal(state.planets['colony-persistence']?.name, 'Persistence Colony');
   assert.equal(state.planets['colony-persistence']?.fleet.ships['spy-probe'], 4);
-  assert.deepEqual(state.rating.battleAwardsByReportId['sentinel-battle'], { 'player-current': 73 });
+  // The sentinel award names no report in the save: loading folds it into the archive (24-hour rule), the total stays.
+  assert.equal((state.rating.battleAwardsByReportId['sentinel-battle']?.['player-current'] ?? 0)
+    + ((state.rating as { archivedBattlePoints?: Record<string, number> }).archivedBattlePoints?.['player-current'] ?? 0), 73);
   assert.deepEqual(state.rating.unrecoveredCostsByOwnerId['player-current'], { metal: 17, minerals: 29, gas: 41 });
 }
 

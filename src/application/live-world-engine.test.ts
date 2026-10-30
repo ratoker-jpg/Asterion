@@ -72,7 +72,7 @@ function setup(world: SaveState, now: () => number) {
 
 const text = (state: SaveState) => serializeSaveForStorage(state, 'production');
 
-test('ticks and commands racing them leave the mirror equal to the worker's world', async () => {
+test('ticks and commands racing them leave the mirror equal to the world in the worker', async () => {
   const world = campaign(12);
   const start = world.npcReplay!.processedThroughAt;
   applyCampaignRuntimeForCatchup(world, start);
