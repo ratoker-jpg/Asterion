@@ -38,7 +38,7 @@
     "test:settings": "node --experimental-strip-types --test src/domain/settings/settings.test.ts src/domain/settings/audio.test.ts",
     "test:rating": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/domain/rating/rating.test.ts src/domain/rating/scoring.test.ts src/domain/rating/attack-eligibility.test.ts",
     "test:release": "node --test tools/next-version.test.mjs",
-    "test:cloud": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test server/src/*.test.ts",
+    "test:cloud": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test server/src/*.test.ts src/application/cloud/*.test.ts",
     "test:runtime": "node --experimental-strip-types --test src/domain/runtime/mode.test.ts",
     "test:resources": "node --experimental-strip-types --test src/domain/resources/credit.test.ts",
     "test:energy": "node --experimental-strip-types --test src/domain/energy/runtime.test.ts",
