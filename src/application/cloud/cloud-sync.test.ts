@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  decideCloudEntry, saveSchemaVersion, saveWorldAt, sha256Text,
+  compareGameVersions, decideCloudEntry, saveSchemaVersion, SERVER_CATCHUP_WAIT_LAG_MS, saveWorldAt, sha256Text,
   type CloudCampaignView, type CloudEntryInput, type CloudSnapshotView,
 } from './cloud-sync.ts';
 import { createHash } from 'node:crypto';
@@ -35,11 +35,36 @@ test('apply: the server keeps alive exactly the save on this computer, same vers
   assert.deepEqual(decideCloudEntry(input({ campaign: campaign(snapshot(3), {}) })), { action: 'claim', baseRevision: 3 });
 });
 
-test('do not apply: another game version computed the living world (it stops, the client catches up itself)', () => {
+test('another game version lives the world: wait for the server to move it (older) or for the game update (newer)', () => {
   assert.deepEqual(decideCloudEntry(input({ campaign: campaign(snapshot(3), { gameVersion: '1.0.9' }) })),
-    { action: 'local', reason: 'version-mismatch', release: true });
+    { action: 'wait', reason: 'server-updating', baseRevision: 3 }, 'the game is newer than the server: the server moves the world, nothing is thrown away');
   assert.deepEqual(decideCloudEntry(input({ campaign: campaign(snapshot(3), { status: 'waiting-version' }) })),
+    { action: 'wait', reason: 'server-updating', baseRevision: 3 });
+  assert.deepEqual(decideCloudEntry(input({ campaign: campaign(snapshot(3), { gameVersion: '1.2.0' }) })),
+    { action: 'wait', reason: 'game-older', baseRevision: 3 });
+  // «Досчитать на этом ПК»: the old local path, the server world kept as a backup.
+  assert.deepEqual(decideCloudEntry(input({ takeNow: true, campaign: campaign(snapshot(3), { gameVersion: '1.0.9' }) })),
+    { action: 'local', reason: 'version-mismatch', release: true });
+  assert.deepEqual(decideCloudEntry(input({ takeNow: true, campaign: campaign(snapshot(3), { status: 'waiting-version' }) })),
     { action: 'local', reason: 'waiting-version', release: true });
+  assert.equal(compareGameVersions('1.10.0', '1.9.3'), 1);
+  assert.equal(compareGameVersions('1.0.2', '1.1.0'), -1);
+  assert.equal(compareGameVersions('1.1.0', '1.1.0'), 0);
+});
+
+test('a world still catching up on the server stays there: no claim until it is within the threshold', () => {
+  const behind = campaign(snapshot(3), { lagMs: 19 * 3_600_000 });
+  assert.deepEqual(decideCloudEntry(input({ campaign: behind })), { action: 'wait', reason: 'catching-up', baseRevision: 3 });
+  assert.deepEqual(decideCloudEntry(input({ campaign: campaign(snapshot(3), { lagMs: SERVER_CATCHUP_WAIT_LAG_MS }) })), { action: 'claim', baseRevision: 3 });
+  assert.deepEqual(decideCloudEntry(input({ campaign: campaign(snapshot(3), { lagMs: SERVER_CATCHUP_WAIT_LAG_MS + 1 }) })),
+    { action: 'wait', reason: 'catching-up', baseRevision: 3 });
+  assert.deepEqual(decideCloudEntry(input({ takeNow: true, campaign: behind })), { action: 'claim', baseRevision: 3 }, '«Досчитать на этом ПК» claims now');
+  assert.deepEqual(decideCloudEntry(input({ campaign: campaign(snapshot(3), { status: 'paused', lagMs: null }) })), { action: 'claim', baseRevision: 3 },
+    'a paused world does not move on the server: nothing to wait for');
+  assert.deepEqual(decideCloudEntry(input({ localDigest: null, record: null, campaign: behind })), { action: 'wait', reason: 'catching-up', baseRevision: 3 },
+    'a second computer waits too');
+  assert.deepEqual(decideCloudEntry(input({ campaign: campaign(snapshot(5, { deviceId: OTHER }), { lagMs: 3_600_000 }) })),
+    { action: 'wait', reason: 'catching-up', baseRevision: 5 }, 'a world living on a newer revision of this save');
 });
 
 test('do not apply: the local save changed after the upload (played offline) — local is newer, server world stops', () => {
@@ -67,8 +92,8 @@ test('newer revision continuing this unchanged save: download it, or take its li
   assert.deepEqual(decideCloudEntry(input({ campaign: campaign(snapshot(4, { origin: 'server', deviceId: 'server', left: true })) })),
     { action: 'download', snapshotId: 4, revision: 4, release: false }, 'a living world finished into a revision (another campaign was left)');
   assert.deepEqual(decideCloudEntry(input({ campaign: campaign(snapshot(5, { deviceId: OTHER }), {}) })), { action: 'claim', baseRevision: 5 });
-  assert.deepEqual(decideCloudEntry(input({ campaign: campaign(snapshot(5, { deviceId: OTHER }), { gameVersion: '1.0.0' }) })),
-    { action: 'download', snapshotId: 5, revision: 5, release: true }, 'another version lives it: its base is taken, the world stops');
+  assert.deepEqual(decideCloudEntry(input({ takeNow: true, campaign: campaign(snapshot(5, { deviceId: OTHER }), { gameVersion: '1.0.0' }) })),
+    { action: 'download', snapshotId: 5, revision: 5, release: true }, 'another version lives it and the player goes on here: its base is taken, the world stops');
   assert.deepEqual(decideCloudEntry(input({ campaign: campaign(snapshot(5, { deviceId: OTHER, schemaVersion: 99 })) })),
     { action: 'local', reason: 'schema-newer', release: false });
 });
@@ -78,6 +103,8 @@ test('second computer without a local save: take the server copy', () => {
   assert.deepEqual(decideCloudEntry(input({ localDigest: null, record: null, campaign: campaign(snapshot(7)) })),
     { action: 'download', snapshotId: 7, revision: 7, release: false });
   assert.deepEqual(decideCloudEntry(input({ localDigest: null, record: null, campaign: campaign(snapshot(7), { gameVersion: '2.0.0' }) })),
+    { action: 'wait', reason: 'game-older', baseRevision: 7 });
+  assert.deepEqual(decideCloudEntry(input({ takeNow: true, localDigest: null, record: null, campaign: campaign(snapshot(7), { gameVersion: '2.0.0' }) })),
     { action: 'download', snapshotId: 7, revision: 7, release: true });
 });
 

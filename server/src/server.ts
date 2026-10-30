@@ -4,8 +4,9 @@
 // Plain HTTP on 127.0.0.1 behind Caddy (TLS). Every request but /v1/health
 // carries the access key the server generated (Authorization: Bearer). Game
 // code runs only in the world runner (runner.ts), a child process started from
-// the release the world belongs to, so an update of the server never changes
-// the code a living world is computed with.
+// the release the world belongs to. An update of the server moves a living
+// world to the new release from its checkpoint (migrateLive), so the server's
+// progress survives every release and a game of the new version takes it.
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -20,6 +21,7 @@ import {
   type Campaign, type RetentionPolicy, type Snapshot,
 } from './store.ts';
 import type { RunnerMessage, RunnerRequest, RunnerStart, RunnerWritten } from './runner.ts';
+import { compareGameVersions } from '../../src/application/cloud/cloud-sync.ts';
 
 declare const __ASTERION_SERVER_VERSION__: string | undefined;
 
@@ -95,8 +97,30 @@ type LiveRun = {
   ready: Promise<void>;
   waiting: Map<string, (message: RunnerMessage) => void>;
   lastStatus?: Extract<RunnerMessage, { type: 'status' }>;
+  /** Recent (wall time, world time) pairs: how fast the world catches up. */
+  history: Array<{ at: number; worldAt: number }>;
+  /** Moved here from this game version at start (an update): resumed in it again if the new runner cannot load the world. */
+  migratedFrom?: string;
+  loaded: boolean;
   exited: boolean;
 };
+
+/** The catch-up speed is measured over this much wall time. */
+const RATE_WINDOW_MS = 2 * 60_000;
+
+/** Game milliseconds the world advances per wall millisecond over the recent window (null until measurable). */
+export function catchUpRate(history: ReadonlyArray<{ at: number; worldAt: number }>): number | null {
+  const last = history.at(-1);
+  const first = history.find((sample) => last !== undefined && last.at - sample.at <= RATE_WINDOW_MS);
+  if (!last || !first || last.at - first.at < 5_000) return null;
+  return Math.max(0, (last.worldAt - first.worldAt) / (last.at - first.at));
+}
+
+/** Wall time until a world `lagMs` behind the clock reaches it at `rate` (the clock moves on meanwhile). */
+export function catchUpEtaMs(lagMs: number | null, rate: number | null): number | null {
+  if (lagMs === null || rate === null || rate <= 1.02) return null;
+  return Math.round(lagMs / (rate - 1));
+}
 
 export function createCloudServer(config: ServerConfig) {
   fs.mkdirSync(path.join(config.dataDir, 'campaigns'), { recursive: true });
@@ -137,7 +161,7 @@ export function createCloudServer(config: ServerConfig) {
     if (!run.exited && run.child.connected) run.child.send(message);
   }
 
-  function startRun(campaign: Campaign, resume: boolean): void {
+  function startRun(campaign: Campaign, resume: boolean, migratedFrom?: string): void {
     const state = campaign.live!;
     const runner = runnerFor(state.gameVersion);
     if (!runner) {
@@ -151,7 +175,10 @@ export function createCloudServer(config: ServerConfig) {
     const fromCheckpoint = resume && fs.existsSync(checkpoint) && state.checkpointWorldAt !== null;
     if (!base && !fromCheckpoint) throw new Error(`Live world ${campaign.id} has no base snapshot.`);
     const child = fork(runner.script, [], { execArgv: runner.execArgv, stdio: ['ignore', 'inherit', 'inherit', 'ipc'], serialization: 'advanced' });
-    const run: LiveRun = { campaignId: campaign.id, child, waiting: new Map(), exited: false, ready: Promise.resolve() };
+    const run: LiveRun = {
+      campaignId: campaign.id, child, waiting: new Map(), history: [], loaded: false, exited: false, ready: Promise.resolve(),
+      ...(migratedFrom ? { migratedFrom } : {}),
+    };
     run.ready = new Promise<void>((resolve, reject) => {
       run.waiting.set('ready', (message) => (message.type === 'ready' ? resolve() : reject(new Error((message as { message?: string }).message ?? 'runner failed'))));
     });
@@ -163,6 +190,17 @@ export function createCloudServer(config: ServerConfig) {
       run.waiting.clear();
       if (live === run) {
         live = null;
+        if (!closing && code !== 0 && run.migratedFrom && !run.loaded && runnerFor(run.migratedFrom)) {
+          // This release could not load the world: it goes on in the release it lived in.
+          const back = updateCampaign(run.campaignId, (current) => ({ ...current, live: current.live && {
+            ...current.live, gameVersion: run.migratedFrom!, migrationError: `runner ${current.live.gameVersion} exited (${code ?? signal}) before loading the world`,
+          } }));
+          config.log(`live ${run.campaignId}: game ${config.version} did not load the world, back to ${run.migratedFrom}`);
+          if (back?.live) {
+            try { startRun(back, true); } catch (error) { config.log(`resume ${run.campaignId} failed: ${String(error)}`); }
+          }
+          return;
+        }
         if (!closing && code !== 0) {
           updateCampaign(run.campaignId, (current) => ({ ...current, live: current.live && { ...current.live, status: 'failed', error: `runner exited (${code ?? signal})` } }));
           config.log(`live ${run.campaignId}: runner exited with ${code ?? signal}`);
@@ -189,6 +227,8 @@ export function createCloudServer(config: ServerConfig) {
   function onRunnerMessage(run: LiveRun, message: RunnerMessage): void {
     const waiter = run.waiting.get(message.type === 'error' ? [...run.waiting.keys()][0] ?? '' : message.type);
     if (message.type === 'ready') {
+      run.loaded = true;
+      run.history = [{ at: Date.now(), worldAt: message.worldAt }];
       updateCampaign(run.campaignId, (current) => ({ ...current, live: current.live && {
         ...current.live, worldAt: message.worldAt, reportedAt: Date.now(),
         ...(current.live.leftReplay === undefined ? { leftReplay: message.leftReplay } : {}),
@@ -196,6 +236,9 @@ export function createCloudServer(config: ServerConfig) {
       config.log(`live ${run.campaignId}: loaded in ${message.loadMs} ms, rss ${Math.round(message.rss / 1e6)} MB`);
     } else if (message.type === 'status') {
       run.lastStatus = message;
+      const at = Date.now();
+      run.history.push({ at, worldAt: message.worldAt });
+      while (run.history.length > 2 && at - run.history[1]!.at > RATE_WINDOW_MS) run.history.shift();
       if (Date.now() - lastPersistAt > 60_000) {
         lastPersistAt = Date.now();
         updateCampaign(run.campaignId, (current) => ({ ...current, live: current.live && { ...current.live, worldAt: message.worldAt, reportedAt: Date.now() } }));
@@ -286,6 +329,29 @@ export function createCloudServer(config: ServerConfig) {
     writeCampaign(config.dataDir, next);
     config.log(`live ${campaign.id}: ended (${mode})${snapshot ? `, snapshot ${snapshot.id} rev ${snapshot.revision}` : ''}`);
     return { campaign: next, snapshot };
+  }
+
+  /**
+   * An update of the server: a world living in an older game version goes on
+   * in this release. The old runner wrote a checkpoint (its schema) when the
+   * old server stopped; this release's runner loads it as the game loads an
+   * older save (migrations only go forward) and keeps it alive from there.
+   * So the server's progress survives the update, and a game of this version
+   * takes the world without a version mismatch. Returns the version it left.
+   */
+  function migrateLive(campaign: Campaign): string | null {
+    const state = campaign.live;
+    if (!state || compareGameVersions(state.gameVersion, config.version) >= 0 || !runnerFor(config.version)) return null;
+    const from = state.gameVersion;
+    const worldAt = state.checkpointWorldAt ?? state.worldAt;
+    const { migrationError: _cleared, ...rest } = state;
+    writeCampaign(config.dataDir, { ...campaign, live: {
+      ...rest, gameVersion: config.version,
+      ...(state.status === 'waiting-version' ? { status: 'running' as const } : {}),
+      migrations: [...(state.migrations ?? []), { from, to: config.version, at: Date.now(), worldAt }].slice(-10),
+    } });
+    config.log(`live ${campaign.id}: moved from game ${from} to ${config.version} (world at ${new Date(worldAt).toISOString()})`);
+    return from;
   }
 
   function rotate(): void {
@@ -495,6 +561,7 @@ export function createCloudServer(config: ServerConfig) {
         if (campaign.live.baseRevision !== campaign.head) throw new HttpError(409, 'stale-live', 'Живой мир не продолжает последнюю ревизию.');
         if (baseRevision !== campaign.head) throw new HttpError(409, 'stale-base', 'Сервер хранит более новую версию кампании.', { head: campaign.head });
         if (campaign.live.gameVersion !== gameVersion) {
+          if (compareGameVersions(gameVersion, config.version) > 0) requestUpdate(gameVersion);
           throw new HttpError(409, 'version-mismatch', `Мир на сервере живёт в версии ${campaign.live.gameVersion}, а игра — ${gameVersion}.`, { worldVersion: campaign.live.gameVersion });
         }
         const ended = await endLive(campaign, 'claim');
@@ -545,6 +612,8 @@ export function createCloudServer(config: ServerConfig) {
         tickMs: live.lastStatus?.tickMs ?? null,
         cpuShare: live.lastStatus?.cpuShare ?? null,
         rss: live.lastStatus?.rss ?? null,
+        rate: catchUpRate(live.history),
+        etaMs: catchUpEtaMs(live.lastStatus?.lagMs ?? null, catchUpRate(live.history)),
       } : null,
     };
   }
@@ -552,7 +621,10 @@ export function createCloudServer(config: ServerConfig) {
   function liveView(campaign: Campaign) {
     const view = describeCampaign(campaign, Date.now());
     if (view.live && live?.campaignId === campaign.id && live.lastStatus) {
-      view.live = { ...view.live, worldAt: live.lastStatus.worldAt, reportedAt: Date.now(), lagMs: live.lastStatus.lagMs };
+      const rate = catchUpRate(live.history);
+      // The lag as of now: the clock moved on since the last tick reported.
+      const lagMs = Math.max(0, Date.now() + campaign.live!.clockOffsetMs - live.lastStatus.worldAt);
+      view.live = { ...view.live, worldAt: live.lastStatus.worldAt, reportedAt: Date.now(), lagMs, rate, etaMs: catchUpEtaMs(lagMs, rate) };
     }
     return view;
   }
@@ -565,6 +637,15 @@ export function createCloudServer(config: ServerConfig) {
     authorize(request, ip);
     if (closing) throw new HttpError(503, 'restarting', 'Сервер перезапускается.');
     if (request.method === 'GET' && url.pathname === '/v1/status') return json(response, 200, statusBody());
+    if (request.method === 'POST' && url.pathname === '/v1/update-request') {
+      // A game newer than this server: the living world moves to that release once the server installs it (migrateLive).
+      const body = await readJson(request);
+      const gameVersion = String(body.gameVersion ?? '');
+      if (!VERSION.test(gameVersion)) throw new HttpError(400, 'bad-request', 'Bad version.');
+      const newer = compareGameVersions(gameVersion, config.version) > 0;
+      if (newer) requestUpdate(gameVersion);
+      return json(response, 200, { requested: newer, serverVersion: config.version });
+    }
     if (request.method === 'GET' && url.pathname === '/v1/campaigns') {
       return json(response, 200, { campaigns: listCampaigns(config.dataDir).map(liveView) });
     }
@@ -610,12 +691,18 @@ export function createCloudServer(config: ServerConfig) {
     async listen(): Promise<number> {
       await new Promise<void>((resolve) => server.listen(config.port, config.host, resolve));
       const address = server.address();
+      // An update: worlds of older game versions move to this release (migrateLive).
+      const migrated = new Map<string, string>();
+      for (const campaign of listCampaigns(config.dataDir)) {
+        const from = migrateLive(campaign);
+        if (from) migrated.set(campaign.id, from);
+      }
       // Resume the world that was alive when the server stopped (an update or a reboot).
       const running = listCampaigns(config.dataDir).filter((campaign) => campaign.live && campaign.live.status !== 'failed')
         .sort((left, right) => right.live!.startedAt - left.live!.startedAt);
       for (const [index, campaign] of running.entries()) {
         if (index === 0) {
-          try { startRun(campaign, true); } catch (error) { config.log(`resume ${campaign.id} failed: ${String(error)}`); }
+          try { startRun(campaign, true, migrated.get(campaign.id)); } catch (error) { config.log(`resume ${campaign.id} failed: ${String(error)}`); }
         } else {
           // More than one is a leftover: finish it into a revision when its player returns.
           writeCampaign(config.dataDir, { ...campaign, live: { ...campaign.live!, status: 'paused' } });
