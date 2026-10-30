@@ -57,7 +57,7 @@ test('a parsed save decodes its compact sections in place and leaves plain ones'
   assert.equal(hasCompactSections(JSON.stringify(save)), true);
   assert.equal(decodeCompactSave(save), save);
   assert.deepEqual(save, { schemaVersion: 29, combat: { reports: [] }, flights: { records: [{ id: 'x' }], requestIndex: {} } });
-  assert.equal(save.flights[COMPACT_SECTION_MARK], undefined);
+  assert.equal((save.flights as Record<string, unknown>)[COMPACT_SECTION_MARK], undefined);
 });
 
 test('a broken table is an error, never a silently different world', () => {
