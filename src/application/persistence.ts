@@ -1,4 +1,4 @@
-import { stringifySave, stringifySaveInSlices } from './save-json.ts';
+import { stringifyCompactSave, stringifyCompactSaveInSlices, stringifySave, stringifySaveInSlices } from './save-json.ts';
 import { getBrowserSaveStorage } from './save-storage.ts';
 import {
   createDefaultBattleHistory,
@@ -141,12 +141,14 @@ import { generateWorld } from '../domain/world/generator.ts';
 import { createDefaultSunRaidState } from '../domain/sun-raid/rules.ts';
 import { migrateSunRaidState } from '../domain/sun-raid/repository.ts';
 import { isCombatFactionId } from '../domain/combat/factions.ts';
-import { inspectSavePayload, isSaveProblem, type SaveProblem } from '../domain/session/save-health.ts';
+import { inspectParsedSave, inspectSavePayload, isSaveProblem, type SaveProblem } from '../domain/session/save-health.ts';
+import { decodeCompactSave } from '../domain/session/save-codec.ts';
 import { createNpcState, migrateNpcState } from '../domain/npc/state.ts';
 import { PLANET_SKIN_IDS } from '../domain/universe/planet-skins.ts';
 import { migrateNpcScienceState } from '../domain/npc/science-state.ts';
 import { projectNpcScienceLedger } from './npc-science.ts';
 import { seedNpcGrudgesFromReports } from './npc-grudges.ts';
+import { pruneCampaignHistory } from './history-retention.ts';
 import { migrateNpcSelfChosenIdentity } from './npc-identity.ts';
 import { assignNpcDisplayNames, createNpcPersonaSalt, deriveLegacyNpcSalt, getNpcOwnerIds } from './npc-foundation.ts';
 import { isNpcReplayMetadata } from './npc-catchup.ts';
@@ -161,12 +163,20 @@ export const NPC_FOUNDATION_SCHEMA_VERSION = 25;
 export const NPC_ECONOMY_SCHEMA_VERSION = 26;
 export const NPC_SCIENCE_SCHEMA_VERSION = 27;
 export const NPC_AUTONOMY_SCHEMA_VERSION = 28;
+/**
+ * Schema 29: reports live at most 24 game hours (older saves shed them at
+ * load) and production saves store their big sections compactly
+ * (domain/session/save-codec.ts). Builds before it refuse these saves as
+ * "newer" instead of misreading them; this build reads both forms.
+ */
+export const COMPACT_ARCHIVES_SCHEMA_VERSION = 29;
 
 export const SAVE_SCHEMA_VERSION = Math.max(
   NPC_FOUNDATION_SCHEMA_VERSION,
   NPC_ECONOMY_SCHEMA_VERSION,
   NPC_SCIENCE_SCHEMA_VERSION,
   NPC_AUTONOMY_SCHEMA_VERSION,
+  COMPACT_ARCHIVES_SCHEMA_VERSION,
   WORLD_CONFIG_SCHEMA_VERSION,
   COMBAT_SAVE_SCHEMA_VERSION,
   SCIENCE_SAVE_SCHEMA_VERSION,
@@ -1395,11 +1405,19 @@ export function loadSavedState(options: PersistenceOptions = {}): SaveLoadResult
     const problem: SaveProblem = { status: 'corrupt', reason: 'Хранилище недоступно для чтения.' };
     return { status: problem.status, problem, state: initialState };
   }
-  const health = inspectSavePayload(raw, SAVE_SCHEMA_VERSION);
-  if (health.status === 'missing') return { status: 'missing', state: createInitialState(mode, timestamp) };
+  if (raw === null || raw === '') return { status: 'missing', state: createInitialState(mode, timestamp) };
+  // One parse: the health check and the migration read the same decoded object.
+  let parsed: unknown;
+  try {
+    parsed = decodeCompactSave(JSON.parse(raw));
+  } catch {
+    const problem: SaveProblem = { status: 'corrupt', reason: 'Повреждённый JSON.' };
+    return { status: problem.status, problem, state: initialState };
+  }
+  const health = inspectParsedSave(parsed, SAVE_SCHEMA_VERSION);
   if (isSaveProblem(health)) return { status: health.status, problem: health, state: initialState };
   try {
-    return { status: 'loaded', state: migrateParsedSave(JSON.parse(raw!) as StoredSave, mode, timestamp, initialState, options) };
+    return { status: 'loaded', state: migrateParsedSave(parsed as StoredSave, mode, timestamp, initialState, options) };
   } catch (error) {
     const problem: SaveProblem = {
       status: 'corrupt',
@@ -1816,7 +1834,10 @@ function migrateParsedSave(
     playTimeMs: Math.max(0, numberOr(parsed.playTimeMs, 0)),
   };
   // Memory of offenders, colony names/looks and alliance crests that older saves lack.
-  return migrateNpcSelfChosenIdentity(seedNpcGrudgesFromReports(projectNpcScienceLedger(migratedState)));
+  const identified = migrateNpcSelfChosenIdentity(seedNpcGrudgesFromReports(projectNpcScienceLedger(migratedState)));
+  // Saves from before the 24-hour report rule shed their old reports at load
+  // (at the world's own time, the replay cursor); the player's saved battles stay.
+  return identified.npcReplay ? pruneCampaignHistory(identified) : identified;
 }
 
 /**
@@ -1843,12 +1864,15 @@ export type PersistenceWriteOptions = {
  * serialize its progress off the UI thread and hand over only the text.
  */
 export function serializeSaveForStorage(state: SaveState, mode: RuntimeMode): string {
-  return stringifySave(persistedPayload(state, mode));
+  // Test Mode keeps plain JSON: its QA reads and edits saves by hand.
+  return mode === 'production' ? stringifyCompactSave(persistedPayload(state, mode)) : stringifySave(persistedPayload(state, mode));
 }
 
 /** serializeSaveForStorage in steps of ~`budgetMs` (see stringifySaveInSlices). */
 export function serializeSaveForStorageInSlices(state: SaveState, mode: RuntimeMode, budgetMs: number, pause: () => Promise<void>) {
-  return stringifySaveInSlices(persistedPayload(state, mode), budgetMs, pause);
+  return mode === 'production'
+    ? stringifyCompactSaveInSlices(persistedPayload(state, mode), budgetMs, pause)
+    : stringifySaveInSlices(persistedPayload(state, mode), budgetMs, pause);
 }
 
 function persistedPayload(state: SaveState, mode: RuntimeMode): object {

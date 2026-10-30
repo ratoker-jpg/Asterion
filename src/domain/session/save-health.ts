@@ -10,6 +10,7 @@ import { validateNpcState } from '../npc/state.ts';
 import { isNpcReplayMetadata } from '../npc/replay-state.ts';
 import { validateNpcScienceLedger } from '../npc/science-state.ts';
 import { validateNpcAutonomyPayload } from '../npc/autonomy-save.ts';
+import { decodeCompactSave } from './save-codec.ts';
 
 export type SavePayloadHealth =
   | { status: 'missing' }
@@ -70,6 +71,11 @@ export function inspectSavePayload(raw: string | null | undefined, currentSchema
     parsed = JSON.parse(raw);
   } catch {
     return { status: 'corrupt', reason: 'Повреждённый JSON.' };
+  }
+  try {
+    decodeCompactSave(parsed);
+  } catch {
+    return { status: 'corrupt', reason: 'Повреждены сжатые разделы сохранения.' };
   }
   return inspectParsedSave(parsed, currentSchemaVersion);
 }

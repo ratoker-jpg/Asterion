@@ -21,6 +21,7 @@ import {
 } from '../domain/session/slots.ts';
 import { isGeneratedNpcOwnerId } from '../domain/world/generator.ts';
 import { describeSaveProblem, inspectParsedSave, inspectSavePayload, isSaveProblem } from '../domain/session/save-health.ts';
+import { decodeCompactSave, decodeSection } from '../domain/session/save-codec.ts';
 import type { PlayerFactionId } from '../domain/profile/types.ts';
 import type { CampaignSpeed } from '../domain/runtime/mode.ts';
 import type { SaveState } from './contracts.ts';
@@ -61,7 +62,7 @@ export function describeSave(save: LooseSave, now: number): Omit<SaveSlotMeta, '
   const planets = record(save.planets);
   if (!Object.keys(planets).length) return null;
   const world = record(record(save.worldConfig).world);
-  const espionage = record(save.espionage);
+  const espionage = record(decodeSection(save.espionage));
   const targets = Object.values(record(espionage.targets)).map(record);
   const sunRaid = record(save.sunRaid);
   const playerId = typeof profile.playerId === 'string' ? profile.playerId : '';
@@ -347,7 +348,13 @@ export function importSaveSlot(text: string, currentSchemaVersion: number, optio
   const index = readSlotIndex(target, now);
   const parsed = parseSlotImport(text, currentSchemaVersion);
   if (!parsed.ok) return { ok: false, error: parsed.error, index };
-  const structure = inspectParsedSave(parsed.save, currentSchemaVersion);
+  let structure: ReturnType<typeof inspectParsedSave>;
+  try {
+    // An exported compact save is checked as the loader will read it (decodes a copy).
+    structure = inspectParsedSave(decodeCompactSave({ ...parsed.save }), currentSchemaVersion);
+  } catch {
+    return { ok: false, error: 'Сжатые разделы сохранения повреждены.', index };
+  }
   if (isSaveProblem(structure)) return { ok: false, error: describeSaveProblem(structure, currentSchemaVersion), index };
   if (!target) return { ok: false, error: 'Хранилище недоступно.', index };
   if (index.slots.length >= MAX_SAVE_SLOTS) return { ok: false, error: `Достигнут предел слотов (${MAX_SAVE_SLOTS}).`, index };
