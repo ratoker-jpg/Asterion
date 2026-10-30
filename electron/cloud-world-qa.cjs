@@ -34,7 +34,8 @@ const option = (name, fallback) => {
 };
 const ROOT = path.join(__dirname, '..');
 const PHASE = option('phase');
-const SLOT_ID = 'slot-cloudqa-0001';
+// A real server keeps every run: each run gets its own campaign id there.
+const SLOT_ID = option('slot', 'slot-cloudqa-0001');
 const SLOT_KEY = `asterion.slot.${SLOT_ID}.v1`;
 const SLOT_INDEX_KEY = 'asterion.slots.index.v1';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -46,6 +47,10 @@ const OUT_DIR = path.join(ROOT, 'visual-qa', 'cloud-world');
 
 if (!PHASE) {
   const fixture = option('fixture');
+  // --server-url/--key-file: a real cloud server instead of the local one (the
+  // unreachable server is then an address nothing listens on).
+  const realUrl = option('server-url');
+  const slotArg = `--slot=${realUrl ? `slot-cloudqa-${crypto.randomBytes(3).toString('hex')}` : SLOT_ID}`;
   const liveSeconds = Number(option('live-seconds', fixture ? '300' : '40'));
   const behindMinutes = Number(option('behind-minutes', fixture ? '30' : '20'));
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'asterion-cloud-qa-'));
@@ -53,7 +58,7 @@ if (!PHASE) {
   for (const dir of Object.values(profiles)) fs.mkdirSync(dir, { recursive: true });
   const dataDir = path.join(temp, 'server');
   fs.mkdirSync(dataDir, { recursive: true });
-  const key = crypto.randomBytes(36).toString('base64url');
+  const key = realUrl ? fs.readFileSync(option('key-file'), 'utf8').trim() : crypto.randomBytes(36).toString('base64url');
   const keyFile = path.join(temp, 'access-key');
   fs.writeFileSync(keyFile, key);
   fs.mkdirSync(OUT_DIR, { recursive: true });
@@ -79,8 +84,10 @@ if (!PHASE) {
   let server = null;
   let port = 0;
   const freePort = () => new Promise((resolve) => { const probe = net.createServer(); probe.listen(0, '127.0.0.1', () => { const { port: p } = probe.address(); probe.close(() => resolve(p)); }); });
-  const base = () => `http://127.0.0.1:${port}`;
+  let reachable = true;
+  const base = () => realUrl || `http://127.0.0.1:${port}`;
   const startServer = async () => {
+    if (realUrl) { reachable = true; return; }
     if (!port) port = await freePort();
     server = spawn(nodeBin, [...nodeArgs, path.join(ROOT, 'server/src/server.ts')], {
       cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'],
@@ -97,19 +104,26 @@ if (!PHASE) {
     throw new Error('the local cloud server did not start');
   };
   const stopServer = async () => {
+    if (realUrl) { reachable = false; return; }
     if (!server) return;
     const exited = new Promise((resolve) => server.once('exit', resolve));
     server.kill('SIGTERM');
     await Promise.race([exited, sleep(30_000)]);
     server = null;
   };
-  const apiGet = async (route) => (await fetch(`${base()}${route}`, { headers: { authorization: `Bearer ${key}` } })).json();
+  const SLOT = slotArg.slice('--slot='.length);
+  const apiGet = async (route) => (await fetch(`${base()}${route.replace(SLOT_ID, SLOT)}`, { headers: { authorization: `Bearer ${key}` } })).json();
   const writeCloud = (profile, values) => {
     fs.writeFileSync(path.join(profile, 'cloud.json'), JSON.stringify({ url: base(), enabled: true, ...values }));
     fs.writeFileSync(path.join(profile, 'cloud-key.txt'), `${values.key ?? key}\n`);
   };
   const phase = (name, profile, extra = []) => {
-    const child = spawnSync(process.execPath, [__filename, `--phase=${name}`, `--profile=${profile}`, `--offset=${offset}`, `--url=${base()}`, ...extra],
+    // The address of an unreachable server: nothing listens on port 9.
+    if (realUrl && fs.existsSync(path.join(profile, 'cloud.json'))) {
+      const config = JSON.parse(fs.readFileSync(path.join(profile, 'cloud.json'), 'utf8'));
+      fs.writeFileSync(path.join(profile, 'cloud.json'), JSON.stringify({ ...config, url: reachable ? realUrl : 'http://127.0.0.1:9' }));
+    }
+    const child = spawnSync(process.execPath, [__filename, `--phase=${name}`, `--profile=${profile}`, `--offset=${offset}`, `--url=${base()}`, slotArg, ...extra],
       { cwd: ROOT, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, timeout: 30 * 60_000, env });
     const line = (child.stdout || '').split('\n').find((text) => text.startsWith('{"phase"'));
     if (child.status !== 0 || !line) throw new Error(`Phase ${name} failed (${child.status}): ${(child.stderr || '').slice(-3_000)}`);
@@ -150,7 +164,7 @@ if (!PHASE) {
         // The same absence on another computer without the server: the local catch-up of the same save.
         const left = view.snapshots.find((snapshot) => snapshot.revision === results.fromServer.claimedFromRevision);
         if (left) {
-          const response = await fetch(`${base()}/v1/campaigns/${SLOT_ID}/snapshots/${left.id}`, { headers: { authorization: `Bearer ${key}` } });
+          const response = await fetch(`${base()}/v1/campaigns/${SLOT}/snapshots/${left.id}`, { headers: { authorization: `Bearer ${key}` } });
           const text = require('zlib').gunzipSync(Buffer.from(await response.arrayBuffer())).toString('utf8');
           const leftFile = path.join(temp, 'left.json');
           fs.writeFileSync(leftFile, text);
@@ -201,6 +215,7 @@ if (!PHASE) {
       expect(/ключ/.test(results.wrongKey.notices.join(' ')), 'the player sees that the key was refused');
       const log = fs.existsSync(path.join(temp, 'server.log')) ? fs.readFileSync(path.join(temp, 'server.log'), 'utf8') : '';
       expect(!log.includes(key), 'the access key never reaches the server log');
+      results.campaign = SLOT;
     } catch (error) {
       failures.push(error.stack || error.message);
     }

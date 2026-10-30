@@ -342,6 +342,12 @@ jobs:
         run: |
           npm run build
           npx electron-builder --win nsis --publish never -c.extraMetadata.version=${{ steps.version.outputs.version }}
+      # The cloud server of the same code (server/deploy/update.sh installs it from this release).
+      - name: Build server bundle ${{ steps.version.outputs.version }}
+        shell: bash
+        env:
+          ASTERION_VERSION: ${{ steps.version.outputs.version }}
+        run: npm run package:server
       - name: Publish GitHub Release ${{ steps.version.outputs.tag }}
         shell: bash
         env:
@@ -351,11 +357,12 @@ jobs:
           TITLE: ${{ steps.version.outputs.title }}
         run: |
           installer="release/Asterion-Setup-$VERSION.exe"
-          for file in "$installer" "$installer.blockmap" release/latest.yml; do
+          bundle="release/asterion-server-$VERSION.tgz"
+          for file in "$installer" "$installer.blockmap" release/latest.yml "$bundle"; do
             [ -f "$file" ] || { echo "::error::missing $file"; ls release; exit 1; }
           done
           grep -q "^version: $VERSION$" release/latest.yml || { echo "::error::latest.yml is not $VERSION"; cat release/latest.yml; exit 1; }
-          gh release create "$TAG" "$installer" "$installer.blockmap" release/latest.yml \
+          gh release create "$TAG" "$installer" "$installer.blockmap" release/latest.yml "$bundle" \
             --target "$GITHUB_SHA" --title "$TITLE" --notes-file release-notes.md --latest
       - name: Upload Windows installer
         uses: actions/upload-artifact@v6
