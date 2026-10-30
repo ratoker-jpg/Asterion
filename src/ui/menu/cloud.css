@@ -4,7 +4,7 @@
 .cloud-entry__bar { position: relative; display: block; height: 4px; overflow: hidden; border-radius: 999px; background: rgba(120, 200, 230, .14); }
 .cloud-entry__bar > i { position: absolute; inset: 0 auto 0 0; width: 38%; border-radius: inherit; background: var(--race-accent, #5fd4f0); animation: cloud-entry-sweep 1.4s ease-in-out infinite; }
 @keyframes cloud-entry-sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(270%); } }
-.cloud-conflict { width: 680px; }
+.cloud-conflict { width: 740px; }
 .cloud-conflict__copies { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 4px 0 0; }
 .cloud-conflict__copies div { padding: 12px 14px; border: 1px solid var(--ut-border, rgba(120, 200, 230, .2)); border-radius: var(--ut-r-card, 8px); background: rgba(255, 255, 255, .03); }
 .cloud-conflict__copies dt { color: #fff; font-size: 13px; font-weight: 700; }
@@ -30,3 +30,4 @@
 .menu-load { display: flex; flex-direction: column; }
 .menu-load > .menu-slots, .menu-load > .menu-empty { flex: 1 1 auto; min-height: 0; }
 .menu-load > .cloud-remote { flex: 0 0 auto; max-height: 300px; overflow: auto; margin-top: 0; }
+.cloud-settings .settings-select-v2 { margin-top: 14px; }
