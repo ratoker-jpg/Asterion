@@ -7,17 +7,13 @@ __DOMAIN__ {
 	request_body {
 		max_size 170MB
 	}
+	# Caddy sets X-Forwarded-For to the client address; server.ts trusts it from localhost only.
 	reverse_proxy 127.0.0.1:8787 {
-		header_up X-Forwarded-For {remote_host}
 		transport http {
 			read_timeout 10m
 			write_timeout 10m
 		}
 	}
-	log {
-		output file /var/log/caddy/asterion.log {
-			roll_size 20MiB
-			roll_keep 5
-		}
-	}
+	# Access log to the journal (journalctl -u caddy).
+	log
 }

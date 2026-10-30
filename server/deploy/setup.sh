@@ -8,6 +8,8 @@ BUNDLE="$2"
 HERE=$(cd "$(dirname "$0")" && pwd)
 log() { echo "== $*"; }
 export DEBIAN_FRONTEND=noninteractive
+# needrestart would restart services (and drop this SSH session) after each install.
+export NEEDRESTART_SUSPEND=1 NEEDRESTART_MODE=l
 
 log "packages"
 need=()
@@ -76,7 +78,6 @@ done
 curl -fsS http://127.0.0.1:8787/v1/health; echo
 
 log "Caddy (HTTPS for $DOMAIN)"
-install -d -o caddy -g caddy /var/log/caddy
 sed "s/__DOMAIN__/$DOMAIN/" "$HERE/Caddyfile.template" > /etc/caddy/Caddyfile.new
 caddy validate --config /etc/caddy/Caddyfile.new --adapter caddyfile >/dev/null
 mv /etc/caddy/Caddyfile.new /etc/caddy/Caddyfile
