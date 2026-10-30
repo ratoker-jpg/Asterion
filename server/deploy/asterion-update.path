@@ -1,0 +1,9 @@
+# The server asks for an update at once when a game of a newer version uploads a world.
+[Unit]
+Description=Asterion server update request
+
+[Path]
+PathExists=/var/lib/asterion/update-request
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,45 @@
+# Asterion cloud world (server/deploy/README.md). The supervisor and one world
+# runner (a child process) share these limits; KillMode=mixed lets the
+# supervisor checkpoint the living world before systemd stops the runner.
+[Unit]
+Description=Asterion cloud world
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=asterion
+Group=asterion
+Environment=NODE_ENV=production
+Environment=ASTERION_DATA=/var/lib/asterion
+Environment=ASTERION_KEY_FILE=/etc/asterion/access-key
+Environment=ASTERION_RELEASES=/opt/asterion/releases
+Environment=ASTERION_HOST=127.0.0.1
+Environment=ASTERION_PORT=8787
+Environment=ASTERION_RUNNER_NODE_ARGS=--max-old-space-size=2300
+ExecStart=/usr/bin/node /opt/asterion/current/server.mjs
+Restart=on-failure
+RestartSec=5
+KillMode=mixed
+TimeoutStopSec=150
+Nice=10
+CPUWeight=50
+MemoryHigh=2800M
+MemoryMax=3G
+MemorySwapMax=2G
+TasksMax=64
+LimitNOFILE=4096
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+ReadWritePaths=/var/lib/asterion
+
+[Install]
+WantedBy=multi-user.target
