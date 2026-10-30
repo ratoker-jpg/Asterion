@@ -174,7 +174,7 @@ if (!PHASE) {
       }
 
       // --only-relay: the timing run of a late world stops after the relay and its local reference.
-      if (option('only-relay')) throw Object.assign(new Error('only-relay'), { done: true });
+      if (args.includes('--only-relay')) throw Object.assign(new Error('only-relay'), { done: true });
       results.version = phase('version', profiles.a, ['--app-version=0.0.1-qa']);
       expect(results.version.entered && !results.version.applied, 'another game version does not take the server world');
       expect(/версией/.test(results.version.notices.join(' ')), 'the player sees why the world is caught up locally');
@@ -333,7 +333,10 @@ if (!PHASE) {
     out.dialog = await run(win, `document.querySelector('[data-qa-cloud-conflict]')?.getAttribute('data-qa-cloud-conflict') || null`);
   }
   async function afterEntry(win, out) {
+    // A late world mounts for a while before the game shows the entry notice.
+    const started = Date.now();
     await sleep(800);
+    while (Date.now() - started < 10_000 && (await run(win, 'window.__cloudQa.notices.length')) < 2) await sleep(200);
     const qa = await run(win, 'window.__cloudQa');
     out.notices = qa.notices;
     out.bannerSeen = qa.banner.some((text) => text.startsWith('Получаем мир с сервера'));
