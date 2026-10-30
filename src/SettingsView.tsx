@@ -99,6 +99,7 @@ export function SettingsView({ preferences, onPreferencesChange, onReset }: Sett
               type="button"
               className={`utility-control ${section === item.id ? 'active' : ''}`}
               onClick={() => setSection(item.id)}
+              data-qa-settings-section={item.id}
             >
               <img className="settings-nav-icon-v2" src={SETTINGS_ICONS[item.id] ?? SETTINGS_ICONS.save} alt="" draggable={false} />
               <span>{item.label}</span>
