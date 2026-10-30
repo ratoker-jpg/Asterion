@@ -72,6 +72,8 @@ jobs:
         run: npm run test:science
       - name: Release version rules
         run: npm run test:release
+      - name: Cloud world (server protocol, revisions, live world = local catch-up)
+        run: npm run test:cloud
       - name: Universe interaction domain tests
         run: npm run test:universe
       - name: Runtime mode domain tests
