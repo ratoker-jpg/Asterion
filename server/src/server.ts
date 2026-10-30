@@ -597,8 +597,8 @@ export function createCloudServer(config: ServerConfig) {
         config.log(`request failed: ${error instanceof Error ? error.stack ?? error.message : String(error)}`);
         json(response, 500, { error: 'internal', message: 'Ошибка сервера.' });
       }
-      // An unread upload body is not worth reading.
-      if (!request.complete) request.destroy();
+      // An unread upload body is drained (Caddy caps it), so the client still reads this answer.
+      if (!request.complete) request.resume();
     });
   });
   server.requestTimeout = 10 * 60_000;

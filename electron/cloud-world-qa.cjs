@@ -17,6 +17,7 @@
 //
 //   npm run test:cloud-world-ui                       (small generated world, CI)
 //   npm run test:cloud-world-ui -- --fixture=late-game-day-2.json --live-seconds=300 --behind-minutes=30
+//       [--server-url=https://host --key-file=cloud-key.txt] [--only-relay]
 //
 // Prints one JSON line per step and exits 1 on any failed expectation.
 const { app, BrowserWindow, session } = require('electron');
@@ -172,6 +173,8 @@ if (!PHASE) {
         }
       }
 
+      // --only-relay: the timing run of a late world stops after the relay and its local reference.
+      if (option('only-relay')) throw Object.assign(new Error('only-relay'), { done: true });
       results.version = phase('version', profiles.a, ['--app-version=0.0.1-qa']);
       expect(results.version.entered && !results.version.applied, 'another game version does not take the server world');
       expect(/версией/.test(results.version.notices.join(' ')), 'the player sees why the world is caught up locally');
@@ -217,7 +220,7 @@ if (!PHASE) {
       expect(!log.includes(key), 'the access key never reaches the server log');
       results.campaign = SLOT;
     } catch (error) {
-      failures.push(error.stack || error.message);
+      if (!error.done) failures.push(error.stack || error.message);
     }
     await stopServer().catch(() => undefined);
     fs.writeFileSync(path.join(OUT_DIR, 'results.json'), JSON.stringify(results, null, 2));
@@ -369,8 +372,9 @@ if (!PHASE) {
     await app.whenReady();
     registerSaveStore();
     registerCloud();
-    const win = new BrowserWindow({ show: false, focusable: false, skipTaskbar: true, width: 1600, height: 900,
-      webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, backgroundThrottling: false } });
+    // Offscreen rendering keeps painting a hidden window, so screenshots show the current frame.
+    const win = new BrowserWindow({ show: false, focusable: false, skipTaskbar: true, width: 1600, height: 900, backgroundColor: '#02050a',
+      webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, backgroundThrottling: false, offscreen: shots } });
     await prepare(win);
     const out = { phase: PHASE };
     if (PHASE === 'settings') {
