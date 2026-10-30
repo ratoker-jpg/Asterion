@@ -1055,12 +1055,19 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       slicedWriteRunning.current = false;
       writeSave(stateRef.current);
     };
-    window.addEventListener('pagehide', flush);
-    window.addEventListener('beforeunload', flush);
+    // A page on its way out takes no more save text from the worker: a write
+    // queued behind the unload would land over whatever the save is by then.
+    const leave = () => {
+      flush();
+      liveWorld.current?.worker.terminate();
+      liveWorld.current = null;
+    };
+    window.addEventListener('pagehide', leave);
+    window.addEventListener('beforeunload', leave);
     window.addEventListener(SAVE_FLUSH_EVENT, flush);
     return () => {
-      window.removeEventListener('pagehide', flush);
-      window.removeEventListener('beforeunload', flush);
+      window.removeEventListener('pagehide', leave);
+      window.removeEventListener('beforeunload', leave);
       window.removeEventListener(SAVE_FLUSH_EVENT, flush);
     };
   }, [writeSave]);
