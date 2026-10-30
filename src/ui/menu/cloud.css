@@ -26,3 +26,7 @@
 .cloud-settings__facts div { display: grid; gap: 3px; }
 .cloud-settings__facts dt { color: #668c98; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
 .cloud-settings__facts dd { margin: 0; color: #dcf7fc; overflow-wrap: anywhere; }
+/* «Загрузить игру» with «На сервере» below: the slot list keeps the free height and scrolls. */
+.menu-load { display: flex; flex-direction: column; }
+.menu-load > .menu-slots, .menu-load > .menu-empty { flex: 1 1 auto; min-height: 0; }
+.menu-load > .cloud-remote { flex: 0 0 auto; max-height: 300px; overflow: auto; margin-top: 0; }

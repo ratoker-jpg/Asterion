@@ -282,8 +282,10 @@ if (!PHASE) {
       }).observe(document, { childList: true, subtree: true, characterData: true });
     })();` });
   }
-  const shot = async (win, name) => {
+  const shot = async (win, name, settle = true) => {
     if (!shots) return;
+    // Menu screens and dialogs fade in (menu-motion.css); the entry banner is caught as it is.
+    if (settle) await sleep(1_600);
     const image = await win.webContents.capturePage();
     fs.writeFileSync(path.join(OUT_DIR, `${name}.png`), image.toPNG());
   };
@@ -323,7 +325,7 @@ if (!PHASE) {
     if (beforeShot) {
       // The banner is on screen while the server is asked.
       const seen = await waitFor(win, `document.querySelector('[data-qa-cloud-entry="busy"]') || document.querySelector('[data-qa-navigation="utility"]')`, 60_000).catch(() => false);
-      if (seen && await run(win, `Boolean(document.querySelector('[data-qa-cloud-entry="busy"]'))`)) await shot(win, beforeShot);
+      if (seen && await run(win, `Boolean(document.querySelector('[data-qa-cloud-entry="busy"]'))`)) await shot(win, beforeShot, false);
     }
     await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]') || document.querySelector('[data-qa-cloud-conflict]') || document.querySelector('.menu-modal [data-qa-confirm-yes]')`, 600_000);
     out.entryMs = Date.now() - started;
