@@ -22,7 +22,9 @@ export function parseSeeds(text) {
 }
 
 function runSeed(seed, label, days, extra) {
-  const fixture = path.join(dir, 'fixtures', `seed-${seed}.json`);
+  // A scenario changes the starting world: its fixtures are kept apart from the plain ones.
+  const scenario = extra.find((arg) => arg.startsWith('--scenario='))?.slice('--scenario='.length);
+  const fixture = path.join(dir, 'fixtures', `${scenario ? `${scenario}-` : ''}seed-${seed}.json`);
   const out = path.join(dir, label, `seed-${seed}`);
   fs.mkdirSync(path.dirname(fixture), { recursive: true });
   fs.mkdirSync(out, { recursive: true });

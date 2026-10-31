@@ -141,8 +141,9 @@ test('seven planets: orders on several planets, deployments to one rally planet,
   assert.equal(attack.originPlanetId, plan.rallyPlanetId);
   assert.equal(attack.missionId, 'attack');
   assert.ok(plan.result, 'the battle closed the plan');
-  const ledger = recorder.take().filter((entry) => entry.k === 'plan');
-  assert.equal(ledger.length, 1, 'the closed plan is in the outcome ledger');
+  const taken = recorder.take();
+  const ledger = taken.filter((entry) => entry.k === 'plan');
+  assert.equal(ledger.length, 1, `the closed plan is in the outcome ledger ${JSON.stringify(ledger)}`);
   assert.equal(ledger[0]!.d!.st, 'done');
   assert.equal(typeof ledger[0]!.d!.err, 'number', 'forecast against result');
   assert.equal(result.state.npcStrategy!.outcomes[world.owner]!.strike!.done, 1);

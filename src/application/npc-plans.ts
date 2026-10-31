@@ -7,8 +7,6 @@ import type { ShipId } from '../domain/combat/ids.ts';
 import { COMMANDER_IDS } from '../domain/combat/commanders.ts';
 import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
 import { calculateFleetPopulation, createEmptyFleetState } from '../domain/fleet/runtime.ts';
-import { calculatePlanetCapacity, calculatePlanetPopulation } from '../domain/fleet/overpopulation.ts';
-import { migrateBuildingLevels } from '../domain/buildings/resource-zone.ts';
 import { estimateWinProbability, utilityToWeight } from '../domain/npc/utility.ts';
 import {
   createNpcStrategyState, NPC_CLOSED_PLANS_KEPT, type NpcOutcomeStat, type NpcPlanOrder, type NpcShipCounts, type NpcStrategyState, type NpcStrikePlan,
@@ -19,7 +17,7 @@ import { flightsToPlanet, ownerFlights } from './npc-knowledge-index.ts';
 import { getOwnerRelation } from './owner-relations.ts';
 import { evaluatePlanetAttackEligibility } from './attack-eligibility.ts';
 import { getNpcFleetProductionCandidates, startNpcFleetProduction } from './npc-fleet-production.ts';
-import { dispatchNpcDeployment, dispatchNpcMission, getNpcMissionAvailableFleet } from './npc-missions.ts';
+import { dispatchNpcDeployment, dispatchNpcMission, getNpcMissionAvailableFleet, npcDeploymentFreeCapacity } from './npc-missions.ts';
 import { candidateToNpcMissionCommand, type NpcMissionCandidate } from './npc-mission-policy.ts';
 import { npcCombatPriority, npcEnemyShape, npcMainCommander } from './npc-commanders.ts';
 import { activeNpcPlans, npcPlanReservedShips } from './npc-plan-reserve.ts';
@@ -51,12 +49,18 @@ export const NPC_STRIKE_BALANCE = Object.freeze({
   budgetShare: 0.6,
   /** At the recheck the plan goes on only while the belief stays above this share of the wanted margin. */
   recheckMargin: 0.9,
-  /** Slack after the expected readiness before the plan is given up, and its bounds (game hours). */
+  /**
+   * Slack after the expected readiness before the plan is given up, and its
+   * bounds (game hours). The owner moves the plan only in its own sessions,
+   * hours apart: a deadline shorter than a couple of them dies unplayed.
+   */
   deadlineFactor: 3,
-  minDeadlineHours: 3,
+  minDeadlineHours: 12,
   maxDeadlineHours: 48,
   /** Production split into this many chunks when it is spread over planets. */
   chunks: 24,
+  /** Free hangar room the rally planet needs over the shares still to arrive. */
+  hangarSlack: 1.15,
 });
 
 const HOUR = 3_600_000;
@@ -133,6 +137,14 @@ function flownPopulation(state: SaveState, ownerId: string, planet: SpyTargetSta
 function underAttack(state: SaveState, planets: readonly SpyTargetState[], ownerId: string, at: number): boolean {
   return planets.some((planet) => flightsToPlanet(state.flights.records, planet.id).some((flight) => flight.phase === 'outbound'
     && flight.arrivalAt > at && flight.ownerId !== ownerId && (flight.missionId === 'attack' || flight.missionId === 'pirate-raid')));
+}
+
+/** Free hangar room at the rally planet less what the owner's deployments already bring there. */
+function rallyRoom(state: SaveState, plan: NpcStrikePlan, rally: SpyTargetState): number {
+  const inbound = ownerFlights(state.flights.records, plan.ownerId).filter((flight) => flight.ownerSide === 'npc' && flight.missionId === 'deployment'
+    && flight.destinationPlanetId === rally.id && flight.phase === 'outbound')
+    .reduce((sum, flight) => sum + fleetPopulation(rally.raceId, flight.selectedShips as Record<string, number>), 0);
+  return npcDeploymentFreeCapacity(rally) - inbound;
 }
 
 /** The owner's free combat ships on a planet, less what its other plans hold. */
@@ -249,13 +261,10 @@ export function draftNpcStrike(state: SaveState, profile: NpcProfile, utility: N
     for (const counts of reserve.values()) addCounts(force, counts);
     if (!Object.keys(force).length) continue;
     // Rally where the force fits the hangar, preferring the planet that already holds most of it, then the one nearest the target.
+    // The hangar takes the shares as the player's deployment checks it (free room now), with slack for the owner's other ships.
     const population = fleetPopulation(raceId, force);
-    const rally = planets.filter((planet) => {
-      const capacity = calculatePlanetCapacity(migrateBuildingLevels(planet.buildings).hangar ?? 0);
-      const others = calculatePlanetPopulation(planet.fleet, Math.max(0, Math.floor(planet.solarSatellites ?? 0)), planet.raceId)
-        - fleetPopulation(raceId, free.get(planet.id) ?? {});
-      return capacity - Math.max(0, others) >= population;
-    }).sort((left, right) => npcFleetValue(raceId, reserve.get(right.id) ?? {}) - npcFleetValue(raceId, reserve.get(left.id) ?? {})
+    const rally = planets.filter((planet) => npcDeploymentFreeCapacity(planet)
+      >= NPC_STRIKE_BALANCE.hangarSlack * (population - fleetPopulation(raceId, free.get(planet.id) ?? {}))).sort((left, right) => npcFleetValue(raceId, reserve.get(right.id) ?? {}) - npcFleetValue(raceId, reserve.get(left.id) ?? {})
       || distance(left, target) - distance(right, target) || (left.id < right.id ? -1 : 1))[0];
     if (!rally) continue;
     const contributing = [...reserve].filter(([, counts]) => Object.keys(counts).length > 0);
@@ -264,15 +273,19 @@ export function draftNpcStrike(state: SaveState, profile: NpcProfile, utility: N
     const revenge = estimateRevengeEconomics(utility, rally, report, force);
     const gate = utility.rivalGateHosts?.has(target.id) ?? false;
     if (!economics.worthFlight && !revenge.worthFlight && !gate) continue;
-    const net = Math.max(economics.net, revenge.net);
     const win = estimateWinProbability(npcForcePower(raceId, force), estimateReportedPower(utility, report, npcForcePower(raceId, force)));
+    // The recheck judges by this same belief: a plan it would cancel at once is not worth starting.
+    if (win < NPC_STRIKE_BALANCE.recheckMargin * wanted) continue;
+    // The haul is what the holds carry home, not the whole half of the target's stock.
+    const holds = win * catalog.reduce((sum, entity) => sum + (force[entity.id] ?? 0) * (entity.ship?.cargo ?? 0), 0);
+    const net = Math.max(Math.min(economics.net, holds), revenge.net);
     const estimate = 0.3 + Math.min(1.5, net / Math.max(1, utility.dayValue)) + (gate ? 1 : 0) + 0.4 * unit(profile.traits.planningHorizon) - 0.2;
     if (best && best.estimate >= estimate) continue;
     const scale = Math.max(1, timeScale);
     const ready = Math.max(readyAt, at) + HOUR / scale;
     const slack = Math.min(NPC_STRIKE_BALANCE.maxDeadlineHours * HOUR / scale,
       Math.max(NPC_STRIKE_BALANCE.minDeadlineHours * HOUR / scale, NPC_STRIKE_BALANCE.deadlineFactor * (ready - at)));
-    const gain = Math.max(0, economics.net);
+    const gain = Math.max(0, Math.min(economics.net, holds));
     best = { estimate, plan: {
       planId: '', template: 'strike', ownerId, status: 'active', phase: 'produce', createdAt: at, deadlineAt: at + Math.round(slack),
       targetPlanetId: target.id, targetOwnerId: target.ownerId, rallyPlanetId: rally.id,
@@ -332,7 +345,7 @@ function latestReport(utility: NpcUtilityContext, plan: NpcStrikePlan): SpyRepor
 export function refreshNpcPlans(state: SaveState, profile: NpcProfile, utility: NpcUtilityContext, at: number, timeScale: number): SaveState {
   const ownerId = profile.ownerId;
   let next = state;
-  for (const plan of activeNpcPlans(state, ownerId)) {
+  for (let plan of activeNpcPlans(state, ownerId)) {
     const target = next.espionage?.targets?.[plan.targetPlanetId];
     if (!target || target.ownerId !== plan.targetOwnerId) { next = closePlan(next, plan, 'cancelled', at, 'target-gone'); continue; }
     if (!next.espionage?.targets?.[plan.rallyPlanetId] || next.espionage.targets[plan.rallyPlanetId]!.ownerId !== ownerId) {
@@ -349,11 +362,23 @@ export function refreshNpcPlans(state: SaveState, profile: NpcProfile, utility: 
       next = closePlan(next, plan, 'cancelled', at, underAttack(next, utility.ownPlanets, ownerId, at) ? 'threat-at-home' : 'deadline');
       continue;
     }
+    if (plan.phase === 'produce' || plan.phase === 'rally') {
+      // A share ready to leave that the rally hangar cannot take (with what is already coming): the force never stands together.
+      const rally = next.espionage!.targets![plan.rallyPlanetId]!;
+      const room = rallyRoom(next, plan, rally);
+      const blocked = Object.entries(plan.reserve).some(([planetId, counts]) => planetId !== plan.rallyPlanetId && !plan.sent.includes(planetId)
+        && plan.orders.filter((order) => order.planetId === planetId).every((order) => order.orderId)
+        && covers(getNpcMissionAvailableFleet(next, ownerId, planetId) ?? {}, counts) && fleetPopulation(rally.raceId, counts) > room);
+      if (blocked) { next = closePlan(next, plan, 'cancelled', at, 'hangar-full'); continue; }
+    }
     if (plan.phase === 'produce') {
       const placed = plan.orders.every((order) => order.orderId);
-      const built = Object.entries(plan.reserve).every(([planetId, counts]) => covers(getNpcMissionAvailableFleet(next, ownerId, planetId) ?? {}, counts));
-      if (placed && built) next = replacePlan(next, { ...plan, phase: 'rally' });
-      continue;
+      // Shares already on their way count as built; the rally planet's own share is counted with the arrivals.
+      const built = Object.entries(plan.reserve).every(([planetId, counts]) => plan.sent.includes(planetId)
+        || covers(getNpcMissionAvailableFleet(next, ownerId, planetId) ?? {}, counts));
+      if (!placed || !built) continue;
+      next = replacePlan(next, { ...plan, phase: 'rally' });
+      plan = activeNpcPlans(next, ownerId).find((item) => item.planId === plan.planId) ?? plan;
     }
     if (plan.phase === 'rally') {
       const sources = Object.keys(plan.reserve).filter((planetId) => planetId !== plan.rallyPlanetId);
@@ -395,11 +420,11 @@ export function getNpcPlanChoices(state: SaveState, profile: NpcProfile, utility
   const planets = utility.ownPlanets;
   const paused = underAttack(state, planets, ownerId, at);
   for (const plan of active) {
-    if (plan.phase === 'produce') {
+    if (plan.phase === 'produce' || plan.phase === 'rally') {
       for (const order of plan.orders) {
         if (order.orderId) continue;
         const id = `plan:produce:${plan.planId}:${order.planetId}:${order.itemId}`;
-        choices.push({ candidate: { id, kind: 'plan', weight: utilityToWeight(2), payload: { planetId: order.planetId } }, run: (current, key) => {
+        choices.push({ candidate: { id, kind: 'plan-step', weight: utilityToWeight(2), payload: { planetId: order.planetId } }, run: (current, key) => {
           const planet = current.espionage?.targets?.[order.planetId];
           if (!planet || planet.ownerId !== ownerId) return { state: current, started: false, reason: 'plan-planet-lost' };
           const reserved = flownPopulation(current, ownerId, planet);
@@ -432,12 +457,13 @@ export function getNpcPlanChoices(state: SaveState, profile: NpcProfile, utility
         if (!plan.orders.filter((order) => order.planetId === planetId).every((order) => order.orderId)) continue;
         if (!covers(getNpcMissionAvailableFleet(state, ownerId, planetId) ?? {}, counts)) continue;
         const id = `plan:rally:${plan.planId}:${planetId}`;
-        choices.push({ candidate: { id, kind: 'plan', weight: utilityToWeight(2.2), payload: { planetId } }, run: (current, key) => {
+        choices.push({ candidate: { id, kind: 'plan-step', weight: utilityToWeight(2.2), payload: { planetId } }, run: (current, key) => {
           const result = dispatchNpcDeployment(current, { requestId: key, ownerId, originPlanetId: planetId, destinationPlanetId: plan.rallyPlanetId,
             selectedShips: counts as Partial<Record<ShipId, number>> }, at, timeScale);
           if (!result.ok) return { state: result.state, started: false, reason: result.reason, planetId };
           const latest = activeNpcPlans(result.state, ownerId).find((item) => item.planId === plan.planId) ?? plan;
-          return { state: replacePlan(result.state, { ...latest, phase: 'rally', sent: [...latest.sent, planetId].sort() }), started: true, reason: null, planetId };
+          // The phase moves on in refreshNpcPlans (orders still to place stay offered meanwhile).
+          return { state: replacePlan(result.state, { ...latest, sent: [...latest.sent, planetId].sort() }), started: true, reason: null, planetId };
         } });
       }
     }
@@ -445,7 +471,7 @@ export function getNpcPlanChoices(state: SaveState, profile: NpcProfile, utility
       const probe = missions.find((mission) => mission.kind === 'espionage' && mission.payload.destinationPlanetId === plan.targetPlanetId);
       if (probe) {
         const id = `plan:recon:${plan.planId}`;
-        choices.push({ candidate: { id, kind: 'plan', weight: utilityToWeight(2), payload: { planetId: String(probe.payload.originPlanetId) } }, run: (current, key) => {
+        choices.push({ candidate: { id, kind: 'plan-step', weight: utilityToWeight(2), payload: { planetId: String(probe.payload.originPlanetId) } }, run: (current, key) => {
           const command = candidateToNpcMissionCommand(probe, ownerId, key);
           if (!command) return { state: current, started: false, reason: 'invalid-mission-candidate' };
           const result = dispatchNpcMission(current, command, at, timeScale);
@@ -455,7 +481,7 @@ export function getNpcPlanChoices(state: SaveState, profile: NpcProfile, utility
     }
     if (plan.phase === 'launch' && !paused) {
       const id = `plan:launch:${plan.planId}`;
-      choices.push({ candidate: { id, kind: 'plan', weight: utilityToWeight(2.4), payload: { planetId: plan.rallyPlanetId } }, run: (current, key) => {
+      choices.push({ candidate: { id, kind: 'plan-step', weight: utilityToWeight(2.4), payload: { planetId: plan.rallyPlanetId } }, run: (current, key) => {
         const rally = current.espionage?.targets?.[plan.rallyPlanetId];
         const target = current.espionage?.targets?.[plan.targetPlanetId];
         if (!rally || !target) return { state: current, started: false, reason: 'plan-target-lost' };
@@ -485,7 +511,7 @@ export function getNpcPlanChoices(state: SaveState, profile: NpcProfile, utility
     const draft = draftNpcStrike(state, profile, utility, at, timeScale);
     if (draft) {
       const id = `plan:strike:${draft.plan.targetPlanetId}`;
-      choices.push({ candidate: { id, kind: 'plan', weight: scored(id, draft.estimate), payload: { planetId: draft.plan.rallyPlanetId } }, run: (current, key) => {
+      choices.push({ candidate: { id, kind: 'plan-step', weight: scored(id, draft.estimate), payload: { planetId: draft.plan.rallyPlanetId } }, run: (current, key) => {
         const plan: NpcStrikePlan = { ...draft.plan, planId: `plan:${ownerId}:${key}` };
         const strategy = strategyOf(current);
         return { state: replacePlan(withStrategy(current, { ...strategy, nextCheckAt: { ...strategy.nextCheckAt,

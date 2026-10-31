@@ -91,7 +91,7 @@ function familyDrive(drives: NpcStrategyDrives, kind: string): number {
     // Gates, Sun raids and their calls: the match's goal, weighed apart from routine trips.
     case 'endgame': return Math.max(0.7, drives.operations, drives.diplomacy);
     // A plan the owner committed to: its steps come before routine (NPC intelligence slice 1).
-    case 'plan': return Math.max(0.7, drives.war, drives.military);
+    case 'plan-step': return Math.max(0.7, drives.war, drives.military);
     default: return 0.5;
   }
 }
