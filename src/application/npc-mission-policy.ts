@@ -1,4 +1,5 @@
 import type { NpcProfile } from '../domain/npc/types.ts';
+import { withoutNpcPlanReserve } from './npc-plan-reserve.ts';
 import { battleReportTime, reportRetentionCutoff } from './history-retention.ts';
 import { ownerBattleReports, ownerFlights, ownerSpyReports, publicDebrisEntries, publicPlayerPlanetsKey } from './npc-knowledge-index.ts';
 import { SHIP_IDS, type ShipId } from '../domain/combat/ids.ts';
@@ -402,7 +403,8 @@ export function getNpcMissionCandidates(
   const probesRoom = Math.min(NPC_PROBES_IN_FLIGHT.max, NPC_PROBES_IN_FLIGHT.base + NPC_PROBES_IN_FLIGHT.perPlanet * ownerTargets.length)
     - probesInFlight(state, ownerId);
   for (const origin of ownerTargets) {
-    const available = getNpcMissionAvailableFleet(state, ownerId, origin.id);
+    // Ships the owner's plans hold stay out of other missions (npc-plan-reserve.ts).
+    const available = withoutNpcPlanReserve(state, ownerId, origin.id, getNpcMissionAvailableFleet(state, ownerId, origin.id));
     if (!available) continue;
 
     if ((available['spy-probe'] ?? 0) > 0 && hasFlightSlot(state, ownerId, 'espionage') && probesRoom > 0) {

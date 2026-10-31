@@ -24,6 +24,7 @@ import { dispatchNpcDeployment, dispatchNpcGas, dispatchNpcMission, dispatchNpcS
 import { beginFlightReturn } from '../domain/flights/runtime.ts';
 import { getNpcPirateCandidates, dispatchNpcPirateMission } from './npc-pirates.ts';
 import { getNpcEndgameChoices } from './npc-endgame.ts';
+import { getNpcPlanChoices, refreshNpcPlans, scheduleNpcPlanCheck } from './npc-plans.ts';
 import { getNpcSpaceportCandidates, getNpcSpaceportCommanderCandidates, startNpcSpaceportUpgrade } from './npc-spaceport.ts';
 import { npcCombatPriority, npcEnemyShape, npcMainCommander } from './npc-commanders.ts';
 import { COMMANDER_IDS, type CommanderId } from '../domain/combat/commanders.ts';
@@ -89,6 +90,8 @@ function familyDrive(drives: NpcStrategyDrives, kind: string): number {
     case 'fleetsave': return Math.max(0.6, drives.military);
     // Gates, Sun raids and their calls: the match's goal, weighed apart from routine trips.
     case 'endgame': return Math.max(0.7, drives.operations, drives.diplomacy);
+    // A plan the owner committed to: its steps come before routine (NPC intelligence slice 1).
+    case 'plan': return Math.max(0.7, drives.war, drives.military);
     default: return 0.5;
   }
 }
@@ -169,6 +172,8 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     if (repaired.repaired > 0) state = { ...state, espionage: { ...state.espionage!, targets: { ...state.espionage!.targets, [target.id]: repaired.target } } };
   }
   const utility = createNpcUtilityContext(state, profile, at, timeScale);
+  // The owner's plans move on by what it sees now (ships built, shares arrived, fresh news).
+  state = refreshNpcPlans(state, profile, utility, at, timeScale);
   // Concept U: estimated benefit − cost − risk + goal, plus this owner's seeded misjudgement.
   const scored = (candidateId: string, estimate: number) => utilityToWeight(estimate + estimationError(profile, eventId, candidateId));
   const missionUtility = (mission: { id: string; kind: string; payload: Readonly<Record<string, string | number | boolean | null>> }): number => {
@@ -491,7 +496,11 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     const result = applyNpcDiplomacyAction(current, ownerId, candidate, at, key);
     return { state: result.state, started: result.ok, reason: result.ok ? null : result.reason };
   } });
-  for (const mission of getNpcMissionCandidates(state, profile, at)) {
+  const missions = getNpcMissionCandidates(state, profile, at);
+  // Strategic plans: their next steps, and a new plan when one is worth committing to.
+  for (const choice of getNpcPlanChoices(state, profile, utility, at, timeScale, missions, scored)) choices.push(choice);
+  state = scheduleNpcPlanCheck(state, ownerId, at, timeScale);
+  for (const mission of missions) {
     // An attack the owner does not believe it wins with its own margin, even
     // with everything at hand, is not an option (a lone ship against a
     // defended planet was); nor is one whose haul does not pay for the flight
