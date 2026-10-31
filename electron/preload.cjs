@@ -26,6 +26,12 @@ contextBridge.exposeInMainWorld('asterionDesktop', {
       if (!result || !result.ok) throw new Error(result && result.error || 'Save store remove failed.');
     },
   },
+  // Bot journal next to the save (src/ui/bot-journal-store.ts, electron/save-store.cjs).
+  botJournal: {
+    append: (key, lines) => ipcRenderer.invoke('asterion:bot-journal:append', key, lines),
+    read: (key) => ipcRenderer.invoke('asterion:bot-journal:read', key),
+    merge: (key, lines) => ipcRenderer.invoke('asterion:bot-journal:merge', key, lines),
+  },
   // Game updates (electron/updater.cjs). `install` only after the saves are flushed.
   updates: {
     get: () => ipcRenderer.invoke('asterion:update:get'),

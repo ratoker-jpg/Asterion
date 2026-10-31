@@ -54,6 +54,8 @@ export type LiveWorldResponse =
   | { type: 'progress'; processedThroughAt: number; targetAt: number }
   /** Save text (serializeSaveForStorage) of the world at `version`. */
   | { type: 'save'; version: LiveWorldVersion; text: string; computeMs: number }
+  /** Bot journal lines (npc-journal.ts) of worlds the UI took, for the file next to the save. */
+  | { type: 'bot-journal'; lines: string }
   /** The worker cannot go on (a bug, a desync): App takes the world back on its own thread. */
   | { type: 'error'; message: string };
 

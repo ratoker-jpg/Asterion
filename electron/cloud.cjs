@@ -212,6 +212,16 @@ async function readSnapshotResponse(response) {
   };
 }
 
+/** The campaign's bot journal on the server (JSON lines); empty when the server has none or is older. */
+async function readBotJournal(id) {
+  try {
+    const response = await request(`/v1/campaigns/${id}/bot-journal`, { raw: true, timeoutMs: TRANSFER_TIMEOUT_MS });
+    return typeof response.text === 'function' ? await response.text() : '';
+  } catch {
+    return '';
+  }
+}
+
 function guard(task) {
   return task().then((value) => ({ ok: true, ...value }), (error) => ({ ok: false, code: error.code || 'network', error: errorText(error) }));
 }
@@ -289,11 +299,13 @@ function registerCloud() {
       body: JSON.stringify({ baseRevision, gameVersion: app.getVersion(), deviceId: settings().deviceId }),
     });
     if (response.status === 204) return { none: true, revision: Number(response.headers.get('x-asterion-revision')) };
-    return { world: await readSnapshotResponse(response) };
+    const world = await readSnapshotResponse(response);
+    return { world: { ...world, botJournal: await readBotJournal(id) } };
   }));
   ipcMain.handle('asterion:cloud:download', (_event, id, snapshotId) => guard(async () => {
     const response = await request(`/v1/campaigns/${id}/snapshots/${Math.floor(snapshotId)}`, { raw: true, timeoutMs: TRANSFER_TIMEOUT_MS });
-    return { world: await readSnapshotResponse(response) };
+    const world = await readSnapshotResponse(response);
+    return { world: { ...world, botJournal: await readBotJournal(id) } };
   }));
   ipcMain.handle('asterion:cloud:release', (_event, id) => guard(async () => {
     const result = await request(`/v1/campaigns/${id}/release`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });

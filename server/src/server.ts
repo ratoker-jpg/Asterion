@@ -157,6 +157,11 @@ export function createCloudServer(config: ServerConfig) {
     try { fs.writeFileSync(path.join(config.dataDir, 'update-request'), `${version}\n`); } catch { /* the timer checks anyway */ }
   }
 
+  /** The campaign's bot journal (npc-journal.ts), kept across live worlds; the client joins it by game time. */
+  function botJournalFile(id: string): string {
+    return path.join(campaignDir(config.dataDir, id), 'bots.jsonl');
+  }
+
   function send(run: LiveRun, message: RunnerRequest): void {
     if (!run.exited && run.child.connected) run.child.send(message);
   }
@@ -220,6 +225,7 @@ export function createCloudServer(config: ServerConfig) {
       stepBudgetMs: config.stepBudgetMs,
       checkpointFile: checkpoint,
       checkpointEveryMs: config.checkpointEveryMs,
+      journalFile: botJournalFile(campaign.id),
     };
     send(run, start);
     updateCampaign(campaign.id, (current) => ({ ...current, live: current.live && { ...current.live, status: 'running', error: undefined } }));
@@ -651,7 +657,7 @@ export function createCloudServer(config: ServerConfig) {
     if (request.method === 'GET' && url.pathname === '/v1/campaigns') {
       return json(response, 200, { campaigns: listCampaigns(config.dataDir).map(liveView) });
     }
-    const match = /^\/v1\/campaigns\/([^/]+)(?:\/(revisions|claim|release|snapshots)(?:\/(\d+))?)?$/.exec(url.pathname);
+    const match = /^\/v1\/campaigns\/([^/]+)(?:\/(revisions|claim|release|snapshots|bot-journal)(?:\/(\d+))?)?$/.exec(url.pathname);
     if (!match || !CAMPAIGN_ID.test(match[1]!)) throw new HttpError(404, 'not-found', 'Not found.');
     const [, id, action, snapshotId] = match as unknown as [string, string, string | undefined, string | undefined];
     if (!action && request.method === 'GET') {
@@ -662,6 +668,14 @@ export function createCloudServer(config: ServerConfig) {
     if (action === 'revisions' && request.method === 'PUT' && !snapshotId) return json(response, 200, await upload(request, id));
     if (action === 'claim' && request.method === 'POST') return claim(request, response, id);
     if (action === 'release' && request.method === 'POST') return json(response, 200, await release(request, id));
+    if (action === 'bot-journal' && request.method === 'GET' && !snapshotId) {
+      if (!readCampaign(config.dataDir, id)) throw new HttpError(404, 'not-found', 'Кампании нет на сервере.');
+      const file = botJournalFile(id);
+      const body = zlib.gzipSync(fs.existsSync(file) ? fs.readFileSync(file) : Buffer.alloc(0));
+      response.writeHead(200, { 'content-type': 'application/x-ndjson; charset=utf-8', 'content-encoding': 'gzip', 'content-length': body.length });
+      response.end(body);
+      return;
+    }
     if (action === 'snapshots' && request.method === 'GET' && snapshotId) {
       const campaign = readCampaign(config.dataDir, id);
       const snapshot = campaign?.snapshots.find((item) => item.id === Number(snapshotId));

@@ -12,6 +12,7 @@ import type { SaveState } from '../../src/application/contracts.ts';
 import { loadSavedState, serializeSaveForStorage } from '../../src/application/persistence.ts';
 import { applyCampaignRuntimeForCatchup } from '../../src/application/npc-catchup-runner.ts';
 import { advanceLiveWorld, beginLiveWorld, finishLiveWorld } from '../../src/application/npc-live-world.ts';
+import { formatNpcJournalLines, NpcJournalRecorder, parseNpcJournalLines, pruneNpcJournal, setNpcJournalSink } from '../../src/application/npc-journal.ts';
 
 const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
@@ -29,6 +30,8 @@ export type RunnerStart = {
   stepBudgetMs: number;
   checkpointFile: string;
   checkpointEveryMs: number;
+  /** Bot journal of the campaign (npc-journal.ts): lines are appended as the world runs. */
+  journalFile?: string;
 };
 
 export type RunnerRequest =
@@ -61,6 +64,21 @@ let busy = false;
 let stopping = false;
 let lastCheckpointAt = Date.now();
 let computeWindow = { since: Date.now(), ms: 0 };
+/** The bot journal only watches the decisions this runner computes. */
+const journal = new NpcJournalRecorder();
+setNpcJournalSink(journal);
+
+async function writeJournal(prune: boolean): Promise<void> {
+  const file = start?.journalFile;
+  if (!file) { journal.take(); return; }
+  const lines = formatNpcJournalLines(journal.take());
+  if (lines) await fs.promises.appendFile(file, lines, 'utf8');
+  if (!prune || !fs.existsSync(file)) return;
+  const kept = formatNpcJournalLines(pruneNpcJournal(parseNpcJournalLines(await fs.promises.readFile(file, 'utf8'))));
+  const temporary = `${file}.tmp-${process.pid}`;
+  await fs.promises.writeFile(temporary, kept, 'utf8');
+  await fs.promises.rename(temporary, file);
+}
 
 /** Writes the world as the client stores it: the save text, gzip, and its digest. */
 export async function writeWorld(world: SaveState, file: string): Promise<RunnerWritten> {
@@ -97,8 +115,10 @@ async function tick(): Promise<void> {
   if (!state || !start || busy || stopping) return;
   busy = true;
   try {
+    journal.observe(state, state.npcReplay?.processedThroughAt ?? now.read());
     const step = advanceLiveWorld(state, now.read(), { budgetMs: start.stepBudgetMs, groups });
     state = step.state;
+    await writeJournal(false);
     groups = step.groups;
     computeWindow.ms += step.computeMs;
     const worldAt = state.npcReplay?.processedThroughAt ?? now.read();
@@ -122,6 +142,7 @@ async function checkpoint(): Promise<void> {
   if (!state || !start) return;
   lastCheckpointAt = Date.now();
   send({ type: 'checkpoint', written: await writeWorld(state, start.checkpointFile) });
+  await writeJournal(true).catch(() => undefined);
 }
 
 async function onStart(message: RunnerStart): Promise<void> {

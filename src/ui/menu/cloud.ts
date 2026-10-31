@@ -1,3 +1,4 @@
+import { mergeBotJournal } from '../bot-journal-store.ts';
 import { useEffect, useRef } from 'react';
 import {
   decideCloudEntry, describeConflict, describeLocalReason, pageClockOffsetMs, saveSchemaVersion, saveWorldAt, sha256Text,
@@ -53,6 +54,8 @@ export type CloudWorld = {
   worldAt: number;
   gameVersion: string;
   gzBytes: number;
+  /** The campaign's bot journal on the server (JSON lines), joined to the file next to the save. */
+  botJournal?: string;
 };
 
 type Failure = { ok: false; code: string; error: string };
@@ -139,6 +142,7 @@ function applyWorld(bridge: CloudBridge, slot: Pick<SaveSlotMeta, 'id' | 'storag
   if (!storage) return Promise.resolve(false);
   storage.setItem(slot.storageKey, world.text);
   if (storage.getItem(slot.storageKey) !== world.text) return Promise.resolve(false);
+  if (world.botJournal) mergeBotJournal(slot.storageKey, world.botJournal);
   return bridge.markSynced(slot.id, world.revision, world.digest);
 }
 

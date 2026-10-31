@@ -11,6 +11,7 @@ import zlib from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createCloudServer, type ServerConfig } from './server.ts';
+import { parseNpcJournalLines } from '../../src/application/npc-journal.ts';
 import { DEFAULT_RETENTION } from './store.ts';
 import { memoryStorage } from '../../src/application/npc-runtime.test-support.ts';
 import { createDefaultNewGameConfig } from '../../src/domain/world/config.ts';
@@ -144,6 +145,12 @@ test('access key, revision line, living world, claim, backups and restart', asyn
   applyCampaignRuntimeForCatchup(leftState, worldAt);
   const local = await runNpcCatchup(freezeNpcCatchupTarget(leftState, worldAt), { now: () => worldAt });
   assert.equal(sha(serializeSaveForStorage(local.state, 'production')), sha(text), 'server world = local catch-up, byte for byte');
+  // The bot journal (npc-journal.ts): written by the server while the player is away, handed out beside the world.
+  const botJournal = await api(base, `/v1/campaigns/${id}/bot-journal`);
+  assert.equal(botJournal.status, 200);
+  const journalEntries = parseNpcJournalLines(await botJournal.text());
+  assert.ok(journalEntries.some((entry) => entry.k === 'top'), 'the server keeps the bot journal while the player is away');
+  assert.ok(journalEntries.every((entry) => entry.t <= worldAt), 'journal entries belong to the lived world');
 
   const after = await (await api(base, `/v1/campaigns/${id}`)).json();
   assert.equal(after.live, null, 'the relay is back with the client');

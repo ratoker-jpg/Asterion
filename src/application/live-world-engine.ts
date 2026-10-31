@@ -5,6 +5,7 @@ import { applyCampaignRuntimeForCatchup, playerFacingEvents, runNpcCatchup } fro
 import { serializeSaveForStorage } from './persistence.ts';
 import { applyWorldPatch, diffWorld, type PatchOp, type WorldPatch } from './world-diff.ts';
 import type { LiveWorldPersistPolicy, LiveWorldRequest, LiveWorldResponse, LiveWorldVersion } from './live-world-protocol.ts';
+import { formatNpcJournalLines, NpcJournalRecorder, setNpcJournalSink, type NpcJournalEntry } from './npc-journal.ts';
 
 /**
  * The live world worker's logic (see live-world-protocol.ts), free of the
@@ -22,9 +23,12 @@ export type LiveWorldEngineHost = {
   /** Runs `task` later on the worker (save scheduling). */
   later: (task: () => void, delayMs: number) => void;
   clock?: () => number;
+  /** false: no bot journal (tests that run several engines in one thread). */
+  journal?: boolean;
 };
 
-type Posted = { from: LiveWorldVersion; to: LiveWorldVersion; state: SaveState };
+/** `journal`: bot journal entries made on the way to `state`, kept only if the UI takes it. */
+type Posted = { from: LiveWorldVersion; to: LiveWorldVersion; state: SaveState; journal: NpcJournalEntry[] };
 
 /** Commits wait this long for company before the world is saved. */
 const COMMIT_SAVE_DELAY_MS = 50;
@@ -45,11 +49,17 @@ export class LiveWorldEngine {
   private savedVersion: LiveWorldVersion = -1;
   private catchup: { rebase: WorldPatch[]; droppedFreeze: boolean } | null = null;
   private failed = false;
+  /** The bot journal of this world (it only watches; see npc-journal.ts). */
+  private readonly journal = new NpcJournalRecorder();
+  /** Entries of worlds the UI took, not yet posted. */
+  private journalOut: NpcJournalEntry[] = [];
 
   private readonly host: LiveWorldEngineHost;
 
   constructor(host: LiveWorldEngineHost) {
     this.host = host;
+    // The worker is this world's only thread: the journal stays attached.
+    if (host.journal !== false) setNpcJournalSink(this.journal);
   }
 
   private readonly clock = () => (this.host.clock ?? (() => performance.now()))();
@@ -91,6 +101,7 @@ export class LiveWorldEngine {
   private resolve(from: LiveWorldVersion, commit: boolean): boolean {
     const reached = this.posted.findIndex((posted) => posted.to === from);
     if (reached >= 0) {
+      for (const posted of this.posted.slice(0, reached + 1)) for (const entry of posted.journal) this.journalOut.push(entry);
       this.ui = this.posted[reached]!.state;
       this.uiVersion = from;
       this.posted = this.posted.slice(reached + 1);
@@ -120,16 +131,18 @@ export class LiveWorldEngine {
     const from = last ? last.to : this.uiVersion;
     const before = last ? last.state : this.ui!;
     if (next === before) {
+      this.journal.take();
       this.host.post({ type: 'ticked', from, to: from, patch: [], events, computeMs });
       return;
     }
     const to = this.version();
-    this.posted.push({ from, to, state: next });
+    this.posted.push({ from, to, state: next, journal: this.journal.take() });
     this.host.post({ type: 'ticked', from, to, patch: diffWorld(before, next), events, computeMs });
   }
 
   private async tick(now: number, testTimeScale: Parameters<typeof reconcileRuntime>[1]['testTimeScale']): Promise<void> {
     const world = this.ui!;
+    this.journal.observe(world, world.npcReplay?.processedThroughAt ?? now);
     if (needsNpcCatchupBefore(world, now)) {
       await this.runCatchup(world, now, testTimeScale);
       return;
@@ -173,6 +186,7 @@ export class LiveWorldEngine {
       if (catchup.droppedFreeze) {
         // App never saw the freeze (it changed its world first) and waits for this tick: start over from App's world.
         this.catchup = null;
+        this.journal.take();
         await this.tick(this.host.now(), testTimeScale);
         return;
       }
@@ -207,6 +221,10 @@ export class LiveWorldEngine {
     this.lastSaveCostMs = computeMs;
     this.savedVersion = version;
     this.host.post({ type: 'save', version, text, computeMs });
+    if (this.journalOut.length) {
+      this.host.post({ type: 'bot-journal', lines: formatNpcJournalLines(this.journalOut) });
+      this.journalOut = [];
+    }
   }
 }
 

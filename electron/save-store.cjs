@@ -34,7 +34,75 @@ function dropStaleVersions(key, target) {
   for (const stale of others.slice(1)) fs.rmSync(path.join(savesDir(), stale.name), { force: true });
 }
 
+// Bot journal (src/application/npc-journal.ts): JSON lines next to the save,
+// appended as the world runs; the last three game days are kept.
+const BOT_JOURNAL_KEEP_MS = 3 * 24 * 60 * 60 * 1000;
+const botJournalSize = new Map();
+
+function botJournalFile(key) {
+  return path.join(savesDir(), `${key}.bots.jsonl`);
+}
+
+function pruneBotJournal(file) {
+  const lines = fs.readFileSync(file, 'utf8').split('
+').filter((line) => line.trim());
+  const times = lines.map((line) => { try { return JSON.parse(line).t; } catch { return null; } });
+  const last = times.reduce((max, t) => (typeof t === 'number' && t > max ? t : max), Number.NEGATIVE_INFINITY);
+  const kept = lines.filter((_line, index) => typeof times[index] === 'number' && times[index] >= last - BOT_JOURNAL_KEEP_MS);
+  const temporary = `${file}.tmp`;
+  fs.writeFileSync(temporary, kept.length ? `${kept.join('
+')}
+` : '', 'utf8');
+  fs.renameSync(temporary, file);
+  return fs.statSync(file).size;
+}
+
 function registerSaveStore() {
+  ipcMain.handle('asterion:bot-journal:append', async (_event, key, lines) => {
+    try {
+      if (!KEY.test(key) || typeof lines !== 'string') throw new Error('Invalid bot journal write.');
+      const file = botJournalFile(key);
+      await fs.promises.appendFile(file, lines, 'utf8');
+      const size = fs.statSync(file).size;
+      // Pruned whenever it has grown by half since the last prune.
+      if (!botJournalSize.has(key)) botJournalSize.set(key, size);
+      if (size > 1.5 * botJournalSize.get(key) + 65536) botJournalSize.set(key, pruneBotJournal(file));
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: String(error && error.message || error) };
+    }
+  });
+  // The server's lines after this file's last game time join it (a world back from the server).
+  ipcMain.handle('asterion:bot-journal:merge', async (_event, key, lines) => {
+    try {
+      if (!KEY.test(key) || typeof lines !== 'string') throw new Error('Invalid bot journal merge.');
+      const file = botJournalFile(key);
+      const timeOf = (line) => { try { return JSON.parse(line).t; } catch { return null; } };
+      const local = fs.existsSync(file) ? fs.readFileSync(file, 'utf8').split('
+').filter((line) => line.trim()) : [];
+      const last = local.reduce((max, line) => { const t = timeOf(line); return typeof t === 'number' && t > max ? t : max; }, Number.NEGATIVE_INFINITY);
+      const added = lines.split('
+').filter((line) => { const t = timeOf(line); return typeof t === 'number' && t > last; });
+      if (added.length) fs.appendFileSync(file, `${added.join('
+')}
+`, 'utf8');
+      if (fs.existsSync(file)) botJournalSize.set(key, pruneBotJournal(file));
+      return { ok: true, added: added.length };
+    } catch (error) {
+      return { ok: false, error: String(error && error.message || error) };
+    }
+  });
+  ipcMain.handle('asterion:bot-journal:read', async (_event, key) => {
+    try {
+      if (!KEY.test(key)) throw new Error('Invalid bot journal key.');
+      const file = botJournalFile(key);
+      if (!fs.existsSync(file)) return { ok: true, text: '' };
+      botJournalSize.set(key, pruneBotJournal(file));
+      return { ok: true, text: await fs.promises.readFile(file, 'utf8') };
+    } catch (error) {
+      return { ok: false, error: String(error && error.message || error) };
+    }
+  });
   ipcMain.on('asterion:save-store:read', (event, key, writeId) => {
     try {
       if (!KEY.test(key) || !WRITE_ID.test(writeId)) throw new Error('Invalid save key.');
@@ -73,6 +141,7 @@ function registerSaveStore() {
     try {
       if (!KEY.test(key)) throw new Error('Invalid save key.');
       for (const name of filesOf(key)) fs.rmSync(path.join(savesDir(), name), { force: true });
+      fs.rmSync(botJournalFile(key), { force: true });
       event.returnValue = { ok: true };
     } catch (error) {
       event.returnValue = { ok: false, error: String(error && error.message || error) };
