@@ -38,8 +38,8 @@ export const LAB_CHARACTERS = [
   ['crystal-hunter', { aggression: 0.75, riskTolerance: 0.9, operationsInterest: 0.9, militaryFocus: 0.7 }],
 ];
 
-export function createLabWorld(bots = 15) {
-  const config = createDefaultNewGameConfig({ seed: 'BOTLAB2026', campaignName: 'Bot lab' });
+export function createLabWorld(bots = 15, seed = 'BOTLAB2026') {
+  const config = createDefaultNewGameConfig({ seed, campaignName: 'Bot lab' });
   config.world = { ...config.world, galaxyCount: 1, npcCount: bots, maxNpcPerSystem: 3, density: 'dense', campaignSpeed: 'fast', randomPlayerStart: false };
   const base = createInitialSaveState('production', START_AT, config);
   const owners = getNpcOwnerIds(base.espionage?.targets, base.profile.playerId);
