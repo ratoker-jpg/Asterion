@@ -9,7 +9,7 @@ import { checkRaidLaunch, getHolderCrystals, missingCrystals } from '../domain/s
 import { WORLD_LIMITS } from '../domain/world/config.ts';
 import { createSeededRandom } from '../domain/world/random.ts';
 import type { SaveState } from './contracts.ts';
-import { getNpcMissionAvailableFleet } from './npc-missions.ts';
+import { getNpcMissionPlanningFleet } from './npc-missions.ts';
 import { utilityToWeight } from '../domain/npc/utility.ts';
 import { selectAllianceRelations } from '../domain/command/diplomacy.ts';
 import { strategyOf, type NpcUtilityContext } from './npc-utility.ts';
@@ -50,7 +50,7 @@ function sunOptions(at: number, timeScale: number): SunRuntimeOptions {
 
 /** Combat hulls free on one planet, a share of them, trimmed to the side's population room. */
 function sunForce(state: SaveState, ownerId: string, planetId: string, raceId: string, share: number, room: number): Partial<Record<ShipId, number>> {
-  const free = getNpcMissionAvailableFleet(state, ownerId, planetId) ?? {};
+  const free = getNpcMissionPlanningFleet(state, ownerId, planetId) ?? {};
   const combat = new Set(getFactionShipCatalog(raceId as never).filter((entity) => entity.category === 'Боевой корабль').map((entity) => entity.id));
   let ships: Partial<Record<ShipId, number>> = {};
   for (const [id, count] of Object.entries(free) as [ShipId, number][]) {

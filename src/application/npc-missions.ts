@@ -1,3 +1,4 @@
+import { npcUnlockKeepers } from './npc-unlock-keepers.ts';
 import { ownerFlights } from './npc-knowledge-index.ts';
 import { calculateFleetPopulation, createEmptyFleetState, getSolarSatelliteFleetCount, removeSolarSatellitesFromFleet, resolveSavedFleetState } from '../domain/fleet/runtime.ts';
 import { calculatePlanetCapacity, calculatePlanetPopulation } from '../domain/fleet/overpopulation.ts';
@@ -134,6 +135,25 @@ export function getNpcMissionAvailableFleet(
   // Launches physically debit the NPC planet fleet, so this is already the
   // authoritative free fleet. Subtracting active flights would reserve twice.
   return { ...fleet.ships };
+}
+
+/**
+ * What an owner plans missions with: the free fleet less the hulls its race
+ * needs at home to build others (npc-unlock-keepers.ts). A choice of the
+ * owner, not a rule: dispatch still checks the free fleet.
+ */
+export function getNpcMissionPlanningFleet(
+  state: SaveState,
+  ownerId: string,
+  originPlanetId: string,
+): Readonly<Record<ShipId, number>> {
+  const ships = { ...getNpcMissionAvailableFleet(state, ownerId, originPlanetId) };
+  const origin = validNpcOrigin(state, ownerId, originPlanetId);
+  if (!origin) return ships;
+  for (const [shipId, keep] of Object.entries(npcUnlockKeepers(origin.raceId))) {
+    if (ships[shipId as ShipId] !== undefined) ships[shipId as ShipId] = Math.max(0, ships[shipId as ShipId]! - keep);
+  }
+  return ships;
 }
 
 function normalizeShips(

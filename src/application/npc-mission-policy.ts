@@ -14,7 +14,7 @@ import type { UniverseCoordinate, UniverseObjectKind, UniversePersistedPlayerPla
 import { explorationNodeId, visibleExplorationContacts } from '../domain/exploration/model.ts';
 import { EXPLORATION_ARTS } from '../exploration-art.ts';
 import { getOwnerRelation } from './owner-relations.ts';
-import { getNpcMissionAvailableFleet, isNpcRecyclerShip, type NpcMissionDispatchCommand, type NpcMissionId } from './npc-missions.ts';
+import { getNpcMissionAvailableFleet, getNpcMissionPlanningFleet, isNpcRecyclerShip, type NpcMissionDispatchCommand, type NpcMissionId } from './npc-missions.ts';
 import { findDebrisNearSystem } from '../domain/espionage/orbital-debris.ts';
 import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
 import type { SaveState } from './contracts.ts';
@@ -402,7 +402,7 @@ export function getNpcMissionCandidates(
   const probesRoom = Math.min(NPC_PROBES_IN_FLIGHT.max, NPC_PROBES_IN_FLIGHT.base + NPC_PROBES_IN_FLIGHT.perPlanet * ownerTargets.length)
     - probesInFlight(state, ownerId);
   for (const origin of ownerTargets) {
-    const available = getNpcMissionAvailableFleet(state, ownerId, origin.id);
+    const available = getNpcMissionPlanningFleet(state, ownerId, origin.id);
     if (!available) continue;
 
     if ((available['spy-probe'] ?? 0) > 0 && hasFlightSlot(state, ownerId, 'espionage') && probesRoom > 0) {

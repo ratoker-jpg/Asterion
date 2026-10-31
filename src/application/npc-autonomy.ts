@@ -20,7 +20,7 @@ import { getNpcMissionCandidates, candidateToNpcMissionCommand } from './npc-mis
 import { assessNpcPlanetThreat, estimateReinforcementUtility } from './npc-threat.ts';
 import { applyNpcAllianceHeraldry } from './npc-identity.ts';
 import { planNpcGasMission } from './npc-gas.ts';
-import { dispatchNpcDeployment, dispatchNpcGas, dispatchNpcMission, dispatchNpcSpaceFlight, dispatchNpcTransport, getNpcMissionAvailableFleet, NPC_SPACE_FLIGHT_GAS_FEE, resolveNpcMissionArrival } from './npc-missions.ts';
+import { dispatchNpcDeployment, dispatchNpcGas, dispatchNpcMission, dispatchNpcSpaceFlight, dispatchNpcTransport, getNpcMissionAvailableFleet, getNpcMissionPlanningFleet, NPC_SPACE_FLIGHT_GAS_FEE, resolveNpcMissionArrival } from './npc-missions.ts';
 import { beginFlightReturn } from '../domain/flights/runtime.ts';
 import { getNpcPirateCandidates, dispatchNpcPirateMission } from './npc-pirates.ts';
 import { getNpcEndgameChoices } from './npc-endgame.ts';
@@ -296,7 +296,7 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
   // has run dry. Whichever planet has the transporters makes the trip.
   const main = planets.find((planet) => planet.id === `${ownerId}-planet`) ?? planets[0];
   if (main && planets.length > 1) for (const source of planets) {
-    const free = getNpcMissionAvailableFleet(state, ownerId, source.id) ?? {};
+    const free = getNpcMissionPlanningFleet(state, ownerId, source.id) ?? {};
     const holds = { transporter: free.transporter ?? 0, 'mega-transporter': free['mega-transporter'] ?? 0 };
     const catalog = getFactionShipCatalog(source.raceId);
     const capacityOf = (id: string) => catalog.find((entity) => entity.id === id)?.ship?.cargo ?? 0;
@@ -469,7 +469,7 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
       } });
       continue;
     }
-    const free = getNpcMissionAvailableFleet(state, ownerId, target.id) ?? {};
+    const free = getNpcMissionPlanningFleet(state, ownerId, target.id) ?? {};
     const ships = Object.fromEntries(Object.entries(free).filter(([shipId, count]) => shipId !== 'solar-satellite' && (count ?? 0) > 0)) as Record<string, number>;
     const value = npcFleetValue(target.raceId, ships);
     if (!Object.keys(ships).length || value < 0.3 * utility.dayValue) continue;

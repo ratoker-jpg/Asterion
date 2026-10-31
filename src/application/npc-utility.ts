@@ -19,6 +19,7 @@ import { calculateFlightFuel } from '../domain/flights/fuel.ts';
 import { selectOwnerMembership } from '../domain/command/selectors.ts';
 import { getFleetProductionEntity } from '../domain/fleet/production.ts';
 import { evaluateProductionRequirements } from '../domain/fleet/requirements.ts';
+import { npcUnlockShortfall } from './npc-unlock-keepers.ts';
 import { findScience } from '../domain/science/catalog.ts';
 import type { ScienceId } from '../domain/science/types.ts';
 import { npcFlagshipOwners } from '../domain/npc/doctrine.ts';
@@ -530,6 +531,7 @@ export function estimateProductionItemUtility(context: NpcUtilityContext, target
   const hoard = hoardPressure(context, target);
   const push = 0.4 * Math.max(spendingPressure(situation), hoard);
   const fortress = fortressDefenseNeed(context, target);
+  const unlock = npcUnlockShortfall(target.raceId, fleet, itemId) > 0 ? 1.5 : 0;
   const efficiency = 0.5 * Math.log(Math.max(0.05, Math.min(1, relativeEfficiency)));
   // The planet hosting this owner's own Gate expects the whole world at its door.
   const threat = context.ownGateHosts?.has(target.id) ? 1 : context.threat;
@@ -539,7 +541,8 @@ export function estimateProductionItemUtility(context: NpcUtilityContext, target
     ? itemId === NPC_FLAGSHIP_ID ? 2.5 * flagshipDrive(context) - efficiency : -0.4 * flagshipDrive(context)
     : 0;
   switch (purpose) {
-    case 'combat': return -0.5 + 1.5 * Math.max(drives.military, drives.war) + 0.5 * threat + efficiency - price + push + rush;
+    // A hull its race needs at home to build stronger ones comes first while short (the Swarm's «Жало», «Стрекоза»).
+    case 'combat': return -0.5 + 1.5 * Math.max(drives.military, drives.war) + 0.5 * threat + efficiency - price + push + rush + unlock;
     // The fortress builds toward its target defence of its best batteries (owner strategy 31.10.2026).
     case 'defense': return -0.8 + 1.4 * threat + 0.5 * drives.military + efficiency - price + push * 0.75 + 1.4 * fortress;
     case 'energy': return -0.6 + 1.5 * (situation?.energyNeed ?? 0) - price;
