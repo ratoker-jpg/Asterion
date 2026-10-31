@@ -39,6 +39,13 @@ export const NPC_CAMPAIGN_START_BOOST: readonly number[] = Object.freeze([2, 1.5
  */
 export const NPC_MIN_ACTIVITY_PROPENSITY = 0.2;
 
+/**
+ * A match lasts three to seven days: a several-day absence at its start left
+ * a bot at one planet for good (lab 31.10.2026). No rare absence begins its
+ * first days.
+ */
+export const NPC_NO_ABSENCE_OPENING_DAYS = 3;
+
 /** Rare players also skip whole days now and then. */
 const RARE_PROPENSITY = 0.1;
 const RARE_DAY_SKIP_PROBABILITY = 0.3;
@@ -75,7 +82,8 @@ export function getNpcSessionEvents(
     : null;
   const events: NpcSessionEvent[] = [];
   for (let localDay = firstLocalDay; localDay <= lastLocalDay; localDay += 1) {
-    if (isNpcInRareAbsenceDay(profile.privateSeed, profile.ownerId, localDay)) continue;
+    const openingDay = startLocalDay !== null && localDay >= startLocalDay && localDay - startLocalDay < NPC_NO_ABSENCE_OPENING_DAYS;
+    if (!openingDay && isNpcInRareAbsenceDay(profile.privateSeed, profile.ownerId, localDay)) continue;
     const dayRandom = createSeededRandom(JSON.stringify([profile.privateSeed, profile.ownerId, 'day', localDay]));
     const wakeRandom = createSeededRandom(JSON.stringify([profile.privateSeed, profile.ownerId, 'wake', localDay]));
     // Propensity 0 still never plays (a switched-off owner); any other plays at least the floor.
