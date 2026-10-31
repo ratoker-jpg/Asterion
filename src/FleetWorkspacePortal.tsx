@@ -15,6 +15,7 @@ import type { SimulatorMaxRounds } from './domain/combat/simulator.ts';
 import { SOLAR_SATELLITE_ID } from './domain/combat/ids.ts';
 import { getBuildingPresentation } from './domain/buildings/balance-v1.ts';
 import { RUNTIME_RESET_EVENT, RUNTIME_STATE_CHANGED_EVENT } from './domain/runtime/mode.ts';
+import { getLiveSaveState } from './application/runtime.ts';
 import {
   getFleetBuildBudget,
   getFleetSnapshot,
@@ -2245,7 +2246,7 @@ export function FleetWorkspacePortal() {
   const persistence = useMemo(() => createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }), []);
   const [target, setTarget] = useState<Element | null>(null);
   const [resetNonce, setResetNonce] = useState(0);
-  const [saveState, setSaveState] = useState<SaveState>(() => persistence.read());
+  const [saveState, setSaveState] = useState<SaveState>(() => getLiveSaveState() ?? persistence.read());
   const [constructionRequested, setConstructionRequested] = useState(false);
   const [launchContext, setLaunchContext] = useState<FleetLaunchContext | null>(null);
   const fallbackPlanetId = Object.keys(saveState.planets)[0] ?? 'helion-01';

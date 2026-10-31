@@ -67,6 +67,23 @@ export function selectRatedAlliances(state: SaveState): Record<string, RatedAlli
   return details;
 }
 
+/**
+ * The world App renders now, set on every App render. Views that live outside
+ * App (the fleet and repair portals, battle reports) start from it instead of
+ * reading the save from storage: a late save takes hundreds of milliseconds to
+ * parse, decode and migrate, and they used to do it on every section switch.
+ */
+let liveSaveState: SaveState | null = null;
+
+export function setLiveSaveState(state: SaveState | null): void {
+  liveSaveState = state;
+}
+
+/** The world App renders, or null outside a running campaign (then read the save). */
+export function getLiveSaveState(): SaveState | null {
+  return liveSaveState;
+}
+
 export function publishApplicationRuntimeSnapshot(
   state: SaveState,
   context: RuntimeApplicationContext,

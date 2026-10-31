@@ -1,3 +1,4 @@
+import { getLiveSaveState } from './application/runtime.ts';
 import { createPortal } from 'react-dom';
 import { SunReportStrip } from './ui/sun-raid/SunReportStrip.tsx';
 import { EMPTY_ART } from './ui/ui-art.ts';
@@ -1225,8 +1226,9 @@ export function BattleReportModal({
 }
 
 export function BattleReportsView({ planetName, coords, onBack }: { planetName: string; coords: string; onBack: () => void }) {
-  const [history, setHistory] = useState<BattleHistoryState>(() => readBattleHistory(undefined, ACTIVE_RUNTIME_MODE));
-  const [saveState, setSaveState] = useState(() => createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read());
+  // The world App renders; the save is read from storage only outside a running campaign.
+  const [saveState, setSaveState] = useState(() => getLiveSaveState() ?? createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read());
+  const [history, setHistory] = useState<BattleHistoryState>(() => migrateBattleHistory(saveState.combat, ACTIVE_RUNTIME_MODE));
   const [mode, setMode] = useState<BattleListMode>('recent');
   const [openReportId, setOpenReportId] = useState<string | null>(null);
   const [saveNotice, setSaveNotice] = useState<SaveNotice>({ kind: 'saved', message: '✓ Автосохранение активно' });
@@ -1244,6 +1246,13 @@ export function BattleReportsView({ planetName, coords, onBack }: { planetName: 
           setHistory(migrateBattleHistory(live.combat, ACTIVE_RUNTIME_MODE));
         }
         setSaveState(live);
+        return;
+      }
+      const current = getLiveSaveState();
+      if (current) {
+        syncedCombat.current = current.combat;
+        setHistory(migrateBattleHistory(current.combat, ACTIVE_RUNTIME_MODE));
+        setSaveState(current);
         return;
       }
       setHistory(readBattleHistory(undefined, ACTIVE_RUNTIME_MODE));
