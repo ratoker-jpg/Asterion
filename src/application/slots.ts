@@ -73,7 +73,8 @@ export function describeSave(save: LooseSave, now: number): Omit<SaveSlotMeta, '
   const createdAt = typeof save.createdAt === 'number' ? save.createdAt : now;
   const summary: SaveSlotSummary = {
     planets: Object.keys(planets).length,
-    npcCount: targets.filter((target) => typeof target.ownerId === 'string' && isGeneratedNpcOwnerId(target.ownerId)).length,
+    // NPC owners, not their planets: a grown NPC holds several colonies (a world of 100 owners showed «561 NPC»).
+    npcCount: new Set(targets.map((target) => target.ownerId).filter((ownerId): ownerId is string => typeof ownerId === 'string' && isGeneratedNpcOwnerId(ownerId))).size,
     galaxyCount: typeof world.galaxyCount === 'number' ? world.galaxyCount : 1,
     days: Math.max(0, Math.floor((typeof save.playTimeMs === 'number' ? save.playTimeMs : 0) / DAY_MS)),
     crystals: Math.max(0, ...ownCrystalLists),
@@ -201,7 +202,8 @@ export function readSlotIndex(storage?: SlotStorage | null, now = Date.now()): S
 }
 
 /** Raw slot payload state for the load screen: readable, broken or written by a newer build. */
-export type SlotHealth = { status: 'ok' } | { status: 'missing' } | { status: 'broken'; reason: string } | { status: 'newer'; schemaVersion: number };
+/** `summary`: the card data as read from the payload now (the index may hold an older one). */
+export type SlotHealth = { status: 'ok'; summary?: SaveSlotSummary } | { status: 'missing' } | { status: 'broken'; reason: string } | { status: 'newer'; schemaVersion: number };
 
 export function inspectSlot(meta: SaveSlotMeta, currentSchemaVersion: number, storage?: SlotStorage | null): SlotHealth {
   const target = resolveStorage(storage);
@@ -212,8 +214,23 @@ export function inspectSlot(meta: SaveSlotMeta, currentSchemaVersion: number, st
   if (health.status === 'missing') return { status: 'missing' };
   if (health.status === 'newer') return { status: 'newer', schemaVersion: health.schemaVersion };
   if (health.status === 'corrupt' || health.status === 'malformed') return { status: 'broken', reason: health.reason };
-  if (!describeRaw(raw!, Date.now())) return { status: 'broken', reason: 'Нет планет в сохранении.' };
-  return { status: 'ok' };
+  const described = describeRaw(raw!, Date.now());
+  if (!described) return { status: 'broken', reason: 'Нет планет в сохранении.' };
+  return { status: 'ok', summary: described.summary };
+}
+
+/**
+ * Stores the card data read from the payload when the index holds another
+ * (a summary cached by an older build, e.g. NPC planets counted as NPC). The
+ * slot's dates and everything else stay as they are.
+ */
+export function updateSlotSummary(slotId: string, summary: SaveSlotSummary, storage?: SlotStorage | null): SlotWriteResult {
+  const target = resolveStorage(storage);
+  const index = readSlotIndex(target);
+  const slot = index.slots.find((item) => item.id === slotId);
+  if (!slot) return { ok: false, error: 'Слот не найден.', index };
+  if (JSON.stringify(slot.summary) === JSON.stringify(summary)) return { ok: true, index };
+  return writeSlotIndex({ ...index, slots: index.slots.map((item) => (item.id === slotId ? { ...item, summary } : item)) }, target);
 }
 
 /** Player-facing text of a slot that cannot be opened. */

@@ -17,6 +17,7 @@ import {
   exportSaveSlot,
   importSaveSlot,
   inspectSlot,
+  updateSlotSummary,
   readSlotIndex,
   renameSaveSlot,
   type SlotHealth,
@@ -307,6 +308,16 @@ function downloadText(fileName: string, text: string) {
 function LoadGameScreen({ index, onBack, onLoad, onChanged }: LoadGameScreenProps) {
   const slots = useMemo(() => sortSlotsByRecent(index.slots), [index.slots]);
   const health = useMemo(() => new Map(slots.map((slot) => [slot.id, inspectSlot(slot, SAVE_SCHEMA_VERSION)])), [slots]);
+  // The health check reads every payload anyway: a card summary cached by an older build is corrected here.
+  useEffect(() => {
+    let changed = false;
+    for (const slot of slots) {
+      const checked = health.get(slot.id);
+      if (checked?.status !== 'ok' || !checked.summary || JSON.stringify(checked.summary) === JSON.stringify(slot.summary)) continue;
+      changed = updateSlotSummary(slot.id, checked.summary).ok || changed;
+    }
+    if (changed) onChanged();
+  }, [health, slots, onChanged]);
   const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<SaveSlotMeta | null>(null);
