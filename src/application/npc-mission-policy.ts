@@ -73,6 +73,16 @@ function hasFlightSlot(state: SaveState, ownerId: string, missionId: NpcMissionI
 }
 
 const ONE_SPY_PROBE: Partial<Record<ShipId, number>> = Object.freeze({ 'spy-probe': 1 });
+/**
+ * Probes one owner keeps out at once (owner 31.10.2026: 4 402 probes were in
+ * flight in a 100-NPC world, 44 a bot): a few per planet, enough to watch its
+ * neighbours and targets, not every planet of the map.
+ */
+export const NPC_PROBES_IN_FLIGHT = Object.freeze({ base: 4, perPlanet: 1, max: 10 });
+
+function probesInFlight(state: SaveState, ownerId: string): number {
+  return activeNpcFlights(state, ownerId).filter((flight) => flight.missionId === 'espionage' || flight.missionId === 'exploration-recon').length;
+}
 // One origin offers the same ship selection to every target: serialize it once.
 const shipsPayloads = new WeakMap<object, string>();
 function shipsPayload(selectedShips: Partial<Record<ShipId, number>>): string {
@@ -389,11 +399,13 @@ export function getNpcMissionCandidates(
     return threshold !== null && (selectOwnerScore(state, ownerId)?.totalPoints ?? 0) >= threshold;
   })();
   const attackScoreCache = new Map<string, { totalPoints: number; resourcePoints: number } | undefined>();
+  const probesRoom = Math.min(NPC_PROBES_IN_FLIGHT.max, NPC_PROBES_IN_FLIGHT.base + NPC_PROBES_IN_FLIGHT.perPlanet * ownerTargets.length)
+    - probesInFlight(state, ownerId);
   for (const origin of ownerTargets) {
     const available = getNpcMissionAvailableFleet(state, ownerId, origin.id);
     if (!available) continue;
 
-    if ((available['spy-probe'] ?? 0) > 0 && hasFlightSlot(state, ownerId, 'espionage')) {
+    if ((available['spy-probe'] ?? 0) > 0 && hasFlightSlot(state, ownerId, 'espionage') && probesRoom > 0) {
       for (const target of allTargets) {
         if (target.id === origin.id || (target.kind !== 'player' && target.kind !== 'npc') || target.ownerId === ownerId) continue;
         const relation = legalRelation(state, ownerId, target);
@@ -407,7 +419,7 @@ export function getNpcMissionCandidates(
       }
     }
 
-    if ((available['spy-probe'] ?? 0) > 0 && hasFlightSlot(state, ownerId, 'exploration-recon')) {
+    if ((available['spy-probe'] ?? 0) > 0 && hasFlightSlot(state, ownerId, 'exploration-recon') && probesRoom > 0) {
       for (const { node, id } of contactById) {
         const reconAlreadyActive = ownerFlights(state.flights.records, ownerId).some((flight) => flight.ownerSide === 'npc'
           && flight.missionId === 'exploration-recon'
