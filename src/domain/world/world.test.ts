@@ -5,6 +5,8 @@ import {
   createDefaultNewGameConfig,
   createLegacyWorldConfig,
   getWorldNpcCapacity,
+  maxNpcForSpeed,
+  WORLD_LIMITS,
   normalizeNewGameConfig,
   validateNewGameConfig,
   type NewGameConfig,
@@ -149,4 +151,18 @@ test('a fixed NPC race mix gives exact shares; random stays seeded', async () =>
   const moved = setNpcFactionShare({ aegis: 34, synod: 33, veyra: 33 }, 'veyra', 60);
   assert.equal(moved.veyra, 60);
   assert.equal(moved.aegis + moved.synod + moved.veyra, 100);
+});
+
+test('«Супербыстрая» ×5 holds at most 50 NPC (owner decision 31.10.2026)', () => {
+  assert.equal(CAMPAIGN_SPEED_SCALE.superfast, 5);
+  assert.equal(maxNpcForSpeed('superfast'), 50);
+  assert.equal(maxNpcForSpeed('fast'), WORLD_LIMITS.npcMax);
+  const base = createDefaultNewGameConfig({ seed: 'SUPERFAST1' });
+  const fast = normalizeNewGameConfig({ ...base, world: { ...base.world, galaxyCount: 2, npcCount: 100, campaignSpeed: 'fast' } }, base);
+  assert.equal(fast.world.npcCount, 100, 'a ×2 world of 100 NPC is unchanged');
+  const superfast = normalizeNewGameConfig({ ...base, world: { ...base.world, galaxyCount: 2, npcCount: 100, campaignSpeed: 'superfast' } }, base);
+  assert.equal(superfast.world.campaignSpeed, 'superfast');
+  assert.equal(superfast.world.npcCount, 50);
+  assert.ok(validateNewGameConfig({ ...base, world: { ...base.world, galaxyCount: 2, npcCount: 60, campaignSpeed: 'superfast' } })
+    .some((issue) => issue.field === 'npcCount' && /50/.test(issue.message)));
 });

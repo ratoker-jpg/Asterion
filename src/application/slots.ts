@@ -47,7 +47,7 @@ function errorText(error: unknown): string {
 }
 
 const FACTIONS: readonly PlayerFactionId[] = ['aegis', 'synod', 'veyra'];
-const SPEEDS: readonly CampaignSpeed[] = ['slow', 'standard', 'fast'];
+const SPEEDS: readonly CampaignSpeed[] = ['slow', 'standard', 'fast', 'superfast'];
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 type LooseSave = Partial<Record<keyof SaveState, unknown>> & Record<string, unknown>;
