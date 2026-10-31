@@ -12,6 +12,11 @@
 //   CI can afford; --catchup-hours=H then makes the game itself catch up H hours.
 // --software: CPU rendering, as the other Electron QA jobs (the game itself uses the GPU).
 // --max-p95-ms=X: fail when an idle screen's p95 frame interval exceeds X (CI: 150).
+// Section switches («click → section ready», every header section, 1920×1080 and
+// 1280×720, --switch-repeats=N each): the frame the section first paints, when its
+// content stops changing (ready), frames with an empty workspace, the longest
+// frame gap and the UI thread's long tasks. --switch-only skips the idle FPS run.
+// --max-switch-ready-ms=X: fail when a section's median ready time exceeds X.
 const { app, BrowserWindow } = require('electron');
 const { spawnSync } = require('child_process');
 const fs = require('fs');
@@ -59,10 +64,18 @@ const SCREENS = [
   ['planet', '.planet-page-v3'],
   ['universe', '.universe-view'],
   ['fleets', '.fleet-main-v1'],
-  ['rating', '[data-qa-utility-screen="rating"]'],
+  ['operations', '.operations-shell-v2'],
   ['command', '.command-view'],
   ['reports', '.reports-view'],
+  ['rating', '[data-qa-utility-screen="rating"]'],
+  ['settings', '[data-qa-utility-screen="settings"]'],
 ];
+const SWITCH_ONLY = args.includes('--switch-only');
+const SWITCH_REPEATS = Number(option('switch-repeats', '3'));
+const MAX_SWITCH_READY_MS = option('max-switch-ready-ms') ? Number(option('max-switch-ready-ms')) : null;
+const VIEWPORTS = [[1920, 1080], [1280, 720]];
+// --switch-profile=DIR: a renderer CPU profile of the first switch to each section (diagnostics).
+const SWITCH_PROFILE = option('switch-profile');
 
 function freshCampaign() {
   const source = `
@@ -234,6 +247,103 @@ async function commandProbe(win) {
     worstLongTaskMs: done.length ? Math.max(0, ...done.flatMap((click) => click.longTasks)) : null };
 }
 
+/**
+ * One header click, measured in the page: `firstFrameMs` — the first animation
+ * frame in which the section's root is in the document (the frame that paints
+ * it); `readyMs` — the last structural change (elements added or removed) in
+ * the page before 500 ms without one: the data are on screen; `blankFrames` —
+ * frames after the click with an empty workspace; `worstFrameMs` — the longest
+ * gap between frames until ready; `longTasks` — UI-thread tasks over 50 ms.
+ */
+const SWITCH_PROBE = (selector, route) => `new Promise((resolve) => {
+  const root = () => document.querySelector(${JSON.stringify(selector)});
+  const button = document.querySelector('[data-qa-route="${route}"]');
+  if (!button) { resolve({ ok: false, reason: 'no route button' }); return; }
+  const longTasks = [];
+  const observer = new PerformanceObserver((list) => { for (const entry of list.getEntries()) longTasks.push(Math.round(entry.duration)); });
+  try { observer.observe({ entryTypes: ['longtask'] }); } catch {}
+  let lastChange = null;
+  const mutations = new MutationObserver((records) => {
+    if (records.some((record) => record.addedNodes.length || record.removedNodes.length)) lastChange = performance.now();
+  });
+  mutations.observe(document.body, { childList: true, subtree: true });
+  const startedAt = performance.now();
+  let firstFrameMs = null;
+  let blankFrames = 0;
+  let worstFrameMs = 0;
+  let previous = startedAt;
+  button.click();
+  const frame = () => {
+    const now = performance.now();
+    worstFrameMs = Math.max(worstFrameMs, now - previous);
+    previous = now;
+    const shown = Boolean(root());
+    if (shown && firstFrameMs === null) firstFrameMs = now - startedAt;
+    const workspace = document.querySelector('.workspace');
+    if (firstFrameMs === null && (!workspace || !(workspace.textContent || '').trim())) blankFrames += 1;
+    const quiet = lastChange === null ? now - startedAt : now - lastChange;
+    if ((firstFrameMs !== null && quiet >= 500) || now - startedAt > 15000) {
+      observer.disconnect();
+      mutations.disconnect();
+      const readyMs = firstFrameMs === null ? null : Math.max(firstFrameMs, lastChange === null ? 0 : lastChange - startedAt);
+      const round = (value) => value === null ? null : Math.round(value * 10) / 10;
+      resolve({ ok: firstFrameMs !== null, firstFrameMs: round(firstFrameMs), readyMs: round(readyMs), blankFrames,
+        worstFrameMs: round(worstFrameMs), longTasks: longTasks.filter((value) => value >= 50) });
+      return;
+    }
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+})`;
+
+const median = (values) => { const sorted = values.filter((value) => value !== null).sort((a, b) => a - b); return sorted.length ? sorted[Math.floor((sorted.length - 1) / 2)] : null; };
+
+/** Every header section, from another one, SWITCH_REPEATS times per viewport. */
+async function switchProbe(win) {
+  const results = {};
+  for (const [width, height] of VIEWPORTS) {
+    win.setContentSize(width, height);
+    await sleep(1_500);
+    const label = `${width}x${height}`;
+    results[label] = {};
+    for (const [route, selector] of SCREENS) {
+      const from = route === 'planet' ? ['reports', '.reports-view'] : ['planet', '.planet-page-v3'];
+      const runs = [];
+      for (let attempt = 0; attempt < SWITCH_REPEATS; attempt += 1) {
+        await openScreen(win, from[0], from[1]);
+        const profiling = SWITCH_PROFILE && attempt === 0 && width === VIEWPORTS[0][0];
+        const dbg = win.webContents.debugger;
+        if (profiling) {
+          if (!dbg.isAttached()) dbg.attach('1.3');
+          await dbg.sendCommand('Profiler.enable');
+          await dbg.sendCommand('Profiler.setSamplingInterval', { interval: 200 });
+          await dbg.sendCommand('Profiler.start');
+        }
+        runs.push(await run(win, SWITCH_PROBE(selector, route)));
+        if (profiling) {
+          const { profile } = await dbg.sendCommand('Profiler.stop');
+          fs.mkdirSync(SWITCH_PROFILE, { recursive: true });
+          fs.writeFileSync(path.join(SWITCH_PROFILE, `${route}.cpuprofile`), JSON.stringify(profile));
+        }
+      }
+      const ok = runs.filter((item) => item.ok);
+      results[label][route] = {
+        firstFrameMs: median(ok.map((item) => item.firstFrameMs)), readyMs: median(ok.map((item) => item.readyMs)),
+        worstReadyMs: ok.length ? Math.max(...ok.map((item) => item.readyMs)) : null,
+        blankFrames: Math.max(0, ...runs.map((item) => item.blankFrames ?? 0)),
+        worstFrameMs: ok.length ? Math.max(...ok.map((item) => item.worstFrameMs)) : null,
+        worstLongTaskMs: Math.max(0, ...runs.flatMap((item) => item.longTasks ?? [])),
+        longTasks: runs.reduce((sum, item) => sum + (item.longTasks?.length ?? 0), 0),
+        failed: runs.length - ok.length,
+      };
+      process.stderr.write(`switch ${label} ${route}: ${JSON.stringify(results[label][route])}\n`);
+    }
+  }
+  win.setContentSize(1920, 1080);
+  await sleep(1_000);
+  return results;
+}
+
 async function main() {
   await app.whenReady();
   registerSaveStore();
@@ -303,7 +413,8 @@ On screen: ${screen}`);
     const { profile } = await dbg.sendCommand('Profiler.stop');
     fs.writeFileSync(CPU_PROFILE, JSON.stringify(profile));
   }
-  for (const [route, selector] of SCREENS) {
+  result.switches = await switchProbe(win);
+  if (!SWITCH_ONLY) for (const [route, selector] of SCREENS) {
     await openScreen(win, route, selector);
     result.screens[route] = await measure(win, SECONDS);
     process.stderr.write(`${route}: ${JSON.stringify(result.screens[route])}\n`);
@@ -319,6 +430,11 @@ On screen: ${screen}`);
   fs.mkdirSync(OUTPUT, { recursive: true });
   fs.writeFileSync(path.join(OUTPUT, 'fps.json'), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result, null, 2));
+  if (MAX_SWITCH_READY_MS !== null) {
+    const slow = Object.entries(result.switches).flatMap(([label, routes]) => Object.entries(routes)
+      .filter(([, value]) => value.failed || value.readyMs === null || value.readyMs > MAX_SWITCH_READY_MS).map(([route, value]) => `${label} ${route} ${value.readyMs}`));
+    if (slow.length) throw new Error(`Section ready over ${MAX_SWITCH_READY_MS} ms: ${slow.join(', ')}`);
+  }
   if (MAX_P95_MS !== null) {
     const slow = Object.entries(result.screens).filter(([, value]) => value.p95Ms === null || value.p95Ms > MAX_P95_MS);
     if (slow.length) throw new Error(`Idle frame p95 over ${MAX_P95_MS} ms: ${slow.map(([route, value]) => `${route} ${value.p95Ms}`).join(', ')}`);
