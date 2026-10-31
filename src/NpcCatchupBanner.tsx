@@ -5,6 +5,7 @@ import { selectWorldSummaryLeaders, type WorldSummaryLeader } from './applicatio
 import type { NpcReplayState } from './domain/npc/replay-state.ts';
 import type { WorldCatchupSummary } from './domain/npc/world-catchup-summary.ts';
 import { useNpcCatchupProgress } from './ui/npc-catchup-progress-store.ts';
+import { localSaveChars, recordLocalCatchupRate } from './ui/menu/cloud.ts';
 import './npc-catchup-banner.css';
 
 /** Pending catch-ups shorter than this finish before the window would be read. */
@@ -36,9 +37,11 @@ function formatWait(ms: number): string {
  * up it turns into a summary of what happened in the world meanwhile.
  * The command gate itself stays in App; this window only reports.
  */
-export function NpcCatchupBanner({ replay: savedReplay, state, onDismissSummary, onOpenMenu }: {
+export function NpcCatchupBanner({ replay: savedReplay, state, slot, onDismissSummary, onOpenMenu }: {
   replay: NpcReplayState | undefined;
   state: SaveState;
+  /** The campaign's slot: this computer's replay speed is remembered for the cloud wait window. */
+  slot?: { id: string; storageKey: string } | null;
   onDismissSummary: () => void;
   onOpenMenu: () => void;
 }) {
@@ -55,7 +58,18 @@ export function NpcCatchupBanner({ replay: savedReplay, state, onDismissSummary,
   if (pending && replay && baseline.current?.targetAt !== replay.targetAt) {
     baseline.current = { targetAt: replay.targetAt, from: replay.processedThroughAt, startedAt: performance.now() };
   }
+  // The catch-up that just ended: how fast this computer replays this world (ServerWaitWindow compares it with the server).
+  const finishedRun = useRef<{ gameMs: number; wallMs: number } | null>(null);
+  if (!pending && baseline.current) {
+    finishedRun.current = { gameMs: baseline.current.targetAt - baseline.current.from, wallMs: performance.now() - baseline.current.startedAt };
+  }
   if (!pending) baseline.current = null;
+  useEffect(() => {
+    const run = finishedRun.current;
+    if (pending || !run || !slot) return;
+    finishedRun.current = null;
+    recordLocalCatchupRate(slot.id, run.gameMs, run.wallMs, localSaveChars(slot));
+  }, [pending, slot]);
 
   // While the world catches up, decorative loops (motion.css) pause: with software
   // rendering every animated layer repaints each frame and steals time from the replay.

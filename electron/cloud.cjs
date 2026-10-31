@@ -299,6 +299,10 @@ function registerCloud() {
     const result = await request(`/v1/campaigns/${id}/release`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
     return { campaign: result.campaign };
   }));
+  ipcMain.handle('asterion:cloud:update-request', () => guard(async () => {
+    const result = await request('/v1/update-request', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ gameVersion: app.getVersion() }) });
+    return { requested: Boolean(result.requested), serverVersion: String(result.serverVersion || '') };
+  }));
   /** The local save is now exactly this server revision (after a download was written, or an explicit choice). */
   ipcMain.handle('asterion:cloud:mark-synced', (_event, id, revision, digest) => {
     if (!CAMPAIGN_ID.test(id) || !Number.isSafeInteger(revision) || !/^[a-f0-9]{64}$/.test(digest)) return false;

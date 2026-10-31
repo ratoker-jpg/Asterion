@@ -231,6 +231,7 @@ import {
   type SunActionResult,
 } from './application/sun-raid.ts';
 import { refreshSlotMeta } from './application/slots.ts';
+import { slotStorageKey } from './domain/session/slots.ts';
 import { gateProgressPercent } from './domain/sun-raid/rules.ts';
 import { getCampaignTimeScale, setCampaignTimeScale, CAMPAIGN_SPEED_SCALE } from './domain/runtime/mode.ts';
 import { setActiveGalaxyCount, warmUniverseTimedSchedules } from './domain/universe/runtime.ts';
@@ -2388,6 +2389,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const [pauseOpen, setPauseOpen] = useState(false);
   const openPauseMenu = useCallback(() => setPauseOpen(true), []);
   // The world summary stays in the save until the player closes it.
+  const catchupSlot = useMemo(() => (session ? { id: session.slotId, storageKey: slotStorageKey(session.slotId) } : null), [session]);
   const dismissWorldSummary = useCallback(() => {
     const current = stateRef.current;
     if (!current.npcReplay?.summary) return;
@@ -2662,7 +2664,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
           onPlanetChange={(planetId) => selectPlanet(planetId)}
           onPlanetMenuToggle={() => setPlanetMenuOpen((open) => !open)}
          />
-        <NpcCatchupBanner replay={state.npcReplay} state={state} onDismissSummary={dismissWorldSummary} onOpenMenu={openPauseMenu} />
+        <NpcCatchupBanner replay={state.npcReplay} state={state} slot={catchupSlot} onDismissSummary={dismissWorldSummary} onOpenMenu={openPauseMenu} />
 
         <button
           className="shell-reset-control shell-pause-control"

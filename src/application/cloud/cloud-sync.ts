@@ -221,9 +221,9 @@ export function describeLocalReason(reason: CloudLocalReason, campaign: CloudCam
     case 'not-on-server': return 'Кампании ещё нет на сервере: она будет выгружена при выходе.';
     case 'same': return 'Мир на сервере совпадает с этим компьютером.';
     case 'local-newer': return 'На этом компьютере мир новее серверного: продолжаем его, сервер получит копию.';
-    case 'version-mismatch': return `Мир на сервере прожит версией ${campaign?.live?.gameVersion ?? '?'}, у вас другая: досчитываем локально.`;
+    case 'version-mismatch': return `Мир на сервере жил в версии ${campaign?.live?.gameVersion ?? '?'}: по вашему выбору досчитываем на этом ПК, мир сервера сохранён резервной копией.`;
     case 'schema-newer': return 'Копия на сервере создана более новой версией игры: продолжаем локальную.';
-    case 'waiting-version': return 'Сервер ещё не обновился до вашей версии: досчитываем локально.';
+    case 'waiting-version': return 'Сервер ещё не обновился до вашей версии: по вашему выбору досчитываем на этом ПК, мир сервера сохранён резервной копией.';
     default: return '';
   }
 }
