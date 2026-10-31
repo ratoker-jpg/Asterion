@@ -8,15 +8,24 @@ function safeCount(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
 }
 
-/** What the defender lost in one battle: destroyed ships and turrets at catalog prices, plus the loot taken. */
-export function defenderBattleLoss(report: BattleReport, raceId: CombatFactionId | undefined): number {
-  const loot = safeCount(report.resources?.metal) + safeCount(report.resources?.minerals) + safeCount(report.resources?.gas);
-  if (!raceId) return loot;
+/** Resources carried off by the attacker in one battle. */
+export function battleLoot(report: BattleReport): number {
+  return safeCount(report.resources?.metal) + safeCount(report.resources?.minerals) + safeCount(report.resources?.gas);
+}
+
+/** Ships (and, for the defender, turrets) one side lost in a battle, at its race's catalog prices. */
+export function sideDestroyedValue(report: BattleReport, side: 'attacker' | 'defender', raceId: CombatFactionId | undefined): number {
+  if (!raceId) return 0;
   const prices = new Map<string, number>([...getFactionShipCatalog(raceId), ...getFactionDefenseCatalog(raceId)]
     .map((entity) => [entity.id, safeCount(entity.cost?.metal) + safeCount(entity.cost?.minerals) + safeCount(entity.cost?.gas)]));
-  const destroyed = [...report.defenderForce.stacks, ...(report.defenderForce.defenses ?? [])]
+  const force = side === 'attacker' ? report.attackerForce : report.defenderForce;
+  return [...force.stacks, ...(force.defenses ?? [])]
     .reduce((sum, stack) => sum + safeCount(stack.destroyed) * (prices.get(stack.entityId) ?? 0), 0);
-  return destroyed + loot;
+}
+
+/** What the defender lost in one battle: destroyed ships and turrets at catalog prices, plus the loot taken. */
+export function defenderBattleLoss(report: BattleReport, raceId: CombatFactionId | undefined): number {
+  return sideDestroyedValue(report, 'defender', raceId) + battleLoot(report);
 }
 
 /** The battles that make an NPC defender remember its attacker; the same filter the battle hook uses. */

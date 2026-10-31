@@ -27,7 +27,8 @@ import { resolveSpyTarget } from './espionage-targets.ts';
 import { getOwnerRelation } from './owner-relations.ts';
 import { updateNpcAutonomyMemory } from '../domain/npc/autonomy-policy.ts';
 import { recordNpcGrievance } from '../domain/npc/grudges.ts';
-import { defenderBattleLoss, isGrievanceBattle } from './npc-grudges.ts';
+import { battleLoot, defenderBattleLoss, isGrievanceBattle, sideDestroyedValue } from './npc-grudges.ts';
+import { getNpcJournalSink } from './npc-journal.ts';
 import type { AttackLaunchSnapshot, AttackLoot, AttackResolution } from '../domain/attack/types.ts';
 import { recordBattleScoreAward } from '../domain/rating/scoring.ts';
 import { isPirateShipId } from '../domain/combat/side-entity.ts';
@@ -398,11 +399,22 @@ function reportLoot(report: BattleReport): AttackLoot {
 function rememberNpcBattle(state: SaveState, report: BattleReport, at: number): SaveState {
   if (!state.npc) return state;
   let profiles = state.npc.profiles;
+  const journal = getNpcJournalSink();
   for (const [side, participant] of [['attacker', report.attacker], ['defender', report.defender]] as const) {
     const ownerId = participant.playerId;
     const profile = ownerId ? profiles[ownerId] : undefined;
     if (!profile || !ownerId) continue;
     const won = report.winner === side;
+    // The outcome ledger only watches (every NPC, each fight it took part in).
+    if (journal?.outcome) {
+      const raceOf = (id: string | undefined) => Object.values(getEspionageTargets(state.espionage)).find((target) => target.ownerId === id)?.raceId;
+      const other = side === 'attacker' ? report.defender : report.attacker;
+      const loot = battleLoot(report);
+      const lost = sideDestroyedValue(report, side, raceOf(ownerId));
+      journal.outcome({ at, ownerId, kind: 'battle', data: { side, won: won ? 1 : 0, vs: other.playerId ?? null, m: report.missionType,
+        gain: side === 'attacker' ? loot : 0, loss: side === 'defender' ? lost + loot : lost,
+        hit: sideDestroyedValue(report, side === 'attacker' ? 'defender' : 'attacker', raceOf(other.playerId)), id: report.id } });
+    }
     let remembered = updateNpcAutonomyMemory(profile, report.id, at,
       won ? 'battle-victory' : 'battle-loss', won, [report.id]);
     // The defender remembers who attacked it and what it cost, for the whole match.

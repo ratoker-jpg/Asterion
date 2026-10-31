@@ -1,4 +1,5 @@
 import type { NewGameConfig } from '../domain/world/config.ts';
+import type { NpcStrategyState } from '../domain/npc/strategy.ts';
 import type { NpcStateV1 } from '../domain/npc/types.ts';
 import type { NpcReplayState } from '../domain/npc/replay-state.ts';
 import type { NpcScienceLedger } from '../domain/npc/science-state.ts';
@@ -123,6 +124,8 @@ export type SaveState = {
   npcReplay?: NpcReplayState;
   /** Canonical owner-wide NPC science, activated on a stable campaign timeline. */
   npcScience?: NpcScienceLedger;
+  /** NPC strategic plans and their outcomes (NPC intelligence slice 1); absent until the first plan check. */
+  npcStrategy?: NpcStrategyState;
   /** PR92 optional migration field. No second save key is used. */
   exploration?: ExplorationState;
   schemaVersion: number;

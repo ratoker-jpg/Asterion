@@ -144,6 +144,7 @@ import { isCombatFactionId } from '../domain/combat/factions.ts';
 import { inspectParsedSave, inspectSavePayload, isSaveProblem, type SaveProblem } from '../domain/session/save-health.ts';
 import { decodeCompactSave } from '../domain/session/save-codec.ts';
 import { createNpcState, migrateNpcState } from '../domain/npc/state.ts';
+import { migrateNpcStrategyState } from '../domain/npc/strategy.ts';
 import { PLANET_SKIN_IDS } from '../domain/universe/planet-skins.ts';
 import { migrateNpcScienceState } from '../domain/npc/science-state.ts';
 import { projectNpcScienceLedger } from './npc-science.ts';
@@ -228,6 +229,7 @@ type StoredSave = {
   npcReplay?: unknown;
   npc?: unknown;
   npcScience?: unknown;
+  npcStrategy?: unknown;
   exploration?: unknown;
   pirate?: unknown;
   schemaVersion?: unknown;
@@ -1795,6 +1797,7 @@ function migrateParsedSave(
       parsed.npc === undefined ? deriveLegacyNpcSalt(parsed) : '',
       Math.max(0, numberOr(objectRecord(parsed.resourceClock)?.lastReconciledAt, 0))),
     npcScience: migrateNpcScienceState(parsed.npcScience, espionage.targets, activationBaseline),
+    ...(migrateNpcStrategyState(parsed.npcStrategy) ? { npcStrategy: migrateNpcStrategyState(parsed.npcStrategy) } : {}),
     ...(mode === 'production' ? { npcReplay: isNpcReplayMetadata(parsed.npcReplay)
       ? migrateNpcReplayState(parsed.npcReplay)
       : { version: 1 as const,

@@ -1,5 +1,6 @@
 import type { SaveState } from './contracts.ts';
 import { selectOwnerScore } from '../domain/rating/scoring.ts';
+import { getFactionDefenseCatalog, getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
 
 /**
  * Bot journal (owner request 31.10.2026): what the strongest NPCs chose, what
@@ -12,6 +13,13 @@ import { selectOwnerScore } from '../domain/rating/scoring.ts';
  * Keys are short, like the player journal's: t time, o owner, k kind, c the
  * chosen candidate (none: a wait), ok started, r refusal reason, w its weight,
  * alt the next best candidates with their weights, s the owner's strategy.
+ *
+ * Outcomes are written for every NPC, not only the top (owner decision
+ * 31.10.2026, NPC intelligence slice): `battle` (each fight an NPC took part
+ * in: side, result, gain and loss), `plan` (a closed strategic plan: forecast
+ * against result and why it ended) and, once a game hour, `kpi` (points,
+ * resources at hand, fleet and defence value, planets) — a compact ledger to
+ * measure every owner's play, kept in the same file as the decisions.
  */
 
 export const NPC_JOURNAL_VERSION = 1;
@@ -50,6 +58,9 @@ export type NpcJournalDecision = Readonly<{
   strategy: string;
 }>;
 
+/** What came of something an owner did (journal only): a battle or a closed plan. */
+export type NpcJournalOutcome = Readonly<{ at: number; ownerId: string; kind: 'battle' | 'plan'; data: Readonly<Record<string, unknown>> }>;
+
 /** A change of the owner's play style, with its reason (journal only). */
 export type NpcJournalStyle = Readonly<{ at: number; ownerId: string; style: string; previous: string | null; reason: string }>;
 
@@ -58,6 +69,7 @@ export type NpcJournalSink = Readonly<{
   detailed: (ownerId: string) => boolean;
   decision: (entry: NpcJournalDecision) => void;
   style?: (entry: NpcJournalStyle) => void;
+  outcome?: (entry: NpcJournalOutcome) => void;
 }>;
 
 let activeSink: NpcJournalSink | null = null;
@@ -108,17 +120,24 @@ export class NpcJournalRecorder implements NpcJournalSink {
     this.pending.push({ t: entry.at, o: entry.ownerId, k: 'style', s: entry.style, d: { from: previous, why: entry.reason } });
   };
 
-  /** Refreshes the detailed top from `state` at most once per game hour. */
+  /** Battles and closed plans of every owner. */
+  outcome = (entry: NpcJournalOutcome): void => {
+    this.pending.push({ t: entry.at, o: entry.ownerId, k: entry.kind, d: entry.data });
+  };
+
+  /** Refreshes the detailed top from `state` at most once per game hour, and writes every owner's `kpi`. */
   observe(state: SaveState, at: number): void {
     if (at - this.rankedAt < NPC_JOURNAL_RANK_INTERVAL_MS && this.top.size) return;
     this.rankedAt = at;
     const owners = Object.keys(state.npc?.profiles ?? {});
+    const points = new Map(owners.map((ownerId) => [ownerId, selectOwnerScore(state, ownerId)?.totalPoints ?? 0]));
     const ranked = owners
-      .map((ownerId) => ({ ownerId, points: selectOwnerScore(state, ownerId)?.totalPoints ?? 0 }))
+      .map((ownerId) => ({ ownerId, points: points.get(ownerId)! }))
       .sort((left, right) => right.points - left.points || (left.ownerId < right.ownerId ? -1 : 1))
       .slice(0, NPC_JOURNAL_DETAILED_TOP);
     this.top = new Set(ranked.map((item) => item.ownerId));
     this.pending.push({ t: at, o: '*', k: 'top', d: { owners: ranked.map((item) => [item.ownerId, Math.round(item.points)]) } });
+    for (const [ownerId, kpi] of npcOwnerKpis(state, owners)) this.pending.push({ t: at, o: ownerId, k: 'kpi', d: { pts: Math.round(points.get(ownerId)!), ...kpi } });
   }
 
   take(): NpcJournalEntry[] {
@@ -126,6 +145,37 @@ export class NpcJournalRecorder implements NpcJournalSink {
     this.pending = [];
     return taken;
   }
+}
+
+function catalogValue(catalog: readonly { id: string; cost?: { metal?: number; minerals?: number; gas?: number } }[],
+  counts: Readonly<Partial<Record<string, number>>> | undefined): number {
+  if (!counts) return 0;
+  let value = 0;
+  for (const entity of catalog) {
+    const count = counts[entity.id] ?? 0;
+    if (count > 0) value += count * ((entity.cost?.metal ?? 0) + (entity.cost?.minerals ?? 0) + (entity.cost?.gas ?? 0));
+  }
+  return value;
+}
+
+/** Each owner's hourly measure: planets, resources at hand, fleet and defence value at catalog prices, active plans. */
+export function npcOwnerKpis(state: SaveState, owners: readonly string[]): Map<string, Record<string, number>> {
+  const wanted = new Set(owners);
+  const kpis = new Map<string, Record<string, number>>();
+  for (const target of Object.values(state.espionage?.targets ?? {})) {
+    if (target.kind !== 'npc' || !wanted.has(target.ownerId)) continue;
+    const kpi = kpis.get(target.ownerId) ?? { pl: 0, res: 0, fleet: 0, def: 0 };
+    kpi.pl! += 1;
+    kpi.res! += Math.round((target.resources.metal ?? 0) + (target.resources.minerals ?? 0) + (target.resources.gas ?? 0));
+    kpi.fleet! += catalogValue(getFactionShipCatalog(target.raceId), target.fleet?.ships);
+    kpi.def! += catalogValue(getFactionDefenseCatalog(target.raceId), target.defense?.defenses);
+    kpis.set(target.ownerId, kpi);
+  }
+  for (const [ownerId, plans] of Object.entries(state.npcStrategy?.plans ?? {})) {
+    const kpi = kpis.get(ownerId);
+    if (kpi) kpi.plans = plans.filter((plan) => plan.status === 'active').length;
+  }
+  return kpis;
 }
 
 /** JSON lines of entries (one per line, newline-terminated). */
