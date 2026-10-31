@@ -7,7 +7,7 @@ import { COMMANDER_IDS, type CommanderId } from '../../domain/combat/commanders.
 import type { ShipId } from '../../domain/combat/ids.ts';
 import { getBaseSunEfficiencyPercent } from '../../domain/energy/runtime.ts';
 import type { RuntimeMode } from '../../domain/runtime/mode.ts';
-import { SOLAR_CRYSTALS, SUN_RAID_CONFIG } from '../../domain/sun-raid/config.ts';
+import { SOLAR_CRYSTALS, SUN_RAID_CONFIG, sunRaidCapsOf } from '../../domain/sun-raid/config.ts';
 import { getHolderCrystals, incomingRaidsOnSun, projectSun, readSun } from '../../domain/sun-raid/rules.ts';
 import type { SunRaidEvent, SunRaidRecord } from '../../domain/sun-raid/types.ts';
 import { getActiveGalaxyCount } from '../../domain/universe/runtime.ts';
@@ -72,6 +72,8 @@ const pad2 = (value: number) => String(value).padStart(2, '0');
 
 export function SunRaidPanel({ state, now, mode, testTimeScale, selected, onSelect, onCommit, onOpenReport, onOpenCommand, onOpenGate, onSendSupport, onRecycleDebris, onTestGateAssault }: SunRaidPanelProps) {
   const sunRaid = currentSunRaidState(state);
+  // Owner rule 31.10.2026: the raid numbers of this world, by its NPC count.
+  const caps = sunRaidCapsOf(state);
   const role = selectPlayerRaidRole(state);
   const crystals = getHolderCrystals(sunRaid, role.holder);
   const alerts = selectIncomingSunAlerts(state, now);
@@ -137,6 +139,7 @@ export function SunRaidPanel({ state, now, mode, testTimeScale, selected, onSele
             </div>
           ) : ownRaids.length ? ownRaids.map((raid) => <RaidRow key={raid.id} raid={raid} now={now}
             gathered={raid.status === 'gathering' ? selectRaidSides(state, raid.id).attackers.population : 0}
+            cap={caps.perSide}
             ownPledge={raid.status === 'gathering' ? ownerRaidPledge(state, raid.id, state.profile.playerId) : 0}
             canJoin={raid.status === 'gathering' && (raid.gatherEndsAt ?? 0) > now && raidPledgeRoom(state, raid, state.profile.playerId) > 0}
             onJoin={() => setLaunch({ kind: 'join', raid })}
@@ -214,8 +217,8 @@ export function SunRaidPanel({ state, now, mode, testTimeScale, selected, onSele
           <article className="srp-card">
             <header><img src={SUN_RAID_MISSION_ICON} alt="" /><span><b>Командный рейд</b><small>Командование → Операции · союз · сбор 30 мин · 3 ч туда и 3 ч обратно</small></span></header>
             <ul className="srp-rules">
-              <li>Рейд вылетает только с полными {SUN_RAID_CONFIG.populationCapPerSide.toLocaleString('ru-RU')} населения: 30 минут на сбор, иначе распускается</li>
-              <li>Один участник вносит не больше {SUN_RAID_CONFIG.participantPopulationCap.toLocaleString('ru-RU')} — только боевой флот, с любых своих планет</li>
+              <li>Рейд вылетает только с полными {caps.perSide.toLocaleString('ru-RU')} населения: 30 минут на сбор, иначе распускается</li>
+              <li>Один участник вносит не больше {caps.participant.toLocaleString('ru-RU')} — только боевой флот, с любых своих планет</li>
               <li>Технологии и уровни кораблей — лучшие среди участников стороны</li>
               <li>Один рейд союза одновременно</li>
             </ul>
@@ -293,14 +296,14 @@ export function SunRaidPanel({ state, now, mode, testTimeScale, selected, onSele
 }
 
 type RaidRowProps = {
-  raid: SunRaidRecord; now: number; gathered: number; ownPledge: number; canJoin: boolean;
+  raid: SunRaidRecord; now: number; gathered: number; cap: number; ownPledge: number; canJoin: boolean;
   onJoin: () => void; onSelect: () => void; onReport: (id: string) => void;
 };
 
-function RaidRow({ raid, now, gathered, ownPledge, canJoin, onJoin, onSelect, onReport }: RaidRowProps) {
+function RaidRow({ raid, now, gathered, cap, ownPledge, canJoin, onJoin, onSelect, onReport }: RaidRowProps) {
   const result = raid.result;
   const status = raid.status === 'gathering'
-    ? `Сбор · ${gathered.toLocaleString('ru-RU')} / ${SUN_RAID_CONFIG.populationCapPerSide.toLocaleString('ru-RU')} · осталось ${countdown((raid.gatherEndsAt ?? now) - now)}${ownPledge ? ` · ваш вклад ${ownPledge.toLocaleString('ru-RU')}` : ''}`
+    ? `Сбор · ${gathered.toLocaleString('ru-RU')} / ${cap.toLocaleString('ru-RU')} · осталось ${countdown((raid.gatherEndsAt ?? now) - now)}${ownPledge ? ` · ваш вклад ${ownPledge.toLocaleString('ru-RU')}` : ''}`
     : raid.status === 'disbanded' ? 'Сбор не набран · рейд распущен'
       : raid.status === 'incoming' ? `В пути · бой через ${countdown(raid.arrivesAt - now)}`
         : result?.winner === 'attacker' ? `Победа · ${result.brightnessBefore}% → ${result.brightnessAfter}%` : 'Рейд отражён';
@@ -350,7 +353,7 @@ type LaunchProps = {
   onSubmit: (originPlanetId: string, ships: Partial<Record<ShipId, number>>, commanders: Partial<Record<CommanderId, number>>) => string | null;
 };
 
-/** Fleet picker with the live population counter X / 225 000 and the blocking reason. */
+/** Fleet picker with the live population counter X / the world's cap and the blocking reason. */
 function SunLaunchDialog({ state, now, options, kind, raid, galaxy, system, onClose, onSubmit }: LaunchProps) {
   const planetIds = Object.keys(state.planets);
   const [originPlanetId, setOriginPlanetId] = useState(state.currentPlanetId);
@@ -456,7 +459,7 @@ function SunLaunchDialog({ state, now, options, kind, raid, galaxy, system, onCl
         ) : null}
         <div className="srp-cap" data-qa-sun-population={`${used}/${preview.cap}`}>
           <div className="srp-cap__head">
-            <small>{kind === 'support' ? 'НАСЕЛЕНИЕ СТОРОНЫ' : `СБОР РЕЙДА · ВАШ ВКЛАД ДО ${SUN_RAID_CONFIG.participantPopulationCap.toLocaleString('ru-RU')}`}{preview.committed ? ` · уже собрано ${preview.committed.toLocaleString('ru-RU')}` : ''}</small>
+            <small>{kind === 'support' ? 'НАСЕЛЕНИЕ СТОРОНЫ' : `СБОР РЕЙДА · ВАШ ВКЛАД ДО ${sunRaidCapsOf(state).participant.toLocaleString('ru-RU')}`}{preview.committed ? ` · уже собрано ${preview.committed.toLocaleString('ru-RU')}` : ''}</small>
             <b className={used > preview.cap ? 'is-over' : ''}>{used.toLocaleString('ru-RU')} / {preview.cap.toLocaleString('ru-RU')}</b>
           </div>
           <i><span style={{ width: `${percent}%` }} className={used > preview.cap ? 'is-over' : ''} /></i>
@@ -465,7 +468,7 @@ function SunLaunchDialog({ state, now, options, kind, raid, galaxy, system, onCl
           <div><dt>В пути</dt><dd>{preview.oneWayMs ? countdown(preview.oneWayMs) : '—'}</dd></div>
           <div><dt>Прибытие</dt><dd>{preview.oneWayMs ? new Date(preview.arrivesAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '—'}</dd></div>
           <div><dt>Газ</dt><dd>{preview.gasCost.toLocaleString('ru-RU')}</dd></div>
-          <div><dt>{kind === 'support' ? 'Атака прибудет' : 'Вылет'}</dt><dd>{kind === 'support' ? (raid ? countdown(raid.arrivesAt - now) : '—') : kind === 'join' && raid ? `сбор ещё ${countdown((raid.gatherEndsAt ?? now) - now)}` : 'при 225 000 за 30 мин'}</dd></div>
+          <div><dt>{kind === 'support' ? 'Атака прибудет' : 'Вылет'}</dt><dd>{kind === 'support' ? (raid ? countdown(raid.arrivesAt - now) : '—') : kind === 'join' && raid ? `сбор ещё ${countdown((raid.gatherEndsAt ?? now) - now)}` : `при ${sunRaidCapsOf(state).perSide.toLocaleString('ru-RU')} за 30 мин`}</dd></div>
         </dl>
         {(error ?? preview.error) && preview.population > 0 ? <p className="srp-block-reason" role="alert">{error ?? preview.error}</p> : null}
         <footer>

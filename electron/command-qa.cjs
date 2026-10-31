@@ -75,6 +75,21 @@ async function patchSave(win, key, patchSource) {
   })()`);
 }
 
+/**
+ * The running page may write its own world over a patched save while it
+ * unloads (a pending autosave of the live world), so the reloaded game would
+ * not hold the patch. Patch, reload, and check the loaded save; again until it holds.
+ */
+async function patchAndReload(win, key, mode, patchSource, heldSource) {
+  for (let attempt = 1; ; attempt += 1) {
+    await patchSave(win, key, patchSource);
+    await reload(win, mode);
+    const held = await run(win, `(() => { const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(key)}) || '{}'); return Boolean((${heldSource})(save)); })()`);
+    if (held) return;
+    if (attempt >= 4) throw new Error(`The patched save did not survive the reload: ${heldSource}`);
+  }
+}
+
 async function click(win, selector) {
   const ok = await run(win, `(() => { const node = document.querySelector(${JSON.stringify(selector)}); if (!node || node.disabled) return false; node.click(); return true; })()`);
   if (!ok) throw new Error(`Missing or disabled control: ${selector}`);
@@ -128,14 +143,13 @@ async function productionScenario(win, label) {
   await capture(win, label, 'production-locked');
 
   // 2. A Hall on a second planet unlocks; the highest level counts, not the sum.
-  await patchSave(win, PRODUCTION_KEY, `(save) => {
+  await patchAndReload(win, PRODUCTION_KEY, 'production', `(save) => {
     const clone = JSON.parse(JSON.stringify(save.planets['helion-01']));
     clone.buildings['planetary-government'] = 7;
     clone.name = 'Colony B';
     save.planets['colony-b'] = clone;
     save.planets['helion-01'].buildings['planetary-government'] = 3;
-  }`);
-  await reload(win, 'production');
+  }`, `(save) => save.planets['colony-b']?.buildings['planetary-government'] === 7`);
   await openCommand(win);
   view = await snapshot(win);
   assert(!view.locked && view.state === 'none' && view.catalogEmpty && view.catalogItems === 0 && !view.testControls, `${label}: Hall on any planet unlocks with an honest empty catalog and no test controls`, view);
@@ -169,8 +183,8 @@ async function productionScenario(win, label) {
   assert(/^alliance-\d+$/.test(allianceId) && saved.profile.allianceId === allianceId, `${label}: stable id mirrored into the profile`, { allianceId, profile: saved.profile.allianceId });
 
   // 5. Losing the last Hall locks the screen without touching the alliance.
-  await patchSave(win, PRODUCTION_KEY, `(save) => { for (const planet of Object.values(save.planets)) planet.buildings['planetary-government'] = 0; }`);
-  await reload(win, 'production');
+  await patchAndReload(win, PRODUCTION_KEY, 'production', `(save) => { for (const planet of Object.values(save.planets)) planet.buildings['planetary-government'] = 0; }`,
+    `(save) => Object.values(save.planets).every((planet) => planet.buildings['planetary-government'] === 0)`);
   await openCommand(win);
   view = await snapshot(win);
   assert(view.locked && view.state === 'locked', `${label}: no Hall locks the screen again`, view);

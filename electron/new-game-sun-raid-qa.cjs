@@ -68,6 +68,15 @@ async function production(win, label) {
   await waitFor(win, `document.querySelector('[data-qa-menu="main"]')`);
   if (!(await run(win, `document.querySelector('[data-qa-menu-action="continue"]').disabled`))) throw new Error('Continue must be disabled without saves');
   await capture(win, label, '01-main-menu-empty');
+  // Settings → «Журнал игрока»: the bot journal card sits beside the player's journal (PR 10).
+  await click(win, '[data-qa-menu-action="settings"]');
+  await waitFor(win, `document.querySelector('[data-qa-settings-section="journal"]')`);
+  await click(win, '[data-qa-settings-section="journal"]');
+  await waitFor(win, `document.querySelector('[data-qa-bot-journal-download]')`);
+  if (!(await run(win, `/ЖУРНАЛ БОТОВ/.test(document.querySelector('[data-qa-bot-journal]').textContent)`))) throw new Error('Bot journal card is missing');
+  await capture(win, label, '01b-settings-bot-journal');
+  await load(win);
+  await waitFor(win, `document.querySelector('[data-qa-menu="main"]')`);
 
   await click(win, '[data-qa-menu-action="new"]');
   await waitFor(win, `document.querySelector('[data-qa-wizard-step="race"]')`);
@@ -79,7 +88,18 @@ async function production(win, label) {
   await waitFor(win, `document.querySelector('[data-qa-wizard-step="world"]')`);
   await run(win, `(() => {
     const set = (qa, value) => { const input = document.querySelector('[data-qa-world="' + qa + '"]'); const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; setter.call(input, String(value)); input.dispatchEvent(new Event('input', { bubbles: true })); };
-    set('galaxies', 3); set('npc', 40); set('seed', 'QASEED42');
+    set('galaxies', 3); set('npc', 80);
+  })()`);
+  // «Супербыстрая» ×5 holds at most 50 NPC: the slider stops there and 80 drops to 50 with the reason shown.
+  await run(win, `[...document.querySelectorAll('[role="radio"]')].find((button) => /Супербыстрая ×5/.test(button.textContent)).click()`);
+  await waitFor(win, `document.querySelector('[data-qa-world="superfast-npc-cap"]')`);
+  const capped = await run(win, `({ max: document.querySelector('[data-qa-world="npc"]').max, value: document.querySelector('[data-qa-world="npc"]').value })`);
+  if (capped.max !== '50' || capped.value !== '50') throw new Error(`Superfast NPC cap: ${JSON.stringify(capped)}`);
+  await capture(win, label, '04a-new-game-superfast');
+  await run(win, `[...document.querySelectorAll('[role="radio"]')].find((button) => /Стандартная ×1/.test(button.textContent)).click()`);
+  await run(win, `(() => {
+    const set = (qa, value) => { const input = document.querySelector('[data-qa-world="' + qa + '"]'); const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; setter.call(input, String(value)); input.dispatchEvent(new Event('input', { bubbles: true })); };
+    set('npc', 40); set('seed', 'QASEED42');
   })()`);
   await sleep(300);
   await capture(win, label, '04-new-game-world');

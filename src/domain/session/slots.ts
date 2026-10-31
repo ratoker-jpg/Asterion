@@ -53,7 +53,7 @@ export function createSlotId(random: () => number = Math.random, now = Date.now(
 }
 
 const FACTIONS: readonly PlayerFactionId[] = ['aegis', 'synod', 'veyra'];
-const SPEEDS: readonly CampaignSpeed[] = ['slow', 'standard', 'fast'];
+const SPEEDS: readonly CampaignSpeed[] = ['slow', 'standard', 'fast', 'superfast'];
 
 function finite(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;

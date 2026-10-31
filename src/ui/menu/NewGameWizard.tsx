@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import {
   CAMPAIGN_SPEED_LABELS,
+  maxNpcForSpeed,
   WORLD_DENSITY_RULES,
   WORLD_LIMITS,
   createDefaultNewGameConfig,
@@ -13,7 +14,7 @@ import {
 } from '../../domain/world/config.ts';
 import { generateWorld, summarizeWorld } from '../../domain/world/generator.ts';
 import { createCampaignSeed } from '../../domain/world/random.ts';
-import type { CampaignSpeed } from '../../domain/runtime/mode.ts';
+import { CAMPAIGN_SPEED_SCALE, type CampaignSpeed } from '../../domain/runtime/mode.ts';
 import type { PlayerFactionId } from '../../domain/profile/types.ts';
 import type { SaveSlotMeta } from '../../domain/session/slots.ts';
 import { createInitialSaveState } from '../../application/persistence.ts';
@@ -51,7 +52,11 @@ export function NewGameWizard({ onBack, onThemeChange, onCreated }: WizardProps)
     // Keep a name the player typed; only the untouched default follows the race.
     campaignName: current.campaignName === DEFAULT_CAMPAIGN_NAME[current.factionId] ? DEFAULT_CAMPAIGN_NAME[factionId] : current.campaignName,
   }));
-  const patchWorld = (patch: Partial<NewGameConfig['world']>) => setConfig((current) => ({ ...current, world: { ...current.world, ...patch } }));
+  // «Супербыстрая» ×5 holds at most 50 NPC: a larger count drops to it (the wizard says why).
+  const patchWorld = (patch: Partial<NewGameConfig['world']>) => setConfig((current) => {
+    const world = { ...current.world, ...patch };
+    return { ...current, world: { ...world, npcCount: Math.min(world.npcCount, maxNpcForSpeed(world.campaignSpeed)) } };
+  });
 
   const goBack = () => {
     if (step === 'race') onBack();
@@ -263,7 +268,8 @@ function WorldStep({ config, issues, onChange, onWorld, onNext }: WorldStepProps
 
         <h2>Вселенная</h2>
         <RangeField label="ГАЛАКТИКИ" value={config.world.galaxyCount} min={WORLD_LIMITS.galaxyMin} max={WORLD_LIMITS.galaxyMax} onChange={(value) => onWorld({ galaxyCount: value })} suffix={`× ${WORLD_LIMITS.systemsPerGalaxy} систем`} qa="galaxies" />
-        <RangeField label="NPC-ВЛАДЕЛЬЦЫ" value={config.world.npcCount} min={WORLD_LIMITS.npcMin} max={WORLD_LIMITS.npcMax} onChange={(value) => onWorld({ npcCount: value })} suffix={`из ${capacity} мест`} qa="npc" />
+        <RangeField label="NPC-ВЛАДЕЛЬЦЫ" value={config.world.npcCount} min={WORLD_LIMITS.npcMin} max={maxNpcForSpeed(config.world.campaignSpeed)} onChange={(value) => onWorld({ npcCount: value })} suffix={`из ${capacity} мест`} qa="npc" />
+        {config.world.campaignSpeed === 'superfast' ? <p className="menu-field__hint" data-qa-world="superfast-npc-cap">При скорости «Супербыстрая» ×5 — не больше {WORLD_LIMITS.superfastNpcMax} NPC: так нагрузка на сервер не выше, чем у мира ×2 со 100 NPC.</p> : null}
         {issueFor('npcCount') ? <p className="menu-inline-error" role="alert">{issueFor('npcCount')}</p> : null}
         <div className="menu-field-row">
           <div className="menu-field">
@@ -281,7 +287,7 @@ function WorldStep({ config, issues, onChange, onWorld, onNext }: WorldStepProps
         <div className="menu-field">
           <small>СКОРОСТЬ ПАРТИИ · ФИКСИРУЕТСЯ НА СТАРТЕ</small>
           <Segmented<CampaignSpeed> label="Скорость партии" value={config.world.campaignSpeed} onChange={(value) => onWorld({ campaignSpeed: value })}
-            options={(Object.keys(CAMPAIGN_SPEED_LABELS) as CampaignSpeed[]).map((value) => ({ value, label: `${CAMPAIGN_SPEED_LABELS[value].label} ${value === 'slow' ? '×0.5' : value === 'fast' ? '×2' : '×1'}`, hint: CAMPAIGN_SPEED_LABELS[value].hint }))} />
+            options={(Object.keys(CAMPAIGN_SPEED_LABELS) as CampaignSpeed[]).map((value) => ({ value, label: `${CAMPAIGN_SPEED_LABELS[value].label} ×${CAMPAIGN_SPEED_SCALE[value]}`, hint: CAMPAIGN_SPEED_LABELS[value].hint }))} />
           <em className="menu-field__hint">{CAMPAIGN_SPEED_LABELS[config.world.campaignSpeed].hint}</em>
         </div>
         <div className="menu-field-row">

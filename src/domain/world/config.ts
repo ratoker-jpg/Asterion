@@ -42,6 +42,8 @@ export const WORLD_LIMITS = Object.freeze({
   positionsPerSystem: 24,
   npcMin: 0,
   npcMax: 100,
+  /** «Супербыстрая» ×5 holds at most this many NPC (owner decision 31.10.2026). */
+  superfastNpcMax: 50,
   playerNameMin: 3,
   playerNameMax: 24,
   campaignNameMax: 40,
@@ -64,10 +66,16 @@ export const CAMPAIGN_SPEED_LABELS: Readonly<Record<CampaignSpeed, { label: stri
   slow: { label: 'Медленная', hint: 'Все таймеры ×0.5 — вдвое дольше' },
   standard: { label: 'Стандартная', hint: 'Текущий темп игры' },
   fast: { label: 'Быстрая', hint: 'Все таймеры ×2 — вдвое быстрее' },
+  superfast: { label: 'Супербыстрая', hint: 'Все таймеры ×5 — впятеро быстрее; в мире не больше 50 NPC' },
 });
 
+/** The most NPC a world of this speed holds. */
+export function maxNpcForSpeed(speed: CampaignSpeed): number {
+  return speed === 'superfast' ? WORLD_LIMITS.superfastNpcMax : WORLD_LIMITS.npcMax;
+}
+
 const FACTIONS: readonly PlayerFactionId[] = ['aegis', 'synod', 'veyra'];
-const SPEEDS: readonly CampaignSpeed[] = ['slow', 'standard', 'fast'];
+const SPEEDS: readonly CampaignSpeed[] = ['slow', 'standard', 'fast', 'superfast'];
 const DENSITIES: readonly WorldDensity[] = ['sparse', 'standard', 'dense'];
 
 function cleanText(value: unknown, max: number): string {
@@ -176,7 +184,10 @@ export function validateNewGameConfig(config: NewGameConfig): WorldConfigIssue[]
   if (!config.campaignName.trim()) issues.push({ field: 'campaignName', message: 'Введите название кампании.' });
   if (!/^[A-Za-z0-9]{4,16}$/.test(config.seed)) issues.push({ field: 'seed', message: 'Сид: 4–16 латинских букв и цифр.' });
   const capacity = getWorldNpcCapacity(config.world);
-  if (config.world.npcCount > capacity) {
+  const speedMax = maxNpcForSpeed(config.world.campaignSpeed);
+  if (config.world.npcCount > speedMax) {
+    issues.push({ field: 'npcCount', message: `При скорости «${CAMPAIGN_SPEED_LABELS[config.world.campaignSpeed].label}» в мире не больше ${speedMax} NPC.` });
+  } else if (config.world.npcCount > capacity) {
     issues.push({ field: 'npcCount', message: `В мире помещается не больше ${capacity} NPC: увеличьте число галактик или лимит NPC на систему.` });
   }
   return issues;
@@ -191,6 +202,7 @@ export function normalizeNewGameConfig(value: unknown, fallback: NewGameConfig):
   const galaxyCount = integerIn(world.galaxyCount, WORLD_LIMITS.galaxyMin, WORLD_LIMITS.galaxyMax, fallback.world.galaxyCount);
   const capacity = galaxyCount * WORLD_LIMITS.systemsPerGalaxy * maxNpc;
   const seed = cleanText(source.seed, 16);
+  const speed = SPEEDS.includes(world.campaignSpeed as CampaignSpeed) ? world.campaignSpeed as CampaignSpeed : fallback.world.campaignSpeed;
   return {
     version: 1,
     seed: /^[A-Za-z0-9]{4,16}$/.test(seed) ? seed : fallback.seed,
@@ -200,10 +212,10 @@ export function normalizeNewGameConfig(value: unknown, fallback: NewGameConfig):
     world: {
       galaxyCount,
       systemsPerGalaxy: 40,
-      npcCount: Math.min(capacity, integerIn(world.npcCount, WORLD_LIMITS.npcMin, WORLD_LIMITS.npcMax, fallback.world.npcCount)),
+      npcCount: Math.min(capacity, maxNpcForSpeed(speed), integerIn(world.npcCount, WORLD_LIMITS.npcMin, WORLD_LIMITS.npcMax, fallback.world.npcCount)),
       maxNpcPerSystem: maxNpc,
       density: DENSITIES.includes(world.density as WorldDensity) ? world.density as WorldDensity : fallback.world.density,
-      campaignSpeed: SPEEDS.includes(world.campaignSpeed as CampaignSpeed) ? world.campaignSpeed as CampaignSpeed : fallback.world.campaignSpeed,
+      campaignSpeed: speed,
       randomPlayerStart: typeof world.randomPlayerStart === 'boolean' ? world.randomPlayerStart : fallback.world.randomPlayerStart,
     },
     npcFactions: source.npcFactions === 'random' ? 'random' : normalizeNpcFactionMix(source.npcFactions) ?? 'random',

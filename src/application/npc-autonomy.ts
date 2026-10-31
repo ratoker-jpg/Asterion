@@ -1,3 +1,5 @@
+import { getNpcJournalSink, NPC_JOURNAL_ALTERNATIVES } from './npc-journal.ts';
+import { npcStyleBias, readNpcPlayStyle } from './npc-style.ts';
 import { chooseNpcAutonomyAction, updateNpcAutonomyMemory, type NpcAutonomyCandidate } from '../domain/npc/autonomy-policy.ts';
 import { flightsToPlanet, ownerFlights } from './npc-knowledge-index.ts';
 import { NPC_REPAIR_BALANCE, npcRepairPoolValue, repairNpcPlanet } from './npc-repair.ts';
@@ -40,6 +42,7 @@ import {
   estimateOperationUtility, estimateProductionItemUtility, flightRemoteness, estimateScienceUtility, npcProductionBatch,
   npcProductionPurpose, NPC_STRATEGY_FAMILY, strategyOf, type NpcStrategyDrives,
   estimateFleetSaveUtility, estimateCommanderUpgradeUtility, npcFleetValue, spaceFlightLegFor, estimateSpaceportUpgradeUtility, NPC_FLAGSHIP_ID,
+  hoardPressure, NPC_FORTRESS_BALANCE,
 } from './npc-utility.ts';
 
 /** A look within this long of the session end is the owner's last before leaving. */
@@ -84,6 +87,8 @@ function familyDrive(drives: NpcStrategyDrives, kind: string): number {
     case 'recon': return Math.max(drives.war, drives.operations, 0.5 * drives.military);
     case 'diplomacy': case 'aid': return drives.diplomacy;
     case 'fleetsave': return Math.max(0.6, drives.military);
+    // Gates, Sun raids and their calls: the match's goal, weighed apart from routine trips.
+    case 'endgame': return Math.max(0.7, drives.operations, drives.diplomacy);
     default: return 0.5;
   }
 }
@@ -307,9 +312,13 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     if (ownerFlights(state.flights.records, ownerId).some((flight) => flight.missionId === 'transport' && flight.originPlanetId === source.id
       && (flight.phase === 'outbound' || flight.phase === 'arrived'))) continue;
     if (source.id !== main.id) {
-      if (fullest < 0.75) continue;
+      // A colony ships home when its stores fill up, or when it holds more
+      // than half a day of the owner's income: the fortress spends it (owner strategy 31.10.2026).
+      const held = source.resources.metal + source.resources.minerals + source.resources.gas;
+      const idle = held / Math.max(1, utility.dayValue) >= NPC_FORTRESS_BALANCE.colonySendDays;
+      if (fullest < 0.75 && !idle) continue;
       destination = main;
-      urgency = fullest - 0.5;
+      urgency = Math.max(fullest - 0.5, idle ? 0.3 + 0.3 * hoardPressure(utility, source) : 0);
     } else {
       const dry = planets.filter((planet) => planet.id !== main.id)
         .map((planet) => ({ planet, fill: describeNpcPlanet(planet, 0, 0, false).fill }))
@@ -570,8 +579,11 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     totals.set(candidate.kind, (totals.get(candidate.kind) ?? 0) + candidate.weight);
     best.set(candidate.kind, Math.max(best.get(candidate.kind) ?? 0, candidate.weight));
   }
+  // The play style of this look (npc-style.ts) weighs the families too; the journal sees its changes.
+  const style = readNpcPlayStyle(state, profile, utility, drives);
+  getNpcJournalSink()?.style?.({ at, ownerId, style: style.style, previous: null, reason: style.reason });
   const familyScale = (kind: string) => Math.min(utilityToWeight(NPC_MAX_UTILITY), Math.max(0.05, best.get(kind)!))
-    * (0.4 + familyDrive(drives, kind));
+    * (0.4 + familyDrive(drives, kind)) * npcStyleBias(style.style, kind);
   const candidates = choices.map(({ candidate }) => ({ ...candidate, weight: candidate.weight / totals.get(candidate.kind)! * familyScale(candidate.kind) }));
   const strategy = chooseNpcStrategy(drives, (item) => estimationError(profile, eventId, `strategy:${item}`));
   const decisions: NpcAutonomyDecision[] = [];
@@ -593,6 +605,14 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     decisions.push({ ...outcome, state: current, kind: selected?.kind ?? 'wait', wait: selected === null, idempotencyKey,
       selectedRole: selected?.payload?.role as BuildingRole ?? null,
       selectedScienceId: selected?.payload?.scienceId as ScienceId ?? null });
+    // The bot journal only watches: nothing here feeds back into the choice.
+    const journal = getNpcJournalSink();
+    if (journal) journal.decision({ at, ownerId, kind: selected?.kind ?? 'wait', strategy,
+      chosen: selected ? { id: selected.id, weight: selected.weight } : null,
+      alternatives: journal.detailed(ownerId) ? open.filter((candidate) => candidate.id !== selected?.id)
+        .sort((left, right) => right.weight - left.weight || (left.id < right.id ? -1 : 1)).slice(0, NPC_JOURNAL_ALTERNATIVES)
+        .map((candidate) => ({ id: candidate.id, weight: candidate.weight })) : [],
+      started: outcome.started, reason: outcome.reason ?? null });
     if (!selected) break;
     const slot = actionSlot(selected);
     open = open.filter((candidate) => candidate.id !== selected.id && actionSlot(candidate) !== slot);

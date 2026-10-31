@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { downloadJournal, getActiveJournalCampaign, readJournal } from './ui/player-journal-store.ts';
+import { botJournalAvailable, downloadBotJournal } from './ui/bot-journal-store.ts';
 import { getDesktopBridge } from './domain/settings/desktop.ts';
 import { AUDIO_VOLUME_MAX, AUDIO_VOLUME_MIN, createDefaultAudioPreferences, type AudioChannel } from './domain/settings/audio.ts';
 import { audio, playSound } from './audio/engine.ts';
@@ -31,7 +32,7 @@ const sections: readonly { id: SettingsSection; label: string; subtitle: string 
   { id: 'notifications', label: 'УВЕДОМЛЕНИЯ', subtitle: 'Системные сигналы' },
   { id: 'save', label: 'СОХРАНЕНИЕ', subtitle: 'Настройки интерфейса' },
   { id: 'cloud', label: 'ОБЛАЧНЫЙ МИР', subtitle: 'Сервер и резервные копии' },
-  { id: 'journal', label: 'ЖУРНАЛ ИГРОКА', subtitle: 'Ваши действия в JSON' },
+  { id: 'journal', label: 'ЖУРНАЛ ИГРОКА', subtitle: 'Ваши действия и журнал ботов' },
 ];
 
 const typographyMeta: Record<TypographyKey, { label: string; sample: string }> = {
@@ -309,7 +310,28 @@ function JournalPanel() {
           downloadJournal(campaign, {}).then((total) => setMessage(`Файл с ${total} записями сохранён.`)).catch(() => setMessage('Не удалось прочитать журнал.'));
         }} data-qa-player-journal-download>СКАЧАТЬ ЖУРНАЛ (JSON)</button>
       </div>
+      <BotJournalCard campaign={campaign} />
     </section>
+  );
+}
+
+/** Owner request 31.10.2026: what the strongest bots chose and why, from a file next to the save. */
+function BotJournalCard({ campaign }: { campaign: string | null }) {
+  const [message, setMessage] = useState('');
+  const available = botJournalAvailable();
+  return (
+    <div className="settings-reset-card-v2" data-qa-bot-journal>
+      <div>
+        <h3 className="utility-section-title">ЖУРНАЛ БОТОВ</h3>
+        <p className="utility-body-text">Десять сильнейших NPC по рейтингу: что выбрали, какие 2–3 варианта рассматривали и с какими оценками, почему отказались, когда сменили стиль игры. Последние 3 игровых дня, пока вас нет — пишет облачный сервер. Журнал лежит рядом с сохранением и не влияет на игру.</p>
+        {!available ? <small className="utility-helper">Журнал ботов ведёт только настольная версия игры.</small> : null}
+        {message ? <small className="utility-helper">{message}</small> : null}
+      </div>
+      <button type="button" className="utility-control" disabled={!campaign || !available} onClick={() => {
+        if (!campaign) return;
+        downloadBotJournal(campaign).then((total) => setMessage(`Файл с ${total} записями сохранён.`)).catch(() => setMessage('Не удалось прочитать журнал ботов.'));
+      }} data-qa-bot-journal-download>ВЫГРУЗИТЬ ЖУРНАЛ БОТОВ</button>
+    </div>
   );
 }
 

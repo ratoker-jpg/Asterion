@@ -19,6 +19,7 @@ import { getNpcSpaceportCandidates, settleNpcSpaceport, startNpcSpaceportUpgrade
 import { createNpcUtilityContext, npcFlagshipPlan } from './npc-utility.ts';
 import { createInitialSaveState, createPersistenceFacade } from './persistence.ts';
 import { currentSunRaidState, reconcileSunRaids } from './sun-raid.ts';
+import { sunRaidCapsOf } from '../domain/sun-raid/config.ts';
 
 const NOW = Date.UTC(2026, 9, 26);
 const HOUR = 3_600_000;
@@ -73,11 +74,38 @@ function allianceOf(state: SaveState, owners: readonly string[]): SaveState {
 
 const scored = (_id: string, estimate: number) => utilityToWeight(estimate);
 
-test('NPC raid gathering: the leader declares, two allies join, 225 000 takes off together and comes home (25.10.2026)', () => {
+/** The owners are at the game now (in a session): only they answer a 30-minute gathering. */
+function online(state: SaveState, owners: readonly string[]): SaveState {
+  const profiles = { ...state.npc!.profiles };
+  for (const ownerId of owners) profiles[ownerId] = { ...profiles[ownerId]!, session: { ...profiles[ownerId]!.session, active: true, sessionStartedAt: NOW - HOUR, sessionEndsAt: NOW + HOUR } };
+  return { ...state, npc: { ...state.npc!, profiles } };
+}
+
+test('a leader does not call a Sun gathering its online members cannot fill (owner 31.10.2026)', () => {
   const { state: initial, owners } = world();
+  let state = allianceOf(initial, owners);
+  for (const ownerId of owners) state = armed(state, ownerId, 20_000);
+  // Only the leader is at the game: 25 000 of the 50 000 this world needs.
+  state = online(state, owners.slice(0, 1));
+  const leaderProfile = state.npc!.profiles[owners[0]!]!;
+  const declare = getNpcEndgameChoices(state, leaderProfile, createNpcUtilityContext(state, leaderProfile, NOW, 1), NOW, 1, scored)
+    .find((choice) => choice.candidate.id.startsWith('sun-raid:'));
+  assert.equal(declare, undefined, 'offline allies cannot answer within 30 minutes');
+  state = online(state, owners);
+  const profile = state.npc!.profiles[owners[0]!]!;
+  assert.ok(getNpcEndgameChoices(state, profile, createNpcUtilityContext(state, profile, NOW, 1), NOW, 1, scored)
+    .some((choice) => choice.candidate.id.startsWith('sun-raid:') && choice.candidate.kind === 'endgame'), 'with them online it calls');
+});
+
+test('NPC raid gathering: the leader declares, allies join, the full cap takes off together and comes home (25.10.2026)', () => {
+  const { state: initial, owners } = world();
+  // A three-NPC world: 50 000 per side, 25 000 per participant (owner rule 31.10.2026).
+  const caps = sunRaidCapsOf(initial);
+  assert.deepEqual(caps, { perSide: 50_000, participant: 25_000 });
   // 20 000 cruisers × 7 population: any risk share still brings the full 75 000.
   let state = allianceOf(initial, owners);
   for (const ownerId of owners) state = armed(state, ownerId, 20_000);
+  state = online(state, owners);
   const leader = owners[0]!;
   const before = Object.fromEntries(owners.map((ownerId) => [ownerId, home(state, ownerId)]));
   const leaderProfile = state.npc!.profiles[leader]!;
@@ -92,11 +120,15 @@ test('NPC raid gathering: the leader declares, two allies join, 225 000 takes of
   assert.equal(raid.gatherEndsAt, NOW + 30 * 60_000);
   const leaderPledge = state.flights.records.filter((item) => item.sunRaid?.raidId === raid.id && item.ownerId === leader)
     .reduce((total, item) => total + (item.sunRaid?.population ?? 0), 0);
-  assert.ok(leaderPledge > 0 && leaderPledge <= 75_000, `the leader brings at most 75 000: ${leaderPledge}`);
+  assert.ok(leaderPledge > 0 && leaderPledge <= caps.participant, `the leader brings at most its cap: ${leaderPledge}`);
   const leaderFlight = state.flights.records.find((item) => item.sunRaid?.raidId === raid.id && item.ownerId === leader)!;
   assert.ok(leaderFlight.gasCost > 0, 'an NPC pays the same gas as the player');
 
+  let joins = 0;
   for (const [index, ownerId] of owners.slice(1).entries()) {
+    // Full already: the rest stay home.
+    if (currentSunRaidState(state).raids[0]!.status !== 'gathering') break;
+    joins += 1;
     const at = NOW + (index + 1) * 60_000;
     const profile = state.npc!.profiles[ownerId]!;
     const join = getNpcEndgameChoices(state, profile, createNpcUtilityContext(state, profile, at, 1), at, 1, scored)
@@ -110,10 +142,11 @@ test('NPC raid gathering: the leader declares, two allies join, 225 000 takes of
   const attackers = state.flights.records.filter((item) => item.sunRaid?.raidId === raid.id && item.sunRaid.side === 'attacker');
   const total = attackers.reduce((sum, item) => sum + (item.sunRaid?.population ?? 0), 0);
   assert.equal(raid.status, 'incoming', `the full side takes off: ${total}`);
-  assert.ok(total >= 225_000 - 100 && total <= 225_000);
+  assert.ok(joins >= 1, 'an ally answers the call');
+  assert.ok(total >= caps.perSide - 100 && total <= caps.perSide);
   for (const ownerId of owners) {
     const own = attackers.filter((item) => item.ownerId === ownerId).reduce((sum, item) => sum + (item.sunRaid?.population ?? 0), 0);
-    assert.ok(own <= 75_000, `${ownerId} stays within 75 000: ${own}`);
+    assert.ok(own <= caps.participant, `${ownerId} stays within its cap: ${own}`);
   }
   assert.ok(attackers.every((item) => item.arrivalAt === raid.arrivesAt), 'everyone leaves together');
 
@@ -128,6 +161,7 @@ test('a gathering that does not reach 225 000 in 30 minutes disbands: ships and 
   const { state: initial, owners } = world();
   let state = allianceOf(initial, owners);
   for (const ownerId of owners) state = armed(state, ownerId, 20_000);
+  state = online(state, owners);
   const leader = owners[0]!;
   const before = home(state, leader);
   const leaderProfile = state.npc!.profiles[leader]!;

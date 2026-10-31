@@ -2,6 +2,7 @@ import { isFlightEventForPlayer, isHostileFlightIncomingToPlayer } from './appli
 import { SAVE_FLUSH_EVENT } from './application/save-storage.ts';
 import { diffPlayerActions, PLAYER_JOURNAL_SNAPSHOT_INTERVAL_MS, snapshotPlayer } from './application/player-journal.ts';
 import { appendJournalEntries, setActiveJournalCampaign } from './ui/player-journal-store.ts';
+import { appendBotJournal } from './ui/bot-journal-store.ts';
 import { selectOwnerPresence } from './application/owner-presence.ts';
 import { dispatchBot01Exploration } from './application/exploration-bot01.ts';
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
@@ -1224,6 +1225,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         const step = link.steps.get(message.version);
         if (step !== undefined) link.savedStep = Math.max(link.savedStep, step);
         reportWriteResult(persistence.writeSerialized(message.text));
+      } else if (message.type === 'bot-journal') {
+        appendBotJournal(persistence.saveKey, message.lines);
       } else {
         stopLiveWorld(message.message);
       }

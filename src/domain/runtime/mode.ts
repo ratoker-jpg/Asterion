@@ -63,11 +63,13 @@ export function getRuntimeSaveKey(mode: RuntimeMode = ACTIVE_RUNTIME_MODE): stri
 }
 
 /** Campaign speed chosen at «Новая игра»; fixed for the whole campaign. */
-export type CampaignSpeed = 'slow' | 'standard' | 'fast';
+export type CampaignSpeed = 'slow' | 'standard' | 'fast' | 'superfast';
 export const CAMPAIGN_SPEED_SCALE: Readonly<Record<CampaignSpeed, number>> = Object.freeze({
   slow: 0.5,
   standard: 1,
   fast: 2,
+  /** Owner decision 31.10.2026: at most WORLD_LIMITS.superfastNpcMax NPC (the load of a ×2 world of 100). */
+  superfast: 5,
 });
 
 let campaignTimeScale = 1;

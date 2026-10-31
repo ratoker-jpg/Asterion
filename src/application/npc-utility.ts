@@ -320,6 +320,44 @@ export function effectiveSpend(cost: Resources | null | undefined, situation?: N
 }
 
 /** 0..1: how hard full stores push this planet to spend on anything. */
+/**
+ * The owner's strategy (Nemexia expert, 31.10.2026), as bot balance (the owner
+ * may change these): a main planet that is a fortress, resources not left
+ * lying (spent, or shipped to the fortress), colonies that fight.
+ */
+export const NPC_FORTRESS_BALANCE = Object.freeze({
+  /** The main planet's defence aims at this many units of its best batteries... */
+  defenseTarget: 25_000,
+  /** ...once the owner earns at least this much a day (an early economy builds mines first). */
+  minDayValue: 1_000_000,
+  /** Resources on a planet beyond this many days of the owner's income are idle: spend or ship them. */
+  hoardDays: 1,
+  /** A colony holding more than this many days of income ships its surplus to the main planet. */
+  colonySendDays: 0.5,
+  /** Largest order while resources pile up (otherwise 500). */
+  hoardBatchCap: 5_000,
+});
+
+/** The owner's main planet (its first, home planet), where the fortress stands. */
+export function isNpcFortress(context: Pick<NpcUtilityContext, 'profile' | 'ownPlanets'>, target: Pick<SpyTargetState, 'id'>): boolean {
+  const home = `${context.profile.ownerId}-planet`;
+  return target.id === home || (!context.ownPlanets.some((planet) => planet.id === home) && context.ownPlanets[0]?.id === target.id);
+}
+
+/** 0..1: how far a planet's stores exceed what the owner should keep idle (days of its income). */
+export function hoardPressure(context: Pick<NpcUtilityContext, 'dayValue'>, target: Pick<SpyTargetState, 'resources'>): number {
+  const held = Math.max(0, target.resources.metal) + Math.max(0, target.resources.minerals) + Math.max(0, target.resources.gas);
+  const b = NPC_FORTRESS_BALANCE;
+  return unit((held / Math.max(1, context.dayValue) - b.hoardDays) / (2 * b.hoardDays));
+}
+
+/** 0..1: what the fortress still lacks of its target defence (0 when the economy is too small for it). */
+export function fortressDefenseNeed(context: Pick<NpcUtilityContext, 'profile' | 'ownPlanets' | 'dayValue'>, target: SpyTargetState): number {
+  if (!isNpcFortress(context, target) || context.dayValue < NPC_FORTRESS_BALANCE.minDayValue) return 0;
+  const units = Object.values(target.defense?.defenses ?? {}).reduce((sum, count) => sum + Math.max(0, Number(count) || 0), 0);
+  return unit(1 - units / NPC_FORTRESS_BALANCE.defenseTarget);
+}
+
 export function spendingPressure(situation?: NpcPlanetSituation): number {
   if (!situation) return 0;
   return unit((Math.max(situation.fill.metal, situation.fill.minerals, situation.fill.gas) - 0.6) / 0.4);
@@ -488,7 +526,10 @@ export function estimateProductionItemUtility(context: NpcUtilityContext, target
   const entity = queueKind === 'ships' ? (getFactionShipCatalog(target.raceId) as Catalog).find((item) => item.id === itemId) : undefined;
   const purpose = npcProductionPurpose(queueKind, itemId, entity?.category);
   const price = pricePenalty(context, cost, situation) * 0.5;
-  const push = 0.4 * spendingPressure(situation);
+  // Full stores, or stores far beyond what the owner should keep idle, push spending.
+  const hoard = hoardPressure(context, target);
+  const push = 0.4 * Math.max(spendingPressure(situation), hoard);
+  const fortress = fortressDefenseNeed(context, target);
   const efficiency = 0.5 * Math.log(Math.max(0.05, Math.min(1, relativeEfficiency)));
   // The planet hosting this owner's own Gate expects the whole world at its door.
   const threat = context.ownGateHosts?.has(target.id) ? 1 : context.threat;
@@ -499,7 +540,8 @@ export function estimateProductionItemUtility(context: NpcUtilityContext, target
     : 0;
   switch (purpose) {
     case 'combat': return -0.5 + 1.5 * Math.max(drives.military, drives.war) + 0.5 * threat + efficiency - price + push + rush;
-    case 'defense': return -0.8 + 1.4 * threat + 0.5 * drives.military + efficiency - price + push * 0.75;
+    // The fortress builds toward its target defence of its best batteries (owner strategy 31.10.2026).
+    case 'defense': return -0.8 + 1.4 * threat + 0.5 * drives.military + efficiency - price + push * 0.75 + 1.4 * fortress;
     case 'energy': return -0.6 + 1.5 * (situation?.energyNeed ?? 0) - price;
     case 'spy': return (fleet[itemId] ?? 0) >= 2 ? -2 : -0.3 + 0.9 * Math.max(drives.war, drives.operations, drives.military * 0.6) - price;
     case 'colony': return owned(itemId) > 0 || drives.expansion <= 0 || context.colonyOpen === false ? -2.5 : -0.4 + 1.6 * drives.expansion - price;
@@ -521,9 +563,16 @@ export function estimateProductionItemUtility(context: NpcUtilityContext, target
     }
     // Holds for logistics: a colony away from the main planet needs a few
     // transporters to ship its surplus home; beyond a couple they are idle.
-    case 'cargo': return context.ownPlanets.length > 1 && (fleet[itemId] ?? 0) < 2
-      ? -0.3 + 0.8 * drives.economy + 0.3 * unit(context.profile.traits.cooperation) - price
-      : -1.2 + 0.4 * unit(context.profile.traits.cooperation) - price;
+    // The mega-transporter carries 1 000 cargo for 570 against the transporter's
+    // 760 and four times the cargo per population (owner 31.10.2026): it is the
+    // hold of choice; a transporter is wanted only as what a mega is built from.
+    case 'cargo': {
+      const mega = itemId === 'mega-transporter';
+      const preference = mega ? 0.4 : itemId === 'transporter' && (fleet[itemId] ?? 0) >= 1 ? -0.5 : 0;
+      return (context.ownPlanets.length > 1 || hoard > 0) && (fleet[itemId] ?? 0) < (mega ? 4 : 2)
+        ? -0.3 + 0.8 * drives.economy + 0.3 * unit(context.profile.traits.cooperation) + preference - price
+        : -1.2 + 0.4 * unit(context.profile.traits.cooperation) + preference - price;
+    }
     default: return -1.2 + 0.4 * unit(context.profile.traits.cooperation) - price;
   }
 }
@@ -549,14 +598,20 @@ export function npcProductionBatch(context: NpcUtilityContext, target: SpyTarget
     return Math.max(1, Math.min(NPC_RECYCLE_BALANCE.maxBatch, wanted, Number.isFinite(affordable) ? affordable : wanted));
   }
   const drives = strategyOf(context);
-  const share = purpose === 'energy' ? 0.35 : 0.25 + 0.45 * Math.max(drives.military, drives.war) + 0.25 * spendingPressure(situation);
+  const hoard = hoardPressure(context, target);
+  const share = purpose === 'energy' ? 0.35 : 0.25 + 0.45 * Math.max(drives.military, drives.war) + 0.25 * Math.max(spendingPressure(situation), hoard);
   let affordable = Number.POSITIVE_INFINITY;
   for (const key of STORE_KEYS) {
     const price = Math.max(0, cost[key] ?? 0);
     if (price > 0) affordable = Math.min(affordable, Math.floor((target.resources[key] ?? 0) * Math.min(0.9, share) / price));
   }
   if (!Number.isFinite(affordable)) return 1;
-  const cap = purpose === 'energy' ? 20 : 500;
+  // Piled-up stores order big: what lies idle is worth nothing (owner strategy 31.10.2026).
+  let cap = purpose === 'energy' ? 20 : hoard > 0 ? NPC_FORTRESS_BALANCE.hoardBatchCap : 500;
+  if (purpose === 'defense' && fortressDefenseNeed(context, target) > 0) {
+    const units = Object.values(target.defense?.defenses ?? {}).reduce((sum, count) => sum + Math.max(0, Number(count) || 0), 0);
+    cap = Math.max(cap, NPC_FORTRESS_BALANCE.defenseTarget - units);
+  }
   return Math.max(1, Math.min(cap, affordable));
 }
 

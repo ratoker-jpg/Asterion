@@ -76,6 +76,21 @@ async function patchSave(win, key, patchSource) {
   })()`);
 }
 
+/**
+ * The running page may write its own world over a patched save while it
+ * unloads (a pending autosave of the live world), so the reloaded game would
+ * not hold the patch. Patch, reload, and check the loaded save; again until it holds.
+ */
+async function patchAndReload(win, key, mode, patchSource, heldSource) {
+  for (let attempt = 1; ; attempt += 1) {
+    await patchSave(win, key, patchSource);
+    await reload(win, mode);
+    const held = await run(win, `(() => { const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(key)}) || '{}'); return Boolean((${heldSource})(save)); })()`);
+    if (held) return;
+    if (attempt >= 4) throw new Error(`The patched save did not survive the reload: ${heldSource}`);
+  }
+}
+
 async function click(win, selector) {
   const ok = await run(win, `(() => { const node = document.querySelector(${JSON.stringify(selector)}); if (!node || node.disabled) return false; node.click(); return true; })()`);
   if (!ok) throw new Error(`Missing or disabled control: ${selector}`);
@@ -145,14 +160,13 @@ async function testModeScenario(win, label) {
   assert(/сгорит/.test(warning) && /не будет засчитано/.test(warning), `${label}: overflow warning is shown before creating the request`, warning);
   await capture(win, label, 'requests-overflow-warning');
   // Make room on the planet so the following deliveries are accepted (the overflow rule itself is unit-tested).
-  await patchSave(win, TEST_KEY, `(save) => {
+  await patchAndReload(win, TEST_KEY, 'test', `(save) => {
     const planet = save.planets[save.currentPlanetId];
     planet.resources = { metal: 1000000, minerals: 1000000, gas: 1000000 };
     save.metal = 1000000; save.minerals = 1000000; save.gas = 1000000;
     // Real cargo hulls for the player's own aid flight (a Test Mode QA seed, like the other fleet QAs).
     planet.fleet.ships['mega-transporter'] = 10;
-  }`);
-  await reload(win, 'test');
+  }`, `(save) => save.planets[save.currentPlanetId].fleet.ships['mega-transporter'] === 10`);
   await openRequestsTab(win);
 
   // 2. The first charge arrives (15 min / 500 = ~2 s), then a real request is created for a concrete own planet.
@@ -251,8 +265,8 @@ async function productionScenario(win, label) {
   await load(win, 'production');
   await run(win, `localStorage.removeItem(${JSON.stringify(PRODUCTION_KEY)}); localStorage.removeItem(${JSON.stringify(TEST_KEY)});`);
   await reload(win, 'production');
-  await patchSave(win, PRODUCTION_KEY, `(save) => { save.planets['helion-01'].buildings['planetary-government'] = 1; }`);
-  await reload(win, 'production');
+  await patchAndReload(win, PRODUCTION_KEY, 'production', `(save) => { save.planets['helion-01'].buildings['planetary-government'] = 1; }`,
+    `(save) => save.planets['helion-01'].buildings['planetary-government'] === 1`);
   await openRoute(win, 'command', '.command-view');
   await click(win, '[data-qa-create-alliance]');
   await setField(win, '[data-qa-alliance-name]', 'Дозор Помощи');
