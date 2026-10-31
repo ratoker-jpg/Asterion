@@ -41,6 +41,7 @@ import {
   estimateOperationUtility, estimateProductionItemUtility, flightRemoteness, estimateScienceUtility, npcProductionBatch,
   npcProductionPurpose, NPC_STRATEGY_FAMILY, strategyOf, type NpcStrategyDrives,
   estimateFleetSaveUtility, estimateCommanderUpgradeUtility, npcFleetValue, spaceFlightLegFor, estimateSpaceportUpgradeUtility, NPC_FLAGSHIP_ID,
+  hoardPressure, NPC_FORTRESS_BALANCE,
 } from './npc-utility.ts';
 
 /** A look within this long of the session end is the owner's last before leaving. */
@@ -308,9 +309,13 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     if (ownerFlights(state.flights.records, ownerId).some((flight) => flight.missionId === 'transport' && flight.originPlanetId === source.id
       && (flight.phase === 'outbound' || flight.phase === 'arrived'))) continue;
     if (source.id !== main.id) {
-      if (fullest < 0.75) continue;
+      // A colony ships home when its stores fill up, or when it holds more
+      // than half a day of the owner's income: the fortress spends it (owner strategy 31.10.2026).
+      const held = source.resources.metal + source.resources.minerals + source.resources.gas;
+      const idle = held / Math.max(1, utility.dayValue) >= NPC_FORTRESS_BALANCE.colonySendDays;
+      if (fullest < 0.75 && !idle) continue;
       destination = main;
-      urgency = fullest - 0.5;
+      urgency = Math.max(fullest - 0.5, idle ? 0.3 + 0.3 * hoardPressure(utility, source) : 0);
     } else {
       const dry = planets.filter((planet) => planet.id !== main.id)
         .map((planet) => ({ planet, fill: describeNpcPlanet(planet, 0, 0, false).fill }))
