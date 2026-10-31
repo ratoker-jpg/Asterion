@@ -49,8 +49,12 @@ export function freezeNpcCatchupTarget(state: SaveState, now: number): SaveState
   if (!replay || isNpcCatchupPending(state)) return state;
   const targetAt = Math.max(replay.processedThroughAt, Math.floor(now));
   if (targetAt === replay.targetAt) return state;
-  // The catch-up starts here, so its world news starts here too (complete).
+  // The catch-up starts here, so its world news starts here too (complete) — unless the
+  // news of the same absence end exactly here (the cloud server lived its first part and
+  // the player chose to replay the rest on this computer): then they go on.
+  const continued = replay.summary?.finishedAt === replay.processedThroughAt
+    ? (({ finishedAt: _closed, ...open }) => open)(replay.summary) : null;
   const summary = targetAt - replay.processedThroughAt > NPC_CATCHUP_COMMAND_GRACE_MS
-    ? startWorldCatchupSummary(state, replay.processedThroughAt) : replay.summary;
+    ? continued ?? startWorldCatchupSummary(state, replay.processedThroughAt) : replay.summary;
   return { ...state, npcReplay: { ...replay, targetAt, ...(summary ? { summary } : {}) } };
 }
