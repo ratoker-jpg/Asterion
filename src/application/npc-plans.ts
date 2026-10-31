@@ -17,6 +17,7 @@ import type { SaveState } from './contracts.ts';
 import { getNpcJournalSink } from './npc-journal.ts';
 import { flightsToPlanet, ownerFlights } from './npc-knowledge-index.ts';
 import { getOwnerRelation } from './owner-relations.ts';
+import { evaluatePlanetAttackEligibility } from './attack-eligibility.ts';
 import { getNpcFleetProductionCandidates, startNpcFleetProduction } from './npc-fleet-production.ts';
 import { dispatchNpcDeployment, dispatchNpcMission, getNpcMissionAvailableFleet } from './npc-missions.ts';
 import { candidateToNpcMissionCommand, type NpcMissionCandidate } from './npc-mission-policy.ts';
@@ -196,6 +197,8 @@ export function draftNpcStrike(state: SaveState, profile: NpcProfile, utility: N
     if (at - report.createdAt > NPC_STRIKE_BALANCE.createReportHours * HOUR / Math.max(1, timeScale)) continue;
     const relation = getOwnerRelation(state, ownerId, target.ownerId);
     if (relation !== 'enemy' && relation !== 'neutral') continue;
+    // The owner points rule decides at launch; a target outside the band is no plan.
+    if (!evaluatePlanetAttackEligibility(state, ownerId, target.ownerId).allowed) continue;
     const enemy = estimateReportedPower(utility, report, empirePower);
     const wanted = wantedWin(utility, target.ownerId);
     if (estimateWinProbability(singleBest, enemy) >= wanted) continue; // one planet can do it: an ordinary attack
@@ -341,7 +344,11 @@ export function refreshNpcPlans(state: SaveState, profile: NpcProfile, utility: 
       if (!flight || flight.phase === 'returning' || flight.phase === 'completed') next = closePlan(next, plan, 'failed', at, 'no-battle');
       continue;
     }
-    if (at > plan.deadlineAt) { next = closePlan(next, plan, 'cancelled', at, 'deadline'); continue; }
+    if (at > plan.deadlineAt) {
+      // A deadline missed while an attack on the owner held the gathering back is the threat's doing.
+      next = closePlan(next, plan, 'cancelled', at, underAttack(next, utility.ownPlanets, ownerId, at) ? 'threat-at-home' : 'deadline');
+      continue;
+    }
     if (plan.phase === 'produce') {
       const placed = plan.orders.every((order) => order.orderId);
       const built = Object.entries(plan.reserve).every(([planetId, counts]) => covers(getNpcMissionAvailableFleet(next, ownerId, planetId) ?? {}, counts));
@@ -362,9 +369,18 @@ export function refreshNpcPlans(state: SaveState, profile: NpcProfile, utility: 
       const force = totalForce(plan);
       const own = npcForcePower(rally.raceId, force);
       const win = estimateWinProbability(own, estimateReportedPower(utility, report, own));
+      const checked = { ...plan, knowledgeAt: report.createdAt };
       next = win < NPC_STRIKE_BALANCE.recheckMargin * wantedWin(utility, plan.targetOwnerId)
-        ? closePlan(next, { ...plan, knowledgeAt: report.createdAt }, 'cancelled', at, 'target-stronger')
-        : replacePlan(next, { ...plan, phase: 'launch', knowledgeAt: report.createdAt });
+        ? closePlan(next, checked, 'cancelled', at, 'target-stronger')
+        : replacePlan(next, { ...checked, phase: 'launch' });
+      continue;
+    }
+    if (plan.phase === 'launch') {
+      // Points or relations changed while the force gathered: the attack is no longer allowed.
+      const relation = getOwnerRelation(next, ownerId, plan.targetOwnerId);
+      if ((relation !== 'enemy' && relation !== 'neutral') || !evaluatePlanetAttackEligibility(next, ownerId, plan.targetOwnerId).allowed) {
+        next = closePlan(next, plan, 'cancelled', at, 'attack-not-allowed');
+      }
     }
   }
   return next;
@@ -465,7 +481,7 @@ export function getNpcPlanChoices(state: SaveState, profile: NpcProfile, utility
     }
   }
   // A new plan: looked for every few game hours, never two strikes at once.
-  if (plansEnabled && !active.length && at >= (state.npcStrategy?.nextCheckAt[ownerId] ?? 0)) {
+  if (plansEnabled && !active.length && !paused && at >= (state.npcStrategy?.nextCheckAt[ownerId] ?? 0)) {
     const draft = draftNpcStrike(state, profile, utility, at, timeScale);
     if (draft) {
       const id = `plan:strike:${draft.plan.targetPlanetId}`;

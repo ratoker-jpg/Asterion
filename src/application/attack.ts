@@ -417,7 +417,7 @@ function rememberNpcBattle(state: SaveState, report: BattleReport, at: number, f
         hit: sideDestroyedValue(report, side === 'attacker' ? 'defender' : 'attacker', raceOf(other.playerId)), id: report.id } });
     }
     let remembered = updateNpcAutonomyMemory(profile, report.id, at,
-      won ? 'battle-victory' : 'battle-loss', won, [report.id]);
+      won ? 'battle-win' : 'battle-loss', won, [report.id]);
     // The defender remembers who attacked it and what it cost, for the whole match.
     if (side === 'defender' && isGrievanceBattle(report)) {
       const raceId = Object.values(getEspionageTargets(state.espionage)).find((target) => target.ownerId === ownerId)?.raceId;

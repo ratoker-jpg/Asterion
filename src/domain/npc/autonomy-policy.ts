@@ -11,6 +11,14 @@ export type NpcAutonomyCandidate = Readonly<{
 /** Draw weight of waiting regardless of the options: about one middling estimate (U ≈ 0). */
 export const NPC_WAIT_FLOOR_WEIGHT = 1;
 const MEMORY_LIMIT = 64;
+/**
+ * Battles keep a ring of their own: a look writes up to 24 «started/denied»
+ * entries, which used to push every battle out of the shared 64 within a few
+ * looks, so attack weight never learned from what fights actually brought.
+ */
+const BATTLE_MEMORY_LIMIT = 16;
+/** Own battles (`battle-victory` is how saves before the fix named a win). */
+const BATTLE_MEMORY_KINDS = new Set(['battle-win', 'battle-loss', 'battle-victory']);
 const MEMORY_FACT_LIMIT = 16;
 const GOAL_LIMIT = 8;
 const MIN_REPLAN_HORIZON_MS = 6 * 60 * 60 * 1000;
@@ -51,7 +59,7 @@ function actionTrait(profile: NpcProfile, kind: string): number {
 }
 
 function relatedMemoryKinds(kind: string): ReadonlySet<string> {
-  if (kind === 'attack') return new Set(['attack', 'battle-loss', 'battle-win', 'observed-battle-loss', 'observed-battle-win']);
+  if (kind === 'attack') return new Set(['attack', 'battle-loss', 'battle-win', 'battle-victory', 'observed-battle-loss', 'observed-battle-win']);
   if (kind === 'recon') return new Set(['recon', 'reconnaissance', 'recon-loss', 'recon-success']);
   if (kind === 'diplomacy' || kind === 'aid') return new Set([
     'diplomacy', 'diplomatic-outcome', 'alliance-outcome', 'war-outcome', 'truce-outcome',
@@ -223,22 +231,36 @@ export function updateNpcAutonomyMemory(
   if (profile.memory.some((entry) => entry.id === id)) return profile;
   const activeGoal = profile.longTermGoals.find((goal) => goal.status === 'active');
   const offStrategy = strategic !== undefined && (!activeGoal || !strategic.goalKinds.has(activeGoal.kind));
-  const plan = updateGoalAtReconsideration(
-    profile,
-    eventId,
-    at,
-    outcomeKind,
-    REPLAN_OUTCOME_KINDS.has(outcomeKind) || offStrategy,
-    strategic?.goalKind ?? outcomeKind,
-  );
-  const memory = Object.freeze([...profile.memory, Object.freeze({
+  const battle = BATTLE_MEMORY_KINDS.has(outcomeKind);
+  // A battle is an outcome, not a goal: a loss only makes the goal due for
+  // reconsideration at the owner's next look, which picks a real strategy.
+  const plan = battle
+    ? { planning: REPLAN_OUTCOME_KINDS.has(outcomeKind) && (profile.planning.reconsiderAt === null || profile.planning.reconsiderAt > at)
+      ? Object.freeze({ ...profile.planning, reconsiderAt: at }) : profile.planning, longTermGoals: profile.longTermGoals }
+    : updateGoalAtReconsideration(
+      profile,
+      eventId,
+      at,
+      outcomeKind,
+      REPLAN_OUTCOME_KINDS.has(outcomeKind) || offStrategy,
+      strategic?.goalKind ?? outcomeKind,
+    );
+  const entries = [...profile.memory, Object.freeze({
     id,
     kind: outcomeKind,
     at,
     valence: succeeded ? 0.75 : 0.25,
     salience: clamp(0.35 + normalizedTrait(profile.traits.attention) * 0.65, 0, 1),
     factIds: explicitFactIds,
-  })].slice(-MEMORY_LIMIT));
+  })];
+  // Oldest first out of each ring, the order of what stays unchanged.
+  const battleCount = entries.filter((entry) => BATTLE_MEMORY_KINDS.has(entry.kind)).length;
+  let battles = battleCount - BATTLE_MEMORY_LIMIT;
+  let others = entries.length - battleCount - MEMORY_LIMIT;
+  const memory = Object.freeze(entries.filter((entry) => {
+    if (BATTLE_MEMORY_KINDS.has(entry.kind)) return battles-- <= 0;
+    return others-- <= 0;
+  }));
   return Object.freeze({
     ...profile,
     planning: plan.planning,

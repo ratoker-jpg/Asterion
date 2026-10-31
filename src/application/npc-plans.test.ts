@@ -17,10 +17,12 @@ import { reconcileFlights } from './flights.ts';
 import { settleNpcFleetProduction } from './npc-fleet-production.ts';
 import { createNpcUtilityContext } from './npc-utility.ts';
 import { getNpcMissionCandidates } from './npc-mission-policy.ts';
+import { getNpcMissionAvailableFleet } from './npc-missions.ts';
 import { draftNpcStrike, getNpcPlanChoices, refreshNpcPlans } from './npc-plans.ts';
 import { npcPlanReservedShips, withoutNpcPlanReserve } from './npc-plan-reserve.ts';
 import { NpcJournalRecorder, setNpcJournalSink } from './npc-journal.ts';
 import type { SaveState } from './contracts.ts';
+import { withAttackEligiblePoints } from './attack-eligibility.test-support.ts';
 
 const START = Date.UTC(2026, 9, 27, 12);
 const MINUTE = 60_000;
@@ -57,7 +59,7 @@ function sevenPlanetWorld(seed: string, defence = 10): World {
   const defense = createEmptyDefenseState();
   targets[victim.id] = { ...victim, resources: { ...victim.resources, metal: 20_000_000, minerals: 20_000_000, gas: 20_000_000 },
     defense: { ...defense, defenses: { ...defense.defenses, 'ion-plasma-battery': defence } } } as SpyTargetState;
-  state = { ...state, espionage: { ...state.espionage!, targets } };
+  state = withAttackEligiblePoints({ ...state, espionage: { ...state.espionage!, targets } }, [owner, victim.ownerId], 2_000_000);
   // The owner's own fresh full report of the neighbour: the only thing a plan may know.
   state = withReport(state, owner, planets[0]!, targets[victim.id]!, START);
   const profile = state.npc!.profiles[owner]!;
@@ -96,7 +98,8 @@ function drive(world: World, minutes: number, onLook?: (state: SaveState, at: nu
     const choices = getNpcPlanChoices(state, profile, utility, at, 1, getNpcMissionCandidates(state, profile, at), (_id, estimate) => utilityToWeight(estimate));
     choices.forEach((choice, index) => {
       const outcome = choice.run(state, `plan-test:${look}:${index}`);
-      if (outcome.started) steps.push(choice.candidate.id.split(':').slice(0, 2).join(':'));
+      if (outcome.started) steps.push(choice.candidate.id.split(":").slice(0, 2).join(":"));
+      else if (process.env.PLAN_DEBUG) console.log("fail", look, choice.candidate.id, outcome.reason);
       state = outcome.state;
     });
     if (plansOf(state, world.owner).some((plan) => plan.status !== 'active')) break;
@@ -157,6 +160,8 @@ test('the plan holds its ships: other missions do not take them, defence still s
   const free = withoutNpcPlanReserve(state, world.owner, source, { cruiser: 40, 'spy-probe': 5 });
   assert.equal(free.cruiser, 0, 'other missions see no free cruisers there');
   assert.equal(free['spy-probe'], 5, 'probes are not part of the force');
+  // Defence and fleetsave read the real fleet: the reservation never hides ships from them.
+  assert.equal(getNpcMissionAvailableFleet(state, world.owner, source)?.cruiser, 40);
 });
 
 test('stale news: the target is scouted again and a stronger target cancels the plan without a flight', () => {
@@ -182,7 +187,7 @@ test('stale news: the target is scouted again and a stronger target cancels the 
   assert.equal(plan.launchFlightId, undefined);
 });
 
-test('an attack on the way home pauses gathering; a missed deadline cancels the plan', () => {
+test('an attack on the way home pauses gathering; the deadline then cancels the plan as threat-at-home', () => {
   const world = sevenPlanetWorld('npc-plans-paused');
   const first = drive(world, 6);
   const plan = plansOf(first.state, world.owner).find((item) => item.status === 'active')!;
@@ -193,10 +198,12 @@ test('an attack on the way home pauses gathering; a missed deadline cancels the 
     phase: 'outbound' as const, destinationPlanetId: world.planets[1]!, arrivalAt: START + 48 * 60 * MINUTE, departedAt: START,
   };
   const waiting = drive({ ...world, state: { ...first.state, flights: { ...first.state.flights, records: [...first.state.flights.records, enemy as never] } } }, 47 * 60);
-  const after = plansOf(waiting.state, world.owner)[0]!;
+  const after = plansOf(waiting.state, world.owner).find((item) => item.planId === plan.planId)!;
   assert.equal(waiting.steps.filter((step) => step === 'plan:rally' || step === 'plan:launch').length, 0, 'no gathering while an attack comes');
+  assert.equal(waiting.steps.filter((step) => step === 'plan:strike').length, 0, 'no new plan while under attack');
   assert.equal(after.status, 'cancelled');
-  assert.equal(after.reason, 'deadline');
+  assert.equal(after.reason, 'threat-at-home');
+  assert.ok(plansOf(waiting.state, world.owner).every((item) => !item.launchFlightId), 'nothing flew: no losses in a cancelled plan');
 });
 
 test('the strategy section survives a save and reload; older saves have none', () => {
