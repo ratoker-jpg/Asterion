@@ -16,7 +16,7 @@
 // 1280×720, --switch-repeats=N each): the frame the section first paints, when its
 // content stops changing (ready), frames with an empty workspace, the longest
 // frame gap and the UI thread's long tasks. --switch-only skips the idle FPS run.
-// --max-switch-ready-ms=X: fail when a section's median ready time exceeds X.
+// --max-switch-ready-ms=X: fail when a section's median ready time exceeds X (CI: 300).
 const { app, BrowserWindow } = require('electron');
 const { spawnSync } = require('child_process');
 const fs = require('fs');
@@ -72,10 +72,13 @@ const SCREENS = [
 ];
 const SWITCH_ONLY = args.includes('--switch-only');
 const SWITCH_REPEATS = Number(option('switch-repeats', '3'));
-const MAX_SWITCH_READY_MS = option('max-switch-ready-ms') ? Number(option('max-switch-ready-ms')) : null;
+// CI budget (a fresh full-world campaign, software rendering on a slow runner; locally 10-30 ms).
+const MAX_SWITCH_READY_MS = option('max-switch-ready-ms') ? Number(option('max-switch-ready-ms')) : process.env.CI === 'true' ? 300 : null;
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
 // --switch-profile=DIR: a renderer CPU profile of the first switch to each section (diagnostics).
 const SWITCH_PROFILE = option('switch-profile');
+// --shots=DIR: a screenshot of every section right after its last measured switch, per viewport.
+const SHOTS = option('shots');
 
 function freshCampaign() {
   const source = `
@@ -325,6 +328,10 @@ async function switchProbe(win) {
           fs.mkdirSync(SWITCH_PROFILE, { recursive: true });
           fs.writeFileSync(path.join(SWITCH_PROFILE, `${route}.cpuprofile`), JSON.stringify(profile));
         }
+      }
+      if (SHOTS) {
+        fs.mkdirSync(SHOTS, { recursive: true });
+        fs.writeFileSync(path.join(SHOTS, `${route}-${label}.png`), (await win.webContents.capturePage()).toPNG());
       }
       const ok = runs.filter((item) => item.ok);
       results[label][route] = {

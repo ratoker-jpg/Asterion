@@ -132,6 +132,26 @@ function isValidDefeatRecordCached(record: PirateContactDefeatRecord): boolean {
 // render dominated NPC decisions, so the latest few results per base are kept.
 const shiftedScheduleCache = new WeakMap<object, Map<string, readonly PirateScheduleCycle[]>>();
 const shiftedByInputs = new WeakMap<object, WeakMap<object, { galaxy: number; system: number; shifted: readonly PirateScheduleCycle[] }>>();
+// The valid defeats of one defeats list by `galaxy:system`: a universe map asks
+// for every system in turn, and scanning the whole list for each one dominated
+// the first opening of «Вселенная» on a late world.
+const defeatsBySystem = new WeakMap<object, Map<string, PirateContactDefeatRecord[]>>();
+
+function systemDefeats(defeats: readonly PirateContactDefeatRecord[], galaxy: number, system: number): readonly PirateContactDefeatRecord[] {
+  let grouped = defeatsBySystem.get(defeats);
+  if (!grouped) {
+    grouped = new Map();
+    for (const record of defeats) {
+      if (!isValidDefeatRecordCached(record)) continue;
+      const key = `${record.galaxy}:${record.system}`;
+      const list = grouped.get(key);
+      if (list) list.push(record);
+      else grouped.set(key, [record]);
+    }
+    defeatsBySystem.set(defeats, grouped);
+  }
+  return grouped.get(`${galaxy}:${system}`) ?? [];
+}
 
 export type PirateScheduleCycle = Readonly<{
   cycleIndex: number;
@@ -156,8 +176,7 @@ export function applyPirateContactDefeatsToSchedules<T extends PirateScheduleCyc
   const known = byDefeats?.get(defeats);
   if (known && known.galaxy === galaxy && known.system === system) return known.shifted as T[];
   const records = new Map<string, PirateContactDefeatRecord>();
-  for (const record of defeats) {
-    if (record.galaxy !== galaxy || record.system !== system || !isValidDefeatRecordCached(record)) continue;
+  for (const record of systemDefeats(defeats, galaxy, system)) {
     const previous = records.get(record.contactCycleKey);
     if (!previous || record.defeatedAt < previous.defeatedAt) records.set(record.contactCycleKey, record);
   }
