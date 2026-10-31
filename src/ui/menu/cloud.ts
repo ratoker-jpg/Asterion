@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import {
   decideCloudEntry, describeConflict, describeLocalReason, pageClockOffsetMs, saveSchemaVersion, saveWorldAt, sha256Text,
-  type CloudCampaignView, type CloudConflictReason, type CloudSyncRecord,
+  type CloudCampaignView, type CloudConflictReason, type CloudSyncRecord, type CloudWaitReason,
 } from '../../application/cloud/cloud-sync.ts';
 import { getBrowserSaveStorage, MISSING_EXTERNAL_SAVE } from '../../application/save-storage.ts';
 import { duplicateSaveSlot, importRawSaveSlot } from '../../application/slots.ts';
@@ -80,6 +80,8 @@ export type CloudBridge = {
   claim(id: string, baseRevision: number): Promise<({ ok: true; none?: true; world?: CloudWorld }) | Failure>;
   download(id: string, snapshotId: number): Promise<({ ok: true; world: CloudWorld }) | Failure>;
   release(id: string): Promise<({ ok: true }) | Failure>;
+  /** A game newer than the server asks it to install its release (the server then moves the living world there). */
+  requestUpdate(): Promise<({ ok: true; requested: boolean; serverVersion: string }) | Failure>;
   markSynced(id: string, revision: number, digest: string): Promise<boolean>;
   preferLocal(id: string): Promise<boolean>;
 };
@@ -111,10 +113,18 @@ export type CloudConflict = {
   server: { savedAt: number; worldAt: number; revision: number; liveSince: number | null; deviceIsThis: boolean };
 };
 
+/** The world stays on the server for now: the server wait window (CloudMenu.tsx ServerWaitWindow). */
+export type CloudServerWait = {
+  reason: CloudWaitReason;
+  campaign: CloudCampaignView;
+  appVersion: string;
+};
+
 export type CloudEntryOutcome =
   | { kind: 'local'; message: string | null; tone: 'info' | 'error' }
   | { kind: 'applied'; message: string; worldAt: number; ms: number }
-  | { kind: 'ask'; conflict: CloudConflict };
+  | { kind: 'ask'; conflict: CloudConflict }
+  | { kind: 'wait'; wait: CloudServerWait };
 
 function readLocal(slot: Pick<SaveSlotMeta, 'storageKey'>): string | null {
   const storage = getBrowserSaveStorage();
@@ -149,7 +159,7 @@ function appliedMessage(world: CloudWorld, startedAt: number): CloudEntryOutcome
  * rules allow it, plays the local save otherwise, and returns a conflict for
  * the player to resolve. Never throws: any failure is the old local path.
  */
-export async function prepareCloudEntry(slot: SaveSlotMeta, options: { onStage?: (text: string) => void; ignoreLocal?: boolean } = {}): Promise<CloudEntryOutcome> {
+export async function prepareCloudEntry(slot: SaveSlotMeta, options: { onStage?: (text: string) => void; ignoreLocal?: boolean; takeNow?: boolean } = {}): Promise<CloudEntryOutcome> {
   const settings = await activeCloudSettings();
   const bridge = cloudBridge();
   if (!settings || !bridge) return { kind: 'local', message: null, tone: 'info' };
@@ -168,7 +178,13 @@ export async function prepareCloudEntry(slot: SaveSlotMeta, options: { onStage?:
     const campaign = found.campaign;
     const decision = decideCloudEntry({
       localDigest, localSavedAt: slot.updatedAt, record, campaign, appVersion: settings.appVersion, deviceId: settings.deviceId, schemaVersion: SAVE_SCHEMA_VERSION,
+      takeNow: options.takeNow,
     });
+    if (decision.action === 'wait') {
+      // The server installs this game's release and moves the world there; the wait window asks again meanwhile.
+      if (decision.reason === 'server-updating') await bridge.requestUpdate().catch(() => undefined);
+      return { kind: 'wait', wait: { reason: decision.reason, campaign: campaign!, appVersion: settings.appVersion } };
+    }
     if (decision.action === 'ask') {
       const head = campaign!.head!;
       return {
@@ -236,6 +252,7 @@ export async function openServerCampaign(campaign: CloudCampaignView, onStage?: 
   if (!settings || !bridge) return { ok: false, error: 'Облачный мир выключен или не настроен.' };
   const placeholder = { id: campaign.id, storageKey: `asterion.slot.${campaign.id}.v1` } as SaveSlotMeta;
   const outcome = await prepareCloudEntry({ ...placeholder, updatedAt: 0, name: campaign.name } as SaveSlotMeta, { onStage, ignoreLocal: true });
+  if (outcome.kind === 'wait') return { ok: false, error: describeServerWait(outcome.wait) };
   if (outcome.kind !== 'applied') return { ok: false, error: outcome.kind === 'local' ? outcome.message ?? 'Кампания не получена.' : 'Кампания не получена.' };
   const storage = getBrowserSaveStorage();
   const text = storage?.getItem(placeholder.storageKey) ?? null;
@@ -243,6 +260,76 @@ export async function openServerCampaign(campaign: CloudCampaignView, onStage?: 
   const imported = importRawSaveSlot(campaign.id, campaign.name, text);
   if (!imported.ok || !imported.slot) return { ok: false, error: imported.ok ? 'Кампания не записана.' : imported.error };
   return { ok: true, slot: imported.slot, outcome };
+}
+
+/* ------------------------------------------------------- server catch-up */
+
+/**
+ * How fast this computer replays an absence (game ms per wall ms), measured
+ * by the catch-up window each time it runs here (NpcCatchupBanner) and kept
+ * per slot. The speed depends mostly on the size of the world, so a campaign
+ * never replayed here borrows the newest measurement of another one, scaled
+ * by save size.
+ */
+const LOCAL_RATE_KEY = 'asterion.cloud.local-catchup-rate.v1';
+/** Nothing measured on this computer yet: one core of the cloud VPS replays ~1.7× slower than a desktop CPU (CLOUD_WORLD_2026-10-30.md). */
+const LOCAL_VS_SERVER_FALLBACK = 1.7;
+
+type LocalRates = Record<string, { rate: number; chars: number; at: number }>;
+
+function readLocalRates(): LocalRates {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(LOCAL_RATE_KEY) ?? '{}') as LocalRates;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch { return {}; }
+}
+
+/** A catch-up of `gameMs` took `wallMs` here (only long ones count: a short one is mostly overhead). */
+export function recordLocalCatchupRate(slotId: string, gameMs: number, wallMs: number, chars: number | null): void {
+  if (!(gameMs > 0) || wallMs < 10_000) return;
+  try {
+    const rates = readLocalRates();
+    rates[slotId] = { rate: gameMs / wallMs, chars: chars ?? 0, at: Date.now() };
+    const newest = Object.entries(rates).sort((left, right) => right[1].at - left[1].at).slice(0, 12);
+    window.localStorage.setItem(LOCAL_RATE_KEY, JSON.stringify(Object.fromEntries(newest)));
+  } catch { /* an estimate only */ }
+}
+
+export type LocalCatchupRate = { rate: number; source: 'measured' | 'similar' | 'server' };
+
+/** This computer's replay speed for a campaign whose save has `chars` characters, and where the number comes from. */
+export function localCatchupRate(slotId: string, chars: number | null, serverRate: number | null): LocalCatchupRate | null {
+  const rates = readLocalRates();
+  const own = rates[slotId];
+  if (own && own.rate > 0) return { rate: own.rate, source: 'measured' };
+  const other = Object.values(rates).filter((entry) => entry.rate > 0 && entry.chars > 0).sort((left, right) => right.at - left.at)[0];
+  if (other && chars) return { rate: other.rate * Math.min(4, Math.max(0.25, other.chars / chars)), source: 'similar' };
+  return serverRate && serverRate > 0 ? { rate: serverRate * LOCAL_VS_SERVER_FALLBACK, source: 'server' } : null;
+}
+
+/** Wall time to replay `lagMs` of game time at `rate` while the clock moves on (null: it would never catch up). */
+export function catchupWaitMs(lagMs: number, rate: number | null | undefined): number | null {
+  if (!rate || rate <= 1.02) return null;
+  return Math.round(lagMs / (rate - 1));
+}
+
+/** Characters of the local save text (a desktop-store pointer names them; null when there is no save). */
+export function localSaveChars(slot: Pick<SaveSlotMeta, 'storageKey'>): number | null {
+  try {
+    const raw = window.localStorage.getItem(slot.storageKey);
+    if (!raw) return null;
+    const pointer = raw.length < 512 && raw.includes('asterionExternalSave') ? Number((/"chars":(\d+)/.exec(raw) ?? [])[1]) : 0;
+    return pointer > 0 ? pointer : raw.length;
+  } catch { return null; }
+}
+
+/** One line for a wait without its window (a campaign opened from «На сервере»). */
+export function describeServerWait(wait: CloudServerWait): string {
+  const live = wait.campaign.live;
+  if (wait.reason === 'game-older') return `Мир на сервере живёт в версии ${live?.gameVersion ?? '?'} — новее этой игры (${wait.appVersion}). Обновите игру.`;
+  if (wait.reason === 'server-updating') return `Сервер переносит мир в версию ${wait.appVersion}: загрузите кампанию через несколько минут.`;
+  const hours = Math.round(((live?.lagMs ?? 0) / 3_600_000) * 10) / 10;
+  return `Мир ещё догоняется на сервере (осталось ${hours.toLocaleString('ru-RU')} игровых ч): загрузите его, когда сервер догонит.`;
 }
 
 /* ------------------------------------------------------------------ uploads */

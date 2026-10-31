@@ -52,6 +52,7 @@ contextBridge.exposeInMainWorld('asterionDesktop', {
     claim: (id, baseRevision) => ipcRenderer.invoke('asterion:cloud:claim', id, baseRevision),
     download: (id, snapshotId) => ipcRenderer.invoke('asterion:cloud:download', id, snapshotId),
     release: (id) => ipcRenderer.invoke('asterion:cloud:release', id),
+    requestUpdate: () => ipcRenderer.invoke('asterion:cloud:update-request'),
     markSynced: (id, revision, digest) => ipcRenderer.invoke('asterion:cloud:mark-synced', id, revision, digest),
     preferLocal: (id) => ipcRenderer.invoke('asterion:cloud:prefer-local', id),
   },

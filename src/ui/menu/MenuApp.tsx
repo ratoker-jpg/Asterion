@@ -17,6 +17,7 @@ import {
   exportSaveSlot,
   importSaveSlot,
   inspectSlot,
+  updateSlotSummary,
   readSlotIndex,
   renameSaveSlot,
   type SlotHealth,
@@ -29,8 +30,8 @@ import { isDesktopShell, quitDesktopApp, type MenuScreen } from './session.ts';
 import type { SolarCrystalId } from '../../domain/sun-raid/config.ts';
 import { useMusic } from '../../audio/hooks.ts';
 import { usePointerDepth } from './pointer-depth.ts';
-import { CloudConflictDialog, CloudEntryBanner, ServerCampaigns } from './CloudMenu.tsx';
-import type { CloudConflict } from './cloud.ts';
+import { CloudConflictDialog, CloudEntryBanner, ServerCampaigns, ServerWaitWindow } from './CloudMenu.tsx';
+import type { CloudConflict, CloudServerWait } from './cloud.ts';
 import './menu.css';
 import './menu-motion.css';
 
@@ -64,10 +65,15 @@ type MenuAppProps = {
   cloudConflict?: { slotName: string; conflict: CloudConflict } | null;
   onResolveCloudConflict?: (choice: 'server' | 'local') => void;
   onCancelCloudConflict?: () => void;
+  /** The world stays on the server for now (catching up, or moving to this game's release). */
+  cloudWait?: { slot: SaveSlotMeta; wait: CloudServerWait } | null;
+  onCloudWaitReady?: () => void;
+  onCloudWaitTakeNow?: () => void;
+  onCloudWaitMenu?: () => void;
 };
 
 /** Main menu, «Новая игра», «Загрузить игру» and settings, on the same 1920×1080 stage as the game. */
-export function MenuApp({ initialScreen, onEnterSlot, entryProblem = null, onDismissEntryProblem, cloudStage = null, cloudConflict = null, onResolveCloudConflict, onCancelCloudConflict }: MenuAppProps) {
+export function MenuApp({ initialScreen, onEnterSlot, entryProblem = null, onDismissEntryProblem, cloudStage = null, cloudConflict = null, onResolveCloudConflict, onCancelCloudConflict, cloudWait = null, onCloudWaitReady, onCloudWaitTakeNow, onCloudWaitMenu }: MenuAppProps) {
   const scale = useMenuScale();
   useMusic('menu');
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -114,6 +120,16 @@ export function MenuApp({ initialScreen, onEnterSlot, entryProblem = null, onDis
         ) : (
           <MenuSettingsScreen onBack={() => setScreen('main')} />
         )}
+        {cloudWait && !cloudStage ? (
+          <ServerWaitWindow
+            key={cloudWait.slot.id}
+            slot={cloudWait.slot}
+            wait={cloudWait.wait}
+            onReady={() => onCloudWaitReady?.()}
+            onTakeNow={() => onCloudWaitTakeNow?.()}
+            onMenu={() => onCloudWaitMenu?.()}
+          />
+        ) : null}
         {cloudStage ? <CloudEntryBanner text={cloudStage} /> : null}
         {cloudConflict ? (
           <CloudConflictDialog
@@ -292,6 +308,16 @@ function downloadText(fileName: string, text: string) {
 function LoadGameScreen({ index, onBack, onLoad, onChanged }: LoadGameScreenProps) {
   const slots = useMemo(() => sortSlotsByRecent(index.slots), [index.slots]);
   const health = useMemo(() => new Map(slots.map((slot) => [slot.id, inspectSlot(slot, SAVE_SCHEMA_VERSION)])), [slots]);
+  // The health check reads every payload anyway: a card summary cached by an older build is corrected here.
+  useEffect(() => {
+    let changed = false;
+    for (const slot of slots) {
+      const checked = health.get(slot.id);
+      if (checked?.status !== 'ok' || !checked.summary || JSON.stringify(checked.summary) === JSON.stringify(slot.summary)) continue;
+      changed = updateSlotSummary(slot.id, checked.summary).ok || changed;
+    }
+    if (changed) onChanged();
+  }, [health, slots, onChanged]);
   const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<SaveSlotMeta | null>(null);
@@ -344,7 +370,7 @@ function LoadGameScreen({ index, onBack, onLoad, onChanged }: LoadGameScreenProp
       ) : (
         <div className="menu-empty"><h2>Сохранений пока нет</h2><p>Начните новую игру или импортируйте файл сохранения.</p></div>
       )}
-      <ServerCampaigns localIds={slots.map((slot) => slot.id)} onOpened={(slot) => { onChanged(); onLoad(slot); }} />
+      <ServerCampaigns slots={slots} onLoad={onLoad} onOpened={(slot) => { onChanged(); onLoad(slot); }} />
       {confirmDelete ? (
         <ConfirmDialog
           title="Удалить сохранение?"

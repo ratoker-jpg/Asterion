@@ -86,6 +86,10 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // The world lives while the game is open: a minimized or covered window keeps its
+      // one-second clock (Chromium would throttle it to once a minute), so a player who
+      // switched away for a while does not come back to a catch-up (owner decision 31.10.2026).
+      backgroundThrottling: false,
     },
   });
 

@@ -1,14 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { SaveState } from './application/contracts.ts';
-import { selectWorldSummaryLeaders, type WorldSummaryLeader } from './application/world-catchup-summary.ts';
+import { isWorldSummaryWorthShowing, selectWorldSummaryLeaders, WORLD_SUMMARY_MIN_ABSENCE_MS, type WorldSummaryLeader } from './application/world-catchup-summary.ts';
 import type { NpcReplayState } from './domain/npc/replay-state.ts';
 import type { WorldCatchupSummary } from './domain/npc/world-catchup-summary.ts';
 import { useNpcCatchupProgress } from './ui/npc-catchup-progress-store.ts';
+import { localSaveChars, recordLocalCatchupRate } from './ui/menu/cloud.ts';
 import './npc-catchup-banner.css';
 
 /** Pending catch-ups shorter than this finish before the window would be read. */
 const SHOW_AFTER_MS = 500;
+/**
+ * A short absence (≤ WORLD_SUMMARY_MIN_ABSENCE_MS) is caught up quietly: its
+ * progress window appears only if the catch-up itself takes this long (a late
+ * world), so the player knows why orders wait.
+ */
+const QUIET_CATCHUP_SHOW_AFTER_MS = 4_000;
 const numberFormat = new Intl.NumberFormat('ru-RU');
 
 function formatGameSpan(ms: number): string {
@@ -36,9 +43,11 @@ function formatWait(ms: number): string {
  * up it turns into a summary of what happened in the world meanwhile.
  * The command gate itself stays in App; this window only reports.
  */
-export function NpcCatchupBanner({ replay: savedReplay, state, onDismissSummary, onOpenMenu }: {
+export function NpcCatchupBanner({ replay: savedReplay, state, slot, onDismissSummary, onOpenMenu }: {
   replay: NpcReplayState | undefined;
   state: SaveState;
+  /** The campaign's slot: this computer's replay speed is remembered for the cloud wait window. */
+  slot?: { id: string; storageKey: string } | null;
   onDismissSummary: () => void;
   onOpenMenu: () => void;
 }) {
@@ -49,13 +58,22 @@ export function NpcCatchupBanner({ replay: savedReplay, state, onDismissSummary,
   // Baseline of the current catch-up: where it started and when, in wall time.
   const baseline = useRef<{ targetAt: number; from: number; startedAt: number } | null>(null);
   const [visible, setVisible] = useState(false);
-  // Whether the progress window was on screen for this catch-up: only then is its summary worth showing.
-  const announced = useRef(false);
 
   if (pending && replay && baseline.current?.targetAt !== replay.targetAt) {
     baseline.current = { targetAt: replay.targetAt, from: replay.processedThroughAt, startedAt: performance.now() };
   }
+  // The catch-up that just ended: how fast this computer replays this world (ServerWaitWindow compares it with the server).
+  const finishedRun = useRef<{ gameMs: number; wallMs: number } | null>(null);
+  if (!pending && baseline.current) {
+    finishedRun.current = { gameMs: baseline.current.targetAt - baseline.current.from, wallMs: performance.now() - baseline.current.startedAt };
+  }
   if (!pending) baseline.current = null;
+  useEffect(() => {
+    const run = finishedRun.current;
+    if (pending || !run || !slot) return;
+    finishedRun.current = null;
+    recordLocalCatchupRate(slot.id, run.gameMs, run.wallMs, localSaveChars(slot));
+  }, [pending, slot]);
 
   // While the world catches up, decorative loops (motion.css) pause: with software
   // rendering every animated layer repaints each frame and steals time from the replay.
@@ -64,25 +82,25 @@ export function NpcCatchupBanner({ replay: savedReplay, state, onDismissSummary,
     return () => document.documentElement.classList.remove('npc-catchup-active');
   }, [pending]);
 
+  const longAbsence = Boolean(replay && baseline.current && replay.targetAt - baseline.current.from > WORLD_SUMMARY_MIN_ABSENCE_MS);
   useEffect(() => {
     if (!pending) { setVisible(false); return; }
-    const timer = window.setTimeout(() => { announced.current = true; setVisible(true); }, SHOW_AFTER_MS);
+    const timer = window.setTimeout(() => setVisible(true), longAbsence ? SHOW_AFTER_MS : QUIET_CATCHUP_SHOW_AFTER_MS);
     return () => window.clearTimeout(timer);
-  }, [pending]);
+  }, [pending, longAbsence]);
 
   const summary = replay?.summary;
   const finished = !pending && summary?.finishedAt !== undefined;
-  // A catch-up too short to be seen leaves no window behind it. A finished
-  // summary loaded from a save was announced before the game closed.
-  const loadedFinished = useRef(finished);
+  // The news of an absence of at most 3 game hours leave no window behind
+  // (owner decision 31.10.2026); a longer one is shown however it was caught
+  // up: here, in a save the game closed on, or by the cloud server.
+  const worthShowing = Boolean(summary && isWorldSummaryWorthShowing(summary));
   useEffect(() => {
-    if (finished && !announced.current && !loadedFinished.current) onDismissSummary();
-  }, [finished, onDismissSummary]);
+    if (finished && !worthShowing) onDismissSummary();
+  }, [finished, worthShowing, onDismissSummary]);
 
-  if (finished && summary && (announced.current || loadedFinished.current)) {
+  if (finished && summary && worthShowing) {
     return createPortal(<CatchupSummary summary={summary} state={state} onClose={() => {
-      announced.current = false;
-      loadedFinished.current = false;
       onDismissSummary();
     }} />, document.body);
   }

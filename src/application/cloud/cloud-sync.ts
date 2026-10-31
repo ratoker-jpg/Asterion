@@ -44,6 +44,12 @@ export type CloudLiveView = {
   worldAt: number;
   reportedAt: number;
   lagMs: number | null;
+  /** Catch-up speed of the running world: game ms per wall ms (null until measured; older servers omit it). */
+  rate?: number | null;
+  /** Wall time until the running world reaches the clock at that speed. */
+  etaMs?: number | null;
+  /** The server moved the world from this game version on its last update. */
+  migratedFrom?: string;
   error?: string;
 };
 
@@ -67,7 +73,34 @@ export type CloudEntryInput = {
   deviceId: string;
   /** Save schema this build reads. */
   schemaVersion: number;
+  /**
+   * The player chose «Досчитать на этом ПК» in the server wait: take the
+   * living world now (or, when this version cannot take it, go on locally).
+   */
+  takeNow?: boolean;
 };
+
+/**
+ * A living world further behind the clock than this is still catching up on
+ * the server: the game waits for it instead of taking it and replaying the
+ * rest itself. In the steady state the server's lag is 0–10 s (a step every
+ * 10 s), and right after a hand-over it catches up within a minute, so the
+ * normal relay never waits. What is left after a claim (≤ 2 game minutes plus
+ * the transfer) replays locally in seconds even on a late world (day 3: ~4 s
+ * per game minute), so waiting for a smaller lag would gain nothing.
+ */
+export const SERVER_CATCHUP_WAIT_LAG_MS = 2 * 60_000;
+
+/** «1.10.0» > «1.9.3»: numeric MAJOR.MINOR.PATCH (pre-release suffixes ignored). */
+export function compareGameVersions(left: string, right: string): number {
+  const parts = (version: string) => version.split(/[-+]/)[0]!.split('.').map((part) => Number(part) || 0);
+  const [a, b] = [parts(left), parts(right)];
+  for (let index = 0; index < 3; index += 1) {
+    const difference = (a[index] ?? 0) - (b[index] ?? 0);
+    if (difference !== 0) return Math.sign(difference);
+  }
+  return 0;
+}
 
 export type CloudConflictReason =
   /** Both sides changed since they were last the same. */
@@ -90,7 +123,21 @@ export type CloudEntryDecision =
   | { action: 'download'; snapshotId: number; revision: number; release: boolean }
   /** Play the local save. `release`: stop the server's living world first (this computer goes on). */
   | { action: 'local'; reason: CloudLocalReason; release: boolean }
-  | { action: 'ask'; reason: CloudConflictReason };
+  | { action: 'ask'; reason: CloudConflictReason }
+  /**
+   * The world stays on the server for now and the game waits (the server
+   * wait window): it is still catching up there, or the server is moving it
+   * to this game's release, or it lives in a newer release than this game.
+   */
+  | { action: 'wait'; reason: CloudWaitReason; baseRevision: number };
+
+export type CloudWaitReason =
+  /** The world is more than SERVER_CATCHUP_WAIT_LAG_MS behind the clock and the server is catching it up. */
+  | 'catching-up'
+  /** The world lives in an older release than this game: the server updates and moves it (server.ts migrateLive). */
+  | 'server-updating'
+  /** The world lives in a newer release than this game: the game updates first. */
+  | 'game-older';
 
 export type CloudLocalReason =
   | 'not-on-server'
@@ -121,7 +168,7 @@ export function decideCloudEntry(input: CloudEntryInput): CloudEntryDecision {
     // Nothing here to lose: a second computer opens the server copy.
     if (live && live.baseRevision === head.revision) {
       const taken = claimOrLocal(input, head.revision, live);
-      if (taken.action === 'claim') return taken;
+      if (taken.action === 'claim' || taken.action === 'wait') return taken;
     }
     return head.schemaVersion > input.schemaVersion
       ? { action: 'local', reason: 'schema-newer', release: false }
@@ -144,14 +191,27 @@ export function decideCloudEntry(input: CloudEntryInput): CloudEntryDecision {
   if (live && live.baseRevision === head.revision) {
     // A world living on top of that newer revision: taken if this version computed it, else its base is.
     const taken = claimOrLocal(input, head.revision, live);
-    return taken.action === 'claim' ? taken : { action: 'download', snapshotId: head.id, revision: head.revision, release: true };
+    return taken.action === 'claim' || taken.action === 'wait' ? taken : { action: 'download', snapshotId: head.id, revision: head.revision, release: true };
   }
   return { action: 'download', snapshotId: head.id, revision: head.revision, release: false };
 }
 
+/**
+ * A living world is taken only by the game version it lives in and once it
+ * has (nearly) reached the clock; until then the game waits and the world
+ * stays on the server. Only the player's explicit «Досчитать на этом ПК»
+ * (`takeNow`) takes a world that is still catching up, or, across versions,
+ * stops it (a server backup) and goes on locally as before.
+ */
 function claimOrLocal(input: CloudEntryInput, baseRevision: number, live: CloudLiveView): CloudEntryDecision {
-  if (live.gameVersion !== input.appVersion) return { action: 'local', reason: 'version-mismatch', release: true };
-  if (live.status === 'waiting-version') return { action: 'local', reason: 'waiting-version', release: true };
+  const order = compareGameVersions(live.gameVersion, input.appVersion);
+  if (order !== 0 || live.status === 'waiting-version') {
+    if (input.takeNow) return { action: 'local', reason: order === 0 ? 'waiting-version' : 'version-mismatch', release: true };
+    return { action: 'wait', reason: order > 0 ? 'game-older' : 'server-updating', baseRevision };
+  }
+  if (!input.takeNow && live.status === 'running' && (live.lagMs ?? 0) > SERVER_CATCHUP_WAIT_LAG_MS) {
+    return { action: 'wait', reason: 'catching-up', baseRevision };
+  }
   return { action: 'claim', baseRevision };
 }
 
@@ -161,9 +221,9 @@ export function describeLocalReason(reason: CloudLocalReason, campaign: CloudCam
     case 'not-on-server': return 'Кампании ещё нет на сервере: она будет выгружена при выходе.';
     case 'same': return 'Мир на сервере совпадает с этим компьютером.';
     case 'local-newer': return 'На этом компьютере мир новее серверного: продолжаем его, сервер получит копию.';
-    case 'version-mismatch': return `Мир на сервере прожит версией ${campaign?.live?.gameVersion ?? '?'}, у вас другая: досчитываем локально.`;
+    case 'version-mismatch': return `Мир на сервере жил в версии ${campaign?.live?.gameVersion ?? '?'}: по вашему выбору досчитываем на этом ПК, мир сервера сохранён резервной копией.`;
     case 'schema-newer': return 'Копия на сервере создана более новой версией игры: продолжаем локальную.';
-    case 'waiting-version': return 'Сервер ещё не обновился до вашей версии: досчитываем локально.';
+    case 'waiting-version': return 'Сервер ещё не обновился до вашей версии: по вашему выбору досчитываем на этом ПК, мир сервера сохранён резервной копией.';
     default: return '';
   }
 }

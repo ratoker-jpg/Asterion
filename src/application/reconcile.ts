@@ -228,6 +228,12 @@ function catchupSummaryFor(state: SaveState, from: number, targetAt: number): Wo
   // the player is still reading that summary, so it stays.
   if (pending && current) return current;
   if (!pending && targetAt - from <= NPC_CATCHUP_COMMAND_GRACE_MS) return current;
+  // The news of the same absence end exactly here (the cloud server lived its first part and
+  // the player replays the rest on this computer): they go on.
+  if (current && current.finishedAt === from) {
+    const { finishedAt: _closed, ...open } = current;
+    return open;
+  }
   return startWorldCatchupSummary(state, from, !pending);
 }
 

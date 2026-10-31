@@ -18,7 +18,7 @@ import { checkSlotEntry, readSlotIndex } from '../../application/slots.ts';
 import { MenuApp, type SlotEntryProblem } from './MenuApp.tsx';
 import { TestSaveGuard } from './SaveProblemScreen.tsx';
 import { applySlotRuntime, consumeNextScreen, wantsAutostart, type ActiveSession } from './session.ts';
-import { prepareCloudEntry, resolveCloudConflict, type CloudConflict, type CloudEntryOutcome } from './cloud.ts';
+import { prepareCloudEntry, resolveCloudConflict, type CloudConflict, type CloudEntryOutcome, type CloudServerWait } from './cloud.ts';
 
 /** The running campaign: the game screen and its global controllers. */
 function GameShell({ session, launched = false }: { session: ActiveSession | null; launched?: boolean }) {
@@ -79,6 +79,8 @@ function ProductionRoot() {
   // The cloud relay runs before a slot opens (src/ui/menu/cloud.ts): its banner and a conflict to resolve.
   const [cloudStage, setCloudStage] = useState<string | null>(null);
   const [conflict, setConflict] = useState<{ slot: SaveSlotMeta; conflict: CloudConflict; launched: boolean } | null>(null);
+  // The world stays on the server for now: «Мир догоняется на сервере» (CloudMenu.tsx ServerWaitWindow).
+  const [serverWait, setServerWait] = useState<{ slot: SaveSlotMeta; wait: CloudServerWait; launched: boolean } | null>(null);
   const [autostartPending, setAutostartPending] = useState(Boolean(autostart?.slot));
   // Entered from the menu (not autostart): the game opens with the jump-in overlay.
   const [launched, setLaunched] = useState(false);
@@ -100,26 +102,27 @@ function ProductionRoot() {
     setLaunched(!viaAutostart);
     setSession(enter(current, notice));
   };
-  const tryEnter = (slot: SaveSlotMeta, viaAutostart = false) => {
+  const settle = (slot: SaveSlotMeta, outcome: CloudEntryOutcome, viaAutostart: boolean) => {
+    setCloudStage(null);
+    setAutostartPending(false);
+    if (outcome.kind === 'ask') setConflict({ slot, conflict: outcome.conflict, launched: !viaAutostart });
+    else if (outcome.kind === 'wait') setServerWait({ slot, wait: outcome.wait, launched: !viaAutostart });
+    else open(slot, outcome, viaAutostart);
+  };
+  const tryEnter = (slot: SaveSlotMeta, viaAutostart = false, takeNow = false) => {
     if (entering.current) return;
     entering.current = true;
-    void prepareCloudEntry(slot, { onStage: setCloudStage }).then((outcome) => {
+    setServerWait(null);
+    void prepareCloudEntry(slot, { onStage: setCloudStage, takeNow }).then((outcome) => {
       entering.current = false;
-      setCloudStage(null);
-      setAutostartPending(false);
-      if (outcome.kind === 'ask') setConflict({ slot, conflict: outcome.conflict, launched: !viaAutostart });
-      else open(slot, outcome, viaAutostart);
+      settle(slot, outcome, viaAutostart);
     });
   };
   const resolve = (choice: 'server' | 'local') => {
     if (!conflict) return;
     const { slot, launched: fromMenu } = conflict;
     setConflict(null);
-    void resolveCloudConflict(slot, choice, setCloudStage).then((outcome) => {
-      setCloudStage(null);
-      if (outcome.kind === 'ask') setConflict({ slot, conflict: outcome.conflict, launched: fromMenu });
-      else open(slot, outcome, !fromMenu);
-    });
+    void resolveCloudConflict(slot, choice, setCloudStage).then((outcome) => settle(slot, outcome, !fromMenu));
   };
   useEffect(() => {
     if (autostart?.slot) tryEnter(autostart.slot, true);
@@ -139,6 +142,10 @@ function ProductionRoot() {
       cloudConflict={conflict ? { slotName: conflict.slot.name, conflict: conflict.conflict } : null}
       onResolveCloudConflict={resolve}
       onCancelCloudConflict={() => setConflict(null)}
+      cloudWait={serverWait}
+      onCloudWaitReady={() => { if (serverWait) tryEnter(serverWait.slot, !serverWait.launched); }}
+      onCloudWaitTakeNow={() => { if (serverWait) tryEnter(serverWait.slot, !serverWait.launched, true); }}
+      onCloudWaitMenu={() => setServerWait(null)}
     />
   );
 }

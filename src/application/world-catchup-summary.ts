@@ -4,6 +4,20 @@ import type { DiplomaticRelation } from '../domain/command/types.ts';
 import { selectOwnerScores } from '../domain/rating/scoring.ts';
 import { createWorldCatchupSummary, type WorldCatchupSummary } from '../domain/npc/world-catchup-summary.ts';
 
+/**
+ * Owner decision (31.10.2026): the world news of an absence are shown only
+ * when the player was away longer than this (game time the catch-up covered:
+ * replayed here or lived on the cloud server). A shorter absence is caught up
+ * quietly — no summary window, and no progress window unless the catch-up
+ * itself takes a while (QUIET_CATCHUP_SHOW_AFTER_MS in NpcCatchupBanner).
+ */
+export const WORLD_SUMMARY_MIN_ABSENCE_MS = 3 * 3_600_000;
+
+/** A finished summary worth its window: an absence longer than WORLD_SUMMARY_MIN_ABSENCE_MS. */
+export function isWorldSummaryWorthShowing(summary: Pick<WorldCatchupSummary, 'fromAt' | 'finishedAt'>): boolean {
+  return (summary.finishedAt ?? summary.fromAt) - summary.fromAt > WORLD_SUMMARY_MIN_ABSENCE_MS;
+}
+
 /** Starts the world news of one catch-up from the ratings as they stand now. */
 export function startWorldCatchupSummary(state: SaveState, fromAt: number, complete = true): WorldCatchupSummary {
   const startScores: Record<string, number> = {};

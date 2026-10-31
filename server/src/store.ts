@@ -57,6 +57,10 @@ export type LiveWorld = {
   /** npcReplay of the left save (the summary the absence started with). */
   leftReplay?: unknown;
   error?: string;
+  /** Server updates the world went through (server.ts migrateLive): from which game version, when, and its world time then. */
+  migrations?: Array<{ from: string; to: string; at: number; worldAt: number }>;
+  /** The last move to a newer release failed: the world went on in its old one. */
+  migrationError?: string;
 };
 
 export type Campaign = {
@@ -231,6 +235,10 @@ export function describeCampaign(campaign: Campaign, now: number) {
       worldAt: campaign.live.worldAt,
       reportedAt: campaign.live.reportedAt,
       lagMs: campaign.live.status === 'running' ? Math.max(0, now + campaign.live.clockOffsetMs - campaign.live.worldAt) : null,
+      // Catch-up speed (game ms per wall ms) and the wall time left to reach the clock: the supervisor fills them for the running world.
+      rate: null as number | null,
+      etaMs: null as number | null,
+      ...(campaign.live.migrations?.length ? { migratedFrom: campaign.live.migrations.at(-1)!.from } : {}),
       ...(campaign.live.error ? { error: campaign.live.error } : {}),
     } : null,
     snapshots: [...campaign.snapshots].sort((left, right) => right.id - left.id).map(publicSnapshot),

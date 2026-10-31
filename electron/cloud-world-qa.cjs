@@ -7,17 +7,25 @@
 //   first-play    a campaign not yet on the server: local entry; leaving it hands the world over
 //   (the server keeps it alive for --live-seconds)
 //   from-server   «Продолжить»: «Получаем мир с сервера…», the server's world applied in seconds
-//   version       a game of another version: local catch-up, the server world stops (kept as a backup)
+//   version       an older game: «Мир на сервере живёт в более новой версии», «Досчитать на этом ПК»
+//                 catches up locally, the server world stops (kept as a backup)
 //   offline       the server is down: local entry at once; closing the window waits ≤ a few seconds
 //   local-newer   played offline, server back: the local save goes on, the server world stops
 //   second-pc     a profile without the campaign: «Загрузить игру → На сервере»
 //   conflict      both copies changed: the choice with dates; «Взять с сервера» keeps a local copy slot
 //   wrong-key     the server refuses the key: local entry with the reason
+//   leave-behind  the owner's case: the player leaves during a long local catch-up; the server gets a world far behind
+//   server-catchup «Загрузить игру → На сервере» shows how far behind it is; «Продолжить» opens «Мир догоняется
+//                 на сервере» (no claim while it catches up); when the server has caught up the game takes the world
+//   take-now      the same far-behind world: «Досчитать на этом ПК» claims at once and the game replays the rest
+//   newer-game    a game newer than the server: the server is asked to update, the update moves the living world
+//                 to the new release, and the game takes it without a version mismatch
 //   local-reference (with --fixture) the same absence caught up locally, for the timing comparison
 //
 //   npm run test:cloud-world-ui                       (small generated world, CI)
 //   npm run test:cloud-world-ui -- --fixture=late-game-day-2.json --live-seconds=300 --behind-minutes=30
-//       [--server-url=https://host --key-file=cloud-key.txt] [--only-relay]
+//       [--server-url=https://host --key-file=cloud-key.txt] [--only-relay] [--only-catchup --behind-hours=6]
+//   (--only-catchup: settings, first play, then the server catch-up phases only — the screenshot run on a late world)
 //
 // Prints one JSON line per step and exits 1 on any failed expectation.
 const { app, BrowserWindow, session } = require('electron');
@@ -87,14 +95,16 @@ if (!PHASE) {
   const freePort = () => new Promise((resolve) => { const probe = net.createServer(); probe.listen(0, '127.0.0.1', () => { const { port: p } = probe.address(); probe.close(() => resolve(p)); }); });
   let reachable = true;
   const base = () => realUrl || `http://127.0.0.1:${port}`;
+  // serverVersion: the release the server runs (newer-game updates it); every game version runs this branch's runner.
+  let serverVersion = version;
   const startServer = async () => {
     if (realUrl) { reachable = true; return; }
     if (!port) port = await freePort();
     server = spawn(nodeBin, [...nodeArgs, path.join(ROOT, 'server/src/server.ts')], {
       cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, ASTERION_DATA: dataDir, ASTERION_KEY_FILE: keyFile, ASTERION_PORT: String(port), ASTERION_VERSION: version,
+      env: { ...process.env, ASTERION_DATA: dataDir, ASTERION_KEY_FILE: keyFile, ASTERION_PORT: String(port), ASTERION_VERSION: serverVersion,
         ASTERION_RELEASES: path.join(dataDir, 'releases'), ASTERION_STEP_MS: '2000', ASTERION_STEP_BUDGET_MS: '3000',
-        ASTERION_RUNNER_OVERRIDE: JSON.stringify({ script: path.join(ROOT, 'server/src/runner.ts'), execArgv: nodeArgs, version }) },
+        ASTERION_RUNNER_OVERRIDE: JSON.stringify({ script: path.join(ROOT, 'server/src/runner.ts'), execArgv: nodeArgs }) },
     });
     server.stdout.on('data', (chunk) => fs.appendFileSync(path.join(temp, 'server.log'), chunk));
     server.stderr.on('data', (chunk) => fs.appendFileSync(path.join(temp, 'server.log'), chunk));
@@ -118,20 +128,37 @@ if (!PHASE) {
     fs.writeFileSync(path.join(profile, 'cloud.json'), JSON.stringify({ url: base(), enabled: true, ...values }));
     fs.writeFileSync(path.join(profile, 'cloud-key.txt'), `${values.key ?? key}\n`);
   };
-  const phase = (name, profile, extra = []) => {
+  // shiftMs: the player comes back that much later (the pages' clock moves on; the server's world falls behind).
+  const phaseArgs = (name, profile, extra, shiftMs) => {
     // The address of an unreachable server: nothing listens on port 9.
     if (realUrl && fs.existsSync(path.join(profile, 'cloud.json'))) {
       const config = JSON.parse(fs.readFileSync(path.join(profile, 'cloud.json'), 'utf8'));
       fs.writeFileSync(path.join(profile, 'cloud.json'), JSON.stringify({ ...config, url: reachable ? realUrl : 'http://127.0.0.1:9' }));
     }
-    const child = spawnSync(process.execPath, [__filename, `--phase=${name}`, `--profile=${profile}`, `--offset=${offset}`, `--url=${base()}`, slotArg, ...extra],
-      { cwd: ROOT, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, timeout: 30 * 60_000, env });
-    const line = (child.stdout || '').split('\n').find((text) => text.startsWith('{"phase"'));
-    if (child.status !== 0 || !line) throw new Error(`Phase ${name} failed (${child.status}): ${(child.stderr || '').slice(-3_000)}`);
+    return [__filename, `--phase=${name}`, `--profile=${profile}`, `--offset=${offset + shiftMs}`, `--url=${base()}`, slotArg, ...extra];
+  };
+  const phaseResult = (name, status, stdout, stderr) => {
+    const line = (stdout || '').split('\n').find((text) => text.startsWith('{"phase"'));
+    if (status !== 0 || !line) throw new Error(`Phase ${name} failed (${status}): ${(stderr || '').slice(-3_000)}`);
     const result = JSON.parse(line);
     console.log(JSON.stringify(result));
     return result;
   };
+  const phase = (name, profile, extra = [], shiftMs = 0) => {
+    const child = spawnSync(process.execPath, phaseArgs(name, profile, extra, shiftMs),
+      { cwd: ROOT, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, timeout: 90 * 60_000, env });
+    return phaseResult(name, child.status, child.stdout, child.stderr);
+  };
+  /** A phase the driver acts on meanwhile (the server is updated while the game waits). */
+  const phaseAsync = (name, profile, extra = [], shiftMs = 0) => new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, phaseArgs(name, profile, extra, shiftMs), { cwd: ROOT, env });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('exit', (status) => { try { resolve(phaseResult(name, status, stdout, stderr)); } catch (error) { reject(error); } });
+  });
+  const onlyCatchup = args.includes('--only-catchup');
   const failures = [];
   const expect = (ok, message) => { if (!ok) failures.push(message); };
   const results = {};
@@ -175,9 +202,11 @@ if (!PHASE) {
 
       // --only-relay: the timing run of a late world stops after the relay and its local reference.
       if (args.includes('--only-relay')) throw Object.assign(new Error('only-relay'), { done: true });
+      if (!onlyCatchup) {
       results.version = phase('version', profiles.a, ['--app-version=0.0.1-qa']);
-      expect(results.version.entered && !results.version.applied, 'another game version does not take the server world');
-      expect(/версией/.test(results.version.notices.join(' ')), 'the player sees why the world is caught up locally');
+      expect(results.version.waitSeen === 'game-older', 'an older game does not take a world of a newer release: it says so and waits');
+      expect(results.version.entered && !results.version.applied, '«Досчитать на этом ПК» opens the local save');
+      expect(/верси/.test(results.version.notices.join(' ')), 'the player sees why the world is caught up locally');
       view = await apiGet(`/v1/campaigns/${SLOT_ID}`);
       expect(view.live === null || view.live.gameVersion === '0.0.1-qa', 'the server world of the other version stopped');
       expect(view.snapshots.some((snapshot) => snapshot.kind === 'backup'), 'the stopped server world is kept as a backup');
@@ -218,6 +247,57 @@ if (!PHASE) {
       expect(/ключ/.test(results.wrongKey.notices.join(' ')), 'the player sees that the key was refused');
       const log = fs.existsSync(path.join(temp, 'server.log')) ? fs.readFileSync(path.join(temp, 'server.log'), 'utf8') : '';
       expect(!log.includes(key), 'the access key never reaches the server log');
+      // Back in sync with the server before the catch-up phases (the wrong-key run played locally).
+      results.resync = phase('local-newer', profiles.a);
+      }
+
+      // The owner's case (30.10): the player comes back hours later and the server world is in step, so the game
+      // takes it and starts the local catch-up of the hours this computer was away; the player leaves in the middle
+      // of it, and the server gets a world far behind the clock.
+      const behindMs = Number(option('behind-hours', fixture ? '6' : '48')) * 3_600_000;
+      results.leaveBehind = phase('leave-behind', profiles.a, [], behindMs);
+      expect(results.leaveBehind.localCatchupSeen, 'the hours away are replayed locally (the server did not live them)');
+      expect(results.leaveBehind.upload?.ok && results.leaveBehind.upload.left, 'leaving during the local catch-up handed the world to the server');
+      view = await apiGet(`/v1/campaigns/${SLOT_ID}`);
+      results.behindOnServer = { lagMs: view.live?.lagMs, status: view.live?.status };
+      expect(view.live?.status === 'running' && view.live.lagMs > 2 * 60_000, 'the server holds the world far behind the clock');
+
+      results.serverCatchup = phase('server-catchup', profiles.a, [], behindMs);
+      expect(results.serverCatchup.listedBehind, '«Загрузить игру → На сервере» shows the world living on the server and how far behind it is');
+      expect(results.serverCatchup.waitSeen === 'catching-up', '«Продолжить» opens «Мир догоняется на сервере»');
+      expect(results.serverCatchup.noClaimWhileWaiting, 'no claim while the server catches up');
+      expect(results.serverCatchup.entered && results.serverCatchup.applied, 'when the server caught up, the game took the world');
+      expect(results.serverCatchup.gapAfterApplyMs !== null && results.serverCatchup.gapAfterApplyMs < 3 * 60_000, 'the world taken is at most a couple of minutes behind');
+
+      // Far behind again: this time «Досчитать на этом ПК» takes it at once and the game replays the rest itself.
+      results.leaveBehindAgain = phase('leave-behind', profiles.a, [], 2 * behindMs);
+      results.takeNow = phase('take-now', profiles.a, [], 2 * behindMs);
+      expect(results.takeNow.waitSeen === 'catching-up', 'a world far behind on the server: the game waits instead of claiming');
+      expect(results.takeNow.entered && results.takeNow.applied, '«Досчитать на этом ПК» takes the world at once');
+      expect(results.takeNow.gapAfterApplyMs > 2 * 60_000 && results.takeNow.localCatchupSeen, '...still behind, and the game replays the rest itself');
+
+      if (!realUrl) {
+        // The game updated before the server: it asks the server to update and waits; asterion-update restarts the
+        // service on the new release, which moves the living world (server.ts migrateLive); the game takes it.
+        const requestFile = path.join(dataDir, 'update-request');
+        fs.rmSync(requestFile, { force: true });
+        const newer = phaseAsync('newer-game', profiles.a, ['--app-version=9.9.9'], 2 * behindMs);
+        const askedAt = Date.now();
+        while (!fs.existsSync(requestFile) && Date.now() - askedAt < 180_000) await sleep(250);
+        results.updateRequested = fs.existsSync(requestFile) ? fs.readFileSync(requestFile, 'utf8').trim() : null;
+        expect(results.updateRequested === '9.9.9', 'the newer game asked the server to update');
+        await sleep(8_000);
+        await stopServer();
+        serverVersion = '9.9.9';
+        await startServer();
+        results.newerGame = await newer;
+        expect(results.newerGame.waitSeen === 'server-updating', 'the newer game waits for the server instead of throwing its world away');
+        expect(results.newerGame.entered && results.newerGame.applied, 'after the update the newer game took the world the server kept living');
+        const serverLog = fs.readFileSync(path.join(temp, 'server.log'), 'utf8');
+        expect(new RegExp(`moved from game ${version.replace(/\./g, '\\.')} to 9\\.9\\.9`).test(serverLog), 'the server moved the living world to the new release');
+        view = await apiGet(`/v1/campaigns/${SLOT_ID}`);
+        expect(view.snapshots.filter((snapshot) => snapshot.kind === 'backup' && snapshot.savedAt > askedAt).length === 0, 'nothing of the server world was set aside as a backup');
+      }
       results.campaign = SLOT;
     } catch (error) {
       if (!error.done) failures.push(error.stack || error.message);
@@ -327,10 +407,40 @@ if (!PHASE) {
       const seen = await waitFor(win, `document.querySelector('[data-qa-cloud-entry="busy"]') || document.querySelector('[data-qa-navigation="utility"]')`, 60_000).catch(() => false);
       if (seen && await run(win, `Boolean(document.querySelector('[data-qa-cloud-entry="busy"]'))`)) await shot(win, beforeShot, false);
     }
-    await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]') || document.querySelector('[data-qa-cloud-conflict]') || document.querySelector('.menu-modal [data-qa-confirm-yes]')`, 600_000);
+    await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]') || document.querySelector('[data-qa-cloud-conflict]') || document.querySelector('.menu-modal [data-qa-confirm-yes]') || document.querySelector('[data-qa-cloud-wait]')`, 600_000);
     out.entryMs = Date.now() - started;
     out.entered = await run(win, `Boolean(document.querySelector('[data-qa-navigation="utility"]'))`);
     out.dialog = await run(win, `document.querySelector('[data-qa-cloud-conflict]')?.getAttribute('data-qa-cloud-conflict') || null`);
+    out.waitSeen = await run(win, `document.querySelector('[data-qa-cloud-wait]')?.getAttribute('data-qa-cloud-wait') || null`);
+  }
+  /** «Досчитать на этом ПК» in the wait window, until the game is on screen. */
+  async function takeNow(win, out) {
+    const started = Date.now();
+    await run(win, `document.querySelector('[data-qa-cloud-wait-take]').click()`);
+    await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`, 600_000);
+    out.takeNowMs = Date.now() - started;
+    out.entered = true;
+  }
+  /** The facts of the wait window as the player reads them. */
+  const waitFacts = (win) => run(win, `Object.fromEntries([...document.querySelectorAll('.cloud-wait__facts div')].map((item) => [item.querySelector('dt').textContent, item.querySelector('dd').textContent]))`);
+  /** The same screen at the two reference sizes (the menu stage scales from 1920×1080). */
+  async function shotSizes(win, name) {
+    if (!shots) return;
+    for (const [width, height] of [[1920, 1080], [1280, 720]]) {
+      win.setContentSize(width, height);
+      await sleep(1_200);
+      const image = await win.webContents.capturePage();
+      fs.writeFileSync(path.join(OUT_DIR, `${name}-${width}x${height}.png`), image.toPNG());
+    }
+    win.setContentSize(1600, 900);
+    await sleep(300);
+  }
+  /** The server's view of the campaign, read with this computer's settings (the key stays in the profile). */
+  async function serverCampaign() {
+    const config = JSON.parse(fs.readFileSync(path.join(PROFILE, 'cloud.json'), 'utf8'));
+    const key = fs.readFileSync(path.join(PROFILE, 'cloud-key.txt'), 'utf8').trim();
+    const response = await fetch(`${config.url}/v1/campaigns/${SLOT_ID}`, { headers: { authorization: `Bearer ${key}` } });
+    return response.ok ? response.json() : null;
   }
   async function afterEntry(win, out) {
     // A late world mounts for a while before the game shows the entry notice.
@@ -360,7 +470,9 @@ if (!PHASE) {
     const before = syncFile().lastUpload?.at ?? 0;
     await run(win, `document.querySelector('[data-qa-npc-catchup-close]')?.click()`);
     await sleep(300);
-    await run(win, `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+    // In the middle of a catch-up its window opens the pause menu itself.
+    await run(win, `document.querySelector('[data-qa-npc-catchup="progress"] .npc-catchup-window__secondary')?.click()
+      ?? window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
     await waitFor(win, `document.querySelector('[data-qa-pause="menu"]')`, 20_000);
     await run(win, `document.querySelector('[data-qa-pause="menu"]').click()`);
     await waitFor(win, `document.querySelector('[data-qa-menu]')`, 60_000);
@@ -411,6 +523,10 @@ if (!PHASE) {
       const before = await storedText(win);
       out.cursorBefore = before && cursorInText(before);
       await continueCampaign(win, out, PHASE === 'from-server' ? '02-entry-banner' : null);
+      if (PHASE === 'version' && out.waitSeen) {
+        await shot(win, '06-game-older');
+        await takeNow(win, out);
+      }
       await afterEntry(win, out);
       const text = await storedText(win);
       out.cursorAfterApply = text && cursorInText(text);
@@ -463,6 +579,74 @@ if (!PHASE) {
       await afterEntry(win, out);
       out.localCopyKept = await run(win, `JSON.parse(localStorage.getItem(${JSON.stringify(SLOT_INDEX_KEY)})).slots.some((slot) => / \\(копия\\)$/.test(slot.name))`);
       await caughtUp(win);
+      out.upload = await leaveToMenu(win);
+    } else if (PHASE === 'take-now' || PHASE === 'leave-behind') {
+      await continueCampaign(win, out);
+      if (out.waitSeen) {
+        out.lagAtEntryMs = Number(await run(win, `document.querySelector('[data-qa-cloud-wait-lag]')?.getAttribute('data-qa-cloud-wait-lag') || 0`));
+        out.facts = await waitFacts(win);
+        await takeNow(win, out);
+      }
+      out.localCatchupSeen = await waitFor(win, `document.querySelector('[data-qa-npc-catchup="progress"]')`, 60_000).then(() => true, () => false);
+      await afterEntry(win, out);
+      const text = await storedText(win);
+      out.cursorAfterApply = text && cursorInText(text);
+      out.gapAfterApplyMs = out.cursorAfterApply ? (await pageNow(win)) - out.cursorAfterApply : null;
+      if (PHASE === 'take-now') await shot(win, '07-take-now-local-catchup');
+      // The player leaves in the middle of the local catch-up (the owner's case on 30.10).
+      out.upload = await leaveToMenu(win);
+    } else if (PHASE === 'server-catchup') {
+      // «Загрузить игру → На сервере»: this computer's campaign, living on the server, and how far behind it is.
+      await menu(win);
+      await run(win, `document.querySelector('[data-qa-menu-action="load"]').click()`);
+      out.listedBehind = await waitFor(win, `/отстаёт/.test(document.querySelector('[data-qa-cloud-remote-campaign="${SLOT_ID}"] [data-qa-cloud-remote-status]')?.textContent || '')`, 60_000).then(() => true, () => false);
+      out.listedText = await run(win, `document.querySelector('[data-qa-cloud-remote-campaign="${SLOT_ID}"] [data-qa-cloud-remote-status]')?.textContent || ''`);
+      // The «На сервере» block sits under the slot list: scrolled into view as a player would.
+      await run(win, `document.querySelector('[data-qa-cloud-remote]')?.scrollIntoView({ block: 'end' })`);
+      await shotSizes(win, '08-load-on-server');
+      await continueCampaign(win, out);
+      if (out.waitSeen === 'catching-up') {
+        // The speed shows after the server measured a few seconds of its catch-up.
+        await waitFor(win, `document.querySelector('[data-qa-cloud-wait-rate]')?.getAttribute('data-qa-cloud-wait-rate')`, 60_000).catch(() => undefined);
+        await sleep(4_000);
+        out.facts = await waitFacts(win);
+        await shotSizes(win, '05-server-catchup');
+        // While the window is up the world stays alive on the server: never claimed.
+        const waitStarted = Date.now();
+        out.noClaimWhileWaiting = true;
+        out.lagSamples = [];
+        while (await run(win, `Boolean(document.querySelector('[data-qa-cloud-wait]'))`)) {
+          const view = await serverCampaign().catch(() => null);
+          if (view) {
+            out.lagSamples.push({ s: Math.round((Date.now() - waitStarted) / 1000), lagMs: view.live?.lagMs ?? null, rate: view.live?.rate ?? null });
+            if (!view.live || view.live.status !== 'running') out.noClaimWhileWaiting = await run(win, `!document.querySelector('[data-qa-cloud-wait]')`);
+          }
+          if (Date.now() - waitStarted > 80 * 60_000) throw new Error('the server did not catch up in 80 minutes');
+          await sleep(5_000);
+        }
+        out.waitedMs = Date.now() - waitStarted;
+        out.lagSamples = out.lagSamples.filter((_, index, all) => index % Math.max(1, Math.ceil(all.length / 12)) === 0 || index === all.length - 1);
+        await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`, 600_000);
+        out.entered = true;
+      }
+      await afterEntry(win, out);
+      const text = await storedText(win);
+      out.cursorAfterApply = text && cursorInText(text);
+      out.gapAfterApplyMs = out.cursorAfterApply ? (await pageNow(win)) - out.cursorAfterApply : null;
+      out.remainingCatchupMs = await caughtUp(win);
+      out.upload = await leaveToMenu(win);
+    } else if (PHASE === 'newer-game') {
+      await continueCampaign(win, out);
+      if (out.waitSeen) {
+        out.facts = await waitFacts(win);
+        await shot(win, '09-server-updating');
+        const started = Date.now();
+        await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`, 75 * 60_000);
+        out.waitedMs = Date.now() - started;
+        out.entered = true;
+      }
+      await afterEntry(win, out);
+      out.remainingCatchupMs = await caughtUp(win);
       out.upload = await leaveToMenu(win);
     } else if (PHASE === 'local-reference') {
       // Cloud off on this computer: the same absence is caught up by the game itself.

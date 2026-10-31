@@ -26,6 +26,14 @@ const FAILURE_STATE = `(() => {
     previewBackdrop: Boolean(document.querySelector('[data-qa-flight-preview-backdrop]')),
     previewError: text('[data-qa-flight-preview-error]'),
     targetStatus: text('[data-qa-flight-target-status]'),
+    // What the target step holds: the typed fields (and whether they are still open) and the target it names.
+    targetInputs: Array.from(document.querySelectorAll('[name^="flight-preview-target-"]')).map((input) => input.name.replace('flight-preview-target-', '') + '=' + input.value),
+    targetStep: text('[data-qa-flight-target-step]'),
+    mission: document.querySelector('#fleet-mission')?.value ?? null,
+    orbitalDebris: (() => {
+      try { return Object.values(JSON.parse(localStorage.getItem('asterion.vertical-slice.test.v1') || '{}').espionage?.orbitalDebris ?? {}).map((item) => item.targetCoordinate && [item.targetCoordinate.galaxy, item.targetCoordinate.system, item.targetCoordinate.position].join(':')); }
+      catch (error) { return String(error); }
+    })(),
     notice: text('[data-qa-last-notice]') ?? text('[data-qa-runtime-notice]'),
     inspector: text('[data-qa-universe-inspector]'),
     stored: (() => {

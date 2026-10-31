@@ -17,6 +17,8 @@ import {
   importSaveSlot,
   inspectSlot,
   readSlotIndex,
+  updateSlotSummary,
+  writeSlotIndex,
   type SlotStorage,
 } from './slots.ts';
 import { createInitialSaveState, createPersistenceFacade, loadSavedState, SAVE_SCHEMA_VERSION } from './persistence.ts';
@@ -195,4 +197,28 @@ test('F-04: an unreadable legacy save is listed as broken, never re-seeded or hi
   assert.equal(inspectSlot(legacy, SAVE_SCHEMA_VERSION, storage).status, 'broken');
   assert.equal(checkSlotEntry(legacy, storage).ok, false);
   assert.equal(storage.getItem(LEGACY_PRODUCTION_SAVE_KEY), BROKEN);
+});
+
+test('the slot card counts NPC owners, not their planets; a summary cached by an older build is corrected', () => {
+  const state = campaign('NPC-OWNERS', 1_000) as unknown as { espionage: { targets: Record<string, { ownerId?: string }> } };
+  const owners = new Set(Object.values(state.espionage.targets).map((target) => target.ownerId).filter((id) => id?.startsWith('npc-gen-')));
+  assert.ok(owners.size > 1, 'the generated world has NPC owners');
+  // Grown NPCs: every owner takes two more colonies.
+  const targets = { ...state.espionage.targets };
+  for (const [id, target] of Object.entries(state.espionage.targets)) {
+    if (!target.ownerId?.startsWith('npc-gen-')) continue;
+    targets[`${id}-colony-a`] = { ...target };
+    targets[`${id}-colony-b`] = { ...target };
+  }
+  const { storage, slot } = slotWithPayload(JSON.stringify({ ...state, espionage: { ...state.espionage, targets } }));
+  const health = inspectSlot(slot, SAVE_SCHEMA_VERSION, storage);
+  assert.equal(health.status, 'ok');
+  assert.equal(health.status === 'ok' && health.summary?.npcCount, owners.size, 'owners, not planets');
+  // The index of an older build counted planets.
+  const index = readSlotIndex(storage);
+  writeSlotIndex({ ...index, slots: index.slots.map((item) => ({ ...item, summary: { ...item.summary, npcCount: owners.size * 3 } })) }, storage);
+  assert.equal(updateSlotSummary(slot.id, health.status === 'ok' ? health.summary! : slot.summary, storage).ok, true);
+  const fixed = readSlotIndex(storage).slots.find((item) => item.id === slot.id)!;
+  assert.equal(fixed.summary.npcCount, owners.size);
+  assert.equal(fixed.updatedAt, slot.updatedAt, 'the correction does not touch the slot dates');
 });

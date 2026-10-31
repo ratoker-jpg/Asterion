@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # /usr/local/sbin/asterion-update (asterion-update.service, every 30 min and on
 # request): installs the asterion-server-X.Y.Z.tgz of the latest GitHub Release
-# next to the installed ones and restarts the supervisor. A living world keeps
-# its own release: the supervisor checkpoints it on stop and resumes it with
-# the runner of the version it was left with (kept until no world needs it).
+# next to the installed ones and restarts the supervisor. The supervisor
+# checkpoints the living world on stop; the new one moves it to the new release
+# from that checkpoint (server.ts migrateLive), so the update keeps the server's
+# progress. A release stays installed while a world still lives in it (a move
+# that failed falls back to the old runner).
 #   asterion-update [--file=bundle.tgz]   (deploy.sh installs a local build this way)
 set -euo pipefail
 
