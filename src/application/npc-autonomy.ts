@@ -86,6 +86,8 @@ function familyDrive(drives: NpcStrategyDrives, kind: string): number {
     case 'recon': return Math.max(drives.war, drives.operations, 0.5 * drives.military);
     case 'diplomacy': case 'aid': return drives.diplomacy;
     case 'fleetsave': return Math.max(0.6, drives.military);
+    // Gates, Sun raids and their calls: the match's goal, weighed apart from routine trips.
+    case 'endgame': return Math.max(0.7, drives.operations, drives.diplomacy);
     default: return 0.5;
   }
 }

@@ -142,8 +142,9 @@ export function getNpcEndgameChoices(state: SaveState, profile: NpcProfile, util
     if (!membership || raid.status !== 'gathering' || raid.allianceId !== membership.alliance.id || (raid.gatherEndsAt ?? 0) <= at) continue;
     if (raidPledgeRoom(state, raid, ownerId) <= 0 || pledgeablePopulation(state, ownerId, share) <= 0) continue;
     const id = `sun-raid-join:${ownerId}:${raid.id}`;
-    const estimate = 0.3 + 0.8 * unit(traits.cooperation) + 0.4 * drives.operations + 0.3 * (4 - missing) / 4;
-    choices.push({ candidate: { id, kind: 'pve', weight: scored(id, estimate), payload: { raidId: raid.id } }, run: (current, key) => {
+    // The alliance's call comes first (owner 31.10.2026: allies never came and all 12 gatherings disbanded).
+    const estimate = 1.2 + 0.8 * unit(traits.cooperation) + 0.4 * drives.operations + 0.3 * (4 - missing) / 4;
+    choices.push({ candidate: { id, kind: 'endgame', weight: scored(id, estimate), payload: { raidId: raid.id } }, run: (current, key) => {
       const result = pledgeFromPlanets(current, ownerId, raid.id, 1, key, options);
       return { state: result.state, started: result.pledged > 0, reason: result.pledged > 0 ? null : 'nothing-to-pledge' };
     } });
@@ -151,7 +152,11 @@ export function getNpcEndgameChoices(state: SaveState, profile: NpcProfile, util
   // 2b. Leadership declares a gathering only when the alliance can fill it.
   if (membership && (membership.role === 'leader' || membership.role === 'deputy') && missing > 0) {
     const alliance = state.command.alliances.find((item) => item.id === membership.alliance.id);
-    const reachable = (alliance?.members ?? []).reduce((total, member) => total + pledgeablePopulation(state, member.ownerId, share), 0);
+    // Only members at the game now can answer within the 30-minute gathering (owner 31.10.2026):
+    // the leader calls when those online, itself included, can really fill the side.
+    const online = (memberId: string) => memberId === ownerId || state.npc?.profiles[memberId]?.session.active === true;
+    const reachable = (alliance?.members ?? []).filter((member) => online(member.ownerId))
+      .reduce((total, member) => total + pledgeablePopulation(state, member.ownerId, share), 0);
     const own = pledgeablePopulation(state, ownerId, share);
     if (own > 0 && reachable >= sunRaidCapsOf(state).perSide) {
       const origin = [...planets].sort((left, right) => sunFleetPopulation(sunForce(state, ownerId, right.id, right.raceId, 1, Infinity), right.raceId as never)
@@ -166,8 +171,8 @@ export function getNpcEndgameChoices(state: SaveState, profile: NpcProfile, util
         galaxy, system: candidate, population, now: at, participantCap: sunRaidCapsOf(state).participant }).ok) : undefined;
       if (system !== undefined) {
         const id = `sun-raid:${ownerId}:${galaxy}:${system}`;
-        const estimate = -0.2 + 0.9 * drives.operations + 0.7 * drives.war + 0.3 * (4 - missing) / 4 + 0.3 * (unit(traits.riskTolerance) - 0.5);
-        choices.push({ candidate: { id, kind: 'pve', weight: scored(id, estimate), payload: { planetId: origin.id } }, run: (current, key) => {
+        const estimate = 0.4 + 0.9 * drives.operations + 0.7 * drives.war + 0.3 * (4 - missing) / 4 + 0.3 * (unit(traits.riskTolerance) - 0.5);
+        choices.push({ candidate: { id, kind: 'endgame', weight: scored(id, estimate), payload: { planetId: origin.id } }, run: (current, key) => {
           const result = launchNpcSunRaid(current, ownerId, { galaxy, system, originPlanetId: origin.id, ships, requestId: key }, options);
           if (!result.ok || !result.raidId) return { state: current, started: false, reason: result.ok ? 'no-raid' : result.error, planetId: origin.id };
           // The leader tops its own share up from its other planets.
@@ -198,8 +203,9 @@ export function getNpcEndgameChoices(state: SaveState, profile: NpcProfile, util
     const ships = sunForce(state, ownerId, origin.id, origin.raceId, 0.2 + 0.35 * unit(traits.riskTolerance), room);
     if (!Object.keys(ships).length) continue;
     const id = `sun-support:${ownerId}:${raid.id}`;
+    // (kind endgame: the Sun is its own family of choices, not one more PvE trip)
     const estimate = -1 + motive + 0.4 * unit(traits.cooperation) + 0.3 * drives.military;
-    choices.push({ candidate: { id, kind: 'pve', weight: scored(id, estimate), payload: { planetId: origin.id } }, run: (current, key) => {
+    choices.push({ candidate: { id, kind: 'endgame', weight: scored(id, estimate), payload: { planetId: origin.id } }, run: (current, key) => {
       const result = sendNpcSunSupport(current, ownerId, { raidId: raid.id, originPlanetId: origin.id, ships, requestId: key }, sunOptions(at, timeScale));
       return result.ok ? { state: result.state, started: true, reason: null, planetId: origin.id } : { state: current, started: false, reason: result.error, planetId: origin.id };
     } });

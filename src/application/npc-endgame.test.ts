@@ -74,6 +74,29 @@ function allianceOf(state: SaveState, owners: readonly string[]): SaveState {
 
 const scored = (_id: string, estimate: number) => utilityToWeight(estimate);
 
+/** The owners are at the game now (in a session): only they answer a 30-minute gathering. */
+function online(state: SaveState, owners: readonly string[]): SaveState {
+  const profiles = { ...state.npc!.profiles };
+  for (const ownerId of owners) profiles[ownerId] = { ...profiles[ownerId]!, session: { ...profiles[ownerId]!.session, active: true, sessionStartedAt: NOW - HOUR, sessionEndsAt: NOW + HOUR } };
+  return { ...state, npc: { ...state.npc!, profiles } };
+}
+
+test('a leader does not call a Sun gathering its online members cannot fill (owner 31.10.2026)', () => {
+  const { state: initial, owners } = world();
+  let state = allianceOf(initial, owners);
+  for (const ownerId of owners) state = armed(state, ownerId, 20_000);
+  // Only the leader is at the game: 25 000 of the 50 000 this world needs.
+  state = online(state, owners.slice(0, 1));
+  const leaderProfile = state.npc!.profiles[owners[0]!]!;
+  const declare = getNpcEndgameChoices(state, leaderProfile, createNpcUtilityContext(state, leaderProfile, NOW, 1), NOW, 1, scored)
+    .find((choice) => choice.candidate.id.startsWith('sun-raid:'));
+  assert.equal(declare, undefined, 'offline allies cannot answer within 30 minutes');
+  state = online(state, owners);
+  const profile = state.npc!.profiles[owners[0]!]!;
+  assert.ok(getNpcEndgameChoices(state, profile, createNpcUtilityContext(state, profile, NOW, 1), NOW, 1, scored)
+    .some((choice) => choice.candidate.id.startsWith('sun-raid:') && choice.candidate.kind === 'endgame'), 'with them online it calls');
+});
+
 test('NPC raid gathering: the leader declares, allies join, the full cap takes off together and comes home (25.10.2026)', () => {
   const { state: initial, owners } = world();
   // A three-NPC world: 50 000 per side, 25 000 per participant (owner rule 31.10.2026).
@@ -82,6 +105,7 @@ test('NPC raid gathering: the leader declares, allies join, the full cap takes o
   // 20 000 cruisers × 7 population: any risk share still brings the full 75 000.
   let state = allianceOf(initial, owners);
   for (const ownerId of owners) state = armed(state, ownerId, 20_000);
+  state = online(state, owners);
   const leader = owners[0]!;
   const before = Object.fromEntries(owners.map((ownerId) => [ownerId, home(state, ownerId)]));
   const leaderProfile = state.npc!.profiles[leader]!;
@@ -137,6 +161,7 @@ test('a gathering that does not reach 225 000 in 30 minutes disbands: ships and 
   const { state: initial, owners } = world();
   let state = allianceOf(initial, owners);
   for (const ownerId of owners) state = armed(state, ownerId, 20_000);
+  state = online(state, owners);
   const leader = owners[0]!;
   const before = home(state, leader);
   const leaderProfile = state.npc!.profiles[leader]!;
