@@ -24,7 +24,7 @@
 //
 //   npm run test:cloud-world-ui                       (small generated world, CI)
 //   npm run test:cloud-world-ui -- --fixture=late-game-day-2.json --live-seconds=300 --behind-minutes=30
-//       [--server-url=https://host --key-file=cloud-key.txt] [--only-relay] [--only-catchup --behind-hours=6]
+//       [--server-url=https://host --allow-remote --key-file=cloud-key.txt] [--only-relay] [--only-catchup --behind-hours=6]
 //   (--only-catchup: settings, first play, then the server catch-up phases only — the screenshot run on a late world)
 //
 // Prints one JSON line per step and exits 1 on any failed expectation.
@@ -59,6 +59,11 @@ if (!PHASE) {
   // --server-url/--key-file: a real cloud server instead of the local one (the
   // unreachable server is then an address nothing listens on).
   const realUrl = option('server-url');
+  // A remote server only on purpose (31.10.2026: a QA run once reached the production server).
+  if (realUrl && (!process.argv.includes('--allow-remote') || !option('key-file'))) {
+    console.error('A remote server needs --server-url, --allow-remote and --key-file together (the default is a local server).');
+    process.exit(2);
+  }
   const slotArg = `--slot=${realUrl ? `slot-cloudqa-${crypto.randomBytes(3).toString('hex')}` : SLOT_ID}`;
   const liveSeconds = Number(option('live-seconds', fixture ? '300' : '40'));
   const behindMinutes = Number(option('behind-minutes', fixture ? '30' : '20'));

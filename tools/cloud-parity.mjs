@@ -7,15 +7,24 @@
 //   npm run cloud:parity -- --fixture=late-game-day-2.json --minutes=10 [--behind-minutes=30]
 //       (`equal`: the bytes; `equalAfterLoad`: both loaded as the game loads a save —
 //       the check that holds across a server restart in the middle)
-//       [--url=https://host] [--key-file=%APPDATA%/Asterion/cloud-key.txt] [--id=slot-qa-parity-day2]
+//       [--id=slot-qa-parity-day2]
+//   By default a LOCAL server (server/src/server.ts on 127.0.0.1) with its own temporary key and data
+//   directory. A remote server only with all three: --url=https://host --allow-remote --key-file=F
+//   (31.10.2026: a run without --url once went to the production server, which holds one live world).
+//   The player's key in %APPDATA% is never read.
 //
 // --behind-minutes leaves the save that far behind the (shifted) clock, so the
 // server first catches up an absence before it keeps the world alive. The
 // server's clock is the save's own time (the clock offset header), like a QA
 // page clock: no real months of absence are replayed.
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import zlib from 'node:zlib';
 import { createHash, randomBytes } from 'node:crypto';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createCloudServer } from '../server/src/server.ts';
+import { DEFAULT_RETENTION } from '../server/src/store.ts';
 import { createPersistenceFacade, serializeSaveForStorage } from '../src/application/persistence.ts';
 import { freezeNpcCatchupTarget } from '../src/application/npc-catchup.ts';
 import { applyCampaignRuntimeForCatchup, runNpcCatchup } from '../src/application/npc-catchup-runner.ts';
@@ -29,10 +38,40 @@ const fixture = option('fixture');
 if (!fixture) { console.error('Usage: --fixture=<save.json> [--minutes=10] [--behind-minutes=0]'); process.exit(2); }
 const minutes = Number(option('minutes', '10'));
 const behindMinutes = Number(option('behind-minutes', '0'));
-const base = option('url', 'https://abstract-latent-blaze.majordomo-client.ru');
-const key = fs.readFileSync(option('key-file', `${process.env.APPDATA}/Asterion/cloud-key.txt`), 'utf8').trim();
+const remote = option('url');
+if (remote && (!args.includes('--allow-remote') || !option('key-file'))) {
+  console.error('A remote server needs --url, --allow-remote and --key-file together (the default is a local server).');
+  process.exit(2);
+}
 const id = option('id', `slot-qa-parity-${randomBytes(3).toString('hex')}`);
 const version = option('version', JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version);
+let key;
+let base;
+let localServer = null;
+if (remote) {
+  base = remote;
+  key = fs.readFileSync(option('key-file'), 'utf8').trim();
+} else {
+  // The server's own code on 127.0.0.1, as server/src/server.test.ts runs it.
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'asterion-cloud-parity-'));
+  key = randomBytes(36).toString('base64url');
+  localServer = createCloudServer({
+    host: '127.0.0.1', port: 0, dataDir, keyHash: createHash('sha256').update(key).digest(), version,
+    releasesDir: path.join(dataDir, 'releases'),
+    runnerOverride: {
+      script: path.join(root, 'server/src/runner.ts'),
+      execArgv: ['--max-old-space-size=8192', '--experimental-strip-types', '--no-warnings', '--experimental-loader',
+        pathToFileURL(path.join(root, 'src/domain/combat/test-asset-loader.mjs')).href],
+      version,
+    },
+    runnerExecArgv: [], stepMs: 1_000, stepBudgetMs: 2_000, checkpointEveryMs: 60 * 60_000,
+    maxUploadGzBytes: 200 * 1024 ** 2, maxSaveBytes: 1024 ** 3, retention: DEFAULT_RETENTION, trustProxy: false,
+    log: () => undefined,
+  });
+  base = `http://127.0.0.1:${await localServer.listen()}`;
+  process.on('exit', () => fs.rmSync(dataDir, { recursive: true, force: true }));
+}
 const sha = (text) => createHash('sha256').update(text, 'utf8').digest('hex');
 const log = (...parts) => process.stderr.write(`${new Date().toISOString().slice(11, 19)} ${parts.join(' ')}\n`);
 const api = (route, init = {}) => fetch(`${base}${route}`, { ...init, headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json', ...(init.headers ?? {}) } });
@@ -119,5 +158,6 @@ const result = {
   serverDigest, localDigest, equal: serverDigest === localDigest,
   equalAfterLoad: serverLoadedDigest === localLoadedDigest,
 };
-console.log(JSON.stringify(result));
+console.log(JSON.stringify({ server: remote ? 'remote' : 'local', ...result }));
 if (!result.equalAfterLoad) process.exitCode = 1;
+if (localServer) await localServer.close();
