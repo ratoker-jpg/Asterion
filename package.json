@@ -83,7 +83,8 @@
     "test:late-game-fps-ui": "electron electron/late-game-fps-qa.cjs",
     "test:save-store-ui": "electron electron/save-store-qa.cjs",
     "test:late-save-ui": "electron electron/late-save-qa.cjs",
-    "test:cloud-world-ui": "electron electron/cloud-world-qa.cjs"
+    "test:cloud-world-ui": "electron electron/cloud-world-qa.cjs",
+    "test:catchup-summary-ui": "electron electron/catchup-summary-qa.cjs"
   },
   "dependencies": {
     "electron-updater": "6.8.11",

@@ -152,7 +152,7 @@ jobs:
           # The cloud world QA runs the game against the server's own code on
           # localhost (no real server is reached from CI).
           - shard: campaign-command
-            suites: "test:new-game-ui:skip test:command-ui:skip test:command-aid-ui:skip test:command-journal-ui:skip test:cloud-world-ui:skip"
+            suites: "test:new-game-ui:skip test:command-ui:skip test:command-aid-ui:skip test:command-journal-ui:skip test:cloud-world-ui:skip test:catchup-summary-ui:skip"
           # The PR gate replays six game hours: the banner, command gate,
           # completion and state checks need no full day, which took about
           # 14 minutes. Whole days run in the long-horizon job (main and nightly).
