@@ -33,7 +33,31 @@ async function reload(win) {
 
 async function rendererMutationAndReload(win, source, label) {
   const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-  const execution = win.webContents.executeJavaScript(source)
+  // location.reload() is asynchronous: the running game's save (a tick write, or its
+  // pagehide flush) could land over the fixture before the page unloads — under load
+  // the queue then kept its 11 s tasks («offline completion mismatch»). In the same task
+  // as the mutation the save key accepts only the fixture's own (first) write or removal until this
+  // document goes away (as in visual-capture.cjs and fixture-reload.cjs).
+  const guarded = `(() => {
+    const saveKey = ${JSON.stringify(SAVE_KEY)};
+    const originalSetItem = Storage.prototype.setItem;
+    let fixtureWritten = false;
+    Storage.prototype.setItem = function (key, value) {
+      if (this === window.localStorage && String(key) === saveKey) {
+        if (fixtureWritten) return;
+        fixtureWritten = true;
+      }
+      return originalSetItem.call(this, key, value);
+    };
+    // A reset fixture removes the save instead: that is its write too.
+    const originalRemoveItem = Storage.prototype.removeItem;
+    Storage.prototype.removeItem = function (key) {
+      if (this === window.localStorage && String(key) === saveKey) fixtureWritten = true;
+      return originalRemoveItem.call(this, key);
+    };
+    return ${source};
+  })()`;
+  const execution = win.webContents.executeJavaScript(guarded)
     .then((value) => ({ value }))
     .catch((error) => ({ error: String(error?.stack || error) }));
   const first = await Promise.race([
