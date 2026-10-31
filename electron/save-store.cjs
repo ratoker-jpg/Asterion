@@ -44,15 +44,12 @@ function botJournalFile(key) {
 }
 
 function pruneBotJournal(file) {
-  const lines = fs.readFileSync(file, 'utf8').split('
-').filter((line) => line.trim());
+  const lines = fs.readFileSync(file, 'utf8').split('\n').filter((line) => line.trim());
   const times = lines.map((line) => { try { return JSON.parse(line).t; } catch { return null; } });
   const last = times.reduce((max, t) => (typeof t === 'number' && t > max ? t : max), Number.NEGATIVE_INFINITY);
   const kept = lines.filter((_line, index) => typeof times[index] === 'number' && times[index] >= last - BOT_JOURNAL_KEEP_MS);
   const temporary = `${file}.tmp`;
-  fs.writeFileSync(temporary, kept.length ? `${kept.join('
-')}
-` : '', 'utf8');
+  fs.writeFileSync(temporary, kept.length ? `${kept.join('\n')}\n` : '', 'utf8');
   fs.renameSync(temporary, file);
   return fs.statSync(file).size;
 }
@@ -78,14 +75,10 @@ function registerSaveStore() {
       if (!KEY.test(key) || typeof lines !== 'string') throw new Error('Invalid bot journal merge.');
       const file = botJournalFile(key);
       const timeOf = (line) => { try { return JSON.parse(line).t; } catch { return null; } };
-      const local = fs.existsSync(file) ? fs.readFileSync(file, 'utf8').split('
-').filter((line) => line.trim()) : [];
+      const local = fs.existsSync(file) ? fs.readFileSync(file, 'utf8').split('\n').filter((line) => line.trim()) : [];
       const last = local.reduce((max, line) => { const t = timeOf(line); return typeof t === 'number' && t > max ? t : max; }, Number.NEGATIVE_INFINITY);
-      const added = lines.split('
-').filter((line) => { const t = timeOf(line); return typeof t === 'number' && t > last; });
-      if (added.length) fs.appendFileSync(file, `${added.join('
-')}
-`, 'utf8');
+      const added = lines.split('\n').filter((line) => { const t = timeOf(line); return typeof t === 'number' && t > last; });
+      if (added.length) fs.appendFileSync(file, `${added.join('\n')}\n`, 'utf8');
       if (fs.existsSync(file)) botJournalSize.set(key, pruneBotJournal(file));
       return { ok: true, added: added.length };
     } catch (error) {
