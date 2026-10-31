@@ -32,6 +32,13 @@ export const NPC_ONLINE_MINUTES_BY_PROPENSITY: readonly (readonly [number, numbe
 /** The opening days are played harder: everything is cheap and quick then. */
 export const NPC_CAMPAIGN_START_BOOST: readonly number[] = Object.freeze([2, 1.5]);
 
+/**
+ * No character makes a bot dead for the whole match (owner 31.10.2026: an
+ * owner with activity 0.08 played 11 sessions in three days and stood at
+ * ~600 points): activity counts as at least this, about 2.5 h on a usual day.
+ */
+export const NPC_MIN_ACTIVITY_PROPENSITY = 0.2;
+
 /** Rare players also skip whole days now and then. */
 const RARE_PROPENSITY = 0.1;
 const RARE_DAY_SKIP_PROBABILITY = 0.3;
@@ -71,7 +78,9 @@ export function getNpcSessionEvents(
     if (isNpcInRareAbsenceDay(profile.privateSeed, profile.ownerId, localDay)) continue;
     const dayRandom = createSeededRandom(JSON.stringify([profile.privateSeed, profile.ownerId, 'day', localDay]));
     const wakeRandom = createSeededRandom(JSON.stringify([profile.privateSeed, profile.ownerId, 'wake', localDay]));
-    const propensity = clamp(activity.propensity, 0, 1);
+    // Propensity 0 still never plays (a switched-off owner); any other plays at least the floor.
+    const raw = clamp(activity.propensity, 0, 1);
+    const propensity = raw > 0 ? Math.max(NPC_MIN_ACTIVITY_PROPENSITY, raw) : 0;
     if (propensity < RARE_PROPENSITY && dayRandom() < RARE_DAY_SKIP_PROBABILITY) continue;
     const weekWeight = getWeekdayWeight(profile.privateSeed, profile.ownerId, localDay);
     const dayIndex = startLocalDay === null ? null : localDay - startLocalDay;
