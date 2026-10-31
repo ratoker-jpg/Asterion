@@ -5,6 +5,7 @@ import { FLEET_ROOT_REQUEST_EVENT } from './FleetRootNavigationController';
 import { ACTIVE_RUNTIME_MODE, RUNTIME_RESET_EVENT, RUNTIME_STATE_CHANGED_EVENT } from './domain/runtime/mode.ts';
 import { createPersistenceFacade } from './application/persistence.ts';
 import { getRepairWorkshopSnapshot } from './application/repair.ts';
+import { getLiveSaveState } from './application/runtime.ts';
 import type { SaveState } from './application/contracts.ts';
 import { useNavigation } from './ui/navigation.tsx';
 
@@ -22,14 +23,15 @@ export function RepairWorkshopPortal() {
   const [resetNonce, setResetNonce] = useState(0);
   const [planet, setPlanet] = useState({ name: 'Helion 01', coords: '[1:1:1]' });
   const persistence = useMemo(() => createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }), []);
-  const [state, setState] = useState<SaveState>(() => persistence.read());
+  // The world App renders; the save is read from storage only outside a running campaign.
+  const [state, setState] = useState<SaveState>(() => getLiveSaveState() ?? persistence.read());
   const active = route === 'fleets' && fleetSection === 'repair';
 
   useEffect(() => {
     const syncPlanet = () => {
       setTarget(document.querySelector('.fleet-main-v1'));
       setPlanet(readCurrentPlanet());
-      setState(persistence.read());
+      setState(getLiveSaveState() ?? persistence.read());
     };
 
     const onRuntimeStateChanged = (event: Event) => {

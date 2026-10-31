@@ -172,7 +172,7 @@ import type { AidResource } from './domain/command/types.ts';
 import { getPlanetOverpopulationSummary } from './application/overpopulation.ts';
 import { energySummaryForPlanet, getPlanetEnergyCoordinates } from './application/energy.ts';
 import { getEffectiveResourceIncomePerHour } from './application/resource-clock.ts';
-import { publishApplicationRuntimeSnapshot } from './application/runtime.ts';
+import { publishApplicationRuntimeSnapshot, setLiveSaveState } from './application/runtime.ts';
 import { reconcileRuntime, type RuntimeReconcileEvent } from './application/reconcile.ts';
 import { freezeNpcCatchupTarget, isNpcCatchupPending, needsNpcCatchupBefore } from './application/npc-catchup.ts';
 import { NpcCatchupBanner } from './NpcCatchupBanner.tsx';
@@ -418,6 +418,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   });
   const stateRef = useRef(state);
   stateRef.current = state;
+  setLiveSaveState(state);
+  useEffect(() => () => setLiveSaveState(null), []);
   const [now, setNow] = useState(Date.now());
   const [testTimeScale, setTestTimeScale] = useState<TestTimeScale>(() => resolveTestTimeScale());
   const [toasts, setToasts] = useState<RuntimeToast[]>([]);
