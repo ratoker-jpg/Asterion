@@ -15,11 +15,21 @@ export const SUN_RAID_CONFIG = Object.freeze({
   /**
    * Population cap of each side (attack and defence) of one Sun battle. For the
    * attackers it is also the minimum (owner rule 25.10.2026): a raid flies only
-   * once its gathering holds the full 225 000.
+   * once its gathering holds the full cap. It scales with the world's NPC count
+   * (owner rule 31.10.2026, see sunRaidCaps): this much per this many NPC...
    */
-  populationCapPerSide: 225_000,
-  /** One participant (player or NPC) adds at most this much, from any of its planets. */
-  participantPopulationCap: 75_000,
+  populationCapPerReference: 225_000,
+  referenceNpcCount: 100,
+  /** ...and never below this. */
+  populationCapMin: 50_000,
+  /**
+   * One participant (player or NPC) adds at most this much, from any of its
+   * planets: participantCapMin at the smallest cap, plus this share of what
+   * the cap adds above its minimum, rounded to participantCapStep.
+   */
+  participantCapMin: 25_000,
+  participantCapSlope: 2 / 7,
+  participantCapStep: 500,
   /** The gathering after a raid is declared; not full by then, the raid disbands. */
   raidGatherMs: 30 * 60 * 1000,
   /** Hull sizes rarely add up to the exact number: the raid flies once this close to the cap. */
@@ -43,6 +53,36 @@ export const SUN_RAID_CONFIG = Object.freeze({
   maxRounds: 12 as const,
   historyLimit: 64,
 });
+
+export type SunRaidCaps = Readonly<{
+  /** Each side's cap of one Sun battle; the attackers' minimum too. */
+  perSide: number;
+  /** What one participant adds at most. */
+  participant: number;
+}>;
+
+/**
+ * Owner rule 31.10.2026: T = max(50 000, 225 000 × NPC / 100), C = 25 000 +
+ * (T − 50 000) × 2/7 rounded to 500. 100 NPC: 225 000 / 75 000 (as before);
+ * 50: 112 500 / 43 000; 30: 67 500 / 30 000; 22 or fewer: 50 000 / 25 000.
+ */
+export function sunRaidCaps(npcCount: number): SunRaidCaps {
+  const c = SUN_RAID_CONFIG;
+  const count = Number.isFinite(npcCount) ? Math.max(0, npcCount) : c.referenceNpcCount;
+  const perSide = Math.max(c.populationCapMin, Math.round(c.populationCapPerReference * count / c.referenceNpcCount));
+  const participant = Math.round((c.participantCapMin + (perSide - c.populationCapMin) * c.participantCapSlope) / c.participantCapStep) * c.participantCapStep;
+  return { perSide, participant };
+}
+
+/**
+ * The caps of a world by its own NPC count: the NPC owners it holds, else the
+ * count its setup asked for; a world without either (a legacy save) keeps the
+ * reference count's caps.
+ */
+export function sunRaidCapsOf(state: { npc?: { profiles: Readonly<Record<string, unknown>> }; worldConfig?: { world: { npcCount: number } } }): SunRaidCaps {
+  const owners = Object.keys(state.npc?.profiles ?? {}).length;
+  return sunRaidCaps(owners > 0 ? owners : state.worldConfig?.world.npcCount ?? SUN_RAID_CONFIG.referenceNpcCount);
+}
 
 export type SolarCrystalId = 'crystal-1' | 'crystal-2' | 'crystal-3' | 'crystal-4';
 

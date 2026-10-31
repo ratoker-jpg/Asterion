@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { createDefaultCombatTechnologies } from '../combat/technologies.ts';
-import { SOLAR_CRYSTAL_IDS, SUN_RAID_CONFIG } from './config.ts';
+import { SOLAR_CRYSTAL_IDS, SUN_RAID_CONFIG, sunRaidCaps, sunRaidCapsOf } from './config.ts';
 import { migrateSunRaidState } from './repository.ts';
 import {
   addCrystal,
@@ -172,4 +172,16 @@ test('Gate breach follows the owner rules of 25.10.2026 over many seeds', () => 
   const stolen = resolveGateBreach('seed-1', { kind: 'alliance', id: 'a' }, ['crystal-1', 'crystal-2'], true, ['crystal-1']);
   if (stolen.kind === 'stolen') assert.equal(stolen.crystal, 'crystal-2');
   assert.deepEqual(resolveGateBreach('s', { kind: 'owner', id: 'o' }, [], true, []), { kind: 'kept' });
+});
+
+test('Sun raid caps scale with the world NPC count (owner rule 31.10.2026)', () => {
+  assert.deepEqual(sunRaidCaps(100), { perSide: 225_000, participant: 75_000 });
+  assert.deepEqual(sunRaidCaps(50), { perSide: 112_500, participant: 43_000 });
+  assert.deepEqual(sunRaidCaps(30), { perSide: 67_500, participant: 30_000 });
+  assert.deepEqual(sunRaidCaps(22), { perSide: 50_000, participant: 25_000 });
+  assert.deepEqual(sunRaidCaps(5), { perSide: 50_000, participant: 25_000 });
+  const profiles = (count: number) => Object.fromEntries(Array.from({ length: count }, (_, index) => [`npc-${index}`, {}]));
+  assert.deepEqual(sunRaidCapsOf({ npc: { profiles: profiles(50) } }), sunRaidCaps(50), 'a world by the NPC owners it holds');
+  assert.deepEqual(sunRaidCapsOf({ worldConfig: { world: { npcCount: 30 } } }), sunRaidCaps(30), 'else by its setup');
+  assert.deepEqual(sunRaidCapsOf({}), sunRaidCaps(100), 'a legacy save keeps the reference caps');
 });

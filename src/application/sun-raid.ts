@@ -18,7 +18,7 @@ import { calculateFleetPopulation } from '../domain/fleet/runtime.ts';
 import { createFlightRecord } from '../domain/flights/runtime.ts';
 import type { FlightRecord, FlightState } from '../domain/flights/types.ts';
 import { scaleRuntimeDuration, type RuntimeMode } from '../domain/runtime/mode.ts';
-import { SOLAR_CRYSTALS, SUN_RAID_CONFIG } from '../domain/sun-raid/config.ts';
+import { SOLAR_CRYSTALS, SUN_RAID_CONFIG, sunRaidCapsOf } from '../domain/sun-raid/config.ts';
 import {
   activeGateOf,
   addCrystal,
@@ -486,8 +486,8 @@ export function ownerRaidPledge(state: SaveState, raidId: string, ownerId: strin
 /** Room left for one more pledge: the participant's 75 000 and the side's 225 000. */
 export function raidPledgeRoom(state: SaveState, raid: SunRaidRecord, ownerId: string): number {
   const committed = selectRaidSides(state, raid.id).attackers.population;
-  return Math.max(0, Math.min(SUN_RAID_CONFIG.participantPopulationCap - ownerRaidPledge(state, raid.id, ownerId),
-    SUN_RAID_CONFIG.populationCapPerSide - committed));
+  return Math.max(0, Math.min(sunRaidCapsOf(state).participant - ownerRaidPledge(state, raid.id, ownerId),
+    sunRaidCapsOf(state).perSide - committed));
 }
 
 /**
@@ -500,7 +500,7 @@ function pledgeToRaid(state: SaveState, owner: SunOwner, raid: SunRaidRecord, sh
   if (population <= 0) return { ok: false, error: 'Выберите боевые корабли для рейда.' };
   const room = raidPledgeRoom(state, raid, owner.ownerId);
   if (population > room) {
-    return { ok: false, error: `Свободно ${room.toLocaleString('ru-RU')} населения: один участник вносит не больше ${SUN_RAID_CONFIG.participantPopulationCap.toLocaleString('ru-RU')}, рейд — ровно ${SUN_RAID_CONFIG.populationCapPerSide.toLocaleString('ru-RU')}.` };
+    return { ok: false, error: `Свободно ${room.toLocaleString('ru-RU')} населения: один участник вносит не больше ${sunRaidCapsOf(state).participant.toLocaleString('ru-RU')}, рейд — ровно ${sunRaidCapsOf(state).perSide.toLocaleString('ru-RU')}.` };
   }
   const shipError = validateShips(owner, ships, commanders);
   if (shipError) return { ok: false, error: shipError };
@@ -532,7 +532,7 @@ function launchIfGathered(state: SaveState, raidId: string, at: number): SaveSta
   const raid = sunRaid.raids.find((item) => item.id === raidId);
   if (!raid || raid.status !== 'gathering') return state;
   const committed = selectRaidSides(state, raid.id).attackers.population;
-  if (committed < SUN_RAID_CONFIG.populationCapPerSide - SUN_RAID_CONFIG.raidLaunchTolerance) return state;
+  if (committed < sunRaidCapsOf(state).perSide - SUN_RAID_CONFIG.raidLaunchTolerance) return state;
   const pledged = flightsOfRaid(state, raid.id, 'attacker').filter((flight) => flight.phase === 'outbound');
   const oneWay = pledged[0]?.oneWayDurationMs ?? 0;
   const arrivesAt = at + oneWay;
@@ -566,7 +566,7 @@ function disbandRaid(state: SaveState, raid: SunRaidRecord, at: number): SaveSta
   const sunRaid = currentSunRaidState(next);
   const event: SunRaidEvent = {
     id: `${raid.id}:disbanded`, at, kind: 'raid-defended', galaxy: raid.galaxy, system: raid.system,
-    text: `[${raid.allianceTag}] сбор рейда на Солнце ${formatSun(raid.galaxy, raid.system)} не набрал ${SUN_RAID_CONFIG.populationCapPerSide.toLocaleString('ru-RU')} — рейд распущен.`,
+    text: `[${raid.allianceTag}] сбор рейда на Солнце ${formatSun(raid.galaxy, raid.system)} не набрал ${sunRaidCapsOf(state).perSide.toLocaleString('ru-RU')} — рейд распущен.`,
   };
   return withSunRaid(next, appendSunEvents({
     ...sunRaid, raids: sunRaid.raids.map((item) => item.id === raid.id ? { ...raid, status: 'disbanded' as const, closedAt: at } : item),
@@ -589,6 +589,7 @@ function launchRaidFor(state: SaveState, owner: SunOwner, input: RaidLaunchInput
     system: input.system,
     population,
     now: options.now,
+    participantCap: sunRaidCapsOf(state).participant,
   });
   if (!check.ok) return { ok: false, state, error: check.message };
   const alliance = membership!.alliance;
@@ -610,7 +611,7 @@ function launchRaidFor(state: SaveState, owner: SunOwner, input: RaidLaunchInput
   };
   const event: SunRaidEvent = {
     id: `${raidId}:declared`, at: options.now, kind: 'raid-launched', galaxy: input.galaxy, system: input.system,
-    text: `[${alliance.tag}] ${owner.ownerName} объявил сбор рейда на Солнце ${formatSun(input.galaxy, input.system)}: 30 мин на ${SUN_RAID_CONFIG.populationCapPerSide.toLocaleString('ru-RU')} населения.`,
+    text: `[${alliance.tag}] ${owner.ownerName} объявил сбор рейда на Солнце ${formatSun(input.galaxy, input.system)}: 30 мин на ${sunRaidCapsOf(state).perSide.toLocaleString('ru-RU')} населения.`,
   };
   const declared = withSunRaid(state, appendSunEvents({ ...sunRaid, raids: [...sunRaid.raids, raid] }, [event]));
   const pledge = pledgeToRaid(declared, owner, raid, ships, commanders, input.requestId, options);
@@ -618,7 +619,7 @@ function launchRaidFor(state: SaveState, owner: SunOwner, input: RaidLaunchInput
   return {
     ok: true,
     state: launchIfGathered(pledge.state, raidId, options.now),
-    notice: `Сбор рейда на Солнце ${formatSun(input.galaxy, input.system)} объявлен: 30 мин, нужно ${SUN_RAID_CONFIG.populationCapPerSide.toLocaleString('ru-RU')} населения от союза (до ${SUN_RAID_CONFIG.participantPopulationCap.toLocaleString('ru-RU')} от каждого).`,
+    notice: `Сбор рейда на Солнце ${formatSun(input.galaxy, input.system)} объявлен: 30 мин, нужно ${sunRaidCapsOf(state).perSide.toLocaleString('ru-RU')} населения от союза (до ${sunRaidCapsOf(state).participant.toLocaleString('ru-RU')} от каждого).`,
     raidId,
     flightId: pledge.flight.id,
   };
@@ -681,9 +682,9 @@ function supportCheckDetailed(state: SaveState, owner: SunOwner, raid: SunRaidRe
   const population = sunFleetPopulation(ships, owner.factionId, commanders);
   if (population <= 0) return { code: 'wrong-ship-composition', message: 'Выберите боевые корабли для защиты.' };
   const committed = selectRaidSides(state, raid.id).defenders.population;
-  const remaining = SUN_RAID_CONFIG.populationCapPerSide - committed;
+  const remaining = sunRaidCapsOf(state).perSide - committed;
   if (population > remaining) {
-    return { code: 'capacity-exceeded', message: `Лимит защиты — ${SUN_RAID_CONFIG.populationCapPerSide.toLocaleString('ru-RU')}: свободно ${Math.max(0, remaining).toLocaleString('ru-RU')} населения.` };
+    return { code: 'capacity-exceeded', message: `Лимит защиты — ${sunRaidCapsOf(state).perSide.toLocaleString('ru-RU')}: свободно ${Math.max(0, remaining).toLocaleString('ru-RU')} населения.` };
   }
   const preview = createSunFlight(owner, {
     missionId: 'sun-support', raidId: raid.id, galaxy: raid.galaxy, system: raid.system, ships, commanders,
@@ -763,14 +764,14 @@ export function previewSunLaunch(
   const owner = playerOwner(state, input.originPlanetId);
   const ships = normalizeSelection(input.ships);
   const commanders = normalizeCommanders(input.commanders);
-  const cap = SUN_RAID_CONFIG.populationCapPerSide;
+  const cap = sunRaidCapsOf(state).perSide;
   if (!owner) return { population: 0, cap, committed: 0, remaining: cap, oneWayMs: 0, arrivesAt: options.now, gasCost: 0, error: 'Планета отправления не найдена.' };
   const population = sunFleetPopulation(ships, owner.factionId, commanders);
   const raid = input.raidId ? currentSunRaidState(state).raids.find((item) => item.id === input.raidId) : undefined;
   const committed = input.kind === 'support' && raid ? selectRaidSides(state, raid.id).defenders.population
     : input.kind === 'join' && raid ? selectRaidSides(state, raid.id).attackers.population : 0;
   // A participant's own room in a raid: its 75 000 and what the gathering still needs.
-  const ownRoom = input.kind === 'attack' ? SUN_RAID_CONFIG.participantPopulationCap
+  const ownRoom = input.kind === 'attack' ? sunRaidCapsOf(state).participant
     : input.kind === 'join' && raid ? raidPledgeRoom(state, raid, owner.ownerId) : Math.max(0, cap - committed);
   const flight = Object.keys(ships).length || Object.keys(commanders).length
     ? createSunFlight(owner, {
@@ -783,7 +784,7 @@ export function previewSunLaunch(
     const membership = allianceOf(state, owner.ownerId);
     const check = checkRaidLaunch({
       state: currentSunRaidState(state), allianceId: membership?.alliance.id ?? null, role: membership?.role ?? null,
-      galaxy: input.galaxy, system: input.system, population, now: options.now,
+      galaxy: input.galaxy, system: input.system, population, now: options.now, participantCap: sunRaidCapsOf(state).participant,
     });
     error = check.ok ? null : check.message;
   }
@@ -791,7 +792,7 @@ export function previewSunLaunch(
   if (!error && input.kind === 'join') {
     if (!raid || raid.status !== 'gathering' || (raid.gatherEndsAt ?? 0) <= options.now) error = 'Сбор этого рейда уже закрыт.';
     else if (allianceOf(state, owner.ownerId)?.alliance.id !== raid.allianceId) error = 'В рейд вступают только участники союза, который его объявил.';
-    else if (population > ownRoom) error = `Свободно ${ownRoom.toLocaleString('ru-RU')} населения: один участник вносит не больше ${SUN_RAID_CONFIG.participantPopulationCap.toLocaleString('ru-RU')}.`;
+    else if (population > ownRoom) error = `Свободно ${ownRoom.toLocaleString('ru-RU')} населения: один участник вносит не больше ${sunRaidCapsOf(state).participant.toLocaleString('ru-RU')}.`;
   }
   if (!error && flight && getPlanetResources(state, owner.planetId).gas < flight.gasCost) error = `Недостаточно газа: нужно ${flight.gasCost.toLocaleString('ru-RU')}.`;
   const oneWayMs = input.kind !== 'support'

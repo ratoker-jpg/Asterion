@@ -2,7 +2,7 @@ import { COMBAT_TECHNOLOGY_IDS, createDefaultCombatTechnologies, type CombatTech
 import type { ShipId } from '../combat/ids.ts';
 import { getBaseSunEfficiencyPercent } from '../energy/runtime.ts';
 import { createSeededRandom } from '../world/random.ts';
-import { SOLAR_CRYSTAL_IDS, SUN_RAID_CONFIG, type SolarCrystalId } from './config.ts';
+import { SOLAR_CRYSTAL_IDS, SUN_RAID_CONFIG, sunRaidCaps, type SolarCrystalId } from './config.ts';
 import type {
   CrystalHolder,
   GateProject,
@@ -215,14 +215,17 @@ export function checkRaidLaunch(input: {
   system: number;
   population: number;
   now: number;
+  /** The world's per-participant cap (sunRaidCapsOf); the reference world's when absent. */
+  participantCap?: number;
 }): RaidLaunchCheck {
   const { state, allianceId, role, galaxy, system, population, now } = input;
+  const participantCap = input.participantCap ?? sunRaidCaps(SUN_RAID_CONFIG.referenceNpcCount).participant;
   if (state.campaignResult) return { ok: false, code: 'campaign-finished', message: 'Кампания завершена: Врата уже построены.' };
   if (!allianceId) return { ok: false, code: 'no-alliance', message: 'Рейд на Солнце — командная операция: нужен союз (Командование → Союз).' };
   if (role !== 'leader' && role !== 'deputy') return { ok: false, code: 'not-leadership', message: 'Рейд объявляет лидер или заместитель союза.' };
   if (population <= 0) return { ok: false, code: 'no-ships', message: 'Выберите боевые корабли для рейда.' };
-  if (population > SUN_RAID_CONFIG.participantPopulationCap) {
-    return { ok: false, code: 'population-cap', message: `Один участник вносит не больше ${SUN_RAID_CONFIG.participantPopulationCap.toLocaleString('ru-RU')} населения: уберите ${(population - SUN_RAID_CONFIG.participantPopulationCap).toLocaleString('ru-RU')}.` };
+  if (population > participantCap) {
+    return { ok: false, code: 'population-cap', message: `Один участник вносит не больше ${participantCap.toLocaleString('ru-RU')} населения: уберите ${(population - participantCap).toLocaleString('ru-RU')}.` };
   }
   const active = activeRaidOfAlliance(state, allianceId);
   if (active) return { ok: false, code: 'raid-active', message: `Союз уже ведёт рейд на Солнце [${active.galaxy}:${active.system}]. Новый — после возвращения флота.` };
