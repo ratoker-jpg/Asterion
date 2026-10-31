@@ -1,4 +1,5 @@
 import { getNpcJournalSink, NPC_JOURNAL_ALTERNATIVES } from './npc-journal.ts';
+import { npcStyleBias, readNpcPlayStyle } from './npc-style.ts';
 import { chooseNpcAutonomyAction, updateNpcAutonomyMemory, type NpcAutonomyCandidate } from '../domain/npc/autonomy-policy.ts';
 import { flightsToPlanet, ownerFlights } from './npc-knowledge-index.ts';
 import { NPC_REPAIR_BALANCE, npcRepairPoolValue, repairNpcPlanet } from './npc-repair.ts';
@@ -578,8 +579,11 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     totals.set(candidate.kind, (totals.get(candidate.kind) ?? 0) + candidate.weight);
     best.set(candidate.kind, Math.max(best.get(candidate.kind) ?? 0, candidate.weight));
   }
+  // The play style of this look (npc-style.ts) weighs the families too; the journal sees its changes.
+  const style = readNpcPlayStyle(state, profile, utility, drives);
+  getNpcJournalSink()?.style?.({ at, ownerId, style: style.style, previous: null, reason: style.reason });
   const familyScale = (kind: string) => Math.min(utilityToWeight(NPC_MAX_UTILITY), Math.max(0.05, best.get(kind)!))
-    * (0.4 + familyDrive(drives, kind));
+    * (0.4 + familyDrive(drives, kind)) * npcStyleBias(style.style, kind);
   const candidates = choices.map(({ candidate }) => ({ ...candidate, weight: candidate.weight / totals.get(candidate.kind)! * familyScale(candidate.kind) }));
   const strategy = chooseNpcStrategy(drives, (item) => estimationError(profile, eventId, `strategy:${item}`));
   const decisions: NpcAutonomyDecision[] = [];

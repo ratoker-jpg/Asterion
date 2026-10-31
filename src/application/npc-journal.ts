@@ -84,6 +84,8 @@ export class NpcJournalRecorder implements NpcJournalSink {
   private top = new Set<string>();
   private rankedAt = Number.NEGATIVE_INFINITY;
   private pending: NpcJournalEntry[] = [];
+  /** Each owner's last style seen (journal memory only: decisions read the world). */
+  private styles = new Map<string, string>();
 
   detailed = (ownerId: string): boolean => this.top.has(ownerId);
 
@@ -98,8 +100,12 @@ export class NpcJournalRecorder implements NpcJournalSink {
     });
   };
 
+  /** Called at every look; written when the style changes (for every owner, not only the top). */
   style = (entry: NpcJournalStyle): void => {
-    this.pending.push({ t: entry.at, o: entry.ownerId, k: 'style', s: entry.style, d: { from: entry.previous, why: entry.reason } });
+    const previous = this.styles.get(entry.ownerId) ?? null;
+    if (previous === entry.style) return;
+    this.styles.set(entry.ownerId, entry.style);
+    this.pending.push({ t: entry.at, o: entry.ownerId, k: 'style', s: entry.style, d: { from: previous, why: entry.reason } });
   };
 
   /** Refreshes the detailed top from `state` at most once per game hour. */

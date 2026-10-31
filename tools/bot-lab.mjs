@@ -152,6 +152,7 @@ function main() {
   const { summary: _summary, ...replay } = state.npcReplay;
   state = beginLiveWorld({ ...state, npcReplay: { ...replay, targetAt: at0 } });
   const journal = [];
+  const styles = new Map();
   const watched = owners ? new Set(owners) : null;
   setNpcJournalSink({
     detailed: (ownerId) => !watched || watched.has(ownerId),
@@ -162,7 +163,11 @@ function main() {
         ...(entry.reason ? { r: entry.reason } : {}),
         ...(entry.alternatives.length ? { alt: entry.alternatives.map((item) => [item.id, +item.weight.toFixed(3)]) } : {}), s: entry.strategy });
     },
-    style: (entry) => { if (!watched || watched.has(entry.ownerId)) journal.push({ t: entry.at, o: entry.ownerId, k: 'style', s: entry.style, d: { from: entry.previous, why: entry.reason } }); },
+    style: (entry) => {
+      if ((watched && !watched.has(entry.ownerId)) || styles.get(entry.ownerId) === entry.style) return;
+      journal.push({ t: entry.at, o: entry.ownerId, k: 'style', s: entry.style, d: { from: styles.get(entry.ownerId) ?? null, why: entry.reason } });
+      styles.set(entry.ownerId, entry.style);
+    },
   });
   const hours = save ? Number(option('hours', '6')) : Number(option('days', '2')) * 24;
   const days = [];
