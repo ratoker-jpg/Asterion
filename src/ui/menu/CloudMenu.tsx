@@ -134,8 +134,8 @@ export function ServerWaitWindow({ slot, wait, onReady, onTakeNow, onMenu }: {
       ? `Мир живёт на сервере в версии ${live?.gameVersion ?? '?'}, игра — ${wait.appVersion}. Сервер ставит новую версию и переносит мир в неё вместе со всем, что он уже прожил; затем игра заберёт его.`
       : `Мир живёт на сервере в версии ${live?.gameVersion ?? '?'}, а эта игра — ${wait.appVersion}. Обновите игру («Перезапустить и обновить» в главном меню): более старая версия не откроет этот мир.`;
   const takeNowNote = reason === 'catching-up'
-    ? 'Сервер остановится, а остаток досчитает этот компьютер.'
-    : 'Мир сервера сохранится резервной копией, а этот компьютер досчитает отсутствие от своего сохранения.';
+    ? 'сервер остановится, а остаток досчитает этот компьютер.'
+    : 'мир сервера сохранится резервной копией, а этот компьютер досчитает отсутствие от своего сохранения.';
   const fasterHere = reason === 'catching-up' && localWait !== null && serverWait !== null && localWait < serverWait * 0.8;
   return (
     <div className="menu-modal cloud-wait" role="presentation" data-qa-cloud-wait={reason}>
@@ -150,11 +150,11 @@ export function ServerWaitWindow({ slot, wait, onReady, onTakeNow, onMenu }: {
             </div>
           </div>
         ) : <i className="cloud-entry__bar" aria-hidden="true"><i /></i>}
-        <dl className="cloud-wait__facts">
+        <dl className={`cloud-wait__facts${reason === 'catching-up' ? ' is-catching-up' : ''}`}>
           <div><dt>Осталось игрового времени</dt><dd data-qa-cloud-wait-lag={Math.round(lagMs)}>{live ? formatGameSpan(lagMs) : '—'}</dd></div>
+          {reason === 'catching-up' ? <div><dt>Скорость сервера</dt><dd data-qa-cloud-wait-rate={serverRate ?? ''}>{rateText(serverRate)}</dd></div> : null}
           <div><dt>Мир прожит до</dt><dd>{live ? dateTime(live.worldAt) : '—'}</dd></div>
           {reason === 'catching-up' ? <>
-            <div><dt>Скорость сервера</dt><dd data-qa-cloud-wait-rate={serverRate ?? ''}>{rateText(serverRate)}</dd></div>
             <div className={fasterHere ? '' : 'is-best'}><dt>Ждать сервер</dt><dd data-qa-cloud-wait-server={serverWait ?? ''}>{formatWait(serverWait)}</dd></div>
             <div className={fasterHere ? 'is-best' : ''}>
               <dt>Досчитать на этом ПК</dt>

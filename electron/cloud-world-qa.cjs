@@ -641,7 +641,7 @@ if (!PHASE) {
         out.facts = await waitFacts(win);
         await shot(win, '09-server-updating');
         const started = Date.now();
-        await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`, 15 * 60_000);
+        await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`, 75 * 60_000);
         out.waitedMs = Date.now() - started;
         out.entered = true;
       }

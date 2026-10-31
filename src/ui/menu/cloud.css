@@ -10,9 +10,9 @@
 .cloud-conflict__copies dt { color: #fff; font-size: 13px; font-weight: 700; }
 .cloud-conflict__copies dd { margin: 6px 0 0; color: #b6cfd8; font-size: 13px; line-height: 1.5; }
 .cloud-conflict__note { font-size: 12px !important; color: #8fb0bc !important; }
-.cloud-remote { display: grid; gap: 10px; margin-top: 18px; }
+.cloud-remote { display: grid; align-content: start; gap: 10px; margin-top: 18px; }
 .cloud-remote h2 { margin: 0; color: var(--ut-amber, #f0b453); font-size: 13px !important; letter-spacing: .2em; }
-.cloud-remote ul { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.cloud-remote ul { display: grid; align-content: start; gap: 10px; margin: 0; padding: 0; list-style: none; }
 .cloud-remote li { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 18px; border: 1px solid var(--ut-border, rgba(120, 200, 230, .2)); border-radius: var(--ut-r-card, 8px); background: rgba(8, 16, 22, .82); }
 .cloud-remote li div { display: grid; gap: 4px; min-width: 0; }
 .cloud-remote li b { color: #fff; font-size: 16px; }
@@ -37,6 +37,10 @@
 .cloud-wait__track { position: relative; height: 8px; overflow: hidden; border-radius: 999px; background: rgba(120, 200, 230, .14); }
 .cloud-wait__track > i { position: absolute; inset: 0; transform-origin: left center; border-radius: inherit; background: var(--race-accent, #5fd4f0); transition: transform .6s cubic-bezier(.2, .8, .2, 1); }
 .cloud-wait__facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 2px 0 0; }
+/* Catching up: three facts, then the two waits side by side (the choice the player makes). */
+.cloud-wait__facts.is-catching-up { grid-template-columns: repeat(6, 1fr); }
+.cloud-wait__facts.is-catching-up > div { grid-column: span 2; }
+.cloud-wait__facts.is-catching-up > div:nth-child(n + 4) { grid-column: span 3; }
 .cloud-wait__facts div { padding: 10px 14px; border: 1px solid var(--ut-border, rgba(120, 200, 230, .2)); border-radius: var(--ut-r-card, 8px); background: rgba(255, 255, 255, .03); }
 .cloud-wait__facts div.is-best { border-color: rgba(159, 232, 194, .55); background: rgba(159, 232, 194, .06); }
 .cloud-wait__facts dt { color: #8fb0bc; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
