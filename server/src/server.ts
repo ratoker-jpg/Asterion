@@ -172,7 +172,9 @@ export function createCloudServer(config: ServerConfig) {
     }
     const base = campaign.snapshots.find((snapshot) => snapshot.kind === 'revision' && snapshot.revision === state.baseRevision);
     const checkpoint = liveCheckpointFile(config.dataDir, campaign.id);
-    const fromCheckpoint = resume && fs.existsSync(checkpoint) && state.checkpointWorldAt !== null;
+    // The checkpoint belongs to this live world (endLive removes it). The runner also writes it when its
+    // supervisor dies (runner.ts on 'disconnect'), before the supervisor could record it in campaign.json.
+    const fromCheckpoint = resume && fs.existsSync(checkpoint) && (state.checkpointWorldAt !== null || state.leftReplay !== undefined);
     if (!base && !fromCheckpoint) throw new Error(`Live world ${campaign.id} has no base snapshot.`);
     const child = fork(runner.script, [], { execArgv: runner.execArgv, stdio: ['ignore', 'inherit', 'inherit', 'ipc'], serialization: 'advanced' });
     const run: LiveRun = {
