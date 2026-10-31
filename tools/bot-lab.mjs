@@ -9,6 +9,7 @@
 //   node --max-old-space-size=8192 --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs \
 //     tools/bot-lab.mjs [--days=2] [--bots=15] [--fixture=F | --write-fixture=F] [--out=DIR]
 //   ... tools/bot-lab.mjs --save=SAVE.json --hours=6 --owners=npc-gen-32[,..] [--out=DIR]
+//   ... tools/bot-lab.mjs --seed=3 [--scenario=seven-planets] ...   (another lab galaxy; see bot-lab-batch.mjs)
 //
 // A fresh campaign draws ids from crypto entropy: before/after comparisons run
 // both revisions on one fixture written once with --write-fixture.
@@ -38,8 +39,8 @@ export const LAB_CHARACTERS = [
   ['crystal-hunter', { aggression: 0.75, riskTolerance: 0.9, operationsInterest: 0.9, militaryFocus: 0.7 }],
 ];
 
-export function createLabWorld(bots = 15) {
-  const config = createDefaultNewGameConfig({ seed: 'BOTLAB2026', campaignName: 'Bot lab' });
+export function createLabWorld(bots = 15, seed = 'BOTLAB2026') {
+  const config = createDefaultNewGameConfig({ seed, campaignName: 'Bot lab' });
   config.world = { ...config.world, galaxyCount: 1, npcCount: bots, maxNpcPerSystem: 3, density: 'dense', campaignSpeed: 'fast', randomPlayerStart: false };
   const base = createInitialSaveState('production', START_AT, config);
   const owners = getNpcOwnerIds(base.espionage?.targets, base.profile.playerId);
@@ -99,6 +100,15 @@ export function describeWorld(state, journal = []) {
   const refusals = {};
   for (const entry of decisions.filter((item) => item.ok === 0)) refusals[entry.r ?? '?'] = (refusals[entry.r ?? '?'] ?? 0) + 1;
   const styles = journal.filter((entry) => entry.k === 'style');
+  // The outcome ledger (every owner): strategic plans and battles.
+  const plans = journal.filter((entry) => entry.k === 'plan');
+  const attacks = journal.filter((entry) => entry.k === 'battle' && entry.d?.side === 'attacker');
+  const defences = journal.filter((entry) => entry.k === 'battle' && entry.d?.side === 'defender');
+  const reasons = {};
+  for (const entry of plans.filter((item) => item.d?.st !== 'done')) reasons[entry.d?.why ?? '?'] = (reasons[entry.d?.why ?? '?'] ?? 0) + 1;
+  const ascending = [...points].reverse();
+  const third = Math.max(1, Math.floor(ascending.length / 3));
+  const activePlans = Object.values(state.npcStrategy?.plans ?? {}).flat().filter((plan) => plan.status === 'active');
   return {
     worldAt: new Date(state.npcReplay?.processedThroughAt ?? 0).toISOString(), owners: owners.length,
     alliances: state.command.alliances.filter((alliance) => alliance.members.some((member) => member.ownerId !== playerId)).map((alliance) => `${alliance.tag}:${alliance.members.length}`),
@@ -119,6 +129,16 @@ export function describeWorld(state, journal = []) {
     transport: { transporters: sum(perOwner.map((owner) => owner.transporters)), mega: sum(perOwner.map((owner) => owner.megaTransporters)) },
     points: { top: points[0] ?? 0, median: median(points), bottom: points.at(-1) ?? 0, topToBottom: points.at(-1) ? +(points[0] / points.at(-1)).toFixed(1) : null },
     actions: { started: started.length, refused: decisions.length - started.length, byKind, topRefusals: Object.entries(refusals).sort((a, b) => b[1] - a[1]).slice(0, 6) },
+    plans: { closed: plans.length, done: plans.filter((entry) => entry.d?.st === 'done').length,
+      won: plans.filter((entry) => entry.d?.st === 'done' && entry.d?.won === 1).length,
+      active: activePlans.length, multiPlanet: plans.filter((entry) => (entry.d?.planets ?? 0) >= 3).length,
+      notDone: Object.entries(reasons).sort((a, b) => b[1] - a[1]),
+      meanAbsError: plans.filter((entry) => typeof entry.d?.err === 'number').length
+        ? +(sum(plans.filter((entry) => typeof entry.d?.err === 'number').map((entry) => Math.abs(entry.d.err))) / plans.filter((entry) => typeof entry.d?.err === 'number').length).toFixed(3) : null },
+    battles: { attacks: attacks.length, attacksWon: attacks.filter((entry) => entry.d?.won === 1).length,
+      raidGain: Math.round(sum(attacks.map((entry) => entry.d?.gain ?? 0))), raidLoss: Math.round(sum(attacks.map((entry) => entry.d?.loss ?? 0))),
+      defences: defences.length, defenceLoss: Math.round(sum(defences.map((entry) => entry.d?.loss ?? 0))) },
+    bottomThirdPoints: Math.round(sum(ascending.slice(0, third)) / third),
     styleChanges: styles.length, styles: Object.entries(styles.reduce((counts, entry) => ({ ...counts, [entry.s]: (counts[entry.s] ?? 0) + 1 }), {})),
     perOwner,
   };
@@ -145,7 +165,8 @@ function main() {
   if (out) fs.mkdirSync(out, { recursive: true });
   const save = option('save');
   const owners = option('owners')?.split(',').filter(Boolean);
-  let state = save ? readSave(save) : option('fixture') ? readSave(option('fixture')) : createLabWorld(Number(option('bots', '15')));
+  let state = save ? readSave(save) : option('fixture') ? readSave(option('fixture'))
+    : createLabWorld(Number(option('bots', '15')), option('seed') ? `BOTLAB-${option('seed')}` : 'BOTLAB2026');
   if (option('write-fixture')) fs.writeFileSync(option('write-fixture'), serializeSaveForStorage(state, 'production'));
   const at0 = state.npcReplay.processedThroughAt;
   applyCampaignRuntimeForCatchup(state, at0);
@@ -163,13 +184,15 @@ function main() {
         ...(entry.reason ? { r: entry.reason } : {}),
         ...(entry.alternatives.length ? { alt: entry.alternatives.map((item) => [item.id, +item.weight.toFixed(3)]) } : {}), s: entry.strategy });
     },
+    // Outcomes of every owner, whoever is watched in detail.
+    outcome: (entry) => journal.push({ t: entry.at, o: entry.ownerId, k: entry.kind, d: entry.data }),
     style: (entry) => {
       if ((watched && !watched.has(entry.ownerId)) || styles.get(entry.ownerId) === entry.style) return;
       journal.push({ t: entry.at, o: entry.ownerId, k: 'style', s: entry.style, d: { from: styles.get(entry.ownerId) ?? null, why: entry.reason } });
       styles.set(entry.ownerId, entry.style);
     },
   });
-  const hours = save ? Number(option('hours', '6')) : Number(option('days', '2')) * 24;
+  const hours = save ? Number(option('hours', '6')) : option('hours') ? Number(option('hours')) : Number(option('days', '2')) * 24;
   const days = [];
   const startedAt = performance.now();
   let groups;
