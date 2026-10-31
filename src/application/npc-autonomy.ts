@@ -1,3 +1,4 @@
+import { getNpcJournalSink, NPC_JOURNAL_ALTERNATIVES } from './npc-journal.ts';
 import { chooseNpcAutonomyAction, updateNpcAutonomyMemory, type NpcAutonomyCandidate } from '../domain/npc/autonomy-policy.ts';
 import { flightsToPlanet, ownerFlights } from './npc-knowledge-index.ts';
 import { NPC_REPAIR_BALANCE, npcRepairPoolValue, repairNpcPlanet } from './npc-repair.ts';
@@ -593,6 +594,14 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     decisions.push({ ...outcome, state: current, kind: selected?.kind ?? 'wait', wait: selected === null, idempotencyKey,
       selectedRole: selected?.payload?.role as BuildingRole ?? null,
       selectedScienceId: selected?.payload?.scienceId as ScienceId ?? null });
+    // The bot journal only watches: nothing here feeds back into the choice.
+    const journal = getNpcJournalSink();
+    if (journal) journal.decision({ at, ownerId, kind: selected?.kind ?? 'wait', strategy,
+      chosen: selected ? { id: selected.id, weight: selected.weight } : null,
+      alternatives: journal.detailed(ownerId) ? open.filter((candidate) => candidate.id !== selected?.id)
+        .sort((left, right) => right.weight - left.weight || (left.id < right.id ? -1 : 1)).slice(0, NPC_JOURNAL_ALTERNATIVES)
+        .map((candidate) => ({ id: candidate.id, weight: candidate.weight })) : [],
+      started: outcome.started, reason: outcome.reason ?? null });
     if (!selected) break;
     const slot = actionSlot(selected);
     open = open.filter((candidate) => candidate.id !== selected.id && actionSlot(candidate) !== slot);
