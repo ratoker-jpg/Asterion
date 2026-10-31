@@ -237,11 +237,11 @@ build queue — 6 из 6 прошли); `test:fleet-ui` — 3 из 3, ни од�
 | `test:cloud` (сервер: перенос живого мира при обновлении с паритетом, откат при сбое нового раннера, скорость догонки, запрос обновления от игры новее; правила входа: ожидание, порог, «досчитать на ПК», клиент новее/старее) | 19/19 |
 | логические наборы CI (application, buildings, flights, attack, pirate-operations, espionage, combat, pirates, repair, operations, command, reports, settings, rating, release, runtime, resources, energy, fleet, science, universe, exploration, sun-raid, new-game) | все зелёные |
 | `test:npc` (с новым `npc-catchup-summary-window.test.ts`) | 181/181, 2 пропуска (30-дневные горизонты, как на main) |
-| `cloud:version-move` — настоящие релизы 1.0.2/1.1.0 → эта ветка | мир перенесён, прогресс сохранён, мир = продолжение контрольной точки 1.0.2 |
-| `test:cloud-world-ui` (маленький мир, как в CI) | проходит (3 полных прогона на финальной сборке и до неё) |
+| `cloud:version-move` — настоящие релизы 1.0.2/1.1.0 → эта ветка | 3 прогона: мир перенесён, время не откатилось, игра 1.0.2 — 409; финальный прогон: 109,4 мин в 1.0.2 → 182,5 мин в 1.2.0, `equalAfterLoad: true` |
+| `test:cloud-world-ui` (маленький мир, как в CI) | проходит: 3 полных прогона подряд, последний — на финальной сборке |
 | `test:cloud-world-ui --fixture=late-game-day-2 --only-catchup` | проходит (3 ч и 6 ч позади; второй прогон упал на моём же таймауте 15 мин у «игры новее» — окно правильно ждало догонку, лимит поднят до 75 мин) |
 | `test:catchup-summary-ui` (новый, в CI) | проходит: 2 ч 59 мин — тихо, 3 ч 01 мин — итоги |
-| `test:save-safety-ui`, `test:late-save-ui` (дни 2–3), `test:npc-replay-ui-6h` | проходят |
+| `test:save-safety-ui`, `test:late-save-ui` (дни 2–3), `test:npc-replay-ui-6h` | проходят (save-safety и npc-replay — и после изменения окна итогов) |
 | `test:fleet-ui` | 3/3 |
 | `qa:visual` | 3/3 (после исправления гонки фикстуры спейспорта) |
 
