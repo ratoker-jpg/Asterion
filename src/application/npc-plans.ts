@@ -72,20 +72,13 @@ export const NPC_STRIKE_BALANCE = Object.freeze({
    * fleet and cancelled half the plans after the gathering.
    */
   unseenFleetShare: 1,
+  /** Force gathered over the strength the wanted margin asks for. */
+  forceSlack: 1.1,
   /** Free hangar room the rally planet needs over the shares still to arrive. */
   hangarSlack: 1.15,
 });
 
 const HOUR = 3_600_000;
-let plansEnabled = true;
-
-/** Lab switch (ablation): with plans off owners never start one; plans in a save still run out. */
-export function setNpcPlansEnabled(enabled: boolean): boolean {
-  const previous = plansEnabled;
-  plansEnabled = enabled;
-  return previous;
-}
-
 type Outcome = { state: SaveState; started: boolean; reason: string | null; planetId?: string; economyActionId?: string };
 export type NpcPlanChoice = { candidate: NpcAutonomyCandidate; run: (state: SaveState, key: string) => Outcome };
 
@@ -270,6 +263,13 @@ export function draftNpcStrike(state: SaveState, profile: NpcProfile, utility: N
         readyAt = Math.max(readyAt, preview.queueFreeAt + count * preview.durationMs);
       }
     }
+    if (empirePower > needed) {
+      // Stronger than the target asks: every planet gives its share of what is needed, the rest stays home and out of the risk.
+      const share = Math.min(1, NPC_STRIKE_BALANCE.forceSlack * needed / empirePower);
+      for (const [planetId, counts] of reserve) {
+        reserve.set(planetId, Object.fromEntries(Object.entries(counts).map(([id, count]) => [id, Math.ceil(count * share)] as const)));
+      }
+    }
     const force: Record<string, number> = {};
     for (const counts of reserve.values()) addCounts(force, counts);
     if (!Object.keys(force).length) continue;
@@ -408,6 +408,11 @@ export function refreshNpcPlans(state: SaveState, profile: NpcProfile, utility: 
       if (arrived) next = replacePlan(next, { ...plan, phase: 'recheck' });
       continue;
     }
+    if ((plan.phase === 'recheck' || plan.phase === 'launch') && !covers(getNpcMissionAvailableFleet(next, ownerId, plan.rallyPlanetId) ?? {}, totalForce(plan))) {
+      // Lost in a fight at the rally planet or saved from one: what is left was never judged against the target.
+      next = closePlan(next, plan, 'cancelled', at, 'force-lost');
+      continue;
+    }
     if (plan.phase === 'recheck') {
       const report = latestReport(utility, plan);
       if (!report || at - report.createdAt > NPC_STRIKE_BALANCE.recheckReportHours * HOUR / Math.max(1, timeScale)) continue; // a probe is due
@@ -508,8 +513,9 @@ export function getNpcPlanChoices(state: SaveState, profile: NpcProfile, utility
         const target = current.espionage?.targets?.[plan.targetPlanetId];
         if (!rally || !target) return { state: current, started: false, reason: 'plan-target-lost' };
         const available = getNpcMissionAvailableFleet(current, ownerId, rally.id) ?? {};
-        const ships = Object.fromEntries(Object.entries(totalForce(plan)).map(([shipId, count]) => [shipId, Math.min(count, Math.floor(available[shipId as ShipId] ?? 0))])
-          .filter(([, count]) => (count as number) > 0)) as Partial<Record<ShipId, number>>;
+        const force = totalForce(plan);
+        if (!covers(available, force)) return { state: current, started: false, reason: 'plan-force-lost', planetId: rally.id };
+        const ships = force as Partial<Record<ShipId, number>>;
         const relation = getOwnerRelation(current, ownerId, target.ownerId);
         if (relation !== 'enemy' && relation !== 'neutral') return { state: current, started: false, reason: 'target-relation-blocked' };
         const report = latestReport(utility, plan);
@@ -529,7 +535,7 @@ export function getNpcPlanChoices(state: SaveState, profile: NpcProfile, utility
     }
   }
   // A new plan: looked for every few game hours, never two strikes at once.
-  if (plansEnabled && !active.length && !paused && at >= (state.npcStrategy?.nextCheckAt[ownerId] ?? 0)) {
+  if (!active.length && !paused && at >= (state.npcStrategy?.nextCheckAt[ownerId] ?? 0)) {
     const draft = draftNpcStrike(state, profile, utility, at, timeScale);
     if (draft) {
       const id = `plan:strike:${draft.plan.targetPlanetId}`;
@@ -546,7 +552,7 @@ export function getNpcPlanChoices(state: SaveState, profile: NpcProfile, utility
 
 /** Marks the owner's next plan check after a look that found or took nothing (keeps the search rare). */
 export function scheduleNpcPlanCheck(state: SaveState, ownerId: string, at: number, timeScale: number): SaveState {
-  if (!plansEnabled || activeNpcPlans(state, ownerId).length) return state;
+  if (activeNpcPlans(state, ownerId).length) return state;
   const strategy = strategyOf(state);
   if ((strategy.nextCheckAt[ownerId] ?? 0) > at) return state;
   return withStrategy(state, { ...strategy, nextCheckAt: { ...strategy.nextCheckAt, [ownerId]: at + Math.round(NPC_STRIKE_BALANCE.checkHours * HOUR / Math.max(1, timeScale)) } });

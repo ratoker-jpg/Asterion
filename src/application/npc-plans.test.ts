@@ -98,8 +98,7 @@ function drive(world: World, minutes: number, onLook?: (state: SaveState, at: nu
     const choices = getNpcPlanChoices(state, profile, utility, at, 1, getNpcMissionCandidates(state, profile, at), (_id, estimate) => utilityToWeight(estimate));
     choices.forEach((choice, index) => {
       const outcome = choice.run(state, `plan-test:${look}:${index}`);
-      if (outcome.started) steps.push(choice.candidate.id.split(":").slice(0, 2).join(":"));
-      else if (process.env.PLAN_DEBUG) console.log("fail", look, choice.candidate.id, outcome.reason);
+      if (outcome.started) steps.push(choice.candidate.id.split(':').slice(0, 2).join(':'));
       state = outcome.state;
     });
     if (plansOf(state, world.owner).some((plan) => plan.status !== 'active')) break;
@@ -125,14 +124,6 @@ test('seven planets: orders on several planets, deployments to one rally planet,
     setNpcJournalSink(previous);
   }
   const plan = plansOf(result.state, world.owner)[0]!;
-  if (process.env.PLAN_DEBUG) {
-    console.log(JSON.stringify(plansOf(result.state, world.owner).map((item) => [item.status, item.reason, item.phase, item.forecast, item.result])));
-    console.log(JSON.stringify({ orders: plan.orders, reserve: plan.reserve, steps: result.steps.slice(0, 30), deadline: plan.deadlineAt - START, ready: plan.forecast.readyAt - START }));
-    for (const [id, counts] of Object.entries(plan.reserve)) {
-      const planet = getEspionageTargets(result.state.espionage)[id]!;
-      console.log(id, JSON.stringify(counts), JSON.stringify(Object.fromEntries(Object.entries(planet.fleet.ships).filter(([, c]) => c > 0))), JSON.stringify(planet.fleetProduction?.shipQueue.map((o) => [o.itemId, o.quantity, o.completedQuantity, o.finishAt - START])));
-    }
-  }
   assert.equal(plan.status, 'done', `the plan ends by its attack (${plan.status} ${plan.reason ?? ''}, phase ${plan.phase})`);
   assert.ok(result.steps.filter((step) => step === 'plan:produce').length >= 3, 'orders placed on several planets');
   assert.equal(result.steps.filter((step) => step === 'plan:rally').length, 6, 'six deployments gather the shares');
@@ -141,9 +132,8 @@ test('seven planets: orders on several planets, deployments to one rally planet,
   assert.equal(attack.originPlanetId, plan.rallyPlanetId);
   assert.equal(attack.missionId, 'attack');
   assert.ok(plan.result, 'the battle closed the plan');
-  const taken = recorder.take();
-  const ledger = taken.filter((entry) => entry.k === 'plan');
-  assert.equal(ledger.length, 1, `the closed plan is in the outcome ledger ${JSON.stringify(ledger)}`);
+  const ledger = recorder.take().filter((entry) => entry.k === 'plan');
+  assert.equal(ledger.length, 1, 'the closed plan is in the outcome ledger');
   assert.equal(ledger[0]!.d!.st, 'done');
   assert.equal(typeof ledger[0]!.d!.err, 'number', 'forecast against result');
   assert.equal(result.state.npcStrategy!.outcomes[world.owner]!.strike!.done, 1);
@@ -157,9 +147,10 @@ test('the plan holds its ships: other missions do not take them, defence still s
   assert.ok(plan, 'a plan was taken in the first looks');
   const source = Object.keys(plan.reserve).find((id) => id !== plan.rallyPlanetId && !plan.sent.includes(id))!;
   const reserved = npcPlanReservedShips(state, world.owner, source);
-  assert.ok((reserved.cruiser ?? 0) >= 40, 'the share is reserved');
+  const share = plan.reserve[source]!.cruiser ?? 0;
+  assert.ok(share > 0 && reserved.cruiser === share, 'the share is reserved');
   const free = withoutNpcPlanReserve(state, world.owner, source, { cruiser: 40, 'spy-probe': 5 });
-  assert.equal(free.cruiser, 0, 'other missions see no free cruisers there');
+  assert.equal(free.cruiser, 40 - share, 'other missions see only what the plan left free');
   assert.equal(free['spy-probe'], 5, 'probes are not part of the force');
   // Defence and fleetsave read the real fleet: the reservation never hides ships from them.
   assert.equal(getNpcMissionAvailableFleet(state, world.owner, source)?.cruiser, 40);
@@ -237,4 +228,33 @@ test('the outcome ledger only watches: a plan played with it equals the plan pla
   assert.ok(recorder.take().some((entry) => entry.k === 'plan'), 'the ledger saw the plan close');
   assert.deepEqual(watched.steps, without.steps);
   assert.deepEqual(watched.state, without.state);
+});
+
+test('an empire stronger than it needs sends a share of its fleet, not all of it', () => {
+  const world = sevenPlanetWorld('npc-plans-trim', 3);
+  const profile = world.state.npc!.profiles[world.owner]!;
+  const draft = draftNpcStrike(world.state, profile, createNpcUtilityContext(world.state, profile, START + MINUTE, 1), START + MINUTE, 1);
+  assert.ok(draft, 'still more than one planet can do alone');
+  assert.equal(draft.plan.orders.length, 0, 'nothing to build');
+  const gathered = Object.values(draft.plan.reserve).reduce((sum, counts) => sum + (counts.cruiser ?? 0), 0);
+  assert.ok(gathered > 40, `more than one planet's squadron (${gathered})`);
+  assert.ok(gathered < 7 * 40, `the rest stays home (${gathered})`);
+});
+
+test('a force lost at the rally planet cancels the plan instead of sending what is left', () => {
+  const world = sevenPlanetWorld('npc-plans-force-lost');
+  let hit = false;
+  const { state, steps } = drive(world, 24 * 60, (current) => {
+    const plan = plansOf(current, world.owner)[0];
+    if (hit || (plan?.phase !== 'recheck' && plan?.phase !== 'launch')) return current;
+    hit = true;
+    const rally = getEspionageTargets(current.espionage)[plan.rallyPlanetId]!;
+    return { ...current, espionage: { ...current.espionage!, targets: { ...getEspionageTargets(current.espionage),
+      [rally.id]: { ...rally, fleet: { ...rally.fleet, ships: { ...rally.fleet.ships, cruiser: 10 } } } } } };
+  });
+  const plan = plansOf(state, world.owner)[0]!;
+  assert.ok(hit, 'the plan reached its recheck');
+  assert.equal(plan.status, 'cancelled');
+  assert.equal(plan.reason, 'force-lost');
+  assert.equal(steps.filter((step) => step === 'plan:launch').length, 0, 'no attack with the remains');
 });
