@@ -65,6 +65,8 @@ export type SunRaidResult = {
   attackerPopulation: number;
   defenderPopulation: number;
   defenders: number;
+  /** Owners who flew in the attacking fleet (absent in older saves). */
+  attackerOwnerIds?: string[];
   /** Absent when the attackers lost or the holder already owned all four crystals. */
   crystalRoll?: { chance: number; roll: number; success: boolean; crystal?: SolarCrystalId; skipped?: 'all-owned' };
   reportId?: string;

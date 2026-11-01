@@ -82,6 +82,12 @@ function stableFraction(key: string): number {
   return (hash >>> 0) / 0x1_0000_0000;
 }
 
+/** -1..1: what this owner remembers of another from earlier rounds of a series; 0 outside a series. */
+function inheritedRegard(profile: NpcProfile, otherOwnerId: string): number {
+  const relation = profile.inherited?.relations[otherOwnerId];
+  return relation ? relation.trust - relation.resentment : 0;
+}
+
 function makeCandidate(kind: NpcDiplomacyCandidate['kind'], id: string, score: number, payload: NpcDiplomacyPayload): NpcDiplomacyCandidate {
   return { id, kind, weight: weight(score), payload };
 }
@@ -130,7 +136,7 @@ export function getNpcDiplomacyCandidates(
     if (!pendingOwnApplication) {
       for (const alliance of command.alliances) {
         if (isAllianceFull(alliance) || selectReapplyBlock(command, ownerId, alliance.id, at)) continue;
-        candidates.push(makeCandidate('apply-to-alliance', `apply-to-alliance:${ownerId}:${alliance.id}`, 0.16 + cooperation * 0.58 + social * 0.12, {
+        candidates.push(makeCandidate('apply-to-alliance', `apply-to-alliance:${ownerId}:${alliance.id}`, 0.16 + cooperation * 0.58 + social * 0.12 + 0.2 * inheritedRegard(profile, alliance.leaderOwnerId), {
           allianceId: alliance.id,
         }));
       }
@@ -143,7 +149,8 @@ export function getNpcDiplomacyCandidates(
       if (application.allianceId !== ownAlliance.id || application.status !== 'pending') continue;
       // Player requests remain for the player. Only answer known autonomous NPCs.
       if (application.ownerId === state.profile.playerId || !state.npc?.profiles[application.ownerId]) continue;
-      const accepts = cooperation + social * 0.15 >= 0.5;
+      // A familiar applicant tilts the answer, it does not decide it: the other side still has to choose.
+      const accepts = cooperation + social * 0.15 + 0.15 * inheritedRegard(profile, application.ownerId) >= 0.5;
       candidates.push(makeCandidate(accepts ? 'accept-application' : 'reject-application', `${accepts ? 'accept' : 'reject'}-application:${ownerId}:${application.id}`, accepts ? 0.25 + cooperation * 0.55 : 0.2 + (1 - cooperation) * 0.4, {
         applicationId: application.id,
       }));

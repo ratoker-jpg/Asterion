@@ -86,7 +86,9 @@ export function weightNpcAction(profile: NpcProfile, kind: string): number {
   const activeGoal = profile.longTermGoals.find((goal) => goal.status === 'active');
   const commitment = normalizedTrait(profile.planning.commitment);
   const goalFactor = activeGoal?.kind === kind ? 1 + commitment * 0.35 : 1;
-  return clamp(base * experienceFactor * goalFactor, 0.35, 1.9);
+  // What earlier rounds of a series taught; absent outside a series.
+  const inherited = profile.inherited?.prefs[kind];
+  return clamp(base * experienceFactor * goalFactor * (inherited ? 1 + 0.25 * inherited : 1), 0.35, 1.9);
 }
 
 function validCandidate(candidate: NpcAutonomyCandidate): boolean {

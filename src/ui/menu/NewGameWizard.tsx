@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import {
   CAMPAIGN_SPEED_LABELS,
   maxNpcForSpeed,
@@ -19,6 +19,10 @@ import type { PlayerFactionId } from '../../domain/profile/types.ts';
 import type { SaveSlotMeta } from '../../domain/session/slots.ts';
 import { createInitialSaveState } from '../../application/persistence.ts';
 import { createSlot } from '../../application/slots.ts';
+import { bindNewCampaignToSeries } from '../../application/npc-series.ts';
+import { readPersonaRegistry, writePersonaRegistry } from '../../application/persona-store.ts';
+import { findSeries, latestSeries, type PersonaRegistry, type PersonaSeries } from '../../domain/npc/persona-registry.ts';
+import type { SeriesRoundRequest } from './session.ts';
 import { RACE_CARDS, raceCard, type RaceCard } from './race-catalog.ts';
 import { ATLAS_GALAXIES } from '../ui-art.ts';
 
@@ -35,11 +39,46 @@ type WizardProps = {
   onBack: () => void;
   onThemeChange: (factionId: PlayerFactionId) => void;
   onCreated: (slot: SaveSlotMeta) => void;
+  /** Came here by «Новый раунд»: the same commander and world settings, a new map. */
+  seriesRound?: SeriesRoundRequest | null;
 };
 
-export function NewGameWizard({ onBack, onThemeChange, onCreated }: WizardProps) {
+/** What the «continue the series» switch can offer right now. */
+type SeriesOffer =
+  | { kind: 'ready'; registry: PersonaRegistry; series: PersonaSeries }
+  | { kind: 'none'; reason: string };
+
+function readSeriesOffer(seriesId: string | null | undefined): SeriesOffer {
+  const read = readPersonaRegistry();
+  if (read.status === 'unavailable') return { kind: 'none', reason: 'Недоступно в браузере: опыт серии хранится только на ПК, в настольной версии игры.' };
+  if (read.status === 'unreadable') return { kind: 'none', reason: `Недоступно: ${read.message} Файл не изменён.` };
+  const series = (seriesId ? findSeries(read.registry, seriesId) : null) ?? latestSeries(read.registry);
+  return series ? { kind: 'ready', registry: read.registry, series } : { kind: 'none', reason: 'Серии пока нет: она появится, когда в кампании будут достроены Врата.' };
+}
+
+function roundCampaignName(name: string, round: number): string {
+  const ending = ` · раунд ${round}`;
+  return `${name.replace(/ · раунд \d+$/, '').slice(0, WORLD_LIMITS.campaignNameMax - ending.length).trim()}${ending}`;
+}
+
+function initialConfig(seriesRound: SeriesRoundRequest | null | undefined, offer: SeriesOffer): NewGameConfig {
+  const fresh = createDefaultNewGameConfig({ campaignName: DEFAULT_CAMPAIGN_NAME.aegis });
+  if (!seriesRound) return fresh;
+  // A new seed, so a new map; everything the player chose stays until they change it.
+  const previous = seriesRound.config;
+  return {
+    ...previous,
+    seed: fresh.seed,
+    campaignName: offer.kind === 'ready' ? roundCampaignName(previous.campaignName, offer.series.rounds + 1) : previous.campaignName,
+  };
+}
+
+export function NewGameWizard({ onBack, onThemeChange, onCreated, seriesRound = null }: WizardProps) {
   const [step, setStep] = useState<Step>('race');
-  const [config, setConfig] = useState<NewGameConfig>(() => createDefaultNewGameConfig({ campaignName: DEFAULT_CAMPAIGN_NAME.aegis }));
+  const [offer] = useState<SeriesOffer>(() => readSeriesOffer(seriesRound?.seriesId));
+  const [config, setConfig] = useState<NewGameConfig>(() => initialConfig(seriesRound, offer));
+  // Off unless the player came by «Новый раунд»: a plain new game is a clean population.
+  const [continueSeries, setContinueSeries] = useState(() => Boolean(seriesRound) && offer.kind === 'ready');
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const issues = useMemo(() => validateNewGameConfig(config), [config]);
@@ -77,7 +116,18 @@ export function NewGameWizard({ onBack, onThemeChange, onCreated }: WizardProps)
     if (issues.length || starting) return;
     setStarting(true);
     const now = Date.now();
-    const state = createInitialSaveState('production', now, config);
+    let state = createInitialSaveState('production', now, config);
+    if (continueSeries && offer.kind === 'ready') {
+      // The world starts only once the registry knows who plays in it.
+      const bound = bindNewCampaignToSeries(offer.registry, offer.series.seriesId, state, now);
+      const written = bound ? writePersonaRegistry(bound.registry) : { ok: false as const, error: 'Серия не найдена.' };
+      if (!bound || !written.ok) {
+        setError(`Не удалось продолжить серию: ${written.ok ? 'реестр недоступен.' : written.error}`);
+        setStarting(false);
+        return;
+      }
+      state = bound.state;
+    }
     const created = createSlot(state, config.campaignName, { now });
     if (!created.ok || !created.slot) {
       setError(created.ok ? 'Не удалось создать слот.' : created.error);
@@ -105,9 +155,11 @@ export function NewGameWizard({ onBack, onThemeChange, onCreated }: WizardProps)
       {step === 'race' ? (
         <RaceStep selected={config.factionId} onSelect={chooseRace} onNext={() => setStep('world')} />
       ) : step === 'world' ? (
-        <WorldStep config={config} issues={issues} onChange={setConfig} onWorld={patchWorld} onNext={() => setStep('confirm')} />
+        <WorldStep config={config} issues={issues} onChange={setConfig} onWorld={patchWorld} onNext={() => setStep('confirm')}
+          series={<SeriesToggle offer={offer} checked={continueSeries} onChange={setContinueSeries} />} />
       ) : (
-        <ConfirmStep config={config} error={error} starting={starting} disabledReason={issues[0]?.message ?? null} onStart={start} onEdit={setStep} />
+        <ConfirmStep config={config} error={error} starting={starting} disabledReason={issues[0]?.message ?? null} onStart={start} onEdit={setStep}
+          seriesLine={continueSeries && offer.kind === 'ready' ? `Серия продолжается · раунд ${offer.series.rounds + 1} · ${offer.series.personas.length} личностей с их опытом` : 'Новые личности, без чужого опыта'} />
       )}
     </main>
   );
@@ -212,6 +264,24 @@ function RaceColumn({ card, selected, dimmed, buttonRef, onSelect, onHover, onKe
   );
 }
 
+/* --------------------------------------------------------------- series */
+
+function SeriesToggle({ offer, checked, onChange }: { offer: SeriesOffer; checked: boolean; onChange: (value: boolean) => void }) {
+  const ready = offer.kind === 'ready';
+  return (
+    <label className={`menu-toggle menu-series-toggle ${ready ? '' : 'is-off'}`} data-qa-series={ready ? 'ready' : 'none'}>
+      <input type="checkbox" checked={checked} disabled={!ready} onChange={(event) => onChange(event.target.checked)} data-qa-series-toggle />
+      <span aria-hidden="true" />
+      <span>
+        <b>Продолжить серию</b>
+        <small data-qa-series-note>{ready
+          ? `Раунд ${offer.series.rounds + 1}: те же ${offer.series.personas.length} личностей NPC помнят опыт и отношения под новыми никами. Мир, флот, ресурсы и разведка — новые.`
+          : offer.reason}</small>
+      </span>
+    </label>
+  );
+}
+
 /* ---------------------------------------------------------------- world */
 
 type WorldStepProps = {
@@ -220,6 +290,7 @@ type WorldStepProps = {
   onChange: (updater: (current: NewGameConfig) => NewGameConfig) => void;
   onWorld: (patch: Partial<NewGameConfig['world']>) => void;
   onNext: () => void;
+  series: ReactNode;
 };
 
 function Segmented<T extends string | number>({ value, options, onChange, label }: { value: T; options: ReadonlyArray<{ value: T; label: string; hint?: string }>; onChange: (value: T) => void; label: string }) {
@@ -245,7 +316,7 @@ function RangeField({ label, value, min, max, step = 1, onChange, suffix, qa }: 
   );
 }
 
-function WorldStep({ config, issues, onChange, onWorld, onNext }: WorldStepProps) {
+function WorldStep({ config, issues, onChange, onWorld, onNext, series }: WorldStepProps) {
   const summary = summarizeWorld(config);
   const issueFor = (field: string) => issues.find((issue) => issue.field === field)?.message;
   const capacity = getWorldNpcCapacity(config.world);
@@ -265,6 +336,7 @@ function WorldStep({ config, issues, onChange, onWorld, onNext }: WorldStepProps
             {issueFor('campaignName') ? <em>{issueFor('campaignName')}</em> : null}
           </label>
         </div>
+        {series}
 
         <h2>Вселенная</h2>
         <RangeField label="ГАЛАКТИКИ" value={config.world.galaxyCount} min={WORLD_LIMITS.galaxyMin} max={WORLD_LIMITS.galaxyMax} onChange={(value) => onWorld({ galaxyCount: value })} suffix={`× ${WORLD_LIMITS.systemsPerGalaxy} систем`} qa="galaxies" />
@@ -440,7 +512,7 @@ function WorldAtlas({ config }: { config: NewGameConfig }) {
 
 /* -------------------------------------------------------------- confirm */
 
-function ConfirmStep({ config, error, starting, disabledReason, onStart, onEdit }: { config: NewGameConfig; error: string | null; starting: boolean; disabledReason: string | null; onStart: () => void; onEdit: (step: Step) => void }) {
+function ConfirmStep({ config, error, starting, disabledReason, onStart, onEdit, seriesLine }: { config: NewGameConfig; error: string | null; starting: boolean; disabledReason: string | null; onStart: () => void; onEdit: (step: Step) => void; seriesLine: string }) {
   const card = raceCard(config.factionId);
   const summary = summarizeWorld(config);
   const startRef = useRef<HTMLButtonElement>(null);
@@ -466,6 +538,7 @@ function ConfirmStep({ config, error, starting, disabledReason, onStart, onEdit 
           <div><dt>Мир</dt><dd>{config.world.galaxyCount} гал. · {summary.systems} систем · {summary.npcCount} NPC</dd><button type="button" onClick={() => onEdit('world')}>изменить</button></div>
           <div><dt>Расселение NPC</dt><dd>{WORLD_DENSITY_RULES[config.world.density].label} · до {config.world.maxNpcPerSystem} на систему</dd></div>
           <div><dt>Расы NPC</dt><dd>{config.npcFactions === 'random' ? 'Случайно по сиду' : `Астеры ${config.npcFactions.aegis}% · Илары ${config.npcFactions.synod}% · Рой ${config.npcFactions.veyra}%`}</dd><button type="button" onClick={() => onEdit('world')}>изменить</button></div>
+          <div data-qa-series-line><dt>Личности NPC</dt><dd>{seriesLine}</dd><button type="button" onClick={() => onEdit('world')}>изменить</button></div>
           <div><dt>Скорость</dt><dd>{CAMPAIGN_SPEED_LABELS[config.world.campaignSpeed].label}</dd></div>
           <div><dt>Старт</dt><dd>{config.world.randomPlayerStart ? 'Случайная система по сиду' : 'Галактика 1 · система 1'}</dd></div>
           <div><dt>Сид</dt><dd className="menu-mono">{config.seed}</dd></div>

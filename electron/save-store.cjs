@@ -5,6 +5,7 @@
 const { app, ipcMain } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { readPersonaFile, writePersonaFile } = require('./persona-file.cjs');
 
 const KEY = /^asterion\.[A-Za-z0-9._-]{1,120}$/;
 const WRITE_ID = /^[a-z0-9-]{1,40}$/;
@@ -55,6 +56,23 @@ function pruneBotJournal(file) {
 }
 
 function registerSaveStore() {
+  // The series registry: read and written only at the boundaries of a campaign.
+  ipcMain.on('asterion:personas:read', (event) => {
+    try {
+      event.returnValue = { ok: true, ...readPersonaFile(app.getPath('userData')) };
+    } catch (error) {
+      event.returnValue = { ok: false, error: String(error && error.message || error) };
+    }
+  });
+  ipcMain.on('asterion:personas:write', (event, text) => {
+    try {
+      if (typeof text !== 'string') throw new Error('Invalid persona registry.');
+      writePersonaFile(app.getPath('userData'), text);
+      event.returnValue = { ok: true };
+    } catch (error) {
+      event.returnValue = { ok: false, error: String(error && error.message || error) };
+    }
+  });
   ipcMain.handle('asterion:bot-journal:append', async (_event, key, lines) => {
     try {
       if (!KEY.test(key) || typeof lines !== 'string') throw new Error('Invalid bot journal write.');
