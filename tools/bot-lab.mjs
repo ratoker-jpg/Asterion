@@ -9,6 +9,7 @@
 //   node --max-old-space-size=8192 --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs \
 //     tools/bot-lab.mjs [--days=2] [--bots=15] [--fixture=F | --write-fixture=F] [--out=DIR]
 //   ... tools/bot-lab.mjs --save=SAVE.json --hours=6 --owners=npc-gen-32[,..] [--out=DIR]
+//   ... tools/bot-lab.mjs --seed=3 [--scenario=seven-planets] ...   (another lab galaxy; see bot-lab-batch.mjs)
 //
 // A fresh campaign draws ids from crypto entropy: before/after comparisons run
 // both revisions on one fixture written once with --write-fixture.
@@ -22,6 +23,9 @@ import { formatNpcJournalLines, setNpcJournalSink } from '../src/application/npc
 import { selectOwnerScore } from '../src/domain/rating/scoring.ts';
 import { createNpcState } from '../src/domain/npc/state.ts';
 import { createDefaultNewGameConfig } from '../src/domain/world/config.ts';
+import { getFactionShipCatalog } from '../src/domain/combat/faction-catalog.ts';
+import { SCIENCE_CATALOG } from '../src/domain/science/catalog.ts';
+import { createDefaultFleetProductionState, createEmptyDefenseState } from '../src/domain/fleet/production.ts';
 
 const HOUR = 3_600_000;
 const START_AT = Date.UTC(2026, 0, 1);
@@ -38,8 +42,8 @@ export const LAB_CHARACTERS = [
   ['crystal-hunter', { aggression: 0.75, riskTolerance: 0.9, operationsInterest: 0.9, militaryFocus: 0.7 }],
 ];
 
-export function createLabWorld(bots = 15) {
-  const config = createDefaultNewGameConfig({ seed: 'BOTLAB2026', campaignName: 'Bot lab' });
+export function createLabWorld(bots = 15, seed = 'BOTLAB2026') {
+  const config = createDefaultNewGameConfig({ seed, campaignName: 'Bot lab' });
   config.world = { ...config.world, galaxyCount: 1, npcCount: bots, maxNpcPerSystem: 3, density: 'dense', campaignSpeed: 'fast', randomPlayerStart: false };
   const base = createInitialSaveState('production', START_AT, config);
   const owners = getNpcOwnerIds(base.espionage?.targets, base.profile.playerId);
@@ -51,6 +55,72 @@ export function createLabWorld(bots = 15) {
       activity: { ...profile.activity, propensity: 0.85 + 0.15 * ((index * 7) % 10) / 10 } };
   });
   return { ...base, npc: { ...npc, profiles } };
+}
+
+/**
+ * Scenario «seven planets» (ADR 7.а): one rich owner (the lab's `fleet`
+ * character) holds seven planets with a combat squadron on each and its own
+ * fresh full report of a neighbour behind batteries no single planet beats but
+ * the whole empire does. The planets come from six other bots, which leave the
+ * world; the neighbour is lifted into the owner's points band. Written into
+ * the fixture, so before and after runs start from the same world.
+ */
+export function applySevenPlanetsScenario(state) {
+  const targets = { ...state.espionage.targets };
+  const owners = Object.keys(state.npc.profiles).sort();
+  const owner = owners[3];
+  const home = Object.values(targets).find((planet) => planet.kind === 'npc' && planet.ownerId === owner);
+  const others = owners.filter((id) => id !== owner);
+  const victimOwner = others[0];
+  const absorbed = others.slice(1, 7);
+  const combat = getFactionShipCatalog(home.raceId).filter((entity) => entity.category === 'Боевой корабль' && entity.combat)
+    .sort((left, right) => sum(Object.values(left.cost ?? {})) - sum(Object.values(right.cost ?? {})) || (left.id < right.id ? -1 : 1));
+  const hull = combat[Math.min(2, combat.length - 1)];
+  const planets = Object.values(targets).filter((planet) => planet.kind === 'npc' && (planet.ownerId === owner || absorbed.includes(planet.ownerId)));
+
+  for (const planet of planets) {
+    targets[planet.id] = {
+      ...planet, ownerId: owner, ownerName: home.ownerName, raceId: home.raceId, ownerProfile: home.ownerProfile,
+      resources: { ...planet.resources, metal: 10_000_000, minerals: 10_000_000, gas: 10_000_000 },
+      buildings: { ...planet.buildings, shipyard: 20, hangar: 100, 'advanced-factory': 10, 'metal-storage': 30, 'mineral-storage': 30, 'gas-storage': 30 },
+      fleet: { ...planet.fleet, ships: { ...planet.fleet.ships, [hull.id]: 40, 'spy-probe': 5 } },
+      fleetProduction: createDefaultFleetProductionState(),
+    };
+  }
+  const victim = Object.values(targets).find((planet) => planet.kind === 'npc' && planet.ownerId === victimOwner);
+  const defense = createEmptyDefenseState();
+  targets[victim.id] = { ...victim, resources: { ...victim.resources, metal: 5_000_000, minerals: 5_000_000, gas: 5_000_000 },
+    defense: { ...defense, defenses: { ...defense.defenses, 'ion-plasma-battery': 10 } } };
+  const at = state.npcReplay.processedThroughAt;
+  const seen = targets[victim.id];
+  const report = {
+    ownerId: owner, id: `lab-seven-report-${at}`, missionId: `lab-seven-mission-${at}`, createdAt: at, sourcePlanetId: home.id,
+    targetPlanetId: seen.id, targetPlanetName: seen.name, targetOwnerId: seen.ownerId, targetOwnerName: seen.ownerName,
+    targetRaceId: seen.raceId, targetRelation: 'neutral', targetCoordinate: { ...seen.coordinate },
+    spyLevel: 10, targetEspionageLevel: 0, delta: 10, roll: 0.5, quality: 'full',
+    resources: { ...seen.resources }, defense: { ...seen.defense.defenses }, fleet: { ...seen.fleet.ships }, firstReport: true,
+  };
+  const profiles = Object.fromEntries(Object.entries(state.npc.profiles).filter(([id]) => !absorbed.includes(id)));
+  let next = { ...state, espionage: { ...state.espionage, targets, reports: [...(state.espionage.reports ?? []), report] }, npc: { ...state.npc, profiles } };
+  // A late-game owner: its sciences (the owner ledger the game reads) let every planet build combat hulls.
+  if (next.npcScience?.owners?.[owner]) {
+    const science = next.npcScience.owners[owner];
+    const max = new Map(SCIENCE_CATALOG.map((entry) => [String(entry.id), entry.maxLevel]));
+    const levels = Object.fromEntries(Object.entries(science.levels).map(([id, level]) => [id,
+      ['18', '19', '20'].includes(id) ? level : Math.max(level, Math.min(15, max.get(id) ?? level))])); // one additional direction at most: left as drawn
+    next = { ...next, npcScience: { ...next.npcScience, owners: { ...next.npcScience.owners, [owner]: { ...science, levels } } } };
+  }
+  // The neighbour in the owner's points band (the same ledger the attack-rule tests use).
+  const ownerPoints = selectOwnerScore(next, owner)?.resourcePoints ?? 0;
+  const victimPoints = selectOwnerScore(next, victimOwner)?.resourcePoints ?? 0;
+  if (victimPoints < ownerPoints) {
+    const unrecovered = { ...next.rating.unrecoveredCostsByOwnerId };
+    const previous = unrecovered[victimOwner] ?? { metal: 0, minerals: 0, gas: 0 };
+    unrecovered[victimOwner] = { ...previous, metal: previous.metal + (ownerPoints - victimPoints) * 1_000 };
+    next = { ...next, rating: { ...next.rating, unrecoveredCostsByOwnerId: unrecovered } };
+  }
+  log(`scenario seven-planets: ${owner} holds ${planets.length} planets (${hull.id} ×40 each), target ${victim.id} of ${victimOwner}`);
+  return next;
 }
 
 function readSave(file) {
@@ -99,6 +169,15 @@ export function describeWorld(state, journal = []) {
   const refusals = {};
   for (const entry of decisions.filter((item) => item.ok === 0)) refusals[entry.r ?? '?'] = (refusals[entry.r ?? '?'] ?? 0) + 1;
   const styles = journal.filter((entry) => entry.k === 'style');
+  // The outcome ledger (every owner): strategic plans and battles.
+  const plans = journal.filter((entry) => entry.k === 'plan' && entry.d?.tp);
+  const attacks = journal.filter((entry) => entry.k === 'battle' && entry.d?.side === 'attacker');
+  const defences = journal.filter((entry) => entry.k === 'battle' && entry.d?.side === 'defender');
+  const reasons = {};
+  for (const entry of plans.filter((item) => item.d?.st !== 'done')) reasons[entry.d?.why ?? '?'] = (reasons[entry.d?.why ?? '?'] ?? 0) + 1;
+  const ascending = [...points].reverse();
+  const third = Math.max(1, Math.floor(ascending.length / 3));
+  const activePlans = Object.values(state.npcStrategy?.plans ?? {}).flat().filter((plan) => plan.template === 'strike' && plan.status === 'active');
   return {
     worldAt: new Date(state.npcReplay?.processedThroughAt ?? 0).toISOString(), owners: owners.length,
     alliances: state.command.alliances.filter((alliance) => alliance.members.some((member) => member.ownerId !== playerId)).map((alliance) => `${alliance.tag}:${alliance.members.length}`),
@@ -119,6 +198,16 @@ export function describeWorld(state, journal = []) {
     transport: { transporters: sum(perOwner.map((owner) => owner.transporters)), mega: sum(perOwner.map((owner) => owner.megaTransporters)) },
     points: { top: points[0] ?? 0, median: median(points), bottom: points.at(-1) ?? 0, topToBottom: points.at(-1) ? +(points[0] / points.at(-1)).toFixed(1) : null },
     actions: { started: started.length, refused: decisions.length - started.length, byKind, topRefusals: Object.entries(refusals).sort((a, b) => b[1] - a[1]).slice(0, 6) },
+    plans: { closed: plans.length, done: plans.filter((entry) => entry.d?.st === 'done').length,
+      won: plans.filter((entry) => entry.d?.st === 'done' && entry.d?.won === 1).length,
+      active: activePlans.length, multiPlanet: plans.filter((entry) => (entry.d?.planets ?? 0) >= 3).length,
+      notDone: Object.entries(reasons).sort((a, b) => b[1] - a[1]),
+      meanAbsError: plans.filter((entry) => typeof entry.d?.err === 'number').length
+        ? +(sum(plans.filter((entry) => typeof entry.d?.err === 'number').map((entry) => Math.abs(entry.d.err))) / plans.filter((entry) => typeof entry.d?.err === 'number').length).toFixed(3) : null },
+    battles: { attacks: attacks.length, attacksWon: attacks.filter((entry) => entry.d?.won === 1).length,
+      raidGain: Math.round(sum(attacks.map((entry) => entry.d?.gain ?? 0))), raidLoss: Math.round(sum(attacks.map((entry) => entry.d?.loss ?? 0))),
+      defences: defences.length, defenceLoss: Math.round(sum(defences.map((entry) => entry.d?.loss ?? 0))) },
+    bottomThirdPoints: Math.round(sum(ascending.slice(0, third)) / third),
     styleChanges: styles.length, styles: Object.entries(styles.reduce((counts, entry) => ({ ...counts, [entry.s]: (counts[entry.s] ?? 0) + 1 }), {})),
     perOwner,
   };
@@ -145,7 +234,9 @@ function main() {
   if (out) fs.mkdirSync(out, { recursive: true });
   const save = option('save');
   const owners = option('owners')?.split(',').filter(Boolean);
-  let state = save ? readSave(save) : option('fixture') ? readSave(option('fixture')) : createLabWorld(Number(option('bots', '15')));
+  let state = save ? readSave(save) : option('fixture') ? readSave(option('fixture'))
+    : createLabWorld(Number(option('bots', '15')), option('seed') ? `BOTLAB-${option('seed')}` : 'BOTLAB2026');
+  if (option('scenario') === 'seven-planets' && !save && !option('fixture')) state = applySevenPlanetsScenario(state);
   if (option('write-fixture')) fs.writeFileSync(option('write-fixture'), serializeSaveForStorage(state, 'production'));
   const at0 = state.npcReplay.processedThroughAt;
   applyCampaignRuntimeForCatchup(state, at0);
@@ -163,13 +254,15 @@ function main() {
         ...(entry.reason ? { r: entry.reason } : {}),
         ...(entry.alternatives.length ? { alt: entry.alternatives.map((item) => [item.id, +item.weight.toFixed(3)]) } : {}), s: entry.strategy });
     },
+    // Outcomes of every owner, whoever is watched in detail.
+    outcome: (entry) => journal.push({ t: entry.at, o: entry.ownerId, k: entry.kind, d: entry.data }),
     style: (entry) => {
       if ((watched && !watched.has(entry.ownerId)) || styles.get(entry.ownerId) === entry.style) return;
       journal.push({ t: entry.at, o: entry.ownerId, k: 'style', s: entry.style, d: { from: styles.get(entry.ownerId) ?? null, why: entry.reason } });
       styles.set(entry.ownerId, entry.style);
     },
   });
-  const hours = save ? Number(option('hours', '6')) : Number(option('days', '2')) * 24;
+  const hours = save ? Number(option('hours', '6')) : option('hours') ? Number(option('hours')) : Number(option('days', '2')) * 24;
   const days = [];
   const startedAt = performance.now();
   let groups;

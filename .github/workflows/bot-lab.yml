@@ -1,0 +1,229 @@
+name: Bot lab
+
+# Heavy NPC measurements, on demand only: never on a push or a PR, and it gates nothing.
+# Each seed is its own job on its own runner. With `base_ref` the same fixtures run on both
+# revisions, so the comparison is paired. The lab tools always come from the branch the run
+# was dispatched on, laid over the checked-out revision, so an older revision can be measured.
+# Local only: no secrets, no cloud server (the tools make no network calls).
+#
+#   gh workflow run bot-lab.yml -R ratoker-jpg/Asterion --ref <branch> \
+#     -f label=strike -f ref=<branch> -f base_ref=<main sha> -f seeds=1-10 -f days=2
+on:
+  workflow_dispatch:
+    inputs:
+      label:
+        description: Name of the measurement (in artifact names)
+        required: true
+        default: lab
+      ref:
+        description: Revision to measure (empty = the dispatched branch)
+        required: false
+        default: ''
+      base_ref:
+        description: Revision to compare with on the same fixtures (empty = no comparison)
+        required: false
+        default: ''
+      seeds:
+        description: Seeds, e.g. 1-10 or 2,5,7
+        required: true
+        default: 1-10
+      days:
+        description: Game days per seed
+        required: true
+        default: '2'
+      scenario:
+        description: Lab scenario, e.g. seven-planets (empty = the plain world)
+        required: false
+        default: ''
+      cpu:
+        description: Also measure the step of the 100-NPC day-3 world (needs base_ref)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+  LAB_NODE: --max-old-space-size=12288 --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs
+
+jobs:
+  plan:
+    name: Fixtures and the seed matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: lab-tools
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.base_ref || inputs.ref || github.sha }}
+          path: world
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install dependencies
+        working-directory: world
+        run: npm ci
+      - name: Build the matrix
+        id: matrix
+        env:
+          SEEDS: ${{ inputs.seeds }}
+          AFTER: ${{ inputs.ref || github.sha }}
+          BASE: ${{ inputs.base_ref }}
+        run: |
+          node -e '
+            const seeds = process.env.SEEDS.split(",").flatMap((part) => {
+              const [from, to] = part.split("-").map(Number);
+              return to ? Array.from({ length: to - from + 1 }, (_, index) => from + index) : [from];
+            }).filter((seed) => Number.isSafeInteger(seed) && seed > 0);
+            if (!seeds.length) throw new Error("no seeds");
+            const sides = [["after", process.env.AFTER], ...(process.env.BASE ? [["base", process.env.BASE]] : [])];
+            const include = sides.flatMap(([side, ref]) => seeds.map((seed) => ({ side, ref, seed })));
+            require("node:fs").appendFileSync(process.env.GITHUB_OUTPUT, `matrix=${JSON.stringify({ include })}\n`);
+            require("node:fs").writeFileSync("seeds.txt", seeds.join(" "));
+          '
+      - name: Write one fixture per seed
+        working-directory: world
+        env:
+          SCENARIO: ${{ inputs.scenario }}
+        run: |
+          cp ../lab-tools/tools/bot-lab.mjs ../lab-tools/tools/bot-lab-batch.mjs tools/
+          mkdir -p ../fixtures
+          for seed in $(cat ../seeds.txt); do
+            node $LAB_NODE tools/bot-lab.mjs --seed=$seed --hours=0 ${SCENARIO:+--scenario=$SCENARIO} --write-fixture=../fixtures/seed-$seed.json > /dev/null
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fixtures
+          path: fixtures
+          retention-days: 7
+
+  lab:
+    name: ${{ matrix.side }} seed ${{ matrix.seed }}
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: lab-tools
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.ref }}
+          path: world
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install dependencies
+        working-directory: world
+        run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: fixtures
+          path: fixtures
+      - name: Run the lab
+        working-directory: world
+        env:
+          SEED: ${{ matrix.seed }}
+          DAYS: ${{ inputs.days }}
+          SIDE: ${{ matrix.side }}
+        run: |
+          cp ../lab-tools/tools/bot-lab.mjs ../lab-tools/tools/bot-lab-batch.mjs tools/
+          node $LAB_NODE tools/bot-lab.mjs --fixture=../fixtures/seed-$SEED.json --days=$DAYS --out=../out/$SIDE/seed-$SEED > /dev/null
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lab-${{ matrix.side }}-seed-${{ matrix.seed }}
+          path: out
+          retention-days: 14
+
+  summary:
+    name: Summary and comparison
+    needs: lab
+    if: always() && needs.lab.result != 'skipped'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: lab-*
+          path: raw
+      - name: Compare
+        env:
+          HAS_BASE: ${{ inputs.base_ref != '' }}
+        run: |
+          mkdir -p lab-runs/after lab-runs/base
+          for dir in raw/*/; do cp -r "$dir"* lab-runs/; done
+          if [ "$HAS_BASE" = "true" ]; then
+            node tools/bot-lab-batch.mjs --compare=base,after --dir=lab-runs > comparison.json
+          else
+            echo '{"note":"no base_ref: no comparison"}' > comparison.json
+          fi
+          node -e '
+            const fs = require("node:fs");
+            const metrics = JSON.parse(fs.readFileSync("comparison.json", "utf8")).metrics ?? {};
+            const rows = Object.entries(metrics).map(([key, value]) => `| ${key} | ${value.base} | ${value.after} | ${value.diff} (${value.low}…${value.high}) | ${value.verdict} |`);
+            if (rows.length) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, ["| Metric | Base | After | Diff (90%) | |", "|---|---|---|---|---|", ...rows, ""].join("\n"));
+          '
+      - uses: actions/upload-artifact@v4
+        with:
+          name: summary
+          path: comparison.json
+          retention-days: 14
+
+  cpu:
+    name: Step of the 100-NPC day-3 world
+    if: inputs.cpu && inputs.base_ref != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.base_ref }}
+          path: base
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          path: after
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: |
+          (cd base && npm ci)
+          (cd after && npm ci)
+      - name: Generate the world on the base revision
+        working-directory: base
+        run: node $LAB_NODE tools/late-game-catchup.mjs generate --days=3 --out=../fixtures
+      - name: Measure, taking turns on one runner
+        run: |
+          mkdir -p cpu
+          for turn in 1 2 3; do
+            for side in after base; do
+              (cd $side && node $LAB_NODE tools/live-world-bench.mjs --fixture=../fixtures/late-game-day-3.json --seconds=120 --step-ms=60000) > cpu/$side-$turn.json
+            done
+          done
+          node -e '
+            const fs = require("node:fs");
+            const read = (side) => [1, 2, 3].map((turn) => JSON.parse(fs.readFileSync(`cpu/${side}-${turn}.json`, "utf8")).worker.tick);
+            const middle = (values) => [...values].sort((a, b) => a - b)[1];
+            const [base, after] = [read("base"), read("after")];
+            const row = (key) => `| ${key} | ${middle(base.map((tick) => tick[key]))} ms | ${middle(after.map((tick) => tick[key]))} ms | ${(100 * (middle(after.map((tick) => tick[key])) / middle(base.map((tick) => tick[key])) - 1)).toFixed(1)}% |`;
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, ["| Tick | Base | After | |", "|---|---|---|---|", row("median"), row("p95"), ""].join("\n"));
+          '
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cpu
+          path: cpu
+          retention-days: 14
