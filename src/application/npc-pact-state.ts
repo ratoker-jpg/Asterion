@@ -171,7 +171,7 @@ export function npcReactionDrives(state: SaveState, ownerId: string, at: number,
   switch (reaction.kind) {
     case 'fortify': return { ...drives, military: clampUnit(drives.military + 0.2), war: clampUnit(drives.war - 0.2) };
     case 'economy': return { ...drives, economy: clampUnit(drives.economy + 0.25), war: clampUnit(drives.war - 0.15) };
-    case 'counter': return { ...drives, war: clampUnit(drives.war + 0.35), military: clampUnit(drives.military + 0.1) };
+    case 'counter': return { ...drives, war: clampUnit(drives.war + 0.15), military: clampUnit(drives.military + 0.1) };
     case 'seek-partner': return { ...drives, diplomacy: clampUnit(drives.diplomacy + 0.3) };
   }
 }
@@ -180,6 +180,8 @@ export function npcReactionDrives(state: SaveState, ownerId: string, at: number,
 export function npcReactionStyle(state: SaveState, ownerId: string, at: number): { style: NpcPlayStyle; reason: string } | null {
   const reaction = npcReactionOf(state, ownerId, at);
   if (!reaction) return null;
-  const style: NpcPlayStyle = reaction.kind === 'fortify' ? 'fortress' : reaction.kind === 'economy' ? 'economist' : reaction.kind === 'counter' ? 'raider' : 'ally';
+  // Looking for a partner changes whom it talks to, not how it plays meanwhile.
+  if (reaction.kind === 'seek-partner') return null;
+  const style: NpcPlayStyle = reaction.kind === 'fortify' ? 'fortress' : reaction.kind === 'economy' ? 'economist' : 'fleet';
   return { style, reason: `robbed-${reaction.kind}` };
 }

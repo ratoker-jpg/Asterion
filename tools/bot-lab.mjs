@@ -150,7 +150,7 @@ export function applySocialScenario(state, scenario) {
       const planet = planetOf(ownerId);
       // Some batteries: the first pirates of a lab world otherwise wipe a fleet standing by with nothing to do with this.
       const guard = createEmptyDefenseState();
-      targets[planet.id] = { ...planet, resources: { ...planet.resources, metal: 1_500_000, minerals: 1_500_000, gas: 1_500_000 },
+      targets[planet.id] = { ...planet, resources: { ...planet.resources, metal: 300_000, minerals: 300_000, gas: 300_000 },
         defense: { ...guard, defenses: { ...guard.defenses, 'ion-plasma-battery': 15 } },
         buildings: { ...planet.buildings, shipyard: 12, hangar: 60, 'metal-storage': 25, 'mineral-storage': 25, 'gas-storage': 25, 'planetary-government': 1 },
         fleet: { ...planet.fleet, ships: { ...planet.fleet.ships, [hull]: 60, transporter: 20, 'spy-probe': 5 } },
@@ -166,7 +166,7 @@ export function applySocialScenario(state, scenario) {
     const battery = getFactionDefenseCatalog(planetOf(victim).raceId).find((entity) => entity.id === 'ion-plasma-battery').combat;
     const defense = createEmptyDefenseState();
     const seen = { ...planetOf(victim), resources: { ...planetOf(victim).resources, metal: 3_000_000, minerals: 3_000_000, gas: 3_000_000 },
-      defense: { ...defense, defenses: { ...defense.defenses, 'ion-plasma-battery': Math.ceil(1.3 * ownPower / Math.sqrt(battery.attack * battery.life)) } },
+      defense: { ...defense, defenses: { ...defense.defenses, 'ion-plasma-battery': Math.ceil(1.5 * ownPower / Math.sqrt(battery.attack * battery.life)) } },
       fleet: { ...planetOf(victim).fleet, ships: {} } };
     targets[seen.id] = seen;
     for (const ownerId of [left, right]) {
@@ -178,10 +178,12 @@ export function applySocialScenario(state, scenario) {
     }
     const memoryOf = (relations) => ({ round: 2, prefs: {}, lessons: [], relations });
     const warm = relation(0.6, 0.5, 0);
-    profiles[left] = { ...profiles[left], inherited: memoryOf({ [right]: warm }) };
+    // They share an old enemy: what a strike costs, a grudge can pay for.
+    const enemy = relation(0, 0, 0.5);
+    profiles[left] = { ...profiles[left], inherited: memoryOf({ [right]: warm, [victim]: enemy }) };
     if (scenario === 'conflict' && index === 0) profiles[right] = { ...profiles[right], inherited: memoryOf({ [left]: relation(0, 0, 0.6) }) };
     else if (scenario === 'conflict' && index === 1) profiles[right] = { ...profiles[right], inherited: memoryOf({ [left]: warm, [victim]: relation(0.7, 0.6, 0) }) };
-    else profiles[right] = { ...profiles[right], inherited: memoryOf({ [left]: warm }) };
+    else profiles[right] = { ...profiles[right], inherited: memoryOf({ [left]: warm, [victim]: enemy }) };
     // All three in one points band (the ledger the attack-rule tests use).
     for (const ownerId of [left, right, victim]) unrecovered[ownerId] = { metal: 400_000_000, minerals: 0, gas: 0 };
   });
@@ -270,6 +272,7 @@ export function describeWorld(state, journal = []) {
     betrayed: pactEvents('joint-strike', 'broken').filter((entry) => entry.d?.why === 'betrayed').length,
     withdrawn: pactEvents('joint-strike', 'withdrawn').length, cancelled: pactEvents('joint-strike', 'cancelled').length,
     jointBattles: arrivals.length, jointWon: arrivals.filter((entry) => entry.d?.won === 1).length,
+    jointHit: Math.round(sum(arrivals.map((entry) => attacks.find((battle) => battle.o === entry.o && battle.t === entry.t)?.d?.hit ?? 0))),
     jointGain: Math.round(sum(arrivals.map((entry) => entry.d?.gain ?? 0))), jointLoss: Math.round(sum(arrivals.map((entry) => entry.d?.loss ?? 0))),
     againstPlayer: pactEvents('joint-strike', 'proposed').filter((entry) => entry.d?.target === playerId).length,
     giftAsked: pactEvents('resource-gift', 'proposed').length, giftSent: gifts.length, giftDeclined: pactEvents('resource-gift', 'declined').length,

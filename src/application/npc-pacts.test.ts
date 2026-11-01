@@ -68,7 +68,7 @@ function soloWorld(seed: string, options: Readonly<{ reports?: boolean; regardAB
   for (const planet of [pa!, pb!]) {
     const fleet = createEmptyFleetState();
     targets[planet.id] = { ...planet, raceId: 'aegis', ownerProfile: ownerProfile as SpyTargetState['ownerProfile'],
-      resources: { ...planet.resources, metal: 800_000, minerals: 800_000, gas: 800_000 },
+      resources: { ...planet.resources, metal: 150_000, minerals: 150_000, gas: 150_000 },
       buildings: { ...planet.buildings, shipyard: 20, hangar: 100, 'advanced-factory': 10, 'metal-storage': 30, 'mineral-storage': 30, 'gas-storage': 30 },
       fleet: { ...fleet, ships: { ...fleet.ships, cruiser: 60, transporter: 200, 'spy-probe': 5 } },
       fleetProduction: createDefaultFleetProductionState() } as SpyTargetState;
@@ -90,7 +90,9 @@ function soloWorld(seed: string, options: Readonly<{ reports?: boolean; regardAB
   for (const [ownerId, other, regard] of [[pa!.ownerId, pb!.ownerId, options.regardAB ?? 0.6], [pb!.ownerId, pa!.ownerId, options.regardBA ?? 0.6]] as const) {
     const profile = profiles[ownerId]!;
     profiles[ownerId] = { ...profile, traits: { ...profile.traits, ...traits }, activity: { ...profile.activity, propensity: 1 },
-      inherited: { round: 2, prefs: {}, lessons: [], relations: regard >= 0 ? { [other]: { trust: regard, affinity: 0.4, resentment: 0 } } : { [other]: { trust: 0, affinity: 0, resentment: -regard } } } };
+      // They share an old enemy: what a strike costs in ships, a grudge can pay for.
+      inherited: { round: 2, prefs: {}, lessons: [], relations: { [pt!.ownerId]: { trust: 0, affinity: 0, resentment: 0.5 },
+        ...(regard >= 0 ? { [other]: { trust: regard, affinity: 0.4, resentment: 0 } } : { [other]: { trust: 0, affinity: 0, resentment: -regard } }) } } };
   }
   // Awake in the same hours: a time one can keep, the other can too.
   const clock = profiles[pa!.ownerId]!.session.timezoneOffsetMinutes;
@@ -208,6 +210,35 @@ test('the plan keeps its time: no launch before the window, each side rechecks w
   const after = refreshNpcPlans(standing, profile, createNpcUtilityContext(standing, profile, early, 1), early, 1);
   // Whatever else the look moved, the phase has not gone on to launch.
   assert.notEqual(planOf(after, world.a)!.phase, 'launch');
+});
+
+test('no grudge and nothing the holds could carry: a strike that only costs ships is not proposed', () => {
+  const world = soloWorld('pact-worthless');
+  const profiles = Object.fromEntries(Object.entries(world.state.npc!.profiles).map(([ownerId, profile]) => {
+    if (!profile.inherited) return [ownerId, profile];
+    const { [world.target]: _old, ...relations } = profile.inherited.relations;
+    return [ownerId, { ...profile, inherited: { ...profile.inherited, relations } }];
+  })) as NonNullable<SaveState['npc']>['profiles'];
+  const state: SaveState = { ...world.state, npc: { ...world.state.npc!, profiles } };
+  assert.equal(jointOf(look(state, world.a, START + MINUTE)), undefined);
+});
+
+test('the second wave brings holds to carry the haul; a robbery reaction needs real robberies, not one hold', () => {
+  const state = agreed(soloWorld('pact-holds'));
+  const pact = jointOf(state)!;
+  const second = pact.terms.fromRole.wave === 2 ? pact.from : pact.to;
+  const first = second === pact.from ? pact.to : pact.from;
+  const holds = (ownerId: string) => Object.values(planOf(state, ownerId)!.reserve).reduce((sum, share) => sum + (share.transporter ?? 0), 0);
+  assert.ok(holds(second) > 0);
+  assert.equal(holds(first), 0);
+  // Three battles held at home: attacked, not robbed, and everyone still reads it as before.
+  const world = soloWorld('pact-held');
+  const report = (index: number, winner: string, loot: number) => ({ id: `b${index}`, attacker: { playerId: world.target }, defender: { playerId: world.a }, winner, missionType: 'attack',
+    timestamp: new Date(START - HOUR).toISOString(), resources: { metal: loot, minerals: 0, gas: 0 }, attackerForce: { stacks: [] }, defenderForce: { stacks: [] } }) as unknown as BattleReport;
+  const held: SaveState = { ...world.state, combat: { ...world.state.combat, reports: [0, 1, 2, 3].map((index) => report(index, 'defender', 0)) } };
+  assert.equal(look(held, world.a, START).npcStrategy?.reactions?.[world.a], undefined);
+  const robbed: SaveState = { ...world.state, combat: { ...world.state.combat, reports: [0, 1, 2, 3].map((index) => report(index, 'attacker', 5_000)) } };
+  assert.ok(look(robbed, world.a, START).npcStrategy?.reactions?.[world.a]);
 });
 
 test('both came: the agreement is fulfilled and each remembers it, in reliability and joint operations', () => {
@@ -434,7 +465,8 @@ test('relations weigh real choices: a friend is a poor target, an enemy of old a
   const world = soloWorld('weights');
   const profile = world.state.npc!.profiles[world.a]!;
   const context = createNpcUtilityContext(world.state, profile, START, 1);
-  assert.equal(npcAttackRegardBias(context, world.target), 0, 'a stranger: numbers as before');
+  assert.equal(npcAttackRegardBias(context, 'nobody-known'), 0, 'a stranger: numbers as before');
+  assert.ok(npcAttackRegardBias(context, world.target) > 0, 'an enemy of old');
   assert.ok(npcAttackRegardBias(context, world.b) < -0.3);
   const origin = getEspionageTargets(world.state.espionage)[world.planetA]!;
   const report = world.state.espionage!.reports!.find((item) => item.ownerId === world.a)!;
@@ -488,9 +520,9 @@ test('T-STYLE-02: robbed alike, different people draw different conclusions, and
   // Being attacked no longer means the fortress for everyone.
   const report = { attacker: { playerId: world.target }, defender: { playerId: world.a }, winner: 'attacker', missionType: 'attack' } as unknown as BattleReport;
   const state: SaveState = { ...recordNpcBattleRelations(world.state, report, START, 1_000), npcStrategy: { version: 1, plans: {}, outcomes: {}, nextCheckAt: {}, reactions: { [world.a]: { kind: 'counter', offender: world.target, since: START, until: START + HOUR } } } };
-  assert.deepEqual(npcReactionStyle(state, world.a, START + 1), { style: 'raider', reason: 'robbed-counter' });
+  assert.deepEqual(npcReactionStyle(state, world.a, START + 1), { style: 'fleet', reason: 'robbed-counter' });
   const context = { ...createNpcUtilityContext(state, profile, START + 1, 1), threat: 1 };
-  assert.equal(readNpcPlayStyle(state, profile, context, strategyOf(context)).style, 'raider');
+  assert.equal(readNpcPlayStyle(state, profile, context, strategyOf(context)).style, 'fleet');
   assert.equal(readNpcPlayStyle(state, profile, { ...context, at: START + 2 * HOUR }, strategyOf(context)).style, 'fortress', 'once it has passed, the old reflex');
   assert.equal(createNpcUtilityContext(state, profile, START + 1, 1).counterOffender, world.target, 'it holds it against the one it blames');
 });

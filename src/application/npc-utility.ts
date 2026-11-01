@@ -223,6 +223,7 @@ export function createNpcUtilityContext(state: SaveState, profile: NpcProfile, a
   const gates = npcGateHosts(state, ownerId);
   const reaction = npcReactionOf(state, ownerId, at);
   const counterOffender = reaction?.kind === 'counter' ? reaction.offender : undefined;
+  const partners = npcActivePartners(state, ownerId);
   const home = ownPlanets.find((planet) => planet.id === `${ownerId}-planet`) ?? ownPlanets[0];
   const flagship = home && npcFlagshipOwners(state.npc).has(ownerId)
     ? npcFlagshipPlan(home.raceId, state.npcScience?.owners[ownerId]?.levels ?? home.ownerProfile?.scienceLevels ?? {},
@@ -232,7 +233,7 @@ export function createNpcUtilityContext(state: SaveState, profile: NpcProfile, a
     ...(flagship ? { flagship } : {}),
     profile, at, timeScale,
     relations: npcRelationViews(state, profile, at),
-    ...(npcActivePartners(state, ownerId).size ? { partners: npcActivePartners(state, ownerId) } : {}),
+    ...(partners.size ? { partners } : {}),
     ...(counterOffender ? { counterOffender } : {}),
     rivalGateHosts: gates.rival,
     ownGateHosts: gates.own,

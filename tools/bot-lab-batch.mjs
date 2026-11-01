@@ -84,6 +84,7 @@ export function labMetrics(summary) {
     jointBattles: day.social?.jointBattles ?? 0,
     jointWon: day.social?.jointWon ?? 0,
     jointNet: (day.social?.jointGain ?? 0) - (day.social?.jointLoss ?? 0),
+    jointHit: day.social?.jointHit ?? 0,
     giftsSent: day.social?.giftSent ?? 0,
     giftsDeclined: day.social?.giftDeclined ?? 0,
     giftCycles: day.social?.giftCycles ?? 0,

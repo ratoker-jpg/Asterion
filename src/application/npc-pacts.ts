@@ -26,6 +26,9 @@ import { activeNpcPlans } from './npc-plan-reserve.ts';
 import {
   combatShipsOf, fleetPopulationOf, flownPopulation, freeCombatShips, npcBelievedPower, npcWantedWin, ownerUnderAttack, replaceNpcPlan, type NpcPlanChoice,
 } from './npc-plans.ts';
+import { battleLoot, isGrievanceBattle } from './npc-grudges.ts';
+import { battleReportTime } from './history-retention.ts';
+import { ownerBattleReports } from './npc-knowledge-index.ts';
 import { npcRelationView } from './npc-relations.ts';
 import { getOwnerRelation } from './owner-relations.ts';
 import { npcResponsiveness } from './npc-sun-prep.ts';
@@ -78,6 +81,8 @@ export const NPC_PACT_BALANCE = Object.freeze({
   targetPointsShare: 0.5,
   /** Share of a planet's stores a joint plan may spend on its ships. */
   budgetShare: 0.6,
+  /** Share of free transports the second wave brings along to carry the haul. */
+  holdsShare: 0.5,
   /** A report older than this (game hours) is no ground for a joint strike. */
   reportHours: 12,
   /** With this little time left to answer, an owner without news refuses rather than waits (real hours). */
@@ -94,7 +99,8 @@ export const NPC_PACT_BALANCE = Object.freeze({
   giftAskDayShare: 0.5,
   giftMinDayShare: 0.05,
   giftFriendRegard: 0.25,
-  /** Robbed again and again: a decision that holds this long before it is thought over. */
+  /** Robbed this many times in two days, it thinks about what to do; the decision holds this long before it is thought over. */
+  reactionRobberies: 4,
   reactionHours: 24,
   reactionDoubt: 0.25,
 });
@@ -151,7 +157,7 @@ type ForcePlan = { reserve: Record<string, Record<string, number>>; orders: NpcP
  * the budget, of the hull its role prefers when it can build that (T-SOC-02: a
  * role never overrides the race, the sciences or the shipyard). Stops at `needed`.
  */
-function jointForcePlan(state: SaveState, utility: NpcUtilityContext, at: number, timeScale: number, hullWanted: string, by: number, needed: number): ForcePlan | null {
+function jointForcePlan(state: SaveState, utility: NpcUtilityContext, at: number, timeScale: number, hullWanted: string, by: number, needed: number, wave: 1 | 2 = 1): ForcePlan | null {
   const ownerId = utility.profile.ownerId;
   const planets = planetsOf(utility);
   if (!planets.length) return null;
@@ -194,7 +200,36 @@ function jointForcePlan(state: SaveState, utility: NpcUtilityContext, at: number
       if (power >= needed) break;
     }
   }
-  return power > 0 ? { reserve, orders, power, readyAt } : null;
+  if (power <= 0) return null;
+  // The second wave comes when the guns are spent: it brings the holds (every dispatched ship flies in an attack, by the player's rule).
+  if (wave === 2) {
+    for (const planet of planets) {
+      const free = getNpcMissionAvailableFleet(state, ownerId, planet.id) ?? {};
+      for (const id of ['mega-transporter', 'transporter'] as const) {
+        const count = Math.floor((free[id] ?? 0) * NPC_PACT_BALANCE.holdsShare);
+        if (count <= 0) continue;
+        const share = reserve[planet.id] ?? (reserve[planet.id] = {});
+        share[id] = count;
+      }
+    }
+  }
+  return { reserve, orders, power, readyAt };
+}
+
+/**
+ * What the strike is worth to this owner by its own report, in days of its
+ * income: the haul its own holds can carry against what it expects to lose.
+ * Bounded below: a loss is what a grudge may still pay for, not the whole story.
+ */
+function jointWorth(utility: NpcUtilityContext, force: ForcePlan, report: SpyReportSnapshot, win: number): number {
+  const raceId = planetsOf(utility)[0]!.raceId;
+  const catalog = getFactionShipCatalog(raceId);
+  const counts: Record<string, number> = {};
+  for (const share of Object.values(force.reserve)) for (const [id, count] of Object.entries(share)) counts[id] = (counts[id] ?? 0) + count;
+  const holds = catalog.reduce((sum, entity) => sum + (counts[entity.id] ?? 0) * (entity.ship?.cargo ?? 0), 0);
+  const haul = win * Math.min(holds, 0.5 * stockOf(report.resources));
+  const loss = npcFleetValue(raceId, counts) * ((1 - win) * 0.85 + win * 0.1);
+  return Math.max(-0.1, (haul - loss) / Math.max(1, utility.dayValue));
 }
 
 /** A sample of the force for judging a flight's speed. */
@@ -220,7 +255,7 @@ function draftJointPlan(state: SaveState, utility: NpcUtilityContext, pact: NpcJ
   const enemy = npcBelievedPower(utility, report, potential.power);
   const wanted = npcWantedWin(utility, terms.targetOwnerId);
   const partner = npcPartnerPowerBelief(state, ownerId, partnerId, potential.power, at);
-  const plan = jointForcePlan(state, utility, at, timeScale, role.hull, by, Math.max(1, enemy * (wanted / (1 - wanted)) ** (1 / 2.5) - partner));
+  const plan = jointForcePlan(state, utility, at, timeScale, role.hull, by, Math.max(1, enemy * (wanted / (1 - wanted)) ** (1 / 2.5) - partner), role.wave);
   if (!plan) return null;
   const contributing = Object.entries(plan.reserve).sort(([left], [right]) => (left < right ? -1 : 1));
   if (!contributing.length) return null;
@@ -235,7 +270,7 @@ function draftJointPlan(state: SaveState, utility: NpcUtilityContext, pact: NpcJ
     planId: `plan:${ownerId}:pact:${pact.proposalId}`, template: 'strike', ownerId, status: 'active', phase: 'produce', createdAt: at,
     deadlineAt: arriveAt + terms.toleranceMs, targetPlanetId: terms.targetPlanetId, targetOwnerId: terms.targetOwnerId, rallyPlanetId: rally.id,
     reserve: Object.fromEntries(contributing), orders: plan.orders,
-    forecast: { win: Math.round(win * 1000) / 1000, gain: Math.round(win * 0.25 * stockOf(report.resources)),
+    forecast: { win: Math.round(win * 1000) / 1000, gain: Math.round(Math.max(0, jointWorth(utility, plan, report, win)) * utility.dayValue),
       loss: Math.round(npcFleetValue(raceId, force) * ((1 - win) * 0.85 + win * 0.1)), readyAt: Math.round(Math.max(plan.readyAt, at)) },
     knowledgeAt: report.createdAt, sent: [],
     partner: { ownerId: partnerId, proposalId: pact.proposalId, wave: role.wave, arriveAt, toleranceMs: terms.toleranceMs },
@@ -269,16 +304,15 @@ function judgeJointStrike(state: SaveState, profile: NpcProfile, utility: NpcUti
   if (ownerUnderAttack(state, utility.ownPlanets, ownerId, at)) return { accept: false, reason: 'threat-at-home' };
   const report = freshReport(utility, terms.targetPlanetId, at, timeScale);
   if (!report) return at < pact.expiresAt - NPC_PACT_BALANCE.reconAnswerHours * HOUR ? { wait: true } : { accept: false, reason: 'no-intel' };
-  const force = jointForcePlan(state, utility, at, timeScale, terms.toRole.hull, terms.strikeAt - HOUR, Number.POSITIVE_INFINITY);
+  const force = jointForcePlan(state, utility, at, timeScale, terms.toRole.hull, terms.strikeAt - HOUR, Number.POSITIVE_INFINITY, terms.toRole.wave);
   if (!force) return { accept: false, reason: 'no-force' };
   const enemy = npcBelievedPower(utility, report, force.power);
   const wanted = npcWantedWin(utility, terms.targetOwnerId);
   const win = estimateWinProbability(force.power + npcPartnerPowerBelief(state, ownerId, pact.from, force.power, at), enemy);
   if (win < 0.9 * wanted) return { accept: false, reason: 'target-too-strong' };
   // It must be worth this owner's while by its own count, not the proposer's.
-  const haul = win * 0.25 * stockOf(report.resources) / Math.max(1, utility.dayValue);
   const grudge = npcRevengeIntensity(utility, terms.targetOwnerId);
-  const score = 0.6 * regard + 0.5 * (unit(profile.traits.cooperation) - 0.4) + Math.min(0.3, 0.3 * haul) + 0.3 * grudge
+  const score = 0.6 * regard + 0.5 * (unit(profile.traits.cooperation) - 0.4) + 0.3 * Math.min(1, jointWorth(utility, force, report, win)) + 0.3 * grudge
     + 0.4 * ((view?.reliability ?? 0.5) - 0.5) - NPC_PACT_BALANCE.repeatPenalty * Math.min(3, view?.jointOps ?? 0)
     - (points(state, ownerId) > 1.5 * points(state, pact.from) ? 0.15 : 0);
   const doubt = (createSeededRandom(JSON.stringify(['npc-pact-answer', profile.privateSeed, pact.proposalId]))() * 2 - 1) * NPC_PACT_BALANCE.answerDoubt;
@@ -379,12 +413,14 @@ function considerJointStrike(state: SaveState, profile: NpcProfile, utility: Npc
     const wanted = npcWantedWin(utility, target.ownerId);
     // A target it can take alone is an ordinary strike.
     if (estimateWinProbability(force.power, enemy) >= wanted) continue;
-    const value = Math.min(1.5, 0.25 * stockOf(report.resources) / Math.max(1, utility.dayValue)) + 0.5 * npcRevengeIntensity(utility, target.ownerId)
-      + (reaction?.offender === target.ownerId ? 0.5 : 0);
-    if (value < 0.1) continue;
     for (const partner of candidates) {
       if (partner.ownerId === target.ownerId) continue;
-      if (estimateWinProbability(force.power + npcPartnerPowerBelief(state, ownerId, partner.ownerId, force.power, at), enemy) < 0.9 * wanted) continue;
+      // The points are public: no use asking someone the attack rule would stop.
+      if (!evaluatePlanetAttackEligibility(state, partner.ownerId, target.ownerId).allowed) continue;
+      const win = estimateWinProbability(force.power + npcPartnerPowerBelief(state, ownerId, partner.ownerId, force.power, at), enemy);
+      if (win < 0.9 * wanted) continue;
+      const value = Math.min(1.5, jointWorth(utility, force, report, win)) + 0.5 * npcRevengeIntensity(utility, target.ownerId) + (reaction?.offender === target.ownerId ? 0.5 : 0);
+      if (value < 0.1) continue;
       const score = value + 0.5 * partner.regard;
       if (!best || score > best.value) best = { report, partner, value: score };
     }
@@ -531,7 +567,8 @@ export function chooseNpcRobberyReaction(profile: NpcProfile, inputs: Readonly<{
   const random = createSeededRandom(JSON.stringify(['npc-robbery-reaction', profile.privateSeed, Math.floor(at / (6 * HOUR))]));
   const doubt = () => (random() * 2 - 1) * NPC_PACT_BALANCE.reactionDoubt;
   const options: [NpcRobberyReactionKind, number][] = [
-    ['fortify', 0.6 * (1 - unit(t.riskTolerance)) + 0.4 * unit(t.planningHorizon) + doubt()],
+    // The usual answer: it takes a character to do anything else.
+    ['fortify', 0.25 + 0.6 * (1 - unit(t.riskTolerance)) + 0.4 * unit(t.planningHorizon) + doubt()],
     ['economy', 0.7 * unit(t.economyFocus) + 0.3 * (1 - unit(t.aggression)) + doubt()],
     ['counter', 0.7 * unit(t.aggression) + 0.5 * unit(t.riskTolerance) + 0.4 * unit(inputs.grudge) - 0.5 * unit(inputs.fearOfOffender) + doubt()],
     ['seek-partner', 0.8 * unit(t.cooperation) + 0.3 * unit(t.socialStyle) + 0.5 * Math.max(0, inputs.bestFriend) + doubt()],
@@ -539,8 +576,19 @@ export function chooseNpcRobberyReaction(profile: NpcProfile, inputs: Readonly<{
   return options.reduce((best, item) => (item[1] > best[1] ? item : best))[0];
 }
 
+/** Battles at home in the last two days that this owner lost and paid for: being attacked and holding is no robbery. */
+function robberiesOf(state: SaveState, ownerId: string, at: number): number {
+  let robbed = 0;
+  for (const report of ownerBattleReports(state.combat.reports, ownerId)) {
+    if (report.defender.playerId !== ownerId || report.winner !== 'attacker' || !isGrievanceBattle(report) || battleLoot(report) <= 0) continue;
+    const when = battleReportTime(report);
+    if (Number.isFinite(when) && when <= at && at - when <= 48 * HOUR) robbed += 1;
+  }
+  return robbed;
+}
+
 function refreshReaction(state: SaveState, profile: NpcProfile, utility: NpcUtilityContext, at: number): SaveState {
-  if (utility.threat < 1 || npcReactionOf(state, profile.ownerId, at)) return state;
+  if (utility.threat < 1 || npcReactionOf(state, profile.ownerId, at) || robberiesOf(state, profile.ownerId, at) < NPC_PACT_BALANCE.reactionRobberies) return state;
   const offender = Object.entries(profile.grudges ?? {}).sort(([leftId, left], [rightId, right]) => right.damage - left.damage || (leftId < rightId ? -1 : 1))[0]?.[0];
   const views = utility.relations;
   const kind = chooseNpcRobberyReaction(profile, {
