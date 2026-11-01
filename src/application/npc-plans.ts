@@ -72,8 +72,6 @@ export const NPC_STRIKE_BALANCE = Object.freeze({
    * fleet and cancelled half the plans after the gathering.
    */
   unseenFleetShare: 1,
-  /** Force gathered over the strength the wanted margin asks for. */
-  forceSlack: 1.1,
   /** Free hangar room the rally planet needs over the shares still to arrive. */
   hangarSlack: 1.15,
 });
@@ -261,13 +259,6 @@ export function draftNpcStrike(state: SaveState, profile: NpcProfile, utility: N
         share[hull.id] = (share[hull.id] ?? 0) + count;
         const preview = previews!.get(planetId)!;
         readyAt = Math.max(readyAt, preview.queueFreeAt + count * preview.durationMs);
-      }
-    }
-    if (empirePower > needed) {
-      // Stronger than the target asks: every planet gives its share of what is needed, the rest stays home and out of the risk.
-      const share = Math.min(1, NPC_STRIKE_BALANCE.forceSlack * needed / empirePower);
-      for (const [planetId, counts] of reserve) {
-        reserve.set(planetId, Object.fromEntries(Object.entries(counts).map(([id, count]) => [id, Math.ceil(count * share)] as const)));
       }
     }
     const force: Record<string, number> = {};

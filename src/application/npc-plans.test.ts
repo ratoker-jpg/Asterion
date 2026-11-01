@@ -230,17 +230,6 @@ test('the outcome ledger only watches: a plan played with it equals the plan pla
   assert.deepEqual(watched.state, without.state);
 });
 
-test('an empire stronger than it needs sends a share of its fleet, not all of it', () => {
-  const world = sevenPlanetWorld('npc-plans-trim', 3);
-  const profile = world.state.npc!.profiles[world.owner]!;
-  const draft = draftNpcStrike(world.state, profile, createNpcUtilityContext(world.state, profile, START + MINUTE, 1), START + MINUTE, 1);
-  assert.ok(draft, 'still more than one planet can do alone');
-  assert.equal(draft.plan.orders.length, 0, 'nothing to build');
-  const gathered = Object.values(draft.plan.reserve).reduce((sum, counts) => sum + (counts.cruiser ?? 0), 0);
-  assert.ok(gathered > 40, `more than one planet's squadron (${gathered})`);
-  assert.ok(gathered < 7 * 40, `the rest stays home (${gathered})`);
-});
-
 test('a force lost at the rally planet cancels the plan instead of sending what is left', () => {
   const world = sevenPlanetWorld('npc-plans-force-lost');
   let hit = false;
