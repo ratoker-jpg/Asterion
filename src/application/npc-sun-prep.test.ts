@@ -13,7 +13,7 @@ import { utilityToWeight } from '../domain/npc/utility.ts';
 import { sunRaidCapsOf } from '../domain/sun-raid/config.ts';
 import { createDefaultNewGameConfig } from '../domain/world/config.ts';
 import type { SaveState } from './contracts.ts';
-import { getNpcEndgameChoices } from './npc-endgame.ts';
+import { getNpcEndgameChoices, npcSunAffordableForce, npcSunForce } from './npc-endgame.ts';
 import { setNpcJournalSink, type NpcJournalSun } from './npc-journal.ts';
 import { advanceLiveWorld, beginLiveWorld } from './npc-live-world.ts';
 import { applyCampaignRuntimeForCatchup } from './npc-catchup-runner.ts';
@@ -23,7 +23,7 @@ import { activeNpcSunPrep, npcSunPrepNextMoment, withoutNpcSunPrepHold, NPC_SUN_
 import { chooseNpcSunForRaid, getNpcSunPrepChoices, npcResponsiveness, pickNpcGatherTime, refreshNpcSunPrep } from './npc-sun-prep.ts';
 import { createNpcUtilityContext } from './npc-utility.ts';
 import { createInitialSaveState, serializeSaveForStorage } from './persistence.ts';
-import { currentSunRaidState, reconcileSunRaids } from './sun-raid.ts';
+import { currentSunRaidState, npcSunFlightGas, reconcileSunRaids, sunFleetPopulation } from './sun-raid.ts';
 
 const NOW = Date.UTC(2026, 9, 26, 6);
 const HOUR = 3_600_000;
@@ -293,6 +293,69 @@ test('a member who answered keeps to its answer; others in the alliance may stil
   const utility = createNpcUtilityContext(state, profile, NOW + HOUR, 1);
   const generic = getNpcEndgameChoices(state, profile, utility, NOW + HOUR, 1, scored);
   assert.equal(generic.some((choice) => choice.candidate.id.startsWith('sun-raid:')), false, 'a leader never calls a gathering on the spot now');
+});
+
+test('a member builds what is missing (a counted, budgeted order) and brings its colony\'s share to its point of departure', () => {
+  const { owners } = world();
+  const team = owners.slice(0, 3);
+  const { state: initial, leader } = ready(team);
+  const member = team[1]!;
+  // Half the fleet stands on a colony a few systems away; the home planet can build.
+  const main = home(initial, member);
+  const hull = hullOf(main.raceId);
+  const count = main.fleet.ships[hull.id as keyof typeof main.fleet.ships] ?? 0;
+  const colonyId = `${member}-colony`;
+  let state = withTarget(initial, { ...main, fleet: { ...main.fleet, ships: { ...main.fleet.ships, [hull.id]: Math.ceil(count / 2) } } });
+  state = withTarget(state, { ...main, id: colonyId, name: 'Colony', coordinate: { ...main.coordinate, system: (main.coordinate.system % 40) + 2 },
+    fleet: { ...main.fleet, ships: { ...main.fleet.ships, [hull.id]: Math.floor(count / 2) } } });
+  state = startPlan(state, leader, NOW);
+  state = act(state, member, NOW + HOUR);
+  const T = planOf(state, leader).gatherAt;
+  assert.ok(planOf(state, leader).rsvps[member]!.population > 0, 'it promises');
+  // Inside the rally window its colony's share flies to the larger pile, landing before T.
+  const inWindow = T - 2 * HOUR;
+  state = act(state, member, inWindow);
+  const rally = state.flights.records.find((flight) => flight.ownerId === member && flight.missionId === 'deployment');
+  assert.ok(rally, 'a deployment left');
+  assert.ok(rally.arrivalAt <= T, 'and lands before T');
+  assert.equal(planOf(state, leader).rsvps[member]!.rallyPlanetId, rally.destinationPlanetId);
+  assert.notEqual(rally.originPlanetId, rally.destinationPlanetId);
+
+  // A promise above what stands: the gap becomes an order, at most twice for one promise.
+  const poor = armed(armed(state, member, 3_000), team[2]!, 3_000);
+  const plan = planOf(poor, leader);
+  const bigger: NpcSunRaidPrepPlan = { ...plan, rsvps: { ...plan.rsvps, [member]: { answer: 'yes', population: 25_000, at: NOW + HOUR } } };
+  let current: SaveState = { ...poor, npcStrategy: { ...poor.npcStrategy!, plans: { ...poor.npcStrategy!.plans, [leader]: [bigger] } } };
+  const profile = current.npc!.profiles[member]!;
+  const utility = createNpcUtilityContext(current, profile, NOW + 2 * HOUR, 1);
+  const order = getNpcSunPrepChoices(current, profile, utility, NOW + 2 * HOUR, 1, scored).find((choice) => choice.candidate.id.startsWith('sun-prep:order:'));
+  if (order) {
+    const placed = order.run(current, 'npc-autonomy:order');
+    if (placed.started) {
+      current = placed.state;
+      assert.equal(activeNpcSunPrep(current, plan.allianceId)!.rsvps[member]!.orders, 1, 'the order is counted');
+    }
+  }
+  const capped: NpcSunRaidPrepPlan = { ...bigger, rsvps: { ...bigger.rsvps, [member]: { ...bigger.rsvps[member]!, orders: NPC_SUN_PREP_BALANCE.maxOrders } } };
+  const stopped: SaveState = { ...poor, npcStrategy: { ...poor.npcStrategy!, plans: { ...poor.npcStrategy!.plans, [leader]: [capped] } } };
+  assert.equal(getNpcSunPrepChoices(stopped, stopped.npc!.profiles[member]!, utility, NOW + 2 * HOUR, 1, scored).some((choice) => choice.candidate.id.startsWith('sun-prep:order:')), false, 'no more orders than the cap');
+});
+
+test('gas limits what a planet may promise and fly: a force is trimmed to its store, the distance counts', () => {
+  const { owners } = world();
+  const team = owners.slice(0, 3);
+  const { state: initial, leader } = ready(team);
+  const planet = home(initial, leader);
+  const options = { now: NOW, mode: 'production' as const, timeScale: 1 };
+  const ships = npcSunForce(initial, leader, planet.id, planet.raceId, 1, 25_000);
+  const near = npcSunFlightGas(initial, leader, planet.id, ships, planet.coordinate.galaxy, planet.coordinate.system, options);
+  const far = npcSunFlightGas(initial, leader, planet.id, ships, planet.coordinate.galaxy, (planet.coordinate.system + 19) % 40 + 1, options);
+  assert.ok(far > near, `a farther Sun costs more gas: ${near} < ${far}`);
+  const dry = withTarget(initial, { ...planet, resources: { ...planet.resources, gas: Math.floor(far / 4) } });
+  const trimmed = npcSunAffordableForce(dry, leader, planet.id, ships, planet.coordinate.galaxy, (planet.coordinate.system + 19) % 40 + 1, options);
+  const cost = npcSunFlightGas(dry, leader, planet.id, trimmed, planet.coordinate.galaxy, (planet.coordinate.system + 19) % 40 + 1, options);
+  assert.ok(cost <= Math.floor(far / 4), 'what is left can pay');
+  assert.ok(sunFleetPopulation(trimmed, planet.raceId) < sunFleetPopulation(ships, planet.raceId));
 });
 
 test('gather time: the visit must hold half the gathering', () => {

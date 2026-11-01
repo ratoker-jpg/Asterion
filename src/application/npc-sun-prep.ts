@@ -499,17 +499,21 @@ function rallyChoices(state: SaveState, ownerId: string, plan: NpcSunRaidPrepPla
   const room = npcDeploymentFreeCapacity(rally.planet) - inbound;
   const choices: NpcSunPrepChoice[] = [];
   for (const source of forces) {
-    if (source.planet.id === rally.planet.id || source.population < NPC_SUN_PREP_BALANCE.rallyMinShare * rsvp.population || source.population > room) continue;
+    if (source.planet.id === rally.planet.id) continue;
+    // What fits the hangar there; the rest pledges from where it stands.
+    const ships = npcSunForce(state, ownerId, source.planet.id, source.planet.raceId, 1, Math.max(0, room));
+    const population = sunFleetPopulation(ships, source.planet.raceId);
+    if (population < NPC_SUN_PREP_BALANCE.rallyMinShare * rsvp.population) continue;
     // A dry run of the real command gives the arrival time and every launch check.
     const trial = dispatchNpcDeployment(state, { requestId: `npc-sun-prep-trial:${source.planet.id}`, ownerId, originPlanetId: source.planet.id,
-      destinationPlanetId: rally.planet.id, selectedShips: source.ships }, at, timeScale);
+      destinationPlanetId: rally.planet.id, selectedShips: ships }, at, timeScale);
     if (!trial.ok || !trial.flight || trial.flight.arrivalAt > plan.gatherAt) continue;
     const id = `sun-prep:rally:${plan.planId}:${source.planet.id}`;
     choices.push({ must: true, candidate: { id, kind: 'plan-step', weight: utilityToWeight(2.5), payload: { planetId: source.planet.id } }, run: (current, key) => {
-      const sent = dispatchNpcDeployment(current, { requestId: key, ownerId, originPlanetId: source.planet.id, destinationPlanetId: rally.planet.id, selectedShips: source.ships }, at, timeScale);
+      const sent = dispatchNpcDeployment(current, { requestId: key, ownerId, originPlanetId: source.planet.id, destinationPlanetId: rally.planet.id, selectedShips: ships }, at, timeScale);
       if (!sent.ok) return { state: sent.state, started: false, reason: sent.reason, planetId: source.planet.id };
       const fresh = activeNpcSunPrep(sent.state, plan.allianceId) ?? plan;
-      journal({ at, ownerId, planId: plan.planId, step: 'rally', detail: { population: Math.round(source.population), from: source.planet.id, to: rally.planet.id } });
+      journal({ at, ownerId, planId: plan.planId, step: 'rally', detail: { population: Math.round(population), from: source.planet.id, to: rally.planet.id } });
       return { state: replacePlan(sent.state, { ...fresh, rsvps: { ...fresh.rsvps, [ownerId]: { ...(fresh.rsvps[ownerId] ?? rsvp), rallyPlanetId: rally.planet.id } } }),
         started: true, reason: null, planetId: source.planet.id };
     } });
