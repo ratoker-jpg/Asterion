@@ -36,7 +36,7 @@ function world(seed: string, npcCount = 12, playerName = 'Dendrilion'): SaveStat
   const config = createDefaultNewGameConfig({ seed, playerName });
   const state = createInitialSaveState('production', NOW, { ...config, world: { ...config.world, npcCount } });
   // A fixed salt in place of the crypto one, so that one seed + version replays exactly.
-  return { ...state, npc: createNpcState(getNpcOwnerIds(state.espionage!.targets, state.profile.playerId), , NOW) };
+  return { ...state, npc: createNpcState(getNpcOwnerIds(state.espionage!.targets, state.profile.playerId), `salt-${seed}`, NOW) };
 }
 
 const owners = (state: SaveState) => Object.keys(state.npc!.profiles).sort();
