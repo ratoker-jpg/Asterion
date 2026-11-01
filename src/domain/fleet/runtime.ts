@@ -5,6 +5,9 @@ import { SHIP_IDS, SOLAR_SATELLITE_ID, type ShipId } from '../combat/ids.ts';
 import type { CombatFactionId } from '../combat/factions.ts';
 import { getHangarCapacity } from '../buildings/balance-v1.ts';
 
+/** One command ship of each kind on a planet: the factory's rule, kept by loading a save and by landing. */
+export const MAX_COMMANDERS_PER_PLANET = 1;
+
 export type OwnedFleetState = {
   ships: Record<ShipId, number>;
   commanders: Record<CommanderId, number>;
@@ -85,7 +88,7 @@ export function migrateFleetState(value: unknown): OwnedFleetState {
     : {};
 
   for (const id of SHIP_IDS) migrated.ships[id] = safeOwnedQuantity(ships[id]);
-  for (const id of COMMANDER_IDS) migrated.commanders[id] = Math.min(1, safeOwnedQuantity(commanders[id]));
+  for (const id of COMMANDER_IDS) migrated.commanders[id] = Math.min(MAX_COMMANDERS_PER_PLANET, safeOwnedQuantity(commanders[id]));
   return migrated;
 }
 
