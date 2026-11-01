@@ -15,7 +15,7 @@ import type { SpyTargetState } from '../domain/espionage/types.ts';
 import type { FlightRecord } from '../domain/flights/types.ts';
 import type { NpcTraits } from '../domain/npc/types.ts';
 import type { SaveState } from './contracts.ts';
-import { dispatchNpcDeployment, getNpcMissionAvailableFleet, npcDeploymentFreeCapacity } from './npc-missions.ts';
+import { dispatchNpcDeployment, getNpcMissionAvailableFleet, npcCommandersAtPlanet, npcDeploymentFreeCapacity } from './npc-missions.ts';
 import { npcDefenseValue, npcFleetValue, npcForcePower, npcPowerPerResource, type NpcUtilityContext } from './npc-utility.ts';
 
 /**
@@ -253,6 +253,8 @@ export function assessNpcPlanetThreat(state: SaveState, context: NpcUtilityConte
   const free = npcDeploymentFreeCapacity(planet);
   const sources: NpcReinforcement[] = [];
   if (free > 0) {
+    // Each command ship only where its kind is not yet, and one of a kind from all the sources together.
+    const bound = new Set(npcCommandersAtPlanet(state, ownerId, planet));
     const threatened = new Set(state.flights.records.filter((flight) => flight.phase === 'outbound' && flight.ownerId !== ownerId
       && (flight.missionId === 'attack' || flight.missionId === 'pirate-raid') && flight.arrivalAt <= arrivalAt + 30 * 60_000)
       .map((flight) => flight.destinationPlanetId));
@@ -263,7 +265,7 @@ export function assessNpcPlanetThreat(state: SaveState, context: NpcUtilityConte
         const combat = Object.fromEntries(Object.entries(available).filter(([id, count]) => count > 0 && !SKIPPED_HULLS.has(id)
           && catalog.find((entity) => entity.id === id)?.category === 'Боевой корабль')) as Partial<Record<ShipId, number>>;
         // A deployment carries at most the room the target hangar has now; commanders first, they lead the battle.
-        const home = Object.fromEntries(Object.entries(source.fleet.commanders ?? {}).filter(([, count]) => (count ?? 0) > 0)) as Partial<Record<CommanderId, number>>;
+        const home = Object.fromEntries(Object.entries(source.fleet.commanders ?? {}).filter(([id, count]) => (count ?? 0) > 0 && !bound.has(id))) as Partial<Record<CommanderId, number>>;
         const commanderPopulation = fleetPopulation(source.raceId, {}, home);
         const flyingCommanders = commanderPopulation <= free ? home : {};
         const room = free - (commanderPopulation <= free ? commanderPopulation : 0);
@@ -278,10 +280,12 @@ export function assessNpcPlanetThreat(state: SaveState, context: NpcUtilityConte
     for (const option of options) {
       if (sources.length >= b.maxReinforcementSources) break;
       // A dry run of the real command gives the arrival time and every launch check.
+      const carried = Object.fromEntries(Object.entries(option.commanders).filter(([id]) => !bound.has(id))) as Partial<Record<CommanderId, number>>;
       const trial = dispatchNpcDeployment(state, { requestId: `npc-threat-trial:${option.source.id}`, ownerId, originPlanetId: option.source.id,
-        destinationPlanetId: planet.id, selectedShips: option.ships, selectedCommanders: option.commanders }, at, timeScale);
+        destinationPlanetId: planet.id, selectedShips: option.ships, selectedCommanders: carried }, at, timeScale);
       if (!trial.ok || !trial.flight || trial.flight.arrivalAt > by) continue;
-      sources.push({ originPlanetId: option.source.id, ships: option.ships, commanders: option.commanders, arrivalAt: trial.flight.arrivalAt });
+      for (const id of Object.keys(carried)) bound.add(id);
+      sources.push({ originPlanetId: option.source.id, ships: option.ships, commanders: carried, arrivalAt: trial.flight.arrivalAt });
     }
   }
   if (sources.length) {
