@@ -663,6 +663,13 @@ export function joinNpcSunRaid(state: SaveState, ownerId: string, input: RaidJoi
   return joinRaidFor(state, owner, input, options);
 }
 
+/** The gas an NPC's fleet would pay for the flight to a Sun from this planet (the distance counts, though the time does not). */
+export function npcSunFlightGas(state: SaveState, ownerId: string, planetId: string, ships: Partial<Record<ShipId, number>>, galaxy: number, system: number, options: SunRuntimeOptions): number {
+  const owner = sunOwnerForNpcPlanet(state, ownerId, planetId);
+  if (!owner || !Object.keys(ships).length) return 0;
+  return createSunFlight(owner, { missionId: 'sun-attack', raidId: 'preview', galaxy, system, ships, requestId: 'preview', departedAt: options.now, allianceId: null }, options).gasCost;
+}
+
 /** An autonomous NPC leader or deputy declares a raid from one of its planets, by the player's rules. */
 export function launchNpcSunRaid(state: SaveState, ownerId: string, input: RaidLaunchInput, options: SunRuntimeOptions): SunActionResult {
   const owner = sunOwnerForNpcPlanet(state, ownerId, input.originPlanetId);

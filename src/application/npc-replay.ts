@@ -14,6 +14,7 @@ import type { SaveState } from './contracts.ts';
 import { applyNpcAutonomyAttention, npcAttentionActionId } from './npc-autonomy.ts';
 import { touchMember } from '../domain/command/membership.ts';
 import { ownerFlights } from './npc-knowledge-index.ts';
+import { npcSunPrepNextMoment } from './npc-sun-prep-state.ts';
 
 /**
  * Owner rule (24.10.2026): while online an NPC acts like a player, with no
@@ -52,7 +53,8 @@ export function isNpcDecisionIdle(profile: NpcProfile, event: NpcReplayEvent): b
 export function getNpcIdleUntil(world: SaveState, profile: NpcProfile, at: number): number {
   const attention = unitTrait(profile.traits.attention);
   const until = at + Math.round((10 + 30 * (1 - attention)) * 60_000);
-  return Math.max(at + 1, Math.min(until, nextOwnEventAt(world, profile.ownerId, at) ?? until));
+  // A moment of the alliance's Sun plan it gave its word for counts like its own event.
+  return Math.max(at + 1, Math.min(until, nextOwnEventAt(world, profile.ownerId, at) ?? until, npcSunPrepNextMoment(world, profile.ownerId, at) ?? until));
 }
 
 /** The owner's next own completion or arrival after `at` (a building, an order, research, a fleet). */
@@ -99,7 +101,7 @@ export function getNpcNextLookAt(world: SaveState, profile: NpcProfile, at: numb
   const event = nextOwnEventAt(world, profile.ownerId, at);
   const reaction = Math.round(lerp(5_000, 60_000) + random() * lerp(25_000, 120_000));
   const next = event !== null ? Math.min(rhythm, event + reaction) : rhythm;
-  return Math.max(at + NPC_REPLAY_DECISION_MIN_DELAY_MS, next);
+  return Math.max(at + NPC_REPLAY_DECISION_MIN_DELAY_MS, Math.min(next, npcSunPrepNextMoment(world, profile.ownerId, at) ?? next));
 }
 
 export type NpcReplayBoundaryEvent = Readonly<NpcSessionEvent & { sessionEndsAt: number }>;

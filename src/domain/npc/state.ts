@@ -1,4 +1,5 @@
 import { isNpcGrudge } from './grudges.ts';
+import { NPC_VISIT_SHIFT_MAX_MS } from './calendar.ts';
 import { isCommanderId } from '../combat/commanders.ts';
 import { createSeededRandom, randomInteger } from '../world/random.ts';
 import {
@@ -180,6 +181,10 @@ function isActivity(value: unknown): value is NpcActivityState {
   return isRecord(value) && inUnitRange(value.propensity) && isCount(value.completedSessions)
     && isCount(value.missedSessions) && isTimestamp(value.updatedAt);
 }
+function isVisitShift(value: unknown): boolean {
+  return isRecord(value) && Number.isSafeInteger(value.localDay) && Number.isSafeInteger(value.index) && Number(value.index) >= 0
+    && Number.isSafeInteger(value.deltaMs) && Math.abs(Number(value.deltaMs)) <= NPC_VISIT_SHIFT_MAX_MS;
+}
 function isSession(value: unknown): value is NpcSessionState {
   return isRecord(value) && Number.isSafeInteger(value.timezoneOffsetMinutes)
     && Number(value.timezoneOffsetMinutes) >= MIN_TIMEZONE_OFFSET_MINUTES
@@ -188,6 +193,7 @@ function isSession(value: unknown): value is NpcSessionState {
     && isNullableTimestamp(value.sessionStartedAt) && isNullableTimestamp(value.sessionEndsAt)
     && isNullableTimestamp(value.lastBoundaryAt)
     && (value.idleUntil === undefined || isTimestamp(value.idleUntil))
+    && (value.visitShifts === undefined || (Array.isArray(value.visitShifts) && value.visitShifts.every(isVisitShift)))
     && (value.active
       ? isTimestamp(value.sessionStartedAt) && isTimestamp(value.sessionEndsAt) && value.sessionEndsAt >= value.sessionStartedAt
       : value.sessionStartedAt === null && value.sessionEndsAt === null);
