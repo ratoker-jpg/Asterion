@@ -525,7 +525,11 @@ export function createCloudServer(config: ServerConfig) {
           } };
         }
         writeCampaign(config.dataDir, campaign);
-        if (campaign.live) startRun(campaign, false);
+        if (campaign.live) {
+          // A game older than every kept release: its world goes on in this one instead of waiting for a runner that will not come.
+          const from = runnerFor(campaign.live.gameVersion) ? null : migrateLive(campaign);
+          startRun(from ? readCampaign(config.dataDir, id)! : campaign, false, from ?? undefined);
+        }
         config.log(`upload ${id}: revision ${added.snapshot.revision} (${Math.round(stats.gzBytes / 1024)} KiB gz, game ${gameVersion}${left ? ', player left' : ''}${force ? ', forced' : ''})`);
         try { rotate(); } catch (error) { config.log(`rotation failed: ${String(error)}`); }
         return { revision: added.snapshot.revision, campaign: describeCampaign(readCampaign(config.dataDir, id)!, Date.now()) };

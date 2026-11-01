@@ -318,6 +318,22 @@ test('a new release that cannot load the world: it goes on in the release it liv
   assert.equal((await claimWorld(base, id, 1, VERSION)).status, 200, 'the game of its version takes it as before');
 });
 
+test('a world left by a game older than every kept release goes on in this release', async (t) => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'asterion-cloud-'));
+  t.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+  const CURRENT = '1.4.0';
+  const cloud = createCloudServer(config(dataDir, { version: CURRENT, runnerOverride: { ...config(dataDir).runnerOverride!, version: CURRENT } }));
+  const base = `http://127.0.0.1:${await cloud.listen()}`;
+  t.after(() => cloud.close());
+  const id = 'slot-old-game-0001';
+  assert.equal((await upload(base, id, leftWorld(10), { 'x-asterion-left': '1', 'x-asterion-game-version': VERSION })).status, 200);
+  const view = await waitFor(async () => (await api(base, `/v1/campaigns/${id}`)).json(),
+    (item) => item.live?.status === 'running' && item.live?.lagMs !== null && item.live.lagMs < 5_000);
+  assert.equal(view.live.gameVersion, CURRENT);
+  assert.equal(view.live.migratedFrom, VERSION);
+  assert.ok(!fs.existsSync(path.join(dataDir, 'update-request')), 'no update is asked for: there is no such release to wait for');
+});
+
 test('a world far behind the clock reports how fast the server catches it up', async (t) => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'asterion-cloud-'));
   t.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
