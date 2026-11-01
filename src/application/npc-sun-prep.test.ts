@@ -20,7 +20,7 @@ import { applyCampaignRuntimeForCatchup } from './npc-catchup-runner.ts';
 import { getNpcMissionCandidates } from './npc-mission-policy.ts';
 import { getNpcMissionAvailableFleet } from './npc-missions.ts';
 import { activeNpcSunPrep, npcSunPrepNextMoment, withoutNpcSunPrepHold, NPC_SUN_PREP_BALANCE } from './npc-sun-prep-state.ts';
-import { chooseNpcSunForRaid, getNpcSunPrepChoices, npcResponsiveness, pickNpcGatherTime, refreshNpcSunPrep } from './npc-sun-prep.ts';
+import { chooseNpcSunForRaid, getNpcSunPrepChoices, npcResponsiveness, npcSunPrepSavesGas, pickNpcGatherTime, refreshNpcSunPrep } from './npc-sun-prep.ts';
 import { createNpcUtilityContext } from './npc-utility.ts';
 import { createInitialSaveState, loadSavedState, serializeSaveForStorage } from './persistence.ts';
 import { currentSunRaidState, npcSunFlightGas, reconcileSunRaids, sunFleetPopulation } from './sun-raid.ts';
@@ -369,6 +369,24 @@ test('a member away says when it could come, and a moved T suits it (its answer,
   const T = pickNpcGatherTime(profile, from, from + 12 * HOUR, 30 * 60_000, [told])!;
   assert.ok(T >= later.startAt, 'the leader picks the visit that suits the member who told');
   assert.ok(pickNpcGatherTime(profile, from, from + 12 * HOUR, 30 * 60_000)! < T, 'without an answer it takes the earliest');
+});
+
+test('near T a member short of gas keeps it: not earlier, not with enough, not without a promise', () => {
+  const { owners } = world();
+  const team = owners.slice(0, 3);
+  const { state: initial, leader } = ready(team);
+  let state = startPlan(initial, leader, NOW);
+  const member = team[1]!;
+  state = act(state, member, NOW + HOUR);
+  const plan = planOf(state, leader);
+  assert.ok(plan.rsvps[member]!.population > 0);
+  const near = plan.gatherAt - HOUR;
+  assert.equal(npcSunPrepSavesGas(state, member, near, 1), false, 'the store is full');
+  const planet = home(state, member);
+  const dry = withTarget(state, { ...planet, resources: { ...planet.resources, gas: 10 } });
+  assert.equal(npcSunPrepSavesGas(dry, member, near, 1), true, 'short of gas near T');
+  assert.equal(npcSunPrepSavesGas(dry, member, plan.gatherAt - 3 * HOUR, 1), false, 'not this long before T');
+  assert.equal(npcSunPrepSavesGas(dry, owners[3]!, near, 1), false, 'not for one who promised nothing');
 });
 
 test('gather time: the visit must hold half the gathering', () => {

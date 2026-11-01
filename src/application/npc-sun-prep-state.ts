@@ -37,6 +37,8 @@ export const NPC_SUN_PREP_BALANCE = Object.freeze({
   budgetShare: 0.6,
   /** Orders one promise may place: a shortfall that two orders cannot close is told to the leader, not paid for look after look. */
   maxOrders: 2,
+  /** From this long before T a member short of gas for its share stops other spending: the flight is paid at the gathering. */
+  saveGasLeadHours: 2,
   /** Before the recheck a member counts on its gas store being this full by T (income is still to come). */
   gasStoreShare: 0.6,
   /** A cautious owner just hit (threat above this) keeps back part of its force. */

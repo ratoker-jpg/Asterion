@@ -24,7 +24,7 @@ import { dispatchNpcDeployment, dispatchNpcGas, dispatchNpcMission, dispatchNpcS
 import { beginFlightReturn } from '../domain/flights/runtime.ts';
 import { getNpcPirateCandidates, dispatchNpcPirateMission } from './npc-pirates.ts';
 import { getNpcEndgameChoices } from './npc-endgame.ts';
-import { getNpcSunPrepChoices, refreshNpcSunPrep, scheduleNpcSunPrepCheck } from './npc-sun-prep.ts';
+import { getNpcSunPrepChoices, npcSunPrepSavesGas, refreshNpcSunPrep, scheduleNpcSunPrepCheck } from './npc-sun-prep.ts';
 import { getNpcSpaceportCandidates, getNpcSpaceportCommanderCandidates, startNpcSpaceportUpgrade } from './npc-spaceport.ts';
 import { npcCombatPriority, npcEnemyShape, npcMainCommander } from './npc-commanders.ts';
 import { COMMANDER_IDS, type CommanderId } from '../domain/combat/commanders.ts';
@@ -574,6 +574,13 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
         return { state: result.state, started: result.ok, reason: result.reason };
       },
     });
+  }
+  // Gas for a promised raid: what spends it waits until the fleet has left.
+  if (state.npcStrategy && npcSunPrepSavesGas(state, ownerId, at, timeScale)) {
+    for (let index = choices.length - 1; index >= 0; index -= 1) {
+      const { candidate, must } = choices[index]!;
+      if (!must && ['economy', 'production', 'science', 'colonize', 'attack', 'pve', 'recon'].includes(candidate.kind)) choices.splice(index, 1);
+    }
   }
   // Catalog size and number of colonies must not multiply an action family's
   // total propensity: within a family the estimates share it. The family's

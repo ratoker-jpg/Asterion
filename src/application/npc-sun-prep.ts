@@ -408,7 +408,7 @@ function answerInvitation(state: SaveState, profile: NpcProfile, utility: NpcUti
  * truth of the losses and of the orders that will not finish in time.
  */
 function refreshPromise(state: SaveState, profile: NpcProfile, utility: NpcUtilityContext, plan: NpcSunRaidPrepPlan, rsvp: NpcSunRsvp, at: number, timeScale: number): SaveState {
-  if (rsvp.reason === 'away' || rsvp.pledged !== undefined || at >= plan.gatherAt) return state;
+  if (rsvp.reason === 'away' || rsvp.pledged !== undefined || plan.phase === 'gathering' || plan.phase === 'flying' || at >= plan.gatherAt + NPC_SUN_PREP_BALANCE.waitingLookMs) return state;
   const caps = sunRaidCapsOf(state);
   const planets = ownPlanets(state, profile.ownerId);
   const truth = at >= plan.gatherAt - NPC_SUN_PREP_BALANCE.recheckLeadMinutes * MINUTE;
@@ -436,6 +436,24 @@ export function refreshNpcSunPrep(state: SaveState, profile: NpcProfile, utility
   // A plan of its own may outlive its alliance or its role: it is the owner's to close.
   const own = next.npcStrategy!.plans[profile.ownerId]?.find((plan) => plan.status === 'active');
   return own ? advanceOwnPlan(next, own, profile, utility, at, timeScale) : next;
+}
+
+/**
+ * A member near T whose planets could not pay the flight of its promise keeps
+ * its gas, as a player does before a raid: this look plans nothing else that
+ * spends it. Last-hour purchases were what left promised gatherings short.
+ */
+export function npcSunPrepSavesGas(state: SaveState, ownerId: string, at: number, timeScale: number): boolean {
+  const entry = npcSunPrepOfOwner(state, ownerId);
+  if (!entry?.rsvp || entry.rsvp.population <= 0 || entry.rsvp.pledged !== undefined || entry.plan.phase === 'flying') return false;
+  if (at < entry.plan.gatherAt - NPC_SUN_PREP_BALANCE.saveGasLeadHours * HOUR) return false;
+  const options = sunOptions(at, timeScale);
+  for (const planet of ownPlanets(state, ownerId)) {
+    const ships = npcSunForce(state, ownerId, planet.id, planet.raceId, 1, entry.rsvp.population);
+    // A margin over the bare price: income also pays what is still landing here.
+    if (npcSunFlightGas(state, ownerId, planet.id, ships, entry.plan.galaxy, entry.plan.system, options) * 1.2 > planet.resources.gas) return true;
+  }
+  return false;
 }
 
 /** Whether the leader thinks about a new plan at this look; it writes the next time (once a look at most). */
