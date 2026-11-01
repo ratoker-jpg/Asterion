@@ -46,7 +46,7 @@ export const NPC_PACT_BALANCE = Object.freeze({
   checkHours: 4,
   giftCheckHours: 6,
   /** The proposer sets the strike this far ahead, and waits this long for the answer. */
-  minLeadHours: 6,
+  minLeadHours: 3,
   maxLeadHours: 30,
   answerHours: 6,
   /** Partners agree on a time only roughly; the second wave comes this much after the first. */
