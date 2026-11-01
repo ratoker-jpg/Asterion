@@ -92,6 +92,9 @@ function drive(world: World, minutes: number, onLook?: (state: SaveState, at: nu
     state = { ...state, espionage: { ...state.espionage!, targets } };
     state = reconcileFlights(state, at, () => 0.5, { mode: 'production', testTimeScale: 1 }).state;
     if (onLook) state = onLook(state, at);
+    // This drive never calls a probe home: a probe that saw nothing is followed by a later one that does.
+    const newest = (state.espionage?.reports ?? []).filter((report) => report.ownerId === world.owner && report.targetPlanetId === world.target).at(-1);
+    if (newest && newest.fleet === undefined && newest.defense === undefined) state = withReport(state, world.owner, world.planets[0]!, getEspionageTargets(state.espionage)[world.target]!, at);
     const profile = state.npc!.profiles[world.owner]!;
     state = refreshNpcPlans(state, profile, createNpcUtilityContext(state, profile, at, 1), at, 1);
     const utility = createNpcUtilityContext(state, profile, at, 1);

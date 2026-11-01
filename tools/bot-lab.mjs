@@ -241,7 +241,7 @@ export function describeWorld(state, journal = [], tally = null) {
   for (const entry of decisions.filter((item) => item.ok === 0)) refusals[entry.r ?? '?'] = (refusals[entry.r ?? '?'] ?? 0) + 1;
   const styles = journal.filter((entry) => entry.k === 'style');
   // The outcome ledger (every owner): strategic plans and battles.
-  const plans = journal.filter((entry) => entry.k === 'plan' && entry.d?.tp);
+  const plans = journal.filter((entry) => entry.k === 'plan' && entry.d?.tp === 'strike');
   const attacks = journal.filter((entry) => entry.k === 'battle' && entry.d?.side === 'attacker');
   const defences = journal.filter((entry) => entry.k === 'battle' && entry.d?.side === 'defender');
   const reasons = {};
