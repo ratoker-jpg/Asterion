@@ -65,6 +65,13 @@ export const NPC_STRIKE_BALANCE = Object.freeze({
   maxDeadlineHours: 48,
   /** Production split into this many chunks when it is spread over planets. */
   chunks: 24,
+  /**
+   * A report that did not see the fleet (below «full» quality) leaves the
+   * owner guessing: it plans for a fleet as strong as this share of the
+   * defence it saw. Without it, probes at the recheck kept revealing the home
+   * fleet and cancelled half the plans after the gathering.
+   */
+  unseenFleetShare: 1,
   /** Free hangar room the rally planet needs over the shares still to arrive. */
   hangarSlack: 1.15,
 });
@@ -213,13 +220,11 @@ export function draftNpcStrike(state: SaveState, profile: NpcProfile, utility: N
     const target = state.espionage?.targets?.[report.targetPlanetId];
     if (!target || target.ownerId !== report.targetOwnerId || target.ownerId === ownerId) continue;
     if (at - report.createdAt > NPC_STRIKE_BALANCE.createReportHours * HOUR / Math.max(1, timeScale)) continue;
-    // Only a report that saw both the fleet and the defence: a plan built on half the picture is cancelled by the next probe.
-    if (report.fleet === undefined || report.defense === undefined) continue;
     const relation = getOwnerRelation(state, ownerId, target.ownerId);
     if (relation !== 'enemy' && relation !== 'neutral') continue;
     // The owner points rule decides at launch; a target outside the band is no plan.
     if (!evaluatePlanetAttackEligibility(state, ownerId, target.ownerId).allowed) continue;
-    const enemy = estimateReportedPower(utility, report, empirePower);
+    const enemy = believedPower(utility, report, empirePower);
     const wanted = wantedWin(utility, target.ownerId);
     if (estimateWinProbability(singleBest, enemy) >= wanted) continue; // one planet can do it: an ordinary attack
     const needed = enemy * (wanted / (1 - wanted)) ** (1 / 2.5);
@@ -281,7 +286,7 @@ export function draftNpcStrike(state: SaveState, profile: NpcProfile, utility: N
     const revenge = estimateRevengeEconomics(utility, rally, report, force);
     const gate = utility.rivalGateHosts?.has(target.id) ?? false;
     if (!economics.worthFlight && !revenge.worthFlight && !gate) continue;
-    const win = estimateWinProbability(npcForcePower(raceId, force), estimateReportedPower(utility, report, npcForcePower(raceId, force)));
+    const win = estimateWinProbability(npcForcePower(raceId, force), believedPower(utility, report, npcForcePower(raceId, force)));
     // The recheck judges by this same belief: a plan it would cancel at once is not worth starting.
     if (win < NPC_STRIKE_BALANCE.createMargin * wanted) continue;
     // The haul is what the holds carry home, not the whole half of the target's stock.
@@ -299,7 +304,7 @@ export function draftNpcStrike(state: SaveState, profile: NpcProfile, utility: N
       targetPlanetId: target.id, targetOwnerId: target.ownerId, rallyPlanetId: rally.id,
       reserve: Object.fromEntries(contributing.sort(([x], [y]) => (x < y ? -1 : 1))),
       orders, forecast: { win: round3(win), gain: Math.round(gain), loss: Math.round(npcFleetValue(raceId, force) * ((1 - win) * 0.85 + win * 0.1)), readyAt: Math.round(ready) },
-      knowledgeAt: report.createdAt, sent: [],
+      knowledgeAt: report.createdAt, sent: [], ...(guessesFleet(report) ? { fleetGuess: true } : {}),
     } };
   }
   return best;
@@ -339,6 +344,14 @@ function closePlan(state: SaveState, plan: NpcStrikePlan, status: NpcStrikePlan[
   } });
   return next;
 }
+
+/** What the owner believes the target can field, with a guess for a fleet its report did not see. */
+function believedPower(utility: NpcUtilityContext, report: SpyReportSnapshot, own: number, guess = guessesFleet(report)): number {
+  const reported = estimateReportedPower(utility, report, own);
+  return guess ? reported * (1 + NPC_STRIKE_BALANCE.unseenFleetShare) : reported;
+}
+
+const guessesFleet = (report: SpyReportSnapshot) => report.fleet === undefined && report.defense !== undefined;
 
 /** The newest own report on the plan's target. */
 function latestReport(utility: NpcUtilityContext, plan: NpcStrikePlan): SpyReportSnapshot | undefined {
@@ -401,7 +414,8 @@ export function refreshNpcPlans(state: SaveState, profile: NpcProfile, utility: 
       const rally = next.espionage!.targets![plan.rallyPlanetId]!;
       const force = totalForce(plan);
       const own = npcForcePower(rally.raceId, force);
-      const win = estimateWinProbability(own, estimateReportedPower(utility, report, own));
+      // The same belief the plan was made with: a fleet seen then is not guessed now, a guessed one stays guessed.
+      const win = estimateWinProbability(own, believedPower(utility, report, own, report.fleet === undefined && (plan.fleetGuess ?? false)));
       const checked = { ...plan, knowledgeAt: report.createdAt };
       next = win < NPC_STRIKE_BALANCE.recheckMargin * wantedWin(utility, plan.targetOwnerId)
         ? closePlan(next, checked, 'cancelled', at, 'target-stronger')

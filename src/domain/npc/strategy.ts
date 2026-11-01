@@ -54,6 +54,8 @@ export type NpcStrikePlan = Readonly<{
   knowledgeAt: number;
   /** Planets whose share already left for the rally planet. */
   sent: readonly string[];
+  /** The report it was made from did not see the fleet: the plan sized it by a guess (kept at the recheck). */
+  fleetGuess?: true;
   launchFlightId?: string;
   closedAt?: number;
   /** Why it ended other than by its attack: intel-stale, target-stronger, target-gone, deadline… */
@@ -120,6 +122,7 @@ function isPlan(value: unknown): value is NpcPlan {
     && Array.isArray(value.orders) && value.orders.every(isOrder)
     && Array.isArray(value.sent) && value.sent.every(isId)
     && isRecord(forecast) && isFiniteNumber(forecast.win) && isFiniteNumber(forecast.gain) && isFiniteNumber(forecast.loss) && isTime(forecast.readyAt)
+    && (value.fleetGuess === undefined || value.fleetGuess === true)
     && (value.launchFlightId === undefined || isId(value.launchFlightId))
     && (value.closedAt === undefined || isTime(value.closedAt))
     && (value.reason === undefined || typeof value.reason === 'string')
