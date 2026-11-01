@@ -24,6 +24,9 @@ import type { ScienceId } from '../domain/science/types.ts';
 import { npcFlagshipOwners } from '../domain/npc/doctrine.ts';
 import { npcGrudgeIntensity } from '../domain/npc/grudges.ts';
 import { NPC_COMMANDER_BALANCE, npcMainCommander } from './npc-commanders.ts';
+import { npcActivePartners, npcReactionOf } from './npc-pact-state.ts';
+import { npcRelationViews } from './npc-relations.ts';
+import type { NpcRelationView } from '../domain/npc/relations.ts';
 import type { CommanderId } from '../domain/combat/commanders.ts';
 
 /**
@@ -110,6 +113,12 @@ export type NpcUtilityContext = Readonly<{
   ownGateHosts?: ReadonlySet<string>;
   /** Present for the planet-destroyer rush doctrine: what still stands between the owner and its strongest hull. */
   flagship?: NpcFlagshipPlan;
+  /** What the owner thinks of others it has an opinion on (absent: a stranger everywhere). */
+  relations?: ReadonlyMap<string, NpcRelationView>;
+  /** Owners it stands in a joint strike with. */
+  partners?: ReadonlySet<string>;
+  /** Decided to hit back after being robbed: the one it blames. */
+  counterOffender?: string;
 }>;
 
 /** The path to the faction's strongest hull: shipyard level, laboratory level and every science level on the way. */
@@ -212,6 +221,8 @@ export function createNpcUtilityContext(state: SaveState, profile: NpcProfile, a
     if (flight.missionId === 'recycle' && (flight.phase === 'outbound' || flight.phase === 'returning')) recyclerCapacity += flight.recycleCapacity ?? 0;
   }
   const gates = npcGateHosts(state, ownerId);
+  const reaction = npcReactionOf(state, ownerId, at);
+  const counterOffender = reaction?.kind === 'counter' ? reaction.offender : undefined;
   const home = ownPlanets.find((planet) => planet.id === `${ownerId}-planet`) ?? ownPlanets[0];
   const flagship = home && npcFlagshipOwners(state.npc).has(ownerId)
     ? npcFlagshipPlan(home.raceId, state.npcScience?.owners[ownerId]?.levels ?? home.ownerProfile?.scienceLevels ?? {},
@@ -220,6 +231,9 @@ export function createNpcUtilityContext(state: SaveState, profile: NpcProfile, a
   const base = {
     ...(flagship ? { flagship } : {}),
     profile, at, timeScale,
+    relations: npcRelationViews(state, profile, at),
+    ...(npcActivePartners(state, ownerId).size ? { partners: npcActivePartners(state, ownerId) } : {}),
+    ...(counterOffender ? { counterOffender } : {}),
     rivalGateHosts: gates.rival,
     ownGateHosts: gates.own,
     nearbyDebris: [...nearby.values()].reduce((sum, value) => sum + value, 0),
@@ -653,14 +667,28 @@ export function estimateAttackUtility(context: NpcUtilityContext, origin: SpyTar
   // it is worth more than any haul, and distance does not matter.
   if (context.rivalGateHosts?.has(targetPlanetId)) return 2.5 + 0.5 * unit(traits.aggression) + Math.min(1, Math.max(0, raid.net) / context.dayValue);
   const revenge = estimateRevengeEconomics(context, origin, report, selectedShips);
+  const social = npcAttackRegardBias(context, report.targetOwnerId);
   // Revenge (owner rule 26.10.2026): hurting an offender is worth a loss, and it comes first.
   const revengeValue = revenge.worthFlight
-    ? revenge.net / context.dayValue + NPC_REVENGE_BALANCE.priority * revenge.intensity + 0.5 * (unit(traits.aggression) - 0.5) - 0.3 * remoteness
+    ? revenge.net / context.dayValue + NPC_REVENGE_BALANCE.priority * revenge.intensity + 0.5 * (unit(traits.aggression) - 0.5) - 0.3 * remoteness + social
     : Number.NEGATIVE_INFINITY;
   // Taste for war never turns a pointless raid (63 resources) into a good one.
   if (!raid.worthFlight) return Number.isFinite(revengeValue) ? revengeValue : -2;
   return Math.max(revengeValue, raid.net / context.dayValue + 0.5 * (unit(traits.aggression) - 0.5)
-    + 0.4 * (strategyOf(context).war - 0.3) - 0.5 * remoteness);
+    + 0.4 * (strategyOf(context).war - 0.3) - 0.5 * remoteness + social);
+}
+
+/**
+ * What the owner thinks of a target, as utility: a friend is a poor target, a
+ * partner a worse one, an enemy of old a better one, and one who has shown it
+ * bites weighs on the cautious. Zero for a stranger.
+ */
+export function npcAttackRegardBias(context: NpcUtilityContext, targetOwnerId: string | undefined): number {
+  if (!targetOwnerId) return 0;
+  const view = context.relations?.get(targetOwnerId);
+  const partner = context.partners?.has(targetOwnerId) ? 1.5 : 0;
+  if (!view) return partner ? -partner : 0;
+  return -0.9 * Math.max(0, view.regard) + 0.25 * Math.max(0, -view.regard) - 0.4 * view.fear * (1 - unit(context.profile.traits.riskTolerance)) - partner;
 }
 
 /**
@@ -689,7 +717,9 @@ export function npcRevengeIntensity(context: NpcUtilityContext, targetOwnerId: s
   const present = npcGrudgeIntensity(context.profile.grudges?.[targetOwnerId], context.dayValue);
   // An old score from an earlier round weighs on a target the owner is looking at anyway; it reveals nothing.
   const old = context.profile.inherited?.relations[targetOwnerId]?.resentment ?? 0;
-  return old > present ? old : present;
+  // One who decided to hit back holds it against the one it blames all the more.
+  const counter = context.counterOffender === targetOwnerId ? 0.25 : 0;
+  return Math.min(1, (old > present ? old : present) + counter);
 }
 
 /**
@@ -788,7 +818,7 @@ export function chooseNpcAttackForce(context: NpcUtilityContext, origin: SpyTarg
   // A lesson from an earlier round about this race moves the margin a little; the report still decides.
   const lesson = context.profile.inherited?.lessons.find((item) => item.family === 'attack' && item.enemyRace === report.targetRaceId)?.effect ?? 0;
   const wanted = Math.max(NPC_REVENGE_BALANCE.minWin, 0.6 + 0.3 * (1 - unit(context.profile.traits.riskTolerance))
-    - NPC_REVENGE_BALANCE.marginDrop * grudge - 0.05 * lesson);
+    - NPC_REVENGE_BALANCE.marginDrop * grudge - 0.05 * lesson + 0.1 * (context.relations?.get(report.targetOwnerId)?.fear ?? 0));
   const winWithAll = estimateWinProbability(estimateForcePower(stacks(catalog, all)), enemy);
   if (winWithAll < wanted) return grudge > 0 && winWithAll >= NPC_REVENGE_BALANCE.minWin ? all : null;
   // Against a Gate the owner throws everything it has: the campaign is at stake.

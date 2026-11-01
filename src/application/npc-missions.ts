@@ -15,6 +15,7 @@ import { createColonyPlanetRuntime } from './owned-planets.ts';
 import { npcColonyIdentity } from './npc-identity.ts';
 import { collectAsteroidGas } from './asteroid-gas-collection.ts';
 import { getOwnerRelation } from './owner-relations.ts';
+import { recordNpcGiftDelivery } from './npc-pact-state.ts';
 import { getExplorationTarget } from './exploration.ts';
 import { creditNpcExplorationReturn } from './exploration-bot01.ts';
 import { syncSpyTargetCommanderCounts } from '../domain/espionage/runtime.ts';
@@ -538,6 +539,8 @@ export function dispatchNpcSpaceFlight(state: SaveState, command: NpcSpaceFlight
 }
 
 export type NpcTransportCommand = Readonly<{
+  /** To another NPC's planet (a friend or a partner) rather than one's own. */
+  toFriend?: boolean;
   requestId: string;
   ownerId: string;
   originPlanetId: string;
@@ -561,7 +564,9 @@ export function dispatchNpcTransport(state: SaveState, command: NpcTransportComm
       : fail(state, 'request-id-owned-by-another-flight');
   }
   const origin = validNpcOrigin(state, command.ownerId, command.originPlanetId);
-  const target = validNpcOrigin(state, command.ownerId, command.destinationPlanetId);
+  // A friend's planet, by the player's own rule (`resolveTransportTarget`): any inhabited planet takes a transport.
+  // Only another NPC's: nothing is ever offered to the player (owner decision 10).
+  const target = command.toFriend ? foreignNpcPlanet(state, command.ownerId, command.destinationPlanetId) : validNpcOrigin(state, command.ownerId, command.destinationPlanetId);
   if (!origin) return fail(state, 'npc-origin-not-found');
   if (!target || target.id === origin.id) return fail(state, 'target-not-available');
   const profile = ownerProfile(state, origin);
@@ -588,7 +593,7 @@ export function dispatchNpcTransport(state: SaveState, command: NpcTransportComm
     destinationOwnerId: target.ownerId,
     targetPlanetName: target.name,
     targetOwnerName: target.ownerName,
-    targetRelation: 'self',
+    targetRelation: command.toFriend ? getOwnerRelation(state, command.ownerId, target.ownerId) : 'self',
     targetKind: 'npc',
     selectedShips,
     departedAt: at,
@@ -861,11 +866,40 @@ export function resolveNpcGasArrival(state: SaveState, flight: FlightRecord, at:
     reason: collection.found ? null : 'target-unavailable', flight: arrived };
 }
 
+/** Another NPC's planet still held by the same owner it was meant for. */
+function foreignNpcPlanet(state: SaveState, ownerId: string, planetId: string): SpyTargetState | undefined {
+  const target = state.espionage?.targets?.[planetId];
+  return target && target.kind === 'npc' && target.ownerId !== ownerId && Boolean(state.npc?.profiles[target.ownerId]) ? target : undefined;
+}
+
+/** A transport to a friend, by the player's rule: the planet's stores take what fits, the rest burns, debris has nowhere to go. */
+function resolveNpcFriendTransportArrival(state: SaveState, flight: FlightRecord): NpcMissionResult {
+  const stored = flight.destinationPlanetId ? foreignNpcPlanet(state, flight.ownerId!, flight.destinationPlanetId) : undefined;
+  const target = stored?.ownerId === flight.destinationOwnerId ? stored : undefined;
+  const cargo: TransportCargo = { ...(flight.cargo ?? { metal: 0, minerals: 0, gas: 0, debris: 0 }) };
+  let next = state;
+  let accepted = 0;
+  if (target) {
+    const delivery = getCappedDelivery({ metal: target.resources.metal, minerals: target.resources.minerals, gas: target.resources.gas }, getStorageCapacities(target.buildings), cargo);
+    next = setTarget(next, { ...target, resources: { ...target.resources, ...delivery.resources } });
+    accepted = delivery.accepted.metal + delivery.accepted.minerals + delivery.accepted.gas;
+  }
+  const returning = beginFlightReturn(next.flights, flight.id, flight.arrivalAt, target ? 'normal-return' : 'target-unavailable');
+  const turned = returning.records.find((record) => record.id === flight.id)!;
+  const arrived: FlightRecord = {
+    ...turned, arrivedAt: flight.arrivalAt, cargo: { metal: 0, minerals: 0, gas: 0, debris: 0 },
+    cargoState: target ? 'delivered' : 'voided', deliveredAt: flight.arrivalAt, completionReason: target ? 'normal-return' : 'target-unavailable',
+  };
+  next = recordNpcGiftDelivery(setFlight({ ...next, flights: returning }, arrived), arrived, target, accepted, flight.arrivalAt);
+  return { state: next, ok: Boolean(target), reason: target ? null : 'target-unavailable', flight: arrived };
+}
+
 /** Unloads an NPC transport into its own destination planet; anything that does not fit flies back. */
 export function resolveNpcTransportArrival(state: SaveState, flight: FlightRecord, at: number): NpcMissionResult {
   if (flight.ownerSide !== 'npc' || !flight.ownerId || flight.missionId !== 'transport' || flight.phase !== 'outbound' || at < flight.arrivalAt) {
     return fail(state, 'invalid-arrival');
   }
+  if (flight.destinationOwnerId && flight.destinationOwnerId !== flight.ownerId) return resolveNpcFriendTransportArrival(state, flight);
   const target = flight.destinationPlanetId ? validNpcOrigin(state, flight.ownerId, flight.destinationPlanetId) : undefined;
   let next = state;
   let remaining: TransportCargo = { ...(flight.cargo ?? { metal: 0, minerals: 0, gas: 0, debris: 0 }) };

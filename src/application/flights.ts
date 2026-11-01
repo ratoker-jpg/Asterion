@@ -136,6 +136,7 @@ import {
 } from './attack.ts';
 import { dispatchPirateFlight, resolvePirateFlightAtTarget } from './pirates.ts';
 import { collectAsteroidGas } from './asteroid-gas-collection.ts';
+import { npcHelpWeight, recordNpcHelp } from './npc-relations.ts';
 import { resolveNpcDeploymentArrival, resolveNpcGasArrival, resolveNpcMissionArrival, resolveNpcRecycleArrival, resolveNpcTransportArrival, settleNpcMissionReturn } from './npc-missions.ts';
 import { resolveNpcPirateArrival } from './npc-pirates.ts';
 import { resolveNpcAidArrival, settleNpcAidReturn } from './npc-aid.ts';
@@ -3174,6 +3175,7 @@ export function reconcileFlights(
             units: accepted,
           }, now),
         };
+        next = recordNpcHelp(next, aid.senderOwnerId, aid.recipientOwnerId, accepted, npcHelpWeight(target.runtime.buildings ?? {}, accepted), arrivalAt);
         const delivered: FlightRecord = {
           ...current,
           aid: { ...aid, creditedUnits: accepted },
@@ -3223,6 +3225,11 @@ export function reconcileFlights(
             cargo,
           );
           next = updatePlanetCargoState(next, target, delivery.resources, cargo.debris);
+          // An NPC remembers who brought it something (owner decision 10): what its stores took, not what was sent.
+          if (target.storage === 'foreign' && target.ownerId && next.npc?.profiles[target.ownerId]) {
+            const taken = delivery.accepted.metal + delivery.accepted.minerals + delivery.accepted.gas;
+            next = recordNpcHelp(next, next.profile.playerId, target.ownerId, taken, npcHelpWeight(target.runtime.buildings ?? {}, taken), arrivalAt);
+          }
           const delivered: FlightRecord = {
             ...current,
             arrivedAt: arrivalAt,

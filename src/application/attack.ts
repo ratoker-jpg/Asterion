@@ -30,6 +30,8 @@ import { recordNpcGrievance } from '../domain/npc/grudges.ts';
 import { battleLoot, defenderBattleLoss, isGrievanceBattle, sideDestroyedValue } from './npc-grudges.ts';
 import { getNpcJournalSink } from './npc-journal.ts';
 import { resolveNpcPlanBattle } from './npc-plans.ts';
+import { breakNpcPactByAttack } from './npc-pact-state.ts';
+import { recordNpcBattleRelations } from './npc-relations.ts';
 import type { AttackLaunchSnapshot, AttackLoot, AttackResolution } from '../domain/attack/types.ts';
 import { recordBattleScoreAward } from '../domain/rating/scoring.ts';
 import { isPirateShipId } from '../domain/combat/side-entity.ts';
@@ -425,10 +427,15 @@ function rememberNpcBattle(state: SaveState, report: BattleReport, at: number, f
     }
     profiles = { ...profiles, [ownerId]: remembered };
   }
-  const next = profiles === state.npc.profiles ? state : { ...state, npc: { ...state.npc, profiles } };
+  let next = profiles === state.npc.profiles ? state : { ...state, npc: { ...state.npc, profiles } };
+  // Who attacked whom stays with those it happened to, and an attack on a partner ends their agreement.
+  if (isGrievanceBattle(report)) {
+    const defenderRace = Object.values(getEspionageTargets(state.espionage)).find((target) => target.ownerId === report.defender.playerId)?.raceId;
+    next = breakNpcPactByAttack(recordNpcBattleRelations(next, report, at, defenderBattleLoss(report, defenderRace)), report, at);
+  }
   // A strategic plan's attack: the plan closes with what the battle brought.
   const attackerId = report.attacker.playerId;
-  if (!attackerId || !state.npcStrategy?.plans[attackerId]) return next;
+  if (!attackerId || !next.npcStrategy?.plans[attackerId]) return next;
   const attackerRace = Object.values(getEspionageTargets(state.espionage)).find((target) => target.ownerId === attackerId)?.raceId;
   return resolveNpcPlanBattle(next, report, flightId, at, sideDestroyedValue(report, 'attacker', attackerRace), battleLoot(report));
 }

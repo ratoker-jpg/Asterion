@@ -1,4 +1,5 @@
 import { selectOwnerMembership } from '../domain/command/selectors.ts';
+import { recordNpcJointRaid } from './npc-relations.ts';
 import { TEST_ALLY_OWNER_ID, TEST_BOT_OWNER_ID } from '../domain/command/catalog.ts';
 import { getCombatFactionName, isCombatFactionId, type CombatFactionId } from '../domain/combat/factions.ts';
 import { getFactionCombatEntity, getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
@@ -1051,7 +1052,7 @@ function resolveRaid(state: SaveState, raid: SunRaidRecord, at: number, options:
   };
   sunRaid = appendSunEvents({ ...sunRaid, raids: sunRaid.raids.map((item) => item.id === raid.id ? { ...raid, status: 'resolved' as const, result } : item) }, events);
 
-  let next = withSunRaid(state, sunRaid);
+  let next = recordNpcJointRaid(withSunRaid(state, sunRaid), result.attackerOwnerIds ?? [], result.winner === 'attacker', at);
   for (const item of [...attackers, ...defenders]) {
     const survivors = (item.snapshot.side === 'attacker' ? attackerSurvivors : defenderSurvivors).get(item.flight.id) ?? {};
     const survivingCommanders = (item.snapshot.side === 'attacker' ? attackerCommanderSurvivors : defenderCommanderSurvivors).get(item.flight.id) ?? {};

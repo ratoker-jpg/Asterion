@@ -8,6 +8,8 @@
  * by deployments at one rally planet, the target re-scouted, then one attack —
  * or a cancellation with its reason. `sun-raid-prep`: see sun-prep.ts.
  */
+import { isNpcGiftRecord, isNpcProposal, isNpcRobberyReaction, type NpcGiftRecord, type NpcProposal, type NpcRobberyReaction } from './pacts.ts';
+import { isNpcRelationEdge, type NpcRelationEdge } from './relations.ts';
 import { isNpcSunRaidPrepPlan, type NpcSunRaidPrepPlan } from './sun-prep.ts';
 
 export const NPC_STRATEGY_VERSION = 1 as const;
@@ -37,6 +39,16 @@ export type NpcPlanForecast = Readonly<{
   readyAt: number;
 }>;
 
+/** A strike agreed with another owner (`joint-strike`): the owner's own plan, and the time it aims for. */
+export type NpcPlanPartner = Readonly<{
+  ownerId: string;
+  proposalId: string;
+  wave: 1 | 2;
+  /** About when this owner's fleet should arrive. */
+  arriveAt: number;
+  toleranceMs: number;
+}>;
+
 export type NpcStrikePlan = Readonly<{
   planId: string;
   template: 'strike';
@@ -58,6 +70,7 @@ export type NpcStrikePlan = Readonly<{
   sent: readonly string[];
   /** The report it was made from did not see the fleet: the plan sized it by a guess (kept at the recheck). */
   fleetGuess?: true;
+  partner?: NpcPlanPartner;
   launchFlightId?: string;
   closedAt?: number;
   /** Why it ended other than by its attack: intel-stale, target-stronger, target-gone, deadline… */
@@ -86,6 +99,14 @@ export type NpcStrategyState = Readonly<{
   outcomes: Readonly<Record<string, Readonly<Record<string, NpcOutcomeStat>>>>;
   /** Per owner (Sun plans) and per `strike:owner` (strike plans): the next time it considers a new plan. */
   nextCheckAt: Readonly<Record<string, number>>;
+  /** Per owner: what it thinks of others (stage E). Absent until something happened. */
+  relations?: Readonly<Record<string, readonly NpcRelationEdge[]>>;
+  /** Agreements between NPC, open ones and the last closed ones. */
+  proposals?: readonly NpcProposal[];
+  /** Transports to friends of the last days. */
+  gifts?: readonly NpcGiftRecord[];
+  /** Per owner: what it decided after being robbed. */
+  reactions?: Readonly<Record<string, NpcRobberyReaction>>;
 }>;
 
 /** Closed plans kept per owner, for the owner's own judgement and the journal. */
@@ -126,6 +147,8 @@ function isStrikePlan(value: unknown): value is NpcStrikePlan {
     && Array.isArray(value.sent) && value.sent.every(isId)
     && isRecord(forecast) && isFiniteNumber(forecast.win) && isFiniteNumber(forecast.gain) && isFiniteNumber(forecast.loss) && isTime(forecast.readyAt)
     && (value.fleetGuess === undefined || value.fleetGuess === true)
+    && (value.partner === undefined || (isRecord(value.partner) && isId(value.partner.ownerId) && isId(value.partner.proposalId)
+      && (value.partner.wave === 1 || value.partner.wave === 2) && isTime(value.partner.arriveAt) && isTime(value.partner.toleranceMs)))
     && (value.launchFlightId === undefined || isId(value.launchFlightId))
     && (value.closedAt === undefined || isTime(value.closedAt))
     && (value.reason === undefined || typeof value.reason === 'string')
@@ -146,7 +169,11 @@ export function isNpcStrategyState(value: unknown): value is NpcStrategyState {
   return isRecord(value) && value.version === NPC_STRATEGY_VERSION
     && isRecord(value.plans) && Object.values(value.plans).every((plans) => Array.isArray(plans) && plans.every(isPlan))
     && isRecord(value.outcomes) && Object.values(value.outcomes).every((stats) => isRecord(stats) && Object.values(stats).every(isStat))
-    && isRecord(value.nextCheckAt) && Object.values(value.nextCheckAt).every(isTime);
+    && isRecord(value.nextCheckAt) && Object.values(value.nextCheckAt).every(isTime)
+    && (value.relations === undefined || (isRecord(value.relations) && Object.values(value.relations).every((edges) => Array.isArray(edges) && edges.every(isNpcRelationEdge))))
+    && (value.proposals === undefined || (Array.isArray(value.proposals) && value.proposals.every(isNpcProposal)))
+    && (value.gifts === undefined || (Array.isArray(value.gifts) && value.gifts.every(isNpcGiftRecord)))
+    && (value.reactions === undefined || (isRecord(value.reactions) && Object.values(value.reactions).every(isNpcRobberyReaction)));
 }
 
 /**
