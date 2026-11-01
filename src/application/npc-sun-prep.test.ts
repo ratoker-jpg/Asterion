@@ -34,6 +34,7 @@ function world(npcCount = 4) {
   const owners = Object.keys(state.npc!.profiles).sort();
   // A new campaign draws its seeds from entropy; the plan is tested on fixed calendars of active owners.
   const profiles = Object.fromEntries(owners.map((ownerId) => [ownerId, { ...state.npc!.profiles[ownerId]!, privateSeed: `sun-prep:${ownerId}`,
+    session: { ...state.npc!.profiles[ownerId]!.session, timezoneOffsetMinutes: 0 },
     activity: { ...state.npc!.profiles[ownerId]!.activity, propensity: 0.9 } }]));
   return { state: { ...state, npc: { ...state.npc!, profiles } }, owners };
 }
@@ -164,7 +165,7 @@ test('T lies 4 to 12 hours ahead, inside one of the leader\'s own visits, and th
   assert.ok(listNpcVisits(profile, plan.gatherAt, plan.gatherAt + 1).length === 1, 'the leader is at the game at T');
   assert.equal(plan.status, 'active');
   assert.equal(plan.phase, 'invite');
-  assert.deepEqual(plan.rsvps, {}, 'nobody has answered: the leader reads answers, not calendars');
+  assert.deepEqual(Object.keys(plan.rsvps), [leader], 'only the leader has answered: it reads answers, not calendars');
   assert.equal(currentSunRaidState(planned).raids.length, 0, 'no gathering is declared ahead of time');
 });
 
@@ -333,16 +334,19 @@ function campaign(): { state: SaveState; owners: string[] } {
   const at0 = state.npcReplay!.processedThroughAt;
   applyCampaignRuntimeForCatchup(state, at0);
   const { summary: _summary, ...replay } = state.npcReplay!;
-  return { state: beginLiveWorld({ ...state, npcReplay: { ...replay, targetAt: at0 } }), owners };
+  // The plan starts with the world, so the run holds its answers, moved visits and T.
+  return { state: startPlan(beginLiveWorld({ ...state, npcReplay: { ...replay, targetAt: at0 } }), owners[0]!, at0), owners };
 }
 
 /**
- * The save to compare, without the pirates' threat clock: it is known to count
- * by slices on main as well, with no plan in the world (NPC_LIVING_PLAYERS_PR1_REPORT).
+ * The save to compare, without two things that count by slices on main as well,
+ * with no plan in the world: the pirates' threat clock (NPC_LIVING_PLAYERS_PR1_REPORT)
+ * and the absence summary (a war and its truce within one slice count as none).
  */
 function comparable(state: SaveState): string {
   const { ownerThreats: _threats, ...pirate } = (state.pirate ?? {}) as NonNullable<SaveState['pirate']>;
-  return serializeSaveForStorage({ ...state, pirate: pirate as NonNullable<SaveState['pirate']> }, 'production');
+  const { summary: _summary, ...replay } = state.npcReplay!;
+  return serializeSaveForStorage({ ...state, pirate: pirate as NonNullable<SaveState['pirate']>, npcReplay: replay }, 'production');
 }
 
 function run(state: SaveState, slices: readonly number[]): SaveState {
@@ -359,17 +363,17 @@ function run(state: SaveState, slices: readonly number[]): SaveState {
 
 test('a world with the plan does not depend on where it is sliced or on a journal (server = client)', { timeout: 300_000 }, () => {
   const { state } = campaign();
-  const whole = run(state, [8]);
-  const sliced = run(state, [1, 2, 3.5, 5, 8]);
+  const whole = run(state, [13]);
+  const sliced = run(state, [1, 2, 3.5, 5, 8, 13]);
   assert.equal(comparable(sliced), comparable(whole));
   const entries: NpcJournalSun[] = [];
   const previous = setNpcJournalSink({ detailed: () => true, decision: () => {}, sun: (entry) => entries.push(entry) });
   try {
-    const watched = run(state, [8]);
+    const watched = run(state, [13]);
     assert.equal(comparable(watched), comparable(whole), 'a journal only watches');
   } finally {
     setNpcJournalSink(previous);
   }
-  assert.ok(whole.npcStrategy, 'the leader thought about a plan');
-  assert.ok(entries.some((entry) => entry.step === 'created'), `a plan started: ${JSON.stringify(entries.slice(0, 5))}`);
+  assert.ok(entries.some((entry) => entry.step === 'rsvp'), `members answered: ${JSON.stringify(entries.slice(0, 5))}`);
+  assert.ok(entries.some((entry) => entry.step === 'declared' || entry.step === 'postponed'), 'and T came');
 });
