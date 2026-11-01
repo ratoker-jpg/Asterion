@@ -183,7 +183,7 @@ export function getNpcAidCandidates(state: SaveState, profile: NpcProfile, at: n
       candidates.push({
         id: `aid:${ownerId}:${request.id}:${source.id}`,
         kind: 'aid',
-        weight: Number.isFinite(profile.traits.cooperation) ? Math.max(0.05, Math.min(1, profile.traits.cooperation)) : 0.05,
+        weight: Number.isFinite(profile.traits.cooperation) ? Math.max(0.05, Math.min(1, profile.traits.cooperation + 0.2 * (profile.inherited?.relations[request.authorOwnerId]?.trust ?? 0))) : 0.05,
         payload,
       });
     }

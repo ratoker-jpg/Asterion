@@ -21,12 +21,15 @@ type PauseMenuProps = {
   onLoad?: () => void;
   onMainMenu?: () => void;
   onExport?: () => void;
+  /** A campaign of a series, still running: the player can end their part in it here. */
+  onEndRound?: () => void;
   testSpeed?: { value: number; options: readonly number[]; onChange: (value: number) => void };
 };
 
 /** In-game menu (Esc / ≡): replaces the old one-click «↻» reset. Restarting always asks first. */
-export function PauseMenu({ variant, title, factionId, playTimeMs, onResume, onSave, onRestart, onLoad, onMainMenu, onExport, testSpeed }: PauseMenuProps) {
+export function PauseMenu({ variant, title, factionId, playTimeMs, onResume, onSave, onRestart, onLoad, onMainMenu, onExport, onEndRound, testSpeed }: PauseMenuProps) {
   const [confirmRestart, setConfirmRestart] = useState(false);
+  const [confirmEndRound, setConfirmEndRound] = useState(false);
   const firstRef = useRef<HTMLButtonElement>(null);
   const card = raceCard(factionId);
   const isTest = variant === 'test';
@@ -37,11 +40,12 @@ export function PauseMenu({ variant, title, factionId, playTimeMs, onResume, onS
       event.preventDefault();
       event.stopPropagation();
       if (confirmRestart) setConfirmRestart(false);
+      else if (confirmEndRound) setConfirmEndRound(false);
       else onResume();
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [confirmRestart, onResume]);
+  }, [confirmRestart, confirmEndRound, onResume]);
 
   const resetLabel = 'Сбросить текущее тестовое сохранение';
   return createPortal(
@@ -63,6 +67,15 @@ export function PauseMenu({ variant, title, factionId, playTimeMs, onResume, onS
                 <button type="button" className="igo-btn" onClick={() => setConfirmRestart(false)}>ОТМЕНА</button>
               </div>
             </div>
+          ) : confirmEndRound ? (
+            <div className="igo-confirm" role="alertdialog" aria-label="Закончить раунд серии">
+              <b>Закончить этот раунд и начать следующий?</b>
+              <span>Опыт NPC за этот раунд запишется в серию. Сохранение останется в слоте, но в серию больше не войдёт.</span>
+              <div>
+                <button type="button" className="igo-btn igo-btn--danger" onClick={onEndRound} data-qa-pause-end-round-confirm>ЗАКОНЧИТЬ РАУНД</button>
+                <button type="button" className="igo-btn" onClick={() => setConfirmEndRound(false)}>ОТМЕНА</button>
+              </div>
+            </div>
           ) : (
             <nav className="igo-pause__nav">
               <button ref={firstRef} type="button" className="igo-btn igo-btn--primary" onClick={onResume} data-qa-pause="resume">ПРОДОЛЖИТЬ</button>
@@ -77,6 +90,7 @@ export function PauseMenu({ variant, title, factionId, playTimeMs, onResume, onS
                   ))}</div>
                 </div>
               ) : null}
+              {onEndRound ? <button type="button" className="igo-btn" onClick={() => setConfirmEndRound(true)} data-qa-pause="end-round">ЗАКОНЧИТЬ РАУНД СЕРИИ</button> : null}
               {isTest ? (
                 <button type="button" className="igo-btn igo-btn--danger" onClick={() => setConfirmRestart(true)} data-qa-pause="restart" data-qa-reset-progress aria-label={resetLabel} title={resetLabel}>СБРОСИТЬ ТЕСТОВОЕ СОХРАНЕНИЕ</button>
               ) : (
@@ -85,7 +99,7 @@ export function PauseMenu({ variant, title, factionId, playTimeMs, onResume, onS
               {onMainMenu ? <button type="button" className="igo-btn" onClick={onMainMenu} data-qa-pause="menu">{isTest ? 'ВЫЙТИ ИЗ TEST MODE · ГЛАВНОЕ МЕНЮ' : 'В ГЛАВНОЕ МЕНЮ'}</button> : null}
             </nav>
           )}
-          {confirmRestart ? null : <GameUpdateRow variant="pause" />}
+          {confirmRestart || confirmEndRound ? null : <GameUpdateRow variant="pause" />}
         </div>
       </section>
     </div>,
@@ -100,10 +114,12 @@ type ResultProps = {
   onStay: () => void;
   onNewGame: () => void;
   onMainMenu: () => void;
+  /** The next round of a series: a new world, the same personas. */
+  onNewRound?: () => void;
 };
 
 /** End of the campaign: the Gate is complete. Written to the save before it is shown. */
-export function CampaignResultOverlay({ result, playTimeMs, onStay, onNewGame, onMainMenu }: ResultProps) {
+export function CampaignResultOverlay({ result, playTimeMs, onStay, onNewGame, onMainMenu, onNewRound }: ResultProps) {
   const stayRef = useRef<HTMLButtonElement>(null);
   useEffect(() => { stayRef.current?.focus(); }, []);
   return createPortal(
@@ -125,7 +141,8 @@ export function CampaignResultOverlay({ result, playTimeMs, onStay, onNewGame, o
         </dl>
         <div className="igo-result__actions">
           <button ref={stayRef} type="button" className="igo-btn" onClick={onStay} data-qa-result-stay>ОСТАТЬСЯ В МИРЕ</button>
-          <button type="button" className="igo-btn igo-btn--primary" onClick={onNewGame} data-qa-result-new>НОВАЯ ИГРА</button>
+          {onNewRound ? <button type="button" className="igo-btn igo-btn--primary" onClick={onNewRound} data-qa-result-round>НОВЫЙ РАУНД</button> : null}
+          <button type="button" className={`igo-btn ${onNewRound ? '' : 'igo-btn--primary'}`} onClick={onNewGame} data-qa-result-new>НОВАЯ ИГРА</button>
           <button type="button" className="igo-btn" onClick={onMainMenu}>ГЛАВНОЕ МЕНЮ</button>
         </div>
       </div>

@@ -82,6 +82,7 @@ function migrateRaid(value: unknown): SunRaidRecord | null {
       attackerPopulation: finite(result.attackerPopulation) ? result.attackerPopulation : 0,
       defenderPopulation: finite(result.defenderPopulation) ? result.defenderPopulation : 0,
       defenders: Number.isSafeInteger(result.defenders) ? result.defenders as number : 0,
+      ...(Array.isArray(result.attackerOwnerIds) ? { attackerOwnerIds: result.attackerOwnerIds.filter((id): id is string => typeof id === 'string' && id.length > 0) } : {}),
       ...(migrateCrystalRoll(result.crystalRoll) ? { crystalRoll: migrateCrystalRoll(result.crystalRoll)! } : {}),
       ...(text(result.reportId) ? { reportId: text(result.reportId)! } : {}),
     }

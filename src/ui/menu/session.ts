@@ -2,9 +2,12 @@ import { CAMPAIGN_SPEED_SCALE, setActiveProductionSaveKey, setCampaignTimeScale,
 import { setActiveGalaxyCount } from '../../domain/universe/runtime.ts';
 import type { SaveSlotMeta } from '../../domain/session/slots.ts';
 import { setActiveSlot } from '../../application/slots.ts';
+import type { NewGameConfig } from '../../domain/world/config.ts';
 
 /** sessionStorage key: which menu screen a reload should open (the game itself reloads into the menu). */
 const NEXT_SCREEN_KEY = 'asterion.session.next-screen.v1';
+/** sessionStorage key: «Новый раунд» asks the wizard to continue a series, from the world just finished. */
+const SERIES_ROUND_KEY = 'asterion.session.series-round.v1';
 
 export type MenuScreen = 'main' | 'load' | 'new' | 'settings';
 
@@ -35,6 +38,27 @@ export function consumeNextScreen(): MenuScreen | null {
     const value = window.sessionStorage.getItem(NEXT_SCREEN_KEY);
     window.sessionStorage.removeItem(NEXT_SCREEN_KEY);
     return value === 'main' || value === 'load' || value === 'new' || value === 'settings' ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/** What the wizard starts from after «Новый раунд». `seriesId` is absent where there is no registry (the browser). */
+export type SeriesRoundRequest = {
+  seriesId: string | null;
+  config: NewGameConfig;
+};
+
+export function requestSeriesRound(request: SeriesRoundRequest): void {
+  try { window.sessionStorage.setItem(SERIES_ROUND_KEY, JSON.stringify(request)); } catch { /* the wizard opens as usual */ }
+}
+
+export function consumeSeriesRound(): SeriesRoundRequest | null {
+  try {
+    const value = window.sessionStorage.getItem(SERIES_ROUND_KEY);
+    window.sessionStorage.removeItem(SERIES_ROUND_KEY);
+    const parsed = value ? JSON.parse(value) as SeriesRoundRequest : null;
+    return parsed && parsed.config && typeof parsed.config === 'object' ? parsed : null;
   } catch {
     return null;
   }

@@ -685,7 +685,11 @@ export const NPC_REVENGE_BALANCE = {
 
 /** 0..1 grudge against the owner of a target, from this owner's lasting memory. */
 export function npcRevengeIntensity(context: NpcUtilityContext, targetOwnerId: string | undefined): number {
-  return targetOwnerId ? npcGrudgeIntensity(context.profile.grudges?.[targetOwnerId], context.dayValue) : 0;
+  if (!targetOwnerId) return 0;
+  const present = npcGrudgeIntensity(context.profile.grudges?.[targetOwnerId], context.dayValue);
+  // An old score from an earlier round weighs on a target the owner is looking at anyway; it reveals nothing.
+  const old = context.profile.inherited?.relations[targetOwnerId]?.resentment ?? 0;
+  return old > present ? old : present;
 }
 
 /**
@@ -781,8 +785,10 @@ export function chooseNpcAttackForce(context: NpcUtilityContext, origin: SpyTarg
   const enemy = estimateReportedPower(context, report, estimateForcePower(stacks(catalog, all)));
   // Revenge lowers the margin the owner asks for: it will trade ships to hurt an offender.
   const grudge = npcRevengeIntensity(context, report.targetOwnerId);
+  // A lesson from an earlier round about this race moves the margin a little; the report still decides.
+  const lesson = context.profile.inherited?.lessons.find((item) => item.family === 'attack' && item.enemyRace === report.targetRaceId)?.effect ?? 0;
   const wanted = Math.max(NPC_REVENGE_BALANCE.minWin, 0.6 + 0.3 * (1 - unit(context.profile.traits.riskTolerance))
-    - NPC_REVENGE_BALANCE.marginDrop * grudge);
+    - NPC_REVENGE_BALANCE.marginDrop * grudge - 0.05 * lesson);
   const winWithAll = estimateWinProbability(estimateForcePower(stacks(catalog, all)), enemy);
   if (winWithAll < wanted) return grudge > 0 && winWithAll >= NPC_REVENGE_BALANCE.minWin ? all : null;
   // Against a Gate the owner throws everything it has: the campaign is at stake.

@@ -239,7 +239,10 @@ import { setActiveGalaxyCount, warmUniverseTimedSchedules } from './domain/unive
 import { SunRaidPanel, type SunSelection } from './ui/sun-raid/SunRaidPanel.tsx';
 import { GateDialog } from './ui/sun-raid/GateDialog.tsx';
 import { CampaignResultOverlay, PauseMenu } from './ui/menu/InGameOverlays.tsx';
-import { reloadToMenu, type ActiveSession } from './ui/menu/session.ts';
+import { isSeriesCampaign, settleCampaign } from './application/npc-series.ts';
+import { createDefaultNewGameConfig } from './domain/world/config.ts';
+import { readPersonaRegistry, writePersonaRegistry } from './application/persona-store.ts';
+import { reloadToMenu, requestSeriesRound, type ActiveSession } from './ui/menu/session.ts';
 import { useCampaignCloudUploads } from './ui/menu/cloud.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
@@ -2571,6 +2574,34 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     if (session) refreshSlotMeta(session.slotId, stateRef.current);
     setNotice(result.ok ? 'Игра сохранена.' : `Не удалось сохранить: ${result.error}`, result.ok ? 'success' : 'error');
   };
+  /**
+   * The boundary of a campaign: once its result is safely in the save, it is
+   * folded into the series on this computer. A repeat (reload, cloud return,
+   * the player pressing on) changes nothing. The running world never reads this.
+   */
+  const settleIntoSeries = (kind: 'gate' | 'left'): string | null => {
+    if (!session) return null;
+    const read = readPersonaRegistry();
+    if (read.status !== 'ok') return null;
+    const saved = persistence.write(stateRef.current);
+    if (!saved.ok) return null;
+    const fold = settleCampaign(read.registry, stateRef.current, kind, Date.now());
+    if (!fold) return null;
+    if (fold.changed && !writePersonaRegistry(fold.registry).ok) return null;
+    return fold.seriesId;
+  };
+  const campaignFinished = Boolean(sunRaidState.campaignResult);
+  useEffect(() => {
+    if (campaignFinished) settleIntoSeries('gate');
+    // Once a campaign has its result; the fold itself is idempotent.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaignFinished]);
+  const startNextRound = (kind: 'gate' | 'left') => {
+    const config = stateRef.current.worldConfig;
+    const seriesId = settleIntoSeries(kind);
+    requestSeriesRound({ seriesId, config: config && !config.legacy ? config : createDefaultNewGameConfig({ factionId: stateRef.current.profile.factionId, playerName: stateRef.current.profile.displayName }) });
+    leaveTo('new');
+  };
   const leaveTo = (screen: 'main' | 'load' | 'new') => {
     foldPlayTime(false);
     persistence.write(stateRef.current);
@@ -3042,6 +3073,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
             onLoad={() => leaveTo('load')}
             onExport={exportCurrentSave}
             onRestart={restartCampaign}
+            onEndRound={!sunRaidState.campaignResult && isSeriesCampaign(state) ? () => startNextRound('left') : undefined}
             onMainMenu={() => leaveTo('main')}
           />
         ) : (
@@ -3065,6 +3097,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
             playTimeMs={state.playTimeMs ?? 0}
             onStay={() => setResultDismissed(true)}
             onNewGame={() => (session ? leaveTo('new') : setResultDismissed(true))}
+            onNewRound={session ? () => startNextRound('gate') : undefined}
             onMainMenu={() => (session ? leaveTo('main') : setResultDismissed(true))}
           />
         ) : null}
