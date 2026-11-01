@@ -223,8 +223,8 @@ test('a strike is judged on the game\'s formulas: a usual owner refuses a resour
 test('a look starts with the orders of the planets lacking most: more of them for a fortress-minded owner than for a raider', () => {
   const fortress = look(empire('fortify-promise', FORTRESS, 5));
   const promised = fortress.choices.filter((choice) => choice.must);
-  assert.equal(promised.length, 2);
+  assert.equal(promised.length, 4);
   for (const choice of promised) assert.match(choice.candidate.id, /^fortify:order:/);
   const raider = look(empire('fortify-promise', RAIDER, 5));
-  assert.equal(raider.choices.filter((choice) => choice.must).length, 1);
+  assert.equal(raider.choices.filter((choice) => choice.must).length, 2);
 });

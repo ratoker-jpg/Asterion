@@ -35,7 +35,7 @@ export const NPC_FORTIFY_BALANCE = Object.freeze({
   /** Days of income the targets may take on top of what lies in stores, at ambition 0 and 1. */
   budgetDays: [0.5, 3] as const,
   /** Share of the stores above the reserve one order may spend, at ambition 0 and 1. */
-  spendShare: [0.35, 0.7] as const,
+  spendShare: [0.5, 0.85] as const,
   /**
    * A look's first thing is the order of the planets lacking most: among
    * thousands of small actions a day a drawn order came up 1% of the time
@@ -43,7 +43,7 @@ export const NPC_FORTIFY_BALANCE = Object.freeze({
    * batteries. This many planets a look, more from this ambition on.
    */
   promiseAmbition: 0.35,
-  promisedPlanets: [1, 2] as const,
+  promisedPlanets: [2, 4] as const,
   /** Hours of the planet's own income kept per resource (never more than this share of the store). */
   reserveHours: 6,
   reserveShare: 0.25,
