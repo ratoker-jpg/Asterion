@@ -84,7 +84,8 @@
     "test:save-store-ui": "electron electron/save-store-qa.cjs",
     "test:late-save-ui": "electron electron/late-save-qa.cjs",
     "test:cloud-world-ui": "electron electron/cloud-world-qa.cjs",
-    "test:catchup-summary-ui": "electron electron/catchup-summary-qa.cjs"
+    "test:catchup-summary-ui": "electron electron/catchup-summary-qa.cjs",
+    "test:npc-rounds-ui": "electron electron/npc-rounds-qa.cjs"
   },
   "dependencies": {
     "electron-updater": "6.8.11",

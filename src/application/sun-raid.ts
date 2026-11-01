@@ -1045,6 +1045,7 @@ function resolveRaid(state: SaveState, raid: SunRaidRecord, at: number, options:
     attackerPopulation: attackers.reduce((sum, item) => sum + item.population, 0),
     defenderPopulation: defenders.reduce((sum, item) => sum + item.population, 0),
     defenders: new Set(defenders.map((item) => item.snapshot.ownerId)).size,
+    attackerOwnerIds: [...new Set(attackers.map((item) => item.snapshot.ownerId))].sort(),
     ...(crystalRoll ? { crystalRoll } : {}),
     ...(playerInvolved ? { reportId } : {}),
   };

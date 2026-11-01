@@ -137,6 +137,23 @@ export type NpcProfile = Readonly<{
    * owner next looks at the game and sets it).
    */
   combatPriority?: Readonly<{ attack: readonly CommanderId[]; defense: readonly CommanderId[] }>;
+  /**
+   * What this owner brought from earlier rounds of a series (domain/npc/persona-registry.ts).
+   * Absent outside a series: such an owner decides exactly as before. Keyed by
+   * this campaign's owners; the hidden persona id stays out of the save.
+   */
+  inherited?: NpcInheritedExperience;
+}>;
+
+export type NpcInheritedRelation = Readonly<{ trust: number; affinity: number; resentment: number }>;
+
+export type NpcInheritedExperience = Readonly<{
+  round: number;
+  /** Learned leanings by action family, -1..1, already weighted by how much still applies. */
+  prefs: Readonly<Record<string, number>>;
+  lessons: readonly Readonly<{ family: 'attack'; enemyRace: string; effect: number }>[];
+  /** Other owners of this world this one has played with before. Attitude only: no location, no intelligence. */
+  relations: Readonly<Record<string, NpcInheritedRelation>>;
 }>;
 
 /** What one offender did to this NPC: attacks suffered and their cost in resources. */

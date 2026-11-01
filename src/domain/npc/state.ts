@@ -6,6 +6,7 @@ import {
   NPC_STATE_VERSION,
   type NpcActivityState,
   type NpcEventCursor,
+  type NpcInheritedExperience,
   type NpcKnowledge,
   type NpcLongTermGoal,
   type NpcMemory,
@@ -44,11 +45,12 @@ export function createNpcState(ownerIds: readonly string[], personaSalt: string,
  * seeded order (one slot per owner, jittered inside it), so seven NPCs get
  * the same proportions as a hundred and activity says nothing about skill.
  */
-function stratifyNpcPopulation(profiles: Record<string, NpcProfile>, personaSalt: string): void {
+function stratifyNpcPopulation(profiles: Record<string, NpcProfile>, personaSalt: string,
+  rank?: (ownerId: string, axis: 'activity' | 'skill') => number): void {
   const ownerIds = Object.keys(profiles);
   if (ownerIds.length < 2) return;
-  const spread = (axis: string): Map<string, number> => {
-    const key = (ownerId: string) => createSeededRandom(JSON.stringify(['npc-population:v1', personaSalt, axis, ownerId]))();
+  const spread = (axis: 'activity' | 'skill'): Map<string, number> => {
+    const key = (ownerId: string) => (rank ? rank(ownerId, axis) : createSeededRandom(JSON.stringify(['npc-population:v1', personaSalt, axis, ownerId]))());
     const order = [...ownerIds].sort((left, right) => key(left) - key(right) || compareStableIds(left, right));
     return new Map(order.map((ownerId, slot) => {
       const jitter = 0.1 + 0.8 * createSeededRandom(JSON.stringify(['npc-population-jitter:v1', personaSalt, axis, ownerId]))();
@@ -65,6 +67,19 @@ function stratifyNpcPopulation(profiles: Record<string, NpcProfile>, personaSalt
       activity: Object.freeze({ ...profile.activity, propensity: activity.get(ownerId)! }),
     });
   }
+}
+
+/**
+ * The same mix for a world of known personas: who plays more and who decides
+ * better stays in each persona's order, and the owner rule holds however many
+ * of them this world has room for.
+ */
+export function respreadNpcPopulation(profiles: Readonly<Record<string, NpcProfile>>, personaSalt: string,
+  rank: (ownerId: string, axis: 'activity' | 'skill') => number): Readonly<Record<string, NpcProfile>> {
+  const next: Record<string, NpcProfile> = Object.create(null) as Record<string, NpcProfile>;
+  for (const ownerId of Object.keys(profiles).sort(compareStableIds)) next[ownerId] = profiles[ownerId]!;
+  stratifyNpcPopulation(next, personaSalt, rank);
+  return Object.freeze(next);
 }
 
 /**
@@ -123,7 +138,8 @@ export function isNpcProfile(value: unknown): value is NpcProfile {
     || (value.grudges !== undefined && (!isRecord(value.grudges) || !Object.entries(value.grudges)
       .every(([offenderId, grudge]) => offenderId.length > 0 && isNpcGrudge(grudge))))
     || (value.combatPriority !== undefined && (!isRecord(value.combatPriority)
-      || !isCommanderOrder(value.combatPriority.attack) || !isCommanderOrder(value.combatPriority.defense)))) return false;
+      || !isCommanderOrder(value.combatPriority.attack) || !isCommanderOrder(value.combatPriority.defense)))
+    || (value.inherited !== undefined && !isInherited(value.inherited))) return false;
   return true;
 }
 
@@ -169,6 +185,14 @@ function createNpcProfile(ownerId: string, personaSalt: string, at: number): Npc
   });
 }
 
+function isInherited(value: unknown): value is NpcInheritedExperience {
+  const signed = (item: unknown) => isFiniteNumber(item) && item >= -1 && item <= 1;
+  return isRecord(value) && isCount(value.round) && isRecord(value.prefs) && Object.values(value.prefs).every(signed)
+    && Array.isArray(value.lessons) && value.lessons.every((lesson) => isRecord(lesson) && lesson.family === 'attack'
+      && typeof lesson.enemyRace === 'string' && lesson.enemyRace.length > 0 && signed(lesson.effect))
+    && isRecord(value.relations) && Object.values(value.relations).every((relation) => isRecord(relation)
+      && inUnitRange(relation.trust) && inUnitRange(relation.affinity) && inUnitRange(relation.resentment));
+}
 function isPlanning(value: unknown): value is NpcPlanningState {
   return isRecord(value) && inUnitRange(value.horizon) && inUnitRange(value.commitment)
     && (value.reconsiderAt === null || isTimestamp(value.reconsiderAt));
