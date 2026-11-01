@@ -45,7 +45,7 @@ import {
   estimateOperationUtility, estimateProductionItemUtility, flightRemoteness, estimateScienceUtility, npcProductionBatch,
   npcProductionPurpose, NPC_STRATEGY_FAMILY, strategyOf, type NpcStrategyDrives,
   estimateFleetSaveUtility, estimateCommanderUpgradeUtility, npcFleetValue, spaceFlightLegFor, estimateSpaceportUpgradeUtility, NPC_FLAGSHIP_ID,
-  hoardPressure, NPC_FORTRESS_BALANCE,
+  hoardPressure, NPC_FORTRESS_BALANCE, npcHeldDays,
 } from './npc-utility.ts';
 
 /** A look within this long of the session end is the owner's last before leaving. */
@@ -265,7 +265,9 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     if (science && at >= state.npcScience!.activatedAt) for (const preview of getNpcScienceCandidates(target, science, at, timeScale)) {
       if (!preview.canStart) continue;
       const scienceCandidateId = `science:${target.id}:${preview.scienceId}`;
-      choices.push({ candidate: { id: scienceCandidateId, kind: 'science', weight: scored(scienceCandidateId, estimateScienceUtility(utility, preview.cost, situation, preview.scienceId)), payload: { scienceId: preview.scienceId } }, run: (current, key) => {
+      // Science on the way to the owner's best battery is a step of its plan.
+      const scienceKind = utility.fortify?.sciences.has(preview.scienceId) ? 'plan-step' : 'science';
+      choices.push({ candidate: { id: scienceCandidateId, kind: scienceKind, weight: scored(scienceCandidateId, estimateScienceUtility(utility, preview.cost, situation, preview.scienceId)), payload: { scienceId: preview.scienceId } }, run: (current, key) => {
         const result = startNpcScience(current.espionage!.targets![target.id]!, current.npcScience!.owners[ownerId]!, preview.scienceId, at, timeScale, key);
         return { state: { ...withTarget(current, result.target), npcScience: { ...current.npcScience!, owners: { ...current.npcScience!.owners, [ownerId]: result.science } } }, started: result.ok, reason: result.reason, planetId: target.id, ...(result.ok ? { economyActionId: key } : {}) };
       } });
@@ -339,8 +341,7 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     if (source.id !== main.id) {
       // A colony ships home when its stores fill up, or when it holds more
       // than half a day of the owner's income: the fortress spends it (owner strategy 31.10.2026).
-      const held = source.resources.metal + source.resources.minerals + source.resources.gas;
-      const idle = held / Math.max(1, utility.dayValue) >= NPC_FORTRESS_BALANCE.colonySendDays;
+      const idle = npcHeldDays(utility, source) >= NPC_FORTRESS_BALANCE.colonySendDays;
       if (fullest < 0.75 && !idle) continue;
       destination = neediestBut(source.id) ?? main;
       urgency = Math.max(fullest - 0.5, idle ? 0.3 + 0.3 * hoardPressure(utility, source) : 0);

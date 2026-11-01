@@ -171,6 +171,11 @@ export function mergeSideTechnologies(levels: readonly CombatTechnologyLevels[])
   for (const id of COMBAT_TECHNOLOGY_IDS) {
     merged[id] = levels.reduce((max, item) => Math.max(max, Math.max(0, Math.floor(item?.[id] ?? 0))), merged[id] ?? 0);
   }
+  // One additional direction per side, as for each owner alone (technologiesFromScience): the strongest of
+  // the participants'. Without it a side of different directions stopped the world in resolveCombat.
+  const exclusive = ['piercingAttack', 'maneuverDefense', 'criticalHit'] as const;
+  const selected = exclusive.reduce((best, id) => (merged[id] > merged[best] ? id : best), exclusive[0]);
+  for (const id of exclusive) if (id !== selected) merged[id] = 0;
   return merged;
 }
 

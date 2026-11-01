@@ -140,6 +140,20 @@ const positiveSum = (record) => sum(Object.values(record ?? {}).map((value) => M
 const shareAtLeast = (values, floor) => (values.length ? +(values.filter((value) => value >= floor).length / values.length).toFixed(3) : 0);
 const spread = (values) => ({ median: median(values), max: Math.max(0, ...values), ge10k: shareAtLeast(values, 10_000), ge25k: shareAtLeast(values, 25_000) });
 
+/** What a planet's turrets cost and how strong they are (attack × life, the square-law strength). */
+function defenceWorth(planet) {
+  let attack = 0;
+  let life = 0;
+  let value = 0;
+  for (const entity of getFactionDefenseCatalog(planet.raceId)) {
+    const count = planet.defense?.defenses?.[entity.id] ?? 0;
+    attack += count * (entity.combat?.attack ?? 0);
+    life += count * (entity.combat?.life ?? 0);
+    value += count * ((entity.cost?.metal ?? 0) + (entity.cost?.minerals ?? 0) + (entity.cost?.gas ?? 0));
+  }
+  return { value, strength: Math.round(Math.sqrt(attack * life)) };
+}
+
 /** Queues and losses read once a game hour: what the end of the run cannot show. Only reads the world. */
 export function createEmpireTally() {
   return { samples: 0, defenseIdle: 0, shipIdle: 0, buildIdle: 0, allIdle: 0, richIdle: 0, lost: {}, known: {}, seenReports: new Set(), colonyDefenceLoss: 0, mainDefenceLoss: 0 };
@@ -224,7 +238,8 @@ export function describeWorld(state, journal = [], tally = null) {
   });
   const defencePlanets = npcPlanets.map((planet) => ({ population: calculateDefensePopulation({ defenses: planet.defense?.defenses ?? {} }, planet.raceId), units: positiveSum(planet.defense?.defenses),
     hangar: Number(planet.buildings?.hangar ?? 0), shipyard: Number(planet.buildings?.shipyard ?? 0), factory: Number(planet.buildings?.['advanced-factory'] ?? 0),
-    batteries: (planet.defense?.defenses?.['ion-plasma-battery'] ?? 0) + (planet.defense?.defenses?.['plasma-laser-battery'] ?? 0) }));
+    batteries: (planet.defense?.defenses?.['ion-plasma-battery'] ?? 0) + (planet.defense?.defenses?.['plasma-laser-battery'] ?? 0),
+    ...defenceWorth(planet) }));
   const closedPlans = journal.filter((entry) => entry.k === 'plan' && entry.d?.tp === 'strike' && entry.d?.st === 'done');
   const conscious = closedPlans.filter((entry) => entry.d?.cl);
   const ordinary = closedPlans.filter((entry) => !entry.d?.cl);
@@ -267,6 +282,9 @@ export function describeWorld(state, journal = [], tally = null) {
     mainDefense: { median: median(perOwner.map((owner) => owner.mainDefense)), max: Math.max(0, ...perOwner.map((owner) => owner.mainDefense)) },
     empire: { planets: npcPlanets.length, defensePopulation: spread(defencePlanets.map((planet) => planet.population)), defenseUnits: spread(defencePlanets.map((planet) => planet.units)),
       batteries: { median: median(defencePlanets.map((planet) => planet.batteries)), max: Math.max(0, ...defencePlanets.map((planet) => planet.batteries)) },
+      strength: { median: median(defencePlanets.map((planet) => planet.strength)), max: Math.max(0, ...defencePlanets.map((planet) => planet.strength)) },
+      defenseValue: { median: median(defencePlanets.map((planet) => planet.value)), total: sum(defencePlanets.map((planet) => planet.value)) },
+      stores: { metal: Math.round(sum(npcPlanets.map((planet) => planet.resources.metal))), minerals: Math.round(sum(npcPlanets.map((planet) => planet.resources.minerals))), gas: Math.round(sum(npcPlanets.map((planet) => planet.resources.gas))) },
       hangarMedian: median(defencePlanets.map((planet) => planet.hangar)), shipyardMedian: median(defencePlanets.map((planet) => planet.shipyard)), factoryMedian: median(defencePlanets.map((planet) => planet.factory)),
       incomePerHour: Math.round(sum(npcPlanets.map((planet) => getNpcPlanetIncomePerHour(planet, 1)))),
       resourcesTotal: sum(perOwner.map((owner) => owner.resources)), ...empireSummary(tally) },

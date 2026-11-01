@@ -47,9 +47,9 @@ export const NPC_FORTIFY_BALANCE = Object.freeze({
   minRelativeScore: 0.45,
   /** ...and what is far below the race's best (its science still ahead) only up to this share of the target: it would fill the hangar for good. */
   stopGapScore: 0.25,
-  stopGapShare: 0.15,
+  stopGapShare: 0.3,
   /** An order worth fewer hours of the planet's income than this waits for more: no stream of tiny orders. */
-  minOrderHours: 0.25,
+  minOrderHours: 0.1,
   /** A single-copy shield is bought only with this many times its price on the planet. */
   shieldStock: 3,
   /** Battles at a planet within this many game hours count as its danger. */

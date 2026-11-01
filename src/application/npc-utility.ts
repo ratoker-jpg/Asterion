@@ -383,14 +383,18 @@ export const NPC_FORTRESS_BALANCE = Object.freeze({
   defenseTarget: 25_000,
   /** ...once the owner earns at least this much a day (an early economy builds mines first). */
   minDayValue: 1_000_000,
-  /** Resources on a planet beyond this many days of the owner's income are idle: spend or ship them. */
-  hoardDays: 1,
-  /** A colony holding more than this many days of income ships its surplus to the main planet. */
-  colonySendDays: 0.5,
+  /** Resources on a planet beyond this many days of its share of the owner's income are idle: spend or ship them. */
+  hoardDays: 0.25,
+  /** A colony holding more than this many days of its share of the income ships its surplus. */
+  colonySendDays: 0.25,
   /** Largest order while resources pile up (otherwise 500). */
   hoardBatchCap: 5_000,
   /** How hard idle stores push the shipyard, factories and construction (utility at full pressure). */
   bottleneckDrive: 1.4,
+  /** Share of a fleet order a full fortress-minded owner gives up while its planets are below target. */
+  fleetYield: 0.6,
+  /** How far scarcity moves the worth of a mine's output. */
+  scarcityRange: [0.2, 3] as const,
 });
 
 /** The owner's main planet (its first, home planet), where the fortress stands. */
@@ -399,11 +403,40 @@ export function isNpcFortress(context: Pick<NpcUtilityContext, 'profile' | 'ownP
   return target.id === home || (!context.ownPlanets.some((planet) => planet.id === home) && context.ownPlanets[0]?.id === target.id);
 }
 
-/** 0..1: how far a planet's stores exceed what the owner should keep idle (days of its income). */
-export function hoardPressure(context: Pick<NpcUtilityContext, 'dayValue'>, target: Pick<SpyTargetState, 'resources'>): number {
+/** Days of the owner's income (its share per planet) that lie on this planet. */
+export function npcHeldDays(context: Pick<NpcUtilityContext, 'dayValue' | 'ownPlanets'>, target: Pick<SpyTargetState, 'resources'>): number {
   const held = Math.max(0, target.resources.metal) + Math.max(0, target.resources.minerals) + Math.max(0, target.resources.gas);
+  return held / Math.max(1, context.dayValue / Math.max(1, context.ownPlanets.length));
+}
+
+/**
+ * 0..1: how far a planet's stores exceed what the owner should keep idle. Only
+ * what can still be spent counts: gas no battery can use without metal and
+ * minerals beside it (measured 01.11.2026: 5,2 of 7,9 bn on hand was gas) is no
+ * reason to order more of anything.
+ */
+export function hoardPressure(context: Pick<NpcUtilityContext, 'dayValue' | 'ownPlanets'>, target: Pick<SpyTargetState, 'resources'>): number {
+  const { metal, minerals, gas } = target.resources;
+  const usable = Math.max(0, metal) + Math.max(0, minerals) + Math.min(Math.max(0, gas), Math.max(0, metal) + Math.max(0, minerals));
   const b = NPC_FORTRESS_BALANCE;
-  return unit((held / Math.max(1, context.dayValue) - b.hoardDays) / (2 * b.hoardDays));
+  return unit((npcHeldDays(context, { resources: { ...target.resources, metal: usable, minerals: 0, gas: 0 } }) - b.hoardDays) / (2 * b.hoardDays));
+}
+
+const MINE_RESOURCE: Readonly<Record<string, StoreKey>> = {
+  'metal-production-1': 'metal', 'metal-production-2': 'metal', 'metal-production-3': 'metal',
+  'mineral-production-1': 'minerals', 'mineral-production-2': 'minerals', 'gas-production-1': 'gas', 'gas-production-2': 'gas',
+};
+
+/**
+ * What one more unit of this resource is worth here: a store far above the
+ * others is worth little, the one that holds every order back a lot. The same
+ * call a player makes looking at three numbers: no more gas mines while gas lies idle.
+ */
+export function npcResourceScarcity(target: Pick<SpyTargetState, 'resources'>, key: StoreKey): number {
+  const held = (id: StoreKey) => Math.max(0, target.resources[id] ?? 0);
+  const mean = (held('metal') + held('minerals') + held('gas')) / 3;
+  if (mean < 1) return 1;
+  return Math.max(NPC_FORTRESS_BALANCE.scarcityRange[0], Math.min(NPC_FORTRESS_BALANCE.scarcityRange[1], mean / Math.max(1, held(key))));
 }
 
 export function spendingPressure(situation?: NpcPlanetSituation): number {
@@ -454,7 +487,7 @@ export function estimateBuildingUtility(context: NpcUtilityContext, target: SpyT
   const energyCost = 1.2 * energyShare(target, cost) * (ENERGY_ROLES.has(role) ? 0 : 1);
   if (INCOME_ROLES.has(role)) {
     const gain = estimateNpcBuildingIncomeGain(target, role, nextLevel, context.timeScale);
-    return returnOnSpend(gain * planningHorizonHours(context.profile), effectiveSpend(cost, situation))
+    return returnOnSpend(gain * npcResourceScarcity(target, MINE_RESOURCE[role]!) * planningHorizonHours(context.profile), effectiveSpend(cost, situation))
       - energyCost + 0.3 * (drives.economy - 0.5);
   }
   const resource = STORAGE_ROLES[role];
@@ -652,7 +685,9 @@ export function npcProductionBatch(context: NpcUtilityContext, target: SpyTarget
   }
   const drives = strategyOf(context);
   const hoard = hoardPressure(context, target);
-  const share = purpose === 'energy' ? 0.35 : 0.25 + 0.45 * Math.max(drives.military, drives.war) + 0.25 * Math.max(spendingPressure(situation), hoard);
+  // The planet still short of its fortify target leaves part of the metal and minerals to its batteries, as much as its owner wants them.
+  const planned = purpose === 'combat' && (context.fortify?.targets[target.id] ?? 0) > 0 ? 1 - NPC_FORTRESS_BALANCE.fleetYield * context.fortify!.ambition : 1;
+  const share = purpose === 'energy' ? 0.35 : planned * (0.25 + 0.45 * Math.max(drives.military, drives.war) + 0.25 * Math.max(spendingPressure(situation), hoard));
   let affordable = Number.POSITIVE_INFINITY;
   for (const key of STORE_KEYS) {
     const price = Math.max(0, cost[key] ?? 0);

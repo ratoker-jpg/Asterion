@@ -101,6 +101,11 @@ test('side technologies and ship levels are the maximum among participants', () 
   assert.deepEqual(mergeSideShipLevels([{ cruiser: 3, scout: 9 }, { cruiser: 7 }]), { cruiser: 7, scout: 9 });
 });
 
+test('a side of different additional directions keeps one, the strongest: the resolver allows no more', () => {
+  const merged = mergeSideTechnologies([{ ...createDefaultCombatTechnologies(), piercingAttack: 2 }, { ...createDefaultCombatTechnologies(), criticalHit: 5 }, { ...createDefaultCombatTechnologies(), maneuverDefense: 3 }]);
+  assert.deepEqual([merged.piercingAttack, merged.maneuverDefense, merged.criticalHit], [0, 0, 5]);
+});
+
 test('raid launch rules: alliance leadership, population cap, frozen Sun, one raid per alliance', () => {
   const state = createDefaultSunRaidState();
   const base = { state, galaxy: 1, system: 3, population: 1_000, now: 0 };
