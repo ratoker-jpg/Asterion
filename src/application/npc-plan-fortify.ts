@@ -37,13 +37,13 @@ export const NPC_FORTIFY_BALANCE = Object.freeze({
   /** Share of the stores above the reserve one order may spend, at ambition 0 and 1. */
   spendShare: [0.35, 0.7] as const,
   /**
-   * From this ambition (or on a planet in danger) a look's first thing is the
-   * order of the planets lacking most, at most this many: among thousands of
-   * small actions a day a drawn order came up 1% of the time (measured 01.11.2026)
-   * and a planet earning 12 mln an hour stood without batteries. Below it, by draw.
+   * A look's first thing is the order of the planets lacking most: among
+   * thousands of small actions a day a drawn order came up 1% of the time
+   * (measured 01.11.2026) and a planet earning 12 mln an hour stood without
+   * batteries. This many planets a look, more from this ambition on.
    */
   promiseAmbition: 0.35,
-  promisedPlanets: 2,
+  promisedPlanets: [1, 2] as const,
   /** Hours of the planet's own income kept per resource (never more than this share of the store). */
   reserveHours: 6,
   reserveShare: 0.25,
@@ -309,10 +309,10 @@ export function getNpcFortifyChoices(state: SaveState, profile: NpcProfile, util
       } });
     }
   }
-  // The planets lacking most come first in the look, for an owner who wants it so or where an attack is coming.
-  const promised = orders.filter((item) => item.danger || plan.ambition >= NPC_FORTIFY_BALANCE.promiseAmbition)
+  // The planets lacking most come first in the look, those an attack is coming to before all.
+  const promised = [...orders]
     .sort((left, right) => Number(right.danger) - Number(left.danger) || right.lack - left.lack || (left.choice.candidate.id < right.choice.candidate.id ? -1 : 1))
-    .slice(0, NPC_FORTIFY_BALANCE.promisedPlanets);
+    .slice(0, NPC_FORTIFY_BALANCE.promisedPlanets[plan.ambition >= NPC_FORTIFY_BALANCE.promiseAmbition ? 1 : 0]);
   for (const item of promised) item.choice.must = true;
   return choices;
 }
