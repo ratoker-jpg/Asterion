@@ -101,9 +101,21 @@ test('side technologies and ship levels are the maximum among participants', () 
   assert.deepEqual(mergeSideShipLevels([{ cruiser: 3, scout: 9 }, { cruiser: 7 }]), { cruiser: 7, scout: 9 });
 });
 
-test('a side of different additional directions keeps one, the strongest: the resolver allows no more', () => {
-  const merged = mergeSideTechnologies([{ ...createDefaultCombatTechnologies(), piercingAttack: 2 }, { ...createDefaultCombatTechnologies(), criticalHit: 5 }, { ...createDefaultCombatTechnologies(), maneuverDefense: 3 }]);
-  assert.deepEqual([merged.piercingAttack, merged.maneuverDefense, merged.criticalHit], [0, 0, 5]);
+test('allies with different exclusive technologies merge into one branch, the strongest', () => {
+  const base = createDefaultCombatTechnologies();
+  const merged = mergeSideTechnologies([
+    { ...base, piercingAttack: 3, laserScience: 2 },
+    { ...base, maneuverDefense: 7 },
+    { ...base, criticalHit: 5, laserScience: 4 },
+  ]);
+  assert.equal(merged.maneuverDefense, 7);
+  assert.equal(merged.piercingAttack, 0);
+  assert.equal(merged.criticalHit, 0);
+  assert.equal(merged.laserScience, 4);
+  // A tie is settled by a fixed order, so the world stays deterministic.
+  const tie = mergeSideTechnologies([{ ...base, criticalHit: 4 }, { ...base, piercingAttack: 4 }]);
+  assert.equal(tie.piercingAttack, 4);
+  assert.equal(tie.criticalHit, 0);
 });
 
 test('raid launch rules: alliance leadership, population cap, frozen Sun, one raid per alliance', () => {
