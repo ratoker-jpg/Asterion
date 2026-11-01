@@ -47,8 +47,14 @@ export const NPC_STRIKE_BALANCE = Object.freeze({
   recheckReportHours: 1.5,
   /** Share of each planet's resources a plan may spend on ships (the rest stays for defence and building; owner rule 31.10.2026). */
   budgetShare: 0.6,
-  /** At the recheck the plan goes on only while the belief stays above this share of the wanted margin. */
-  recheckMargin: 0.9,
+  /**
+   * A plan starts only when the owner's belief reaches this share of its
+   * wanted margin, and the recheck cancels it only below the lower share: a
+   * fresh probe that shows a few more ships than the old report is no reason
+   * to throw the gathering away (hysteresis).
+   */
+  createMargin: 0.9,
+  recheckMargin: 0.8,
   /**
    * Slack after the expected readiness before the plan is given up, and its
    * bounds (game hours). The owner moves the plan only in its own sessions,
@@ -207,6 +213,8 @@ export function draftNpcStrike(state: SaveState, profile: NpcProfile, utility: N
     const target = state.espionage?.targets?.[report.targetPlanetId];
     if (!target || target.ownerId !== report.targetOwnerId || target.ownerId === ownerId) continue;
     if (at - report.createdAt > NPC_STRIKE_BALANCE.createReportHours * HOUR / Math.max(1, timeScale)) continue;
+    // Only a report that saw both the fleet and the defence: a plan built on half the picture is cancelled by the next probe.
+    if (report.fleet === undefined || report.defense === undefined) continue;
     const relation = getOwnerRelation(state, ownerId, target.ownerId);
     if (relation !== 'enemy' && relation !== 'neutral') continue;
     // The owner points rule decides at launch; a target outside the band is no plan.
@@ -275,7 +283,7 @@ export function draftNpcStrike(state: SaveState, profile: NpcProfile, utility: N
     if (!economics.worthFlight && !revenge.worthFlight && !gate) continue;
     const win = estimateWinProbability(npcForcePower(raceId, force), estimateReportedPower(utility, report, npcForcePower(raceId, force)));
     // The recheck judges by this same belief: a plan it would cancel at once is not worth starting.
-    if (win < NPC_STRIKE_BALANCE.recheckMargin * wanted) continue;
+    if (win < NPC_STRIKE_BALANCE.createMargin * wanted) continue;
     // The haul is what the holds carry home, not the whole half of the target's stock.
     const holds = win * catalog.reduce((sum, entity) => sum + (force[entity.id] ?? 0) * (entity.ship?.cargo ?? 0), 0);
     const net = Math.max(Math.min(economics.net, holds), revenge.net);
