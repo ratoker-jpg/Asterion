@@ -434,7 +434,7 @@ export function refreshNpcSunPrep(state: SaveState, profile: NpcProfile, utility
     next = answerInvitation(next, profile, utility, entry.plan, at, timeScale);
   }
   // A plan of its own may outlive its alliance or its role: it is the owner's to close.
-  const own = next.npcStrategy!.plans[profile.ownerId]?.find((plan) => plan.status === 'active');
+  const own = next.npcStrategy!.plans[profile.ownerId]?.find((plan): plan is NpcSunRaidPrepPlan => plan.template === 'sun-raid-prep' && plan.status === 'active');
   return own ? advanceOwnPlan(next, own, profile, utility, at, timeScale) : next;
 }
 
@@ -473,7 +473,7 @@ function declareChoice(profile: NpcProfile, plan: NpcSunRaidPrepPlan, at: number
   return { must: true, candidate: { id, kind: 'plan-step', weight: utilityToWeight(3), payload: { planId: plan.planId } }, run: (current, key) => {
     const planets = ownPlanets(current, ownerId);
     const caps = sunRaidCapsOf(current);
-    const own = current.npcStrategy!.plans[ownerId]!.find((item) => item.planId === plan.planId)!;
+    const own = current.npcStrategy!.plans[ownerId]!.find((item): item is NpcSunRaidPrepPlan => item.template === 'sun-raid-prep' && item.planId === plan.planId)!;
     const limit = own.rsvps[ownerId]?.answer === 'limit' ? own.rsvps[ownerId]!.population : caps.participant;
     const options = sunOptions(at, timeScale);
     const forces = planets.map((planet) => ({ planet, ships: npcSunAffordableForce(current, ownerId, planet.id, npcSunForce(current, ownerId, planet.id, planet.raceId, 1, Math.min(limit, caps.participant)), own.galaxy, own.system, options) }))

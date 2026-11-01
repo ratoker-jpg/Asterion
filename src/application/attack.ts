@@ -27,7 +27,9 @@ import { resolveSpyTarget } from './espionage-targets.ts';
 import { getOwnerRelation } from './owner-relations.ts';
 import { updateNpcAutonomyMemory } from '../domain/npc/autonomy-policy.ts';
 import { recordNpcGrievance } from '../domain/npc/grudges.ts';
-import { defenderBattleLoss, isGrievanceBattle } from './npc-grudges.ts';
+import { battleLoot, defenderBattleLoss, isGrievanceBattle, sideDestroyedValue } from './npc-grudges.ts';
+import { getNpcJournalSink } from './npc-journal.ts';
+import { resolveNpcPlanBattle } from './npc-plans.ts';
 import type { AttackLaunchSnapshot, AttackLoot, AttackResolution } from '../domain/attack/types.ts';
 import { recordBattleScoreAward } from '../domain/rating/scoring.ts';
 import { isPirateShipId } from '../domain/combat/side-entity.ts';
@@ -395,16 +397,27 @@ function reportLoot(report: BattleReport): AttackLoot {
 }
 
 /** Both owners learn only from the battle in which they actually participated. */
-function rememberNpcBattle(state: SaveState, report: BattleReport, at: number): SaveState {
+function rememberNpcBattle(state: SaveState, report: BattleReport, at: number, flightId?: string): SaveState {
   if (!state.npc) return state;
   let profiles = state.npc.profiles;
+  const journal = getNpcJournalSink();
   for (const [side, participant] of [['attacker', report.attacker], ['defender', report.defender]] as const) {
     const ownerId = participant.playerId;
     const profile = ownerId ? profiles[ownerId] : undefined;
     if (!profile || !ownerId) continue;
     const won = report.winner === side;
+    // The outcome ledger only watches (every NPC, each fight it took part in).
+    if (journal?.outcome) {
+      const raceOf = (id: string | undefined) => Object.values(getEspionageTargets(state.espionage)).find((target) => target.ownerId === id)?.raceId;
+      const other = side === 'attacker' ? report.defender : report.attacker;
+      const loot = battleLoot(report);
+      const lost = sideDestroyedValue(report, side, raceOf(ownerId));
+      journal.outcome({ at, ownerId, kind: 'battle', data: { side, won: won ? 1 : 0, vs: other.playerId ?? null, m: report.missionType,
+        gain: side === 'attacker' ? loot : 0, loss: side === 'defender' ? lost + loot : lost,
+        hit: sideDestroyedValue(report, side === 'attacker' ? 'defender' : 'attacker', raceOf(other.playerId)), id: report.id } });
+    }
     let remembered = updateNpcAutonomyMemory(profile, report.id, at,
-      won ? 'battle-victory' : 'battle-loss', won, [report.id]);
+      won ? 'battle-win' : 'battle-loss', won, [report.id]);
     // The defender remembers who attacked it and what it cost, for the whole match.
     if (side === 'defender' && isGrievanceBattle(report)) {
       const raceId = Object.values(getEspionageTargets(state.espionage)).find((target) => target.ownerId === ownerId)?.raceId;
@@ -412,7 +425,12 @@ function rememberNpcBattle(state: SaveState, report: BattleReport, at: number): 
     }
     profiles = { ...profiles, [ownerId]: remembered };
   }
-  return profiles === state.npc.profiles ? state : { ...state, npc: { ...state.npc, profiles } };
+  const next = profiles === state.npc.profiles ? state : { ...state, npc: { ...state.npc, profiles } };
+  // A strategic plan's attack: the plan closes with what the battle brought.
+  const attackerId = report.attacker.playerId;
+  if (!attackerId || !state.npcStrategy?.plans[attackerId]) return next;
+  const attackerRace = Object.values(getEspionageTargets(state.espionage)).find((target) => target.ownerId === attackerId)?.raceId;
+  return resolveNpcPlanBattle(next, report, flightId, at, sideDestroyedValue(report, 'attacker', attackerRace), battleLoot(report));
 }
 
 function resolveTargetForFlight(state: SaveState, flight: FlightRecord): SpyTargetState | null {
@@ -650,7 +668,7 @@ export function resolveAttackAtTarget(state: SaveState, flight: FlightRecord, no
     )
     : withTargetState(next, siege.target);
   next = addReport(next, reportWithSiege);
-  next = rememberNpcBattle(next, reportWithSiege, now);
+  next = rememberNpcBattle(next, reportWithSiege, now, flight.id);
   const resolution: AttackResolution = { reportId, resolvedAt: safeCount(now), debris, loot, planetDestroyed: siege.planetDestroyed };
   return { state: next, report: reportWithSiege, resolution };
 }
@@ -885,7 +903,7 @@ function resolveOwnedIncomingAttack(state: SaveState, flight: FlightRecord, now:
     if (destroyed.destroyed) next = destroyed.state;
   }
   next = addReport(next, reportWithSiege);
-  next = rememberNpcBattle(next, reportWithSiege, now);
+  next = rememberNpcBattle(next, reportWithSiege, now, flight.id);
   const resolution: AttackResolution = { reportId, resolvedAt: safeCount(now), debris, loot, planetDestroyed: siege.planetDestroyed };
   return { state: next, report: reportWithSiege, resolution };
 }

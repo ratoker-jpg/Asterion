@@ -118,10 +118,39 @@ test('a fact-backed battle loss changes attack weight and forces timely goal rec
   const learnedLoss = updateNpcAutonomyMemory(priorGoal, 'battle-loss-1', 101, 'battle-loss', false,
     ['own-battle-report-1']);
   assert.ok(weightNpcAction(learnedLoss, 'attack') < attackBefore);
-  assert.equal(learnedLoss.longTermGoals.find((goal) => goal.kind === 'colonize')?.status, 'paused');
-  assert.equal(learnedLoss.longTermGoals.at(-1)?.kind, 'battle-loss');
-  assert.ok(learnedLoss.planning.reconsiderAt! > priorGoal.planning.reconsiderAt!);
+  // A battle is no goal: the goal stands until the next look reconsiders it (due at once).
+  assert.ok(learnedLoss.longTermGoals.every((goal) => !goal.kind.startsWith('battle-')));
+  assert.equal(learnedLoss.planning.reconsiderAt, 101);
+  const nextLook = updateNpcAutonomyMemory(learnedLoss, 'look-after-loss', 102, 'production', true, ['decision:look-after-loss'],
+    { goalKind: 'production', goalKinds: new Set(['production', 'attack']) });
+  assert.equal(nextLook.longTermGoals.find((goal) => goal.kind === 'colonize')?.status, 'paused');
+  assert.equal(nextLook.longTermGoals.at(-1)?.kind, 'production');
+  assert.ok(nextLook.planning.reconsiderAt! > 102);
   assert.ok(validateNpcState({ version: 1, personaSalt: 'policy-test-salt', profiles: { [ownerId]: learnedLoss } }));
+});
+
+test('battle wins count for attack weight, under their name and the old one', () => {
+  const learner = withTraits(sourceProfile, { adaptability: 1, persistence: 0, riskTolerance: 0.5 });
+  const before = weightNpcAction(learner, 'attack');
+  assert.ok(weightNpcAction(updateNpcAutonomyMemory(learner, 'win-1', 100, 'battle-win', true, ['own-report-win-1']), 'attack') > before);
+  assert.ok(weightNpcAction(updateNpcAutonomyMemory(learner, 'win-old', 100, 'battle-victory', true, ['own-report-win-old']), 'attack') > before,
+    'a win saved before the fix still counts');
+});
+
+test('a look full of started/denied entries does not push battles out of memory', () => {
+  let profile = updateNpcAutonomyMemory(sourceProfile, 'fight-1', 10, 'battle-loss', false, ['own-report-fight-1']);
+  for (let index = 0; index < 200; index += 1) {
+    profile = updateNpcAutonomyMemory(profile, `look:${index}`, 11 + index, index % 2 ? 'production' : 'attack', index % 3 > 0,
+      [`decision:look:${index}`]);
+  }
+  assert.ok(profile.memory.some((entry) => entry.kind === 'battle-loss'), 'the battle survives 200 decisions');
+  assert.equal(profile.memory.filter((entry) => !entry.kind.startsWith('battle-')).length, 64);
+  for (let index = 0; index < 30; index += 1) {
+    profile = updateNpcAutonomyMemory(profile, `fight-${index + 2}`, 1000 + index, index % 2 ? 'battle-win' : 'battle-loss', index % 2 === 1,
+      [`own-report-fight-${index + 2}`]);
+  }
+  assert.equal(profile.memory.filter((entry) => entry.kind.startsWith('battle-')).length, 16, 'battles keep a ring of their own');
+  assert.ok(validateNpcState({ version: 1, personaSalt: 'policy-test-salt', profiles: { [ownerId]: profile } }));
 });
 
 test('adaptability, persistence, and risk tolerance scale the effect of fact-backed outcomes', () => {

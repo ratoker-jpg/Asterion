@@ -24,6 +24,7 @@ import { dispatchNpcDeployment, dispatchNpcGas, dispatchNpcMission, dispatchNpcS
 import { beginFlightReturn } from '../domain/flights/runtime.ts';
 import { getNpcPirateCandidates, dispatchNpcPirateMission } from './npc-pirates.ts';
 import { getNpcEndgameChoices } from './npc-endgame.ts';
+import { getNpcPlanChoices, refreshNpcPlans, scheduleNpcPlanCheck } from './npc-plans.ts';
 import { getNpcSunPrepChoices, npcSunPrepSavesGas, refreshNpcSunPrep, scheduleNpcSunPrepCheck } from './npc-sun-prep.ts';
 import { getNpcSpaceportCandidates, getNpcSpaceportCommanderCandidates, startNpcSpaceportUpgrade } from './npc-spaceport.ts';
 import { npcCombatPriority, npcEnemyShape, npcMainCommander } from './npc-commanders.ts';
@@ -172,6 +173,8 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     if (repaired.repaired > 0) state = { ...state, espionage: { ...state.espionage!, targets: { ...state.espionage!.targets, [target.id]: repaired.target } } };
   }
   const utility = createNpcUtilityContext(state, profile, at, timeScale);
+  // The owner's plans move on by what it sees now (ships built, shares arrived, fresh news).
+  state = refreshNpcPlans(state, profile, utility, at, timeScale);
   // The Sun plan of the owner's alliance moves on by what it sees now.
   state = refreshNpcSunPrep(state, profile, utility, at, timeScale);
   // Concept U: estimated benefit − cost − risk + goal, plus this owner's seeded misjudgement.
@@ -496,7 +499,11 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     const result = applyNpcDiplomacyAction(current, ownerId, candidate, at, key);
     return { state: result.state, started: result.ok, reason: result.ok ? null : result.reason };
   } });
-  for (const mission of getNpcMissionCandidates(state, profile, at)) {
+  const missions = getNpcMissionCandidates(state, profile, at);
+  // Strategic plans: their next steps, and a new plan when one is worth committing to.
+  for (const choice of getNpcPlanChoices(state, profile, utility, at, timeScale, missions, scored)) choices.push(choice);
+  state = scheduleNpcPlanCheck(state, ownerId, at, timeScale);
+  for (const mission of missions) {
     // An attack the owner does not believe it wins with its own margin, even
     // with everything at hand, is not an option (a lone ship against a
     // defended planet was); nor is one whose haul does not pay for the flight

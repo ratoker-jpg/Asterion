@@ -7,7 +7,7 @@ import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
 import type { SpyTargetState } from '../domain/espionage/types.ts';
 import { listNpcVisits } from '../domain/npc/calendar.ts';
 import { createNpcState, migrateNpcState } from '../domain/npc/state.ts';
-import { isNpcStrategyState, migrateNpcStrategyState } from '../domain/npc/strategy.ts';
+import { isNpcStrategyState, migrateNpcStrategyState, type NpcStrikePlan } from '../domain/npc/strategy.ts';
 import { npcSunPromised, type NpcSunRaidPrepPlan } from '../domain/npc/sun-prep.ts';
 import { utilityToWeight } from '../domain/npc/utility.ts';
 import { sunRaidCapsOf } from '../domain/sun-raid/config.ts';
@@ -21,12 +21,61 @@ import { getNpcMissionCandidates } from './npc-mission-policy.ts';
 import { getNpcMissionAvailableFleet } from './npc-missions.ts';
 import { activeNpcSunPrep, npcSunPrepNextMoment, withoutNpcSunPrepHold, NPC_SUN_PREP_BALANCE } from './npc-sun-prep-state.ts';
 import { chooseNpcSunForRaid, getNpcSunPrepChoices, npcResponsiveness, npcSunPrepSavesGas, pickNpcGatherTime, refreshNpcSunPrep } from './npc-sun-prep.ts';
+import { scheduleNpcPlanCheck } from './npc-plans.ts';
+import { activeNpcPlans } from './npc-plan-reserve.ts';
 import { createNpcUtilityContext } from './npc-utility.ts';
 import { createInitialSaveState, loadSavedState, serializeSaveForStorage } from './persistence.ts';
 import { currentSunRaidState, npcSunFlightGas, reconcileSunRaids, sunFleetPopulation } from './sun-raid.ts';
 
 const NOW = Date.UTC(2026, 9, 26, 6);
 const HOUR = 3_600_000;
+
+/** A running strike of the owner on another's planet: nothing to build, its own ships at its own rally planet. */
+function withStrike(state: SaveState, ownerId: string, targetOwnerId: string, at: number): SaveState {
+  const planet = home(state, ownerId);
+  const plan: NpcStrikePlan = {
+    planId: `plan:${ownerId}:test-strike`, template: 'strike', ownerId, status: 'active', phase: 'produce', createdAt: at, deadlineAt: at + 12 * HOUR,
+    targetPlanetId: home(state, targetOwnerId).id, targetOwnerId, rallyPlanetId: planet.id,
+    reserve: { [planet.id]: { [hullOf(planet.raceId).id]: 2 } }, orders: [], forecast: { win: 0.8, gain: 1, loss: 1, readyAt: at + HOUR }, knowledgeAt: at, sent: [],
+  };
+  const strategy = state.npcStrategy ?? { version: 1 as const, plans: {}, outcomes: {}, nextCheckAt: {} };
+  return { ...state, npcStrategy: { ...strategy, plans: { ...strategy.plans, [ownerId]: [plan, ...(strategy.plans[ownerId] ?? [])] } } };
+}
+
+test('a strike and a Sun plan of one owner live side by side: each reads its own, and neither blocks the other\'s check', () => {
+  const { owners } = world();
+  const team = owners.slice(0, 3);
+  const { state: initial, leader } = ready(team);
+  // A strike check just made does not put off the leader's Sun check.
+  const started = startPlan(scheduleNpcPlanCheck(initial, leader, NOW, 1), leader, NOW);
+  assert.ok(planOf(started, leader), 'the Sun plan starts');
+  let state = withStrike(started, leader, owners[3]!, NOW);
+  const sun = planOf(state, leader);
+  assert.equal(state.npcStrategy!.plans[leader]![0]!.template, 'strike', 'the strike comes first in the list');
+  assert.ok(isNpcStrategyState(JSON.parse(JSON.stringify(state.npcStrategy))), 'the section holds both templates');
+  assert.deepEqual(activeNpcPlans(state, leader).map((plan) => plan.template), ['strike'], 'strike readers see only strikes');
+  for (const ownerId of team) state = act(state, ownerId, NOW + HOUR);
+  assert.equal(planOf(state, leader).planId, sun.planId);
+  assert.ok(Object.keys(planOf(state, leader).rsvps).length > 0, 'the Sun plan moved on');
+  assert.equal(activeNpcPlans(state, leader).length, 1, 'and left the strike alone');
+});
+
+test('a world with a strike and a Sun plan does not depend on where it is sliced or on a journal', { timeout: 300_000 }, () => {
+  const { state: base, owners } = campaign();
+  const at0 = base.npcReplay!.processedThroughAt;
+  const state = withStrike(base, owners[0]!, owners[5]!, at0);
+  const whole = run(state, [8]);
+  assert.equal(comparable(run(state, [1, 2, 3.5, 5, 8])), comparable(whole));
+  const previous = setNpcJournalSink({ detailed: () => true, decision: () => {}, sun: () => {}, outcome: () => {} });
+  try {
+    assert.equal(comparable(run(state, [8])), comparable(whole), 'a journal only watches');
+  } finally {
+    setNpcJournalSink(previous);
+  }
+  const strike = (whole.npcStrategy!.plans[owners[0]!] ?? []).find((plan) => plan.template === 'strike')!;
+  assert.ok(strike.status !== 'active' || strike.phase !== 'produce', `the strike moved on in this world (${strike.status} ${strike.phase})`);
+  assert.ok((whole.npcStrategy!.plans[owners[0]!] ?? []).some((plan) => plan.template === 'sun-raid-prep'), 'next to the Sun plan');
+});
 
 function world(npcCount = 4) {
   const config = createDefaultNewGameConfig({ seed: 'NPC-SUN-PREP', factionId: 'aegis', playerName: 'Prep Test' });
@@ -116,7 +165,7 @@ function startPlan(state: SaveState, leader: string, at: number): SaveState {
 }
 
 function planOf(state: SaveState, leader: string): NpcSunRaidPrepPlan {
-  return state.npcStrategy!.plans[leader]![0]!;
+  return state.npcStrategy!.plans[leader]!.find((plan): plan is NpcSunRaidPrepPlan => plan.template === 'sun-raid-prep')!;
 }
 
 function ready(owners: readonly string[], population = 30_000): { state: SaveState; leader: string } {

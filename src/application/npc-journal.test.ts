@@ -59,8 +59,12 @@ test('a world with the bot journal attached equals the world without it', () => 
   for (const top of tops) assert.equal((top.d!.owners as unknown[]).length, NPC_JOURNAL_DETAILED_TOP);
   // The top is refreshed every game hour: an owner may enter or leave it.
   const owners = new Set(tops.flatMap((top) => (top.d!.owners as [string, number][]).map(([ownerId]) => ownerId)));
-  const decisions = entries.filter((entry) => entry.k !== 'top' && entry.k !== 'style');
+  const decisions = entries.filter((entry) => !['top', 'style', 'kpi', 'battle', 'plan'].includes(entry.k));
   assert.ok(decisions.length > 20, `decisions recorded (${decisions.length})`);
+  // The outcome ledger covers every owner, not only the top: each hour, each NPC's kpi.
+  const kpiOwners = new Set(entries.filter((entry) => entry.k === 'kpi').map((entry) => entry.o));
+  assert.equal(kpiOwners.size, Object.keys(start.npc!.profiles).length, 'every NPC has an hourly kpi');
+  assert.ok(entries.filter((entry) => entry.k === 'kpi').every((entry) => typeof entry.d?.pts === 'number' && typeof entry.d?.fleet === 'number'));
   assert.ok(decisions.every((entry) => owners.has(entry.o)), 'only the top owners are written in detail');
   assert.ok(decisions.some((entry) => (entry.alt?.length ?? 0) > 0), 'alternatives with their weights are kept');
   assert.deepEqual(parseNpcJournalLines(formatNpcJournalLines(entries)), entries);
