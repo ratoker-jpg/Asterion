@@ -35,7 +35,15 @@ export const NPC_FORTIFY_BALANCE = Object.freeze({
   /** Days of income the targets may take on top of what lies in stores, at ambition 0 and 1. */
   budgetDays: [0.5, 3] as const,
   /** Share of the stores above the reserve one order may spend, at ambition 0 and 1. */
-  spendShare: [0.45, 0.9] as const,
+  spendShare: [0.35, 0.7] as const,
+  /**
+   * From this ambition (or on a planet in danger) a look's first thing is the
+   * order of the planets lacking most, at most this many: among thousands of
+   * small actions a day a drawn order came up 1% of the time (measured 01.11.2026)
+   * and a planet earning 12 mln an hour stood without batteries. Below it, by draw.
+   */
+  promiseAmbition: 0.35,
+  promisedPlanets: 2,
   /** Hours of the planet's own income kept per resource (never more than this share of the store). */
   reserveHours: 6,
   reserveShare: 0.25,
@@ -49,7 +57,7 @@ export const NPC_FORTIFY_BALANCE = Object.freeze({
   stopGapScore: 0.25,
   stopGapShare: 0.3,
   /** An order worth fewer hours of the planet's income than this waits for more: no stream of tiny orders. */
-  minOrderHours: 0.1,
+  minOrderHours: 0.25,
   /** A single-copy shield is bought only with this many times its price on the planet. */
   shieldStock: 3,
   /** Battles at a planet within this many game hours count as its danger. */
@@ -69,7 +77,7 @@ export type NpcFortifyPlanetInput = Readonly<{
 }>;
 
 type Outcome = { state: SaveState; started: boolean; reason: string | null; planetId?: string; economyActionId?: string };
-export type NpcFortifyChoice = { candidate: NpcAutonomyCandidate; run: (state: SaveState, key: string) => Outcome };
+export type NpcFortifyChoice = { candidate: NpcAutonomyCandidate; run: (state: SaveState, key: string) => Outcome; must?: boolean };
 
 function strategyOf(state: SaveState): NpcStrategyState {
   return state.npcStrategy ?? createNpcStrategyState();
@@ -229,6 +237,7 @@ export function getNpcFortifyChoices(state: SaveState, profile: NpcProfile, util
   if (!plan) return [];
   const ownerId = profile.ownerId;
   const choices: NpcFortifyChoice[] = [];
+  const orders: { choice: NpcFortifyChoice; lack: number; danger: boolean }[] = [];
   const share = lerp(NPC_FORTIFY_BALANCE.spendShare, plan.ambition);
   const withTarget = (current: SaveState, target: SpyTargetState): SaveState => ({
     ...current, espionage: { ...current.espionage!, targets: { ...current.espionage!.targets, [target.id]: target } },
@@ -249,7 +258,7 @@ export function getNpcFortifyChoices(state: SaveState, profile: NpcProfile, util
     const order = pickOrder(planet, input.production, missing, summary.available, at, timeScale, share, income, wanted, summary.population, incoming ? 1 : 0);
     if (order) {
       const id = `fortify:order:${planet.id}:${order.itemId}`;
-      choices.push({ candidate: { id, kind: 'plan-step', weight: scored(id, stepEstimate), payload: { planetId: planet.id, itemId: order.itemId } }, run: (current, key) => {
+      const choice: NpcFortifyChoice = { candidate: { id, kind: 'plan-step', weight: scored(id, stepEstimate), payload: { planetId: planet.id, itemId: order.itemId } }, run: (current, key) => {
         const live = current.espionage?.targets?.[planet.id];
         if (!live || live.ownerId !== ownerId) return { state: current, started: false, reason: 'plan-planet-lost' };
         let quantity = order.quantity;
@@ -259,7 +268,9 @@ export function getNpcFortifyChoices(state: SaveState, profile: NpcProfile, util
           result = startNpcFleetProduction(live, ownerId, 'defense', order.itemId, at, timeScale, key, 0, quantity);
         }
         return { state: withTarget(current, result.target), started: result.ok, reason: result.reason, planetId: planet.id, ...(result.ok && result.orderId ? { economyActionId: result.orderId } : {}) };
-      } });
+      } };
+      choices.push(choice);
+      orders.push({ choice, lack: need, danger: incoming });
     }
     // What holds the battery back: room in the hangar, then the yard's speed.
     const building = (role: BuildingRole) => input.buildings.find((item) => item.role === role && item.availability.canBuild);
@@ -298,6 +309,11 @@ export function getNpcFortifyChoices(state: SaveState, profile: NpcProfile, util
       } });
     }
   }
+  // The planets lacking most come first in the look, for an owner who wants it so or where an attack is coming.
+  const promised = orders.filter((item) => item.danger || plan.ambition >= NPC_FORTIFY_BALANCE.promiseAmbition)
+    .sort((left, right) => Number(right.danger) - Number(left.danger) || right.lack - left.lack || (left.choice.candidate.id < right.choice.candidate.id ? -1 : 1))
+    .slice(0, NPC_FORTIFY_BALANCE.promisedPlanets);
+  for (const item of promised) item.choice.must = true;
   return choices;
 }
 
