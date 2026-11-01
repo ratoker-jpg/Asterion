@@ -69,7 +69,7 @@ function initialConfig(seriesRound: SeriesRoundRequest | null | undefined, offer
   return {
     ...previous,
     seed: fresh.seed,
-    campaignName: offer.kind === 'ready' ? roundCampaignName(previous.campaignName, offer.series.rounds + 1) : previous.campaignName,
+    campaignName: offer.kind === 'ready' && offer.series.seriesId === seriesRound.seriesId ? roundCampaignName(previous.campaignName, offer.series.rounds + 1) : previous.campaignName,
   };
 }
 
@@ -78,7 +78,7 @@ export function NewGameWizard({ onBack, onThemeChange, onCreated, seriesRound = 
   const [offer] = useState<SeriesOffer>(() => readSeriesOffer(seriesRound?.seriesId));
   const [config, setConfig] = useState<NewGameConfig>(() => initialConfig(seriesRound, offer));
   // Off unless the player came by «Новый раунд»: a plain new game is a clean population.
-  const [continueSeries, setContinueSeries] = useState(() => Boolean(seriesRound) && offer.kind === 'ready');
+  const [continueSeries, setContinueSeries] = useState(() => Boolean(seriesRound?.seriesId) && offer.kind === 'ready' && offer.series.seriesId === seriesRound?.seriesId);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const issues = useMemo(() => validateNewGameConfig(config), [config]);
