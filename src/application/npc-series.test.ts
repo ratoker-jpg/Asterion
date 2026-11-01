@@ -25,7 +25,10 @@ import { getNpcDiplomacyCandidates } from './npc-diplomacy.ts';
 import { getNpcOwnerIds } from './npc-foundation.ts';
 import { bindNewCampaignToSeries, campaignIdOf, isSeriesCampaign, settleCampaign } from './npc-series.ts';
 import { readPersonaRegistry, writePersonaRegistry, type PersonaBridge } from './persona-store.ts';
-import { createInitialSaveState } from './persistence.ts';
+import { freezeNpcCatchupTarget, isNpcCatchupPending } from './npc-catchup.ts';
+import { campaign, memoryStorage, START } from './npc-runtime.test-support.ts';
+import { reconcileRuntime } from './reconcile.ts';
+import { createInitialSaveState, createPersistenceFacade } from './persistence.ts';
 import { createSlot, exportSaveSlot, type SlotStorage } from './slots.ts';
 
 const NOW = Date.UTC(2026, 10, 1, 12);
@@ -425,4 +428,36 @@ test('a malformed registry is refused, field by field', () => {
   doubled.series[0].personas[1].personaId = doubled.series[0].personas[0].personaId;
   assert.deepEqual(parsePersonaRegistry(JSON.stringify(doubled)), { ok: false, reason: 'corrupt' });
   assert.deepEqual(parsePersonaRegistry('[]'), { ok: false, reason: 'corrupt' });
+});
+
+test('a campaign of a series plays the same in slices and across reloads, and its memory survives the save', () => {
+  const targetAt = START + 6 * 60 * 60 * 1000;
+  const roundA = campaign(6, 'SERIES-REPLAY-A');
+  const [one, two] = Object.keys(roundA.npc!.profiles).sort();
+  const fold = settleCampaign(createPersonaRegistry(), withAid(roundA, one!, two!, 4), 'gate', START)!;
+  const bound = bindNewCampaignToSeries(fold.registry, fold.seriesId, campaign(6, 'SERIES-REPLAY-B'), START)!;
+  assert.ok(Object.values(bound.state.npc!.profiles).some((profile) => Object.keys(profile.inherited!.relations).length > 0));
+  const start = freezeNpcCatchupTarget(bound.state, targetAt);
+  const drain = (reload: boolean) => {
+    let state = start;
+    for (let guard = 0; isNpcCatchupPending(state); guard += 1) {
+      assert.ok(guard < 2_000, 'catch-up must finish');
+      state = reconcileRuntime(state, { planetId: state.currentPlanetId, now: targetAt, mode: 'production', testTimeScale: 1, replayMaxGroups: 64 }).state;
+      if (reload) {
+        const facade = createPersistenceFacade({ mode: 'production', storage: memoryStorage(), saveKey: 'asterion.npc-series.test', now: () => targetAt });
+        assert.equal(facade.write(state).ok, true);
+        const loaded = facade.load();
+        assert.equal(loaded.status, 'loaded');
+        if (loaded.status === 'loaded') state = loaded.state;
+      }
+    }
+    return state;
+  };
+  const straight = drain(false);
+  const reloaded = drain(true);
+  assert.deepEqual(JSON.parse(JSON.stringify(reloaded.npc)), JSON.parse(JSON.stringify(straight.npc)));
+  assert.deepEqual(JSON.parse(JSON.stringify(reloaded.flights.records)), JSON.parse(JSON.stringify(straight.flights.records)));
+  for (const [ownerId, profile] of Object.entries(reloaded.npc!.profiles)) {
+    assert.deepEqual(JSON.parse(JSON.stringify(profile.inherited)), JSON.parse(JSON.stringify(bound.state.npc!.profiles[ownerId]!.inherited)));
+  }
 });
