@@ -222,3 +222,19 @@ test('the strategy section survives a save and reload; older saves have none', (
   if (loaded.status === 'loaded') assert.deepEqual(loaded.state.npcStrategy, state.npcStrategy);
   assert.equal(migrateNpcStrategyState({ version: 2 }), undefined, 'an unknown section is dropped, not half-trusted');
 });
+
+test('the outcome ledger only watches: a plan played with it equals the plan played without', () => {
+  const world = sevenPlanetWorld('npc-plans-ledger-parity');
+  const without = drive(world, 24 * 60);
+  const recorder = new NpcJournalRecorder();
+  const previous = setNpcJournalSink(recorder);
+  let watched: ReturnType<typeof drive>;
+  try {
+    watched = drive(world, 24 * 60);
+  } finally {
+    setNpcJournalSink(previous);
+  }
+  assert.ok(recorder.take().some((entry) => entry.k === 'plan'), 'the ledger saw the plan close');
+  assert.deepEqual(watched.steps, without.steps);
+  assert.deepEqual(watched.state, without.state);
+});
