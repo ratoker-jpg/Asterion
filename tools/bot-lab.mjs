@@ -148,7 +148,10 @@ export function applySocialScenario(state, scenario) {
     const hull = 'cruiser';
     for (const ownerId of [left, right]) {
       const planet = planetOf(ownerId);
+      // Some batteries: the first pirates of a lab world otherwise wipe a fleet standing by with nothing to do with this.
+      const guard = createEmptyDefenseState();
       targets[planet.id] = { ...planet, resources: { ...planet.resources, metal: 1_500_000, minerals: 1_500_000, gas: 1_500_000 },
+        defense: { ...guard, defenses: { ...guard.defenses, 'ion-plasma-battery': 15 } },
         buildings: { ...planet.buildings, shipyard: 12, hangar: 60, 'metal-storage': 25, 'mineral-storage': 25, 'gas-storage': 25, 'planetary-government': 1 },
         fleet: { ...planet.fleet, ships: { ...planet.fleet.ships, [hull]: 60, transporter: 20, 'spy-probe': 5 } },
         fleetProduction: createDefaultFleetProductionState() };

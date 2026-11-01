@@ -82,7 +82,7 @@ const HOUR = 3_600_000;
 /** Regard above which an owner does not plan a strike on someone. */
 const NPC_STRIKE_FRIEND_REGARD = 0.3;
 type Outcome = { state: SaveState; started: boolean; reason: string | null; planetId?: string; economyActionId?: string };
-export type NpcPlanChoice = { candidate: NpcAutonomyCandidate; run: (state: SaveState, key: string) => Outcome };
+export type NpcPlanChoice = { candidate: NpcAutonomyCandidate; run: (state: SaveState, key: string) => Outcome; must?: boolean };
 
 type Catalog = ReturnType<typeof getFactionShipCatalog>;
 const combatShips = (catalog: Catalog) => catalog.filter((entity) => entity.category === 'Боевой корабль' && entity.combat);
@@ -429,7 +429,9 @@ export function refreshNpcPlans(state: SaveState, profile: NpcProfile, utility: 
       // A strike agreed for a time: the force stands by, the news is taken when it is due.
       if (plan.partner && !npcJointTimeNear(next, plan, at, timeScale, NPC_JOINT_RECHECK_LEAD_MS)) continue;
       const report = latestReport(utility, plan);
-      if (!report || at - report.createdAt > NPC_STRIKE_BALANCE.recheckReportHours * HOUR / Math.max(1, timeScale)) continue; // a probe is due
+      // At the agreed time itself no probe has come back: it goes by the newest news it has rather than break its word.
+      const reportHours = plan.partner && npcJointTimeNear(next, plan, at, timeScale, 0) ? NPC_STRIKE_BALANCE.createReportHours : NPC_STRIKE_BALANCE.recheckReportHours;
+      if (!report || at - report.createdAt > reportHours * HOUR / Math.max(1, timeScale)) continue; // a probe is due
       const rally = next.espionage!.targets![plan.rallyPlanetId]!;
       const force = totalForce(plan);
       const own = npcForcePower(rally.raceId, force);
@@ -530,7 +532,8 @@ export function getNpcPlanChoices(state: SaveState, profile: NpcProfile, utility
       const probe = missions.find((mission) => mission.kind === 'espionage' && mission.payload.destinationPlanetId === plan.targetPlanetId);
       if (probe) {
         const id = `plan:recon:${plan.planId}`;
-        choices.push({ candidate: { id, kind: 'plan-step', weight: utilityToWeight(2), payload: { planetId: String(probe.payload.originPlanetId) } }, run: (current, key) => {
+        // A time agreed with someone is a promise: what it has due comes first.
+        choices.push({ ...(plan.partner ? { must: true } : {}), candidate: { id, kind: 'plan-step', weight: utilityToWeight(2), payload: { planetId: String(probe.payload.originPlanetId) } }, run: (current, key) => {
           const command = candidateToNpcMissionCommand(probe, ownerId, key);
           if (!command) return { state: current, started: false, reason: 'invalid-mission-candidate' };
           const result = dispatchNpcMission(current, command, at, timeScale);
@@ -540,7 +543,7 @@ export function getNpcPlanChoices(state: SaveState, profile: NpcProfile, utility
     }
     if (plan.phase === 'launch' && !paused && (!plan.partner || npcJointTimeNear(state, plan, at, timeScale, 0))) {
       const id = `plan:launch:${plan.planId}`;
-      choices.push({ candidate: { id, kind: 'plan-step', weight: utilityToWeight(2.4), payload: { planetId: plan.rallyPlanetId } }, run: (current, key) => {
+      choices.push({ ...(plan.partner ? { must: true } : {}), candidate: { id, kind: 'plan-step', weight: utilityToWeight(2.4), payload: { planetId: plan.rallyPlanetId } }, run: (current, key) => {
         const rally = current.espionage?.targets?.[plan.rallyPlanetId];
         const target = current.espionage?.targets?.[plan.targetPlanetId];
         if (!rally || !target) return { state: current, started: false, reason: 'plan-target-lost' };
