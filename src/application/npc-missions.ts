@@ -1,5 +1,5 @@
 import { ownerFlights } from './npc-knowledge-index.ts';
-import { calculateFleetPopulation, createEmptyFleetState, getSolarSatelliteFleetCount, removeSolarSatellitesFromFleet, resolveSavedFleetState } from '../domain/fleet/runtime.ts';
+import { MAX_COMMANDERS_PER_PLANET, calculateFleetPopulation, createEmptyFleetState, getSolarSatelliteFleetCount, removeSolarSatellitesFromFleet, resolveSavedFleetState } from '../domain/fleet/runtime.ts';
 import { calculatePlanetCapacity, calculatePlanetPopulation } from '../domain/fleet/overpopulation.ts';
 import { migrateBuildingLevels } from '../domain/buildings/resource-zone.ts';
 import { isNpcPlanetBlocked, startNpcOverpopulationAt } from './npc-economy.ts';
@@ -638,6 +638,24 @@ function takeCommanders(origin: SpyTargetState, raw: Partial<Record<CommanderId,
 }
 
 /** Population the destination hangar has free right now, the only room a deployment is checked against. */
+/**
+ * Command ships this planet has or has coming: its own, those flown from it
+ * (they come back, and leave the planet's roster while away) and those deployed
+ * to it. A second of a kind would be lost on landing, so the owner neither
+ * builds one nor sends one there.
+ */
+export function npcCommandersAtPlanet(state: SaveState, ownerId: string, planet: SpyTargetState): ReadonlySet<string> {
+  const bound = new Set(Object.entries(planet.fleet.commanders ?? {}).filter(([, count]) => (count ?? 0) > 0).map(([id]) => id));
+  for (const flight of ownerFlights(state.flights.records, ownerId)) {
+    if (flight.ownerSide !== 'npc' || !['outbound', 'arrived', 'returning'].includes(flight.phase)) continue;
+    const home = flight.originPlanetId === planet.id;
+    const deployed = flight.missionId === 'deployment' && flight.phase === 'outbound' && flight.destinationPlanetId === planet.id;
+    if (!home && !deployed) continue;
+    for (const [id, count] of Object.entries(flight.selectedCommanders ?? {})) if ((count ?? 0) > 0) bound.add(id);
+  }
+  return bound;
+}
+
 export function npcDeploymentFreeCapacity(target: SpyTargetState): number {
   const fleet = removeSolarSatellitesFromFleet(target.fleet).fleet;
   const satellites = Math.max(Math.max(0, Math.floor(target.solarSatellites ?? 0)), getSolarSatelliteFleetCount(target.fleet));
@@ -747,7 +765,7 @@ export function resolveNpcDeploymentArrival(state: SaveState, flight: FlightReco
   const commanders = { ...target.fleet.commanders };
   for (const [id, raw] of Object.entries(flight.selectedCommanders ?? {}) as [CommanderId, number][]) {
     const count = safeCount(raw);
-    if (count) commanders[id] = (commanders[id] ?? 0) + count;
+    if (count) commanders[id] = Math.min(MAX_COMMANDERS_PER_PLANET, (commanders[id] ?? 0) + count);
   }
   // Levels are owner-wide; a destination profile behind the flight's snapshot takes the higher one.
   const levels = { ...(target.ownerProfile?.commanderLevels ?? {}) } as Partial<Record<CommanderId, number>>;
@@ -1119,7 +1137,7 @@ export function settleNpcMissionReturn(
     const commanders = { ...source.fleet.commanders };
     for (const [id, raw] of Object.entries(flight.selectedCommanders ?? {}) as [CommanderId, number][]) {
       const survived = battleReport ? battleReport.attackerForce.stacks.find((stack) => stack.entityId === id)?.countAfter ?? 0 : safeCount(raw);
-      if (survived > 0) commanders[id] = (commanders[id] ?? 0) + survived;
+      if (survived > 0) commanders[id] = Math.min(MAX_COMMANDERS_PER_PLANET, (commanders[id] ?? 0) + survived);
     }
     const homeFleet = { ...source.fleet, ships, commanders };
     let resources = { metal: source.resources.metal, minerals: source.resources.minerals, gas: source.resources.gas };

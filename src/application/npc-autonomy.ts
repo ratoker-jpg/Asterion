@@ -20,7 +20,7 @@ import { getNpcMissionCandidates, candidateToNpcMissionCommand } from './npc-mis
 import { assessNpcPlanetThreat, estimateReinforcementUtility } from './npc-threat.ts';
 import { applyNpcAllianceHeraldry } from './npc-identity.ts';
 import { planNpcGasMission } from './npc-gas.ts';
-import { dispatchNpcDeployment, dispatchNpcGas, dispatchNpcMission, dispatchNpcSpaceFlight, dispatchNpcTransport, getNpcMissionAvailableFleet, NPC_SPACE_FLIGHT_GAS_FEE, resolveNpcMissionArrival } from './npc-missions.ts';
+import { dispatchNpcDeployment, dispatchNpcGas, dispatchNpcMission, dispatchNpcSpaceFlight, dispatchNpcTransport, getNpcMissionAvailableFleet, npcCommandersAtPlanet, NPC_SPACE_FLIGHT_GAS_FEE, resolveNpcMissionArrival } from './npc-missions.ts';
 import { beginFlightReturn } from '../domain/flights/runtime.ts';
 import { getNpcPirateCandidates, dispatchNpcPirateMission } from './npc-pirates.ts';
 import { getNpcEndgameChoices } from './npc-endgame.ts';
@@ -237,7 +237,9 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
       && flight.originPlanetId === target.id && ['outbound', 'arrived', 'returning'].includes(flight.phase))
       .reduce((sum, flight) => { const empty = createEmptyFleetState(); return sum + calculateFleetPopulation({ ships: { ...empty.ships, ...flight.selectedShips }, commanders: { ...empty.commanders, ...flight.selectedCommanders } }, target.raceId); }, 0);
     const buildings = getNpcBuildingCandidates(target, true);
-    const production = getNpcFleetProductionCandidates(target, ownerId, at, timeScale, reservedPopulation);
+    const commandersHere = npcCommandersAtPlanet(state, ownerId, target);
+    const production = getNpcFleetProductionCandidates(target, ownerId, at, timeScale, reservedPopulation)
+      .filter((preview) => preview.queueKind !== 'commanders' || !commandersHere.has(preview.itemId));
     const energyCosts = buildings.filter(({ availability }) => availability.cost && availability.cost.energy > 0)
       .map(({ availability }) => availability.cost!.energy).sort((a, b) => a - b);
     const situation = describeNpcPlanet(target,
