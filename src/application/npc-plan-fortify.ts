@@ -43,8 +43,13 @@ export const NPC_FORTIFY_BALANCE = Object.freeze({
   queueHours: 10,
   /** Work left beyond this many game hours makes the shipyard and factory the next thing to build. */
   yardHours: 6,
-  /** A cheaper battery only when it is at least this good next to the planet's best. */
+  /** A cheaper battery only when it is at least this good next to the best this planet can build now... */
   minRelativeScore: 0.45,
+  /** ...and what is far below the race's best (its science still ahead) only up to this share of the target: it would fill the hangar for good. */
+  stopGapScore: 0.25,
+  stopGapShare: 0.15,
+  /** An order worth fewer hours of the planet's income than this waits for more: no stream of tiny orders. */
+  minOrderHours: 0.25,
   /** A single-copy shield is bought only with this many times its price on the planet. */
   shieldStock: 3,
   /** Battles at a planet within this many game hours count as its danger. */
@@ -179,7 +184,7 @@ type OrderPick = { itemId: string; quantity: number };
 
 /** The order that adds most strength now on this planet, among batteries worth its population. */
 function pickOrder(planet: SpyTargetState, production: readonly NpcFleetProductionCandidate[], missing: number, room: number, at: number, timeScale: number,
-  share: number, income: number): OrderPick | null {
+  share: number, income: number, wanted: number, population: number, danger: number): OrderPick | null {
   const money = spendable(planet, income, share);
   const queue = planet.fleetProduction?.defenseQueue ?? [];
   const freeAt = Math.max(at, ...queue.map((order) => order.finishAt));
@@ -190,16 +195,19 @@ function pickOrder(planet: SpyTargetState, production: readonly NpcFleetProducti
   const buildable = production.filter((preview) => preview.queueKind === 'defense' && (preview.available || /^Недостаточно (металла|минералов|газа|ресурсов|населения)/.test(preview.reason ?? '')));
   const rows = stats.filter((row) => buildable.some((preview) => preview.itemId === row.id));
   const top = rows[0]?.score ?? 0;
+  const raceBest = stats[0]?.score ?? 0;
   let pick: OrderPick | null = null;
   let bestStrength = 0;
   for (const row of rows) {
     if (row.score < NPC_FORTIFY_BALANCE.minRelativeScore * top) break;
+    // A stop-gap turret holds its population for good: a little of it, or a lot when an attack is on its way.
+    if (row.score < NPC_FORTIFY_BALANCE.stopGapScore * raceBest && !danger && population >= NPC_FORTIFY_BALANCE.stopGapShare * wanted) break;
     const preview = buildable.find((item) => item.itemId === row.id)!;
     const byMoney = Math.min(...KEYS.map((key) => (preview.cost[key] > 0 ? Math.floor(money[key] / preview.cost[key]) : Number.MAX_SAFE_INTEGER)));
     const byTime = preview.durationMs > 0 ? Math.floor(horizon / preview.durationMs)
       : Math.floor(horizon / Math.max(1, row.seconds * 1000 / Math.max(1, timeScale)));
     const quantity = Math.min(Math.floor(Math.min(missing, room) / row.population), byMoney, byTime);
-    if (quantity < 1) continue;
+    if (quantity < 1 || (quantity * row.cost < NPC_FORTIFY_BALANCE.minOrderHours * income && quantity * row.population < missing)) continue;
     const strength = quantity * row.strength;
     if (strength > bestStrength) { bestStrength = strength; pick = { itemId: row.id, quantity }; }
   }
@@ -236,7 +244,9 @@ export function getNpcFortifyChoices(state: SaveState, profile: NpcProfile, util
     const hoard = hoardPressure(utility, planet);
     const income = getNpcPlanetIncomePerHour(planet, timeScale);
     const stepEstimate = 0.3 + 1.2 * plan.ambition + 0.6 * need + 0.8 * hoard + 0.6 * utility.threat;
-    const order = pickOrder(planet, input.production, missing, summary.available, at, timeScale, share, income);
+    const incoming = flightsToPlanet(state.flights.records, planet.id).some((flight) => flight.phase === 'outbound' && flight.arrivalAt > at
+      && flight.ownerId !== ownerId && (flight.missionId === 'attack' || flight.missionId === 'pirate-raid'));
+    const order = pickOrder(planet, input.production, missing, summary.available, at, timeScale, share, income, wanted, summary.population, incoming ? 1 : 0);
     if (order) {
       const id = `fortify:order:${planet.id}:${order.itemId}`;
       choices.push({ candidate: { id, kind: 'plan-step', weight: scored(id, stepEstimate), payload: { planetId: planet.id, itemId: order.itemId } }, run: (current, key) => {

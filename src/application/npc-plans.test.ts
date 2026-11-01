@@ -126,7 +126,7 @@ test('seven planets: orders on several planets, deployments to one rally planet,
   } finally {
     setNpcJournalSink(previous);
   }
-  const plan = plansOf(result.state, world.owner)[0]!;
+  const plan = plansOf(result.state, world.owner).find((item) => item.status !== 'active')!;
   assert.equal(plan.status, 'done', `the plan ends by its attack (${plan.status} ${plan.reason ?? ''}, phase ${plan.phase})`);
   assert.ok(result.steps.filter((step) => step === 'plan:produce').length >= 3, 'orders placed on several planets');
   assert.equal(result.steps.filter((step) => step === 'plan:rally').length, 6, 'six deployments gather the shares');
@@ -244,7 +244,7 @@ test('a force lost at the rally planet cancels the plan instead of sending what 
     return { ...current, espionage: { ...current.espionage!, targets: { ...getEspionageTargets(current.espionage),
       [rally.id]: { ...rally, fleet: { ...rally.fleet, ships: { ...rally.fleet.ships, cruiser: 10 } } } } } };
   });
-  const plan = plansOf(state, world.owner)[0]!;
+  const plan = plansOf(state, world.owner).find((item) => item.status !== 'active')!;
   assert.ok(hit, 'the plan reached its recheck');
   assert.equal(plan.status, 'cancelled');
   assert.equal(plan.reason, 'force-lost');
