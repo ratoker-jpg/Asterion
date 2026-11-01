@@ -21,7 +21,8 @@ import type { NpcStrategyDrives } from './npc-utility.ts';
  * lives in npc-pacts.ts.
  */
 
-export const NPC_GIFT_REQUEST_PREFIX = 'npc-gift:';
+/** Under the autonomy prefix: the save keeps only NPC flights that carry it. */
+export const NPC_GIFT_REQUEST_PREFIX = 'npc-autonomy:gift:';
 
 /** Reasons to pull out that nobody holds against a partner: the world changed under it. */
 const EXCUSED_REASONS: ReadonlySet<string> = new Set(['threat-at-home', 'force-lost', 'rally-lost', 'target-gone', 'attack-not-allowed', 'hangar-full']);

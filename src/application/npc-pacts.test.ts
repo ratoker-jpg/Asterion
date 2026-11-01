@@ -13,13 +13,15 @@ import { migrateNpcStrategyState, type NpcStrikePlan } from '../domain/npc/strat
 import { campaignIdFromSalt, createPersonaRegistry, findSeries } from '../domain/npc/persona-registry.ts';
 import type { SpyReportSnapshot, SpyTargetState } from '../domain/espionage/types.ts';
 import type { BattleReport } from '../domain/combat/report.ts';
+import { createNpcState } from '../domain/npc/state.ts';
+import { getNpcOwnerIds } from './npc-foundation.ts';
 import { createInitialSaveState, createPersistenceFacade } from './persistence.ts';
 import type { SaveState } from './contracts.ts';
 import { withAttackEligiblePoints } from './attack-eligibility.test-support.ts';
 import { getNpcDiplomacyCandidates } from './npc-diplomacy.ts';
 import { reconcileFlights } from './flights.ts';
 import { resolveNpcTransportArrival, dispatchNpcTransport } from './npc-missions.ts';
-import { journalNpcPact, npcReactionStyle, recordNpcPactArrival, settleNpcPact, breakNpcPactByAttack, withNpcPact } from './npc-pact-state.ts';
+import { journalNpcPact, NPC_GIFT_REQUEST_PREFIX, npcReactionStyle, recordNpcPactArrival, settleNpcPact, breakNpcPactByAttack, withNpcPact } from './npc-pact-state.ts';
 import { chooseNpcRobberyReaction, npcJointTargetAllowed, npcPactForbidsAttack, refreshNpcPacts, NPC_PACT_BALANCE } from './npc-pacts.ts';
 import { refreshNpcPlans } from './npc-plans.ts';
 import { npcRelationView, recordNpcBattleRelations, recordNpcHelp, recordNpcRelation } from './npc-relations.ts';
@@ -27,6 +29,9 @@ import { bindNewCampaignToSeries, settleCampaign } from './npc-series.ts';
 import { readNpcPlayStyle } from './npc-style.ts';
 import { createNpcUtilityContext, estimateAttackUtility, npcAttackRegardBias, strategyOf } from './npc-utility.ts';
 import { NpcJournalRecorder, setNpcJournalSink } from './npc-journal.ts';
+import { freezeNpcCatchupTarget, isNpcCatchupPending } from './npc-catchup.ts';
+import { memoryStorage } from './npc-runtime.test-support.ts';
+import { reconcileRuntime } from './reconcile.ts';
 
 const START = Date.UTC(2026, 9, 27, 12);
 const HOUR = 3_600_000;
@@ -54,6 +59,8 @@ function withReport(state: SaveState, ownerId: string, sourcePlanetId: string, t
 function soloWorld(seed: string, options: Readonly<{ reports?: boolean; regardAB?: number; regardBA?: number; cooperation?: number }> = {}): World {
   const base = createDefaultNewGameConfig({ seed, factionId: 'aegis', playerName: 'Pacts' });
   let state = createInitialSaveState('production', START, { ...base, world: { ...base.world, npcCount: 7, campaignSpeed: 'standard' as const } });
+  // A fixed salt in place of the crypto one: the owners' calendars, and so these tests, repeat.
+  state = { ...state, npc: createNpcState(getNpcOwnerIds(state.espionage!.targets, state.profile.playerId), `salt-${seed}`, START) };
   const all = npcPlanets(state);
   const [pa, pb, pt] = all;
   const targets = { ...getEspionageTargets(state.espionage) };
@@ -322,7 +329,7 @@ test('T-SOC-03: a gift is an ordinary transport: paid in fuel, credited on arriv
   const answered = look(ask, world.b, START + 2 * MINUTE);
   const gift = giftOf(answered)!;
   assert.equal(gift.status, 'accepted', gift.reason);
-  const flight = answered.flights.records.find((record) => record.requestId.startsWith('npc-gift:'))!;
+  const flight = answered.flights.records.find((record) => record.requestId.startsWith(NPC_GIFT_REQUEST_PREFIX))!;
   assert.equal(flight.missionId, 'transport');
   assert.equal(flight.ownerId, world.b);
   assert.equal(flight.destinationOwnerId, world.a);
@@ -364,7 +371,7 @@ test('T-SOC-03: only a friend or a partner is asked, and the answer can be no', 
   const answered = look(asked({ ...world, state: cold }), world.b, START + 2 * MINUTE);
   assert.equal(giftOf(answered)!.status, 'declined');
   assert.equal(giftOf(answered)!.reason, 'distrust');
-  assert.equal(answered.flights.records.filter((record) => record.requestId.startsWith('npc-gift:')).length, 0);
+  assert.equal(answered.flights.records.filter((record) => record.requestId.startsWith(NPC_GIFT_REQUEST_PREFIX)).length, 0);
 });
 
 test('T-SOC-03: the gift never reaches a planet it may not: the player, one\'s own by this path, a planet with a new holder', () => {
@@ -506,6 +513,33 @@ test('everything survives a save and reload; a bad section is dropped whole, not
   assert.equal(migrateNpcStrategyState({ ...state.npcStrategy, proposals: [{ nonsense: true }] }), undefined);
   // A save from before stage E passes as it was.
   assert.ok(migrateNpcStrategyState({ version: 1, plans: {}, outcomes: {}, nextCheckAt: {} }));
+});
+
+test('a world with agreements plays the same in slices and across reloads', () => {
+  const world = soloWorld('pact-replay');
+  const targetAt = START + 7 * HOUR;
+  const start = freezeNpcCatchupTarget(world.state, targetAt);
+  const drain = (reload: boolean) => {
+    let state = start;
+    for (let guard = 0; isNpcCatchupPending(state); guard += 1) {
+      assert.ok(guard < 2_000, 'catch-up must finish');
+      state = reconcileRuntime(state, { planetId: state.currentPlanetId, now: targetAt, mode: 'production', testTimeScale: 1, replayMaxGroups: 64 }).state;
+      if (reload) {
+        const facade = createPersistenceFacade({ mode: 'production', storage: memoryStorage(), saveKey: 'asterion.npc-pacts.test', now: () => targetAt });
+        assert.equal(facade.write(state).ok, true);
+        const loaded = facade.load();
+        assert.equal(loaded.status, 'loaded');
+        if (loaded.status === 'loaded') state = loaded.state;
+      }
+    }
+    return state;
+  };
+  const straight = drain(false);
+  const reloaded = drain(true);
+  assert.ok(proposals(straight).length > 0, 'nothing was agreed: this world tests nothing');
+  assert.deepEqual(JSON.parse(JSON.stringify(reloaded.npcStrategy)), JSON.parse(JSON.stringify(straight.npcStrategy)));
+  assert.deepEqual(JSON.parse(JSON.stringify(reloaded.npc)), JSON.parse(JSON.stringify(straight.npc)));
+  assert.deepEqual(JSON.parse(JSON.stringify(reloaded.flights.records)), JSON.parse(JSON.stringify(straight.flights.records)));
 });
 
 test('the journal only watches: agreements appear there and the world is the same without it', () => {

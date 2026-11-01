@@ -148,11 +148,10 @@ export function applySocialScenario(state, scenario) {
     const hull = 'cruiser';
     for (const ownerId of [left, right]) {
       const planet = planetOf(ownerId);
-      const science = state.npcScience?.owners?.[ownerId]?.levels ?? {};
       targets[planet.id] = { ...planet, resources: { ...planet.resources, metal: 1_500_000, minerals: 1_500_000, gas: 1_500_000 },
         buildings: { ...planet.buildings, shipyard: 12, hangar: 60, 'metal-storage': 25, 'mineral-storage': 25, 'gas-storage': 25, 'planetary-government': 1 },
         fleet: { ...planet.fleet, ships: { ...planet.fleet.ships, [hull]: 60, transporter: 20, 'spy-probe': 5 } },
-        fleetProduction: createDefaultFleetProductionState(), ownerProfile: { ...planet.ownerProfile, scienceLevels: { ...science, ...planet.ownerProfile?.scienceLevels } } };
+        fleetProduction: createDefaultFleetProductionState() };
       const profile = profiles[ownerId];
       // Solo by temperament: an alliance would hide what this scenario asks.
       profiles[ownerId] = { ...profile, traits: { ...profile.traits, cooperation: 0.28, socialStyle: 0.25, riskTolerance: 0.7, militaryFocus: 0.8, attention: 0.9 },
