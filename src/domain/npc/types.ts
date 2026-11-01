@@ -62,6 +62,18 @@ export type NpcActivityState = Readonly<{
   updatedAt: number;
 }>;
 
+/**
+ * One visit of the calendar moved in time (owner decision 7, 31.10.2026: an
+ * invitation may move the nearest visit by up to two hours; its length stays,
+ * so the day's budget does not grow). Keyed by the visit's place in its day;
+ * deltaMs is the whole move from the calendar's time.
+ */
+export type NpcVisitShift = Readonly<{
+  localDay: number;
+  index: number;
+  deltaMs: number;
+}>;
+
 export type NpcSessionState = Readonly<{
   timezoneOffsetMinutes: number;
   active: boolean;
@@ -70,6 +82,8 @@ export type NpcSessionState = Readonly<{
   lastBoundaryAt: number | null;
   /** Within the current session: the owner found nothing to do and looks again at this time. */
   idleUntil?: number;
+  /** Visits moved by an invitation; absent in older saves and for most owners. */
+  visitShifts?: readonly NpcVisitShift[];
 }>;
 
 export type NpcEventPriority =

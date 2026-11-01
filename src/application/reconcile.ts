@@ -295,6 +295,7 @@ function reconcileRuntimeSlice(
   };
   let economicIndex = 0;
   let processedGroups = 0;
+  let visitMoved = false;
   const settleNpcEconomies = (at: number, ownerIds?: ReadonlySet<string>) => {
     if (!replay || !next.espionage?.targets) return;
     const before = next.espionage.targets;
@@ -793,7 +794,10 @@ function reconcileRuntimeSlice(
       .filter((point): point is number => point !== undefined)
       .reduce<number | undefined>((min, point) => min === undefined ? point : Math.min(min,point), undefined);
     if (checkpoint === undefined) break;
-    if (replay && processedGroups >= replayMaxGroups) {
+    // An invitation moved a visit: the events of this slice came from the profile
+    // at its start, so the slice ends here and the next one generates them anew
+    // (slices never change a result, so this one changes nothing else).
+    if (replay && (processedGroups >= replayMaxGroups || visitMoved)) {
       context = { ...context, now: Math.max(replay.from, processedThrough) };
       break;
     }
@@ -941,7 +945,9 @@ function reconcileRuntimeSlice(
       }
       const group = [];
       while (economicEvents[economicIndex]?.at === checkpoint) group.push(economicEvents[economicIndex++]!);
+      const profilesBefore = next.npc.profiles;
       const applied = applyNpcReplayEventsAt(next.npc, checkpoint, group, { targets: next.espionage.targets, timeScale, science: next.npcScience, world: next });
+      visitMoved = group.some((event) => applied.state.profiles[event.ownerId]?.session.visitShifts !== profilesBefore[event.ownerId]?.session.visitShifts);
       next = { ...(applied.world ?? next), npc: applied.state, npcScience: applied.science ?? next.npcScience, espionage: { ...(applied.world?.espionage ?? next.espionage), targets: { ...applied.targets } } };
       if (applied.emitted.length) events.push({ kind: 'npc-economy', events: applied.emitted });
       // A fleet the owner sends out can end an overpopulation lock. The lock

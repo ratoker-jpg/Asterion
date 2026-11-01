@@ -13,12 +13,12 @@ import { SOLAR_CRYSTAL_IDS } from '../domain/sun-raid/config.ts';
 import { createDefaultNewGameConfig } from '../domain/world/config.ts';
 import type { SaveState } from './contracts.ts';
 import { createNpcAidRequest, getNpcAidRequestCandidates } from './npc-aid.ts';
-import { getNpcEndgameChoices } from './npc-endgame.ts';
+import { getNpcEndgameChoices, npcSunForce } from './npc-endgame.ts';
 import { dispatchNpcTransport, resolveNpcTransportArrival } from './npc-missions.ts';
 import { getNpcSpaceportCandidates, settleNpcSpaceport, startNpcSpaceportUpgrade, syncNpcOwnerShipLevels } from './npc-spaceport.ts';
 import { createNpcUtilityContext, npcFlagshipPlan } from './npc-utility.ts';
 import { createInitialSaveState, createPersistenceFacade } from './persistence.ts';
-import { currentSunRaidState, reconcileSunRaids } from './sun-raid.ts';
+import { currentSunRaidState, launchNpcSunRaid, reconcileSunRaids } from './sun-raid.ts';
 import { sunRaidCapsOf } from '../domain/sun-raid/config.ts';
 
 const NOW = Date.UTC(2026, 9, 26);
@@ -81,21 +81,23 @@ function online(state: SaveState, owners: readonly string[]): SaveState {
   return { ...state, npc: { ...state.npc!, profiles } };
 }
 
-test('a leader does not call a Sun gathering its online members cannot fill (owner 31.10.2026)', () => {
+test('a leader does not call a Sun gathering on the spot, however many are online: it plans one ahead (npc-sun-prep.ts)', () => {
   const { state: initial, owners } = world();
   let state = allianceOf(initial, owners);
   for (const ownerId of owners) state = armed(state, ownerId, 20_000);
-  // Only the leader is at the game: 25 000 of the 50 000 this world needs.
-  state = online(state, owners.slice(0, 1));
-  const leaderProfile = state.npc!.profiles[owners[0]!]!;
-  const declare = getNpcEndgameChoices(state, leaderProfile, createNpcUtilityContext(state, leaderProfile, NOW, 1), NOW, 1, scored)
-    .find((choice) => choice.candidate.id.startsWith('sun-raid:'));
-  assert.equal(declare, undefined, 'offline allies cannot answer within 30 minutes');
   state = online(state, owners);
   const profile = state.npc!.profiles[owners[0]!]!;
-  assert.ok(getNpcEndgameChoices(state, profile, createNpcUtilityContext(state, profile, NOW, 1), NOW, 1, scored)
-    .some((choice) => choice.candidate.id.startsWith('sun-raid:') && choice.candidate.kind === 'endgame'), 'with them online it calls');
+  assert.equal(getNpcEndgameChoices(state, profile, createNpcUtilityContext(state, profile, NOW, 1), NOW, 1, scored)
+    .some((choice) => choice.candidate.id.startsWith('sun-raid:')), false);
 });
+
+/** A gathering as the plan's declaration makes it: the leader's force from its main planet. */
+function declaredRaid(state: SaveState, leader: string, requestId: string) {
+  const planet = home(state, leader);
+  const caps = sunRaidCapsOf(state);
+  return launchNpcSunRaid(state, leader, { galaxy: planet.coordinate.galaxy, system: 1 + (planet.coordinate.system % 40), originPlanetId: planet.id,
+    ships: npcSunForce(state, leader, planet.id, planet.raceId, 1, caps.participant), requestId }, { now: NOW, mode: 'production', timeScale: 1 });
+}
 
 test('NPC raid gathering: the leader declares, allies join, the full cap takes off together and comes home (25.10.2026)', () => {
   const { state: initial, owners } = world();
@@ -108,12 +110,8 @@ test('NPC raid gathering: the leader declares, allies join, the full cap takes o
   state = online(state, owners);
   const leader = owners[0]!;
   const before = Object.fromEntries(owners.map((ownerId) => [ownerId, home(state, ownerId)]));
-  const leaderProfile = state.npc!.profiles[leader]!;
-  const declare = getNpcEndgameChoices(state, leaderProfile, createNpcUtilityContext(state, leaderProfile, NOW, 1), NOW, 1, scored)
-    .find((choice) => choice.candidate.id.startsWith('sun-raid:'));
-  assert.ok(declare, 'an alliance able to fill 225 000 declares a gathering');
-  const declared = declare.run(state, `npc-autonomy:${JSON.stringify([leader, 'sun-1'])}`);
-  assert.equal(declared.started, true, declared.reason ?? undefined);
+  const declared = declaredRaid(state, leader, `npc-autonomy:${JSON.stringify([leader, 'sun-1'])}`);
+  assert.ok(declared.ok, declared.ok ? undefined : declared.error);
   state = declared.state;
   let raid = currentSunRaidState(state).raids[0]!;
   assert.equal(raid.status, 'gathering');
@@ -164,10 +162,7 @@ test('a gathering that does not reach 225 000 in 30 minutes disbands: ships and 
   state = online(state, owners);
   const leader = owners[0]!;
   const before = home(state, leader);
-  const leaderProfile = state.npc!.profiles[leader]!;
-  const declare = getNpcEndgameChoices(state, leaderProfile, createNpcUtilityContext(state, leaderProfile, NOW, 1), NOW, 1, scored)
-    .find((choice) => choice.candidate.id.startsWith('sun-raid:'))!;
-  state = declare.run(state, 'npc-autonomy:lonely').state;
+  state = declaredRaid(state, leader, 'npc-autonomy:lonely').state;
   const raid = currentSunRaidState(state).raids[0]!;
   assert.ok(home(state, leader).fleet.ships.cruiser < before.fleet.ships.cruiser);
   state = reconcileSunRaids(state, { now: raid.gatherEndsAt!, mode: 'production', timeScale: 1 }).state;
@@ -176,9 +171,7 @@ test('a gathering that does not reach 225 000 in 30 minutes disbands: ships and 
   assert.equal(after.closedAt, raid.gatherEndsAt);
   assert.equal(home(state, leader).fleet.ships.cruiser, before.fleet.ships.cruiser, 'every ship is home');
   assert.equal(home(state, leader).resources.gas, before.resources.gas, 'gas is returned');
-  const again = getNpcEndgameChoices(state, state.npc!.profiles[leader]!, createNpcUtilityContext(state, state.npc!.profiles[leader]!, raid.gatherEndsAt!, 1), raid.gatherEndsAt!, 1, scored)
-    .some((choice) => choice.candidate.id.startsWith('sun-raid:'));
-  assert.equal(again, true, 'a new gathering may be declared at once');
+  assert.equal(declaredRaid(state, leader, 'npc-autonomy:again').ok, true, 'a new gathering may be declared at once');
 });
 
 test('an NPC holding four crystals lays the Gate on its main planet; a solo attacker breaks it by the 25.10.2026 rules', () => {

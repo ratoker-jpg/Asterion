@@ -24,6 +24,7 @@ import { dispatchNpcDeployment, dispatchNpcGas, dispatchNpcMission, dispatchNpcS
 import { beginFlightReturn } from '../domain/flights/runtime.ts';
 import { getNpcPirateCandidates, dispatchNpcPirateMission } from './npc-pirates.ts';
 import { getNpcEndgameChoices } from './npc-endgame.ts';
+import { getNpcSunPrepChoices, npcSunPrepSavesGas, refreshNpcSunPrep, scheduleNpcSunPrepCheck } from './npc-sun-prep.ts';
 import { getNpcSpaceportCandidates, getNpcSpaceportCommanderCandidates, startNpcSpaceportUpgrade } from './npc-spaceport.ts';
 import { npcCombatPriority, npcEnemyShape, npcMainCommander } from './npc-commanders.ts';
 import { COMMANDER_IDS, type CommanderId } from '../domain/combat/commanders.ts';
@@ -89,6 +90,8 @@ function familyDrive(drives: NpcStrategyDrives, kind: string): number {
     case 'fleetsave': return Math.max(0.6, drives.military);
     // Gates, Sun raids and their calls: the match's goal, weighed apart from routine trips.
     case 'endgame': return Math.max(0.7, drives.operations, drives.diplomacy);
+    // A plan the owner committed to: its due steps come before routine.
+    case 'plan-step': return Math.max(0.7, drives.war, drives.military);
     default: return 0.5;
   }
 }
@@ -100,7 +103,7 @@ const STRATEGIC_GOAL_KINDS: ReadonlySet<string> = new Set(Object.values(NPC_STRA
 const ENERGY_SHORT_REASON = 'Недостаточно энергии.';
 
 type Outcome = { state: SaveState; started: boolean; reason: string | null; economyActionId?: string; planetId?: string };
-type Choice = { candidate: NpcAutonomyCandidate; run: (state: SaveState, key: string) => Outcome };
+type Choice = { candidate: NpcAutonomyCandidate; run: (state: SaveState, key: string) => Outcome; must?: boolean };
 export type NpcAutonomyDecision = Outcome & {
   kind: string; wait: boolean; idempotencyKey: string;
   selectedRole: BuildingRole | null; selectedScienceId: ScienceId | null;
@@ -169,6 +172,8 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     if (repaired.repaired > 0) state = { ...state, espionage: { ...state.espionage!, targets: { ...state.espionage!.targets, [target.id]: repaired.target } } };
   }
   const utility = createNpcUtilityContext(state, profile, at, timeScale);
+  // The Sun plan of the owner's alliance moves on by what it sees now.
+  state = refreshNpcSunPrep(state, profile, utility, at, timeScale);
   // Concept U: estimated benefit − cost − risk + goal, plus this owner's seeded misjudgement.
   const scored = (candidateId: string, estimate: number) => utilityToWeight(estimate + estimationError(profile, eventId, candidateId));
   const missionUtility = (mission: { id: string; kind: string; payload: Readonly<Record<string, string | number | boolean | null>> }): number => {
@@ -547,6 +552,8 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
   } });
   // The endgame by the player's rules: Gates, Sun raids, Sun defence.
   for (const choice of getNpcEndgameChoices(state, profile, utility, at, timeScale, scored)) choices.push(choice);
+  for (const choice of getNpcSunPrepChoices(state, profile, utility, at, timeScale, scored)) choices.push(choice);
+  state = scheduleNpcSunPrepCheck(state, ownerId, at);
   for (const aid of getNpcAidCandidates(state, profile, at)) choices.push({ candidate: aid, run: (current, key) => {
     const result = dispatchNpcAid(current, ownerId, aid, at, key, timeScale);
     return { state: result.state, started: result.ok, reason: result.reason };
@@ -568,6 +575,13 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
       },
     });
   }
+  // Gas for a promised raid: what spends it waits until the fleet has left.
+  if (state.npcStrategy && npcSunPrepSavesGas(state, ownerId, at, timeScale)) {
+    for (let index = choices.length - 1; index >= 0; index -= 1) {
+      const { candidate, must } = choices[index]!;
+      if (!must && ['economy', 'production', 'science', 'colonize', 'attack', 'pve', 'recon'].includes(candidate.kind)) choices.splice(index, 1);
+    }
+  }
   // Catalog size and number of colonies must not multiply an action family's
   // total propensity: within a family the estimates share it. The family's
   // best estimate then scales it, so a family of only losing options (an
@@ -586,6 +600,8 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     * (0.4 + familyDrive(drives, kind)) * npcStyleBias(style.style, kind);
   const candidates = choices.map(({ candidate }) => ({ ...candidate, weight: candidate.weight / totals.get(candidate.kind)! * familyScale(candidate.kind) }));
   const strategy = chooseNpcStrategy(drives, (item) => estimationError(profile, eventId, `strategy:${item}`));
+  // What a plan has due is a promise: done first, by id, ahead of the look's draw.
+  const due = new Set(choices.filter((choice) => choice.must).map((choice) => choice.candidate.id));
   const decisions: NpcAutonomyDecision[] = [];
   let current = state;
   let open = candidates;
@@ -594,7 +610,8 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     const actionId = npcAttentionActionId(eventId, index);
     const idempotencyKey = `npc-autonomy:${JSON.stringify([ownerId, actionId])}`;
     const acting = current.npc?.profiles[ownerId] ?? profile;
-    const selected = chooseNpcAutonomyAction(acting, open, actionId);
+    const promised = due.size ? open.filter((candidate) => due.has(candidate.id)).sort((left, right) => (left.id < right.id ? -1 : 1))[0] : undefined;
+    const selected = promised ?? chooseNpcAutonomyAction(acting, open, actionId);
     const choice = selected ? choices.find(({ candidate }) => candidate.id === selected.id)! : null;
     const outcome = choice?.run(current, idempotencyKey) ?? { state: current, started: false, reason: null };
     const observedProfile = outcome.state.npc?.profiles[ownerId] ?? acting;
@@ -614,6 +631,8 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
         .map((candidate) => ({ id: candidate.id, weight: candidate.weight })) : [],
       started: outcome.started, reason: outcome.reason ?? null });
     if (!selected) break;
+    // A new Sun plan ends the look: what it holds back was not known when this look's options were weighed.
+    if (outcome.started && selected.id.startsWith('sun-prep:new:')) break;
     const slot = actionSlot(selected);
     open = open.filter((candidate) => candidate.id !== selected.id && actionSlot(candidate) !== slot);
     if (!outcome.started && ++refusals >= 4) break;
