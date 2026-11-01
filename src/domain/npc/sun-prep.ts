@@ -16,8 +16,11 @@ export type NpcSunRsvp = Readonly<{
   /** Population promised to the gathering (0 for «no»). */
   population: number;
   at: number;
-  /** Why not everything: away, threat, no-fleet, caution. */
+  /** Why not everything: away, threat, no-fleet, force (it has no more), caution. */
   reason?: string;
+  /** «Не смогу», but it says when it could: its own next visit, a thing it tells the leader. */
+  freeFrom?: number;
+  freeTo?: number;
   /** The planet this member's share gathers at. */
   rallyPlanetId?: string;
   /** Orders placed for this promise (each spends a share of the stores: they are counted). */
@@ -65,6 +68,8 @@ const isId = (value: unknown): value is string => typeof value === 'string' && v
 function isRsvp(value: unknown): value is NpcSunRsvp {
   return isRecord(value) && ['yes', 'limit', 'no'].includes(String(value.answer)) && isCount(value.population) && isTime(value.at)
     && (value.reason === undefined || typeof value.reason === 'string')
+    && (value.freeFrom === undefined || isTime(value.freeFrom))
+    && (value.freeTo === undefined || isTime(value.freeTo))
     && (value.rallyPlanetId === undefined || isId(value.rallyPlanetId))
     && (value.orders === undefined || isCount(value.orders))
     && (value.pledged === undefined || isCount(value.pledged));

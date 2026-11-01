@@ -22,7 +22,7 @@ import { getNpcMissionAvailableFleet } from './npc-missions.ts';
 import { activeNpcSunPrep, npcSunPrepNextMoment, withoutNpcSunPrepHold, NPC_SUN_PREP_BALANCE } from './npc-sun-prep-state.ts';
 import { chooseNpcSunForRaid, getNpcSunPrepChoices, npcResponsiveness, pickNpcGatherTime, refreshNpcSunPrep } from './npc-sun-prep.ts';
 import { createNpcUtilityContext } from './npc-utility.ts';
-import { createInitialSaveState, serializeSaveForStorage } from './persistence.ts';
+import { createInitialSaveState, loadSavedState, serializeSaveForStorage } from './persistence.ts';
 import { currentSunRaidState, npcSunFlightGas, reconcileSunRaids, sunFleetPopulation } from './sun-raid.ts';
 
 const NOW = Date.UTC(2026, 9, 26, 6);
@@ -154,13 +154,13 @@ test('a leader chooses a Sun by what it may know: not its own, not frozen, not w
   assert.equal(seen.knowledgeAt >= 0, true);
 });
 
-test('T lies 4 to 12 hours ahead, inside one of the leader\'s own visits, and the choice is the leader\'s to weigh', () => {
+test('T lies 2 to 12 hours ahead, inside one of the leader\'s own visits, and the choice is the leader\'s to weigh', () => {
   const { owners } = world();
   const team = owners.slice(0, 3);
   const { state, leader } = ready(team);
   const planned = startPlan(state, leader, NOW);
   const plan = planOf(planned, leader);
-  assert.ok(plan.gatherAt >= NOW + 4 * HOUR && plan.gatherAt <= NOW + 12 * HOUR, `T in ${(plan.gatherAt - NOW) / HOUR} h`);
+  assert.ok(plan.gatherAt >= NOW + 2 * HOUR && plan.gatherAt <= NOW + 12 * HOUR, `T in ${(plan.gatherAt - NOW) / HOUR} h`);
   const profile = planned.npc!.profiles[leader]!;
   assert.ok(listNpcVisits(profile, plan.gatherAt, plan.gatherAt + 1).length === 1, 'the leader is at the game at T');
   assert.equal(plan.status, 'active');
@@ -358,6 +358,19 @@ test('gas limits what a planet may promise and fly: a force is trimmed to its st
   assert.ok(sunFleetPopulation(trimmed, planet.raceId) < sunFleetPopulation(ships, planet.raceId));
 });
 
+test('a member away says when it could come, and a moved T suits it (its answer, not its calendar)', () => {
+  const { state } = world();
+  const profile = Object.values(state.npc!.profiles)[0]!;
+  const from = NOW + 2 * HOUR;
+  const visits = listNpcVisits(profile, from, from + 12 * HOUR);
+  assert.ok(visits.length >= 2, 'the leader has a choice');
+  const later = visits[visits.length - 1]!;
+  const told = { answer: 'no' as const, population: 0, at: NOW, reason: 'away', freeFrom: later.startAt, freeTo: later.endAt };
+  const T = pickNpcGatherTime(profile, from, from + 12 * HOUR, 30 * 60_000, [told])!;
+  assert.ok(T >= later.startAt, 'the leader picks the visit that suits the member who told');
+  assert.ok(pickNpcGatherTime(profile, from, from + 12 * HOUR, 30 * 60_000)! < T, 'without an answer it takes the earliest');
+});
+
 test('gather time: the visit must hold half the gathering', () => {
   const { state } = world();
   const profile = Object.values(state.npc!.profiles)[0]!;
@@ -383,6 +396,13 @@ test('the plan survives the save: validators keep it and the moved visit, an unr
     session: { ...state.npc!.profiles[leader]!.session, visitShifts: [{ localDay: 20_000, index: 1, deltaMs: HOUR }] } } } };
   const migrated = migrateNpcState(JSON.parse(JSON.stringify(shifted)), Object.keys(shifted.profiles), '', 0);
   assert.deepEqual(migrated.profiles[leader]!.session.visitShifts, [{ localDay: 20_000, index: 1, deltaMs: HOUR }]);
+  // And through a real save and load, moved visit included.
+  const saved: SaveState = { ...state, npc: shifted };
+  const raw = serializeSaveForStorage(saved, 'production');
+  const loaded = loadSavedState({ mode: 'production', storage: { getItem: () => raw, setItem() {}, removeItem() {} }, saveKey: 'k', now: () => NOW });
+  assert.equal(loaded.status, 'loaded');
+  assert.deepEqual((loaded as { state: SaveState }).state.npcStrategy, JSON.parse(JSON.stringify(state.npcStrategy)), 'the plan comes back');
+  assert.deepEqual((loaded as { state: SaveState }).state.npc!.profiles[leader]!.session.visitShifts, [{ localDay: 20_000, index: 1, deltaMs: HOUR }]);
   const fresh = createNpcState(owners, 'salt', NOW);
   assert.equal(Object.values(fresh.profiles)[0]!.session.visitShifts, undefined, 'new owners carry no moves');
 });

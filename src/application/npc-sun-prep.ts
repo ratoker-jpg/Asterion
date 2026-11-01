@@ -190,9 +190,13 @@ function underAttack(state: SaveState, planets: readonly SpyTargetState[], owner
     && flight.arrivalAt > at && flight.ownerId !== ownerId && (flight.missionId === 'attack' || flight.missionId === 'pirate-raid')));
 }
 
-/** The share of its force an owner is willing to send away from home. */
-function willingShare(profile: NpcProfile): number {
-  return 0.7 + 0.3 * Math.max(unit(profile.traits.cooperation), unit(profile.traits.riskTolerance));
+/**
+ * The share of its force an owner sends away from home: all of it, as a raid
+ * asks (the risk of an empty home is weighed when deciding to raid); only the
+ * cautious who were just hit keep something back: «дам не более N».
+ */
+function willingShare(profile: NpcProfile, threat: number): number {
+  return threat > NPC_SUN_PREP_BALANCE.cautionThreat && unit(profile.traits.riskTolerance) < 0.5 ? NPC_SUN_PREP_BALANCE.cautionShare : 1;
 }
 
 /** «Отзывчивость»: the chance an invitation moves a visit (owner decision 7). No trait of its own: the people-minded and attentive answer. */
@@ -202,13 +206,21 @@ export function npcResponsiveness(profile: NpcProfile): number {
 
 /* --------------------------------------------------------------- the leader */
 
-/** T within one of the leader's own visits in [fromAt, toAt], with half the gathering still ahead of it. */
-export function pickNpcGatherTime(profile: NpcProfile, fromAt: number, toAt: number, windowMs: number): number | null {
+/**
+ * T within one of the leader's own visits in [fromAt, toAt], with half the
+ * gathering still ahead of it: the earliest, unless a later one suits more of
+ * the members who said when they could come (their answers, not their calendars).
+ */
+export function pickNpcGatherTime(profile: NpcProfile, fromAt: number, toAt: number, windowMs: number, answers: readonly NpcSunRsvp[] = []): number | null {
+  let best: { gatherAt: number; suited: number } | null = null;
   for (const visit of listNpcVisits(profile, fromAt, toAt)) {
     const gatherAt = Math.max(fromAt, visit.startAt + DECLARE_AFTER_VISIT_START_MS);
-    if (gatherAt <= toAt && visit.endAt - gatherAt >= windowMs / 2) return gatherAt;
+    if (gatherAt > toAt || visit.endAt - gatherAt < windowMs / 2) continue;
+    const suited = answers.filter((answer) => answer.freeFrom !== undefined && answer.freeTo !== undefined
+      && npcVisitOverlap({ startAt: answer.freeFrom, endAt: answer.freeTo }, gatherAt, gatherAt + windowMs) >= windowMs / 2).length;
+    if (!best || suited > best.suited) best = { gatherAt, suited };
   }
-  return null;
+  return best?.gatherAt ?? null;
 }
 
 /**
@@ -279,8 +291,8 @@ function createPlan(state: SaveState, profile: NpcProfile, utility: NpcUtilityCo
 
 function postpone(state: SaveState, plan: NpcSunRaidPrepPlan, profile: NpcProfile, at: number, timeScale: number, why: string): SaveState {
   if (plan.postponed >= NPC_SUN_PREP_BALANCE.maxPostpones) return closePlan(state, plan, 'cancelled', at, why);
-  const gatherAt = pickNpcGatherTime(profile, Math.max(at + NPC_SUN_PREP_BALANCE.postponeLeadHours * HOUR, plan.gatherAt + HOUR),
-    at + NPC_SUN_PREP_BALANCE.maxLeadHours * HOUR, gatherWindowMs(timeScale));
+  const gatherAt = pickNpcGatherTime(profile, at + NPC_SUN_PREP_BALANCE.postponeLeadHours * HOUR,
+    at + NPC_SUN_PREP_BALANCE.maxLeadHours * HOUR, gatherWindowMs(timeScale), Object.values(plan.rsvps));
   if (gatherAt === null) return closePlan(state, plan, 'cancelled', at, why);
   journal({ at, ownerId: plan.ownerId, planId: plan.planId, step: 'postponed', detail: { reason: why, gatherAt, promised: Math.round(npcSunPromised(plan)) } });
   return replacePlan(state, { ...plan, phase: 'invite', gatherAt, deadlineAt: gatherAt, postponed: plan.postponed + 1, rsvps: {},
@@ -323,8 +335,18 @@ function advanceOwnPlan(state: SaveState, plan: NpcSunRaidPrepPlan, profile: Npc
     current = { ...plan, galaxy: sun.galaxy, system: sun.system, forecast: { ...plan.forecast, win: Math.round(sun.win * 1000) / 1000 }, knowledgeAt: sun.knowledgeAt };
   }
   if (at > current.gatherAt + gatherWindowMs(timeScale)) return postpone(state, current, profile, at, timeScale, 'leader-late');
-  if (at < current.gatherAt - NPC_SUN_PREP_BALANCE.recheckLeadMinutes * MINUTE) return current === plan ? state : replacePlan(state, current);
   const members = new Set((state.command.alliances.find((item) => item.id === current.allianceId)?.members ?? []).map((member) => member.ownerId));
+  if (at < current.gatherAt - NPC_SUN_PREP_BALANCE.recheckLeadMinutes * MINUTE) {
+    // Everyone has answered and only absences stand in the way: no need to wait for T to move it.
+    const asked = [...members].filter((ownerId) => state.npc?.profiles[ownerId]);
+    const answers = asked.map((ownerId) => current.rsvps[ownerId]);
+    const absent = answers.filter((answer) => answer?.reason === 'away').length;
+    const have = answers.reduce((sum, answer) => sum + (answer?.population ?? 0), 0);
+    if (absent > 0 && answers.every(Boolean) && have < caps.perSide - SUN_RAID_CONFIG.raidLaunchTolerance && have + absent * caps.participant >= caps.perSide) {
+      return postpone(state, current, profile, at, timeScale, 'members-away');
+    }
+    return current === plan ? state : replacePlan(state, current);
+  }
   const promised = Object.entries(current.rsvps).reduce((sum, [ownerId, rsvp]) => sum + (members.has(ownerId) ? rsvp.population : 0), 0);
   const enough = promised >= caps.perSide - SUN_RAID_CONFIG.raidLaunchTolerance && (current.rsvps[current.ownerId]?.population ?? 0) > 0;
   if (at < current.gatherAt) {
@@ -345,7 +367,7 @@ function advanceOwnPlan(state: SaveState, plan: NpcSunRaidPrepPlan, profile: Npc
 
 /* --------------------------------------------------------------- the members */
 
-function answerInvitation(state: SaveState, profile: NpcProfile, plan: NpcSunRaidPrepPlan, at: number, timeScale: number): SaveState {
+function answerInvitation(state: SaveState, profile: NpcProfile, utility: NpcUtilityContext, plan: NpcSunRaidPrepPlan, at: number, timeScale: number): SaveState {
   const ownerId = profile.ownerId;
   const windowMs = gatherWindowMs(timeScale);
   const overlap = windowMs / 2;
@@ -359,7 +381,8 @@ function answerInvitation(state: SaveState, profile: NpcProfile, plan: NpcSunRai
   const force = projectedForce(state, ownerId, planets, plan.gatherAt, at, { galaxy: plan.galaxy, system: plan.system, timeScale, truth: false });
   const buildable = force >= caps.participant ? 0 : buildOptions(state, ownerId, planets, plan.gatherAt, at, timeScale)
     .reduce((sum, option) => sum + option.units * option.population, 0);
-  const promise = Math.floor(Math.min(caps.participant, (force + buildable) * willingShare(profile)));
+  const share = willingShare(profile, utility.threat);
+  const promise = Math.floor(Math.min(caps.participant, (force + buildable) * share));
   if (promise < NPC_SUN_PREP_BALANCE.minPromiseShare * caps.participant) return answer({ answer: 'no', population: 0, reason: 'no-fleet' });
   // Its own calendar: is it at the game then? If not, it may move the nearest visit (owner decision 7).
   let next = state;
@@ -367,12 +390,16 @@ function answerInvitation(state: SaveState, profile: NpcProfile, plan: NpcSunRai
   if (!online) {
     const shift = planNpcVisitShift(profile, plan.gatherAt, plan.gatherAt + windowMs, overlap, at);
     const willing = createSeededRandom(JSON.stringify(['npc-sun-visit', profile.privateSeed, plan.planId, plan.gatherAt]))() < npcResponsiveness(profile);
-    if (!shift || !willing) return answer({ answer: 'no', population: 0, reason: 'away' });
+    if (!shift || !willing) {
+      // It cannot then, but tells when it could: its own next visit past the time a move would need.
+      const free = listNpcVisits(profile, at + NPC_SUN_PREP_BALANCE.postponeLeadHours * HOUR, at + NPC_SUN_PREP_BALANCE.maxLeadHours * HOUR)[0];
+      return answer({ answer: 'no', population: 0, reason: 'away', ...(free ? { freeFrom: free.startAt, freeTo: free.endAt } : {}) });
+    }
     const current = state.npc!.profiles[ownerId]!;
     next = { ...state, npc: { ...state.npc!, profiles: { ...state.npc!.profiles, [ownerId]: { ...current, session: withNpcVisitShift(current.session, shift, at) } } } };
     journal({ at, ownerId, planId: plan.planId, step: 'shift', detail: { deltaMinutes: Math.round(shift.deltaMs / MINUTE) } });
   }
-  return answer(promise >= caps.participant ? { answer: 'yes', population: promise } : { answer: 'limit', population: promise, reason: 'caution' }, next);
+  return answer(promise >= caps.participant ? { answer: 'yes', population: promise } : { answer: 'limit', population: promise, reason: share < 1 ? 'caution' : 'force' }, next);
 }
 
 /**
@@ -380,17 +407,18 @@ function answerInvitation(state: SaveState, profile: NpcProfile, plan: NpcSunRai
  * promises only what really stands by then, so the leader's recheck sees the
  * truth of the losses and of the orders that will not finish in time.
  */
-function refreshPromise(state: SaveState, profile: NpcProfile, plan: NpcSunRaidPrepPlan, rsvp: NpcSunRsvp, at: number, timeScale: number): SaveState {
+function refreshPromise(state: SaveState, profile: NpcProfile, utility: NpcUtilityContext, plan: NpcSunRaidPrepPlan, rsvp: NpcSunRsvp, at: number, timeScale: number): SaveState {
   if (rsvp.reason === 'away' || rsvp.pledged !== undefined || at >= plan.gatherAt) return state;
   const caps = sunRaidCapsOf(state);
   const planets = ownPlanets(state, profile.ownerId);
   const truth = at >= plan.gatherAt - NPC_SUN_PREP_BALANCE.recheckLeadMinutes * MINUTE;
-  const willing = Math.floor(Math.min(caps.participant, projectedForce(state, profile.ownerId, planets, plan.gatherAt, at, { galaxy: plan.galaxy, system: plan.system, timeScale, truth }) * willingShare(profile)));
+  const share = willingShare(profile, utility.threat);
+  const willing = Math.floor(Math.min(caps.participant, projectedForce(state, profile.ownerId, planets, plan.gatherAt, at, { galaxy: plan.galaxy, system: plan.system, timeScale, truth }) * share));
   const population = truth ? willing : Math.max(rsvp.population, willing);
   if (Math.abs(population - rsvp.population) < 0.01 * caps.participant) return state;
   const minimum = NPC_SUN_PREP_BALANCE.minPromiseShare * caps.participant;
   const updated: NpcSunRsvp = population < minimum ? { ...rsvp, answer: 'no', population: 0, reason: 'no-fleet', at }
-    : population >= caps.participant ? { ...rsvp, answer: 'yes', population, reason: undefined, at } : { ...rsvp, answer: 'limit', population, reason: 'caution', at };
+    : population >= caps.participant ? { ...rsvp, answer: 'yes', population, reason: undefined, at } : { ...rsvp, answer: 'limit', population, reason: share < 1 ? 'caution' : 'force', at };
   const { reason, ...rest } = updated;
   return replacePlan(state, { ...plan, rsvps: { ...plan.rsvps, [profile.ownerId]: reason ? { ...rest, reason } : rest } });
 }
@@ -400,10 +428,10 @@ export function refreshNpcSunPrep(state: SaveState, profile: NpcProfile, utility
   if (!state.npcStrategy) return state;
   const entry = npcSunPrepOfOwner(state, profile.ownerId);
   let next = state;
-  if (entry?.rsvp) next = refreshPromise(next, profile, entry.plan, entry.rsvp, at, timeScale);
+  if (entry?.rsvp) next = refreshPromise(next, profile, utility, entry.plan, entry.rsvp, at, timeScale);
   // The alliance's call is read first: the answer holds its ships before this look plans anything else.
   else if (entry && (entry.plan.phase === 'invite' || entry.plan.phase === 'ready') && at < entry.plan.gatherAt) {
-    next = answerInvitation(next, profile, entry.plan, at, timeScale);
+    next = answerInvitation(next, profile, utility, entry.plan, at, timeScale);
   }
   // A plan of its own may outlive its alliance or its role: it is the owner's to close.
   const own = next.npcStrategy!.plans[profile.ownerId]?.find((plan) => plan.status === 'active');
@@ -557,7 +585,7 @@ export function getNpcSunPrepChoices(state: SaveState, profile: NpcProfile, util
       if (activeNpcSunPrep(current, draft.allianceId)) return { state: current, started: false, reason: 'plan-active' };
       journal({ at, ownerId, planId: draft.planId, step: 'created', detail: { system: draft.system, gatherAt: draft.gatherAt, win: draft.forecast.win } });
       // The leader answers its own call at once: its ships are held from here on.
-      return { state: answerInvitation(replacePlan(current, draft), current.npc?.profiles[ownerId] ?? profile, draft, at, timeScale), started: true, reason: null };
+      return { state: answerInvitation(replacePlan(current, draft), current.npc?.profiles[ownerId] ?? profile, utility, draft, at, timeScale), started: true, reason: null };
     } }];
   }
   const choices: NpcSunPrepChoice[] = [];

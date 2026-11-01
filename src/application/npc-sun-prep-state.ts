@@ -15,16 +15,16 @@ import type { SaveState } from './contracts.ts';
  */
 
 export const NPC_SUN_PREP_BALANCE = Object.freeze({
-  /** How far ahead a leader sets the gathering (real hours: visits do not speed up with the campaign). */
-  minLeadHours: 4,
+  /** How far ahead a leader sets the gathering (real hours: visits do not speed up with the campaign). Two hours leave time to answer and to rally; a longer wait costs raids. */
+  minLeadHours: 2,
   maxLeadHours: 12,
   /** A moved gathering stays at least this far ahead of the moment it is moved. */
-  postponeLeadHours: 3,
+  postponeLeadHours: 2,
   /** Owner rule for this plan: at most two moves, then a cancellation with its reason. */
   maxPostpones: 2,
   /** Real hours between a leader's thoughts about a new plan, and the pause after a cancelled one. */
-  checkHours: 1,
-  cancelCooldownHours: 12,
+  checkHours: 0.25,
+  cancelCooldownHours: 6,
   /** From this long before T the leader checks the promises (and members promise only what they have). */
   recheckLeadMinutes: 60,
   /** From this long before T a promised force stays out of other missions (as long as a plan's lead: from the answer on)… */
@@ -39,6 +39,9 @@ export const NPC_SUN_PREP_BALANCE = Object.freeze({
   maxOrders: 2,
   /** Before the recheck a member counts on its gas store being this full by T (income is still to come). */
   gasStoreShare: 0.6,
+  /** A cautious owner just hit (threat above this) keeps back part of its force. */
+  cautionThreat: 0.3,
+  cautionShare: 0.85,
   /** Below this share of the participant's cap the member answers «не смогу». */
   minPromiseShare: 0.1,
   /** A member online during the gathering, nothing pledged yet, looks at least this often (real ms). */
