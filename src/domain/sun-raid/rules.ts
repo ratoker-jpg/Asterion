@@ -165,11 +165,20 @@ export function resolveGateBreach(seed: string, holder: CrystalHolder, holderCry
   return { kind: 'destroyed', crystal: holderCrystals[Math.floor(random() * holderCrystals.length)]! };
 }
 
-/** Highest level of every technology among one side's participants. */
+/**
+ * Highest level of every technology among one side's participants. The battle
+ * models piercing, maneuver and critical as mutually exclusive, and allies may
+ * have chosen different ones: only the strongest stays, as for a single owner.
+ */
 export function mergeSideTechnologies(levels: readonly CombatTechnologyLevels[]): CombatTechnologyLevels {
   const merged = createDefaultCombatTechnologies();
   for (const id of COMBAT_TECHNOLOGY_IDS) {
     merged[id] = levels.reduce((max, item) => Math.max(max, Math.max(0, Math.floor(item?.[id] ?? 0))), merged[id] ?? 0);
+  }
+  const exclusive = ['piercingAttack', 'maneuverDefense', 'criticalHit'] as const;
+  const selected = exclusive.reduce((best, id) => merged[id] > merged[best] ? id : best, exclusive[0]);
+  for (const id of exclusive) {
+    if (id !== selected) merged[id] = 0;
   }
   return merged;
 }
