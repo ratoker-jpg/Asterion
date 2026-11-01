@@ -80,7 +80,7 @@ function withReport(state: SaveState, ownerId: string, sourcePlanetId: string, t
   return { ...state, espionage: { ...state.espionage!, reports: [...(state.espionage!.reports ?? []), report] } };
 }
 
-const plansOf = (state: SaveState, owner: string): readonly NpcStrikePlan[] => state.npcStrategy?.plans[owner] ?? [];
+const plansOf = (state: SaveState, owner: string): readonly NpcStrikePlan[] => (state.npcStrategy?.plans[owner] ?? []).filter((plan): plan is NpcStrikePlan => plan.template === 'strike');
 
 /** The owner's looks every five minutes: production and flights settle, plan steps run as they come. */
 function drive(world: World, minutes: number, onLook?: (state: SaveState, at: number) => SaveState): { state: SaveState; steps: string[] } {

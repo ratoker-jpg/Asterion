@@ -1,5 +1,5 @@
 import { createSeededRandom, randomInteger } from '../world/random.ts';
-import type { NpcActivityState, NpcProfile, NpcSessionEvent } from './types.ts';
+import type { NpcActivityState, NpcProfile, NpcSessionEvent, NpcSessionState, NpcVisitShift } from './types.ts';
 
 export const NPC_CALENDAR_DAY_MS = 24 * 60 * 60 * 1_000;
 export const NPC_SESSION_MINUTES = Object.freeze({ min: 5, max: 180 });
@@ -45,6 +45,12 @@ export const NPC_MIN_ACTIVITY_PROPENSITY = 0.2;
  * first days.
  */
 export const NPC_NO_ABSENCE_OPENING_DAYS = 3;
+
+/**
+ * Owner decision 7 (31.10.2026): an invitation to a joint operation may move
+ * the owner's nearest visit by at most this much, never lengthening it.
+ */
+export const NPC_VISIT_SHIFT_MAX_MS = 2 * 60 * 60_000;
 
 /** Rare players also skip whole days now and then. */
 const RARE_PROPENSITY = 0.1;
@@ -114,7 +120,7 @@ export function getNpcSessionEvents(
       const latestStart = slotEnd - durationMinutes - NPC_CALENDAR_SAMPLE_POLICY.minimumPauseMinutes;
       // Wake time and a sixteen-hour awake window keep sessions out of the night block.
       const startMinute = randomInteger(dayRandom, slotStart, Math.max(slotStart, latestStart));
-      const startAt = localDay * NPC_CALENDAR_DAY_MS - offsetMs + startMinute * 60_000;
+      const startAt = localDay * NPC_CALENDAR_DAY_MS - offsetMs + startMinute * 60_000 + visitShiftOf(profile.session.visitShifts, localDay, index);
       const endAt = startAt + durationMinutes * 60_000;
       const sessionId = 'npc-session:v1:' + JSON.stringify([profile.privateSeed, profile.ownerId, localDay, index]);
       const pair: NpcSessionEvent[] = [
@@ -125,6 +131,76 @@ export function getNpcSessionEvents(
     }
   }
   return events.sort((left, right) => left.at - right.at || compareStableIds(left.eventId, right.eventId));
+}
+
+function visitShiftOf(shifts: readonly NpcVisitShift[] | undefined, localDay: number, index: number): number {
+  if (!shifts) return 0;
+  for (const shift of shifts) if (shift.localDay === localDay && shift.index === index) return shift.deltaMs;
+  return 0;
+}
+
+type NpcCalendarProfile = Pick<NpcProfile, 'ownerId' | 'privateSeed' | 'activity' | 'session' | 'campaignStartedAt'>;
+export type NpcCalendarVisit = Readonly<{ localDay: number; index: number; startAt: number; endAt: number }>;
+
+/** The owner's own visits that overlap [fromAt, toAt), any shift applied, in time order. */
+export function listNpcVisits(profile: NpcCalendarProfile, fromAt: number, toAt: number): NpcCalendarVisit[] {
+  const halo = NPC_SESSION_MINUTES.max * 60_000;
+  const parts = new Map<string, { localDay: number; index: number; startAt?: number; endAt?: number }>();
+  for (const event of getNpcSessionEvents(profile, fromAt - halo, toAt + halo)) {
+    let part = parts.get(event.sessionId);
+    if (!part) {
+      // The session id ends with [.., localDay, index].
+      const place = JSON.parse(event.sessionId.slice('npc-session:v1:'.length)) as [string, string, number, number];
+      parts.set(event.sessionId, part = { localDay: place[2], index: place[3] });
+    }
+    if (event.boundary === 'session-start') part.startAt = event.at; else part.endAt = event.at;
+  }
+  const visits: NpcCalendarVisit[] = [];
+  for (const part of parts.values()) {
+    if (part.startAt === undefined || part.endAt === undefined || part.endAt <= fromAt || part.startAt >= toAt) continue;
+    visits.push({ localDay: part.localDay, index: part.index, startAt: part.startAt, endAt: part.endAt });
+  }
+  return visits.sort((left, right) => left.startAt - right.startAt);
+}
+
+/** How long a visit overlaps [fromAt, toAt). */
+export function npcVisitOverlap(visit: Pick<NpcCalendarVisit, 'startAt' | 'endAt'>, fromAt: number, toAt: number): number {
+  return Math.max(0, Math.min(visit.endAt, toAt) - Math.max(visit.startAt, fromAt));
+}
+
+/**
+ * The smallest move of a visit still ahead (not started by `now`) that gives
+ * [fromAt, toAt) an overlap of at least `overlap`: at most two hours from the
+ * calendar's time, keeping the pause to its neighbours. Null when none exists.
+ */
+export function planNpcVisitShift(profile: NpcCalendarProfile, fromAt: number, toAt: number, overlap: number, now: number): NpcVisitShift | null {
+  // Neighbours matter too: a day each way covers them.
+  const visits = listNpcVisits(profile, Math.min(now, fromAt - NPC_CALENDAR_DAY_MS), toAt + NPC_CALENDAR_DAY_MS);
+  const pause = NPC_CALENDAR_SAMPLE_POLICY.minimumPauseMinutes * 60_000;
+  let best: { shift: NpcVisitShift; move: number } | null = null;
+  visits.forEach((visit, position) => {
+    if (visit.startAt <= now || visit.endAt - visit.startAt < overlap) return;
+    // Move just far enough: the visit ends `overlap` after fromAt, or starts `overlap` before toAt.
+    const move = visit.endAt < fromAt + overlap ? fromAt + overlap - visit.endAt
+      : visit.startAt > toAt - overlap ? toAt - overlap - visit.startAt : 0;
+    if (move === 0) return;
+    const deltaMs = visitShiftOf(profile.session.visitShifts, visit.localDay, visit.index) + move;
+    if (Math.abs(deltaMs) > NPC_VISIT_SHIFT_MAX_MS) return;
+    const previous = visits[position - 1];
+    const following = visits[position + 1];
+    if (visit.startAt + move <= now || (previous && visit.startAt + move < previous.endAt + pause)
+      || (following && visit.endAt + move > following.startAt - pause)) return;
+    if (!best || Math.abs(move) < Math.abs(best.move)) best = { shift: { localDay: visit.localDay, index: visit.index, deltaMs }, move };
+  });
+  return (best as { shift: NpcVisitShift } | null)?.shift ?? null;
+}
+
+/** The session state with one more moved visit; moves of days long past are forgotten (no replay reaches them). */
+export function withNpcVisitShift(session: NpcSessionState, shift: NpcVisitShift, at: number): NpcSessionState {
+  const offsetMs = session.timezoneOffsetMinutes * 60_000;
+  const today = Math.floor((at + offsetMs) / NPC_CALENDAR_DAY_MS);
+  const kept = (session.visitShifts ?? []).filter((item) => item.localDay >= today - 2 && !(item.localDay === shift.localDay && item.index === shift.index));
+  return { ...session, visitShifts: [...kept, shift] };
 }
 
 /**

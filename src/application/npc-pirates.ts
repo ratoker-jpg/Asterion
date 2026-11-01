@@ -1,5 +1,6 @@
 import { ownerFlights as ownerFlightIndex } from './npc-knowledge-index.ts';
 import { withoutNpcPlanReserve } from './npc-plan-reserve.ts';
+import { withoutNpcSunPrepHold } from './npc-sun-prep-state.ts';
 import { calculateFleetPopulation, createEmptyFleetState, resolveSavedFleetState } from '../domain/fleet/runtime.ts';
 import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
 import type { ShipId } from '../domain/combat/ids.ts';
@@ -123,7 +124,7 @@ export function getNpcPirateCandidates(state: SaveState, profile: NpcProfile, at
     const ownReconReport = state.pirate?.reconReports
       .filter((report) => report.ownerId === ownerId && report.contactCycleKey === contact.contactCycleKey)
       .sort((left, right) => right.arrivedAt - left.arrivedAt)[0];
-    const free = withoutNpcPlanReserve(state, ownerId, origin.id, getNpcMissionAvailableFleet(state, ownerId, origin.id));
+    const free = withoutNpcPlanReserve(state, ownerId, origin.id, withoutNpcSunPrepHold(state, ownerId, origin.id, getNpcMissionAvailableFleet(state, ownerId, origin.id), at));
     const active = activePirateFlights(state, ownerId, contact.contactCycleKey);
     const spyAvailable = safeCount(free['spy-probe']) > 0;
     const cooldownKey = pirateReconCooldownKey(ownerId, contact.contactCycleKey);

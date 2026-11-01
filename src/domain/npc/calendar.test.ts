@@ -12,6 +12,7 @@ import {
   getNpcSessionEvents,
   isNpcInRareAbsenceDay,
 } from './calendar.ts';
+import { listNpcVisits, NPC_VISIT_SHIFT_MAX_MS, npcVisitOverlap, planNpcVisitShift, withNpcVisitShift } from './calendar.ts';
 import { createNpcState } from './state.ts';
 import type { NpcProfile } from './types.ts';
 
@@ -103,4 +104,33 @@ test('invalid interval boundaries are rejected', () => {
   assert.throws(() => getNpcSessionEvents(profile, 51, 50), /safe integer timestamps/);
   assert.throws(() => getNpcSessionEvents(profile, Number.NaN, 50), /safe integer timestamps/);
   assert.throws(() => getNpcSessionEvents(profile, Number.MAX_SAFE_INTEGER + 1, 50), /safe integer timestamps/);
+});
+
+test('a moved visit keeps its length, stays within two hours and keeps its neighbours apart; only the moved one changes', () => {
+  const profile = { ownerId: 'npc-shift', privateSeed: 'shift-seed', campaignStartedAt: undefined as number | undefined,
+    activity: { propensity: 0.5, completedSessions: 0, missedSessions: 0, updatedAt: 0 },
+    session: { timezoneOffsetMinutes: 0, active: false, sessionStartedAt: null, sessionEndsAt: null, lastBoundaryAt: null } };
+  const day = 24 * 3_600_000;
+  const from = Date.UTC(2026, 9, 26);
+  const visits = listNpcVisits(profile, from, from + 2 * day);
+  assert.ok(visits.length >= 2);
+  const length = (list: readonly { startAt: number; endAt: number }[]) => list.reduce((sum, visit) => sum + visit.endAt - visit.startAt, 0);
+  // Just past the end of the first visit tomorrow: a small move later reaches it.
+  const target = visits.find((visit) => visit.startAt >= from + day)!;
+  const windowStart = target.endAt + 20 * 60_000;
+  const shift = planNpcVisitShift(profile, windowStart, windowStart + 30 * 60_000, 15 * 60_000, from);
+  assert.ok(shift, 'a visit can reach the window');
+  assert.ok(Math.abs(shift!.deltaMs) <= NPC_VISIT_SHIFT_MAX_MS);
+  const moved = { ...profile, session: withNpcVisitShift(profile.session, shift!, from) };
+  const after = listNpcVisits(moved, from, from + 2 * day);
+  assert.equal(after.length, visits.length);
+  assert.equal(length(after), length(visits), 'the same minutes at the game');
+  assert.ok(after.some((visit) => npcVisitOverlap(visit, windowStart, windowStart + 30 * 60_000) >= 15 * 60_000));
+  assert.equal(after.filter((visit) => !visits.some((old) => old.startAt === visit.startAt)).length, 1, 'one visit moved');
+  for (let index = 1; index < after.length; index += 1) assert.ok(after[index]!.startAt >= after[index - 1]!.endAt, 'visits do not overlap');
+  // Nothing within reach: too far from any visit.
+  const night = visits[0]!.startAt - 6 * 3_600_000;
+  assert.equal(planNpcVisitShift(profile, night, night + 60_000, 30_000, night - day), null);
+  // A visit already begun does not move.
+  assert.equal(planNpcVisitShift(profile, windowStart, windowStart + 30 * 60_000, 15 * 60_000, target.startAt), null);
 });

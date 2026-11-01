@@ -124,7 +124,7 @@ export type SaveState = {
   npcReplay?: NpcReplayState;
   /** Canonical owner-wide NPC science, activated on a stable campaign timeline. */
   npcScience?: NpcScienceLedger;
-  /** NPC strategic plans and their outcomes (NPC intelligence slice 1); absent until the first plan check. */
+  /** NPC strategic plans and their outcomes (NPC intelligence ADR); absent until the first plan check. */
   npcStrategy?: NpcStrategyState;
   /** PR92 optional migration field. No second save key is used. */
   exploration?: ExplorationState;

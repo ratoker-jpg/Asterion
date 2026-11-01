@@ -1,9 +1,9 @@
 import type { NpcStrikePlan } from '../domain/npc/strategy.ts';
 import type { SaveState } from './contracts.ts';
 
-/** The owner's active plans (at most a couple). */
+/** The owner's active strike plans (at most a couple). */
 export function activeNpcPlans(state: SaveState, ownerId: string): readonly NpcStrikePlan[] {
-  return (state.npcStrategy?.plans[ownerId] ?? []).filter((plan) => plan.status === 'active');
+  return (state.npcStrategy?.plans[ownerId] ?? []).filter((plan): plan is NpcStrikePlan => plan.template === 'strike' && plan.status === 'active');
 }
 
 function addCounts(into: Record<string, number>, counts: Readonly<Record<string, number>> | undefined): void {

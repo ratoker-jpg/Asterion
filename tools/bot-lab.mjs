@@ -177,7 +177,7 @@ export function describeWorld(state, journal = []) {
   for (const entry of plans.filter((item) => item.d?.st !== 'done')) reasons[entry.d?.why ?? '?'] = (reasons[entry.d?.why ?? '?'] ?? 0) + 1;
   const ascending = [...points].reverse();
   const third = Math.max(1, Math.floor(ascending.length / 3));
-  const activePlans = Object.values(state.npcStrategy?.plans ?? {}).flat().filter((plan) => plan.status === 'active');
+  const activePlans = Object.values(state.npcStrategy?.plans ?? {}).flat().filter((plan) => plan.template === 'strike' && plan.status === 'active');
   return {
     worldAt: new Date(state.npcReplay?.processedThroughAt ?? 0).toISOString(), owners: owners.length,
     alliances: state.command.alliances.filter((alliance) => alliance.members.some((member) => member.ownerId !== playerId)).map((alliance) => `${alliance.tag}:${alliance.members.length}`),

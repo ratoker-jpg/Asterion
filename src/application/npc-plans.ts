@@ -21,6 +21,7 @@ import { dispatchNpcDeployment, dispatchNpcMission, getNpcMissionAvailableFleet,
 import { candidateToNpcMissionCommand, type NpcMissionCandidate } from './npc-mission-policy.ts';
 import { npcCombatPriority, npcEnemyShape, npcMainCommander } from './npc-commanders.ts';
 import { activeNpcPlans, npcPlanReservedShips } from './npc-plan-reserve.ts';
+import { withoutNpcSunPrepHold } from './npc-sun-prep-state.ts';
 import {
   combatEfficiency, estimateRaidEconomics, estimateReportedPower, estimateRevengeEconomics, npcFleetValue, npcForcePower,
   npcRevengeIntensity, NPC_REVENGE_BALANCE, type NpcUtilityContext,
@@ -82,6 +83,9 @@ export type NpcPlanChoice = { candidate: NpcAutonomyCandidate; run: (state: Save
 
 type Catalog = ReturnType<typeof getFactionShipCatalog>;
 const combatShips = (catalog: Catalog) => catalog.filter((entity) => entity.category === 'Боевой корабль' && entity.combat);
+
+/** A strike's own check time: Sun plans keep theirs under the bare owner id. */
+const checkKey = (ownerId: string) => `strike:${ownerId}`;
 
 function strategyOf(state: SaveState): NpcStrategyState {
   return state.npcStrategy ?? createNpcStrategyState();
@@ -151,9 +155,9 @@ function rallyRoom(state: SaveState, plan: NpcStrikePlan, rally: SpyTargetState)
   return npcDeploymentFreeCapacity(rally) - inbound;
 }
 
-/** The owner's free combat ships on a planet, less what its other plans hold. */
-function freeCombat(state: SaveState, ownerId: string, planet: SpyTargetState, catalog: Catalog): Record<string, number> {
-  const available = getNpcMissionAvailableFleet(state, ownerId, planet.id) ?? {};
+/** The owner's free combat ships on a planet, less what its other plans hold and its Sun plan was promised. */
+function freeCombat(state: SaveState, ownerId: string, planet: SpyTargetState, catalog: Catalog, at: number): Record<string, number> {
+  const available = withoutNpcSunPrepHold(state, ownerId, planet.id, getNpcMissionAvailableFleet(state, ownerId, planet.id) ?? {}, at);
   const reserved = npcPlanReservedShips(state, ownerId, planet.id);
   const free: Record<string, number> = {};
   for (const entity of combatShips(catalog)) {
@@ -176,7 +180,7 @@ export function draftNpcStrike(state: SaveState, profile: NpcProfile, utility: N
   const raceId = planets[0]!.raceId;
   const catalog = getFactionShipCatalog(raceId);
   const combat = combatShips(catalog);
-  const free = new Map(planets.map((planet) => [planet.id, freeCombat(state, ownerId, planet, catalog)]));
+  const free = new Map(planets.map((planet) => [planet.id, freeCombat(state, ownerId, planet, catalog, at)]));
   const allShips: Record<string, number> = {};
   for (const counts of free.values()) addCounts(allShips, counts);
   const singleBest = Math.max(0, ...planets.map((planet) => npcForcePower(raceId, free.get(planet.id))));
@@ -526,7 +530,7 @@ export function getNpcPlanChoices(state: SaveState, profile: NpcProfile, utility
     }
   }
   // A new plan: looked for every few game hours, never two strikes at once.
-  if (!active.length && !paused && at >= (state.npcStrategy?.nextCheckAt[ownerId] ?? 0)) {
+  if (!active.length && !paused && at >= (state.npcStrategy?.nextCheckAt[checkKey(ownerId)] ?? 0)) {
     const draft = draftNpcStrike(state, profile, utility, at, timeScale);
     if (draft) {
       const id = `plan:strike:${draft.plan.targetPlanetId}`;
@@ -534,7 +538,7 @@ export function getNpcPlanChoices(state: SaveState, profile: NpcProfile, utility
         const plan: NpcStrikePlan = { ...draft.plan, planId: `plan:${ownerId}:${key}` };
         const strategy = strategyOf(current);
         return { state: replacePlan(withStrategy(current, { ...strategy, nextCheckAt: { ...strategy.nextCheckAt,
-          [ownerId]: at + Math.round(NPC_STRIKE_BALANCE.checkHours * HOUR / Math.max(1, timeScale)) } }), plan), started: true, reason: null };
+          [checkKey(ownerId)]: at + Math.round(NPC_STRIKE_BALANCE.checkHours * HOUR / Math.max(1, timeScale)) } }), plan), started: true, reason: null };
       } });
     }
   }
@@ -545,8 +549,8 @@ export function getNpcPlanChoices(state: SaveState, profile: NpcProfile, utility
 export function scheduleNpcPlanCheck(state: SaveState, ownerId: string, at: number, timeScale: number): SaveState {
   if (activeNpcPlans(state, ownerId).length) return state;
   const strategy = strategyOf(state);
-  if ((strategy.nextCheckAt[ownerId] ?? 0) > at) return state;
-  return withStrategy(state, { ...strategy, nextCheckAt: { ...strategy.nextCheckAt, [ownerId]: at + Math.round(NPC_STRIKE_BALANCE.checkHours * HOUR / Math.max(1, timeScale)) } });
+  if ((strategy.nextCheckAt[checkKey(ownerId)] ?? 0) > at) return state;
+  return withStrategy(state, { ...strategy, nextCheckAt: { ...strategy.nextCheckAt, [checkKey(ownerId)]: at + Math.round(NPC_STRIKE_BALANCE.checkHours * HOUR / Math.max(1, timeScale)) } });
 }
 
 /** A battle of a plan's attack closes the plan with what it brought (called by the battle hook). */

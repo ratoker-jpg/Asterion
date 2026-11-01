@@ -1,17 +1,19 @@
 /**
- * NPC strategic plans (NPC intelligence ADR, slice 1): a plan is data in the
- * save, so it survives the owner leaving the game and the server and this
- * computer play it the same. It never grants anything: every step runs through
- * the canonical command a player would use, which still checks what is legal.
+ * NPC strategic plans (NPC intelligence ADR): a plan is data in the save, so it
+ * survives the owner leaving the game and the server and this computer play it
+ * the same. It never grants anything: every step runs through the canonical
+ * command a player would use, which still checks what is legal.
  *
- * One template for now, `strike`: ships produced on several of the owner's
- * planets, brought together by deployments at one rally planet, the target
- * re-scouted, then one attack — or a cancellation with its reason.
+ * `strike`: ships produced on several of the owner's planets, brought together
+ * by deployments at one rally planet, the target re-scouted, then one attack —
+ * or a cancellation with its reason. `sun-raid-prep`: see sun-prep.ts.
  */
+import { isNpcSunRaidPrepPlan, type NpcSunRaidPrepPlan } from './sun-prep.ts';
 
 export const NPC_STRATEGY_VERSION = 1 as const;
 
 export type NpcPlanStatus = 'active' | 'done' | 'failed' | 'cancelled';
+
 export type NpcStrikePhase = 'produce' | 'rally' | 'recheck' | 'launch' | 'flying';
 
 export type NpcShipCounts = Readonly<Record<string, number>>;
@@ -31,7 +33,7 @@ export type NpcPlanForecast = Readonly<{
   /** Expected haul and loss in resources. */
   gain: number;
   loss: number;
-  /** When the force is expected to stand at the rally planet. */
+  /** When the force is expected to stand ready. */
   readyAt: number;
 }>;
 
@@ -63,7 +65,7 @@ export type NpcStrikePlan = Readonly<{
   result?: Readonly<{ won: boolean; gain: number; loss: number }>;
 }>;
 
-export type NpcPlan = NpcStrikePlan;
+export type NpcPlan = NpcStrikePlan | NpcSunRaidPrepPlan;
 
 /** What came of an owner's plans of one template (small running sums). */
 export type NpcOutcomeStat = Readonly<{
@@ -82,7 +84,7 @@ export type NpcStrategyState = Readonly<{
   /** Per owner: active plans first, then the last few closed ones. */
   plans: Readonly<Record<string, readonly NpcPlan[]>>;
   outcomes: Readonly<Record<string, Readonly<Record<string, NpcOutcomeStat>>>>;
-  /** Per owner: the next time it considers a new plan. */
+  /** Per owner (Sun plans) and per `strike:owner` (strike plans): the next time it considers a new plan. */
   nextCheckAt: Readonly<Record<string, number>>;
 }>;
 
@@ -99,6 +101,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 const isTime = (value: unknown): value is number => Number.isSafeInteger(value) && Number(value) >= 0;
 const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+
 const isId = (value: unknown): value is string => typeof value === 'string' && value.length > 0;
 
 function isCounts(value: unknown): value is NpcShipCounts {
@@ -111,7 +114,7 @@ function isOrder(value: unknown): value is NpcPlanOrder {
     && (value.orderId === undefined || isId(value.orderId));
 }
 
-function isPlan(value: unknown): value is NpcPlan {
+function isStrikePlan(value: unknown): value is NpcStrikePlan {
   if (!isRecord(value) || value.template !== 'strike') return false;
   const forecast = value.forecast;
   return isId(value.planId) && isId(value.ownerId) && isId(value.targetPlanetId) && isId(value.targetOwnerId) && isId(value.rallyPlanetId)
@@ -130,6 +133,10 @@ function isPlan(value: unknown): value is NpcPlan {
       && isFiniteNumber(value.result.gain) && isFiniteNumber(value.result.loss)));
 }
 
+function isPlan(value: unknown): value is NpcPlan {
+  return isStrikePlan(value) || isNpcSunRaidPrepPlan(value);
+}
+
 function isStat(value: unknown): value is NpcOutcomeStat {
   return isRecord(value) && ['n', 'done', 'wins', 'cancelled'].every((key) => Number.isSafeInteger(value[key]) && Number(value[key]) >= 0)
     && isFiniteNumber(value.sumError) && isFiniteNumber(value.sumAbsError) && isTime(value.lastAt);
@@ -143,9 +150,9 @@ export function isNpcStrategyState(value: unknown): value is NpcStrategyState {
 }
 
 /**
- * Saves without the section (every save before this slice) stay without it:
- * it appears with an owner's first plan check. An unreadable section is
- * dropped rather than half-trusted; plans are intentions, not assets.
+ * Saves without the section (every save before it) stay without it: it appears
+ * with an owner's first plan check. An unreadable section is dropped rather
+ * than half-trusted; plans are intentions, not assets.
  */
 export function migrateNpcStrategyState(value: unknown): NpcStrategyState | undefined {
   return isNpcStrategyState(value) ? value : undefined;

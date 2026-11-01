@@ -64,12 +64,23 @@ export type NpcJournalOutcome = Readonly<{ at: number; ownerId: string; kind: 'b
 /** A change of the owner's play style, with its reason (journal only). */
 export type NpcJournalStyle = Readonly<{ at: number; ownerId: string; style: string; previous: string | null; reason: string }>;
 
+/** One step of a Sun plan (`sun-raid-prep`): every owner's, kept for the lab and the study of the plan. */
+export type NpcJournalSun = Readonly<{
+  at: number;
+  ownerId: string;
+  planId: string;
+  /** created, rsvp, shift, ready, postponed, declared, pledged, disbanded, flying, done, cancelled. */
+  step: string;
+  detail?: Readonly<Record<string, string | number>>;
+}>;
+
 export type NpcJournalSink = Readonly<{
   /** True when the owner is written in detail; the decision code skips the alternatives otherwise. */
   detailed: (ownerId: string) => boolean;
   decision: (entry: NpcJournalDecision) => void;
   style?: (entry: NpcJournalStyle) => void;
   outcome?: (entry: NpcJournalOutcome) => void;
+  sun?: (entry: NpcJournalSun) => void;
 }>;
 
 let activeSink: NpcJournalSink | null = null;
@@ -100,6 +111,11 @@ export class NpcJournalRecorder implements NpcJournalSink {
   private styles = new Map<string, string>();
 
   detailed = (ownerId: string): boolean => this.top.has(ownerId);
+
+  /** Every owner's Sun plan steps: the plan is the alliance's, not only the top's. */
+  sun = (entry: NpcJournalSun): void => {
+    this.pending.push({ t: entry.at, o: entry.ownerId, k: 'sun', c: entry.planId, r: entry.step, ...(entry.detail ? { d: entry.detail } : {}) });
+  };
 
   decision = (entry: NpcJournalDecision): void => {
     if (!this.top.has(entry.ownerId)) return;
