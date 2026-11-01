@@ -32,6 +32,18 @@ contextBridge.exposeInMainWorld('asterionDesktop', {
     read: (key) => ipcRenderer.invoke('asterion:bot-journal:read', key),
     merge: (key, lines) => ipcRenderer.invoke('asterion:bot-journal:merge', key, lines),
   },
+  // Series registry in the game's profile (src/application/persona-store.ts, electron/persona-file.cjs).
+  personas: {
+    read: () => {
+      const result = ipcRenderer.sendSync('asterion:personas:read');
+      if (!result || !result.ok) throw new Error(result && result.error || 'Persona registry read failed.');
+      return { text: result.text, backup: result.backup };
+    },
+    write: (text) => {
+      const result = ipcRenderer.sendSync('asterion:personas:write', text);
+      if (!result || !result.ok) throw new Error(result && result.error || 'Persona registry write failed.');
+    },
+  },
   // Game updates (electron/updater.cjs). `install` only after the saves are flushed.
   updates: {
     get: () => ipcRenderer.invoke('asterion:update:get'),

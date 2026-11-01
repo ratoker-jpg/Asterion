@@ -26,7 +26,7 @@ import { CrystalSet } from '../sun-raid/SunRaidArt.tsx';
 import { RACE_CARDS, raceCard } from './race-catalog.ts';
 import { NewGameWizard } from './NewGameWizard.tsx';
 import { GameUpdateRow } from './GameUpdateRow.tsx';
-import { isDesktopShell, quitDesktopApp, type MenuScreen } from './session.ts';
+import { consumeSeriesRound, isDesktopShell, quitDesktopApp, type MenuScreen } from './session.ts';
 import type { SolarCrystalId } from '../../domain/sun-raid/config.ts';
 import { useMusic } from '../../audio/hooks.ts';
 import { usePointerDepth } from './pointer-depth.ts';
@@ -79,6 +79,7 @@ export function MenuApp({ initialScreen, onEnterSlot, entryProblem = null, onDis
   const viewportRef = useRef<HTMLDivElement>(null);
   usePointerDepth(viewportRef);
   const [screen, setScreen] = useState<MenuScreen>(initialScreen);
+  const [seriesRound] = useState(() => consumeSeriesRound());
   const [index, setIndex] = useState<SaveSlotIndex>(() => readSlotIndex());
   const continueSlot = selectContinueSlot(index);
   const [themeFaction, setThemeFaction] = useState(continueSlot?.factionId ?? 'aegis');
@@ -116,7 +117,7 @@ export function MenuApp({ initialScreen, onEnterSlot, entryProblem = null, onDis
         ) : screen === 'load' ? (
           <LoadGameScreen index={index} onBack={() => setScreen('main')} onLoad={onEnterSlot} onChanged={refresh} />
         ) : screen === 'new' ? (
-          <NewGameWizard onBack={() => setScreen('main')} onThemeChange={setThemeFaction} onCreated={onEnterSlot} />
+          <NewGameWizard seriesRound={seriesRound} onBack={() => setScreen('main')} onThemeChange={setThemeFaction} onCreated={onEnterSlot} />
         ) : (
           <MenuSettingsScreen onBack={() => setScreen('main')} />
         )}
