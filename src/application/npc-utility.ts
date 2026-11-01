@@ -17,7 +17,7 @@ import { findDebrisNearSystem } from '../domain/espionage/orbital-debris.ts';
 import { calculateRouteDistance } from '../domain/flights/distance.ts';
 import { calculateFlightFuel } from '../domain/flights/fuel.ts';
 import { selectOwnerMembership } from '../domain/command/selectors.ts';
-import { getFleetProductionEntity } from '../domain/fleet/production.ts';
+import { calculateDefensePopulation, getFleetProductionEntity } from '../domain/fleet/production.ts';
 import { evaluateProductionRequirements } from '../domain/fleet/requirements.ts';
 import { findScience } from '../domain/science/catalog.ts';
 import type { ScienceId } from '../domain/science/types.ts';
@@ -391,6 +391,8 @@ export const NPC_FORTRESS_BALANCE = Object.freeze({
   hoardBatchCap: 5_000,
   /** How hard idle stores push the shipyard, factories and construction (utility at full pressure). */
   bottleneckDrive: 1.4,
+  /** How much less a full fortress-minded owner wants a fleet order while its planet has no batteries yet (utility). */
+  fleetDelay: 1.2,
   /** Share of a fleet order a full fortress-minded owner gives up while its planets are below target. */
   fleetYield: 0.6,
   /** How far scarcity moves the worth of a mine's output. */
@@ -437,6 +439,14 @@ export function npcResourceScarcity(target: Pick<SpyTargetState, 'resources'>, k
   const mean = (held('metal') + held('minerals') + held('gas')) / 3;
   if (mean < 1) return 1;
   return Math.max(NPC_FORTRESS_BALANCE.scarcityRange[0], Math.min(NPC_FORTRESS_BALANCE.scarcityRange[1], mean / Math.max(1, held(key))));
+}
+
+/** 0..1: how much a planet below its fortify target holds a fleet order back: full for a fortress-minded owner, little for a raider. */
+function fortifyLack(context: NpcUtilityContext, target: SpyTargetState): number {
+  const wanted = context.fortify?.targets[target.id] ?? 0;
+  if (wanted <= 0) return 0;
+  const have = calculateDefensePopulation(target.defense, target.raceId);
+  return context.fortify!.ambition * unit(1 - have / wanted);
 }
 
 export function spendingPressure(situation?: NpcPlanetSituation): number {
@@ -623,7 +633,7 @@ export function estimateProductionItemUtility(context: NpcUtilityContext, target
     ? itemId === NPC_FLAGSHIP_ID ? 2.5 * flagshipDrive(context) - efficiency : -0.4 * flagshipDrive(context)
     : 0;
   switch (purpose) {
-    case 'combat': return -0.5 + 1.5 * Math.max(drives.military, drives.war) + 0.5 * threat + efficiency - price + push + rush;
+    case 'combat': return -0.5 + 1.5 * Math.max(drives.military, drives.war) + 0.5 * threat + efficiency - price + push + rush - NPC_FORTRESS_BALANCE.fleetDelay * fortifyLack(context, target);
     // A planet under the fortify plan orders only by its plan (its best batteries, not whatever comes up).
     case 'defense': return context.fortify?.targets[target.id] ? -2.5 : -0.8 + 1.4 * threat + 0.5 * drives.military + efficiency - price + push * 0.75;
     case 'energy': return -0.6 + 1.5 * (situation?.energyNeed ?? 0) - price;

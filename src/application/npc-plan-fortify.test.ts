@@ -158,7 +158,7 @@ test('stop-gap turrets only up to a small share of the target, unless an attack 
   const planetId = world.planets[0]!;
   const targets = { ...getEspionageTargets(world.state.espionage) };
   targets[planetId] = { ...targets[planetId]!, ownerProfile: { scienceLevels: { 1: 5 }, shipLevels: {}, commanderLevels: {} },
-    defense: { defenses: { ...targets[planetId]!.defense.defenses, 'ion-turret': 500 } } } as SpyTargetState;
+    defense: { defenses: { ...targets[planetId]!.defense.defenses, 'ion-turret': 600 } } } as SpyTargetState;
   const filled = { ...world, state: { ...world.state, espionage: { ...world.state.espionage!, targets } } };
   const quiet = look(filled);
   assert.equal(quiet.choices.filter((choice) => choice.candidate.id.startsWith('fortify:order:')).length, 0, 'it waits for real batteries');
