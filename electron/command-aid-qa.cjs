@@ -1,5 +1,6 @@
 const { app, BrowserWindow } = require('electron');
 const { PARSE_SAVE } = require('./qa-save.cjs');
+const { editSaveIdle, patchSaveIdle } = require('./qa-save-edit.cjs');
 const fs = require('fs');
 const path = require('path');
 
@@ -68,27 +69,26 @@ async function capture(win, label, name) {
 
 const readSave = (win, key) => run(win, `${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(key)}) || 'null')`);
 
-async function patchSave(win, key, patchSource) {
-  await run(win, `(() => {
-    const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(key)}) || '{}');
-    (${patchSource})(save);
-    localStorage.setItem(${JSON.stringify(key)}, JSON.stringify(save));
-  })()`);
-}
+const readyFor = (mode) => `document.querySelector('[data-qa-navigation="utility"]') && localStorage.getItem(${JSON.stringify(mode === 'test' ? TEST_KEY : PRODUCTION_KEY)})`;
 
 /**
- * The running page may write its own world over a patched save while it
- * unloads (a pending autosave of the live world), so the reloaded game would
- * not hold the patch. Patch, reload, and check the loaded save; again until it holds.
+ * Patches the stored save while the game is not running (see qa-save-edit.cjs:
+ * the running game writes its own state over a patch while it unloads),
+ * loads the game again and checks that it holds the patch.
  */
 async function patchAndReload(win, key, mode, patchSource, heldSource) {
-  for (let attempt = 1; ; attempt += 1) {
-    await patchSave(win, key, patchSource);
-    await reload(win, mode);
-    const held = await run(win, `(() => { const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(key)}) || '{}'); return Boolean((${heldSource})(save)); })()`);
-    if (held) return;
-    if (attempt >= 4) throw new Error(`The patched save did not survive the reload: ${heldSource}`);
-  }
+  await patchSaveIdle(win, key, patchSource, {
+    ready: readyFor(mode),
+    held: `(${heldSource})(${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(key)}) || '{}'))`,
+    label: `patched save (${heldSource})`,
+  });
+  await sleep(150);
+}
+
+/** Runs `source` against the stored saves while the game is not running, then loads the game in `mode`. */
+async function editStorageAndReload(win, mode, source) {
+  await editSaveIdle(win, source, { ready: readyFor(mode), label: 'storage edit' });
+  await sleep(150);
 }
 
 async function click(win, selector) {
@@ -142,8 +142,7 @@ async function openRequestsTab(win) {
 
 async function testModeScenario(win, label) {
   await load(win, 'test');
-  await run(win, `localStorage.removeItem(${JSON.stringify(TEST_KEY)}); localStorage.setItem(${JSON.stringify(TIME_SCALE_KEY)}, '500');`);
-  await reload(win, 'test');
+  await editStorageAndReload(win, 'test', `(() => { localStorage.removeItem(${JSON.stringify(TEST_KEY)}); localStorage.setItem(${JSON.stringify(TIME_SCALE_KEY)}, '500'); return true; })()`);
   await openRequestsTab(win);
 
   // 1. Honest start: 0/3 and the 15-minute first charge counting on the (accelerated) clock; the form is blocked, not hidden.
@@ -263,8 +262,7 @@ async function testModeScenario(win, label) {
 
 async function productionScenario(win, label) {
   await load(win, 'production');
-  await run(win, `localStorage.removeItem(${JSON.stringify(PRODUCTION_KEY)}); localStorage.removeItem(${JSON.stringify(TEST_KEY)});`);
-  await reload(win, 'production');
+  await editStorageAndReload(win, 'production', `(() => { localStorage.removeItem(${JSON.stringify(PRODUCTION_KEY)}); localStorage.removeItem(${JSON.stringify(TEST_KEY)}); return true; })()`);
   await patchAndReload(win, PRODUCTION_KEY, 'production', `(save) => { save.planets['helion-01'].buildings['planetary-government'] = 1; }`,
     `(save) => save.planets['helion-01'].buildings['planetary-government'] === 1`);
   await openRoute(win, 'command', '.command-view');
