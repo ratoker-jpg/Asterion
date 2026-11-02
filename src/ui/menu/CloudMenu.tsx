@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { SaveSlotMeta } from '../../domain/session/slots.ts';
-import { compareGameVersions, SERVER_CATCHUP_WAIT_LAG_MS, type CloudCampaignView, type CloudLiveView, type CloudWaitReason } from '../../application/cloud/cloud-sync.ts';
+import { compareGameVersions, describeServerStall, SERVER_CATCHUP_WAIT_LAG_MS, type CloudCampaignView, type CloudLiveView, type CloudWaitReason } from '../../application/cloud/cloud-sync.ts';
 import {
   activeCloudSettings, catchupWaitMs, cloudBridge, localCatchupRate, localSaveChars, openServerCampaign,
   type CloudConflict, type CloudServerWait,
@@ -43,7 +43,7 @@ export function serverWaitReason(live: CloudLiveView | null, appVersion: string)
   const order = compareGameVersions(live.gameVersion, appVersion);
   if (order > 0) return 'game-older';
   if (order < 0 || live.status === 'waiting-version') return 'server-updating';
-  return live.status === 'running' && (live.lagMs ?? 0) > SERVER_CATCHUP_WAIT_LAG_MS ? 'catching-up' : null;
+  return live.status === 'running' && ((live.lagMs ?? 0) > SERVER_CATCHUP_WAIT_LAG_MS || live.recovery?.nextAttemptAt !== undefined) ? 'catching-up' : null;
 }
 
 /** A newer game asks the server to update again this often while it waits (the server checks GitHub on request). */
@@ -136,6 +136,7 @@ export function ServerWaitWindow({ slot, wait, onReady, onTakeNow, onMenu }: {
   const takeNowNote = reason === 'catching-up'
     ? 'сервер остановится, а остаток досчитает этот компьютер.'
     : 'мир сервера сохранится резервной копией, а этот компьютер досчитает отсутствие от своего сохранения.';
+  const stallNote = describeServerStall(live, 'waiting');
   const fasterHere = reason === 'catching-up' && localWait !== null && serverWait !== null && localWait < serverWait * 0.8;
   return (
     <div className="menu-modal cloud-wait" role="presentation" data-qa-cloud-wait={reason}>
@@ -143,6 +144,7 @@ export function ServerWaitWindow({ slot, wait, onReady, onTakeNow, onMenu }: {
         <small>ОБЛАЧНЫЙ МИР · {slot.name}</small>
         <h2 id="cloud-wait-title">{title}</h2>
         <p>{lead}</p>
+        {stallNote ? <p className="cloud-wait__stall" role="status" data-qa-cloud-wait-stall>{stallNote}</p> : null}
         {reason === 'catching-up' ? (
           <div className="cloud-wait__progress" role="status" aria-live="polite">
             <div className="cloud-wait__track" role="progressbar" aria-label="Сервер догоняет время" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.floor(progress * 100)}>

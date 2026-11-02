@@ -51,6 +51,17 @@ export type CloudLiveView = {
   /** The server moved the world from this game version on its last update. */
   migratedFrom?: string;
   error?: string;
+  /** The server's world runner stopped and was raised again (or was given up on): when, no technical details (server/src/store.ts publicRecovery). */
+  recovery?: {
+    /** Wall time the world stopped. */
+    stalledAt: number;
+    stalledWorldAt: number;
+    restarts: number;
+    /** Wall time a new runner took the world over again. */
+    recoveredAt?: number;
+    /** The server is waiting out a pause before its next attempt. */
+    nextAttemptAt?: number;
+  };
 };
 
 export type CloudCampaignView = {
@@ -145,7 +156,9 @@ export type CloudLocalReason =
   | 'local-newer'
   | 'version-mismatch'
   | 'schema-newer'
-  | 'waiting-version';
+  | 'waiting-version'
+  /** The world on the server stopped for good (its runner kept failing): the game goes on from this computer's save. */
+  | 'server-failed';
 
 /** The server world as of now: the living one, or the head revision. */
 export function serverWorldAt(campaign: CloudCampaignView): number {
@@ -205,11 +218,15 @@ export function decideCloudEntry(input: CloudEntryInput): CloudEntryDecision {
  */
 function claimOrLocal(input: CloudEntryInput, baseRevision: number, live: CloudLiveView): CloudEntryDecision {
   const order = compareGameVersions(live.gameVersion, input.appVersion);
+  if (live.status === 'failed') {
+    // Nothing alive to take (the server gave up on its runner): the server world is kept as a backup, this computer goes on.
+    return { action: 'local', reason: 'server-failed', release: true };
+  }
   if (order !== 0 || live.status === 'waiting-version') {
     if (input.takeNow) return { action: 'local', reason: order === 0 ? 'waiting-version' : 'version-mismatch', release: true };
     return { action: 'wait', reason: order > 0 ? 'game-older' : 'server-updating', baseRevision };
   }
-  if (!input.takeNow && live.status === 'running' && (live.lagMs ?? 0) > SERVER_CATCHUP_WAIT_LAG_MS) {
+  if (!input.takeNow && live.status === 'running' && ((live.lagMs ?? 0) > SERVER_CATCHUP_WAIT_LAG_MS || live.recovery?.nextAttemptAt !== undefined)) {
     return { action: 'wait', reason: 'catching-up', baseRevision };
   }
   return { action: 'claim', baseRevision };
@@ -224,8 +241,30 @@ export function describeLocalReason(reason: CloudLocalReason, campaign: CloudCam
     case 'version-mismatch': return `Мир на сервере жил в версии ${campaign?.live?.gameVersion ?? '?'}: по вашему выбору досчитываем на этом ПК, мир сервера сохранён резервной копией.`;
     case 'schema-newer': return 'Копия на сервере создана более новой версией игры: продолжаем локальную.';
     case 'waiting-version': return 'Сервер ещё не обновился до вашей версии: по вашему выбору досчитываем на этом ПК, мир сервера сохранён резервной копией.';
+    case 'server-failed': return describeServerStall(campaign?.live ?? null, 'local') ?? 'Мир на сервере остановился: игра досчитала время сама по сохранению этого компьютера.';
     default: return '';
   }
+}
+
+/** What the player did with a world that stopped on the server: took what the server raised, waits for it, or counted the time itself. */
+export type ServerStallOutcome = 'took-server' | 'waiting' | 'local';
+
+const stallTime = (ms: number) => new Date(ms).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+
+/**
+ * A calm line for a world whose runner stopped on the server: since when, and
+ * what became of it. Null when nothing happened (no detail, no error text).
+ */
+export function describeServerStall(live: CloudLiveView | null, outcome: ServerStallOutcome): string | null {
+  if (!live || (!live.recovery && live.status !== 'failed')) return null;
+  const since = stallTime(live.recovery?.stalledAt ?? live.reportedAt);
+  if (outcome === 'local') return `Мир на сервере стоял с ${since} и не смог продолжиться. Игра досчитала время сама по сохранению этого компьютера; мир сервера сохранён резервной копией.`;
+  if (outcome === 'waiting') {
+    return live.recovery?.nextAttemptAt !== undefined
+      ? `Мир на сервере остановился в ${since}. Сервер продолжит его сам через несколько минут, ничего не потеряно.`
+      : `Мир на сервере стоял с ${since}, затем сервер продолжил его сам и теперь догоняет время.`;
+  }
+  return `Мир на сервере стоял с ${since}, затем сервер продолжил его сам. Игра взяла мир сервера.`;
 }
 
 export function describeConflict(reason: CloudConflictReason): string {
