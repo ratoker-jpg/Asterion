@@ -306,7 +306,8 @@ async function verifyFlow(win, directory, label) {
     return true;
   })()`, `${label}: clear save`);
   await seedTradeCenter(win);
-  await installStateTrace(win, SAVE_KEY, `(save) => ({ metal: save?.metal, minerals: save?.minerals, gas: save?.gas, debris: save?.planets?.['helion-01']?.recycling?.availableDebris, refill: save?.planets?.['helion-01']?.trade?.refillAtQueue?.length })`);
+  await installStateTrace(win, SAVE_KEY, `(save) => ({ metal: save?.metal, minerals: save?.minerals, gas: save?.gas, debris: save?.planets?.['helion-01']?.recycling?.availableDebris, refill: save?.planets?.['helion-01']?.trade?.refillAtQueue?.length })`,
+    `() => ({ slots: document.querySelector('[data-qa-trade-slots]')?.getAttribute('data-qa-trade-slots'), toast: document.querySelector('[data-qa-trade-toast]')?.textContent?.slice(0, 80) ?? null, submitDisabled: document.querySelector('[data-qa-trade-submit]')?.disabled ?? null, amount: document.querySelector('[data-qa-trade-amount-input]')?.value ?? null, notice: document.querySelector('[data-qa-runtime-notice]')?.textContent?.slice(0, 60) ?? null })`);
   const seeded = await readSave(win);
   if (Number(seeded.schemaVersion) < 7 || seeded.tradeLevel !== 1) throw new Error(`${label}: seeded envelope mismatch ${JSON.stringify(seeded)}`);
   if (Number(seeded.metal) !== 15_880 || Number(seeded.minerals) !== 12_712 || Number(seeded.gas) !== 6_421
