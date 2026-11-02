@@ -313,6 +313,13 @@ type LiveWorldLink = {
   savedStep: number;
 };
 
+/** A command result that React had not rendered was applied again (enqueueApplicationStateUpdate): counted for QA, logged each time. */
+function noteStateHeal(): void {
+  const counter = window as unknown as { __asterionStateHeals?: number };
+  counter.__asterionStateHeals = (counter.__asterionStateHeals ?? 0) + 1;
+  console.warn('Asterion: a command result was not rendered by React and was applied again.');
+}
+
 /** Versions remembered for matching the worker's saves to App's worlds. */
 const LIVE_WORLD_STEP_MEMORY = 256;
 
@@ -421,6 +428,9 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   });
   const stateRef = useRef(state);
   stateRef.current = state;
+  // What React rendered (stateRef is also assigned by commands): lets a command notice that its result never reached React.
+  const renderedStateRef = useRef(state);
+  renderedStateRef.current = state;
   setLiveSaveState(state);
   useEffect(() => () => setLiveSaveState(null), []);
   const [now, setNow] = useState(Date.now());
@@ -1545,7 +1555,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         testTimeScale,
       }, assignment),
       result: undefined,
-    }), flushSync);
+    }), flushSync, renderedStateRef, noteStateHeal);
     setNotice('Роботы перераспределены');
   };
 
@@ -1564,7 +1574,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         state: transition.ok ? transition.state : current,
         result: transition,
       };
-    }, flushSync);
+    }, flushSync, renderedStateRef, noteStateHeal);
     if (!result.ok) {
       setNotice(result.reason ?? 'Переработка сейчас недоступна');
       return false;
@@ -1584,7 +1594,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         testTimeScale,
       }, jobId);
       return { state: transition.state, result: transition };
-    }, flushSync);
+    }, flushSync, renderedStateRef, noteStateHeal);
     if (!result.ok || !result.output) {
       setNotice(result.reason ?? 'Ресурс пока недоступен');
       return false;
@@ -1614,7 +1624,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         testTimeScale,
       }, selectOwnerScores(current)[current.profile.playerId]?.resourcePoints ?? 0, request);
       return { state: transition.state, result: transition.execution };
-    }, flushSync);
+    }, flushSync, renderedStateRef, noteStateHeal);
     if (!result.ok) {
       setNotice(result.reason ?? 'Обмен сейчас недоступен');
       return result;
@@ -1684,7 +1694,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         state: transition.ok ? transition.state : current,
         result: transition,
       };
-    }, flushSync);
+    }, flushSync, renderedStateRef, noteStateHeal);
     if (!result.ok) {
       setNotice(result.reason ?? 'Строительство сейчас недоступно.');
       return false;

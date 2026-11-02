@@ -2971,3 +2971,36 @@ test('dismantling satellites on a planet blocked only by satellites lifts the bl
   assert.equal(reconciled.summary.blocked, false);
   assert.equal(isPlanetBlocked(reconciled.state, 'helion-01'), false);
 });
+
+test('a command result that React never rendered is committed again and reported', () => {
+  const initial = withBuildingSetup(createInitialSaveState('test', TEST_UNIVERSE_NOW_MS));
+  const stateRef = { current: initial };
+  let committed = initial;
+  const rendered = { get current() { return committed; } };
+  const queuedUpdates: Array<(current: SaveState) => SaveState> = [];
+  const setState = (update: (current: SaveState) => SaveState) => { queuedUpdates.push(update); };
+  // The first flush runs the updater (the command is acknowledged) but drops its result, as a lost React update would.
+  let flushes = 0;
+  const flush = (work: () => void) => {
+    work();
+    flushes += 1;
+    if (flushes === 1) { queuedUpdates.reduce((current, update) => update(current), committed); queuedUpdates.length = 0; return; }
+    committed = queuedUpdates.reduce((current, update) => update(current), committed);
+    queuedUpdates.length = 0;
+  };
+  const buildingContext = context(60_000);
+  const heals: SaveState[] = [];
+  const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
+    const transition = startBuilding(current, buildingContext, 'trade-center');
+    return { state: transition.ok ? transition.state : current, result: transition };
+  }, flush, rendered, (state) => heals.push(state));
+  assert.equal(result.ok, true);
+  assert.equal(heals.length, 1);
+  assert.equal(committed.queues['helion-01'].length, 1);
+  assert.equal(stateRef.current, committed);
+
+  // A command that changes nothing (refused) is not a loss and is not re-applied.
+  const refused = enqueueApplicationStateUpdate(stateRef, setState, (current) => ({ state: current, result: 'refused' }), flush, rendered, (state) => heals.push(state));
+  assert.equal(refused, 'refused');
+  assert.equal(heals.length, 1);
+});

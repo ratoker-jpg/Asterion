@@ -53,7 +53,16 @@ async function installStateTrace(win, saveKey, digestSource, domDigestSource = '
 }
 
 async function readStateTrace(win) {
-  return win.webContents.executeJavaScript(`JSON.stringify(window.__qaStateTrace || null)`).catch((error) => String(error));
+  return win.webContents.executeJavaScript(`JSON.stringify({ heals: window.__asterionStateHeals || 0, trace: window.__qaStateTrace || null })`).catch((error) => String(error));
 }
 
-module.exports = { installStateTrace, readStateTrace };
+/**
+ * Prints how often the game had to commit a command result again because React
+ * never rendered it (App.tsx noteStateHeal); the QA repeat workflow sums these lines.
+ */
+async function logStateHeals(win, label) {
+  const heals = await win.webContents.executeJavaScript(`window.__asterionStateHeals || 0`).catch(() => 0);
+  console.log(`ASTERION_STATE_HEALS=${heals} (${label})`);
+}
+
+module.exports = { installStateTrace, readStateTrace, logStateHeals };

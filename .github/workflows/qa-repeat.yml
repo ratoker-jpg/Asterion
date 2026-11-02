@@ -94,7 +94,8 @@ jobs:
             tail -n 40 "qa-repeat/$script.log"
             echo "::endgroup::"
             reason=$(grep -aE "^(Error|TypeError|AssertionError)" "qa-repeat/$script.log" | head -1 | cut -c1-8000 | tr '	' ' ' || true)
-            printf '%s\t%s\t%s\n' "$script" "$status" "$reason" >> "$result"
+            heals=$(grep -aoE "ASTERION_STATE_HEALS=[0-9]+" "qa-repeat/$script.log" | awk -F= '{s+=$2} END{print s+0}')
+            printf '%s\t%s\t%s\theals=%s\n' "$script" "$status" "$reason" "$heals" >> "$result"
           done
           cat "$result"
       - uses: actions/upload-artifact@v6

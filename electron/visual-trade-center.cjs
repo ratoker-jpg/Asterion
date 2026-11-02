@@ -1,7 +1,7 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
 const { editSaveIdle } = require('./qa-save-edit.cjs');
-const { installStateTrace, readStateTrace } = require('./qa-trace.cjs');
+const { installStateTrace, readStateTrace, logStateHeals } = require('./qa-trace.cjs');
 const path = require('path');
 
 app.disableHardwareAcceleration();
@@ -407,6 +407,7 @@ async function verifyFlow(win, directory, label) {
 
   assertGeometry(await measure(win), label);
   await verifyReturn(win);
+  await logStateHeals(win, 'trade center');
   return {
     viewport: label,
     screenshots: ['trade-standard.png', 'trade-pair-tooltip.png', 'trade-success-slots.png'],

@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { PARSE_SAVE } = require('./qa-save.cjs');
 const { editSaveIdle } = require('./qa-save-edit.cjs');
-const { installStateTrace, readStateTrace } = require('./qa-trace.cjs');
+const { installStateTrace, readStateTrace, logStateHeals } = require('./qa-trace.cjs');
 
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
@@ -857,6 +857,7 @@ async function verifyResourceZoneFlow(win, directory, label) {
     fifo,
     persisted,
   };
+  await logStateHeals(win, 'resource queue');
   console.log(`Resource zone QA passed: terrain, canonical names, large ×10 income and final-level preview visibility, requirements, three-slot FIFO queue, completion transition and reload persistence.`);
 
   await resetTestSave(win);

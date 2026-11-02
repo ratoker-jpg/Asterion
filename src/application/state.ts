@@ -43,18 +43,32 @@ export type ApplicationStateTransition<TResult> = {
   result: TResult;
 };
 
+/** The state React last rendered (App assigns it during render, unlike `ApplicationStateRef` which commands assign too). */
+export type ApplicationRenderedState = { readonly current: SaveState };
+
 /**
  * Resolve the action inside a functional React update and return the
  * transition that was actually applied. The caller supplies the synchronous
  * flush boundary so handler APIs can report the applied result without an
  * eager state calculation.
+ *
+ * With `rendered`, the result is checked after the flush: a command the game
+ * has acknowledged (its result says ok, the notice is shown) whose state React
+ * never rendered would be lost silently - the queue entry or the trade the
+ * player was just told about is simply not there (seen on CI as «Build queue
+ * did not persist» and a trade that never took a slot, with no state commit
+ * after the click). The transition's state is then committed explicitly and
+ * `onHeal` is told.
  */
 export function enqueueApplicationStateUpdate<TResult>(
   stateRef: ApplicationStateRef,
   setState: ApplicationStateSetter,
   update: (current: SaveState) => ApplicationStateTransition<TResult>,
   flush: ApplicationStateFlush,
+  rendered?: ApplicationRenderedState,
+  onHeal?: (state: SaveState) => void,
 ): TResult {
+  const renderedBefore = rendered?.current;
   const applied: { transition?: ApplicationStateTransition<TResult> } = {};
   flush(() => {
     setState((current) => {
@@ -65,6 +79,10 @@ export function enqueueApplicationStateUpdate<TResult>(
   });
   const resolved = applied.transition;
   if (!resolved) throw new Error('Application state update was not applied synchronously.');
+  if (rendered && resolved.state !== renderedBefore && rendered.current !== resolved.state) {
+    flush(() => { setState(() => resolved.state); });
+    onHeal?.(resolved.state);
+  }
   stateRef.current = resolved.state;
   return resolved.result;
 }
