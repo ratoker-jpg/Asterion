@@ -53,6 +53,7 @@ env:
 
 jobs:
   plan:
+    if: inputs.seeds != 'none'
     name: Fixtures and the seed matrix
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -299,8 +300,7 @@ jobs:
             const pick = (level, key) => middle(read(level).map((tick) => tick[key]));
             const row = (level, key) => `| ${level} | ${key} | ${pick(level, key)} ms | ${(100 * (pick(level, key) / pick("normal", key) - 1)).toFixed(1)}% |`;
             const lines = ["normal", "high", "max"].flatMap((level) => ["median", "p95"].map((key) => row(level, key)));
-            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, [`${process.env.NPC} NPC, x${process.env.SCALE}, day 3`, "", "| Activity | Tick | Step | vs normal |", "|---|---|---|---|", ...lines, ""].join("
-"));
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, [`${process.env.NPC} NPC, x${process.env.SCALE}, day 3`, "", "| Activity | Tick | Step | vs normal |", "|---|---|---|---|", ...lines, ""].join("\n"));
           '
       - uses: actions/upload-artifact@v4
         with:
