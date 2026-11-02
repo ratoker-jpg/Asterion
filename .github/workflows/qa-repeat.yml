@@ -80,6 +80,7 @@ jobs:
           mkdir -p qa-repeat
           result=qa-repeat/${{ matrix.shard }}-${{ matrix.replica }}.tsv
           : > "$result"
+          set +e
           for entry in ${{ matrix.suites }}; do
             script="${entry%:skip}"
             if [ "$entry" != "$script" ]; then export ASTERION_SKIP_SCREENSHOTS=1; else unset ASTERION_SKIP_SCREENSHOTS; fi
@@ -87,7 +88,7 @@ jobs:
             if npm run "$script" > "qa-repeat/$script.log" 2>&1; then status=pass; else status=fail; fi
             tail -n 40 "qa-repeat/$script.log"
             echo "::endgroup::"
-            reason=$(grep -aE "^(Error|TypeError|AssertionError)" "qa-repeat/$script.log" | head -1 | cut -c1-300 | tr '\t' ' ')
+            reason=$(grep -aE "^(Error|TypeError|AssertionError)" "qa-repeat/$script.log" | head -1 | cut -c1-300 | tr '	' ' ' || true)
             printf '%s\t%s\t%s\n' "$script" "$status" "$reason" >> "$result"
           done
           cat "$result"

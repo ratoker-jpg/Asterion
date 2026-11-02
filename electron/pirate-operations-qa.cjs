@@ -1,5 +1,6 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
+const { editSaveIdle } = require('./qa-save-edit.cjs');
 const path = require('path');
 
 console.log('[pirate-operations-qa] main script loaded');
@@ -40,6 +41,20 @@ async function reload(win) {
   await settle(win);
 }
 
+/**
+ * Edits the stored save while the game is not running (qa-save-edit.cjs: the
+ * running game writes its own state over a patch while it unloads), then loads
+ * the game again and waits for it as reload() does.
+ */
+async function editAndReload(win, source) {
+  const result = await editSaveIdle(win, source, {
+    ready: `document.querySelector('[data-qa-navigation="primary"]') && localStorage.getItem(${JSON.stringify(SAVE_KEY)})`,
+    label: 'pirate operations QA save edit',
+  });
+  await settle(win);
+  return result;
+}
+
 async function click(win, selector) {
   const clicked = await win.webContents.executeJavaScript(`(() => {
     const element = document.querySelector(${JSON.stringify(selector)});
@@ -77,9 +92,9 @@ async function readSave(win) {
 }
 
 async function seedTestPlayer(win) {
-  const result = await win.webContents.executeJavaScript(`(() => {
+  if (new URL(win.webContents.getURL()).search !== '?mode=test') throw new Error('QA must use Test Mode');
+  const result = await editAndReload(win, `(() => {
     try {
-      if (location.search !== '?mode=test') return { ok: false, reason: 'QA must use Test Mode' };
       const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
       const planet = save?.planets?.[save.currentPlanetId];
       if (!save || !planet?.fleet?.ships) return { ok: false, reason: 'test save or current fleet is missing' };
@@ -109,7 +124,6 @@ async function seedTestPlayer(win) {
     }
   })()`);
   if (!result?.ok) throw new Error(`Could not prepare the isolated Test Mode save: ${result?.reason || 'unknown error'}`);
-  await reload(win);
   const inventory = await win.webContents.executeJavaScript(`(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
     const planet = save.planets?.[save.currentPlanetId];
@@ -161,7 +175,7 @@ async function findActiveContact(win) {
 }
 
 async function grantTargetSystemColony(win, contact) {
-  const result = await win.webContents.executeJavaScript(`(() => {
+  const result = await editAndReload(win, `(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
     const origin = save?.planets?.[save.currentPlanetId];
     if (!origin) return { ok: false, reason: 'missing homeworld' };
@@ -180,7 +194,6 @@ async function grantTargetSystemColony(win, contact) {
     return { ok: true, system: colony.universeSystem };
   })()`);
   if (!result.ok) throw new Error(`Pirate raid QA could not grant target-system colony: ${result.reason}`);
-  await reload(win);
 }
 
 async function reselectContact(win, contact) {
@@ -342,9 +355,9 @@ async function runViewport(width, height) {
     // Use the real recon contact/profile to create a valid persisted *incoming*
     // pirate mission fixture. Only the hostile presentation is under test here;
     // remove it before continuing the rest of the recon/battle E2E scenario.
-    // The running app may autosave over the injected flight between setItem and the
-    // reload (slow CI): re-inject until the reloaded save still carries it.
-    const seedIncoming = () => win.webContents.executeJavaScript(`(() => {
+    // Injected while the game is not running, so no autosave of the old page can
+    // write over the flight before the reload (the game then loads it as saved).
+    const seedIncoming = () => editAndReload(win, `(() => {
       const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
       const recon = save?.flights?.records?.find(x => x.id === ${JSON.stringify(reconFlight.id)});
       const planetId = save?.currentPlanetId;
@@ -378,14 +391,8 @@ async function runViewport(width, height) {
       localStorage.setItem(${JSON.stringify(SAVE_KEY)},JSON.stringify(save));
       return {ok:true,id:flight.id,requestId};
     })()`);
-    let incomingFixture = null;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      incomingFixture = await seedIncoming();
-      if (!incomingFixture?.ok) throw new Error(`Cannot seed hostile fleet presentation: ${JSON.stringify(incomingFixture)}`);
-      await reload(win);
-      const kept = await win.webContents.executeJavaScript(`(() => { const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null'); return Boolean(save?.flights?.records?.some((x) => x.id === ${JSON.stringify(incomingFixture.id)})); })()`);
-      if (kept) break;
-    }
+    const incomingFixture = await seedIncoming();
+    if (!incomingFixture?.ok) throw new Error(`Cannot seed hostile fleet presentation: ${JSON.stringify(incomingFixture)}`);
     await clickPrimary(win,'fleets',`document.querySelector('.fleet-workspace-v1')`);
     // Keep the strict UI assertion. On a slow CI compositor, distinguish
     // a dropped persisted fixture from an unrendered row before failing.
@@ -405,7 +412,7 @@ async function runViewport(width, height) {
     }
     // Owner rule (26.10.2026): the raid's composition and population are visible only from Espionage 10.
     const setEspionage=async(level)=>{
-      const previous=await win.webContents.executeJavaScript(`(() => {
+      const previous=await editAndReload(win, `(() => {
         const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'null');
         if (!save?.science?.levels) return null;
         const before=save.science.levels[5]??0;
@@ -414,7 +421,6 @@ async function runViewport(width, height) {
         return before;
       })()`);
       if (previous===null) throw new Error('Cannot set the QA espionage level');
-      await reload(win);
       await clickPrimary(win,'fleets',`document.querySelector('[data-qa-flight-pirate-raid]')`);
       return previous;
     };
@@ -454,7 +460,7 @@ async function runViewport(width, height) {
     }
     await capture(win,directory,'pirate-incoming-warning');
     await setEspionage(originalEspionage);
-    const removedIncoming=await win.webContents.executeJavaScript(`(() => {
+    const removedIncoming=await editAndReload(win, `(() => {
       const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'null');
       if (!save?.flights) return false;
       save.flights.records=save.flights.records.filter(x=>x.id!==${JSON.stringify(incomingFixture.id)});
@@ -463,7 +469,6 @@ async function runViewport(width, height) {
       return true;
     })()`);
     if (!removedIncoming) throw new Error('Could not remove temporary QA incoming flight');
-    await reload(win);
 
     await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}').pirate?.reconReports?.some((report) => report.missionId === ${JSON.stringify(reconFlight.pirateSnapshot?.reconMission?.missionId || reconFlight.id)})`, 45_000);
     const reconReport = await win.webContents.executeJavaScript(`(() => {

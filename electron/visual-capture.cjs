@@ -1,6 +1,8 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { PARSE_SAVE } = require('./qa-save.cjs');
+const { editSaveIdle } = require('./qa-save-edit.cjs');
 
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
@@ -85,44 +87,18 @@ async function reload(win) {
   await settle(win);
 }
 
+/**
+ * Runs the fixture mutation `source` (it writes the save and returns false to
+ * refuse) while the game is not running, then loads the game. The running game
+ * saves once a second and again when it unloads, so a mutation made in its page
+ * and followed by a reload could be overwritten (qa-save-edit.cjs).
+ */
 async function rendererMutationAndReload(win, source, label) {
-  const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-  // location.reload() is asynchronous: the running game's once-a-second save
-  // could overwrite the fixture before the page unloads. In the same task as
-  // the mutation, the save key accepts only the fixture's own (first) write
-  // until this document goes away (same idea as fixture-reload.cjs).
-  const guarded = `(() => {
-    const saveKey = ${JSON.stringify(SAVE_KEY)};
-    const originalSetItem = Storage.prototype.setItem;
-    let fixtureWritten = false;
-    Storage.prototype.setItem = function (key, value) {
-      if (this === window.localStorage && String(key) === saveKey) {
-        if (fixtureWritten) return;
-        fixtureWritten = true;
-      }
-      return originalSetItem.call(this, key, value);
-    };
-    return ${source};
-  })()`;
-  const execution = win.webContents.executeJavaScript(guarded)
-    .then((value) => ({ value }))
-    .catch((error) => ({ error: String(error?.stack || error) }));
-  const first = await Promise.race([
-    execution.then((result) => ({ result })),
-    loaded.then(() => ({ loaded: true })),
-  ]);
-  if (first.result?.value === false) throw new Error(`${label}: renderer mutation was rejected`);
-  if (!first.loaded) {
-    const reloaded = await Promise.race([
-      loaded.then(() => true),
-      sleep(10_000).then(() => false),
-    ]);
-    if (!reloaded) throw new Error(`${label}: renderer mutation did not reload the page: ${JSON.stringify(first.result)}`);
-  }
-  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+  const value = await editSaveIdle(win, source, { ready: `document.querySelector('[data-qa-navigation="utility"]')`, label });
+  if (value === false) throw new Error(`${label}: renderer mutation was rejected`);
   await win.webContents.executeJavaScript('document.fonts?.ready');
   await settle(win);
-  return first.result;
+  return { value };
 }
 
 async function advanceRendererClockTo(win, timestamp) {
@@ -185,16 +161,9 @@ async function restoreRendererClock(win) {
 }
 
 async function resetTestSave(win) {
-  // Clear and navigate in the same renderer task. Clearing the session from
-  // the main process and reloading in a later task leaves a small window in
-  // which the mounted App can persist its previous SaveState back to storage.
-  const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-  await win.webContents.executeJavaScript(`(() => {
-    localStorage.clear();
-    window.location.reload();
-    return true;
-  })()`).catch(() => undefined);
-  await done;
+  // Cleared while the game is not running: a mounted App would persist its
+  // previous SaveState back to storage while it unloads (qa-save-edit.cjs).
+  await editSaveIdle(win, `(() => { localStorage.clear(); return true; })()`, { ready: `document.querySelector('[data-qa-navigation="utility"]')`, label: 'reset test save' });
   await waitFor(win, `(() => {
     try {
       const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
@@ -406,6 +375,36 @@ async function readResourceQueueDiagnostics(win) {
   })()`);
 }
 
+/**
+ * Evidence for «Build queue did not persist»: every state the game commits
+ * (RUNTIME_STATE_CHANGED_EVENT) and every write of the save key, with the
+ * helion-01 queue roles each of them held, so a failure shows where an
+ * accepted command was lost (in React state, or only in storage).
+ */
+async function installQueueTrace(win) {
+  await win.webContents.executeJavaScript(`(() => {
+    if (window.__qaQueueTrace) return;
+    const trace = window.__qaQueueTrace = [];
+    const parse = ${PARSE_SAVE};
+    const roles = (queue) => Array.isArray(queue) ? queue.map((item) => item.assetRole) : null;
+    const push = (kind, detail) => { trace.push({ kind, at: Math.round(performance.now()), ...detail }); if (trace.length > 200) trace.shift(); };
+    window.addEventListener(${JSON.stringify('asterion:runtime-state-changed')}, (event) => push('state', { queue: roles(event.detail?.queues?.['helion-01']) }));
+    const originalSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (this === window.localStorage && String(key) === ${JSON.stringify(SAVE_KEY)}) {
+        let queue = 'unparsed';
+        try { queue = roles(parse(String(value)).queues?.['helion-01']); } catch {}
+        push('write', { queue, chars: String(value).length });
+      }
+      return originalSetItem.call(this, key, value);
+    };
+  })()`);
+}
+
+async function readQueueTrace(win) {
+  return win.webContents.executeJavaScript(`JSON.stringify(window.__qaQueueTrace || null)`).catch((error) => String(error));
+}
+
 async function enqueueResourceBuilding(win, role, expectedQueueRoles) {
   // Commands are refused while the NPC catch-up after a load is still running
   // («Команда отклонена: дождитесь завершения обработки событий NPC»); on a slow
@@ -456,7 +455,7 @@ async function enqueueResourceBuilding(win, role, expectedQueueRoles) {
   } catch (error) {
     const diagnostics = await readResourceQueueDiagnostics(win);
     const notice = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-runtime-notice]')?.textContent?.trim() || ''`);
-    throw new Error(`Build queue did not persist after ${role}; expected=${expected}; actual=${JSON.stringify(diagnostics)}; lastNotice=${JSON.stringify(notice)}; error=${String(error)}`);
+    throw new Error(`Build queue did not persist after ${role}; expected=${expected}; actual=${JSON.stringify(diagnostics)}; lastNotice=${JSON.stringify(notice)}; error=${String(error)}; trace=${await readQueueTrace(win)}`);
   }
   await waitFor(win, `JSON.stringify(Array.from(document.querySelectorAll('[data-qa-queue-role]')).map((item) => item.getAttribute('data-qa-queue-role')))===${JSON.stringify(expected)}`);
   await settle(win);
@@ -706,7 +705,6 @@ async function verifyResourceZoneFlow(win, directory, label) {
     save.science={...(save.science||{}),levels:{...(save.science?.levels||{}),1:10,3:10}};
     save.resourceClock={lastReconciledAt:Date.now(),remainder:{metal:0,minerals:0,gas:0,energy:0}};
     localStorage.setItem(${JSON.stringify(SAVE_KEY)},JSON.stringify(save));
-    window.location.reload();
     return true;
   })()`, 'Could not seed maximum mining-income and final-level preview fixture');
   await activateResourceZone(win);
@@ -726,28 +724,14 @@ async function verifyResourceZoneFlow(win, directory, label) {
     planet.productionBots={metal:0,minerals:0,gas:0};
     save.resourceClock = { lastReconciledAt: Date.now() + 60_000, remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
     const fixture = JSON.stringify(save);
-    // React may persist the previous high-resource state between this task and
-    // navigation. Reassert the fixture through the unload sequence, after any
-    // pending old-document effects and before the new App hydrates.
-    const writeFixtureAtUnload = () => {
-      localStorage.setItem(${JSON.stringify(SAVE_KEY)}, fixture);
-      sessionStorage.setItem('asterion.qa.insufficient-unload', '1');
-    };
-    // Another renderer persistence hook can run later in the unload sequence.
-    // Reassert the fixture at pagehide/unload so the next App hydrates zeros.
-    for (const event of ['beforeunload', 'pagehide', 'unload']) {
-      window.addEventListener(event, writeFixtureAtUnload, { once: true });
-    }
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, fixture);
-    window.location.reload();
     return true;
   })()`, 'Could not seed insufficient-resource wallet fixture');
   const reloadedInsufficientFixture = await win.webContents.executeJavaScript(`(() => {
     const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}');
-    return { rootMetal: save.metal, planetMetal: save.planets?.['helion-01']?.resources?.metal,
-      unloadSeeded: sessionStorage.getItem('asterion.qa.insufficient-unload') === '1' };
+    return { rootMetal: save.metal, planetMetal: save.planets?.['helion-01']?.resources?.metal };
   })()`);
-  if(reloadedInsufficientFixture.rootMetal!==0 || reloadedInsufficientFixture.planetMetal!==0 || !reloadedInsufficientFixture.unloadSeeded)
+  if(reloadedInsufficientFixture.rootMetal!==0 || reloadedInsufficientFixture.planetMetal!==0)
     throw new Error(`Insufficient-resource canonical wallet did not survive reload: ${JSON.stringify(reloadedInsufficientFixture)}`);
   await activateResourceZone(win);
   await openResourceBuilding(win,'metal-production-1');
@@ -773,7 +757,6 @@ async function verifyResourceZoneFlow(win, directory, label) {
     save.resourceClock = { lastReconciledAt: Date.now(), remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     localStorage.setItem(${JSON.stringify(TEST_TIME_SCALE_KEY)}, '1');
-    window.location.reload();
     return true;
   })()`, 'Could not seed the resource queue QA fixture');
   const queueFixtureWallet = await win.webContents.executeJavaScript(`(() => {
@@ -786,6 +769,7 @@ async function verifyResourceZoneFlow(win, directory, label) {
   await freezeRendererClock(win);
   await activateResourceZone(win);
 
+  await installQueueTrace(win);
   const queueClickResults=[];
   const expectedQueueRoles=[];
   for(const role of ['basic-energy','gas-production-1','hangar']) {
