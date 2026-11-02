@@ -12,6 +12,7 @@ import {
 import { readNpcRelationEdge } from '../domain/npc/relations.ts';
 import { respreadNpcPopulation } from '../domain/npc/state.ts';
 import type { NpcProfile } from '../domain/npc/types.ts';
+import { npcActivityOf } from '../domain/world/config.ts';
 import type { SaveState } from './contracts.ts';
 import { isGrievanceBattle } from './npc-grudges.ts';
 
@@ -59,7 +60,7 @@ export function bindNewCampaignToSeries(registry: PersonaRegistry, seriesId: str
   }
   const rank = (ownerId: string, axis: 'activity' | 'skill') => (axis === 'skill' ? profiles[ownerId]!.traits.mechanicsKnowledge : profiles[ownerId]!.activity.propensity);
   return {
-    state: { ...state, npc: Object.freeze({ ...npc, profiles: respreadNpcPopulation(profiles, npc.personaSalt, rank) }) },
+    state: { ...state, npc: Object.freeze({ ...npc, profiles: respreadNpcPopulation(profiles, npc.personaSalt, rank, npcActivityOf(state.worldConfig)) }) },
     registry: started.registry,
     round: started.round,
   };

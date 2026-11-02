@@ -136,7 +136,7 @@ import { createDefaultPirateState, normalizePirateState, isPirateMissionSnapshot
 import { createExplorationState, migrateExplorationState } from '../domain/exploration/ledger.ts';
 import { COMBAT_TECHNOLOGIES } from '../domain/combat/technologies.ts';
 import { getSpaceportUpgradeMaxLevel } from '../domain/buildings/spaceport-upgrades.ts';
-import { createLegacyWorldConfig, normalizeNewGameConfig, type NewGameConfig } from '../domain/world/config.ts';
+import { createLegacyWorldConfig, normalizeNewGameConfig, npcActivityOf, type NewGameConfig } from '../domain/world/config.ts';
 import { generateWorld } from '../domain/world/generator.ts';
 import { createDefaultSunRaidState } from '../domain/sun-raid/rules.ts';
 import { migrateSunRaidState } from '../domain/sun-raid/repository.ts';
@@ -1334,7 +1334,7 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
   };
   return {
     schemaVersion: SAVE_SCHEMA_VERSION,
-    npc: createNpcState(getNpcOwnerIds(espionage.targets, defaultProfile.playerId), salt, now),
+    npc: createNpcState(getNpcOwnerIds(espionage.targets, defaultProfile.playerId), salt, now, npcActivityOf(worldConfig)),
     npcScience: migrateNpcScienceState(undefined, espionage.targets, now),
     ...(mode === 'production' ? { npcReplay: { version: 1 as const, processedThroughAt: now, targetAt: now } } : {}),
     metal: initialResources.metal,

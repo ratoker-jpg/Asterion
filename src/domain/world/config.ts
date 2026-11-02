@@ -1,6 +1,7 @@
 import type { CampaignSpeed } from '../runtime/mode.ts';
 import type { PlayerFactionId } from '../profile/types.ts';
 import { createCampaignSeed } from './random.ts';
+import { NPC_ACTIVITY_LEVELS, type NpcActivityLevel } from '../npc/calendar.ts';
 
 export type WorldDensity = 'sparse' | 'standard' | 'dense';
 
@@ -28,6 +29,8 @@ export type NewGameConfig = {
     density: WorldDensity;
     campaignSpeed: CampaignSpeed;
     randomPlayerStart: boolean;
+    /** How much the bots play (owner 02.11.2026); absent in older saves and series = `normal`. */
+    npcActivity?: NpcActivityLevel;
   };
   /** `random`: every stub rolls its race from the seed; a mix fixes the shares exactly. */
   npcFactions: 'random' | NpcFactionMix;
@@ -69,6 +72,17 @@ export const CAMPAIGN_SPEED_LABELS: Readonly<Record<CampaignSpeed, { label: stri
   superfast: { label: 'Супербыстрая', hint: 'Все таймеры ×5 — впятеро быстрее; в мире не больше 50 NPC' },
 });
 
+export const NPC_ACTIVITY_LABELS: Readonly<Record<NpcActivityLevel, { label: string; hint: string }>> = Object.freeze({
+  normal: { label: 'Обычная', hint: 'Как у живых игроков: примерно 3 из 10 ботов почти всегда онлайн (12–16 ч в сутки), часть заходит ненадолго или редко' },
+  high: { label: 'Высокая', hint: 'Около 45% ботов почти всегда онлайн, остальные играют по 2–8 ч в сутки; редких почти нет. Нагрузка на ПК выше' },
+  max: { label: 'Максимальная', hint: 'Около 70% ботов почти всегда онлайн, остальные играют по 5–8 ч в сутки; коротких заходов и редких нет. Нагрузка на ПК выше всего' },
+});
+
+/** The activity level of a config; a config without the field is `normal`. */
+export function npcActivityOf(config: { world: Pick<NewGameConfig['world'], 'npcActivity'> } | null | undefined): NpcActivityLevel {
+  return config?.world.npcActivity ?? 'normal';
+}
+
 /** The most NPC a world of this speed holds. */
 export function maxNpcForSpeed(speed: CampaignSpeed): number {
   return speed === 'superfast' ? WORLD_LIMITS.superfastNpcMax : WORLD_LIMITS.npcMax;
@@ -102,6 +116,7 @@ export function createDefaultNewGameConfig(input: Partial<Pick<NewGameConfig, 'f
       density: 'standard',
       campaignSpeed: 'standard',
       randomPlayerStart: true,
+      npcActivity: 'normal',
     },
     npcFactions: 'random',
   };
@@ -217,6 +232,7 @@ export function normalizeNewGameConfig(value: unknown, fallback: NewGameConfig):
       density: DENSITIES.includes(world.density as WorldDensity) ? world.density as WorldDensity : fallback.world.density,
       campaignSpeed: speed,
       randomPlayerStart: typeof world.randomPlayerStart === 'boolean' ? world.randomPlayerStart : fallback.world.randomPlayerStart,
+      ...(NPC_ACTIVITY_LEVELS.includes(world.npcActivity as NpcActivityLevel) ? { npcActivity: world.npcActivity as NpcActivityLevel } : {}),
     },
     npcFactions: source.npcFactions === 'random' ? 'random' : normalizeNpcFactionMix(source.npcFactions) ?? 'random',
     ...(source.legacy === true ? { legacy: true as const } : {}),
