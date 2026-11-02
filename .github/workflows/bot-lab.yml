@@ -39,6 +39,10 @@ on:
         description: Also measure the step of the 100-NPC day-3 world (needs base_ref)
         type: boolean
         default: false
+      activity_cpu:
+        description: Step of the day-3 world at each NPC activity level (100 NPC at x1, 50 NPC at x5); measures `ref` only
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -225,5 +229,81 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: cpu
+          path: cpu
+          retention-days: 14
+
+  activity-fixtures:
+    name: Day-3 world, ${{ matrix.npc }} NPC, ${{ matrix.activity }}
+    if: inputs.activity_cpu
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        npc: [100, 50]
+        activity: [normal, high, max]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - name: Generate the world
+        run: node $LAB_NODE tools/late-game-catchup.mjs generate --days=3 --npc=${{ matrix.npc }} --activity=${{ matrix.activity }} --out=fixtures
+      - uses: actions/upload-artifact@v4
+        with:
+          name: activity-fixture-${{ matrix.npc }}-${{ matrix.activity }}
+          path: fixtures
+          retention-days: 3
+
+  activity-cpu:
+    name: Step by activity, ${{ matrix.npc }} NPC at x${{ matrix.scale }}
+    needs: activity-fixtures
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { npc: 100, scale: 1 }
+          - { npc: 50, scale: 5 }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: activity-fixture-${{ matrix.npc }}-*
+          path: fixtures
+      - name: Measure, taking turns on one runner
+        env:
+          NPC: ${{ matrix.npc }}
+          SCALE: ${{ matrix.scale }}
+        run: |
+          mkdir -p cpu
+          for turn in 1 2 3; do
+            for level in normal high max; do
+              node $LAB_NODE tools/live-world-bench.mjs --fixture=fixtures/activity-fixture-$NPC-$level/late-game-day-3.json --seconds=120 --step-ms=60000 --time-scale=$SCALE > cpu/$level-$turn.json
+            done
+          done
+          node -e '
+            const fs = require("node:fs");
+            const read = (level) => [1, 2, 3].map((turn) => JSON.parse(fs.readFileSync(`cpu/${level}-${turn}.json`, "utf8")).worker.tick);
+            const middle = (values) => [...values].sort((a, b) => a - b)[1];
+            const pick = (level, key) => middle(read(level).map((tick) => tick[key]));
+            const row = (level, key) => `| ${level} | ${key} | ${pick(level, key)} ms | ${(100 * (pick(level, key) / pick("normal", key) - 1)).toFixed(1)}% |`;
+            const lines = ["normal", "high", "max"].flatMap((level) => ["median", "p95"].map((key) => row(level, key)));
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, [`${process.env.NPC} NPC, x${process.env.SCALE}, day 3`, "", "| Activity | Tick | Step | vs normal |", "|---|---|---|---|", ...lines, ""].join("
+"));
+          '
+      - uses: actions/upload-artifact@v4
+        with:
+          name: activity-cpu-${{ matrix.npc }}
           path: cpu
           retention-days: 14

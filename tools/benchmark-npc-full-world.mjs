@@ -30,16 +30,16 @@ export const FULL_WORLD_PERSONA_SALT = 'npc-replay-benchmark-persona-salt-v1';
 export const FULL_WORLD_START_AT = Date.UTC(2026, 0, 1);
 
 /** The un-isolated new campaign the Electron full-world QA also loads. */
-export function createFullWorldFixture(startAt = FULL_WORLD_START_AT) {
+export function createFullWorldFixture(startAt = FULL_WORLD_START_AT, { npcCount = 100, activity = 'normal', campaignSpeed } = {}) {
   const config = createDefaultNewGameConfig({ seed: FULL_WORLD_SEED, campaignName: 'NPC full-world QA' });
-  config.world = { ...config.world, galaxyCount: 10, npcCount: 100, randomPlayerStart: false };
+  config.world = { ...config.world, galaxyCount: 10, npcCount, randomPlayerStart: false, ...(activity !== 'normal' ? { npcActivity: activity } : {}), ...(campaignSpeed ? { campaignSpeed } : {}) };
   const base = createInitialSaveState('production', startAt, config);
   const ownerIds = getNpcOwnerIds(base.espionage?.targets, base.profile.playerId);
-  if (ownerIds.length !== 100) throw new Error(`Expected 100 NPC owners, got ${ownerIds.length}`);
+  if (ownerIds.length !== npcCount) throw new Error(`Expected ${npcCount} NPC owners, got ${ownerIds.length}`);
   if (!base.asteroidSimulation) throw new Error('Full-world fixture must keep the asteroid simulation.');
   // Only the hidden persona salt is fixed (fresh campaigns draw it from crypto);
   // every other timeline keeps the cursor createInitialSaveState gave it.
-  return { ...base, npc: createNpcState(ownerIds, FULL_WORLD_PERSONA_SALT, startAt) };
+  return { ...base, npc: createNpcState(ownerIds, FULL_WORLD_PERSONA_SALT, startAt, activity) };
 }
 
 function sha256(value) {
