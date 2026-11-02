@@ -474,8 +474,31 @@ test('the plan survives the save: validators keep it and the moved visit, an unr
   assert.equal(Object.values(fresh.profiles)[0]!.session.visitShifts, undefined, 'new owners carry no moves');
 });
 
-function campaign(): { state: SaveState; owners: string[] } {
-  const { state: initial, owners } = world(6);
+/**
+ * Persona salts that once split a run by slice size. `88594d5d...` is the one
+ * where a spy probe in orbit was judged again after its owner joined the
+ * target's alliance (NPC_ARRIVAL_DETERMINISM_2026-11-02); the others are
+ * ordinary draws, so a run holds more than one world.
+ */
+const SALTS = ['88594d5d92d3843733acf147efe59bf8', '0123456789abcdef0123456789abcdef'] as const;
+
+/** A new campaign draws its salt from entropy; a test needs a world it can name. */
+function withSalt<T>(salt: string, build: () => T): T {
+  const words = salt.match(/.{8}/g)!.map((word) => parseInt(word, 16));
+  const original = globalThis.crypto.getRandomValues.bind(globalThis.crypto);
+  Object.defineProperty(globalThis.crypto, 'getRandomValues', { configurable: true, value: (array: Uint32Array<ArrayBuffer>) => {
+    if (array instanceof Uint32Array && array.length === 4) { array.set(words); return array; }
+    return original(array);
+  } });
+  try {
+    return build();
+  } finally {
+    Object.defineProperty(globalThis.crypto, 'getRandomValues', { configurable: true, value: original });
+  }
+}
+
+function campaign(salt: string = SALTS[0]): { state: SaveState; owners: string[] } {
+  const { state: initial, owners } = withSalt(salt, () => world(6));
   let state = keen(allianceOf(initial, owners.slice(0, 4)), owners.slice(0, 4));
   for (const ownerId of owners.slice(0, 4)) state = armed(state, ownerId);
   const profiles = { ...state.npc!.profiles };
@@ -511,19 +534,49 @@ function run(state: SaveState, slices: readonly number[]): SaveState {
   return current;
 }
 
-test('a world with the plan does not depend on where it is sliced or on a journal (server = client)', { timeout: 300_000 }, () => {
-  const { state } = campaign();
-  const whole = run(state, [13]);
-  const sliced = run(state, [1, 2, 3.5, 5, 8, 13]);
-  assert.equal(comparable(sliced), comparable(whole));
-  const entries: NpcJournalSun[] = [];
-  const previous = setNpcJournalSink({ detailed: () => true, decision: () => {}, sun: (entry) => entries.push(entry) });
-  try {
-    const watched = run(state, [13]);
-    assert.equal(comparable(watched), comparable(whole), 'a journal only watches');
-  } finally {
-    setNpcJournalSink(previous);
+test('a world with the plan does not depend on where it is sliced or on a journal (server = client)', { timeout: 600_000 }, () => {
+  for (const salt of SALTS) {
+    const { state } = campaign(salt);
+    const whole = run(state, [13]);
+    const sliced = run(state, [1, 2, 3.5, 5, 8, 13]);
+    assert.equal(comparable(sliced), comparable(whole), `sliced, salt ${salt}`);
+    const entries: NpcJournalSun[] = [];
+    const previous = setNpcJournalSink({ detailed: () => true, decision: () => {}, sun: (entry) => entries.push(entry) });
+    try {
+      const watched = run(state, [13]);
+      assert.equal(comparable(watched), comparable(whole), `a journal only watches, salt ${salt}`);
+    } finally {
+      setNpcJournalSink(previous);
+    }
+    assert.ok(entries.some((entry) => entry.step === 'rsvp'), `members answered (salt ${salt}): ${JSON.stringify(entries.slice(0, 5))}`);
+    assert.ok(entries.some((entry) => entry.step === 'declared' || entry.step === 'postponed'), `and T came (salt ${salt})`);
   }
-  assert.ok(entries.some((entry) => entry.step === 'rsvp'), `members answered: ${JSON.stringify(entries.slice(0, 5))}`);
-  assert.ok(entries.some((entry) => entry.step === 'declared' || entry.step === 'postponed'), 'and T came');
+});
+
+/** The same span with a fixed number of groups per call: the step must not show in the world. */
+function runFixed(state: SaveState, hours: number, groups: number): SaveState {
+  const at0 = state.npcReplay!.processedThroughAt;
+  let t = 0;
+  return advanceLiveWorld(state, at0 + hours * HOUR, { groups, chunkTargetMs: 250, clock: () => (t += 250) }).state;
+}
+
+test('NPC arrivals and pirate threats do not depend on the step size of the calculation', { timeout: 300_000 }, () => {
+  // Salt 88594d5d...: npc-gen-06's probe reaches npc-gen-03 at +118 min, both are
+  // allied from +179 min. A step of 32 groups judged the orbiting probe again
+  // after that (a relation read at the arrival time of a world that was later),
+  // 256 did not. The fresh pirate threat of npc-gen-02 started at the slice
+  // cursor, so its age followed the step as well.
+  const { state } = campaign(SALTS[0]);
+  const hours = 3.1;
+  const fine = runFixed(state, hours, 32);
+  const coarse = runFixed(state, hours, 256);
+  assert.equal(comparable(fine), comparable(coarse), 'the world');
+  assert.equal(JSON.stringify(fine.pirate?.ownerThreats), JSON.stringify(coarse.pirate?.ownerThreats), 'the threat clock of the pirates');
+  const probe = fine.flights.records.find((flight) => flight.ownerId === 'npc-gen-06' && flight.missionId === 'espionage' && flight.arrivalAt === 1793001405705);
+  assert.ok(probe, 'the probe of the repro exists');
+  // It reported at its arrival, then went home the moment its owner joined the target's alliance.
+  const joinedAt = fine.command.alliances.flatMap((alliance) => alliance.members).find((member) => member.ownerId === 'npc-gen-06')!.joinedAt;
+  assert.equal(probe.completionReason, 'target-unavailable');
+  assert.equal(probe.completedAt, joinedAt + probe.oneWayDurationMs, 'home one flight after the owner joined the alliance');
+  assert.deepEqual(coarse.flights.records.find((flight) => flight.id === probe.id), probe, 'the same record at either step');
 });
