@@ -237,7 +237,7 @@ jobs:
     name: Day-3 world, ${{ matrix.npc }} NPC, ${{ matrix.activity }}
     if: inputs.activity_cpu
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 350
     strategy:
       fail-fast: false
       matrix:
