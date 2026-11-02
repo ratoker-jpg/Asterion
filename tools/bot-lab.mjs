@@ -18,7 +18,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createInitialSaveState, loadSavedState, serializeSaveForStorage } from '../src/application/persistence.ts';
 import { getNpcOwnerIds } from '../src/application/npc-foundation.ts';
-import { getNpcPolicy, setNpcPolicyOverride } from '../src/domain/npc/policy.ts';
+// A revision without the strategy policy (main before stage H) still runs in the lab: it simply has no policy to report or override.
+const { getNpcPolicy, setNpcPolicyOverride } = await import('../src/domain/npc/policy.ts').catch((error) => {
+  if (error?.code !== 'ERR_MODULE_NOT_FOUND') throw error;
+  return { getNpcPolicy: () => ({ version: null, params: null }), setNpcPolicyOverride: () => { throw new Error('this revision has no strategy policy; --policy needs one'); } };
+});
 import { applyCampaignRuntimeForCatchup } from '../src/application/npc-catchup-runner.ts';
 import { advanceLiveWorld, beginLiveWorld } from '../src/application/npc-live-world.ts';
 import { formatNpcJournalLines, setNpcJournalSink } from '../src/application/npc-journal.ts';
