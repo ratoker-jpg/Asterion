@@ -1,5 +1,6 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
+const { editSaveIdle } = require('./qa-save-edit.cjs');
 const path = require('path');
 
 app.disableHardwareAcceleration();
@@ -159,51 +160,40 @@ async function openGasPreviewAt(win, coordinate) {
   await waitFor(win, `document.querySelector('[data-qa-flight-preview]') && document.querySelector('[data-qa-gas-asteroid-preview]')`);
 }
 
-// Root cause of the audit's Fleet QA timeouts: the harness patches the save of a
-// *running* game and reloads, and the old page's per-tick autosave could still
-// write its stale in-memory state over the patch before the navigation commits
+// Root cause of the audit's Fleet QA timeouts: the harness patched the save of a
+// *running* game and reloaded, and the old page's autosave / unload flush wrote
+// its stale in-memory state over the patch before the navigation committed
 // (observed: a gas=0 patch read back as 189 000 000; a seeded empty flight list
-// came back with the previous transport). After its own patch the old page may
-// no longer write the save key; the reloaded page gets a fresh Storage.
-const PATCH_AND_RELOAD = `
-  localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
-  const writeSetItem = Storage.prototype.setItem;
-  Storage.prototype.setItem = function (key, value) {
-    if (this === window.localStorage && key === ${JSON.stringify(TEST_KEY)}) return;
-    return writeSetItem.call(this, key, value);
-  };
-  window.location.reload();
-`;
-
-async function seedProductionSave(win, mutator, args = []) {
-  const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-  const result = await win.webContents.executeJavaScript(`(async () => {
+// came back with the previous transport). The edit now runs while the game is
+// not running at all (qa-save-edit.cjs) and the game is loaded afterwards.
+async function editStoredTestSave(win, label, editSource, held) {
+  const result = await editSaveIdle(win, `(() => {
     try {
-      await new Promise((resolve) => setTimeout(resolve, 50));
       const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
       const planet = save?.planets?.['helion-01'];
       if (!save || !planet) return { ok: false, error: 'missing test save or homeworld' };
-      (${mutator.toString()})(save, planet, ...${JSON.stringify(args)});
-      ${PATCH_AND_RELOAD}
+      (${editSource})(save, planet);
+      localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
       return { ok: true };
     } catch (error) {
       return { ok: false, error: String(error?.stack || error) };
     }
-  })()`);
-  if (!result?.ok) throw new Error(`Could not seed fleet production save: ${result?.error || 'unknown error'}`);
-  await done;
-  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
-  await waitFor(win, `localStorage.getItem(${JSON.stringify(TEST_KEY)})`);
+  })()`, {
+    ready: `document.querySelector('[data-qa-navigation="utility"]') && localStorage.getItem(${JSON.stringify(TEST_KEY)})`,
+    held,
+    label,
+  });
+  if (!result?.ok) throw new Error(`${label}: ${result?.error || 'unknown error'}`);
   await settle(win);
 }
 
+async function seedProductionSave(win, mutator, args = []) {
+  await editStoredTestSave(win, 'Could not seed fleet production save',
+    `(save, planet) => (${mutator.toString()})(save, planet, ...${JSON.stringify(args)})`);
+}
+
 async function setStoredSourceGas(win, gas) {
-  const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-  const ok = await win.webContents.executeJavaScript(`(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
-    const planet = save?.planets?.['helion-01'];
-    if (!save || !planet) return false;
+  await editStoredTestSave(win, 'Could not set stored source gas', `(save, planet) => {
     save.gas = ${JSON.stringify(gas)};
     planet.resources = { ...planet.resources, gas: ${JSON.stringify(gas)} };
     const previousClock = save.resourceClock || {};
@@ -218,14 +208,7 @@ async function setStoredSourceGas(win, gas) {
       ...homeworldClock,
       byPlanet: { ...(previousClock.byPlanet || {}), 'helion-01': homeworldClock },
     };
-    ${PATCH_AND_RELOAD}
-    return true;
-  })()`);
-  if (!ok) throw new Error('Could not set stored source gas');
-  await done;
-  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
-  await waitFor(win, `localStorage.getItem(${JSON.stringify(TEST_KEY)})`);
-  await settle(win);
+  }`);
 }
 
 async function chooseFreeColonizationTarget(win) {
@@ -713,27 +696,15 @@ async function runRecycleUiCycle(win, label) {
   await setFleetShipQuantity(win, 'recycler', 1);
   await click(win, '[data-qa-flight-preview-open]');
   await waitFor(win, `document.querySelector('[data-qa-flight-preview-backdrop]')`);
-  // On CI the typed coordinate was sometimes dropped before the send click and
-  // the preview validated the launch target instead (27.10.2026, cause not
-  // reproduced locally). Retype a bounded number of times; the rejection of
-  // the debris-free coordinate itself stays mandatory.
-  for (let attempt = 1; ; attempt += 1) {
-    if (!(await win.webContents.executeJavaScript(`Boolean(document.querySelector('[data-qa-flight-target-inputs]'))`))) {
-      await click(win, '[data-qa-flight-target-step] .flight-timeline-edit');
-      await waitFor(win, `document.querySelector('[data-qa-flight-target-inputs]')`);
-    }
-    await setFlightCoordinate(win, 'galaxy', alternate.coordinate[0]);
-    await setFlightCoordinate(win, 'system', alternate.coordinate[1]);
-    await setFlightCoordinate(win, 'position', alternate.coordinate[2]);
-    await click(win, '[data-qa-flight-preview-open]');
-    try {
-      await waitFor(win, `document.querySelector('[data-qa-flight-target-status].is-invalid')`, attempt < 3 ? 4_000 : 10_000);
-      break;
-    } catch (error) {
-      if (attempt >= 3) throw error;
-      console.warn(`${label}: recycle validation attempt ${attempt} lost the typed coordinate, retyping`);
-    }
+  if (!(await win.webContents.executeJavaScript(`Boolean(document.querySelector('[data-qa-flight-target-inputs]'))`))) {
+    await click(win, '[data-qa-flight-target-step] .flight-timeline-edit');
+    await waitFor(win, `document.querySelector('[data-qa-flight-target-inputs]')`);
   }
+  await setFlightCoordinate(win, 'galaxy', alternate.coordinate[0]);
+  await setFlightCoordinate(win, 'system', alternate.coordinate[1]);
+  await setFlightCoordinate(win, 'position', alternate.coordinate[2]);
+  await click(win, '[data-qa-flight-preview-open]');
+  await waitFor(win, `document.querySelector('[data-qa-flight-target-status].is-invalid')`);
   const rejectedTarget = await win.webContents.executeJavaScript(`({
     sendDisabled: Boolean(document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled),
     message: document.querySelector('[data-qa-flight-target-status]')?.textContent?.trim() || '',

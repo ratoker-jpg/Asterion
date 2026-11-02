@@ -1,4 +1,6 @@
 const { app, BrowserWindow } = require('electron');
+const { editSaveIdle } = require('./qa-save-edit.cjs');
+const { PARSE_SAVE } = require('./qa-save.cjs');
 const fs = require('fs');
 const path = require('path');
 const {
@@ -50,6 +52,14 @@ async function reload(win) {
   await waitFor(win, `document.querySelector('[data-qa-navigation="primary"]')`);
   await win.webContents.executeJavaScript('document.fonts?.ready');
   await settle(win);
+}
+
+/** Edits the stored save while the game is not running (qa-save-edit.cjs), then loads the game and waits as reload() does. */
+async function editSaveAndReload(win, source, held) {
+  const result = await editSaveIdle(win, source, { ready: `document.querySelector('[data-qa-navigation="primary"]')`, held, label: 'reports QA save edit' });
+  await win.webContents.executeJavaScript('document.fonts?.ready');
+  await settle(win);
+  return result;
 }
 
 async function clickPrimary(win, route, waitExpression = `document.querySelector('[data-qa-profile]')`) {
@@ -306,16 +316,15 @@ async function runViewport(win, width, height) {
     gasCollected: 0,
     scrapCollected: 0,
   };
-  const seededReport = await win.webContents.executeJavaScript(`(() => {
+  const seededReport = await editSaveAndReload(win, `(() => {
     try {
       const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
       save.reports = { ...(save.reports || {}), overpopulationReports: [${JSON.stringify(overpopulationReport)}], recyclerArrivalReports: [${JSON.stringify(recyclerArrivalReports[0])}, ${JSON.stringify(recyclerArrivalReports[1])}], gasExtractionArrivalReports: [${JSON.stringify(gasExtractionArrivalReport)}] };
       localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
       return true;
     } catch { return false; }
-  })()`);
+  })()`, `${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}').reports?.recyclerArrivalReports?.length === 2`);
   if (!seededReport) throw new Error(`Unable to seed overpopulation report at ${label}`);
-  await reload(win);
   await clickPrimary(win, 'reports');
   await clickFolder(win, 'system');
   const reportSelector = `[data-report-item-id="${overpopulationReport.id}"] .reports-list-open`;
@@ -489,12 +498,11 @@ async function runViewport(win, width, height) {
   if (updatedState.command?.alliances?.filter((alliance) => alliance.fixtureId !== 'test-command-bot01-v1').length !== 1 || updatedAlliance?.id !== 'alliance-test-helion-v1' || updatedAlliance?.name !== 'Содружество Север' || updatedAlliance?.tag !== 'NORTH' || updatedAlliance?.emblem?.glyph !== 'starforge' || updatedAlliance?.emblem?.accent !== 'amber' || updatedAlliance?.emblem?.crest?.glyph !== 'phoenix' || updatedAlliance?.emblem?.crest?.color !== 'amber') throw new Error(`Updated command save contract failed at ${label}: ${JSON.stringify(updatedState.command?.alliances)}`);
 
   const beforeActiveAlliance = await savedState(win);
-  await win.webContents.executeJavaScript(`(() => {
+  await editSaveAndReload(win, `(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
     save.profile = { playerId: 'player-current', displayName: 'Dendrilion', factionId: 'aegis', allianceId: 'alliance-ion', alliance: { id: 'alliance-ion', name: 'Ion Pact', tag: 'ION', emblem: { glyph: 'orbit', accent: 'violet' } }, protectionMode: false };
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
   })()`);
-  await reload(win);
   await clickPrimary(win, 'reports');
   const reloadedProfile = await profileSnapshot(win);
   if (reloadedProfile.alliance !== 'Содружество Север' || reloadedProfile.allianceTag !== 'NORTH') throw new Error(`Reloaded profile alliance contract failed at ${label}: ${JSON.stringify(reloadedProfile)}`);
@@ -509,8 +517,7 @@ async function runViewport(win, width, height) {
   const commandRoute = await win.webContents.executeJavaScript(`document.querySelector('.command-view')?.getAttribute('aria-label') || ''`);
   if (commandRoute !== 'Командование союза') throw new Error(`Alliance command route failed at ${label}: ${commandRoute}`);
 
-  await win.webContents.executeJavaScript(`localStorage.setItem(${JSON.stringify(SAVE_KEY)}, ${JSON.stringify(JSON.stringify(beforeActiveAlliance))})`);
-  await reload(win);
+  await editSaveAndReload(win, `localStorage.setItem(${JSON.stringify(SAVE_KEY)}, ${JSON.stringify(JSON.stringify(beforeActiveAlliance))})`);
   await clickPrimary(win, 'reports');
   await clickFolder(win, 'alliances');
   // No joint operation is fabricated into the mailbox any more: the folder is honestly empty.

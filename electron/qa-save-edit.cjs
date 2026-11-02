@@ -16,8 +16,12 @@
 //      kills its workers and timers: nothing can write after this point;
 //   2. run the caller's page-side `source` there - it reads the save as
 //      stored (after the flush), changes it and writes it back;
-//   3. load the game again, wait for it, and check that the game really loaded
-//      the edit (`held`, a page-side expression over the loaded game's save).
+//   3. load the game again, wait for it, check that the game really loaded the
+//      edit (`held`, a page-side expression over the loaded game's save) and
+//      wait until it takes commands again: a freshly loaded save with a gap
+//      since its last NPC replay refuses commands («дождитесь завершения
+//      обработки событий NPC») behind a progress banner, and a QA click or
+//      event that lands in that window is dropped silently.
 // There is no retry loop: a failure of `held` means a real problem and is thrown
 // with the stored save's head for diagnosis instead of being hidden.
 const fs = require('fs');
@@ -46,6 +50,29 @@ async function waitExpression(win, expression, timeoutMs, label) {
 }
 
 /**
+ * Waits until the game takes player commands: one clock tick has passed since
+ * the load (a gap since the last NPC replay is frozen into a catch-up on the
+ * first tick) and neither the catch-up banner nor its summary is up.
+ */
+async function waitForCommands(win, timeoutMs = 180_000) {
+  const banner = `document.querySelector('[data-qa-npc-catchup]')`;
+  await sleep(1_500);
+  const started = Date.now();
+  let quiet = 0;
+  while (quiet < 3) {
+    if (Date.now() - started > timeoutMs) throw new Error('the game still refuses commands (NPC catch-up banner is up)');
+    if (await win.webContents.executeJavaScript(`Boolean(${banner})`)) {
+      quiet = 0;
+      await win.webContents.executeJavaScript(`document.querySelector('[data-qa-npc-catchup-close]')?.click()`);
+      await sleep(250);
+    } else {
+      quiet += 1;
+      await sleep(200);
+    }
+  }
+}
+
+/**
  * @param {Electron.BrowserWindow} win a window showing the game
  * @param {string} source page-side expression (usually an IIFE) that edits storage; its value is returned.
  *   PARSE_SAVE (compact save -> plain object) is available as a function in this scope.
@@ -54,11 +81,12 @@ async function waitExpression(win, expression, timeoutMs, label) {
  *   (default: the primary navigation exists)
  * @param {string} [options.held] page-side expression, true when the reloaded game holds the edit
  * @param {number} [options.timeoutMs] boot and check timeout, default 60 s
+ * @param {boolean} [options.commands] wait until the game takes commands (default true)
  * @param {string} [options.url] load this instead of the page the window showed
  * @param {string} [options.label] names the edit in errors
  */
 async function editSaveIdle(win, source, options = {}) {
-  const { ready = `document.querySelector('[data-qa-navigation="utility"]')`, held, timeoutMs = 60_000, label = 'save edit' } = options;
+  const { ready = `document.querySelector('[data-qa-navigation="utility"]')`, held, timeoutMs = 60_000, label = 'save edit', commands = true } = options;
   const gameUrl = options.url || win.webContents.getURL();
   if (!gameUrl || gameUrl === idleUrl()) throw new Error(`${label}: the window shows no game page to return to (${gameUrl || 'empty url'})`);
 
@@ -76,6 +104,7 @@ async function editSaveIdle(win, source, options = {}) {
       throw new Error(`${label}: the reloaded game does not hold the edit. ${error.message}`);
     }
   }
+  if (commands) await waitForCommands(win);
   return result;
 }
 
@@ -100,4 +129,4 @@ function removeKeysIdle(win, keys, options = {}) {
   return editSaveIdle(win, `(() => { for (const key of ${JSON.stringify(keys)}) localStorage.removeItem(key); return true; })()`, options);
 }
 
-module.exports = { editSaveIdle, patchSaveIdle, patchSaveSource, removeKeysIdle };
+module.exports = { waitForCommands, editSaveIdle, patchSaveIdle, patchSaveSource, removeKeysIdle };
