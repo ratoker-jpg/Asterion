@@ -36,8 +36,8 @@ jobs:
         run: |
           ref="$INPUT_REF"; n="$INPUT_N"
           if [ -z "$ref" ]; then
-            ref=$(printf '%s' "$COMMIT_MESSAGE" | sed -n 's/.*QA-REPEAT ref=\([A-Za-z0-9._\/-]*\).*//p' | head -1)
-            n=$(printf '%s' "$COMMIT_MESSAGE" | sed -n 's/.*QA-REPEAT .*n=\([0-9]*\).*//p' | head -1)
+            ref=$(printf '%s' "$COMMIT_MESSAGE" | sed -n 's/.*QA-REPEAT ref=\([A-Za-z0-9._\/-]*\).*/\1/p' | head -1)
+            n=$(printf '%s' "$COMMIT_MESSAGE" | sed -n 's/.*QA-REPEAT .*n=\([0-9]*\).*/\1/p' | head -1)
           fi
           ref=${ref:-main}; n=${n:-10}
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
