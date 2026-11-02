@@ -182,6 +182,8 @@ async function editStoredTestSave(win, label, editSource, held) {
     ready: `document.querySelector('[data-qa-navigation="utility"]') && localStorage.getItem(${JSON.stringify(TEST_KEY)})`,
     held,
     label,
+    // Some seeds are timed against the clock (a 1.5 s science task): no extra waiting after the load.
+    commands: false,
   });
   if (!result?.ok) throw new Error(`${label}: ${result?.error || 'unknown error'}`);
   await settle(win);
