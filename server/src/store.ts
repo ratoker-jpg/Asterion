@@ -41,6 +41,27 @@ export type Snapshot = {
 
 export type LiveStatus = 'running' | 'paused' | 'waiting-version' | 'failed';
 
+/** What the supervisor knows about a world whose runner crashed (server.ts handleRunnerCrash). */
+export type LiveRecovery = {
+  /** Crashes in a row since the world last ran healthy (past the crash point). */
+  consecutive: number;
+  /** Crashes of this live world in total. */
+  total: number;
+  /** The newest crash: wall time, world time it was at, and the error's first line (digits masked). */
+  last: { at: number; worldAt: number; error: string };
+  /** The current stall began here: wall time and world time of its first crash. */
+  stalledAt: number;
+  stalledWorldAt: number;
+  /** A new runner loaded the world after the stall. */
+  recoveredAt?: number;
+  /** Wall time of the next automatic attempt (the world is waiting out a pause). */
+  nextAttemptAt?: number;
+  /** The server release the world was given up on: a newer one tries again (server.ts listen). */
+  failedOnVersion?: string;
+  /** Why the supervisor stopped restarting. */
+  failedReason?: 'same-spot' | 'too-many' | 'no-base';
+};
+
 export type LiveWorld = {
   status: LiveStatus;
   /** The revision the world was left at and continues. */
@@ -61,6 +82,7 @@ export type LiveWorld = {
   migrations?: Array<{ from: string; to: string; at: number; worldAt: number }>;
   /** The last move to a newer release failed: the world went on in its old one. */
   migrationError?: string;
+  recovery?: LiveRecovery;
 };
 
 export type Campaign = {
@@ -96,6 +118,15 @@ export function campaignDir(dataDir: string, id: string): string {
 
 export function snapshotFile(dataDir: string, id: string, snapshotId: number): string {
   return path.join(campaignDir(dataDir, id), `snap-${snapshotId}.json.gz`);
+}
+
+/** Diagnostics of runner crashes (the newest entries) and the world as it was when the supervisor gave up. */
+export function crashDiagnosticsFile(dataDir: string, id: string): string {
+  return path.join(campaignDir(dataDir, id), 'crash.json');
+}
+
+export function crashCheckpointFile(dataDir: string, id: string): string {
+  return path.join(campaignDir(dataDir, id), 'crash-checkpoint.json.gz');
 }
 
 export function liveCheckpointFile(dataDir: string, id: string): string {
@@ -240,12 +271,24 @@ export function describeCampaign(campaign: Campaign, now: number) {
       etaMs: null as number | null,
       ...(campaign.live.migrations?.length ? { migratedFrom: campaign.live.migrations.at(-1)!.from } : {}),
       ...(campaign.live.error ? { error: campaign.live.error } : {}),
+      ...(campaign.live.recovery ? { recovery: publicRecovery(campaign.live.recovery) } : {}),
     } : null,
     snapshots: [...campaign.snapshots].sort((left, right) => right.id - left.id).map(publicSnapshot),
   };
 }
 
 export type PublicCampaign = ReturnType<typeof describeCampaign>;
+
+/** The stall as the player may see it: when, how often, whether the world is back (no errors, no stacks). */
+function publicRecovery(recovery: LiveRecovery) {
+  return {
+    stalledAt: recovery.stalledAt,
+    stalledWorldAt: recovery.stalledWorldAt,
+    restarts: recovery.total,
+    ...(recovery.recoveredAt !== undefined ? { recoveredAt: recovery.recoveredAt } : {}),
+    ...(recovery.nextAttemptAt !== undefined ? { nextAttemptAt: recovery.nextAttemptAt } : {}),
+  };
+}
 
 function publicSnapshot(snapshot: Snapshot) {
   const { id, kind, revision, parent, origin, savedAt, worldAt, gameVersion, schemaVersion, deviceId, left, digest, bytes, gzBytes, note } = snapshot;

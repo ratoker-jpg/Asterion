@@ -16,9 +16,9 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
 import {
-  addSnapshot, campaignDir, checkUpload, createCampaign, describeCampaign, headSnapshot, listCampaigns, liveCheckpointFile,
-  planRotation, readCampaign, removeSnapshots, snapshotFile, writeCampaign, CAMPAIGN_ID, DEFAULT_RETENTION,
-  type Campaign, type RetentionPolicy, type Snapshot,
+  addSnapshot, campaignDir, checkUpload, crashCheckpointFile, crashDiagnosticsFile, createCampaign, describeCampaign, headSnapshot, listCampaigns,
+  liveCheckpointFile, planRotation, readCampaign, removeSnapshots, snapshotFile, writeCampaign, CAMPAIGN_ID, DEFAULT_RETENTION,
+  type Campaign, type LiveRecovery, type RetentionPolicy, type Snapshot,
 } from './store.ts';
 import type { RunnerMessage, RunnerRequest, RunnerStart, RunnerWritten } from './runner.ts';
 import { compareGameVersions } from '../../src/application/cloud/cloud-sync.ts';
@@ -43,10 +43,32 @@ export type ServerConfig = {
   maxUploadGzBytes: number;
   maxSaveBytes: number;
   retention: RetentionPolicy;
+  /** Automatic restarts of a crashed world runner (defaults: DEFAULT_RESTART_POLICY). */
+  restart?: Partial<RestartPolicy>;
   /** Trust X-Forwarded-For from this proxy address (Caddy on localhost). */
   trustProxy: boolean;
   log: (line: string) => void;
 };
+
+export type RestartPolicy = {
+  /** Pause before attempt n (the last value repeats). */
+  backoffMs: number[];
+  /** Crashes in a row (different errors or places) after which the world is given up on. */
+  maxAttempts: number;
+  /** Two crashes with the same error this close in world time are the same spot: deterministic, no more attempts. */
+  sameSpotMs: number;
+};
+
+export const DEFAULT_RESTART_POLICY: RestartPolicy = {
+  backoffMs: [5_000, 15_000, 45_000, 2 * 60_000, 5 * 60_000, 10 * 60_000],
+  maxAttempts: 6,
+  sameSpotMs: 30 * 60_000,
+};
+
+/** First line of a runner error with digits masked: the same bug at another moment is the same error. */
+export function errorHeadline(message: string): string {
+  return (message.split('\n')[0] ?? '').replace(/\d+/g, '#').trim().slice(0, 300);
+}
 
 export function configFromEnv(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   const keyFile = env.ASTERION_KEY_FILE ?? '/etc/asterion/access-key';
@@ -71,6 +93,10 @@ export function configFromEnv(env: NodeJS.ProcessEnv = process.env): ServerConfi
       maxSnapshotsPerCampaign: Number(env.ASTERION_KEEP_SNAPSHOTS ?? DEFAULT_RETENTION.maxSnapshotsPerCampaign),
       maxTotalBytes: Number(env.ASTERION_MAX_STORE_BYTES ?? DEFAULT_RETENTION.maxTotalBytes),
       minFreeBytes: Number(env.ASTERION_MIN_FREE_BYTES ?? DEFAULT_RETENTION.minFreeBytes),
+    },
+    restart: {
+      ...(env.ASTERION_RESTART_BACKOFF_MS ? { backoffMs: env.ASTERION_RESTART_BACKOFF_MS.split(',').map(Number).filter((value) => value >= 0) } : {}),
+      ...(env.ASTERION_RESTART_MAX ? { maxAttempts: Number(env.ASTERION_RESTART_MAX) } : {}),
     },
     trustProxy: env.ASTERION_TRUST_PROXY !== '0',
     log: (line) => console.log(line),
@@ -103,6 +129,14 @@ type LiveRun = {
   migratedFrom?: string;
   loaded: boolean;
   exited: boolean;
+  /** The runner's own last words (its error message with the stack), kept for the crash record. */
+  lastError?: string;
+  /** Being stopped on purpose (a hand-back, a shutdown): its exit is no crash. */
+  stopping: boolean;
+  /** Started by the supervisor after a crash. */
+  afterCrash: boolean;
+  /** It has run past the crash point: the crash counter starts over. */
+  healthy: boolean;
 };
 
 /** The catch-up speed is measured over this much wall time. */
@@ -128,6 +162,14 @@ export function createCloudServer(config: ServerConfig) {
   let live: LiveRun | null = null;
   let lastPersistAt = 0;
   let closing = false;
+  const restart: RestartPolicy = { ...DEFAULT_RESTART_POLICY, ...config.restart };
+  /** Campaigns waiting out the pause before the next automatic attempt. */
+  const retryTimers = new Map<string, NodeJS.Timeout>();
+  const cancelRetry = (id: string) => {
+    const timer = retryTimers.get(id);
+    if (timer) clearTimeout(timer);
+    retryTimers.delete(id);
+  };
 
   /** One operation per campaign at a time (uploads, claims, releases). */
   const withLock = <T>(id: string, task: () => Promise<T>): Promise<T> => {
@@ -166,7 +208,8 @@ export function createCloudServer(config: ServerConfig) {
     if (!run.exited && run.child.connected) run.child.send(message);
   }
 
-  function startRun(campaign: Campaign, resume: boolean, migratedFrom?: string): void {
+  function startRun(campaign: Campaign, resume: boolean, migratedFrom?: string, afterCrash = false): void {
+    cancelRetry(campaign.id);
     const state = campaign.live!;
     const runner = runnerFor(state.gameVersion);
     if (!runner) {
@@ -184,6 +227,7 @@ export function createCloudServer(config: ServerConfig) {
     const child = fork(runner.script, [], { execArgv: runner.execArgv, stdio: ['ignore', 'inherit', 'inherit', 'ipc'], serialization: 'advanced' });
     const run: LiveRun = {
       campaignId: campaign.id, child, waiting: new Map(), history: [], loaded: false, exited: false, ready: Promise.resolve(),
+      stopping: false, afterCrash, healthy: false,
       ...(migratedFrom ? { migratedFrom } : {}),
     };
     run.ready = new Promise<void>((resolve, reject) => {
@@ -208,10 +252,7 @@ export function createCloudServer(config: ServerConfig) {
           }
           return;
         }
-        if (!closing && code !== 0) {
-          updateCampaign(run.campaignId, (current) => ({ ...current, live: current.live && { ...current.live, status: 'failed', error: `runner exited (${code ?? signal})` } }));
-          config.log(`live ${run.campaignId}: runner exited with ${code ?? signal}`);
-        }
+        if (!closing && !run.stopping && code !== 0) handleRunnerCrash(run, code, signal);
       }
     });
     live = run;
@@ -228,7 +269,10 @@ export function createCloudServer(config: ServerConfig) {
       journalFile: botJournalFile(campaign.id),
     };
     send(run, start);
-    updateCampaign(campaign.id, (current) => ({ ...current, live: current.live && { ...current.live, status: 'running', error: undefined } }));
+    updateCampaign(campaign.id, (current) => ({ ...current, live: current.live && {
+      ...current.live, status: 'running', error: undefined,
+      ...(current.live.recovery ? { recovery: { ...current.live.recovery, nextAttemptAt: undefined } } : {}),
+    } }));
     config.log(`live ${campaign.id}: started (game ${state.gameVersion}, ${fromCheckpoint ? 'from checkpoint' : `from revision ${state.baseRevision}`})`);
   }
 
@@ -239,11 +283,21 @@ export function createCloudServer(config: ServerConfig) {
       run.history = [{ at: Date.now(), worldAt: message.worldAt }];
       updateCampaign(run.campaignId, (current) => ({ ...current, live: current.live && {
         ...current.live, worldAt: message.worldAt, reportedAt: Date.now(),
+        ...(run.afterCrash && current.live.recovery ? { recovery: { ...current.live.recovery, recoveredAt: Date.now() } } : {}),
         ...(current.live.leftReplay === undefined ? { leftReplay: message.leftReplay } : {}),
       } }));
       config.log(`live ${run.campaignId}: loaded in ${message.loadMs} ms, rss ${Math.round(message.rss / 1e6)} MB`);
     } else if (message.type === 'status') {
       run.lastStatus = message;
+      if (run.afterCrash && !run.healthy) {
+        const recovery = readCampaign(config.dataDir, run.campaignId)?.live?.recovery;
+        if (recovery && message.worldAt > recovery.last.worldAt + restart.sameSpotMs) {
+          // Past the place it fell at: the next crash is a new one, not a repeat.
+          run.healthy = true;
+          updateCampaign(run.campaignId, (current) => ({ ...current, live: current.live?.recovery ? { ...current.live, recovery: { ...current.live.recovery, consecutive: 0 } } : current.live }));
+          config.log(`live ${run.campaignId}: past the crash point, world ${new Date(message.worldAt).toISOString()}`);
+        }
+      }
       const at = Date.now();
       run.history.push({ at, worldAt: message.worldAt });
       while (run.history.length > 2 && at - run.history[1]!.at > RATE_WINDOW_MS) run.history.shift();
@@ -256,6 +310,7 @@ export function createCloudServer(config: ServerConfig) {
         ...current.live, checkpointWorldAt: message.written.worldAt, worldAt: message.written.worldAt, reportedAt: Date.now(),
       } }));
     } else if (message.type === 'error') {
+      run.lastError = message.message;
       config.log(`live ${run.campaignId}: runner error ${message.message.split('\n')[0]}`);
     }
     if (waiter) {
@@ -264,10 +319,92 @@ export function createCloudServer(config: ServerConfig) {
     }
   }
 
+  /**
+   * The runner died. The world goes on by itself from its last checkpoint (or
+   * from the revision it started at) after a pause that grows with every
+   * crash in a row. The checkpoint is written atomically, so a crash in the
+   * middle of a step only loses the compute since it, and the game's code
+   * recomputes exactly the same world. The same error at the same place in the
+   * world twice, or too many crashes in a row, is not worth another attempt:
+   * the world is marked failed with the reason, and the evidence stays next to
+   * the campaign (crash.json, crash-checkpoint.json.gz).
+   */
+  function handleRunnerCrash(run: LiveRun, code: number | null, signal: NodeJS.Signals | null): void {
+    const id = run.campaignId;
+    const campaign = readCampaign(config.dataDir, id);
+    const state = campaign?.live;
+    if (!campaign || !state) return;
+    const message = run.lastError ?? `runner exited (${code ?? signal})`;
+    const headline = errorHeadline(message);
+    const now = Date.now();
+    const worldAt = Math.max(run.lastStatus?.worldAt ?? 0, state.checkpointWorldAt ?? 0, state.worldAt);
+    const previous = state.recovery;
+    const inStall = Boolean(previous && previous.consecutive > 0);
+    const consecutive = (previous?.consecutive ?? 0) + 1;
+    const sameSpot = Boolean(previous && inStall && previous.last.error === headline && Math.abs(worldAt - previous.last.worldAt) <= restart.sameSpotMs);
+    const failedReason: LiveRecovery['failedReason'] | null = sameSpot ? 'same-spot' : consecutive > restart.maxAttempts ? 'too-many' : null;
+    const delay = restart.backoffMs[Math.min(consecutive - 1, restart.backoffMs.length - 1)] ?? 10 * 60_000;
+    const recovery: LiveRecovery = {
+      consecutive, total: (previous?.total ?? 0) + 1,
+      last: { at: now, worldAt, error: headline },
+      stalledAt: inStall ? previous!.stalledAt : now,
+      stalledWorldAt: inStall ? previous!.stalledWorldAt : worldAt,
+      ...(failedReason ? { failedOnVersion: config.version, failedReason } : { nextAttemptAt: now + delay }),
+    };
+    writeCrashRecord(id, {
+      at: now, worldAt, gameVersion: state.gameVersion, serverVersion: config.version, exit: code ?? signal, error: message,
+      attempt: consecutive, checkpointWorldAt: state.checkpointWorldAt, loaded: run.loaded,
+      verdict: failedReason ?? `restart in ${Math.round(delay / 1000)} s`,
+    });
+    if (failedReason) {
+      try {
+        if (fs.existsSync(liveCheckpointFile(config.dataDir, id))) fs.copyFileSync(liveCheckpointFile(config.dataDir, id), crashCheckpointFile(config.dataDir, id));
+      } catch (error) { config.log(`live ${id}: crash checkpoint not kept: ${String(error)}`); }
+      const reason = failedReason === 'same-spot'
+        ? `Расчёт мира дважды остановился на одном и том же месте (${new Date(worldAt).toISOString()}) с одной ошибкой: «${headline}». Автоперезапуск прекращён, мир и диагностика сохранены.`
+        : `Расчёт мира остановился ${consecutive} раз подряд (последняя ошибка: «${headline}»). Автоперезапуск прекращён, мир и диагностика сохранены.`;
+      updateCampaign(id, (current) => ({ ...current, live: current.live && { ...current.live, status: 'failed', error: reason, recovery } }));
+      config.log(`live ${id}: runner crashed (${headline}); giving up (${failedReason}), crash.json and crash-checkpoint.json.gz kept`);
+      return;
+    }
+    // The world keeps its status 'running': for a game it is a world that is catching up, and it waits.
+    updateCampaign(id, (current) => ({ ...current, live: current.live && { ...current.live, status: 'running', error: undefined, recovery } }));
+    config.log(`live ${id}: runner crashed (${headline}); attempt ${consecutive}/${restart.maxAttempts} in ${Math.round(delay / 1000)} s`);
+    cancelRetry(id);
+    const timer = setTimeout(() => {
+      retryTimers.delete(id);
+      if (closing) return;
+      void withLock(id, async () => {
+        if (live || closing) return;
+        const current = readCampaign(config.dataDir, id);
+        if (!current?.live || current.live.status === 'failed') return;
+        try { startRun(current, true, undefined, true); } catch (error) {
+          config.log(`live ${id}: restart failed: ${String(error)}`);
+          updateCampaign(id, (item) => ({ ...item, live: item.live && { ...item.live, status: 'failed', error: 'Мир не удалось поднять: нет сохранения, с которого его продолжить.',
+            recovery: { ...(item.live.recovery ?? recovery), failedOnVersion: config.version, failedReason: 'no-base' as const, nextAttemptAt: undefined } } }));
+        }
+      });
+    }, delay);
+    timer.unref();
+    retryTimers.set(id, timer);
+  }
+
+  function writeCrashRecord(id: string, entry: Record<string, unknown>): void {
+    try {
+      const file = crashDiagnosticsFile(config.dataDir, id);
+      let entries: unknown[] = [];
+      try { entries = (JSON.parse(fs.readFileSync(file, 'utf8')) as { crashes?: unknown[] }).crashes ?? []; } catch { entries = []; }
+      const temporary = `${file}.tmp-${process.pid}`;
+      fs.writeFileSync(temporary, JSON.stringify({ campaign: id, crashes: [...entries, entry].slice(-20) }, null, 1));
+      fs.renameSync(temporary, file);
+    } catch (error) { config.log(`live ${id}: crash.json not written: ${String(error)}`); }
+  }
+
   /** Stops the living world and writes it to `out`; `finish` hands it back (closes the absence). */
   async function stopRun(run: LiveRun, out: string, finish: boolean, timeoutMs = 180_000): Promise<RunnerWritten> {
     await run.ready;
     if (run.exited) throw new Error('The world runner is not running.');
+    run.stopping = true;
     const stopped = new Promise<RunnerMessage>((resolve) => run.waiting.set('stopped', resolve));
     send(run, { type: 'stop', out, finish });
     const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('The world runner did not stop in time.')), timeoutMs).unref());
@@ -591,6 +728,43 @@ export function createCloudServer(config: ServerConfig) {
     sendSnapshot(response, result.campaign, result.snapshot);
   }
 
+  /**
+   * The operator's «raise the world»: starts a stopped (failed, or waiting out
+   * a pause) living world again from its checkpoint, or from the revision it
+   * started at. What a coordinator did by hand with a PUT, without the PUT.
+   */
+  async function recoverWorld(request: http.IncomingMessage, id: string): Promise<unknown> {
+    const body = await readJson(request);
+    const from = body.from === 'revision' ? 'revision' : 'checkpoint';
+    return withLock(id, async () => {
+      const campaign = readCampaign(config.dataDir, id);
+      if (!campaign) throw new HttpError(404, 'not-found', 'Кампании нет на сервере.');
+      if (!campaign.live) throw new HttpError(409, 'no-live-world', 'У кампании нет мира, который живёт на сервере.');
+      if (live && !live.exited) {
+        throw new HttpError(409, live.campaignId === id ? 'already-running' : 'other-world-running',
+          live.campaignId === id ? 'Мир уже считается.' : 'На сервере живёт мир другой кампании.');
+      }
+      cancelRetry(id);
+      const checkpoint = liveCheckpointFile(config.dataDir, id);
+      let used: 'checkpoint' | 'revision' = from;
+      if (from === 'revision' && fs.existsSync(checkpoint)) {
+        // Not deleted: the checkpoint stays next to the campaign under another name.
+        fs.renameSync(checkpoint, path.join(campaignDir(config.dataDir, id), `checkpoint-before-restart-${Date.now()}.json.gz`));
+      }
+      if (from === 'checkpoint' && !fs.existsSync(checkpoint)) used = 'revision';
+      const { recovery, ...rest } = campaign.live;
+      const next: Campaign = { ...campaign, live: {
+        ...rest, status: 'running', ...(used === 'revision' ? { checkpointWorldAt: null } : {}),
+        ...(recovery ? { recovery: { ...recovery, consecutive: 0, nextAttemptAt: undefined, failedOnVersion: undefined, failedReason: undefined } } : {}),
+      } };
+      delete next.live!.error;
+      writeCampaign(config.dataDir, next);
+      startRun(next, true, undefined, true);
+      config.log(`live ${id}: raised by the operator from ${used}`);
+      return { from: used, campaign: describeCampaign(readCampaign(config.dataDir, id)!, Date.now()) };
+    });
+  }
+
   async function release(request: http.IncomingMessage, id: string): Promise<unknown> {
     await readJson(request);
     return withLock(id, async () => {
@@ -661,7 +835,7 @@ export function createCloudServer(config: ServerConfig) {
     if (request.method === 'GET' && url.pathname === '/v1/campaigns') {
       return json(response, 200, { campaigns: listCampaigns(config.dataDir).map(liveView) });
     }
-    const match = /^\/v1\/campaigns\/([^/]+)(?:\/(revisions|claim|release|snapshots|bot-journal)(?:\/(\d+))?)?$/.exec(url.pathname);
+    const match = /^\/v1\/campaigns\/([^/]+)(?:\/(revisions|claim|release|recover|snapshots|bot-journal)(?:\/(\d+))?)?$/.exec(url.pathname);
     if (!match || !CAMPAIGN_ID.test(match[1]!)) throw new HttpError(404, 'not-found', 'Not found.');
     const [, id, action, snapshotId] = match as unknown as [string, string, string | undefined, string | undefined];
     if (!action && request.method === 'GET') {
@@ -672,6 +846,7 @@ export function createCloudServer(config: ServerConfig) {
     if (action === 'revisions' && request.method === 'PUT' && !snapshotId) return json(response, 200, await upload(request, id));
     if (action === 'claim' && request.method === 'POST') return claim(request, response, id);
     if (action === 'release' && request.method === 'POST') return json(response, 200, await release(request, id));
+    if (action === 'recover' && request.method === 'POST' && !snapshotId) return json(response, 200, await recoverWorld(request, id));
     if (action === 'bot-journal' && request.method === 'GET' && !snapshotId) {
       if (!readCampaign(config.dataDir, id)) throw new HttpError(404, 'not-found', 'Кампании нет на сервере.');
       const file = botJournalFile(id);
@@ -717,6 +892,17 @@ export function createCloudServer(config: ServerConfig) {
         const from = migrateLive(campaign);
         if (from) migrated.set(campaign.id, from);
       }
+      // A world given up on under an older release tries again under this one: the update may carry the fix.
+      for (const campaign of listCampaigns(config.dataDir)) {
+        const state = campaign.live;
+        if (!state || state.status !== 'failed' || state.recovery?.failedOnVersion === config.version) continue;
+        const { error: _error, ...rest } = state;
+        writeCampaign(config.dataDir, { ...campaign, live: {
+          ...rest, status: 'running',
+          ...(state.recovery ? { recovery: { ...state.recovery, consecutive: 0, nextAttemptAt: undefined, failedOnVersion: undefined, failedReason: undefined } } : {}),
+        } });
+        config.log(`live ${campaign.id}: failed under another release, trying again under ${config.version}`);
+      }
       // Resume the world that was alive when the server stopped (an update or a reboot).
       const running = listCampaigns(config.dataDir).filter((campaign) => campaign.live && campaign.live.status !== 'failed')
         .sort((left, right) => right.live!.startedAt - left.live!.startedAt);
@@ -734,6 +920,7 @@ export function createCloudServer(config: ServerConfig) {
     /** Shutdown (update, reboot): the living world writes a checkpoint and resumes on the next start. */
     async close(): Promise<void> {
       closing = true;
+      for (const id of [...retryTimers.keys()]) cancelRetry(id);
       server.close();
       const run = live;
       if (run && !run.exited) {
