@@ -223,7 +223,9 @@ export function resolveDuePirateRoll(
   if (pirate.raidRolls?.[rollKey]) return state;
   const seed = `pirate-raid-v1:${event.ownerId}:${event.contactCycleKey}`;
   const current = pirate.ownerThreats?.[event.ownerId] ?? {
-    version: 1 as const, ageHours: 0, integratedAt: pirate.raidProcessedAt ?? event.at,
+    // A threat that never existed starts at this roll. The slice cursor
+    // (raidProcessedAt) would make its age depend on where a catch-up slice ended.
+    version: 1 as const, ageHours: 0, integratedAt: event.at,
   };
   const points = selectOwnerScore(state, event.ownerId);
   const resourcePoints = safe(points?.resourcePoints ?? 0);

@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  compareGameVersions, decideCloudEntry, saveSchemaVersion, SERVER_CATCHUP_WAIT_LAG_MS, saveWorldAt, sha256Text,
+  compareGameVersions, decideCloudEntry, describeLocalReason, describeServerStall, saveSchemaVersion, SERVER_CATCHUP_WAIT_LAG_MS, saveWorldAt, sha256Text,
   type CloudCampaignView, type CloudEntryInput, type CloudSnapshotView,
 } from './cloud-sync.ts';
 import { createHash } from 'node:crypto';
@@ -114,4 +114,39 @@ test('digests and save fields read without parsing the save', async () => {
   assert.equal(saveWorldAt(text), 1767312000000);
   assert.equal(saveSchemaVersion(text), 28);
   assert.equal(saveWorldAt('{"resourceClock":{"lastReconciledAt":123.5}}'), 123);
+});
+
+const stalled = { stalledAt: Date.UTC(2026, 10, 2, 9, 30), stalledWorldAt: 700, restarts: 1 };
+
+test('a world that stopped on the server: waiting out the pause, given up on, or raised again', () => {
+  // The server waits out a pause before its next attempt: the game waits for it, however small the lag looks.
+  const pause = campaign(snapshot(3), { lagMs: 10_000, recovery: { ...stalled, nextAttemptAt: Date.now() + 5_000 } });
+  assert.deepEqual(decideCloudEntry(input({ campaign: pause })), { action: 'wait', reason: 'catching-up', baseRevision: 3 });
+  // Raised again and caught up: the game takes it like any other world.
+  const raised = campaign(snapshot(3), { lagMs: 0, recovery: { ...stalled, recoveredAt: stalled.stalledAt + 60_000 } });
+  assert.deepEqual(decideCloudEntry(input({ campaign: raised })), { action: 'claim', baseRevision: 3 });
+  // Given up on: nothing to take, this computer goes on from its own save and the server world stays a backup.
+  const failed = campaign(snapshot(3), { status: 'failed', recovery: stalled, error: 'x' });
+  assert.deepEqual(decideCloudEntry(input({ campaign: failed })), { action: 'local', reason: 'server-failed', release: true });
+  assert.deepEqual(decideCloudEntry(input({ takeNow: true, campaign: failed })), { action: 'local', reason: 'server-failed', release: true });
+  // A second computer without the campaign downloads the base copy and releases the failed world.
+  assert.deepEqual(decideCloudEntry(input({ localDigest: null, record: null, campaign: failed })), { action: 'download', snapshotId: 3, revision: 3, release: true });
+});
+
+test('the stall line is calm: when it stopped and what happened, no technical details; nothing when all was well', () => {
+  assert.equal(describeServerStall(campaign(snapshot(3), { lagMs: 0 }).live, 'took-server'), null, 'no recovery, no line');
+  assert.equal(describeServerStall(null, 'local'), null);
+  const raised = campaign(snapshot(3), { recovery: { ...stalled, recoveredAt: stalled.stalledAt + 60_000 } }).live;
+  assert.match(describeServerStall(raised, 'took-server')!, /^Мир на сервере стоял с .+, затем сервер продолжил его сам\. Игра взяла мир сервера\.$/);
+  assert.match(describeServerStall(raised, 'waiting')!, /сервер продолжил его сам и теперь догоняет время/);
+  const pause = campaign(snapshot(3), { recovery: { ...stalled, nextAttemptAt: 1 } }).live;
+  assert.match(describeServerStall(pause, 'waiting')!, /Сервер продолжит его сам через несколько минут, ничего не потеряно/);
+  const failed = campaign(snapshot(3), { status: 'failed', error: 'Расчёт мира дважды остановился: «boom #»', recovery: stalled });
+  const text = describeLocalReason('server-failed', failed);
+  assert.match(text, /Игра досчитала время сама по сохранению этого компьютера/);
+  for (const line of [text, describeServerStall(raised, 'took-server')!, describeServerStall(pause, 'waiting')!]) {
+    assert.doesNotMatch(line, /boom|runner|stack|ошибк|checkpoint|контрольн/i, 'no error text, no jargon');
+  }
+  // A failed world from an older server (no recovery details) still gets a line, dated by its last report.
+  assert.match(describeLocalReason('server-failed', campaign(snapshot(3), { status: 'failed' })), /Мир на сервере стоял с/);
 });

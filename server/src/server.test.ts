@@ -8,9 +8,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
+import { execFile, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { createCloudServer, type ServerConfig } from './server.ts';
+import { createCloudServer, errorHeadline, planCrash, type ServerConfig } from './server.ts';
 import { parseNpcJournalLines } from '../../src/application/npc-journal.ts';
 import { DEFAULT_RETENTION } from './store.ts';
 import { memoryStorage } from '../../src/application/npc-runtime.test-support.ts';
@@ -351,4 +352,205 @@ test('a world far behind the clock reports how fast the server catches it up', a
   const status = await (await api(base, '/v1/status')).json();
   assert.equal(status.live.campaignId, id);
   assert.ok(status.live.rate > 1);
+});
+
+/* ---------------------------------------------------------------- crashes */
+
+const FAULT_RUNNER = path.join(here, 'runner-fault.test-support.ts');
+
+/** A server whose runner dies as `faultFile` says; it checkpoints on every tick and waits little between attempts. */
+function faultConfig(dataDir: string, overrides: Partial<ServerConfig> = {}): ServerConfig {
+  const base = config(dataDir);
+  return config(dataDir, {
+    runnerOverride: { ...base.runnerOverride!, script: FAULT_RUNNER },
+    checkpointEveryMs: 1,
+    restart: { backoffMs: [150, 300], maxAttempts: 6, sameSpotMs: 30 * 60_000 },
+    ...overrides,
+  });
+}
+
+function setFault(file: string, fault: { crashes: number; afterStatuses: number }): void {
+  const current = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) as { done?: number } : {};
+  fs.writeFileSync(file, JSON.stringify({ ...fault, ...(current.done ? { done: current.done } : {}) }));
+}
+
+const readCrashes = (dataDir: string, id: string): Array<{ error: string; verdict: string; attempt: number; worldAt: number }> => {
+  try { return JSON.parse(fs.readFileSync(path.join(dataDir, 'campaigns', id, 'crash.json'), 'utf8')).crashes; } catch { return []; }
+};
+
+/** The world a local catch-up of the same save to the same moment makes, as the game would store it after a load. */
+async function localDigestAt(left: string, worldAt: number): Promise<string> {
+  const local = load(left);
+  applyCampaignRuntimeForCatchup(local, worldAt);
+  const caughtUp = await runNpcCatchup(freezeNpcCatchupTarget(local, worldAt), { now: () => worldAt });
+  return loadedDigest(serializeSaveForStorage(caughtUp.state, 'production'));
+}
+
+const settled = (view: { live?: { status: string; lagMs: number | null } | null }) => view.live?.status === 'running' && view.live.lagMs !== null && view.live.lagMs < 5_000;
+
+for (const [label, afterStatuses] of [['before any checkpoint (the revision it started at)', 0], ['after checkpoints (the last checkpoint)', 2]] as const) {
+  test(`a runner that dies in the middle of a step is raised again ${label}: the world equals one that never crashed`, async (t) => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'asterion-cloud-'));
+    const faultFile = path.join(dataDir, 'fault.json');
+    setFault(faultFile, { crashes: 1, afterStatuses });
+    process.env.ASTERION_TEST_FAULT = faultFile;
+    const lines: string[] = [];
+    const cloud = createCloudServer(faultConfig(dataDir, { log: (line) => lines.push(line) }));
+    const base = `http://127.0.0.1:${await cloud.listen()}`;
+    t.after(() => { delete process.env.ASTERION_TEST_FAULT; return cloud.close().finally(() => fs.rmSync(dataDir, { recursive: true, force: true })); });
+    const id = 'slot-crash-0001';
+    const left = leftWorld(30);
+    assert.equal((await upload(base, id, left, { 'x-asterion-left': '1' })).status, 200);
+
+    const recovered = await waitFor(async () => (await api(base, `/v1/campaigns/${id}`)).json(),
+      (view) => view.live?.recovery?.recoveredAt !== undefined && settled(view), 90_000);
+    assert.equal(recovered.live.recovery.restarts, 1);
+    assert.ok(recovered.live.recovery.stalledAt > 0 && recovered.live.recovery.recoveredAt >= recovered.live.recovery.stalledAt);
+    assert.equal(recovered.live.error, undefined);
+    assert.equal(JSON.stringify(recovered).includes('Injected'), false, 'the player never sees the error text');
+    const crashes = readCrashes(dataDir, id);
+    assert.equal(crashes.length, 1);
+    assert.match(crashes[0]!.error, /Injected fault #1 in the middle of a step[\s\S]+\n\s+at /, 'the diagnostics keep the error and its stack');
+    assert.ok(lines.some((line) => /runner crashed .* attempt 1\/6/.test(line)));
+    assert.equal(fs.existsSync(path.join(dataDir, 'campaigns', id, 'crash-checkpoint.json.gz')), false, 'nothing given up on: no crash checkpoint');
+    const starts = lines.filter((line) => line.includes(': started ('));
+    assert.equal(starts.length, 2);
+    assert.match(starts[1]!, afterStatuses === 0 ? /from revision 1/ : /from checkpoint/, 'the restart resumed from where the label says');
+
+    const journal = (await (await api(base, `/v1/campaigns/${id}/bot-journal`)).text()).split('\n').filter(Boolean);
+    assert.ok(journal.length > 0);
+    assert.equal(new Set(journal).size, journal.length, 'the bot journal has no line twice: what the crashed runner wrote past the resume point was dropped');
+    const taken = await claimWorld(base, id, 1, VERSION);
+    assert.equal(taken.status, 200);
+    assert.equal(loadedDigest(taken.text!), await localDigestAt(left, taken.worldAt!), 'after the crash and the restart: byte for byte the world of a run without the crash');
+  });
+}
+
+test('the same error at the same place of the world stops the restarts: failed with a reason, evidence kept, raised by hand', async (t) => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'asterion-cloud-'));
+  const faultFile = path.join(dataDir, 'fault.json');
+  setFault(faultFile, { crashes: 99, afterStatuses: 1 });
+  process.env.ASTERION_TEST_FAULT = faultFile;
+  const cloud = createCloudServer(faultConfig(dataDir));
+  const base = `http://127.0.0.1:${await cloud.listen()}`;
+  t.after(() => { delete process.env.ASTERION_TEST_FAULT; return cloud.close().finally(() => fs.rmSync(dataDir, { recursive: true, force: true })); });
+  const id = 'slot-crash-0002';
+  const left = leftWorld(30);
+  assert.equal((await upload(base, id, left, { 'x-asterion-left': '1' })).status, 200);
+
+  const failed = await waitFor(async () => (await api(base, `/v1/campaigns/${id}`)).json(), (view) => view.live?.status === 'failed', 90_000);
+  assert.match(failed.live.error, /дважды остановился на одном и том же месте/);
+  assert.equal(failed.live.recovery.restarts, 2);
+  assert.equal(readCrashes(dataDir, id).length, 2);
+  assert.ok(fs.existsSync(path.join(dataDir, 'campaigns', id, 'crash-checkpoint.json.gz')), 'the checkpoint is kept next to the campaign');
+  await new Promise((resolve) => setTimeout(resolve, 1_000));
+  assert.equal(readCrashes(dataDir, id).length, 2, 'no attempts after giving up');
+  assert.equal((await (await api(base, `/v1/campaigns/${id}`)).json()).live.status, 'failed');
+
+  // The operator raises it (the fault is gone): from the checkpoint, once.
+  setFault(faultFile, { crashes: 0, afterStatuses: 1 });
+  const raised = await api(base, `/v1/campaigns/${id}/recover`, { method: 'POST', body: '{}' });
+  assert.equal(raised.status, 200);
+  assert.equal((await raised.json()).from, 'checkpoint');
+  const again = await api(base, `/v1/campaigns/${id}/recover`, { method: 'POST', body: '{}' });
+  assert.equal(again.status, 409);
+  assert.equal((await again.json()).error, 'already-running');
+  const back = await waitFor(async () => (await api(base, `/v1/campaigns/${id}`)).json(), settled, 90_000);
+  assert.equal(back.live.error, undefined);
+  const taken = await claimWorld(base, id, 1, VERSION);
+  assert.equal(taken.status, 200);
+  assert.equal(loadedDigest(taken.text!), await localDigestAt(left, taken.worldAt!), 'raised by hand: the same world as without the crashes');
+  assert.equal((await api(base, '/v1/campaigns/slot-none/recover', { method: 'POST', body: '{}' })).status, 404);
+});
+
+test('a world given up on tries again when the server is updated', async (t) => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'asterion-cloud-'));
+  const faultFile = path.join(dataDir, 'fault.json');
+  setFault(faultFile, { crashes: 99, afterStatuses: 0 });
+  process.env.ASTERION_TEST_FAULT = faultFile;
+  let cloud = createCloudServer(faultConfig(dataDir));
+  let base = `http://127.0.0.1:${await cloud.listen()}`;
+  t.after(() => { delete process.env.ASTERION_TEST_FAULT; return cloud.close().finally(() => fs.rmSync(dataDir, { recursive: true, force: true })); });
+  const id = 'slot-crash-0003';
+  assert.equal((await upload(base, id, leftWorld(20), { 'x-asterion-left': '1' })).status, 200);
+  await waitFor(async () => (await api(base, `/v1/campaigns/${id}`)).json(), (view) => view.live?.status === 'failed', 90_000);
+  await cloud.close();
+
+  // The same release restarts (a reboot): still given up on. A newer release (the fix) tries again.
+  cloud = createCloudServer(faultConfig(dataDir));
+  base = `http://127.0.0.1:${await cloud.listen()}`;
+  assert.equal((await (await api(base, `/v1/campaigns/${id}`)).json()).live.status, 'failed');
+  await cloud.close();
+  setFault(faultFile, { crashes: 0, afterStatuses: 0 });
+  const NEXT = '1.2.4';
+  cloud = createCloudServer(faultConfig(dataDir, { version: NEXT, runnerOverride: { ...faultConfig(dataDir).runnerOverride!, version: undefined } }));
+  base = `http://127.0.0.1:${await cloud.listen()}`;
+  const back = await waitFor(async () => (await api(base, `/v1/campaigns/${id}`)).json(), settled, 90_000);
+  assert.equal(back.live.gameVersion, NEXT);
+  assert.equal(back.live.error, undefined);
+});
+
+test('restart plan: pauses grow, the same error at the same place stops, a different one counts, too many in a row stops', () => {
+  const policy = { backoffMs: [5_000, 15_000, 45_000], maxAttempts: 4, sameSpotMs: 30 * 60_000 };
+  const at = 1_000_000;
+  const first = planCrash(undefined, { at, worldAt: 100, headline: 'boom #' }, policy, '1.0.0');
+  assert.equal(first.failedReason, null);
+  assert.equal(first.delayMs, 5_000);
+  assert.equal(first.recovery.nextAttemptAt, at + 5_000);
+  const second = planCrash(first.recovery, { at: at + 10_000, worldAt: 100 + 40 * 60_000, headline: 'other #' }, policy, '1.0.0');
+  assert.equal(second.failedReason, null, 'another error is not a repeat');
+  assert.equal(second.delayMs, 15_000);
+  assert.equal(second.recovery.stalledAt, at, 'one stall: it began at the first crash');
+  assert.equal(second.recovery.total, 2);
+  const third = planCrash(second.recovery, { at: at + 40_000, worldAt: 100 + 50 * 60_000, headline: 'x #' }, policy, '1.0.0');
+  const fourth = planCrash(third.recovery, { at: at + 90_000, worldAt: 100 + 130 * 60_000, headline: 'y #' }, policy, '1.0.0');
+  assert.equal(fourth.delayMs, 45_000, 'the last pause repeats');
+  const fifth = planCrash(fourth.recovery, { at: at + 200_000, worldAt: 100 + 230 * 60_000, headline: 'z #' }, policy, '1.0.0');
+  assert.equal(fifth.failedReason, 'too-many');
+  assert.equal(fifth.recovery.failedOnVersion, '1.0.0');
+  const repeat = planCrash(first.recovery, { at: at + 10_000, worldAt: 100 + 5 * 60_000, headline: 'boom #' }, policy, '1.0.0');
+  assert.equal(repeat.failedReason, 'same-spot');
+  const healthy = planCrash({ ...first.recovery, consecutive: 0 }, { at: at + 10_000, worldAt: 100, headline: 'boom #' }, policy, '1.0.0');
+  assert.equal(healthy.failedReason, null, 'after a healthy run the same error is a new stall');
+  assert.equal(healthy.recovery.stalledAt, at + 10_000);
+  assert.equal(errorHeadline('Injected fault #12 at 1730000000000\n  at x'), 'Injected fault ## at #');
+});
+
+test('recover-world.sh raises a failed world through the server and never prints the key', async (t) => {
+  const bash = spawnSync('bash', ['--version']);
+  if (bash.error) return t.skip('no bash on this machine');
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'asterion-cloud-'));
+  const faultFile = path.join(dataDir, 'fault.json');
+  setFault(faultFile, { crashes: 99, afterStatuses: 1 });
+  process.env.ASTERION_TEST_FAULT = faultFile;
+  const cloud = createCloudServer(faultConfig(dataDir));
+  const port = await cloud.listen();
+  const base = `http://127.0.0.1:${port}`;
+  t.after(() => { delete process.env.ASTERION_TEST_FAULT; return cloud.close().finally(() => fs.rmSync(dataDir, { recursive: true, force: true })); });
+  const keyFile = path.join(dataDir, 'access-key');
+  fs.writeFileSync(keyFile, `${KEY}\n`);
+  const id = 'slot-crash-0004';
+  assert.equal((await upload(base, id, leftWorld(20), { 'x-asterion-left': '1' })).status, 200);
+  await waitFor(async () => (await api(base, `/v1/campaigns/${id}`)).json(), (view) => view.live?.status === 'failed', 90_000);
+  setFault(faultFile, { crashes: 0, afterStatuses: 1 });
+
+  // Asynchronous: the server under test lives in this process.
+  const run = (args: string[], env: Record<string, string> = {}) => new Promise<{ status: number | null; stdout: string; stderr: string }>((resolve) => {
+    execFile('bash', [path.join(root, 'server/deploy/recover-world.sh'), '--local', ...args],
+      { env: { ...process.env, ASTERION_URL: base, ASTERION_KEY_FILE: keyFile, ...env } },
+      (error, stdout, stderr) => resolve({ status: error ? (typeof error.code === 'number' ? error.code : 1) : 0, stdout, stderr }));
+  });
+  const wrongKey = path.join(dataDir, 'wrong-key');
+  fs.writeFileSync(wrongKey, 'x'.repeat(40));
+  const refused = await run([], { ASTERION_KEY_FILE: wrongKey });
+  assert.notEqual(refused.status, 0, 'a wrong key raises nothing');
+  assert.equal(`${refused.stdout}${refused.stderr}`.includes(KEY), false);
+  const done = await run([]);
+  assert.equal(done.status, 0, done.stderr);
+  assert.match(done.stdout, /Мир slot-crash-0004 поднят \(с контрольной точки\)/);
+  assert.equal(`${done.stdout}${done.stderr}`.includes(KEY), false, 'the key is never printed');
+  await waitFor(async () => (await api(base, `/v1/campaigns/${id}`)).json(), settled, 90_000);
+  const nothing = await run([]);
+  assert.equal(nothing.status, 0);
+  assert.match(nothing.stdout, /поднимать нечего/);
 });

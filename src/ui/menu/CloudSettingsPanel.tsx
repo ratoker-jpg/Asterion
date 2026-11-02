@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import type { CloudCampaignView } from '../../application/cloud/cloud-sync.ts';
+import { describeServerStall, type CloudCampaignView } from '../../application/cloud/cloud-sync.ts';
 import { cloudBridge, type CloudServerStatus, type CloudSettings } from './cloud.ts';
 
 const dateTime = (ms: number) => new Date(ms).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -62,6 +62,10 @@ export function CloudSettingsPanel({ heading }: { heading: (props: { eyebrow: st
     );
   }
   const upload = settings?.lastUpload ?? null;
+  // A world that stopped on the server: one calm line per campaign, only when it happened.
+  const stalls = server && 'campaigns' in server
+    ? server.campaigns.flatMap((campaign) => { const note = describeServerStall(campaign.live, campaign.live?.status === 'failed' ? 'local' : campaign.live?.recovery?.recoveredAt !== undefined ? 'took-server' : 'waiting'); return note ? [`«${campaign.name}»: ${note}`] : []; })
+    : [];
   const live = server && 'status' in server ? server.status.live : null;
   const liveCampaign = live && server && 'campaigns' in server ? server.campaigns.find((campaign) => campaign.id === live.campaignId) : null;
   return (
@@ -103,6 +107,7 @@ export function CloudSettingsPanel({ heading }: { heading: (props: { eyebrow: st
             <div><dt>Мир на сервере</dt><dd data-qa-cloud-live={live ? 'running' : 'none'}>{live
               ? `«${liveCampaign?.name ?? live.campaignId}» жив до ${live.worldAt ? dateTime(live.worldAt) : '—'}${live.lagMs !== null ? ` · ${lag(live.lagMs)}` : ''}${live.cpuShare !== null ? ` · CPU ${(live.cpuShare * 100).toFixed(1)}%` : ''}${live.rss ? ` · ${Math.round(live.rss / 1024 ** 2)} МБ` : ''}`
               : server && 'status' in server ? 'сейчас никакой мир не живёт на сервере' : '—'}</dd></div>
+            {stalls.length ? <div><dt>Остановки мира</dt><dd data-qa-cloud-stall>{stalls.join(' ')}</dd></div> : null}
             <div><dt>Сервер</dt><dd>{server && 'status' in server
               ? `версия ${server.status.version} · кампаний ${server.status.campaigns} · копии ${gigabytes(server.status.storedBytes)}${server.status.disk ? ` · свободно ${gigabytes(server.status.disk.freeBytes)}` : ''}`
               : server && 'error' in server ? `недоступен: ${server.error}` : '—'}</dd></div>
