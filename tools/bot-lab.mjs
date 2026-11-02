@@ -10,6 +10,7 @@
 //     tools/bot-lab.mjs [--days=2] [--bots=15] [--fixture=F | --write-fixture=F] [--out=DIR]
 //   ... tools/bot-lab.mjs --save=SAVE.json --hours=6 --owners=npc-gen-32[,..] [--out=DIR]
 //   ... tools/bot-lab.mjs --seed=3 [--scenario=seven-planets|familiar-solos|conflict] ...   (another lab galaxy; see bot-lab-batch.mjs)
+//   ... tools/bot-lab.mjs --policy=FILE.json ...   (stage H: the whole run under another strategy policy; see tools/league.mjs)
 //
 // A fresh campaign draws ids from crypto entropy: before/after comparisons run
 // both revisions on one fixture written once with --write-fixture.
@@ -17,6 +18,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createInitialSaveState, loadSavedState, serializeSaveForStorage } from '../src/application/persistence.ts';
 import { getNpcOwnerIds } from '../src/application/npc-foundation.ts';
+import { getNpcPolicy, setNpcPolicyOverride } from '../src/domain/npc/policy.ts';
 import { applyCampaignRuntimeForCatchup } from '../src/application/npc-catchup-runner.ts';
 import { advanceLiveWorld, beginLiveWorld } from '../src/application/npc-live-world.ts';
 import { formatNpcJournalLines, setNpcJournalSink } from '../src/application/npc-journal.ts';
@@ -281,6 +283,36 @@ function empireSummary(tally) {
       colonyDefenceLoss: Math.round(tally?.colonyDefenceLoss ?? 0), mainDefenceLoss: Math.round(tally?.mainDefenceLoss ?? 0) } };
 }
 
+/** Shannon entropy in bits of a table of counts. */
+const entropyOf = (counts) => {
+  const total = sum(counts);
+  return total ? -sum(counts.filter((count) => count > 0).map((count) => (count / total) * Math.log2(count / total))) : 0;
+};
+
+/**
+ * Diversity of play (stage H): how many different ways the owners play. The
+ * entropy of the styles they settled on, and how far each owner's mix of started
+ * action kinds lies from the average mix (mean L1 distance, 0..2).
+ */
+export function describeDiversity(journal, owners) {
+  const finalStyle = new Map();
+  for (const entry of journal.filter((item) => item.k === 'style')) finalStyle.set(entry.o, entry.s);
+  const styleCounts = {};
+  for (const style of finalStyle.values()) styleCounts[style] = (styleCounts[style] ?? 0) + 1;
+  const kinds = new Set();
+  const mix = new Map(owners.map((ownerId) => [ownerId, {}]));
+  for (const entry of journal) {
+    if (!entry.c || entry.ok !== 1 || !mix.has(entry.o)) continue;
+    kinds.add(entry.k);
+    mix.get(entry.o)[entry.k] = (mix.get(entry.o)[entry.k] ?? 0) + 1;
+  }
+  const shares = owners.map((ownerId) => { const own = mix.get(ownerId); const total = sum(Object.values(own)); return Object.fromEntries([...kinds].map((kind) => [kind, total ? (own[kind] ?? 0) / total : 0])); });
+  const mean = Object.fromEntries([...kinds].map((kind) => [kind, sum(shares.map((row) => row[kind])) / Math.max(1, shares.length)]));
+  const distances = shares.map((row) => sum([...kinds].map((kind) => Math.abs(row[kind] - mean[kind]))));
+  return { styleEntropy: +entropyOf(Object.values(styleCounts)).toFixed(3), styleKinds: Object.keys(styleCounts).length,
+    actionMixSpread: +(sum(distances) / Math.max(1, distances.length)).toFixed(3) };
+}
+
 /** What the world looks like for the questions the owner asks. */
 export function describeWorld(state, journal = [], tally = null) {
   const playerId = state.profile.playerId;
@@ -411,6 +443,7 @@ export function describeWorld(state, journal = [], tally = null) {
       defences: defences.length, defenceLoss: Math.round(sum(defences.map((entry) => entry.d?.loss ?? 0))) },
     social,
     bottomThirdPoints: Math.round(sum(ascending.slice(0, third)) / third),
+    diversity: describeDiversity(journal, owners),
     styleChanges: styles.length, styles: Object.entries(styles.reduce((counts, entry) => ({ ...counts, [entry.s]: (counts[entry.s] ?? 0) + 1 }), {})),
     perOwner,
   };
@@ -434,6 +467,7 @@ export function listProblems(summary) {
 
 function main() {
   const out = option('out');
+  if (option('policy')) setNpcPolicyOverride(JSON.parse(fs.readFileSync(option('policy'), 'utf8')));
   if (out) fs.mkdirSync(out, { recursive: true });
   const save = option('save');
   const owners = option('owners')?.split(',').filter(Boolean);
@@ -483,7 +517,7 @@ function main() {
     }
   }
   setNpcJournalSink(null);
-  const result = { tool: 'bot-lab', source: save ? path.basename(save) : option('fixture') ? path.basename(option('fixture')) : 'fresh lab world',
+  const result = { tool: 'bot-lab', policy: { file: option('policy') ? path.basename(option('policy')) : null, version: getNpcPolicy().version, params: getNpcPolicy().params }, source: save ? path.basename(save) : option('fixture') ? path.basename(option('fixture')) : 'fresh lab world',
     hours, wallSeconds: Math.round((performance.now() - startedAt) / 1000), journalEntries: journal.length, days };
   if (out) {
     fs.writeFileSync(path.join(out, 'summary.json'), JSON.stringify(result, null, 2));

@@ -1,0 +1,201 @@
+{
+  "round": 1,
+  "step": 0.2,
+  "candidates": {
+    "base": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.25,
+        "bottleneckDrive": 1.4,
+        "scarcityHigh": 3,
+        "styleCapRaise": 0,
+        "budgetDaysHigh": 3,
+        "spendShareHigh": 0.85,
+        "reserveHours": 6,
+        "tableWeight": 0
+      }
+    },
+    "hoardDays-down": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.05,
+        "bottleneckDrive": 1.4,
+        "scarcityHigh": 3,
+        "styleCapRaise": 0,
+        "budgetDaysHigh": 3,
+        "spendShareHigh": 0.85,
+        "reserveHours": 6,
+        "tableWeight": 0
+      }
+    },
+    "hoardDays-up": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.64,
+        "bottleneckDrive": 1.4,
+        "scarcityHigh": 3,
+        "styleCapRaise": 0,
+        "budgetDaysHigh": 3,
+        "spendShareHigh": 0.85,
+        "reserveHours": 6,
+        "tableWeight": 0
+      }
+    },
+    "bottleneckDrive-down": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.25,
+        "bottleneckDrive": 1,
+        "scarcityHigh": 3,
+        "styleCapRaise": 0,
+        "budgetDaysHigh": 3,
+        "spendShareHigh": 0.85,
+        "reserveHours": 6,
+        "tableWeight": 0
+      }
+    },
+    "bottleneckDrive-up": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.25,
+        "bottleneckDrive": 1.8,
+        "scarcityHigh": 3,
+        "styleCapRaise": 0,
+        "budgetDaysHigh": 3,
+        "spendShareHigh": 0.85,
+        "reserveHours": 6,
+        "tableWeight": 0
+      }
+    },
+    "scarcityHigh-down": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.25,
+        "bottleneckDrive": 1.4,
+        "scarcityHigh": 2,
+        "styleCapRaise": 0,
+        "budgetDaysHigh": 3,
+        "spendShareHigh": 0.85,
+        "reserveHours": 6,
+        "tableWeight": 0
+      }
+    },
+    "scarcityHigh-up": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.25,
+        "bottleneckDrive": 1.4,
+        "scarcityHigh": 4,
+        "styleCapRaise": 0,
+        "budgetDaysHigh": 3,
+        "spendShareHigh": 0.85,
+        "reserveHours": 6,
+        "tableWeight": 0
+      }
+    },
+    "styleCapRaise-up": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.25,
+        "bottleneckDrive": 1.4,
+        "scarcityHigh": 3,
+        "styleCapRaise": 0.2,
+        "budgetDaysHigh": 3,
+        "spendShareHigh": 0.85,
+        "reserveHours": 6,
+        "tableWeight": 0
+      }
+    },
+    "budgetDaysHigh-down": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.25,
+        "bottleneckDrive": 1.4,
+        "scarcityHigh": 3,
+        "styleCapRaise": 0,
+        "budgetDaysHigh": 1.5,
+        "spendShareHigh": 0.85,
+        "reserveHours": 6,
+        "tableWeight": 0
+      }
+    },
+    "budgetDaysHigh-up": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.25,
+        "bottleneckDrive": 1.4,
+        "scarcityHigh": 3,
+        "styleCapRaise": 0,
+        "budgetDaysHigh": 4.5,
+        "spendShareHigh": 0.85,
+        "reserveHours": 6,
+        "tableWeight": 0
+      }
+    },
+    "spendShareHigh-down": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.25,
+        "bottleneckDrive": 1.4,
+        "scarcityHigh": 3,
+        "styleCapRaise": 0,
+        "budgetDaysHigh": 3,
+        "spendShareHigh": 0.72,
+        "reserveHours": 6,
+        "tableWeight": 0
+      }
+    },
+    "spendShareHigh-up": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.25,
+        "bottleneckDrive": 1.4,
+        "scarcityHigh": 3,
+        "styleCapRaise": 0,
+        "budgetDaysHigh": 3,
+        "spendShareHigh": 0.95,
+        "reserveHours": 6,
+        "tableWeight": 0
+      }
+    },
+    "reserveHours-down": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.25,
+        "bottleneckDrive": 1.4,
+        "scarcityHigh": 3,
+        "styleCapRaise": 0,
+        "budgetDaysHigh": 3,
+        "spendShareHigh": 0.85,
+        "reserveHours": 1.4,
+        "tableWeight": 0
+      }
+    },
+    "reserveHours-up": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.25,
+        "bottleneckDrive": 1.4,
+        "scarcityHigh": 3,
+        "styleCapRaise": 0,
+        "budgetDaysHigh": 3,
+        "spendShareHigh": 0.85,
+        "reserveHours": 10.6,
+        "tableWeight": 0
+      }
+    },
+    "tableWeight-up": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.25,
+        "bottleneckDrive": 1.4,
+        "scarcityHigh": 3,
+        "styleCapRaise": 0,
+        "budgetDaysHigh": 3,
+        "spendShareHigh": 0.85,
+        "reserveHours": 6,
+        "tableWeight": 0.2
+      }
+    }
+  }
+}
