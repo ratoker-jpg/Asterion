@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "note": "Policy of the NPC strategy (stage H). Version 1 equals the constants the code carried before the policy file existed. Chosen by tools/league.mjs on training seeds, checked on held-out seeds; the game only reads it.",
+  "params": {
+    "hoardDays": 0.25,
+    "bottleneckDrive": 1.4,
+    "scarcityHigh": 3,
+    "styleCapRaise": 0,
+    "budgetDaysHigh": 3,
+    "spendShareHigh": 0.85,
+    "reserveHours": 6,
+    "tableWeight": 0
+  }
+}

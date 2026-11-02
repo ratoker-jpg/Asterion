@@ -13,6 +13,7 @@ import { startNpcFleetProduction, type NpcFleetProductionCandidate } from './npc
 import { getNpcJournalSink } from './npc-journal.ts';
 import { flightsToPlanet, ownerBattleReports } from './npc-knowledge-index.ts';
 import { npcCharacterStyle, type NpcPlayStyle } from './npc-style.ts';
+import { getNpcPolicy } from '../domain/npc/policy.ts';
 import { activeNpcFortifyPlan, hoardPressure, npcBatteryStats, NPC_FORTRESS_BALANCE, type NpcUtilityContext } from './npc-utility.ts';
 
 /**
@@ -29,13 +30,20 @@ export const NPC_FORTIFY_BALANCE = Object.freeze({
   /** Game hours between reviews of the targets. */
   reviewHours: 6,
   /** Defence population each usual style aims at per planet; danger raises it to the full target. */
-  styleCap: Object.freeze<Record<NpcPlayStyle, number>>({
+  baseStyleCap: Object.freeze<Record<NpcPlayStyle, number>>({
     fortress: NPC_FORTRESS_BALANCE.defenseTarget, economist: 18_000, ally: 15_000, fleet: 12_000, 'crystal-hunter': 10_000, raider: 8_000,
   }),
+  /** The policy file lifts the caps of the other styles toward the full fortress (`styleCapRaise`); 0 leaves them as above. */
+  get styleCap(): Readonly<Record<NpcPlayStyle, number>> {
+    const raise = getNpcPolicy().params.styleCapRaise;
+    const base = NPC_FORTIFY_BALANCE.baseStyleCap;
+    if (raise === 0) return base;
+    return Object.fromEntries(Object.entries(base).map(([style, cap]) => [style, Math.round(cap + raise * (NPC_FORTRESS_BALANCE.defenseTarget - cap))])) as Record<NpcPlayStyle, number>;
+  },
   /** Days of income the targets may take on top of what lies in stores, at ambition 0 and 1. */
-  budgetDays: [0.5, 3] as const,
+  get budgetDays(): readonly [number, number] { return [0.5, getNpcPolicy().params.budgetDaysHigh]; },
   /** Share of the stores above the reserve one order may spend, at ambition 0 and 1. */
-  spendShare: [0.5, 0.85] as const,
+  get spendShare(): readonly [number, number] { return [0.5, getNpcPolicy().params.spendShareHigh]; },
   /**
    * A look's first thing is the order of the planets lacking most: among
    * thousands of small actions a day a drawn order came up 1% of the time
@@ -45,7 +53,7 @@ export const NPC_FORTIFY_BALANCE = Object.freeze({
   promiseAmbition: 0.35,
   promisedPlanets: [2, 4] as const,
   /** Hours of the planet's own income kept per resource (never more than this share of the store). */
-  reserveHours: 6,
+  get reserveHours() { return getNpcPolicy().params.reserveHours; },
   reserveShare: 0.25,
   /** Game hours of work a defence queue may hold ahead: news may still change the target. */
   queueHours: 10,
@@ -106,9 +114,10 @@ function planetDanger(state: SaveState, ownerId: string, planets: readonly SpyTa
 
 /** 0..1: how much of the full fortress this character wants when nothing presses it. */
 export function npcFortifyAmbition(profile: NpcProfile): number {
-  const caps = Object.values(NPC_FORTIFY_BALANCE.styleCap);
+  // Ambition (how fast the fortress is built) follows the base caps: the policy moves how far, not how eagerly.
+  const caps = Object.values(NPC_FORTIFY_BALANCE.baseStyleCap);
   const floor = Math.min(...caps);
-  return (NPC_FORTIFY_BALANCE.styleCap[npcCharacterStyle(profile)] - floor) / (NPC_FORTRESS_BALANCE.defenseTarget - floor);
+  return (NPC_FORTIFY_BALANCE.baseStyleCap[npcCharacterStyle(profile)] - floor) / (NPC_FORTRESS_BALANCE.defenseTarget - floor);
 }
 
 /**

@@ -1,0 +1,328 @@
+{
+  "version": 1,
+  "engine": "asterion-combat-engine-v8",
+  "method": {
+    "defencePopulation": 4000,
+    "budgets": [
+      1,
+      2
+    ],
+    "maxRounds": 8,
+    "technologies": "none",
+    "note": "equal-budget mass fights, one unit type against one unit type"
+  },
+  "races": {
+    "aegis": {
+      "defence": [
+        {
+          "id": "ion-plasma-battery",
+          "population": 65,
+          "cost": 260000,
+          "count": 61,
+          "held": 0.643,
+          "exchange": 2.417
+        },
+        {
+          "id": "plasma-laser-battery",
+          "population": 44,
+          "cost": 220000,
+          "count": 90,
+          "held": 0.5,
+          "exchange": 1.249
+        },
+        {
+          "id": "laser-ion-battery",
+          "population": 21,
+          "cost": 126000,
+          "count": 190,
+          "held": 0.25,
+          "exchange": 0.53
+        },
+        {
+          "id": "plasma-turret",
+          "population": 19,
+          "cost": 104500,
+          "count": 210,
+          "held": 0,
+          "exchange": 0.023
+        },
+        {
+          "id": "ion-turret",
+          "population": 14,
+          "cost": 70000,
+          "count": 285,
+          "held": 0,
+          "exchange": 0.005
+        },
+        {
+          "id": "laser-turret",
+          "population": 3,
+          "cost": 13500,
+          "count": 1333,
+          "held": 0,
+          "exchange": 0.005
+        },
+        {
+          "id": "ballistic-turret",
+          "population": 2,
+          "cost": 7100,
+          "count": 2000,
+          "held": 0,
+          "exchange": 0.003
+        }
+      ],
+      "ships": [
+        {
+          "id": "scout",
+          "cost": 4000,
+          "won": 0.893,
+          "exchange": 11.868
+        },
+        {
+          "id": "death-star",
+          "cost": 4655000,
+          "won": 0.821,
+          "exchange": 16650.906
+        },
+        {
+          "id": "cruiser",
+          "cost": 18600,
+          "won": 0.821,
+          "exchange": 9.216
+        },
+        {
+          "id": "battleship",
+          "cost": 70600,
+          "won": 0.786,
+          "exchange": 5.013
+        },
+        {
+          "id": "defender",
+          "cost": 21200,
+          "won": 0.786,
+          "exchange": 4.989
+        },
+        {
+          "id": "bomber",
+          "cost": 110000,
+          "won": 0.786,
+          "exchange": 4.444
+        },
+        {
+          "id": "destroyer",
+          "cost": 187800,
+          "won": 0.714,
+          "exchange": 9.387
+        }
+      ]
+    },
+    "synod": {
+      "defence": [
+        {
+          "id": "ion-plasma-battery",
+          "population": 80,
+          "cost": 320000,
+          "count": 50,
+          "held": 0.714,
+          "exchange": 2.794
+        },
+        {
+          "id": "plasma-laser-battery",
+          "population": 42,
+          "cost": 210000,
+          "count": 95,
+          "held": 0.607,
+          "exchange": 2.115
+        },
+        {
+          "id": "laser-ion-battery",
+          "population": 26,
+          "cost": 156000,
+          "count": 153,
+          "held": 0.357,
+          "exchange": 0.745
+        },
+        {
+          "id": "plasma-turret",
+          "population": 20,
+          "cost": 110000,
+          "count": 200,
+          "held": 0,
+          "exchange": 0.023
+        },
+        {
+          "id": "ion-turret",
+          "population": 15,
+          "cost": 75100,
+          "count": 266,
+          "held": 0,
+          "exchange": 0.005
+        },
+        {
+          "id": "laser-turret",
+          "population": 4,
+          "cost": 18000,
+          "count": 1000,
+          "held": 0,
+          "exchange": 0.005
+        },
+        {
+          "id": "ballistic-turret",
+          "population": 3,
+          "cost": 10500,
+          "count": 1333,
+          "held": 0,
+          "exchange": 0.003
+        }
+      ],
+      "ships": [
+        {
+          "id": "scout",
+          "cost": 4000,
+          "won": 0.857,
+          "exchange": 10.535
+        },
+        {
+          "id": "cruiser",
+          "cost": 13300,
+          "won": 0.821,
+          "exchange": 8.303
+        },
+        {
+          "id": "death-star",
+          "cost": 4089800,
+          "won": 0.786,
+          "exchange": 13377.867
+        },
+        {
+          "id": "battleship",
+          "cost": 61200,
+          "won": 0.75,
+          "exchange": 4.383
+        },
+        {
+          "id": "defender",
+          "cost": 24800,
+          "won": 0.75,
+          "exchange": 4.376
+        },
+        {
+          "id": "bomber",
+          "cost": 100000,
+          "won": 0.714,
+          "exchange": 3.839
+        },
+        {
+          "id": "destroyer",
+          "cost": 175300,
+          "won": 0.643,
+          "exchange": 8.022
+        }
+      ]
+    },
+    "veyra": {
+      "defence": [
+        {
+          "id": "ion-plasma-battery",
+          "population": 42,
+          "cost": 168000,
+          "count": 95,
+          "held": 0.643,
+          "exchange": 2.082
+        },
+        {
+          "id": "plasma-laser-battery",
+          "population": 18,
+          "cost": 90000,
+          "count": 222,
+          "held": 0.607,
+          "exchange": 2.082
+        },
+        {
+          "id": "laser-ion-battery",
+          "population": 11,
+          "cost": 66000,
+          "count": 363,
+          "held": 0.321,
+          "exchange": 0.718
+        },
+        {
+          "id": "plasma-turret",
+          "population": 7,
+          "cost": 38500,
+          "count": 571,
+          "held": 0.036,
+          "exchange": 0.051
+        },
+        {
+          "id": "ballistic-turret",
+          "population": 1,
+          "cost": 3500,
+          "count": 4000,
+          "held": 0,
+          "exchange": 0.006
+        },
+        {
+          "id": "ion-turret",
+          "population": 4,
+          "cost": 20000,
+          "count": 1000,
+          "held": 0,
+          "exchange": 0.005
+        },
+        {
+          "id": "laser-turret",
+          "population": 2,
+          "cost": 9100,
+          "count": 2000,
+          "held": 0,
+          "exchange": 0.005
+        }
+      ],
+      "ships": [
+        {
+          "id": "scout",
+          "cost": 2000,
+          "won": 0.857,
+          "exchange": 11.687
+        },
+        {
+          "id": "death-star",
+          "cost": 2128000,
+          "won": 0.821,
+          "exchange": 4933.492
+        },
+        {
+          "id": "cruiser",
+          "cost": 5300,
+          "won": 0.821,
+          "exchange": 9.177
+        },
+        {
+          "id": "battleship",
+          "cost": 47000,
+          "won": 0.75,
+          "exchange": 4.632
+        },
+        {
+          "id": "defender",
+          "cost": 10700,
+          "won": 0.75,
+          "exchange": 4.437
+        },
+        {
+          "id": "bomber",
+          "cost": 105000,
+          "won": 0.714,
+          "exchange": 4.166
+        },
+        {
+          "id": "destroyer",
+          "cost": 106400,
+          "won": 0.679,
+          "exchange": 3.246
+        }
+      ]
+    }
+  }
+}

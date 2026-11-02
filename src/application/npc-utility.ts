@@ -6,6 +6,7 @@ import type { BuildingRole } from '../domain/buildings/resource-zone.ts';
 import { getStorageCapacities } from '../domain/buildings/balance-v1.ts';
 import type { SpyReportSnapshot, SpyTargetState } from '../domain/espionage/types.ts';
 import type { NpcProfile } from '../domain/npc/types.ts';
+import { doctrineDefenceIndex, getNpcPolicy } from '../domain/npc/policy.ts';
 import { estimateForcePower, estimateWinProbability, planningHorizonHours, type ForceStack } from '../domain/npc/utility.ts';
 import { estimateNpcBuildingIncomeGain, getNpcPlanetIncomePerHour } from './npc-economy.ts';
 import type { SaveState } from './contracts.ts';
@@ -134,17 +135,19 @@ const batteryRanks = new Map<string, readonly NpcBatteryStats[]>();
  * strength per population × √(strength per resource). Single-copy shields apart.
  */
 export function npcBatteryStats(raceId: CombatFactionId): readonly NpcBatteryStats[] {
-  const known = batteryRanks.get(raceId);
+  const weight = getNpcPolicy().params.tableWeight;
+  const rankKey = `${raceId}:${weight}`;
+  const known = batteryRanks.get(rankKey);
   if (known) return known;
   const rows = getFactionDefenseCatalog(raceId).filter((entity) => entity.id !== 'tower-shield' && entity.id !== 'planetary-shield' && entity.combat && entity.population > 0)
     .map((entity) => {
       const strength = Math.sqrt(entity.combat!.attack * entity.combat!.life);
       const cost = Math.max(1, costValue(entity.cost));
       const [hours = 0, minutes = 0, seconds = 0] = entity.construction.time.split(':').map(Number);
-      return { id: entity.id, population: entity.population, cost, strength, score: strength / entity.population * Math.sqrt(strength / cost),
+      return { id: entity.id, population: entity.population, cost, strength, score: strength / entity.population * Math.sqrt(strength / cost) * (1 - weight + weight * doctrineDefenceIndex(raceId, entity.id)),
         seconds: hours * 3_600 + minutes * 60 + seconds, requiredShipyard: entity.construction.requiredShipyardLevel };
     }).sort((left, right) => right.score - left.score || (left.id < right.id ? -1 : 1));
-  batteryRanks.set(raceId, rows);
+  batteryRanks.set(rankKey, rows);
   return rows;
 }
 
@@ -399,19 +402,19 @@ export const NPC_FORTRESS_BALANCE = Object.freeze({
   /** ...once the owner earns at least this much a day (an early economy builds mines first). */
   minDayValue: 1_000_000,
   /** Resources on a planet beyond this many days of its share of the owner's income are idle: spend or ship them. */
-  hoardDays: 0.25,
+  get hoardDays() { return getNpcPolicy().params.hoardDays; },
   /** A colony holding more than this many days of its share of the income ships its surplus. */
   colonySendDays: 0.25,
   /** Largest order while resources pile up (otherwise 500). */
   hoardBatchCap: 5_000,
   /** How hard idle stores push the shipyard, factories and construction (utility at full pressure). */
-  bottleneckDrive: 1.4,
+  get bottleneckDrive() { return getNpcPolicy().params.bottleneckDrive; },
   /** How much less a full fortress-minded owner wants a fleet order while its planet has no batteries yet (utility). */
   fleetDelay: 1.2,
   /** Share of a fleet order a full fortress-minded owner gives up while its planets are below target. */
   fleetYield: 0.6,
   /** How far scarcity moves the worth of a mine's output. */
-  scarcityRange: [0.2, 3] as const,
+  get scarcityRange(): readonly [number, number] { return [0.2, getNpcPolicy().params.scarcityHigh]; },
 });
 
 /** The owner's main planet (its first, home planet), where the fortress stands. */
