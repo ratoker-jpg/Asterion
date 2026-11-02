@@ -2795,7 +2795,10 @@ export function reconcileFlights(
       }
       if ((current.missionId === 'espionage' || current.missionId === 'colonize')
         && current.phase !== 'returning' && current.arrivalAt <= now) {
-        const settled = resolveNpcMissionArrival(next, current, current.arrivalAt, CAMPAIGN_SPEED_SCALE[next.worldConfig?.world.campaignSpeed ?? 'standard']);
+        // A probe in orbit is judged when this call sees its station turn illegal, and goes
+        // home from that moment; an arrival is judged at its own time.
+        const judgedAt = current.phase === 'arrived' ? Math.max(current.arrivalAt, now) : current.arrivalAt;
+        const settled = resolveNpcMissionArrival(next, current, judgedAt, CAMPAIGN_SPEED_SCALE[next.worldConfig?.world.campaignSpeed ?? 'standard']);
         changed ||= settled.state !== next;
         next = settled.state;
         if (settled.flight) events.push({ flight: settled.flight,
