@@ -1,5 +1,6 @@
 const { app, BrowserWindow } = require('electron');
 const { PARSE_SAVE } = require('./qa-save.cjs');
+const { editSaveIdle, patchSaveIdle } = require('./qa-save-edit.cjs');
 const fs = require('fs');
 const path = require('path');
 
@@ -69,13 +70,30 @@ async function capture(win, label, name) {
 
 const readSave = (win, key) => run(win, `${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(key)}) || 'null')`);
 
-async function patchSave(win, key, patchSource) {
-  await run(win, `(() => {
-    const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(key)}) || '{}');
-    (${patchSource})(save);
-    localStorage.setItem(${JSON.stringify(key)}, JSON.stringify(save));
-  })()`);
+const readyFor = (mode) => `document.querySelector('[data-qa-navigation="utility"]') && localStorage.getItem(${JSON.stringify(mode === 'test' ? TEST_KEY : PRODUCTION_KEY)})`;
+
+/**
+ * Patches the stored save while the game is not running (see qa-save-edit.cjs:
+ * the running game writes its own state over a patch while it unloads),
+ * loads the game again and checks that it holds the patch.
+ */
+async function patchAndReload(win, key, mode, patchSource, heldSource) {
+  await patchSaveIdle(win, key, patchSource, {
+    ready: readyFor(mode),
+    held: `(${heldSource})(${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(key)}) || '{}'))`,
+    label: `patched save (${heldSource})`,
+  });
+  await sleep(150);
 }
+
+/** Runs `source` against the stored saves while the game is not running, then loads the game in `mode`. */
+async function editStorageAndReload(win, mode, source) {
+  await editSaveIdle(win, source, { ready: readyFor(mode), label: 'storage edit' });
+  await sleep(150);
+}
+
+/** Patches a stored save while the game is not running and loads the game again (the test-mode save by default). */
+const patchSave = (win, key, patchSource, heldSource) => patchAndReload(win, key, key === TEST_KEY ? 'test' : 'production', patchSource, heldSource || '() => true');
 
 async function click(win, selector) {
   const ok = await run(win, `(() => { const node = document.querySelector(${JSON.stringify(selector)}); if (!node || node.disabled) return false; node.click(); return true; })()`);
@@ -132,14 +150,12 @@ const seedJoin = (win, key, joinedAgoMs, oldAgoMs, newAgoMs) => patchSave(win, k
 
 async function testModeScenario(win, label) {
   await load(win, 'test');
-  await run(win, `localStorage.removeItem(${JSON.stringify(TEST_KEY)}); localStorage.setItem(${JSON.stringify(TIME_SCALE_KEY)}, '500');`);
-  await reload(win, 'test');
+  await editStorageAndReload(win, 'test', `(() => { localStorage.removeItem(${JSON.stringify(TEST_KEY)}); localStorage.setItem(${JSON.stringify(TIME_SCALE_KEY)}, '500'); return true; })()`);
   const MIN = 60000;
   const HOUR = 60 * MIN;
 
   // 1. Fresh member (30 min): hidden sentinel events must leave no trace in the DOM.
   await seedJoin(win, TEST_KEY, 30 * MIN, 40 * MIN, 10 * MIN);
-  await reload(win, 'test');
   await openJournal(win);
   let state = await journal(win);
   assert(state.state === 'locked', `${label}: a 30-minute member sees the locked journal`, state.state);
@@ -155,7 +171,6 @@ async function testModeScenario(win, label) {
 
   // 2. Three hours in: only events after the join are readable.
   await seedJoin(win, TEST_KEY, 3 * HOUR, 4 * HOUR, HOUR);
-  await reload(win, 'test');
   await openJournal(win);
   state = await journal(win);
   assert(state.state === 'open' && state.entries.length === 1, `${label}: after 2 h exactly the post-join event is shown`, state);
@@ -166,7 +181,6 @@ async function testModeScenario(win, label) {
 
   // 3. Re-join: a fresh joinedAt locks the journal and hides the earlier stay again.
   await seedJoin(win, TEST_KEY, 5 * MIN, 4 * HOUR, HOUR);
-  await reload(win, 'test');
   await openJournal(win);
   state = await journal(win);
   assert(state.state === 'locked' && !/SENTINEL|876543|876 543/.test(state.html), `${label}: a fresh join locks the journal`, state.state);
@@ -180,7 +194,6 @@ async function testModeScenario(win, label) {
     planet.resources = { metal: 1000000, minerals: 1000000, gas: 1000000 };
     save.metal = 1000000; save.minerals = 1000000; save.gas = 1000000;
   }`);
-  await reload(win, 'test');
   await openRoute(win, 'command', '.command-view');
   await click(win, '[data-qa-command-tab="requests"]');
   await waitFor(win, `/^[1-3]\\/3/.test(document.querySelector('[data-qa-request-charges]')?.textContent?.trim() || '')`);
@@ -220,7 +233,6 @@ async function testModeScenario(win, label) {
   await capture(win, label, 'diplomacy-war');
   // Move the war start 4 h back (the time is moved in the save, not accelerated) so a truce may be offered.
   await patchSave(win, TEST_KEY, `(save) => { for (const relation of save.command.diplomacy) relation.since = Date.now() - 4 * 3600000; }`);
-  await reload(win, 'test');
   await openRoute(win, 'command', '.command-view');
   await click(win, '[data-qa-command-tab="diplomacy"]');
   await waitFor(win, `document.querySelector('[data-qa-test-bot-truce]')`);
@@ -234,10 +246,8 @@ async function testModeScenario(win, label) {
 
 async function productionScenario(win, label) {
   await load(win, 'production');
-  await run(win, `localStorage.removeItem(${JSON.stringify(PRODUCTION_KEY)}); localStorage.removeItem(${JSON.stringify(TEST_KEY)});`);
-  await reload(win, 'production');
+  await editStorageAndReload(win, 'production', `(() => { localStorage.removeItem(${JSON.stringify(PRODUCTION_KEY)}); localStorage.removeItem(${JSON.stringify(TEST_KEY)}); return true; })()`);
   await patchSave(win, PRODUCTION_KEY, `(save) => { save.planets['helion-01'].buildings['planetary-government'] = 1; }`);
-  await reload(win, 'production');
   await openRoute(win, 'command', '.command-view');
   await click(win, '[data-qa-create-alliance]');
   await setField(win, '[data-qa-alliance-name]', 'Журнал Дозора с очень длинным названием');
@@ -249,20 +259,12 @@ async function productionScenario(win, label) {
   let state = await journal(win);
   assert(state.entries.length === 0 && !state.overflowX && !state.contentOverflow, `${label}: production journal is locked and fits`, state);
   await capture(win, label, 'production-journal-locked');
-  // The running game may autosave over a direct storage patch before the
-  // reload lands (the NPC replay writes the save too), so confirm the backdated
-  // join survived the reload and repeat the patch if it did not.
-  const backdateJoin = `(save) => { const own = save.command.alliances.find((alliance) => alliance.members.some((member) => member.ownerId === save.profile.playerId));
-    own.members.find((member) => member.ownerId === save.profile.playerId).joinedAt = Date.now() - 3 * 3600000; }`;
-  const joinBackdated = `(() => { const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(PRODUCTION_KEY)}) || '{}');
-    const own = save.command?.alliances?.find((alliance) => alliance.members.some((member) => member.ownerId === save.profile.playerId));
+  // Backdate the join while the game is not running; the reloaded game must hold it.
+  await patchAndReload(win, PRODUCTION_KEY, 'production', `(save) => { const own = save.command.alliances.find((alliance) => alliance.members.some((member) => member.ownerId === save.profile.playerId));
+    own.members.find((member) => member.ownerId === save.profile.playerId).joinedAt = Date.now() - 3 * 3600000; }`,
+    `(save) => { const own = save.command?.alliances?.find((alliance) => alliance.members.some((member) => member.ownerId === save.profile.playerId));
     const me = own?.members.find((member) => member.ownerId === save.profile.playerId);
-    return Boolean(me && Date.now() - me.joinedAt >= 2 * 3600000); })()`;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    await patchSave(win, PRODUCTION_KEY, backdateJoin);
-    await reload(win, 'production');
-    if (await run(win, joinBackdated)) break;
-  }
+    return Boolean(me && Date.now() - me.joinedAt >= 2 * 3600000); }`);
   await openJournal(win);
   state = await journal(win);
   assert(state.state === 'empty' && /пока нет/.test(state.text), `${label}: production journal is empty and invents nothing`, state);

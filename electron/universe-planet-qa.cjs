@@ -1,6 +1,7 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { editSaveIdle } = require('./qa-save-edit.cjs');
 const {
   assertRenderedFactionGeneralPortraits,
   inspectRenderedFactionGeneralPortraits,
@@ -62,7 +63,7 @@ async function readOwnedPlanetLocations(win) {
 }
 
 async function setOwnedPlanetLocations(win, locations) {
-  const changed = await win.webContents.executeJavaScript(`(() => {
+  const changed = await editSaveIdle(win, `(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
     if (!save.planets?.['helion-01']) return false;
     const locations = ${JSON.stringify(locations)};
@@ -75,9 +76,11 @@ async function setOwnedPlanetLocations(win, locations) {
     }
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     return true;
-  })()`);
+  })()`, { ready: `document.querySelector('[data-qa-navigation]')`, label: 'fixture', commands: false });
   if (!changed) throw new Error('Could not move the QA colonies for the reachability fixture.');
-  await reload(win);
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+  await waitFor(win, `localStorage.getItem(${JSON.stringify(SAVE_KEY)})`);
+  await settle(win);
   await win.webContents.executeJavaScript(`void (Date.now = () => ${QA_UNIVERSE_NOW});`);
   await clickPrimary(win, 'universe');
 }
@@ -1053,7 +1056,7 @@ async function runViewport(width, height) {
     await pressKey(win, 'Escape');
     await checkRestoredFocus(win, 'player-planet-helion-01');
 
-    await win.webContents.executeJavaScript(`(() => {
+    await editSaveIdle(win, `(() => {
       const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
       const espionage = save.espionage || {};
       const targets = espionage.targets || espionage.bot01Planets || {};
@@ -1062,8 +1065,10 @@ async function runViewport(width, height) {
       if (espionage.orbitalDebris) delete espionage.orbitalDebris[${JSON.stringify(debrisFixtures.deadTargetId)}];
       save.espionage = espionage;
       localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
-    })()`);
-    await reload(win);
+    })()`, { ready: `document.querySelector('[data-qa-navigation]')`, label: 'fixture', commands: false });
+    await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+    await waitFor(win, `localStorage.getItem(${JSON.stringify(SAVE_KEY)})`);
+    await settle(win);
     await win.webContents.executeJavaScript(`void (Date.now = () => ${QA_UNIVERSE_NOW});`);
     await clickPrimary(win, 'universe');
     await selectSystem(win, debrisFixtures.deadCoordinate.system);

@@ -1,7 +1,8 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
+const { editSaveIdle } = require('./qa-save-edit.cjs');
+const { installStateTrace, readStateTrace, logStateHeals } = require('./qa-trace.cjs');
 const path = require('path');
-const { assertFreshDocumentHasNoFixtureGuard, guardSaveKeyUntilReload } = require('./fixture-reload.cjs');
 
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
@@ -37,30 +38,14 @@ async function reload(win) {
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await win.webContents.executeJavaScript('document.fonts?.ready');
   await settle(win);
-  await assertFreshDocumentHasNoFixtureGuard(win, 'Trade Center reload');
 }
 
 async function rendererMutationAndReload(win, source, label) {
-  const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-  const execution = win.webContents.executeJavaScript(source)
-    .then((value) => ({ value }))
-    .catch((error) => ({ error: String(error?.stack || error) }));
-  const first = await Promise.race([
-    execution.then((result) => ({ result })),
-    loaded.then(() => ({ loaded: true })),
-  ]);
-  if (first.result?.value === false) throw new Error(`${label}: renderer mutation was rejected`);
-  if (!first.loaded) {
-    const reloaded = await Promise.race([
-      loaded.then(() => true),
-      sleep(10_000).then(() => false),
-    ]);
-    if (!reloaded) throw new Error(`${label}: renderer mutation did not reload the page: ${JSON.stringify(first.result)}`);
-  }
-  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
-  await win.webContents.executeJavaScript('document.fonts?.ready');
+  // Run while the game is not running, then load it (qa-save-edit.cjs): the
+  // running game would write its own state over the fixture while it unloads.
+  const value = await editSaveIdle(win, source, { ready: `document.querySelector('[data-qa-navigation="utility"]')`, label });
+  if (value === false) throw new Error(`${label}: fixture mutation was rejected`);
   await settle(win);
-  await assertFreshDocumentHasNoFixtureGuard(win, label);
 }
 
 async function click(win, selector) {
@@ -132,7 +117,6 @@ async function seedTradeCenter(win) {
     save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 7);
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     localStorage.setItem(${JSON.stringify(TEST_TIME_SCALE_KEY)}, '1');
-    ${guardSaveKeyUntilReload(SAVE_KEY)};
   })()`, 'Could not seed Trade Center state');
 }
 
@@ -282,7 +266,6 @@ async function setRefillQueueForOfflineStep(win, offsets) {
     const base = Date.now();
     planet.trade.refillAtQueue = ${JSON.stringify(offsets)}.map((offset) => base + offset);
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
-    ${guardSaveKeyUntilReload(SAVE_KEY)};
   })()`, 'Could not rewrite trade refill queue');
   const normalized = await readSave(win);
   const expectedQueueLength = Math.max(0, offsets.length - 1);
@@ -307,13 +290,24 @@ async function verifyReturn(win) {
   await waitFor(win, `document.querySelector('[data-qa-building-dialog="trade-center"]')`);
 }
 
+/** Waits for the slot counter; a timeout reports what the game did meanwhile (state commits, save writes, last notice). */
+async function waitForSlots(win, expected) {
+  try {
+    await waitFor(win, `document.querySelector('[data-qa-trade-slots]')?.getAttribute('data-qa-trade-slots') === '${expected}'`);
+  } catch (error) {
+    const notice = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-runtime-notice]')?.textContent?.trim() || ''`);
+    throw new Error(`${error.message}; lastNotice=${JSON.stringify(notice)}; trace=${await readStateTrace(win)}; screen=${JSON.stringify(await readScreen(win))}`);
+  }
+}
+
 async function verifyFlow(win, directory, label) {
   await rendererMutationAndReload(win, `(() => {
     localStorage.removeItem(${JSON.stringify(SAVE_KEY)});
-    window.location.reload();
     return true;
   })()`, `${label}: clear save`);
   await seedTradeCenter(win);
+  await installStateTrace(win, SAVE_KEY, `(save) => ({ metal: save?.metal, minerals: save?.minerals, gas: save?.gas, debris: save?.planets?.['helion-01']?.recycling?.availableDebris, refill: save?.planets?.['helion-01']?.trade?.refillAtQueue?.length })`,
+    `() => ({ slots: document.querySelector('[data-qa-trade-slots]')?.getAttribute('data-qa-trade-slots'), toast: document.querySelector('[data-qa-trade-toast]')?.textContent?.slice(0, 80) ?? null, submitDisabled: document.querySelector('[data-qa-trade-submit]')?.disabled ?? null, amount: document.querySelector('[data-qa-trade-amount-input]')?.value ?? null, notice: document.querySelector('[data-qa-runtime-notice]')?.textContent?.slice(0, 60) ?? null })`);
   const seeded = await readSave(win);
   if (Number(seeded.schemaVersion) < 7 || seeded.tradeLevel !== 1) throw new Error(`${label}: seeded envelope mismatch ${JSON.stringify(seeded)}`);
   if (Number(seeded.metal) !== 15_880 || Number(seeded.minerals) !== 12_712 || Number(seeded.gas) !== 6_421
@@ -373,7 +367,7 @@ async function verifyFlow(win, directory, label) {
   screen = await readScreen(win);
   if (screen?.rate !== '1 : 0,6' || screen.receive !== 600 || screen.submitDisabled) throw new Error(`${label}: debris 0.6 preview mismatch ${JSON.stringify(screen)}`);
   await click(win, '[data-qa-trade-submit]');
-  await waitFor(win, `document.querySelector('[data-qa-trade-slots]')?.getAttribute('data-qa-trade-slots') === '1/3'`);
+  await waitForSlots(win, '1/3');
   screen = await readScreen(win);
   if (screen?.queueCount !== 2 || screen.queueSegments !== 2 || !screen.nextRefill.includes('+1 через') || !screen.fullRefill) throw new Error(`${label}: sequential refill UI missing ${JSON.stringify(screen)}`);
   saved = await readSave(win);
@@ -385,7 +379,7 @@ async function verifyFlow(win, directory, label) {
   await click(win, '[data-qa-trade-target="metal"]');
   await setInput(win, '[data-qa-trade-amount-input]', 500);
   await click(win, '[data-qa-trade-submit]');
-  await waitFor(win, `document.querySelector('[data-qa-trade-slots]')?.getAttribute('data-qa-trade-slots') === '0/3'`);
+  await waitForSlots(win, '0/3');
   screen = await readScreen(win);
   if (screen?.queueCount !== 3 || screen.queueSegments !== 3 || screen.validation !== 'Нет доступных сделок' || !screen.submitDisabled) throw new Error(`${label}: no-slot state mismatch ${JSON.stringify(screen)}`);
   saved = await readSave(win);
@@ -413,6 +407,7 @@ async function verifyFlow(win, directory, label) {
 
   assertGeometry(await measure(win), label);
   await verifyReturn(win);
+  await logStateHeals(win, 'trade center');
   return {
     viewport: label,
     screenshots: ['trade-standard.png', 'trade-pair-tooltip.png', 'trade-success-slots.png'],

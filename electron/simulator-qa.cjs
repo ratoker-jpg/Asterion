@@ -1,6 +1,7 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { editSaveIdle } = require('./qa-save-edit.cjs');
 
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
@@ -180,8 +181,8 @@ async function runViewport(win, width, height) {
   fs.mkdirSync(directory, { recursive: true });
   win.setContentSize(width, height);
   await settle(win);
-  await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(SAVE_KEY)}); localStorage.removeItem('asterion.preferences.v2');`);
-  await reload(win);
+  // Removed while the game is not running: its unload would write the old save back (qa-save-edit.cjs).
+  await editSaveIdle(win, `(() => { localStorage.removeItem(${JSON.stringify(SAVE_KEY)}); localStorage.removeItem('asterion.preferences.v2'); return true; })()`, { ready: `document.querySelector('[data-qa-navigation]') && localStorage.getItem(${JSON.stringify(SAVE_KEY)})`, label: 'reset save', commands: false });
   const resetPresets = (await readSave(win)).combatSimulator?.presets || [];
   if (resetPresets.length !== 0) throw new Error(`${label}: simulator QA storage reset did not clear presets ${JSON.stringify(await simulatorPresetDiagnostics(win))}`);
   await openSimulator(win);

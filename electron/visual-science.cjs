@@ -1,6 +1,7 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { editSaveIdle } = require('./qa-save-edit.cjs');
 
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
@@ -71,7 +72,7 @@ async function capture(win, directory, name, selector = null) {
 
 async function seed(win, science) {
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
-  const ok = await win.webContents.executeJavaScript(`(() => {
+  const ok = await editSaveIdle(win, `(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
     const planet = save?.planets?.['helion-01'];
     if (!save || !planet?.buildings || !save.science?.levels) return false;
@@ -103,9 +104,11 @@ async function seed(win, science) {
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     localStorage.setItem(${JSON.stringify(TEST_TIME_SCALE_KEY)}, '1');
     return true;
-  })()`);
+  })()`, { ready: `document.querySelector('[data-qa-navigation]')`, label: 'fixture', commands: false });
   if (!ok) throw new Error('Could not seed Science save');
-  await reload(win);
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+  await win.webContents.executeJavaScript('document.fonts?.ready');
+  await settle(win);
 }
 
 async function openScience(win) {
@@ -245,16 +248,18 @@ async function runViewport(width, height) {
   await capture(win, directory, 'science-one-queued', '[data-qa-science-id="1"]');
 
   const activeSnapshot = afterOne.queueTasks[0];
-  const labChanged = await win.webContents.executeJavaScript(`(() => {
+  const labChanged = await editSaveIdle(win, `(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
     const planet = save?.planets?.['helion-01'];
     if (!planet?.buildings) return false;
     planet.buildings.research = 20;
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     return true;
-  })()`);
+  })()`, { ready: `document.querySelector('[data-qa-navigation]')`, label: 'fixture', commands: false });
   if (!labChanged || !activeSnapshot) throw new Error(`${label}: could not prepare active queue reload snapshot`);
-  await reload(win);
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+  await win.webContents.executeJavaScript('document.fonts?.ready');
+  await settle(win);
   await openScience(win);
   const afterActiveReload = await readScreen(win);
   const reloadedActiveTask = afterActiveReload.queueTasks.find((task) => task.id === activeSnapshot.id);

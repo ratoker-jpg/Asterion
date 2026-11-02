@@ -1,5 +1,6 @@
 const { app, BrowserWindow } = require('electron');
 const path = require('path');
+const { editSaveIdle } = require('./qa-save-edit.cjs');
 
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
@@ -32,48 +33,10 @@ async function reload(win) {
 }
 
 async function rendererMutationAndReload(win, source, label) {
-  const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-  // location.reload() is asynchronous: the running game's save (a tick write, or its
-  // pagehide flush) could land over the fixture before the page unloads — under load
-  // the queue then kept its 11 s tasks («offline completion mismatch»). In the same task
-  // as the mutation the save key accepts only the fixture's own (first) write or removal until this
-  // document goes away (as in visual-capture.cjs and fixture-reload.cjs).
-  const guarded = `(() => {
-    const saveKey = ${JSON.stringify(SAVE_KEY)};
-    const originalSetItem = Storage.prototype.setItem;
-    let fixtureWritten = false;
-    Storage.prototype.setItem = function (key, value) {
-      if (this === window.localStorage && String(key) === saveKey) {
-        if (fixtureWritten) return;
-        fixtureWritten = true;
-      }
-      return originalSetItem.call(this, key, value);
-    };
-    // A reset fixture removes the save instead: that is its write too.
-    const originalRemoveItem = Storage.prototype.removeItem;
-    Storage.prototype.removeItem = function (key) {
-      if (this === window.localStorage && String(key) === saveKey) fixtureWritten = true;
-      return originalRemoveItem.call(this, key);
-    };
-    return ${source};
-  })()`;
-  const execution = win.webContents.executeJavaScript(guarded)
-    .then((value) => ({ value }))
-    .catch((error) => ({ error: String(error?.stack || error) }));
-  const first = await Promise.race([
-    execution.then((result) => ({ result })),
-    loaded.then(() => ({ loaded: true })),
-  ]);
-  if (first.result?.value === false) throw new Error(`${label}: renderer mutation was rejected`);
-  if (!first.loaded) {
-    const reloaded = await Promise.race([
-      loaded.then(() => true),
-      sleep(10_000).then(() => false),
-    ]);
-    if (!reloaded) throw new Error(`${label}: renderer mutation did not reload the page: ${JSON.stringify(first.result)}`);
-  }
-  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
-  await win.webContents.executeJavaScript('document.fonts?.ready');
+  // Run while the game is not running, then load it (qa-save-edit.cjs): the
+  // running game would write its own state over the fixture while it unloads.
+  const value = await editSaveIdle(win, source, { ready: `document.querySelector('[data-qa-navigation="utility"]')`, label });
+  if (value === false) throw new Error(`${label}: fixture mutation was rejected`);
   await settle(win);
 }
 
@@ -91,7 +54,6 @@ async function click(win, selector) {
 async function seed(win) {
   await rendererMutationAndReload(win, `(() => {
     localStorage.removeItem(${JSON.stringify(SAVE_KEY)});
-    window.location.reload();
     return true;
   })()`, 'Could not reset Spaceport integration state');
   await rendererMutationAndReload(win, `(() => {
@@ -120,7 +82,6 @@ async function seed(win) {
     };
     save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 8);
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
-    window.location.reload();
     return true;
   })()`, 'Could not seed Spaceport integration state');
 }
@@ -212,7 +173,6 @@ async function forceOfflineCompletion(win) {
       });
     }
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
-    window.location.reload();
     return true;
   })()`, 'Could not force offline completion');
 }
@@ -226,7 +186,6 @@ async function seedMaxLevels(win) {
     state.commanderQueue = [];
     save.shipUpgradeLevels = { ...(save.shipUpgradeLevels || {}), transporter: 10, corsair: 40 };
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
-    window.location.reload();
     return true;
   })()`, 'Could not seed max levels');
 }
