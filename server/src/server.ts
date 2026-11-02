@@ -70,6 +70,37 @@ export function errorHeadline(message: string): string {
   return (message.split('\n')[0] ?? '').replace(/\d+/g, '#').trim().slice(0, 300);
 }
 
+export type CrashPlan = {
+  recovery: LiveRecovery;
+  /** Set when no more attempts are made. */
+  failedReason: LiveRecovery['failedReason'] | null;
+  delayMs: number;
+};
+
+/**
+ * What to do about a runner that crashed at world time `worldAt` with `headline`:
+ * try again after a pause that grows with the crashes in a row, unless the same
+ * error repeats at the same place in the world (deterministic: the next attempt
+ * would walk into it again) or the attempts in a row ran out.
+ */
+export function planCrash(previous: LiveRecovery | undefined, crash: { at: number; worldAt: number; headline: string }, policy: RestartPolicy, serverVersion: string): CrashPlan {
+  const inStall = Boolean(previous && previous.consecutive > 0);
+  const consecutive = (previous?.consecutive ?? 0) + 1;
+  const sameSpot = Boolean(previous && inStall && previous.last.error === crash.headline && Math.abs(crash.worldAt - previous.last.worldAt) <= policy.sameSpotMs);
+  const failedReason = sameSpot ? 'same-spot' : consecutive > policy.maxAttempts ? 'too-many' : null;
+  const delayMs = policy.backoffMs[Math.min(consecutive - 1, policy.backoffMs.length - 1)] ?? 10 * 60_000;
+  return {
+    failedReason, delayMs,
+    recovery: {
+      consecutive, total: (previous?.total ?? 0) + 1,
+      last: { at: crash.at, worldAt: crash.worldAt, error: crash.headline },
+      stalledAt: inStall ? previous!.stalledAt : crash.at,
+      stalledWorldAt: inStall ? previous!.stalledWorldAt : crash.worldAt,
+      ...(failedReason ? { failedOnVersion: serverVersion, failedReason } : { nextAttemptAt: crash.at + delayMs }),
+    },
+  };
+}
+
 export function configFromEnv(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   const keyFile = env.ASTERION_KEY_FILE ?? '/etc/asterion/access-key';
   const key = fs.readFileSync(keyFile, 'utf8').trim();
@@ -338,19 +369,8 @@ export function createCloudServer(config: ServerConfig) {
     const headline = errorHeadline(message);
     const now = Date.now();
     const worldAt = Math.max(run.lastStatus?.worldAt ?? 0, state.checkpointWorldAt ?? 0, state.worldAt);
-    const previous = state.recovery;
-    const inStall = Boolean(previous && previous.consecutive > 0);
-    const consecutive = (previous?.consecutive ?? 0) + 1;
-    const sameSpot = Boolean(previous && inStall && previous.last.error === headline && Math.abs(worldAt - previous.last.worldAt) <= restart.sameSpotMs);
-    const failedReason: LiveRecovery['failedReason'] | null = sameSpot ? 'same-spot' : consecutive > restart.maxAttempts ? 'too-many' : null;
-    const delay = restart.backoffMs[Math.min(consecutive - 1, restart.backoffMs.length - 1)] ?? 10 * 60_000;
-    const recovery: LiveRecovery = {
-      consecutive, total: (previous?.total ?? 0) + 1,
-      last: { at: now, worldAt, error: headline },
-      stalledAt: inStall ? previous!.stalledAt : now,
-      stalledWorldAt: inStall ? previous!.stalledWorldAt : worldAt,
-      ...(failedReason ? { failedOnVersion: config.version, failedReason } : { nextAttemptAt: now + delay }),
-    };
+    const { recovery, failedReason, delayMs: delay } = planCrash(state.recovery, { at: now, worldAt, headline }, restart, config.version);
+    const consecutive = recovery.consecutive;
     writeCrashRecord(id, {
       at: now, worldAt, gameVersion: state.gameVersion, serverVersion: config.version, exit: code ?? signal, error: message,
       attempt: consecutive, checkpointWorldAt: state.checkpointWorldAt, loaded: run.loaded,
