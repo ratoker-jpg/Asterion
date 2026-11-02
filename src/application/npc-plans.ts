@@ -5,7 +5,11 @@ import type { BattleReport } from '../domain/combat/report.ts';
 import type { CombatFactionId } from '../domain/combat/factions.ts';
 import type { ShipId } from '../domain/combat/ids.ts';
 import { COMMANDER_IDS } from '../domain/combat/commanders.ts';
-import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
+import { getFactionDefenseCatalog, getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
+import { calculateBattlePoints } from '../domain/combat/battle-points.ts';
+import { calculateRouteDistance } from '../domain/flights/distance.ts';
+import { calculateFlightFuel } from '../domain/flights/fuel.ts';
+import { calculateAwardedBattlePoints } from '../domain/rating/scoring.ts';
 import { calculateFleetPopulation, createEmptyFleetState } from '../domain/fleet/runtime.ts';
 import { estimateWinProbability, utilityToWeight } from '../domain/npc/utility.ts';
 import {
@@ -24,7 +28,7 @@ import { activeNpcPlans, npcPlanReservedShips } from './npc-plan-reserve.ts';
 import { isNpcPactOpen, npcActivePartners, npcFleetFlightMs, npcPartnerPowerBelief, npcProposalsOf, recordNpcPactArrival, withdrawFromNpcPact } from './npc-pact-state.ts';
 import { withoutNpcSunPrepHold } from './npc-sun-prep-state.ts';
 import {
-  combatEfficiency, estimateRaidEconomics, estimateReportedPower, estimateRevengeEconomics, npcFleetValue, npcForcePower,
+  combatEfficiency, estimateReportedPower, npcDefenseValue, npcFleetValue, npcForcePower,
   npcRevengeIntensity, NPC_REVENGE_BALANCE, type NpcUtilityContext,
 } from './npc-utility.ts';
 
@@ -76,6 +80,23 @@ export const NPC_STRIKE_BALANCE = Object.freeze({
   unseenFleetShare: 1,
   /** Free hangar room the rally planet needs over the shares still to arrive. */
   hangarSlack: 1.15,
+  /** Target stores the holds of the force are sized for (the rule loots at most 75% of each resource). */
+  lootShare: 0.75,
+  /** Battle scrap per base life destroyed (the rule rolls 0.25–0.35), and how much of what the recyclers can lift is really won. */
+  debrisPerLife: 0.3,
+  debrisCollected: 0.5,
+  /** The owner's attention and fleet tied up, as a share of its income per hour of the plan. */
+  timeIncomeShare: 0.1,
+  /** A resource point of the rating (1 000 resources) at this share of its price, at aggression 0 and 1. */
+  pointWeight: [0.05, 0.3] as const,
+  /** Enemy value destroyed, as worth to an owner at war with its owner. */
+  warWeight: 0.3,
+  /** Enemy value destroyed, as worth to an owner the same enemy has been hitting (at full threat). */
+  threatWeight: 0.3,
+  /** From these traits an owner may knowingly go into a resource loss for what the target is worth. */
+  riskyTolerance: 0.6,
+  riskyAggression: 0.7,
+  vengefulGrudge: 0.25,
 });
 
 const HOUR = 3_600_000;
@@ -87,6 +108,12 @@ export type NpcPlanChoice = { candidate: NpcAutonomyCandidate; run: (state: Save
 type Catalog = ReturnType<typeof getFactionShipCatalog>;
 const combatShips = (catalog: Catalog) => catalog.filter((entity) => entity.category === 'Боевой корабль' && entity.combat);
 export const combatShipsOf = combatShips;
+const HOLD_IDS = ['mega-transporter', 'transporter'] as const;
+
+/** The force's fighting strength: holds carry the loot, they do not win the battle. */
+function strikePower(raceId: CombatFactionId, force: Readonly<Record<string, number>>): number {
+  return npcForcePower(raceId, Object.fromEntries(Object.entries(force).filter(([id]) => !(HOLD_IDS as readonly string[]).includes(id))));
+}
 
 /** A strike's own check time: Sun plans keep theirs under the bare owner id. */
 const checkKey = (ownerId: string) => `strike:${ownerId}`;
@@ -176,6 +203,87 @@ export function freeCombatShips(state: SaveState, ownerId: string, planet: SpyTa
 }
 
 type Draft = { plan: NpcStrikePlan; estimate: number };
+
+export type NpcStrikeWorth = Readonly<{
+  /** Expected, in resources. */
+  haul: number; debris: number; loss: number; fuel: number; time: number;
+  /** Resources the attack should bring, net of everything it costs. */
+  econ: number;
+  /** What the target is worth beyond resources: battle points, war, less danger, revenge. */
+  strategic: number;
+  /** Why this owner accepts a forecast loss, when it does. */
+  conscious: 'gate' | 'revenge' | 'risk' | null;
+  allowed: boolean;
+}>;
+
+const lifeOf = (catalog: readonly { id: string; combat?: { life: number } }[], counts: Readonly<Record<string, number>>, ignore: ReadonlySet<string> = new Set()) =>
+  catalog.reduce((sum, entity) => sum + (ignore.has(entity.id) ? 0 : (counts[entity.id] ?? 0) * (entity.combat?.life ?? 0)), 0);
+
+const SCRAPLESS: ReadonlySet<string> = new Set(['tower-shield', 'planetary-shield']);
+
+/**
+ * What one strike is worth on the game's own formulas, from the owner's report:
+ * Lanchester's square law for the losses, the attack rule for the loot (75% of
+ * each resource, what the surviving holds lift), the debris rule, flight fuel,
+ * the rating's battle points. A usual owner goes only for a resource profit; a
+ * risky or a vengeful one may knowingly pay for what the target is worth.
+ */
+export function estimateStrikeWorth(state: SaveState, utility: NpcUtilityContext, rally: SpyTargetState, report: SpyReportSnapshot, force: Readonly<Record<string, number>>,
+  win: number, enemyPower: number, hoursAhead: number, unseenFleet: boolean): NpcStrikeWorth {
+  const raceId = rally.raceId;
+  const b = NPC_STRIKE_BALANCE;
+  const catalog = getFactionShipCatalog(raceId);
+  const race = report.targetRaceId as CombatFactionId;
+  const traits = utility.profile.traits;
+  const own = strikePower(raceId, force);
+  const ratio = own > 0 ? Math.min(1, enemyPower / own) : 1;
+  // Won: the share of its strength the winner loses by the square law. Lost: all of it.
+  const wonLoss = 1 - Math.sqrt(1 - ratio ** 2);
+  const value = npcFleetValue(raceId, force);
+  const loss = value * (win * wonLoss + (1 - win));
+  const holds = (1 - wonLoss) * catalog.reduce((sum, entity) => sum + (force[entity.id] ?? 0) * (entity.ship?.cargo ?? 0), 0);
+  const stores = (report.resources?.metal ?? 0) + (report.resources?.minerals ?? 0) + (report.resources?.gas ?? 0);
+  const haul = win * Math.min(holds, b.lootShare * stores);
+  const fuel = calculateFlightFuel(raceId, force as Partial<Record<ShipId, number>>, calculateRouteDistance(rally.coordinate, report.targetCoordinate));
+  const time = Math.max(0, hoursAhead) * utility.dayValue / 24 * b.timeIncomeShare;
+  // What the enemy loses: all it showed on a win, the square-law share on a loss. An unseen fleet is the guess the plan is sized by.
+  const shownValue = npcFleetValue(race, report.fleet ?? {}) + npcDefenseValue(race, report.defense);
+  const enemyValue = shownValue * (unseenFleet ? 1 + b.unseenFleetShare : 1);
+  const hitShare = win + (1 - win) * Math.min(1, (own / Math.max(1, enemyPower)) ** 2);
+  const destroyed = enemyValue * hitShare;
+  const scrapLife = lifeOf(catalog, force) * (win * wonLoss + (1 - win))
+    + (lifeOf(getFactionShipCatalog(race), report.fleet ?? {}) + lifeOf(getFactionDefenseCatalog(race), report.defense ?? {}, SCRAPLESS)) * hitShare;
+  const debris = Math.min(utility.recyclerCapacity ?? 0, b.debrisPerLife * scrapLife) * b.debrisCollected;
+  const stack = (counts: Readonly<Record<string, number>> | undefined, left: number) => Object.entries(counts ?? {}).map(([entityId, count]) => ({ entityId, countBefore: count, countAfter: Math.round(count * left) }));
+  const points = calculateAwardedBattlePoints('attacker', calculateBattlePoints('attacker', stack(force, 1 - wonLoss), stack(report.fleet, 1 - hitShare), [], stack(report.defense, 1 - hitShare), raceId, race));
+  const grudge = npcRevengeIntensity(utility, report.targetOwnerId);
+  const aggression = unit(traits.aggression);
+  const pointWorth = win * points.attacker * 1_000 * (b.pointWeight[0] + (b.pointWeight[1] - b.pointWeight[0]) * aggression);
+  const war = getOwnerRelation(state, utility.profile.ownerId, report.targetOwnerId) === 'enemy' ? b.warWeight * destroyed : 0;
+  const danger = grudge > 0 ? b.threatWeight * utility.threat * destroyed : 0;
+  const revenge = NPC_REVENGE_BALANCE.weight * grudge * destroyed;
+  const econ = haul + debris - loss - fuel - time;
+  const strategic = pointWorth + war + danger + revenge;
+  const gate = utility.rivalGateHosts?.has(report.targetPlanetId) ?? false;
+  const vengeful = grudge >= b.vengefulGrudge;
+  const risky = unit(traits.riskTolerance) >= b.riskyTolerance || aggression >= b.riskyAggression;
+  const knowing = gate || ((vengeful || risky) && econ + strategic >= 0);
+  const allowed = econ >= 0 || knowing;
+  return { haul, debris, loss, fuel, time, econ, strategic, allowed,
+    conscious: econ >= 0 || !knowing ? null : gate ? 'gate' : vengeful ? 'revenge' : 'risk' };
+}
+
+/** Free holds on a planet, biggest first, to carry the loot home with the force. */
+function freeHolds(state: SaveState, ownerId: string, planet: SpyTargetState, at: number): Record<string, number> {
+  const available = withoutNpcSunPrepHold(state, ownerId, planet.id, getNpcMissionAvailableFleet(state, ownerId, planet.id) ?? {}, at);
+  const reserved = npcPlanReservedShips(state, ownerId, planet.id);
+  const free: Record<string, number> = {};
+  for (const id of HOLD_IDS) {
+    const count = Math.max(0, Math.floor((available[id as ShipId] ?? 0) - (reserved[id] ?? 0)));
+    if (count > 0) free[id] = count;
+  }
+  return free;
+}
 
 /**
  * The best strike the owner could commit to now, from its own reports only,
@@ -275,6 +383,23 @@ export function draftNpcStrike(state: SaveState, profile: NpcProfile, utility: N
         readyAt = Math.max(readyAt, preview.queueFreeAt + count * preview.durationMs);
       }
     }
+    // The holds that carry the loot: the owner's free transports, up to what the target's stores would fill.
+    const stores = (report.resources?.metal ?? 0) + (report.resources?.minerals ?? 0) + (report.resources?.gas ?? 0);
+    const cargoOf = (id: string) => catalog.find((entity) => entity.id === id)?.ship?.cargo ?? 0;
+    const combatHolds = () => { const counts: Record<string, number> = {}; for (const share of reserve.values()) addCounts(counts, share); return catalog.reduce((sum, entity) => sum + (counts[entity.id] ?? 0) * (entity.ship?.cargo ?? 0), 0); };
+    let wantHolds = Math.max(0, NPC_STRIKE_BALANCE.lootShare * stores - combatHolds());
+    for (const planet of planets) {
+      if (wantHolds <= 0) break;
+      const holdsHere = freeHolds(state, ownerId, planet, at);
+      for (const id of HOLD_IDS) {
+        const cargo = cargoOf(id);
+        const take = cargo > 0 ? Math.min(holdsHere[id] ?? 0, Math.ceil(wantHolds / cargo)) : 0;
+        if (take <= 0) continue;
+        const share = reserve.get(planet.id)!;
+        share[id] = (share[id] ?? 0) + take;
+        wantHolds -= take * cargo;
+      }
+    }
     const force: Record<string, number> = {};
     for (const counts of reserve.values()) addCounts(force, counts);
     if (!Object.keys(force).length) continue;
@@ -285,31 +410,49 @@ export function draftNpcStrike(state: SaveState, profile: NpcProfile, utility: N
       >= NPC_STRIKE_BALANCE.hangarSlack * (population - fleetPopulation(raceId, free.get(planet.id) ?? {}))).sort((left, right) => npcFleetValue(raceId, reserve.get(right.id) ?? {}) - npcFleetValue(raceId, reserve.get(left.id) ?? {})
       || distance(left, target) - distance(right, target) || (left.id < right.id ? -1 : 1))[0];
     if (!rally) continue;
+    // Holds still short: the rally planet builds them with what the plan may spend there.
+    if (wantHolds > 0) {
+      const buildable = getNpcFleetProductionCandidates(rally, ownerId, at, timeScale, flownPopulation(state, ownerId, rally))
+        .filter((preview) => preview.available && preview.queueKind === 'ships' && (HOLD_IDS as readonly string[]).includes(preview.itemId));
+      const preview = HOLD_IDS.map((id) => buildable.find((item) => item.itemId === id)).find(Boolean);
+      if (preview) {
+        const placed = orders.filter((order) => order.planetId === rally.id);
+        const spent = (key: 'metal' | 'minerals' | 'gas') => placed.reduce((sum, order) => sum + (catalog.find((entity) => entity.id === order.itemId)?.cost?.[key] ?? 0) * order.quantity, 0);
+        const count = Math.min(Math.ceil(wantHolds / Math.max(1, cargoOf(preview.itemId))), ...(['metal', 'minerals', 'gas'] as const).map((key) => (preview.cost[key] > 0
+          ? Math.floor(Math.max(0, NPC_STRIKE_BALANCE.budgetShare * rally.resources[key] - spent(key)) / preview.cost[key]) : Number.MAX_SAFE_INTEGER)));
+        if (count > 0) {
+          orders.push({ planetId: rally.id, itemId: preview.itemId, quantity: count });
+          const share = reserve.get(rally.id)!;
+          share[preview.itemId] = (share[preview.itemId] ?? 0) + count;
+          force[preview.itemId] = (force[preview.itemId] ?? 0) + count;
+          const queue = (rally as SpyTargetState & { fleetProduction?: { shipQueue?: { finishAt: number }[] } }).fleetProduction?.shipQueue ?? [];
+          const ahead = placed.reduce((sum, order) => sum + order.quantity * (previews?.get(rally.id)?.durationMs ?? 0), 0);
+          readyAt = Math.max(readyAt, Math.max(at, ...queue.map((order) => order.finishAt)) + ahead + count * preview.durationMs);
+        }
+      }
+    }
     const contributing = [...reserve].filter(([, counts]) => Object.keys(counts).length > 0);
     if (contributing.length < 2) continue; // nothing to gather: not this plan
-    const economics = estimateRaidEconomics(utility, rally, report, force);
-    const revenge = estimateRevengeEconomics(utility, rally, report, force);
     const gate = utility.rivalGateHosts?.has(target.id) ?? false;
-    if (!economics.worthFlight && !revenge.worthFlight && !gate) continue;
-    const win = estimateWinProbability(npcForcePower(raceId, force), believedPower(utility, report, npcForcePower(raceId, force)));
+    const enemyPower = believedPower(utility, report, strikePower(raceId, force));
+    const win = estimateWinProbability(strikePower(raceId, force), enemyPower);
     // The recheck judges by this same belief: a plan it would cancel at once is not worth starting.
     if (win < NPC_STRIKE_BALANCE.createMargin * wanted) continue;
-    // The haul is what the holds carry home, not the whole half of the target's stock.
-    const holds = win * catalog.reduce((sum, entity) => sum + (force[entity.id] ?? 0) * (entity.ship?.cargo ?? 0), 0);
-    const net = Math.max(Math.min(economics.net, holds), revenge.net);
-    const estimate = 0.3 + Math.min(1.5, net / Math.max(1, utility.dayValue)) + (gate ? 1 : 0) + 0.4 * unit(profile.traits.planningHorizon) - 0.2;
-    if (best && best.estimate >= estimate) continue;
     const scale = Math.max(1, timeScale);
     const ready = Math.max(readyAt, at) + HOUR / scale;
+    const worth = estimateStrikeWorth(state, utility, rally, report, force, win, enemyPower, (ready - at) * scale / HOUR, guessesFleet(report));
+    if (!worth.allowed) continue;
+    const estimate = 0.3 + Math.min(1.5, (worth.econ + worth.strategic) / Math.max(1, utility.dayValue)) + (gate ? 1 : 0) + 0.4 * unit(profile.traits.planningHorizon) - 0.2;
+    if (best && best.estimate >= estimate) continue;
     const slack = Math.min(NPC_STRIKE_BALANCE.maxDeadlineHours * HOUR / scale,
       Math.max(NPC_STRIKE_BALANCE.minDeadlineHours * HOUR / scale, NPC_STRIKE_BALANCE.deadlineFactor * (ready - at)));
-    const gain = Math.max(0, Math.min(economics.net, holds));
     best = { estimate, plan: {
       planId: '', template: 'strike', ownerId, status: 'active', phase: 'produce', createdAt: at, deadlineAt: at + Math.round(slack),
       targetPlanetId: target.id, targetOwnerId: target.ownerId, rallyPlanetId: rally.id,
       reserve: Object.fromEntries(contributing.sort(([x], [y]) => (x < y ? -1 : 1))),
-      orders, forecast: { win: round3(win), gain: Math.round(gain), loss: Math.round(npcFleetValue(raceId, force) * ((1 - win) * 0.85 + win * 0.1)), readyAt: Math.round(ready) },
+      orders, forecast: { win: round3(win), gain: Math.round(worth.haul), loss: Math.round(worth.loss), readyAt: Math.round(ready) },
       knowledgeAt: report.createdAt, sent: [], ...(guessesFleet(report) ? { fleetGuess: true } : {}),
+      worth: { econ: Math.round(worth.econ), strategic: Math.round(worth.strategic) }, ...(worth.conscious ? { conscious: worth.conscious } : {}),
     } };
   }
   return best;
@@ -346,6 +489,7 @@ function closePlan(state: SaveState, plan: NpcStrikePlan, status: NpcStrikePlan[
     tp: plan.template, id: plan.planId, st: status, why: reason ?? null, ph: plan.phase,
     f: { p: plan.forecast.win, g: plan.forecast.gain, l: plan.forecast.loss, ready: plan.forecast.readyAt },
     ...(result ? { won: result.won ? 1 : 0, gain: Math.round(result.gain), loss: Math.round(result.loss), err: round3(error) } : {}),
+    ...(plan.worth ? { e: plan.worth.econ, s: plan.worth.strategic } : {}), ...(plan.conscious ? { cl: plan.conscious } : {}),
     ka: plan.knowledgeAt, planets: Object.keys(plan.reserve).length, orders: plan.orders.length, target: plan.targetOwnerId,
     ...(plan.partner ? { partner: plan.partner.ownerId, wave: plan.partner.wave } : {}),
     hours: round3((at - plan.createdAt) / HOUR),
@@ -432,17 +576,27 @@ export function refreshNpcPlans(state: SaveState, profile: NpcProfile, utility: 
       // At the agreed time itself no probe has come back: it goes by the newest news it has rather than break its word.
       const reportHours = plan.partner && npcJointTimeNear(next, plan, at, timeScale, 0) ? NPC_STRIKE_BALANCE.createReportHours : NPC_STRIKE_BALANCE.recheckReportHours;
       if (!report || at - report.createdAt > reportHours * HOUR / Math.max(1, timeScale)) continue; // a probe is due
+      // A probe that saw neither fleet nor defence brings no news: it is no reason to call the target stronger. Another one goes.
+      if (report.fleet === undefined && report.defense === undefined) continue;
       const rally = next.espionage!.targets![plan.rallyPlanetId]!;
       const force = totalForce(plan);
-      const own = npcForcePower(rally.raceId, force);
+      const own = strikePower(rally.raceId, force);
       // The same belief the plan was made with: a fleet seen then is not guessed now, a guessed one stays guessed.
+      const unseen = report.fleet === undefined && (plan.fleetGuess ?? false);
+      const enemyPower = believedPower(utility, report, own, unseen);
       // Each side judges by its own news; of the partner it knows only what it dares expect.
       const counted = plan.partner ? own + npcPartnerPowerBelief(next, ownerId, plan.partner.ownerId, own, at) : own;
-      const win = estimateWinProbability(counted, believedPower(utility, report, own, report.fleet === undefined && (plan.fleetGuess ?? false)));
-      const checked = { ...plan, knowledgeAt: report.createdAt };
+      const win = estimateWinProbability(counted, enemyPower);
+      const worth = estimateStrikeWorth(next, utility, rally, report, force, win, enemyPower, 0, unseen);
+      const checked: NpcStrikePlan = { ...plan, knowledgeAt: report.createdAt, worth: { econ: Math.round(worth.econ), strategic: Math.round(worth.strategic) },
+        forecast: { ...plan.forecast, gain: Math.round(worth.haul), loss: Math.round(worth.loss) } };
+      const { conscious: _conscious, ...plain } = checked;
+      const known = worth.conscious ? { ...plain, conscious: worth.conscious } : plain;
+      // What a strike agreed with someone is worth was judged when it was agreed: only worse news of the target calls it off.
       next = win < NPC_STRIKE_BALANCE.recheckMargin * npcWantedWin(utility, plan.targetOwnerId)
-        ? closePlan(next, checked, 'cancelled', at, 'target-stronger')
-        : replaceNpcPlan(next, { ...checked, phase: 'launch' });
+        ? closePlan(next, known, 'cancelled', at, 'target-stronger')
+        : !worth.allowed && !plan.partner ? closePlan(next, known, 'cancelled', at, 'unprofitable')
+        : replaceNpcPlan(next, { ...known, phase: 'launch' });
       continue;
     }
     if (plan.phase === 'launch') {

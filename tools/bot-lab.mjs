@@ -25,7 +25,9 @@ import { createNpcState } from '../src/domain/npc/state.ts';
 import { createDefaultNewGameConfig } from '../src/domain/world/config.ts';
 import { getFactionDefenseCatalog, getFactionShipCatalog } from '../src/domain/combat/faction-catalog.ts';
 import { SCIENCE_CATALOG } from '../src/domain/science/catalog.ts';
-import { createDefaultFleetProductionState, createEmptyDefenseState } from '../src/domain/fleet/production.ts';
+import { calculateDefensePopulation, createDefaultFleetProductionState, createEmptyDefenseState } from '../src/domain/fleet/production.ts';
+import { getFactionDefenseCatalog } from '../src/domain/combat/faction-catalog.ts';
+import { getNpcPlanetIncomePerHour } from '../src/application/npc-economy.ts';
 
 const HOUR = 3_600_000;
 const START_AT = Date.UTC(2026, 0, 1);
@@ -204,8 +206,84 @@ const sum = (values) => values.reduce((total, value) => total + value, 0);
 const median = (values) => { const sorted = [...values].sort((a, b) => a - b); return sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0; };
 const positiveSum = (record) => sum(Object.values(record ?? {}).map((value) => Math.max(0, Number(value) || 0)));
 
+const shareAtLeast = (values, floor) => (values.length ? +(values.filter((value) => value >= floor).length / values.length).toFixed(3) : 0);
+const spread = (values) => ({ median: median(values), max: Math.max(0, ...values), ge10k: shareAtLeast(values, 10_000), ge25k: shareAtLeast(values, 25_000) });
+
+/** What a planet's turrets cost and how strong they are (attack × life, the square-law strength). */
+function defenceWorth(planet) {
+  let attack = 0;
+  let life = 0;
+  let value = 0;
+  for (const entity of getFactionDefenseCatalog(planet.raceId)) {
+    const count = planet.defense?.defenses?.[entity.id] ?? 0;
+    attack += count * (entity.combat?.attack ?? 0);
+    life += count * (entity.combat?.life ?? 0);
+    value += count * ((entity.cost?.metal ?? 0) + (entity.cost?.minerals ?? 0) + (entity.cost?.gas ?? 0));
+  }
+  return { value, strength: Math.round(Math.sqrt(attack * life)) };
+}
+
+/** Queues and losses read once a game hour: what the end of the run cannot show. Only reads the world. */
+export function createEmpireTally() {
+  return { samples: 0, defenseIdle: 0, shipIdle: 0, buildIdle: 0, allIdle: 0, richIdle: 0, lost: {}, known: {}, seenReports: new Set(), colonyDefenceLoss: 0, mainDefenceLoss: 0 };
+}
+
+function destroyedValue(force, catalog) {
+  const cost = new Map(catalog.map((entity) => [entity.id, (entity.cost?.metal ?? 0) + (entity.cost?.minerals ?? 0) + (entity.cost?.gas ?? 0)]));
+  return sum([...(force?.stacks ?? []), ...(force?.defenses ?? [])].map((stack) => Math.max(0, (stack.countBefore ?? 0) - (stack.countAfter ?? 0)) * (cost.get(stack.entityId) ?? 0)));
+}
+
+export function sampleEmpire(tally, state, at) {
+  const planets = Object.values(state.espionage?.targets ?? {}).filter((target) => target.kind === 'npc');
+  const income = new Map();
+  for (const planet of planets) income.set(planet.ownerId, (income.get(planet.ownerId) ?? 0) + getNpcPlanetIncomePerHour(planet, 1));
+  for (const planet of planets) {
+    const busy = (queue) => (queue ?? []).some((order) => order.finishAt > at);
+    const defense = busy(planet.fleetProduction?.defenseQueue);
+    const ships = busy(planet.fleetProduction?.shipQueue);
+    const building = busy(planet.buildingQueue);
+    tally.samples += 1;
+    if (!defense) tally.defenseIdle += 1;
+    if (!ships) tally.shipIdle += 1;
+    if (!building) tally.buildIdle += 1;
+    if (!defense && !ships && !building) {
+      tally.allIdle += 1;
+      // Nothing being made while a day of the owner's income lies on this planet.
+      if (planet.resources.metal + planet.resources.minerals + planet.resources.gas > 24 * (income.get(planet.ownerId) ?? 0)) tally.richIdle += 1;
+    }
+  }
+  const now = new Map(planets.map((planet) => [planet.id, planet]));
+  for (const [id, was] of Object.entries(tally.known)) {
+    if (now.get(id)?.ownerId !== was.ownerId) { tally.lost[id] = was; delete tally.known[id]; }
+  }
+  for (const planet of planets) {
+    tally.known[planet.id] = { ownerId: planet.ownerId, main: planet.id === `${planet.ownerId}-planet`, buildings: sum(Object.values(planet.buildings ?? {}).map(Number)),
+      income: Math.round(getNpcPlanetIncomePerHour(planet, 1)) };
+  }
+  for (const report of state.combat?.reports ?? []) {
+    if (tally.seenReports.has(report.id)) continue;
+    tally.seenReports.add(report.id);
+    const ownerId = report.defender?.playerId;
+    const owned = planets.find((planet) => planet.ownerId === ownerId);
+    if (!owned) continue;
+    const loss = destroyedValue(report.defenderForce, [...getFactionShipCatalog(owned.raceId), ...getFactionDefenseCatalog(owned.raceId)]);
+    const planetName = report.defender?.planetName ?? report.defender?.planet;
+    const main = planets.find((planet) => planet.id === `${ownerId}-planet`);
+    if (main && (planetName === undefined || planetName === main.name)) tally.mainDefenceLoss += loss; else tally.colonyDefenceLoss += loss;
+  }
+}
+
+function empireSummary(tally) {
+  const part = (count) => (tally?.samples ? +(count / tally.samples).toFixed(3) : 0);
+  const lost = Object.values(tally?.lost ?? {});
+  return { idle: { samples: tally?.samples ?? 0, defense: part(tally?.defenseIdle ?? 0), ships: part(tally?.shipIdle ?? 0), building: part(tally?.buildIdle ?? 0),
+    all: part(tally?.allIdle ?? 0), rich: part(tally?.richIdle ?? 0) },
+    losses: { planetsLost: lost.length, coloniesLost: lost.filter((planet) => !planet.main).length, valuableLost: lost.filter((planet) => !planet.main && planet.buildings >= 60).length,
+      colonyDefenceLoss: Math.round(tally?.colonyDefenceLoss ?? 0), mainDefenceLoss: Math.round(tally?.mainDefenceLoss ?? 0) } };
+}
+
 /** What the world looks like for the questions the owner asks. */
-export function describeWorld(state, journal = []) {
+export function describeWorld(state, journal = [], tally = null) {
   const playerId = state.profile.playerId;
   const npcPlanets = Object.values(state.espionage?.targets ?? {}).filter((target) => target.kind === 'npc');
   const owners = Object.keys(state.npc?.profiles ?? {});
@@ -227,6 +305,14 @@ export function describeWorld(state, journal = []) {
       alliance: state.command.alliances.find((alliance) => alliance.members.some((member) => member.ownerId === ownerId))?.tag ?? null,
     };
   });
+  const defencePlanets = npcPlanets.map((planet) => ({ population: calculateDefensePopulation({ defenses: planet.defense?.defenses ?? {} }, planet.raceId), units: positiveSum(planet.defense?.defenses),
+    hangar: Number(planet.buildings?.hangar ?? 0), shipyard: Number(planet.buildings?.shipyard ?? 0), factory: Number(planet.buildings?.['advanced-factory'] ?? 0),
+    batteries: (planet.defense?.defenses?.['ion-plasma-battery'] ?? 0) + (planet.defense?.defenses?.['plasma-laser-battery'] ?? 0),
+    ...defenceWorth(planet) }));
+  const closedPlans = journal.filter((entry) => entry.k === 'plan' && entry.d?.tp === 'strike' && entry.d?.st === 'done');
+  const conscious = closedPlans.filter((entry) => entry.d?.cl);
+  const ordinary = closedPlans.filter((entry) => !entry.d?.cl);
+  const planNet = (entries) => Math.round(sum(entries.map((entry) => (entry.d?.gain ?? 0) - (entry.d?.loss ?? 0))));
   const flights = state.flights.records.filter((flight) => flight.ownerSide === 'npc' && (flight.phase === 'outbound' || flight.phase === 'arrived'));
   const debris = Object.values(state.espionage?.orbitalDebris ?? {});
   const raids = state.sunRaid?.raids ?? [];
@@ -239,7 +325,7 @@ export function describeWorld(state, journal = []) {
   for (const entry of decisions.filter((item) => item.ok === 0)) refusals[entry.r ?? '?'] = (refusals[entry.r ?? '?'] ?? 0) + 1;
   const styles = journal.filter((entry) => entry.k === 'style');
   // The outcome ledger (every owner): strategic plans and battles.
-  const plans = journal.filter((entry) => entry.k === 'plan' && entry.d?.tp);
+  const plans = journal.filter((entry) => entry.k === 'plan' && entry.d?.tp === 'strike');
   const attacks = journal.filter((entry) => entry.k === 'battle' && entry.d?.side === 'attacker');
   const defences = journal.filter((entry) => entry.k === 'battle' && entry.d?.side === 'defender');
   const reasons = {};
@@ -299,6 +385,18 @@ export function describeWorld(state, journal = []) {
     probesInFlight: flights.filter((flight) => flight.missionId === 'espionage').length,
     resources: { median: median(perOwner.map((owner) => owner.resources)), max: Math.max(0, ...perOwner.map((owner) => owner.resources)) },
     mainDefense: { median: median(perOwner.map((owner) => owner.mainDefense)), max: Math.max(0, ...perOwner.map((owner) => owner.mainDefense)) },
+    empire: { planets: npcPlanets.length, defensePopulation: spread(defencePlanets.map((planet) => planet.population)), defenseUnits: spread(defencePlanets.map((planet) => planet.units)),
+      batteries: { median: median(defencePlanets.map((planet) => planet.batteries)), max: Math.max(0, ...defencePlanets.map((planet) => planet.batteries)) },
+      strength: { median: median(defencePlanets.map((planet) => planet.strength)), max: Math.max(0, ...defencePlanets.map((planet) => planet.strength)) },
+      defenseValue: { median: median(defencePlanets.map((planet) => planet.value)), total: sum(defencePlanets.map((planet) => planet.value)) },
+      stores: { metal: Math.round(sum(npcPlanets.map((planet) => planet.resources.metal))), minerals: Math.round(sum(npcPlanets.map((planet) => planet.resources.minerals))), gas: Math.round(sum(npcPlanets.map((planet) => planet.resources.gas))) },
+      hangarMedian: median(defencePlanets.map((planet) => planet.hangar)), shipyardMedian: median(defencePlanets.map((planet) => planet.shipyard)), factoryMedian: median(defencePlanets.map((planet) => planet.factory)),
+      incomePerHour: Math.round(sum(npcPlanets.map((planet) => getNpcPlanetIncomePerHour(planet, 1)))),
+      resourcesTotal: sum(perOwner.map((owner) => owner.resources)), ...empireSummary(tally) },
+    planProfit: { done: closedPlans.length, net: planNet(closedPlans), profitable: closedPlans.filter((entry) => (entry.d?.gain ?? 0) > (entry.d?.loss ?? 0)).length,
+      forecastNet: Math.round(sum(closedPlans.map((entry) => (entry.d?.f?.g ?? 0) - (entry.d?.f?.l ?? 0)))),
+      ordinary: { done: ordinary.length, net: planNet(ordinary), profitable: ordinary.filter((entry) => (entry.d?.gain ?? 0) > (entry.d?.loss ?? 0)).length },
+      conscious: { done: conscious.length, net: planNet(conscious) } },
     fleetOnLargestMedian: median(perOwner.map((owner) => owner.fleetOnLargest)),
     transport: { transporters: sum(perOwner.map((owner) => owner.transporters)), mega: sum(perOwner.map((owner) => owner.megaTransporters)) },
     points: { top: points[0] ?? 0, median: median(points), bottom: points.at(-1) ?? 0, topToBottom: points.at(-1) ? +(points[0] / points.at(-1)).toFixed(1) : null },
@@ -373,12 +471,14 @@ function main() {
   const days = [];
   const startedAt = performance.now();
   let groups;
+  const tally = createEmpireTally();
   for (let hour = 1; hour <= hours; hour += 1) {
     const step = advanceLiveWorld(state, at0 + hour * HOUR, { groups });
     state = step.state;
     groups = step.groups;
+    sampleEmpire(tally, state, at0 + hour * HOUR);
     if (hour % 24 === 0 || hour === hours) {
-      const summary = describeWorld(state, journal);
+      const summary = describeWorld(state, journal, tally);
       days.push({ hour, problems: listProblems(summary), ...summary });
       log(`lab h${hour} (${Math.round((performance.now() - startedAt) / 1000)} s): ${JSON.stringify({ sun: summary.sun, debris: summary.debris, points: summary.points, problems: listProblems(summary) })}`);
     }

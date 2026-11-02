@@ -92,6 +92,9 @@ function drive(world: World, minutes: number, onLook?: (state: SaveState, at: nu
     state = { ...state, espionage: { ...state.espionage!, targets } };
     state = reconcileFlights(state, at, () => 0.5, { mode: 'production', testTimeScale: 1 }).state;
     if (onLook) state = onLook(state, at);
+    // This drive never calls a probe home: a probe that saw nothing is followed by a later one that does.
+    const newest = (state.espionage?.reports ?? []).filter((report) => report.ownerId === world.owner && report.targetPlanetId === world.target).at(-1);
+    if (newest && newest.fleet === undefined && newest.defense === undefined) state = withReport(state, world.owner, world.planets[0]!, getEspionageTargets(state.espionage)[world.target]!, at);
     const profile = state.npc!.profiles[world.owner]!;
     state = refreshNpcPlans(state, profile, createNpcUtilityContext(state, profile, at, 1), at, 1);
     const utility = createNpcUtilityContext(state, profile, at, 1);
@@ -123,7 +126,7 @@ test('seven planets: orders on several planets, deployments to one rally planet,
   } finally {
     setNpcJournalSink(previous);
   }
-  const plan = plansOf(result.state, world.owner)[0]!;
+  const plan = plansOf(result.state, world.owner).find((item) => item.status !== 'active')!;
   assert.equal(plan.status, 'done', `the plan ends by its attack (${plan.status} ${plan.reason ?? ''}, phase ${plan.phase})`);
   assert.ok(result.steps.filter((step) => step === 'plan:produce').length >= 3, 'orders placed on several planets');
   assert.equal(result.steps.filter((step) => step === 'plan:rally').length, 6, 'six deployments gather the shares');
@@ -241,7 +244,7 @@ test('a force lost at the rally planet cancels the plan instead of sending what 
     return { ...current, espionage: { ...current.espionage!, targets: { ...getEspionageTargets(current.espionage),
       [rally.id]: { ...rally, fleet: { ...rally.fleet, ships: { ...rally.fleet.ships, cruiser: 10 } } } } } };
   });
-  const plan = plansOf(state, world.owner)[0]!;
+  const plan = plansOf(state, world.owner).find((item) => item.status !== 'active')!;
   assert.ok(hit, 'the plan reached its recheck');
   assert.equal(plan.status, 'cancelled');
   assert.equal(plan.reason, 'force-lost');

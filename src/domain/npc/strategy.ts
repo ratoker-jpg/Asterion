@@ -71,6 +71,10 @@ export type NpcStrikePlan = Readonly<{
   /** The report it was made from did not see the fleet: the plan sized it by a guess (kept at the recheck). */
   fleetGuess?: true;
   partner?: NpcPlanPartner;
+  /** Worth at creation: resources it should bring (net) and what the target is worth beyond them. */
+  worth?: Readonly<{ econ: number; strategic: number }>;
+  /** Why the owner accepts a forecast loss in resources: revenge, gate, risk. */
+  conscious?: string;
   launchFlightId?: string;
   closedAt?: number;
   /** Why it ended other than by its attack: intel-stale, target-stronger, target-gone, deadline… */
@@ -78,7 +82,25 @@ export type NpcStrikePlan = Readonly<{
   result?: Readonly<{ won: boolean; gain: number; loss: number }>;
 }>;
 
-export type NpcPlan = NpcStrikePlan | NpcSunRaidPrepPlan;
+/**
+ * `fortify-empire`: a defence population each planet of the owner aims at,
+ * reviewed a few times a day. Steps are the player's orders and buildings.
+ */
+export type NpcFortifyPlan = Readonly<{
+  planId: string;
+  template: 'fortify-empire';
+  ownerId: string;
+  status: NpcPlanStatus;
+  createdAt: number;
+  reviewedAt: number;
+  targets: Readonly<Record<string, number>>;
+  /** 0..1: how much of the full fortress this character wants; sets its pace. */
+  ambition: number;
+  closedAt?: number;
+  reason?: string;
+}>;
+
+export type NpcPlan = NpcStrikePlan | NpcSunRaidPrepPlan | NpcFortifyPlan;
 
 /** What came of an owner's plans of one template (small running sums). */
 export type NpcOutcomeStat = Readonly<{
@@ -97,7 +119,7 @@ export type NpcStrategyState = Readonly<{
   /** Per owner: active plans first, then the last few closed ones. */
   plans: Readonly<Record<string, readonly NpcPlan[]>>;
   outcomes: Readonly<Record<string, Readonly<Record<string, NpcOutcomeStat>>>>;
-  /** Per owner (Sun plans) and per `strike:owner` (strike plans): the next time it considers a new plan. */
+  /** Per owner (Sun plans), `strike:owner` and `fortify:owner`: the next time it considers a plan. */
   nextCheckAt: Readonly<Record<string, number>>;
   /** Per owner: what it thinks of others (stage E). Absent until something happened. */
   relations?: Readonly<Record<string, readonly NpcRelationEdge[]>>;
@@ -149,6 +171,8 @@ function isStrikePlan(value: unknown): value is NpcStrikePlan {
     && (value.fleetGuess === undefined || value.fleetGuess === true)
     && (value.partner === undefined || (isRecord(value.partner) && isId(value.partner.ownerId) && isId(value.partner.proposalId)
       && (value.partner.wave === 1 || value.partner.wave === 2) && isTime(value.partner.arriveAt) && isTime(value.partner.toleranceMs)))
+    && (value.worth === undefined || (isRecord(value.worth) && isFiniteNumber(value.worth.econ) && isFiniteNumber(value.worth.strategic)))
+    && (value.conscious === undefined || typeof value.conscious === 'string')
     && (value.launchFlightId === undefined || isId(value.launchFlightId))
     && (value.closedAt === undefined || isTime(value.closedAt))
     && (value.reason === undefined || typeof value.reason === 'string')
@@ -156,8 +180,17 @@ function isStrikePlan(value: unknown): value is NpcStrikePlan {
       && isFiniteNumber(value.result.gain) && isFiniteNumber(value.result.loss)));
 }
 
+function isFortifyPlan(value: unknown): value is NpcFortifyPlan {
+  return isRecord(value) && value.template === 'fortify-empire' && isId(value.planId) && isId(value.ownerId)
+    && ['active', 'done', 'failed', 'cancelled'].includes(String(value.status))
+    && isTime(value.createdAt) && isTime(value.reviewedAt) && isFiniteNumber(value.ambition)
+    && isRecord(value.targets) && Object.values(value.targets).every((target) => Number.isSafeInteger(target) && Number(target) >= 0)
+    && (value.closedAt === undefined || isTime(value.closedAt))
+    && (value.reason === undefined || typeof value.reason === 'string');
+}
+
 function isPlan(value: unknown): value is NpcPlan {
-  return isStrikePlan(value) || isNpcSunRaidPrepPlan(value);
+  return isStrikePlan(value) || isNpcSunRaidPrepPlan(value) || isFortifyPlan(value);
 }
 
 function isStat(value: unknown): value is NpcOutcomeStat {
