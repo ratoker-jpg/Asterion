@@ -191,7 +191,8 @@ function isInherited(value: unknown): value is NpcInheritedExperience {
     && Array.isArray(value.lessons) && value.lessons.every((lesson) => isRecord(lesson) && lesson.family === 'attack'
       && typeof lesson.enemyRace === 'string' && lesson.enemyRace.length > 0 && signed(lesson.effect))
     && isRecord(value.relations) && Object.values(value.relations).every((relation) => isRecord(relation)
-      && inUnitRange(relation.trust) && inUnitRange(relation.affinity) && inUnitRange(relation.resentment));
+      && inUnitRange(relation.trust) && inUnitRange(relation.affinity) && inUnitRange(relation.resentment)
+      && (relation.fear === undefined || inUnitRange(relation.fear)) && (relation.reliability === undefined || inUnitRange(relation.reliability)));
 }
 function isPlanning(value: unknown): value is NpcPlanningState {
   return isRecord(value) && inUnitRange(value.horizon) && inUnitRange(value.commitment)

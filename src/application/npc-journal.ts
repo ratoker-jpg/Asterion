@@ -19,7 +19,9 @@ import { getFactionDefenseCatalog, getFactionShipCatalog } from '../domain/comba
  * in: side, result, gain and loss), `plan` (a closed strategic plan: forecast
  * against result and why it ended) and, once a game hour, `kpi` (points,
  * resources at hand, fleet and defence value, planets) — a compact ledger to
- * measure every owner's play, kept in the same file as the decisions.
+ * measure every owner's play, kept in the same file as the decisions. Agreements
+ * between NPC appear here as `pact` and only here (owner decision 5): the game
+ * shows none of them. `reaction`: what an owner decided after being robbed.
  */
 
 export const NPC_JOURNAL_VERSION = 1;
@@ -59,7 +61,7 @@ export type NpcJournalDecision = Readonly<{
 }>;
 
 /** What came of something an owner did (journal only): a battle or a closed plan. */
-export type NpcJournalOutcome = Readonly<{ at: number; ownerId: string; kind: 'battle' | 'plan' | 'fortify'; data: Readonly<Record<string, unknown>> }>;
+export type NpcJournalOutcome = Readonly<{ at: number; ownerId: string; kind: 'battle' | 'plan' | 'fortify' | 'pact' | 'reaction'; data: Readonly<Record<string, unknown>> }>;
 
 /** A change of the owner's play style, with its reason (journal only). */
 export type NpcJournalStyle = Readonly<{ at: number; ownerId: string; style: string; previous: string | null; reason: string }>;

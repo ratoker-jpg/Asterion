@@ -25,6 +25,7 @@ import { dispatchNpcDeployment, dispatchNpcMission, getNpcMissionAvailableFleet,
 import { candidateToNpcMissionCommand, type NpcMissionCandidate } from './npc-mission-policy.ts';
 import { npcCombatPriority, npcEnemyShape, npcMainCommander } from './npc-commanders.ts';
 import { activeNpcPlans, npcPlanReservedShips } from './npc-plan-reserve.ts';
+import { isNpcPactOpen, npcActivePartners, npcFleetFlightMs, npcPartnerPowerBelief, npcProposalsOf, recordNpcPactArrival, withdrawFromNpcPact } from './npc-pact-state.ts';
 import { withoutNpcSunPrepHold } from './npc-sun-prep-state.ts';
 import {
   combatEfficiency, estimateReportedPower, npcDefenseValue, npcFleetValue, npcForcePower,
@@ -99,11 +100,14 @@ export const NPC_STRIKE_BALANCE = Object.freeze({
 });
 
 const HOUR = 3_600_000;
+/** Regard above which an owner does not plan a strike on someone. */
+const NPC_STRIKE_FRIEND_REGARD = 0.3;
 type Outcome = { state: SaveState; started: boolean; reason: string | null; planetId?: string; economyActionId?: string };
-export type NpcPlanChoice = { candidate: NpcAutonomyCandidate; run: (state: SaveState, key: string) => Outcome };
+export type NpcPlanChoice = { candidate: NpcAutonomyCandidate; run: (state: SaveState, key: string) => Outcome; must?: boolean };
 
 type Catalog = ReturnType<typeof getFactionShipCatalog>;
 const combatShips = (catalog: Catalog) => catalog.filter((entity) => entity.category === 'Боевой корабль' && entity.combat);
+export const combatShipsOf = combatShips;
 const HOLD_IDS = ['mega-transporter', 'transporter'] as const;
 
 /** The force's fighting strength: holds carry the loot, they do not win the battle. */
@@ -122,7 +126,7 @@ function withStrategy(state: SaveState, strategy: NpcStrategyState): SaveState {
   return { ...state, npcStrategy: strategy };
 }
 
-function replacePlan(state: SaveState, plan: NpcStrikePlan): SaveState {
+export function replaceNpcPlan(state: SaveState, plan: NpcStrikePlan): SaveState {
   const strategy = strategyOf(state);
   const plans = strategy.plans[plan.ownerId] ?? [];
   const next = plans.some((item) => item.planId === plan.planId) ? plans.map((item) => item.planId === plan.planId ? plan : item) : [plan, ...plans];
@@ -147,14 +151,18 @@ function covers(available: Readonly<Partial<Record<string, number>>>, wanted: Np
   return Object.entries(wanted ?? {}).every(([id, count]) => (available[id] ?? 0) >= count);
 }
 
-function wantedWin(utility: NpcUtilityContext, targetOwnerId: string): number {
+export function npcWantedWin(utility: NpcUtilityContext, targetOwnerId: string): number {
   const grudge = npcRevengeIntensity(utility, targetOwnerId);
-  return Math.max(NPC_REVENGE_BALANCE.minWin, 0.6 + 0.3 * (1 - unit(utility.profile.traits.riskTolerance)) - NPC_REVENGE_BALANCE.marginDrop * grudge);
+  // Someone who has shown it bites asks for a bigger margin.
+  const fear = utility.relations?.get(targetOwnerId)?.fear ?? 0;
+  return Math.max(NPC_REVENGE_BALANCE.minWin, 0.6 + 0.3 * (1 - unit(utility.profile.traits.riskTolerance)) - NPC_REVENGE_BALANCE.marginDrop * grudge + 0.1 * fear);
 }
 
 function unit(value: number): number {
   return Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0));
 }
+
+export const fleetPopulationOf = (raceId: CombatFactionId, ships: Readonly<Record<string, number>>) => fleetPopulation(raceId, ships);
 
 function fleetPopulation(raceId: CombatFactionId, ships: Readonly<Record<string, number>>): number {
   const empty = createEmptyFleetState();
@@ -162,14 +170,14 @@ function fleetPopulation(raceId: CombatFactionId, ships: Readonly<Record<string,
 }
 
 /** Population already flown out of a planet on the owner's missions (counts against its production room). */
-function flownPopulation(state: SaveState, ownerId: string, planet: SpyTargetState): number {
+export function flownPopulation(state: SaveState, ownerId: string, planet: SpyTargetState): number {
   return ownerFlights(state.flights.records, ownerId).filter((flight) => flight.ownerSide === 'npc' && flight.originPlanetId === planet.id
     && ['outbound', 'arrived', 'returning'].includes(flight.phase))
     .reduce((sum, flight) => { const empty = createEmptyFleetState(); return sum + calculateFleetPopulation({ ships: { ...empty.ships, ...flight.selectedShips }, commanders: { ...empty.commanders, ...flight.selectedCommanders } }, planet.raceId); }, 0);
 }
 
 /** An enemy attack on its way to any of the owner's planets: gathering waits (the fleet may be needed at home). */
-function underAttack(state: SaveState, planets: readonly SpyTargetState[], ownerId: string, at: number): boolean {
+export function ownerUnderAttack(state: SaveState, planets: readonly SpyTargetState[], ownerId: string, at: number): boolean {
   return planets.some((planet) => flightsToPlanet(state.flights.records, planet.id).some((flight) => flight.phase === 'outbound'
     && flight.arrivalAt > at && flight.ownerId !== ownerId && (flight.missionId === 'attack' || flight.missionId === 'pirate-raid')));
 }
@@ -183,7 +191,7 @@ function rallyRoom(state: SaveState, plan: NpcStrikePlan, rally: SpyTargetState)
 }
 
 /** The owner's free combat ships on a planet, less what its other plans hold and its Sun plan was promised. */
-function freeCombat(state: SaveState, ownerId: string, planet: SpyTargetState, catalog: Catalog, at: number): Record<string, number> {
+export function freeCombatShips(state: SaveState, ownerId: string, planet: SpyTargetState, catalog: Catalog, at: number): Record<string, number> {
   const available = withoutNpcSunPrepHold(state, ownerId, planet.id, getNpcMissionAvailableFleet(state, ownerId, planet.id) ?? {}, at);
   const reserved = npcPlanReservedShips(state, ownerId, planet.id);
   const free: Record<string, number> = {};
@@ -288,7 +296,7 @@ export function draftNpcStrike(state: SaveState, profile: NpcProfile, utility: N
   const raceId = planets[0]!.raceId;
   const catalog = getFactionShipCatalog(raceId);
   const combat = combatShips(catalog);
-  const free = new Map(planets.map((planet) => [planet.id, freeCombat(state, ownerId, planet, catalog, at)]));
+  const free = new Map(planets.map((planet) => [planet.id, freeCombatShips(state, ownerId, planet, catalog, at)]));
   const allShips: Record<string, number> = {};
   for (const counts of free.values()) addCounts(allShips, counts);
   const singleBest = Math.max(0, ...planets.map((planet) => npcForcePower(raceId, free.get(planet.id))));
@@ -325,10 +333,12 @@ export function draftNpcStrike(state: SaveState, profile: NpcProfile, utility: N
     if (at - report.createdAt > NPC_STRIKE_BALANCE.createReportHours * HOUR / Math.max(1, timeScale)) continue;
     const relation = getOwnerRelation(state, ownerId, target.ownerId);
     if (relation !== 'enemy' && relation !== 'neutral') continue;
+    // A friend or a partner is no target for a plan of many days.
+    if ((utility.relations?.get(target.ownerId)?.regard ?? 0) >= NPC_STRIKE_FRIEND_REGARD || utility.partners?.has(target.ownerId)) continue;
     // The owner points rule decides at launch; a target outside the band is no plan.
     if (!evaluatePlanetAttackEligibility(state, ownerId, target.ownerId).allowed) continue;
     const enemy = believedPower(utility, report, empirePower);
-    const wanted = wantedWin(utility, target.ownerId);
+    const wanted = npcWantedWin(utility, target.ownerId);
     if (estimateWinProbability(singleBest, enemy) >= wanted) continue; // one planet can do it: an ordinary attack
     const needed = enemy * (wanted / (1 - wanted)) ** (1 / 2.5);
     const reserve = new Map<string, Record<string, number>>([...free].map(([id, counts]) => [id, { ...counts }]));
@@ -463,7 +473,9 @@ function statOf(strategy: NpcStrategyState, ownerId: string): NpcOutcomeStat {
 function closePlan(state: SaveState, plan: NpcStrikePlan, status: NpcStrikePlan['status'], at: number, reason?: string,
   result?: NpcStrikePlan['result']): SaveState {
   const closed: NpcStrikePlan = { ...plan, status, closedAt: at, ...(reason ? { reason } : {}), ...(result ? { result } : {}) };
-  let next = replacePlan(state, closed);
+  let next = replaceNpcPlan(state, closed);
+  // A partner's plan that ends without its attack is a notice, or a no-show.
+  if (plan.partner && status !== 'done') next = withdrawFromNpcPact(next, plan.partner.proposalId, plan.ownerId, reason ?? status, at);
   const strategy = strategyOf(next);
   const stat = statOf(strategy, plan.ownerId);
   const error = result ? (result.won ? 1 : 0) - plan.forecast.win : 0;
@@ -479,12 +491,15 @@ function closePlan(state: SaveState, plan: NpcStrikePlan, status: NpcStrikePlan[
     ...(result ? { won: result.won ? 1 : 0, gain: Math.round(result.gain), loss: Math.round(result.loss), err: round3(error) } : {}),
     ...(plan.worth ? { e: plan.worth.econ, s: plan.worth.strategic } : {}), ...(plan.conscious ? { cl: plan.conscious } : {}),
     ka: plan.knowledgeAt, planets: Object.keys(plan.reserve).length, orders: plan.orders.length, target: plan.targetOwnerId,
+    ...(plan.partner ? { partner: plan.partner.ownerId, wave: plan.partner.wave } : {}),
     hours: round3((at - plan.createdAt) / HOUR),
   } });
   return next;
 }
 
 /** What the owner believes the target can field, with a guess for a fleet its report did not see. */
+export const npcBelievedPower = (utility: NpcUtilityContext, report: SpyReportSnapshot, own: number) => believedPower(utility, report, own);
+
 function believedPower(utility: NpcUtilityContext, report: SpyReportSnapshot, own: number, guess = guessesFleet(report)): number {
   const reported = estimateReportedPower(utility, report, own);
   return guess ? reported * (1 + NPC_STRIKE_BALANCE.unseenFleetShare) : reported;
@@ -511,6 +526,8 @@ export function refreshNpcPlans(state: SaveState, profile: NpcProfile, utility: 
     if (!next.espionage?.targets?.[plan.rallyPlanetId] || next.espionage.targets[plan.rallyPlanetId]!.ownerId !== ownerId) {
       next = closePlan(next, plan, 'cancelled', at, 'rally-lost'); continue;
     }
+    // The agreement is over (the partner pulled out or broke it): nobody strikes alone on a plan made for two.
+    if (plan.partner && plan.phase !== 'flying' && !npcPactStands(next, plan)) { next = closePlan(next, plan, 'cancelled', at, 'partner-out'); continue; }
     if (plan.phase === 'flying') {
       const flight = next.flights.records.find((record) => record.id === plan.launchFlightId);
       // The fleet came back (or never fought) without a battle on the plan's target.
@@ -519,7 +536,7 @@ export function refreshNpcPlans(state: SaveState, profile: NpcProfile, utility: 
     }
     if (at > plan.deadlineAt) {
       // A deadline missed while an attack on the owner held the gathering back is the threat's doing.
-      next = closePlan(next, plan, 'cancelled', at, underAttack(next, utility.ownPlanets, ownerId, at) ? 'threat-at-home' : 'deadline');
+      next = closePlan(next, plan, 'cancelled', at, ownerUnderAttack(next, utility.ownPlanets, ownerId, at) ? 'threat-at-home' : 'deadline');
       continue;
     }
     if (plan.phase === 'produce' || plan.phase === 'rally') {
@@ -537,14 +554,14 @@ export function refreshNpcPlans(state: SaveState, profile: NpcProfile, utility: 
       const built = Object.entries(plan.reserve).every(([planetId, counts]) => plan.sent.includes(planetId)
         || covers(getNpcMissionAvailableFleet(next, ownerId, planetId) ?? {}, counts));
       if (!placed || !built) continue;
-      next = replacePlan(next, { ...plan, phase: 'rally' });
+      next = replaceNpcPlan(next, { ...plan, phase: 'rally' });
       plan = activeNpcPlans(next, ownerId).find((item) => item.planId === plan.planId) ?? plan;
     }
     if (plan.phase === 'rally') {
       const sources = Object.keys(plan.reserve).filter((planetId) => planetId !== plan.rallyPlanetId);
       const arrived = sources.every((planetId) => plan.sent.includes(planetId))
         && covers(getNpcMissionAvailableFleet(next, ownerId, plan.rallyPlanetId) ?? {}, totalForce(plan));
-      if (arrived) next = replacePlan(next, { ...plan, phase: 'recheck' });
+      if (arrived) next = replaceNpcPlan(next, { ...plan, phase: 'recheck' });
       continue;
     }
     if ((plan.phase === 'recheck' || plan.phase === 'launch') && !covers(getNpcMissionAvailableFleet(next, ownerId, plan.rallyPlanetId) ?? {}, totalForce(plan))) {
@@ -553,8 +570,12 @@ export function refreshNpcPlans(state: SaveState, profile: NpcProfile, utility: 
       continue;
     }
     if (plan.phase === 'recheck') {
+      // A strike agreed for a time: the force stands by, the news is taken when it is due.
+      if (plan.partner && !npcJointTimeNear(next, plan, at, timeScale, NPC_JOINT_RECHECK_LEAD_MS)) continue;
       const report = latestReport(utility, plan);
-      if (!report || at - report.createdAt > NPC_STRIKE_BALANCE.recheckReportHours * HOUR / Math.max(1, timeScale)) continue; // a probe is due
+      // At the agreed time itself no probe has come back: it goes by the newest news it has rather than break its word.
+      const reportHours = plan.partner && npcJointTimeNear(next, plan, at, timeScale, 0) ? NPC_STRIKE_BALANCE.createReportHours : NPC_STRIKE_BALANCE.recheckReportHours;
+      if (!report || at - report.createdAt > reportHours * HOUR / Math.max(1, timeScale)) continue; // a probe is due
       // A probe that saw neither fleet nor defence brings no news: it is no reason to call the target stronger. Another one goes.
       if (report.fleet === undefined && report.defense === undefined) continue;
       const rally = next.espionage!.targets![plan.rallyPlanetId]!;
@@ -563,16 +584,19 @@ export function refreshNpcPlans(state: SaveState, profile: NpcProfile, utility: 
       // The same belief the plan was made with: a fleet seen then is not guessed now, a guessed one stays guessed.
       const unseen = report.fleet === undefined && (plan.fleetGuess ?? false);
       const enemyPower = believedPower(utility, report, own, unseen);
-      const win = estimateWinProbability(own, enemyPower);
+      // Each side judges by its own news; of the partner it knows only what it dares expect.
+      const counted = plan.partner ? own + npcPartnerPowerBelief(next, ownerId, plan.partner.ownerId, own, at) : own;
+      const win = estimateWinProbability(counted, enemyPower);
       const worth = estimateStrikeWorth(next, utility, rally, report, force, win, enemyPower, 0, unseen);
       const checked: NpcStrikePlan = { ...plan, knowledgeAt: report.createdAt, worth: { econ: Math.round(worth.econ), strategic: Math.round(worth.strategic) },
         forecast: { ...plan.forecast, gain: Math.round(worth.haul), loss: Math.round(worth.loss) } };
       const { conscious: _conscious, ...plain } = checked;
       const known = worth.conscious ? { ...plain, conscious: worth.conscious } : plain;
-      next = win < NPC_STRIKE_BALANCE.recheckMargin * wantedWin(utility, plan.targetOwnerId)
+      // What a strike agreed with someone is worth was judged when it was agreed: only worse news of the target calls it off.
+      next = win < NPC_STRIKE_BALANCE.recheckMargin * npcWantedWin(utility, plan.targetOwnerId)
         ? closePlan(next, known, 'cancelled', at, 'target-stronger')
-        : !worth.allowed ? closePlan(next, known, 'cancelled', at, 'unprofitable')
-        : replacePlan(next, { ...known, phase: 'launch' });
+        : !worth.allowed && !plan.partner ? closePlan(next, known, 'cancelled', at, 'unprofitable')
+        : replaceNpcPlan(next, { ...known, phase: 'launch' });
       continue;
     }
     if (plan.phase === 'launch') {
@@ -586,6 +610,22 @@ export function refreshNpcPlans(state: SaveState, profile: NpcProfile, utility: 
   return next;
 }
 
+/** Is the agreement behind this plan still on? */
+function npcPactStands(state: SaveState, plan: NpcStrikePlan): boolean {
+  return state.npcStrategy?.proposals?.some((item) => item.proposalId === plan.partner!.proposalId && item.status === 'accepted') ?? false;
+}
+
+/** How long before its launch window a partner's plan takes fresh news (real time: visits do not speed up). */
+const NPC_JOINT_RECHECK_LEAD_MS = 45 * 60_000;
+
+/** Would a fleet leaving now (or in `lead`) arrive about the agreed time? Its own flight, by its own clock: it sees no other. */
+function npcJointTimeNear(state: SaveState, plan: NpcStrikePlan, at: number, timeScale: number, lead: number): boolean {
+  const rally = state.espionage?.targets?.[plan.rallyPlanetId];
+  const target = state.espionage?.targets?.[plan.targetPlanetId];
+  if (!rally || !target || !plan.partner) return false;
+  return at + lead + npcFleetFlightMs(rally, target, totalForce(plan), timeScale) >= plan.partner.arriveAt - plan.partner.toleranceMs;
+}
+
 /** The plan steps the owner can take in this look, and a new plan when one is worth it. */
 export function getNpcPlanChoices(state: SaveState, profile: NpcProfile, utility: NpcUtilityContext, at: number, timeScale: number,
   missions: readonly NpcMissionCandidate[], scored: (candidateId: string, estimate: number) => number): NpcPlanChoice[] {
@@ -593,7 +633,7 @@ export function getNpcPlanChoices(state: SaveState, profile: NpcProfile, utility
   const choices: NpcPlanChoice[] = [];
   const active = activeNpcPlans(state, ownerId);
   const planets = utility.ownPlanets;
-  const paused = underAttack(state, planets, ownerId, at);
+  const paused = ownerUnderAttack(state, planets, ownerId, at);
   for (const plan of active) {
     if (plan.phase === 'produce' || plan.phase === 'rally') {
       for (const order of plan.orders) {
@@ -620,7 +660,7 @@ export function getNpcPlanChoices(state: SaveState, profile: NpcProfile, utility
               ? { ...item, quantity, orderId: result.orderId ?? key } : item),
             reserve: { ...latest.reserve, [order.planetId]: share } };
           const withTarget = { ...current, espionage: { ...current.espionage!, targets: { ...current.espionage!.targets, [planet.id]: result.target } } };
-          return { state: replacePlan(withTarget, updated), started: true, reason: null, planetId: order.planetId,
+          return { state: replaceNpcPlan(withTarget, updated), started: true, reason: null, planetId: order.planetId,
             ...(result.orderId ? { economyActionId: result.orderId } : {}) };
         } });
       }
@@ -638,15 +678,16 @@ export function getNpcPlanChoices(state: SaveState, profile: NpcProfile, utility
           if (!result.ok) return { state: result.state, started: false, reason: result.reason, planetId };
           const latest = activeNpcPlans(result.state, ownerId).find((item) => item.planId === plan.planId) ?? plan;
           // The phase moves on in refreshNpcPlans (orders still to place stay offered meanwhile).
-          return { state: replacePlan(result.state, { ...latest, sent: [...latest.sent, planetId].sort() }), started: true, reason: null, planetId };
+          return { state: replaceNpcPlan(result.state, { ...latest, sent: [...latest.sent, planetId].sort() }), started: true, reason: null, planetId };
         } });
       }
     }
-    if (plan.phase === 'recheck') {
+    if (plan.phase === 'recheck' && (!plan.partner || npcJointTimeNear(state, plan, at, timeScale, NPC_JOINT_RECHECK_LEAD_MS))) {
       const probe = missions.find((mission) => mission.kind === 'espionage' && mission.payload.destinationPlanetId === plan.targetPlanetId);
       if (probe) {
         const id = `plan:recon:${plan.planId}`;
-        choices.push({ candidate: { id, kind: 'plan-step', weight: utilityToWeight(2), payload: { planetId: String(probe.payload.originPlanetId) } }, run: (current, key) => {
+        // A time agreed with someone is a promise: what it has due comes first.
+        choices.push({ ...(plan.partner ? { must: true } : {}), candidate: { id, kind: 'plan-step', weight: utilityToWeight(2), payload: { planetId: String(probe.payload.originPlanetId) } }, run: (current, key) => {
           const command = candidateToNpcMissionCommand(probe, ownerId, key);
           if (!command) return { state: current, started: false, reason: 'invalid-mission-candidate' };
           const result = dispatchNpcMission(current, command, at, timeScale);
@@ -654,9 +695,9 @@ export function getNpcPlanChoices(state: SaveState, profile: NpcProfile, utility
         } });
       }
     }
-    if (plan.phase === 'launch' && !paused) {
+    if (plan.phase === 'launch' && !paused && (!plan.partner || npcJointTimeNear(state, plan, at, timeScale, 0))) {
       const id = `plan:launch:${plan.planId}`;
-      choices.push({ candidate: { id, kind: 'plan-step', weight: utilityToWeight(2.4), payload: { planetId: plan.rallyPlanetId } }, run: (current, key) => {
+      choices.push({ ...(plan.partner ? { must: true } : {}), candidate: { id, kind: 'plan-step', weight: utilityToWeight(2.4), payload: { planetId: plan.rallyPlanetId } }, run: (current, key) => {
         const rally = current.espionage?.targets?.[plan.rallyPlanetId];
         const target = current.espionage?.targets?.[plan.targetPlanetId];
         if (!rally || !target) return { state: current, started: false, reason: 'plan-target-lost' };
@@ -678,19 +719,20 @@ export function getNpcPlanChoices(state: SaveState, profile: NpcProfile, utility
         }, at, timeScale);
         if (!result.ok || !result.flight) return { state: result.state, started: false, reason: result.reason, planetId: rally.id };
         const latest = activeNpcPlans(result.state, ownerId).find((item) => item.planId === plan.planId) ?? plan;
-        return { state: replacePlan(result.state, { ...latest, phase: 'flying', launchFlightId: result.flight.id }), started: true, reason: null, planetId: rally.id };
+        return { state: replaceNpcPlan(result.state, { ...latest, phase: 'flying', launchFlightId: result.flight.id }), started: true, reason: null, planetId: rally.id };
       } });
     }
   }
   // A new plan: looked for every few game hours, never two strikes at once.
-  if (!active.length && !paused && at >= (state.npcStrategy?.nextCheckAt[checkKey(ownerId)] ?? 0)) {
+  if (!active.length && !paused && at >= (state.npcStrategy?.nextCheckAt[checkKey(ownerId)] ?? 0)
+    && !npcProposalsOf(state, ownerId).some((item) => item.kind === 'joint-strike' && isNpcPactOpen(item.status))) {
     const draft = draftNpcStrike(state, profile, utility, at, timeScale);
     if (draft) {
       const id = `plan:strike:${draft.plan.targetPlanetId}`;
       choices.push({ candidate: { id, kind: 'plan-step', weight: scored(id, draft.estimate), payload: { planetId: draft.plan.rallyPlanetId } }, run: (current, key) => {
         const plan: NpcStrikePlan = { ...draft.plan, planId: `plan:${ownerId}:${key}` };
         const strategy = strategyOf(current);
-        return { state: replacePlan(withStrategy(current, { ...strategy, nextCheckAt: { ...strategy.nextCheckAt,
+        return { state: replaceNpcPlan(withStrategy(current, { ...strategy, nextCheckAt: { ...strategy.nextCheckAt,
           [checkKey(ownerId)]: at + Math.round(NPC_STRIKE_BALANCE.checkHours * HOUR / Math.max(1, timeScale)) } }), plan), started: true, reason: null };
       } });
     }
@@ -713,5 +755,6 @@ export function resolveNpcPlanBattle(state: SaveState, report: BattleReport, fli
   if (!flightId || !ownerId || !state.npcStrategy) return state;
   const plan = activeNpcPlans(state, ownerId).find((item) => item.phase === 'flying' && item.launchFlightId === flightId);
   if (!plan) return state;
-  return closePlan(state, plan, 'done', at, undefined, { won: report.winner === 'attacker', gain, loss });
+  const closed = closePlan(state, plan, 'done', at, undefined, { won: report.winner === 'attacker', gain, loss });
+  return plan.partner ? recordNpcPactArrival(closed, plan.partner.proposalId, ownerId, { at, won: report.winner === 'attacker', gain, loss }) : closed;
 }

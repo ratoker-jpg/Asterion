@@ -57,6 +57,9 @@ export type PersonaRelation = Readonly<{
   helpGiven: number;
   jointOps: number;
   lastRound: number;
+  /** Absent in files written before relations were tracked inside a campaign. */
+  fear?: number;
+  reliability?: number;
 }>;
 
 export type PersonaCampaignResult = Readonly<{
@@ -139,7 +142,8 @@ function isLesson(value: unknown): value is PersonaLesson {
 
 function isRelation(value: unknown): value is PersonaRelation {
   return isRecord(value) && isId(value.other) && isUnit(value.trust) && isUnit(value.affinity) && isUnit(value.resentment)
-    && isCount(value.helpReceived) && isCount(value.helpGiven) && isCount(value.jointOps) && isCount(value.lastRound);
+    && isCount(value.helpReceived) && isCount(value.helpGiven) && isCount(value.jointOps) && isCount(value.lastRound)
+    && (value.fear === undefined || isUnit(value.fear)) && (value.reliability === undefined || isUnit(value.reliability));
 }
 
 function isResult(value: unknown): value is PersonaCampaignResult {
@@ -329,6 +333,8 @@ export function beginSeriesCampaign(registry: PersonaRegistry, seriesId: string,
         trust: round4(relation.trust * RELATION_CONFIDENCE),
         affinity: round4(relation.affinity * RELATION_CONFIDENCE),
         resentment: round4(relation.resentment * RELATION_CONFIDENCE),
+        ...(relation.fear !== undefined ? { fear: round4(relation.fear * RELATION_CONFIDENCE) } : {}),
+        ...(relation.reliability !== undefined ? { reliability: relation.reliability } : {}),
       };
     }
     inherited[ownerId] = {
@@ -380,6 +386,8 @@ export type PersonaEdgeFacts = Readonly<{
   /** `from` delivered this much aid to `to`. */
   helpGiven: number;
   jointOps: number;
+  /** How the campaign left what `from` thinks of `to` (domain/npc/relations.ts), where it kept an edge. */
+  final?: Readonly<{ trust: number; affinity: number; fear: number; resentment: number; reliability?: number }>;
 }>;
 
 export type CampaignFacts = Readonly<{
@@ -498,6 +506,7 @@ function foldRelations(persona: PersonaRecord, edges: readonly PersonaEdgeFacts[
     trust: relation.trust * RELATION_CARRY,
     affinity: relation.affinity * RELATION_CARRY,
     resentment: relation.resentment * RELATION_CARRY,
+    ...(relation.fear !== undefined ? { fear: relation.fear * RELATION_CARRY } : {}),
   }]));
   for (const edge of edges) {
     const other = personaOf.get(edge.to);
@@ -505,12 +514,18 @@ function foldRelations(persona: PersonaRecord, edges: readonly PersonaEdgeFacts[
     const old = relations.get(other) ?? { other, trust: 0, affinity: 0, resentment: 0, helpReceived: 0, helpGiven: 0, jointOps: 0, lastRound: round };
     const hurt = edge.attacks > 0 ? 0.2 * edge.attacks + 0.08 * Math.log10(1 + edge.damage) : 0;
     const trust = gain(gain(old.trust, 0.15, edge.helpReceived), 0.08, edge.jointOps) * 0.8 ** Math.min(4, edge.attacks);
+    const affinity = gain(gain(gain(old.affinity, 0.1, edge.helpReceived), 0.1, edge.jointOps), 0.03, edge.helpGiven);
+    const final = edge.final;
+    // Where the campaign kept an opinion it speaks too: a warm one lifts, a betrayal cuts what the counts alone would keep.
+    const settled = (counted: number, felt: number) => (felt >= 0 ? Math.max(counted, felt) : counted * (1 + felt));
     relations.set(other, {
       other,
-      trust,
+      trust: final ? settled(trust, final.trust) : trust,
       // Helping someone leaves a little warmth too, though it says nothing about trusting them.
-      affinity: gain(gain(gain(old.affinity, 0.1, edge.helpReceived), 0.1, edge.jointOps), 0.03, edge.helpGiven),
-      resentment: clamp(old.resentment + hurt, 0, 1),
+      affinity: final ? settled(affinity, final.affinity) : affinity,
+      resentment: Math.max(clamp(old.resentment + hurt, 0, 1), final?.resentment ?? 0),
+      ...(final ? { fear: round4(Math.max(old.fear ?? 0, final.fear)) } : old.fear !== undefined ? { fear: round4(old.fear) } : {}),
+      ...(final?.reliability !== undefined ? { reliability: round4(final.reliability) } : old.reliability !== undefined ? { reliability: old.reliability } : {}),
       helpReceived: old.helpReceived + edge.helpReceived,
       helpGiven: old.helpGiven + edge.helpGiven,
       jointOps: old.jointOps + edge.jointOps,
@@ -519,7 +534,7 @@ function foldRelations(persona: PersonaRecord, edges: readonly PersonaEdgeFacts[
   }
   const weight = (relation: PersonaRelation) => Math.max(relation.trust, relation.affinity, relation.resentment);
   return [...relations.values()]
-    .map((relation) => ({ ...relation, trust: round4(relation.trust), affinity: round4(relation.affinity), resentment: round4(relation.resentment) }))
+    .map((relation) => ({ ...relation, trust: round4(relation.trust), affinity: round4(relation.affinity), resentment: round4(relation.resentment), ...(relation.fear !== undefined ? { fear: round4(relation.fear) } : {}) }))
     .filter((relation) => weight(relation) >= 0.01)
     .sort((left, right) => weight(right) - weight(left) || right.lastRound - left.lastRound || compareIds(left.other, right.other))
     .slice(0, PERSONA_LIMITS.relations);

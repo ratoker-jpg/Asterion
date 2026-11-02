@@ -25,6 +25,7 @@ import {
 import type { AllianceSettingsInput, CommandState } from '../domain/command/types.ts';
 import type { SaveState } from './contracts.ts';
 import { applyNpcAllianceHeraldry } from './npc-identity.ts';
+import { npcGroupRegard, npcRegard } from './npc-relations.ts';
 
 export type NpcDiplomacyPayload = Readonly<Record<string, string | number | boolean | null>>;
 export type NpcDiplomacyCandidate = Readonly<{
@@ -82,12 +83,6 @@ function stableFraction(key: string): number {
   return (hash >>> 0) / 0x1_0000_0000;
 }
 
-/** -1..1: what this owner remembers of another from earlier rounds of a series; 0 outside a series. */
-function inheritedRegard(profile: NpcProfile, otherOwnerId: string): number {
-  const relation = profile.inherited?.relations[otherOwnerId];
-  return relation ? relation.trust - relation.resentment : 0;
-}
-
 function makeCandidate(kind: NpcDiplomacyCandidate['kind'], id: string, score: number, payload: NpcDiplomacyPayload): NpcDiplomacyCandidate {
   return { id, kind, weight: weight(score), payload };
 }
@@ -136,7 +131,7 @@ export function getNpcDiplomacyCandidates(
     if (!pendingOwnApplication) {
       for (const alliance of command.alliances) {
         if (isAllianceFull(alliance) || selectReapplyBlock(command, ownerId, alliance.id, at)) continue;
-        candidates.push(makeCandidate('apply-to-alliance', `apply-to-alliance:${ownerId}:${alliance.id}`, 0.16 + cooperation * 0.58 + social * 0.12 + 0.2 * inheritedRegard(profile, alliance.leaderOwnerId), {
+        candidates.push(makeCandidate('apply-to-alliance', `apply-to-alliance:${ownerId}:${alliance.id}`, 0.16 + cooperation * 0.58 + social * 0.12 + 0.2 * npcGroupRegard(state, profile, alliance.members.map((member) => member.ownerId), at), {
           allianceId: alliance.id,
         }));
       }
@@ -150,7 +145,7 @@ export function getNpcDiplomacyCandidates(
       // Player requests remain for the player. Only answer known autonomous NPCs.
       if (application.ownerId === state.profile.playerId || !state.npc?.profiles[application.ownerId]) continue;
       // A familiar applicant tilts the answer, it does not decide it: the other side still has to choose.
-      const accepts = cooperation + social * 0.15 + 0.15 * inheritedRegard(profile, application.ownerId) >= 0.5;
+      const accepts = cooperation + social * 0.15 + 0.15 * npcRegard(state, profile, application.ownerId, at) >= 0.5;
       candidates.push(makeCandidate(accepts ? 'accept-application' : 'reject-application', `${accepts ? 'accept' : 'reject'}-application:${ownerId}:${application.id}`, accepts ? 0.25 + cooperation * 0.55 : 0.2 + (1 - cooperation) * 0.4, {
         applicationId: application.id,
       }));
@@ -163,7 +158,7 @@ export function getNpcDiplomacyCandidates(
       if (relation?.status === 'war' && relation.truce?.byAllianceId === other.id) {
         // Do not make an unattended NPC accept or reject a player's offer.
         if (other.members.some((member) => member.ownerId === state.profile.playerId)) continue;
-        const accept = cooperation + (1 - aggression) * 0.25 >= 0.62;
+        const accept = cooperation + (1 - aggression) * 0.25 + 0.15 * npcGroupRegard(state, profile, other.members.map((member) => member.ownerId), at) >= 0.62;
         candidates.push(makeCandidate('respond-truce', `respond-truce:${ownerId}:${other.id}:${accept}`, accept ? 0.35 + cooperation * 0.4 : 0.22 + aggression * 0.3, {
           fromAllianceId: other.id,
           accept,
@@ -175,7 +170,8 @@ export function getNpcDiplomacyCandidates(
             targetAllianceId: other.id,
           }));
         }
-      } else if (aggression * (0.55 + military * 0.45) >= 0.68) {
+      } else if (aggression * (0.55 + military * 0.45) - 0.3 * npcGroupRegard(state, profile, other.members.map((member) => member.ownerId), at) >= 0.68) {
+        // Old scores push toward war, friends in the other alliance hold it back.
         candidates.push(makeCandidate('declare-war', `declare-war:${ownerId}:${other.id}`, 0.12 + aggression * 0.55 + military * 0.2, {
           targetAllianceId: other.id,
         }));

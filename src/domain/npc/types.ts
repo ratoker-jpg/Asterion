@@ -145,7 +145,7 @@ export type NpcProfile = Readonly<{
   inherited?: NpcInheritedExperience;
 }>;
 
-export type NpcInheritedRelation = Readonly<{ trust: number; affinity: number; resentment: number }>;
+export type NpcInheritedRelation = Readonly<{ trust: number; affinity: number; resentment: number; fear?: number; reliability?: number }>;
 
 export type NpcInheritedExperience = Readonly<{
   round: number;
