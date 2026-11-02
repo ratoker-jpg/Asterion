@@ -417,6 +417,9 @@ for (const [label, afterStatuses] of [['before any checkpoint (the revision it s
     assert.equal(starts.length, 2);
     assert.match(starts[1]!, afterStatuses === 0 ? /from revision 1/ : /from checkpoint/, 'the restart resumed from where the label says');
 
+    const journal = (await (await api(base, `/v1/campaigns/${id}/bot-journal`)).text()).split('\n').filter(Boolean);
+    assert.ok(journal.length > 0);
+    assert.equal(new Set(journal).size, journal.length, 'the bot journal has no line twice: what the crashed runner wrote past the resume point was dropped');
     const taken = await claimWorld(base, id, 1, VERSION);
     assert.equal(taken.status, 200);
     assert.equal(loadedDigest(taken.text!), await localDigestAt(left, taken.worldAt!), 'after the crash and the restart: byte for byte the world of a run without the crash');

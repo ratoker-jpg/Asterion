@@ -22,6 +22,7 @@ import {
 } from './store.ts';
 import type { RunnerMessage, RunnerRequest, RunnerStart, RunnerWritten } from './runner.ts';
 import { compareGameVersions } from '../../src/application/cloud/cloud-sync.ts';
+import { formatNpcJournalLines, parseNpcJournalLines } from '../../src/application/npc-journal.ts';
 
 declare const __ASTERION_SERVER_VERSION__: string | undefined;
 
@@ -235,6 +236,19 @@ export function createCloudServer(config: ServerConfig) {
     return path.join(campaignDir(config.dataDir, id), 'bots.jsonl');
   }
 
+  /** Keeps the journal lines before game time `at` (the resume point of a crashed world). */
+  function trimBotJournal(file: string, at: number): void {
+    try {
+      if (!fs.existsSync(file)) return;
+      const entries = parseNpcJournalLines(fs.readFileSync(file, 'utf8'));
+      const kept = entries.filter((entry) => entry.t < at);
+      if (kept.length === entries.length) return;
+      const temporary = `${file}.tmp-${process.pid}`;
+      fs.writeFileSync(temporary, formatNpcJournalLines(kept), 'utf8');
+      fs.renameSync(temporary, file);
+    } catch (error) { config.log(`bot journal not trimmed: ${String(error)}`); }
+  }
+
   function send(run: LiveRun, message: RunnerRequest): void {
     if (!run.exited && run.child.connected) run.child.send(message);
   }
@@ -255,6 +269,8 @@ export function createCloudServer(config: ServerConfig) {
     // supervisor dies (runner.ts on 'disconnect'), before the supervisor could record it in campaign.json.
     const fromCheckpoint = resume && fs.existsSync(checkpoint) && (state.checkpointWorldAt !== null || state.leftReplay !== undefined);
     if (!base && !fromCheckpoint) throw new Error(`Live world ${campaign.id} has no base snapshot.`);
+    // A world resumed after a crash recomputes what the crashed runner had already journaled past the resume point: drop those lines.
+    if (afterCrash) trimBotJournal(botJournalFile(campaign.id), fromCheckpoint ? state.checkpointWorldAt ?? state.worldAt : base!.worldAt);
     const child = fork(runner.script, [], { execArgv: runner.execArgv, stdio: ['ignore', 'inherit', 'inherit', 'ipc'], serialization: 'advanced' });
     const run: LiveRun = {
       campaignId: campaign.id, child, waiting: new Map(), history: [], loaded: false, exited: false, ready: Promise.resolve(),
