@@ -44,7 +44,7 @@ jobs:
           echo "replicas=$(seq 1 "$n" | paste -sd, - | sed 's/^/[/;s/$/]/')" >> "$GITHUB_OUTPUT"
 
   repeat:
-    name: ${{ matrix.shard }} #${{ matrix.replica }}
+    name: "${{ matrix.shard }} run ${{ matrix.replica }}"
     needs: prepare
     runs-on: windows-latest
     timeout-minutes: 30
@@ -52,6 +52,7 @@ jobs:
       fail-fast: false
       matrix:
         replica: ${{ fromJSON(needs.prepare.outputs.replicas) }}
+        shard: [visual, science-reports, campaign-command, npc-replay, fleet-universe]
         include:
           - shard: visual
             suites: "qa:visual test:test-mode-ui:skip test:header-ui test:resource-assets-ui test:save-safety-ui:skip test:save-store-ui"
