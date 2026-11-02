@@ -1,0 +1,214 @@
+{
+  "round": 2,
+  "step": 0.1,
+  "candidates": {
+    "base": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.25,
+        "bottleneckDrive": 1.4,
+        "scarcityHigh": 3,
+        "styleCapRaise": 0,
+        "budgetDaysHigh": 3,
+        "spendShareHigh": 0.85,
+        "reserveHours": 1.4,
+        "tableWeight": 0
+      }
+    },
+    "hoardDays-down": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.055,
+        "bottleneckDrive": 1.4,
+        "scarcityHigh": 3,
+        "styleCapRaise": 0,
+        "budgetDaysHigh": 3,
+        "spendShareHigh": 0.85,
+        "reserveHours": 1.4,
+        "tableWeight": 0
+      }
+    },
+    "hoardDays-up": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.445,
+        "bottleneckDrive": 1.4,
+        "scarcityHigh": 3,
+        "styleCapRaise": 0,
+        "budgetDaysHigh": 3,
+        "spendShareHigh": 0.85,
+        "reserveHours": 1.4,
+        "tableWeight": 0
+      }
+    },
+    "bottleneckDrive-down": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.25,
+        "bottleneckDrive": 1.2,
+        "scarcityHigh": 3,
+        "styleCapRaise": 0,
+        "budgetDaysHigh": 3,
+        "spendShareHigh": 0.85,
+        "reserveHours": 1.4,
+        "tableWeight": 0
+      }
+    },
+    "bottleneckDrive-up": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.25,
+        "bottleneckDrive": 1.6,
+        "scarcityHigh": 3,
+        "styleCapRaise": 0,
+        "budgetDaysHigh": 3,
+        "spendShareHigh": 0.85,
+        "reserveHours": 1.4,
+        "tableWeight": 0
+      }
+    },
+    "scarcityHigh-down": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.25,
+        "bottleneckDrive": 1.4,
+        "scarcityHigh": 2.5,
+        "styleCapRaise": 0,
+        "budgetDaysHigh": 3,
+        "spendShareHigh": 0.85,
+        "reserveHours": 1.4,
+        "tableWeight": 0
+      }
+    },
+    "scarcityHigh-up": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.25,
+        "bottleneckDrive": 1.4,
+        "scarcityHigh": 3.5,
+        "styleCapRaise": 0,
+        "budgetDaysHigh": 3,
+        "spendShareHigh": 0.85,
+        "reserveHours": 1.4,
+        "tableWeight": 0
+      }
+    },
+    "styleCapRaise-up": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.25,
+        "bottleneckDrive": 1.4,
+        "scarcityHigh": 3,
+        "styleCapRaise": 0.1,
+        "budgetDaysHigh": 3,
+        "spendShareHigh": 0.85,
+        "reserveHours": 1.4,
+        "tableWeight": 0
+      }
+    },
+    "budgetDaysHigh-down": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.25,
+        "bottleneckDrive": 1.4,
+        "scarcityHigh": 3,
+        "styleCapRaise": 0,
+        "budgetDaysHigh": 2.25,
+        "spendShareHigh": 0.85,
+        "reserveHours": 1.4,
+        "tableWeight": 0
+      }
+    },
+    "budgetDaysHigh-up": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.25,
+        "bottleneckDrive": 1.4,
+        "scarcityHigh": 3,
+        "styleCapRaise": 0,
+        "budgetDaysHigh": 3.75,
+        "spendShareHigh": 0.85,
+        "reserveHours": 1.4,
+        "tableWeight": 0
+      }
+    },
+    "spendShareHigh-down": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.25,
+        "bottleneckDrive": 1.4,
+        "scarcityHigh": 3,
+        "styleCapRaise": 0,
+        "budgetDaysHigh": 3,
+        "spendShareHigh": 0.785,
+        "reserveHours": 1.4,
+        "tableWeight": 0
+      }
+    },
+    "spendShareHigh-up": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.25,
+        "bottleneckDrive": 1.4,
+        "scarcityHigh": 3,
+        "styleCapRaise": 0,
+        "budgetDaysHigh": 3,
+        "spendShareHigh": 0.915,
+        "reserveHours": 1.4,
+        "tableWeight": 0
+      }
+    },
+    "reserveHours-down": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.25,
+        "bottleneckDrive": 1.4,
+        "scarcityHigh": 3,
+        "styleCapRaise": 0,
+        "budgetDaysHigh": 3,
+        "spendShareHigh": 0.85,
+        "reserveHours": 1,
+        "tableWeight": 0
+      }
+    },
+    "reserveHours-up": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.25,
+        "bottleneckDrive": 1.4,
+        "scarcityHigh": 3,
+        "styleCapRaise": 0,
+        "budgetDaysHigh": 3,
+        "spendShareHigh": 0.85,
+        "reserveHours": 3.7,
+        "tableWeight": 0
+      }
+    },
+    "tableWeight-up": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.25,
+        "bottleneckDrive": 1.4,
+        "scarcityHigh": 3,
+        "styleCapRaise": 0,
+        "budgetDaysHigh": 3,
+        "spendShareHigh": 0.85,
+        "reserveHours": 1.4,
+        "tableWeight": 0.1
+      }
+    },
+    "combo-leaders": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.25,
+        "bottleneckDrive": 1.2,
+        "scarcityHigh": 3.8,
+        "styleCapRaise": 0,
+        "budgetDaysHigh": 2.2,
+        "spendShareHigh": 0.85,
+        "reserveHours": 1.4,
+        "tableWeight": 0
+      }
+    }
+  }
+}
