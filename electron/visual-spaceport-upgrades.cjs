@@ -74,7 +74,7 @@ async function capture(win, directory, name, selector = null) {
 async function seedSpaceport(win) {
   // Removed while the game is not running: its unload would write the old save back (qa-save-edit.cjs).
   await editSaveIdle(win, `(() => { localStorage.removeItem(${JSON.stringify(SAVE_KEY)}); return true; })()`, { ready: `document.querySelector('[data-qa-navigation]') && localStorage.getItem(${JSON.stringify(SAVE_KEY)})`, label: 'reset save', commands: false });
-  const ok = await win.webContents.executeJavaScript(`(() => {
+  const ok = await editSaveIdle(win, `(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
     const planet = save?.planets?.['helion-01'];
     if (!planet?.buildings) return false;
@@ -92,9 +92,10 @@ async function seedSpaceport(win) {
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     localStorage.setItem(${JSON.stringify(TEST_TIME_SCALE_KEY)}, '1');
     return true;
-  })()`);
+  })()`, { ready: `document.querySelector('[data-qa-navigation="utility"]')`, label: 'Spaceport seed' });
   if (!ok) throw new Error('Could not seed Spaceport state');
-  await reload(win);
+  await win.webContents.executeJavaScript('document.fonts?.ready');
+  await settle(win);
 }
 
 async function activateMilitary(win) {
@@ -422,23 +423,9 @@ const maxLevelsLoadedExpression = `(() => {
 })()`;
 
 async function seedMaxLevels(win) {
-  // Even with injection and navigation in one renderer turn, the old page keeps
-  // running until the reload commits, and its autosave can still write the
-  // preceding 3-item queue over the fixture (seen on CI, 26.10.2026). The
-  // fixture is accepted only once the reloaded game holds it.
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    await seedMaxLevelsOnce(win);
-    if (await win.webContents.executeJavaScript(maxLevelsLoadedExpression)) return;
-  }
-  throw new Error('Max-level fixture was overwritten by the running game three times');
-}
-
-async function seedMaxLevelsOnce(win) {
-  // Fixture injection and navigation must share one renderer turn. A separate
-  // localStorage write followed by a host-side delay/reload races React autosave
-  // and can revive the preceding 3-item queue on the second viewport.
-  const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-  const execution = win.webContents.executeJavaScript(`(() => {
+  // Written while the game is not running (qa-save-edit.cjs): the running page's
+  // autosave used to revive the preceding 3-item queue over this fixture.
+  const ok = await editSaveIdle(win, `(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
     const state = save.planets?.['helion-01']?.spaceportUpgrades;
     if (!state) return false;
@@ -449,23 +436,9 @@ async function seedMaxLevelsOnce(win) {
     state.shipLevels = {};
     save.shipUpgradeLevels = { ...(save.shipUpgradeLevels || {}), transporter: 10, corsair: 40 };
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
-    window.location.reload();
     return true;
-  })()`)
-    .then((value) => ({ value }))
-    .catch((error) => ({ error: String(error?.stack || error) }));
-  const first = await Promise.race([
-    execution.then((result) => ({ result })),
-    loaded.then(() => ({ loaded: true })),
-  ]);
-  if (first.result?.value === false || first.result?.error) {
-    throw new Error(`Could not seed max-level state: ${JSON.stringify(first.result)}`);
-  }
-  if (!first.loaded) {
-    const reloaded = await Promise.race([loaded.then(() => true), sleep(10_000).then(() => false)]);
-    if (!reloaded) throw new Error('Max-level fixture did not trigger a reload');
-  }
-  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+  })()`, { ready: `document.querySelector('[data-qa-navigation="utility"]')`, held: maxLevelsLoadedExpression, label: 'max-level fixture' });
+  if (!ok) throw new Error('Could not seed max-level state');
   await win.webContents.executeJavaScript('document.fonts?.ready');
   await settle(win);
 }
