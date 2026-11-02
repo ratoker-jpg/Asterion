@@ -757,6 +757,7 @@ async function verifyResourceZoneFlow(win, directory, label) {
     const diagnostics=await readResourceQueueDiagnostics(win);
     throw new Error(`Three-slot resource queue persistence timed out: ${JSON.stringify({clickResults:queueClickResults, state:diagnostics, waitError:String(error)})}`);
   }
+  await logStateHeals(win, 'resource queue');
   await waitFor(win, `document.querySelectorAll('[data-qa-queue-role]').length===3 && document.querySelector('[data-qa-queue-full]')`);
   await settle(win);
 
@@ -857,7 +858,6 @@ async function verifyResourceZoneFlow(win, directory, label) {
     fifo,
     persisted,
   };
-  await logStateHeals(win, 'resource queue');
   console.log(`Resource zone QA passed: terrain, canonical names, large ×10 income and final-level preview visibility, requirements, three-slot FIFO queue, completion transition and reload persistence.`);
 
   await resetTestSave(win);
