@@ -1,6 +1,7 @@
 import type { SaveState } from './contracts.ts';
 import type { NpcProfile } from '../domain/npc/types.ts';
 import { selectOwnerMembership } from '../domain/command/selectors.ts';
+import { npcReactionStyle } from './npc-pact-state.ts';
 import { hoardPressure, isNpcFortress, type NpcStrategyDrives, type NpcUtilityContext } from './npc-utility.ts';
 
 /**
@@ -36,6 +37,9 @@ export function npcCharacterStyle(profile: NpcProfile): NpcPlayStyle {
 
 export function readNpcPlayStyle(state: SaveState, profile: NpcProfile, utility: NpcUtilityContext, drives: NpcStrategyDrives): NpcStyleReading {
   const ownerId = profile.ownerId;
+  // Robbed again and again, it has decided what to make of it: not everyone digs in.
+  const reaction = state.npcStrategy?.reactions ? npcReactionStyle(state, ownerId, utility.at) : null;
+  if (reaction) return reaction;
   if (utility.threat >= 0.5) return { style: 'fortress', reason: 'attacked' };
   const membership = selectOwnerMembership(state.command, ownerId);
   if (membership && (state.sunRaid?.raids ?? []).some((raid) => raid.status === 'gathering' && raid.allianceId === membership.alliance.id)) {

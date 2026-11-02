@@ -9,7 +9,7 @@
 //   node --max-old-space-size=8192 --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs \
 //     tools/bot-lab.mjs [--days=2] [--bots=15] [--fixture=F | --write-fixture=F] [--out=DIR]
 //   ... tools/bot-lab.mjs --save=SAVE.json --hours=6 --owners=npc-gen-32[,..] [--out=DIR]
-//   ... tools/bot-lab.mjs --seed=3 [--scenario=seven-planets] ...   (another lab galaxy; see bot-lab-batch.mjs)
+//   ... tools/bot-lab.mjs --seed=3 [--scenario=seven-planets|familiar-solos|conflict] ...   (another lab galaxy; see bot-lab-batch.mjs)
 //
 // A fresh campaign draws ids from crypto entropy: before/after comparisons run
 // both revisions on one fixture written once with --write-fixture.
@@ -23,10 +23,9 @@ import { formatNpcJournalLines, setNpcJournalSink } from '../src/application/npc
 import { selectOwnerScore } from '../src/domain/rating/scoring.ts';
 import { createNpcState } from '../src/domain/npc/state.ts';
 import { createDefaultNewGameConfig } from '../src/domain/world/config.ts';
-import { getFactionShipCatalog } from '../src/domain/combat/faction-catalog.ts';
+import { getFactionDefenseCatalog, getFactionShipCatalog } from '../src/domain/combat/faction-catalog.ts';
 import { SCIENCE_CATALOG } from '../src/domain/science/catalog.ts';
 import { calculateDefensePopulation, createDefaultFleetProductionState, createEmptyDefenseState } from '../src/domain/fleet/production.ts';
-import { getFactionDefenseCatalog } from '../src/domain/combat/faction-catalog.ts';
 import { getNpcPlanetIncomePerHour } from '../src/application/npc-economy.ts';
 
 const HOUR = 3_600_000;
@@ -123,6 +122,75 @@ export function applySevenPlanetsScenario(state) {
   }
   log(`scenario seven-planets: ${owner} holds ${planets.length} planets (${hull.id} ×40 each), target ${victim.id} of ${victimOwner}`);
   return next;
+}
+
+/**
+ * Scenarios of stage E (ADR §7.б, §9.2). Solo owners by character who remember
+ * each other from an earlier round, each strong, rich and with its own fresh
+ * report of a neighbour behind batteries: too much for one (by the owner's own
+ * judgement), not for two. They are told nothing else; what they do is theirs.
+ *
+ * `familiar-solos`: two pairs that think well of each other, both ways.
+ * `conflict`: three pairs. One regards the other well but is not regarded back;
+ * one's partner counts the target as a friend; the third is a control pair.
+ */
+export function applySocialScenario(state, scenario) {
+  const targets = { ...state.espionage.targets };
+  const owners = Object.keys(state.npc.profiles).sort();
+  const at = state.npcReplay.processedThroughAt;
+  const profiles = { ...state.npc.profiles };
+  const reports = [];
+  const unrecovered = { ...state.rating.unrecoveredCostsByOwnerId };
+  const groups = [[0, 1, 2], [3, 4, 5], ...(scenario === 'conflict' ? [[6, 7, 8]] : [])];
+  const relation = (trust, affinity, resentment) => ({ trust, affinity, resentment });
+  groups.forEach(([a, b, c], index) => {
+    const [left, right, victim] = [owners[a], owners[b], owners[c]];
+    const planetOf = (ownerId) => Object.values(targets).find((planet) => planet.kind === 'npc' && planet.ownerId === ownerId);
+    const hull = 'cruiser';
+    for (const ownerId of [left, right]) {
+      const planet = planetOf(ownerId);
+      // Some batteries: the first pirates of a lab world otherwise wipe a fleet standing by with nothing to do with this.
+      const guard = createEmptyDefenseState();
+      targets[planet.id] = { ...planet, resources: { ...planet.resources, metal: 300_000, minerals: 300_000, gas: 300_000 },
+        defense: { ...guard, defenses: { ...guard.defenses, 'ion-plasma-battery': 15 } },
+        buildings: { ...planet.buildings, shipyard: 12, hangar: 60, 'metal-storage': 25, 'mineral-storage': 25, 'gas-storage': 25, 'planetary-government': 1 },
+        fleet: { ...planet.fleet, ships: { ...planet.fleet.ships, [hull]: 60, transporter: 20, 'spy-probe': 5 } },
+        fleetProduction: createDefaultFleetProductionState() };
+      const profile = profiles[ownerId];
+      // Solo by temperament: an alliance would hide what this scenario asks.
+      profiles[ownerId] = { ...profile, traits: { ...profile.traits, cooperation: 0.28, socialStyle: 0.25, riskTolerance: 0.7, militaryFocus: 0.8, attention: 0.9 },
+        activity: { ...profile.activity, propensity: 0.95 } };
+    }
+    const leftPlanet = targets[planetOf(left).id];
+    const force = getFactionShipCatalog(leftPlanet.raceId).find((entity) => entity.id === hull).combat;
+    const ownPower = 60 * Math.sqrt(force.attack * force.life);
+    const battery = getFactionDefenseCatalog(planetOf(victim).raceId).find((entity) => entity.id === 'ion-plasma-battery').combat;
+    const defense = createEmptyDefenseState();
+    const seen = { ...planetOf(victim), resources: { ...planetOf(victim).resources, metal: 3_000_000, minerals: 3_000_000, gas: 3_000_000 },
+      defense: { ...defense, defenses: { ...defense.defenses, 'ion-plasma-battery': Math.ceil(1.5 * ownPower / Math.sqrt(battery.attack * battery.life)) } },
+      fleet: { ...planetOf(victim).fleet, ships: {} } };
+    targets[seen.id] = seen;
+    for (const ownerId of [left, right]) {
+      const home = targets[planetOf(ownerId).id];
+      reports.push({ ownerId, id: `lab-social-report-${index}-${ownerId}`, missionId: `lab-social-mission-${index}-${ownerId}`, createdAt: at, sourcePlanetId: home.id,
+        targetPlanetId: seen.id, targetPlanetName: seen.name, targetOwnerId: seen.ownerId, targetOwnerName: seen.ownerName, targetRaceId: seen.raceId, targetRelation: 'neutral',
+        targetCoordinate: { ...seen.coordinate }, spyLevel: 10, targetEspionageLevel: 0, delta: 10, roll: 0.5, quality: 'full',
+        resources: { ...seen.resources }, defense: { ...seen.defense.defenses }, fleet: { ...seen.fleet.ships }, firstReport: true });
+    }
+    const memoryOf = (relations) => ({ round: 2, prefs: {}, lessons: [], relations });
+    const warm = relation(0.6, 0.5, 0);
+    // They share an old enemy: what a strike costs, a grudge can pay for.
+    const enemy = relation(0, 0, 0.5);
+    profiles[left] = { ...profiles[left], inherited: memoryOf({ [right]: warm, [victim]: enemy }) };
+    if (scenario === 'conflict' && index === 0) profiles[right] = { ...profiles[right], inherited: memoryOf({ [left]: relation(0, 0, 0.6) }) };
+    else if (scenario === 'conflict' && index === 1) profiles[right] = { ...profiles[right], inherited: memoryOf({ [left]: warm, [victim]: relation(0.7, 0.6, 0) }) };
+    else profiles[right] = { ...profiles[right], inherited: memoryOf({ [left]: warm, [victim]: enemy }) };
+    // All three in one points band (the ledger the attack-rule tests use).
+    for (const ownerId of [left, right, victim]) unrecovered[ownerId] = { metal: 400_000_000, minerals: 0, gas: 0 };
+  });
+  log(`scenario ${scenario}: ${groups.length} groups`);
+  return { ...state, npc: { ...state.npc, profiles }, rating: { ...state.rating, unrecoveredCostsByOwnerId: unrecovered },
+    espionage: { ...state.espionage, targets, reports: [...(state.espionage.reports ?? []), ...reports] } };
 }
 
 function readSave(file) {
@@ -263,6 +331,42 @@ export function describeWorld(state, journal = [], tally = null) {
   for (const entry of plans.filter((item) => item.d?.st !== 'done')) reasons[entry.d?.why ?? '?'] = (reasons[entry.d?.why ?? '?'] ?? 0) + 1;
   const ascending = [...points].reverse();
   const third = Math.max(1, Math.floor(ascending.length / 3));
+  // Agreements between NPC (stage E): the bot journal is where they are visible.
+  const pacts = journal.filter((entry) => entry.k === 'pact');
+  const pactEvents = (kind, event) => pacts.filter((entry) => entry.d?.tp === kind && entry.d?.ev === event);
+  const arrivals = pactEvents('joint-strike', 'arrived');
+  const whyNot = {};
+  for (const entry of pacts.filter((item) => item.d?.ev === 'declined')) { const key = `${entry.d.tp}:${entry.d.why}`; whyNot[key] = (whyNot[key] ?? 0) + 1; }
+  const gifts = pactEvents('resource-gift', 'accepted').map((entry) => ({ from: entry.d.to, to: entry.d.from, at: entry.t, amount: entry.d.sent ?? 0 })).sort((a, b) => a.at - b.at);
+  // A chain of gifts that brings wealth back to its sender within two days.
+  const giftCycles = gifts.filter((gift, index) => {
+    const reached = new Set([gift.to]);
+    for (const later of gifts.slice(index + 1)) {
+      if (later.at - gift.at > 48 * HOUR) break;
+      if (!reached.has(later.from)) continue;
+      if (later.to === gift.from) return true;
+      reached.add(later.to);
+    }
+    return false;
+  }).length;
+  const pairCounts = {};
+  for (const entry of pactEvents('joint-strike', 'fulfilled')) { const key = [entry.d.from, entry.d.to].sort().join('+'); pairCounts[key] = (pairCounts[key] ?? 0) + 1; }
+  const social = {
+    proposed: pactEvents('joint-strike', 'proposed').length, accepted: pactEvents('joint-strike', 'accepted').length, declined: pactEvents('joint-strike', 'declined').length,
+    expired: pactEvents('joint-strike', 'expired').length, fulfilled: pactEvents('joint-strike', 'fulfilled').length, broken: pactEvents('joint-strike', 'broken').length,
+    betrayed: pactEvents('joint-strike', 'broken').filter((entry) => entry.d?.why === 'betrayed').length,
+    withdrawn: pactEvents('joint-strike', 'withdrawn').length, cancelled: pactEvents('joint-strike', 'cancelled').length,
+    jointBattles: arrivals.length, jointWon: arrivals.filter((entry) => entry.d?.won === 1).length,
+    jointHit: Math.round(sum(arrivals.map((entry) => attacks.find((battle) => battle.o === entry.o && battle.t === entry.t)?.d?.hit ?? 0))),
+    jointGain: Math.round(sum(arrivals.map((entry) => entry.d?.gain ?? 0))), jointLoss: Math.round(sum(arrivals.map((entry) => entry.d?.loss ?? 0))),
+    againstPlayer: pactEvents('joint-strike', 'proposed').filter((entry) => entry.d?.target === playerId).length,
+    giftAsked: pactEvents('resource-gift', 'proposed').length, giftSent: gifts.length, giftDeclined: pactEvents('resource-gift', 'declined').length,
+    giftDelivered: pactEvents('resource-gift', 'fulfilled').length, giftVolume: sum(gifts.map((gift) => gift.amount)), giftCycles,
+    bestPairRepeats: Math.max(0, ...Object.values(pairCounts)), whyNot: Object.entries(whyNot).sort((a, b) => b[1] - a[1]),
+    reactions: journal.filter((entry) => entry.k === 'reaction').reduce((counts, entry) => ({ ...counts, [entry.d?.react]: (counts[entry.d?.react] ?? 0) + 1 }), {}),
+    relationEdges: Object.values(state.npcStrategy?.relations ?? {}).reduce((total, edges) => total + edges.length, 0),
+    strategyBytes: JSON.stringify(state.npcStrategy ?? null).length,
+  };
   const activePlans = Object.values(state.npcStrategy?.plans ?? {}).flat().filter((plan) => plan.template === 'strike' && plan.status === 'active');
   return {
     worldAt: new Date(state.npcReplay?.processedThroughAt ?? 0).toISOString(), owners: owners.length,
@@ -305,6 +409,7 @@ export function describeWorld(state, journal = [], tally = null) {
     battles: { attacks: attacks.length, attacksWon: attacks.filter((entry) => entry.d?.won === 1).length,
       raidGain: Math.round(sum(attacks.map((entry) => entry.d?.gain ?? 0))), raidLoss: Math.round(sum(attacks.map((entry) => entry.d?.loss ?? 0))),
       defences: defences.length, defenceLoss: Math.round(sum(defences.map((entry) => entry.d?.loss ?? 0))) },
+    social,
     bottomThirdPoints: Math.round(sum(ascending.slice(0, third)) / third),
     styleChanges: styles.length, styles: Object.entries(styles.reduce((counts, entry) => ({ ...counts, [entry.s]: (counts[entry.s] ?? 0) + 1 }), {})),
     perOwner,
@@ -335,6 +440,7 @@ function main() {
   let state = save ? readSave(save) : option('fixture') ? readSave(option('fixture'))
     : createLabWorld(Number(option('bots', '15')), option('seed') ? `BOTLAB-${option('seed')}` : 'BOTLAB2026');
   if (option('scenario') === 'seven-planets' && !save && !option('fixture')) state = applySevenPlanetsScenario(state);
+  if (['familiar-solos', 'conflict'].includes(option('scenario')) && !save && !option('fixture')) state = applySocialScenario(state, option('scenario'));
   if (option('write-fixture')) fs.writeFileSync(option('write-fixture'), serializeSaveForStorage(state, 'production'));
   const at0 = state.npcReplay.processedThroughAt;
   applyCampaignRuntimeForCatchup(state, at0);

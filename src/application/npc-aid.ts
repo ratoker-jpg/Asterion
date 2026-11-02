@@ -1,4 +1,5 @@
 import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
+import { npcHelpWeight, npcRegard, recordNpcHelp } from './npc-relations.ts';
 import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
 import type { ShipId } from '../domain/combat/ids.ts';
 import type { AidResource, ResourceRequest } from '../domain/command/types.ts';
@@ -177,13 +178,15 @@ export function getNpcAidCandidates(state: SaveState, profile: NpcProfile, at: n
   const candidates: NpcAidCandidate[] = [];
   for (const request of selectFulfillableRequests(state.command, ownerId)) {
     if (request.allianceId !== membership.alliance.id || !requestPlanet(state, request)) continue;
+    // Not everyone in an alliance helps everyone: one who wronged this owner asks in vain.
+    if (npcRegard(state, profile, request.authorOwnerId, at) <= -0.4) continue;
     for (const source of sources) {
       const payload = aidPlan(state, ownerId, request, source, profile.traits.cooperation);
       if (!payload) continue;
       candidates.push({
         id: `aid:${ownerId}:${request.id}:${source.id}`,
         kind: 'aid',
-        weight: Number.isFinite(profile.traits.cooperation) ? Math.max(0.05, Math.min(1, profile.traits.cooperation + 0.2 * (profile.inherited?.relations[request.authorOwnerId]?.trust ?? 0))) : 0.05,
+        weight: Number.isFinite(profile.traits.cooperation) ? Math.max(0.05, Math.min(1, profile.traits.cooperation + 0.2 * npcRegard(state, profile, request.authorOwnerId, at))) : 0.05,
         payload,
       });
     }
@@ -409,6 +412,7 @@ export function resolveNpcAidArrival(state: SaveState, flight: FlightRecord, at:
   next = { ...next, command: creditAidDelivery(next.command, {
     requestId: aid.requestId, flightId: current.id, senderOwnerId: aid.senderOwnerId, units: accepted,
   }, at) };
+  next = recordNpcHelp(next, aid.senderOwnerId, aid.recipientOwnerId, accepted, npcHelpWeight(target.planet.buildings, accepted), at);
   const delivered: FlightRecord = { ...current, aid: { ...aid, creditedUnits: accepted }, arrivedAt: current.arrivedAt ?? current.arrivalAt,
     cargoState: 'delivered', deliveredAt: current.arrivedAt ?? current.arrivalAt, cargoResolvedAt: at };
   const deliveredState = updateFlight(next, delivered);

@@ -1,7 +1,7 @@
 import { mergeBotJournal } from '../bot-journal-store.ts';
 import { useEffect, useRef } from 'react';
 import {
-  decideCloudEntry, describeConflict, describeLocalReason, pageClockOffsetMs, saveSchemaVersion, saveWorldAt, sha256Text,
+  decideCloudEntry, describeConflict, describeLocalReason, describeServerStall, pageClockOffsetMs, saveSchemaVersion, saveWorldAt, sha256Text,
   type CloudCampaignView, type CloudConflictReason, type CloudSyncRecord, type CloudWaitReason,
 } from '../../application/cloud/cloud-sync.ts';
 import { getBrowserSaveStorage, MISSING_EXTERNAL_SAVE } from '../../application/save-storage.ts';
@@ -158,6 +158,11 @@ function appliedMessage(world: CloudWorld, startedAt: number): CloudEntryOutcome
   };
 }
 
+/** The entry message plus, when the server's world had stopped, one calm line about it. */
+function withStallNote(outcome: CloudEntryOutcome, note: string | null): CloudEntryOutcome {
+  return note && outcome.kind === 'applied' ? { ...outcome, message: `${outcome.message} ${note}` } : outcome;
+}
+
 /**
  * Runs before a production slot opens. Takes the server's world when the
  * rules allow it, plays the local save otherwise, and returns a conflict for
@@ -212,14 +217,14 @@ export async function prepareCloudEntry(slot: SaveSlotMeta, options: { onStage?:
       if (!claimed.world) return { kind: 'local', message: null, tone: 'info' };
       options.onStage?.('Получаем мир с сервера… сохраняем');
       if (!await applyWorld(bridge, slot, claimed.world)) return { kind: 'local', message: 'Мир с сервера не записан: играем локальное сохранение.', tone: 'error' };
-      return appliedMessage(claimed.world, startedAt);
+      return withStallNote(appliedMessage(claimed.world, startedAt), describeServerStall(campaign!.live, 'took-server'));
     }
     if (decision.release) await bridge.release(slot.id).catch(() => undefined);
     options.onStage?.('Получаем мир с сервера… скачиваем копию');
     const downloaded = await bridge.download(slot.id, decision.snapshotId);
     if (!downloaded.ok) return { kind: 'local', message: `Копия с сервера не получена (${downloaded.error}): играем локальное сохранение.`, tone: 'error' };
     if (!await applyWorld(bridge, slot, downloaded.world)) return { kind: 'local', message: 'Копия с сервера не записана: играем локальное сохранение.', tone: 'error' };
-    return appliedMessage(downloaded.world, startedAt);
+    return withStallNote(appliedMessage(downloaded.world, startedAt), campaign!.live?.status === 'failed' ? describeServerStall(campaign!.live, 'local') : null);
   } catch (error) {
     console.warn('Asterion cloud entry failed; the local save is used.', error);
     return { kind: 'local', message: 'Облачный мир недоступен: играем локальное сохранение.', tone: 'error' };

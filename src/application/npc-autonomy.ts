@@ -26,6 +26,9 @@ import { getNpcPirateCandidates, dispatchNpcPirateMission } from './npc-pirates.
 import { getNpcEndgameChoices } from './npc-endgame.ts';
 import { getNpcPlanChoices, refreshNpcPlans, scheduleNpcPlanCheck } from './npc-plans.ts';
 import { getNpcSunPrepChoices, npcSunPrepSavesGas, refreshNpcSunPrep, scheduleNpcSunPrepCheck } from './npc-sun-prep.ts';
+import { getNpcPactChoices, npcPactForbidsAttack, refreshNpcPacts } from './npc-pacts.ts';
+import { npcReactionDrives } from './npc-pact-state.ts';
+import { activeNpcPlans, withoutNpcPlanReserve } from './npc-plan-reserve.ts';
 import { getNpcFortifyChoices, npcFortifyShortfalls, refreshNpcFortify, type NpcFortifyPlanetInput } from './npc-plan-fortify.ts';
 import { getNpcSpaceportCandidates, getNpcSpaceportCommanderCandidates, startNpcSpaceportUpgrade } from './npc-spaceport.ts';
 import { npcCombatPriority, npcEnemyShape, npcMainCommander } from './npc-commanders.ts';
@@ -180,6 +183,8 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
   state = refreshNpcFortify(state, profile, utility, at, timeScale);
   // The Sun plan of the owner's alliance moves on by what it sees now.
   state = refreshNpcSunPrep(state, profile, utility, at, timeScale);
+  // Agreements with other owners: answers, what was agreed, a new ask.
+  state = refreshNpcPacts(state, profile, utility, at, timeScale);
   // Concept U: estimated benefit − cost − risk + goal, plus this owner's seeded misjudgement.
   const scored = (candidateId: string, estimate: number) => utilityToWeight(estimate + estimationError(profile, eventId, candidateId));
   const missionUtility = (mission: { id: string; kind: string; payload: Readonly<Record<string, string | number | boolean | null>> }): number => {
@@ -212,7 +217,7 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     }
     return attackForces.get(mission.id) ?? ships;
   }
-  const drives = strategyOf(utility);
+  const drives = npcReactionDrives(state, ownerId, at, strategyOf(utility));
   const planets = Object.values(state.espionage?.targets ?? {}).filter((target) => target.kind === 'npc' && target.ownerId === ownerId)
     .sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
   // «Боевой приоритет» for defence, set like a player does before a fight:
@@ -507,7 +512,9 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
       } });
       continue;
     }
-    const free = getNpcMissionAvailableFleet(state, ownerId, target.id) ?? {};
+    // A fleet standing by for an agreed strike stays: it would not be back for the agreed time. An attack on its way still moves it.
+    const available = getNpcMissionAvailableFleet(state, ownerId, target.id) ?? {};
+    const free = threat?.decision !== 'evacuate' && activeNpcPlans(state, ownerId).some((plan) => plan.partner) ? withoutNpcPlanReserve(state, ownerId, target.id, available) : available;
     const ships = Object.fromEntries(Object.entries(free).filter(([shipId, count]) => shipId !== 'solar-satellite' && (count ?? 0) > 0)) as Record<string, number>;
     const value = npcFleetValue(target.raceId, ships);
     if (!Object.keys(ships).length || value < 0.3 * utility.dayValue) continue;
@@ -532,6 +539,7 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
   const missions = getNpcMissionCandidates(state, profile, at);
   // Strategic plans: their next steps, and a new plan when one is worth committing to.
   for (const choice of getNpcPlanChoices(state, profile, utility, at, timeScale, missions, scored)) choices.push(choice);
+  for (const choice of getNpcPactChoices(state, profile, at, timeScale, utility, missions)) choices.push(choice);
   for (const choice of getNpcFortifyChoices(state, profile, utility, at, timeScale, fortifyInputs, scored)) choices.push(choice);
   state = scheduleNpcPlanCheck(state, ownerId, at, timeScale);
   for (const mission of missions) {
@@ -540,6 +548,8 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     // defended planet was); nor is one whose haul does not pay for the flight
     // (a raid for 63 resources every few minutes was).
     if (mission.kind === 'attack') {
+      // One's partner is no target, unless this owner is the kind to betray.
+      if (npcPactForbidsAttack(profile, utility.partners, ownerOfPlanet(String(mission.payload.destinationPlanetId ?? '')) ?? '')) continue;
       const force = attackShips(mission);
       if (!attackForces.get(mission.id)) continue;
       const origin = state.espionage?.targets?.[String(mission.payload.originPlanetId)];

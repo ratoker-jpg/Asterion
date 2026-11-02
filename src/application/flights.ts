@@ -136,6 +136,7 @@ import {
 } from './attack.ts';
 import { dispatchPirateFlight, resolvePirateFlightAtTarget } from './pirates.ts';
 import { collectAsteroidGas } from './asteroid-gas-collection.ts';
+import { npcHelpWeight, recordNpcHelp } from './npc-relations.ts';
 import { resolveNpcDeploymentArrival, resolveNpcGasArrival, resolveNpcMissionArrival, resolveNpcRecycleArrival, resolveNpcTransportArrival, settleNpcMissionReturn } from './npc-missions.ts';
 import { resolveNpcPirateArrival } from './npc-pirates.ts';
 import { resolveNpcAidArrival, settleNpcAidReturn } from './npc-aid.ts';
@@ -2794,7 +2795,10 @@ export function reconcileFlights(
       }
       if ((current.missionId === 'espionage' || current.missionId === 'colonize')
         && current.phase !== 'returning' && current.arrivalAt <= now) {
-        const settled = resolveNpcMissionArrival(next, current, current.arrivalAt, CAMPAIGN_SPEED_SCALE[next.worldConfig?.world.campaignSpeed ?? 'standard']);
+        // A probe in orbit is judged when this call sees its station turn illegal, and goes
+        // home from that moment; an arrival is judged at its own time.
+        const judgedAt = current.phase === 'arrived' ? Math.max(current.arrivalAt, now) : current.arrivalAt;
+        const settled = resolveNpcMissionArrival(next, current, judgedAt, CAMPAIGN_SPEED_SCALE[next.worldConfig?.world.campaignSpeed ?? 'standard']);
         changed ||= settled.state !== next;
         next = settled.state;
         if (settled.flight) events.push({ flight: settled.flight,
@@ -3174,6 +3178,7 @@ export function reconcileFlights(
             units: accepted,
           }, now),
         };
+        next = recordNpcHelp(next, aid.senderOwnerId, aid.recipientOwnerId, accepted, npcHelpWeight(target.runtime.buildings ?? {}, accepted), arrivalAt);
         const delivered: FlightRecord = {
           ...current,
           aid: { ...aid, creditedUnits: accepted },
@@ -3223,6 +3228,11 @@ export function reconcileFlights(
             cargo,
           );
           next = updatePlanetCargoState(next, target, delivery.resources, cargo.debris);
+          // An NPC remembers who brought it something (owner decision 10): what its stores took, not what was sent.
+          if (target.storage === 'foreign' && target.ownerId && next.npc?.profiles[target.ownerId]) {
+            const taken = delivery.accepted.metal + delivery.accepted.minerals + delivery.accepted.gas;
+            next = recordNpcHelp(next, next.profile.playerId, target.ownerId, taken, npcHelpWeight(target.runtime.buildings ?? {}, taken), arrivalAt);
+          }
           const delivered: FlightRecord = {
             ...current,
             arrivedAt: arrivalAt,

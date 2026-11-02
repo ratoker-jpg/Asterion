@@ -9,6 +9,7 @@ import {
   type PersonaOwnerFacts,
   type PersonaRegistry,
 } from '../domain/npc/persona-registry.ts';
+import { readNpcRelationEdge } from '../domain/npc/relations.ts';
 import { respreadNpcPopulation } from '../domain/npc/state.ts';
 import type { NpcProfile } from '../domain/npc/types.ts';
 import type { SaveState } from './contracts.ts';
@@ -69,7 +70,7 @@ type RunningFacts = {
   attacksByRace: Record<string, { wins: number; losses: number }>;
 };
 
-type EdgeCounts = { attacks: number; damage: number; helpReceived: number; helpGiven: number; jointOps: number };
+type EdgeCounts = { attacks: number; damage: number; helpReceived: number; helpGiven: number; jointOps: number; final?: NonNullable<PersonaEdgeFacts['final']> };
 
 /**
  * Only what the save confirms: battle reports, attacks remembered, aid that
@@ -141,6 +142,20 @@ export function collectCampaignFacts(state: SaveState, kind: CampaignFacts['kind
     if (raid.status !== 'resolved') continue;
     const flown = (raid.result?.attackerOwnerIds ?? []).filter(known);
     for (const from of flown) for (const to of flown) if (from !== to) edgeOf(from, to).jointOps += 1;
+  }
+  // What the campaign's own relations kept: they outlive the archives above, and know the agreements and the transports.
+  for (const [from, list] of Object.entries(state.npcStrategy?.relations ?? {})) {
+    if (!known(from)) continue;
+    for (const relation of list) {
+      if (!known(relation.to)) continue;
+      const view = readNpcRelationEdge(relation, undefined, at)!;
+      const edge = edgeOf(from, relation.to);
+      edge.helpReceived = Math.max(edge.helpReceived, relation.helpsReceived);
+      edge.helpGiven = Math.max(edge.helpGiven, relation.helpsGiven);
+      edge.jointOps = Math.max(edge.jointOps, relation.jointOps);
+      edge.final = { trust: view.trust, affinity: view.affinity, fear: view.fear, resentment: view.resentment,
+        ...(relation.promisesKept + relation.promisesBroken > 0 ? { reliability: view.reliability } : {}) };
+    }
   }
 
   const result = state.sunRaid?.campaignResult;
