@@ -7,7 +7,7 @@ name: QA repeat
 # Keep the shard list in step with the electron job in ci.yml.
 # A manual start needs this file on the default branch; until it is merged, a push
 # to a claude/qa-flaky-* branch starts it instead: put "QA-REPEAT ref=<branch|sha> n=<runs>"
-# in the commit message (otherwise nothing runs).
+# in the commit message (otherwise nothing runs). Add "suite=<npm script>" to repeat one script only.
 on:
   push:
     branches: ['claude/qa-flaky-*']
@@ -27,6 +27,7 @@ jobs:
     outputs:
       replicas: ${{ steps.list.outputs.replicas }}
       ref: ${{ steps.list.outputs.ref }}
+      suite: ${{ steps.list.outputs.suite }}
     steps:
       - id: list
         env:
@@ -39,13 +40,17 @@ jobs:
             ref=$(printf '%s' "$COMMIT_MESSAGE" | sed -n 's/.*QA-REPEAT ref=\([A-Za-z0-9._\/-]*\).*/\1/p' | head -1)
             n=$(printf '%s' "$COMMIT_MESSAGE" | sed -n 's/.*QA-REPEAT .*n=\([0-9]*\).*/\1/p' | head -1)
           fi
+          suite=$(printf '%s' "$COMMIT_MESSAGE" | sed -n 's/.*QA-REPEAT .*suite=\([A-Za-z0-9:._-]*\).*/\1/p' | head -1)
           ref=${ref:-main}; n=${n:-10}
+          echo "suite=$suite" >> "$GITHUB_OUTPUT"
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
           echo "replicas=$(seq 1 "$n" | paste -sd, - | sed 's/^/[/;s/$/]/')" >> "$GITHUB_OUTPUT"
 
   repeat:
     name: "${{ matrix.shard }} run ${{ matrix.replica }}"
     needs: prepare
+    # A single-suite run uses the first shard's runners only.
+    if: needs.prepare.outputs.suite == '' || matrix.shard == 'visual'
     runs-on: windows-latest
     timeout-minutes: 30
     strategy:
@@ -81,7 +86,9 @@ jobs:
           result=qa-repeat/${{ matrix.shard }}-${{ matrix.replica }}.tsv
           : > "$result"
           set +e
-          for entry in ${{ matrix.suites }}; do
+          suites="${{ matrix.suites }}"
+          if [ -n "${{ needs.prepare.outputs.suite }}" ]; then suites="${{ needs.prepare.outputs.suite }}"; fi
+          for entry in $suites; do
             script="${entry%:skip}"
             if [ "$entry" != "$script" ]; then export ASTERION_SKIP_SCREENSHOTS=1; else unset ASTERION_SKIP_SCREENSHOTS; fi
             echo "::group::$script"

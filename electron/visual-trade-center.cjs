@@ -290,6 +290,16 @@ async function verifyReturn(win) {
   await waitFor(win, `document.querySelector('[data-qa-building-dialog="trade-center"]')`);
 }
 
+/** Waits for the slot counter; a timeout reports what the game did meanwhile (state commits, save writes, last notice). */
+async function waitForSlots(win, expected) {
+  try {
+    await waitFor(win, `document.querySelector('[data-qa-trade-slots]')?.getAttribute('data-qa-trade-slots') === '${expected}'`);
+  } catch (error) {
+    const notice = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-runtime-notice]')?.textContent?.trim() || ''`);
+    throw new Error(`${error.message}; lastNotice=${JSON.stringify(notice)}; trace=${await readStateTrace(win)}; screen=${JSON.stringify(await readScreen(win))}`);
+  }
+}
+
 async function verifyFlow(win, directory, label) {
   await rendererMutationAndReload(win, `(() => {
     localStorage.removeItem(${JSON.stringify(SAVE_KEY)});
@@ -356,11 +366,7 @@ async function verifyFlow(win, directory, label) {
   screen = await readScreen(win);
   if (screen?.rate !== '1 : 0,6' || screen.receive !== 600 || screen.submitDisabled) throw new Error(`${label}: debris 0.6 preview mismatch ${JSON.stringify(screen)}`);
   await click(win, '[data-qa-trade-submit]');
-  try {
-    await waitFor(win, `document.querySelector('[data-qa-trade-slots]')?.getAttribute('data-qa-trade-slots') === '1/3'`);
-  } catch (error) {
-    throw new Error(`${error.message}; trade state trace=${await readStateTrace(win)}; screen=${JSON.stringify(await readScreen(win))}`);
-  }
+  await waitForSlots(win, '1/3');
   screen = await readScreen(win);
   if (screen?.queueCount !== 2 || screen.queueSegments !== 2 || !screen.nextRefill.includes('+1 через') || !screen.fullRefill) throw new Error(`${label}: sequential refill UI missing ${JSON.stringify(screen)}`);
   saved = await readSave(win);
@@ -372,7 +378,7 @@ async function verifyFlow(win, directory, label) {
   await click(win, '[data-qa-trade-target="metal"]');
   await setInput(win, '[data-qa-trade-amount-input]', 500);
   await click(win, '[data-qa-trade-submit]');
-  await waitFor(win, `document.querySelector('[data-qa-trade-slots]')?.getAttribute('data-qa-trade-slots') === '0/3'`);
+  await waitForSlots(win, '0/3');
   screen = await readScreen(win);
   if (screen?.queueCount !== 3 || screen.queueSegments !== 3 || screen.validation !== 'Нет доступных сделок' || !screen.submitDisabled) throw new Error(`${label}: no-slot state mismatch ${JSON.stringify(screen)}`);
   saved = await readSave(win);
