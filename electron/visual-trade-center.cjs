@@ -1,7 +1,7 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
+const { editSaveIdle } = require('./qa-save-edit.cjs');
 const path = require('path');
-const { assertFreshDocumentHasNoFixtureGuard, guardSaveKeyUntilReload } = require('./fixture-reload.cjs');
 
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
@@ -37,30 +37,14 @@ async function reload(win) {
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await win.webContents.executeJavaScript('document.fonts?.ready');
   await settle(win);
-  await assertFreshDocumentHasNoFixtureGuard(win, 'Trade Center reload');
 }
 
 async function rendererMutationAndReload(win, source, label) {
-  const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-  const execution = win.webContents.executeJavaScript(source)
-    .then((value) => ({ value }))
-    .catch((error) => ({ error: String(error?.stack || error) }));
-  const first = await Promise.race([
-    execution.then((result) => ({ result })),
-    loaded.then(() => ({ loaded: true })),
-  ]);
-  if (first.result?.value === false) throw new Error(`${label}: renderer mutation was rejected`);
-  if (!first.loaded) {
-    const reloaded = await Promise.race([
-      loaded.then(() => true),
-      sleep(10_000).then(() => false),
-    ]);
-    if (!reloaded) throw new Error(`${label}: renderer mutation did not reload the page: ${JSON.stringify(first.result)}`);
-  }
-  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
-  await win.webContents.executeJavaScript('document.fonts?.ready');
+  // Run while the game is not running, then load it (qa-save-edit.cjs): the
+  // running game would write its own state over the fixture while it unloads.
+  const value = await editSaveIdle(win, source, { ready: `document.querySelector('[data-qa-navigation="utility"]')`, label });
+  if (value === false) throw new Error(`${label}: fixture mutation was rejected`);
   await settle(win);
-  await assertFreshDocumentHasNoFixtureGuard(win, label);
 }
 
 async function click(win, selector) {
@@ -132,7 +116,6 @@ async function seedTradeCenter(win) {
     save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 7);
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     localStorage.setItem(${JSON.stringify(TEST_TIME_SCALE_KEY)}, '1');
-    ${guardSaveKeyUntilReload(SAVE_KEY)};
   })()`, 'Could not seed Trade Center state');
 }
 
@@ -282,7 +265,6 @@ async function setRefillQueueForOfflineStep(win, offsets) {
     const base = Date.now();
     planet.trade.refillAtQueue = ${JSON.stringify(offsets)}.map((offset) => base + offset);
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
-    ${guardSaveKeyUntilReload(SAVE_KEY)};
   })()`, 'Could not rewrite trade refill queue');
   const normalized = await readSave(win);
   const expectedQueueLength = Math.max(0, offsets.length - 1);
@@ -310,7 +292,6 @@ async function verifyReturn(win) {
 async function verifyFlow(win, directory, label) {
   await rendererMutationAndReload(win, `(() => {
     localStorage.removeItem(${JSON.stringify(SAVE_KEY)});
-    window.location.reload();
     return true;
   })()`, `${label}: clear save`);
   await seedTradeCenter(win);

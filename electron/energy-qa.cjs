@@ -1,7 +1,7 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
+const { editSaveIdle } = require('./qa-save-edit.cjs');
 const path = require('path');
-const { assertFreshDocumentHasNoFixtureGuard, guardSaveKeyUntilReload } = require('./fixture-reload.cjs');
 
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
@@ -36,26 +36,11 @@ async function loadTestMode(win) {
 }
 
 async function rendererMutationAndReload(win, source, label) {
-  const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-  const execution = win.webContents.executeJavaScript(source)
-    .then((value) => ({ value }))
-    .catch((error) => ({ error: String(error?.stack || error) }));
-  const first = await Promise.race([
-    execution.then((result) => ({ result })),
-    loaded.then(() => ({ loaded: true })),
-  ]);
-  if (first.result?.value === false) throw new Error(`${label}: fixture mutation was rejected`);
-  if (!first.loaded) {
-    const reloaded = await Promise.race([
-      loaded.then(() => true),
-      sleep(10_000).then(() => false),
-    ]);
-    if (!reloaded) throw new Error(`${label}: renderer fixture did not reload: ${JSON.stringify(first.result)}`);
-  }
-  await waitFor(win, `document.querySelector('[data-qa-header]')`);
-  await waitFor(win, `localStorage.getItem(${JSON.stringify(SAVE_KEY)})`);
+  // Run while the game is not running, then load it (qa-save-edit.cjs): the
+  // running game would write its own state over the fixture while it unloads.
+  const value = await editSaveIdle(win, source, { ready: `document.querySelector('[data-qa-header]') && localStorage.getItem(${JSON.stringify(SAVE_KEY)})`, label });
+  if (value === false) throw new Error(`${label}: fixture mutation was rejected`);
   await settle(win);
-  await assertFreshDocumentHasNoFixtureGuard(win, label);
 }
 
 async function click(win, selector) {
@@ -93,7 +78,6 @@ async function seedStation(win) {
     save.schemaVersion = 14;
     save.resourceClock = { lastReconciledAt: Date.now(), remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
-    ${guardSaveKeyUntilReload(SAVE_KEY)};
     return true;
   })()`, 'Could not seed the energy station fixture');
   const seeded = await win.webContents.executeJavaScript(`(() => {
@@ -117,7 +101,6 @@ async function seedSatellites(win) {
     delete planet.energySources;
     delete planet.energyExpenseAttribution;
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
-    ${guardSaveKeyUntilReload(SAVE_KEY)};
     return true;
   })()`, 'Could not seed the satellite fixture');
   const seededCount = await win.webContents.executeJavaScript(`JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null')?.planets?.['helion-01']?.solarSatellites ?? -1`);

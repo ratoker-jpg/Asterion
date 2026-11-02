@@ -1,6 +1,7 @@
 const { app, BrowserWindow } = require('electron');
 const { PARSE_SAVE } = require('./qa-save.cjs');
 const fs = require('fs');
+const { editSaveIdle } = require('./qa-save-edit.cjs');
 const path = require('path');
 
 app.disableHardwareAcceleration();
@@ -149,23 +150,21 @@ function hasRepairFixture(envelope, amount) {
     && defenses['planetary-shield'] === 0;
 }
 
-// After the harness writes its seed, the old page must not write the save again
-// before the reload commits (its per-tick autosave would restore the stale state).
-const FREEZE_SAVE_WRITES = `{
-  const writeSetItem = Storage.prototype.setItem;
-  Storage.prototype.setItem = function (key, value) {
-    if (this === window.localStorage && key === ${JSON.stringify(TEST_KEY)}) return;
-    return writeSetItem.call(this, key, value);
-  };
-}`;
+// A seed is written while the game is not running (qa-save-edit.cjs): the
+// running game saves every tick and again on unload, and would restore its
+// stale state over the seed before the reload commits (seen on CI: the seeded
+// finished Science task came back unapplied).
+async function editTestSave(win, source) {
+  const result = await editSaveIdle(win, source, {
+    ready: `document.querySelector('[data-qa-navigation="utility"]') && localStorage.getItem(${JSON.stringify(TEST_KEY)})`,
+    label: 'Test Mode QA seed',
+  });
+  await settle(win);
+  return result;
+}
 
 async function seedTestRuntime(win, changes = {}) {
-  // The running game saves every tick, and location.reload() only *schedules* the
-  // navigation: a tick can still land before unload and write its stale state over
-  // the seed (seen on CI: the seeded finished Science task came back unapplied).
-  // After writing the seed the old page may no longer write the save key.
-  const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-  const ok = await win.webContents.executeJavaScript(`(() => {
+  const ok = await editTestSave(win, `(() => {
     const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
     const planet = save?.planets?.['helion-01'];
     if (!save || !planet) return false;
@@ -187,14 +186,9 @@ async function seedTestRuntime(win, changes = {}) {
     save.gas = resourceWallet.gas;
     planet.energy = ${changes.energy ?? 1_000_000};
     localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
-    ${FREEZE_SAVE_WRITES}
-    window.location.reload();
     return true;
   })()`);
   if (!ok) throw new Error('Could not seed Test Mode runtime');
-  await loaded;
-  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
-  await settle(win);
   if (changes.resourceClock) {
     const seeded = await readEnvelope(win,TEST_KEY);
     console.log('[qa:pr91:resource-seed]',JSON.stringify({
@@ -355,10 +349,7 @@ async function openFleet(win) {
 }
 
 async function seedTestFleet(win, ships, reset = false) {
-  // The game persists every tick, so write the fixture and reload in the same
-  // renderer task to prevent the running state from overwriting it.
-  const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-  const ok = await win.webContents.executeJavaScript(`(() => {
+  const ok = await editTestSave(win, `(() => {
     const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
     const fleet = save?.planets?.['helion-01']?.fleet;
     if (!save || !fleet) return false;
@@ -367,14 +358,9 @@ async function seedTestFleet(win, ships, reset = false) {
     }
     Object.assign(fleet.ships, ${JSON.stringify(ships)});
     localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
-    ${FREEZE_SAVE_WRITES}
-    window.location.reload();
     return true;
   })()`);
   if (!ok) throw new Error('Could not seed Test Mode fleet');
-  await loaded;
-  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
-  await settle(win);
 }
 
 async function readQaState(win) {
@@ -622,31 +608,27 @@ async function runViewport(width, height) {
       throw new Error(`${label}: full storage tooltip did not report склад заполнен: ${cappedMetalTooltip}`);
     }
 
-    await win.webContents.executeJavaScript(`(() => {
+    await editTestSave(win, `(() => {
       const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
       const fleet = save?.planets?.['helion-01']?.fleet;
       if (!fleet) return false;
       fleet.commanders = { ...(fleet.commanders || {}), corsair: 1 };
       localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
-      ${FREEZE_SAVE_WRITES}
       return true;
     })()`);
-    await reload(win, 'test');
     await openFleet(win);
     const commanderFleet = await readQaState(win);
     if (!commanderFleet.fleetPopulation.includes('68 / 120')) throw new Error(`${label}: commander population was not included in fleet capacity ${JSON.stringify(commanderFleet)}`);
 
-    await win.webContents.executeJavaScript(`(() => {
+    await editTestSave(win, `(() => {
       const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
       const fleet = save?.planets?.['helion-01']?.fleet;
       if (!fleet) return false;
       fleet.commanders = { ...(fleet.commanders || {}), corsair: 0 };
       delete save.planets['helion-01'].fleet;
       localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
-      ${FREEZE_SAVE_WRITES}
       return true;
     })()`);
-    await reload(win, 'test');
     const legacyFleet = await readQaState(win);
     if (legacyFleet.fleet?.ships?.scout !== 20 || legacyFleet.fleet?.ships?.transporter !== 0 || legacyFleet.fleet?.ships?.recycler !== 1 || legacyFleet.fleet?.ships?.colonizer !== 1 || legacyFleet.fleet?.ships?.['spy-probe'] !== 1) {
       throw new Error(`${label}: legacy save without fleet did not receive canonical fleet ${JSON.stringify(legacyFleet)}`);
