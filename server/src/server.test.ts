@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
+import { execFile, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createCloudServer, errorHeadline, planCrash, type ServerConfig } from './server.ts';
@@ -510,4 +511,43 @@ test('restart plan: pauses grow, the same error at the same place stops, a diffe
   assert.equal(healthy.failedReason, null, 'after a healthy run the same error is a new stall');
   assert.equal(healthy.recovery.stalledAt, at + 10_000);
   assert.equal(errorHeadline('Injected fault #12 at 1730000000000\n  at x'), 'Injected fault ## at #');
+});
+
+test('recover-world.sh raises a failed world through the server and never prints the key', async (t) => {
+  const bash = spawnSync('bash', ['--version']);
+  if (bash.error) return t.skip('no bash on this machine');
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'asterion-cloud-'));
+  const faultFile = path.join(dataDir, 'fault.json');
+  setFault(faultFile, { crashes: 99, afterStatuses: 1 });
+  process.env.ASTERION_TEST_FAULT = faultFile;
+  const cloud = createCloudServer(faultConfig(dataDir));
+  const port = await cloud.listen();
+  const base = `http://127.0.0.1:${port}`;
+  t.after(() => { delete process.env.ASTERION_TEST_FAULT; return cloud.close().finally(() => fs.rmSync(dataDir, { recursive: true, force: true })); });
+  const keyFile = path.join(dataDir, 'access-key');
+  fs.writeFileSync(keyFile, `${KEY}\n`);
+  const id = 'slot-crash-0004';
+  assert.equal((await upload(base, id, leftWorld(20), { 'x-asterion-left': '1' })).status, 200);
+  await waitFor(async () => (await api(base, `/v1/campaigns/${id}`)).json(), (view) => view.live?.status === 'failed', 90_000);
+  setFault(faultFile, { crashes: 0, afterStatuses: 1 });
+
+  // Asynchronous: the server under test lives in this process.
+  const run = (args: string[], env: Record<string, string> = {}) => new Promise<{ status: number | null; stdout: string; stderr: string }>((resolve) => {
+    execFile('bash', [path.join(root, 'server/deploy/recover-world.sh'), '--local', ...args],
+      { env: { ...process.env, ASTERION_URL: base, ASTERION_KEY_FILE: keyFile, ...env } },
+      (error, stdout, stderr) => resolve({ status: error ? (typeof error.code === 'number' ? error.code : 1) : 0, stdout, stderr }));
+  });
+  const wrongKey = path.join(dataDir, 'wrong-key');
+  fs.writeFileSync(wrongKey, 'x'.repeat(40));
+  const refused = await run([], { ASTERION_KEY_FILE: wrongKey });
+  assert.notEqual(refused.status, 0, 'a wrong key raises nothing');
+  assert.equal(`${refused.stdout}${refused.stderr}`.includes(KEY), false);
+  const done = await run([]);
+  assert.equal(done.status, 0, done.stderr);
+  assert.match(done.stdout, /Мир slot-crash-0004 поднят \(с контрольной точки\)/);
+  assert.equal(`${done.stdout}${done.stderr}`.includes(KEY), false, 'the key is never printed');
+  await waitFor(async () => (await api(base, `/v1/campaigns/${id}`)).json(), settled, 90_000);
+  const nothing = await run([]);
+  assert.equal(nothing.status, 0);
+  assert.match(nothing.stdout, /поднимать нечего/);
 });
