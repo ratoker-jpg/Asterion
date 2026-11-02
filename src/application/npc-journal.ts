@@ -59,7 +59,7 @@ export type NpcJournalDecision = Readonly<{
 }>;
 
 /** What came of something an owner did (journal only): a battle or a closed plan. */
-export type NpcJournalOutcome = Readonly<{ at: number; ownerId: string; kind: 'battle' | 'plan'; data: Readonly<Record<string, unknown>> }>;
+export type NpcJournalOutcome = Readonly<{ at: number; ownerId: string; kind: 'battle' | 'plan' | 'fortify'; data: Readonly<Record<string, unknown>> }>;
 
 /** A change of the owner's play style, with its reason (journal only). */
 export type NpcJournalStyle = Readonly<{ at: number; ownerId: string; style: string; previous: string | null; reason: string }>;

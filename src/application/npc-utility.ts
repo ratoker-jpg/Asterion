@@ -17,7 +17,7 @@ import { findDebrisNearSystem } from '../domain/espionage/orbital-debris.ts';
 import { calculateRouteDistance } from '../domain/flights/distance.ts';
 import { calculateFlightFuel } from '../domain/flights/fuel.ts';
 import { selectOwnerMembership } from '../domain/command/selectors.ts';
-import { getFleetProductionEntity } from '../domain/fleet/production.ts';
+import { calculateDefensePopulation, getFleetProductionEntity } from '../domain/fleet/production.ts';
 import { evaluateProductionRequirements } from '../domain/fleet/requirements.ts';
 import { findScience } from '../domain/science/catalog.ts';
 import type { ScienceId } from '../domain/science/types.ts';
@@ -25,6 +25,7 @@ import { npcFlagshipOwners } from '../domain/npc/doctrine.ts';
 import { npcGrudgeIntensity } from '../domain/npc/grudges.ts';
 import { NPC_COMMANDER_BALANCE, npcMainCommander } from './npc-commanders.ts';
 import type { CommanderId } from '../domain/combat/commanders.ts';
+import type { NpcFortifyPlan } from '../domain/npc/strategy.ts';
 
 /**
  * Owner-scoped utility estimates for NPC candidate actions. Every input is
@@ -110,7 +111,64 @@ export type NpcUtilityContext = Readonly<{
   ownGateHosts?: ReadonlySet<string>;
   /** Present for the planet-destroyer rush doctrine: what still stands between the owner and its strongest hull. */
   flagship?: NpcFlagshipPlan;
+  /** The owner's `fortify-empire` plan, and the sciences still between it and its best battery. */
+  fortify?: Readonly<{ targets: Readonly<Record<string, number>>; ambition: number; sciences: ReadonlySet<ScienceId> }>;
 }>;
+
+export type NpcBatteryStats = Readonly<{ id: string; population: number; cost: number; strength: number; score: number; seconds: number; requiredShipyard: number }>;
+
+const batteryRanks = new Map<string, readonly NpcBatteryStats[]>();
+
+/**
+ * This race's turrets, best first. The hangar caps defence by population, so a
+ * turret is first worth what it holds per population, then what it costs:
+ * strength per population × √(strength per resource). Single-copy shields apart.
+ */
+export function npcBatteryStats(raceId: CombatFactionId): readonly NpcBatteryStats[] {
+  const known = batteryRanks.get(raceId);
+  if (known) return known;
+  const rows = getFactionDefenseCatalog(raceId).filter((entity) => entity.id !== 'tower-shield' && entity.id !== 'planetary-shield' && entity.combat && entity.population > 0)
+    .map((entity) => {
+      const strength = Math.sqrt(entity.combat!.attack * entity.combat!.life);
+      const cost = Math.max(1, costValue(entity.cost));
+      const [hours = 0, minutes = 0, seconds = 0] = entity.construction.time.split(':').map(Number);
+      return { id: entity.id, population: entity.population, cost, strength, score: strength / entity.population * Math.sqrt(strength / cost),
+        seconds: hours * 3_600 + minutes * 60 + seconds, requiredShipyard: entity.construction.requiredShipyardLevel };
+    }).sort((left, right) => right.score - left.score || (left.id < right.id ? -1 : 1));
+  batteryRanks.set(raceId, rows);
+  return rows;
+}
+
+/** The owner's active `fortify-empire` plan. */
+export function activeNpcFortifyPlan(state: SaveState, ownerId: string): NpcFortifyPlan | undefined {
+  for (const plan of state.npcStrategy?.plans[ownerId] ?? []) if (plan.template === 'fortify-empire' && plan.status === 'active') return plan;
+  return undefined;
+}
+
+function missingSciencePath(entity: NonNullable<ReturnType<typeof getFleetProductionEntity>>, scienceLevels: Readonly<Partial<Record<number, number>>>, shipyardLevel: number) {
+  const evaluation = evaluateProductionRequirements(entity, { scienceLevels: scienceLevels as never, shipyardLevel, hangarLevel: 0, advancedFactoryLevel: 0 });
+  const sciences = new Map<ScienceId, number>();
+  let laboratoryLevel = 0;
+  const need = (id: ScienceId, level: number) => {
+    if ((scienceLevels[id] ?? 0) >= level || (sciences.get(id) ?? 0) >= level) return;
+    sciences.set(id, level);
+    const science = findScience(id);
+    if (!science) return;
+    laboratoryLevel = Math.max(laboratoryLevel, science.laboratoryLevel);
+    for (const prerequisite of science.prerequisites) need(prerequisite.scienceId, prerequisite.level);
+  };
+  for (const requirement of evaluation.requirements) {
+    if (requirement.kind === 'science' && requirement.scienceId !== undefined && requirement.requiredLevel !== null) need(requirement.scienceId, requirement.requiredLevel);
+  }
+  return { sciences, laboratoryLevel, met: evaluation.met };
+}
+
+/** Sciences still missing for this race's best battery, each with what it needs in turn. */
+function npcBatterySciences(raceId: CombatFactionId, scienceLevels: Readonly<Partial<Record<number, number>>>): ReadonlySet<ScienceId> {
+  const best = npcBatteryStats(raceId)[0];
+  const entity = best ? getFleetProductionEntity('defense', best.id, raceId) : null;
+  return new Set(entity ? missingSciencePath(entity, scienceLevels, 0).sciences.keys() : []);
+}
 
 /** The path to the faction's strongest hull: shipyard level, laboratory level and every science level on the way. */
 export type NpcFlagshipPlan = Readonly<{
@@ -127,21 +185,8 @@ export const NPC_FLAGSHIP_ID = 'death-star';
 export function npcFlagshipPlan(raceId: string, scienceLevels: Readonly<Partial<Record<number, number>>>, shipyardLevel: number): NpcFlagshipPlan | undefined {
   const entity = getFleetProductionEntity('ships', NPC_FLAGSHIP_ID, raceId as CombatFactionId);
   if (!entity) return undefined;
-  const evaluation = evaluateProductionRequirements(entity, { scienceLevels: scienceLevels as never, shipyardLevel, hangarLevel: 0, advancedFactoryLevel: 0 });
-  const sciences = new Map<ScienceId, number>();
-  let laboratoryLevel = 0;
-  const need = (id: ScienceId, level: number) => {
-    if ((scienceLevels[id] ?? 0) >= level || (sciences.get(id) ?? 0) >= level) return;
-    sciences.set(id, level);
-    const science = findScience(id);
-    if (!science) return;
-    laboratoryLevel = Math.max(laboratoryLevel, science.laboratoryLevel);
-    for (const prerequisite of science.prerequisites) need(prerequisite.scienceId, prerequisite.level);
-  };
-  for (const requirement of evaluation.requirements) {
-    if (requirement.kind === 'science' && requirement.scienceId !== undefined && requirement.requiredLevel !== null) need(requirement.scienceId, requirement.requiredLevel);
-  }
-  return { shipyardLevel: entity.construction.requiredShipyardLevel, laboratoryLevel, sciences, unlocked: evaluation.met };
+  const path = missingSciencePath(entity, scienceLevels, shipyardLevel);
+  return { shipyardLevel: entity.construction.requiredShipyardLevel, laboratoryLevel: path.laboratoryLevel, sciences: path.sciences, unlocked: path.met };
 }
 
 /** Public Gate announcements as seen by one owner: rival Gates to break and its own side's to hold. */
@@ -217,8 +262,12 @@ export function createNpcUtilityContext(state: SaveState, profile: NpcProfile, a
     ? npcFlagshipPlan(home.raceId, state.npcScience?.owners[ownerId]?.levels ?? home.ownerProfile?.scienceLevels ?? {},
       Math.max(0, ...ownPlanets.map((planet) => Math.floor(Number(planet.buildings.shipyard ?? 0)))))
     : undefined;
+  const fortifyPlan = activeNpcFortifyPlan(state, ownerId);
+  const fortify = fortifyPlan && home ? { targets: fortifyPlan.targets, ambition: fortifyPlan.ambition,
+    sciences: npcBatterySciences(home.raceId, state.npcScience?.owners[ownerId]?.levels ?? home.ownerProfile?.scienceLevels ?? {}) } : undefined;
   const base = {
     ...(flagship ? { flagship } : {}),
+    ...(fortify ? { fortify } : {}),
     profile, at, timeScale,
     rivalGateHosts: gates.rival,
     ownGateHosts: gates.own,
@@ -322,20 +371,32 @@ export function effectiveSpend(cost: Resources | null | undefined, situation?: N
 /** 0..1: how hard full stores push this planet to spend on anything. */
 /**
  * The owner's strategy (Nemexia expert, 31.10.2026), as bot balance (the owner
- * may change these): a main planet that is a fortress, resources not left
- * lying (spent, or shipped to the fortress), colonies that fight.
+ * may change these): every planet a fortress (plan `fortify-empire`), resources
+ * not left lying (spent, or shipped to where they are needed), colonies that fight.
  */
 export const NPC_FORTRESS_BALANCE = Object.freeze({
-  /** The main planet's defence aims at this many units of its best batteries... */
+  /**
+   * A planet's defence aims at this much population of its best batteries: a
+   * full hangar (level 20) holds 25 112, so no planet can hold 25 000 real
+   * batteries by unit count, and this is the owner's «~25 000»...
+   */
   defenseTarget: 25_000,
   /** ...once the owner earns at least this much a day (an early economy builds mines first). */
   minDayValue: 1_000_000,
-  /** Resources on a planet beyond this many days of the owner's income are idle: spend or ship them. */
-  hoardDays: 1,
-  /** A colony holding more than this many days of income ships its surplus to the main planet. */
-  colonySendDays: 0.5,
+  /** Resources on a planet beyond this many days of its share of the owner's income are idle: spend or ship them. */
+  hoardDays: 0.25,
+  /** A colony holding more than this many days of its share of the income ships its surplus. */
+  colonySendDays: 0.25,
   /** Largest order while resources pile up (otherwise 500). */
   hoardBatchCap: 5_000,
+  /** How hard idle stores push the shipyard, factories and construction (utility at full pressure). */
+  bottleneckDrive: 1.4,
+  /** How much less a full fortress-minded owner wants a fleet order while its planet has no batteries yet (utility). */
+  fleetDelay: 1.2,
+  /** Share of a fleet order a full fortress-minded owner gives up while its planets are below target. */
+  fleetYield: 0.6,
+  /** How far scarcity moves the worth of a mine's output. */
+  scarcityRange: [0.2, 3] as const,
 });
 
 /** The owner's main planet (its first, home planet), where the fortress stands. */
@@ -344,18 +405,48 @@ export function isNpcFortress(context: Pick<NpcUtilityContext, 'profile' | 'ownP
   return target.id === home || (!context.ownPlanets.some((planet) => planet.id === home) && context.ownPlanets[0]?.id === target.id);
 }
 
-/** 0..1: how far a planet's stores exceed what the owner should keep idle (days of its income). */
-export function hoardPressure(context: Pick<NpcUtilityContext, 'dayValue'>, target: Pick<SpyTargetState, 'resources'>): number {
+/** Days of the owner's income (its share per planet) that lie on this planet. */
+export function npcHeldDays(context: Pick<NpcUtilityContext, 'dayValue' | 'ownPlanets'>, target: Pick<SpyTargetState, 'resources'>): number {
   const held = Math.max(0, target.resources.metal) + Math.max(0, target.resources.minerals) + Math.max(0, target.resources.gas);
-  const b = NPC_FORTRESS_BALANCE;
-  return unit((held / Math.max(1, context.dayValue) - b.hoardDays) / (2 * b.hoardDays));
+  return held / Math.max(1, context.dayValue / Math.max(1, context.ownPlanets.length));
 }
 
-/** 0..1: what the fortress still lacks of its target defence (0 when the economy is too small for it). */
-export function fortressDefenseNeed(context: Pick<NpcUtilityContext, 'profile' | 'ownPlanets' | 'dayValue'>, target: SpyTargetState): number {
-  if (!isNpcFortress(context, target) || context.dayValue < NPC_FORTRESS_BALANCE.minDayValue) return 0;
-  const units = Object.values(target.defense?.defenses ?? {}).reduce((sum, count) => sum + Math.max(0, Number(count) || 0), 0);
-  return unit(1 - units / NPC_FORTRESS_BALANCE.defenseTarget);
+/**
+ * 0..1: how far a planet's stores exceed what the owner should keep idle. Only
+ * what can still be spent counts: gas no battery can use without metal and
+ * minerals beside it (measured 01.11.2026: 5,2 of 7,9 bn on hand was gas) is no
+ * reason to order more of anything.
+ */
+export function hoardPressure(context: Pick<NpcUtilityContext, 'dayValue' | 'ownPlanets'>, target: Pick<SpyTargetState, 'resources'>): number {
+  const { metal, minerals, gas } = target.resources;
+  const usable = Math.max(0, metal) + Math.max(0, minerals) + Math.min(Math.max(0, gas), Math.max(0, metal) + Math.max(0, minerals));
+  const b = NPC_FORTRESS_BALANCE;
+  return unit((npcHeldDays(context, { resources: { ...target.resources, metal: usable, minerals: 0, gas: 0 } }) - b.hoardDays) / (2 * b.hoardDays));
+}
+
+const MINE_RESOURCE: Readonly<Record<string, StoreKey>> = {
+  'metal-production-1': 'metal', 'metal-production-2': 'metal', 'metal-production-3': 'metal',
+  'mineral-production-1': 'minerals', 'mineral-production-2': 'minerals', 'gas-production-1': 'gas', 'gas-production-2': 'gas',
+};
+
+/**
+ * What one more unit of this resource is worth here: a store far above the
+ * others is worth little, the one that holds every order back a lot. The same
+ * call a player makes looking at three numbers: no more gas mines while gas lies idle.
+ */
+export function npcResourceScarcity(target: Pick<SpyTargetState, 'resources'>, key: StoreKey): number {
+  const held = (id: StoreKey) => Math.max(0, target.resources[id] ?? 0);
+  const mean = (held('metal') + held('minerals') + held('gas')) / 3;
+  if (mean < 1) return 1;
+  return Math.max(NPC_FORTRESS_BALANCE.scarcityRange[0], Math.min(NPC_FORTRESS_BALANCE.scarcityRange[1], mean / Math.max(1, held(key))));
+}
+
+/** 0..1: how much a planet below its fortify target holds a fleet order back: full for a fortress-minded owner, little for a raider. */
+function fortifyLack(context: NpcUtilityContext, target: SpyTargetState): number {
+  const wanted = context.fortify?.targets[target.id] ?? 0;
+  if (wanted <= 0) return 0;
+  const have = calculateDefensePopulation(target.defense, target.raceId);
+  return context.fortify!.ambition * unit(1 - have / wanted);
 }
 
 export function spendingPressure(situation?: NpcPlanetSituation): number {
@@ -401,10 +492,12 @@ export function estimateBuildingUtility(context: NpcUtilityContext, target: SpyT
   const traits = context.profile.traits;
   const drives = strategyOf(context);
   const firstLevel = nextLevel <= 1;
+  // Stores lying idle go first into what speeds every queue up (owner strategy 31.10.2026, PR 10 finding).
+  const bottleneck = role === 'shipyard' || role === 'advanced-factory' || role === 'construction' ? NPC_FORTRESS_BALANCE.bottleneckDrive * hoardPressure(context, target) : 0;
   const energyCost = 1.2 * energyShare(target, cost) * (ENERGY_ROLES.has(role) ? 0 : 1);
   if (INCOME_ROLES.has(role)) {
     const gain = estimateNpcBuildingIncomeGain(target, role, nextLevel, context.timeScale);
-    return returnOnSpend(gain * planningHorizonHours(context.profile), effectiveSpend(cost, situation))
+    return returnOnSpend(gain * npcResourceScarcity(target, MINE_RESOURCE[role]!) * planningHorizonHours(context.profile), effectiveSpend(cost, situation))
       - energyCost + 0.3 * (drives.economy - 0.5);
   }
   const resource = STORAGE_ROLES[role];
@@ -434,16 +527,18 @@ export function estimateBuildingUtility(context: NpcUtilityContext, target: SpyT
       default: return -0.3 + 0.3 * (unit(traits.economyFocus) + unit(traits.militaryFocus)) / 2;
     }
   })();
-  return enabler - pricePenalty(context, cost, situation) - energyCost + 0.3 * spendingPressure(situation);
+  return enabler + bottleneck - pricePenalty(context, cost, situation) - energyCost + 0.3 * spendingPressure(situation);
 }
 
 export function estimateScienceUtility(context: NpcUtilityContext, cost: Resources | null, situation?: NpcPlanetSituation,
   scienceId?: ScienceId): number {
   const drives = strategyOf(context);
   const onFlagshipPath = scienceId !== undefined && context.flagship?.sciences.has(scienceId) === true;
+  const onBatteryPath = scienceId !== undefined && context.fortify?.sciences.has(scienceId) === true;
   return -0.4 + 1.4 * drives.science + 0.2 * unit(context.profile.traits.planningHorizon)
     - pricePenalty(context, cost, situation) + 0.3 * spendingPressure(situation)
-    + (onFlagshipPath ? 1.2 * flagshipDrive(context) : 0);
+    + (onFlagshipPath ? 1.2 * flagshipDrive(context) : 0)
+    + (onBatteryPath ? 0.5 + 0.8 * context.fortify!.ambition : 0);
 }
 
 /**
@@ -529,7 +624,6 @@ export function estimateProductionItemUtility(context: NpcUtilityContext, target
   // Full stores, or stores far beyond what the owner should keep idle, push spending.
   const hoard = hoardPressure(context, target);
   const push = 0.4 * Math.max(spendingPressure(situation), hoard);
-  const fortress = fortressDefenseNeed(context, target);
   const efficiency = 0.5 * Math.log(Math.max(0.05, Math.min(1, relativeEfficiency)));
   // The planet hosting this owner's own Gate expects the whole world at its door.
   const threat = context.ownGateHosts?.has(target.id) ? 1 : context.threat;
@@ -539,9 +633,9 @@ export function estimateProductionItemUtility(context: NpcUtilityContext, target
     ? itemId === NPC_FLAGSHIP_ID ? 2.5 * flagshipDrive(context) - efficiency : -0.4 * flagshipDrive(context)
     : 0;
   switch (purpose) {
-    case 'combat': return -0.5 + 1.5 * Math.max(drives.military, drives.war) + 0.5 * threat + efficiency - price + push + rush;
-    // The fortress builds toward its target defence of its best batteries (owner strategy 31.10.2026).
-    case 'defense': return -0.8 + 1.4 * threat + 0.5 * drives.military + efficiency - price + push * 0.75 + 1.4 * fortress;
+    case 'combat': return -0.5 + 1.5 * Math.max(drives.military, drives.war) + 0.5 * threat + efficiency - price + push + rush - NPC_FORTRESS_BALANCE.fleetDelay * fortifyLack(context, target);
+    // A planet under the fortify plan orders only by its plan (its best batteries, not whatever comes up).
+    case 'defense': return context.fortify?.targets[target.id] ? -2.5 : -0.8 + 1.4 * threat + 0.5 * drives.military + efficiency - price + push * 0.75;
     case 'energy': return -0.6 + 1.5 * (situation?.energyNeed ?? 0) - price;
     case 'spy': return (fleet[itemId] ?? 0) >= 2 ? -2 : -0.3 + 0.9 * Math.max(drives.war, drives.operations, drives.military * 0.6) - price;
     case 'colony': return owned(itemId) > 0 || drives.expansion <= 0 || context.colonyOpen === false ? -2.5 : -0.4 + 1.6 * drives.expansion - price;
@@ -552,7 +646,7 @@ export function estimateProductionItemUtility(context: NpcUtilityContext, target
       const deficit = npcRecyclerDeficit(context);
       return deficit <= 0 || (!(context.nearbyDebris ?? 0) && !context.knownDebris?.size && !context.gasAsteroidNearby) ? -2
         : -0.2 + 1.2 * drives.operations + 0.4 * Math.log1p((context.nearbyDebris ?? 0) / Math.max(1, context.dayValue))
-          + 0.5 * Math.min(1, deficit / Math.max(1, npcRecyclerWanted(context))) - price;
+          + 0.5 * Math.min(1, deficit / Math.max(1, npcRecyclerWanted(context))) + 0.8 * hoard - price;
     }
     // The main commander first (owner request 27.10.2026): one of it, then upgrades; others rarely.
     case 'commander': {
@@ -590,16 +684,20 @@ export function npcProductionBatch(context: NpcUtilityContext, target: SpyTarget
     const cargo = (getFactionShipCatalog(target.raceId) as ReadonlyArray<{ id: string; role: string; ship?: { cargo: number } }>)
       .find((entity) => entity.role.toLocaleLowerCase().includes('переработчик'))?.ship?.cargo ?? 0;
     const wanted = cargo > 0 ? Math.ceil(npcRecyclerDeficit(context) / cargo) : 1;
+    // Idle stores buy the whole shortfall at once rather than a few hulls a look.
+    const batchCap = hoardPressure(context, target) > 0 ? NPC_RECYCLE_BALANCE.richBatch : NPC_RECYCLE_BALANCE.maxBatch;
     let affordable = Number.POSITIVE_INFINITY;
     for (const key of STORE_KEYS) {
       const price = Math.max(0, cost[key] ?? 0);
       if (price > 0) affordable = Math.min(affordable, Math.floor((target.resources[key] ?? 0) * 0.5 / price));
     }
-    return Math.max(1, Math.min(NPC_RECYCLE_BALANCE.maxBatch, wanted, Number.isFinite(affordable) ? affordable : wanted));
+    return Math.max(1, Math.min(batchCap, wanted, Number.isFinite(affordable) ? affordable : wanted));
   }
   const drives = strategyOf(context);
   const hoard = hoardPressure(context, target);
-  const share = purpose === 'energy' ? 0.35 : 0.25 + 0.45 * Math.max(drives.military, drives.war) + 0.25 * Math.max(spendingPressure(situation), hoard);
+  // The planet still short of its fortify target leaves part of the metal and minerals to its batteries, as much as its owner wants them.
+  const planned = purpose === 'combat' && (context.fortify?.targets[target.id] ?? 0) > 0 ? 1 - NPC_FORTRESS_BALANCE.fleetYield * context.fortify!.ambition : 1;
+  const share = purpose === 'energy' ? 0.35 : planned * (0.25 + 0.45 * Math.max(drives.military, drives.war) + 0.25 * Math.max(spendingPressure(situation), hoard));
   let affordable = Number.POSITIVE_INFINITY;
   for (const key of STORE_KEYS) {
     const price = Math.max(0, cost[key] ?? 0);
@@ -607,11 +705,7 @@ export function npcProductionBatch(context: NpcUtilityContext, target: SpyTarget
   }
   if (!Number.isFinite(affordable)) return 1;
   // Piled-up stores order big: what lies idle is worth nothing (owner strategy 31.10.2026).
-  let cap = purpose === 'energy' ? 20 : hoard > 0 ? NPC_FORTRESS_BALANCE.hoardBatchCap : 500;
-  if (purpose === 'defense' && fortressDefenseNeed(context, target) > 0) {
-    const units = Object.values(target.defense?.defenses ?? {}).reduce((sum, count) => sum + Math.max(0, Number(count) || 0), 0);
-    cap = Math.max(cap, NPC_FORTRESS_BALANCE.defenseTarget - units);
-  }
+  const cap = purpose === 'energy' ? 20 : hoard > 0 ? NPC_FORTRESS_BALANCE.hoardBatchCap : 500;
   return Math.max(1, Math.min(cap, affordable));
 }
 
@@ -623,6 +717,7 @@ export function npcProductionBatch(context: NpcUtilityContext, target: SpyTarget
 export const NPC_RECYCLE_BALANCE = {
   tripsToClear: 4,
   maxBatch: 40,
+  richBatch: 400,
   /** Holds kept for asteroid gas while a planet is short of gas and an asteroid is near. */
   gasHolds: 200_000,
 } as const;

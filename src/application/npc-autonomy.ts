@@ -26,6 +26,7 @@ import { getNpcPirateCandidates, dispatchNpcPirateMission } from './npc-pirates.
 import { getNpcEndgameChoices } from './npc-endgame.ts';
 import { getNpcPlanChoices, refreshNpcPlans, scheduleNpcPlanCheck } from './npc-plans.ts';
 import { getNpcSunPrepChoices, npcSunPrepSavesGas, refreshNpcSunPrep, scheduleNpcSunPrepCheck } from './npc-sun-prep.ts';
+import { getNpcFortifyChoices, npcFortifyShortfalls, refreshNpcFortify, type NpcFortifyPlanetInput } from './npc-plan-fortify.ts';
 import { getNpcSpaceportCandidates, getNpcSpaceportCommanderCandidates, startNpcSpaceportUpgrade } from './npc-spaceport.ts';
 import { npcCombatPriority, npcEnemyShape, npcMainCommander } from './npc-commanders.ts';
 import { COMMANDER_IDS, type CommanderId } from '../domain/combat/commanders.ts';
@@ -44,7 +45,7 @@ import {
   estimateOperationUtility, estimateProductionItemUtility, flightRemoteness, estimateScienceUtility, npcProductionBatch,
   npcProductionPurpose, NPC_STRATEGY_FAMILY, strategyOf, type NpcStrategyDrives,
   estimateFleetSaveUtility, estimateCommanderUpgradeUtility, npcFleetValue, spaceFlightLegFor, estimateSpaceportUpgradeUtility, NPC_FLAGSHIP_ID,
-  hoardPressure, NPC_FORTRESS_BALANCE,
+  hoardPressure, NPC_FORTRESS_BALANCE, npcHeldDays,
 } from './npc-utility.ts';
 
 /** A look within this long of the session end is the owner's last before leaving. */
@@ -175,6 +176,8 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
   const utility = createNpcUtilityContext(state, profile, at, timeScale);
   // The owner's plans move on by what it sees now (ships built, shares arrived, fresh news).
   state = refreshNpcPlans(state, profile, utility, at, timeScale);
+  // The owner reviews what each of its planets should hold, a few times a day.
+  state = refreshNpcFortify(state, profile, utility, at, timeScale);
   // The Sun plan of the owner's alliance moves on by what it sees now.
   state = refreshNpcSunPrep(state, profile, utility, at, timeScale);
   // Concept U: estimated benefit − cost − risk + goal, plus this owner's seeded misjudgement.
@@ -232,6 +235,7 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
   const withTarget = (current: SaveState, target: (typeof planets)[number]): SaveState => ({
     ...current, espionage: { ...current.espionage!, targets: { ...current.espionage!.targets, [target.id]: target } },
   });
+  const fortifyInputs = new Map<string, NpcFortifyPlanetInput>();
   for (const target of planets) {
     const reservedPopulation = ownerFlights(state.flights.records, ownerId).filter((flight) => flight.ownerSide === 'npc'
       && flight.originPlanetId === target.id && ['outbound', 'arrived', 'returning'].includes(flight.phase))
@@ -240,6 +244,7 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     const commandersHere = npcCommandersAtPlanet(state, ownerId, target);
     const production = getNpcFleetProductionCandidates(target, ownerId, at, timeScale, reservedPopulation)
       .filter((preview) => preview.queueKind !== 'commanders' || !commandersHere.has(preview.itemId));
+    fortifyInputs.set(target.id, { production, buildings });
     const energyCosts = buildings.filter(({ availability }) => availability.cost && availability.cost.energy > 0)
       .map(({ availability }) => availability.cost!.energy).sort((a, b) => a - b);
     const situation = describeNpcPlanet(target,
@@ -262,7 +267,9 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     if (science && at >= state.npcScience!.activatedAt) for (const preview of getNpcScienceCandidates(target, science, at, timeScale)) {
       if (!preview.canStart) continue;
       const scienceCandidateId = `science:${target.id}:${preview.scienceId}`;
-      choices.push({ candidate: { id: scienceCandidateId, kind: 'science', weight: scored(scienceCandidateId, estimateScienceUtility(utility, preview.cost, situation, preview.scienceId)), payload: { scienceId: preview.scienceId } }, run: (current, key) => {
+      // Science on the way to the owner's best battery is a step of its plan.
+      const scienceKind = utility.fortify?.sciences.has(preview.scienceId) ? 'plan-step' : 'science';
+      choices.push({ candidate: { id: scienceCandidateId, kind: scienceKind, weight: scored(scienceCandidateId, estimateScienceUtility(utility, preview.cost, situation, preview.scienceId)), payload: { scienceId: preview.scienceId } }, run: (current, key) => {
         const result = startNpcScience(current.espionage!.targets![target.id]!, current.npcScience!.owners[ownerId]!, preview.scienceId, at, timeScale, key);
         return { state: { ...withTarget(current, result.target), npcScience: { ...current.npcScience!, owners: { ...current.npcScience!.owners, [ownerId]: result.science } } }, started: result.ok, reason: result.reason, planetId: target.id, ...(result.ok ? { economyActionId: key } : {}) };
       } });
@@ -305,6 +312,18 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
   // its surplus to the main planet, and the main planet supplies a colony that
   // has run dry. Whichever planet has the transporters makes the trip.
   const main = planets.find((planet) => planet.id === `${ownerId}-planet`) ?? planets[0];
+  // The planet of the fortify plan that lacks most is where surplus goes first, not always the main one.
+  const shortfalls = npcFortifyShortfalls(state, ownerId, planets);
+  const neediestBut = (sourceId: string) => {
+    let pick: (typeof planets)[number] | undefined;
+    let most = 0;
+    for (const planet of planets) {
+      if (planet.id === sourceId) continue;
+      const lacking = (shortfalls.get(planet.id) ?? 0) - (planet.resources.metal + planet.resources.minerals + planet.resources.gas);
+      if (lacking > most) { pick = planet; most = lacking; }
+    }
+    return pick;
+  };
   if (main && planets.length > 1) for (const source of planets) {
     const free = getNpcMissionAvailableFleet(state, ownerId, source.id) ?? {};
     const holds = { transporter: free.transporter ?? 0, 'mega-transporter': free['mega-transporter'] ?? 0 };
@@ -324,10 +343,9 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     if (source.id !== main.id) {
       // A colony ships home when its stores fill up, or when it holds more
       // than half a day of the owner's income: the fortress spends it (owner strategy 31.10.2026).
-      const held = source.resources.metal + source.resources.minerals + source.resources.gas;
-      const idle = held / Math.max(1, utility.dayValue) >= NPC_FORTRESS_BALANCE.colonySendDays;
+      const idle = npcHeldDays(utility, source) >= NPC_FORTRESS_BALANCE.colonySendDays;
       if (fullest < 0.75 && !idle) continue;
-      destination = main;
+      destination = neediestBut(source.id) ?? main;
       urgency = Math.max(fullest - 0.5, idle ? 0.3 + 0.3 * hoardPressure(utility, source) : 0);
     } else {
       const dry = planets.filter((planet) => planet.id !== main.id)
@@ -335,14 +353,24 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
         .map((item) => ({ ...item, lowest: Math.min(item.fill.metal, item.fill.minerals, item.fill.gas) }))
         .filter((item) => item.lowest < 0.15)
         .sort((left, right) => left.lowest - right.lowest || left.planet.id.localeCompare(right.planet.id))[0];
-      if (!dry || fullest < 0.35) continue;
-      destination = dry.planet;
-      keep = 0.6;
-      urgency = 0.3 - dry.lowest;
+      const needy = neediestBut(source.id);
+      const rich = hoardPressure(utility, source);
+      if (needy && rich > 0 && (!dry || fullest < 0.35)) {
+        destination = needy;
+        keep = 0.4;
+        urgency = 0.3 + 0.3 * rich;
+      } else {
+        if (!dry || fullest < 0.35) continue;
+        destination = dry.planet;
+        keep = 0.6;
+        urgency = 0.3 - dry.lowest;
+      }
     }
     // Keep part of each store for the source's own work; gas also pays the flight.
-    const surplus = { metal: Math.floor(source.resources.metal * (1 - keep)), minerals: Math.floor(source.resources.minerals * (1 - keep)),
-      gas: Math.floor(source.resources.gas * (1 - keep) * 0.75) };
+    // And what its own batteries still need stays home.
+    const ownNeed = (shortfalls.get(source.id) ?? 0) / 3;
+    const surplus = { metal: Math.floor(Math.max(0, source.resources.metal * (1 - keep) - ownNeed)), minerals: Math.floor(Math.max(0, source.resources.minerals * (1 - keep) - ownNeed)),
+      gas: Math.floor(Math.max(0, source.resources.gas * (1 - keep) - ownNeed) * 0.75) };
     const total = surplus.metal + surplus.minerals + surplus.gas;
     if (total < 0.02 * utility.dayValue) continue;
     const share = Math.min(1, capacity / total);
@@ -504,6 +532,7 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
   const missions = getNpcMissionCandidates(state, profile, at);
   // Strategic plans: their next steps, and a new plan when one is worth committing to.
   for (const choice of getNpcPlanChoices(state, profile, utility, at, timeScale, missions, scored)) choices.push(choice);
+  for (const choice of getNpcFortifyChoices(state, profile, utility, at, timeScale, fortifyInputs, scored)) choices.push(choice);
   state = scheduleNpcPlanCheck(state, ownerId, at, timeScale);
   for (const mission of missions) {
     // An attack the owner does not believe it wins with its own margin, even
