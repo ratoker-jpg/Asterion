@@ -3004,3 +3004,22 @@ test('a command result that React never rendered is committed again and reported
   assert.equal(refused, 'refused');
   assert.equal(heals.length, 1);
 });
+
+test('a newer rendered state is never replaced when a command result looks lost', () => {
+  const initial = withBuildingSetup(createInitialSaveState('test', TEST_UNIVERSE_NOW_MS));
+  let committed = initial;
+  const newer = { ...initial, playTimeMs: (initial.playTimeMs ?? 0) + 5 };
+  const stateRef = { current: initial };
+  const rendered = { get current() { return committed; } };
+  const queued: Array<(current: SaveState) => SaveState> = [];
+  const setState = (update: (current: SaveState) => SaveState) => { queued.push(update); };
+  // The flush drops the command's result and a newer world step is rendered instead.
+  const flush = (work: () => void) => { work(); queued.reduce((c, u) => u(c), committed); queued.length = 0; committed = newer; };
+  const heals: SaveState[] = [];
+  enqueueApplicationStateUpdate(stateRef, setState, (current) => {
+    const transition = startBuilding(current, context(60_000), 'trade-center');
+    return { state: transition.ok ? transition.state : current, result: transition };
+  }, flush, rendered, (state) => heals.push(state));
+  assert.equal(heals.length, 0);
+  assert.equal(committed, newer);
+});

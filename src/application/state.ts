@@ -58,7 +58,7 @@ export type ApplicationRenderedState = { readonly current: SaveState };
  * player was just told about is simply not there (seen on CI as «Build queue
  * did not persist» and a trade that never took a slot, with no state commit
  * after the click). The transition's state is then committed explicitly and
- * `onHeal` is told.
+ * `onHeal` is told. A newer rendered state is never overwritten.
  */
 export function enqueueApplicationStateUpdate<TResult>(
   stateRef: ApplicationStateRef,
@@ -79,10 +79,20 @@ export function enqueueApplicationStateUpdate<TResult>(
   });
   const resolved = applied.transition;
   if (!resolved) throw new Error('Application state update was not applied synchronously.');
-  if (rendered && resolved.state !== renderedBefore && rendered.current !== resolved.state) {
-    flush(() => { setState(() => resolved.state); });
-    onHeal?.(resolved.state);
+  // Only when React rendered nothing at all since the command: a newer rendered state (a tick, a worker
+  // step) may already contain the command or must not be replaced by an older one. The command is then
+  // applied again as a functional update on whatever React holds now, never as the stale result.
+  if (rendered && resolved.state !== renderedBefore && rendered.current === renderedBefore) {
+    flush(() => {
+      setState((current) => {
+        const again = update(current);
+        applied.transition = again;
+        return again.state;
+      });
+    });
+    onHeal?.(applied.transition?.state ?? resolved.state);
   }
-  stateRef.current = resolved.state;
-  return resolved.result;
+  const final = applied.transition ?? resolved;
+  stateRef.current = final.state;
+  return final.result;
 }
