@@ -26,7 +26,6 @@ import { createDefaultNewGameConfig } from '../src/domain/world/config.ts';
 import { getFactionDefenseCatalog, getFactionShipCatalog } from '../src/domain/combat/faction-catalog.ts';
 import { SCIENCE_CATALOG } from '../src/domain/science/catalog.ts';
 import { calculateDefensePopulation, createDefaultFleetProductionState, createEmptyDefenseState } from '../src/domain/fleet/production.ts';
-import { getFactionDefenseCatalog } from '../src/domain/combat/faction-catalog.ts';
 import { getNpcPlanetIncomePerHour } from '../src/application/npc-economy.ts';
 
 const HOUR = 3_600_000;
