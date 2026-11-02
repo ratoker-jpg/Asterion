@@ -1,0 +1,127 @@
+name: QA repeat
+
+# Runs the Electron QA shards of ci.yml many times in a row to measure flaky
+# checks ("N failures out of M runs"). Manual only: it is a measurement, not a gate.
+# `ref` is the code under test (a branch, tag or sha); the workflow file itself
+# comes from the branch the run is started on, so a fix can be compared with main.
+# Keep the shard list in step with the electron job in ci.yml.
+# A manual start needs this file on the default branch; until it is merged, a push
+# to a claude/qa-flaky-* branch starts it instead: put "QA-REPEAT ref=<branch|sha> n=<runs>"
+# in the commit message (otherwise nothing runs).
+on:
+  push:
+    branches: ['claude/qa-flaky-*']
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch or sha to test
+        default: main
+      replicas:
+        description: How many times each shard runs (one runner per run)
+        default: '10'
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, 'QA-REPEAT ')
+    outputs:
+      replicas: ${{ steps.list.outputs.replicas }}
+      ref: ${{ steps.list.outputs.ref }}
+    steps:
+      - id: list
+        env:
+          INPUT_REF: ${{ inputs.ref }}
+          INPUT_N: ${{ inputs.replicas }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          ref="$INPUT_REF"; n="$INPUT_N"
+          if [ -z "$ref" ]; then
+            ref=$(printf '%s' "$COMMIT_MESSAGE" | sed -n 's/.*QA-REPEAT ref=\([A-Za-z0-9._\/-]*\).*//p' | head -1)
+            n=$(printf '%s' "$COMMIT_MESSAGE" | sed -n 's/.*QA-REPEAT .*n=\([0-9]*\).*//p' | head -1)
+          fi
+          ref=${ref:-main}; n=${n:-10}
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "replicas=$(seq 1 "$n" | paste -sd, - | sed 's/^/[/;s/$/]/')" >> "$GITHUB_OUTPUT"
+
+  repeat:
+    name: ${{ matrix.shard }} #${{ matrix.replica }}
+    needs: prepare
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        replica: ${{ fromJSON(needs.prepare.outputs.replicas) }}
+        include:
+          - shard: visual
+            suites: "qa:visual test:test-mode-ui:skip test:header-ui test:resource-assets-ui test:save-safety-ui:skip test:save-store-ui"
+          - shard: science-reports
+            suites: "test:science-ui:skip test:building-actions-ui test:reports-ui test:battle-reports-ui:skip test:simulator-ui:skip test:space-flight-ui:skip test:production-test-isolation-ui:skip"
+          - shard: campaign-command
+            suites: "test:new-game-ui:skip test:command-ui:skip test:command-aid-ui:skip test:command-journal-ui:skip test:cloud-world-ui:skip test:catchup-summary-ui:skip"
+          - shard: npc-replay
+            suites: "test:npc-replay-ui-6h test:pirate-operations-ui test:late-game-fps-ui:skip"
+          - shard: fleet-universe
+            suites: "test:fleet-ui:skip test:universe-ui:skip test:energy-ui:skip test:repair-ui:skip"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Run the shard (every suite, a failure does not stop the next one)
+        shell: bash
+        run: |
+          mkdir -p qa-repeat
+          result=qa-repeat/${{ matrix.shard }}-${{ matrix.replica }}.tsv
+          : > "$result"
+          for entry in ${{ matrix.suites }}; do
+            script="${entry%:skip}"
+            if [ "$entry" != "$script" ]; then export ASTERION_SKIP_SCREENSHOTS=1; else unset ASTERION_SKIP_SCREENSHOTS; fi
+            echo "::group::$script"
+            if npm run "$script" > "qa-repeat/$script.log" 2>&1; then status=pass; else status=fail; fi
+            tail -n 40 "qa-repeat/$script.log"
+            echo "::endgroup::"
+            reason=$(grep -aE "^(Error|TypeError|AssertionError)" "qa-repeat/$script.log" | head -1 | cut -c1-300 | tr '\t' ' ')
+            printf '%s\t%s\t%s\n' "$script" "$status" "$reason" >> "$result"
+          done
+          cat "$result"
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: repeat-${{ matrix.shard }}-${{ matrix.replica }}
+          path: qa-repeat/*.tsv
+          retention-days: 14
+
+  summary:
+    needs: [prepare, repeat]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: repeat-*
+          path: results
+          merge-multiple: true
+      - name: Failures per suite
+        run: |
+          {
+            echo "### Ref \`${{ needs.prepare.outputs.ref }}\`"
+            echo
+            echo "| suite | runs | failed |"
+            echo "|---|---|---|"
+            cat results/*.tsv | cut -f1 | sort -u | while read -r s; do
+              runs=$(cat results/*.tsv | awk -F'\t' -v s="$s" '$1==s' | wc -l)
+              failed=$(cat results/*.tsv | awk -F'\t' -v s="$s" '$1==s && $2=="fail"' | wc -l)
+              echo "| $s | $runs | $failed |"
+            done
+            echo
+            echo "Failure texts:"
+            echo '```'
+            cat results/*.tsv | awk -F'\t' '$2=="fail"{print $1": "$3}' | sort | uniq -c | sort -rn
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
