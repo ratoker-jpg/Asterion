@@ -72,7 +72,7 @@ async function setRange(win, resource, value) {
 }
 
 async function seedPlanet(win) {
-  const ok = await win.webContents.executeJavaScript(`(() => {
+  const ok = await editSaveIdle(win, `(() => {
     const raw = localStorage.getItem(${JSON.stringify(SAVE_KEY)});
     const save = raw ? JSON.parse(raw) : null;
     const planet = save?.planets?.['helion-01'];
@@ -88,9 +88,11 @@ async function seedPlanet(win) {
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     localStorage.setItem(${JSON.stringify(TEST_TIME_SCALE_KEY)}, '1');
     return true;
-  })()`);
+  })()`, { ready: `document.querySelector('[data-qa-navigation]')`, label: 'fixture', commands: false });
   if (!ok) throw new Error('Could not seed production bot planet');
-  await reload(win);
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+  await win.webContents.executeJavaScript('document.fonts?.ready');
+  await settle(win);
 }
 
 async function activateZone(win, zone) {
