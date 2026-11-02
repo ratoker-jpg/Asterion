@@ -20,6 +20,7 @@ import { reconcileResourceIncome } from './resource-clock.ts';
 import type { ResourceCreditResult } from '../domain/resources/credit.ts';
 import type { FleetProductionCompletion } from '../domain/fleet/production.ts';
 import { reconcileFlights, type FlightReconcileEvent } from './flights.ts';
+import { relationStructureToken } from './owner-relations.ts';
 import { currentSunRaidState, publishSunBrightness, reconcileSunRaids, type SunRaidNotice } from './sun-raid.ts';
 import { projectSun } from '../domain/sun-raid/rules.ts';
 import { reconcileAidMembership, syncAidState } from './alliance-aid.ts';
@@ -826,6 +827,8 @@ function reconcileRuntimeSlice(
     const workIsDue = workCheckpoint === checkpoint;
     const economicIsDue = sessionCheckpoint === checkpoint;
     const dueOwners = new Set<string>();
+    // Who is allied with whom before this moment's decisions (see the check after the group).
+    const relationsBefore = relationStructureToken(next.command);
     // Flight records before this checkpoint's arrivals, raids and burns (see ownersTouchedAtCheckpoint).
     let recordsAtCheckpoint: readonly FlightRecord[] | undefined;
     // Replay owners settled at this checkpoint. Only these can be read or
@@ -963,6 +966,12 @@ function reconcileRuntimeSlice(
         completeNpcScience(checkpoint, lockedOwners);
       }
     }
+    // A decision that changed who is allied (a member joined) can make an orbiting
+    // probe's station illegal. Those probes go home at this moment, not at whichever
+    // reconcile call happens to run next: that call would read a later world, and
+    // where calls fall depends on how the calculation is sliced.
+    if (replay && relationStructureToken(next.command) !== relationsBefore
+      && processFlightsAt(checkpoint)) restartRaidSelection(Math.max(pirateCursor, checkpoint - 1));
     // Archive limits hold after every group, so what NPCs can still read never
     // depends on where a catch-up slice ended.
     if (replay) {
