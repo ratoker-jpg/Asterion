@@ -28,6 +28,7 @@ jobs:
       replicas: ${{ steps.list.outputs.replicas }}
       ref: ${{ steps.list.outputs.ref }}
       suite: ${{ steps.list.outputs.suite }}
+      shards: ${{ steps.list.outputs.shards }}
     steps:
       - id: list
         env:
@@ -43,32 +44,22 @@ jobs:
           suite=$(printf '%s' "$COMMIT_MESSAGE" | sed -n 's/.*QA-REPEAT .*suite=\([A-Za-z0-9:._-]*\).*/\1/p' | head -1)
           ref=${ref:-main}; n=${n:-10}
           echo "suite=$suite" >> "$GITHUB_OUTPUT"
+          # A single-suite run uses one shard's worth of runners.
+          if [ -n "$suite" ]; then shards='["single"]'; else shards='["visual","science-reports","campaign-command","npc-replay","fleet-universe"]'; fi
+          echo "shards=$shards" >> "$GITHUB_OUTPUT"
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
           echo "replicas=$(seq 1 "$n" | paste -sd, - | sed 's/^/[/;s/$/]/')" >> "$GITHUB_OUTPUT"
 
   repeat:
     name: "${{ matrix.shard }} run ${{ matrix.replica }}"
     needs: prepare
-    # A single-suite run uses the first shard's runners only.
-    if: needs.prepare.outputs.suite == '' || matrix.shard == 'visual'
     runs-on: windows-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         replica: ${{ fromJSON(needs.prepare.outputs.replicas) }}
-        shard: [visual, science-reports, campaign-command, npc-replay, fleet-universe]
-        include:
-          - shard: visual
-            suites: "qa:visual test:test-mode-ui:skip test:header-ui test:resource-assets-ui test:save-safety-ui:skip test:save-store-ui"
-          - shard: science-reports
-            suites: "test:science-ui:skip test:building-actions-ui test:reports-ui test:battle-reports-ui:skip test:simulator-ui:skip test:space-flight-ui:skip test:production-test-isolation-ui:skip"
-          - shard: campaign-command
-            suites: "test:new-game-ui:skip test:command-ui:skip test:command-aid-ui:skip test:command-journal-ui:skip test:cloud-world-ui:skip test:catchup-summary-ui:skip"
-          - shard: npc-replay
-            suites: "test:npc-replay-ui-6h test:pirate-operations-ui test:late-game-fps-ui:skip"
-          - shard: fleet-universe
-            suites: "test:fleet-ui:skip test:universe-ui:skip test:energy-ui:skip test:repair-ui:skip"
+        shard: ${{ fromJSON(needs.prepare.outputs.shards) }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -86,7 +77,14 @@ jobs:
           result=qa-repeat/${{ matrix.shard }}-${{ matrix.replica }}.tsv
           : > "$result"
           set +e
-          suites="${{ matrix.suites }}"
+          case "${{ matrix.shard }}" in
+            visual) suites="qa:visual test:test-mode-ui:skip test:header-ui test:resource-assets-ui test:save-safety-ui:skip test:save-store-ui" ;;
+            science-reports) suites="test:science-ui:skip test:building-actions-ui test:reports-ui test:battle-reports-ui:skip test:simulator-ui:skip test:space-flight-ui:skip test:production-test-isolation-ui:skip" ;;
+            campaign-command) suites="test:new-game-ui:skip test:command-ui:skip test:command-aid-ui:skip test:command-journal-ui:skip test:cloud-world-ui:skip test:catchup-summary-ui:skip" ;;
+            npc-replay) suites="test:npc-replay-ui-6h test:pirate-operations-ui test:late-game-fps-ui:skip" ;;
+            fleet-universe) suites="test:fleet-ui:skip test:universe-ui:skip test:energy-ui:skip test:repair-ui:skip" ;;
+            *) suites="" ;;
+          esac
           if [ -n "${{ needs.prepare.outputs.suite }}" ]; then suites="${{ needs.prepare.outputs.suite }}"; fi
           for entry in $suites; do
             script="${entry%:skip}"
@@ -95,7 +93,7 @@ jobs:
             if npm run "$script" > "qa-repeat/$script.log" 2>&1; then status=pass; else status=fail; fi
             tail -n 40 "qa-repeat/$script.log"
             echo "::endgroup::"
-            reason=$(grep -aE "^(Error|TypeError|AssertionError)" "qa-repeat/$script.log" | head -1 | cut -c1-300 | tr '	' ' ' || true)
+            reason=$(grep -aE "^(Error|TypeError|AssertionError)" "qa-repeat/$script.log" | head -1 | cut -c1-8000 | tr '	' ' ' || true)
             printf '%s\t%s\t%s\n' "$script" "$status" "$reason" >> "$result"
           done
           cat "$result"
