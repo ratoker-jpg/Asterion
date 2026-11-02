@@ -48,3 +48,4 @@
 .cloud-remote li.is-behind { border-color: rgba(240, 180, 83, .45); }
 .cloud-remote li b .menu-tag { margin-left: 10px; font-style: normal; vertical-align: middle; }
 @media (prefers-reduced-motion: reduce) { .cloud-wait__track > i { transition: none; } }
+.cloud-wait__stall { margin: 0; padding: 8px 12px; border-left: 2px solid currentColor; opacity: .85; }
