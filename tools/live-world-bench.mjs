@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import { reconcileRuntime } from '../src/application/reconcile.ts';
 import { applyWorldPatch, describePatch, diffWorld } from '../src/application/world-diff.ts';
 import { loadSavedState } from '../src/application/persistence.ts';
+import { setCampaignTimeScale } from '../src/domain/runtime/mode.ts';
 import { applyCampaignRuntimeForCatchup } from '../src/application/npc-catchup-runner.ts';
 
 const option = (name, fallback) => process.argv.find((arg) => arg.startsWith(`--${name}=`))?.slice(name.length + 3) ?? fallback;
@@ -16,6 +17,8 @@ const loaded = loadSavedState({ mode: 'production', storage: { getItem: () => ra
 let world = loaded.state;
 applyCampaignRuntimeForCatchup(world, at0);
 let mirror = structuredClone(world);
+// --time-scale=5 measures the step of a «Супербыстрая» world (the campaign scale App sets on load).
+setCampaignTimeScale(Number(option('time-scale', '1')));
 const seconds = Number(option('seconds', '120'));
 const stepMs = Number(option('step-ms', '1000'));
 const rows = [];

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import {
   CAMPAIGN_SPEED_LABELS,
+  NPC_ACTIVITY_LABELS,
+  npcActivityOf,
   maxNpcForSpeed,
   WORLD_DENSITY_RULES,
   WORLD_LIMITS,
@@ -19,6 +21,7 @@ import type { PlayerFactionId } from '../../domain/profile/types.ts';
 import type { SaveSlotMeta } from '../../domain/session/slots.ts';
 import { createInitialSaveState } from '../../application/persistence.ts';
 import { createSlot } from '../../application/slots.ts';
+import { NPC_ACTIVITY_LEVELS, type NpcActivityLevel } from '../../domain/npc/calendar.ts';
 import { bindNewCampaignToSeries } from '../../application/npc-series.ts';
 import { readPersonaRegistry, writePersonaRegistry } from '../../application/persona-store.ts';
 import { findSeries, latestSeries, type PersonaRegistry, type PersonaSeries } from '../../domain/npc/persona-registry.ts';
@@ -362,6 +365,12 @@ function WorldStep({ config, issues, onChange, onWorld, onNext, series }: WorldS
             options={(Object.keys(CAMPAIGN_SPEED_LABELS) as CampaignSpeed[]).map((value) => ({ value, label: `${CAMPAIGN_SPEED_LABELS[value].label} ×${CAMPAIGN_SPEED_SCALE[value]}`, hint: CAMPAIGN_SPEED_LABELS[value].hint }))} />
           <em className="menu-field__hint">{CAMPAIGN_SPEED_LABELS[config.world.campaignSpeed].hint}</em>
         </div>
+        <div className="menu-field" data-qa-world="npc-activity">
+          <small>АКТИВНОСТЬ NPC · ФИКСИРУЕТСЯ НА СТАРТЕ</small>
+          <Segmented<NpcActivityLevel> label="Активность NPC" value={npcActivityOf(config)} onChange={(value) => onWorld({ npcActivity: value })}
+            options={NPC_ACTIVITY_LEVELS.map((value) => ({ value, label: NPC_ACTIVITY_LABELS[value].label, hint: NPC_ACTIVITY_LABELS[value].hint }))} />
+          <em className="menu-field__hint" data-qa-world="npc-activity-hint">{NPC_ACTIVITY_LABELS[npcActivityOf(config)].hint}</em>
+        </div>
         <div className="menu-field-row">
           <label className="menu-field">
             <small>СИД МИРА</small>
@@ -540,6 +549,7 @@ function ConfirmStep({ config, error, starting, disabledReason, onStart, onEdit,
           <div><dt>Расы NPC</dt><dd>{config.npcFactions === 'random' ? 'Случайно по сиду' : `Астеры ${config.npcFactions.aegis}% · Илары ${config.npcFactions.synod}% · Рой ${config.npcFactions.veyra}%`}</dd><button type="button" onClick={() => onEdit('world')}>изменить</button></div>
           <div data-qa-series-line><dt>Личности NPC</dt><dd>{seriesLine}</dd><button type="button" onClick={() => onEdit('world')}>изменить</button></div>
           <div><dt>Скорость</dt><dd>{CAMPAIGN_SPEED_LABELS[config.world.campaignSpeed].label}</dd></div>
+          <div><dt>Активность NPC</dt><dd>{NPC_ACTIVITY_LABELS[npcActivityOf(config)].label}</dd></div>
           <div><dt>Старт</dt><dd>{config.world.randomPlayerStart ? 'Случайная система по сиду' : 'Галактика 1 · система 1'}</dd></div>
           <div><dt>Сид</dt><dd className="menu-mono">{config.seed}</dd></div>
         </dl>

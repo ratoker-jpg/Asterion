@@ -1,5 +1,6 @@
 import type { PlayerFactionId } from '../profile/types.ts';
 import type { CampaignSpeed, RuntimeMode } from '../runtime/mode.ts';
+import { NPC_ACTIVITY_LEVELS, type NpcActivityLevel } from '../npc/calendar.ts';
 
 /** Legacy single-save key; a migrated legacy slot keeps using it as its storage. */
 export const LEGACY_PRODUCTION_SAVE_KEY = 'asterion.vertical-slice.v1';
@@ -27,6 +28,8 @@ export type SaveSlotMeta = {
   factionId: PlayerFactionId;
   playerName: string;
   campaignSpeed: CampaignSpeed;
+  /** Absent in older slots = `normal`. */
+  npcActivity?: NpcActivityLevel;
   schemaVersion: number;
   /** localStorage key holding this slot's SaveState. */
   storageKey: string;
@@ -86,6 +89,7 @@ export function normalizeSlotMeta(value: unknown): SaveSlotMeta | null {
     factionId: FACTIONS.includes(source.factionId as PlayerFactionId) ? source.factionId as PlayerFactionId : 'aegis',
     playerName: typeof source.playerName === 'string' && source.playerName.trim() ? source.playerName.trim().slice(0, 24) : 'Командир',
     campaignSpeed: SPEEDS.includes(source.campaignSpeed as CampaignSpeed) ? source.campaignSpeed as CampaignSpeed : 'standard',
+    ...(NPC_ACTIVITY_LEVELS.includes(source.npcActivity as NpcActivityLevel) ? { npcActivity: source.npcActivity as NpcActivityLevel } : {}),
     schemaVersion: Math.max(0, Math.floor(finite(source.schemaVersion, 0))),
     storageKey: slotStorageKey(source.id),
     summary: normalizeSummary(source.summary),
@@ -173,7 +177,7 @@ export type SlotExportPayload = {
   format: typeof SLOT_EXPORT_FORMAT;
   version: 1;
   exportedAt: number;
-  meta: Pick<SaveSlotMeta, 'name' | 'factionId' | 'playerName' | 'campaignSpeed' | 'schemaVersion' | 'playTimeMs' | 'summary' | 'createdAt'>;
+  meta: Pick<SaveSlotMeta, 'name' | 'factionId' | 'playerName' | 'campaignSpeed' | 'npcActivity' | 'schemaVersion' | 'playTimeMs' | 'summary' | 'createdAt'>;
   save: unknown;
 };
 
@@ -187,6 +191,7 @@ export function createSlotExport(meta: SaveSlotMeta, save: unknown, now: number)
       factionId: meta.factionId,
       playerName: meta.playerName,
       campaignSpeed: meta.campaignSpeed,
+      ...(meta.npcActivity ? { npcActivity: meta.npcActivity } : {}),
       schemaVersion: meta.schemaVersion,
       playTimeMs: meta.playTimeMs,
       summary: meta.summary,

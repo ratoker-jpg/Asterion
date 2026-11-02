@@ -24,6 +24,7 @@ import { describeSaveProblem, inspectParsedSave, inspectSavePayload, isSaveProbl
 import { decodeCompactSave, decodeSection } from '../domain/session/save-codec.ts';
 import type { PlayerFactionId } from '../domain/profile/types.ts';
 import type { CampaignSpeed } from '../domain/runtime/mode.ts';
+import { NPC_ACTIVITY_LEVELS, type NpcActivityLevel } from '../domain/npc/calendar.ts';
 import type { SaveState } from './contracts.ts';
 import { loadSavedState, SAVE_SCHEMA_VERSION } from './persistence.ts';
 
@@ -87,6 +88,7 @@ export function describeSave(save: LooseSave, now: number): Omit<SaveSlotMeta, '
     factionId: FACTIONS.includes(profile.factionId as PlayerFactionId) ? profile.factionId as PlayerFactionId : 'aegis',
     playerName: typeof profile.displayName === 'string' && profile.displayName.trim() ? profile.displayName.trim().slice(0, 24) : 'Командир',
     campaignSpeed: SPEEDS.includes(world.campaignSpeed as CampaignSpeed) ? world.campaignSpeed as CampaignSpeed : 'standard',
+    ...(NPC_ACTIVITY_LEVELS.includes(world.npcActivity as NpcActivityLevel) ? { npcActivity: world.npcActivity as NpcActivityLevel } : {}),
     schemaVersion: typeof save.schemaVersion === 'number' ? save.schemaVersion : 0,
     summary,
   };

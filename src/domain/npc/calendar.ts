@@ -29,6 +29,36 @@ export const NPC_ONLINE_MINUTES_BY_PROPENSITY: readonly (readonly [number, numbe
   [0, 40], [0.1, 75], [0.11, 120], [0.35, 180], [0.36, 300], [0.7, 480], [0.71, 720], [1, 960],
 ].map((point) => Object.freeze(point as [number, number])));
 
+/**
+ * Owner decision (02.11.2026): the wizard picks how active the bots are. The
+ * hidden activity order stays the same (one even slot per owner); only the
+ * slot's value maps into the propensity ranges below. «normal» is the
+ * 24.10 mix untouched (identity), «high» ~45/40/15/0 and «max» ~70/30/0/0 of
+ * 12–16 h / 5–8 h / 2–3 h / rare. Each share maps linearly into its band, so
+ * hours still vary inside a class.
+ */
+export type NpcActivityLevel = 'normal' | 'high' | 'max';
+export const NPC_ACTIVITY_LEVELS: readonly NpcActivityLevel[] = Object.freeze(['normal', 'high', 'max']);
+const NPC_ACTIVITY_BANDS: Readonly<Record<Exclude<NpcActivityLevel, 'normal'>, readonly (readonly [number, number, number])[]>> = Object.freeze({
+  // [share of owners, propensity at the bottom of the band, at the top]; bands ascend.
+  high: Object.freeze([[0.15, 0.2, 0.35], [0.4, 0.36, 0.7], [0.45, 0.71, 1]] as const),
+  max: Object.freeze([[0.3, 0.36, 0.7], [0.7, 0.71, 1]] as const),
+});
+
+/** Maps an even activity slot `u` in [0, 1) to a propensity for the world's activity level. */
+export function shapeNpcActivity(u: number, level: NpcActivityLevel): number {
+  if (level === 'normal') return u;
+  const bands = NPC_ACTIVITY_BANDS[level];
+  let from = 0;
+  for (let index = 0; index < bands.length; index += 1) {
+    const [share, low, high] = bands[index]!;
+    const to = index === bands.length - 1 ? 1 : from + share;
+    if (u < to || index === bands.length - 1) return low + (high - low) * clamp((u - from) / (to - from), 0, 1);
+    from = to;
+  }
+  return u;
+}
+
 /** The opening days are played harder: everything is cheap and quick then. */
 export const NPC_CAMPAIGN_START_BOOST: readonly number[] = Object.freeze([2, 1.5]);
 

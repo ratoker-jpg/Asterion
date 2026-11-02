@@ -1,5 +1,5 @@
 import { isNpcGrudge } from './grudges.ts';
-import { NPC_VISIT_SHIFT_MAX_MS } from './calendar.ts';
+import { NPC_VISIT_SHIFT_MAX_MS, shapeNpcActivity, type NpcActivityLevel } from './calendar.ts';
 import { isCommanderId } from '../combat/commanders.ts';
 import { createSeededRandom, randomInteger } from '../world/random.ts';
 import {
@@ -28,13 +28,13 @@ const MIN_TIMEZONE_OFFSET_MINUTES = -12 * 60;
 const MAX_TIMEZONE_OFFSET_MINUTES = 14 * 60;
 
 /** Create stable owner-keyed profiles. Owner list order and public names are irrelevant. */
-export function createNpcState(ownerIds: readonly string[], personaSalt: string, at: number): NpcStateV1 {
+export function createNpcState(ownerIds: readonly string[], personaSalt: string, at: number, activityLevel: NpcActivityLevel = 'normal'): NpcStateV1 {
   assertOwnerIds(ownerIds);
   assertSalt(personaSalt);
   assertTimestamp(at, 'at');
   const profiles: Record<string, NpcProfile> = Object.create(null) as Record<string, NpcProfile>;
   for (const ownerId of [...ownerIds].sort(compareStableIds)) profiles[ownerId] = createNpcProfile(ownerId, personaSalt, at);
-  stratifyNpcPopulation(profiles, personaSalt);
+  stratifyNpcPopulation(profiles, personaSalt, undefined, activityLevel);
   return Object.freeze({ version: NPC_STATE_VERSION, personaSalt, profiles: Object.freeze(profiles) });
 }
 
@@ -46,9 +46,16 @@ export function createNpcState(ownerIds: readonly string[], personaSalt: string,
  * the same proportions as a hundred and activity says nothing about skill.
  */
 function stratifyNpcPopulation(profiles: Record<string, NpcProfile>, personaSalt: string,
-  rank?: (ownerId: string, axis: 'activity' | 'skill') => number): void {
+  rank?: (ownerId: string, axis: 'activity' | 'skill') => number, activityLevel: NpcActivityLevel = 'normal'): void {
   const ownerIds = Object.keys(profiles);
-  if (ownerIds.length < 2) return;
+  if (ownerIds.length < 2) {
+    // A lone owner keeps their own roll; only the world's level shapes it.
+    if (activityLevel !== 'normal') for (const ownerId of ownerIds) {
+      const profile = profiles[ownerId]!;
+      profiles[ownerId] = Object.freeze({ ...profile, activity: Object.freeze({ ...profile.activity, propensity: shapeNpcActivity(profile.activity.propensity, activityLevel) }) });
+    }
+    return;
+  }
   const spread = (axis: 'activity' | 'skill'): Map<string, number> => {
     const key = (ownerId: string) => (rank ? rank(ownerId, axis) : createSeededRandom(JSON.stringify(['npc-population:v1', personaSalt, axis, ownerId]))());
     const order = [...ownerIds].sort((left, right) => key(left) - key(right) || compareStableIds(left, right));
@@ -64,7 +71,7 @@ function stratifyNpcPopulation(profiles: Record<string, NpcProfile>, personaSalt
     profiles[ownerId] = Object.freeze({
       ...profile,
       traits: Object.freeze({ ...profile.traits, mechanicsKnowledge: skill.get(ownerId)! }),
-      activity: Object.freeze({ ...profile.activity, propensity: activity.get(ownerId)! }),
+      activity: Object.freeze({ ...profile.activity, propensity: shapeNpcActivity(activity.get(ownerId)!, activityLevel) }),
     });
   }
 }
@@ -75,10 +82,10 @@ function stratifyNpcPopulation(profiles: Record<string, NpcProfile>, personaSalt
  * of them this world has room for.
  */
 export function respreadNpcPopulation(profiles: Readonly<Record<string, NpcProfile>>, personaSalt: string,
-  rank: (ownerId: string, axis: 'activity' | 'skill') => number): Readonly<Record<string, NpcProfile>> {
+  rank: (ownerId: string, axis: 'activity' | 'skill') => number, activityLevel: NpcActivityLevel = 'normal'): Readonly<Record<string, NpcProfile>> {
   const next: Record<string, NpcProfile> = Object.create(null) as Record<string, NpcProfile>;
   for (const ownerId of Object.keys(profiles).sort(compareStableIds)) next[ownerId] = profiles[ownerId]!;
-  stratifyNpcPopulation(next, personaSalt, rank);
+  stratifyNpcPopulation(next, personaSalt, rank, activityLevel);
   return Object.freeze(next);
 }
 
