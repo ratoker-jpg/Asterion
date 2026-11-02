@@ -1,6 +1,7 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { editSaveIdle } = require('./qa-save-edit.cjs');
 
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
@@ -66,7 +67,7 @@ async function click(win, selector) {
 }
 
 async function setBuiltInteriorSave(win) {
-  const ok = await win.webContents.executeJavaScript(`(() => {
+  const ok = await editSaveIdle(win, `(() => {
     const raw = localStorage.getItem(${JSON.stringify(SAVE_KEY)});
     const save = raw ? JSON.parse(raw) : null;
     const planet = save?.planets?.['helion-01'];
@@ -79,9 +80,11 @@ async function setBuiltInteriorSave(win) {
     save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 5);
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     return true;
-  })()`);
+  })()`, { ready: `document.querySelector('[data-qa-navigation]')`, label: 'fixture', commands: false });
   if (!ok) throw new Error('Could not seed building interiors');
-  await reload(win);
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+  await win.webContents.executeJavaScript('document.fonts?.ready');
+  await settle(win);
 }
 
 async function activateZone(win, zone) {
@@ -393,8 +396,8 @@ async function verifyMaxBuildingDialog(win, directory) {
 }
 
 async function verifyFlow(win, directory) {
-  await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(SAVE_KEY)})`);
-  await reload(win);
+  // Removed while the game is not running: its unload would write the old save back (qa-save-edit.cjs).
+  await editSaveIdle(win, `(() => { localStorage.removeItem(${JSON.stringify(SAVE_KEY)}); return true; })()`, { ready: `document.querySelector('[data-qa-navigation]') && localStorage.getItem(${JSON.stringify(SAVE_KEY)})`, label: 'reset save', commands: false });
   await setBuiltInteriorSave(win);
 
   await verifyProductionHost(win, directory);

@@ -1,6 +1,7 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { editSaveIdle } = require('./qa-save-edit.cjs');
 
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
@@ -185,7 +186,7 @@ function assertResourceImages(label, images, requiredKinds, { exact = false } = 
 }
 
 async function seedSave(win) {
-  const seeded = await win.webContents.executeJavaScript(`(() => {
+  const seeded = await editSaveIdle(win, `(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
     const planet = save?.planets?.['helion-01'];
     if (!save || !planet?.buildings) return false;
@@ -217,9 +218,11 @@ async function seedSave(win) {
     save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 10);
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     return true;
-  })()`);
+  })()`, { ready: `document.querySelector('[data-qa-navigation]')`, label: 'fixture', commands: false });
   if (!seeded) throw new Error('Could not seed resource asset QA save');
-  await reload(win);
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+  await waitFor(win, `localStorage.getItem(${JSON.stringify(SAVE_KEY)})`);
+  await settle(win);
 }
 
 async function assertHeader(win) {

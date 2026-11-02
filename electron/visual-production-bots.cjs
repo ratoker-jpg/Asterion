@@ -1,6 +1,7 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { editSaveIdle } = require('./qa-save-edit.cjs');
 
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
@@ -71,7 +72,7 @@ async function setRange(win, resource, value) {
 }
 
 async function seedPlanet(win) {
-  const ok = await win.webContents.executeJavaScript(`(() => {
+  const ok = await editSaveIdle(win, `(() => {
     const raw = localStorage.getItem(${JSON.stringify(SAVE_KEY)});
     const save = raw ? JSON.parse(raw) : null;
     const planet = save?.planets?.['helion-01'];
@@ -87,9 +88,11 @@ async function seedPlanet(win) {
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     localStorage.setItem(${JSON.stringify(TEST_TIME_SCALE_KEY)}, '1');
     return true;
-  })()`);
+  })()`, { ready: `document.querySelector('[data-qa-navigation]')`, label: 'fixture', commands: false });
   if (!ok) throw new Error('Could not seed production bot planet');
-  await reload(win);
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+  await win.webContents.executeJavaScript('document.fonts?.ready');
+  await settle(win);
 }
 
 async function activateZone(win, zone) {
@@ -229,8 +232,8 @@ async function verifyReturn(win, role, viaEscape = false) {
 }
 
 async function verifyFlow(win, directory, label) {
-  await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(SAVE_KEY)})`);
-  await reload(win);
+  // Removed while the game is not running: its unload would write the old save back (qa-save-edit.cjs).
+  await editSaveIdle(win, `(() => { localStorage.removeItem(${JSON.stringify(SAVE_KEY)}); return true; })()`, { ready: `document.querySelector('[data-qa-navigation]') && localStorage.getItem(${JSON.stringify(SAVE_KEY)})`, label: 'reset save', commands: false });
   await seedPlanet(win);
 
   await activateZone(win, 'resource');

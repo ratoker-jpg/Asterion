@@ -1,5 +1,6 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
+const { editSaveIdle } = require('./qa-save-edit.cjs');
 const path = require('path');
 
 app.disableHardwareAcceleration();
@@ -81,9 +82,9 @@ async function seedSave(win, {
   tokens = 31,
   wallet = { metal: 999999999, minerals: 999999999, gas: 999999999 },
 } = {}) {
-  // The running game saves every tick: write and reload in one task.
-  const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-  const seeded = await win.webContents.executeJavaScript(`(() => {
+  // The running game saves every tick and again when it unloads: the seed is
+  // written while the game is not running (qa-save-edit.cjs), then the game is loaded.
+  const seeded = await editSaveIdle(win, `(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
     const planet = save?.planets?.['helion-01'];
     if (!save || !planet?.buildings || !planet?.fleet || !planet?.fleetProduction) return false;
@@ -150,12 +151,9 @@ async function seedSave(win, {
     save.queues = { 'helion-01': [] };
     save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 13);
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
-    window.location.reload();
     return true;
-  })()`);
+  })()`, { ready: `document.querySelector('[data-qa-navigation="utility"]') && localStorage.getItem(${JSON.stringify(SAVE_KEY)})`, label: 'Repair Workshop QA seed' });
   if (!seeded) throw new Error('Could not seed Repair Workshop QA save');
-  await loaded;
-  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await settle(win);
 }
 

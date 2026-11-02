@@ -1,6 +1,7 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { editSaveIdle } = require('./qa-save-edit.cjs');
 
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
@@ -59,7 +60,7 @@ function assertArrivalCountdown(label, displayed, savedArrivalAt) {
 }
 
 async function seedCommanderOnlySave(win) {
-  const result = await win.webContents.executeJavaScript(`(() => {
+  const result = await editSaveIdle(win, `(() => {
     try {
       const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
       const planet = save?.planets?.[save.currentPlanetId];
@@ -87,9 +88,10 @@ async function seedCommanderOnlySave(win) {
     } catch (error) {
       return { ok: false, error: String(error?.stack || error) };
     }
-  })()`);
+  })()`, { ready: `document.querySelector('[data-qa-navigation]')`, label: 'fixture', commands: false });
   if (!result?.ok) throw new Error(`Could not seed commander-only flight: ${result?.error || 'unknown error'}`);
-  await reload(win);
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+  await waitFor(win, `localStorage.getItem(${JSON.stringify(TEST_KEY)})`);
   return result.planetId;
 }
 
