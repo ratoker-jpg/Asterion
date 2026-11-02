@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { PARSE_SAVE } = require('./qa-save.cjs');
 const { editSaveIdle } = require('./qa-save-edit.cjs');
+const { installStateTrace, readStateTrace } = require('./qa-trace.cjs');
 
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
@@ -375,35 +376,9 @@ async function readResourceQueueDiagnostics(win) {
   })()`);
 }
 
-/**
- * Evidence for «Build queue did not persist»: every state the game commits
- * (RUNTIME_STATE_CHANGED_EVENT) and every write of the save key, with the
- * helion-01 queue roles each of them held, so a failure shows where an
- * accepted command was lost (in React state, or only in storage).
- */
-async function installQueueTrace(win) {
-  await win.webContents.executeJavaScript(`(() => {
-    if (window.__qaQueueTrace) return;
-    const trace = window.__qaQueueTrace = [];
-    const parse = ${PARSE_SAVE};
-    const roles = (queue) => Array.isArray(queue) ? queue.map((item) => item.assetRole) : null;
-    const push = (kind, detail) => { trace.push({ kind, at: Math.round(performance.now()), ...detail }); if (trace.length > 200) trace.shift(); };
-    window.addEventListener(${JSON.stringify('asterion:runtime-state-changed')}, (event) => push('state', { queue: roles(event.detail?.queues?.['helion-01']) }));
-    const originalSetItem = Storage.prototype.setItem;
-    Storage.prototype.setItem = function (key, value) {
-      if (this === window.localStorage && String(key) === ${JSON.stringify(SAVE_KEY)}) {
-        let queue = 'unparsed';
-        try { queue = roles(parse(String(value)).queues?.['helion-01']); } catch {}
-        push('write', { queue, chars: String(value).length });
-      }
-      return originalSetItem.call(this, key, value);
-    };
-  })()`);
-}
-
-async function readQueueTrace(win) {
-  return win.webContents.executeJavaScript(`JSON.stringify(window.__qaQueueTrace || null)`).catch((error) => String(error));
-}
+const installQueueTrace = (win) => installStateTrace(win, SAVE_KEY,
+  `(save) => ({ queue: Array.isArray(save?.queues?.['helion-01']) ? save.queues['helion-01'].map((item) => item.assetRole) : null, metal: save?.metal })`);
+const readQueueTrace = readStateTrace;
 
 async function enqueueResourceBuilding(win, role, expectedQueueRoles) {
   // Commands are refused while the NPC catch-up after a load is still running

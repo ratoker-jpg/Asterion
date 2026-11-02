@@ -1489,8 +1489,8 @@ async function runViewport(width, height) {
   const win = new BrowserWindow({ width, height, show: false, webPreferences: { sandbox: false, partition: `fleet-production-qa-${width}x${height}` } });
   try {
     await loadTestMode(win);
-    await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(TEST_KEY)})`);
-    await reload(win);
+    // Removed while the game is not running: its unload would write the old save back (qa-save-edit.cjs).
+    await editSaveIdle(win, `(() => { localStorage.removeItem(${JSON.stringify(TEST_KEY)}); return true; })()`, { ready: `document.querySelector('[data-qa-navigation]') && localStorage.getItem(${JSON.stringify(TEST_KEY)})`, label: 'reset save', commands: false });
     await click(win, '[data-qa-test-speed="1"]');
     await waitFor(win, `document.querySelector('[data-qa-test-time-scale]')?.textContent?.includes('×1')`);
     await seedProductionSave(win, (_save, planetState) => {

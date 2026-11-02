@@ -270,8 +270,8 @@ async function runViewport(win, width, height) {
   fs.mkdirSync(directory, { recursive: true });
   win.setContentSize(width, height);
   await settle(win);
-  await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(SAVE_KEY)}); localStorage.removeItem('asterion.preferences.v2');`);
-  await reload(win);
+  // The previous viewport's save (with its reports already read) must not come back while the game unloads.
+  await editSaveAndReload(win, `(() => { localStorage.removeItem(${JSON.stringify(SAVE_KEY)}); localStorage.removeItem('asterion.preferences.v2'); return true; })()`);
   await clickPrimary(win, 'reports');
 
   const initialUnreadBadge = await win.webContents.executeJavaScript(`Number(document.querySelector('[data-qa-navigation="primary"] [data-qa-route="reports"] .asterion-header__nav-badge')?.textContent?.trim() ?? 0)`);

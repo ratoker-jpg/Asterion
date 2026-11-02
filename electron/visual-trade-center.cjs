@@ -1,6 +1,7 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
 const { editSaveIdle } = require('./qa-save-edit.cjs');
+const { installStateTrace, readStateTrace } = require('./qa-trace.cjs');
 const path = require('path');
 
 app.disableHardwareAcceleration();
@@ -295,6 +296,7 @@ async function verifyFlow(win, directory, label) {
     return true;
   })()`, `${label}: clear save`);
   await seedTradeCenter(win);
+  await installStateTrace(win, SAVE_KEY, `(save) => ({ metal: save?.metal, minerals: save?.minerals, gas: save?.gas, debris: save?.planets?.['helion-01']?.recycling?.availableDebris, refill: save?.planets?.['helion-01']?.trade?.refillAtQueue?.length })`);
   const seeded = await readSave(win);
   if (Number(seeded.schemaVersion) < 7 || seeded.tradeLevel !== 1) throw new Error(`${label}: seeded envelope mismatch ${JSON.stringify(seeded)}`);
   if (Number(seeded.metal) !== 15_880 || Number(seeded.minerals) !== 12_712 || Number(seeded.gas) !== 6_421
@@ -354,7 +356,11 @@ async function verifyFlow(win, directory, label) {
   screen = await readScreen(win);
   if (screen?.rate !== '1 : 0,6' || screen.receive !== 600 || screen.submitDisabled) throw new Error(`${label}: debris 0.6 preview mismatch ${JSON.stringify(screen)}`);
   await click(win, '[data-qa-trade-submit]');
-  await waitFor(win, `document.querySelector('[data-qa-trade-slots]')?.getAttribute('data-qa-trade-slots') === '1/3'`);
+  try {
+    await waitFor(win, `document.querySelector('[data-qa-trade-slots]')?.getAttribute('data-qa-trade-slots') === '1/3'`);
+  } catch (error) {
+    throw new Error(`${error.message}; trade state trace=${await readStateTrace(win)}; screen=${JSON.stringify(await readScreen(win))}`);
+  }
   screen = await readScreen(win);
   if (screen?.queueCount !== 2 || screen.queueSegments !== 2 || !screen.nextRefill.includes('+1 через') || !screen.fullRefill) throw new Error(`${label}: sequential refill UI missing ${JSON.stringify(screen)}`);
   saved = await readSave(win);
