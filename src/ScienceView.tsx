@@ -171,50 +171,42 @@ export function ScienceView({ factionId = 'aegis' }: { factionId?: BuildingFacti
   return (
     <div className="utility-view science-view-v2" data-qa-science-root>
       <aside className="science-sidebar-v2">
-        <header className="science-title-v2">
-          <small className="utility-secondary">{laboratory.name.toUpperCase()}</small>
-          <h1 className="utility-page-title">НАУКИ</h1>
-        </header>
-
-        <div className="science-lab-card-v2">
+        <header className="sci-side-head">
           <img className="science-lab-art-v2" src={laboratory.art} alt={laboratory.name} draggable={false} />
           <div>
-            <small className="utility-secondary">{laboratory.name.toUpperCase()}</small>
-            <strong className="utility-section-title" data-qa-science-laboratory-level>УРОВЕНЬ {effectiveRuntime.laboratoryLevel} / {SCIENCE_LABORATORY_MAX_LEVEL}</strong>
-            <small className="science-lab-speed-v2" data-qa-science-laboratory-speed>−{Math.round(SCIENCE_LABORATORY_TIME_REDUCTION_PER_LEVEL * 100)}% времени за уровень</small>
+            <h1 className="utility-page-title">НАУКИ</h1>
+            <small className="utility-secondary">{laboratory.name} <span className="sci-side-level utility-data-text" data-qa-science-laboratory-level>УРОВЕНЬ {effectiveRuntime.laboratoryLevel} / {SCIENCE_LABORATORY_MAX_LEVEL}</span></small>
+            <small className="sci-side-speed utility-secondary" data-qa-science-laboratory-speed>−{Math.round(SCIENCE_LABORATORY_TIME_REDUCTION_PER_LEVEL * 100)}% времени за уровень</small>
           </div>
-        </div>
+        </header>
 
         <nav className="science-sections-v2" aria-label="Разделы наук">
           {SCIENCE_SECTIONS.map((item) => (
-            <button type="button" key={item.id} className={`utility-control ${section === item.id ? 'active' : ''}`} onClick={() => setSection(item.id)}>
+            <button type="button" key={item.id} className={section === item.id ? 'active' : undefined} aria-current={section === item.id ? 'true' : undefined} onClick={() => setSection(item.id)}>
               <span>{item.label}</span>
               <b>{sciencesForSection(item.id).length}</b>
             </button>
           ))}
         </nav>
 
-        <section className="science-queue-v2" data-qa-science-queue>
+        <section className="sci-queue" data-qa-science-queue>
           <header>
             <span className="utility-section-title">ОЧЕРЕДЬ</span>
             <small className="utility-secondary" data-qa-science-queue-count>{scienceState.queue.length}/{SCIENCE_QUEUE_CAPACITY}</small>
           </header>
           {scienceState.queue.length > 0 ? scienceState.queue.map((task) => (
             <ScienceQueueCard key={task.id} task={task} payerName={task.planetId ? runtime.planetNames?.[task.planetId] : undefined} now={scienceQueueNow} paused={scienceQueuePaused} onCancel={() => setPendingCancellation(task)} />
-          )) : <p className="utility-helper">Очередь свободна.</p>}
+          )) : <p className="sci-queue-empty utility-helper">Очередь свободна — выберите исследование.</p>}
         </section>
       </aside>
 
       <main className="science-main-v2">
-        <header className="science-main-heading-v2">
-          <div>
-            <small className="utility-secondary">КАТАЛОГ ИССЛЕДОВАНИЙ</small>
-            <h2 className="utility-section-title">{heading.toUpperCase()}</h2>
-          </div>
-          <span className="science-count-v2 utility-data-text">{sciences.length} НАУК</span>
+        <header className="sci-main-head">
+          <h2 className="utility-section-title">{heading.toUpperCase()}</h2>
+          <span className="utility-secondary">{sciences.length} {pluralSciences(sciences.length)}</span>
         </header>
 
-        {section === 'additional' ? <div className="science-additional-hint-v2 utility-helper"><b>ВНИМАНИЕ</b>{ADDITIONAL_SCIENCE_HINT}</div> : null}
+        {section === 'additional' ? <div className="sci-hint utility-helper"><b>ВНИМАНИЕ</b>{ADDITIONAL_SCIENCE_HINT}</div> : null}
 
         <div className="science-catalog-v2" data-qa-scroll="science-catalog">
           {sciences.map((science) => (
@@ -262,16 +254,10 @@ function ScienceQueueCard({ task, payerName, now, paused, onCancel }: { task: Sc
       data-qa-science-progress-percent={progress}
     >
       <img src={SCIENCE_ARTS[science.artSlug]} alt="" draggable={false} />
-      <div>
-        <strong className="utility-section-title">{science.name}</strong>
-        <span className="utility-secondary">Уровень {task.fromLevel} → {task.toLevel}{payerName ? <> · <span data-qa-science-payer={task.planetId}>{payerName}</span></> : null}</span>
-        <time
-          className="utility-data-text"
-          data-qa-science-remaining
-          data-qa-science-duration-ms={task.durationMs}
-        >
-          {formatDuration(Math.max(0, task.finishAt - now))}
-        </time>
+      <div className="sci-queue-card__copy">
+        <strong>{science.name}</strong>
+        <span>Уровень {task.fromLevel} → {task.toLevel}</span>
+        {payerName ? <span data-qa-science-payer={task.planetId}>{payerName}</span> : null}
       </div>
       <button
         type="button"
@@ -283,6 +269,13 @@ function ScienceQueueCard({ task, payerName, now, paused, onCancel }: { task: Sc
         onClick={onCancel}
       >×</button>
       <i><b style={{ width: `${progress}%` }} /></i>
+      <time
+        className="utility-data-text"
+        data-qa-science-remaining
+        data-qa-science-duration-ms={task.durationMs}
+      >
+        {formatDuration(Math.max(0, task.finishAt - now))}
+      </time>
     </div>
   );
 }
@@ -311,25 +304,25 @@ function ScienceRow({
         : preview.status === 'additional-direction-blocked'
           ? 'НАПРАВЛЕНИЕ ЗАБЛОКИРОВАНО'
           : `ПОВЫСИТЬ УРОВЕНЬ (${preview.nextLevel ?? currentLevel + 1})`;
-  const note = preview.canStart
-    ? `Условия выполнены · очередь ${preview.queuedCount}/${SCIENCE_QUEUE_CAPACITY}`
-    : preview.reason ? localizeBuildingNames(preview.reason, factionId) : 'Исследование недоступно.';
+  const statusText = preview.status === 'max-level'
+    ? 'Исследование завершено.'
+    : preview.canStart
+      ? `В очереди ${preview.queuedCount} из ${SCIENCE_QUEUE_CAPACITY}`
+      : preview.reason ? localizeBuildingNames(preview.reason, factionId) : 'Исследование недоступно.';
+  const blocked = !preview.canStart && preview.status !== 'max-level';
 
   return (
-    <article className={`science-row-v2 ${preview.canStart ? 'is-available' : 'is-blocked'}`} data-qa-science-id={science.id} data-qa-science-status={preview.status}>
-      <div className="science-art-v2">
+    <article className={`science-row-v2 sci-card ${preview.canStart ? 'is-available' : 'is-blocked'}`} data-qa-science-id={science.id} data-qa-science-status={preview.status}>
+      <div className="sci-card__art">
         <img src={SCIENCE_ARTS[science.artSlug]} alt={science.name} draggable={false} />
-        <span className="utility-data-text" data-qa-science-level>УР. {currentLevel} / {preview.maxLevel}</span>
       </div>
 
-      <div className="science-info-v2">
-        <header>
-          <div>
-            <small className="utility-secondary">ИССЛЕДОВАНИЕ</small>
-            <h3 className="utility-section-title">{science.name}</h3>
-          </div>
+      <div className="sci-card__body">
+        <header className="sci-card__head">
+          <h3 className="utility-section-title">{science.name}</h3>
+          <span className="sci-card__level utility-data-text" data-qa-science-level>УР. {currentLevel} / {preview.maxLevel}</span>
         </header>
-        <p className="utility-body-text">{science.description}</p>
+        <p className="sci-card__desc utility-body-text">{science.description}</p>
 
         <ScienceLevelProgress
           currentLevel={currentLevel}
@@ -339,54 +332,53 @@ function ScienceRow({
           maxLevel={preview.maxLevel}
         />
 
-        <div
-          className={`science-status-slot-v2 ${preview.reason && preview.status !== 'max-level' ? 'is-visible' : ''}`}
-          data-qa-science-status-slot
-          data-qa-science-queue-full={preview.status === 'queue-full' ? 'true' : 'false'}
-          aria-live="polite"
-        >
-          {preview.reason && preview.status !== 'max-level' ? (
-            <div className="science-missing-banner-v2" role="note">{localizeBuildingNames(preview.reason, factionId)}</div>
-          ) : <span aria-hidden="true" />}
-        </div>
-
-        <div className="science-costs-v2" aria-label="Стоимость следующего уровня">
+        <div className="science-costs-v2 sci-card__costs" aria-label="Стоимость следующего уровня">
           <ResourceCost kind="metal" label="Металл" value={preview.cost.metal} available={runtime.wallet.metal} />
           <ResourceCost kind="minerals" label="Минералы" value={preview.cost.minerals} available={runtime.wallet.minerals} />
           <ResourceCost kind="gas" label="Газ" value={preview.cost.gas} available={runtime.wallet.gas} />
           {preview.cost.energy > 0 ? <ResourceCost kind="energy" label="Энергия" value={preview.cost.energy} available={runtime.wallet.energy} /> : null}
-          <span className="science-time-v2"><small className="utility-secondary">ВРЕМЯ</small><strong className="utility-data-text" data-qa-science-duration-ms={preview.durationMs}>{formatDuration(preview.durationMs)}</strong></span>
+          <span className="sci-card__time" title="Время исследования">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25" /><path d="M8 4.6V8l2.4 1.6" /></svg>
+            <strong className="utility-data-text" data-qa-science-duration-ms={preview.durationMs}>{formatDuration(preview.durationMs)}</strong>
+          </span>
         </div>
 
-        <div className="science-requirements-v2">
-          {preview.requirements.map((requirement) => (
-            <RequirementBadge
-              key={`${requirement.kind}-${requirement.scienceId ?? 'laboratory'}`}
-              label={localizeBuildingNames(requirement.label, factionId)}
-              art={requirement.kind === 'laboratory-level' ? laboratoryArt : SCIENCE_ARTS[SCIENCE_CATALOG.find((item) => item.id === requirement.scienceId)?.artSlug ?? '']}
-              requiredLevel={requirement.requiredLevel}
-              currentLevel={requirement.currentLevel}
-            />
-          ))}
-        </div>
+        {preview.requirements.length > 0 ? (
+          <div className="sci-card__reqs">
+            <span className="utility-secondary">Требуется</span>
+            {preview.requirements.map((requirement) => (
+              <RequirementBadge
+                key={`${requirement.kind}-${requirement.scienceId ?? 'laboratory'}`}
+                label={localizeBuildingNames(requirement.label, factionId)}
+                art={requirement.kind === 'laboratory-level' ? laboratoryArt : SCIENCE_ARTS[SCIENCE_CATALOG.find((item) => item.id === requirement.scienceId)?.artSlug ?? '']}
+                requiredLevel={requirement.requiredLevel}
+                currentLevel={requirement.currentLevel}
+              />
+            ))}
+          </div>
+        ) : null}
       </div>
 
-      <div className="science-action-v2">
-        <span className="utility-secondary">СЛЕДУЮЩИЙ УРОВЕНЬ</span>
-        <strong className="utility-data-text">{preview.nextLevel ?? currentLevel}</strong>
+      <div className="sci-card__action">
         <button
           type="button"
           className="utility-control science-ready-action-v2"
           data-qa-science-action
           disabled={!preview.canStart}
-          title={note}
+          title={statusText}
           onClick={() => onStart(science.id)}
         >
           {actionLabel}
         </button>
-        <small className={`${preview.canStart ? 'science-ready-note-v2' : 'science-blocked-note-v2'} utility-helper`}>
-          {note}
-        </small>
+        <div
+          className={`sci-card__status ${blocked ? 'is-blocked' : ''}`}
+          data-qa-science-status-slot
+          data-qa-science-queue-full={preview.status === 'queue-full' ? 'true' : 'false'}
+          aria-live="polite"
+          title={statusText}
+        >
+          {statusText}
+        </div>
       </div>
     </article>
   );
@@ -409,21 +401,21 @@ function ScienceLevelProgress({
 
   return (
     <section
-      className={`science-level-progress-v2 ${isMax ? 'is-max' : ''}`}
+      className={`sci-level ${isMax ? 'is-max' : ''}`}
       data-qa-science-level-progress
       data-qa-current-level={currentLevel}
       data-qa-projected-level={projectedLevel}
       data-qa-max-level={maxLevel}
-      aria-label={`Текущий уровень ${currentLevel} из ${maxLevel}. Заказано уровней: ${queuedCount}.`}
+      aria-label={`Уровень ${currentLevel} из ${maxLevel}. В очереди уровней: ${queuedCount}.`}
     >
-      <div className="science-level-progress-meta-v2">
-        <span>Фактический уровень <b>{currentLevel}</b> / {maxLevel}</span>
+      <div className="sci-level__caption">
         {isMax ? (
-          <strong>Максимальный уровень</strong>
+          <strong>Максимальный уровень {maxLevel}</strong>
         ) : (
           <>
-            <span>Заказано <b>+{queuedCount}</b> → {projectedLevel}</span>
-            <span>Следующий <b>{nextLevel ?? 'MAX'}</b></span>
+            <span>Уровень <b>{currentLevel}</b> из {maxLevel}</span>
+            {queuedCount > 0 ? <span className="sci-level__queued">+{queuedCount} в очереди</span> : null}
+            {nextLevel !== null ? <span className="sci-level__next">→ <b>{nextLevel}</b></span> : null}
           </>
         )}
       </div>
@@ -457,7 +449,7 @@ function RequirementBadge({
   const tooltip = `${label}\nУровень: ${currentLevel}\nТребуется: ${requiredLevel}`;
   return (
     <span
-      className={`science-requirement-badge-v2 ${met ? 'is-met' : 'is-missing'}`}
+      className={`sci-req ${met ? 'is-met' : 'is-missing'}`}
       title={tooltip}
       aria-label={`${label}. Текущий уровень ${currentLevel}. Требуется ${requiredLevel}.`}
     >
@@ -469,11 +461,20 @@ function RequirementBadge({
 
 function ResourceCost({ kind, label, value, available }: { kind: ResourceIconKind; label: string; value: number; available: number }) {
   return (
-    <span className={`science-cost-v2 science-cost-v2--${kind} ${available < value ? 'is-insufficient' : ''}`} data-qa-science-cost-resource={kind} title={`${label}: доступно ${formatNumber(available)}`}>
-      <i><ResourceIcon kind={kind} label={label} /></i>
+    <span className={`sci-cost ${available < value ? 'is-insufficient' : ''}`} data-qa-science-cost-resource={kind} title={`${label}: доступно ${formatNumber(available)}`}>
+      <ResourceIcon kind={kind} label={label} />
       <strong className="utility-data-text">{formatNumber(value)}</strong>
     </span>
   );
+}
+
+function pluralSciences(count: number) {
+  const tens = count % 100;
+  const ones = count % 10;
+  if (tens >= 11 && tens <= 14) return 'наук';
+  if (ones === 1) return 'наука';
+  if (ones >= 2 && ones <= 4) return 'науки';
+  return 'наук';
 }
 
 function formatNumber(value: number) {
