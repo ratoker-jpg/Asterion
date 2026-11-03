@@ -109,3 +109,16 @@
 @media (prefers-reduced-motion: reduce) {
   .quick-send, .quick-send__leg, .quick-send__leg-body, .quick-send__error { animation-duration: 1ms; animation-delay: 0ms; }
 }
+
+/* «Оставить на каждой планете» (transport with a gather planner). */
+.quick-send__keep { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 8px; padding: 10px 14px 2px; }
+.quick-send__keep > small { grid-column: 1 / -1; }
+.quick-send__keep label { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 4px 8px; border-radius: 8px; background: rgba(126, 200, 220, .06); }
+.quick-send__keep label > :first-child { flex: none; width: 16px; height: 16px; }
+.quick-send__keep input {
+  width: 100%; min-width: 0; padding: 2px 0; border: 0; background: transparent; color: var(--qa-text);
+  font: 700 12px/1.2 Montserrat, Arial, sans-serif; font-variant-numeric: tabular-nums; outline: none; appearance: textfield;
+}
+.quick-send__keep input::-webkit-inner-spin-button { appearance: none; }
+.quick-send__keep label:focus-within { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--qa-k, #56d9f2) 60%, transparent); }
+.quick-send__notice { margin: 10px 14px 0; padding: 8px 10px; border-radius: 8px; background: rgba(242, 180, 90, .1); color: var(--qa-warn); font-size: 12px; font-weight: 600; line-height: 1.35; }

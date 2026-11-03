@@ -5,7 +5,7 @@ import { appendJournalEntries, setActiveJournalCampaign } from './ui/player-jour
 import { appendBotJournal } from './ui/bot-journal-store.ts';
 import { selectOwnerPresence } from './application/owner-presence.ts';
 import { dispatchBot01Exploration } from './application/exploration-bot01.ts';
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { flushSync, createPortal } from 'react-dom';
 import './planet-skins.css';
 import './universe.css';
@@ -19,6 +19,8 @@ import { buildReportsFeed, dropExpiredReportItems, getReportUnreadCounts } from 
 import { reportRetentionCutoff } from './application/history-retention.ts';
 import { ZONE_VIEW_META, ZoneView } from './ZoneView';
 import { PlanetOrbitView } from './ui/planet/PlanetOrbitView';
+import { EmpireView, PlanetSections } from './ui/empire/EmpireView';
+import { pickToastSpot, type ToastSpot } from './ui/toast-placement.ts';
 import { BuildingInteriorHost } from './BuildingInteriorHost';
 import { FLEET_ROOT_REQUEST_EVENT } from './FleetRootNavigationController';
 import { useSoundOnIncrease } from './audio/hooks.ts';
@@ -432,6 +434,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const { route: activeRoute, fleetSection: activeFleetSection, navigate } = useNavigation();
   const activeTab = APP_ROUTE_LABELS[activeRoute];
   const [planetViewMode, setPlanetViewMode] = useState<PlanetViewMode>('overview');
+  // «Планета» has two parts: the selected planet and «Империя» (all planets).
+  const [planetSection, setPlanetSection] = useState<'current' | 'empire'>('current');
   const persistence = useMemo(() => createPersistenceFacade({ mode: RUNTIME_MODE }), []);
   const [state, setState] = useState<SaveState>(() => {
     const loaded = persistence.read();
@@ -448,6 +452,11 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const [now, setNow] = useState(Date.now());
   const [testTimeScale, setTestTimeScale] = useState<TestTimeScale>(() => resolveTestTimeScale());
   const [toasts, setToasts] = useState<RuntimeToast[]>([]);
+  // Toasts take the first spot that covers no control or screen title (toast-placement.ts).
+  const toastStackRef = useRef<HTMLDivElement>(null);
+  const [toastSpot, setToastSpot] = useState<ToastSpot | null>(null);
+  // No free spot for the whole stack: show only the newest toast, in the spot that fits it.
+  const [toastCompact, setToastCompact] = useState(false);
   const [lastNotice, setLastNotice] = useState('Система готова. Локальное сохранение активно.');
   const noticeSeq = useRef(0);
   // When a save failure was last shown (null: never in this window).
@@ -1701,10 +1710,10 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     return true;
   };
 
-  const buildBuilding = (assetRole: BuildingRole) => {
+  const buildBuilding = (assetRole: BuildingRole, planetId: PlanetId = state.currentPlanetId) => {
     if (rejectNpcCatchupCommand()) return false;
     const enqueuedAt = Date.now();
-    const context = { planetId: state.currentPlanetId, now: enqueuedAt, mode: RUNTIME_MODE, testTimeScale };
+    const context = { planetId, now: enqueuedAt, mode: RUNTIME_MODE, testTimeScale };
     const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
       const availability = previewBuilding(current, context, assetRole).availability;
       if (!availability.canBuild) {
@@ -1723,7 +1732,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       setNotice(result.reason ?? 'Строительство сейчас недоступно.');
       return false;
     }
-    setNotice(`${currentPlanetName}: ${getBuildingDefinition(assetRole, state.profile.factionId).name} добавлено в общую очередь.`);
+    setNotice(`${state.planets[planetId]?.name ?? currentPlanetName}: ${getBuildingDefinition(assetRole, state.profile.factionId).name} добавлено в общую очередь.`);
     return true;
   };
 
@@ -2682,6 +2691,32 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     setNotice('Кампания начата заново по тем же настройкам мира.', 'success');
   };
 
+  // Re-picked when a toast appears or the screen changes, after the new screen has painted.
+  // While toasts are visible the spot is re-checked twice a second, so a panel
+  // or dialog opening under a toast moves it (a clear spot is kept).
+  const toastCount = toasts.length;
+  const toastSpotRef = useRef<ToastSpot | null>(null);
+  useLayoutEffect(() => {
+    if (toastCount === 0) return;
+    const place = () => {
+      const stack = toastStackRef.current;
+      if (!stack) return;
+      const header = document.querySelector('.asterion-header')?.getBoundingClientRect().bottom ?? 0;
+      const width = stack.offsetWidth || Math.min(380, window.innerWidth - 48);
+      const single = Math.max(52, stack.lastElementChild instanceof HTMLElement ? stack.lastElementChild.offsetHeight : 52);
+      const full = pickToastSpot(width, Math.max(single * toastCount + 6 * (toastCount - 1), toastCount * 52), header, stack, toastSpotRef.current);
+      const pick = full.clear || toastCount === 1 ? full : pickToastSpot(width, single, header, stack, toastSpotRef.current);
+      setToastCompact(!full.clear && toastCount > 1);
+      if (JSON.stringify(toastSpotRef.current) !== JSON.stringify(pick.spot)) {
+        toastSpotRef.current = pick.spot;
+        setToastSpot(pick.spot);
+      }
+    };
+    place();
+    const timer = window.setInterval(place, 500);
+    return () => window.clearInterval(timer);
+  }, [toastCount, activeRoute, planetSection, planetViewMode, buildingInterior]);
+
   const remaining = currentActiveQueueItem ? currentActiveQueueItem.finishAt - now : 0;
   const workspaceKind = buildingInteriorTarget?.kind === 'host'
     ? 'building-interior'
@@ -2772,7 +2807,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         <section className={`workspace workspace-v4 workspace--${workspaceKind}`}>
           {/* A new key per screen replays the holographic scan over it (motion.css §2, sound «screen»). */}
           <i
-            key={`${workspaceKind}:${activeRoute}:${planetViewMode}:${buildingInterior?.buildingRole ?? ''}:${buildingInteriorTarget?.kind ?? ''}`}
+            key={`${workspaceKind}:${activeRoute}:${planetViewMode}:${planetSection}:${buildingInterior?.buildingRole ?? ''}:${buildingInteriorTarget?.kind ?? ''}`}
             className="route-sweep"
             aria-hidden="true"
           />
@@ -3010,7 +3045,23 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
                 };
               })()}
             />
+          ) : activeRoute === 'planet' && planetSection === 'empire' ? (
+            <>
+              <PlanetSections section="empire" planetCount={ownedPlanets.length} idleCount={ownedPlanets.filter((planet) => (state.queues[planet.id] ?? []).length === 0).length} onChange={setPlanetSection} />
+              <EmpireView
+                state={state}
+                now={now}
+                mode={RUNTIME_MODE}
+                testTimeScale={testTimeScale}
+                planetArt={Object.fromEntries(ownedPlanets.map((planet) => [planet.id, planetSkins.find((skin) => skin.id === state.planets[planet.id].skin)?.art ?? planetSkins[0].art]))}
+                onOpenPlanet={(id) => { if (id !== state.currentPlanetId) selectPlanet(id as PlanetId); setPlanetSection('current'); }}
+                onBuild={(id, role) => buildBuilding(role, id as PlanetId)}
+                onSend={sendQuickFlights}
+              />
+            </>
           ) : activeRoute === 'planet' ? (
+            <>
+            <PlanetSections section="current" planetCount={ownedPlanets.length} idleCount={ownedPlanets.filter((planet) => (state.queues[planet.id] ?? []).length === 0).length} onChange={setPlanetSection} />
             <PlanetOrbitView
               name={currentPlanetName}
               kicker={`ОБЗОР ПЛАНЕТЫ · ${PLAYER_FACTION_LABELS[state.profile.factionId].toUpperCase()}`}
@@ -3076,6 +3127,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               onChooseZone={chooseZone}
               onColonize={() => navigateTo('universe')}
             />
+            </>
           ) : (
             <main className="module-placeholder-v3">
               <span>ASTERION COMMAND MODULE</span>
@@ -3097,8 +3149,9 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         </div>
 
         {createPortal(
-          <div className="runtime-toast-stack" data-qa-runtime-toast-stack aria-live="polite">
-            {toasts.map((toast) => (
+          <div ref={toastStackRef} className="runtime-toast-stack" data-qa-runtime-toast-stack aria-live="polite"
+            style={toastSpot ? { left: toastSpot.left ?? 'auto', right: toastSpot.right ?? 'auto', top: toastSpot.top ?? 'auto', bottom: toastSpot.bottom ?? 'auto' } : undefined}>
+            {(toastCompact ? toasts.slice(-1) : toasts).map((toast) => (
               <div key={toast.id} className={`runtime-toast runtime-toast--${toast.tone}`} data-qa-runtime-toast>
                 <span>{toast.text}</span>
                 <button type="button" aria-label="Закрыть уведомление" title="Закрыть" onClick={() => dismissToast(toast.id)}>×</button>
