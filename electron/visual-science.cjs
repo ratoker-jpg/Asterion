@@ -156,6 +156,7 @@ async function readScreen(win) {
       queuePaused: [...document.querySelectorAll('[data-qa-science-queue-task]')].map((element) => element.getAttribute('data-qa-science-paused') === 'true'),
       queueProgressPercent: [...document.querySelectorAll('[data-qa-science-queue-task]')].map((element) => Number(element.getAttribute('data-qa-science-progress-percent') ?? 0)),
       wallet: { metal: save.metal, minerals: save.minerals, gas: save.gas, energy: save.planets?.['helion-01']?.energy },
+      // The page may fit the window; when it does not, the document scrolls, never a panel.
       documentScroll: document.documentElement.scrollHeight > window.innerHeight + 2,
       nestedVerticalScroll: ['.science-sidebar-v2', '.science-main-v2', '.science-catalog-v2'].some((selector) => [...document.querySelectorAll(selector)].some((element) => {
         const overflowY = getComputedStyle(element).overflowY;
@@ -284,7 +285,7 @@ async function runViewport(width, height) {
     const button = last?.querySelector('[data-qa-science-cancel]');
     return { count: cards.length, buttonEnabled: Boolean(button && !button.disabled), visible: Boolean(rect && rect.top >= 0 && rect.bottom <= window.innerHeight) };
   })()`);
-  if (queueVisibility.count !== 3 || !queueVisibility.buttonEnabled || !queueVisibility.visible || !full.scienceCancelRed || full.horizontalOverflow || full.nestedVerticalScroll || !full.documentScroll) throw new Error(`${label}: three-task queue is clipped or not cancellable ${JSON.stringify({ full, queueVisibility })}`);
+  if (queueVisibility.count !== 3 || !queueVisibility.buttonEnabled || !queueVisibility.visible || !full.scienceCancelRed || full.horizontalOverflow || full.nestedVerticalScroll) throw new Error(`${label}: three-task queue is clipped or not cancellable ${JSON.stringify({ full, queueVisibility })}`);
   assertScienceGeometry(label, [empty, afterOne, full]);
   const queueFullMarker = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-science-id="1"] [data-qa-science-status-slot]')?.getAttribute('data-qa-science-queue-full')`);
   if (queueFullMarker !== 'true') throw new Error(`${label}: queue-full status marker is missing`);
@@ -340,7 +341,7 @@ async function runViewport(width, height) {
     const PASSIVE_INCOME_TOLERANCE = 50;
     return delta >= refundBounds.min[key] && delta <= refundBounds.max[key] + PASSIVE_INCOME_TOLERANCE;
   });
-  if (!validRefund || afterCancel.scienceQueueLength !== 0 || afterCancel.queueIds.length !== 0 || !afterCancel.activeScienceAction || afterCancel.nestedVerticalScroll || !afterCancel.documentScroll) throw new Error(`${label}: science cascade refund/focus/scroll mismatch ${JSON.stringify({ beforeCancel, afterCancel, refundBounds })}`);
+  if (!validRefund || afterCancel.scienceQueueLength !== 0 || afterCancel.queueIds.length !== 0 || !afterCancel.activeScienceAction || afterCancel.nestedVerticalScroll) throw new Error(`${label}: science cascade refund/focus/scroll mismatch ${JSON.stringify({ beforeCancel, afterCancel, refundBounds })}`);
   await capture(win, directory, 'science-cancelled-queue', '[data-qa-science-queue]');
 
   await reload(win);

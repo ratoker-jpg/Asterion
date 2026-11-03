@@ -261,7 +261,7 @@ async function verifyFlow(win, directory, label) {
 
   screen = await readBotScreen(win, 'construction');
   if (JSON.stringify(screen?.draft) !== JSON.stringify({ metal: '6', minerals: '4', gas: '0' })) throw new Error(`${label}: draft mismatch ${JSON.stringify(screen)}`);
-  if (screen.total !== 10 || screen.free !== 4 || screen.effects.metal !== '6 ботов · +36%' || screen.effects.minerals !== '4 бота · +20%') {
+  if (screen.total !== 10 || screen.free !== 4 || screen.effects.metal !== '+36%' || screen.effects.minerals !== '+20%') {
     throw new Error(`${label}: draft summary mismatch ${JSON.stringify(screen)}`);
   }
   if (screen.distributeDisabled) throw new Error(`${label}: distribute should be enabled`);

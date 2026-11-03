@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { getBuildingDefinition } from './domain/buildings/resource-zone.ts';
 import type { BuildingFaction } from './domain/buildings/balance-v1.ts';
 import {
@@ -53,8 +53,6 @@ export function ProductionBotsView({
     return () => window.clearTimeout(timer);
   }, [toastVisible]);
 
-  const appliedTotal = useMemo(() => getProductionBotAssignmentTotal(appliedAssignment), [appliedAssignment]);
-  const appliedFree = useMemo(() => getProductionBotFreeCount(appliedAssignment, availableBots), [appliedAssignment, availableBots]);
   const draftTotal = useMemo(() => getProductionBotAssignmentTotal(draft), [draft]);
   const draftFree = useMemo(() => getProductionBotFreeCount(draft, availableBots), [draft, availableBots]);
   const draftValid = useMemo(() => isProductionBotAssignmentValid(draft, availableBots), [draft, availableBots]);
@@ -78,9 +76,8 @@ export function ProductionBotsView({
       data-qa-production-bots={buildingRole}
       data-qa-production-bots-building={buildingRole}
     >
-      <header className="production-bots-header">
-        <div className="production-bots-header__copy">
-          <small>ASTERION // ПРОМЫШЛЕННЫЙ МОДУЛЬ</small>
+      <header className="pbots-header">
+        <div>
           <h1>ПРОИЗВОДСТВЕННЫЕ БОТЫ</h1>
           <p>{building.name} · {planetName}</p>
         </div>
@@ -96,108 +93,85 @@ export function ProductionBotsView({
         </button>
       </header>
 
-      <div className="production-bots-layout">
-        <aside className="production-bots-building-panel">
-          <div className="production-bots-building-art">
-            <img src={building.art} alt={building.name} draggable={false} />
-          </div>
-
-          <div className="production-bots-building-copy">
-            <small>ТЕКУЩИЙ КОНТЕКСТ</small>
-            <h2>{building.name}</h2>
-            <div className="production-bots-building-level">УРОВЕНЬ <strong>{buildingLevel}</strong></div>
-          </div>
-
-          <section className="production-bots-pool" aria-label="Применённое распределение производственных роботов">
-            <div><small>ДОСТУПНО РОБОТОВ</small><strong data-qa-bots-available={availableBots}>{availableBots}</strong></div>
-            <div><small>РАСПРЕДЕЛЕНО</small><strong data-qa-bots-applied-total>{appliedTotal} / {availableBots}</strong></div>
-            <div><small>СВОБОДНО</small><strong data-qa-bots-applied-free>{appliedFree}</strong></div>
-          </section>
-
-          <section className="production-bots-applied" aria-label="Применённый бонус от роботов">
-            <div className="production-bots-section-label">БОНУС ОТ РОБОТОВ <span>ПРИМЕНЕНО</span></div>
-            {PRODUCTION_BOT_BONUSES.map((definition) => (
-              <div className="production-bots-applied-row" key={definition.resource}>
-                <span>{definition.label}</span>
-                <strong data-qa-bot-current-bonus={definition.resource}>+{getProductionBotBonusPercent(appliedAssignment, definition.resource)}%</strong>
-              </div>
-            ))}
-          </section>
+      <section className="pbots-panel" aria-label="Распределение производственных роботов">
+        <aside className="pbots-building">
+          <img src={building.art} alt={building.name} draggable={false} />
+          <h2>{building.name}</h2>
+          <span className="pbots-building__level">Уровень {buildingLevel}</span>
+          <p className="pbots-building__total">Роботов на планете: <strong data-qa-bots-available={availableBots}>{availableBots}</strong></p>
+          <p>Каждый робот ускоряет добычу выбранного ресурса. На один ресурс — до {MAX_PRODUCTION_BOTS_PER_RESOURCE} роботов.</p>
         </aside>
 
-        <section className="production-bots-targets" aria-label="Целевые ресурсы">
-          <header className="production-bots-targets-header">
-            <div>
-              <small>РАСПРЕДЕЛЕНИЕ РОБОТОВ</small>
-              <h2>ЦЕЛЕВЫЕ РЕСУРСЫ</h2>
-            </div>
-            <span data-qa-bots-draft-total={draftTotal}>ЧЕРНОВИК {draftTotal} / {availableBots} · ДО 10 НА РЕСУРС</span>
-          </header>
+        <div className="pbots-allocation">
+          <div className="pbots-columns" aria-hidden="true">
+            <span>Ресурс</span>
+            <span>Роботы</span>
+            <span>Бонус</span>
+          </div>
 
-          <div className="production-bots-target-list">
+          <div className="pbots-rows">
             {PRODUCTION_BOT_BONUSES.map((definition) => {
               const assigned = draft[definition.resource];
               const draftBonus = getProductionBotBonusPercent(draft, definition.resource);
+              const appliedBonus = getProductionBotBonusPercent(appliedAssignment, definition.resource);
+              const reachable = Math.min(MAX_PRODUCTION_BOTS_PER_RESOURCE, assigned + draftFree);
               const canDecrease = assigned > 0;
               const canIncrease = assigned < MAX_PRODUCTION_BOTS_PER_RESOURCE && draftTotal < availableBots;
 
               return (
                 <div
-                  className={`production-bot-target production-bot-target--${definition.resource}`}
+                  className={`pbots-row pbots-row--${definition.resource}`}
                   key={definition.resource}
                   data-qa-production-bot-resource={definition.resource}
                 >
-                  <div className="production-bot-target__resource">
-                    <span className="production-bot-target__icon"><ResourceIcon kind={definition.resource} /></span>
-                    <span><small>РЕСУРС</small><strong>{definition.label}</strong></span>
+                  <div className="pbots-row__resource">
+                    <ResourceIcon kind={definition.resource} />
+                    <strong>{definition.label}</strong>
                   </div>
 
-                  <button
-                    type="button"
-                    className="production-bot-step"
-                    aria-label={`Уменьшить: ${definition.label}`}
-                    data-qa-bot-minus={definition.resource}
-                    disabled={!canDecrease}
-                    onClick={() => changeDraft(definition.resource, assigned - 1)}
-                  >−</button>
+                  <div className="pbots-row__control">
+                    <button
+                      type="button"
+                      className="pbots-step"
+                      aria-label={`Уменьшить: ${definition.label}`}
+                      data-qa-bot-minus={definition.resource}
+                      disabled={!canDecrease}
+                      onClick={() => changeDraft(definition.resource, assigned - 1)}
+                    >−</button>
 
-                  <input
-                    className="production-bot-range"
-                    type="range"
-                    min={0}
-                    max={MAX_PRODUCTION_BOTS_PER_RESOURCE}
-                    step={1}
-                    value={assigned}
-                    aria-label={`Роботы: ${definition.label}`}
-                    aria-valuetext={`${assigned} из ${MAX_PRODUCTION_BOTS_PER_RESOURCE}`}
-                    data-qa-bot-slider={definition.resource}
-                    onChange={(event) => changeDraft(definition.resource, Number(event.target.value))}
-                  />
+                    <BotPips
+                      resource={definition.resource}
+                      label={definition.label}
+                      value={assigned}
+                      reachable={reachable}
+                      onChange={(value) => changeDraft(definition.resource, value)}
+                    />
 
-                  <button
-                    type="button"
-                    className="production-bot-step"
-                    aria-label={`Увеличить: ${definition.label}`}
-                    data-qa-bot-plus={definition.resource}
-                    disabled={!canIncrease}
-                    onClick={() => changeDraft(definition.resource, assigned + 1)}
-                  >+</button>
+                    <button
+                      type="button"
+                      className="pbots-step"
+                      aria-label={`Увеличить: ${definition.label}`}
+                      data-qa-bot-plus={definition.resource}
+                      disabled={!canIncrease}
+                      onClick={() => changeDraft(definition.resource, assigned + 1)}
+                    >+</button>
 
-                  <strong className="production-bot-target__count" data-qa-bot-draft={definition.resource}>{assigned}</strong>
+                    <strong className="pbots-row__count" data-qa-bot-draft={definition.resource}>{assigned}</strong>
+                  </div>
 
-                  <div className="production-bot-target__effect" data-qa-bot-draft-effect={definition.resource}>
-                    {assigned} {assigned === 1 ? 'бот' : assigned >= 2 && assigned <= 4 ? 'бота' : 'ботов'} · +{draftBonus}%
+                  <div className="pbots-row__bonus">
+                    <strong data-qa-bot-draft-effect={definition.resource}>+{draftBonus}%</strong>
+                    <small className={draftBonus === appliedBonus ? '' : 'is-changed'}>сейчас <b data-qa-bot-current-bonus={definition.resource}>+{appliedBonus}%</b></small>
                   </div>
                 </div>
               );
             })}
           </div>
 
-          <footer className="production-bots-targets-footer">
-            <div>
-              <small>СВОБОДНО В ЧЕРНОВИКЕ</small>
-              <strong data-qa-bots-draft-free={draftFree}>{draftFree}</strong>
-            </div>
+          <footer className="pbots-footer">
+            <p data-qa-bots-draft-total={draftTotal}>
+              Свободно <strong data-qa-bots-draft-free={draftFree}>{draftFree}</strong> из {availableBots}
+            </p>
             <button
               type="button"
               className="production-bots-distribute"
@@ -208,12 +182,70 @@ export function ProductionBotsView({
               РАСПРЕДЕЛИТЬ
             </button>
           </footer>
-        </section>
-      </div>
+        </div>
+      </section>
 
       <div className={`production-bots-toast ${toastVisible ? 'visible' : ''}`} aria-live="polite" aria-atomic="true" data-qa-production-bots-toast>
         {toastVisible ? <span><b aria-hidden="true">✓</b> Роботы перераспределены</span> : null}
       </div>
     </main>
+  );
+}
+
+// Ten pips over a native range input: the input keeps keyboard control
+// (arrows, Home/End) and the accessible value; a click or drag on the pips
+// picks the pip under the pointer exactly.
+function BotPips({
+  resource,
+  label,
+  value,
+  reachable,
+  onChange,
+}: {
+  resource: BotResource;
+  label: string;
+  value: number;
+  reachable: number;
+  onChange: (value: number) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const pick = (event: PointerEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const ratio = (event.clientX - rect.left) / rect.width;
+    onChange(Math.max(0, Math.min(MAX_PRODUCTION_BOTS_PER_RESOURCE, Math.ceil(ratio * MAX_PRODUCTION_BOTS_PER_RESOURCE))));
+  };
+
+  return (
+    <div
+      className="pbots-pips"
+      onPointerDown={(event) => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        inputRef.current?.focus({ preventScroll: true });
+        pick(event);
+      }}
+      onPointerMove={(event) => {
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) pick(event);
+      }}
+    >
+      <span className="pbots-pips__track" aria-hidden="true">
+        {Array.from({ length: MAX_PRODUCTION_BOTS_PER_RESOURCE }, (_, index) => (
+          <i key={index} className={index < value ? 'is-on' : index < reachable ? 'is-open' : 'is-closed'} />
+        ))}
+      </span>
+      <input
+        ref={inputRef}
+        type="range"
+        min={0}
+        max={MAX_PRODUCTION_BOTS_PER_RESOURCE}
+        step={1}
+        value={value}
+        aria-label={`Роботы: ${label}`}
+        aria-valuetext={`${value} из ${MAX_PRODUCTION_BOTS_PER_RESOURCE}`}
+        data-qa-bot-slider={resource}
+        onChange={(event) => onChange(Number(event.target.value))}
+      />
+    </div>
   );
 }
