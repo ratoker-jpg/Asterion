@@ -164,6 +164,8 @@ export type SaveState = {
   sunRaid?: SunRaidState;
   /** Accumulated play time of this campaign, shown on save slots. */
   playTimeMs?: number;
+  /** Fleet-screen favourites and last own targets; UI data, no game rule reads it. */
+  fleetUi?: import('../domain/flights/fleet-ui.ts').FleetUiState;
 };
 
 export function getPlanetState(state: SaveState, planetId: PlanetId): PlanetRuntime {

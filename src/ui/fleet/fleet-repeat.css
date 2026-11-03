@@ -1,0 +1,28 @@
+/* ---------- Fleet keeps its target: sent strip, «Повторить», source and favourites in the plan ---------- */
+.fleet-root-v2 .fleet-flights-v2.is-sent { border-color: rgba(86, 217, 242, .5); background: linear-gradient(90deg, rgba(31, 122, 150, .28), rgba(6, 18, 26, .92)); }
+.fleet-sent-strip-v1 { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+.fleet-sent-strip-v1 > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.fleet-sent-strip-v1 strong { color: #8ff0c4; font-size: 11px !important; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fleet-sent-strip-v1 span { color: #cfe9ef; font-size: 12px !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fleet-sent-strip-v1 button { flex: none; height: 36px; padding: 0 14px; border-radius: 9px; border: 1px solid rgba(126, 200, 220, .45); background: rgba(8, 24, 32, .8); color: #eafbff; font-size: 11px !important; font-weight: 800; letter-spacing: .08em; white-space: nowrap; cursor: pointer; }
+.fleet-sent-strip-v1 button.is-primary { border-color: #56d9f2; background: linear-gradient(180deg, #3fc7e6, #1f8fb0); color: #021219; }
+.fleet-sent-strip-v1 button:disabled { opacity: .45; cursor: default; }
+.fleet-sent-strip-v1 button:not(:disabled):hover { filter: brightness(1.12); }
+
+/* «Все рейсы»: room for two actions, finished routes below the active ones */
+.fleet-flights-drop-v2 .fleet-flight-row-v1 { grid-template-columns: 1.15fr 2.4fr 1fr .8fr 1.25fr; }
+.fleet-flight-actions-cell { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.fleet-flight-recent-head-v1 { margin: 10px 0 2px; color: var(--ut-label, #8fb6c0); font-size: 10px; font-weight: 800; letter-spacing: .14em; }
+.fleet-flight-row-v1.is-recent { opacity: .86; }
+.fleet-flight-row-v1.is-recent:hover { opacity: 1; }
+
+/* Plan step 01: the source is a list, not a fixed line */
+.flight-source-select-v1 { margin-top: 2px; }
+.flight-source-select-v1 select { font-size: 11px; font-weight: 700; }
+
+.flight-favorite-toggle-v1.is-on { border-color: rgba(246, 196, 84, .7); color: #f6c454; }
+
+/* Steps 01–02 keep their own height (source list, favourites, coordinates); the ship list takes what is left and scrolls. */
+.flight-briefing-v2 .flight-timeline-steps > .flight-timeline-step:not(.is-ship-step),
+.flight-briefing-v2 .flight-timeline-steps > .flight-timeline-step-connector { flex-shrink: 0; }
+.flight-briefing-v2 .flight-timeline-steps > .flight-timeline-step.is-ship-step { min-height: 0; overflow-y: auto; }

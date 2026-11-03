@@ -1350,6 +1350,8 @@ async function runPlanetSwitchRegression(win, label) {
     throw new Error(`${label}: Homeworld preview fixture failed ${JSON.stringify(homeDraft)}`);
   }
 
+  // Owner rule (audit 03.11, М3): a header switch closes the plan of the other planet
+  // but keeps the mission and target; the typed 2 scouts follow, capped by the colony's 1.
   await selectPlanet(win, 'qa-colony-01');
   await waitFor(win, `!document.querySelector('[data-qa-flight-preview-backdrop]')`);
   await waitFor(win, `document.querySelector('.fleet-yard-level-v1')?.textContent?.includes('4')`);
@@ -1361,8 +1363,8 @@ async function runPlanetSwitchRegression(win, label) {
     previewOpen: Boolean(document.querySelector('[data-qa-flight-preview-backdrop]')),
     previewMetrics: Boolean(document.querySelector('[data-qa-flight-preview]')),
   }))()`);
-  if (colonyDraft.planetId !== 'qa-colony-01' || !colonyDraft.name.includes('Колония QA') || !colonyDraft.yard.includes('4') || colonyDraft.selected !== '0' || colonyDraft.previewOpen || colonyDraft.previewMetrics) {
-    throw new Error(`${label}: colony retained stale Homeworld draft ${JSON.stringify(colonyDraft)}`);
+  if (colonyDraft.planetId !== 'qa-colony-01' || !colonyDraft.name.includes('Колония QA') || !colonyDraft.yard.includes('4') || colonyDraft.selected !== '1' || colonyDraft.previewOpen || colonyDraft.previewMetrics) {
+    throw new Error(`${label}: colony draft did not follow the switch ${JSON.stringify(colonyDraft)}`);
   }
 
   await click(win, '[data-qa-fleet-section="ships"]');
@@ -1378,12 +1380,13 @@ async function runPlanetSwitchRegression(win, label) {
   await selectPlanet(win, 'helion-01');
   await waitFor(win, `document.querySelector('.fleet-yard-level-v1')?.textContent?.includes('15')`);
   const homeAfterSwitch = await readSave(win);
+  // The open section (here «Верфь») stays open for the newly selected planet.
   const homeView = await win.webContents.executeJavaScript(`(() => ({
-    selected: document.querySelector('[data-qa-fleet-ship="scout"] input')?.value || '',
+    shipyard: Boolean(document.querySelector('[data-qa-construction-mode="ships"]')),
     previewOpen: Boolean(document.querySelector('[data-qa-flight-preview-backdrop]')),
     yard: document.querySelector('.fleet-yard-level-v1')?.textContent?.trim() || '',
   }))()`);
-  if (homeView.selected !== '0' || homeView.previewOpen || !homeView.yard.includes('15') || homeAfterSwitch.planets['helion-01'].fleetProduction.shipQueue.length !== 0 || homeAfterSwitch.planets['qa-colony-01'].fleetProduction.shipQueue.length !== 1) {
+  if (!homeView.shipyard || homeView.previewOpen || !homeView.yard.includes('15') || homeAfterSwitch.planets['helion-01'].fleetProduction.shipQueue.length !== 0 || homeAfterSwitch.planets['qa-colony-01'].fleetProduction.shipQueue.length !== 1) {
     throw new Error(`${label}: Homeworld received colony state after switching back ${JSON.stringify({ homeView, queues: { home: homeAfterSwitch.planets['helion-01'].fleetProduction.shipQueue.length, colony: homeAfterSwitch.planets['qa-colony-01'].fleetProduction.shipQueue.length } })}`);
   }
 
