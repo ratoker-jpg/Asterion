@@ -125,12 +125,21 @@ test('NPC science completing exactly at an attack arrival updates that battle be
       owners: { ...dispatched.state.npcScience!.owners, [distantTarget.ownerId]: started.science },
     },
   };
-  const completed = reconcileRuntime(inFlight, {
+  // The owners now play busier before the arrival: the catch-up may need several calls to reach it.
+  let completed = reconcileRuntime(inFlight, {
     planetId: inFlight.currentPlanetId,
     now: dispatched.flight.arrivalAt,
     mode: 'production',
     testTimeScale: 1,
   });
+  for (let call = 0; call < 200 && completed.state.flights.records.find((item) => item.id === dispatched.flight.id)?.phase === 'outbound'; call += 1) {
+    completed = reconcileRuntime(completed.state, {
+      planetId: completed.state.currentPlanetId,
+      now: dispatched.flight.arrivalAt,
+      mode: 'production',
+      testTimeScale: 1,
+    });
+  }
 
   const report = completed.state.combat.reports.find((item) => item.id === `battle-attack-${dispatched.flight.id}`);
   if (!report) throw new Error('The coinciding flight did not resolve through the actual combat engine.');

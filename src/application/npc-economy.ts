@@ -14,8 +14,14 @@ import {
   type BuildingRole,
 } from '../domain/buildings/resource-zone.ts';
 import {
+  BOT_RESOURCES,
+  MAX_PRODUCTION_BOTS_PER_RESOURCE,
+  createEmptyBotAssignment,
+  getAvailableProductionBots,
+  getProductionBotBonusDefinition,
   getProductionBotIncomePerHour,
   migrateProductionBotAssignment,
+  productionBotAssignmentsEqual,
 } from '../domain/buildings/production-bots.ts';
 import { creditResources } from '../domain/resources/credit.ts';
 import {
@@ -192,6 +198,34 @@ function incomeFor(target: SpyTargetState, timeScale: number, buildings = target
   };
   derivedIncome.set(buildings, { science, bots: target.productionBots, timeScale, income: result });
   return result;
+}
+
+/**
+ * Production robots (Factory and Advanced Factory levels) are free to place, as
+ * the player does on the robots screen: each goes where it adds the most
+ * (its percent of that resource's base income, at most 10 per resource). An
+ * NPC that never placed them left the bonus on the table. Returns the same
+ * target when the placement already stands.
+ */
+export function assignNpcProductionBots(target: SpyTargetState): SpyTargetState {
+  const buildings = targetBuildingLevels(target);
+  const available = getAvailableProductionBots(buildings);
+  if (available <= 0) return target;
+  const base = getBuildingResourceIncomePerHour(buildings, targetScience(target));
+  const assignment = createEmptyBotAssignment();
+  for (let placed = 0; placed < available; placed += 1) {
+    let best: (typeof BOT_RESOURCES)[number] | null = null;
+    let bestGain = 0;
+    for (const resource of BOT_RESOURCES) {
+      if (assignment[resource] >= MAX_PRODUCTION_BOTS_PER_RESOURCE) continue;
+      const gain = finiteNonNegative(base[resource]) * getProductionBotBonusDefinition(resource).percentPerBot;
+      if (best === null || gain > bestGain) { best = resource; bestGain = gain; }
+    }
+    if (best === null) break;
+    assignment[best] += 1;
+  }
+  const current = migrateProductionBotAssignment(target.productionBots, buildings);
+  return productionBotAssignmentsEqual(current, assignment) ? target : { ...target, productionBots: assignment };
 }
 
 /** Canonical income per hour (metal + minerals + gas) this planet earns now. */
