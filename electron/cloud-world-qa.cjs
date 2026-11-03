@@ -297,7 +297,8 @@ if (!PHASE) {
         await startServer();
         results.newerGame = await newer;
         expect(results.newerGame.waitSeen === 'server-updating', 'the newer game waits for the server instead of throwing its world away');
-        expect(results.newerGame.entered && results.newerGame.applied, 'after the update the newer game took the world the server kept living');
+        expect(results.newerGame.quiet && !/\d\.\d/.test(results.newerGame.quietText) && !/ДОСЧИТАТЬ/i.test(results.newerGame.quietText), 'a routine server update is a calm line: no choice, no version numbers');
+        expect(results.newerGame.entered && results.newerGame.applied,'after the update the newer game took the world the server kept living');
         const serverLog = fs.readFileSync(path.join(temp, 'server.log'), 'utf8');
         expect(new RegExp(`moved from game ${version.replace(/\./g, '\\.')} to 9\\.9\\.9`).test(serverLog), 'the server moved the living world to the new release');
         view = await apiGet(`/v1/campaigns/${SLOT_ID}`);
@@ -644,6 +645,9 @@ if (!PHASE) {
       await continueCampaign(win, out);
       if (out.waitSeen) {
         out.facts = await waitFacts(win);
+        // A routine server update is one calm line, no decision and no version numbers.
+        out.quiet = await run(win, `Boolean(document.querySelector('[data-qa-cloud-wait-quiet]'))`);
+        out.quietText = await run(win, `document.querySelector('[data-qa-cloud-wait-quiet]')?.textContent || ''`);
         await shot(win, '09-server-updating');
         const started = Date.now();
         await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`, 75 * 60_000);

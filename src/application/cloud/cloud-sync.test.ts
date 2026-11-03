@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  compareGameVersions, decideCloudEntry, describeLocalReason, describeServerStall, saveSchemaVersion, SERVER_CATCHUP_WAIT_LAG_MS, saveWorldAt, sha256Text,
+  compareGameVersions, decideCloudEntry, describeLocalReason, describeServerStall, saveSchemaVersion, SERVER_CATCHUP_WAIT_LAG_MS, SERVER_UPDATE_QUIET_MS, saveWorldAt, sha256Text, waitPresentation,
   type CloudCampaignView, type CloudEntryInput, type CloudSnapshotView,
 } from './cloud-sync.ts';
 import { createHash } from 'node:crypto';
@@ -149,4 +149,31 @@ test('the stall line is calm: when it stopped and what happened, no technical de
   }
   // A failed world from an older server (no recovery details) still gets a line, dated by its last report.
   assert.match(describeLocalReason('server-failed', campaign(snapshot(3), { status: 'failed' })), /Мир на сервере стоял с/);
+});
+
+test('server behind the game: silent wait, then the plain choice after the quiet window', () => {
+  const behind = campaign(snapshot(3), { gameVersion: '1.0.9' }).live;
+  const wait = (waitedMs: number, live = behind) => waitPresentation({ reason: 'server-updating', waitedMs, live });
+  assert.equal(wait(0), 'quiet', 'a routine update is not shown as a decision');
+  assert.equal(wait(SERVER_UPDATE_QUIET_MS - 1), 'quiet');
+  assert.equal(wait(SERVER_UPDATE_QUIET_MS), 'choice', 'unusually long: the fallback choice');
+  assert.equal(wait(1_000, { ...behind!, status: 'failed' }), 'choice', 'the server reports a failure: the choice at once');
+  assert.equal(wait(1_000, { ...behind!, error: 'x' }), 'choice');
+  assert.equal(wait(0, null), 'quiet', 'no report yet is still a routine wait');
+});
+
+test('other waits are never silent: catching-up and a game older than the server', () => {
+  const live = campaign(snapshot(3), {}).live;
+  assert.equal(waitPresentation({ reason: 'catching-up', waitedMs: 0, live }), 'choice');
+  assert.equal(waitPresentation({ reason: 'game-older', waitedMs: 0, live }), 'choice');
+});
+
+test('server updated and caught up: the wait ends by itself (claim)', () => {
+  const entry = (live: Partial<NonNullable<CloudCampaignView['live']>>) => decideCloudEntry(input({ campaign: campaign(snapshot(3), live) }));
+  assert.equal(entry({ gameVersion: '1.0.9' }).action, 'wait');
+  assert.equal(entry({ gameVersion: '1.1.0', lagMs: 0 }).action, 'claim', 'new version reported and caught up: auto-open');
+});
+
+test('local-entry notices carry no version numbers', () => {
+  assert.doesNotMatch(describeLocalReason('version-mismatch', campaign(snapshot(3), { gameVersion: '1.0.9' })), /\d\.\d/);
 });
