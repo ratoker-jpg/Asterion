@@ -33,26 +33,20 @@
   gap:24px;
   padding:28px 56px 30px;
   overflow:hidden;
-  background:#04111a;
   color:#e8faff;
 }
-.production-bots-view::before,
-.production-bots-view::after{
+.production-bots-view::before{
   content:'';
   position:absolute;
   inset:0;
   z-index:-1;
   pointer-events:none;
-}
-.production-bots-view::before{
+  /* The resource terrain fades into the space backdrop on every side, so the
+     screen has no rectangular edge. */
   background:var(--pbots-terrain) center/cover no-repeat;
-  opacity:.34;
+  opacity:.3;
   filter:saturate(.85);
-}
-.production-bots-view::after{
-  background:
-    radial-gradient(ellipse at 50% 42%,transparent 18%,rgba(2,9,14,.86) 82%),
-    linear-gradient(180deg,rgba(3,14,22,.55),rgba(2,8,13,.92));
+  mask-image:radial-gradient(ellipse 62% 58% at 50% 48%,#000 30%,transparent 100%);
 }
 
 .pbots-header{
