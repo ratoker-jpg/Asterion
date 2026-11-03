@@ -215,6 +215,7 @@ import {
 } from './application/state.ts';
 import { getOwnerShipUpgradeLevels, getPlanetResources, type PlanetId, type SaveState } from './application/contracts.ts';
 import { selectOwnedPlanet } from './application/owned-planets.ts';
+import { sendQuickLegs, type QuickLegOutcome } from './application/quick-actions.ts';
 import type { TargetRelation } from './domain/flights/types.ts';
 import { materializePirateProfiles, pirateContactOperation, pirateOperationId, selectOwnedPiratePresentations, selectOwnedPirateTargets, selectPirateContacts } from './application/pirate-presentation.ts';
 import { selectExplorationTargets, getExplorationTarget, explorationTargetStatus, selectExplorationOperations, planExplorationAttackLaunch } from './application/exploration.ts';
@@ -2254,6 +2255,35 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     }, 40);
   };
 
+  /** Map quick panel: every leg goes through dispatchFlight, as from the fleet screen. */
+  const sendQuickFlights = (commands: DispatchFlightCommand[]): QuickLegOutcome[] => {
+    if (rejectNpcCatchupCommand()) {
+      return commands.map((command) => ({ originPlanetId: command.originPlanetId ?? stateRef.current.currentPlanetId,
+        result: { ok: false as const, state: stateRef.current, error: { code: 'invalid-command' as const, message: NPC_CATCHUP_COMMAND_BLOCKED_MESSAGE } } }));
+    }
+    const { state: next, outcomes } = sendQuickLegs(stateRef.current, commands, { now: Date.now(), mode: RUNTIME_MODE, testTimeScale }, dispatchFlight);
+    const sent = outcomes.filter((outcome) => outcome.result.ok);
+    const refused = outcomes.find((outcome) => !outcome.result.ok);
+    if (sent.length) {
+      stateRef.current = next;
+      setState(next);
+      for (const outcome of sent) window.dispatchEvent(new CustomEvent(FLIGHT_COMMAND_RESULT_EVENT, { detail: { ...outcome.result, state: next } }));
+    }
+    if (refused && !refused.result.ok) setNotice(sent.length ? `Отправлено флотов: ${sent.length} из ${outcomes.length}. ${refused.result.error.message}` : refused.result.error.message, 'error');
+    else if (sent.length === 1 && sent[0]!.result.ok) setNotice(sent[0]!.result.notice);
+    else setNotice(`Отправлено флотов: ${sent.length}.`);
+    return outcomes;
+  };
+  /** Quick panel «Подробно»: select the source planet, then open the fleet screen prefilled. */
+  const openQuickDetails = (context: FlightLaunchContext, originPlanetId: string | null) => {
+    if (originPlanetId && originPlanetId !== stateRef.current.currentPlanetId && stateRef.current.planets[originPlanetId]) {
+      const next = selectOwnedPlanet(stateRef.current, originPlanetId);
+      stateRef.current = next;
+      setState(next);
+    }
+    openSunFleetLaunch(context);
+  };
+
   const openUniverseTarget = (target: UniverseFocusTarget) => {
     clearBuildingInterior();
     closePlanetEditor();
@@ -2827,6 +2857,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
                 },
               } : null}
               onRecycleDebris={openDebrisRecycleLaunch}
+              onQuickSend={sendQuickFlights}
+              onQuickDetails={openQuickDetails}
               focusTarget={universeFocusTarget}
               onFocusHandled={() => { setUniverseFocusTarget(null); setPirateFocusTarget(null); }}
             />

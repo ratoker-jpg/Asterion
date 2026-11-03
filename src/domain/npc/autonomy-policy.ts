@@ -114,6 +114,7 @@ export function chooseNpcAutonomyAction(
   profile: NpcProfile,
   candidates: readonly NpcAutonomyCandidate[],
   eventId: string,
+  options: Readonly<{ noWait?: boolean }> = {},
 ): NpcAutonomyCandidate | null {
   if (typeof eventId !== 'string' || eventId.length === 0) throw new TypeError('eventId must be a non-empty string');
   const legal = candidates.filter(validCandidate).slice().sort((left, right) =>
@@ -141,7 +142,8 @@ export function chooseNpcAutonomyAction(
     - (activeGoal ? persistence * 0.04 : 0), 0.02, 0.24);
   // A fixed floor too: when every option is poor (all estimates negative) a
   // player leaves the game for a while rather than doing something pointless.
-  const waitWeight = totalWeight * waitProbability / (1 - waitProbability) + NPC_WAIT_FLOOR_WEIGHT;
+  // `noWait`: the caller keeps a queue busy and wants one of these, not a pause.
+  const waitWeight = options.noWait ? 0 : totalWeight * waitProbability / (1 - waitProbability) + NPC_WAIT_FLOOR_WEIGHT;
   const random = createSeededRandom(JSON.stringify([
     'npc-autonomy-choice:v1', profile.privateSeed, profile.ownerId, eventId,
   ]));

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { describeOwnerPresence, type OwnerPresence } from './application/owner-presence.ts';
 import { DEBRIS_FINDER_ICON, SUN_DEBRIS_ART } from './ui/sun-raid/sun-raid-assets.ts';
 import { NEARBY_DEBRIS_SYSTEM_SPAN, findDebrisNearSystem, nearbySystemWindow } from './domain/espionage/orbital-debris.ts';
@@ -97,6 +97,9 @@ import type { PirateContactPresentation, PirateSystemSelection } from './pirate-
 import type { TargetRelation } from './domain/flights/types.ts';
 import type { SpyTargetState } from './domain/espionage/types.ts';
 import { planetSkinMapArt } from './planet-skin-art.ts';
+import { QuickActions } from './ui/universe/QuickActions.tsx';
+import type { QuickLegOutcome, QuickTarget } from './application/quick-actions.ts';
+import type { DispatchFlightCommand, FlightLaunchContext } from './application/flights.ts';
 
 const planetArts = [
   planet01, planet02, planet03, planet04, planet05, planet06, planet07, planet08, planet09, planet10, planet11, planet12,
@@ -154,6 +157,10 @@ type UniverseViewProps = {
   sunAlerts?: readonly { galaxy: number; system: number }[];
   /** The map opens on the home system (random starts are no longer [1:1]). */
   homeCoordinate?: { galaxy: number; system: number };
+  /** Right mouse button: sends quick-panel legs through the fleet screen's dispatch. */
+  onQuickSend?: (commands: DispatchFlightCommand[]) => QuickLegOutcome[];
+  /** Quick panel «Подробно»: the fleet screen with the launch prefilled from that planet. */
+  onQuickDetails?: (context: FlightLaunchContext, originPlanetId: string | null) => void;
 };
 
 const POINT_LABELS: ReadonlyArray<{ key: keyof UniverseOwnerPoints; label: string }> = [
@@ -608,7 +615,7 @@ function useStableValue<T>(value: T, key: string): T {
 
 // The clock belongs to the map, not to a render or a selected object. Toggling
 // the layer and visiting another system must not restart orbital motion.
-function MovingAsteroid({ node, underlyingKind, nowMs, hasDebris, occupiedNodes, onSelect }: { node: UniversePlanetNode; underlyingKind?: UniversePlanetNode['kind']; nowMs: number; hasDebris: boolean; occupiedNodes: readonly UniversePlanetNode[]; onSelect: (node: UniversePlanetNode) => void }) {
+function MovingAsteroid({ node, underlyingKind, nowMs, hasDebris, occupiedNodes, onSelect, onQuick }: { node: UniversePlanetNode; underlyingKind?: UniversePlanetNode['kind']; nowMs: number; hasDebris: boolean; occupiedNodes: readonly UniversePlanetNode[]; onSelect: (node: UniversePlanetNode) => void; onQuick?: (node: UniversePlanetNode, event: ReactMouseEvent<HTMLElement>) => void }) {
   const ref = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const point = getUniverseAsteroidPoint(node, nowMs, occupiedNodes);
@@ -631,13 +638,13 @@ function MovingAsteroid({ node, underlyingKind, nowMs, hasDebris, occupiedNodes,
     data-qa-universe-asteroid-next-coordinate={nextCoordinate}
     data-qa-universe-asteroid-gas="hidden"
     data-qa-universe-asteroid-debris={hasDebris ? 'present' : 'absent'}
-    data-qa-universe-object={node.id} data-qa-universe-kind="asteroid" data-qa-universe-underlying-kind={underlyingKind ?? ''} onClick={() => onSelect(node)}>
+    data-qa-universe-object={node.id} data-qa-universe-kind="asteroid" data-qa-universe-underlying-kind={underlyingKind ?? ''} onClick={() => onSelect(node)} onContextMenu={onQuick ? (event) => onQuick(node, event) : undefined}>
     <img src={node.art} alt="" draggable={false} /><span className="system-asteroid__label">АСТЕРОИД · {node.coordinate.position}</span>
     {hasDebris ? <span className="universe-asteroid-debris-marker"><DebrisChip label="обломки" ariaLabel="Обломки на астероиде: есть" /><span className="universe-debris-tooltip universe-asteroid-debris-tooltip" id={`universe-asteroid-debris-tooltip-${node.asteroid?.spawnIndex}`} role="tooltip">На астероиде есть обломки</span></span> : null}
   </button>;
 }
 
-export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPlanetName, profile, ownerScores, command, playerPlanets: playerPlanetsProp, spyTargets: spyTargetsProp, orbitalDebrisByCoordinate, asteroidDebrisPresenceBySpawnIndex, asteroidStates, pirateContactState, pirateContacts = [], pirateFocusTarget, mode, onColonize, onAsteroidRecycler, onExpedition, onExplorationRecon, onExplorationAttack, explorationEligibility = {}, onTransport, onSpy, onAttack, onPirateRecon, onPirateAttack, onPirateReport, onPirateSystemChange, focusTarget, onFocusHandled, onSunSelect, sunAlerts = [], homeCoordinate, debrisOrigin, onRecycleDebris }: UniverseViewProps) {
+export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPlanetName, profile, ownerScores, command, playerPlanets: playerPlanetsProp, spyTargets: spyTargetsProp, orbitalDebrisByCoordinate, asteroidDebrisPresenceBySpawnIndex, asteroidStates, pirateContactState, pirateContacts = [], pirateFocusTarget, mode, onColonize, onAsteroidRecycler, onExpedition, onExplorationRecon, onExplorationAttack, explorationEligibility = {}, onTransport, onSpy, onAttack, onPirateRecon, onPirateAttack, onPirateReport, onPirateSystemChange, focusTarget, onFocusHandled, onSunSelect, sunAlerts = [], homeCoordinate, debrisOrigin, onRecycleDebris, onQuickSend, onQuickDetails }: UniverseViewProps) {
   const galaxyCount = getActiveGalaxyCount();
   const [galaxy, setGalaxy] = useState(homeCoordinate?.galaxy ?? GALAXY);
   const [system, setSystem] = useState(homeCoordinate?.system ?? 1);
@@ -650,6 +657,7 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [debrisSearch, setDebrisSearch] = useState<null | { origin: { planetName: string; coordinate: UniverseCoordinate }; from: number; to: number; results: Array<{ coordinate: UniverseCoordinate; debris: number }> }>(null);
   const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(null);
+  const [quick, setQuick] = useState<{ nodeId: string; anchor: HTMLElement } | null>(null);
   const highlightTimerRef = useRef(0);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const onPirateSystemChangeRef = useRef(onPirateSystemChange);
@@ -863,6 +871,7 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
     setGalaxy(boundedGalaxy);
     setSystem(bounded);
     setSelectedNodeId(null);
+    setQuick(null);
     onNotice(`Галактика ${boundedGalaxy} · Солнечная система ${bounded}.`);
   };
   const openDebrisSearch = () => {
@@ -894,6 +903,29 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
   const pad2 = (value: number) => String(value).padStart(2, '0');
 
   const selectNode = (node: UniversePlanetNode) => setSelectedNodeId(node.id);
+  // Right mouse button (or the context-menu key) opens quick actions beside the object; left click keeps the card.
+  const openQuick = (node: UniversePlanetNode, event: ReactMouseEvent<HTMLElement>) => {
+    if (!onQuickSend) return;
+    event.preventDefault();
+    setQuick({ nodeId: node.id, anchor: event.currentTarget });
+  };
+  const quickNode = quick ? systemNodesById.get(quick.nodeId) ?? null : null;
+  const quickTarget = useMemo<QuickTarget | null>(() => {
+    if (!quickNode) return null;
+    const key = `${quickNode.coordinate.galaxy}:${quickNode.coordinate.system}:${quickNode.coordinate.position}`;
+    const targetOwner = quickNode.kind === 'player' || quickNode.kind === 'npc' ? owners.get(quickNode.ownerId ?? '') : undefined;
+    return {
+      node: quickNode,
+      ...(quickNode.kind === 'player' || quickNode.kind === 'npc' ? { relation: getUniverseOwnerRelation(quickNode, owner.id, owner.alliance, targetOwner, allianceDiplomacy) } : {}),
+      ...(targetOwner ? { owner: { id: targetOwner.id, displayName: targetOwner.displayName, raceId: targetOwner.raceId, alliance: targetOwner.alliance ?? null } } : {}),
+      ...(quickNode.kind === 'asteroid' ? { underlyingKind: systemData.positions.find((node) => node.coordinate.position === quickNode.coordinate.position)?.kind } : {}),
+      orbitalDebris: quickNode.kind === 'asteroid' ? 0 : orbitalDebrisByKey.get(key) ?? 0,
+      explorationStatus: explorationEligibility[quickNode.id],
+      ...(quickNode.kind === 'pirate' ? { pirate: pirateContacts.find((contact) => contact.contactCycleKey === quickNode.pirate?.contactCycleKey) } : {}),
+    };
+    // Rebuilt when the object or what is known about it changes, not on every clock tick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quickNode?.id, quickNode?.coordinate.position, owners, allianceDiplomacy, orbitalDebrisByKey, explorationEligibility[quickNode?.id ?? ''], pirateContacts]);
 
   const handleAction = (action: UniverseAction, node: UniversePlanetNode) => {
     const targetOwner = owners.get(node.ownerId ?? '');
@@ -973,6 +1005,7 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
                 data-qa-universe-object={node.id}
                 data-qa-universe-kind={node.kind}
                 onClick={() => selectNode(node)}
+                onContextMenu={(event) => openQuick(node, event)}
               >
                 {showSlotLabels ? <span>{node.coordinate.position}</span> : null}
                 {orbitalDebris > 0 && showDebris ? <span className="universe-debris-marker"><DebrisChip label={compactAmount(orbitalDebris)} /><span className="universe-debris-tooltip" id={`universe-debris-tooltip-${node.id}`} role="tooltip">Обломки на орбите: {numberFormat.format(orbitalDebris)}</span></span> : null}
@@ -992,6 +1025,7 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
               data-qa-universe-kind={node.kind}
               data-qa-universe-relation={relation ?? undefined}
               onClick={() => selectNode(node)}
+              onContextMenu={(event) => openQuick(node, event)}
             >
               {claim ? <span className={`uv-claim-ring uv-claim-ring--${claim}`} aria-hidden="true" /> : null}
               <img src={node.art} alt="" draggable={false} />
@@ -1007,7 +1041,7 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
           );
         })}
 
-        {showAsteroids ? systemData.asteroids.map((asteroid) => <MovingAsteroid key={asteroid.id} node={asteroid} underlyingKind={systemData.positions.find((node) => node.coordinate.position === asteroid.coordinate.position)?.kind} nowMs={nowMs} hasDebris={Boolean(asteroid.asteroid && asteroidDebrisPresenceBySpawnIndex?.[String(asteroid.asteroid.spawnIndex)])} occupiedNodes={asteroidAttachmentNodes} onSelect={selectNode} />) : null}
+        {showAsteroids ? systemData.asteroids.map((asteroid) => <MovingAsteroid key={asteroid.id} node={asteroid} underlyingKind={systemData.positions.find((node) => node.coordinate.position === asteroid.coordinate.position)?.kind} nowMs={nowMs} hasDebris={Boolean(asteroid.asteroid && asteroidDebrisPresenceBySpawnIndex?.[String(asteroid.asteroid.spawnIndex)])} occupiedNodes={asteroidAttachmentNodes} onSelect={selectNode} onQuick={openQuick} />) : null}
       </div>
 
       <div className="universe-radar__crumb">
@@ -1028,7 +1062,7 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
         </button>
         <div className="universe-radar__list-body">
           {listedNodes.map(({ node, legend }) => (
-            <button type="button" key={node.id} className={`universe-radar__row legend-${legend} ${selectedNodeId === node.id ? 'is-selected' : ''}`} onClick={() => selectNode(node)}>
+            <button type="button" key={node.id} className={`universe-radar__row legend-${legend} ${selectedNodeId === node.id ? 'is-selected' : ''}`} onClick={() => selectNode(node)} onContextMenu={(event) => openQuick(node, event)}>
               <span className="universe-radar__pos">{node.coordinate.position}</span>
               <img src={node.art} alt="" draggable={false} />
               <strong>{getUniverseNodeCaption(node, profile.displayName, owners.get(node.ownerId ?? '')?.displayName, owner.id)}</strong>
@@ -1145,6 +1179,12 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
           </section>
         </div>,
         document.body,
+      ) : null}
+
+      {quick && quickTarget && !selectedNode && onQuickSend ? (
+        <QuickActions target={quickTarget} anchor={quick.anchor} onClose={() => setQuick(null)} onSend={onQuickSend}
+          onDetails={(context, originPlanetId) => onQuickDetails?.(context, originPlanetId)}
+          onOpenCard={() => setSelectedNodeId(quickTarget.node.id)} onPirateReport={onPirateReport} />
       ) : null}
 
       {selectedNode ? createPortal(

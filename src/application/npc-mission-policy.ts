@@ -328,10 +328,30 @@ function systemDistance(left: UniverseCoordinate, right: UniverseCoordinate): nu
   return left.galaxy === right.galaxy ? Math.abs(left.system - right.system) : 1_000 + Math.abs(left.galaxy - right.galaxy);
 }
 
+/** A unique object pays by cargo carried home: a lone hull parked to «hold» it earns nothing and dies to the first attack. */
+export const NPC_EXPEDITION_MIN_CARGO = 50_000;
+/** Share of the owner's hauling hulls it risks on one expedition. */
+export const NPC_EXPEDITION_RISK_SHARE = 0.5;
+
 function availableExpeditionShip(available: Partial<Record<ShipId, number>>, factionId: SpyTargetState['raceId']): Partial<Record<ShipId, number>> | null {
-  const preferred = available.scout && available.scout > 0 ? 'scout' : SHIP_IDS.find((shipId) =>
-    available[shipId] && available[shipId]! > 0 && isAttackCombatShip(shipId, factionId));
-  return preferred ? { [preferred]: 1 } : null;
+  const catalog = getFactionShipCatalog(factionId);
+  const haulers = (Object.entries(available) as [ShipId, number][]).filter(([, count]) => count > 0)
+    .map(([id, count]) => ({ id, count, cargo: catalog.find((entity) => entity.id === id)?.ship?.cargo ?? 0 }))
+    .filter((hull) => hull.cargo > 0 && (hull.id === 'transporter' || hull.id === 'mega-transporter' || hull.id === 'recycler'))
+    .sort((left, right) => right.cargo - left.cargo || compareIds(left.id, right.id));
+  const chosen: Partial<Record<ShipId, number>> = {};
+  let capacity = 0;
+  for (const hull of haulers) {
+    const count = Math.floor(hull.count * NPC_EXPEDITION_RISK_SHARE);
+    if (count <= 0) continue;
+    chosen[hull.id] = count;
+    capacity += count * hull.cargo;
+  }
+  if (capacity < NPC_EXPEDITION_MIN_CARGO) return null;
+  // A small escort of its cheapest warships rides along when the owner has them.
+  const escort = SHIP_IDS.find((shipId) => (available[shipId] ?? 0) >= 4 && isAttackCombatShip(shipId, factionId));
+  if (escort) chosen[escort] = Math.floor(available[escort]! / 4);
+  return chosen;
 }
 
 /** Just enough recyclers (largest holds first) to carry `debris`, or all that are left. */

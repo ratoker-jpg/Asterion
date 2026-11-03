@@ -671,7 +671,7 @@ export function resolveRecycleTargetKindAtCoordinate(
   return activeAsteroidOverlay && actualTarget.kind === 'empty' ? 'asteroid' : actualTarget.kind;
 }
 
-function isRecyclerShip(shipId: ShipId, factionId: CombatFactionId): boolean {
+export function isRecyclerShip(shipId: ShipId, factionId: CombatFactionId): boolean {
   const entity = getFactionShipCatalog(factionId).find((candidate) => candidate.id === shipId);
   return Boolean(entity?.role.toLocaleLowerCase().includes('переработчик'));
 }
