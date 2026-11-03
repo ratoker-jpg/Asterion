@@ -10,6 +10,7 @@ import { flushSync, createPortal } from 'react-dom';
 import './planet-skins.css';
 import './universe.css';
 import { UniverseView } from './UniverseView';
+import { applyFleetUiUpdate, FLEET_UI_UPDATE_EVENT, type FleetUiUpdate } from './domain/flights/fleet-ui.ts';
 import { OperationsView } from './OperationsView';
 import { createOperationsVariantAQaFixture, getOperationsVariantAQaStatus } from './operations-variant-a-qa-fixture.ts';
 import { createUniverseNpcOwnerProfile, rerollTestUniverseLayout, TEST_MODE_ALLY_PLANET_FIXTURE, UNIVERSE_NPC_OWNER_ID } from './domain/universe/runtime.ts';
@@ -725,6 +726,17 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     if (RUNTIME_MODE !== 'test') return;
     persistence.writeTestTimeScale(testTimeScale);
   }, [persistence, testTimeScale]);
+
+  useEffect(() => {
+    const onFleetUiUpdate = (event: Event) => {
+      const update = (event as CustomEvent<FleetUiUpdate>).detail;
+      const next = { ...stateRef.current, fleetUi: applyFleetUiUpdate(stateRef.current.fleetUi, update) };
+      stateRef.current = next;
+      setState(next);
+    };
+    window.addEventListener(FLEET_UI_UPDATE_EVENT, onFleetUiUpdate);
+    return () => window.removeEventListener(FLEET_UI_UPDATE_EVENT, onFleetUiUpdate);
+  }, []);
 
   useEffect(() => {
     const onDispatchRequest = (event: Event) => {
@@ -2900,7 +2912,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               onAttack={openAttackLaunch}
               onSunSelect={(galaxy, system) => openSunsPanel({ galaxy, system })}
               sunAlerts={sunAlerts.map((alert) => ({ galaxy: alert.raid.galaxy, system: alert.raid.system }))}
-              homeCoordinate={{ galaxy: homePlanet?.universeGalaxy ?? 1, system: homePlanet?.universeSystem ?? 1 }}
+              homeCoordinate={{ galaxy: (state.planets[state.currentPlanetId] ?? homePlanet)?.universeGalaxy ?? 1, system: (state.planets[state.currentPlanetId] ?? homePlanet)?.universeSystem ?? 1 }}
               debrisOrigin={state.planets[state.currentPlanetId] ? {
                 planetName: state.planets[state.currentPlanetId]!.name,
                 coordinate: {

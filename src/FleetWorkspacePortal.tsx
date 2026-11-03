@@ -89,6 +89,7 @@ import { EMPTY_ART, MISSION_BANNERS } from './ui/ui-art.ts';
 import './building-card.css';
 import './fleet-workspace.css';
 import './ui/fleet/fleet-root-v2.css';
+import './ui/fleet/fleet-repeat.css';
 
 const FLEET_ROOT_STATUS = 'Выберите корабли и миссию. Для колонизации сначала выберите свободную координату во Вселенной.';
 const GAS_PREVIEW_FRESHNESS_WINDOW_MS = 10_000;
@@ -128,6 +129,17 @@ import missionAidIcon from '../assets/source/mission-icons-v1/33_trade_convoy.pn
 import { AID_MISSION_DESCRIPTION, AID_MISSION_ENABLED, AID_TRANSPORT_SHIP_IDS } from './domain/flights/aid-mission.ts';
 import { AID_RESOURCE_LABELS, selectFulfillableRequests, selectRequestById } from './domain/command/aid.ts';
 import { selectRequestProgress } from './application/alliance-aid.ts';
+import {
+  FOLLOW_UP_MISSIONS,
+  buildFlightRepeatPlan,
+  canRepeatFlight,
+  carryComposition,
+  clampComposition,
+  listSourcePlanets,
+  pickNextSourcePlanet,
+  type FlightRepeatPlan,
+} from './application/flight-repeat.ts';
+import { FLEET_UI_UPDATE_EVENT, isFavoriteTarget, type FleetFavoriteTarget, type FleetUiUpdate } from './domain/flights/fleet-ui.ts';
 
 function queueKindForConstructionView(view: ConstructionView): FleetProductionQueueKind | null {
   if (view === 'ships') return 'ships';
@@ -418,9 +430,21 @@ function FleetWorkspace({
   const [selectedAidRequestId, setSelectedAidRequestId] = useState<string | null>(null);
   const [transportCargoDraft, setTransportCargoDraft] = useState<TransportCargo>(emptyTransportCargo);
   const [pendingRecall, setPendingRecall] = useState<FlightRecord | null>(null);
+  /** The flight just sent: mission and target stay, «Ещё с другой планеты» sends the next wave. */
+  const [sentFlight, setSentFlight] = useState<FlightRecord | null>(null);
+  /** Opens the plan after the composition for another source has been committed. */
+  const [planOpenRequest, setPlanOpenRequest] = useState<{ originPlanetId: string; nonce: number } | null>(null);
+  const dispatchRequestIdRef = useRef<string | null>(null);
+  const pendingRepeatRef = useRef<FlightRepeatPlan | null>(null);
   const [clockNow, setClockNow] = useState(() => Date.now());
   const fleetSnapshot = useMemo(() => getFleetSnapshot(saveState, planetId as SaveState['currentPlanetId']), [planetId, saveState]);
   const fleetBudget = useMemo(() => getFleetBuildBudget(saveState, planetId as SaveState['currentPlanetId']), [planetId, saveState]);
+  /** The plan may launch from another own planet; the root screen always shows the current one. */
+  const launchPlanetId = previewOriginPlanetId && saveState.planets[previewOriginPlanetId] ? previewOriginPlanetId : planetId;
+  const sourceFleet = useMemo(
+    () => launchPlanetId === planetId ? fleetSnapshot.fleet : getAvailableFleetForPlanet(saveState, launchPlanetId),
+    [fleetSnapshot.fleet, launchPlanetId, planetId, saveState],
+  );
   const flightRecords = saveState.flights.records;
   const flightSlots = useMemo(() => getPlayerFlightSlotUsage(saveState), [saveState]);
   const espionageState = saveState.espionage ?? { missions: [], reports: [], hunterNotices: [] };
@@ -455,36 +479,39 @@ function FleetWorkspace({
     [fleetSnapshot.factionId, fleetSnapshot.fleet, fleetSnapshot.fleetProduction, fleetSnapshot.hangarLevel],
   );
   const ownedShipDefinitions = useMemo(
-    () => shipDefinitions.filter((ship) => ship.id !== SOLAR_SATELLITE_ID && (fleetSnapshot.fleet.ships[ship.id] ?? 0) > 0),
-    [fleetSnapshot.fleet, shipDefinitions],
+    () => shipDefinitions.filter((ship) => ship.id !== SOLAR_SATELLITE_ID && (sourceFleet.ships[ship.id] ?? 0) > 0),
+    [sourceFleet, shipDefinitions],
   );
   const availableShipCount = useMemo(
-    () => ownedShipDefinitions.reduce((total, ship) => total + (fleetSnapshot.fleet.ships[ship.id] ?? 0), 0),
-    [fleetSnapshot.fleet, ownedShipDefinitions],
+    () => ownedShipDefinitions.reduce((total, ship) => total + (sourceFleet.ships[ship.id] ?? 0), 0),
+    [sourceFleet, ownedShipDefinitions],
   );
 
-  const visibleShipDefinitions = missionId === 'colonize'
-    ? ownedShipDefinitions.filter((ship) => ship.id === 'colonizer')
+  /** Ship types the selected mission can take; the same filter on every source planet. */
+  const isMissionShip = (shipId: ShipId) => shipId !== SOLAR_SATELLITE_ID && (missionId === 'colonize'
+    ? shipId === 'colonizer'
     : missionId === 'espionage'
-      ? ownedShipDefinitions.filter((ship) => ship.id === 'spy-probe')
+      ? shipId === 'spy-probe'
       : missionId === 'pirate-elimination'
-        ? ownedShipDefinitions.filter((ship) => getFactionShipCatalog(factionId).find((entity) => entity.id === ship.id)?.category === 'Боевой корабль')
+        ? shipDefinitions.find((entity) => entity.id === shipId)?.category === 'Боевой корабль'
       : missionId === 'sun-support'
-        ? ownedShipDefinitions.filter((ship) => isSunCombatHull(ship.id as ShipId))
+        ? isSunCombatHull(shipId)
       : missionId === 'attack'
-        ? ownedShipDefinitions.filter((ship) => isAttackCombatShip(ship.id, factionId))
+        ? isAttackCombatShip(shipId, factionId)
         : missionId === 'recycle' || missionId === 'gas'
-          ? ownedShipDefinitions.filter((ship) => ship.id === 'recycler')
+          ? shipId === 'recycler'
           : missionId === 'aid'
-            ? ownedShipDefinitions.filter((ship) => (AID_TRANSPORT_SHIP_IDS as readonly string[]).includes(ship.id))
-      : ownedShipDefinitions;
+            ? (AID_TRANSPORT_SHIP_IDS as readonly string[]).includes(shipId)
+      : true);
+  const missionShipIds = shipDefinitions.map((ship) => ship.id as ShipId).filter(isMissionShip);
+  const visibleShipDefinitions = ownedShipDefinitions.filter((ship) => isMissionShip(ship.id as ShipId));
   const commanderAvailability = useMemo(() => {
     if (missionId !== 'attack' && missionId !== 'pirate-elimination' && missionId !== 'deployment' && missionId !== 'space-flight' && missionId !== 'sun-support') return {} as Partial<Record<CommanderId, number>>;
     const runtimeState = saveState;
     return missionId === 'attack' || missionId === 'pirate-elimination'
-      ? getAttackCommanderSelection(runtimeState, planetId)
-      : getAvailableFleetForPlanet(runtimeState, planetId).commanders;
-  }, [flightRecords, fleetSnapshot.fleet, missionId, planetId, saveState]);
+      ? getAttackCommanderSelection(runtimeState, launchPlanetId)
+      : getAvailableFleetForPlanet(runtimeState, launchPlanetId).commanders;
+  }, [flightRecords, fleetSnapshot.fleet, missionId, launchPlanetId, saveState]);
   const selectedShipCount = useMemo(
     () => visibleShipDefinitions.reduce((total, ship) => total + (selectedQuantities[ship.id] ?? 0), 0),
     [selectedQuantities, visibleShipDefinitions],
@@ -593,6 +620,43 @@ function FleetWorkspace({
     setSimulatorHandoff(null);
     setSpyOperationsOpen(false);
     setSelectedSpyMissionIds(new Set());
+    setSentFlight(null);
+    setPlanOpenRequest(null);
+    pendingRepeatRef.current = null;
+  };
+
+  /** Commanders for a source: attack takes all free ones, as when the mission is picked. */
+  const commandersFor = (sourceId: string, wanted: Partial<Record<CommanderId, number>>, runtimeState = saveStateRef.current) =>
+    missionId === 'attack' || missionId === 'pirate-elimination'
+      ? getAttackCommanderSelection(runtimeState, sourceId)
+      : clampComposition(wanted, getAvailableFleetForPlanet(runtimeState, sourceId).commanders);
+
+  /** Moves the chosen ships to another source planet without touching mission or target. */
+  const carryCompositionTo = (fromId: string, toId: string, runtimeState = saveStateRef.current) => {
+    if (fromId === toId) return;
+    const before = getAvailableFleetForPlanet(runtimeState, fromId).ships;
+    const after = getAvailableFleetForPlanet(runtimeState, toId).ships;
+    setSelectedQuantities((current) => missionId === 'colonize' || missionId === 'espionage'
+      ? clampComposition(current, after)
+      : carryComposition(current, before, after, missionShipIds));
+    setSelectedCommanders((current) => commandersFor(toId, current, runtimeState));
+  };
+
+  /** Opens (or re-checks) the plan from the given source once its composition is in state. */
+  const requestPlan = (originPlanetId: string) => {
+    setPreviewOriginPlanetId(originPlanetId);
+    setPlanOpenRequest({ originPlanetId, nonce: Date.now() + Math.random() });
+  };
+
+  const changePlanSource = (nextId: string) => {
+    if (!saveState.planets[nextId] || nextId === launchPlanetId) return;
+    carryCompositionTo(launchPlanetId, nextId, saveState);
+    setTransportCargoDraft(emptyTransportCargo());
+    requestPlan(nextId);
+  };
+
+  const updateFleetUi = (update: FleetUiUpdate) => {
+    window.dispatchEvent(new CustomEvent<FleetUiUpdate>(FLEET_UI_UPDATE_EVENT, { detail: update }));
   };
 
   const clearLaunchContext = () => {
@@ -601,6 +665,9 @@ function FleetWorkspace({
   };
 
   const closeFlightPreview = () => {
+    // The root screen shows the current planet again; the chosen ships follow it.
+    if (launchPlanetId !== planetId) carryCompositionTo(launchPlanetId, planetId);
+    setPreviewOriginPlanetId(null);
     setPreviewOpen(false);
     setPreviewResult(null);
     setPreviewSubmittedTargetKind(null);
@@ -654,18 +721,69 @@ function FleetWorkspace({
     setStatus(launchContext.destination?.kind === 'operation' && launchContext.operationId?.startsWith('sun:')
       ? `Цель: ${launchContext.targetPlanetName ?? 'Солнце'} [${launchContext.destination.coordinate.galaxy}:${launchContext.destination.coordinate.system}:0].`
       : launchContext.destination ? `Цель: ${flightCoordinateLabel(launchContext.destination.coordinate)}.` : 'Выберите корабли и координаты цели.');
-  }, [launchContext, planetId]);
+    setSentFlight(null);
+    const repeat = pendingRepeatRef.current;
+    pendingRepeatRef.current = null;
+    if (repeat && repeat.context === launchContext && runtimeState.planets[repeat.originPlanetId]) {
+      // «Повторить»: the same source, target and composition, capped by what is on the planet now.
+      const available = getAvailableFleetForPlanet(runtimeState, repeat.originPlanetId);
+      setSelectedQuantities(clampComposition(repeat.ships, available.ships));
+      setSelectedCommanders(clampComposition(repeat.commanders, available.commanders));
+      if (repeat.cargo) setTransportCargoDraft(repeat.cargo);
+      setStatus(`Повтор рейса: ${flightMissionLabel(launchContext.missionId)} с планеты ${runtimeState.planets[repeat.originPlanetId]!.name}.`);
+      requestPlan(repeat.originPlanetId);
+    }
+  }, [launchContext]);
+
+  // Picking another planet in the header keeps mission and target; the ships follow the new planet.
+  const previousPlanetIdRef = useRef(planetId);
+  useEffect(() => {
+    const previous = previousPlanetIdRef.current;
+    previousPlanetIdRef.current = planetId;
+    if (previous === planetId) return;
+    // An open plan belonged to the other planet: close it, the ships move with the screen.
+    if (previewOpen) closeFlightPreview();
+    else carryCompositionTo(previous, planetId);
+  }, [planetId]);
 
   useEffect(() => {
-    resetFlightWorkspace();
-  }, [planetId]);
+    if (!planOpenRequest) return;
+    openFlightPreview(planOpenRequest.originPlanetId);
+  }, [planOpenRequest]);
 
   useEffect(() => {
     const onCommandResult = (event: Event) => {
       const result = (event as CustomEvent<FlightCommandResult>).detail;
       if (result.ok) {
-        resetFlightWorkspace();
-        setStatus(result.notice);
+        const ownDispatch = dispatchRequestIdRef.current !== null && result.flight?.requestId === dispatchRequestIdRef.current;
+        if (ownDispatch) dispatchRequestIdRef.current = null;
+        if (ownDispatch && FOLLOW_UP_MISSIONS.has(result.flight.missionId)) {
+          // Mission and target stay for the next wave; only the ships left on the current planet remain chosen.
+          const flight = result.flight;
+          const left = getAvailableFleetForPlanet(result.state, result.state.currentPlanetId);
+          setSelectedQuantities((current) => clampComposition(current, left.ships));
+          setSelectedCommanders((current) => clampComposition(current, left.commanders));
+          setTransportCargoDraft(emptyTransportCargo());
+          setPreviewOpen(false);
+          setPreviewResult(null);
+          setPreviewOriginPlanetId(null);
+          setPreviewSubmittedTargetKind(null);
+          setPreviewTargetError(null);
+          setGasPreviewNeedsReconfirmation(false);
+          setSentFlight(flight);
+          setStatus(result.notice);
+          if ((flight.missionId === 'transport' || flight.missionId === 'deployment') && flight.destination.kind === 'planet' && flight.targetRelation === 'self') {
+            window.dispatchEvent(new CustomEvent<FleetUiUpdate>(FLEET_UI_UPDATE_EVENT, {
+              detail: { kind: 'remember-own-target', missionId: flight.missionId, planetId: flight.destination.planetId },
+            }));
+          }
+        } else if (ownDispatch) {
+          resetFlightWorkspace();
+          window.dispatchEvent(new Event(FLIGHT_LAUNCH_CONTEXT_CLEAR_EVENT));
+          setStatus(result.notice);
+        } else {
+          setStatus(result.notice);
+        }
       } else {
         setStatus(result.error.message);
         setPreviewResult(result);
@@ -844,9 +962,10 @@ function FleetWorkspace({
     setPreviewSubmittedTargetKind(null);
   }, [missionId, oneWayDurationMinutes, previewOpen, previewOriginPlanetId, saveState, selectedCommanders, selectedQuantities, transportCargoDraft]);
 
-  const openFlightPreview = () => {
+  const openFlightPreview = (originOverride?: string) => {
     const runtimeState = saveState;
-    const originPlanetId = runtimeState.currentPlanetId;
+    const originPlanetId = originOverride && runtimeState.planets[originOverride] ? originOverride : planetId;
+    setSentFlight(null);
     const availablePirates = missionId === 'pirate-elimination' ? selectOwnedPirateTargets(runtimeState, Date.now()) : [];
     const expeditionTargets = missionId === 'expedition' ? selectExplorationTargets(runtimeState, Date.now(), ACTIVE_RUNTIME_MODE) : [];
     const requestedExpedition = expeditionTargets.find(item => item.id === selectedExplorationTargetKey)
@@ -860,7 +979,7 @@ function FleetWorkspace({
       ? aidRequestForPreview && aidRequestForPreview.status === 'open'
         ? { kind: 'planet' as const, planetId: aidRequestForPreview.planetId, coordinate: { ...aidRequestForPreview.coordinate } }
         : undefined
-      : previewDestination ?? launchDestination;
+      : previewDestination ?? launchDestination ?? lastOwnTargetFor(originPlanetId);
     const sunTargets = missionId === 'sun-support' ? selectSunSupportTargets(runtimeState, Date.now()) : [];
     const requestedSun = sunTargets.find((item) => item.operationId === selectedSunOperationId)
       ?? (!selectedSunOperationId && sunTargets.length === 1 ? sunTargets[0] : null);
@@ -873,7 +992,8 @@ function FleetWorkspace({
       : missionId === 'space-flight'
       ? createFlightCommand(`preview-${Date.now()}`, { originPlanetId }, runtimeState)?.destination
       : requestedDestination;
-    const targetRelation = missionId === 'pirate-elimination' || missionId === 'expedition' || missionId === 'sun-support' ? 'neutral' : missionId === 'space-flight' ? undefined : missionId === 'aid' ? 'ally' : previewTargetRelation ?? launchTargetRelation;
+    const targetRelation = missionId === 'pirate-elimination' || missionId === 'expedition' || missionId === 'sun-support' ? 'neutral' : missionId === 'space-flight' ? undefined : missionId === 'aid' ? 'ally'
+      : !previewDestination && !launchDestination && destination ? 'self' : previewTargetRelation ?? launchTargetRelation;
     if (requestedSun) setSelectedSunOperationId(requestedSun.operationId);
     const command = missionId === 'space-flight'
       ? createFlightCommand(`preview-${Date.now()}`, { originPlanetId }, runtimeState)
@@ -896,6 +1016,16 @@ function FleetWorkspace({
     }
     setPreviewOpen(true);
   };
+
+  /** Transport / deployment open on the own planet used last time (not the source, not locked). */
+  function lastOwnTargetFor(originPlanetId: string): FlightDestination | undefined {
+    if (missionId !== 'transport' && missionId !== 'deployment') return undefined;
+    const lastId = saveState.fleetUi?.lastOwnTargets?.[missionId];
+    const planet = lastId ? saveState.planets[lastId] : undefined;
+    if (!lastId || !planet || lastId === originPlanetId) return undefined;
+    if (missionId === 'deployment' && getPlanetOverpopulationSummary(saveState, lastId).blocked) return undefined;
+    return { kind: 'planet', planetId: lastId, coordinate: { galaxy: planet.universeGalaxy ?? 1, system: planet.universeSystem ?? 1, position: planet.universePosition ?? 1 } };
+  }
 
   const refreshFlightPreview = (originPlanetId: string, destination: FlightDestination, targetRelation?: TargetRelation | null, pirateContactCycleKey?: string, aidRequestId?: string) => {
     const runtimeState = saveState;
@@ -1096,6 +1226,7 @@ function FleetWorkspace({
 
   const confirmFlightDispatch = () => {
     const requestId = globalThis.crypto?.randomUUID?.() ?? `flight-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    dispatchRequestIdRef.current = requestId;
     const gasPreviewFlight = missionId === 'gas' && previewResult?.ok && previewResult.flight.missionId === 'gas'
       ? previewResult.flight
       : null;
@@ -1209,7 +1340,7 @@ function FleetWorkspace({
   const setShipQuantity = (shipId: ShipId, raw: number) => {
     if (shipId === SOLAR_SATELLITE_ID) return;
     if (missionId === 'colonize' && shipId !== 'colonizer') return;
-    const available = fleetSnapshot.fleet.ships[shipId] ?? 0;
+    const available = sourceFleet.ships[shipId] ?? 0;
     const next = missionId === 'colonize' || missionId === 'espionage'
       ? Math.min(1, available)
       : Number.isFinite(raw) ? Math.max(0, Math.min(available, Math.floor(raw))) : 0;
@@ -1240,7 +1371,7 @@ function FleetWorkspace({
     }
     if (nextMissionId === 'attack' || nextMissionId === 'pirate-elimination') {
       const runtimeState = saveState;
-      setSelectedCommanders(getAttackCommanderSelection(runtimeState, runtimeState.currentPlanetId));
+      setSelectedCommanders(getAttackCommanderSelection(runtimeState, launchPlanetId));
       setAttackRounds(12);
     } else {
       setSelectedCommanders({});
@@ -1254,7 +1385,7 @@ function FleetWorkspace({
       setGasPreviewNeedsReconfirmation(false);
     }
     setSelectedQuantities(Object.fromEntries(
-      visibleShipDefinitions.map((ship) => [ship.id, maximum ? (missionId === 'colonize' || missionId === 'espionage' ? 1 : fleetSnapshot.fleet.ships[ship.id] ?? 0) : 0]),
+      visibleShipDefinitions.map((ship) => [ship.id, maximum ? (missionId === 'colonize' || missionId === 'espionage' ? 1 : sourceFleet.ships[ship.id] ?? 0) : 0]),
     ) as Partial<Record<ShipId, number>>);
   };
 
@@ -1454,6 +1585,76 @@ function FleetWorkspace({
   /** Missions with the cargo editor keep the summary to one line: the editor must stay on screen. */
   const compactSummary = missionId === 'transport' || missionId === 'aid' || missionId === 'space-flight';
   const holdLabel = missionId === 'recycle' ? 'ТРЮМ ОБЛОМКОВ' : missionId === 'gas' ? 'ТРЮМ ГАЗА' : 'ГРУЗОПОДЪЁМНОСТЬ';
+  const sourceTargetCoordinate = previewOpen ? previewTargetDestination?.coordinate ?? null : (sentFlight?.destinationCoordinate ?? previewDestination?.coordinate ?? launchDestination?.coordinate ?? null);
+  const sourceOptions = listSourcePlanets(saveState, isMissionShip, sourceTargetCoordinate);
+  const nextWaveSourceId = sentFlight
+    ? pickNextSourcePlanet(sourceOptions, [sentFlight.originPlanetId, ...(sentFlight.destination.kind === 'planet' ? [sentFlight.destination.planetId] : [])])
+    : null;
+  const lastOwnTargetId = missionId === 'transport' || missionId === 'deployment' ? saveState.fleetUi?.lastOwnTargets?.[missionId] : undefined;
+  const favoriteTargets = saveState.fleetUi?.favoriteTargets ?? [];
+  const favoriteMission = missionId === 'attack' || missionId === 'transport' || missionId === 'colonize' || missionId === 'recycle' || missionId === 'gas';
+  const favoriteCoordinate = previewTargetDestination?.kind === 'coordinate' || previewTargetDestination?.kind === 'planet'
+    ? previewTargetDestination.coordinate
+    : !previewTargetError && coordinateDraftError(previewTargetDraft) === null ? coordinateFromDraft(previewTargetDraft) : null;
+  const favoriteName = previewTargetPlanet?.name ?? (previewTargetTyped ? undefined : launchContext?.targetPlanetName);
+  const targetIsFavorite = favoriteCoordinate ? isFavoriteTarget(saveState.fleetUi, favoriteCoordinate) : false;
+  /** Finished own routes the player can send again; the newest of each route only. */
+  const recentFlights = (() => {
+    const seen = new Set<string>();
+    return flightRecords
+      .filter((flight) => flight.phase === 'completed' && canRepeatFlight(saveState, flight))
+      .sort((left, right) => (right.completedAt ?? right.returnAt ?? 0) - (left.completedAt ?? left.returnAt ?? 0))
+      .filter((flight) => {
+        const key = `${flight.missionId}|${flight.originPlanetId}|${flightCoordinateLabel(flight.destinationCoordinate)}|${JSON.stringify(flight.selectedShips)}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 5);
+  })();
+
+  const repeatFlight = (flight: FlightRecord) => {
+    const plan = buildFlightRepeatPlan(saveState, flight);
+    if (!plan) {
+      setStatus('Этот рейс нельзя повторить.');
+      return;
+    }
+    pendingRepeatRef.current = plan;
+    window.dispatchEvent(new CustomEvent<FlightLaunchContext>(FLIGHT_LAUNCH_CONTEXT_EVENT, { detail: plan.context }));
+  };
+
+  const sendNextWave = () => {
+    if (!sentFlight || !nextWaveSourceId) return;
+    const origin = sentFlight.originPlanetId;
+    const remaining = getAvailableFleetForPlanet(saveState, origin).ships;
+    const before = { ...remaining };
+    for (const [shipId, quantity] of Object.entries(sentFlight.selectedShips) as [ShipId, number][]) before[shipId] = (before[shipId] ?? 0) + quantity;
+    const next = getAvailableFleetForPlanet(saveState, nextWaveSourceId);
+    setSelectedQuantities(missionId === 'espionage' ? { 'spy-probe': 1 } : carryComposition(sentFlight.selectedShips, before, next.ships, missionShipIds));
+    setSelectedCommanders(commandersFor(nextWaveSourceId, {}, saveState));
+    setSentFlight(null);
+    requestPlan(nextWaveSourceId);
+  };
+
+  const chooseFavoriteTarget = (index: string) => {
+    const favorite = favoriteTargets[Number(index)];
+    if (!favorite) return;
+    const destination: FlightDestination = { kind: 'coordinate', coordinate: { ...favorite.coordinate } };
+    setPreviewTargetDraft(flightCoordinateDraft(favorite.coordinate));
+    setPreviewTargetTyped(true);
+    setPreviewDestination(destination);
+    setPreviewTargetRelation(undefined);
+    setPreviewTargetError(null);
+    setEditingPreviewTarget(false);
+    refreshFlightPreview(previewSourceId ?? planetId, destination, null);
+  };
+
+  const toggleFavorite = () => {
+    if (!favoriteCoordinate) return;
+    const target: FleetFavoriteTarget = { coordinate: favoriteCoordinate, ...(favoriteName ? { name: favoriteName } : {}) };
+    updateFleetUi({ kind: 'toggle-favorite', target });
+  };
+
   const previewTargetLabel = previewTargetError
     ? `[${previewTargetDraft.galaxy || '—'}:${previewTargetDraft.system || '—'}:${previewTargetDraft.position || '—'}]`
     : previewCoordinate
@@ -1520,7 +1721,15 @@ function FleetWorkspace({
               <div><strong>{hostileIncomingFlights.length > 1 ? `ВХОДЯЩИЕ АТАКИ · ${hostileIncomingFlights.length}` : 'ВХОДЯЩАЯ АТАКА'}</strong><span>{hostileIncomingFlights[0].originLabel} → {flightCoordinateLabel(hostileIncomingFlights[0].flight.destinationCoordinate)} · прибытие через {flightCountdown(hostileIncomingFlights[0].flight.arrivalAt, clockNow)}</span></div>
               <button type="button" onClick={() => setFlightsOpen(true)}>ПОКАЗАТЬ РЕЙС</button>
             </div> : null}
-            <section className="fleet-panel-v1 fleet-flights-v1 fleet-flights-v2">
+            <section className={`fleet-panel-v1 fleet-flights-v1 fleet-flights-v2${sentFlight ? ' is-sent' : ''}`}>
+              {sentFlight ? <div className="fleet-sent-strip-v1" role="status" data-qa-fleet-sent-strip>
+                <div>
+                  <strong>{`Рейс «${flightMissionLabel(sentFlight.missionId)}» отправлен · ${saveState.planets[sentFlight.originPlanetId]?.name ?? 'ваша планета'}`}</strong>
+                  <span>{nextWaveSourceId ? `Цель ${flightCoordinateLabel(sentFlight.destinationCoordinate)} сохранена · следующая волна: ${saveState.planets[nextWaveSourceId]?.name}` : `Цель ${flightCoordinateLabel(sentFlight.destinationCoordinate)} сохранена · на других планетах нет подходящих кораблей`}</span>
+                </div>
+                <button type="button" className="is-primary" data-qa-fleet-next-wave disabled={!nextWaveSourceId} onClick={sendNextWave}>ЕЩЁ С ДРУГОЙ ПЛАНЕТЫ</button>
+                <button type="button" data-qa-fleet-sent-done onClick={() => { clearLaunchContext(); setStatus(FLEET_ROOT_STATUS); }}>ГОТОВО</button>
+              </div> : <>
               <small className="fleet-flights-v2__label">В ПУТИ · {activeFlightRecords.length}</small>
               <span
                 className={`fleet-flights-v2__slots${flightSlots.free <= 0 ? ' is-full' : ''}`}
@@ -1531,6 +1740,7 @@ function FleetWorkspace({
               {ownFlightGroups.map((group) => <span className="fleet-flights-v2__count" key={group.missionId} title={flightMissionLabel(group.missionId)}><img src={flightMissionIcon(group.missionId)} alt="" />{flightMissionLabel(group.missionId)}<b>{group.count}</b></span>)}
               {nextFlightEvent ? <span className="fleet-flights-v2__next"><small>БЛИЖАЙШЕЕ СОБЫТИЕ</small><strong>{nextFlightEvent.label} · {flightCountdown(nextFlightEvent.at, clockNow)}</strong></span> : null}
               <span className="fleet-flights-v2__spacer" />
+              </>}
               <button type="button" onClick={() => setSpyOperationsOpen(true)} aria-haspopup="dialog">ШПИОНСКИЕ ОТЧЁТЫ</button>
               <button type="button" className={flightsOpen ? 'is-on' : ''} aria-expanded={flightsOpen} onClick={() => setFlightsOpen((open) => !open)} data-qa-flights-toggle>{flightsOpen ? 'СВЕРНУТЬ ▴' : `ВСЕ РЕЙСЫ · ${activeFlightRecords.length} ▾`}</button>
             </section>
@@ -1540,7 +1750,7 @@ function FleetWorkspace({
                 <div className="fleet-flight-row-v1 fleet-flight-head-v1">
                   <span>МИССИЯ</span><span>МАРШРУТ</span><span>СТАТУС</span><span>ОСТАЛОСЬ</span><span>ДЕЙСТВИЕ</span>
                 </div>
-                {activeFlightRecords.length === 0 ? <div className="fleet-flight-empty-v1" data-qa-flight-empty>
+                {activeFlightRecords.length === 0 && recentFlights.length === 0 ? <div className="fleet-flight-empty-v1" data-qa-flight-empty>
                   <img className="ui-empty-art" src={EMPTY_ART.flights} alt="" draggable={false} />
                   <strong>Активных полётов нет</strong>
                   <span>Флоты, находящиеся в пути, будут отображаться здесь.</span>
@@ -1590,9 +1800,21 @@ function FleetWorkspace({
                     <strong data-qa-flight-return hidden={flight.phase !== 'returning'}>{flight.phase === 'returning' ? flightCountdown(flight.returnAt, clockNow) : '—'}</strong>
                     {flight.phase !== 'outbound' && flight.phase !== 'returning' ? <strong>—</strong> : null}
                   </span>
-                  <span>{isHostileIncoming || (flight.ownerSide === 'npc' && flight.missionId === 'aid') ? <span aria-label="Чужой флот нельзя отозвать" data-qa-flight-no-recall>—</span> : <button type="button" data-qa-flight-recall={flight.id} disabled={flight.phase !== 'outbound' && !((flight.missionId === 'expedition' || flight.explorationAttack) && flight.phase === 'arrived')} onClick={() => setPendingRecall(flight)}>ОТОЗВАТЬ</button>}</span>
+                  <span className="fleet-flight-actions-cell">{!isHostileIncoming && canRepeatFlight(saveState, flight) ? <button type="button" data-qa-flight-repeat={flight.id} onClick={() => repeatFlight(flight)}>ПОВТОРИТЬ</button> : null}{isHostileIncoming || (flight.ownerSide === 'npc' && flight.missionId === 'aid') ? <span aria-label="Чужой флот нельзя отозвать" data-qa-flight-no-recall>—</span> : <button type="button" data-qa-flight-recall={flight.id} disabled={flight.phase !== 'outbound' && !((flight.missionId === 'expedition' || flight.explorationAttack) && flight.phase === 'arrived')} onClick={() => setPendingRecall(flight)}>ОТОЗВАТЬ</button>}</span>
                 </div>;
                 })}
+                {recentFlights.length ? <div className="fleet-flight-recent-head-v1">НЕДАВНО ЗАВЕРШЁННЫЕ</div> : null}
+                {recentFlights.map((flight) => <div className="fleet-flight-row-v1 is-recent" key={flight.id} data-qa-flight-recent={flight.id}>
+                  <span className="fleet-flight-mission-cell"><img className="fleet-flight-mission-icon" src={flightMissionIcon(flight.missionId)} alt="" /><span>{flightMissionLabel(flight.missionId).toUpperCase()}<small>{Object.entries(flight.selectedShips).filter(([, quantity]) => (quantity ?? 0) > 0).map(([id, quantity]) => `${shipDefinitions.find((ship) => ship.id === id)?.name ?? id} ×${flightNumberLabel(quantity ?? 0)}`).join(' · ')}</small></span></span>
+                  <span className="fleet-flight-route-cell">
+                    <span><strong>{saveState.planets[flight.originPlanetId]?.name ?? 'Ваша планета'}</strong><CoordinateLink coordinate={flight.originCoordinate} /></span>
+                    <b className="fleet-flight-route-arrow" aria-hidden="true">→</b>
+                    <span><strong>{flight.targetPlanetName ?? <CoordinateLink coordinate={flight.destinationCoordinate} />}</strong>{flight.targetPlanetName ? <CoordinateLink coordinate={flight.destinationCoordinate} /> : null}</span>
+                  </span>
+                  <span>ВЕРНУЛСЯ</span>
+                  <span className="fleet-flight-time-cell"><strong>—</strong></span>
+                  <span className="fleet-flight-actions-cell"><button type="button" data-qa-flight-repeat={flight.id} onClick={() => repeatFlight(flight)}>ПОВТОРИТЬ</button></span>
+                </div>)}
               </div>
 
               <div className="fleet-flight-actions-v1">
@@ -1645,7 +1867,7 @@ function FleetWorkspace({
 
               <div className="fleet-ship-roster-v1 fleet-ship-grid-v2" data-qa-fleet-roster>
                 {visibleShipDefinitions.filter((ship) => shipFilter === 'all' || (shipFilter === 'civil') === CIVIL_SHIP_IDS.has(ship.id)).map((ship) => {
-                  const available = fleetSnapshot.fleet.ships[ship.id] ?? 0;
+                  const available = sourceFleet.ships[ship.id] ?? 0;
                   const selected = selectedQuantities[ship.id] ?? 0;
                   return (
                     <div className={`fleet-ship-line-v1 fleet-ship-tile-v2${selected > 0 ? ' is-selected' : ''}`} key={ship.id} data-qa-fleet-ship={ship.id}>
@@ -1760,7 +1982,7 @@ function FleetWorkspace({
 
               <footer className="fleet-compose-footer-v1">
                 <span>{status}</span>
-                <button type="button" data-qa-flight-preview-open disabled={!hasLaunchableComposition} onClick={openFlightPreview}>ПРОДОЛЖИТЬ · ПЛАН ПЕРЕЛЁТА</button>
+                <button type="button" data-qa-flight-preview-open disabled={!hasLaunchableComposition} onClick={() => openFlightPreview()}>ПРОДОЛЖИТЬ · ПЛАН ПЕРЕЛЁТА</button>
               </footer>
             </section>
             </div>
@@ -1916,8 +2138,12 @@ function FleetWorkspace({
                   <span aria-hidden="true">01</span>
                   <div>
                     <small>ИСТОЧНИК</small>
-                    <strong>{previewSource?.name ?? planetName}</strong>
-                    <em>{previewSource ? `[${previewSource.universeGalaxy}:${previewSource.universeSystem}:${previewSource.universePosition}]` : coords} · выбрано флотом</em>
+                    {sourceOptions.length > 1 ? <label className="flight-timeline-own-target flight-source-select-v1">
+                      <select aria-label="Планета, с которой летит флот" value={previewSourceId ?? planetId} onChange={(event) => changePlanSource(event.target.value)} data-qa-flight-source-select>
+                        {sourceOptions.map((option) => <option key={option.id} value={option.id} data-qa-flight-source-option={option.id}>{`${option.name} [${option.coordinate.galaxy}:${option.coordinate.system}:${option.coordinate.position}] · ${flightNumberLabel(option.eligibleShips)} ${shipCountLabel(option.eligibleShips).toLowerCase()}`}</option>)}
+                      </select>
+                    </label> : <strong>{previewSource?.name ?? planetName}</strong>}
+                    <em>{previewSourceId && previewSourceId !== planetId ? 'выбрано флотом · текущая планета не меняется' : `${previewSource ? `[${previewSource.universeGalaxy}:${previewSource.universeSystem}:${previewSource.universePosition}]` : coords} · выбрано флотом`}</em>
                   </div>
                 </li>
                 <li className="flight-timeline-step-connector" aria-hidden="true"><span>↓</span></li>
@@ -1929,6 +2155,13 @@ function FleetWorkspace({
                       <span>БЕЗ КООРДИНАТНОЙ ЦЕЛИ</span>
                       <strong>Автоматический возврат на {previewSource?.name ?? planetName}</strong>
                     </div> : <>
+                    {favoriteMission && favoriteTargets.length && (editingPreviewTarget || !favoriteCoordinate) ? <label className="flight-timeline-own-target" data-qa-flight-favorite-select>
+                      <span>ИЗБРАННОЕ</span>
+                      <select aria-label="Избранные цели" value="" onChange={(event) => chooseFavoriteTarget(event.target.value)}>
+                        <option value="">{`Выбрать из избранного · ${favoriteTargets.length}`}</option>
+                        {favoriteTargets.map((favorite, index) => <option key={flightCoordinateLabel(favorite.coordinate)} value={index}>{`${favorite.name ? `${favorite.name} ` : ''}${flightCoordinateLabel(favorite.coordinate)}`}</option>)}
+                      </select>
+                    </label> : null}
                     {missionId === 'expedition' ? <label className="flight-timeline-own-target" data-qa-expedition-target-select>
                       <span>УНИКАЛЬНЫЙ ОБЪЕКТ / АНОМАЛИЯ · ±5 СИСТЕМ</span>
                       <select aria-label="Выберите объект экспедиции" value={currentExpeditionTarget?.id ?? ''} onChange={(event) => selectExpeditionTarget(event.target.value)}>
@@ -1973,7 +2206,7 @@ function FleetWorkspace({
                           : `до разблокировки ${flightCountdown(target.unlockAt, clockNow)}`;
                       return <option key={target.id} value={target.id} disabled={locked} aria-label={locked ? `${target.name}, заблокирована: население ${flightNumberLabel(target.actualPopulation ?? 0)}, вместимость ${flightNumberLabel(target.capacity ?? 0)}, ${countdown}` : undefined} data-qa-deployment-target-locked={locked || undefined}>{locked
                         ? `🔒 ${target.name} · население ${flightNumberLabel(target.actualPopulation ?? 0)} / вместимость ${flightNumberLabel(target.capacity ?? 0)} · ${countdown}`
-                        : `Своя · ${target.name} [${target.coordinate.galaxy}:${target.coordinate.system}:${target.coordinate.position}]`}</option>;
+                        : `Своя · ${target.name} [${target.coordinate.galaxy}:${target.coordinate.system}:${target.coordinate.position}]${target.id === lastOwnTargetId ? ' · последняя цель' : ''}`}</option>;
                     })}</select></label> : null}
                     {missionId === 'expedition' ? <strong>{currentExpeditionTarget ? flightCoordinateLabel(currentExpeditionTarget.coordinate) : 'Цель не выбрана'}</strong> : missionId === 'pirate-elimination' ? <strong>{currentPirateTarget ? flightCoordinateLabel(currentPirateTarget.coordinate) : 'Цель не выбрана'}</strong> : missionId === 'sun-support' ? <strong>{currentSunTarget ? `Солнце [${currentSunTarget.raid.galaxy}:${currentSunTarget.raid.system}:0]` : 'Цель не выбрана'}</strong> : sunDebrisTarget ? <strong data-qa-sun-debris-target>{`Обломки Солнца [${sunDebrisTarget.galaxy}:${sunDebrisTarget.system}:0]`}</strong> : missionId === 'aid' ? null : missionId !== 'deployment' && !isReadOnlyTarget && editingPreviewTarget ? <div className="flight-timeline-coordinate-inputs" data-qa-flight-target-inputs>
                       <label><span>ГАЛ.</span><input name="flight-preview-target-galaxy" inputMode="numeric" value={previewTargetDraft.galaxy} onInput={(event) => changePreviewTargetField('galaxy', event.currentTarget.value)} onChange={(event) => changePreviewTargetField('galaxy', event.currentTarget.value)} aria-label="Галактика цели" /></label>
@@ -1983,6 +2216,7 @@ function FleetWorkspace({
                     <div className={`flight-timeline-target-status ${previewTargetError ? 'is-invalid' : 'is-valid'}`} data-qa-flight-target-status>
                       <span data-qa-target-relation={previewTargetRelation}>{previewTargetError ?? (missionId === 'expedition' && !currentExpeditionTarget ? 'Выберите свободный объект' : missionId === 'pirate-elimination' && !currentPirateTarget ? 'Выберите действующий пиратский контакт' : missionId === 'sun-support' && !currentSunTarget ? 'Выберите Солнце под атакой' : missionId === 'sun-support' && previewResult && !previewResult.ok ? previewResult.error.message : missionId === 'deployment' && !previewTargetDestination ? 'Выберите свою планету' : missionId === 'recycle' && previewResult && !previewResult.ok ? previewResult.error.message : previewTargetRelation === 'ally' ? 'Союзная планета' : previewTargetRelation === 'self' ? 'Своя планета' : previewTargetRelation === 'neutral' && previewResult?.ok ? 'Нейтральная планета' : previewTargetRelation === 'enemy' && previewResult?.ok ? 'Вражеская планета' : previewResult?.ok ? 'Цель подтверждена' : 'Координаты будут проверены при отправке')}</span>
                       {!isReadOnlyTarget && !sunDebrisTarget && missionId !== 'deployment' && missionId !== 'aid' && missionId !== 'pirate-elimination' && missionId !== 'expedition' && missionId !== 'sun-support' ? <button type="button" className="flight-timeline-edit" onClick={togglePreviewTargetEditing}>{editingPreviewTarget ? missionId === 'recycle' ? 'ПРОВЕРИТЬ' : 'ГОТОВО' : 'ИЗМЕНИТЬ'}</button> : null}
+                      {favoriteMission && favoriteCoordinate && !sunDebrisTarget ? <button type="button" className={`flight-timeline-edit flight-favorite-toggle-v1${targetIsFavorite ? ' is-on' : ''}`} aria-pressed={targetIsFavorite} onClick={toggleFavorite} data-qa-flight-favorite-toggle>{targetIsFavorite ? '★ В ИЗБРАННОМ' : '☆ В ИЗБРАННОЕ'}</button> : null}
                     </div>
                     </>}
                   </div>
@@ -2101,7 +2335,7 @@ function FleetWorkspace({
                   </div>
                   <div className="flight-draft-v3__hint" data-qa-flight-draft-hint>
                     <strong>{targetIsLocallyValid ? 'Цель задана' : 'Выберите цель'}</strong>
-                    <span>{targetIsLocallyValid ? 'Время в пути и газ появятся, как только координаты будут заполнены. Доступность цели проверяется при отправке.' : 'Введите галактику, систему и позицию — время в пути, газ и прибытие появятся здесь сразу.'}</span>
+                    <span>{targetIsLocallyValid ? 'Время в пути и газ появятся, как только координаты будут заполнены. Доступность цели проверяется при отправке.' : missionId === 'deployment' ? 'Выберите планету в списке «Своя планета» — время в пути, газ и прибытие появятся здесь сразу.' : 'Введите галактику, систему и позицию — время в пути, газ и прибытие появятся здесь сразу.'}</span>
                   </div>
                   </>}
                 </>}
@@ -2274,10 +2508,8 @@ export function FleetWorkspacePortal() {
     };
     const onCommandResult = (event: Event) => {
       const result = (event as CustomEvent<FlightCommandResult>).detail;
-      if (result.ok) {
-        setSaveState(result.state);
-        setLaunchContext(null);
-      }
+      // The workspace decides whether the target stays for the next wave.
+      if (result.ok) setSaveState(result.state);
     };
 
     window.addEventListener(FLIGHT_LAUNCH_CONTEXT_EVENT, onLaunchContext);
@@ -2308,7 +2540,7 @@ export function FleetWorkspacePortal() {
   if (route !== 'fleets' || !target) return null;
   return createPortal(
       <FleetWorkspace
-      key={`${planetId}:${resetNonce}`}
+      key={resetNonce}
       planetId={planetId}
       planetName={planetName}
       coords={coords}

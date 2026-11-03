@@ -156,6 +156,7 @@ import { isNpcReplayMetadata } from './npc-catchup.ts';
 import type { NpcReplayState } from '../domain/npc/replay-state.ts';
 import { normalizeWorldCatchupSummary } from '../domain/npc/world-catchup-summary.ts';
 import { CANONICAL_STARTING_WALLET } from '../domain/world/start.ts';
+import { migrateFleetUiState } from '../domain/flights/fleet-ui.ts';
 
 /** Schema 24: save slots, `worldConfig`, the saved race is authoritative, Sun raid state. */
 export const WORLD_CONFIG_SCHEMA_VERSION = 24;
@@ -263,6 +264,7 @@ type StoredSave = {
   worldConfig?: unknown;
   sunRaid?: unknown;
   playTimeMs?: unknown;
+  fleetUi?: unknown;
 };
 
 export type PersistenceWriteResult =
@@ -1835,6 +1837,7 @@ function migrateParsedSave(
     worldConfig: normalizeNewGameConfig(parsed.worldConfig, createLegacyWorldConfig(profile.factionId, profile.displayName)),
     sunRaid: migrateSunRaidState(parsed.sunRaid),
     playTimeMs: Math.max(0, numberOr(parsed.playTimeMs, 0)),
+    ...(migrateFleetUiState(parsed.fleetUi) ? { fleetUi: migrateFleetUiState(parsed.fleetUi) } : {}),
   };
   // Memory of offenders, colony names/looks and alliance crests that older saves lack.
   const identified = migrateNpcSelfChosenIdentity(seedNpcGrudgesFromReports(projectNpcScienceLedger(migratedState)));
