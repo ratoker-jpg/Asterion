@@ -66,6 +66,15 @@
 .workspace:has(.command-view) .building-interior-return-overlay{right:430px}
 .building-interior-return-overlay span{margin-right:9px;color:#72e7ff}
 
+/* Building interiors sit on the game's own space backdrop: no flat
+   square-cornered slab under the whole workspace. Their panels are the
+   rounded surfaces. */
+.workspace--building-interior > :is(.building-interior-host, .production-bots-view, .recycling-center-view, .trade-center-view, .spaceport-upgrades){
+  background:transparent !important;
+  box-shadow:none !important;
+  border-color:transparent !important;
+}
+
 /* Keep the fixed 1920x1080 building canvas centered before Electron scales it
    on narrow desktop viewports. Without this positioning, the transformed
    stage keeps its unscaled grid offset and the right/bottom of an interior
