@@ -267,7 +267,7 @@ async function runViewport(win, directory) {
   await openZone(win, 'resource');
   await sleep(2600);
   await settle(win);
-  metrics.toasts = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-qa-runtime-toast]')).map((toast) => toast.innerText.replace(/\s+/g, ' ').trim())`);
+  metrics.toasts = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-qa-runtime-toast]')).map((toast) => toast.innerText.replace(/\\s+/g, ' ').trim())`);
   metrics.toastCoversIncome = await win.webContents.executeJavaScript(`(() => {
     const income = document.querySelector('.resource-zone-economy')?.getBoundingClientRect();
     if (!income) return false;
@@ -289,7 +289,7 @@ async function runViewport(win, directory) {
   await click(win, '[data-qa-route="reports"]');
   await sleep(3300);
   await settle(win);
-  metrics.messagesToasts = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-qa-runtime-toast]')).map((toast) => toast.innerText.replace(/\s+/g, ' ').trim())`);
+  metrics.messagesToasts = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-qa-runtime-toast]')).map((toast) => toast.innerText.replace(/\\s+/g, ' ').trim())`);
   if (!metrics.messagesToasts.length) fail('No toast on the Messages screen', metrics.messagesToasts);
   metrics.messagesCoveredControls = await coveredControls(win);
   if (metrics.messagesCoveredControls.length) fail('Toasts cover controls on the Messages screen', metrics.messagesCoveredControls);
