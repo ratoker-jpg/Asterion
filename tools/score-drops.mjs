@@ -85,10 +85,11 @@ for (let hour = 1; hour <= hoursToRun; hour += 1) {
     if (score < was.score) {
       const flights = state.flights.records.filter((flight) => (flight.ownerId === id || flight.ownerSide === 'npc' && flight.ownerId === id) && flightsBefore.get(flight.id) !== flight.phase)
         .map((flight) => ({ id: flight.id, mission: flight.missionId, side: flight.ownerSide, was: flightsBefore.get(flight.id) ?? 'new', phase: flight.phase, reason: flight.completionReason, ships: flight.selectedShips }));
-      const context = newReports.length === 0 && option('explain') ? {
+      const context = option('explain') ? {
         lastReports: (state.combat?.reports ?? []).slice(-6).map((r) => ({ id: r.id, mission: r.missionType, att: r.attacker?.playerId, def: r.defender?.playerId, winner: r.winner, at: r.createdAt ?? r.at })),
         claims: Object.values(state.exploration?.contacts ?? {}).filter((c) => c.claim?.ownerId === id || c.events?.some((e) => e.ownerId === id && e.at > at0 + (hour - 1) * HOUR)).map((c) => ({ id: c.id, claim: c.claim?.ownerId, events: c.events.filter((e) => e.at > at0 + (hour - 1) * HOUR).map((e) => [e.kind, e.ownerId, e.at]) })),
         flightsOfOwner: state.flights.records.filter((f) => f.ownerId === id).map((f) => ({ id: f.id, m: f.missionId, p: f.phase, r: f.completionReason, exp: f.explorationAttack, dep: f.departedAt, ships: f.selectedShips })).slice(-12),
+        scoutLossReports: newReports.filter((r) => [...(r.defenderForce?.stacks ?? []), ...(r.attackerForce?.stacks ?? [])].some((st) => st.entityId === 'scout' && st.countBefore - st.countAfter === 288)).map((r) => ({ id: r.id, mission: r.missionType, att: r.attacker, def: r.defender, winner: r.winner })),
         reportCount: [(state.combat?.reports ?? []).length],
       } : undefined;
       drops.push({ hour, owner: id, from: was.score, to: score, delta: score - was.score, change: diff(was.snap, snap), flights, context,
