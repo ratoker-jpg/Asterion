@@ -5,7 +5,7 @@ import { dispatchFlight, reconcileFlights, recallFlight } from './flights.ts';
 import { reconcileRuntime } from './reconcile.ts';
 import { getPlanetResources, replacePlanetState, replacePlanetResources } from './contracts.ts';
 import type { SaveState } from './contracts.ts';
-import { getExplorationTarget, explorationTargetStatus, selectExplorationTargets, selectExplorationOperations } from './exploration.ts';
+import { getExplorationTarget, explorationTargetStatus, selectExplorationTargets, selectExplorationOperations, planExplorationAttackLaunch } from './exploration.ts';
 import { acceptLiveExploration, cancelLiveExploration } from './exploration-operations.ts';
 import { explorationResourceScore } from './exploration-flight.ts';
 import { explorationMailboxReports } from '../domain/exploration/report-items.ts';
@@ -999,4 +999,46 @@ test('real-source production NPC expedition survives strict save migration witho
   assert.equal(stored!.explorationFactionId,source.raceId);
   assert.deepEqual(stored!.selectedShips,npcFlight.selectedShips);
   assert.equal(getEspionageTargets(loaded.espionage)[source.id]?.ownerId,ownerId);
+});
+
+test('«Атаковать» из диалога объекта и вида системы: контекст только для чужого занятого объекта и ведёт в обычную миссию «Атака»', () => {
+  const fixture = prepare();
+  const id = fixture.target.id;
+  // Свободный объект: атаковать нечего.
+  const free = planExplorationAttackLaunch(fixture.state, id, fixture.now, 'test');
+  assert.equal(free.ok, false);
+  // Объект занят флотом игрока: своих не атакуем.
+  const sent = dispatchFlight(fixture.state, {
+    requestId: 'attack-entry-own', missionId: 'expedition', contactCycleKey: id, operationId: id,
+    originPlanetId: 'helion-01', destination: { kind: 'coordinate', coordinate: fixture.target.coordinate },
+    targetKind: fixture.target.kind, selectedShips: { transporter: 5, recycler: 5 }, departedAt: fixture.now,
+  }, { now: fixture.now, mode: 'test', testTimeScale: 15 });
+  assert.equal(sent.ok, true, sent.ok ? '' : sent.error.message);
+  if (!sent.ok) return;
+  const own = reconcileFlights(sent.state, sent.flight.arrivalAt, undefined, { mode: 'test', testTimeScale: 15 }).state;
+  assert.equal(explorationTargetStatus(own, fixture.target), 'self');
+  assert.equal(planExplorationAttackLaunch(own, id, sent.flight.arrivalAt, 'test').ok, false);
+  // Чужой реальный флот: кнопка открывает «Атаку» с теми же полями, что и кнопка в «Операциях».
+  const contact = own.exploration!.contacts[id]!;
+  const foreign = { ...own, exploration: { ...own.exploration!, contacts: { ...own.exploration!.contacts,
+    [id]: { ...contact, claim: { ...contact.claim!, ownerId: 'qa-foreign-owner' } } } } };
+  assert.equal(explorationTargetStatus(foreign, fixture.target), 'occupied');
+  const plan = planExplorationAttackLaunch(foreign, id, sent.flight.arrivalAt, 'test');
+  assert.equal(plan.ok, true);
+  if (!plan.ok) return;
+  assert.equal(plan.context.missionId, 'attack');
+  assert.equal(plan.context.operationId, id);
+  assert.deepEqual(plan.context.destination, { kind: 'coordinate', coordinate: fixture.target.coordinate });
+  // Тот же диспетчер, те же проверки: флот улетает именно как атака на объект.
+  const at = sent.flight.arrivalAt + 60_000;
+  const attack = dispatchFlight(foreign, {
+    requestId: 'attack-entry-dispatch', missionId: 'attack', contactCycleKey: plan.context.contactCycleKey,
+    operationId: plan.context.operationId, originPlanetId: 'helion-01', destination: plan.context.destination!,
+    targetKind: plan.context.targetKind, targetRelation: 'neutral', selectedShips: { transporter: 5, recycler: 5 },
+    selectedCommanders: {}, departedAt: at,
+  }, { now: at, mode: 'test', testTimeScale: 15 });
+  assert.equal(attack.ok, true, attack.ok ? '' : attack.error.message);
+  if (attack.ok) assert.equal(attack.flight.explorationAttack, true);
+  // Объект исчез или id неизвестен: честный отказ.
+  assert.equal(planExplorationAttackLaunch(foreign, 'no-such-object', at, 'test').ok, false);
 });
