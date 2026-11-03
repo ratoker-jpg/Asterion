@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { getPlanetZoneTerrainUrl } from './assets/planetZoneTerrainAssets.ts';
 import { canEnterBuildingInterior } from './building-interior-navigation.ts';
 import { getZoneScenePlacement } from './zone-scene.ts';
+import { describeQuickUpgrade } from './zone-quick-upgrade.ts';
 import {
   BUILDING_QUEUE_CAPACITY,
   evaluateBuildingBuild,
@@ -265,6 +266,7 @@ export function ZoneView({
   const availability = selectedRole ? evaluateBuildingBuild(economy, selectedRole) : null;
   const selectedHasQueue = selectedRole ? queue.some((item) => item.assetRole === selectedRole) : false;
   const [pendingAction, setPendingAction] = useState<PendingBuildingAction | null>(null);
+  const [quickQueuedRole, setQuickQueuedRole] = useState<BuildingRole | null>(null);
   const confirmYesRef = useRef<HTMLButtonElement>(null);
   const confirmNoRef = useRef<HTMLButtonElement>(null);
   const activeCount = zoneBuildings.filter((building) => buildings[building.assetRole] > 0).length;
@@ -347,6 +349,18 @@ export function ZoneView({
     if (onBuild(selectedRole)) onSelectedRoleChange(null);
   };
 
+  useEffect(() => {
+    if (!quickQueuedRole) return;
+    const timer = window.setTimeout(() => setQuickQueuedRole(null), 700);
+    return () => window.clearTimeout(timer);
+  }, [quickQueuedRole]);
+
+  // The tile's «+» runs the dialog's own «Улучшить» command without opening the dialog.
+  const submitQuickBuild = (role: BuildingRole) => {
+    if (!evaluateBuildingBuild(economy, role).canBuild) return;
+    if (onBuild(role)) setQuickQueuedRole(role);
+  };
+
   const confirmPendingAction = () => {
     if (!pendingAction) return;
     const succeeded = pendingAction.kind === 'cancel'
@@ -377,28 +391,51 @@ export function ZoneView({
               const level = buildings[building.assetRole];
               const statusText = selectorStatusText(status.className, level);
               const tooltipId = `zone-selector-tooltip-${building.assetRole}`;
+              const buildAvailability = evaluateBuildingBuild(economy, building.assetRole);
+              const quick = describeQuickUpgrade(
+                building.name,
+                buildAvailability,
+                BUILDING_QUEUE_CAPACITY - queue.length,
+                buildAvailability.reason ? localizeBuildingNames(buildAvailability.reason, factionId) : null,
+              );
               return (
-                <button
-                  key={building.assetRole}
-                  type="button"
-                  data-zone-selector-role={building.assetRole}
-                  data-resource-selector-role={building.assetRole}
-                  className={`resource-zone-selector-tile ${status.className} ${selectedClass}`}
-                  aria-label={`${building.name}. Уровень ${level} из ${building.maxLevel}. ${statusText}.`}
-                  aria-describedby={tooltipId}
-                  onClick={() => onSelectedRoleChange(building.assetRole)}
-                >
-                  <img src={building.art} alt="" draggable={false} />
-                  <b className="resource-zone-selector-level">{level}/{building.maxLevel}</b>
-                  {status.className === 'blocked' ? <span className="resource-zone-selector-lock" aria-hidden="true" /> : null}
-                  {status.className === 'building' || status.className === 'queued' ? (
-                    <span className={`resource-zone-selector-queue-indicator ${status.className}`} aria-hidden="true" />
-                  ) : null}
-                  <span className="resource-zone-selector-tooltip" id={tooltipId} role="tooltip">
-                    <strong>{building.name}</strong>
-                    <small>Уровень {level}/{building.maxLevel} · {statusText}</small>
-                  </span>
-                </button>
+                <div className="resource-zone-selector-cell" key={building.assetRole}>
+                  <button
+                    type="button"
+                    data-zone-selector-role={building.assetRole}
+                    data-resource-selector-role={building.assetRole}
+                    className={`resource-zone-selector-tile ${status.className} ${selectedClass}`}
+                    aria-label={`${building.name}. Уровень ${level} из ${building.maxLevel}. ${statusText}.`}
+                    aria-describedby={tooltipId}
+                    onClick={() => onSelectedRoleChange(building.assetRole)}
+                  >
+                    <img src={building.art} alt="" draggable={false} />
+                    <b className="resource-zone-selector-level">{level}/{building.maxLevel}</b>
+                    {status.className === 'blocked' ? <span className="resource-zone-selector-lock" aria-hidden="true" /> : null}
+                    {status.className === 'building' || status.className === 'queued' ? (
+                      <span className={`resource-zone-selector-queue-indicator ${status.className}`} aria-hidden="true" />
+                    ) : null}
+                    <span className="resource-zone-selector-tooltip" id={tooltipId} role="tooltip">
+                      <strong>{building.name}</strong>
+                      <small>Уровень {level}/{building.maxLevel} · {statusText}</small>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`resource-zone-selector-quick${quick.enabled ? '' : ' is-disabled'}${quickQueuedRole === building.assetRole ? ' is-queued' : ''}`}
+                    data-qa-quick-build={building.assetRole}
+                    data-qa-quick-build-status={buildAvailability.status}
+                    aria-disabled={!quick.enabled}
+                    aria-label={quick.ariaLabel}
+                    title={quick.title}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      submitQuickBuild(building.assetRole);
+                    }}
+                  >
+                    <span aria-hidden="true">+</span>
+                  </button>
+                </div>
               );
             })}
           </div>
