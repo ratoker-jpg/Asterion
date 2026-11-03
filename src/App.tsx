@@ -28,6 +28,7 @@ import {
   type AppRoute,
 } from './ui/navigation.tsx';
 import { AsterionHeader } from './ui/header/AsterionHeader';
+import { selectHeaderAlerts, type HeaderAlert } from './ui/header/header-alerts.ts';
 import { ApprovedZoneIcon } from './ui/header/HeaderAssetIcons';
 import { GameIcon } from './ui/header/HeaderIcons';
 import {
@@ -1478,6 +1479,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   // Same rule as the Fleet screen alert: hostile fleets still on their way in.
   const incomingAttackCount = state.flights.records.filter((flight) => isHostileFlightIncomingToPlayer(flight, state.profile.playerId)).length;
   const sunAlerts = useMemo(() => selectIncomingSunAlerts(state, now), [state, now]);
+  const headerAlerts = useMemo(() => selectHeaderAlerts(state, sunAlerts, now), [state, sunAlerts, now]);
   // Audible cues for news that may arrive on any screen: a new hostile fleet, a new report.
   useSoundOnIncrease(incomingAttackCount + sunAlerts.length, 'alarm');
   useSoundOnIncrease(reportsUnreadCount, 'notify');
@@ -2421,7 +2423,21 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     else if (nextRoute === 'command') setNotice('Командование: союзный контур загружен.');
     else if (nextRoute === 'reports') setNotice('Отчёты: центр сообщений и боевых журналов загружен.');
     else if (nextRoute === 'planet') setNotice(`${currentPlanetName}: обзор планеты.`);
-    else setNotice(`Экран «${APP_ROUTE_LABELS[nextRoute]}» пока в разработке.`);
+    else setNotice(`Экран «${APP_ROUTE_LABELS[nextRoute]}» открыт.`);
+  };
+
+  const openSettingsFromPause = () => {
+    setPauseOpen(false);
+    chooseRoute('settings');
+  };
+
+  const openHeaderAlert = (alert: HeaderAlert) => {
+    if (alert.target.kind === 'fleets') {
+      chooseRoute('fleets');
+      return;
+    }
+    if (alert.target.planetId !== currentPlanet.id) selectPlanet(alert.target.planetId);
+    chooseRoute('planet');
   };
 
   const chooseZone = (nextZone: Zone) => {
@@ -2750,6 +2766,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
           activeZone={activeRoute === 'planet' && planetViewMode !== 'overview' ? planetViewMode : null}
           reportsUnreadCount={reportsUnreadCount}
           planetMenuOpen={planetMenuOpen}
+          alerts={headerAlerts}
+          onAlertOpen={openHeaderAlert}
             campaign={{ now, mode: RUNTIME_MODE, timeScale: testTimeScale, saveKey: persistence.saveKey, timeScaleOptions: TEST_TIME_SCALE_OPTIONS, onTimeScaleChange: setTestTimeScale, label: `Кампания${SPEED_SUFFIX[state.worldConfig?.world.campaignSpeed ?? 'standard'] ?? ''}` }}
           onRouteChange={chooseRoute}
           onZoneChange={chooseZone}
@@ -2764,9 +2782,9 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
           data-qa-pause-open
           onClick={() => setPauseOpen(true)}
           aria-label="Меню игры"
-          title="Меню игры (Esc)"
         >
           <span aria-hidden="true">≡</span>
+          <span className="hdr-tip" aria-hidden="true">Меню игры · Esc</span>
         </button>
 
         <section className={`workspace workspace-v4 workspace--${workspaceKind}`}>
@@ -3131,6 +3149,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
             onSave={saveNow}
             onLoad={() => leaveTo('load')}
             onExport={exportCurrentSave}
+            onSettings={openSettingsFromPause}
             onRestart={restartCampaign}
             onEndRound={!sunRaidState.campaignResult && isSeriesCampaign(state) ? () => startNextRound('left') : undefined}
             onMainMenu={() => leaveTo('main')}
@@ -3144,6 +3163,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
             onResume={() => setPauseOpen(false)}
             onSave={saveNow}
             onExport={exportCurrentSave}
+            onSettings={openSettingsFromPause}
             testSpeed={RUNTIME_MODE === 'test' ? { value: testTimeScale, options: TEST_TIME_SCALE_OPTIONS, onChange: (value) => setTestTimeScale(value as TestTimeScale) } : undefined}
             onRestart={() => { setPauseOpen(false); reset(); }}
             onMainMenu={() => { persistence.write(stateRef.current); window.location.href = window.location.pathname; }}

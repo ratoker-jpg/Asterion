@@ -21,13 +21,15 @@ type PauseMenuProps = {
   onLoad?: () => void;
   onMainMenu?: () => void;
   onExport?: () => void;
+  /** Opens the in-game «Настройки» screen (the header no longer has its own gear). */
+  onSettings?: () => void;
   /** A campaign of a series, still running: the player can end their part in it here. */
   onEndRound?: () => void;
   testSpeed?: { value: number; options: readonly number[]; onChange: (value: number) => void };
 };
 
 /** In-game menu (Esc / ≡): replaces the old one-click «↻» reset. Restarting always asks first. */
-export function PauseMenu({ variant, title, factionId, playTimeMs, onResume, onSave, onRestart, onLoad, onMainMenu, onExport, onEndRound, testSpeed }: PauseMenuProps) {
+export function PauseMenu({ variant, title, factionId, playTimeMs, onResume, onSave, onRestart, onLoad, onMainMenu, onExport, onSettings, onEndRound, testSpeed }: PauseMenuProps) {
   const [confirmRestart, setConfirmRestart] = useState(false);
   const [confirmEndRound, setConfirmEndRound] = useState(false);
   const firstRef = useRef<HTMLButtonElement>(null);
@@ -82,6 +84,7 @@ export function PauseMenu({ variant, title, factionId, playTimeMs, onResume, onS
               <button type="button" className="igo-btn" onClick={onSave} data-qa-pause="save">СОХРАНИТЬ СЕЙЧАС</button>
               {onLoad ? <button type="button" className="igo-btn" onClick={onLoad} data-qa-pause="load">ЗАГРУЗИТЬ ИГРУ</button> : null}
               {onExport ? <button type="button" className="igo-btn" onClick={onExport} data-qa-pause="export">ЭКСПОРТ СОХРАНЕНИЯ (JSON)</button> : null}
+              {onSettings ? <button type="button" className="igo-btn" onClick={onSettings} data-qa-pause="settings">НАСТРОЙКИ</button> : null}
               {testSpeed ? (
                 <div className="igo-speed" role="group" aria-label="Скорость тестового времени">
                   <small>УСКОРЕНИЕ ВРЕМЕНИ</small>
@@ -92,7 +95,7 @@ export function PauseMenu({ variant, title, factionId, playTimeMs, onResume, onS
               ) : null}
               {onEndRound ? <button type="button" className="igo-btn" onClick={() => setConfirmEndRound(true)} data-qa-pause="end-round">ЗАКОНЧИТЬ РАУНД СЕРИИ</button> : null}
               {isTest ? (
-                <button type="button" className="igo-btn igo-btn--danger" onClick={() => setConfirmRestart(true)} data-qa-pause="restart" data-qa-reset-progress aria-label={resetLabel} title={resetLabel}>СБРОСИТЬ ТЕСТОВОЕ СОХРАНЕНИЕ</button>
+                <button type="button" className="igo-btn igo-btn--danger" onClick={() => setConfirmRestart(true)} data-qa-pause="restart" data-qa-reset-progress aria-label={resetLabel}>СБРОСИТЬ ТЕСТОВОЕ СОХРАНЕНИЕ</button>
               ) : (
                 <button type="button" className="igo-btn igo-btn--danger" onClick={() => setConfirmRestart(true)} data-qa-pause="restart">НАЧАТЬ ЗАНОВО</button>
               )}
