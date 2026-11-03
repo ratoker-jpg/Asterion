@@ -278,7 +278,8 @@ type ToastGroup = {
 
 const TOAST_AUTO_CLOSE_MS = 3_000;
 const SAVE_FAILURE_NOTICE_INTERVAL_MS = 10 * 60_000;
-const TOAST_STACK_LIMIT = 3;
+/** Two cards fit the control-free band under the header (see src/ui/planet-pass.css). */
+const TOAST_STACK_LIMIT = 2;
 /** Replay compute per catch-up task before React gets the frame back. */
 const NPC_CATCHUP_TASK_BUDGET_MS = 40;
 /**
@@ -1174,10 +1175,10 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       } else if (event.kind === 'building') {
         const planet = result.state.planets[event.planetId] ?? result.state.planets[result.state.currentPlanetId];
         const name = getBuildingDefinition(event.assetRole, result.state.profile.factionId).name;
-        setNotice(`${planet.name}: ${name} завершено.`, 'success', {
+        setNotice(`${planet.name}: постройка завершена — ${name}.`, 'success', {
           key: `building:${event.planetId}`,
           item: name,
-          summarize: (items) => `${planet.name}: завершено построек — ${items.length}. ${items.join(', ')}.`,
+          summarize: (items) => `${planet.name}: завершено построек — ${items.length}: ${items.join(', ')}.`,
         });
       } else if (event.kind === 'recycling') {
         const planet = result.state.planets[event.planetId] ?? result.state.planets[result.state.currentPlanetId];

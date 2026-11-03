@@ -150,6 +150,22 @@ function clipped(win, selector) {
     .filter((node) => node.scrollWidth > node.clientWidth + 1).map((node) => node.textContent.trim())`);
 }
 
+/** Visible buttons, links, inputs and tabs that a toast overlaps. */
+function coveredControls(win) {
+  return win.webContents.executeJavaScript(`(() => {
+    const toasts = Array.from(document.querySelectorAll('[data-qa-runtime-toast]')).map((toast) => toast.getBoundingClientRect());
+    return Array.from(document.querySelectorAll('button, a, input, select, textarea, [role=tab], [role=button]'))
+      .filter((node) => !node.closest('.runtime-toast-stack'))
+      .filter((node) => {
+        const box = node.getBoundingClientRect();
+        const style = getComputedStyle(node);
+        return box.width > 2 && box.height > 2 && style.visibility !== 'hidden' && style.opacity !== '0'
+          && toasts.some((toast) => box.left < toast.right && toast.left < box.right && box.top < toast.bottom && toast.top < box.bottom);
+      })
+      .map((node) => (node.getAttribute('aria-label') || node.textContent || '').trim().slice(0, 40));
+  })()`);
+}
+
 async function runViewport(win, directory) {
   const metrics = {};
   const fail = (message, detail) => { if (CHECKS) throw new Error(`${message}: ${JSON.stringify(detail)}`); metrics.failures = [...(metrics.failures ?? []), message]; };
@@ -251,7 +267,7 @@ async function runViewport(win, directory) {
   await openZone(win, 'resource');
   await sleep(2600);
   await settle(win);
-  metrics.toasts = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-qa-runtime-toast]')).map((toast) => toast.innerText.replace(/\\s+/g, ' ').trim())`);
+  metrics.toasts = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-qa-runtime-toast]')).map((toast) => toast.innerText.replace(/\s+/g, ' ').trim())`);
   metrics.toastCoversIncome = await win.webContents.executeJavaScript(`(() => {
     const income = document.querySelector('.resource-zone-economy')?.getBoundingClientRect();
     if (!income) return false;
@@ -261,7 +277,23 @@ async function runViewport(win, directory) {
     });
   })()`);
   if (metrics.toastCoversIncome) fail('Toasts cover the income panel', metrics.toasts);
+  metrics.toastCoveredControls = await coveredControls(win);
+  if (metrics.toastCoveredControls.length) fail('Toasts cover controls on the zone screen', metrics.toastCoveredControls);
   await capture(win, directory, '10-toasts');
+
+  // Same on the Messages screen (owner: a toast covered «Отметить все прочитанными»).
+  await seed(win, { queue: [
+    { role: 'metal-production-1', level: 15, finishOffset: 2500 },
+    { role: 'construction', level: 11, startOffset: 2500, finishOffset: 2800 },
+  ], buildings: { ...RICH_BUILDINGS, 'metal-production-1': 14 } });
+  await click(win, '[data-qa-route="reports"]');
+  await sleep(3300);
+  await settle(win);
+  metrics.messagesToasts = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-qa-runtime-toast]')).map((toast) => toast.innerText.replace(/\s+/g, ' ').trim())`);
+  if (!metrics.messagesToasts.length) fail('No toast on the Messages screen', metrics.messagesToasts);
+  metrics.messagesCoveredControls = await coveredControls(win);
+  if (metrics.messagesCoveredControls.length) fail('Toasts cover controls on the Messages screen', metrics.messagesCoveredControls);
+  await capture(win, directory, '11-toasts-messages');
   return metrics;
 }
 
