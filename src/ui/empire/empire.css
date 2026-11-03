@@ -1,0 +1,243 @@
+/* «Империя» (src/ui/empire/EmpireView.tsx). The lanes live on the 1920×1080
+   stage; the build picker and the logistics drawer are portalled to body and
+   sized in screen pixels, like the map quick panel. */
+.empire {
+  --em-line: rgba(126, 200, 220, .12);
+  --em-text: #e8f4f7;
+  --em-muted: #7f98a0;
+  --em-label: #8fb6c0;
+  --em-cyan: #56d9f2;
+  --em-warn: #f2b45a;
+  --em-full: #ff6f78;
+  --em-ok: #3ee6a4;
+  position: absolute; inset: 70px 36px 16px; display: flex; flex-direction: column; min-height: 0;
+  color: var(--em-text); font-family: Montserrat, Arial, sans-serif;
+}
+.empire small { display: block; color: var(--em-muted); font-size: 14px !important; font-weight: 600; }
+.empire b { font-weight: 800; }
+
+/* --- Summary strip --- */
+.empire__sum { display: flex; align-items: center; gap: 34px; padding: 0 6px 14px; }
+.empire__sum-res { display: grid; grid-template-columns: 30px auto; grid-template-rows: auto auto; column-gap: 10px; align-items: center; }
+.empire__sum-res > :first-child { grid-row: 1 / 3; width: 30px; height: 30px; }
+.empire__sum-res span { display: flex; align-items: baseline; gap: 8px; }
+.empire__sum-res b { font-size: 21px !important; font-variant-numeric: tabular-nums; }
+.empire__sum-res em { font-style: normal; color: var(--em-ok); font-size: 14px !important; font-weight: 700; font-variant-numeric: tabular-nums; }
+.empire__sum-stat { display: grid; gap: 1px; }
+.empire__sum-stat b { font-size: 18px !important; }
+.empire__sum-stat.is-warn b { color: var(--em-warn); }
+.empire__sum-res + .empire__sum-stat { margin-left: 18px; }
+
+/* --- Column captions --- */
+.empire__cols, .empire-lane {
+  display: grid; align-items: center; column-gap: 16px;
+  grid-template-columns: 250px repeat(3, minmax(0, 1fr)) 214px 206px 206px 178px;
+}
+.empire__cols { padding: 0 20px 8px; }
+.empire__cols span { color: var(--em-label); font-size: 13px !important; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+
+/* --- Lanes --- */
+.empire__lanes {
+  flex: 1 1 auto; min-height: 0; margin: 0; padding: 0 0 2px; list-style: none;
+  display: grid; grid-auto-rows: minmax(84px, 106px); gap: 8px; align-content: start; overflow: hidden auto; overscroll-behavior: contain;
+}
+.empire-lane {
+  position: relative; padding: 8px 20px 8px 14px; border-radius: 16px;
+  background: linear-gradient(90deg, rgba(14, 33, 50, .92), rgba(7, 18, 30, .78));
+  animation: empire-lane-in 420ms cubic-bezier(.23, 1, .32, 1) both; animation-delay: calc(var(--lane-i, 0) * 38ms);
+  transition: background 180ms ease, box-shadow 180ms ease;
+}
+@keyframes empire-lane-in { from { opacity: 0; translate: 0 10px; } }
+.empire-lane:hover { background: linear-gradient(90deg, rgba(18, 42, 63, .95), rgba(9, 22, 36, .82)); }
+.empire-lane.is-current { box-shadow: inset 4px 0 0 var(--em-cyan); }
+.empire-lane.is-target { box-shadow: inset 0 0 0 1px rgba(86, 217, 242, .55), 0 0 26px rgba(86, 217, 242, .14); }
+
+.empire-lane__planet {
+  display: flex; align-items: center; gap: 14px; min-width: 0; padding: 4px; border: 0; border-radius: 12px;
+  background: transparent; color: inherit; cursor: pointer; text-align: left; font: inherit;
+}
+.empire-lane__planet img { flex: none; width: 66px; height: 66px; object-fit: contain; filter: drop-shadow(0 0 10px rgba(86, 217, 242, .18)); transition: scale 220ms cubic-bezier(.23, 1, .32, 1); }
+.empire-lane__planet:hover img, .empire-lane__planet:focus-visible img { scale: 1.08; }
+.empire-lane__planet:focus-visible { outline: 2px solid var(--em-cyan); outline-offset: 2px; }
+.empire-lane__planet span { display: grid; min-width: 0; }
+.empire-lane__planet b { overflow: hidden; font-size: 19px !important; white-space: nowrap; text-overflow: ellipsis; }
+.empire-lane.is-idle .empire-lane__planet b::before {
+  content: ""; display: inline-block; width: 9px; height: 9px; margin: 0 8px 2px 0; border-radius: 50%;
+  background: var(--em-warn); box-shadow: 0 0 10px var(--em-warn); vertical-align: middle;
+  animation: empire-pulse 2.4s ease-in-out infinite;
+}
+@keyframes empire-pulse { 50% { opacity: .45; } }
+
+/* Resource cells: amount, income, storage bar. */
+.empire-res { display: grid; gap: 6px; min-width: 0; }
+.empire-res small { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.empire-res b { overflow: hidden; font-size: 19px !important; font-variant-numeric: tabular-nums; white-space: nowrap; text-overflow: ellipsis; }
+.empire-res em { font-style: normal; color: var(--em-ok); font-size: 14px !important; font-weight: 700; font-variant-numeric: tabular-nums; }
+.empire-res__bar { display: block; height: 6px; overflow: hidden; border-radius: 3px; background: rgba(126, 200, 220, .1); }
+.empire-res__bar i { display: block; height: 100%; width: 100%; border-radius: inherit; transform-origin: left; scale: var(--fill, 0) 1; transition: scale 600ms cubic-bezier(.23, 1, .32, 1); }
+.empire-res--metal .empire-res__bar i { background: linear-gradient(90deg, #7f99ab, #c5d6e2); }
+.empire-res--minerals .empire-res__bar i { background: linear-gradient(90deg, #5b67e6, #9aa6ff); }
+.empire-res--gas .empire-res__bar i { background: linear-gradient(90deg, #2bb98a, #6ff0bd); }
+.empire-res.is-near .empire-res__bar i { background: linear-gradient(90deg, #d99232, var(--em-warn)); }
+.empire-res.is-full .empire-res__bar i { background: linear-gradient(90deg, #d8404b, var(--em-full)); box-shadow: 0 0 12px rgba(255, 111, 120, .5); }
+.empire-res.is-full b, .empire-res.is-full small { color: var(--em-full); }
+.empire-res.is-full em { color: inherit; }
+.empire-res.is-near small { color: var(--em-warn); }
+
+/* Build queue: three slots, the first one counts down. */
+.empire-queue { display: grid; gap: 6px; min-width: 0; }
+.empire-queue__slots { display: flex; gap: 8px; }
+.empire-slot {
+  position: relative; display: grid; place-items: center; width: 52px; height: 52px; flex: none; overflow: hidden; border-radius: 12px;
+  background: rgba(126, 200, 220, .07);
+}
+.empire-slot img { width: 46px; height: 46px; object-fit: contain; }
+.empire-slot em { position: absolute; right: 3px; bottom: 2px; font-style: normal; font-size: 13px !important; font-weight: 800; text-shadow: 0 1px 3px #000; }
+.empire-slot.is-active::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: var(--em-cyan);
+  transform-origin: left; scale: var(--progress, 0) 1; transition: scale 1s linear;
+}
+.empire-slot--free { background: rgba(126, 200, 220, .035); }
+.empire-slot--add {
+  border: 0; color: var(--em-cyan); cursor: pointer; font: 300 34px/1 Montserrat, Arial, sans-serif;
+  background: rgba(86, 217, 242, .12); box-shadow: inset 0 0 0 1px rgba(86, 217, 242, .35);
+  transition: background 160ms ease, scale 160ms cubic-bezier(.23, 1, .32, 1);
+}
+.empire-slot--add:hover, .empire-slot--add:focus-visible, .empire-slot--add.is-open { background: rgba(86, 217, 242, .24); outline: none; }
+.empire-slot--add:active { scale: .94; }
+.empire-lane.is-idle .empire-slot--add { box-shadow: inset 0 0 0 1px rgba(242, 180, 90, .6); color: var(--em-warn); background: rgba(242, 180, 90, .12); }
+.empire-queue small { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.empire-queue small.is-warn { color: var(--em-warn); font-weight: 700; }
+
+.empire-work { display: grid; gap: 8px; min-width: 0; }
+.empire-work span { overflow: hidden; color: var(--em-text); font-size: 15px !important; white-space: nowrap; text-overflow: ellipsis; }
+.empire-work span.is-off { color: var(--em-muted); }
+
+.empire-fleet { display: grid; gap: 6px; min-width: 0; }
+.empire-fleet__ships { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.empire-fleet__ships > span { display: flex; align-items: center; gap: 3px; }
+.empire-fleet__ships img { width: 34px; height: 34px; object-fit: contain; }
+.empire-fleet__ships b { font-size: 16px !important; font-variant-numeric: tabular-nums; }
+.empire-fleet__ships em { font-style: normal; color: var(--em-muted); font-size: 14px !important; font-weight: 700; }
+.empire-fleet__none { color: var(--em-muted); font-size: 15px !important; }
+.empire-fleet small { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.empire .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+
+.empire-lane__acts { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* Buttons */
+.empire__btn {
+  padding: 11px 16px; border: 0; border-radius: 11px; cursor: pointer; white-space: nowrap;
+  background: rgba(126, 200, 220, .09); color: #cfeefc; box-shadow: inset 0 0 0 1px rgba(126, 200, 220, .26);
+  font: 800 14px/1 Montserrat, Arial, sans-serif; letter-spacing: .08em; text-transform: uppercase;
+  transition: background 160ms ease, box-shadow 160ms ease, scale 160ms cubic-bezier(.23, 1, .32, 1);
+}
+.empire__btn:hover, .empire__btn:focus-visible { background: rgba(126, 200, 220, .16); outline: none; }
+.empire__btn:active { scale: .96; }
+.empire__btn--pri { background: linear-gradient(180deg, rgba(86, 217, 242, .3), rgba(31, 163, 204, .22)); color: #eafcff; box-shadow: inset 0 0 0 1px rgba(86, 217, 242, .6); }
+.empire__btn--pri:hover, .empire__btn--pri:focus-visible { background: linear-gradient(180deg, rgba(86, 217, 242, .42), rgba(31, 163, 204, .3)); }
+
+.empire__foot { display: flex; align-items: center; gap: 12px; padding-top: 12px; }
+.empire__hint { margin-left: auto; color: var(--em-muted); font-size: 14px !important; }
+
+/* --- Section switch «Текущая планета / Империя» (both views) --- */
+.planet-sections {
+  position: absolute; z-index: 6; top: 14px; left: 36px; display: flex; gap: 4px; padding: 4px; border-radius: 999px;
+  background: rgba(5, 16, 26, .72); box-shadow: inset 0 0 0 1px rgba(126, 200, 220, .16);
+}
+.planet-sections button {
+  position: relative; padding: 10px 22px; border: 0; border-radius: 999px; background: transparent; cursor: pointer;
+  color: #8fb6c0; font: 800 15px/1 Montserrat, Arial, sans-serif; letter-spacing: .12em; text-transform: uppercase;
+  transition: color 180ms ease, background 220ms cubic-bezier(.23, 1, .32, 1);
+}
+.planet-sections button:hover, .planet-sections button:focus-visible { color: #e8f4f7; outline: none; }
+.planet-sections button[aria-selected="true"] { color: #eafcff; background: linear-gradient(180deg, rgba(86, 217, 242, .28), rgba(31, 163, 204, .16)); box-shadow: inset 0 0 0 1px rgba(86, 217, 242, .5); }
+.planet-sections button em { margin-left: 8px; font-style: normal; color: #f2b45a; }
+
+/* --- Build picker (screen pixels) --- */
+.empire-pick {
+  position: fixed; z-index: 30500; width: 380px; max-height: 420px; display: flex; flex-direction: column; overflow: hidden;
+  border-radius: 14px; background: linear-gradient(180deg, #0e2030, #060f19);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .6), inset 0 0 0 1px rgba(86, 217, 242, .28);
+  color: #e8f4f7; font-family: Montserrat, Arial, sans-serif;
+  animation: empire-pop 200ms cubic-bezier(.23, 1, .32, 1) both; transform-origin: top left;
+}
+@keyframes empire-pop { from { opacity: 0; scale: .96; translate: 0 -4px; } }
+.empire-pick header { display: grid; grid-template-columns: minmax(0, 1fr) auto 28px; align-items: center; gap: 8px; padding: 10px 10px 8px 14px; }
+.empire-pick header b { overflow: hidden; font-size: 13px !important; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; text-overflow: ellipsis; }
+.empire-pick header span { color: #7f98a0; font-size: 11px !important; font-weight: 600; }
+.empire-pick header button { width: 28px; height: 28px; border: 0; border-radius: 8px; background: transparent; color: #8fb6c0; cursor: pointer; font-size: 14px !important; }
+.empire-pick header button:hover { background: rgba(126, 200, 220, .1); color: #fff; }
+.empire-pick nav { display: flex; gap: 4px; padding: 0 10px 8px; }
+.empire-pick nav button {
+  flex: 1; padding: 7px 4px; border: 0; border-radius: 8px; background: rgba(126, 200, 220, .06); color: #8fb6c0; cursor: pointer;
+  font: 700 11px/1 Montserrat, Arial, sans-serif; letter-spacing: .06em; text-transform: uppercase; transition: background 140ms ease, color 140ms ease;
+}
+.empire-pick nav button.is-on { background: rgba(86, 217, 242, .2); color: #eafcff; }
+.empire-pick ul { margin: 0; padding: 0 6px 8px; list-style: none; overflow: hidden auto; overscroll-behavior: contain; }
+.empire-pick li button {
+  display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%; padding: 6px 8px;
+  border: 0; border-radius: 10px; background: transparent; color: inherit; cursor: pointer; text-align: left; font: inherit;
+  transition: background 140ms ease;
+}
+.empire-pick li button:hover, .empire-pick li button:focus-visible { background: rgba(86, 217, 242, .1); outline: none; }
+.empire-pick li button.is-off { cursor: default; }
+.empire-pick li button.is-off img, .empire-pick li button.is-off > span:nth-child(2) { opacity: .5; }
+.empire-pick li button.is-done { animation: empire-done 700ms ease; }
+@keyframes empire-done { 30% { background: rgba(62, 230, 164, .22); } }
+.empire-pick__empty, .empire-pick__locked { padding: 8px 10px; color: #7f98a0; font-size: 11px; font-weight: 600; }
+.empire-pick li img { width: 38px; height: 38px; object-fit: contain; }
+.empire-pick li span { display: grid; min-width: 0; }
+.empire-pick li b { overflow: hidden; font-size: 12px !important; font-weight: 700; white-space: nowrap; text-overflow: ellipsis; }
+.empire-pick li small { color: #7f98a0; font-size: 11px !important; font-weight: 600; }
+.empire-pick__cost { display: grid; justify-items: end; gap: 2px; max-width: 150px; }
+.empire-pick__cost em { display: flex; align-items: center; gap: 4px; font-style: normal; font-size: 11px !important; font-weight: 700; font-variant-numeric: tabular-nums; }
+.empire-pick__cost em > img { width: 13px; height: 13px; }
+.empire-pick__cost em.is-short { color: #ff6f78; }
+.empire-pick__cost em.is-reason { display: block; color: #7f98a0; font-weight: 600; text-align: right; white-space: normal; line-height: 1.25; }
+
+/* --- Logistics drawer (screen pixels), right side under the header --- */
+.empire-drawer {
+  --qa-k: #56d9f2;
+  position: fixed; z-index: 30400; right: 14px; bottom: 14px; width: min(420px, calc(100vw - 28px));
+  top: calc(var(--asterion-stage-top, 0px) + min(100vw / 1920 * 135, 100vh / 1080 * 135) + 8px);
+  display: flex; flex-direction: column; min-height: 0; max-height: none; overflow: hidden; border-radius: 16px;
+  background: linear-gradient(180deg, #0e2030, #060f19);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, .62), inset 0 0 0 1px rgba(86, 217, 242, .26);
+  font-family: Montserrat, Arial, sans-serif; color: #e8f4f7;
+  animation: empire-drawer-in 280ms cubic-bezier(.23, 1, .32, 1) both;
+}
+@keyframes empire-drawer-in { from { opacity: 0; translate: 24px 0; } }
+.empire-drawer__top { padding: 12px 14px 10px; border-bottom: 1px solid rgba(126, 200, 220, .12); }
+.empire-drawer__top > small { display: block; margin-bottom: 6px; color: #8fb6c0; font-size: 10px !important; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+.empire-drawer__targets { display: flex; flex-wrap: wrap; gap: 4px; }
+.empire-drawer__targets button {
+  display: flex; align-items: center; gap: 5px; max-width: 128px; padding: 4px 9px 4px 4px; border: 0; border-radius: 999px;
+  background: rgba(126, 200, 220, .07); color: #b9d3da; cursor: pointer; font: 700 11px/1.2 Montserrat, Arial, sans-serif;
+  transition: background 140ms ease, color 140ms ease;
+}
+.empire-drawer__targets button img { width: 20px; height: 20px; object-fit: contain; }
+.empire-drawer__targets button span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.empire-drawer__targets button:hover { background: rgba(126, 200, 220, .14); color: #fff; }
+.empire-drawer__targets button.is-on { background: rgba(86, 217, 242, .24); color: #eafcff; box-shadow: inset 0 0 0 1px rgba(86, 217, 242, .55); }
+.empire-drawer__modes { display: flex; gap: 4px; margin-top: 10px; }
+.empire-drawer__modes button {
+  flex: 1; padding: 8px; border: 0; border-radius: 9px; background: rgba(126, 200, 220, .06); color: #8fb6c0; cursor: pointer;
+  font: 800 11px/1 Montserrat, Arial, sans-serif; letter-spacing: .1em; text-transform: uppercase;
+}
+.empire-drawer__modes button.is-on { background: rgba(86, 217, 242, .22); color: #eafcff; }
+.empire-drawer .quick-send { flex: 1 1 auto; min-height: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .empire-lane, .empire-pick, .empire-drawer { animation: none; }
+  .empire-lane.is-idle .empire-lane__planet b::before { animation: none; }
+}
+
+/* The global typography layer pins text to category sizes; the console is
+   laid out on the 1920 stage, so it keeps its declared sizes (captured by the
+   controller as --asterion-base-font-size) times the player's text scale. */
+html body :is(.empire, .planet-sections, .empire-pick) [data-asterion-typography] { font-size: calc(var(--asterion-base-font-size) * var(--text-scale-body, 1)) !important; }
+
+/* «Текущая планета»: the switch takes the top-left corner, the title block moves under it. */
+.planet-sections ~ .planet-orbit .planet-orbit__name { top: 80px; }
+.planet-sections ~ .planet-orbit .planet-orbit__vitals { top: 206px; }

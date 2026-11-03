@@ -6,7 +6,7 @@ import { emptyTransportCargo, type TransportCargo } from '../../domain/flights/c
 import { ACTIVE_RUNTIME_MODE, resolveTestTimeScale } from '../../domain/runtime/mode.ts';
 import { isFlightLimitExempt } from '../../domain/flights/limit.ts';
 import { formatUniverseCoordinate } from '../../domain/universe/runtime.ts';
-import { getPlanetResources, type SaveState } from '../../application/contracts.ts';
+import { getPlanetResources, type PlanetResources, type SaveState } from '../../application/contracts.ts';
 import { getAvailableFleetForPlanet, getPlayerFlightSlotUsage, type DispatchFlightCommand, type FlightLaunchContext } from '../../application/flights.ts';
 import {
   QUICK_ACTION_LABELS,
@@ -32,6 +32,7 @@ const clock = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-dig
 const HOSTILE = new Set<QuickActionId>(['attack', 'exploration-attack', 'pirate-elimination']);
 const CARGO_KEYS = ['metal', 'minerals', 'gas'] as const;
 const CARGO_LABELS = { metal: 'Металл', minerals: 'Минералы', gas: 'Газ' } as const;
+const NOTHING_KEPT: PlanetResources = { metal: 0, minerals: 0, gas: 0 };
 
 export function flightDurationLabel(ms: number) {
   const seconds = Math.max(1, Math.round(ms / 1_000));
@@ -67,6 +68,12 @@ export function quickRuntimeNow() {
  * - `initialOrigins`: planets checked at open; default is the nearest planet
  *   whose suggested fleet the runtime accepts.
  * - `onBack`: shows a «‹» back button (e.g. to the action list).
+ * - `gatherLoads(originPlanetIds, keep)`: transport only. Shows «Оставить на
+ *   планете» and fills every checked leg with its ships and cargo from this
+ *   planner (the «Империя» console passes `planGatherLoads`). The legs are
+ *   refilled when a planet is checked or the kept amount changes; slider
+ *   changes in between stay.
+ * - `notice`: one line above the planets (e.g. «склады цели полны»).
  *
  * Probe and colonizer actions are single-source (checking one planet
  * unchecks the others); the rest gather fleets from several planets. The
@@ -82,21 +89,32 @@ export type QuickSendPanelProps = {
   onDetails?: (context: FlightLaunchContext, originPlanetId: string | null) => void;
   onBack?: () => void;
   initialOrigins?: readonly string[];
+  notice?: string | null;
+  gatherLoads?: (originPlanetIds: readonly string[], keep: PlanetResources) => Record<string, { ships: QuickFleet['ships']; cargo: TransportCargo }>;
 };
 
 type LegDraft = { checked: boolean; fleet: QuickFleet; cargo: TransportCargo; sent?: boolean; allShips?: boolean };
 
-export function QuickSendPanel({ state, actionId, target, onSend, onClose, onDetails, onBack, initialOrigins }: QuickSendPanelProps) {
+export function QuickSendPanel({ state, actionId, target, onSend, onClose, onDetails, onBack, initialOrigins, gatherLoads, notice }: QuickSendPanelProps) {
   const factionId = state.profile.factionId as CombatFactionId;
   const catalog = useMemo(() => new Map(getFactionShipCatalog(factionId).map((ship) => [ship.id as ShipId, ship])), [factionId]);
   const multi = isMultiSourceAction(actionId);
+  const planner = actionId === 'transport' ? gatherLoads : undefined;
+  // Refills every checked leg from the planner; unchecked legs keep their draft.
+  function fill(current: Record<string, LegDraft>, kept: PlanetResources): Record<string, LegDraft> {
+    if (!planner) return current;
+    const loads = planner(Object.keys(current).filter((id) => current[id]!.checked && !current[id]!.sent), kept);
+    return Object.fromEntries(Object.entries(current).map(([id, draft]) => [id, loads[id] ? { ...draft, fleet: { ships: loads[id]!.ships }, cargo: loads[id]!.cargo } : draft]));
+  }
   // Planets are listed once per opening; ships and verdicts follow the live state.
   const [origins] = useState(() => planQuickLegs(state, actionId, target, quickRuntimeNow()).map((leg) => leg.originPlanetId));
   const [drafts, setDrafts] = useState<Record<string, LegDraft>>(() => {
     const legs = planQuickLegs(state, actionId, target, quickRuntimeNow());
     const preferred = initialOrigins?.length ? new Set(initialOrigins) : new Set([(legs.find((leg) => leg.preview?.ok) ?? legs[0])?.originPlanetId]);
-    return Object.fromEntries(legs.map((leg) => [leg.originPlanetId, { checked: preferred.has(leg.originPlanetId), fleet: leg.fleet, cargo: emptyTransportCargo() }]));
+    const drafts = Object.fromEntries(legs.map((leg) => [leg.originPlanetId, { checked: preferred.has(leg.originPlanetId), fleet: leg.fleet, cargo: emptyTransportCargo() }]));
+    return planner ? fill(drafts, NOTHING_KEPT) : drafts;
   });
+  const [keep, setKeep] = useState<PlanetResources>(NOTHING_KEPT);
   const [sending, setSending] = useState(false);
   const [sendErrors, setSendErrors] = useState<Record<string, string>>({});
   const sendRef = useRef<HTMLButtonElement>(null);
@@ -122,8 +140,13 @@ export function QuickSendPanel({ state, actionId, target, onSend, onClose, onDet
     setSendErrors((current) => { const next = { ...current }; delete next[planetId]; return next; });
     setDrafts((current) => ({ ...current, [planetId]: change(current[planetId]!) }));
   };
-  const toggle = (planetId: string) => setDrafts((current) => Object.fromEntries(Object.entries(current).map(([id, draft]) => [id,
-    id === planetId ? { ...draft, checked: multi ? !draft.checked : true } : multi ? draft : { ...draft, checked: false }])));
+  const toggle = (planetId: string) => setDrafts((current) => fill(Object.fromEntries(Object.entries(current).map(([id, draft]) => [id,
+    id === planetId ? { ...draft, checked: multi ? !draft.checked : true } : multi ? draft : { ...draft, checked: false }])), keep));
+  const changeKeep = (key: keyof PlanetResources, value: number) => {
+    const next = { ...keep, [key]: Math.max(0, Math.floor(Number.isFinite(value) ? value : 0)) };
+    setKeep(next);
+    setDrafts((current) => fill(current, next));
+  };
   const reset = (planetId: string) => update(planetId, (draft) => ({ ...draft, fleet: defaultQuickFleet(state, actionId, planetId, target) }));
 
   const send = () => {
@@ -153,6 +176,21 @@ export function QuickSendPanel({ state, actionId, target, onSend, onClose, onDet
         <div><b>{QUICK_ACTION_LABELS[actionId]}</b><span>{target.node.name} · {formatUniverseCoordinate(target.node.coordinate)}</span></div>
         <button type="button" className="quick-send__close" onClick={onClose} aria-label="Закрыть">✕</button>
       </header>
+
+      {notice ? <p className="quick-send__notice" role="status" data-qa-quick-notice>{notice}</p> : null}
+
+      {planner && legs.length > 0 ? (
+        <div className="quick-send__keep" data-qa-quick-keep>
+          <small>Оставить на каждой планете</small>
+          {CARGO_KEYS.map((key) => (
+            <label key={key}>
+              <ResourceIcon kind={key} />
+              <input type="number" min={0} step={1000} inputMode="numeric" value={keep[key]} aria-label={`${CARGO_LABELS[key]}: оставить на планете`}
+                onChange={(event) => changeKeep(key, event.currentTarget.valueAsNumber)} data-qa-quick-keep-input={key} />
+            </label>
+          ))}
+        </div>
+      ) : null}
 
       {legs.length === 0 ? <p className="quick-send__error" role="alert" data-qa-quick-error>Нет свободных кораблей для этого действия ни на одной вашей планете.</p> : (
         <div className="quick-send__legs" role={multi ? 'group' : 'radiogroup'} aria-label={multi ? 'Планеты отправки' : 'Планета отправки'}>
