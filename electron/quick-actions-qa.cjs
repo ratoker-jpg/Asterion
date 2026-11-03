@@ -259,7 +259,13 @@ async function scenarios(win, directory, label) {
   await closeMenu(win);
 
   // 5. Unique object: probe and expedition (attack when occupied).
-  await selectSystem(win, 5);
+  // Unique objects are timed: take the first one on the map now.
+  let uniqueSystem = 0;
+  for (let system = 1; system <= 40 && !uniqueSystem; system += 1) {
+    await selectSystem(win, system);
+    if (await js(win, `Boolean(document.querySelector('[data-qa-universe-kind="unique"]'))`)) uniqueSystem = system;
+  }
+  if (!uniqueSystem) throw new Error(`${label}: no unique object on the map`);
   await rightClick(win, '[data-qa-universe-kind="unique"]');
   const unique = await menuSnapshot(win);
   if (unique.actions[0]?.id !== 'exploration-recon' || !['expedition', 'exploration-attack'].includes(unique.actions[1]?.id)) throw new Error(`${label}: unique actions ${JSON.stringify(unique.actions)}`);
