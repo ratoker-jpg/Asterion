@@ -102,6 +102,33 @@ export type CloudEntryInput = {
  */
 export const SERVER_CATCHUP_WAIT_LAG_MS = 2 * 60_000;
 
+/**
+ * A server that is only behind this game's version updates itself within a
+ * minute or so (asterion-update.timer); the player is not asked anything
+ * until it takes unusually long.
+ */
+export const SERVER_UPDATE_QUIET_MS = 2 * 60_000;
+
+/**
+ * How the server wait is shown: `quiet` is one calm line on the normal loading
+ * screen (the game opens the world by itself), `choice` is the plain-language
+ * decision with «Досчитать на этом ПК». Only a routine server update stays
+ * quiet, and only until it takes too long or the server reports a failure.
+ */
+export type CloudWaitPresentation = 'quiet' | 'choice';
+
+export function waitPresentation(input: {
+  reason: CloudWaitReason;
+  /** Wall time since the wait began. */
+  waitedMs: number;
+  live: CloudLiveView | null;
+}):CloudWaitPresentation {
+  if (input.reason !== 'server-updating') return 'choice';
+  if (input.live?.status === 'failed' || input.live?.error) return 'choice';
+  if (input.waitedMs >= SERVER_UPDATE_QUIET_MS) return 'choice';
+  return 'quiet';
+}
+
 /** «1.10.0» > «1.9.3»: numeric MAJOR.MINOR.PATCH (pre-release suffixes ignored). */
 export function compareGameVersions(left: string, right: string): number {
   const parts = (version: string) => version.split(/[-+]/)[0]!.split('.').map((part) => Number(part) || 0);
@@ -238,7 +265,7 @@ export function describeLocalReason(reason: CloudLocalReason, campaign: CloudCam
     case 'not-on-server': return 'Кампании ещё нет на сервере: она будет выгружена при выходе.';
     case 'same': return 'Мир на сервере совпадает с этим компьютером.';
     case 'local-newer': return 'На этом компьютере мир новее серверного: продолжаем его, сервер получит копию.';
-    case 'version-mismatch': return `Мир на сервере жил в версии ${campaign?.live?.gameVersion ?? '?'}: по вашему выбору досчитываем на этом ПК, мир сервера сохранён резервной копией.`;
+    case 'version-mismatch': return 'Мир на сервере жил в другой версии игры: по вашему выбору досчитываем на этом ПК, мир сервера сохранён резервной копией.';
     case 'schema-newer': return 'Копия на сервере создана более новой версией игры: продолжаем локальную.';
     case 'waiting-version': return 'Сервер ещё не обновился до вашей версии: по вашему выбору досчитываем на этом ПК, мир сервера сохранён резервной копией.';
     case 'server-failed': return describeServerStall(campaign?.live ?? null, 'local') ?? 'Мир на сервере остановился: игра досчитала время сама по сохранению этого компьютера.';

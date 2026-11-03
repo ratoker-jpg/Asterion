@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { SaveSlotMeta } from '../../domain/session/slots.ts';
-import { compareGameVersions, describeServerStall, SERVER_CATCHUP_WAIT_LAG_MS, type CloudCampaignView, type CloudLiveView, type CloudWaitReason } from '../../application/cloud/cloud-sync.ts';
+import { compareGameVersions, describeServerStall, SERVER_CATCHUP_WAIT_LAG_MS, waitPresentation, type CloudCampaignView, type CloudLiveView, type CloudWaitReason } from '../../application/cloud/cloud-sync.ts';
 import {
   activeCloudSettings, catchupWaitMs, cloudBridge, localCatchupRate, localSaveChars, openServerCampaign,
   type CloudConflict, type CloudServerWait,
@@ -74,7 +74,15 @@ export function ServerWaitWindow({ slot, wait, onReady, onTakeNow, onMenu }: {
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
   const [chars] = useState(() => localSaveChars(slot));
-  useEffect(() => { menuRef.current?.focus(); }, []);
+  const startedAt = useRef(Date.now());
+  const [waitedMs, setWaitedMs] = useState(0);
+  // The quiet line turns into the choice after SERVER_UPDATE_QUIET_MS without the player doing anything.
+  useEffect(() => {
+    const timer = window.setInterval(() => setWaitedMs(Date.now() - startedAt.current), 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const quiet = waitPresentation({ reason: serverWaitReason(campaign.live, wait.appVersion) ?? wait.reason, waitedMs, live: campaign.live }) === 'quiet';
+  useEffect(() => { menuRef.current?.focus(); }, [quiet]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); onMenu(); } };
     window.addEventListener('keydown', onKey, true);
@@ -126,18 +134,33 @@ export function ServerWaitWindow({ slot, wait, onReady, onTakeNow, onMenu }: {
   const localWait = catchupWaitMs(lagMs, local?.rate);
   if (startLag.current < lagMs) startLag.current = lagMs;
   const progress = startLag.current > 0 ? Math.min(1, Math.max(0, 1 - lagMs / startLag.current)) : 0;
+  const presentation = waitPresentation({ reason, waitedMs, live });
   const title = reason === 'catching-up' ? 'Мир догоняется на сервере'
-    : reason === 'server-updating' ? 'Сервер переносит мир в новую версию' : 'Мир на сервере живёт в более новой версии';
+    : reason === 'server-updating' ? 'Сервер обновляется дольше обычного' : 'Игре нужно обновление';
   const lead = reason === 'catching-up'
     ? `Пока вас не было, мир «${slot.name}» живёт на сервере, и он ещё не догнал текущее время. Когда догонит, игра заберёт его и войдёт за секунды.`
     : reason === 'server-updating'
-      ? `Мир живёт на сервере в версии ${live?.gameVersion ?? '?'}, игра — ${wait.appVersion}. Сервер ставит новую версию и переносит мир в неё вместе со всем, что он уже прожил; затем игра заберёт его.`
-      : `Мир живёт на сервере в версии ${live?.gameVersion ?? '?'}, а эта игра — ${wait.appVersion}. Обновите игру («Перезапустить и обновить» в главном меню): более старая версия не откроет этот мир.`;
+      ? `Обычно это занимает меньше минуты. Игра откроет мир сама, как только сервер закончит. Можно подождать или не ждать и досчитать мир на этом компьютере.`
+      : 'Мир на сервере уже обновлён, а эта игра старее. Обновите игру («Перезапустить и обновить» в главном меню), и мир откроется.';
   const takeNowNote = reason === 'catching-up'
     ? 'сервер остановится, а остаток досчитает этот компьютер.'
     : 'мир сервера сохранится резервной копией, а этот компьютер досчитает отсутствие от своего сохранения.';
   const stallNote = describeServerStall(live, 'waiting');
   const fasterHere = reason === 'catching-up' && localWait !== null && serverWait !== null && localWait < serverWait * 0.8;
+  if (presentation === 'quiet') {
+    return (
+      <div className="menu-modal cloud-entry" role="status" aria-live="polite" data-qa-cloud-wait={reason} data-qa-cloud-wait-quiet>
+        <section className="menu-modal__card cloud-entry__card">
+          <small>ОБЛАЧНЫЙ МИР</small>
+          <h2>Сервер обновляется, мир откроется через несколько секунд</h2>
+          <i className="cloud-entry__bar" aria-hidden="true"><i /></i>
+          <div className="menu-modal__actions">
+            <button ref={menuRef} type="button" className="menu-btn" onClick={onMenu} data-qa-cloud-wait-menu>В МЕНЮ</button>
+          </div>
+        </section>
+      </div>
+    );
+  }
   return (
     <div className="menu-modal cloud-wait" role="presentation" data-qa-cloud-wait={reason}>
       <section className="menu-modal__card cloud-wait__card" role="dialog" aria-modal="true" aria-labelledby="cloud-wait-title">
@@ -152,18 +175,26 @@ export function ServerWaitWindow({ slot, wait, onReady, onTakeNow, onMenu }: {
             </div>
           </div>
         ) : <i className="cloud-entry__bar" aria-hidden="true"><i /></i>}
-        <dl className={`cloud-wait__facts${reason === 'catching-up' ? ' is-catching-up' : ''}`}>
-          <div><dt>Осталось игрового времени</dt><dd data-qa-cloud-wait-lag={Math.round(lagMs)}>{live ? formatGameSpan(lagMs) : '—'}</dd></div>
-          {reason === 'catching-up' ? <div><dt>Скорость сервера</dt><dd data-qa-cloud-wait-rate={serverRate ?? ''}>{rateText(serverRate)}</dd></div> : null}
-          <div><dt>Мир прожит до</dt><dd>{live ? dateTime(live.worldAt) : '—'}</dd></div>
-          {reason === 'catching-up' ? <>
+        {reason === 'catching-up' ? (
+          <dl className="cloud-wait__facts is-catching-up">
+            <div><dt>Осталось игрового времени</dt><dd data-qa-cloud-wait-lag={Math.round(lagMs)}>{live ? formatGameSpan(lagMs) : '—'}</dd></div>
+            <div><dt>Скорость сервера</dt><dd data-qa-cloud-wait-rate={serverRate ?? ''}>{rateText(serverRate)}</dd></div>
+            <div><dt>Мир прожит до</dt><dd>{live ? dateTime(live.worldAt) : '—'}</dd></div>
             <div className={fasterHere ? '' : 'is-best'}><dt>Ждать сервер</dt><dd data-qa-cloud-wait-server={serverWait ?? ''}>{formatWait(serverWait)}</dd></div>
             <div className={fasterHere ? 'is-best' : ''}>
               <dt>Досчитать на этом ПК</dt>
               <dd data-qa-cloud-wait-local={localWait ?? ''}>{formatWait(localWait)}{local?.source === 'measured' ? '' : local ? ' (оценка)' : ''}</dd>
             </div>
-          </> : <div><dt>Версия сервера / игры</dt><dd>{live?.gameVersion ?? '?'} / {wait.appVersion}</dd></div>}
-        </dl>
+          </dl>
+        ) : (
+          <details className="cloud-wait__details">
+            <summary>Подробнее</summary>
+            <dl className="cloud-wait__facts">
+              <div><dt>Версия сервера / игры</dt><dd>{live?.gameVersion ?? '?'} / {wait.appVersion}</dd></div>
+              <div><dt>Мир прожит до</dt><dd>{live ? dateTime(live.worldAt) : '—'}</dd></div>
+            </dl>
+          </details>
+        )}
         {error ? <p className="menu-message menu-message--error" role="status">{error}</p> : null}
         <p className="cloud-conflict__note">«Меню игры» оставляет мир на сервере. «Досчитать на этом ПК» — {takeNowNote}</p>
         <div className="menu-modal__actions">
