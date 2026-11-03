@@ -265,12 +265,11 @@ export function estimateStrikeWorth(state: SaveState, utility: NpcUtilityContext
   const econ = haul + debris - loss - fuel - time;
   const strategic = pointWorth + war + danger + revenge;
   const gate = utility.rivalGateHosts?.has(report.targetPlanetId) ?? false;
-  const vengeful = grudge >= b.vengefulGrudge;
-  const risky = unit(traits.riskTolerance) >= b.riskyTolerance || aggression >= b.riskyAggression;
-  const knowing = gate || ((vengeful || risky) && econ + strategic >= 0);
-  const allowed = econ >= 0 || knowing;
+  // Owner rule 04.11.2026: no strike that loses by its own estimate, grudge or taste for risk notwithstanding;
+  // what the target is worth beyond resources only orders strikes that already pay. A rival Gate is the one exception.
+  const allowed = econ >= 0 || gate;
   return { haul, debris, loss, fuel, time, econ, strategic, allowed,
-    conscious: econ >= 0 || !knowing ? null : gate ? 'gate' : vengeful ? 'revenge' : 'risk' };
+    conscious: econ >= 0 || !gate ? null : 'gate' };
 }
 
 /** Free holds on a planet, biggest first, to carry the loot home with the force. */
