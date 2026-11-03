@@ -294,6 +294,30 @@ async function runViewport(win, directory) {
   metrics.messagesCoveredControls = await coveredControls(win);
   if (metrics.messagesCoveredControls.length) fail('Toasts cover controls on the Messages screen', metrics.messagesCoveredControls);
   await capture(win, directory, '11-toasts-messages');
+
+  // A report is interface, not a document: a mouse sweep selects nothing and text shows the arrow.
+  await win.webContents.executeJavaScript(`document.querySelector('.reports-category-unread')?.closest('button')?.click()`);
+  await settle(win, 500);
+  await win.webContents.executeJavaScript(`document.querySelector('.reports-list-open')?.click()`);
+  await settle(win, 600);
+  const sweep = await win.webContents.executeJavaScript(`(() => {
+    const box = document.querySelector('.reports-preview-scroll')?.getBoundingClientRect();
+    return box ? { x1: box.left + 20, y1: box.top + 20, x2: box.right - 20, y2: Math.min(box.bottom - 20, box.top + 360) } : null;
+  })()`);
+  if (!sweep) fail('No report preview on the Messages screen', sweep);
+  else {
+    const mouse = (type, x, y) => win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1 });
+    await mouse('mousePressed', sweep.x1, sweep.y1);
+    for (let step = 1; step <= 8; step += 1) await mouse('mouseMoved', sweep.x1 + ((sweep.x2 - sweep.x1) * step) / 8, sweep.y1 + ((sweep.y2 - sweep.y1) * step) / 8);
+    metrics.reportSelection = await win.webContents.executeJavaScript(`({
+      title: document.querySelector('.reports-preview-scroll h2, .reports-preview-scroll h3, .reports-preview-scroll strong')?.textContent?.trim() ?? '',
+      selected: window.getSelection()?.toString().length ?? -1,
+      cursor: getComputedStyle(document.querySelector('.reports-preview-scroll strong, .reports-preview-scroll p') ?? document.body).cursor,
+    })`);
+    await capture(win, directory, '12-report-drag-no-selection');
+    await mouse('mouseReleased', sweep.x2, sweep.y2);
+    if (metrics.reportSelection.selected !== 0 || metrics.reportSelection.cursor !== 'default') fail('Report text is selectable', metrics.reportSelection);
+  }
   return metrics;
 }
 
