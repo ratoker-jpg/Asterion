@@ -133,6 +133,7 @@ type UniverseViewProps = {
   onAsteroidRecycler: (target: { spawnIndex: number; coordinate: UniverseCoordinate }) => void;
   onExpedition?: (node: UniversePlanetNode) => void;
   onExplorationRecon?: (node: UniversePlanetNode) => void;
+  onExplorationAttack?: (node: UniversePlanetNode) => void;
   explorationEligibility?: Readonly<Record<string, 'free' | 'self' | 'occupied'>>;
   onTransport: (target: { planetId: string; coordinate: UniverseCoordinate; relation: TargetRelation }) => void;
   onSpy: (target: { planetId: string; planetName: string; coordinate: UniverseCoordinate; relation: Extract<TargetRelation, 'enemy' | 'neutral'>; owner: UniverseOwnerProfile; targetKind: 'player' | 'npc' }) => void;
@@ -444,7 +445,7 @@ function OwnerInspector({
 
 type ActionInfo = { label: string; description: string; enabled: boolean };
 
-function SpecialInspector({ node, underlyingNode, nowMs, asteroidHasDebris, pirateContact, onColonize, onAsteroidRecycler, onExpedition, onExplorationRecon, explorationStatus, onPirateRecon, onPirateAttack, onPirateReport }: { node: UniversePlanetNode; underlyingNode?: UniversePlanetNode; nowMs: number; asteroidHasDebris: boolean; pirateContact?: PirateContactPresentation; onColonize: (coordinate: UniverseCoordinate) => void; onAsteroidRecycler: (target: { spawnIndex: number; coordinate: UniverseCoordinate }) => void; onExpedition?: (node: UniversePlanetNode) => void; onExplorationRecon?: (node: UniversePlanetNode) => void; explorationStatus?: 'free' | 'self' | 'occupied'; onPirateRecon?: (contact: PirateContactPresentation) => void; onPirateAttack?: (contact: PirateContactPresentation) => void; onPirateReport?: (reportId: string) => void }) {
+function SpecialInspector({ node, underlyingNode, nowMs, asteroidHasDebris, pirateContact, onColonize, onAsteroidRecycler, onExpedition, onExplorationRecon, onExplorationAttack, explorationStatus, onPirateRecon, onPirateAttack, onPirateReport }: { node: UniversePlanetNode; underlyingNode?: UniversePlanetNode; nowMs: number; asteroidHasDebris: boolean; pirateContact?: PirateContactPresentation; onColonize: (coordinate: UniverseCoordinate) => void; onAsteroidRecycler: (target: { spawnIndex: number; coordinate: UniverseCoordinate }) => void; onExpedition?: (node: UniversePlanetNode) => void; onExplorationRecon?: (node: UniversePlanetNode) => void; onExplorationAttack?: (node: UniversePlanetNode) => void; explorationStatus?: 'free' | 'self' | 'occupied'; onPirateRecon?: (contact: PirateContactPresentation) => void; onPirateAttack?: (contact: PirateContactPresentation) => void; onPirateReport?: (reportId: string) => void }) {
   const isEmpty = node.kind === 'empty';
   const isPirate = node.kind === 'pirate';
   const isAnomaly = node.kind === 'anomaly';
@@ -509,6 +510,7 @@ function SpecialInspector({ node, underlyingNode, nowMs, asteroidHasDebris, pira
     ] : []),
     ...(isExploration ? [
       { label: 'ИССЛЕДОВАТЬ ЗОНДОМ', description: 'Принять исследовательскую операцию и отправить один шпионский зонд', enabled: Boolean(onExplorationRecon && explorationStatus) },
+      ...(explorationStatus === 'occupied' ? [{ label: 'АТАКОВАТЬ', description: 'Боевой захват объекта: выбрать флот и подтвердить миссию «Атака»', enabled: Boolean(onExplorationAttack) }] : []),
       { label: 'ЭКСПЕДИЦИЯ', description: explorationStatus === 'occupied' ? 'Объект занят. Для захвата нужна миссия «Атака».' : explorationStatus === 'self' ? 'Ваш флот уже добывает здесь.' : explorationStatus !== 'free' ? 'Экспедиция доступна в пределах пяти систем от ваших колоний.' : 'Подготовить экспедицию', enabled: Boolean(onExpedition && explorationStatus === 'free') },
     ] : []),
     ...(!canColonize && !isAsteroid && !isPirate && !isExploration ? [{ label: node.kind === 'uninhabited' ? 'КОЛОНИЗАЦИЯ' : 'ИССЛЕДОВАНИЕ', description: 'Механика появится позже', enabled: false }] : []),
@@ -566,6 +568,7 @@ function SpecialInspector({ node, underlyingNode, nowMs, asteroidHasDebris, pira
           {isExploration ? <>
             <button type="button" className="uw-btn" disabled={!onExplorationRecon || !explorationStatus} data-qa-universe-special-action="exploration-recon"
               title="Принять исследовательскую операцию и отправить один шпионский зонд" onClick={() => onExplorationRecon?.(node)}>ИССЛЕДОВАТЬ ЗОНДОМ</button>
+            {explorationStatus === 'occupied' ? <button type="button" className="uw-btn uw-btn--pirate" disabled={!onExplorationAttack} title="Боевой захват объекта: выбрать флот и подтвердить миссию «Атака»" data-qa-universe-special-action="exploration-attack" onClick={() => onExplorationAttack?.(node)}>АТАКОВАТЬ</button> : null}
             <button type="button" className="uw-btn uw-btn--primary" disabled={!onExpedition || explorationStatus !== 'free'}
               title={explorationStatus === 'occupied' ? 'Объект занят. Для захвата нужна миссия «Атака».'
                 : explorationStatus === 'self' ? 'Ваш флот уже добывает здесь.'
@@ -634,7 +637,7 @@ function MovingAsteroid({ node, underlyingKind, nowMs, hasDebris, occupiedNodes,
   </button>;
 }
 
-export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPlanetName, profile, ownerScores, command, playerPlanets: playerPlanetsProp, spyTargets: spyTargetsProp, orbitalDebrisByCoordinate, asteroidDebrisPresenceBySpawnIndex, asteroidStates, pirateContactState, pirateContacts = [], pirateFocusTarget, mode, onColonize, onAsteroidRecycler, onExpedition, onExplorationRecon, explorationEligibility = {}, onTransport, onSpy, onAttack, onPirateRecon, onPirateAttack, onPirateReport, onPirateSystemChange, focusTarget, onFocusHandled, onSunSelect, sunAlerts = [], homeCoordinate, debrisOrigin, onRecycleDebris }: UniverseViewProps) {
+export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPlanetName, profile, ownerScores, command, playerPlanets: playerPlanetsProp, spyTargets: spyTargetsProp, orbitalDebrisByCoordinate, asteroidDebrisPresenceBySpawnIndex, asteroidStates, pirateContactState, pirateContacts = [], pirateFocusTarget, mode, onColonize, onAsteroidRecycler, onExpedition, onExplorationRecon, onExplorationAttack, explorationEligibility = {}, onTransport, onSpy, onAttack, onPirateRecon, onPirateAttack, onPirateReport, onPirateSystemChange, focusTarget, onFocusHandled, onSunSelect, sunAlerts = [], homeCoordinate, debrisOrigin, onRecycleDebris }: UniverseViewProps) {
   const galaxyCount = getActiveGalaxyCount();
   const [galaxy, setGalaxy] = useState(homeCoordinate?.galaxy ?? GALAXY);
   const [system, setSystem] = useState(homeCoordinate?.system ?? 1);
@@ -1158,7 +1161,7 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
             <button ref={closeButtonRef} type="button" className="universe-inspector-close uw-close" data-asterion-close aria-label="Закрыть инспектор" title="Закрыть инспектор" onClick={() => setSelectedNodeId(null)}>✕</button>
           </header>
           <div className="universe-inspector-body uw-body">
-          {selectedOwner ? <OwnerInspector node={selectedNode} owner={selectedOwner} presence={ownerPresence?.[selectedOwner.id]} nowMs={nowMs} planets={ownerPlanets} currentOwnerId={owner.id} currentAlliance={owner.alliance} diplomacy={allianceDiplomacy} debrisAt={(coordinate) => orbitalDebrisByKey.get(`${coordinate.galaxy}:${coordinate.system}:${coordinate.position}`) ?? 0} onAction={handleAction} onVisit={(planet) => { goSystem(planet.coordinate.system); requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-qa-universe-object="${planet.id}"]`)?.focus()); }} /> : <SpecialInspector node={selectedNode} underlyingNode={selectedUnderlyingNode} nowMs={nowMs} asteroidHasDebris={Boolean(selectedNode.kind === 'asteroid' && selectedNode.asteroid && asteroidDebrisPresenceBySpawnIndex?.[String(selectedNode.asteroid.spawnIndex)])} pirateContact={selectedNode.kind === 'pirate' ? pirateContacts.find((contact) => contact.contactCycleKey === selectedNode.pirate?.contactCycleKey) : undefined} onColonize={onColonize} onAsteroidRecycler={onAsteroidRecycler} onExpedition={onExpedition} onExplorationRecon={onExplorationRecon} explorationStatus={explorationEligibility[selectedNode.id]} onPirateRecon={onPirateRecon} onPirateAttack={onPirateAttack} onPirateReport={onPirateReport} />}
+          {selectedOwner ? <OwnerInspector node={selectedNode} owner={selectedOwner} presence={ownerPresence?.[selectedOwner.id]} nowMs={nowMs} planets={ownerPlanets} currentOwnerId={owner.id} currentAlliance={owner.alliance} diplomacy={allianceDiplomacy} debrisAt={(coordinate) => orbitalDebrisByKey.get(`${coordinate.galaxy}:${coordinate.system}:${coordinate.position}`) ?? 0} onAction={handleAction} onVisit={(planet) => { goSystem(planet.coordinate.system); requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-qa-universe-object="${planet.id}"]`)?.focus()); }} /> : <SpecialInspector node={selectedNode} underlyingNode={selectedUnderlyingNode} nowMs={nowMs} asteroidHasDebris={Boolean(selectedNode.kind === 'asteroid' && selectedNode.asteroid && asteroidDebrisPresenceBySpawnIndex?.[String(selectedNode.asteroid.spawnIndex)])} pirateContact={selectedNode.kind === 'pirate' ? pirateContacts.find((contact) => contact.contactCycleKey === selectedNode.pirate?.contactCycleKey) : undefined} onColonize={onColonize} onAsteroidRecycler={onAsteroidRecycler} onExpedition={onExpedition} onExplorationRecon={onExplorationRecon} onExplorationAttack={onExplorationAttack} explorationStatus={explorationEligibility[selectedNode.id]} onPirateRecon={onPirateRecon} onPirateAttack={onPirateAttack} onPirateReport={onPirateReport} />}
           </div>
         </aside>
         </div>, document.body) : null}
