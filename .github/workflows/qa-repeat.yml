@@ -82,7 +82,7 @@ jobs:
             science-reports) suites="test:science-ui:skip test:building-actions-ui test:planet-pass-ui test:reports-ui test:battle-reports-ui:skip test:simulator-ui:skip test:space-flight-ui:skip test:production-test-isolation-ui:skip" ;;
             campaign-command) suites="test:new-game-ui:skip test:command-ui:skip test:command-aid-ui:skip test:command-journal-ui:skip test:cloud-world-ui:skip test:catchup-summary-ui:skip" ;;
             npc-replay) suites="test:npc-replay-ui-6h test:pirate-operations-ui test:late-game-fps-ui:skip" ;;
-            fleet-universe) suites="test:fleet-ui:skip test:universe-ui:skip test:quick-actions-ui test:fleet-repeat-ui test:energy-ui:skip test:repair-ui:skip" ;;
+            fleet-universe) suites="test:fleet-ui:skip test:universe-ui:skip test:quick-actions-ui test:empire-ui test:fleet-repeat-ui test:energy-ui:skip test:repair-ui:skip" ;;
             *) suites="" ;;
           esac
           if [ -n "${{ needs.prepare.outputs.suite }}" ]; then suites="${{ needs.prepare.outputs.suite }}"; fi

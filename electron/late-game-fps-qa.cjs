@@ -68,7 +68,8 @@ const SCREENS = [
   ['command', '.command-view'],
   ['reports', '.reports-view'],
   ['rating', '[data-qa-utility-screen="rating"]'],
-  ['settings', '[data-qa-utility-screen="settings"]'],
+  // «Настройки» moved to the pause menu; the header's utility switch is measured on «Наука».
+  ['science', '[data-qa-utility-screen="science"]'],
 ];
 const SWITCH_ONLY = args.includes('--switch-only');
 const SWITCH_REPEATS = Number(option('switch-repeats', '3'));
