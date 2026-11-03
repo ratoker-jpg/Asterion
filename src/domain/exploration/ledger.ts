@@ -385,6 +385,23 @@ export function cancelExplorationOperation(state: ExplorationState, contactId: s
   return { ...state, acceptedContactIds: state.acceptedContactIds.filter(id => id !== contactId) };
 }
 
+/** Who held the object when the probe arrived, revealed under the planet espionage tiers. */
+export type ExplorationReconOccupant = {
+  ownerId: string;
+  ownerName: string;
+  raceId: import('../combat/factions.ts').CombatFactionId;
+  alliance: { id: string; name: string; tag: string } | null;
+  /** basic: who; detailed: who; full: who and the fleet. Same roll tiers as planets. */
+  quality: import('../espionage/types.ts').SpyReportQuality;
+  spyLevel: number;
+  targetEspionageLevel: number;
+  delta: number;
+  roll: number;
+  firstReport: boolean;
+  fleet?: Record<string, number>;
+  fleetLevels?: Record<string, number>;
+};
+
 export type ExplorationReconRecord = {
   id: string;
   contactId: string;
@@ -392,6 +409,7 @@ export type ExplorationReconRecord = {
   flightId: string;
   resolvedAt: number;
   success: boolean;
+  occupant?: ExplorationReconOccupant;
 };
 
 export function resolveExplorationRecon(
@@ -400,6 +418,7 @@ export function resolveExplorationRecon(
   flightId: string,
   landedAt: number,
   past: readonly ExplorationReconRecord[],
+  occupant?: ExplorationReconOccupant,
 ): ExplorationReconRecord {
   if (landedAt >= contact.expiresAt || landedAt < contact.appearedAt) throw new Error('Expired recon target');
   const duplicate = past.find(r => r.flightId === flightId);
@@ -407,7 +426,7 @@ export function resolveExplorationRecon(
   const last = past.filter(r => r.contactId === contact.id && r.ownerId === ownerId).at(-1);
   if (last && landedAt - last.resolvedAt < EXPLORATION_RULES.reconCooldownMs) throw new Error('Recon cooldown');
   const success = explorationSeedRoll(contact.id, ownerId, flightId, 'recon') < EXPLORATION_RULES.reconSuccess;
-  return { id: flightId + ':recon', contactId: contact.id, ownerId, flightId, resolvedAt: landedAt, success };
+  return { id: flightId + ':recon', contactId: contact.id, ownerId, flightId, resolvedAt: landedAt, success, ...(occupant ? { occupant } : {}) };
 }
 
 function validNumber(value: unknown): value is number {

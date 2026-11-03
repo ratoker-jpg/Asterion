@@ -756,7 +756,7 @@ function updateSpyMission(espionage: EspionageState, mission: SpyMission): Espio
   };
 }
 
-function removeSpyProbeFromOrigin(state: SaveState, mission: SpyMission): SaveState {
+function removeSpyProbeFromOrigin(state: SaveState, mission: Pick<SpyMission, 'originPlanetId'>): SaveState {
   const origin = state.planets[mission.originPlanetId];
   if (!origin) return state;
   const fleet = removeSolarSatellitesFromFleet(resolveSavedFleetState(origin.fleet, state.profile.factionId)).fleet;
@@ -2899,6 +2899,16 @@ export function reconcileFlights(
       if (current.missionId === 'exploration-recon') {
         const result = resolveExplorationProbeArrival(next, current, arrivalAt, targetMode);
         next = result.state;
+        if (result.probeLost) {
+          // Same as a planet's repeat report: the probe never comes back. A player probe stays
+          // in the origin fleet until removed; an NPC probe was debited at launch.
+          const lost: FlightRecord = { ...current, phase: 'completed', arrivedAt: arrivalAt, completedAt: arrivalAt, completionReason: 'spy-destroyed' };
+          if (current.ownerSide === undefined || current.ownerSide === 'player') next = removeSpyProbeFromOrigin(next, current);
+          next = { ...next, flights: updateFlight(currentFlightState(next), lost) };
+          changed = true;
+          events.push({ flight: lost, status: 'spy-detected', notice: result.notice });
+          continue;
+        }
         const returningState = beginDomainFlightReturn(next.flights, current.id, arrivalAt, 'normal-return');
         const returningFlight = returningState.records.find(item => item.id === current.id)!;
         next = { ...next, flights: returningState };
