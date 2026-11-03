@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { HeaderGameIcon, HeaderNavigationIcon } from './HeaderAssetIcons';
+import { HeaderAlertsIcon, HeaderGameIcon, HeaderNavigationIcon } from './HeaderAssetIcons';
+import type { HeaderAlert } from './header-alerts.ts';
 import { ResourceChip } from './ResourceChip';
 import { FACTION_EMBLEMS } from './faction-emblems.ts';
 import {
@@ -35,6 +36,9 @@ export type AsterionHeaderProps = {
   incomingAttackCount?: number;
   planetMenuOpen: boolean;
   campaign: HeaderCampaignModel;
+  /** «Сигналы»: what needs attention across all planets; the bell sits first in the utility group. */
+  alerts?: readonly HeaderAlert[];
+  onAlertOpen?: (alert: HeaderAlert) => void;
   onRouteChange: (route: AppRoute) => void;
   onZoneChange: (zone: HeaderZoneId) => void;
   onPlanetChange: (planetId: string) => void;
@@ -70,6 +74,8 @@ export function AsterionHeader({
   incomingAttackCount = 0,
   planetMenuOpen,
   campaign,
+  alerts = [],
+  onAlertOpen,
   onRouteChange,
   onZoneChange,
   onPlanetChange,
@@ -79,6 +85,8 @@ export function AsterionHeader({
   const wasPlanetMenuOpen = useRef(planetMenuOpen);
   const restorePlanetFocusOnClose = useRef(false);
   const [speedMenuOpen, setSpeedMenuOpen] = useState(false);
+  const [alertsOpen, setAlertsOpen] = useState(false);
+  const alertsButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (wasPlanetMenuOpen.current && !planetMenuOpen && restorePlanetFocusOnClose.current) {
@@ -94,6 +102,26 @@ export function AsterionHeader({
     window.addEventListener('pointerdown', close);
     return () => window.removeEventListener('pointerdown', close);
   }, [speedMenuOpen]);
+
+  useEffect(() => {
+    if (!alertsOpen) return;
+    const close = () => setAlertsOpen(false);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      setAlertsOpen(false);
+      alertsButtonRef.current?.focus();
+    };
+    window.addEventListener('pointerdown', close);
+    window.addEventListener('keydown', onKey, true);
+    return () => {
+      window.removeEventListener('pointerdown', close);
+      window.removeEventListener('keydown', onKey, true);
+    };
+  }, [alertsOpen]);
+
+  const dangerCount = alerts.filter((alert) => alert.tone === 'danger').length;
 
   const closePlanetMenu = () => {
     if (!planetMenuOpen) return;
@@ -244,10 +272,10 @@ export function AsterionHeader({
             onRouteChange('planet');
           }}
           aria-label={`Открыть ${currentPlanet.name}`}
-          title={`${currentPlanet.name} · склад заполнен на ${Math.round(storageFill)}%`}
           data-qa-planet-home
         >
           <img src={currentPlanet.art} alt={currentPlanet.name} draggable={false} />
+          <span className="hdr-tip" aria-hidden="true">{currentPlanet.name} · склад заполнен на {Math.round(storageFill)}%</span>
         </button>
         <img className="hdr-core__emblem" src={FACTION_EMBLEMS[factionId]} alt="" aria-hidden="true" draggable={false} data-qa-faction-emblem={factionId} />
         {HEADER_ZONE_IDS.map((zone) => {
@@ -257,7 +285,6 @@ export function AsterionHeader({
               key={zone}
               type="button"
               className={`hdr-zone hdr-zone--${zone}${isActive ? ' active' : ''}`}
-              title={zoneMeta[zone].title}
               aria-label={zoneMeta[zone].title}
               aria-pressed={isActive}
               data-qa-zone={zone}
@@ -267,6 +294,7 @@ export function AsterionHeader({
               }}
             >
               <HeaderGameIcon kind={zone} />
+              <span className="hdr-tip" aria-hidden="true">{zoneMeta[zone].title}</span>
             </button>
           );
         })}
@@ -285,10 +313,10 @@ export function AsterionHeader({
               className="hdr-test__toggle"
               aria-expanded={speedMenuOpen}
               aria-label={`Тестовый режим, ускорение ×${campaign.timeScale}`}
-              title={`Тестовый режим · ${campaign.saveKey}`}
               onClick={() => setSpeedMenuOpen((open) => !open)}
             >
               <span data-qa-test-time-scale>ТЕСТ ×{campaign.timeScale}</span><i aria-hidden="true" />
+              {speedMenuOpen ? null : <span className="hdr-tip" aria-hidden="true">Тестовый режим · {campaign.saveKey}</span>}
             </button>
             {campaign.timeScaleOptions?.length ? (
               <div className="hdr-test__menu" role="group" aria-label="Скорость тестового режима" hidden={!speedMenuOpen}>
@@ -316,7 +344,22 @@ export function AsterionHeader({
         <time>{new Date(campaign.now).toLocaleTimeString('ru-RU', { hour12: false })}</time>
       </section>
 
-      <nav className="hdr-utility" aria-label="Служебная навигация" data-qa-navigation="utility">
+      <nav className="hdr-utility" aria-label="Служебная навигация" data-qa-navigation="utility" onPointerDown={(event) => event.stopPropagation()}>
+        <button
+          ref={alertsButtonRef}
+          type="button"
+          className={`hdr-alerts-toggle${alertsOpen ? ' active' : ''}`}
+          aria-label={alerts.length ? `Сигналы: ${alerts.length}` : 'Сигналы: всё спокойно'}
+          aria-expanded={alertsOpen}
+          aria-controls="asterion-header-alerts"
+          data-qa-alerts-toggle
+          data-qa-alerts-count={alerts.length}
+          onClick={() => setAlertsOpen((open) => !open)}
+        >
+          <HeaderAlertsIcon />
+          {alerts.length ? <b className={`asterion-header__nav-badge ${dangerCount ? 'asterion-header__nav-badge--alert' : 'asterion-header__nav-badge--calm'}`} aria-hidden="true">{alerts.length > 99 ? '99+' : alerts.length}</b> : null}
+          {alertsOpen ? null : <span className="hdr-tip" aria-hidden="true">Сигналы</span>}
+        </button>
         {UTILITY_NAVIGATION.map(({ id, label, icon }) => {
           const isActive = activeRoute === id;
           return (
@@ -324,7 +367,6 @@ export function AsterionHeader({
               key={id}
               type="button"
               aria-label={label}
-              title={label}
               aria-current={isActive ? 'page' : undefined}
               className={isActive ? 'active' : ''}
               data-route={id}
@@ -335,9 +377,37 @@ export function AsterionHeader({
               }}
             >
               <HeaderNavigationIcon kind={icon} factionId={factionId} />
+              <span className="hdr-tip" aria-hidden="true">{label}</span>
             </button>
           );
         })}
+        <section className="hdr-alerts" id="asterion-header-alerts" aria-label="Сигналы" hidden={!alertsOpen} data-qa-alerts-panel>
+          <header><strong>Сигналы</strong><small>{alerts.length ? `${alerts.length} · по всем планетам` : 'по всем планетам'}</small></header>
+          {alerts.length ? (
+            <ul>
+              {alerts.map((alert) => (
+                <li key={alert.id}>
+                  <button
+                    type="button"
+                    className={`hdr-alert hdr-alert--${alert.tone}`}
+                    data-qa-alert={alert.id}
+                    onClick={() => {
+                      setAlertsOpen(false);
+                      dismissPlanetMenuForNavigation();
+                      onAlertOpen?.(alert);
+                    }}
+                  >
+                    <i aria-hidden="true" />
+                    <span><strong>{alert.title}</strong><small>{alert.detail}</small></span>
+                    <em>{alert.action} ›</em>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="hdr-alerts__empty">Всё спокойно: атак нет, склады не переполнены, стройка идёт на всех планетах.</p>
+          )}
+        </section>
       </nav>
     </header>
   );

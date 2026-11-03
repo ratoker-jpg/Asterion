@@ -15,7 +15,8 @@ const PRIMARY_ROUTES = [
   ['command', '.command-view'],
   ['reports', '.reports-view'],
 ];
-const UTILITY_ROUTES = ['settings', 'rating', 'science'];
+// The gear left the header: «Настройки» opens from the pause menu (≡), the bell «Сигналы» took its place.
+const UTILITY_ROUTES = ['rating', 'science'];
 // «Ядро» header: zones sit around the planet dial (military on top, resource left, industry right).
 const EXPECTED_ZONE_POSITIONS = {
   resource: ['-33px', '56px'],
@@ -74,6 +75,37 @@ async function clickRoute(win, route) {
   }
   await waitFor(win, `document.querySelector('[data-qa-route="${route}"][aria-current="page"]')`);
   await settle(win);
+}
+
+async function openSettingsFromPause(win) {
+  await win.webContents.executeJavaScript(`document.querySelector('[data-qa-pause-open]').click()`);
+  await waitFor(win, `document.querySelector('[data-qa-pause="settings"]')`);
+  await win.webContents.executeJavaScript(`document.querySelector('[data-qa-pause="settings"]').click()`);
+  await waitFor(win, `document.querySelector('[data-qa-utility-screen="settings"]') && !document.querySelector('[data-qa-pause-menu]')`);
+  await settle(win);
+}
+
+async function readAlertsContract(win) {
+  const toggled = await win.webContents.executeJavaScript(`(() => {
+    const button = document.querySelector('[data-qa-alerts-toggle]');
+    if (!button) return false;
+    button.click();
+    return true;
+  })()`);
+  if (!toggled) throw new Error('«Сигналы» toggle not found');
+  await waitFor(win, `!document.querySelector('[data-qa-alerts-panel]').hidden`);
+  const result = await win.webContents.executeJavaScript(`(() => ({
+    rows: document.querySelectorAll('[data-qa-alerts-panel] [data-qa-alert]').length,
+    count: Number(document.querySelector('[data-qa-alerts-toggle]').getAttribute('data-qa-alerts-count')),
+    gear: Boolean(document.querySelector('[data-qa-navigation="utility"] [data-qa-route="settings"]')),
+    nativeTitles: Array.from(document.querySelectorAll('[data-qa-header] [title], [data-qa-pause-open][title]')).map((element) => element.outerHTML.slice(0, 80)),
+  }))()`);
+  await win.webContents.executeJavaScript(`document.querySelector('[data-qa-alerts-toggle]').click()`);
+  await waitFor(win, `document.querySelector('[data-qa-alerts-panel]').hidden`);
+  if (result.rows !== result.count) throw new Error(`«Сигналы»: ${result.rows} rows for a badge of ${result.count}`);
+  if (result.gear) throw new Error('The settings gear is still in the header');
+  if (result.nativeTitles.length) throw new Error(`Native title tooltips in the header: ${result.nativeTitles.join(' | ')}`);
+  return result;
 }
 
 async function readHeaderContract(win) {
@@ -540,6 +572,8 @@ async function main() {
 
       for (const [route] of PRIMARY_ROUTES) await clickRoute(win, route);
       for (const route of UTILITY_ROUTES) await clickRoute(win, route);
+      await readAlertsContract(win);
+      await openSettingsFromPause(win);
 
       results.push({
         viewport: `${width}x${height}`,

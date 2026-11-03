@@ -181,8 +181,13 @@ async function resetTestSave(win) {
 }
 
 async function activateScreen(win, route, label, expectedClass) {
+  if (route === 'settings') {
+    // «Настройки» live in the pause menu (≡), not in the header.
+    await win.webContents.executeJavaScript(`document.querySelector('[data-qa-pause-open]').click()`);
+    await waitFor(win, `document.querySelector('[data-qa-pause="settings"]')`);
+  }
   const clicked = await win.webContents.executeJavaScript(`(() => {
-    const button = document.querySelector('[data-qa-navigation="utility"] [data-qa-route="${route}"]');
+    const button = document.querySelector(${JSON.stringify(route === 'settings' ? '[data-qa-pause="settings"]' : `[data-qa-navigation="utility"] [data-qa-route="${route}"]`)});
     if (!button) return false;
     button.click();
     return true;

@@ -87,7 +87,7 @@ async function clickTestModeReset(win, label) {
     };
   })()`);
   const expectedLabel = 'Сбросить текущее тестовое сохранение';
-  if (!resetControl || resetControl.ariaLabel !== expectedLabel || resetControl.title !== expectedLabel) {
+  if (!resetControl || resetControl.ariaLabel !== expectedLabel || resetControl.title !== null) {
     throw new Error(`${label}: reset control contract mismatch ${JSON.stringify(resetControl)}`);
   }
   await click(win, '[data-qa-reset-progress]');

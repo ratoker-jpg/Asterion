@@ -53,7 +53,6 @@ export const PRIMARY_NAVIGATION = [
 ] as const satisfies readonly AppNavigationItem[];
 
 export const UTILITY_NAVIGATION = [
-  { id: 'settings', label: APP_ROUTE_LABELS.settings, icon: 'settings' },
   { id: 'rating', label: APP_ROUTE_LABELS.rating, icon: 'rating' },
   { id: 'science', label: APP_ROUTE_LABELS.science, icon: 'science' },
 ] as const satisfies readonly AppNavigationItem[];

@@ -19,6 +19,7 @@ import reportsIcon from '../../assets/ui/header-icons/reports.png';
 import settingsIcon from '../../assets/ui/header-icons/settings.png';
 import ratingIcon from '../../assets/ui/header-icons/rating.png';
 import scienceIcon from '../../assets/ui/header-icons/science.png';
+import alertsIcon from '../../assets/ui/header-icons/alerts.png';
 
 const GLOBAL_GAME_ICON_ASSETS = {
   metal: RESOURCE_ICON_ASSETS.metal,
@@ -83,4 +84,9 @@ export function ApprovedZoneIcon({ kind }: { kind: HeaderZoneId }) {
  */
 export function HeaderNavigationIcon({ kind, factionId = 'aegis' }: { kind: NavigationIconKind; factionId?: PlayerFactionId }) {
   return <AssetIcon src={NAVIGATION_ICON_ASSETS[factionId]?.[kind] ?? AEGIS_NAVIGATION_ICON_ASSETS[kind]} />;
+}
+
+/** «Сигналы» bell, painted in the same pack as the navigation icons. */
+export function HeaderAlertsIcon() {
+  return <AssetIcon src={alertsIcon} />;
 }

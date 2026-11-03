@@ -87,6 +87,13 @@ async function clickPrimary(win, route) {
 }
 
 async function clickUtility(win, route) {
+  if (route === 'settings') {
+    // «Настройки» live in the pause menu (≡), not in the header.
+    await click(win, '[data-qa-pause-open]');
+    await sleep(200);
+    await click(win, '[data-qa-pause="settings"]');
+    return;
+  }
   await click(win, `[data-qa-navigation="utility"] [data-qa-route="${route}"]`);
 }
 

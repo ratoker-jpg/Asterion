@@ -139,9 +139,9 @@
   position:absolute;right:10px;top:6px;width:112px;height:46px;display:flex;align-items:center;justify-content:space-around;border-radius:12px;
   background:rgba(0,0,0,.3);box-shadow:inset 0 1px 3px rgba(0,0,0,.6),inset 0 0 0 1px rgba(255,255,255,.05);
 }
-.hdr-utility button{--hdr-radius:9px;width:32px;height:32px;display:grid;place-items:center;padding:0;border:0;background:none}
-.hdr-utility button:hover,.hdr-utility button.active,.hdr-utility button:focus-visible{outline:0;background:color-mix(in srgb,var(--header-accent-strong) 18%,transparent)}
-.hdr-utility img{width:24px;height:24px}
+.hdr-utility>button{--hdr-radius:9px;width:32px;height:32px;display:grid;place-items:center;padding:0;border:0;background:none}
+.hdr-utility>button:hover,.hdr-utility>button.active,.hdr-utility>button:focus-visible{outline:0;background:color-mix(in srgb,var(--header-accent-strong) 18%,transparent)}
+.hdr-utility>button img{width:24px;height:24px}
 
 /* ---------- core dial ---------- */
 .hdr-core{position:absolute;left:calc(50% - 83px);top:18px;width:166px;height:166px}
@@ -230,3 +230,49 @@
 .asterion-header__nav-badge--alert { background: #f0445e !important; color: #fff !important; }
 @keyframes hdr-route-alert { 50% { box-shadow: 0 0 0 2px rgba(240, 68, 94, 1), 0 0 26px rgba(240, 68, 94, .8); } }
 @media (prefers-reduced-motion: reduce) { .asterion-header .hdr-route.hdr-route--alert .hdr-route__icon { animation: none; } }
+
+/* ---------- game tooltips (no native title) ---------- */
+.hdr-tip{
+  position:absolute;z-index:60;left:50%;top:calc(100% + 8px);padding:5px 10px;border-radius:8px;white-space:nowrap;pointer-events:none;
+  background:linear-gradient(180deg,#132029,#0a1216);color:#e8f6fa;font-size:11px;font-weight:700;letter-spacing:.02em;line-height:1.2;
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--race-accent,#56d9f2) 45%,transparent),0 10px 22px rgba(0,0,0,.7);
+  opacity:0;transform:translate(-50%,-3px);transition:opacity .12s ease,transform .12s ease;
+}
+button:hover>.hdr-tip,button:focus-visible>.hdr-tip{opacity:1;transform:translate(-50%,0);transition-delay:.25s}
+.hdr-utility .hdr-tip{left:auto;right:-4px;transform:translateY(-3px)}
+.hdr-utility button:hover>.hdr-tip,.hdr-utility button:focus-visible>.hdr-tip{transform:translateY(0)}
+.hdr-utility>button{position:relative}
+.hdr-zone .hdr-tip{text-transform:none}
+.hdr-zone--military .hdr-tip{top:auto;bottom:calc(100% + 8px)}
+.hdr-test__toggle{position:relative}
+
+/* ---------- «Сигналы» ---------- */
+.hdr-utility .asterion-header__nav-badge{top:-5px;right:-7px;min-width:18px;height:16px;font-size:9.5px}
+.asterion-header__nav-badge--calm{background:var(--header-accent-strong);color:#04131a;box-shadow:0 0 10px var(--header-glow),0 0 0 2px #0b1418}
+.hdr-alerts:not([hidden]){
+  position:absolute;z-index:70;right:0;top:calc(100% + 8px);width:360px;display:grid;gap:6px;padding:8px;border-radius:14px;pointer-events:auto;
+  background:linear-gradient(180deg,#121d24,#0a1115);box-shadow:inset 0 0 0 1px rgba(86,217,242,.32),0 16px 30px rgba(0,0,0,.75);
+  animation:hdr-alerts-in .16s cubic-bezier(.2,.8,.2,1);transform-origin:top right;
+}
+@keyframes hdr-alerts-in{from{opacity:0;transform:translateY(-4px) scale(.98)}}
+.hdr-alerts>header{display:flex;align-items:baseline;justify-content:space-between;padding:2px 6px}
+.hdr-alerts>header strong{font-size:13px;letter-spacing:.06em;text-transform:uppercase}
+.hdr-alerts>header small{font-size:10px;color:#86a1aa}
+.hdr-alerts ul{display:grid;gap:3px;max-height:360px;margin:0;padding:0;overflow:auto;list-style:none}
+.hdr-alert{
+  --tone:var(--header-accent);--hdr-radius:10px;
+  width:100%;display:flex;align-items:center;gap:10px;padding:8px 10px;border:0;background:rgba(255,255,255,.02);text-align:left;
+}
+.hdr-alert--danger{--tone:#f0445e}
+.hdr-alert--warn{--tone:#f0ad38}
+.hdr-alert:hover,.hdr-alert:focus-visible{outline:0;background:color-mix(in srgb,var(--tone) 12%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--tone) 45%,transparent)}
+.hdr-alert>i{flex:0 0 8px;width:8px;height:8px;border-radius:50%;background:var(--tone);box-shadow:0 0 8px var(--tone)}
+.hdr-alert>span{flex:1;min-width:0;display:grid;gap:2px}
+.hdr-alert strong{font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hdr-alert small{font-size:10.5px;color:#86a1aa;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hdr-alert>em{flex:none;font-style:normal;font-size:10.5px;font-weight:700;color:var(--tone)}
+.hdr-alerts__empty{margin:0;padding:10px 8px 8px;color:#86a1aa;font-size:11.5px;line-height:1.45}
+@media (prefers-reduced-motion:reduce){.hdr-alerts:not([hidden]){animation:none}.hdr-tip{transition:none}}
+/* ≡ sits outside the header, in the rail's left cap: its tooltip opens to the right. */
+.stage .shell-pause-control .hdr-tip{left:0;font-size:11px;line-height:1.2;transform:translateY(-3px)}
+.stage .shell-pause-control:hover>.hdr-tip,.stage .shell-pause-control:focus-visible>.hdr-tip{transform:translateY(0)}
