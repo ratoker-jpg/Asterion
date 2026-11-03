@@ -9,7 +9,7 @@ import {
 } from '../../domain/settings/preferences.ts';
 import type { UiPreferencesV2 } from '../../domain/settings/types.ts';
 import { formatPlayTime, selectContinueSlot, sortSlotsByRecent, type SaveSlotIndex, type SaveSlotMeta } from '../../domain/session/slots.ts';
-import { CAMPAIGN_SPEED_LABELS } from '../../domain/world/config.ts';
+import { CAMPAIGN_SPEED_LABELS, NPC_ACTIVITY_LABELS } from '../../domain/world/config.ts';
 import { SAVE_SCHEMA_VERSION } from '../../application/persistence.ts';
 import {
   deleteSaveSlot,
@@ -428,6 +428,7 @@ function SlotCard({ slot, active, health, renaming, onRenameStart, onRenameChang
           <div><dt>Планеты</dt><dd>{slot.summary.planets}</dd></div>
           <div><dt>Мир</dt><dd>{slot.summary.galaxyCount} гал. · {slot.summary.npcCount} NPC</dd></div>
           <div><dt>Скорость</dt><dd>{CAMPAIGN_SPEED_LABELS[slot.campaignSpeed].label}</dd></div>
+          <div><dt>Активность NPC</dt><dd>{NPC_ACTIVITY_LABELS[slot.npcActivity ?? 'normal'].label}</dd></div>
           <div><dt>Версия</dt><dd>схема {slot.schemaVersion}</dd></div>
         </dl>
         <div className="menu-slot__crystals"><CrystalSet owned={CRYSTALS.slice(0, slot.summary.crystals)} size={18} />{slot.summary.victory ? <b>ПОБЕДА</b> : null}</div>

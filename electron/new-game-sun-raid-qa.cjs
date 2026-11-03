@@ -95,7 +95,18 @@ async function production(win, label) {
   await waitFor(win, `document.querySelector('[data-qa-world="superfast-npc-cap"]')`);
   const capped = await run(win, `({ max: document.querySelector('[data-qa-world="npc"]').max, value: document.querySelector('[data-qa-world="npc"]').value })`);
   if (capped.max !== '50' || capped.value !== '50') throw new Error(`Superfast NPC cap: ${JSON.stringify(capped)}`);
+  // «Активность NPC»: three choices, «Обычная» by default, the hint follows the choice.
+  const activityOf = () => run(win, `(() => { const box = document.querySelector('[data-qa-world="npc-activity"]'); return { checked: [...box.querySelectorAll('[role="radio"]')].filter((button) => button.getAttribute('aria-checked') === 'true').map((button) => button.textContent.trim()), hint: box.querySelector('[data-qa-world="npc-activity-hint"]').textContent }; })()`);
+  const pickActivity = (name) => run(win, `[...document.querySelectorAll('[data-qa-world="npc-activity"] [role="radio"]')].find((button) => button.textContent.trim() === ${JSON.stringify(name)}).click()`);
+  const activityDefault = await activityOf();
+  if (activityDefault.checked.join() !== 'Обычная') throw new Error(`Activity default: ${JSON.stringify(activityDefault)}`);
+  await pickActivity('Максимальная');
+  await sleep(200);
+  const activityMax = await activityOf();
+  if (activityMax.checked.join() !== 'Максимальная' || !/70%/.test(activityMax.hint)) throw new Error(`Activity max: ${JSON.stringify(activityMax)}`);
+  await run(win, `document.querySelector('[data-qa-world="npc-activity"]').scrollIntoView({ block: 'end' })`);
   await capture(win, label, '04a-new-game-superfast');
+  await pickActivity('Высокая');
   await run(win, `[...document.querySelectorAll('[role="radio"]')].find((button) => /Стандартная ×1/.test(button.textContent)).click()`);
   await run(win, `(() => {
     const set = (qa, value) => { const input = document.querySelector('[data-qa-world="' + qa + '"]'); const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; setter.call(input, String(value)); input.dispatchEvent(new Event('input', { bubbles: true })); };
@@ -105,6 +116,7 @@ async function production(win, label) {
   await capture(win, label, '04-new-game-world');
   await click(win, '[data-qa-wizard-next]');
   await waitFor(win, `document.querySelector('[data-qa-wizard-step="confirm"]')`);
+  if (!/Активность NPC\s*Высокая/.test(await run(win, `document.querySelector('[data-qa-wizard-step="confirm"]').textContent`))) throw new Error('The confirm step does not show the NPC activity');
   await capture(win, label, '05-new-game-confirm');
   await click(win, '[data-qa-wizard-start]');
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
