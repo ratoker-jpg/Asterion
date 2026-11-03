@@ -1,6 +1,8 @@
 import { getNpcJournalSink, NPC_JOURNAL_ALTERNATIVES } from './npc-journal.ts';
 import { npcStyleBias, readNpcPlayStyle } from './npc-style.ts';
 import { chooseNpcAutonomyAction, updateNpcAutonomyMemory, type NpcAutonomyCandidate } from '../domain/npc/autonomy-policy.ts';
+import { explorationContactForFlight, updateExpeditionContact } from './exploration-flight.ts';
+import { prepareExplorationRecall } from '../domain/exploration/ledger.ts';
 import { NPC_ECONOMY_ROLES } from '../domain/npc/economy-policy.ts';
 import { flightsToPlanet, ownerFlights } from './npc-knowledge-index.ts';
 import { NPC_REPAIR_BALANCE, npcRepairPoolValue, repairNpcPlanet } from './npc-repair.ts';
@@ -606,6 +608,22 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
         return { state: result.state, started: result.ok, reason: result.reason, planetId: armed.originPlanetId };
       },
     });
+  }
+  // A held unique object with a hostile attack flying at it: the owner calls its fleet home
+  // (the 30 s preparation of the player's «Вернуть флот»), cargo and ships are worth more than the claim.
+  for (const flight of ownerFlights(state.flights.records, ownerId)) {
+    if (flight.ownerSide !== 'npc' || flight.missionId !== 'expedition' || flight.phase !== 'arrived') continue;
+    const contact = explorationContactForFlight(state, flight);
+    if (!contact?.claim || contact.claim.flightId !== flight.id || contact.claim.pendingRecallAt !== undefined || at >= contact.expiresAt) continue;
+    const incoming = state.flights.records.some((other) => other.explorationAttack && other.phase === 'outbound' && other.arrivalAt > at
+      && other.ownerId !== ownerId && other.operationId === flight.operationId);
+    if (!incoming) continue;
+    const recallId = `expedition-recall:${flight.id}`;
+    choices.push({ candidate: { id: recallId, kind: 'pve', weight: 1_000_000 }, must: true, run: (current) => {
+      const held = explorationContactForFlight(current, flight);
+      if (!held?.claim || held.claim.pendingRecallAt !== undefined) return { state: current, started: false, reason: 'not-held' };
+      return { state: updateExpeditionContact(current, prepareExplorationRecall(held, ownerId, at)), started: true, reason: null };
+    } });
   }
   for (const mission of getNpcPirateCandidates(state, profile, at)) choices.push({
     candidate: { id: `pirate:${mission.id}`, kind: mission.missionId === 'pirate-recon' ? 'recon' : 'pve',

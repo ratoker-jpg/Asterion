@@ -32,6 +32,17 @@ export function createGrowthWorld({ bots, seed, speed, activity }) {
 
 const SCALE = { slow: 0.5, standard: 1, fast: 2, superfast: 5 };
 
+/** What the NPC took from unique objects (the lab has no player flights): extracted stock, hauls brought home, claims taken. */
+function uniqueStats(state) {
+  const contacts = Object.values(state.exploration?.contacts ?? {});
+  const events = contacts.flatMap((contact) => contact.events ?? []);
+  const sumCargo = (cargo) => Object.values(cargo ?? {}).reduce((total, value) => total + (Number(value) || 0), 0);
+  const released = events.filter((event) => /:release$/.test(event.id));
+  return { contacts: contacts.length, extracted: Math.round(sum(contacts.map((contact) => sumCargo(contact.extractedByType)))),
+    releases: released.length, broughtHome: Math.round(sum(released.map((event) => sumCargo(event.cargo)))),
+    recalled: released.filter((event) => event.kind === 'recalled').length };
+}
+
 export function sampleGrowth(state, at, speed) {
   const scale = SCALE[speed] ?? 1;
   const owners = Object.keys(state.npc.profiles);
@@ -70,6 +81,7 @@ export function sampleGrowth(state, at, speed) {
     science: { totalMedian: median(rows.map((row) => row.scienceTotal)), mathematicsMedian: median(rows.map((row) => row.mathematics)) },
     botsAssignedMedian: median(rows.map((row) => row.bots)),
     storesMedian: Math.round(median(rows.map((row) => row.stores))),
+    unique: uniqueStats(state),
     rows,
   };
 }
