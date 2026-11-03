@@ -246,7 +246,7 @@ function CoordinateLink({ value, onOpen }: { value: string; onOpen?: (coordinate
 function GenericDossier({ item, exploration, onOpenUniverseTarget }: {
   item: ReportItem;
   exploration?: ExplorationState;
-  onOpenUniverseTarget?: (target: { coordinate: UniverseCoordinate }) => void;
+  onOpenUniverseTarget?: (target: { coordinate: UniverseCoordinate; planetId?: string; ownerId?: string }) => void;
 }) {
   const openCoordinate = onOpenUniverseTarget ? (coordinate: UniverseCoordinate) => onOpenUniverseTarget({ coordinate }) : undefined;
   const route: { label: string; value: string }[] = [];
@@ -309,9 +309,37 @@ function GenericDossier({ item, exploration, onOpenUniverseTarget }: {
         {tokens ? <div className="reports-v3-fact reports-v3-fact--token"><small>ЖЕТОНЫ РЕМОНТА</small><b>{tokens === '0' ? 'Не найдены' : `+${tokens.replace(/^\+/, '')}`}</b></div> : null}
         {facts.map((entry) => <div className="reports-v3-fact" key={`${entry.label}-${entry.value}`}><small>{entry.label}</small><b>{entry.value}</b></div>)}
       </section> : null}
+      {item.occupantRecon ? <OccupantBlock occupant={item.occupantRecon} coordinate={parseCoordinate(item.coordinates[0] ?? '')} onOpenUniverseTarget={onOpenUniverseTarget} /> : null}
       <section className="reports-v3-summary"><p>{item.body}</p>{notes.map((note) => <p className="reports-v3-note" key={note}>{note}</p>)}</section>
     </div>
   );
+}
+
+function OccupantBlock({ occupant, coordinate, onOpenUniverseTarget }: {
+  occupant: NonNullable<ReportItem['occupantRecon']>;
+  coordinate: UniverseCoordinate | null;
+  onOpenUniverseTarget?: (target: { coordinate: UniverseCoordinate; planetId?: string; ownerId?: string }) => void;
+}) {
+  const fleet = Object.entries(occupant.fleet ?? {}).filter(([, count]) => Number(count) > 0);
+  return <section className="spy-report-card reports-occupant" data-qa-occupant-report={occupant.ownerId} data-quality={occupant.quality}>
+    <header><strong>КТО ЗАНИМАЕТ</strong><span>{occupant.quality === 'full' ? 'Полный отчёт' : occupant.quality === 'detailed' ? 'Детальный отчёт' : 'Базовый отчёт'}</span></header>
+    <dl className="spy-report-summary-grid">
+      <div><dt>Владелец</dt><dd>{coordinate && onOpenUniverseTarget
+        ? <button type="button" className="spy-report-link" onClick={() => onOpenUniverseTarget({ coordinate, ownerId: occupant.ownerId })}>{occupant.ownerName}</button>
+        : <strong>{occupant.ownerName}</strong>}</dd></div>
+      <div><dt>Раса</dt><dd>{getCombatFactionName(occupant.raceId)}</dd></div>
+      <div><dt>Альянс</dt><dd>{occupant.alliance ? `[${occupant.alliance.tag}] ${occupant.alliance.name}` : 'Без альянса'}</dd></div>
+    </dl>
+    {occupant.quality === 'full'
+      ? fleet.length
+        ? <div className="spy-report-entity-grid">{fleet.map(([id, count]) => {
+          const entity = getFactionCombatEntity(occupant.raceId, id as CombatEntityId);
+          const level = occupant.fleetLevels?.[id];
+          return <article className="spy-report-entity" key={id} data-level={level}><span className="reports-v2-art reports-v2-entity-art"><img src={entity.art} alt="" /></span><div><strong>{entity.name}</strong><span>{level !== undefined ? `Уровень ${level}` : entity.role}</span></div><b>{numberFormat.format(Number(count))}</b></article>;
+        })}</div>
+        : <p className="spy-report-empty">Корабли не найдены.</p>
+      : <p className="spy-report-empty" data-qa-occupant-fleet-hidden>Состав флота не раскрыт: уровень шпионажа зонда ниже, чем нужно для полного отчёта.</p>}
+  </section>;
 }
 
 function OverpopulationDossier({ item }: { item: ReportItem }) {

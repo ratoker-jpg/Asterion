@@ -44,7 +44,8 @@ export function explorationMailboxReports(ledger?: ExplorationState, flights: re
       timestamp: new Date(record.resolvedAt).toISOString(),
       statusLabel: record.success ? 'УСПЕШНО' : 'НЕУДАЧА',
       statusTone: record.success ? 'success' : 'warning',
-      participantNames: [], planetNames: profile ? [profile.name] : [], coordinates: [location],
+      participantNames: record.occupant ? [record.occupant.ownerName] : [], planetNames: profile ? [profile.name] : [], coordinates: [location],
+      ...(record.occupant ? { occupantRecon: record.occupant } : {}),
       details: [
         { label: 'Цель', value: profile?.name ?? 'Неизвестный объект' },
         { label: 'Координаты', value: location },

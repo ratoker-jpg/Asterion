@@ -2,6 +2,7 @@
 import type { SpyHunterNotice, SpyReportSnapshot } from '../espionage/types.ts';
 import type { CombatFactionId } from '../combat/factions.ts';
 import type { ShipId } from '../combat/ids.ts';
+import type { ExplorationReconOccupant } from '../exploration/ledger.ts';
 import type { PirateReconReport } from '../pirates/recon-report.ts';
 
 export type OrdinaryShipId = Exclude<ShipId, 'solar-satellite'>;
@@ -91,6 +92,8 @@ export type ReportItem = {
   commandOperationId?: string;
   spyReport?: SpyReportSnapshot;
   spyHunterNotice?: SpyHunterNotice;
+  /** Who held the unique object when the probe arrived (exploration recon only). */
+  occupantRecon?: ExplorationReconOccupant;
   overpopulationReport?: OverpopulationEpisodeReport;
   pirateReconReport?: PirateReconReport;
   action?: ReportAction;
