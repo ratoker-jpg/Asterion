@@ -5,6 +5,7 @@ import type { UniverseCoordinate, UniversePlanetNode, UniversePersistedPlayerPla
 import { explorationNodeId, visibleExplorationContacts } from '../domain/exploration/model.ts';
 import type { RuntimeMode } from '../domain/runtime/mode.ts';
 import { EXPLORATION_ARTS } from '../exploration-art.ts';
+import type { FlightLaunchContext } from './flights.ts';
 
 /** The shared selector for Fleet and Operations: only actual local owned colonies grant visibility. */
 export function selectExplorationTargets(
@@ -157,4 +158,30 @@ export function selectExplorationOperations(state: SaveState, nowMs: number, mod
       };
     }).slice(-60);
   return [...displayed, ...historical];
+}
+
+/**
+ * Entry point shared by the unique-object dialog, the system view and Operations:
+ * an object held by someone else's real fleet opens the ordinary «Атака» mission.
+ * The context only pre-fills the fleet screen; eligibility is checked again by dispatchFlight.
+ */
+export function planExplorationAttackLaunch(
+  state: SaveState,
+  id: string,
+  nowMs: number,
+  mode?: RuntimeMode,
+): { ok: true; context: FlightLaunchContext } | { ok: false; notice: string } {
+  const live = getExplorationTarget(state, id, nowMs, mode);
+  const claim = live && state.exploration?.contacts[live.id]?.claim;
+  if (!live || !claim || claim.ownerId === state.profile.playerId) {
+    return { ok: false, notice: 'Для атаки нужен объект, занятый чужим реальным флотом.' };
+  }
+  return {
+    ok: true,
+    context: {
+      missionId: 'attack', contactCycleKey: live.id, operationId: live.id,
+      targetKind: live.kind, targetRelation: 'neutral', targetPlanetName: live.name,
+      destination: { kind: 'coordinate', coordinate: live.coordinate },
+    },
+  };
 }

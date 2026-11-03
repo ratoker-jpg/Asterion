@@ -218,7 +218,7 @@ import { selectOwnedPlanet } from './application/owned-planets.ts';
 import { sendQuickLegs, type QuickLegOutcome } from './application/quick-actions.ts';
 import type { TargetRelation } from './domain/flights/types.ts';
 import { materializePirateProfiles, pirateContactOperation, pirateOperationId, selectOwnedPiratePresentations, selectOwnedPirateTargets, selectPirateContacts } from './application/pirate-presentation.ts';
-import { selectExplorationTargets, getExplorationTarget, explorationTargetStatus, selectExplorationOperations } from './application/exploration.ts';
+import { selectExplorationTargets, getExplorationTarget, explorationTargetStatus, selectExplorationOperations, planExplorationAttackLaunch } from './application/exploration.ts';
 import { acceptLiveExploration, cancelLiveExploration } from './application/exploration-operations.ts';
 import type { PirateContactPresentation, PirateSystemSelection } from './pirate-ui.ts';
 import { startBot01GateAssault } from './application/flights.ts';
@@ -1930,10 +1930,9 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   };
 
   const openExplorationAttackLaunch = (node: import('./domain/universe/types.ts').UniversePlanetNode) => {
-    const live = getExplorationTarget(stateRef.current,node.id,Date.now(),RUNTIME_MODE);
-    const claim = live && stateRef.current.exploration?.contacts[live.id]?.claim;
-    if (!live || !claim || claim.ownerId === stateRef.current.profile.playerId) {
-      setNotice('Для атаки нужен объект, занятый чужим реальным флотом.','error');
+    const plan = planExplorationAttackLaunch(stateRef.current, node.id, Date.now(), RUNTIME_MODE);
+    if (!plan.ok) {
+      setNotice(plan.notice, 'error');
       return;
     }
     clearBuildingInterior();
@@ -1941,13 +1940,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
     setNotice('Боевой захват объекта: выберите флот, проверьте маршрут и подтвердите атаку.');
-    window.setTimeout(() => window.dispatchEvent(new CustomEvent<FlightLaunchContext>(FLIGHT_LAUNCH_CONTEXT_EVENT,{
-      detail:{
-        missionId:'attack',contactCycleKey:live.id,operationId:live.id,
-        targetKind:live.kind,targetRelation:'neutral',targetPlanetName:live.name,
-        destination:{kind:'coordinate',coordinate:live.coordinate},
-      },
-    })),40);
+    window.setTimeout(() => window.dispatchEvent(new CustomEvent<FlightLaunchContext>(FLIGHT_LAUNCH_CONTEXT_EVENT, { detail: plan.context })), 40);
   };
 
   const openFleetRootFromOperations = () => {
@@ -2847,6 +2840,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               onAsteroidRecycler={openAsteroidRecyclerLaunch}
               onExpedition={openExpeditionLaunch}
               onExplorationRecon={launchExplorationRecon}
+              onExplorationAttack={openExplorationAttackLaunch}
               explorationEligibility={universeExplorationEligibility}
               onTransport={openTransportLaunch}
               onSpy={openSpyLaunch}
