@@ -1,6 +1,7 @@
 import { getNpcJournalSink, NPC_JOURNAL_ALTERNATIVES } from './npc-journal.ts';
 import { npcStyleBias, readNpcPlayStyle } from './npc-style.ts';
 import { chooseNpcAutonomyAction, updateNpcAutonomyMemory, type NpcAutonomyCandidate } from '../domain/npc/autonomy-policy.ts';
+import { NPC_ECONOMY_ROLES } from '../domain/npc/economy-policy.ts';
 import { flightsToPlanet, ownerFlights } from './npc-knowledge-index.ts';
 import { NPC_REPAIR_BALANCE, npcRepairPoolValue, repairNpcPlanet } from './npc-repair.ts';
 import { findNextNpcSessionEvent } from '../domain/npc/calendar.ts';
@@ -11,7 +12,7 @@ import type { NpcProfile } from '../domain/npc/types.ts';
 import type { BuildingRole } from '../domain/buildings/resource-zone.ts';
 import type { ScienceId } from '../domain/science/types.ts';
 import type { SaveState } from './contracts.ts';
-import { getNpcBuildingCandidates, startNpcBuilding } from './npc-economy.ts';
+import { assignNpcProductionBots, getNpcBuildingCandidates, startNpcBuilding } from './npc-economy.ts';
 import { getNpcScienceCandidates, startNpcScience } from './npc-science.ts';
 import { getNpcFleetProductionCandidates, startNpcFleetProduction } from './npc-fleet-production.ts';
 import { applyNpcDiplomacyAction, getNpcDiplomacyCandidates } from './npc-diplomacy.ts';
@@ -148,6 +149,21 @@ function actionSlot(candidate: NpcAutonomyCandidate): string {
   return id;
 }
 
+/** An open building option counts for keeping a queue busy when it is at least this share as good as the best one. */
+export const NPC_KEEP_BUSY_SHARE = 0.25;
+
+/**
+ * Economy buildings the owner can start right now (the candidates are already
+ * legal and affordable) that are worth a fair share of the best of them. A
+ * look that would end in a pause while any exist takes one of these instead.
+ */
+export function npcKeepQueueBusyOptions(open: readonly NpcAutonomyCandidate[]): NpcAutonomyCandidate[] {
+  const economy = open.filter((candidate) => candidate.kind === 'economy' && candidate.id.startsWith('building:')
+    && (NPC_ECONOMY_ROLES as readonly string[]).includes(String(candidate.payload?.role)));
+  const best = Math.max(0, ...economy.map((candidate) => candidate.weight));
+  return best > 0 ? economy.filter((candidate) => candidate.weight >= NPC_KEEP_BUSY_SHARE * best) : [];
+}
+
 /**
  * One look at the game (owner rule 24.10.2026: no cap on actions while
  * online). Options are estimated once from what the owner sees, then it does
@@ -175,6 +191,12 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     if (!underAttack) continue;
     const repaired = repairNpcPlanet(target, 1);
     if (repaired.repaired > 0) state = { ...state, espionage: { ...state.espionage!, targets: { ...state.espionage!.targets, [target.id]: repaired.target } } };
+  }
+  // The robots of every planet go where they pay most, as on the player's robots screen.
+  for (const target of Object.values(state.espionage?.targets ?? {})) {
+    if (target.kind !== 'npc' || target.ownerId !== ownerId || target.resourceClock?.lastReconciledAt !== Math.floor(at)) continue;
+    const placed = assignNpcProductionBots(target);
+    if (placed !== target) state = { ...state, espionage: { ...state.espionage!, targets: { ...state.espionage!.targets, [target.id]: placed } } };
   }
   const utility = createNpcUtilityContext(state, profile, at, timeScale);
   // The owner's plans move on by what it sees now (ships built, shares arrived, fresh news).
@@ -659,7 +681,13 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     const idempotencyKey = `npc-autonomy:${JSON.stringify([ownerId, actionId])}`;
     const acting = current.npc?.profiles[ownerId] ?? profile;
     const promised = due.size ? open.filter((candidate) => due.has(candidate.id)).sort((left, right) => (left.id < right.id ? -1 : 1))[0] : undefined;
-    const selected = promised ?? chooseNpcAutonomyAction(acting, open, actionId);
+    let selected = promised ?? chooseNpcAutonomyAction(acting, open, actionId);
+    // A player with a free construction slot and a mine in reach does not close the game for half an hour:
+    // a pause drawn while good building options are open is turned into one of them.
+    if (!selected) {
+      const keep = npcKeepQueueBusyOptions(open);
+      if (keep.length) selected = chooseNpcAutonomyAction(acting, keep, `${actionId}:keep`, { noWait: true });
+    }
     const choice = selected ? choices.find(({ candidate }) => candidate.id === selected.id)! : null;
     const outcome = choice?.run(current, idempotencyKey) ?? { state: current, started: false, reason: null };
     const observedProfile = outcome.state.npc?.profiles[ownerId] ?? acting;
