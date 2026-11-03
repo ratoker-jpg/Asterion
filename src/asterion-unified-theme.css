@@ -123,10 +123,12 @@
   transition:transform .16s ease, border-color .16s ease, box-shadow .16s ease;
 }
 .resource-zone-selector-tile:hover{
-  transform:translateY(-2px);
   box-shadow:0 10px 26px rgba(0,0,0,.45);
   border-color:var(--ut-border-strong) !important;
 }
+.resource-zone-selector-cell{ transition:transform .16s ease; }
+.resource-zone-selector-cell:hover{ transform:translateY(-2px); }
+@media (prefers-reduced-motion:reduce){ .resource-zone-selector-cell:hover{ transform:none; } }
 .resource-zone-selector-level{
   border-radius:7px;
   font-size:10.5px;
@@ -937,10 +939,10 @@ html.asterion-repair-page .repair-page-head-v1::after{
 }
 /* first grid column: jump over the neighbour tile so the
    tooltip always lands just past the panel edge */
-.resource-zone-selector-tile:nth-child(odd) .resource-zone-selector-tooltip{
+.resource-zone-selector-cell:nth-child(odd) .resource-zone-selector-tooltip{
   left:calc(200% + 28px) !important;
 }
-.resource-zone-selector-tile:nth-child(even) .resource-zone-selector-tooltip{
+.resource-zone-selector-cell:nth-child(even) .resource-zone-selector-tooltip{
   left:calc(100% + 22px) !important;
 }
 .resource-zone-selector-tile:hover .resource-zone-selector-tooltip,

@@ -332,9 +332,85 @@ async function verifyDestroy(win, directory) {
   return { enabled, destroyConfirmation: destroyText, afterDestroy, blocked };
 }
 
+async function captureSelector(win, directory, name) {
+  await waitFor(win, `Array.from(document.querySelectorAll('.resource-zone-summary img')).every((img) => img.complete && img.naturalWidth > 0)`);
+  await settle(win);
+  const rect = await win.webContents.executeJavaScript(`(() => {
+    const box = document.querySelector('.resource-zone-summary')?.getBoundingClientRect();
+    return box ? { x: box.left, y: box.top, width: box.width, height: box.height } : null;
+  })()`);
+  if (!rect) throw new Error('Building selector panel not found');
+  const result = await win.webContents.debugger.sendCommand('Page.captureScreenshot', {
+    format: 'png',
+    fromSurface: true,
+    clip: { ...rect, scale: 1 },
+  });
+  fs.writeFileSync(path.join(directory, `${name}.png`), Buffer.from(result.data, 'base64'));
+}
+
+function readQuickButtons(win) {
+  return win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-qa-quick-build]')).map((node) => ({
+    role: node.getAttribute('data-qa-quick-build'),
+    status: node.getAttribute('data-qa-quick-build-status'),
+    disabled: node.getAttribute('aria-disabled') === 'true',
+    label: node.getAttribute('aria-label'),
+    title: node.getAttribute('title'),
+    focusable: node.tabIndex >= 0,
+  }))`);
+}
+
+async function verifyQuickUpgrade(win, directory) {
+  await seed(win, { 'metal-production-1': 1 });
+  await activateZone(win, 'resource');
+  const initial = await readQuickButtons(win);
+  const metal = initial.find((item) => item.role === 'metal-production-1');
+  const blocked = initial.find((item) => item.status === 'requirements-unmet');
+  const tiles = await win.webContents.executeJavaScript(`document.querySelectorAll('[data-zone-selector-role]').length`);
+  if (initial.length !== tiles) throw new Error(`Every building tile needs a quick button: ${initial.length}/${tiles}`);
+  if (!metal || metal.disabled || !/^Улучшить .+ до ур\. 2$/.test(metal.label ?? '') || !metal.title.includes('Металл') || !metal.title.includes('Свободно слотов: 3') || !metal.focusable) {
+    throw new Error(`Quick upgrade should be enabled with cost and slots: ${JSON.stringify(metal)}`);
+  }
+  if (!blocked || !blocked.disabled || !blocked.title.includes('Требуется') || !blocked.focusable) {
+    throw new Error(`A blocked building should show a disabled, focusable quick button with the reason: ${JSON.stringify(blocked)}`);
+  }
+  await captureSelector(win, directory, 'quick-upgrade-enabled');
+
+  await click(win, '[data-qa-quick-build="metal-production-1"]');
+  if (await win.webContents.executeJavaScript(`Boolean(document.querySelector('[data-qa-building-dialog]'))`)) {
+    throw new Error('Quick upgrade must not open the building dialog');
+  }
+  const firstQueue = await waitForBuildingQueue(win, ['metal-production-1']);
+  if (firstQueue[0]?.targetLevel !== 2) throw new Error(`Quick upgrade queued the wrong level: ${JSON.stringify(firstQueue)}`);
+  const afterFirst = (await readQuickButtons(win)).find((item) => item.role === 'metal-production-1');
+  if (!/до ур\. 3$/.test(afterFirst?.label ?? '')) throw new Error(`Quick upgrade did not move to the next level: ${JSON.stringify(afterFirst)}`);
+
+  await click(win, '[data-qa-quick-build="metal-production-1"]');
+  await click(win, '[data-qa-quick-build="metal-production-1"]');
+  const fullQueue = await waitForBuildingQueue(win, ['metal-production-1', 'metal-production-1', 'metal-production-1']);
+  const full = await readQuickButtons(win);
+  const enabledWhenFull = full.filter((item) => !item.disabled);
+  const metalFull = full.find((item) => item.role === 'metal-production-1');
+  if (enabledWhenFull.length > 0 || metalFull?.status !== 'queue-full' || !metalFull.title.endsWith('Очередь заполнена.')) {
+    throw new Error(`A full queue should disable every quick button with the reason: ${JSON.stringify({ enabledWhenFull, metalFull })}`);
+  }
+  await click(win, '[data-qa-quick-build="metal-production-1"]');
+  await waitForBuildingQueue(win, ['metal-production-1', 'metal-production-1', 'metal-production-1']);
+  await captureSelector(win, directory, 'quick-upgrade-disabled-queue-full');
+
+  await click(win, '[data-zone-selector-role="metal-production-1"]');
+  await waitFor(win, `document.querySelector('[data-qa-building-dialog="metal-production-1"]')`);
+  await closeDialog(win);
+  return {
+    initial: { metal, blocked, buttons: initial.length },
+    queue: fullQueue.map((item) => item.targetLevel),
+    full: { metalFull, disabled: full.length },
+  };
+}
+
 async function runViewport(win, directory) {
   return {
     screen: 'building-actions',
+    quickUpgrade: await verifyQuickUpgrade(win, directory),
     dependentQueue: await verifyDependentQueueCancellation(win, directory),
     queue: await verifyQueueCancellation(win, directory),
     destroy: await verifyDestroy(win, directory),

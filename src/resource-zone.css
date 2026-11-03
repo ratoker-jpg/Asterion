@@ -207,6 +207,57 @@
   box-shadow:inset 0 0 20px rgba(39,204,238,.11),0 0 0 1px rgba(93,229,255,.22);
 }
 
+/* Quick «+» on a building tile: queues the next level like the dialog's «Улучшить». */
+.resource-zone-selector-cell{position:relative;min-width:0}
+.resource-zone-selector-cell:hover,.resource-zone-selector-cell:focus-within{z-index:5}
+.resource-zone-selector-tile{width:100%}
+.resource-zone-selector-quick{
+  position:absolute;
+  z-index:6;
+  right:5px;
+  bottom:5px;
+  width:24px;
+  height:24px;
+  display:grid;
+  place-items:center;
+  padding:0;
+  border:1px solid var(--race-accent,#56d9f2);
+  border-radius:8px;
+  background:rgba(4,30,42,.92);
+  color:var(--race-accent,#56d9f2);
+  font-family:inherit;
+  font-size:16px;
+  font-weight:700;
+  line-height:1;
+  cursor:pointer;
+  box-shadow:0 2px 8px rgba(0,0,0,.35);
+  transition:background .14s ease,color .14s ease,box-shadow .14s ease,border-color .14s ease;
+}
+.resource-zone-selector-quick:hover,
+.resource-zone-selector-quick:focus-visible{
+  outline:none;
+  background:var(--race-accent,#56d9f2);
+  color:#04121a;
+  box-shadow:0 0 0 2px rgba(4,18,26,.9),0 0 12px var(--race-glow,rgba(86,217,242,.45));
+}
+.resource-zone-selector-quick.is-disabled{
+  border-color:rgba(130,150,156,.38);
+  background:rgba(10,20,26,.86);
+  color:rgba(150,170,176,.6);
+  box-shadow:none;
+  cursor:not-allowed;
+}
+.resource-zone-selector-quick.is-disabled:hover,
+.resource-zone-selector-quick.is-disabled:focus-visible{
+  background:rgba(14,26,32,.92);
+  color:rgba(180,198,204,.8);
+  border-color:rgba(150,170,176,.6);
+  box-shadow:none;
+}
+.resource-zone-selector-quick.is-disabled:focus-visible{outline:2px solid rgba(150,170,176,.7);outline-offset:1px}
+.resource-zone-selector-quick.is-queued{animation:resourceZoneQuickQueued .6s ease-out}
+@keyframes resourceZoneQuickQueued{0%{box-shadow:0 0 0 0 var(--race-glow,rgba(86,217,242,.6))}100%{box-shadow:0 0 0 8px rgba(86,217,242,0)}}
+
 .resource-zone-economy{
   margin-top:auto;
   padding-top:8px;
@@ -586,5 +637,7 @@
 
 @media (prefers-reduced-motion:reduce){
   .resource-building-node.building .resource-building-art{animation:none}
+  .resource-zone-selector-quick,.resource-zone-selector-cell{transition:none}
+  .resource-zone-selector-quick.is-queued{animation:none}
   .resource-building-art{transition:none}
 }
