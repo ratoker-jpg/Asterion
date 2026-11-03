@@ -1,0 +1,91 @@
+{
+  "layout": {
+    "lanes": 7,
+    "lowestLane": 669,
+    "viewport": [
+      1280,
+      720
+    ],
+    "pageScrollX": 0,
+    "empireScrollX": 0,
+    "summaryOverflow": 0,
+    "overlaps": [],
+    "idle": 7,
+    "full": 3,
+    "energyCells": 7,
+    "footer": [
+      "Свезти ресурсы на планету",
+      "Собрать флот на планету"
+    ]
+  },
+  "pickerOnScreen": true,
+  "queued": {
+    "queue": 1,
+    "current": "helion-01",
+    "timer": "00:07",
+    "clipped": 0
+  },
+  "buildToastCovers": [],
+  "detail": {
+    "laneVisible": true,
+    "scrollX": 0,
+    "listScrollX": 0,
+    "expanded": "true",
+    "tasks": 1,
+    "stock": 4,
+    "built": 10
+  },
+  "yardOnScreen": true,
+  "ordered": {
+    "orders": 1,
+    "timer": "14:59",
+    "tasks": 1,
+    "current": "helion-01"
+  },
+  "orderToastCovers": [],
+  "canceled": 0,
+  "drawer": {
+    "onScreen": true,
+    "closeInCorner": true,
+    "innerClose": 0,
+    "checked": [
+      "planet-1-1-6",
+      "helion-01",
+      "planet-1-3-9",
+      "planet-1-17-11"
+    ],
+    "cargo": [
+      "31 952/16 623/11 425",
+      "119 761/79 849/50 390",
+      "27 905/20 931/11 164",
+      "9 620/7 873/2 507"
+    ]
+  },
+  "drawerToastCovers": [],
+  "sent": {
+    "drawerOpen": false,
+    "incoming": "летят сюда: 4",
+    "flights": 4
+  },
+  "sendToastCovers": [],
+  "switchClear": true,
+  "debris": {
+    "row": "[1:8:14]",
+    "amount": "250",
+    "ships": [
+      [
+        "recycler",
+        1
+      ]
+    ],
+    "route": "ok",
+    "fleetScreen": false,
+    "onScreen": true,
+    "onTop": true
+  },
+  "advice": {
+    "text": "Свободных транспортов нет на других планетах: они есть только на планете Helion 01, куда вы хотите отправить. Выберите другую планету назначения. Или постройте их на планете Нордин: там хватит ресурсов на 4 255 шт.Транспорт: заказать на планете Нордин",
+    "route": false,
+    "build": "planet-1-5-2"
+  }
+}

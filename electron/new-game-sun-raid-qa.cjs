@@ -186,14 +186,17 @@ async function testMode(win, label) {
   await waitFor(win, `document.querySelector('[data-qa-sun-result]')`);
   await capture(win, label, '12-test-raid-resolved');
   // The battle left debris at [G:S:0]: recyclers fly to the Sun from «Флоты».
-  // «Найти обломки» lists the Sun's debris at [1:1:0]; «Отправить» opens «Флоты → Переработка».
+  // «Найти обломки» lists the Sun's debris at [1:1:0]; «Отправить» opens the quick-send panel.
   await clickText(win, 'Вселенная');
   await waitFor(win, `document.querySelector('[data-qa-universe-find-debris]')`);
   await click(win, '[data-qa-universe-find-debris]');
   await waitFor(win, `document.querySelector('[data-qa-debris-row="[1:1:0]"]')`);
   await capture(win, label, '12a-debris-finder');
   await click(win, '[data-qa-debris-send="[1:1:0]"]');
-  await waitFor(win, `document.querySelector('[data-qa-mission-id="recycle"].active')`);
+  await waitFor(win, `document.querySelector('[data-qa-quick-send="recycle"]')`);
+  await capture(win, label, '12a2-debris-quick-send');
+  await click(win, '[data-qa-quick-send="recycle"] .quick-send__close');
+  await click(win, '[data-qa-debris-finder] [data-asterion-close]');
   await clickText(win, 'Командование');
   await click(win, '[data-qa-command-tab="operations"]');
   await waitFor(win, `document.querySelector('[data-qa-sun-raid-panel]')`);

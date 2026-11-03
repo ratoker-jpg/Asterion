@@ -30,6 +30,8 @@
   animation: quick-pop-in 180ms cubic-bezier(.23, 1, .32, 1) both;
 }
 .quick-pop--left { transform-origin: right center; }
+/* Opened from a dialog («Найти обломки»), so it sits above that dialog's backdrop. */
+.quick-pop.is-over-dialog { z-index: 10001; }
 .quick-pop.is-panel { display: flex; width: 392px; max-height: min(640px, calc(100vh - 16px)); overflow: hidden; }
 .quick-pop.is-panel > .quick-send { flex: 1 1 auto; min-height: 0; }
 .quick-pop::before {

@@ -8,10 +8,11 @@ import type { SaveState } from './contracts.ts';
 import { dispatchFlight } from './flights.ts';
 import { buildQuickCommand, previewQuickCommand, type QuickTarget } from './quick-actions.ts';
 import { getStorageCapacities } from '../domain/buildings/balance-v1.ts';
-import { buildEmpireOverview, cargoHullsOnPlanet, fitCargo, holdOf, pickCargoShips, planGatherLoads, planTransportLoad, type CargoHull } from './empire.ts';
+import { adviseEmptyGather, buildEmpireOverview, buildProductionItems, cargoHullsOnPlanet, fitCargo, holdOf, pickCargoShips, planGatherLoads, planTransportLoad, type CargoHull } from './empire.ts';
 
 const NOW = 1_000_000;
 const RUNTIME = { now: NOW, mode: 'production' as const };
+const RUNTIME_FULL = { now: NOW, mode: 'production' as const, testTimeScale: 1 as const };
 const hangar = (ships: Partial<Record<ShipId, number>>) => Object.fromEntries(SHIP_IDS.map((id) => [id, ships[id] ?? 0])) as Record<ShipId, number>;
 const HULLS: CargoHull[] = [
   { shipId: 'transporter', capacity: 5_000, free: 10 },
@@ -157,4 +158,49 @@ test('planGatherLoads shares the target storage room between legs and keeps fuel
     assert.equal(preview.ok, true, preview.ok ? '' : preview.error.message);
     if (preview.ok) assert.ok(20_000 - load.cargo.gas - preview.flight.gasCost >= 1_000);
   }
+});
+
+test('overview: every planet reports energy, and the totals are their sum', () => {
+  const state = withColony(campaign(), 'colony-a', 5, {});
+  const overview = buildEmpireOverview(state, RUNTIME_FULL);
+  assert.equal(overview.rows.length, 2);
+  assert.equal(overview.energy.available, overview.rows[0]!.energy.available + overview.rows[1]!.energy.available);
+  assert.equal(overview.energy.produced, overview.rows[0]!.energy.produced + overview.rows[1]!.energy.produced);
+  assert.equal(overview.shipyardsBusy, 0);
+});
+
+test('production items: a locked hull cannot be ordered and says why; the wallet limits the rest', () => {
+  const base = withColony(campaign(), 'colony-a', 5, {}, { metal: 1_000_000, minerals: 1_000_000, gas: 1_000_000 });
+  const colony = base.planets['colony-a']!;
+  const noYard = { ...base, planets: { ...base.planets, 'colony-a': { ...colony, buildings: { ...colony.buildings, shipyard: 0 } } } };
+  const locked = buildProductionItems(noYard, 'colony-a', 'ships', RUNTIME_FULL).find((item) => item.id === 'transporter')!;
+  assert.equal(locked.unlocked, false);
+  assert.equal(locked.max, 0);
+  assert.ok(locked.reason);
+
+  const armed = { ...base, planets: { ...base.planets, 'colony-a': { ...colony, buildings: { ...colony.buildings, shipyard: 12, hangar: 12 } } } };
+  const poor = { ...armed, planets: { ...armed.planets, 'colony-a': { ...armed.planets['colony-a']!, resources: { metal: 0, minerals: 0, gas: 0 } } } };
+  const open = buildProductionItems(armed, 'colony-a', 'ships', RUNTIME_FULL).find((item) => item.unlocked && item.max > 0);
+  assert.ok(open, 'at least one hull is open with a level 12 shipyard');
+  assert.equal(buildProductionItems(poor, 'colony-a', 'ships', RUNTIME_FULL).find((item) => item.id === open!.id)!.max, 0);
+});
+
+test('empty-gather advice names the planet holding the only transports and where to build more', () => {
+  let state = withColony(campaign(), 'colony-a', 5, {}, { metal: 50_000_000, minerals: 50_000_000, gas: 50_000_000 });
+  const colony = state.planets['colony-a']!;
+  const home = state.currentPlanetId;
+  state = {
+    ...state,
+    planets: {
+      ...state.planets,
+      'colony-a': { ...colony, buildings: { ...colony.buildings, shipyard: 12, hangar: 12 } },
+      [home]: { ...state.planets[home]!, fleet: { ...state.planets[home]!.fleet, ships: hangar({ transporter: 30 }) } },
+    },
+  };
+  const onlyHere = adviseEmptyGather(state, buildEmpireOverview(state, RUNTIME_FULL).rows, home, 'transport', RUNTIME_FULL);
+  assert.match(onlyHere.message, new RegExp(`только на планете ${state.planets[home]!.name}`));
+
+  const emptied = { ...state, planets: { ...state.planets, [home]: { ...state.planets[home]!, fleet: { ...state.planets[home]!.fleet, ships: hangar({}) } } } };
+  const nowhere = adviseEmptyGather(emptied, buildEmpireOverview(emptied, RUNTIME_FULL).rows, home, 'transport', RUNTIME_FULL);
+  assert.match(nowhere.message, /нет ни на одной планете/);
 });

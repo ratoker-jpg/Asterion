@@ -150,7 +150,10 @@ import {
 } from './application/science.ts';
 import {
   bindFleetProductionEventBridge,
+  cancelFleetProduction,
+  startFleetProduction,
 } from './application/fleet-production.ts';
+import type { FleetProductionCancellationTransition } from './domain/fleet/production.ts';
 import {
   bindCombatResultEventBridge,
   bindRepairEventBridge,
@@ -1750,12 +1753,42 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     return true;
   };
 
-  const cancelBuilding = (queueId: string) => {
+  /** «Империя»: an order on any own planet's shipyard, through the same command as the shipyard screen. */
+  const orderProduction = (planetId: PlanetId, queueKind: 'ships' | 'defense', itemId: string, quantity: number) => {
+    if (rejectNpcCatchupCommand()) return false;
+    const orderedAt = Date.now();
+    const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
+      const action = startFleetProduction(current, { planetId, now: orderedAt, mode: RUNTIME_MODE, testTimeScale }, queueKind, itemId, quantity);
+      return { state: action.state, result: action.transition };
+    }, flushSync, renderedStateRef, noteStateHeal);
+    if (!result.ok) {
+      setNotice(result.reason ?? 'Производство сейчас недоступно.');
+      return false;
+    }
+    setNotice(`${state.planets[planetId]?.name ?? currentPlanetName}: заказ добавлен в очередь производства.`);
+    return true;
+  };
+
+  const cancelProduction = (planetId: PlanetId, orderId: string) => {
+    if (rejectNpcCatchupCommand()) return;
+    const canceledAt = Date.now();
+    const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
+      const action = cancelFleetProduction(current, { planetId, now: canceledAt, mode: RUNTIME_MODE, testTimeScale }, orderId);
+      return { state: action.state, result: action.transition as FleetProductionCancellationTransition };
+    }, flushSync, renderedStateRef, noteStateHeal);
+    setNotice(result.ok
+      ? result.refundPercent == null
+        ? 'Заказ отменён. Сохранённая стоимость отсутствует, возврат не начислен.'
+        : `Заказ отменён. Возвращено ${result.refundPercent}% стоимости незавершённых единиц.`
+      : result.reason ?? 'Заказ недоступен для отмены.');
+  };
+
+  const cancelBuilding = (queueId: string, planetId: PlanetId = state.currentPlanetId) => {
     if (rejectNpcCatchupCommand()) return false;
     const canceledAt = Date.now();
     const current = stateRef.current;
     const result = cancelBuildingAction(current, {
-      planetId: state.currentPlanetId,
+      planetId,
       now: canceledAt,
       mode: RUNTIME_MODE,
       testTimeScale,
@@ -2547,12 +2580,6 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     missionId: 'recycle', operationId: `sun:${sun.galaxy}:${sun.system}`, targetKind: 'empty',
     destination: sunLaunchDestination(sun.galaxy, sun.system), targetPlanetName: `Обломки Солнца ${sun.galaxy}:${sun.system}`,
   });
-  /** «Найти обломки» → «Отправить»: recyclers to a planet orbit or, at position 0, to the Sun. */
-  const openDebrisRecycleLaunch = (coordinate: UniverseCoordinate) => {
-    if (coordinate.position === 0) { openSunRecycleInFleets({ galaxy: coordinate.galaxy, system: coordinate.system }); return; }
-    setNotice(`Переработка обломков: [${coordinate.galaxy}:${coordinate.system}:${coordinate.position}].`);
-    openSunFleetLaunch({ missionId: 'recycle', destination: { kind: 'coordinate', coordinate: { ...coordinate } } });
-  };
   const startGate = () => {
     if (rejectNpcCatchupCommand()) return;
     if (!gateDialogPlanetId) return;
@@ -2921,7 +2948,6 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
                   position: state.planets[state.currentPlanetId]!.universePosition ?? 1,
                 },
               } : null}
-              onRecycleDebris={openDebrisRecycleLaunch}
               onQuickSend={sendQuickFlights}
               onQuickDetails={openQuickDetails}
               focusTarget={universeFocusTarget}
@@ -3086,6 +3112,9 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
                 planetArt={Object.fromEntries(ownedPlanets.map((planet) => [planet.id, planetSkins.find((skin) => skin.id === state.planets[planet.id].skin)?.art ?? planetSkins[0].art]))}
                 onOpenPlanet={(id) => { if (id !== state.currentPlanetId) selectPlanet(id as PlanetId); setPlanetSection('current'); }}
                 onBuild={(id, role) => buildBuilding(role, id as PlanetId)}
+                onCancelBuilding={(id, queueId) => cancelBuilding(queueId, id as PlanetId)}
+                onProduce={(id, kind, itemId, quantity) => orderProduction(id as PlanetId, kind, itemId, quantity)}
+                onCancelProduction={(id, orderId) => cancelProduction(id as PlanetId, orderId)}
                 onSend={sendQuickFlights}
               />
             </>

@@ -149,7 +149,6 @@ type UniverseViewProps = {
   /** «Найти обломки» scans the systems around this planet (the one selected in the header). */
   debrisOrigin?: { planetName: string; coordinate: UniverseCoordinate } | null;
   /** «Отправить»: opens «Флоты → Переработка» aimed at the coordinate (position 0 = the Sun). */
-  onRecycleDebris?: (coordinate: UniverseCoordinate) => void;
   onFocusHandled?: () => void;
   /** Click on the system's Sun: opens «Командование → Операции» for it. */
   onSunSelect?: (galaxy: number, system: number) => void;
@@ -644,7 +643,7 @@ function MovingAsteroid({ node, underlyingKind, nowMs, hasDebris, occupiedNodes,
   </button>;
 }
 
-export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPlanetName, profile, ownerScores, command, playerPlanets: playerPlanetsProp, spyTargets: spyTargetsProp, orbitalDebrisByCoordinate, asteroidDebrisPresenceBySpawnIndex, asteroidStates, pirateContactState, pirateContacts = [], pirateFocusTarget, mode, onColonize, onAsteroidRecycler, onExpedition, onExplorationRecon, onExplorationAttack, explorationEligibility = {}, onTransport, onSpy, onAttack, onPirateRecon, onPirateAttack, onPirateReport, onPirateSystemChange, focusTarget, onFocusHandled, onSunSelect, sunAlerts = [], homeCoordinate, debrisOrigin, onRecycleDebris, onQuickSend, onQuickDetails }: UniverseViewProps) {
+export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPlanetName, profile, ownerScores, command, playerPlanets: playerPlanetsProp, spyTargets: spyTargetsProp, orbitalDebrisByCoordinate, asteroidDebrisPresenceBySpawnIndex, asteroidStates, pirateContactState, pirateContacts = [], pirateFocusTarget, mode, onColonize, onAsteroidRecycler, onExpedition, onExplorationRecon, onExplorationAttack, explorationEligibility = {}, onTransport, onSpy, onAttack, onPirateRecon, onPirateAttack, onPirateReport, onPirateSystemChange, focusTarget, onFocusHandled, onSunSelect, sunAlerts = [], homeCoordinate, debrisOrigin, onQuickSend, onQuickDetails }: UniverseViewProps) {
   const galaxyCount = getActiveGalaxyCount();
   const [galaxy, setGalaxy] = useState(homeCoordinate?.galaxy ?? GALAXY);
   const [system, setSystem] = useState(homeCoordinate?.system ?? 1);
@@ -658,6 +657,7 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
   const [debrisSearch, setDebrisSearch] = useState<null | { origin: { planetName: string; coordinate: UniverseCoordinate }; from: number; to: number; results: Array<{ coordinate: UniverseCoordinate; debris: number }> }>(null);
   const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(null);
   const [quick, setQuick] = useState<{ nodeId: string; anchor: HTMLElement } | null>(null);
+  const [debrisQuick, setDebrisQuick] = useState<{ target: QuickTarget; anchor: HTMLElement } | null>(null);
   const highlightTimerRef = useRef(0);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const onPirateSystemChangeRef = useRef(onPirateSystemChange);
@@ -879,8 +879,20 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
     const range = nearbySystemWindow(debrisOrigin.coordinate.system, SYSTEM_COUNT);
     setDebrisSearch({ origin: debrisOrigin, ...range, results: findDebrisNearSystem(orbitalDebrisByCoordinate, debrisOrigin.coordinate, SYSTEM_COUNT) });
   };
+  /** «Отправить» in the list: the same send panel as «Собрать обломки» on the map; position 0 is the Sun. */
+  const openDebrisQuick = (entry: { coordinate: UniverseCoordinate; debris: number }, anchor: HTMLElement) => {
+    const { coordinate, debris } = entry;
+    const isSun = coordinate.position === 0;
+    const atPosition = isSun ? undefined : [...nodesById.values()].find((node) => node.kind !== 'asteroid' && node.coordinate.galaxy === coordinate.galaxy && node.coordinate.system === coordinate.system && node.coordinate.position === coordinate.position);
+    const node: UniversePlanetNode = atPosition ?? {
+      id: `debris:${formatUniverseCoordinate(coordinate)}`, kind: 'empty', art: isSun ? SUN_DEBRIS_ART : '', statusLabel: '', description: '',
+      name: isSun ? `Обломки Солнца ${coordinate.galaxy}:${coordinate.system}` : 'Свободная позиция', coordinate,
+    };
+    setDebrisQuick({ anchor, target: { node, orbitalDebris: debris, ...(isSun ? { sun: { galaxy: coordinate.galaxy, system: coordinate.system } } : {}) } });
+  };
   /** Opens the coordinate's system and pulses whatever sits there (position 0 is the Sun itself). */
   const pinpointCoordinate = (coordinate: UniverseCoordinate) => {
+    setDebrisQuick(null);
     setDebrisSearch(null);
     setGalaxy(coordinate.galaxy);
     setSystem(coordinate.system);
@@ -1167,8 +1179,8 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
                           <b>{key}</b><small>{isSun ? 'Солнце системы' : `Система ${pad2(entry.coordinate.system)} · позиция ${entry.coordinate.position}`}</small>
                         </button>
                         <span className="universe-debris-finder__amount"><small>ОБЛОМКИ</small><b>{entry.debris.toLocaleString('ru-RU')}</b></span>
-                        <button type="button" className="uw-btn uw-btn--primary" disabled={!onRecycleDebris} data-qa-debris-send={key}
-                          onClick={() => { setDebrisSearch(null); onRecycleDebris?.(entry.coordinate); }}>ОТПРАВИТЬ</button>
+                        <button type="button" className="uw-btn uw-btn--primary" disabled={!onQuickSend} data-qa-debris-send={key}
+                          onClick={(event) => openDebrisQuick(entry, event.currentTarget)}>ОТПРАВИТЬ</button>
                       </li>
                     );
                   })}
@@ -1179,6 +1191,11 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
           </section>
         </div>,
         document.body,
+      ) : null}
+
+      {debrisQuick && debrisSearch && onQuickSend ? (
+        <QuickActions key={debrisQuick.target.node.id} initialAction="recycle" target={debrisQuick.target} anchor={debrisQuick.anchor} onClose={() => setDebrisQuick(null)} onSend={onQuickSend}
+          onDetails={(context, originPlanetId) => { setDebrisQuick(null); setDebrisSearch(null); onQuickDetails?.(context, originPlanetId); }} onOpenCard={() => undefined} />
       ) : null}
 
       {quick && quickTarget && !selectedNode && onQuickSend ? (
