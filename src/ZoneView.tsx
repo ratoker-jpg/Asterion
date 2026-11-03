@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { getPlanetZoneTerrainUrl } from './assets/planetZoneTerrainAssets.ts';
 import { canEnterBuildingInterior } from './building-interior-navigation.ts';
 import { getZoneScenePlacement } from './zone-scene.ts';
-import { describeQuickUpgrade } from './zone-quick-upgrade.ts';
+import { describeQuickUpgrade, formatQuickAmount } from './zone-quick-upgrade.ts';
 import {
   BUILDING_QUEUE_CAPACITY,
   evaluateBuildingBuild,
@@ -113,7 +113,7 @@ function playerEffectForLevel(
       ? calculateSolarStationContribution(level, physicsLevel, energyCoordinates.system, energyCoordinates.position, energyCoordinates.galaxy)
       : calculateNuclearReactorContribution(level, physicsLevel);
     const factors = [
-      `База ${formatNumber(base)}`,
+      `Основа ${formatNumber(base)}`,
       `Физика ×${getPhysicsMultiplier(physicsLevel).toFixed(2)}`,
       ...(role === 'basic-energy'
         ? [`Солнце ×${getSunMultiplier(energyCoordinates.system, energyCoordinates.galaxy).toFixed(2)}`, `Позиция ×${getPositionMultiplier(energyCoordinates.position).toFixed(2)}`]
@@ -145,12 +145,13 @@ function playerEffectForLevel(
   };
   const bonusParts = [
     scienceBonusPercent > 0 ? `${scienceEffect.kind === 'resource-income' ? 'Математика' : 'Физика'} +${scienceBonusPercent}%` : null,
-    productionBotBonusPercent > 0 ? `production bots +${productionBotBonusPercent}%` : null,
+    productionBotBonusPercent > 0 ? `Производственные боты +${productionBotBonusPercent}%` : null,
   ].filter((part): part is string => Boolean(part));
   return {
     primary: formatBalanceEffect(boostedEffect),
+    // «Добыча металла: +94 600/ч» → «Основа +94 600/ч»: the effect name is already in the primary line.
     secondary: bonusParts.length > 0
-      ? `База ${formatBalanceEffect(effect)} · ${bonusParts.join(' · ')}`
+      ? `Основа ${formatBalanceEffect(effect).replace(/^[^:]+:\s*/, '')} · ${bonusParts.join(' · ')}`
       : null,
     value: null,
     energy: false,
@@ -230,6 +231,9 @@ export type ZoneGateSlot = {
   onOpen: () => void;
 };
 
+/** The floating tile tooltip: portaled to <body> so map captions never cover it. */
+type TileTip = { role: BuildingRole; kind: 'tile' | 'quick'; left: number; top: number };
+
 type PendingBuildingAction =
   | { kind: 'cancel'; queueId: string; assetRole: BuildingRole; targetLevel: number }
   | { kind: 'destroy'; assetRole: BuildingRole; currentLevel: number };
@@ -267,6 +271,9 @@ export function ZoneView({
   const selectedHasQueue = selectedRole ? queue.some((item) => item.assetRole === selectedRole) : false;
   const [pendingAction, setPendingAction] = useState<PendingBuildingAction | null>(null);
   const [quickQueuedRole, setQuickQueuedRole] = useState<BuildingRole | null>(null);
+  const [tileTip, setTileTip] = useState<TileTip | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const summaryRef = useRef<HTMLElement>(null);
   const confirmYesRef = useRef<HTMLButtonElement>(null);
   const confirmNoRef = useRef<HTMLButtonElement>(null);
   const activeCount = zoneBuildings.filter((building) => buildings[building.assetRole] > 0).length;
@@ -349,6 +356,15 @@ export function ZoneView({
     if (onBuild(selectedRole)) onSelectedRoleChange(null);
   };
 
+  useEffect(() => setDetailsOpen(false), [selectedRole]);
+
+  const showTileTip = (role: BuildingRole, kind: TileTip['kind'], target: HTMLElement) => {
+    const anchor = target.getBoundingClientRect();
+    const panel = summaryRef.current?.getBoundingClientRect();
+    setTileTip({ role, kind, left: (panel?.right ?? anchor.right) + 12, top: anchor.top + anchor.height / 2 });
+  };
+  const hideTileTip = () => setTileTip(null);
+
   useEffect(() => {
     if (!quickQueuedRole) return;
     const timer = window.setTimeout(() => setQuickQueuedRole(null), 700);
@@ -376,7 +392,7 @@ export function ZoneView({
       data-zone={zone}
       data-qa-resource-zone={zone === 'resource' ? 'true' : undefined}
     >
-      <aside className="resource-zone-summary">
+      <aside className="resource-zone-summary" ref={summaryRef}>
         <header className="resource-zone-panel-title">
           <div><small>{meta.title}</small><strong>{planetName}</strong></div>
           <span>{activeCount} / {zoneBuildings.length}</span>
@@ -408,6 +424,10 @@ export function ZoneView({
                     aria-label={`${building.name}. Уровень ${level} из ${building.maxLevel}. ${statusText}.`}
                     aria-describedby={tooltipId}
                     onClick={() => onSelectedRoleChange(building.assetRole)}
+                    onMouseEnter={(event) => showTileTip(building.assetRole, 'tile', event.currentTarget)}
+                    onMouseLeave={hideTileTip}
+                    onFocus={(event) => showTileTip(building.assetRole, 'tile', event.currentTarget)}
+                    onBlur={hideTileTip}
                   >
                     <img src={building.art} alt="" draggable={false} />
                     <b className="resource-zone-selector-level">{level}/{building.maxLevel}</b>
@@ -426,12 +446,16 @@ export function ZoneView({
                     data-qa-quick-build={building.assetRole}
                     data-qa-quick-build-status={buildAvailability.status}
                     aria-disabled={!quick.enabled}
+                    data-qa-quick-build-summary={quick.summary}
                     aria-label={quick.ariaLabel}
-                    title={quick.title}
                     onClick={(event) => {
                       event.stopPropagation();
                       submitQuickBuild(building.assetRole);
                     }}
+                    onMouseEnter={(event) => showTileTip(building.assetRole, 'quick', event.currentTarget)}
+                    onMouseLeave={hideTileTip}
+                    onFocus={(event) => showTileTip(building.assetRole, 'quick', event.currentTarget)}
+                    onBlur={hideTileTip}
                   >
                     <span aria-hidden="true">+</span>
                   </button>
@@ -446,21 +470,13 @@ export function ZoneView({
           <section className="resource-zone-economy" aria-label="Добыча за 1 час">
             <div className="resource-zone-economy-title">ДОБЫЧА ЗА 1 ЧАС</div>
             <div className="resource-zone-income-list">
-              <div className="resource-zone-income-row" data-resource-income="metal">
-                <span className="resource-zone-income-icon"><ResourceIcon kind="metal" /></span>
-                <span className="resource-zone-income-name">Металл</span>
-                <strong>{formatNumber(resourceIncomePerHour.metal)}</strong>
-              </div>
-              <div className="resource-zone-income-row" data-resource-income="minerals">
-                <span className="resource-zone-income-icon"><ResourceIcon kind="minerals" /></span>
-                <span className="resource-zone-income-name">Минералы</span>
-                <strong>{formatNumber(resourceIncomePerHour.minerals)}</strong>
-              </div>
-              <div className="resource-zone-income-row" data-resource-income="gas">
-                <span className="resource-zone-income-icon"><ResourceIcon kind="gas" /></span>
-                <span className="resource-zone-income-name">Газ</span>
-                <strong>{formatNumber(resourceIncomePerHour.gas)}</strong>
-              </div>
+              {(['metal', 'minerals', 'gas'] as const).map((key) => (
+                <div className="resource-zone-income-row" data-resource-income={key} key={key}>
+                  <span className="resource-zone-income-icon"><ResourceIcon kind={key} /></span>
+                  <span className="resource-zone-income-name">{resourceLabels[key]}</span>
+                  <strong>{formatNumber(resourceIncomePerHour[key])}</strong>
+                </div>
+              ))}
             </div>
           </section>
           <section className="resource-zone-energy-summary" aria-label="Баланс энергии" data-qa-energy-summary>
@@ -590,19 +606,21 @@ export function ZoneView({
                   onClick={() => onSelectedRoleChange(item.assetRole)}
                 >
                   <img src={queueDefinition.art} alt="" />
-                  <span>
-                    <small>{ZONE_VIEW_META[queueDefinition.zone].queueLabel} · {isActive ? 'СТРОИТСЯ' : 'ОЖИДАЕТ'}</small>
+                  <span className="resource-zone-queue-card-copy">
+                    <small>{isActive ? 'Строится' : 'В очереди'}</small>
                     <strong>{queueDefinition.name}</strong>
-                    <em>{isActive ? `Осталось ${formatDuration(remaining)}` : `Уровень ${item.targetLevel}`}</em>
+                    <em>{ZONE_VIEW_META[queueDefinition.zone].queueLabel.toLowerCase()} зона</em>
                   </span>
-                  <b>ур. {Math.max(0, item.targetLevel - 1)} → {item.targetLevel}</b>
+                  <span className="resource-zone-queue-card-meta">
+                    <b>ур. {Math.max(0, item.targetLevel - 1)} → {item.targetLevel}</b>
+                    {isActive ? <time><span>Осталось</span> {formatDuration(remaining)}</time> : null}
+                  </span>
                   {isActive ? <i><span style={{ width: `${progress}%` }} /></i> : null}
                 </button>
                 <button
                   className="resource-zone-queue-cancel"
                   type="button"
                   aria-label={`Отменить ${queueDefinition.name}, уровень ${item.targetLevel}`}
-                  title="Отменить строительство"
                   data-qa-queue-cancel={index + 1}
                   onClick={(event) => {
                     event.stopPropagation();
@@ -620,6 +638,16 @@ export function ZoneView({
           <div className="resource-zone-queue-full" data-qa-queue-full>Очередь заполнена</div>
         ) : null}
       </aside>
+
+      {tileTip ? createPortal(
+        <ZoneTileTooltip
+          tip={tileTip}
+          economy={economy}
+          freeSlots={BUILDING_QUEUE_CAPACITY - queue.length}
+          factionId={factionId}
+        />,
+        document.body,
+      ) : null}
 
       {selected && selectedRole && availability ? createPortal(
         <div className="resource-building-dialog-backdrop" onMouseDown={() => onSelectedRoleChange(null)}>
@@ -711,19 +739,27 @@ export function ZoneView({
                   <div className="resource-building-effect" data-qa-building-effect>
                     <div className="resource-building-effect-heading">
                       <small>ЭФФЕКТ УЛУЧШЕНИЯ</small>
-                      <span>СРАВНЕНИЕ УРОВНЕЙ</span>
+                      <button
+                        type="button"
+                        className="resource-building-details-toggle"
+                        data-qa-building-details-toggle
+                        aria-expanded={detailsOpen}
+                        onClick={() => setDetailsOpen((open) => !open)}
+                      >
+                        {detailsOpen ? 'Скрыть' : 'Подробнее'}
+                      </button>
                     </div>
                     <div className="resource-building-effect-grid">
                       <div className="resource-building-effect-card current" data-qa-building-effect-current>
                         <small>ТЕКУЩИЙ УРОВЕНЬ · {availability.currentLevel}</small>
                         <strong>{currentEffect?.primary}</strong>
-                        {currentEffect?.secondary ? <span>{currentEffect.secondary}</span> : null}
+                        {currentEffect?.secondary ? <span hidden={!detailsOpen}>{currentEffect.secondary}</span> : null}
                       </div>
                       {availability.nextLevel != null ? (
                         <div className="resource-building-effect-card next" data-qa-building-effect-next>
                           <small>СЛЕДУЮЩИЙ УРОВЕНЬ · {availability.nextLevel}</small>
                         <strong>{nextEffect?.primary}</strong>
-                        {nextEffect?.secondary ? <span>{nextEffect.secondary}</span> : null}
+                        {nextEffect?.secondary ? <span hidden={!detailsOpen}>{nextEffect.secondary}</span> : null}
                         {energyUpgradeDelta != null ? <em data-qa-energy-upgrade-delta>ПРИБАВКА +{formatNumber(energyUpgradeDelta)}</em> : null}
                       </div>
                       ) : null}
@@ -731,28 +767,20 @@ export function ZoneView({
                   </div>
 
                   <div className="resource-building-costs">
-                    <div className="resource-building-time-panel" data-qa-building-time-effective>
-                      <div className="resource-building-time-summary">
-                        <small>ВРЕМЯ СТРОИТЕЛЬСТВА</small>
-                        <strong data-qa-building-time-value>{formatDurationLabel(availability.timeMs)}</strong>
-                        <span>ФАКТИЧЕСКОЕ · С УЧЁТОМ БОНУСОВ</span>
-                      </div>
-                      <div className="resource-building-time-breakdown">
-                        <div>
-                          <small>БАЗОВОЕ ВРЕМЯ</small>
-                          <b data-qa-building-time-raw>{formatDurationLabel(availability.rawTimeMs)}</b>
-                        </div>
-                        <div>
-                          <small>{getBuildingDefinition('construction', factionId).name.toUpperCase()}</small>
-                          <b className={constructionBonusPercent > 0 ? 'bonus' : ''} data-qa-building-time-bonus>
-                            {constructionBonusPercent > 0 ? `−${constructionBonusPercent}%` : 'НЕТ'}
-                          </b>
-                        </div>
-                      </div>
-                    </div>
                     <div className="resource-building-cost-title">
                       <span>СТОИМОСТЬ ПЕРЕХОДА В УР. {availability.nextLevel ?? availability.maxLevel}</span>
+                      <div className="resource-building-time-panel" data-qa-building-time-effective>
+                        <small>ВРЕМЯ СТРОИТЕЛЬСТВА</small>
+                        <strong data-qa-building-time-value>{formatDurationLabel(availability.timeMs)}</strong>
+                      </div>
                     </div>
+                    <p className="resource-building-time-breakdown" hidden={!detailsOpen}>
+                      Время без бонусов <b data-qa-building-time-raw>{formatDurationLabel(availability.rawTimeMs)}</b>
+                      {' · '}{getBuildingDefinition('construction', factionId).name}{' '}
+                      <b className={constructionBonusPercent > 0 ? 'bonus' : ''} data-qa-building-time-bonus>
+                        {constructionBonusPercent > 0 ? `−${constructionBonusPercent}%` : 'НЕТ'}
+                      </b>
+                    </p>
                     <div className="resource-building-cost-grid">
                       {(Object.keys(resourceLabels) as Array<keyof typeof resourceLabels>).map((key) => (
                         <div key={key} className={availability.missing[key] ? 'missing' : ''} data-qa-building-cost={key}>
@@ -830,6 +858,57 @@ export function ZoneView({
         </div>,
         document.body,
       ) : null}
+    </div>
+  );
+}
+
+function ZoneTileTooltip({ tip, economy, freeSlots, factionId }: {
+  tip: TileTip;
+  economy: BuildingEconomyState;
+  freeSlots: number;
+  factionId: PlayerFactionId;
+}) {
+  const building = getBuildingDefinition(tip.role, factionId);
+  const level = economy.buildings[tip.role];
+  // Centred on the tile, kept inside the viewport.
+  const style = { left: tip.left, top: Math.min(Math.max(tip.top, 96), window.innerHeight - 96) } as CSSProperties;
+  if (tip.kind === 'tile') {
+    const status = stateFor(economy, tip.role);
+    return (
+      <div className="zone-tile-tip" role="tooltip" style={style} data-qa-tile-tooltip={tip.role}>
+        <strong>{building.name}</strong>
+        <small>Уровень {level}/{building.maxLevel} · {selectorStatusText(status.className, level)}</small>
+      </div>
+    );
+  }
+  const availability = evaluateBuildingBuild(economy, tip.role);
+  const quick = describeQuickUpgrade(
+    building.name,
+    availability,
+    freeSlots,
+    availability.reason ? localizeBuildingNames(availability.reason, factionId) : null,
+  );
+  return (
+    <div
+      className={`zone-tile-tip zone-tile-tip--quick ${quick.enabled ? 'is-ready' : 'is-blocked'}`}
+      role="tooltip"
+      style={style}
+      data-qa-quick-tooltip={tip.role}
+    >
+      <strong>{building.name}</strong>
+      <small>{quick.heading}</small>
+      {quick.costs.length > 0 ? (
+        <ul className="zone-tile-tip__costs">
+          {quick.costs.map((cost) => (
+            <li key={cost.key} className={cost.missing ? 'is-missing' : undefined}>
+              <ResourceIcon kind={cost.key} />
+              <span>{formatQuickAmount(cost.amount)}</span>
+              {cost.missing ? <em>не хватает {formatQuickAmount(cost.missing)}</em> : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <p className="zone-tile-tip__status">{quick.enabled ? `Можно строить · ${quick.status}` : quick.status}</p>
     </div>
   );
 }

@@ -354,7 +354,8 @@ function readQuickButtons(win) {
     status: node.getAttribute('data-qa-quick-build-status'),
     disabled: node.getAttribute('aria-disabled') === 'true',
     label: node.getAttribute('aria-label'),
-    title: node.getAttribute('title'),
+    title: node.getAttribute('data-qa-quick-build-summary') ?? '',
+    nativeTitle: node.getAttribute('title'),
     focusable: node.tabIndex >= 0,
   }))`);
 }
@@ -367,6 +368,7 @@ async function verifyQuickUpgrade(win, directory) {
   const blocked = initial.find((item) => item.status === 'requirements-unmet');
   const tiles = await win.webContents.executeJavaScript(`document.querySelectorAll('[data-zone-selector-role]').length`);
   if (initial.length !== tiles) throw new Error(`Every building tile needs a quick button: ${initial.length}/${tiles}`);
+  if (initial.some((item) => item.nativeTitle)) throw new Error(`Quick buttons must use the game tooltip, not a native title: ${JSON.stringify(initial)}`);
   if (!metal || metal.disabled || !/^Улучшить .+ до ур\. 2$/.test(metal.label ?? '') || !metal.title.includes('Металл') || !metal.title.includes('Свободно слотов: 3') || !metal.focusable) {
     throw new Error(`Quick upgrade should be enabled with cost and slots: ${JSON.stringify(metal)}`);
   }

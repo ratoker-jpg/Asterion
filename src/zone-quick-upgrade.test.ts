@@ -29,10 +29,10 @@ test('quick upgrade mirrors the dialog: enabled with target level, cost and free
   assert.equal(view.verb, 'Улучшить');
   assert.equal(view.targetLevel, 2);
   assert.equal(view.ariaLabel, 'Улучшить Поглотитель металла I до ур. 2');
-  assert.match(view.title, /^Улучшить Поглотитель металла I до ур\. 2\n/);
-  assert.match(view.title, /Металл \d/);
-  assert.match(view.title, /Энергия \d/);
-  assert.match(view.title, new RegExp(`Свободно слотов: ${BUILDING_QUEUE_CAPACITY}\\.$`));
+  assert.match(view.summary, /^Улучшить Поглотитель металла I до ур\. 2\n/);
+  assert.match(view.summary, /Металл \d/);
+  assert.match(view.summary, /Энергия \d/);
+  assert.match(view.summary, new RegExp(`Свободно слотов: ${BUILDING_QUEUE_CAPACITY}\\.$`));
 });
 
 test('quick button on an empty slot says «Построить» to level 1', () => {
@@ -65,15 +65,15 @@ test('repeated quick clicks queue consecutive levels through the same domain com
   assert.equal(full.enabled, false);
   assert.equal(full.targetLevel, 5);
   assert.match(full.ariaLabel, /недоступно\. Очередь заполнена\.$/);
-  assert.match(full.title, /Очередь заполнена\.$/);
+  assert.match(full.summary, /Очередь заполнена\.$/);
 });
 
 test('missing resources disable the quick button and name the shortfall', () => {
   const state = createState({ resources: { metal: 0, minerals: 0, gas: 0, energy: 0 } });
   const view = describeQuickUpgrade('Поглотитель', evaluateBuildingBuild(state, 'metal-production-1'), free(state));
   assert.equal(view.enabled, false);
-  assert.match(view.title, /не хватает/);
-  assert.match(view.title, /Недостаточно /);
+  assert.match(view.summary, /не хватает/);
+  assert.match(view.summary, /Недостаточно /);
 });
 
 test('unmet requirements and max level disable the quick button with the dialog reason', () => {
@@ -83,7 +83,7 @@ test('unmet requirements and max level disable the quick button with the dialog 
   assert.ok(blockedRole, 'a role with unmet requirements exists on a fresh planet');
   const blocked = describeQuickUpgrade('Здание', evaluateBuildingBuild(state, blockedRole), free(state));
   assert.equal(blocked.enabled, false);
-  assert.match(blocked.title, /Требуется:/);
+  assert.match(blocked.summary, /Требуется:/);
 
   const maxLevel = getBuildingDefinition('metal-production-1').maxLevel;
   const maxed = createState({ buildings: { ...createCanonicalStartingBuildingLevels(), 'metal-production-1': maxLevel } });
@@ -91,5 +91,16 @@ test('unmet requirements and max level disable the quick button with the dialog 
   assert.equal(view.enabled, false);
   assert.equal(view.targetLevel, null);
   assert.equal(view.ariaLabel, 'Поглотитель: максимальный уровень');
-  assert.equal(view.title, 'Достигнут максимальный уровень.');
+  assert.equal(view.summary, 'Достигнут максимальный уровень.');
+});
+
+test('the tooltip lists only non-zero costs and names each shortfall', () => {
+  const state = createState({ resources: { metal: 0, minerals: 10_000_000, gas: 10_000_000, energy: 10_000_000 } });
+  const view = describeQuickUpgrade('Поглотитель', evaluateBuildingBuild(state, 'metal-production-1'), free(state));
+  assert.equal(view.heading, 'Улучшить до ур. 2');
+  assert.ok(view.costs.every((cost) => cost.amount > 0));
+  const metal = view.costs.find((cost) => cost.key === 'metal');
+  assert.ok(metal && metal.missing === metal.amount);
+  assert.ok(view.costs.filter((cost) => cost.key !== 'metal').every((cost) => cost.missing === 0));
+  assert.match(view.status, /^Недостаточно /);
 });
