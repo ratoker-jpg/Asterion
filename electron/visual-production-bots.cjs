@@ -213,8 +213,9 @@ function assertGeometry(snapshot, label, role) {
   if (rows.length !== 3) throw new Error(`${label}/${role}: expected 3 rows: ${JSON.stringify(snapshot)}`);
   for (const item of rows) {
     if (item.row.left < root.left - epsilon || item.row.right > root.right + epsilon) throw new Error(`${label}/${role}: row overflow`);
-    if (item.minus.width < 30 || item.plus.width < 30 || item.slider.width < 110 || item.count.width < 28) throw new Error(`${label}/${role}: controls too small: ${JSON.stringify(item)}`);
-    if (item.minus.right > item.slider.left + epsilon || item.slider.right > item.plus.left + epsilon || item.plus.right > item.count.left + epsilon) {
+    if (item.minus.width < 30 || item.plus.width < 30 || item.slider.width < 110 || item.count.width < 10) throw new Error(`${label}/${role}: controls too small: ${JSON.stringify(item)}`);
+    // The robot count sits above the controls: − · robot places · +.
+    if (item.minus.right > item.slider.left + epsilon || item.slider.right > item.plus.left + epsilon || item.count.bottom > Math.min(item.minus.top, item.slider.top) + epsilon) {
       throw new Error(`${label}/${role}: controls overlap: ${JSON.stringify(item)}`);
     }
   }

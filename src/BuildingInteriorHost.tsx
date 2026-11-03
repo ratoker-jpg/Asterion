@@ -2,7 +2,12 @@ import { ProductionBotsView } from './ProductionBotsView';
 import { RecyclingCenterView } from './RecyclingCenterView';
 import { SpaceportUpgradeView } from './SpaceportUpgradeView';
 import { TradeCenterView } from './TradeCenterView';
-import { getBuildingDefinition, type BuildingLevels, type ScienceLevels } from './domain/buildings/resource-zone.ts';
+import {
+  getBuildingDefinition,
+  getBuildingResourceIncomePerHour,
+  type BuildingLevels,
+  type ScienceLevels,
+} from './domain/buildings/resource-zone.ts';
 import {
   getAvailableProductionBots,
   isProductionBotBuildingRole,
@@ -17,7 +22,8 @@ import type {
 import type { TradeExecution, TradeRequest, TradeState, TradeWallet } from './domain/buildings/trade.ts';
 import type { BuildingInteriorContext } from './building-interior-navigation.ts';
 import type { PlayerFactionId } from './domain/profile/types.ts';
-import type { TestTimeScale } from './domain/runtime/mode.ts';
+import { ACTIVE_RUNTIME_MODE, type TestTimeScale } from './domain/runtime/mode.ts';
+import { getEffectiveResourceIncomePerHour } from './application/resource-clock.ts';
 import './building-interiors.css';
 
 type BuildingInteriorHostProps<PlanetId extends string> = {
@@ -128,6 +134,11 @@ export function BuildingInteriorHost<PlanetId extends string>({
         buildingLevel={buildings[context.buildingRole]}
         availableBots={getAvailableProductionBots(buildings)}
         appliedAssignment={productionBots}
+        baseIncomePerHour={getEffectiveResourceIncomePerHour(
+          getBuildingResourceIncomePerHour(buildings, scienceLevels),
+          ACTIVE_RUNTIME_MODE,
+          testTimeScale,
+        )}
         onApply={onProductionBotsApply}
         onBack={onBack}
       />
