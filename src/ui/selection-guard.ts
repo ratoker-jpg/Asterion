@@ -1,19 +1,11 @@
 // The game is an interface, not a document: Ctrl+A or a mouse sweep must not
 // paint selection over buttons, headings and panels, and decorative art must
-// not be dragged out as a ghost image. Fields stay editable, and text the
-// player may want to copy (coordinates, nicknames, report and message bodies)
-// stays selectable. Keep SELECTABLE_REGIONS in sync with the matching block in
+// not be dragged out as a ghost image. Fields stay editable; only text marked
+// `.ut-selectable` (a player's nickname) can be copied. Reports, messages and
+// dialogs are interface too (owner, 03.11.2026: a dragged spy report lit up in
+// blue). Keep SELECTABLE_REGIONS in sync with the matching block in
 // `src/ui/ui-polish.css`.
-export const SELECTABLE_REGIONS = [
-  '.ut-selectable',
-  '.reports-preview-scroll',
-  '.command-journal__list',
-  '.command-dialog-body',
-  '.cmdA-dossier-body',
-  '.cmdA-desc',
-  '.uw-coord',
-  '.uw-owner-copy h3',
-].join(',');
+export const SELECTABLE_REGIONS = '.ut-selectable';
 
 function isEditable(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;

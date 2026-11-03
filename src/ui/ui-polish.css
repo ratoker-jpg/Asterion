@@ -3,32 +3,27 @@
    standard of «Операции», «Планета» and «Командование». */
 
 /* ---- 1. Selection and drag ------------------------------------------------
-   The interface is not a document: nothing is selectable by default. Fields
-   and the copyable regions listed in `src/ui/selection-guard.ts` opt back in. */
+   The interface is not a document: nothing is selectable by default and text
+   shows the arrow, not the I-beam. Fields and `.ut-selectable` (see
+   `src/ui/selection-guard.ts`) opt back in. */
 html,
 body,
 #root {
   -webkit-user-select: none;
   user-select: none;
+  cursor: default;
 }
 
 input:not([type="button"], [type="checkbox"], [type="radio"], [type="range"], [type="submit"], [type="reset"]),
 textarea,
 [contenteditable]:not([contenteditable="false"]),
-.ut-selectable,
-.reports-preview-scroll,
-.command-journal__list,
-.command-dialog-body,
-.cmdA-dossier-body,
-.cmdA-desc,
-.uw-coord,
-.uw-owner-copy h3 {
+.ut-selectable {
   -webkit-user-select: text;
   user-select: text;
 }
 
 /* Controls inside a copyable region stay controls. */
-:is(.reports-preview-scroll, .cmdA-dossier-body, .ut-selectable) :is(button, [role="button"], [role="tab"]) {
+.ut-selectable :is(button, [role="button"], [role="tab"]) {
   -webkit-user-select: none;
   user-select: none;
 }

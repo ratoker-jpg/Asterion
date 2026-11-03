@@ -1,0 +1,302 @@
+/* ==========================================================================
+   Planet / resource zone pass (owner playtest of 1.8.7, 03.11.2026).
+   Loaded last so it wins over the layered zone styles without touching them:
+   one frame per block (no frame inside a frame), the --ut-r-card / --ut-r-chip
+   radius family, readable sizes, no technical noise.
+   ========================================================================== */
+
+/* --- Quick «+» on a building tile: ready = filled accent, blocked = hollow --- */
+html body .resource-zone-selector-quick {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--ut-r-chip);
+  border: 1px solid var(--race-accent, #56d9f2);
+  background: var(--race-accent, #56d9f2);
+  color: #04121a;
+  font-size: 18px;
+  font-weight: 800;
+  box-shadow: 0 0 0 2px rgba(4, 18, 26, .85), 0 0 12px var(--race-glow, rgba(86, 217, 242, .4));
+}
+html body .resource-zone-selector-quick:hover,
+html body .resource-zone-selector-quick:focus-visible {
+  background: color-mix(in srgb, var(--race-accent, #56d9f2) 80%, #fff);
+  color: #04121a;
+  box-shadow: 0 0 0 2px rgba(4, 18, 26, .9), 0 0 18px var(--race-glow, rgba(86, 217, 242, .6));
+}
+html body .resource-zone-selector-quick.is-disabled,
+html body .resource-zone-selector-quick.is-disabled:hover,
+html body .resource-zone-selector-quick.is-disabled:focus-visible {
+  border: 1px solid rgba(143, 182, 192, .22);
+  background: rgba(6, 12, 16, .7);
+  color: rgba(143, 182, 192, .38);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+html body .resource-zone-selector-quick.is-disabled:hover { border-color: rgba(240, 120, 110, .45); color: rgba(240, 160, 150, .7); }
+
+/* The in-tile tooltip is now the floating .zone-tile-tip; it stays only as the
+   button's accessible description. */
+html body .resource-zone-selector-tooltip { display: none !important; }
+
+/* --- Floating tile tooltip (portaled to <body>, always above the map) --- */
+.zone-tile-tip {
+  position: fixed;
+  z-index: 30500;
+  display: grid;
+  gap: 4px;
+  width: max-content;
+  max-width: 280px;
+  padding: 10px 13px;
+  border: 1px solid var(--ut-border-strong, rgba(126, 200, 220, .3));
+  border-radius: var(--ut-r-card, 13px);
+  background: rgba(8, 15, 19, .97);
+  box-shadow: 0 16px 38px rgba(0, 0, 0, .55);
+  color: #e8f6fa;
+  pointer-events: none;
+  transform: translateY(-50%);
+  animation: zone-tile-tip-in 160ms var(--ut-spring, cubic-bezier(.2, .8, .25, 1)) both;
+}
+.zone-tile-tip strong { font-size: 13px; font-weight: 800; line-height: 1.3; }
+.zone-tile-tip small { font-size: 11.5px; line-height: 1.35; color: var(--ut-label, #8fb6c0); }
+.zone-tile-tip--quick small { color: var(--race-accent, #56d9f2); font-weight: 700; }
+.zone-tile-tip__costs { display: grid; gap: 3px; margin: 4px 0 0; padding: 0; list-style: none; }
+.zone-tile-tip__costs li { display: grid; grid-template-columns: 18px auto 1fr; align-items: center; gap: 7px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.zone-tile-tip__costs li > :first-child { width: 16px; height: 16px; }
+.zone-tile-tip__costs em { justify-self: end; padding-left: 10px; font-style: normal; font-size: 11.5px; font-weight: 700; color: #ff8f86; }
+.zone-tile-tip__costs li.is-missing span { color: #ffb4ad; }
+.zone-tile-tip__status { margin: 5px 0 0; padding-top: 6px; border-top: 1px solid rgba(126, 200, 220, .14); font-size: 12px; font-weight: 700; line-height: 1.35; }
+.zone-tile-tip.is-ready .zone-tile-tip__status { color: var(--ut-positive, #35e58a); }
+.zone-tile-tip.is-blocked .zone-tile-tip__status { color: #ff8f86; }
+@keyframes zone-tile-tip-in {
+  from { opacity: 0; translate: -6px 0; }
+  to { opacity: 1; translate: 0 0; }
+}
+@media (prefers-reduced-motion: reduce) { .zone-tile-tip { animation: none; } }
+
+/* --- Map: the hovered building and its caption sit above every neighbour --- */
+html body .resource-building-node:hover,
+html body .resource-building-node:focus-visible { z-index: 24; }
+
+/* --- «Добыча за 1 час»: one clean block right under the tiles --- */
+html body .resource-zone-summary .resource-zone-economy {
+  margin-top: 14px;
+  padding: 12px 2px 0;
+  border: 0 !important;
+  border-top: 1px solid rgba(126, 200, 220, .14) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html body .resource-zone-summary .resource-zone-economy-title { margin: 0 0 6px; font-size: 12px !important; letter-spacing: .12em; color: var(--ut-label, #8fb6c0); }
+html body .resource-zone-summary .resource-zone-income-list { gap: 0; }
+html body .resource-zone-view .resource-zone-summary .resource-zone-income-row {
+  min-height: 38px;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 6px 2px;
+  border: 0 !important;
+  border-bottom: 1px solid rgba(126, 200, 220, .08) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html body .resource-zone-view .resource-zone-summary .resource-zone-income-row:last-child { border-bottom: 0 !important; }
+html body .resource-zone-summary .resource-zone-income-icon { width: 24px; height: 24px; }
+html body .resource-zone-summary .resource-zone-income-icon svg { width: 22px; height: 22px; }
+html body .resource-zone-summary .resource-zone-income-name { font-size: 13px !important; color: #c6d9de; }
+html body .resource-zone-view .resource-zone-summary .resource-zone-income-row strong { font-size: 17px; letter-spacing: 0; color: #f0fbff; }
+
+/* --- Build queue card: picture | name, zone | level change + timer, bar --- */
+html body .resource-zone-queue-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 6px;
+  min-height: 0;
+  padding: 10px;
+  border-radius: var(--ut-r-card) !important;
+}
+html body .resource-zone-queue-card.busy,
+html body .resource-zone-queue-card.waiting { min-height: 0; }
+html body .resource-zone-queue-card.waiting { opacity: 1; }
+html body .resource-zone-queue-card-main {
+  position: static;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  grid-template-areas: "art copy" "meta meta" "bar bar";
+  column-gap: 10px;
+  row-gap: 8px;
+  align-items: center;
+  min-height: 0;
+  height: auto;
+  padding: 0;
+  border-radius: 0 !important;
+}
+html body .resource-zone-queue-card img { grid-area: art; width: 46px; height: 46px; }
+html body .resource-zone-queue-card-copy { grid-area: copy; display: grid; gap: 2px; min-width: 0; }
+html body .resource-zone-queue-card .resource-zone-queue-card-copy small {
+  margin: 0;
+  font-size: 10.5px !important;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ut-label, #8fb6c0);
+}
+html body .resource-zone-queue-card.busy .resource-zone-queue-card-copy small { color: #f1bd58; }
+html body .resource-zone-queue-card .resource-zone-queue-card-copy strong {
+  margin: 0;
+  overflow: hidden;
+  font-size: 13px !important;
+  line-height: 1.25;
+  color: #f2fbff;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+html body .resource-zone-queue-card .resource-zone-queue-card-copy em { margin: 0; font-size: 11px; font-style: normal; color: #7f98a0; }
+html body .resource-zone-queue-card-meta {
+  grid-area: meta;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+html body .resource-zone-queue-card-meta b {
+  position: static;
+  padding: 3px 8px;
+  border: 1px solid rgba(126, 200, 220, .2);
+  border-radius: var(--ut-r-chip);
+  background: rgba(0, 0, 0, .22);
+  color: #bfeefa;
+  font-size: 11.5px;
+  font-weight: 800;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+html body .resource-zone-queue-card-meta time { color: #f2fbff; font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+html body .resource-zone-queue-card-main > i {
+  grid-area: bar;
+  position: static;
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, .08);
+  overflow: hidden;
+}
+html body .resource-zone-queue-card-main > i span { border-radius: 2px; }
+html body .resource-zone-queue-cancel {
+  position: static;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--ut-r-chip);
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* --- Building dialog: one frame per block, details behind «Подробнее» --- */
+html body .resource-building-dialog .resource-building-effect {
+  padding: 0;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+html body .resource-building-effect-heading small,
+html body .resource-building-cost-title > span { font-size: 11px; letter-spacing: .12em; color: var(--ut-label, #8fb6c0); }
+.resource-building-details-toggle {
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--race-accent, #56d9f2);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  opacity: .8;
+}
+.resource-building-details-toggle:hover,
+.resource-building-details-toggle:focus-visible { opacity: 1; text-decoration: underline; outline: none; }
+html body .resource-building-effect-card small { font-size: 11px; letter-spacing: .08em; }
+html body .resource-building-effect-card strong { font-size: 14px; }
+html body .resource-building-effect-card > span { font-size: 11px; line-height: 1.4; }
+html body .resource-building-effect-card > span[hidden],
+html body .resource-building-dialog [hidden] { display: none !important; }
+
+html body .resource-building-cost-title { margin-top: 14px; gap: 12px; }
+html body .resource-building-dialog .resource-building-dialog-copy .resource-building-time-panel {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html body .resource-building-time-panel small { font-size: 11px; letter-spacing: .12em; color: var(--ut-label, #8fb6c0); }
+html body .resource-building-time-panel strong { color: #f2fdff; font-size: 14px; font-weight: 800; letter-spacing: 0; font-variant-numeric: tabular-nums; white-space: nowrap; }
+html body .resource-building-dialog .resource-building-time-breakdown {
+  display: block;
+  margin: 6px 0 0;
+  padding: 0;
+  border: 0 !important;
+  background: none !important;
+  color: #7f98a0;
+  font-size: 11px;
+  text-align: right;
+}
+html body .resource-building-time-breakdown b { font-size: 11px; color: #c6d9de; }
+html body .resource-building-time-breakdown b.bonus { color: var(--race-accent, #56d9f2); }
+
+/* Availability is a status line above the button, not another card. */
+html body .resource-building-dialog .resource-building-dialog-copy .resource-building-availability {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 0 2px;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+html body .resource-building-availability strong { font-size: 11px; letter-spacing: .1em; }
+html body .resource-building-availability span { margin: 0; font-size: 12px; color: #9fb8bf; }
+
+/* --- Planet dock: hourly income as one block of three rows --- */
+html body .planet-orbit .planet-orbit__income > div { grid-template-columns: 1fr; gap: 0; margin-top: 6px; }
+html body .planet-orbit .planet-orbit__income span {
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  grid-template-rows: auto;
+  column-gap: 10px;
+  padding: 3px 2px;
+  border: 0;
+  border-bottom: 1px solid rgba(126, 200, 220, .08);
+  border-radius: 0;
+  background: transparent;
+  color: #c6d9de;
+  font-size: 12.5px !important;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+html body .planet-orbit .planet-orbit__income span:last-child { border-bottom: 0; }
+html body .planet-orbit .planet-orbit__income span > :first-child { grid-row: auto; width: 20px; height: 20px; }
+html body .planet-orbit .planet-orbit__income b { justify-self: end; font-size: 17px !important; line-height: 1.25; }
+
+/* --- Toasts: top-left just under the header. Measured on every main screen
+   (planet, zones, universe, fleets, operations, command, messages) at
+   1280×720 and 1920×1080: the only band with no controls in it. The bottom-left
+   corner covered «Добыча за 1 час» and «Отметить все прочитанными». --- */
+html body .runtime-toast-stack {
+  left: 24px;
+  right: auto;
+  top: 92px;
+  bottom: auto;
+  gap: 6px;
+  width: min(380px, calc(100vw - 48px));
+}
+@media (min-height: 1000px) { html body .runtime-toast-stack { top: 138px; } }
+html body .runtime-toast-stack .runtime-toast { padding: 8px 10px 8px 12px; }
+
+/* The «+» glyph itself (the typography layer shrinks bare spans). */
+html body .resource-zone-selector-quick > span { font-size: 18px !important; line-height: 1; }
+html body .resource-zone-queue-card-meta time > span { margin-right: 4px; color: #7f98a0; font-size: 11px; font-weight: 700; }

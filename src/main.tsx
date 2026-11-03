@@ -38,6 +38,7 @@ import './final-polish.css';
 import './ui/fleet/fleet-unified.css';
 import './ui/unified-screens.css';
 import './ui/ui-polish.css';
+import './ui/planet-pass.css';
 
 const isElectron = navigator.userAgent.includes('Electron');
 

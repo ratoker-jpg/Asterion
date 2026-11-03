@@ -264,11 +264,22 @@ type RuntimeToast = {
   id: number;
   text: string;
   tone: 'info' | 'success' | 'error';
+  /** Toasts of one group (e.g. builds finished on a planet) merge into one card. */
+  group?: string;
+  items?: readonly string[];
+};
+
+/** Notices of one kind that arrive together and read better as one summary. */
+type ToastGroup = {
+  key: string;
+  item: string;
+  summarize: (items: readonly string[]) => string;
 };
 
 const TOAST_AUTO_CLOSE_MS = 3_000;
 const SAVE_FAILURE_NOTICE_INTERVAL_MS = 10 * 60_000;
-const TOAST_STACK_LIMIT = 3;
+/** Two cards fit the control-free band under the header (see src/ui/planet-pass.css). */
+const TOAST_STACK_LIMIT = 2;
 /** Replay compute per catch-up task before React gets the frame back. */
 const NPC_CATCHUP_TASK_BUDGET_MS = 40;
 /**
@@ -463,14 +474,21 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
    * Keeps the QA notice layer in sync and emits a bottom-left toast. Silent
    * navigation noise still lands in the QA layer but never renders a toast.
    */
-  const setNotice = useCallback((text: string, tone: RuntimeToast['tone'] = 'info') => {
+  const setNotice = useCallback((text: string, tone: RuntimeToast['tone'] = 'info', group?: ToastGroup) => {
     setLastNotice(text);
     if (SILENT_NOTICE_PATTERNS.some((pattern) => pattern.test(text))) return;
     noticeSeq.current += 1;
     const id = noticeSeq.current;
-    setToasts((current) => current.some((toast) => toast.text === text)
-      ? current
-      : [...current, { id, text, tone }].slice(-TOAST_STACK_LIMIT));
+    setToasts((current) => {
+      const grouped = group ? current.find((toast) => toast.group === group.key) : undefined;
+      if (group && grouped) {
+        // The merged card takes the newest id, so it stays for a full timeout after the last event.
+        const items = [...(grouped.items ?? []), group.item];
+        return [...current.filter((toast) => toast !== grouped), { id, text: group.summarize(items), tone, group: group.key, items }];
+      }
+      if (current.some((toast) => toast.text === text)) return current;
+      return [...current, { id, text, tone, group: group?.key, items: group ? [group.item] : undefined }].slice(-TOAST_STACK_LIMIT);
+    });
     window.setTimeout(() => {
       setToasts((current) => current.filter((toast) => toast.id !== id));
     }, TOAST_AUTO_CLOSE_MS);
@@ -1156,7 +1174,12 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         setNotice(`Наука: исследование завершено — ${names}.`, 'success');
       } else if (event.kind === 'building') {
         const planet = result.state.planets[event.planetId] ?? result.state.planets[result.state.currentPlanetId];
-        setNotice(`${planet.name}: ${getBuildingDefinition(event.assetRole, result.state.profile.factionId).name} завершено.`, 'success');
+        const name = getBuildingDefinition(event.assetRole, result.state.profile.factionId).name;
+        setNotice(`${planet.name}: постройка завершена — ${name}.`, 'success', {
+          key: `building:${event.planetId}`,
+          item: name,
+          summarize: (items) => `${planet.name}: завершено построек — ${items.length}: ${items.join(', ')}.`,
+        });
       } else if (event.kind === 'recycling') {
         const planet = result.state.planets[event.planetId] ?? result.state.planets[result.state.currentPlanetId];
         setNotice(`${planet.name}: результат переработки автоматически зачислен`, 'success');
