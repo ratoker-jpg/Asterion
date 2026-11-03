@@ -199,3 +199,16 @@ test('multi-source rebase: each leg leaves from its planet, the header planet st
   assert.equal(next.currentPlanetId, home.currentPlanetId);
   assert.deepEqual(next.flights.records.filter((flight) => flight.missionId === 'deployment').map((flight) => flight.originPlanetId).sort(), ['colony-a', 'colony-b']);
 });
+
+test('a refusal a smaller fleet can fix keeps the action open for adjusting', () => {
+  const base = campaign({ transporter: 100 });
+  const home = base.planets[base.currentPlanetId]!;
+  const state = { ...base, gas: 3, planets: { ...base.planets, [base.currentPlanetId]: { ...home, resources: { ...(home.resources ?? { metal: 0, minerals: 0 }), gas: 3 } as typeof home.resources } } } as SaveState;
+  const transport = evaluateQuickActions(state, neutralTarget(state), RUNTIME).find((action) => action.id === 'transport')!;
+  assert.equal(transport.plan?.preview?.ok, false);
+  assert.equal(transport.plan?.preview && !transport.plan.preview.ok ? transport.plan.preview.error.code : '', 'insufficient-gas');
+  assert.equal(transport.enabled, true, 'the panel opens so the fleet can be reduced');
+  assert.match(transport.adjust ?? '', /газ/i);
+  const smaller = buildQuickCommand(state, 'transport', neutralTarget(state), state.currentPlanetId, { ships: { transporter: 1 } }, RUNTIME);
+  assert.equal(dispatchFlight(state, smaller!, { now: NOW, mode: 'production' }).ok, true);
+});

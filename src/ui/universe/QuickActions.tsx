@@ -177,7 +177,9 @@ function QuickMenu({ target, actions, onChoose, onOpenCard }: { target: QuickTar
             <img src={ACTION_ICONS[action.id]} alt="" draggable={false} />
             <span>
               <b>{action.label}</b>
-              {action.enabled
+              {action.enabled && action.adjust
+                ? <small className="quick-pop__reason" data-qa-quick-adjust>{action.adjust} Состав можно изменить.</small>
+                : action.enabled
                 ? <small>{flight ? `${planetName(action.plan?.originPlanetId) ?? 'Планета'} · ${flightDurationLabel(flight.oneWayDurationMs)}` : action.id === 'pirate-report' ? 'Последний отчёт по базе' : 'Готово к отправке'}</small>
                 : <small className="quick-pop__reason" data-qa-quick-reason>{action.reason}</small>}
             </span>

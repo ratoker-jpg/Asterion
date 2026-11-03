@@ -422,14 +422,26 @@ export function planQuickSend(state: SaveState, actionId: QuickActionId, target:
   };
 }
 
-export type QuickActionView = QuickActionRule & { plan?: QuickSendPlan };
+/**
+ * `adjust`: the suggested fleet is refused for a reason a smaller or different
+ * fleet can fix (gas, hangar room, composition); the action stays open so the
+ * player can change the fleet in the panel.
+ */
+export type QuickActionView = QuickActionRule & { plan?: QuickSendPlan; adjust?: string };
+
+const FLEET_DEPENDENT_REFUSALS = new Set<string>([
+  'insufficient-gas', 'capacity-exceeded', 'insufficient-cargo-capacity', 'wrong-ship-composition', 'insufficient-commanders',
+]);
 
 /** The menu: map rules first, then the runtime's verdict for the default launch. */
 export function evaluateQuickActions(state: SaveState, target: QuickTarget, runtime: QuickRuntime): QuickActionView[] {
   return listQuickActions(target, state.profile.playerId).map((action) => {
     if (!action.enabled || !action.missionId) return action;
     const plan = planQuickSend(state, action.id, target, runtime);
-    return plan.preview?.ok ? { ...action, plan } : { ...action, enabled: false, reason: plan.error, plan };
+    if (plan.preview?.ok) return { ...action, plan };
+    const adjustable = plan.originPlanetId !== null && isMultiSourceAction(action.id)
+      && plan.preview !== null && !plan.preview.ok && FLEET_DEPENDENT_REFUSALS.has(plan.preview.error.code);
+    return adjustable ? { ...action, plan, adjust: plan.error } : { ...action, enabled: false, reason: plan.error, plan };
   });
 }
 
