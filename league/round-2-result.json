@@ -1,0 +1,791 @@
+{
+  "round": 2,
+  "base": {
+    "version": 1,
+    "params": {
+      "hoardDays": 0.25,
+      "bottleneckDrive": 1.4,
+      "scarcityHigh": 3,
+      "styleCapRaise": 0,
+      "budgetDaysHigh": 3,
+      "spendShareHigh": 0.85,
+      "reserveHours": 1.4,
+      "tableWeight": 0
+    }
+  },
+  "seedsPerCandidate": [
+    [
+      "hoardDays-down",
+      6
+    ],
+    [
+      "hoardDays-up",
+      6
+    ],
+    [
+      "bottleneckDrive-down",
+      6
+    ],
+    [
+      "bottleneckDrive-up",
+      5
+    ],
+    [
+      "scarcityHigh-down",
+      6
+    ],
+    [
+      "scarcityHigh-up",
+      6
+    ],
+    [
+      "styleCapRaise-up",
+      6
+    ],
+    [
+      "budgetDaysHigh-down",
+      6
+    ],
+    [
+      "budgetDaysHigh-up",
+      6
+    ],
+    [
+      "spendShareHigh-down",
+      6
+    ],
+    [
+      "spendShareHigh-up",
+      6
+    ],
+    [
+      "reserveHours-down",
+      6
+    ],
+    [
+      "reserveHours-up",
+      6
+    ],
+    [
+      "tableWeight-up",
+      6
+    ],
+    [
+      "combo-leaders",
+      6
+    ]
+  ],
+  "results": [
+    {
+      "name": "scarcityHigh-down",
+      "seeds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "objective": {
+        "mean": 0.0395,
+        "low": 0.0279,
+        "high": 0.0505
+      },
+      "parts": {
+        "pointsMedian": {
+          "mean": 0.0337,
+          "low": -0.0151,
+          "high": 0.0872
+        },
+        "pointsBottomThird": {
+          "mean": 0.072,
+          "low": 0.0342,
+          "high": 0.1115
+        },
+        "incomePerHour": {
+          "mean": 0.0129,
+          "low": 0.0058,
+          "high": 0.0201
+        }
+      },
+      "diffs": {
+        "coloniesLost": 0,
+        "styleEntropy": -0.0693,
+        "actionMixSpread": -0.0062,
+        "attacks": -160.6667
+      },
+      "guards": {
+        "bottomThird": true,
+        "coloniesLost": true,
+        "styleEntropy": false,
+        "actionMixSpread": true
+      },
+      "passes": false
+    },
+    {
+      "name": "tableWeight-up",
+      "seeds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "objective": {
+        "mean": 0.0322,
+        "low": -0.0021,
+        "high": 0.0698
+      },
+      "parts": {
+        "pointsMedian": {
+          "mean": 0.0381,
+          "low": -0.0182,
+          "high": 0.1007
+        },
+        "pointsBottomThird": {
+          "mean": 0.046,
+          "low": -0.0299,
+          "high": 0.1246
+        },
+        "incomePerHour": {
+          "mean": 0.0125,
+          "low": -0.002,
+          "high": 0.0262
+        }
+      },
+      "diffs": {
+        "coloniesLost": 0,
+        "styleEntropy": -0.1402,
+        "actionMixSpread": -0.006,
+        "attacks": -340.6667
+      },
+      "guards": {
+        "bottomThird": true,
+        "coloniesLost": true,
+        "styleEntropy": false,
+        "actionMixSpread": true
+      },
+      "passes": false
+    },
+    {
+      "name": "combo-leaders",
+      "seeds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "objective": {
+        "mean": 0.0218,
+        "low": -0.0289,
+        "high": 0.0703
+      },
+      "parts": {
+        "pointsMedian": {
+          "mean": 0.0255,
+          "low": -0.0506,
+          "high": 0.1057
+        },
+        "pointsBottomThird": {
+          "mean": 0.0317,
+          "low": -0.0463,
+          "high": 0.096
+        },
+        "incomePerHour": {
+          "mean": 0.0083,
+          "low": -0.0065,
+          "high": 0.0236
+        }
+      },
+      "diffs": {
+        "coloniesLost": 0,
+        "styleEntropy": -0.053,
+        "actionMixSpread": -0.0037,
+        "attacks": -456.6667
+      },
+      "guards": {
+        "bottomThird": true,
+        "coloniesLost": true,
+        "styleEntropy": false,
+        "actionMixSpread": true
+      },
+      "passes": false
+    },
+    {
+      "name": "styleCapRaise-up",
+      "seeds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "objective": {
+        "mean": 0.0181,
+        "low": -0.0105,
+        "high": 0.0448
+      },
+      "parts": {
+        "pointsMedian": {
+          "mean": 0.0039,
+          "low": -0.0393,
+          "high": 0.0448
+        },
+        "pointsBottomThird": {
+          "mean": 0.0398,
+          "low": -0.0383,
+          "high": 0.1089
+        },
+        "incomePerHour": {
+          "mean": 0.0105,
+          "low": -0.0014,
+          "high": 0.0214
+        }
+      },
+      "diffs": {
+        "coloniesLost": 0,
+        "styleEntropy": 0.0743,
+        "actionMixSpread": -0.0075,
+        "attacks": -453.5
+      },
+      "guards": {
+        "bottomThird": true,
+        "coloniesLost": true,
+        "styleEntropy": true,
+        "actionMixSpread": true
+      },
+      "passes": true
+    },
+    {
+      "name": "spendShareHigh-up",
+      "seeds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "objective": {
+        "mean": 0.0147,
+        "low": -0.0152,
+        "high": 0.0426
+      },
+      "parts": {
+        "pointsMedian": {
+          "mean": -0.0061,
+          "low": -0.0653,
+          "high": 0.049
+        },
+        "pointsBottomThird": {
+          "mean": 0.0408,
+          "low": -0.0173,
+          "high": 0.0988
+        },
+        "incomePerHour": {
+          "mean": 0.0094,
+          "low": 0.0048,
+          "high": 0.0136
+        }
+      },
+      "diffs": {
+        "coloniesLost": 0,
+        "styleEntropy": -0.1257,
+        "actionMixSpread": -0.0055,
+        "attacks": 62.8333
+      },
+      "guards": {
+        "bottomThird": true,
+        "coloniesLost": true,
+        "styleEntropy": false,
+        "actionMixSpread": true
+      },
+      "passes": false
+    },
+    {
+      "name": "reserveHours-up",
+      "seeds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "objective": {
+        "mean": 0.0094,
+        "low": -0.0115,
+        "high": 0.0333
+      },
+      "parts": {
+        "pointsMedian": {
+          "mean": 0.0125,
+          "low": -0.0406,
+          "high": 0.0608
+        },
+        "pointsBottomThird": {
+          "mean": 0.014,
+          "low": -0.0219,
+          "high": 0.0502
+        },
+        "incomePerHour": {
+          "mean": 0.0016,
+          "low": -0.0086,
+          "high": 0.0123
+        }
+      },
+      "diffs": {
+        "coloniesLost": 0,
+        "styleEntropy": -0.027,
+        "actionMixSpread": -0.0013,
+        "attacks": -42.1667
+      },
+      "guards": {
+        "bottomThird": true,
+        "coloniesLost": true,
+        "styleEntropy": true,
+        "actionMixSpread": true
+      },
+      "passes": true
+    },
+    {
+      "name": "budgetDaysHigh-down",
+      "seeds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "objective": {
+        "mean": 0.008,
+        "low": -0.0325,
+        "high": 0.0497
+      },
+      "parts": {
+        "pointsMedian": {
+          "mean": 0.0527,
+          "low": -0.0343,
+          "high": 0.1534
+        },
+        "pointsBottomThird": {
+          "mean": -0.0421,
+          "low": -0.0849,
+          "high": -0.0017
+        },
+        "incomePerHour": {
+          "mean": 0.0135,
+          "low": -0.0022,
+          "high": 0.0308
+        }
+      },
+      "diffs": {
+        "coloniesLost": 0,
+        "styleEntropy": -0.1732,
+        "actionMixSpread": -0.009,
+        "attacks": -192.6667
+      },
+      "guards": {
+        "bottomThird": false,
+        "coloniesLost": true,
+        "styleEntropy": false,
+        "actionMixSpread": true
+      },
+      "passes": false
+    },
+    {
+      "name": "hoardDays-up",
+      "seeds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "objective": {
+        "mean": 0.0055,
+        "low": -0.0284,
+        "high": 0.0396
+      },
+      "parts": {
+        "pointsMedian": {
+          "mean": 0.0048,
+          "low": -0.0576,
+          "high": 0.0696
+        },
+        "pointsBottomThird": {
+          "mean": 0.0088,
+          "low": -0.0369,
+          "high": 0.0542
+        },
+        "incomePerHour": {
+          "mean": 0.0031,
+          "low": -0.0058,
+          "high": 0.0116
+        }
+      },
+      "diffs": {
+        "coloniesLost": 0,
+        "styleEntropy": 0.0885,
+        "actionMixSpread": -0.006,
+        "attacks": -274.3333
+      },
+      "guards": {
+        "bottomThird": true,
+        "coloniesLost": true,
+        "styleEntropy": true,
+        "actionMixSpread": true
+      },
+      "passes": true
+    },
+    {
+      "name": "scarcityHigh-up",
+      "seeds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "objective": {
+        "mean": 0.0034,
+        "low": -0.0226,
+        "high": 0.0285
+      },
+      "parts": {
+        "pointsMedian": {
+          "mean": 0.0284,
+          "low": -0.0153,
+          "high": 0.0704
+        },
+        "pointsBottomThird": {
+          "mean": -0.0204,
+          "low": -0.0586,
+          "high": 0.017
+        },
+        "incomePerHour": {
+          "mean": 0.0023,
+          "low": -0.0104,
+          "high": 0.0148
+        }
+      },
+      "diffs": {
+        "coloniesLost": 0,
+        "styleEntropy": -0.0417,
+        "actionMixSpread": -0.0048,
+        "attacks": -351.8333
+      },
+      "guards": {
+        "bottomThird": false,
+        "coloniesLost": true,
+        "styleEntropy": true,
+        "actionMixSpread": true
+      },
+      "passes": false
+    },
+    {
+      "name": "budgetDaysHigh-up",
+      "seeds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "objective": {
+        "mean": 0.0007,
+        "low": -0.0175,
+        "high": 0.0197
+      },
+      "parts": {
+        "pointsMedian": {
+          "mean": -0.0016,
+          "low": -0.0598,
+          "high": 0.0656
+        },
+        "pointsBottomThird": {
+          "mean": 0.002,
+          "low": -0.0448,
+          "high": 0.0446
+        },
+        "incomePerHour": {
+          "mean": 0.0018,
+          "low": -0.0114,
+          "high": 0.0145
+        }
+      },
+      "diffs": {
+        "coloniesLost": 0,
+        "styleEntropy": -0.1107,
+        "actionMixSpread": -0.0063,
+        "attacks": -116.6667
+      },
+      "guards": {
+        "bottomThird": true,
+        "coloniesLost": true,
+        "styleEntropy": false,
+        "actionMixSpread": true
+      },
+      "passes": false
+    },
+    {
+      "name": "bottleneckDrive-up",
+      "seeds": [
+        1,
+        2,
+        4,
+        5,
+        6
+      ],
+      "objective": {
+        "mean": -0.0057,
+        "low": -0.0269,
+        "high": 0.0152
+      },
+      "parts": {
+        "pointsMedian": {
+          "mean": -0.0198,
+          "low": -0.0764,
+          "high": 0.0405
+        },
+        "pointsBottomThird": {
+          "mean": 0.0074,
+          "low": -0.0246,
+          "high": 0.0461
+        },
+        "incomePerHour": {
+          "mean": -0.0047,
+          "low": -0.0183,
+          "high": 0.0091
+        }
+      },
+      "diffs": {
+        "coloniesLost": 0,
+        "styleEntropy": 0.0136,
+        "actionMixSpread": 0.0036,
+        "attacks": -486.4
+      },
+      "guards": {
+        "bottomThird": true,
+        "coloniesLost": true,
+        "styleEntropy": true,
+        "actionMixSpread": true
+      },
+      "passes": true
+    },
+    {
+      "name": "bottleneckDrive-down",
+      "seeds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "objective": {
+        "mean": -0.0141,
+        "low": -0.0547,
+        "high": 0.0292
+      },
+      "parts": {
+        "pointsMedian": {
+          "mean": -0.039,
+          "low": -0.1105,
+          "high": 0.0345
+        },
+        "pointsBottomThird": {
+          "mean": -0.0057,
+          "low": -0.0494,
+          "high": 0.0431
+        },
+        "incomePerHour": {
+          "mean": 0.0023,
+          "low": -0.0148,
+          "high": 0.0201
+        }
+      },
+      "diffs": {
+        "coloniesLost": 0,
+        "styleEntropy": -0.0907,
+        "actionMixSpread": -0.0128,
+        "attacks": -63
+      },
+      "guards": {
+        "bottomThird": true,
+        "coloniesLost": true,
+        "styleEntropy": false,
+        "actionMixSpread": true
+      },
+      "passes": false
+    },
+    {
+      "name": "spendShareHigh-down",
+      "seeds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "objective": {
+        "mean": -0.0161,
+        "low": -0.0545,
+        "high": 0.0223
+      },
+      "parts": {
+        "pointsMedian": {
+          "mean": -0.0406,
+          "low": -0.104,
+          "high": 0.024
+        },
+        "pointsBottomThird": {
+          "mean": -0.0104,
+          "low": -0.0547,
+          "high": 0.0349
+        },
+        "incomePerHour": {
+          "mean": 0.0027,
+          "low": -0.0095,
+          "high": 0.0148
+        }
+      },
+      "diffs": {
+        "coloniesLost": 0,
+        "styleEntropy": 0.0247,
+        "actionMixSpread": -0.0072,
+        "attacks": -521.6667
+      },
+      "guards": {
+        "bottomThird": false,
+        "coloniesLost": true,
+        "styleEntropy": true,
+        "actionMixSpread": true
+      },
+      "passes": false
+    },
+    {
+      "name": "reserveHours-down",
+      "seeds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "objective": {
+        "mean": -0.0174,
+        "low": -0.0312,
+        "high": -0.0034
+      },
+      "parts": {
+        "pointsMedian": {
+          "mean": -0.0322,
+          "low": -0.0761,
+          "high": 0.012
+        },
+        "pointsBottomThird": {
+          "mean": -0.0188,
+          "low": -0.0511,
+          "high": 0.0135
+        },
+        "incomePerHour": {
+          "mean": -0.0012,
+          "low": -0.0129,
+          "high": 0.0109
+        }
+      },
+      "diffs": {
+        "coloniesLost": 0,
+        "styleEntropy": -0.0842,
+        "actionMixSpread": -0.0065,
+        "attacks": -286.3333
+      },
+      "guards": {
+        "bottomThird": false,
+        "coloniesLost": true,
+        "styleEntropy": false,
+        "actionMixSpread": true
+      },
+      "passes": false
+    },
+    {
+      "name": "hoardDays-down",
+      "seeds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "objective": {
+        "mean": -0.0494,
+        "low": -0.0944,
+        "high": -0.0024
+      },
+      "parts": {
+        "pointsMedian": {
+          "mean": -0.0639,
+          "low": -0.1481,
+          "high": 0.0292
+        },
+        "pointsBottomThird": {
+          "mean": -0.0651,
+          "low": -0.1206,
+          "high": -0.0148
+        },
+        "incomePerHour": {
+          "mean": -0.0191,
+          "low": -0.0394,
+          "high": 0.0052
+        }
+      },
+      "diffs": {
+        "coloniesLost": 0,
+        "styleEntropy": -0.0507,
+        "actionMixSpread": -0.0123,
+        "attacks": -658.8333
+      },
+      "guards": {
+        "bottomThird": false,
+        "coloniesLost": true,
+        "styleEntropy": false,
+        "actionMixSpread": true
+      },
+      "passes": false
+    }
+  ],
+  "chosen": {
+    "name": "styleCapRaise-up",
+    "objective": {
+      "mean": 0.0181,
+      "low": -0.0105,
+      "high": 0.0448
+    },
+    "policy": {
+      "version": 1,
+      "params": {
+        "hoardDays": 0.25,
+        "bottleneckDrive": 1.4,
+        "scarcityHigh": 3,
+        "styleCapRaise": 0.1,
+        "budgetDaysHigh": 3,
+        "spendShareHigh": 0.85,
+        "reserveHours": 1.4,
+        "tableWeight": 0
+      }
+    }
+  }
+}
+

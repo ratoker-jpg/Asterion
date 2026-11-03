@@ -66,6 +66,8 @@ export function labMetrics(summary) {
     pointsMedian: day.points.median,
     pointsBottomThird: day.bottomThirdPoints ?? 0,
     pointsTop: day.points.top,
+    styleEntropy: day.diversity?.styleEntropy ?? 0,
+    actionMixSpread: day.diversity?.actionMixSpread ?? 0,
     resourcesMedian: day.resources.median,
     resourcesTotal: day.empire?.resourcesTotal ?? 0,
     incomePerHour: day.empire?.incomePerHour ?? 0,

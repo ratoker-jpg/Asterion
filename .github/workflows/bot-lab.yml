@@ -35,6 +35,10 @@ on:
         description: Lab scenario, e.g. seven-planets (empty = the plain world)
         required: false
         default: ''
+      league:
+        description: Strategy league (stage H), a manifest from tools/league.mjs committed on the dispatched branch, e.g. league/round-1.json. Each candidate policy plays every seed on the same fixture; the summary scores them against `base`.
+        required: false
+        default: ''
       cpu:
         description: Also measure the step of the 100-NPC day-3 world (needs base_ref)
         type: boolean
@@ -84,6 +88,7 @@ jobs:
           SEEDS: ${{ inputs.seeds }}
           AFTER: ${{ inputs.ref || github.sha }}
           BASE: ${{ inputs.base_ref }}
+          LEAGUE: ${{ inputs.league }}
         run: |
           node -e '
             const seeds = process.env.SEEDS.split(",").flatMap((part) => {
@@ -91,7 +96,10 @@ jobs:
               return to ? Array.from({ length: to - from + 1 }, (_, index) => from + index) : [from];
             }).filter((seed) => Number.isSafeInteger(seed) && seed > 0);
             if (!seeds.length) throw new Error("no seeds");
-            const sides = [["after", process.env.AFTER], ...(process.env.BASE ? [["base", process.env.BASE]] : [])];
+            const fs = require("node:fs");
+            // League: every candidate policy of the manifest plays on the dispatched revision; "base" is the shipped policy.
+            const league = process.env.LEAGUE ? Object.keys(JSON.parse(fs.readFileSync("lab-tools/" + process.env.LEAGUE, "utf8")).candidates) : null;
+            const sides = league ? league.map((name) => [name, process.env.AFTER]) : [["after", process.env.AFTER], ...(process.env.BASE ? [["base", process.env.BASE]] : [])];
             const include = sides.flatMap(([side, ref]) => seeds.map((seed) => ({ side, ref, seed })));
             require("node:fs").appendFileSync(process.env.GITHUB_OUTPUT, `matrix=${JSON.stringify({ include })}\n`);
             require("node:fs").writeFileSync("seeds.txt", seeds.join(" "));
@@ -144,9 +152,16 @@ jobs:
           SEED: ${{ matrix.seed }}
           DAYS: ${{ inputs.days }}
           SIDE: ${{ matrix.side }}
+          LEAGUE: ${{ inputs.league }}
         run: |
           cp ../lab-tools/tools/bot-lab.mjs ../lab-tools/tools/bot-lab-batch.mjs tools/
-          node $LAB_NODE tools/bot-lab.mjs --fixture=../fixtures/seed-$SEED.json --days=$DAYS --out=../out/$SIDE/seed-$SEED > /dev/null
+          POLICY_FLAG=""
+          if [ -n "$LEAGUE" ]; then
+            # The candidate's policy file, written from the manifest; "base" runs on the shipped file of the revision.
+            node -e 'const m = JSON.parse(require("node:fs").readFileSync("../lab-tools/" + process.env.LEAGUE, "utf8")); require("node:fs").writeFileSync("../policy.json", JSON.stringify(m.candidates[process.env.SIDE]));'
+            if [ "$SIDE" != base ]; then POLICY_FLAG="--policy=../policy.json"; fi
+          fi
+          node $LAB_NODE tools/bot-lab.mjs --fixture=../fixtures/seed-$SEED.json --days=$DAYS --out=../out/$SIDE/seed-$SEED $POLICY_FLAG > /dev/null
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -172,10 +187,19 @@ jobs:
       - name: Compare
         env:
           HAS_BASE: ${{ inputs.base_ref != '' }}
+          LEAGUE: ${{ inputs.league }}
         run: |
           mkdir -p lab-runs/after lab-runs/base
           for dir in raw/*/; do cp -r "$dir"* lab-runs/; done
-          if [ "$HAS_BASE" = "true" ]; then
+          if [ -n "$LEAGUE" ]; then
+            node tools/league.mjs score --dir=lab-runs --manifest=$LEAGUE > comparison.json
+            node -e '
+              const fs = require("node:fs");
+              const result = JSON.parse(fs.readFileSync("comparison.json", "utf8"));
+              const rows = result.results.map((r) => `| ${r.name} | ${r.seeds.length} | ${r.objective.mean} (${r.objective.low}…${r.objective.high}) | ${r.parts.pointsMedian.mean} | ${r.parts.pointsBottomThird.mean} | ${r.parts.incomePerHour.mean} | ${r.diffs.coloniesLost} | ${r.diffs.styleEntropy} | ${r.diffs.actionMixSpread} | ${r.passes ? "ok" : "guard"} |`);
+              fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, ["| Candidate | Seeds | Objective (90%) | Median pts | Bottom third | Income | Colonies lost | Style entropy | Mix spread | Guards |", "|---|---|---|---|---|---|---|---|---|---|", ...rows, "", `Chosen: ${result.chosen ? result.chosen.name : "none"}`, ""].join(String.fromCharCode(10)));
+            '
+          elif [ "$HAS_BASE" = "true" ]; then
             node tools/bot-lab-batch.mjs --compare=base,after --dir=lab-runs > comparison.json
           else
             echo '{"note":"no base_ref: no comparison"}' > comparison.json
