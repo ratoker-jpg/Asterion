@@ -1,0 +1,173 @@
+/* The colour language of the system map. One tone, three places: the planet's
+   ring, its name chip, and the marker shape that also works without colour
+   (flag, shield, cross, crosshair, lock, diamond, triangle, star).
+   Rule of the reds: strong red is an enemy alliance, soft red is a stranger in
+   attack range; a solid ring can be hit now, a dashed one cannot.
+   Keep the colours in step with MAP_TONE_COLOR in UniverseView.tsx. */
+.universe-radar {
+  --map-self: var(--race-accent-strong, #5f9bff);
+  --map-ally: #4fe08a;
+  --map-enemy: #ff2e48;
+  --map-range: #ff8f8f;
+  --map-neutral: #8397a3;
+  --map-wild: #8fb6c0;
+  --map-unique: #f2cc5b;
+  --map-pirate: #ffa23a;
+  --map-anomaly: #b58cff;
+}
+.universe-radar .legend-self { --legend-k: var(--map-self); }
+.universe-radar .legend-ally { --legend-k: var(--map-ally); }
+.universe-radar .legend-enemy { --legend-k: var(--map-enemy); }
+.universe-radar .legend-range { --legend-k: var(--map-range); }
+.universe-radar .legend-neutral { --legend-k: var(--map-neutral); }
+.universe-radar .legend-wild { --legend-k: var(--map-wild); }
+.universe-radar .legend-unique { --legend-k: var(--map-unique); }
+.universe-radar .legend-pirate { --legend-k: var(--map-pirate); }
+.universe-radar .legend-anomaly { --legend-k: var(--map-anomaly); }
+
+/* ---- marker shape ---- */
+.map-mark { display: inline-flex; align-items: center; gap: 2px; flex: none; vertical-align: -2px; color: inherit; }
+.map-mark svg { display: block; width: 12px; height: 12px; }
+
+/* ---- tones on a planet ---- */
+:root .workspace--universe .universe-view-v3.universe-radar .system-planet.map-tone--self {
+  --tone-k: var(--map-self); --chip-bg: color-mix(in srgb, var(--map-self) 88%, #fff); --chip-fg: #03101a; --chip-line: #fff6;
+  --ring-w: 2px; --ring-style: solid; --ring-glow: 0 0 0 3px #02080eb3, 0 0 0 4.5px var(--map-self);
+}
+:root .workspace--universe .universe-view-v3.universe-radar .system-planet.map-tone--ally {
+  --tone-k: var(--map-ally); --chip-bg: #0e3324e6; --chip-fg: #86fbb6; --chip-line: #4fe08ab3;
+  --ring-w: 1.5px; --ring-style: solid; --ring-glow: none;
+}
+:root .workspace--universe .universe-view-v3.universe-radar .system-planet.map-tone--enemy {
+  --tone-k: var(--map-enemy); --chip-bg: #9c1226; --chip-fg: #fff; --chip-line: #ff5a6d;
+  --ring-w: 3px; --ring-style: solid; --ring-glow: 0 0 12px #ff2e4866;
+}
+:root .workspace--universe .universe-view-v3.universe-radar .system-planet.map-tone--enemy.is-blocked {
+  --chip-bg: #4d0f1be6; --chip-fg: #ffc9cf;
+  --ring-w: 2.5px; --ring-style: dashed; --ring-glow: none;
+}
+:root .workspace--universe .universe-view-v3.universe-radar .system-planet.map-tone--range {
+  --tone-k: var(--map-range); --chip-bg: #3a1a22e6; --chip-fg: #ffbdb8; --chip-line: #ff8f8f8c;
+  --ring-w: 1.5px; --ring-style: solid; --ring-glow: none;
+}
+:root .workspace--universe .universe-view-v3.universe-radar .system-planet.map-tone--neutral {
+  --tone-k: var(--map-neutral); --chip-bg: #17242be0; --chip-fg: #a9bbc4; --chip-line: #8397a366;
+  --ring-w: 1px; --ring-style: dashed; --ring-glow: none; --ring-alpha: .55;
+}
+:root .workspace--universe .universe-view-v3.universe-radar .system-planet.map-tone--wild {
+  --tone-k: var(--map-wild); --chip-bg: #10202ae0; --chip-fg: #a7c6cf; --chip-line: #8fb6c04d;
+  --ring-w: 1px; --ring-style: dotted; --ring-glow: none; --ring-alpha: .35;
+}
+:root .workspace--universe .universe-view-v3.universe-radar .system-planet.map-tone--unique {
+  --tone-k: var(--map-unique); --chip-bg: #3a2f10e6; --chip-fg: #ffe28d; --chip-line: #f2cc5b8c;
+  --ring-w: 1.5px; --ring-style: solid; --ring-glow: none;
+}
+:root .workspace--universe .universe-view-v3.universe-radar .system-planet.map-tone--pirate {
+  --tone-k: var(--map-pirate); --chip-bg: #3f2710e6; --chip-fg: #ffc27a; --chip-line: #ffa23a8c;
+  --ring-w: 1.5px; --ring-style: solid; --ring-glow: none;
+}
+:root .workspace--universe .universe-view-v3.universe-radar .system-planet.map-tone--anomaly {
+  --tone-k: var(--map-anomaly); --chip-bg: #281c46e6; --chip-fg: #d3bcff; --chip-line: #b58cff8c;
+  --ring-w: 1.5px; --ring-style: solid; --ring-glow: none;
+}
+
+/* One soft shadow on the art instead of two wide ones: the ring carries the meaning. */
+:root .workspace--universe .universe-view-v3.universe-radar .system-planet[class*="map-tone--"] > img {
+  filter: drop-shadow(0 0 7px color-mix(in srgb, var(--tone-k) 32%, transparent));
+}
+@media (hover: hover) and (pointer: fine) {
+  :root .workspace--universe .universe-view-v3.universe-radar .system-planet[class*="map-tone--"]:hover > img {
+    filter: brightness(1.16) drop-shadow(0 0 12px color-mix(in srgb, var(--tone-k) 55%, transparent));
+  }
+}
+
+/* The ring: grows together with the planet on hover. Objects with an occupancy ring keep only that one. */
+:root .workspace--universe .universe-view-v3.universe-radar .system-planet[class*="map-tone--"]::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  left: 20px;
+  top: -2px;
+  width: 90px;
+  height: 90px;
+  box-sizing: border-box;
+  border: var(--ring-w) var(--ring-style) var(--tone-k);
+  border-radius: 50%;
+  box-shadow: var(--ring-glow);
+  opacity: var(--ring-alpha, 1);
+  pointer-events: none;
+  transition: scale 520ms var(--ut-spring-pop, ease), opacity 180ms ease;
+}
+:root .workspace--universe .universe-view-v3.universe-radar .system-planet.has-claim::after { display: none; }
+:root .workspace--universe .universe-view-v3.universe-radar .system-planet[class*="map-tone--"]:is(:hover, :focus-visible)::after { scale: 1.14; opacity: 1; }
+
+/* A reachable enemy breathes, softly: only opacity, only on the few red rings. */
+:root .workspace--universe .universe-view-v3.universe-radar .system-planet.map-tone--enemy.is-attackable::after { animation: map-ring-breathe 2.6s ease-in-out infinite; }
+@keyframes map-ring-breathe { 50% { opacity: .62; } }
+
+/* The name chip. */
+:root .workspace--universe .universe-view-v3.universe-radar .system-planet[class*="map-tone--"] .planet-name {
+  height: 23px;
+  border: 1px solid var(--chip-line);
+  background: var(--chip-bg);
+  color: var(--chip-fg);
+  font-weight: 700;
+}
+:root .workspace--universe .universe-view-v3.universe-radar .system-planet[class*="map-tone--"] .planet-name .map-mark { margin-right: 5px; }
+:root .workspace--universe .universe-view-v3.universe-radar .system-planet.map-tone--self .planet-name { font-weight: 800; }
+:root .workspace--universe .universe-view-v3.universe-radar .system-planet.map-tone--enemy.is-attackable .planet-name { font-weight: 800; }
+.universe-radar .system-planet.is-attackable:is(:hover, :focus-visible) .map-mark--range svg { rotate: 90deg; }
+.universe-radar .map-mark--range svg { transition: rotate 420ms var(--ut-spring-pop, ease); }
+
+/* ---- the reason, in plain words (replaces the white system tooltip) ---- */
+:root .workspace--universe .universe-view-v3.universe-radar .system-planet .map-status-tip {
+  position: absolute;
+  z-index: 30;
+  left: 50%;
+  bottom: calc(100% + 6px);
+  display: grid;
+  gap: 3px;
+  width: max-content;
+  min-width: 150px;
+  max-width: 270px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--tone-k) 60%, transparent);
+  border-radius: var(--ut-r-chip, 8px);
+  background: #081218f5;
+  color: #d9e8ee;
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
+  opacity: 0;
+  visibility: hidden;
+  translate: -50% 5px;
+  transition: opacity 140ms ease, translate 200ms var(--ut-ease-out, ease), visibility 140ms;
+  pointer-events: none;
+}
+:root .workspace--universe .universe-view-v3.universe-radar .system-planet.has-claim .map-status-tip { bottom: calc(100% + 26px); }
+:root .workspace--universe .universe-view-v3.universe-radar .system-planet:is(:hover, :focus-visible) .map-status-tip { opacity: 1; visibility: visible; translate: -50% 0; }
+.universe-radar .map-status-tip strong { font-size: 12px; font-weight: 700; color: #fff; }
+.universe-radar .map-status-tip strong small { font-size: 10.5px; font-weight: 500; color: #8fb6c0; }
+.universe-radar .map-status-tip em { display: flex; align-items: center; gap: 5px; font-style: normal; font-weight: 700; color: color-mix(in srgb, var(--tone-k) 80%, #fff); }
+.universe-radar .map-status-tip > small { font-size: 10.5px; color: #a9bbc4; }
+
+/* ---- the filter chips are the legend ---- */
+.universe-radar .universe-map-legend button .map-mark { color: var(--legend-k); vertical-align: 0; }
+.universe-radar .universe-radar__seg .universe-map-legend button.is-on { color: var(--legend-k); border-color: color-mix(in srgb, var(--legend-k) 55%, transparent); background: linear-gradient(180deg, color-mix(in srgb, var(--legend-k) 20%, transparent), transparent); }
+.universe-radar .universe-radar__seg .universe-map-legend button.is-on span { color: color-mix(in srgb, var(--legend-k) 72%, #fff); }
+.universe-radar .universe-map-legend button:not(.is-on) .map-mark { opacity: .3; }
+
+/* ---- the system list uses the same marks ---- */
+.universe-radar .universe-radar__list-dots i { flex: 0 0 12px; width: 12px; height: 12px; border-radius: 0; background: none; box-shadow: none; color: var(--legend-k, #8fb6c0); }
+.universe-radar .universe-radar__row > i { display: inline-flex; justify-content: flex-end; width: auto; min-width: 12px; height: 12px; border-radius: 0; background: none; box-shadow: none; color: var(--legend-k, #8fb6c0); }
+.universe-radar .universe-radar__row strong { color: color-mix(in srgb, var(--legend-k, #fff) 45%, #fff); }
+
+/* ---- the planet card says why ---- */
+.uw .uw-foot-status b .map-mark { margin-right: 5px; color: var(--uw-k, inherit); }
+.uw .uw-foot-why { margin: 3px 0 0; font-size: 11px; line-height: 1.3; color: #a9bbc4; }
+
+@media (prefers-reduced-motion: reduce) {
+  :root .workspace--universe .universe-view-v3.universe-radar .system-planet.map-tone--enemy.is-attackable::after { animation: none; }
+  .universe-radar .map-mark--range svg { transition: none; }
+}

@@ -15,7 +15,7 @@ app.on('window-all-closed', () => {});
 
 const ROOT = path.join(__dirname, '..');
 const OUTPUT = process.env.ASTERION_QA_OUTPUT || path.join(ROOT, 'visual-qa', 'map-colors');
-const STAGE = process.env.ASTERION_QA_STAGE || 'before';
+const STAGE = process.env.ASTERION_QA_STAGE || 'after';
 const SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
 const skipScreenshots = process.env.ASTERION_SKIP_SCREENSHOTS === '1';
@@ -187,6 +187,49 @@ async function seed(win, worlds) {
   });
 }
 
+/** Each planet's look on the map, what its hover says, and what the attack rule was seeded to answer. */
+const EXPECTED = {
+  'qa-target-ally': ['ally', null],
+  'qa-target-ally-long': ['ally', null],
+  'qa-target-enemy': ['enemy', 'true'],
+  'qa-target-enemy-truce': ['enemy', 'true'],
+  'qa-target-enemy-far': ['enemy', 'false'],
+  'qa-target-range': ['range', 'true'],
+  'qa-target-range-long': ['range', 'true'],
+  'qa-target-far': ['neutral', 'false'],
+  'qa-target-weak': ['neutral', 'false'],
+  'qa-target-newbie': ['neutral', 'false'],
+  'qa-own-relations': ['self', null],
+};
+
+async function checkRelations(win, label) {
+  const seen = await js(win, `Object.fromEntries([...document.querySelectorAll('.system-planet[data-qa-universe-object]')].map((node) => [node.getAttribute('data-qa-universe-object'), [node.getAttribute('data-qa-map-tone'), node.getAttribute('data-qa-map-attackable')]]))`);
+  for (const [id, expected] of Object.entries(EXPECTED)) {
+    if (JSON.stringify(seen[id]) !== JSON.stringify(expected)) throw new Error(`${label}: ${id} reads ${JSON.stringify(seen[id])}, expected ${JSON.stringify(expected)}`);
+  }
+  const tones = new Set(Object.values(seen).map((entry) => entry[0]));
+  if (tones.has(null)) throw new Error(`${label}: a planet without a tone ${JSON.stringify(seen)}`);
+  // Nothing on the map falls back to the white system tooltip.
+  const titled = await js(win, `document.querySelectorAll('.system-planet[title]').length`);
+  if (titled) throw new Error(`${label}: ${titled} planets still use a system tooltip`);
+  // The filter dock holds every chip inside the window.
+  const dock = await js(win, `(() => { const box = document.querySelector('.universe-radar__dock').getBoundingClientRect(); const chips = [...document.querySelectorAll('.universe-radar__dock button')].map((node) => node.getBoundingClientRect()); return { left: box.left, right: box.right, inner: innerWidth, clipped: chips.filter((chip) => chip.right > box.right + 1 || chip.left < box.left - 1).length, labels: [...document.querySelectorAll('.universe-map-legend span:not(.map-mark)')].map((node) => node.textContent) }; })()`);
+  if (dock.left < 0 || dock.right > dock.inner || dock.clipped) throw new Error(`${label}: filter dock overflows ${JSON.stringify(dock)}`);
+  if (!dock.labels.includes('В диапазоне атаки')) throw new Error(`${label}: no range filter ${JSON.stringify(dock.labels)}`);
+}
+
+/** The reason a hover shows must be readable: fully inside the scene, not clipped by it. */
+async function checkTip(win, label, selector, expectedTitle) {
+  const tip = await js(win, `(() => {
+    const node = document.querySelector(${JSON.stringify(selector)} + ' [data-qa-map-status-tip]');
+    const style = getComputedStyle(node);
+    const box = node.getBoundingClientRect();
+    const scene = document.querySelector('[data-qa-universe-scene]').getBoundingClientRect();
+    return { text: node.textContent, visible: style.visibility === 'visible' && Number(style.opacity) > 0.9, inside: box.top >= scene.top && box.left >= scene.left && box.right <= scene.right && box.bottom <= scene.bottom };
+  })()`);
+  if (!tip.visible || !tip.inside || !tip.text.includes(expectedTitle)) throw new Error(`${label}: hover reason ${JSON.stringify(tip)}, expected «${expectedTitle}»`);
+}
+
 /** Rendering pace on a crowded system: printed for the PR, CI renders on the CPU. */
 async function framePace(win) {
   return js(win, `new Promise((resolve) => { let frames = 0; const start = performance.now(); const step = () => { frames += 1; if (performance.now() - start < 2000) requestAnimationFrame(step); else resolve(Math.round(frames / ((performance.now() - start) / 1000))); }; requestAnimationFrame(step); })`);
@@ -214,21 +257,35 @@ async function runViewport(width, height) {
     await openUniverse(win);
 
     await selectSystem(win, worlds.relations.system);
+    await checkRelations(win, label);
     await capture(win, directory, 'all-relations');
     await hover(win, '[data-qa-universe-object="qa-target-range"]');
+    await checkTip(win, label, '[data-qa-universe-object="qa-target-range"]', 'В диапазоне атаки');
     await capture(win, directory, 'hover-in-range');
     await hover(win, '[data-qa-universe-object="qa-target-enemy-far"]');
+    await checkTip(win, label, '[data-qa-universe-object="qa-target-enemy-far"]', 'Враг · вне диапазона атаки');
     await capture(win, directory, 'hover-enemy-out-of-range');
     await hover(win, '[data-qa-universe-object="qa-target-newbie"]');
+    await checkTip(win, label, '[data-qa-universe-object="qa-target-newbie"]', 'Защита новичка');
     await capture(win, directory, 'hover-newbie');
     await clearHover(win);
+    // The filter hides exactly the soft red planets.
+    await js(win, `document.querySelector('.universe-map-legend .legend-range').click()`);
+    await waitFor(win, `document.querySelector('[data-qa-universe-object="qa-target-range"]').classList.contains('is-filtered') && !document.querySelector('[data-qa-universe-object="qa-target-enemy"]').classList.contains('is-filtered')`);
+    await capture(win, directory, 'filter-range-hidden');
+    await js(win, `document.querySelector('.universe-map-legend .legend-range').click()`);
     await js(win, `document.querySelector('[data-qa-universe-object="qa-target-far"]').click()`);
     await waitFor(win, `document.querySelector('[data-qa-universe-inspector]')`);
+    // The card agrees with the map: the reason is there and the attack button is off.
+    const card = await js(win, `(() => ({ tone: document.querySelector('[data-qa-universe-map-status]')?.getAttribute('data-qa-universe-map-status'), why: document.querySelector('.uw-foot-why')?.textContent || '', attackOff: Boolean(document.querySelector('[data-qa-universe-inspector] [data-qa-universe-action="attack"]')?.disabled) }))()`);
+    if (card.tone !== 'neutral' || !card.why.includes('вне диапазона') || !card.attackOff) throw new Error(`${label}: out-of-range card ${JSON.stringify(card)}`);
     await capture(win, directory, 'card-out-of-range');
     await js(win, `document.querySelector('[data-qa-universe-inspector] [data-asterion-close]').click()`);
     await waitFor(win, `!document.querySelector('[data-qa-universe-inspector]')`);
 
     await selectSystem(win, worlds.home.system);
+    const own = await js(win, `document.querySelectorAll('.system-planet[data-qa-map-tone="self"]').length`);
+    if (own < 7) throw new Error(`${label}: expected all 7 own planets in the system, got ${own}`);
     await capture(win, directory, 'all-own');
     await selectSystem(win, worlds.empty.system);
     await capture(win, directory, 'empty-system');

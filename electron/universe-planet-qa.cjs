@@ -634,7 +634,7 @@ async function runViewport(width, height) {
       throw new Error(`${label}: object fixture coverage failed ${JSON.stringify(map)}`);
     }
     if (map.homeCaption !== '★ Dendrilion' || map.coordinateLineCount !== 0 || map.mapCaptions.some((caption) => /\\[\\d+:\\d+:\\d+\\]/.test(caption))) throw new Error(`${label}: map caption contract failed ${JSON.stringify(map)}`);
-    const expectedLegend = ['Ваш мир', 'Союзная', 'Вражеская', 'Нейтральная', 'Необитаемые', 'Уникальные', 'Отступники', 'Аномалии'];
+    const expectedLegend = ['Ваш мир', 'Союзная', 'Вражеская', 'В диапазоне атаки', 'Нейтральная', 'Необитаемые', 'Уникальные', 'Отступники', 'Аномалии'];
     if (JSON.stringify(map.legend.map((item) => item.text)) !== JSON.stringify(expectedLegend)
       || map.ownerRelations.find((item) => item.id === 'player-planet-helion-01')?.relation !== 'self'
       || map.ownerRelations.find((item) => item.id === 'test-mode-ally-ira-vel-v1')?.relation !== 'ally') {

@@ -68,7 +68,9 @@ export function stageOwnerRelation(
       }];
     }
     if (relation === 'war') {
-      diplomacy = [{ id: TEST_OTHER_ALLIANCE_ID, allianceName: 'Другой союз', tag: 'OTH', status: 'war' }];
+      // The player's own view of the war: only such views count (a view without an owner is from an old save).
+      const own = alliances.find((alliance) => alliance.members.some((candidate) => candidate.ownerId === playerId));
+      diplomacy = [{ id: TEST_OTHER_ALLIANCE_ID, allianceName: 'Другой союз', tag: 'OTH', status: 'war', ...(own ? { ownerAllianceId: own.id } : {}) }];
     }
   }
 

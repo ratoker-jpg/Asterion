@@ -11,6 +11,19 @@ export function isAttackEligibilityExempt(ownerId: string | undefined): boolean 
 }
 
 /**
+ * The gate itself, over any source of the owners' points. The map asks it with
+ * the points it already holds, so its colours and the launch give one answer.
+ */
+export function evaluateOwnerAttackEligibility(
+  attackerOwnerId: string,
+  defenderOwnerId: string,
+  scoreOf: (ownerId: string) => AttackEligibilityPoints | undefined,
+): AttackEligibility {
+  if (isAttackEligibilityExempt(attackerOwnerId) || isAttackEligibilityExempt(defenderOwnerId)) return EXEMPT;
+  return evaluateAttackEligibility(scoreOf(attackerOwnerId), scoreOf(defenderOwnerId));
+}
+
+/**
  * The authoritative launch gate for attacking a player or NPC planet, shared
  * by the player's dispatch, NPC dispatch and NPC candidate filtering. Pass a
  * cache to reuse each owner's score across many targets in one decision.
@@ -21,12 +34,10 @@ export function evaluatePlanetAttackEligibility(
   defenderOwnerId: string,
   scoreCache?: Map<string, AttackEligibilityPoints | undefined>,
 ): AttackEligibility {
-  if (isAttackEligibilityExempt(attackerOwnerId) || isAttackEligibilityExempt(defenderOwnerId)) return EXEMPT;
-  const score = (ownerId: string) => {
+  return evaluateOwnerAttackEligibility(attackerOwnerId, defenderOwnerId, (ownerId) => {
     if (scoreCache?.has(ownerId)) return scoreCache.get(ownerId);
     const value = selectOwnerScore(state, ownerId);
     scoreCache?.set(ownerId, value);
     return value;
-  };
-  return evaluateAttackEligibility(score(attackerOwnerId), score(defenderOwnerId));
+  });
 }

@@ -1,5 +1,5 @@
+import { selectAllianceRelations } from '../domain/command/diplomacy.ts';
 import { selectOwnerAlliance } from '../domain/command/selectors.ts';
-import type { DiplomaticRelation } from '../domain/command/types.ts';
 import { getEspionageTargets } from '../domain/espionage/runtime.ts';
 import type { SpyTargetState } from '../domain/espionage/types.ts';
 import type { SaveState } from './contracts.ts';
@@ -76,7 +76,9 @@ export function resolveSpyTarget(
     state.profile.playerId,
     currentAlliance,
     owner,
-    state.command.diplomacy as readonly Pick<DiplomaticRelation, 'id' | 'tag' | 'status'>[],
+    // Only the player's own alliance's wars count, exactly as on the map: a war
+    // between two other alliances must not turn their members into the player's enemies.
+    currentAlliance ? selectAllianceRelations(state.command, currentAlliance.id) : [],
   );
   return { target, owner, relation };
 }
