@@ -182,6 +182,8 @@ test('a plan bigger than the hangar: starts what fits and names the hangar', () 
   assert.equal(line.limitedBy, 'hangar');
   const result = startFleetPlanLines(state, context(), RUNTIME);
   assert.equal(result.started, line.startable);
+  const crowded = world({ targets: { scout: 10_000_000, defender: 10_000_000 } });
+  assert.equal(buildFleetPlanView(crowded, PLANET, RUNTIME).startable, startFleetPlanLines(crowded, context(), RUNTIME).started, 'the «start all» number is what really starts');
   const after = getFleetSummaryForState(result.state, PLANET);
   assert.ok(after.population <= after.capacity, 'the command never overfills the hangar');
 });

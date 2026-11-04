@@ -384,7 +384,7 @@ function TargetInput({ value, name, autoFocus, onCommit, qa }: { value: number; 
   return (
     <input
       ref={ref}
-      className="fplan-lane__input"
+      className={`fplan-lane__input ${String(value).length > 8 ? 'is-long' : ''}`}
       type="text"
       inputMode="numeric"
       autoComplete="off"

@@ -136,6 +136,23 @@ export function buildFleetPlanView(state: SaveState, planetId: string, runtime: 
     }
     return { ...line, item, startable, limitedBy, short: shortOf(cost, wallet), cost, buildMs: item.unitMs * line.missing };
   });
+  // What one «start all» really orders: each line spends from what the previous left.
+  const purse = { ...wallet };
+  let freeRoom = room;
+  let startableAll = 0;
+  let startableLines = 0;
+  for (const line of lines) {
+    if (line.startable <= 0) continue;
+    const unit = line.item;
+    const counts = [line.startable, ...FLEET_PLAN_RESOURCES.filter((key) => unit.unitCost[key] > 0).map((key) => Math.floor(purse[key] / unit.unitCost[key]))];
+    if (unit.population > 0) counts.push(Math.floor(freeRoom / unit.population));
+    const count = Math.max(0, Math.min(...counts));
+    if (count <= 0) continue;
+    for (const key of FLEET_PLAN_RESOURCES) purse[key] -= unit.unitCost[key] * count;
+    freeRoom -= unit.population * count;
+    startableAll += count;
+    startableLines += 1;
+  }
   const buildable = lines.filter((line) => line.missing > 0 && line.item.unlocked);
   const cost = amounts((key) => buildable.reduce((total, line) => total + line.cost[key], 0));
   const queue = state.planets[planetId]?.fleetProduction?.shipQueue ?? [];
@@ -149,8 +166,8 @@ export function buildFleetPlanView(state: SaveState, planetId: string, runtime: 
     wallet,
     missing: lines.reduce((total, line) => total + line.missing, 0),
     missingLines: lines.filter((line) => line.missing > 0).length,
-    startableLines: lines.filter((line) => line.startable > 0).length,
-    startable: lines.reduce((total, line) => total + line.startable, 0),
+    startableLines,
+    startable: startableAll,
     cost,
     short: shortOf(cost, wallet),
     queueEndsAt: queue.at(-1)?.finishAt ?? 0,

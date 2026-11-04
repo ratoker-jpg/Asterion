@@ -84,10 +84,8 @@ async function seed(win, scenario = {}) {
     const now = Date.now();
     const shipIds = Object.keys(home.fleet.ships);
     const ships = (list) => Object.fromEntries(shipIds.map((id) => [id, (list || {})[id] || 0]));
-    if (scenario.race) {
-      save.profile.factionId = scenario.race;
-      if (save.worldConfig) save.worldConfig.factionId = scenario.race;
-    }
+    save.profile.factionId = scenario.race || 'aegis';
+    if (save.worldConfig) save.worldConfig.factionId = save.profile.factionId;
     home.name = scenario.homeName || 'Москва';
     home.fleet.ships = ships(scenario.ships);
     home.solarSatellites = 0;
@@ -378,15 +376,15 @@ async function runViewport(win, directory) {
 
   // A fleet on a mission counts as «в рейсе» and is not ordered again.
   await seed(win, { ships: fleet, plans: homePlan(OWNER_PLAN) });
-  await run(win, `window.dispatchEvent(new CustomEvent('asterion:flight-dispatch-request', { detail: {
+  await run(win, `window.__planFlight = null; window.addEventListener('asterion:flight-command-result', (event) => { window.__planFlight = event.detail?.ok ? 'ok' : JSON.stringify(event.detail?.error); }); window.dispatchEvent(new CustomEvent('asterion:flight-dispatch-request', { detail: {
     missionId: 'transport', originPlanetId: ${JSON.stringify(HOME)}, targetRelation: 'self',
     destination: { kind: 'planet', planetId: 'planet-1-1-6', coordinate: { galaxy: 1, system: 1, position: 6 } },
-    cargo: { metal: 0, minerals: 0, gas: 0 }, selectedShips: { scout: 60 }, selectedCommanders: {},
+    cargo: { metal: 100, minerals: 0, gas: 0, debris: 0 }, selectedShips: { scout: 60 }, selectedCommanders: {},
   } })); true`);
   await settle(win, 400);
   await openPlanner(win);
   const flying = await run(win, `Number(document.querySelector('[data-qa-fleet-plan-line="scout"] [data-qa-fleet-plan-line-away]')?.dataset.qaFleetPlanLineAway ?? 0)`);
-  check(flying === 60, 'A fleet on a mission shows as «в рейсе»', flying);
+  check(flying === 60, 'A fleet on a mission shows as «в рейсе»', { flying, result: await run(win, 'window.__planFlight') });
   check((await lineData(win, 'scout'))?.missing === 120, 'A fleet on a mission is not ordered again', await lineData(win, 'scout'));
   await checkLayout(win, '23-fleet-in-flight');
   await capture(win, directory, '23-fleet-in-flight');

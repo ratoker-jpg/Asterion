@@ -379,3 +379,5 @@ html body :is(.empire, .planet-sections, .empire-pick, .empire-drawer__advice, .
 :is(.empire-fleet__plan, .empire-detail__col h4 span).is-warn { color: var(--ut-amber); }
 :is(.empire-fleet__plan, .empire-detail__col h4 span).is-bad { color: #ff7a6b; }
 :is(.empire-fleet__plan, .empire-detail__col h4 span).is-ok { color: var(--ut-positive); }
+.empire-work__idle { overflow: hidden; text-overflow: ellipsis; }
+.empire-pick nav button[data-qa-empire-yard-planner] { flex: 1.5 1 auto; white-space: nowrap; }
