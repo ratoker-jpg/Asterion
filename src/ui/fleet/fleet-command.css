@@ -32,7 +32,7 @@ html:has(.fleet-workspace-v1){
 .fleet-workspace-v1 .fleet-main-v1{min-width:0;min-height:0;height:100%}
 html.asterion-long-page .fleet-workspace-v1{grid-template-rows:auto auto;align-content:start}
 html.asterion-long-page:has(.fleet-workspace-v1) body,
-html.asterion-long-page:has(.fleet-workspace-v1) #root{overflow:visible !important}
+html.asterion-long-page:has(.fleet-workspace-v1) #root{overflow-x:clip !important;overflow-y:visible !important}
 
 .fleet-workspace-v1{
 /* ---------- section tabs: two wings either side of the hub ---------- */
@@ -492,9 +492,18 @@ html.asterion-long-page:has(.fleet-workspace-v1) #root{overflow:visible !importa
 .flight-briefing-v2 .flight-cargo-sliders-v2 .amount-slider,
 .flight-briefing-v2 .flight-timeline-step>span{border:0 !important;background:none !important;box-shadow:none !important}
 .flight-briefing-v2 .flight-cargo-sliders-v2 .amount-slider{min-width:0;width:100%}
-@media (max-width:1500px){
-  .flight-briefing-v2 .flight-cargo-sliders-v2 .flight-timeline-cargo-field{display:grid !important;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) !important;gap:2px 8px !important}
-  .flight-briefing-v2 .flight-cargo-sliders-v2 .flight-timeline-cargo-field>.amount-slider{grid-column:1/-1}
+/* A window under 1500 wide: one line per resource and its slider below, so all four stay in view. */
+@media (min-width:1101px) and (max-width:1500px){
+  .flight-briefing-v2 .flight-cargo-sliders-v2{gap:6px !important;margin-top:6px !important}
+  .flight-briefing-v2 .flight-cargo-sliders-v2 .flight-timeline-cargo-field{display:grid !important;grid-template-columns:auto minmax(0,1fr) !important;gap:1px 8px !important;padding:0 !important}
+  .flight-briefing-v2 .flight-cargo-sliders-v2 .flight-timeline-cargo-field>.amount-slider{grid-column:1/-1;padding:0 !important;gap:4px !important}
+  .flight-briefing-v2 .flight-cargo-sliders-v2 .amount-slider>button:first-child,
+  .flight-briefing-v2 .flight-cargo-sliders-v2 .amount-slider__scale{display:none !important}
+  .flight-briefing-v2 .flight-timeline-cargo-input{display:flex !important;align-items:center;justify-content:flex-end;gap:6px}
+  .flight-briefing-v2 .flight-timeline-cargo-input input{order:2;width:96px !important;height:26px !important}
+  .flight-briefing-v2 .flight-timeline-cargo-input em{order:1;white-space:nowrap}
+  .flight-briefing-v2 .flight-timeline-cargo-head>span{padding:4px 0 !important}
+  .flight-briefing-v2 .flight-timeline-cargo>p{margin:4px 0 0 !important}
   .flight-briefing-v2 .flight-briefing-v2__hero{grid-template-columns:56px minmax(0,1fr) !important;gap:10px !important;padding:8px !important}
   .flight-briefing-v2 .flight-briefing-v2__hero img{width:56px !important;height:56px !important;border-radius:12px !important}
   .flight-briefing-v2 .flight-briefing-v2__hero p{display:none}

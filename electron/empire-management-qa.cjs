@@ -347,7 +347,7 @@ async function runViewport(win, directory) {
         amount: document.querySelector('[data-qa-debris-row="${row}"] .universe-debris-finder__amount b')?.textContent,
         ships: ships.map((node) => [node.dataset.qaQuickShip, Number(node.dataset.qaQuickShipCount)]),
         route: document.querySelector('[data-qa-quick-route]')?.dataset.qaQuickRoute,
-        fleetScreen: Boolean(document.querySelector('[data-qa-mission-id="recycle"].active')),
+        fleetScreen: Boolean(document.querySelector('[data-qa-mission-id="recycle"].is-on')),
         onScreen: box.left >= 0 && box.top >= 0 && box.right <= innerWidth + 0.5 && box.bottom <= innerHeight + 0.5,
         onTop: (() => { const hit = document.elementFromPoint(box.left + box.width / 2, box.top + 20); return Boolean(hit?.closest('[data-qa-quick-menu]')); })(),
       };
