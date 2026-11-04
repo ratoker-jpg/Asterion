@@ -199,6 +199,15 @@ const MAP_MARK_SHAPES: Record<MapTone, ReactNode> = {
   anomaly: <path d="M6 .4C6.5 4 8 5.5 11.6 6 8 6.5 6.5 8 6 11.6 5.5 8 4 6.5.4 6 4 5.5 5.5 4 6 .4z" fill="currentColor" />,
 };
 
+/**
+ * Worlds higher on the screen lie on top: a name chip hangs below its planet, so
+ * the planet underneath slides behind the chip instead of covering the name.
+ * Even numbers: an asteroid parked on a planet takes the odd one right above it.
+ */
+function mapStackOrder(y: number): number {
+  return 6 + 2 * Math.round((100 - y) / 4);
+}
+
 function MapMark({ tone, blocked = false }: { tone: MapTone; blocked?: boolean }) {
   return (
     <span className={`map-mark map-mark--${tone}`} aria-hidden="true">
@@ -654,7 +663,7 @@ function MovingAsteroid({ node, underlyingKind, nowMs, hasDebris, occupiedNodes,
   // collide with the planet's, so only the debris chip stays visible.
   const attached = Boolean(point.offsetX || point.offsetY);
   const nextCoordinate = node.asteroid?.nextCoordinate ? formatUniverseCoordinate(node.asteroid.nextCoordinate) : 'маршрут завершён';
-  return <button ref={ref} type="button" className={`system-asteroid ${attached ? 'is-attached' : ''} ${hasDebris ? 'has-debris' : ''}`} style={toStyle(point)}
+  return <button ref={ref} type="button" className={`system-asteroid ${attached ? 'is-attached' : ''} ${hasDebris ? 'has-debris' : ''}`} style={{ ...toStyle(point), ...(attached ? { zIndex: mapStackOrder(point.y) + 1 } : {}) }}
     title={`${node.name} · ${formatUniverseCoordinate(node.coordinate)} · далее ${nextCoordinate}`} aria-label={`${node.name} · ${formatUniverseCoordinate(node.coordinate)}`}
     aria-describedby={hasDebris ? `universe-asteroid-debris-tooltip-${node.asteroid?.spawnIndex}` : undefined}
     data-qa-universe-asteroid-position={node.coordinate.position}
@@ -1057,7 +1066,7 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
               type="button"
               key={node.id}
               className={`system-planet system-planet--${node.kind} ${claim ? `has-claim has-claim--${claim}` : ''} ${relation ? `system-planet--${relation}` : ''} ${node.isHomeworld ? 'owned' : ''} ${highlightedNodeId === node.id ? 'system-planet--highlight' : ''} ${orbitalDebris > 0 ? 'system-planet--with-debris' : ''} map-tone--${mapStatus.tone} ${mapStatus.attackable === true ? 'is-attackable' : ''} ${mapStatus.attackable === false ? 'is-blocked' : ''} ${hiddenLegend.has(mapStatus.tone) ? 'is-filtered' : ''}`}
-              style={toStyle(point)}
+              style={{ ...toStyle(point), zIndex: mapStackOrder(point.y) }}
               aria-label={`${ariaLabel} · ${mapStatus.title}${debrisDescription}`}
               aria-describedby={orbitalDebris > 0 ? `universe-debris-tooltip-${node.id}` : undefined}
               data-qa-universe-object={node.isHomeworld ? 'player-planet-helion-01' : node.id}
@@ -1078,9 +1087,9 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
               {showSlotLabels ? <span className="planet-slot">{node.coordinate.position}</span> : null}
               <span className="planet-name" data-qa-map-caption><MapMark tone={mapStatus.tone} blocked={mapStatus.attackable === false} />{caption}</span>
               <span className="map-status-tip" data-qa-map-status-tip>
-                <strong>{node.name} <small>{coordinate}</small></strong>
+                <strong>{node.name} <span>{coordinate}</span></strong>
                 <em><MapMark tone={mapStatus.tone} blocked={mapStatus.attackable === false} />{mapStatus.title}</em>
-                {mapStatus.detail ? <small>{mapStatus.detail}</small> : null}
+                {mapStatus.detail ? <span className="map-status-tip__why">{mapStatus.detail}</span> : null}
               </span>
               {orbitalDebris > 0 && showDebris ? <span className="universe-debris-marker"><DebrisChip label={compactAmount(orbitalDebris)} /><span className="universe-debris-tooltip" id={`universe-debris-tooltip-${node.id}`} role="tooltip">Обломки на орбите: {numberFormat.format(orbitalDebris)}</span></span> : null}
             </button>

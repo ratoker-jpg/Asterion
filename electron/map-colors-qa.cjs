@@ -59,10 +59,10 @@ async function selectSystem(win, system) {
 
 async function hover(win, selector) {
   const point = await js(win, `(() => {
-    const element = document.querySelector(${JSON.stringify(selector)});
+    const element = document.querySelector(${JSON.stringify(selector)} + ' img');
     if (!element) return null;
     const rect = element.getBoundingClientRect();
-    return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + 40) };
+    return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
   })()`);
   if (!point) throw new Error(`Map object not found: ${selector}`);
   await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseMoved', x: point.x, y: point.y });

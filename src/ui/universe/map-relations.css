@@ -25,6 +25,10 @@
 .universe-radar .legend-pirate { --legend-k: var(--map-pirate); }
 .universe-radar .legend-anomaly { --legend-k: var(--map-anomaly); }
 
+/* The stacking order of worlds stays inside the scene; a hovered world comes above all of them. */
+.universe-radar > .system-scene { isolation: isolate; }
+:root .workspace--universe .universe-view-v3.universe-radar .system-planet:is(:hover, :focus-visible) { z-index: 90 !important; }
+
 /* ---- marker shape ---- */
 .map-mark { display: inline-flex; align-items: center; gap: 2px; flex: none; vertical-align: -2px; color: inherit; }
 .map-mark svg { display: block; width: 12px; height: 12px; }
@@ -48,7 +52,7 @@
 }
 :root .workspace--universe .universe-view-v3.universe-radar .system-planet.map-tone--range {
   --tone-k: var(--map-range); --chip-bg: #3a1a22e6; --chip-fg: #ffbdb8; --chip-line: #ff8f8f8c;
-  --ring-w: 1.5px; --ring-style: solid; --ring-glow: none;
+  --ring-w: 2px; --ring-style: solid; --ring-glow: none;
 }
 :root .workspace--universe .universe-view-v3.universe-radar .system-planet.map-tone--neutral {
   --tone-k: var(--map-neutral); --chip-bg: #17242be0; --chip-fg: #a9bbc4; --chip-line: #8397a366;
@@ -148,9 +152,9 @@
 :root .workspace--universe .universe-view-v3.universe-radar .system-planet.has-claim .map-status-tip { bottom: calc(100% + 26px); }
 :root .workspace--universe .universe-view-v3.universe-radar .system-planet:is(:hover, :focus-visible) .map-status-tip { opacity: 1; visibility: visible; translate: -50% 0; }
 .universe-radar .map-status-tip strong { font-size: 12px; font-weight: 700; color: #fff; }
-.universe-radar .map-status-tip strong small { font-size: 10.5px; font-weight: 500; color: #8fb6c0; }
+.universe-radar .map-status-tip strong span { font-size: 10.5px; font-weight: 500; color: #8fb6c0; }
 .universe-radar .map-status-tip em { display: flex; align-items: center; gap: 5px; font-style: normal; font-weight: 700; color: color-mix(in srgb, var(--tone-k) 80%, #fff); }
-.universe-radar .map-status-tip > small { font-size: 10.5px; color: #a9bbc4; }
+.universe-radar .map-status-tip__why { font-size: 10.5px; color: #a9bbc4; }
 
 /* ---- the filter chips are the legend ---- */
 .universe-radar .universe-map-legend button .map-mark { color: var(--legend-k); vertical-align: 0; }
@@ -159,7 +163,9 @@
 .universe-radar .universe-map-legend button:not(.is-on) .map-mark { opacity: .3; }
 
 /* ---- the system list uses the same marks ---- */
-.universe-radar .universe-radar__list-dots i { flex: 0 0 12px; width: 12px; height: 12px; border-radius: 0; background: none; box-shadow: none; color: var(--legend-k, #8fb6c0); }
+.universe-radar .universe-radar__list-dots { gap: 3px; -webkit-mask-image: linear-gradient(90deg, #000 82%, transparent); mask-image: linear-gradient(90deg, #000 82%, transparent); }
+.universe-radar .universe-radar__list-dots i { flex: 0 0 9px; width: 9px; height: 9px; border-radius: 0; background: none; box-shadow: none; color: var(--legend-k, #8fb6c0); }
+.universe-radar .universe-radar__list-dots .map-mark svg { width: 9px; height: 9px; }
 .universe-radar .universe-radar__row > i { display: inline-flex; justify-content: flex-end; width: auto; min-width: 12px; height: 12px; border-radius: 0; background: none; box-shadow: none; color: var(--legend-k, #8fb6c0); }
 .universe-radar .universe-radar__row strong { color: color-mix(in srgb, var(--legend-k, #fff) 45%, #fff); }
 
