@@ -122,7 +122,7 @@ function collectModel(faction,debris,tech){
       const amount=slice+(i<remainder?1:0);
       if(amount<=0)continue;
       const id='recycle-'+level+'-'+i;
-      const queued=startRecyclingJob(state,level,amount,{metal:50,minerals:50,gas:0},start,id);
+      const queued=startRecyclingJob(state,level,amount,{metal:50,minerals:50,gas:0},start,id,{mode:'production'});
       if(!queued.canStart)throw new Error('Cannot create real recycling job: '+queued.reason);
       state=queued.state;
       maxFinish=Math.max(maxFinish,queued.job.finishAt);
