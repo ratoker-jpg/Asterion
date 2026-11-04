@@ -115,8 +115,8 @@ const RELATION_CAST = [
   { id: 'range', name: 'Сосед Орин', points: 60_000 },
   { id: 'range-long', name: LONG, points: 70_000, debris: 12_000 },
   { id: 'far', name: 'Гигант Кронос', points: 1_000_000 },
-  { id: 'weak', name: 'Малыш Пип', points: 4_000 },
-  { id: 'newbie', name: 'Новичок', protected: true },
+  { id: 'weak', name: 'Малыш Пип', points: 4_000, bare: true },
+  { id: 'newbie', name: 'Новичок', bare: true },
 ];
 
 async function seed(win, worlds) {
@@ -164,6 +164,7 @@ async function seed(win, worlds) {
     // Planets of the cast, cloned from a real target, and exact points.
     const targets = save.espionage.targets ?? save.espionage.bot01Planets;
     const template = Object.values(targets)[0];
+    const zeroed = (value) => (typeof value === 'number' ? 0 : Array.isArray(value) ? value.map(zeroed) : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, zeroed(item)])) : value);
     save.rating.unrecoveredCostsByOwnerId = save.rating.unrecoveredCostsByOwnerId ?? {};
     save.rating.unrecoveredCostsByOwnerId[playerId] = { metal: 100000000, minerals: 0, gas: 0 };
     for (const entry of cast) {
@@ -173,8 +174,11 @@ async function seed(win, worlds) {
       targets[id] = {
         ...clone, id, name: entry.name, kind: 'npc', ownerId: ownerOf(entry), ownerName: entry.name, alliance: null,
         coordinate: { galaxy: 1, system: entry.system, position: entry.position },
-        buildings: entry.protected ? {} : clone.buildings,
-        fleet: entry.protected ? { ships: {}, commanders: {} } : clone.fleet,
+        // A bare owner has only the points given below: the cloned bot's own would lift it into range.
+        buildings: entry.bare ? {} : clone.buildings,
+        fleet: entry.bare ? zeroed(clone.fleet) : clone.fleet,
+        defense: entry.bare ? zeroed(clone.defense) : clone.defense,
+        commanders: entry.bare ? {} : clone.commanders,
         resources: { ...clone.resources, debris: entry.debris ?? 0 },
       };
       if (entry.points) save.rating.unrecoveredCostsByOwnerId[ownerOf(entry)] = { metal: entry.points * 1000, minerals: 0, gas: 0 };
@@ -257,8 +261,8 @@ async function runViewport(width, height) {
     await openUniverse(win);
 
     await selectSystem(win, worlds.relations.system);
-    await checkRelations(win, label);
     await capture(win, directory, 'all-relations');
+    await checkRelations(win, label);
     await hover(win, '[data-qa-universe-object="qa-target-range"]');
     await checkTip(win, label, '[data-qa-universe-object="qa-target-range"]', 'В диапазоне атаки');
     await capture(win, directory, 'hover-in-range');
