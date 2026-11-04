@@ -99,8 +99,6 @@ export function RecyclingCenterView({
   const [pickedDebris, setPickedDebris] = useState<number | null>(null);
   const [pickedCount, setPickedCount] = useState<number | null>(null);
   const [allocation, setAllocationState] = useState<ResourceAllocationPercent>(lastAllocation);
-  // Bumped on every start so the fresh processes play their entrance once.
-  const [startPulse, setStartPulse] = useState(0);
 
   const available = recycling.availableDebris;
   const maxJobs = getRecyclingMaxConcurrentJobs(buildingLevel);
@@ -125,6 +123,12 @@ export function RecyclingCenterView({
     .filter((job) => readyIds.includes(job.id))
     .reduce((sum, job) => sum + jobOutputTotal(job), 0);
   const inJobs = recycling.jobs.reduce((total, job) => total + job.debrisAmount, 0);
+  // With nothing to start, the bays show what the running processes will bring.
+  const coming = recycling.jobs.reduce((sum, job) => ({
+    metal: sum.metal + job.output.metal,
+    minerals: sum.minerals + job.output.minerals,
+    gas: sum.gas + job.output.gas,
+  }), { metal: 0, minerals: 0, gas: 0 });
 
   useEffect(() => {
     // Back to «everything» once the picked amount is gone.
@@ -149,7 +153,6 @@ export function RecyclingCenterView({
     if (!onStart(totalDebris, processCount, { ...allocation })) return;
     setPickedDebris(null);
     setPickedCount(null);
-    setStartPulse((value) => value + 1);
   };
 
   const hint = available <= 0 && recycling.jobs.length === 0
@@ -182,13 +185,13 @@ export function RecyclingCenterView({
       </header>
 
       <section className="rc-flow" aria-label="Переработка">
-        <section className="rc-pile" aria-label="Обломки">
+        <section className={`rc-pile${available > 0 ? '' : ' is-empty'}`} aria-label="Обломки">
           <img className="rc-pile__art" src={DEBRIS_PILE_ART} alt="" draggable={false} />
           <div className="rc-pile__body">
             <span className="rc-pile__label"><ResourceIcon kind="debris" /> Свободные обломки</span>
             <strong className="rc-pile__total" data-qa-recycling-free-debris={available}>{formatNumber(available)}</strong>
-            <span className="rc-pile__busy" data-qa-recycling-total-debris={available + inJobs}>
-              {inJobs > 0 ? `ещё ${formatAmount(inJobs)} в работе` : 'в работе ничего нет'}
+            <span className={`rc-pile__busy${inJobs > 0 ? '' : ' is-empty'}`} data-qa-recycling-total-debris={available + inJobs}>
+              {inJobs > 0 ? `ещё ${formatAmount(inJobs)} в работе` : ' '}
             </span>
             <label className="rc-pile__field">
               <span>Переработать</span>
@@ -238,7 +241,7 @@ export function RecyclingCenterView({
           <p className="rc-core__summary" aria-live="polite" data-qa-recycling-validation={plan.canStart ? 'ok' : hint ?? ''}>
             {plan.canStart ? (
               <>
-                <b data-qa-recycling-output-total={outputTotal}>{formatAmount(outputTotal)}</b> ресурсов за <b data-qa-recycling-duration>{formatClock(durationMs)}</b>
+                <span><b data-qa-recycling-output-total={outputTotal}>{formatAmount(outputTotal)}</b> ресурсов за <b data-qa-recycling-duration>{formatClock(durationMs)}</b></span>
                 <small>
                   {processCount === 1 ? '1 процесс' : `${processCount} ${processWord(processCount)} по ${formatAmount(longestAmount)}`}
                 </small>
@@ -261,7 +264,8 @@ export function RecyclingCenterView({
               key={resource}
               resource={resource}
               percent={allocation[resource]}
-              amount={output[resource]}
+              amount={plan.canStart ? output[resource] : coming[resource]}
+              caption={plan.canStart ? 'получите' : inJobs > 0 ? 'в работе' : ''}
               onChange={(percent) => setAllocation(resource, percent)}
             />
           ))}
@@ -272,7 +276,11 @@ export function RecyclingCenterView({
         <header className="rc-floor__head">
           <h2>Процессы <b data-qa-recycling-job-count={recycling.jobs.length} data-qa-recycling-max-jobs={maxJobs}>{recycling.jobs.length} из {maxJobs}</b></h2>
           <span className="rc-floor__free" data-qa-recycling-free-slots={freeSlots}>
-            {freeSlots > 0 ? `свободно ${freeSlots}. Нажмите на место, чтобы выбрать сколько запустить` : 'свободных мест нет'}
+            {freeSlots <= 0
+              ? 'свободных мест нет'
+              : totalDebris > 0
+                ? `свободно ${freeSlots}. Нажмите на место, чтобы выбрать сколько запустить`
+                : `свободно ${freeSlots}`}
           </span>
           {readyIds.length > 0 ? (
             <button type="button" className="rc-collect-all" data-qa-recycling-collect-all={readyIds.length} onClick={() => onCollectAll()}>
@@ -283,7 +291,7 @@ export function RecyclingCenterView({
         <div className="rc-slots" data-qa-recycling-job-list>
           {Array.from({ length: RECYCLING_MAX_LEVEL }, (_, index) => {
             const job = recycling.jobs[index];
-            if (job) return <JobSlot key={`${job.id}-${startPulse > 0 ? 'p' : ''}`} job={job} now={now} onCollect={onCollect} />;
+            if (job) return <JobSlot key={job.id} job={job} now={now} onCollect={onCollect} />;
             if (index >= maxJobs) {
               return (
                 <div className="rc-slot is-locked" key={index} data-qa-recycling-locked-slot={index + 1}>
@@ -338,7 +346,7 @@ function JobSlot({ job, now, onCollect }: { job: RecyclingJob; now: number; onCo
       </span>
       <b data-qa-recycling-job-output={jobOutputTotal(job)}>{ready ? 'Забрать' : formatClock(job.finishAt - now)}</b>
       <small data-qa-recycling-job-timer={ready ? 'expires' : 'remaining'}>
-        {ready ? `само через ${formatClock(expiresAt - now)}` : `${formatAmount(job.debrisAmount)} обломков`}
+        {ready ? `авто через ${formatClock(expiresAt - now)}` : `${formatAmount(job.debrisAmount)} обломков`}
       </small>
       <span className="rc-slot__tip" role="tooltip" data-qa-recycling-job-allocation>
         {RECYCLING_RESOURCES.filter((resource) => job.output[resource] > 0).map((resource) => (
@@ -368,11 +376,13 @@ function ResourceBay({
   resource,
   percent,
   amount,
+  caption,
   onChange,
 }: {
   resource: RecyclingResource;
   percent: number;
   amount: number;
+  caption: string;
   onChange: (percent: number) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -391,7 +401,7 @@ function ResourceBay({
         <h3>{label}</h3>
         <strong className="rc-bay__percent" data-qa-recycling-allocation-value={resource}>{percent}%</strong>
       </div>
-      <p className="rc-bay__get"><strong key={amount} data-qa-recycling-resource-output={resource}>{formatAmount(amount)}</strong></p>
+      <p className="rc-bay__get"><strong key={amount} data-qa-recycling-resource-output={resource}>{formatAmount(amount)}</strong> <span>{caption}</span></p>
       <div className="rc-bay__controls">
         <button
           type="button"
