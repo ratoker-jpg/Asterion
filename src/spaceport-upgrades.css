@@ -42,7 +42,7 @@ html body .spaceport-upgrades-v2 .spaceport-sidebar-v2 {
   top: 18px;
   align-self: start;
   min-width: 0;
-  min-height: 800px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -113,9 +113,12 @@ html body .spaceport-upgrades-v2 .spaceport-sidebar-v2 {
 .spaceport-upgrades-v2 .sp-task time { font-size: calc(14px * var(--text-scale-table, 1)) !important; font-weight: 700; }
 .spaceport-upgrades-v2 .sp-task__wait { grid-area: foot; color: var(--ut-label); font-size: calc(13px * var(--text-scale-secondary, 1)) !important; }
 
+/* Top right, where the production robots screen keeps it. */
 html body .spaceport-upgrades-v2 .spaceport-back-v2 {
-  margin-top: auto;
-  min-height: 46px;
+  flex: 0 0 auto;
+  width: auto;
+  margin: 0 0 0 auto;
+  min-height: 44px;
   padding: 0 14px;
   font-weight: 700;
   cursor: pointer;
@@ -134,7 +137,7 @@ html body .spaceport-upgrades-v2 .spaceport-main-v2 {
   background: transparent !important;
   box-shadow: none !important;
 }
-.sp-main-head { display: flex; align-items: baseline; gap: 12px; padding: 4px 4px 12px; }
+.sp-main-head { display: flex; align-items: center; gap: 12px; padding: 0 4px 12px; }
 .spaceport-upgrades-v2 .sp-main-head h2 { margin: 0; color: #effcff; font-size: calc(18px * var(--text-scale-section-title, 1)) !important; font-weight: 800; letter-spacing: 2px; }
 .spaceport-upgrades-v2 .sp-main-head span { color: var(--ut-label); font-size: calc(14px * var(--text-scale-secondary, 1)) !important; }
 
@@ -157,7 +160,7 @@ html body .spaceport-upgrades-v2 .spaceport-row-v2 { overflow: visible !importan
 .sp-card__ship { min-width: 0; display: grid; gap: 7px; }
 .sp-card__ship > header { min-width: 0; display: flex; align-items: baseline; gap: 10px; }
 .spaceport-upgrades-v2 .sp-card__ship h3 { flex: 0 1 auto; min-width: 0; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #f0fcff; font-size: calc(19px * var(--text-scale-section-title, 1)) !important; font-weight: 800; letter-spacing: .3px; line-height: 1.2; }
-.spaceport-upgrades-v2 .sp-card__ship p { min-width: 0; margin: 0; color: #91abb3; font-size: calc(14px * var(--text-scale-secondary, 1)) !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.spaceport-upgrades-v2 .sp-card__ship p { flex: 0 100 auto; min-width: 0; margin: 0; color: #91abb3; font-size: calc(14px * var(--text-scale-secondary, 1)) !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .sp-level { min-width: 0; display: grid; gap: 6px; }
 .sp-level__caption { min-width: 0; display: flex; align-items: baseline; gap: 10px; white-space: nowrap; overflow: hidden; color: var(--ut-label); }
@@ -170,7 +173,7 @@ html body .spaceport-upgrades-v2 .spaceport-row-v2 { overflow: visible !importan
 .spaceport-level-segments-v2 { height: 8px; display: flex; gap: 3px; }
 .spaceport-level-segments-v2 i { flex: 1 1 0; min-width: 2px; height: 100%; background: rgba(255, 255, 255, .08); transition: background-color var(--ut-motion-base) ease; }
 .spaceport-level-segments-v2 i.is-complete { background: linear-gradient(180deg, #4ee4f9, #1984a0); }
-.spaceport-level-segments-v2 i.is-queued { background: repeating-linear-gradient(135deg, rgba(231, 187, 78, .9) 0 3px, rgba(129, 98, 33, .8) 3px 6px); animation: sp-queued-in var(--ut-motion-item) var(--ut-spring-pop) backwards; }
+.spaceport-level-segments-v2 i.is-queued { background: repeating-linear-gradient(135deg, rgba(231, 187, 78, .9) 0 3px, rgba(129, 98, 33, .8) 3px 6px); background-size: 200% 100%; animation: sp-queued-in var(--ut-motion-item) var(--ut-spring-pop) backwards, sp-queued-crawl 1.6s linear infinite; }
 .sp-level.is-max .spaceport-level-segments-v2 i.is-complete { filter: brightness(1.1); }
 
 .sp-card__price { min-width: 0; display: grid; gap: 8px; }
@@ -238,6 +241,7 @@ html body .spaceport-upgrades-v2 .spaceport-upgrade-cta-v2 {
   transition: translate var(--ut-motion-base) var(--ut-spring), filter var(--ut-motion-base) var(--ut-ease-out);
 }
 .spaceport-upgrades-v2 .spaceport-upgrade-cta-v2 { font-size: calc(15px * var(--text-scale-control, 1)) !important; }
+html body .spaceport-upgrades-v2 .spaceport-upgrade-cta-v2:not(:disabled) { border-color: transparent; background: linear-gradient(180deg, var(--sp-accent), var(--sp-accent-strong)); color: #04141a; }
 html body .spaceport-upgrades-v2 .spaceport-upgrade-cta-v2:disabled { border: 1px solid var(--ut-border); border-radius: var(--ut-r-btn); background: rgba(255, 255, 255, .04); box-shadow: none; color: #7f979e; cursor: not-allowed; }
 .spaceport-upgrade-cta-v2:focus-visible { outline: var(--ut-focus); outline-offset: 2px; }
 .sp-why { display: grid; gap: 2px; }
@@ -247,6 +251,7 @@ html body .spaceport-upgrades-v2 .spaceport-upgrade-cta-v2:disabled { border: 1p
 .sp-why__line.is-muted { color: var(--ut-label); }
 
 @keyframes sp-queued-in { from { opacity: 0; scale: 1 .4; } }
+@keyframes sp-queued-crawl { to { background-position: -8.485px 0; } }
 
 @media (prefers-reduced-motion: reduce) {
   .sp-task, .spaceport-level-segments-v2 i.is-queued { animation: none; }

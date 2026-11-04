@@ -407,16 +407,16 @@ export function SpaceportUpgradeView({
 
         <SelectedQueue track={activeTrack} factionId={factionId} upgrades={upgrades} now={now} onCancel={setPendingCancellation} />
 
-        <button type="button" className="spaceport-back-v2" data-qa-building-interior-back onClick={onBack}>
-          <span aria-hidden="true">←</span>
-          Назад: {spaceport.name}
-        </button>
       </aside>
 
       <section className="spaceport-main-v2">
         <header className="sp-main-head">
           <h2>{TRACK_LABELS[activeTrack].toUpperCase()}</h2>
           <span>{catalog.length} {pluralShips(catalog.length)}</span>
+          <button type="button" className="spaceport-back-v2" data-qa-building-interior-back onClick={onBack}>
+            <span aria-hidden="true">←</span>
+            Назад: {spaceport.name}
+          </button>
         </header>
 
         <div className="spaceport-catalog-v2" data-qa-spaceport-catalog={activeTrack}>
@@ -540,7 +540,7 @@ export function SpaceportUpgradeView({
                         ))}
                       </span>
                     ) : null}
-                    {queueFull ? <span className="sp-why__line is-muted" data-qa-spaceport-blocker="queue">Очередь улучшений заполнена: {selectedQueue.length} из {SPACEPORT_UPGRADE_QUEUE_CAPACITY}</span> : null}
+                    {queueFull ? <span className="sp-why__line is-muted" data-qa-spaceport-blocker="queue">Очередь улучшений заполнена</span> : null}
                   </div>
                 </div>
               </article>

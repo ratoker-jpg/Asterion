@@ -17,6 +17,7 @@ import {
   type TradeTargetResource,
   type TradeWallet,
 } from './domain/buildings/trade.ts';
+import { getPlanetZoneTerrainUrl } from './assets/planetZoneTerrainAssets.ts';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
 import './trade-center.css';
 
@@ -51,6 +52,8 @@ const OBJECT_LABELS: Record<TradeResource, string> = {
 const QUICK_SHARES = [25, 50, 75] as const;
 /** Longer figures than this would not fit the result card at full size. */
 const LONG_FIGURE_DIGITS = 13;
+/** Longer figures than this would not fit the amount field at full size. */
+const LONG_INPUT_DIGITS = 12;
 /** More digits than the game can count exactly are ignored while typing. */
 const MAX_AMOUNT_DIGITS = 15;
 
@@ -189,6 +192,7 @@ export function TradeCenterView({
   const sliderMax = Math.max(1, maxAmount);
   const sliderValue = Math.min(amount, sliderMax);
   const noDeals = refill.availableSlots <= 0;
+  const tooMuch = amount > maxAmount;
   // The rule's own wording stays for every refusal but the empty field, which is not a mistake yet.
   const validationText = validation.canTrade
     ? 'Всё готово к обмену'
@@ -197,7 +201,11 @@ export function TradeCenterView({
       : validation.reason;
 
   return (
-    <main className="trade-center-view" data-qa-trade-center>
+    <main
+      className="trade-center-view"
+      data-qa-trade-center
+      style={{ '--tc-terrain': `url("${getPlanetZoneTerrainUrl('industry')}")` } as CSSProperties}
+    >
       <header className="tc-head">
         <div className="tc-head__title">
           <h1>{building.name}</h1>
@@ -269,17 +277,13 @@ export function TradeCenterView({
             <ResourceIcon key={source} kind={source} />
             <span>Отдаёте {OBJECT_LABELS[source]}</span>
           </div>
-          <strong className={`tc-result__give ${String(amount).length > LONG_FIGURE_DIGITS ? 'is-long' : ''}`} data-qa-trade-send={amount}>{formatNumber(amount)}</strong>
+          <strong key={`give-${amount}`} className={`tc-result__give ${String(amount).length > LONG_FIGURE_DIGITS ? 'is-long' : ''} ${tooMuch ? 'is-too-much' : ''}`} data-qa-trade-send={amount}>{formatNumber(amount)}</strong>
           <span className="tc-result__flow" aria-hidden="true"><i /><i /><i /></span>
-          <strong className={`tc-result__get ${String(received).length > LONG_FIGURE_DIGITS ? 'is-long' : ''}`} data-qa-trade-receive={received}>{formatNumber(received)}</strong>
+          <strong key={`get-${received}`} className={`tc-result__get ${String(received).length > LONG_FIGURE_DIGITS ? 'is-long' : ''}`} data-qa-trade-receive={received}>{formatNumber(received)}</strong>
           <div className="tc-result__line">
             <ResourceIcon key={target} kind={target} />
             <span>Получите {OBJECT_LABELS[target]}</span>
           </div>
-          <p className="tc-result__rate">
-            Курс <b data-qa-trade-rate>{rate}</b>
-            {debris ? <> · <em>40% обломков теряется при обмене</em></> : ' · прямой обмен без потерь'}
-          </p>
           {completedTrades > 0 ? <i key={completedTrades} className="tc-result__flash" aria-hidden="true" /> : null}
           <div className={`tc-toast ${toast ? 'visible' : ''}`} aria-live="polite" data-qa-trade-toast>{toast ? <span><b>✓</b>{toast}</span> : null}</div>
         </section>
@@ -308,6 +312,11 @@ export function TradeCenterView({
                 </button>
               );
             })}
+            {/* Fills the fourth row, so both columns keep tiles of one size, level with each other. */}
+            <p className={`tc-rate ${debris ? 'is-lossy' : ''}`}>
+              <span>Курс <b data-qa-trade-rate>{rate}</b></span>
+              <small>{debris ? '40% обломков теряется при обмене' : 'Прямой обмен без потерь'}</small>
+            </p>
           </div>
         </section>
       </div>
@@ -318,7 +327,7 @@ export function TradeCenterView({
           <input
             ref={amountInputRef}
             id="tc-amount-input"
-            className="tc-amount__input"
+            className={`tc-amount__input ${String(amount).length > LONG_INPUT_DIGITS ? 'is-long' : ''}`}
             type="text"
             inputMode="numeric"
             autoComplete="off"
@@ -356,7 +365,8 @@ export function TradeCenterView({
               <button type="button" className={`tc-share ${amount === maxAmount && maxAmount > 0 ? 'is-on' : ''}`} data-qa-trade-max onClick={() => setAmount(maxAmount)} disabled={maxAmount <= 0}>Макс.</button>
             </div>
             <p className="tc-limit" data-qa-trade-limit={amountLimit} data-qa-trade-rating={resourceRatingPoints}>
-              За сделку не больше <b>{formatNumber(amountLimit)}</b>: предел растёт с рейтингом ресурсов
+              <span>За сделку не больше <b>{formatNumber(amountLimit)}</b></span>
+              <span>Предел растёт с рейтингом ресурсов</span>
             </p>
           </div>
         </div>

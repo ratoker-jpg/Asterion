@@ -9,6 +9,7 @@
   --tc-accent-strong:var(--race-accent-strong,var(--ut-accent));
   --tc-glow:var(--race-glow,rgba(86,217,242,.35));
   position:relative;
+  isolation:isolate;
   width:100%;
   height:100%;
   min-width:0;
@@ -20,6 +21,8 @@
   overflow:hidden;
   color:#e8faff;
 }
+/* The industrial terrain fades into the space backdrop, as on the production robots screen. */
+.trade-center-view::before{content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;background:var(--tc-terrain) center/cover no-repeat;opacity:.3;filter:saturate(.85);mask-image:radial-gradient(ellipse 62% 58% at 50% 48%,#000 30%,transparent 100%)}
 /* The fixed 1920×1080 canvas stays centred, as on the production robots screen. */
 .viewport:has(.trade-center-view){position:relative;display:block}
 .viewport:has(.trade-center-view)>.stage{position:absolute;left:50%;top:50%;margin-left:-960px;margin-top:-540px;transform-origin:center center}
@@ -51,7 +54,11 @@
 .tc-exchange{min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 560px minmax(0,1fr);gap:28px}
 .tc-side{min-width:0;min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr);gap:12px}
 .trade-center-view .tc-side h2{margin:0;color:var(--ut-label);font-size:calc(15px * var(--text-scale-section-title,1)) !important;font-weight:700;letter-spacing:2px;text-transform:uppercase}
-.tc-tiles{min-height:0;display:grid;grid-auto-rows:minmax(0,1fr);gap:12px}
+.tc-tiles{min-height:0;display:grid;grid-template-rows:repeat(4,minmax(0,1fr));gap:12px}
+.tc-rate{min-width:0;margin:0;display:flex;flex-direction:column;justify-content:center;gap:4px;padding:0 22px;text-align:center}
+.trade-center-view .tc-rate span,.trade-center-view .tc-rate b{color:#eefbff;font-size:calc(24px * var(--text-scale-table,1)) !important;font-weight:800;font-variant-numeric:tabular-nums}
+.trade-center-view .tc-rate small{color:var(--ut-label);font-size:calc(16px * var(--text-scale-helper,1)) !important;line-height:1.3}
+.trade-center-view .tc-rate.is-lossy small{color:var(--ut-amber)}
 
 .tc-tile{
   --tc-res:#b9c6d6;
@@ -135,7 +142,7 @@
   box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 20px 50px rgba(0,0,0,.35);
   text-align:center;
 }
-.tc-result__art{flex:0 1 150px;min-height:0;height:150px;width:auto;max-width:100%;object-fit:contain;filter:drop-shadow(0 14px 22px rgba(0,0,0,.6))}
+.tc-result__art{flex:0 1 200px;min-height:0;height:200px;margin-bottom:8px;animation:tc-art-float 6s ease-in-out infinite;width:auto;max-width:100%;object-fit:contain;filter:drop-shadow(0 14px 22px rgba(0,0,0,.6))}
 .tc-result__line{display:flex;align-items:center;justify-content:center;gap:10px}
 .tc-result__line .asterion-resource-icon{width:32px;height:32px;object-fit:contain;display:block}
 .trade-center-view .tc-result__line span{color:#b8d4db;font-size:calc(17px * var(--text-scale-body,1)) !important}
@@ -143,6 +150,8 @@
 .trade-center-view .tc-result strong{font-size:calc(44px * var(--text-scale-table,1)) !important;font-weight:800}
 .trade-center-view .tc-result strong.is-long{font-size:calc(32px * var(--text-scale-table,1)) !important}
 .tc-result__give{color:#f2fdff}
+.tc-result__give.is-too-much{color:var(--ut-amber)}
+.tc-result strong{animation:tc-figure-tick 200ms var(--ut-spring-pop)}
 .tc-result__get{color:#7f979e}
 .tc-result.is-ready .tc-result__get{color:var(--ut-positive)}
 .tc-result__flow{display:grid;justify-items:center;gap:0;height:24px;overflow:hidden}
@@ -150,14 +159,10 @@
 .tc-result.is-ready .tc-result__flow i{background:var(--tc-accent);animation:tc-flow 1.4s ease-in-out infinite;animation-delay:calc(var(--tc-i,0) * 180ms)}
 .tc-result__flow i:nth-child(2){--tc-i:1}
 .tc-result__flow i:nth-child(3){--tc-i:2}
-.tc-result__rate{margin:4px 0 0;color:var(--ut-label)}
-.trade-center-view .tc-result__rate,.trade-center-view .tc-result__rate b,.trade-center-view .tc-result__rate em{font-size:calc(15px * var(--text-scale-helper,1)) !important;font-style:normal}
-.tc-result__rate b{color:#eefbff;font-variant-numeric:tabular-nums}
-.tc-result__rate em{color:var(--ut-amber)}
 /* A completed deal: a light passes over the card from what was given to what was received. */
 .tc-result__flash{position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--ut-positive) 26%,transparent),transparent);translate:-100% 0;opacity:0;animation:tc-flash 900ms var(--ut-ease-out)}
 /* Inside the card it never covers the amount or the button. */
-.tc-toast{position:absolute;left:50%;right:auto;top:14px;bottom:auto;z-index:2;max-width:calc(100% - 32px);translate:-50% -8px;opacity:0;pointer-events:none;transition:opacity var(--ut-motion-fast) ease,translate var(--ut-motion-base) var(--ut-spring)}
+.tc-toast{position:absolute;left:50%;right:auto;top:14px;bottom:auto;z-index:2;width:max-content;max-width:calc(100% - 32px);translate:-50% -8px;opacity:0;pointer-events:none;transition:opacity var(--ut-motion-fast) ease,translate var(--ut-motion-base) var(--ut-spring)}
 .tc-toast.visible{opacity:1;translate:-50% 0}
 .tc-toast span{display:flex;align-items:center;gap:8px;padding:9px 16px;border:1px solid color-mix(in srgb,var(--ut-positive) 50%,transparent);border-radius:var(--ut-r-chip);background:rgba(5,40,38,.96);color:#dffdf1;font-weight:700}
 .trade-center-view .tc-toast span,.trade-center-view .tc-toast b{font-size:calc(15px * var(--text-scale-helper,1)) !important}
@@ -178,6 +183,7 @@
 .trade-center-view .tc-amount label{color:var(--ut-label);font-size:calc(15px * var(--text-scale-secondary,1)) !important;font-weight:700}
 .tc-amount__input{width:100%;height:62px;padding:0 18px;border:1px solid var(--ut-border-strong);border-radius:var(--ut-r-input);background:rgba(0,0,0,.35);color:#f2fdff;font-family:inherit;font-weight:800;font-variant-numeric:tabular-nums;outline:none;transition:border-color var(--ut-motion-fast) ease,box-shadow var(--ut-motion-fast) ease}
 .trade-center-view .tc-amount__input{font-size:calc(28px * var(--text-scale-table,1)) !important}
+.trade-center-view .tc-amount__input.is-long{font-size:calc(20px * var(--text-scale-table,1)) !important}
 .tc-amount__input:focus{border-color:var(--tc-accent);box-shadow:0 0 0 1px var(--tc-accent)}
 
 .tc-picker{min-width:0;display:grid;gap:16px}
@@ -208,23 +214,23 @@
 .tc-step:focus-visible,.tc-share:focus-visible{outline:var(--ut-focus);outline-offset:2px}
 .tc-step:disabled,.tc-share:disabled{opacity:.35;cursor:not-allowed}
 .tc-share.is-on{border-color:var(--tc-accent);background:color-mix(in srgb,var(--tc-accent-strong) 22%,transparent);color:#fff}
-.tc-limit{flex:1 1 0;min-width:0;margin:0 0 0 14px;color:var(--ut-label);line-height:1.3}
-.trade-center-view .tc-limit,.trade-center-view .tc-limit b{font-size:calc(15px * var(--text-scale-helper,1)) !important}
+.tc-limit{flex:1 1 0;min-width:0;margin:0 0 0 14px;display:grid;gap:2px;color:var(--ut-label);line-height:1.3}
+.trade-center-view .tc-limit,.trade-center-view .tc-limit span,.trade-center-view .tc-limit b{font-size:calc(15px * var(--text-scale-helper,1)) !important}
 .tc-limit b{color:#eefbff;font-variant-numeric:tabular-nums}
 
 .tc-go{min-width:0;display:grid;gap:8px}
 .tc-go__submit{position:relative;height:72px;overflow:hidden;border:1px solid var(--ut-border);border-radius:var(--ut-r-btn);background:rgba(255,255,255,.04);color:#7f979e;font-family:inherit;font-weight:800;letter-spacing:1.4px;cursor:not-allowed;transition:translate var(--ut-motion-base) var(--ut-spring),filter var(--ut-motion-base) var(--ut-ease-out)}
 .trade-center-view .tc-go__submit{font-size:calc(22px * var(--text-scale-control,1)) !important}
-.tc-go__submit:not(:disabled){cursor:pointer}
+html body .trade-center-view .tc-go__submit:not(:disabled){cursor:pointer;border-color:transparent;background:linear-gradient(180deg,var(--tc-accent),var(--tc-accent-strong));box-shadow:0 0 24px var(--tc-glow);color:#04141a}
 .tc-go__submit:focus-visible{outline:var(--ut-focus);outline-offset:2px}
 /* The one bright thing on the screen: a slow gleam while the deal is ready. */
 .tc-go__submit:not(:disabled)::after{content:'';position:absolute;inset:0;background:linear-gradient(105deg,transparent 35%,rgba(255,255,255,.45) 50%,transparent 65%);translate:-110% 0;animation:tc-gleam 3.6s var(--ut-ease-in-out) infinite;pointer-events:none}
 @media (hover:hover) and (pointer:fine){
-  .tc-go__submit:not(:disabled):hover{translate:0 -2px;filter:brightness(1.12) drop-shadow(0 6px 14px rgba(86,217,242,.34))}
+  .tc-go__submit:not(:disabled):hover{translate:0 -2px;filter:brightness(1.12)}
 }
 .tc-go__why{min-height:20px;color:var(--ut-amber);line-height:1.25;text-align:center}
 .tc-go__why.is-valid{color:var(--ut-positive)}
-.trade-center-view .tc-go__why{font-size:calc(15px * var(--text-scale-helper,1)) !important}
+.trade-center-view .tc-go__why{font-size:calc(17px * var(--text-scale-helper,1)) !important}
 
 /* ---------- arrival ---------- */
 .tc-head,.tc-side,.tc-result,.tc-dock{animation:ut-item-in var(--ut-motion-item) var(--ut-spring) backwards}
@@ -234,12 +240,14 @@
 .tc-dock{animation-delay:210ms}
 
 @keyframes tc-icon-pop{from{scale:.82}}
+@keyframes tc-art-float{0%,100%{translate:0 3px}50%{translate:0 -5px}}
+@keyframes tc-figure-tick{from{scale:.97}}
 @keyframes tc-flow{0%,100%{opacity:.25}50%{opacity:1}}
 @keyframes tc-flash{0%{opacity:0;translate:-100% 0}30%{opacity:1}100%{opacity:0;translate:100% 0}}
 @keyframes tc-gleam{0%,55%{translate:-110% 0}85%,100%{translate:110% 0}}
 
 @media (prefers-reduced-motion:reduce){
-  .tc-head,.tc-side,.tc-result,.tc-dock,.tc-tile.is-selected .tc-tile__icon,.tc-result.is-ready .tc-result__flow i,.tc-result__flash,.tc-go__submit:not(:disabled)::after{animation:none}
+  .tc-head,.tc-side,.tc-result,.tc-dock,.tc-result__art,.tc-result strong,.tc-tile.is-selected .tc-tile__icon,.tc-result.is-ready .tc-result__flow i,.tc-result__flash,.tc-go__submit:not(:disabled)::after{animation:none}
   .tc-result.is-ready .tc-result__flow i{opacity:1}
   .tc-go__submit:not(:disabled)::after{display:none}
   .tc-tile,.tc-tile__tip,.tc-toast,.tc-go__submit,.tc-result strong{transition:none}
