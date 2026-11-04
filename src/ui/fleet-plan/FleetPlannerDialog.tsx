@@ -175,7 +175,7 @@ export function FleetPlannerDialog({ state, now, mode, testTimeScale, planetId, 
               {view.lines.map((line, index) => (
                 <Lane key={line.id} line={line} index={index} autoFocus={focusId === line.id} launchKey={launched?.ids.has(line.id) ? launched.key : null} faction={factionId}
                   onTarget={(target) => save(setFleetPlanTarget(view.plan, line.id, target))}
-                  onFill={() => save(toggleFleetPlanFill(view.plan, line.id))}
+                  onFill={() => save(toggleFleetPlanFill(view.plan, line.id, Math.max(1, view.lines.find((other) => other.isFill)?.target ?? 0)))}
                   onRemove={() => save(removeFleetPlanLine(view.plan, line.id))}
                   onStart={() => start([line.id])} />
               ))}

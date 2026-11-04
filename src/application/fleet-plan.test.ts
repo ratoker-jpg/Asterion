@@ -94,12 +94,15 @@ test('over capacity: reports by how much, the fill line stays at zero', () => {
 test('plan edits: one fill line at most, a line with its own number stops being the fill line', () => {
   let plan = toggleFleetPlanFill({ targets: { bomber: 5 } }, 'bomber');
   assert.deepEqual(plan, { targets: {}, fillShipId: 'bomber' });
+  plan = toggleFleetPlanFill(plan, 'scout', 40);
+  assert.deepEqual(plan, { targets: { bomber: 40 }, fillShipId: 'scout' }, 'the old fill line stays at the number it showed');
+  plan = toggleFleetPlanFill(plan, 'scout', 25);
+  assert.deepEqual(plan, { targets: { bomber: 40, scout: 25 } }, 'unmarking keeps the line');
   plan = toggleFleetPlanFill(plan, 'scout');
-  assert.equal(plan.fillShipId, 'scout');
   plan = setFleetPlanTarget(plan, 'scout', 3);
-  assert.deepEqual(plan, { targets: { scout: 3 } });
+  assert.deepEqual(plan, { targets: { bomber: 40, scout: 3 } });
   plan = setFleetPlanTarget(plan, 'scout', 0);
-  assert.deepEqual(plan, { targets: {} });
+  assert.deepEqual(plan, { targets: { bomber: 40 } });
 });
 
 test('view uses the game hangar numbers, including ships on a mission and queued', () => {

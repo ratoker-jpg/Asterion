@@ -250,7 +250,7 @@ async function runViewport(win, directory) {
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`, 20000);
   await settle(win, 300);
   const stored = (await savedSave(win)).fleetUi?.plans?.[HOME];
-  check(stored?.targets?.defender === 2000 && stored?.fillShipId === undefined, 'The edited plan is in the save', stored);
+  check(stored?.targets?.defender === 2000 && stored?.targets?.scout > 0 && stored?.fillShipId === 'bomber', 'The edited plan is in the save', stored);
   const queue = (await savedSave(win)).planets[HOME].fleetProduction.shipQueue;
   check(queue.length >= 3, 'All started orders survive the reload', queue.map((order) => order.itemId));
 

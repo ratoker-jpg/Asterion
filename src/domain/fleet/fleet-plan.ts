@@ -122,12 +122,19 @@ export function setFleetPlanTarget(plan: FleetPlan | undefined, shipId: ShipId, 
   return { targets, ...(keepFill ? { fillShipId: current.fillShipId } : {}) };
 }
 
-/** Marks a type «на остаток», or unmarks it. There is one fill line at most. */
-export function toggleFleetPlanFill(plan: FleetPlan | undefined, shipId: ShipId): FleetPlan {
+/**
+ * Marks a type «на остаток», or unmarks it. There is one fill line at most. The
+ * line that stops being the fill line stays in the plan at `previousFillTarget`,
+ * the number it showed.
+ */
+export function toggleFleetPlanFill(plan: FleetPlan | undefined, shipId: ShipId, previousFillTarget = 0): FleetPlan {
   const current = plan ?? emptyFleetPlan();
   const targets = { ...current.targets };
   delete targets[shipId];
-  return current.fillShipId === shipId ? { targets } : { targets, fillShipId: shipId };
+  const previous = current.fillShipId;
+  const kept = safeCount(previousFillTarget);
+  if (previous && kept > 0) targets[previous] = kept;
+  return previous === shipId ? { targets } : { targets, fillShipId: shipId };
 }
 
 export function removeFleetPlanLine(plan: FleetPlan | undefined, shipId: ShipId): FleetPlan {
