@@ -1,9 +1,10 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { whatsNewVitePlugin } from './tools/changelog.mjs';
 
 export default defineConfig({
   base: './',
-  plugins: [react()],
+  plugins: [react(), whatsNewVitePlugin()],
   server: {
     host: '127.0.0.1',
     port: 5173,

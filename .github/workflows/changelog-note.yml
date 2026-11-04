@@ -1,0 +1,30 @@
+name: Player note
+
+# A PR that changes game code under src/ must add a player note (changelog/notes/)
+# or carry the changelog:none label (docs/RELEASES.md). This is its own light
+# workflow: adding the label re-checks the note without restarting the whole CI.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  note:
+    name: Player note («Что нового»)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Check the note
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+        run: node tools/changelog.mjs pr-check

@@ -7,6 +7,7 @@ import type { PlayerFactionId } from '../../domain/profile/types.ts';
 import '../sun-raid/gate.css';
 import { raceCard } from './race-catalog.ts';
 import { GameUpdateRow } from './GameUpdateRow.tsx';
+import { WhatsNewDialog, useWhatsNew } from './WhatsNew.tsx';
 import './overlays.css';
 
 type PauseMenuProps = {
@@ -35,10 +36,13 @@ export function PauseMenu({ variant, title, factionId, playTimeMs, onResume, onS
   const firstRef = useRef<HTMLButtonElement>(null);
   const card = raceCard(factionId);
   const isTest = variant === 'test';
+  const whatsNew = useWhatsNew();
+  const whatsNewOpen = whatsNew.open;
+  useEffect(() => { firstRef.current?.focus(); }, [confirmRestart, confirmEndRound]);
   useEffect(() => {
-    firstRef.current?.focus();
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
+      // The open «Что нового» closes first; it handles the key itself.
+      if (event.key !== 'Escape' || whatsNewOpen) return;
       event.preventDefault();
       event.stopPropagation();
       if (confirmRestart) setConfirmRestart(false);
@@ -47,7 +51,7 @@ export function PauseMenu({ variant, title, factionId, playTimeMs, onResume, onS
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [confirmRestart, confirmEndRound, onResume]);
+  }, [confirmRestart, confirmEndRound, onResume, whatsNewOpen]);
 
   const resetLabel = 'Сбросить текущее тестовое сохранение';
   return createPortal(
@@ -85,6 +89,7 @@ export function PauseMenu({ variant, title, factionId, playTimeMs, onResume, onS
               {onLoad ? <button type="button" className="igo-btn" onClick={onLoad} data-qa-pause="load">ЗАГРУЗИТЬ ИГРУ</button> : null}
               {onExport ? <button type="button" className="igo-btn" onClick={onExport} data-qa-pause="export">ЭКСПОРТ СОХРАНЕНИЯ (JSON)</button> : null}
               {onSettings ? <button type="button" className="igo-btn" onClick={onSettings} data-qa-pause="settings">НАСТРОЙКИ</button> : null}
+              {whatsNew.available ? <button type="button" className="igo-btn" onClick={whatsNew.show} data-qa-pause="whats-new" data-qa-whats-new-open>ЧТО НОВОГО{whatsNew.hasNew ? <span className="whats-new-mark" data-qa-whats-new-mark>НОВОЕ</span> : null}</button> : null}
               {testSpeed ? (
                 <div className="igo-speed" role="group" aria-label="Скорость тестового времени">
                   <small>УСКОРЕНИЕ ВРЕМЕНИ</small>
@@ -105,6 +110,7 @@ export function PauseMenu({ variant, title, factionId, playTimeMs, onResume, onS
           {confirmRestart || confirmEndRound ? null : <GameUpdateRow variant="pause" />}
         </div>
       </section>
+      {whatsNew.open ? <WhatsNewDialog seen={whatsNew.seenAtOpen} onClose={whatsNew.close} /> : null}
     </div>,
     document.body,
   );
