@@ -300,11 +300,14 @@ export type CargoHull = { shipId: ShipId; capacity: number; free: number; prefer
 export function cargoHullsOnPlanet(state: SaveState, planetId: string): CargoHull[] {
   const factionId = state.profile.factionId as CombatFactionId;
   const free = getAvailableFleetForPlanet(state, planetId).ships;
-  return getFactionShipCatalog(factionId)
+  const hulls = getFactionShipCatalog(factionId)
     .filter((entity) => entity.id !== SOLAR_SATELLITE_ID)
     .map((entity) => ({ shipId: entity.id as ShipId, capacity: entity.ship?.cargo ?? 0, free: Math.max(0, Math.floor(free[entity.id as ShipId] ?? 0)), preferred: TRANSPORT_SHIPS.includes(entity.id as ShipId) }))
     .filter((hull) => hull.capacity > 0 && hull.free > 0)
     .sort((a, b) => b.capacity - a.capacity);
+  // A planet with transports sends only them: the gather never strips its warships and
+  // recyclers. Without any transport, its other ships with a hold carry the load.
+  return hulls.some((hull) => hull.preferred) ? hulls.filter((hull) => hull.preferred) : hulls;
 }
 
 /**

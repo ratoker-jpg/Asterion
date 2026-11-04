@@ -11,7 +11,7 @@ import { getPlanetResources, type SaveState } from './contracts.ts';
 import { dispatchFlight, recallFlight, reconcileFlights, type DispatchFlightCommand } from './flights.ts';
 import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
 import { serializeSaveForStorage, loadSavedState } from './persistence.ts';
-import { pickCargoShips, type CargoHull } from './empire.ts';
+import { cargoHullsOnPlanet, pickCargoShips, type CargoHull } from './empire.ts';
 import { emptyTransportCargo, getCargoFieldMaximum, getFleetCargoCapacity } from '../domain/flights/cargo.ts';
 import { getSunDebris, sunDebrisLedgerKey } from './sun-raid.ts';
 import {
@@ -421,4 +421,11 @@ test('cargo hulls: transports are used first, other ships only for the rest', ()
   assert.deepEqual(pickCargoShips(hulls, 150), { transporter: 2 });
   assert.deepEqual(pickCargoShips(hulls, 600), { transporter: 2, recycler: 1 });
   assert.deepEqual(pickCargoShips([hulls[1]!], 500), { recycler: 2 });
+});
+
+test('gather uses only transports where a planet has them, other holds where it has none', () => {
+  const mixed = campaign({ transporter: 2, recycler: 5, cruiser: 3 });
+  assert.deepEqual(cargoHullsOnPlanet(mixed, mixed.currentPlanetId).map((hull) => hull.shipId), ['transporter']);
+  const bare = campaign({ recycler: 5 });
+  assert.ok(cargoHullsOnPlanet(bare, bare.currentPlanetId).some((hull) => hull.shipId === 'recycler'));
 });
