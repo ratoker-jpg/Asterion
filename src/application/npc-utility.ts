@@ -97,6 +97,8 @@ export type NpcUtilityContext = Readonly<{
   /** Hostile battles this owner defended in the last two game days (0..1). */
   threat: number;
   latestReports: ReadonlyMap<string, SpyReportSnapshot>;
+  /** Planets (by "galaxy:system:position") where this owner lost an attack, and when: what it spied there before is wrong. */
+  attackLossAt?: ReadonlyMap<string, number>;
   /** Orbital debris the owner saw in its own spy reports (target planet id → amount). */
   knownDebris?: ReadonlyMap<string, number>;
   /** The owner's current strategic reading; derived from the rest when absent. */
@@ -232,9 +234,16 @@ export function createNpcUtilityContext(state: SaveState, profile: NpcProfile, a
   const ownPlanets = Object.values(state.espionage?.targets ?? {}).filter((target) => target.kind === 'npc' && target.ownerId === ownerId);
   const income = ownPlanets.reduce((sum, target) => sum + getNpcPlanetIncomePerHour(target, timeScale), 0);
   let defended = 0;
+  const attackLossAt = new Map<string, number>();
   // Reports past the retention window are skipped, whether or not a prune has removed them yet.
   const cutoff = reportRetentionCutoff(at);
   for (const report of ownerBattleReports(state.combat.reports, ownerId)) {
+    if (report.attacker.playerId === ownerId && report.winner === 'defender' && report.missionType === 'attack') {
+      // A lost attack: what the owner knew of that planet was wrong (what it spied is out of date).
+      const lostWhen = battleReportTime(report);
+      const key = coordinateLabelKey(report.defender.coordinates);
+      if (key && Number.isFinite(lostWhen) && lostWhen <= at && lostWhen >= cutoff && lostWhen > (attackLossAt.get(key) ?? 0)) attackLossAt.set(key, lostWhen);
+    }
     if (report.defender.playerId !== ownerId) continue;
     const when = battleReportTime(report);
     if (Number.isFinite(when) && when <= at && when >= cutoff && at - when <= 48 * HOUR) defended += 1;
@@ -299,6 +308,7 @@ export function createNpcUtilityContext(state: SaveState, profile: NpcProfile, a
     ownPlanets,
     threat: Math.min(1, defended / 3),
     latestReports,
+    ...(attackLossAt.size ? { attackLossAt } : {}),
     knownDebris,
   };
   return { ...base, strategy: assessNpcStrategy(base) };
@@ -768,7 +778,7 @@ export function estimateAttackUtility(context: NpcUtilityContext, origin: SpyTar
   const revenge = estimateRevengeEconomics(context, origin, report, selectedShips);
   const social = npcAttackRegardBias(context, report.targetOwnerId);
   // Revenge (owner rule 26.10.2026): hurting an offender is worth a loss, and it comes first.
-  const revengeValue = revenge.worthFlight
+  const revengeValue = revenge.worthFlight && raid.worthFlight
     ? revenge.net / context.dayValue + NPC_REVENGE_BALANCE.priority * revenge.intensity + 0.5 * (unit(traits.aggression) - 0.5) - 0.3 * remoteness + social
     : Number.NEGATIVE_INFINITY;
   // Taste for war never turns a pointless raid (63 resources) into a good one.
@@ -844,6 +854,32 @@ export function estimateRevengeEconomics(context: NpcUtilityContext, origin: Spy
     worthFlight: win >= NPC_REVENGE_BALANCE.minWin && damage >= NPC_REVENGE_BALANCE.minDamageDayShare * context.dayValue && net >= 0 };
 }
 
+/** "[1:17:6]" of a battle report as "1:17:6". */
+function coordinateLabelKey(label: string | undefined): string | null {
+  const match = /^\[(\d+):(\d+):(\d+)\]$/.exec((label ?? '').trim());
+  return match ? `${Number(match[1])}:${Number(match[2])}:${Number(match[3])}` : null;
+}
+
+const coordinateKeyOf = (coordinate: Readonly<{ galaxy: number; system: number; position: number }>) => `${coordinate.galaxy}:${coordinate.system}:${coordinate.position}`;
+
+/**
+ * A player attacks on what a spy report showed, and the report is only as good
+ * as it is young: a defender builds in the meantime. An attack is sent only on
+ * a report younger than this many game hours, and never on one older than a
+ * lost attack on the same planet (that fight proved it wrong).
+ */
+export const NPC_ATTACK_INTEL_MAX_HOURS = 3;
+
+/** 'fresh' the report may carry an attack; 'stale' too old; 'refuted' a lost attack came after it. Spy again first. */
+export function npcAttackIntel(context: NpcUtilityContext, report: SpyReportSnapshot): 'fresh' | 'stale' | 'refuted' {
+  const lostAt = context.attackLossAt?.get(coordinateKeyOf(report.targetCoordinate));
+  if (lostAt !== undefined && lostAt >= report.createdAt) return 'refuted';
+  return context.at - report.createdAt > NPC_ATTACK_INTEL_MAX_HOURS * HOUR ? 'stale' : 'fresh';
+}
+
+/** An attack needs at least even odds by the owner's own estimate, whatever the grudge. */
+export const NPC_ATTACK_MIN_BELIEF = 0.5;
+
 /** Smallest net haul, as a share of the owner's daily income, that justifies a raid. */
 export const MIN_RAID_DAY_SHARE = 0.01;
 
@@ -872,7 +908,8 @@ export function estimateRaidEconomics(context: NpcUtilityContext, origin: SpyTar
   const sendsFlagship = ((selectedShips as Readonly<Partial<Record<string, number>>>)[NPC_FLAGSHIP_ID] ?? 0) > 0;
   const gainWithSiege = sendsFlagship ? win * 0.05 * hiddenPopulation * HIDDEN_FLEET_VALUE_PER_POPULATION : 0;
   const net = gain + gainWithSiege - fuel - expectedLoss - risk;
-  return { net, worthFlight: gain + gainWithSiege >= 2 * fuel && net >= MIN_RAID_DAY_SHARE * context.dayValue };
+  // A fat store makes even a likely defeat pay on paper (a long shot at millions): the odds must be real too.
+  return { net, worthFlight: win >= NPC_ATTACK_MIN_BELIEF && gain + gainWithSiege >= 2 * fuel && net >= MIN_RAID_DAY_SHARE * context.dayValue };
 }
 
 /** Rough price of one population unit of fleet, for judging a fleet nobody can see. */
@@ -916,10 +953,11 @@ export function chooseNpcAttackForce(context: NpcUtilityContext, origin: SpyTarg
   const grudge = npcRevengeIntensity(context, report.targetOwnerId);
   // A lesson from an earlier round about this race moves the margin a little; the report still decides.
   const lesson = context.profile.inherited?.lessons.find((item) => item.family === 'attack' && item.enemyRace === report.targetRaceId)?.effect ?? 0;
-  const wanted = Math.max(NPC_REVENGE_BALANCE.minWin, 0.6 + 0.3 * (1 - unit(context.profile.traits.riskTolerance))
+  const wanted = Math.max(NPC_REVENGE_BALANCE.minWin, NPC_ATTACK_MIN_BELIEF, 0.6 + 0.3 * (1 - unit(context.profile.traits.riskTolerance))
     - NPC_REVENGE_BALANCE.marginDrop * grudge - 0.05 * lesson + 0.1 * (context.relations?.get(report.targetOwnerId)?.fear ?? 0));
   const winWithAll = estimateWinProbability(estimateForcePower(stacks(catalog, all)), enemy);
-  if (winWithAll < wanted) return grudge > 0 && winWithAll >= NPC_REVENGE_BALANCE.minWin ? all : null;
+  // A grudge never sends a force that does not break the known defence: revenge only orders the profitable options.
+  if (winWithAll < wanted) return null;
   // Against a Gate the owner throws everything it has: the campaign is at stake.
   if (context.rivalGateHosts?.has(targetPlanetId)) return all;
   // Smallest share of the available force (in tenths) that still meets the margin.
@@ -943,7 +981,7 @@ export function flightRemoteness(from: Readonly<{ galaxy: number; system: number
 }
 
 /** Intelligence is worth more when the owner has none or it has gone stale. */
-export function estimateEspionageUtility(context: NpcUtilityContext, targetPlanetId: string, remoteness = 0, targetOwnerId?: string): number {
+export function estimateEspionageUtility(context: NpcUtilityContext, targetPlanetId: string, remoteness = 0, targetOwnerId?: string, attackIntelNeeded = false): number {
   const traits = context.profile.traits;
   const report = context.latestReports.get(targetPlanetId);
   // Everyone hears of a Gate; whoever wants to break it must see its defence first.
@@ -951,8 +989,9 @@ export function estimateEspionageUtility(context: NpcUtilityContext, targetPlane
     const age = report ? (context.at - report.createdAt) / HOUR : Infinity;
     return age > 1 ? 2 : -1;
   }
-  const staleness = report ? Math.min(1, (context.at - report.createdAt) / (48 * HOUR)) : 1;
-  return -0.25 + 0.6 * staleness * (unit(traits.aggression) + unit(traits.militaryFocus)) / 2
+  // An attack worth sending but held back for old intel (or intel a lost fight refuted): look again first.
+  const staleness = report && !attackIntelNeeded ? Math.min(1, (context.at - report.createdAt) / (48 * HOUR)) : 1;
+  return (attackIntelNeeded ? 0.5 : 0) - 0.25 + 0.6 * staleness * (unit(traits.aggression) + unit(traits.militaryFocus)) / 2
     + 0.4 * staleness * (strategyOf(context).war - 0.3) - 0.6 * remoteness
     + NPC_REVENGE_BALANCE.spyBonus * staleness * npcRevengeIntensity(context, targetOwnerId);
 }

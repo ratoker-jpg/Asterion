@@ -187,7 +187,7 @@ test('the plan is valid save data, and an unreadable one drops the section', () 
   assert.equal(isNpcStrategyState(broken), false);
 });
 
-test('a strike is judged on the game\'s formulas: a usual owner refuses a resource loss, a risky one takes it knowingly, a rich target pays', () => {
+test('a strike is judged on the game\'s formulas: a usual owner refuses a resource loss, a risky one does not either (owner rule 04.11.2026), a rich target pays', () => {
   const world = empire('fortify-worth', { riskTolerance: 0.3, aggression: 0.3 });
   const planets = planetsOf(world.state);
   const rally = planets[0]!;
@@ -209,9 +209,9 @@ test('a strike is judged on the game\'s formulas: a usual owner refuses a resour
   const riskyProfile = risky.npc!.profiles[world.owner]!;
   const hot = estimateStrikeWorth(risky, createNpcUtilityContext(risky, riskyProfile, START, 1), rally, report, { battleship: 150 }, 0.75, 400_000, 2, false);
   assert.ok(hot.strategic > 0, 'battle points count');
-  if (hot.econ < 0 && hot.econ + hot.strategic >= 0) {
-    assert.equal(hot.allowed, true);
-    assert.equal(hot.conscious, 'risk');
+  if (hot.econ < 0) {
+    assert.equal(hot.allowed, false, 'taste for risk or war never buys a loss');
+    assert.equal(hot.conscious, null);
   }
 
   const rich = { ...(report as object), resources: { metal: 80_000_000, minerals: 80_000_000, gas: 80_000_000, developmentEnergy: 0 } } as never;

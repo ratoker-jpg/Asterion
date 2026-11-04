@@ -471,9 +471,9 @@ test('relations weigh real choices: a friend is a poor target, an enemy of old a
   const origin = getEspionageTargets(world.state.espionage)[world.planetA]!;
   const report = world.state.espionage!.reports!.find((item) => item.ownerId === world.a)!;
   const friendly = { ...world.state, espionage: { ...world.state.espionage!, reports: [...world.state.espionage!.reports!, { ...report, id: 'x', targetPlanetId: world.planetB, targetOwnerId: world.b, resources: report.resources }] } };
-  const before = estimateAttackUtility(createNpcUtilityContext(friendly, profile, START, 1), origin, world.planetB, { cruiser: 60 });
+  const before = estimateAttackUtility(createNpcUtilityContext(friendly, profile, START, 1), origin, world.planetB, { cruiser: 200 });
   const stranger = { ...profile, inherited: { ...profile.inherited!, relations: {} } };
-  const without = estimateAttackUtility(createNpcUtilityContext(friendly, stranger, START, 1), origin, world.planetB, { cruiser: 60 });
+  const without = estimateAttackUtility(createNpcUtilityContext(friendly, stranger, START, 1), origin, world.planetB, { cruiser: 200 });
   assert.ok(before < without, `friend ${before}, stranger ${without}`);
   // A betrayal raises what it thinks of the target's standing in a later war decision.
   const views = (state: SaveState) => getNpcDiplomacyCandidates(state, state.npc!.profiles[world.a]!, START);
