@@ -65,6 +65,7 @@
     "test:battle-reports-ui": "electron electron/battle-report-qa.cjs",
     "test:universe-ui": "electron electron/universe-planet-qa.cjs",
     "test:quick-actions-ui": "electron electron/quick-actions-qa.cjs",
+    "test:map-colors-ui": "electron electron/map-colors-qa.cjs",
     "test:recycle-own-planet-ui": "electron electron/recycle-own-planet-qa.cjs",
     "test:quick-send-cargo-ui": "electron electron/quick-send-cargo-qa.cjs",
     "test:fleet-repeat-ui": "electron electron/fleet-repeat-qa.cjs",
