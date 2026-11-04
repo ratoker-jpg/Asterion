@@ -748,7 +748,7 @@ async function runViewport(width, height) {
     const actions = fleetRoot.fleetFlightActions;
     const spyAction = fleetRoot.fleetSpyAction;
     const spyPanel = spyAction?.panel;
-    const spyClipped = !spyAction || spyAction.text !== 'ШПИОНСКИЕ ОТЧЁТЫ'
+    const spyClipped = !spyAction || spyAction.text !== 'Шпионские отчёты'
       || !spyPanel || spyAction.top < spyPanel.top - 2 || spyAction.bottom > spyPanel.bottom + 2
       || spyAction.left < spyPanel.left - 2 || spyAction.right > spyPanel.right + 2
       || spyAction.clientWidth < spyAction.scrollWidth - 2;

@@ -829,7 +829,7 @@ async function runViewport(width, height) {
     await clickAt(win, '[data-qa-flight-preview-open]', false, true, true);
     await waitFor(win, `document.querySelector('[data-qa-flight-preview-backdrop]')`);
     const timelineText = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-flight-preview-backdrop]')?.textContent?.replace(/\s+/g, ' ').trim() || ''`);
-    const timelineFields = ['ИСТОЧНИК', 'выбрано флотом', 'ЦЕЛЬ', 'Цель подтверждена', 'СОСТАВ ФЛОТА', 'Колонизатор', 'Население: 12', 'ПАРАМЕТРЫ ПЕРЕЛЁТА', 'ЭФФ. СКОРОСТЬ', 'ТУДА', 'ОБРАТНО', 'ПОЛНЫЙ ЦИКЛ', 'ГАЗ', 'НАСЕЛЕНИЕ', 'ПРИБЫТИЕ', 'МОСКОВСКОЕ ВРЕМЯ', 'МСК', 'Газ списывается только за один путь туда.', 'При отзыве колонизатор возвращается', 'ОТМЕНА', 'ОТПРАВИТЬ'];
+    const timelineFields = ['ИСТОЧНИК', 'выбрано флотом', 'ЦЕЛЬ', 'Цель подтверждена', 'СОСТАВ ФЛОТА', 'Колонизатор', 'Население: 12', 'ПАРАМЕТРЫ ПЕРЕЛЁТА', 'СКОРОСТЬ ФЛОТА', 'ТУДА', 'ОБРАТНО', 'ПОЛНЫЙ ЦИКЛ', 'ГАЗ', 'НАСЕЛЕНИЕ', 'ПРИБЫТИЕ', 'МОСКОВСКОЕ ВРЕМЯ', 'МСК', 'Газ списывается только за один путь туда.', 'При отзыве колонизатор возвращается', 'ОТМЕНА', 'ОТПРАВИТЬ'];
     if (timelineFields.some((field) => !timelineText.includes(field))) throw new Error(`${label}: Concept 2 Mission Timeline fields are incomplete ${JSON.stringify({ missing: timelineFields.filter((field) => !timelineText.includes(field)), timelineText })}`);
     const timelineStructure = await win.webContents.executeJavaScript(`(() => ({
       sourceIsLocked: Boolean(document.querySelector('[data-qa-flight-source-step]')) && !document.querySelector('[data-qa-flight-source-step] .flight-timeline-edit'),

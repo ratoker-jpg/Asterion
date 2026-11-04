@@ -246,7 +246,6 @@ async function catalogueScenes(win, directory, label) {
 
   await seed(win, { mutate: `${HUGE_FLEET} planet.resources = { ...planet.resources, metal: 9000000000, minerals: 9000000000, gas: 9000000000 }; save.metal = 9000000000; save.minerals = 9000000000; save.gas = 9000000000; planet.fleetProduction.shipQueue = ${queueOf('ships', [['battleship', 123456789], ['destroyer', 98765432], ['scout', 8], ['transporter', 1000], ['recycler', 5], ['colonizer', 1]])};` });
   await openSection(win, 'ships', '[data-qa-construction-mode="ships"]');
-  await click(win, '[data-qa-fleet-production-item="scout"] [data-qa-unit-max]');
   await shot('ships-02-huge-busy-queue');
   await hover(win, '[data-qa-fleet-production-item="transporter"] .fc-unit__art');
   await shot('ships-03-stats-hover');
