@@ -203,7 +203,8 @@ html body .fleet-workspace-v1 .battle-view-v1 .brow[open] > .brow__line {
 /* ---------- who against whom ---------- */
 .battle-view-v1 .brow__sides {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 18px minmax(0, 1fr);
+  /* Reads as a sentence: the arrow follows the first name, no gap across the row. */
+  grid-template-columns: fit-content(50%) 20px minmax(0, 1fr);
   gap: 6px;
   align-items: center;
   min-width: 0;
@@ -241,7 +242,8 @@ html body .fleet-workspace-v1 .battle-view-v1 .brow[open] > .brow__line {
 }
 .battle-view-v1 .brow__arrow {
   color: var(--brow-accent);
-  font-size: 14px;
+  font-size: 18px !important;
+  line-height: 1;
   text-align: center;
   transition: transform 180ms cubic-bezier(.2, .8, .2, 1);
 }
@@ -293,8 +295,8 @@ html body .fleet-workspace-v1 .battle-view-v1 .brow__star .battle-save-v1 {
   border-radius: var(--ut-r-chip, 9px);
   background: none;
   box-shadow: none;
-  color: #6f8f99;
-  font-size: 16px;
+  color: #8fb6c0;
+  font-size: 18px !important;
   line-height: 1;
   transition: background-color 160ms ease, color 160ms ease;
 }
@@ -310,7 +312,7 @@ html body .fleet-workspace-v1 .battle-view-v1 .brow__star .battle-save-v1.saved 
   width: 18px;
   height: 18px;
   color: #73bfd0;
-  font-size: 16px;
+  font-size: 18px !important;
   transition: transform 220ms cubic-bezier(.2, .8, .2, 1), color 160ms ease;
 }
 .battle-view-v1 .brow[open] .battle-card-expand-v1 { transform: rotate(180deg); color: #eafaff; }

@@ -75,7 +75,7 @@ function seedSource(scenario) {
     const force = (side, lost) => ({ ...base[side], populationBefore: 120000, populationAfter: 120000 - lost });
     const npc = (name, coordinates) => ({ playerId: 'qa-npc-' + name, playerName: name, planetName: name, coordinates, race: 'Астеры' });
     const mine = (coordinates) => ({ playerId: me, playerName: 'Командор', planetName: 'Москва', coordinates });
-    const pirates = (coordinates) => ({ playerId: 'pirates', playerName: 'Пиратский флот', planetName: 'Пираты', coordinates, race: 'Пираты' });
+    const pirates = (coordinates) => ({ playerId: 'pirates', playerName: 'Пиратский флот', planetName: 'Пираты', coordinates, race: 'pirates' });
     const reports = [];
     if (scenario.worst) {
       reports.push(
@@ -265,6 +265,8 @@ app.whenReady().then(async () => {
     await win.loadFile(path.join(ROOT, 'dist', 'index.html'), { search: '?mode=test' });
     await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`, 20_000);
     win.webContents.debugger.attach('1.3');
+    // Windows runners report reduced motion; the player's game has its animations.
+    await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
     for (const [width, height] of VIEWPORTS) {
       const directory = path.join(OUTPUT, `${width}x${height}`);
       fs.mkdirSync(directory, { recursive: true });
