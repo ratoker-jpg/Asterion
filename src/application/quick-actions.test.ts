@@ -7,10 +7,15 @@ import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
 import type { CombatFactionId } from '../domain/combat/factions.ts';
 import { SHIP_IDS, type ShipId } from '../domain/combat/ids.ts';
 import type { UniversePlanetNode } from '../domain/universe/types.ts';
-import type { SaveState } from './contracts.ts';
-import { dispatchFlight } from './flights.ts';
+import { getPlanetResources, type SaveState } from './contracts.ts';
+import { dispatchFlight, recallFlight, reconcileFlights, type DispatchFlightCommand } from './flights.ts';
+import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
+import { serializeSaveForStorage, loadSavedState } from './persistence.ts';
+import { cargoHullsOnPlanet, pickCargoShips, type CargoHull } from './empire.ts';
+import { emptyTransportCargo, getCargoFieldMaximum, getFleetCargoCapacity } from '../domain/flights/cargo.ts';
 import { getSunDebris, sunDebrisLedgerKey } from './sun-raid.ts';
 import {
+  QUICK_ACTION_LABELS,
   buildQuickCommand,
   defaultQuickFleet,
   isMultiSourceAction,
@@ -168,7 +173,8 @@ test('multi-source: every planet with suitable ships is a leg with its own arriv
   const homeSystem = home.planets[home.currentPlanetId]!.universeSystem ?? 1;
   const state = withColony(withColony(home, homeSystem + 4, { transporter: 3 }, 'colony-a'), homeSystem + 8, { 'spy-probe': 1 }, 'colony-b');
   const legs = planQuickLegs(state, 'transport', neutralTarget(state), RUNTIME);
-  assert.deepEqual(legs.map((leg) => leg.originPlanetId).sort(), [home.currentPlanetId, 'colony-a'].sort());
+  // Any ship with a hold may carry cargo, so the probe planet is a leg too.
+  assert.deepEqual(legs.map((leg) => leg.originPlanetId).sort(), [home.currentPlanetId, 'colony-a', 'colony-b'].sort());
   for (const leg of legs) assert.equal(leg.preview?.ok, true, leg.error);
   assert.equal(isMultiSourceAction('attack'), true);
   assert.equal(isMultiSourceAction('spy'), false);
@@ -296,10 +302,10 @@ test('own planet as target: transport and rebase exclude it, and the lines say �
   const actions = evaluateQuickActions(state, target, RUNTIME);
   const transport = actions.find((action) => action.id === 'transport')!;
   assert.equal(transport.enabled, false);
-  assert.equal(transport.reason, 'Нет свободных транспортов на других ваших планетах.');
+  assert.equal(transport.reason, 'Нет свободных кораблей с грузовым отсеком на других ваших планетах.');
   assert.equal(noShipsMessage(state, 'deployment', target), 'Нет свободных кораблей на других ваших планетах.');
   // A foreign target keeps the general wording.
-  assert.equal(noShipsMessage(state, 'transport', { node: node('npc') }), 'Нет свободных транспортов ни на одной вашей планете.');
+  assert.equal(noShipsMessage(state, 'transport', { node: node('npc') }), 'Нет свободных кораблей с грузовым отсеком ни на одной вашей планете.');
 });
 
 test('recycle with no debris known: offered, sized to what is free, the runtime accepts it (in advance)', () => {
@@ -309,4 +315,187 @@ test('recycle with no debris known: offered, sized to what is free, the runtime 
   assert.equal(recycle.enabled, true, recycle.reason);
   assert.deepEqual(recycle.plan?.fleet.ships, { recycler: 9 });
   assert.equal(recycle.plan?.preview?.ok, true);
+});
+
+// Cargo in the quick-send panel: the fleet screen's own limits (stock of the source, shared hold).
+function withStock(state: SaveState, planetId: string, stock: { metal?: number; minerals?: number; gas?: number; debris?: number }): SaveState {
+  const planet = state.planets[planetId]!;
+  const resources = { metal: stock.metal ?? 0, minerals: stock.minerals ?? 0, gas: stock.gas ?? 100_000 };
+  // The selected planet's wallet lives in the root fields.
+  return { ...state, ...(planetId === state.currentPlanetId ? resources : {}), planets: { ...state.planets, [planetId]: { ...planet,
+    resources, recycling: { ...planet.recycling, availableDebris: stock.debris ?? 0 } } } };
+}
+
+test('transport from the panel carries debris, within the hold and the planet\'s debris stock', () => {
+  const base = withStock(campaign({ transporter: 2 }), campaign().currentPlanetId, { metal: 50_000, debris: 300 });
+  const origin = base.currentPlanetId;
+  const target = neutralTarget(base);
+  const fleet = defaultQuickFleet(base, 'transport', origin, target);
+  assert.equal(getCargoFieldMaximum('debris', emptyTransportCargo(), base.planets[origin]!.resources!, 300, 1_000_000), 300, 'debris is limited by the stock');
+  const command = buildQuickCommand(base, 'transport', target, origin, fleet, RUNTIME, { metal: 0, minerals: 0, gas: 0, debris: 250 })!;
+  const { state: next, outcomes } = sendQuickLegs(base, [command], RUNTIME, dispatchFlight);
+  assert.equal(outcomes[0]!.result.ok, true);
+  const flight = next.flights.records.find((record) => record.missionId === 'transport')!;
+  assert.equal(flight.cargo?.debris, 250);
+  assert.equal(next.planets[origin]!.recycling.availableDebris, 50, 'the debris left the planet with the fleet');
+});
+
+test('shared hold: cargo beyond the fleet\'s capacity or the debris stock never leaves', () => {
+  const base = withStock(campaign({ transporter: 1 }), campaign().currentPlanetId, { metal: 500_000, debris: 100 });
+  const origin = base.currentPlanetId;
+  const target = neutralTarget(base);
+  const fleet = defaultQuickFleet(base, 'transport', origin, target);
+  const capacity = getFleetCargoCapacity(fleet.ships, Object.fromEntries(getFactionShipCatalog(base.profile.factionId as CombatFactionId).map((e) => [e.id, { cargo: e.ship?.cargo ?? 0 }])));
+  assert.ok(capacity > 0);
+  const huge = buildQuickCommand(base, 'transport', target, origin, fleet, RUNTIME, { metal: capacity * 10, minerals: 0, gas: 0, debris: 10_000 })!;
+  const { state: next } = sendQuickLegs(base, [huge], RUNTIME, dispatchFlight);
+  const flight = next.flights.records.find((record) => record.missionId === 'transport');
+  const carried = flight ? Object.values(flight.cargo ?? {}).reduce((sum, value) => sum + value, 0) : 0;
+  assert.ok(carried <= capacity, `carried ${carried} of hold ${capacity}`);
+  assert.ok((flight?.cargo?.debris ?? 0) <= 100);
+  // The panel's slider limit already accounts for what the other fields hold.
+  assert.equal(getCargoFieldMaximum('debris', { metal: capacity, minerals: 0, gas: 0, debris: 0 }, base.planets[origin]!.resources!, 100, capacity), 0);
+});
+
+test('player-facing name of the rebase mission is «Дислокация»', () => {
+  assert.equal(QUICK_ACTION_LABELS.deployment, 'Дислокация');
+});
+
+// «Дислокация» with cargo (owner rule 04.11.2026): resources ride along, up to the hold.
+function planetCoord(state: SaveState, id: string) {
+  const p = state.planets[id]!;
+  return { galaxy: p.universeGalaxy ?? 1, system: p.universeSystem ?? 1, position: p.universePosition ?? 1 };
+}
+
+function deploymentSetup(stock = 50_000) {
+  const base = withStock(campaign({ transporter: 5 }), campaign().currentPlanetId, { metal: stock, gas: 100_000, debris: 300 });
+  const home = base.currentPlanetId;
+  const homeSystem = base.planets[home]!.universeSystem ?? 1;
+  const state = withColony(base, homeSystem + 3, {}, 'colony-a');
+  const colony = state.planets['colony-a']!;
+  const withRoom: SaveState = { ...state, planets: { ...state.planets, 'colony-a': { ...colony, buildings: { ...colony.buildings, hangar: 25 }, resources: { metal: 0, minerals: 0, gas: 0 } } } };
+  const capacity = getFleetCargoCapacity({ transporter: 2 }, Object.fromEntries(getFactionShipCatalog(base.profile.factionId as CombatFactionId).map((e) => [e.id, { cargo: e.ship?.cargo ?? 0 }])));
+  const command = (cargo: Partial<Record<'metal' | 'minerals' | 'gas' | 'debris', number>>, id = 'dep'): DispatchFlightCommand => ({
+    missionId: 'deployment', requestId: id, originPlanetId: home, selectedShips: { transporter: 2 }, selectedCommanders: {},
+    destination: { kind: 'planet', planetId: 'colony-a', coordinate: planetCoord(withRoom, 'colony-a') }, targetRelation: 'self',
+    cargo: { metal: 0, minerals: 0, gas: 0, debris: 0, ...cargo }, departedAt: NOW,
+  });
+  return { state: withRoom, home, capacity, command };
+}
+
+test('deployment takes cargo at departure and lands it with the fleet', () => {
+  const { state, home, command } = deploymentSetup();
+  const sent = dispatchFlight(state, command({ metal: 4_000, debris: 100 }), { now: NOW, mode: 'production' });
+  assert.equal(sent.ok, true, sent.ok ? '' : sent.error.message);
+  if (!sent.ok) return;
+  assert.equal(sent.flight.cargo?.metal, 4_000);
+  assert.equal(getPlanetResources(sent.state, home).metal, getPlanetResources(state, home).metal - 4_000);
+  const arrived = reconcileFlights(sent.state, sent.flight.arrivalAt);
+  const flight = arrived.state.flights.records.find((record) => record.id === sent.flight.id)!;
+  assert.equal(flight.phase, 'completed');
+  assert.equal(flight.cargoState, 'delivered');
+  assert.equal(arrived.state.planets['colony-a']!.resources!.metal, 4_000);
+  assert.equal(arrived.state.planets['colony-a']!.recycling.availableDebris, state.planets['colony-a']!.recycling.availableDebris + 100);
+  assert.equal(arrived.state.planets['colony-a']!.fleet.ships.transporter, 2, 'the fleet arrives together with the cargo');
+});
+
+test('deployment without cargo keeps the record as before (no cargo fields)', () => {
+  const { state, command } = deploymentSetup();
+  const sent = dispatchFlight(state, command({}), { now: NOW, mode: 'production' });
+  assert.equal(sent.ok, true);
+  if (sent.ok) { assert.equal(sent.flight.cargo, undefined); assert.equal(sent.flight.cargoState, undefined); }
+});
+
+test('deployment cargo beyond the hold or the stock is cut down, never more leaves', () => {
+  const { state, capacity, command } = deploymentSetup(1_000_000);
+  const sent = dispatchFlight(state, command({ metal: capacity * 10, minerals: 5 }), { now: NOW, mode: 'production' });
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  assert.equal(Object.values(sent.flight.cargo!).reduce((sum, value) => sum + value, 0), capacity);
+});
+
+test('gas cargo and fuel come from one stock for a deployment too', () => {
+  const { state, home, command } = deploymentSetup();
+  const poor = withStock(state, home, { metal: 1000, gas: 300 });
+  const sent = dispatchFlight(poor, command({ gas: 300 }), { now: NOW, mode: 'production' });
+  assert.equal(sent.ok, false);
+  assert.match(sent.ok ? '' : sent.error.message, /газ/i);
+});
+
+test('recall brings the deployment cargo back to the origin with the fleet', () => {
+  const { state, home, command } = deploymentSetup();
+  const sent = dispatchFlight(state, command({ metal: 3_000 }), { now: NOW, mode: 'production' });
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  const recalled = recallFlight(sent.state, sent.flight.id, { now: NOW + 5_000, mode: 'production' });
+  assert.equal(recalled.ok, true);
+  if (!recalled.ok) return;
+  const back = reconcileFlights(recalled.state, recalled.flight.returnAt!);
+  const flight = back.state.flights.records.find((record) => record.id === sent.flight.id)!;
+  assert.equal(flight.phase, 'completed');
+  assert.equal(flight.cargoState, 'returned');
+  assert.equal(getPlanetResources(back.state, home).metal, getPlanetResources(state, home).metal);
+  assert.equal(back.state.planets['colony-a']!.resources!.metal, 0);
+  assert.equal(back.state.planets[home]!.fleet.ships.transporter, 5);
+});
+
+test('full storage on arrival: what the target cannot hold burns, as for a transport', () => {
+  const { state, command } = deploymentSetup();
+  const caps = getStorageCapacities(state.planets['colony-a']!.buildings);
+  const nearlyFull = { ...state, planets: { ...state.planets, 'colony-a': { ...state.planets['colony-a']!, resources: { metal: caps.metal - 10, minerals: 0, gas: 0 } } } };
+  const sent = dispatchFlight(nearlyFull, command({ metal: 1_000 }), { now: NOW, mode: 'production' });
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  const arrived = reconcileFlights(sent.state, sent.flight.arrivalAt);
+  const flight = arrived.state.flights.records.find((record) => record.id === sent.flight.id)!;
+  assert.equal(arrived.state.planets['colony-a']!.resources!.metal, caps.metal);
+  assert.equal(flight.cargoSettlement?.burned.metal, 990);
+});
+
+test('reload mid-flight: the saved deployment still lands its cargo', () => {
+  const { state, command } = deploymentSetup();
+  const sent = dispatchFlight(state, command({ metal: 2_000 }), { now: NOW, mode: 'production' });
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  const raw = serializeSaveForStorage(sent.state, 'production');
+  const loaded = loadSavedState({ mode: 'production', storage: { getItem: () => raw, setItem: () => undefined, removeItem: () => undefined } });
+  assert.equal(loaded.status, 'loaded');
+  const flight = loaded.state.flights.records.find((record) => record.id === sent.flight.id)!;
+  assert.equal(flight.cargo?.metal, 2_000);
+  const arrived = reconcileFlights(loaded.state, sent.flight.arrivalAt);
+  assert.equal(arrived.state.planets['colony-a']!.resources!.metal, 2_000);
+});
+
+test('transport is offered with any ship that has a hold, transports first', () => {
+  const noHulls = campaign({ recycler: 3 });
+  const homeSystem = noHulls.planets[noHulls.currentPlanetId]!.universeSystem ?? 1;
+  const state = withColony(noHulls, homeSystem + 3, { recycler: 4 }, 'colony-a');
+  const target = neutralTarget(state);
+  const fleet = defaultQuickFleet(state, 'transport', state.currentPlanetId, target);
+  assert.deepEqual(Object.keys(fleet.ships), ['recycler']);
+  const menu = evaluateQuickActions(state, target, RUNTIME).find((action) => action.id === 'transport')!;
+  assert.equal(menu.enabled, true);
+  assert.equal(menu.plan?.fleet.ships.recycler !== undefined, true);
+  const mixed = withColony(campaign({ recycler: 3, transporter: 2 }), homeSystem + 3, { recycler: 4 }, 'colony-a');
+  assert.deepEqual(defaultQuickFleet(mixed, 'transport', mixed.currentPlanetId, target).ships, { transporter: 2 });
+  const none = evaluateQuickActions(campaign({ cruiser: 0 }), target, RUNTIME).find((action) => action.id === 'transport')!;
+  assert.equal(none.enabled, false);
+  assert.match(none.reason ?? '', /грузов/);
+});
+
+test('cargo hulls: transports are used first, other ships only for the rest', () => {
+  const hulls: CargoHull[] = [
+    { shipId: 'transporter', capacity: 100, free: 2, preferred: true },
+    { shipId: 'recycler', capacity: 400, free: 5, preferred: false },
+  ];
+  assert.deepEqual(pickCargoShips(hulls, 150), { transporter: 2 });
+  assert.deepEqual(pickCargoShips(hulls, 600), { transporter: 2, recycler: 1 });
+  assert.deepEqual(pickCargoShips([hulls[1]!], 500), { recycler: 2 });
+});
+
+test('gather uses only transports where a planet has them, other holds where it has none', () => {
+  const mixed = campaign({ transporter: 2, recycler: 5, cruiser: 3 });
+  assert.deepEqual(cargoHullsOnPlanet(mixed, mixed.currentPlanetId).map((hull) => hull.shipId), ['transporter']);
+  const bare = campaign({ recycler: 5 });
+  assert.ok(cargoHullsOnPlanet(bare, bare.currentPlanetId).some((hull) => hull.shipId === 'recycler'));
 });

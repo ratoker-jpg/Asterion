@@ -1575,6 +1575,8 @@ export function dispatchFlight(
   let deploymentCommanders: Partial<Record<CommanderId, number>> | undefined;
   let deploymentCommanderLevels: Partial<Record<CommanderId, number>> | undefined;
   let deploymentPopulation = 0;
+  let deploymentCargo: TransportCargo | undefined;
+  let deploymentOverflowWarning = false;
 
   if (command.missionId === 'espionage') {
     if (!command.destination || command.destination.kind !== 'planet' || !isFlightCoordinate(command.destination.coordinate)) {
@@ -1708,6 +1710,14 @@ export function dispatchFlight(
       return failure(state, 'capacity-exceeded', `На планете ${targetPlanet.name} недостаточно свободной вместимости.`);
     }
     deploymentCommanderLevels = commanderLevelsForDeployment(state, deploymentCommanders);
+    // Resources ride along like in a transport: clamped to the source's stock and the fleet's hold.
+    // No cargo keeps the record exactly as it was before this option existed.
+    const loaded = getTransportCargoSummary(state, originPlanetId, selectedShips, command.cargo,
+      { kind: 'planet', planetId: deploymentTarget.planetId, coordinate: { ...deploymentTarget.coordinate } });
+    if (getCargoUsed(loaded.cargo) > 0) {
+      deploymentCargo = loaded.cargo;
+      deploymentOverflowWarning = loaded.overflowWarning;
+    }
   }
 
   if (command.missionId === 'colonize') {
@@ -1820,6 +1830,7 @@ export function dispatchFlight(
       overflowWarning: transportOverflowWarning,
     } : {}),
     ...(aidPlan ? { aid: aidPlan.snapshot } : {}),
+    ...(deploymentCargo ? { cargo: deploymentCargo, overflowWarning: deploymentOverflowWarning } : {}),
     ...(command.missionId === 'recycle' ? {
       cargo: emptyTransportCargo(),
       recycleCapacity,
@@ -1893,8 +1904,9 @@ export function dispatchFlight(
     return failure(state, 'insufficient-gas', 'Недостаточно газа: нужен и груз помощи, и топливо на путь.');
   }
   // Same rule for an ordinary transport: gas cargo and fuel come from one stock.
-  if (command.missionId === 'transport' && transportCargo && transportCargo.gas > 0
-    && gas.gas < flight.gasCost + transportCargo.gas) {
+  if ((command.missionId === 'transport' && transportCargo && transportCargo.gas > 0
+    && gas.gas < flight.gasCost + transportCargo.gas)
+    || (deploymentCargo && deploymentCargo.gas > 0 && gas.gas < flight.gasCost + deploymentCargo.gas)) {
     return failure(state, 'insufficient-gas', 'Недостаточно газа: нужен и груз, и топливо на путь.');
   }
 
@@ -1903,23 +1915,24 @@ export function dispatchFlight(
     ...gas,
     gas: gas.gas - flight.gasCost,
   });
-  if ((command.missionId === 'transport' || command.missionId === 'aid') && transportCargo) {
+  const departingCargo = command.missionId === 'deployment' ? deploymentCargo : transportCargo;
+  if ((command.missionId === 'transport' || command.missionId === 'aid' || command.missionId === 'deployment') && departingCargo) {
     const nextOrigin = nextState.planets[originPlanetId];
     if (!nextOrigin) return failure(state, 'invalid-command', 'Исходная планета не найдена.');
     nextState = replacePlanetState(nextState, originPlanetId, {
       ...nextOrigin,
       recycling: {
         ...nextOrigin.recycling,
-        availableDebris: Math.max(0, nextOrigin.recycling.availableDebris - transportCargo.debris),
+        availableDebris: Math.max(0, nextOrigin.recycling.availableDebris - departingCargo.debris),
       },
     });
     const debited = getPlanetResources(nextState, originPlanetId);
     // Cargo is clamped to the source and gas is checked against fuel above,
     // so plain subtraction cannot go negative.
     const nextResources = {
-      metal: debited.metal - transportCargo.metal,
-      minerals: debited.minerals - transportCargo.minerals,
-      gas: debited.gas - transportCargo.gas,
+      metal: debited.metal - departingCargo.metal,
+      minerals: debited.minerals - departingCargo.minerals,
+      gas: debited.gas - departingCargo.gas,
     };
     nextState = replacePlanetResources(nextState, originPlanetId, nextResources);
   }
@@ -2311,7 +2324,7 @@ function returnTransportCargo(
 ): { state: SaveState; flight: FlightRecord } {
   if (flight.cargoState === 'returned'
     || flight.cargoState === 'voided'
-    || ((flight.missionId === 'transport' || flight.missionId === 'aid') && flight.cargoState === 'delivered')) return { state, flight };
+    || ((flight.missionId === 'transport' || flight.missionId === 'aid' || flight.missionId === 'deployment') && flight.cargoState === 'delivered')) return { state, flight };
   const cargo = normalizeTransportCargo(flight.cargo);
   if (flight.ownerSide === 'npc' && flight.missionId === 'aid') return returnNpcAidCargo(state, flight, cargo, now);
   const origin = state.planets[flight.originPlanetId];
@@ -2466,7 +2479,7 @@ function applyDeploymentArrival(
   for (const [commanderId, quantity] of Object.entries(selectedCommanders) as [CommanderId, number][]) {
     nextTargetFleet.commanders[commanderId] = (nextTargetFleet.commanders[commanderId] ?? 0) + quantity;
   }
-  const completed: FlightRecord = {
+  let completed: FlightRecord = {
     ...flight,
     phase: 'completed',
     arrivedAt: flight.arrivedAt ?? flight.arrivalAt,
@@ -2479,6 +2492,22 @@ function applyDeploymentArrival(
     fleet: nextTargetFleet,
     solarSatellites: targetSatellites,
   });
+  if (flight.cargo && flight.cargoState === 'loaded') {
+    // The cargo lands with the fleet: same storage rules as a transport (overflow burns).
+    const cargo = normalizeTransportCargo(flight.cargo);
+    const landing = resolveTransportTarget(next, flight.destination);
+    if (landing.runtime) {
+      const delivery = getCappedDelivery(landing.runtime.resources ?? { metal: 0, minerals: 0, gas: 0 }, getStorageCapacities(landing.runtime.buildings), cargo);
+      next = updatePlanetCargoState(next, landing, delivery.resources, cargo.debris);
+      completed = {
+        ...completed,
+        cargoState: 'delivered',
+        deliveredAt: completed.arrivedAt,
+        cargoResolvedAt: now,
+        cargoSettlement: cargoSettlementFromDelivery('delivered', completed.arrivedAt ?? now, delivery, cargo.debris),
+      };
+    }
+  }
   next = { ...next, flights: updateFlight(currentFlightState(next), completed) };
   return { state: next, flight: completed, transferred: true };
 }
@@ -2825,7 +2854,7 @@ export function reconcileFlights(
         phase: 'failed',
         completionReason: 'origin-destroyed',
         completedAt: now,
-        ...(current.missionId === 'space-flight' ? { cargoState: 'voided' as const, cargoResolvedAt: now } : {}),
+        ...(current.missionId === 'space-flight' || (current.missionId === 'deployment' && current.cargo) ? { cargoState: 'voided' as const, cargoResolvedAt: now } : {}),
       };
       next = { ...next, flights: updateFlight(currentFlightState(next), destroyed) };
       changed = true;
@@ -3129,7 +3158,7 @@ export function reconcileFlights(
           flight: deployment.flight,
           status: deployment.transferred ? 'deployed' : 'target-unavailable',
           notice: deployment.transferred
-            ? 'Дислокация завершена: флот и командиры переведены на целевую планету.'
+            ? deployment.flight.cargo ? 'Дислокация завершена: флот, командиры и груз переведены на целевую планету.' : 'Дислокация завершена: флот и командиры переведены на целевую планету.'
             : 'Целевая планета недоступна или больше не вмещает флот; рейс возвращается без перевода.',
         });
         continue;
@@ -3566,7 +3595,7 @@ export function reconcileFlights(
       } else if (refreshed.missionId === 'expedition' || refreshed.explorationAttack) {
         next = creditExpeditionReturn(next, refreshed, refreshed.returnAt);
       }
-      if (refreshed.missionId === 'transport' || refreshed.missionId === 'aid' || refreshed.missionId === 'recycle' || refreshed.missionId === 'gas' || refreshed.missionId === 'space-flight') {
+      if (refreshed.missionId === 'transport' || refreshed.missionId === 'aid' || refreshed.missionId === 'recycle' || refreshed.missionId === 'gas' || refreshed.missionId === 'space-flight' || (refreshed.missionId === 'deployment' && refreshed.cargo !== undefined)) {
         const returned = returnTransportCargo(next, refreshed, refreshed.returnAt);
         next = returned.state;
         returnedFlight = returned.flight;

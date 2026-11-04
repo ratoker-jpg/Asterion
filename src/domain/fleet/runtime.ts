@@ -217,6 +217,30 @@ export function calculateFleetPopulation(
   return shipPopulation + commanderPopulation;
 }
 
+/**
+ * Population that sets the size of an incoming pirate raid: defence is added by the
+ * caller; here only combat hulls ('Боевой корабль', the same category the fleet
+ * screen's «Боевые» filter and pirate eliminations use) and commander ships count.
+ * Civil hulls (transport, mega-transport, recycler, colonizer, probe) and solar
+ * satellites do not.
+ */
+export function calculateCombatFleetPopulation(
+  fleet: OwnedFleetState,
+  factionId: CombatFactionId = 'aegis',
+): number {
+  const shipPopulation = getFactionShipCatalog(factionId).reduce(
+    (total, entity) => entity.category === 'Боевой корабль'
+      ? total + (fleet.ships[entity.id as ShipId] ?? 0) * entity.population
+      : total,
+    0,
+  );
+  const commanderPopulation = COMMANDER_COMBAT_CATALOG.reduce(
+    (total, entity) => total + (fleet.commanders[entity.id as CommanderId] ?? 0) * entity.population,
+    0,
+  );
+  return shipPopulation + commanderPopulation;
+}
+
 export function calculateFleetCapacity(hangarLevel: number): number {
   return getHangarCapacity(hangarLevel);
 }

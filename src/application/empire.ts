@@ -265,11 +265,14 @@ const TRANSPORT_SHIPS: readonly ShipId[] = ['transporter', 'mega-transporter'];
 
 export function adviseEmptyGather(state: SaveState, rows: readonly EmpirePlanetRow[], targetId: string, mode: 'transport' | 'deployment', runtime: EmpireRuntime): EmpireEmptyAdvice {
   const targetRow = rows.find((row) => row.id === targetId);
-  const usable = (row: EmpirePlanetRow) => mode === 'deployment' ? row.shipCount > 0 : TRANSPORT_SHIPS.some((id) => (row.ships[id] ?? 0) > 0);
+  // Any ship with a hold can carry resources, as on the fleet screen.
+  const holds = new Map(getFactionShipCatalog(state.profile.factionId as CombatFactionId).map((entity) => [entity.id as ShipId, entity.ship?.cargo ?? 0]));
+  const carries = (ships: Partial<Record<ShipId, number>> | undefined) => (Object.entries(ships ?? {}) as [ShipId, number][]).some(([id, count]) => (count ?? 0) > 0 && (holds.get(id) ?? 0) > 0);
+  const usable = (row: EmpirePlanetRow) => mode === 'deployment' ? row.shipCount > 0 : carries(row.ships);
   const onTargetOnly = Boolean(targetRow && usable(targetRow));
-  const noun = mode === 'deployment' ? 'кораблей' : 'транспортов';
+  const noun = mode === 'deployment' ? 'кораблей' : 'кораблей с грузовым отсеком';
   const inFlight = rows.some((row) => row.flights.some((flight) => flight.direction === 'out' && (mode === 'deployment'
-    || TRANSPORT_SHIPS.some((id) => (flight.selectedShips?.[id] ?? 0) > 0))));
+    || carries(flight.selectedShips))));
   const lead = onTargetOnly
     ? `Свободных ${noun} нет на других планетах: они есть только на планете ${targetRow!.name}, куда вы хотите отправить. Выберите другую планету назначения.`
     : `Свободных ${noun} нет ни на одной планете.${inFlight ? ' Часть кораблей сейчас в рейсах: дождитесь их возвращения.' : ''}`;
@@ -287,17 +290,24 @@ export function adviseEmptyGather(state: SaveState, rows: readonly EmpirePlanetR
 
 /* ---------- Transfer arithmetic (transport legs) ---------- */
 
-export type CargoHull = { shipId: ShipId; capacity: number; free: number };
+/** `preferred`: transports and mega-transports, used before any other ship with a hold. */
+export type CargoHull = { shipId: ShipId; capacity: number; free: number; preferred?: boolean };
 
-/** Transport hulls of the race that are free on the planet, largest hold first. */
+/**
+ * Free ships of the planet that have a hold (any ship may carry cargo, as on
+ * the fleet screen), largest hold first. Transports are marked `preferred`.
+ */
 export function cargoHullsOnPlanet(state: SaveState, planetId: string): CargoHull[] {
   const factionId = state.profile.factionId as CombatFactionId;
   const free = getAvailableFleetForPlanet(state, planetId).ships;
-  return getFactionShipCatalog(factionId)
-    .filter((entity) => entity.id === 'transporter' || entity.id === 'mega-transporter')
-    .map((entity) => ({ shipId: entity.id as ShipId, capacity: entity.ship?.cargo ?? 0, free: Math.max(0, Math.floor(free[entity.id as ShipId] ?? 0)) }))
+  const hulls = getFactionShipCatalog(factionId)
+    .filter((entity) => entity.id !== SOLAR_SATELLITE_ID)
+    .map((entity) => ({ shipId: entity.id as ShipId, capacity: entity.ship?.cargo ?? 0, free: Math.max(0, Math.floor(free[entity.id as ShipId] ?? 0)), preferred: TRANSPORT_SHIPS.includes(entity.id as ShipId) }))
     .filter((hull) => hull.capacity > 0 && hull.free > 0)
     .sort((a, b) => b.capacity - a.capacity);
+  // A planet with transports sends only them: the gather never strips its warships and
+  // recyclers. Without any transport, its other ships with a hold carry the load.
+  return hulls.some((hull) => hull.preferred) ? hulls.filter((hull) => hull.preferred) : hulls;
 }
 
 /**
@@ -306,6 +316,18 @@ export function cargoHullsOnPlanet(state: SaveState, planetId: string): CargoHul
  * fits it. When the hangar cannot carry it all, every hull goes.
  */
 export function pickCargoShips(hulls: readonly CargoHull[], amount: number): Partial<Record<ShipId, number>> {
+  const usable = hulls.filter((hull) => hull.capacity > 0 && hull.free > 0);
+  const transports = usable.filter((hull) => hull.preferred !== false);
+  const others = usable.filter((hull) => hull.preferred === false);
+  const transportHold = transports.reduce((sum, hull) => sum + hull.capacity * hull.free, 0);
+  // Transports first; other ships join only for what transports cannot carry.
+  if (others.length > 0 && amount > transportHold) {
+    const rest = pickCargoShips(others.map((hull) => ({ ...hull, preferred: true })), amount - transportHold);
+    const all = Object.fromEntries(transports.map((hull) => [hull.shipId, hull.free])) as Partial<Record<ShipId, number>>;
+    for (const [id, count] of Object.entries(rest) as [ShipId, number][]) all[id] = count;
+    return all;
+  }
+  hulls = transports.length > 0 ? transports : others;
   const sorted = [...hulls].filter((hull) => hull.capacity > 0 && hull.free > 0).sort((a, b) => b.capacity - a.capacity);
   const total = sorted.reduce((sum, hull) => sum + hull.capacity * hull.free, 0);
   if (amount <= 0 || sorted.length === 0) return {};
