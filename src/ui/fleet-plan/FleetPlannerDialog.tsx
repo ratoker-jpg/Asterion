@@ -19,24 +19,16 @@ import type { SaveState } from '../../application/contracts.ts';
 import {
   buildFleetPlanView,
   FLEET_PLAN_RESOURCES,
-  type FleetPlanLimit,
   type FleetPlanLine,
-  type FleetPlanResource,
-  type FleetPlanStartOutcome,
   type FleetPlanStartResult,
   type FleetPlanView,
 } from '../../application/fleet-plan.ts';
 import { compactAmount, formatNumber, plural } from '../empire/empire-format.ts';
 import { ResourceIcon } from '../resources/ResourceIcon.tsx';
+import { fleetPlanLimitText, fleetPlanReport, planAmount } from './fleet-plan-text.ts';
 import './fleet-planner.css';
 
-const RESOURCE_GENITIVE: Record<FleetPlanResource, string> = { metal: 'металла', minerals: 'минералов', gas: 'газа' };
 const MAX_TARGET_DIGITS = 12;
-/** Text a number exactly while it reads at a glance, compact above this. */
-const EXACT_BELOW = 10_000_000;
-
-const amount = (value: number) => (value >= EXACT_BELOW ? compactAmount(value) : formatNumber(value));
-
 /** «2:14:30», «3 д 04:10» past a day. Long orders only ever read in days and hours. */
 function buildTime(ms: number): string {
   const total = Math.max(0, Math.ceil(ms / 1_000));
@@ -47,13 +39,6 @@ function buildTime(ms: number): string {
   const pad = (value: number) => String(value).padStart(2, '0');
   if (days > 0) return `${formatNumber(days)} д ${pad(hours)}:${pad(minutes)}`;
   return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${pad(minutes)}:${pad(seconds)}`;
-}
-
-function limitText(limit: FleetPlanLimit | null, short: FleetPlanLine['short']): string | null {
-  if (limit === 'hangar') return 'нет места в ангаре';
-  if (!limit) return null;
-  const lacking = short[limit];
-  return lacking ? `не хватает ${RESOURCE_GENITIVE[limit]} ${compactAmount(lacking)}` : null;
 }
 
 export type FleetPlannerDialogProps = {
@@ -70,20 +55,6 @@ export type FleetPlannerDialogProps = {
 };
 
 type Report = { planetId: string; text: string; warn: string | null; key: number };
-
-function reportOf(result: FleetPlanStartResult): Pick<Report, 'text' | 'warn'> {
-  const started = result.outcomes.filter((outcome) => outcome.started > 0);
-  const shortfall = result.outcomes.filter((outcome) => outcome.started < outcome.wanted);
-  const why = (outcome: FleetPlanStartOutcome) => {
-    const rest = outcome.wanted - outcome.started;
-    const cause = outcome.reason ?? limitText(outcome.limitedBy, outcome.short);
-    return `${outcome.name}: ещё ${amount(rest)}${cause ? `, ${cause}` : ''}`;
-  };
-  const text = started.length
-    ? `Запущено ${amount(result.started)} ${plural(result.started, 'корабль', 'корабля', 'кораблей')}: ${started.map((outcome) => `${outcome.name} ${amount(outcome.started)}`).join(', ')}.`
-    : 'Ничего не запущено.';
-  return { text, warn: shortfall.length ? shortfall.map(why).join(' · ') : null };
-}
 
 /**
  * «Эталонный флот»: what a planet should hold, what it holds, and one click for
@@ -142,7 +113,7 @@ export function FleetPlannerDialog({ state, now, mode, testTimeScale, planetId, 
       setLaunched({ ids, key: Date.now() });
       playSound('success');
     }
-    setReport({ planetId, ...reportOf(result), key: Date.now() });
+    setReport({ planetId, ...fleetPlanReport(result), key: Date.now() });
   };
 
   const addLine = (shipId: ShipId) => {
@@ -259,7 +230,7 @@ export function FleetPlannerDialog({ state, now, mode, testTimeScale, planetId, 
               </button>
             ) : null}
             <button type="button" className="fplan__btn fplan__btn--pri" disabled={view.startable <= 0} onClick={() => start()} data-qa-fleet-plan-start-all data-sfx="none">
-              {view.startable > 0 ? `Запустить всё · ${amount(view.startable)}` : 'Запустить всё'}
+              {view.startable > 0 ? `Запустить всё · ${planAmount(view.startable)}` : 'Запустить всё'}
             </button>
           </div>
           {copyOpen ? (
@@ -297,12 +268,12 @@ function HangarBand({ view, name }: { view: FleetPlanView; name: string }) {
     <div className={`fplan-hangar ${overBy > 0 ? 'is-over' : ''}`} data-qa-fleet-plan-hangar data-qa-fleet-plan-over={overBy}>
       <p>
         <span>{name}</span>
-        <b data-qa-fleet-plan-used={used}>{amount(used)}</b>
-        <span>из {amount(capacity)} занято</span>
-        {!view.empty ? <span className="fplan-hangar__plan">по плану будет <b>{amount(withPlan)}</b></span> : null}
+        <b data-qa-fleet-plan-used={used}>{planAmount(used)}</b>
+        <span>из {planAmount(capacity)} занято</span>
+        {!view.empty ? <span className="fplan-hangar__plan">по плану будет <b>{planAmount(withPlan)}</b></span> : null}
         {overBy > 0
-          ? <strong className="fplan-hangar__over" data-qa-fleet-plan-over-text>План не помещается: больше ангара на {amount(overBy)} населения</strong>
-          : !view.empty ? <em className="fplan-hangar__free">{free > 0 ? `останется ${amount(free)} места` : 'ангар будет заполнен'}</em> : null}
+          ? <strong className="fplan-hangar__over" data-qa-fleet-plan-over-text>План не помещается: больше ангара на {planAmount(overBy)} населения</strong>
+          : !view.empty ? <em className="fplan-hangar__free">{free > 0 ? `останется ${planAmount(free)} места` : 'ангар будет заполнен'}</em> : null}
       </p>
       <div className="fplan-hangar__band" role="meter" aria-valuemin={0} aria-valuemax={capacity} aria-valuenow={used} aria-label={`${name}: занято ${formatNumber(used)} из ${formatNumber(capacity)}`}>
         <i className="fplan-hangar__plan-part" style={{ '--from': usedShare, '--share': planShare } as CSSProperties} />
@@ -330,7 +301,7 @@ function EmptyPlan({ view, copyCount, onFromCurrent, onCopy, onAdd }: { view: Fl
           <button key={item.id} type="button" style={{ '--i': index } as CSSProperties} onClick={() => onAdd(item.id as ShipId)} data-qa-fleet-plan-add={item.id}>
             <img src={item.art} alt="" draggable={false} />
             <b>{item.name}</b>
-            <small>{item.owned + item.pending > 0 ? `есть ${amount(item.owned + item.pending)}` : 'нет'}</small>
+            <small>{item.owned + item.pending > 0 ? `есть ${planAmount(item.owned + item.pending)}` : 'нет'}</small>
           </button>
         ))}
       </div>
@@ -344,7 +315,7 @@ function Lane({ line, index, autoFocus, launchKey, faction, onTarget, onFill, on
 }) {
   const { item } = line;
   const scale = Math.max(line.target, line.current, 1);
-  const hold = limitText(line.limitedBy, line.short);
+  const hold = fleetPlanLimitText(line.limitedBy, line.short);
   const locked = !item.unlocked;
   const reason = locked ? localizeBuildingNames(item.reason ?? 'Требования не выполнены.', faction) : null;
   const state = locked ? 'locked' : line.missing <= 0 ? 'done' : line.startable <= 0 ? 'stuck' : line.startable < line.missing ? 'part' : 'ready';
@@ -365,15 +336,15 @@ function Lane({ line, index, autoFocus, launchKey, faction, onTarget, onFill, on
           <i className="is-here" style={{ '--from': 0, '--share': line.onPlanet / scale } as CSSProperties} />
         </div>
         <small className="fplan-lane__parts">
-          <span>на планете <b>{amount(line.onPlanet)}</b></span>
-          {line.queued ? <span className="is-queued" data-qa-fleet-plan-line-queued={line.queued}>строится <b>{amount(line.queued)}</b></span> : null}
-          {line.away ? <span data-qa-fleet-plan-line-away={line.away}>в рейсе <b>{amount(line.away)}</b></span> : null}
-          {line.surplus ? <span className="is-surplus">сверх плана <b>{amount(line.surplus)}</b></span> : null}
+          <span>на планете <b>{planAmount(line.onPlanet)}</b></span>
+          {line.queued ? <span className="is-queued" data-qa-fleet-plan-line-queued={line.queued}>строится <b>{planAmount(line.queued)}</b></span> : null}
+          {line.away ? <span data-qa-fleet-plan-line-away={line.away}>в рейсе <b>{planAmount(line.away)}</b></span> : null}
+          {line.surplus ? <span className="is-surplus">сверх плана <b>{planAmount(line.surplus)}</b></span> : null}
         </small>
       </div>
       <div className="fplan-lane__target">
         {line.isFill ? (
-          <div className="fplan-lane__fill-value" data-qa-fleet-plan-fill-target={line.target}>{amount(line.target)}</div>
+          <div className="fplan-lane__fill-value" data-qa-fleet-plan-fill-target={line.target}>{planAmount(line.target)}</div>
         ) : (
           <TargetInput value={line.target} name={item.name} autoFocus={autoFocus} onCommit={onTarget} qa={line.id} />
         )}
@@ -385,12 +356,12 @@ function Lane({ line, index, autoFocus, launchKey, faction, onTarget, onFill, on
         ) : line.missing <= 0 ? (
           <p className="fplan-lane__done">Как в плане</p>
         ) : line.startable <= 0 ? (
-          <p className="fplan-lane__stuck" data-qa-fleet-plan-line-stuck><b>Не хватает {amount(line.missing)}</b><small>{hold}</small></p>
+          <p className="fplan-lane__stuck" data-qa-fleet-plan-line-stuck><b>Не хватает {planAmount(line.missing)}</b><small>{hold}</small></p>
         ) : (
           <>
             <button type="button" className={`fplan-lane__go ${state === 'part' ? 'is-part' : ''}`} onClick={onStart} data-qa-fleet-plan-start={line.id} data-sfx="none">
-              <span>Запустить</span> <b>{amount(line.startable)}</b>
-              {state === 'part' ? <small>из {amount(line.missing)}</small> : null}
+              <span>Запустить</span> <b>{planAmount(line.startable)}</b>
+              {state === 'part' ? <small>из {planAmount(line.missing)}</small> : null}
             </button>
             <small className={`fplan-lane__hint ${state === 'part' ? 'is-warn' : ''}`}>{state === 'part' ? hold : buildTime(line.buildMs)}</small>
           </>

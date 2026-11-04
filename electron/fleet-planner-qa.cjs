@@ -24,7 +24,8 @@ const failures = [];
 const fail = (message, detail) => { failures.push({ message, detail }); console.error(`[planner-qa] ${message}`, JSON.stringify(detail ?? null)); };
 const check = (ok, message, detail) => { if (!ok) fail(message, detail); };
 
-const OWNER_PLAN = { targets: { scout: 1300, defender: 1300, destroyer: 200, battleship: 500 }, fillShipId: 'bomber' };
+// The owner's example, scaled to fit a level-30 hangar.
+const OWNER_PLAN = { targets: { scout: 300, defender: 300, destroyer: 40, battleship: 100 }, fillShipId: 'bomber' };
 const ALL_SHIPS = ['solar-satellite', 'spy-probe', 'transporter', 'mega-transporter', 'colonizer', 'recycler', 'scout', 'cruiser', 'defender', 'battleship', 'destroyer', 'bomber', 'death-star'];
 const COLONIES = [
   ['planet-1-1-6', 'Кассия', 1, 6],
@@ -134,7 +135,9 @@ async function seed(win, scenario = {}) {
 }
 
 async function openPlanner(win) {
-  await run(win, `window.dispatchEvent(new CustomEvent('asterion:fleet-planner-open'))`);
+  await click(win, '[data-qa-planet-section="empire"]');
+  await waitFor(win, `document.querySelector('[data-qa-empire-planner]')`);
+  await click(win, '[data-qa-empire-planner]');
   await waitFor(win, `document.querySelector('[data-qa-fleet-planner]')`);
   await settle(win, 900);
 }
@@ -207,7 +210,7 @@ async function scene(win, directory, name, scenario, after) {
 async function runViewport(win, directory) {
   const metrics = {};
   const homePlan = (plan) => ({ [HOME]: plan });
-  const fleet = { scout: 900, defender: 1300, battleship: 120, destroyer: 40, bomber: 1200 };
+  const fleet = { scout: 180, defender: 300, battleship: 24, destroyer: 8, bomber: 240 };
 
   metrics.empty = await scene(win, directory, '01-empty-plan', { ships: fleet });
   check(await run(win, `Boolean(document.querySelector('[data-qa-fleet-plan-empty]'))`), 'An empty plan shows its own screen');
@@ -215,7 +218,7 @@ async function runViewport(win, directory) {
 
   metrics.owner = await scene(win, directory, '02-owner-plan', { ships: fleet, plans: homePlan(OWNER_PLAN), queue: 0 });
   const scout = await lineData(win, 'scout');
-  check(scout?.missing === 400, 'Missing = target − ships', scout);
+  check(scout?.missing === 120, 'Missing = target − ships', scout);
   check((await lineData(win, 'defender'))?.state === 'done', 'A reached target reads as done');
   const fill = await lineData(win, 'bomber');
   check(fill?.missing > 0, 'The fill line wants the rest of the hangar', fill);
@@ -224,8 +227,8 @@ async function runViewport(win, directory) {
   // One line: exactly the missing amount, and the line says so at once.
   await click(win, '[data-qa-fleet-plan-start="scout"]');
   const started = await lineData(win, 'scout');
-  check(started?.missing === 0 && started?.current === 1300, 'One click starts exactly the missing amount', started);
-  check(await run(win, `/Запущено 400/.test(document.querySelector('[data-qa-fleet-plan-report]')?.textContent || '')`), 'The report names what started');
+  check(started?.missing === 0 && started?.current === 300, 'One click starts exactly the missing amount', started);
+  check(await run(win, `/Запущено 120/.test(document.querySelector('[data-qa-fleet-plan-report]')?.textContent || '')`), 'The report names what started');
   await capture(win, directory, '03-after-one-line');
   await click(win, '[data-qa-fleet-plan-start-all]');
   await settle(win, 300);
@@ -247,7 +250,7 @@ async function runViewport(win, directory) {
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`, 20000);
   await settle(win, 300);
   const stored = (await savedSave(win)).fleetUi?.plans?.[HOME];
-  check(stored?.targets?.defender === 2000 && stored?.targets?.bomber === undefined && stored?.fillShipId === 'scout' || stored?.fillShipId === undefined, 'The edited plan is in the save', stored);
+  check(stored?.targets?.defender === 2000 && stored?.fillShipId === undefined, 'The edited plan is in the save', stored);
   const queue = (await savedSave(win)).planets[HOME].fleetProduction.shipQueue;
   check(queue.length >= 3, 'All started orders survive the reload', queue.map((order) => order.itemId));
 
@@ -325,13 +328,13 @@ async function runViewport(win, directory) {
   await settle(win, 400);
   await capture(win, directory, '16-copy-list');
   await click(win, '[data-qa-fleet-plan-copy-from="planet-1-1-6"]');
-  check((await lineData(win, 'scout'))?.target === 1300, 'Copy brings the other planet\'s numbers');
+  check((await lineData(win, 'scout'))?.target === 300, 'Copy brings the other planet\'s numbers');
   await click(win, '[data-qa-fleet-plan-planet="planet-1-3-9"]');
   await settle(win, 400);
   await click(win, '[data-qa-fleet-plan-copy]');
   await click(win, `[data-qa-fleet-plan-copy-from="${HOME}"]`);
   await settle(win, 200);
-  check((await lineData(win, 'defender'))?.target === 1300, 'Copy replaces the plan on the second planet');
+  check((await lineData(win, 'defender'))?.target === 300, 'Copy replaces the plan on the second planet');
   check(await run(win, `Boolean(document.querySelector('[data-qa-fleet-plan-undo]'))`), 'Replacing a plan offers undo');
   await capture(win, directory, '17-copy-replaced-undo');
   await click(win, '[data-qa-fleet-plan-undo]');
@@ -357,17 +360,36 @@ async function runViewport(win, directory) {
   await settle(win, 900);
   await capture(win, directory, '20-opened-from-empire');
 
-  // The fleet screen's menu opens the planner too.
+  // The order picker of «Империя» knows the plan and opens the planner.
   await seed(win, { ships: fleet, plans: homePlan(OWNER_PLAN) });
-  await run(win, `document.querySelector('[data-qa-route="fleets"]')?.click(); true`);
+  await click(win, '[data-qa-planet-section="empire"]');
+  await waitFor(win, `document.querySelector('[data-qa-empire-order="${HOME}"]')`);
+  await click(win, `[data-qa-empire-more="${HOME}"]`);
+  await settle(win, 500);
+  await click(win, '[data-qa-empire-yard-open="ships"]');
+  await waitFor(win, `document.querySelector('[data-qa-empire-yard-planner]')`);
+  check(await run(win, `Number(document.querySelector('[data-qa-empire-produce-item="scout"]').dataset.qaEmpireProduceLacking) === 120`), 'The order list shows what the plan lacks');
+  await click(win, '[data-qa-empire-produce-item="scout"]');
+  check(await run(win, `document.querySelector('[data-qa-empire-produce-qty]').value === '120'`), 'The order starts at the missing number');
+  await capture(win, directory, '21-order-picker');
+  await click(win, '[data-qa-empire-yard-planner]');
+  await waitFor(win, `document.querySelector('[data-qa-fleet-planner]')`);
+  await click(win, '[data-qa-fleet-planner-close]');
+
+  // A fleet on a mission counts as «в рейсе» and is not ordered again.
+  await seed(win, { ships: fleet, plans: homePlan(OWNER_PLAN) });
+  await run(win, `window.dispatchEvent(new CustomEvent('asterion:flight-dispatch-request', { detail: {
+    missionId: 'transport', originPlanetId: ${JSON.stringify(HOME)}, targetRelation: 'self',
+    destination: { kind: 'planet', planetId: 'planet-1-1-6', coordinate: { galaxy: 1, system: 1, position: 6 } },
+    cargo: { metal: 0, minerals: 0, gas: 0 }, selectedShips: { scout: 60 }, selectedCommanders: {},
+  } })); true`);
   await settle(win, 400);
-  const hasMenu = await run(win, `Boolean(document.querySelector('[data-qa-fleet-section="fleet-plan"]'))`);
-  if (hasMenu) {
-    await capture(win, directory, '21-fleet-menu');
-    await click(win, '[data-qa-fleet-section="fleet-plan"]');
-    await waitFor(win, `document.querySelector('[data-qa-fleet-planner]')`);
-    await click(win, '[data-qa-fleet-planner-close]');
-  } else fail('The fleet menu has no «Эталонный флот»');
+  await openPlanner(win);
+  const flying = await run(win, `Number(document.querySelector('[data-qa-fleet-plan-line="scout"] [data-qa-fleet-plan-line-away]')?.dataset.qaFleetPlanLineAway ?? 0)`);
+  check(flying === 60, 'A fleet on a mission shows as «в рейсе»', flying);
+  check((await lineData(win, 'scout'))?.missing === 120, 'A fleet on a mission is not ordered again', await lineData(win, 'scout'));
+  await checkLayout(win, '23-fleet-in-flight');
+  await capture(win, directory, '23-fleet-in-flight');
 
   // A stress beyond the catalogue: 24 lines (the game has 13), the list scrolls and nothing breaks.
   await seed(win, { ships: fleet, plans: homePlan({ targets: Object.fromEntries(ALL_SHIPS.map((id, index) => [id, 500 + index * 700])) }) });

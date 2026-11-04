@@ -10,11 +10,11 @@ import { flushSync, createPortal } from 'react-dom';
 import './planet-skins.css';
 import './universe.css';
 import { UniverseView } from './UniverseView';
-import { applyFleetUiUpdate, FLEET_PLANNER_OPEN_EVENT, FLEET_UI_UPDATE_EVENT, type FleetUiUpdate } from './domain/flights/fleet-ui.ts';
+import { applyFleetUiUpdate, FLEET_UI_UPDATE_EVENT, type FleetUiUpdate } from './domain/flights/fleet-ui.ts';
 import type { FleetPlan } from './domain/fleet/fleet-plan.ts';
 import type { ShipId } from './domain/combat/ids.ts';
 import { startFleetPlanLines, type FleetPlanStartResult } from './application/fleet-plan.ts';
-import { FleetPlannerDialog } from './ui/fleet-plan/FleetPlannerDialog';
+import { fleetPlanReport } from './ui/fleet-plan/fleet-plan-text.ts';
 import { OperationsView } from './OperationsView';
 import { createOperationsVariantAQaFixture, getOperationsVariantAQaStatus } from './operations-variant-a-qa-fixture.ts';
 import { createUniverseNpcOwnerProfile, rerollTestUniverseLayout, TEST_MODE_ALLY_PLANET_FIXTURE, UNIVERSE_NPC_OWNER_ID } from './domain/universe/runtime.ts';
@@ -444,7 +444,6 @@ const SPEED_SUFFIX: Record<string, string> = { slow: ' ×0.5', standard: '', fas
 export function App({ session = null }: { session?: ActiveSession | null } = {}) {
   const scale = useStageScale();
   const { route: activeRoute, fleetSection: activeFleetSection, navigate } = useNavigation();
-  const [fleetPlannerPlanetId, setFleetPlannerPlanetId] = useState<string | null>(null);
   const activeTab = APP_ROUTE_LABELS[activeRoute];
   const [planetViewMode, setPlanetViewMode] = useState<PlanetViewMode>('overview');
   // «Планета» has two parts: the selected planet and «Империя» (all planets).
@@ -741,12 +740,6 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     if (RUNTIME_MODE !== 'test') return;
     persistence.writeTestTimeScale(testTimeScale);
   }, [persistence, testTimeScale]);
-
-  useEffect(() => {
-    const onOpen = (event: Event) => setFleetPlannerPlanetId((event as CustomEvent<{ planetId?: string } | null>).detail?.planetId ?? stateRef.current.currentPlanetId);
-    window.addEventListener(FLEET_PLANNER_OPEN_EVENT, onOpen);
-    return () => window.removeEventListener(FLEET_PLANNER_OPEN_EVENT, onOpen);
-  }, []);
 
   useEffect(() => {
     const onFleetUiUpdate = (event: Event) => {
@@ -1804,14 +1797,19 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   };
 
   /** Planner: starts the missing ships of some lines (or all) in one update, through the ordinary shipyard command. */
-  const startFleetPlan = (planetId: string, shipIds?: readonly ShipId[]): FleetPlanStartResult | null => {
+  const startFleetPlan = (planetId: string, shipIds?: readonly ShipId[], announce = false): FleetPlanStartResult | null => {
     if (rejectNpcCatchupCommand()) return null;
     const orderedAt = Date.now();
     const runtime = { now: orderedAt, mode: RUNTIME_MODE, testTimeScale };
-    return enqueueApplicationStateUpdate(stateRef, setState, (current) => {
+    const started = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
       const action = startFleetPlanLines(current, { planetId: planetId as PlanetId, ...runtime }, runtime, shipIds);
       return { state: action.state, result: action };
     }, flushSync, renderedStateRef, noteStateHeal);
+    if (announce) {
+      const report = fleetPlanReport(started);
+      setNotice(`${state.planets[planetId]?.name ?? currentPlanetName}: ${report.text}${report.warn ? ` ${report.warn}` : ''}`);
+    }
+    return started;
   };
 
   /** «Империя»: an order on any own planet's shipyard, through the same command as the shipyard screen. */
@@ -3178,8 +3176,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
                 onProduce={(id, kind, itemId, quantity) => orderProduction(id as PlanetId, kind, itemId, quantity)}
                 onCancelProduction={(id, orderId) => cancelProduction(id as PlanetId, orderId)}
                 onSend={sendQuickFlights}
-                onOpenPlanner={(id) => setFleetPlannerPlanetId(id)}
-                onStartPlan={(id) => startFleetPlan(id)}
+                onSavePlan={saveFleetPlan}
+                onStartPlan={startFleetPlan}
               />
             </>
           ) : activeRoute === 'planet' ? (
@@ -3271,20 +3269,6 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
           <span>{lastNotice}</span>
         </div>
 
-        {fleetPlannerPlanetId && state.planets[fleetPlannerPlanetId] ? (
-          <FleetPlannerDialog
-            state={state}
-            now={now}
-            mode={RUNTIME_MODE}
-            testTimeScale={testTimeScale}
-            planetId={fleetPlannerPlanetId}
-            planetArt={Object.fromEntries(ownedPlanets.map((planet) => [planet.id, planetSkins.find((skin) => skin.id === state.planets[planet.id].skin)?.art ?? planetSkins[0].art]))}
-            onPlanet={setFleetPlannerPlanetId}
-            onClose={() => setFleetPlannerPlanetId(null)}
-            onSavePlan={saveFleetPlan}
-            onStart={startFleetPlan}
-          />
-        ) : null}
         {createPortal(
           <div ref={toastStackRef} className="runtime-toast-stack" data-qa-runtime-toast-stack aria-live="polite"
             style={toastSpot ? { left: toastSpot.left ?? 'auto', right: toastSpot.right ?? 'auto', top: toastSpot.top ?? 'auto', bottom: toastSpot.bottom ?? 'auto' } : undefined}>

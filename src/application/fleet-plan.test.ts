@@ -21,7 +21,7 @@ import { applyCampaignRuntimeForCatchup, runNpcCatchup } from './npc-catchup-run
 import { freezeNpcCatchupTarget } from './npc-catchup.ts';
 import { campaign } from './npc-runtime.test-support.ts';
 import { createInitialSaveState, createPersistenceFacade, serializeSaveForStorage } from './persistence.ts';
-import { enqueueApplicationStateUpdate } from './state.ts';
+import { enqueueApplicationStateUpdate, runOutsideApplicationCommand } from './state.ts';
 
 const NOW = 1_000_000;
 const RUNTIME = { now: NOW, mode: 'production' as const, testTimeScale: 1 as const };
@@ -237,6 +237,25 @@ test('start all is one transition: a tick after it cannot split the orders', () 
   assert.equal(started, 15);
   assert.equal(stateRef.current, held);
   assert.equal(held.planets[PLANET]!.fleetProduction.shipQueue.length, 2);
+});
+
+test('a tick effect firing inside the command flush cannot undo a started line (the PR #161 race)', async () => {
+  let held = world({ targets: { scout: 10, defender: 5 } });
+  const setState = (update: SaveState | ((current: SaveState) => SaveState)) => { held = typeof update === 'function' ? update(held) : update; };
+  const stateRef = { current: held };
+  // React runs the previous commit's effects first, inside the flush, while stateRef still lacks the command.
+  const flush = (work: () => void) => {
+    runOutsideApplicationCommand(() => setState(stateRef.current));
+    work();
+  };
+  for (const shipId of ['scout', 'defender'] as const) {
+    enqueueApplicationStateUpdate(stateRef, setState, (current) => {
+      const action = startFleetPlanLines(current, context(), RUNTIME, [shipId]);
+      return { state: action.state, result: action.started };
+    }, flush);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  assert.deepEqual(held.planets[PLANET]!.fleetProduction.shipQueue.map((order) => order.itemId), ['scout', 'defender']);
 });
 
 test('save and reload keeps the plan, in both save formats', () => {
