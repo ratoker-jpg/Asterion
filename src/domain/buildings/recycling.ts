@@ -195,6 +195,28 @@ export function isRecyclingAllocationValid(allocation: ResourceAllocationPercent
   }) && getRecyclingAllocationTotal(allocation) === 100;
 }
 
+/**
+ * Sets one resource's share and gives the rest to the other two in their
+ * present proportion, so the three always add up to 100.
+ */
+export function rebalanceRecyclingAllocation(
+  allocation: ResourceAllocationPercent,
+  resource: RecyclingResource,
+  percent: number,
+): ResourceAllocationPercent {
+  const value = toSafePercent(percent);
+  const rest = 100 - value;
+  const [first, second] = RECYCLING_RESOURCES.filter((candidate) => candidate !== resource) as [RecyclingResource, RecyclingResource];
+  const weights = allocation[first] + allocation[second];
+  const firstShare = weights > 0 ? Math.round(rest * allocation[first] / weights) : Math.ceil(rest / 2);
+  return {
+    ...allocation,
+    [resource]: value,
+    [first]: firstShare,
+    [second]: rest - firstShare,
+  };
+}
+
 export function normalizeRecyclingAllocation(value: unknown): ResourceAllocationPercent {
   const source = value && typeof value === 'object'
     ? value as Partial<Record<RecyclingResource, unknown>>

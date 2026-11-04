@@ -16,6 +16,7 @@ import {
 import {
   applyProductionBots,
   cancelBuilding,
+  collectAllRecycling,
   collectRecycling,
   cancelSpaceportUpgrade,
   destroyBuilding,
@@ -25,6 +26,7 @@ import {
   reconcileSpaceport,
   startBuilding,
   startRecycling,
+  startRecyclingBatch,
   startSpaceportUpgrade,
 } from './buildings.ts';
 import {
@@ -63,7 +65,7 @@ import {
 } from './persistence.ts';
 import { BUILDING_ROLES, getStorageCapacities } from '../domain/buildings/resource-zone.ts';
 import { getBuildingMaxLevel } from '../domain/buildings/balance-v1.ts';
-import { getOwnerShipUpgradeLevel, getPlanetResources, type SaveState } from './contracts.ts';
+import { getOwnerShipUpgradeLevel, getPlanetResources, replacePlanetResources, type SaveState } from './contracts.ts';
 import { createColonyPlanetRuntime, destroyOwnedPlanet } from './owned-planets.ts';
 import {
   getPlanetOverpopulationSummary,
@@ -3022,4 +3024,33 @@ test('a newer rendered state is never replaced when a command result looks lost'
   }, flush, rendered, (state) => heals.push(state));
   assert.equal(heals.length, 0);
   assert.equal(committed, newer);
+});
+
+test('a recycling batch and collect-all each take one state update', () => {
+  const startAt = 1_000_000;
+  const seeded = createInitialSaveState('test');
+  const planet = seeded.planets['helion-01'];
+  const initial = replacePlanetResources({ ...seeded, planets: { ...seeded.planets, 'helion-01': {
+    ...planet,
+    buildings: { ...planet.buildings, recycling: 10 },
+    recycling: { availableDebris: 1_003, jobs: [] },
+  } } }, 'helion-01', { ...getPlanetResources(seeded, 'helion-01'), metal: 1_000 });
+  const ids = Array.from({ length: 10 }, (_, index) => `batch-${index}`);
+  const started = startRecyclingBatch(initial, context(startAt), 1_003, 10, { metal: 100, minerals: 0, gas: 0 }, ids);
+  assert.equal(started.ok, true);
+  const recycling = started.state.planets['helion-01'].recycling;
+  assert.equal(recycling.availableDebris, 0);
+  assert.deepEqual(recycling.jobs.map((job) => job.debrisAmount), [101, 101, 101, 100, 100, 100, 100, 100, 100, 100]);
+
+  assert.equal(collectAllRecycling(started.state, context(startAt)).ok, false, 'nothing is ready yet');
+  const finishAt = Math.max(...recycling.jobs.map((job) => job.finishAt));
+  const metalBefore = getPlanetResources(started.state, 'helion-01').metal;
+  const collected = collectAllRecycling(started.state, context(finishAt));
+  assert.equal(collected.ok, true);
+  assert.equal(collected.collected, 10);
+  assert.equal(collected.state.planets['helion-01'].recycling.jobs.length, 0);
+  const expected = recycling.jobs.reduce((sum, job) => sum + job.output.metal, 0);
+  assert.equal(collected.output?.metal, expected);
+  assert.equal(getPlanetResources(collected.state, 'helion-01').metal, metalBefore + expected);
+  assert.equal(collectAllRecycling(collected.state, context(finishAt)).ok, false, 'paid once');
 });

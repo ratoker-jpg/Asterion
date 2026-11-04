@@ -47,6 +47,6 @@ test('a world written by an effect inside a command flush waits for the command'
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.deepEqual(seen, [after]);
   // Outside a command it runs at once.
-  runOutsideApplicationCommand(() => { seen.push('now'); });
-  assert.equal(seen.at(-1), 'now');
+  runOutsideApplicationCommand(() => { (seen as unknown[]).push('now'); });
+  assert.equal(seen.length, 2);
 });

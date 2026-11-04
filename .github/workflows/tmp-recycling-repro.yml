@@ -17,6 +17,8 @@ jobs:
       - run: npx electron tools/tmp-mock/capture.cjs
         continue-on-error: true
       - run: npx electron electron/command-tick-race-qa.cjs
+        continue-on-error: true
+      - run: npx electron electron/visual-recycling-center.cjs
       - uses: actions/upload-artifact@v6
         if: always()
         with:

@@ -142,7 +142,8 @@ import {
   executeTradeAction,
   previewBuilding,
   startBuilding as startBuildingAction,
-  startRecycling as startRecyclingAction,
+  collectAllRecycling as collectAllRecyclingAction,
+  startRecyclingBatch as startRecyclingBatchAction,
   startSpaceportUpgrade as startSpaceportUpgradeAction,
 } from './application/buildings.ts';
 import {
@@ -1614,17 +1615,19 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     setNotice('Роботы перераспределены');
   };
 
-  const startRecycling = (debrisAmount: number, allocation: ResourceAllocationPercent) => {
+  const startRecycling = (totalDebris: number, processCount: number, allocation: ResourceAllocationPercent) => {
     if (rejectNpcCatchupCommand()) return false;
     const startedAt = Date.now();
-    const jobId = globalThis.crypto?.randomUUID?.() ?? `recycling-${startedAt}-${Math.random().toString(36).slice(2, 9)}`;
+    const jobIds = Array.from({ length: Math.max(0, Math.floor(processCount)) }, () => (
+      globalThis.crypto?.randomUUID?.() ?? `recycling-${startedAt}-${Math.random().toString(36).slice(2, 11)}`
+    ));
     const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
-      const transition = startRecyclingAction(current, {
+      const transition = startRecyclingBatchAction(current, {
         planetId: state.currentPlanetId,
         now: startedAt,
         mode: RUNTIME_MODE,
         testTimeScale,
-      }, debrisAmount, allocation, jobId);
+      }, totalDebris, processCount, allocation, jobIds);
       return {
         state: transition.ok ? transition.state : current,
         result: transition,
@@ -1635,6 +1638,26 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       return false;
     }
     setNotice('Переработка запущена');
+    return true;
+  };
+
+  const collectAllRecycling = () => {
+    if (rejectNpcCatchupCommand()) return false;
+    const collectedAt = Date.now();
+    const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
+      const transition = collectAllRecyclingAction(current, {
+        planetId: state.currentPlanetId,
+        now: collectedAt,
+        mode: RUNTIME_MODE,
+        testTimeScale,
+      });
+      return { state: transition.state, result: transition };
+    }, flushSync, renderedStateRef, noteStateHeal);
+    if (!result.ok) {
+      setNotice(result.reason ?? 'Ресурс пока недоступен');
+      return false;
+    }
+    setNotice('Ресурсы получены');
     return true;
   };
 
@@ -2906,6 +2929,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               onProductionBotsApply={applyProductionBots}
               onRecyclingStart={startRecycling}
               onRecyclingCollect={collectRecycling}
+              onRecyclingCollectAll={collectAllRecycling}
               onTrade={tradeResources}
               onSpaceportUpgrade={startSpaceportUpgrade}
               onSpaceportCancel={cancelSpaceportUpgrade}

@@ -9,15 +9,21 @@ import {
   getRecyclingDurationMs,
   getRecyclingEfficiencyPercent,
   getRecyclingMaxConcurrentJobs,
+  getReadyRecyclingJobIds,
   getRecyclingOutput,
+  getRecyclingRunDurationMs,
   getRecyclingStartValidation,
   migrateRecyclingState,
+  planRecyclingBatch,
+  rebalanceRecyclingAllocation,
   resolveRecyclingFixture,
+  startRecyclingBatch,
   startRecyclingJob,
   type RecyclingJob,
   type RecyclingState,
   type ResourceAllocationPercent,
 } from './recycling.ts';
+import { setCampaignTimeScale } from '../runtime/mode.ts';
 
 const allocation: ResourceAllocationPercent = { metal: 60, minerals: 40, gas: 0 };
 const TEST_RECYCLING_CONTEXT = { mode: 'test' as const, fixture: resolveRecyclingFixture('test') };
@@ -251,4 +257,117 @@ test('PR91 x10 affects only new recycling jobs; legacy active job keeps saved de
   const fresh=start(createDefaultRecyclingState(PRODUCTION_RECYCLING_CONTEXT),1,100_000,startedAt,'new');
   assert.equal(fresh.canStart,false,'production stock cannot be invented for test');
   assert.equal(getRecyclingDurationMs(100_000,1),1_429_000);
+});
+
+const ONE_RESOURCE: ResourceAllocationPercent = { metal: 100, minerals: 0, gas: 0 };
+
+test('a new job runs on the campaign clock; a running one keeps its finishAt', () => {
+  try {
+    setCampaignTimeScale(1);
+    const standard = startRecyclingJob({ availableDebris: 980_000, jobs: [] }, 10, 980_000, ONE_RESOURCE, 0, 'a', { mode: 'production' });
+    assert.equal(standard.job!.finishAt, 1_000_000, 'standard speed stays exactly the balance time');
+    setCampaignTimeScale(5);
+    const superfast = startRecyclingJob({ availableDebris: 980_000, jobs: [] }, 10, 980_000, ONE_RESOURCE, 0, 'b', { mode: 'production' });
+    assert.equal(superfast.job!.finishAt, 200_000);
+    // A job started before this rule loads with the time it had.
+    const migrated = migrateRecyclingState(standard.state, 10, 5, PRODUCTION_RECYCLING_CONTEXT);
+    assert.equal(migrated.jobs[0]!.finishAt, 1_000_000);
+    setCampaignTimeScale(0.5);
+    assert.equal(getRecyclingRunDurationMs(980_000, 10, { mode: 'production' }), 2_000_000);
+  } finally {
+    setCampaignTimeScale(1);
+  }
+});
+
+test('Test Mode follows its own selector, not the campaign speed', () => {
+  assert.equal(getRecyclingRunDurationMs(980_000, 10, { mode: 'test', testTimeScale: 1 }), 1_000_000);
+  assert.equal(getRecyclingRunDurationMs(980_000, 10, { mode: 'test', testTimeScale: 100 }), 10_000);
+});
+
+test('the shortest job stays one second at any speed, so a reload does not change it', () => {
+  const started = startRecyclingJob({ availableDebris: 100, jobs: [] }, 10, 1, ONE_RESOURCE, 7_000, 'tiny', { mode: 'test', testTimeScale: 500 });
+  assert.equal(started.job!.finishAt, 8_000);
+  const migrated = migrateRecyclingState(started.state, 10, 7_000, TEST_RECYCLING_CONTEXT);
+  assert.equal(migrated.jobs[0]!.finishAt, 8_000, 'a finishAt under a second would be derived anew on load');
+});
+
+test('at level 10 and every campaign speed ten processes beat top production per hour', () => {
+  // Maxed mines, science and robots (metal, the richest resource): 5 389 920 per hour at x1.
+  const TOP_METAL_PER_HOUR_AT_X1 = 5_389_920;
+  const debrisPerSecond = 980;
+  try {
+    for (const speed of [0.5, 1, 2, 5]) {
+      setCampaignTimeScale(speed);
+      const oneHourDebris = debrisPerSecond * 3600 * speed;
+      const duration = getRecyclingRunDurationMs(oneHourDebris, 10, { mode: 'production' });
+      assert.equal(duration, 3_600_000, `x${speed}: one process takes ${oneHourDebris} per hour`);
+      assert.ok(oneHourDebris * 10 * 1.2 > TOP_METAL_PER_HOUR_AT_X1 * speed);
+      assert.ok(oneHourDebris * 2 * 1.2 > TOP_METAL_PER_HOUR_AT_X1 * speed, 'two processes are already enough');
+    }
+  } finally {
+    setCampaignTimeScale(1);
+  }
+});
+
+test('a batch splits the total evenly and gives the remainder to the first processes', () => {
+  const state: RecyclingState = { availableDebris: 1_000, jobs: [] };
+  assert.deepEqual(planRecyclingBatch(state, 10, 100, 10, ONE_RESOURCE).amounts, Array(10).fill(10));
+  const plan = planRecyclingBatch(state, 10, 103, 10, ONE_RESOURCE);
+  assert.equal(plan.canStart, true);
+  assert.deepEqual(plan.amounts, [11, 11, 11, 10, 10, 10, 10, 10, 10, 10]);
+  assert.equal(plan.amounts.reduce((sum, amount) => sum + amount, 0), 103);
+});
+
+test('a batch is refused when there are not enough slots or debris per process', () => {
+  const running = startRecyclingJob({ availableDebris: 1_000, jobs: [] }, 3, 100, ONE_RESOURCE, 0, 'running', { mode: 'production' }).state;
+  const tooMany = planRecyclingBatch(running, 3, 300, 3, ONE_RESOURCE);
+  assert.equal(tooMany.canStart, false);
+  assert.equal(tooMany.reason, 'Свободных процессов только 2');
+  assert.deepEqual(tooMany.amounts, []);
+
+  const belowMinimum = planRecyclingBatch(running, 10, 3, 5, ONE_RESOURCE);
+  assert.equal(belowMinimum.canStart, false);
+  assert.equal(belowMinimum.reason, 'На 5 процессов нужно хотя бы 5 обломков');
+
+  assert.equal(planRecyclingBatch(running, 10, 0, 5, ONE_RESOURCE).canStart, false);
+  assert.equal(planRecyclingBatch(running, 10, 901, 5, ONE_RESOURCE).reason, 'Недостаточно свободных обломков');
+  assert.equal(planRecyclingBatch(running, 10, 100, 0, ONE_RESOURCE).reason, 'Выберите число процессов');
+  assert.equal(planRecyclingBatch(running, 10, 100, 5, { metal: 50, minerals: 0, gas: 0 }).canStart, false);
+});
+
+test('a batch starts ordinary jobs at once, or nothing at all', () => {
+  const state: RecyclingState = { availableDebris: 1_000, jobs: [] };
+  const split = { metal: 50, minerals: 30, gas: 20 };
+  const started = startRecyclingBatch(state, 10, 1_000, 3, split, 500, ['a', 'b', 'c'], { mode: 'production' });
+  assert.equal(started.canStart, true);
+  assert.deepEqual(started.jobs.map((job) => [job.id, job.debrisAmount]), [['a', 334], ['b', 333], ['c', 333]]);
+  assert.ok(started.jobs.every((job) => job.startedAt === 500 && job.allocationPercent.metal === 50));
+  assert.equal(started.state.availableDebris, 0);
+  assert.equal(started.state.jobs.length, 3);
+
+  for (const ids of [['a', 'b'], ['a', 'a', 'b']]) {
+    const refused = startRecyclingBatch(state, 10, 900, 3, split, 500, ids, { mode: 'production' });
+    assert.equal(refused.canStart, false);
+    assert.equal(refused.state, state, 'nothing changed');
+  }
+  const noSlots = startRecyclingBatch(state, 2, 900, 3, split, 500, ['a', 'b', 'c'], { mode: 'production' });
+  assert.equal(noSlots.canStart, false);
+  assert.equal(noSlots.state, state);
+});
+
+test('only finished jobs are ready to collect', () => {
+  const started = startRecyclingBatch({ availableDebris: 2_000, jobs: [] }, 10, 1_960, 2, ONE_RESOURCE, 0, ['a', 'b'], { mode: 'production' });
+  assert.deepEqual(getReadyRecyclingJobIds(started.state, 999), []);
+  assert.deepEqual(getReadyRecyclingJobIds(started.state, 1_000), ['a', 'b']);
+});
+
+test('one share set, the other two take the rest in proportion and the total stays 100', () => {
+  assert.deepEqual(rebalanceRecyclingAllocation({ metal: 34, minerals: 33, gas: 33 }, 'metal', 50), { metal: 50, minerals: 25, gas: 25 });
+  assert.deepEqual(rebalanceRecyclingAllocation({ metal: 100, minerals: 0, gas: 0 }, 'metal', 40), { metal: 40, minerals: 30, gas: 30 });
+  assert.deepEqual(rebalanceRecyclingAllocation({ metal: 50, minerals: 40, gas: 10 }, 'gas', 100), { metal: 0, minerals: 0, gas: 100 });
+  for (let percent = -5; percent <= 105; percent += 7) {
+    const next = rebalanceRecyclingAllocation({ metal: 17, minerals: 61, gas: 22 }, 'minerals', percent);
+    assert.equal(next.metal + next.minerals + next.gas, 100);
+    assert.ok(next.metal >= 0 && next.gas >= 0);
+  }
 });
