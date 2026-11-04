@@ -124,8 +124,8 @@ function rule(id: QuickActionId, enabled: boolean, reason?: string): QuickAction
  */
 export function listQuickActions(target: QuickTarget, currentOwnerId: string): QuickActionRule[] {
   const { node } = target;
-  const debris = (target.orbitalDebris ?? 0) > 0;
-  const recycle = debris ? [rule('recycle', true)] : [];
+  // Owner rule (04.11.2026): recyclers go to any coordinate in advance, debris or not.
+  const recycle = [rule('recycle', true)];
   switch (node.kind) {
     case 'player':
     case 'npc': {

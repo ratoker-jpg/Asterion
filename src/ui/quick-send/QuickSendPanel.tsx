@@ -184,6 +184,13 @@ export function QuickSendPanel({ state, actionId, target, onSend, onClose, onDet
       </header>}
 
       {notice ? <p className="quick-send__notice" role="status" data-qa-quick-notice>{notice}</p> : null}
+      {actionId === 'recycle' && !target.sun ? (
+        <p className="quick-send__notice" role="status" data-qa-quick-recycle-note>
+          {(target.orbitalDebris ?? 0) > 0
+            ? 'Соберём то, что будет на орбите к моменту прибытия.'
+            : 'Обломков здесь сейчас нет. Если к прибытию их не будет, флот вернётся пустым.'}
+        </p>
+      ) : null}
 
       {planner && legs.length > 0 ? (
         <div className="quick-send__keep" data-qa-quick-keep>

@@ -58,23 +58,23 @@ test('asteroid: colonize only over a free position, the recycler always', () => 
 test('planets: foreign → spy, attack, transport; own → transport, rebase; ally → transport; debris adds the recycler', () => {
   const owner = { id: 'npc-1', displayName: 'Nyxax' };
   const foreign = node('npc', { ownerId: 'npc-1' });
-  assert.deepEqual(ids({ node: foreign, relation: 'neutral', owner }), ['spy', 'attack', 'transport']);
+  assert.deepEqual(ids({ node: foreign, relation: 'neutral', owner }), ['spy', 'attack', 'transport', 'recycle']);
   assert.deepEqual(ids({ node: foreign, relation: 'enemy', owner, orbitalDebris: 500 }), ['spy', 'attack', 'transport', 'recycle']);
-  assert.deepEqual(ids({ node: node('player', { ownerId: 'player-1' }), relation: 'self' }), ['transport', 'deployment']);
-  assert.deepEqual(ids({ node: node('player', { ownerId: 'friend' }), relation: 'ally', owner: { id: 'friend', displayName: 'Друг' } }), ['transport']);
+  assert.deepEqual(ids({ node: node('player', { ownerId: 'player-1' }), relation: 'self' }), ['transport', 'deployment', 'recycle']);
+  assert.deepEqual(ids({ node: node('player', { ownerId: 'friend' }), relation: 'ally', owner: { id: 'friend', displayName: 'Друг' } }), ['transport', 'recycle']);
 });
 
 test('empty slot and debris: colonize, plus the recycler when debris lies there', () => {
-  assert.deepEqual(ids({ node: node('empty') }), ['colonize']);
+  assert.deepEqual(ids({ node: node('empty') }), ['colonize', 'recycle']);
   assert.deepEqual(ids({ node: node('empty'), orbitalDebris: 1 }), ['colonize', 'recycle']);
-  assert.deepEqual(ids({ node: node('uninhabited') }), []);
+  assert.deepEqual(ids({ node: node('uninhabited') }), ['recycle']);
   assert.deepEqual(ids({ node: node('uninhabited'), orbitalDebris: 10 }), ['recycle']);
 });
 
 test('unique object: probe and expedition when free, attack when occupied, reasons when out of range', () => {
   const unique = node('unique');
-  assert.deepEqual(ids({ node: unique, explorationStatus: 'free' }), ['exploration-recon', 'expedition']);
-  assert.deepEqual(ids({ node: unique, explorationStatus: 'occupied' }), ['exploration-recon', 'exploration-attack']);
+  assert.deepEqual(ids({ node: unique, explorationStatus: 'free' }), ['exploration-recon', 'expedition', 'recycle']);
+  assert.deepEqual(ids({ node: unique, explorationStatus: 'occupied' }), ['exploration-recon', 'exploration-attack', 'recycle']);
   const out = listQuickActions({ node: unique }, 'player-1');
   assert.equal(out[0]!.enabled, false);
   assert.match(out[0]!.reason!, /пяти систем/);
@@ -90,7 +90,7 @@ test('pirate base: the contact\'s own disabled reasons are shown', () => {
     elimination: { enabled: false, disabledReason: 'Пиратский рейд доступен только в системах с вашей колонией.' },
   };
   const actions = listQuickActions({ node: node('pirate'), pirate }, 'player-1');
-  assert.deepEqual(actions.map((action) => [action.id, action.enabled]), [['pirate-recon', true], ['pirate-elimination', false], ['pirate-report', false]]);
+  assert.deepEqual(actions.map((action) => [action.id, action.enabled]), [['pirate-recon', true], ['pirate-elimination', false], ['pirate-report', false], ['recycle', true]]);
   assert.equal(actions[1]!.reason, pirate.elimination.disabledReason);
   assert.equal(actions[2]!.reason, 'Разведотчёт ещё не сформирован.');
 });
@@ -300,4 +300,13 @@ test('own planet as target: transport and rebase exclude it, and the lines say �
   assert.equal(noShipsMessage(state, 'deployment', target), 'Нет свободных кораблей на других ваших планетах.');
   // A foreign target keeps the general wording.
   assert.equal(noShipsMessage(state, 'transport', { node: node('npc') }), 'Нет свободных транспортов ни на одной вашей планете.');
+});
+
+test('recycle with no debris known: offered, sized to what is free, the runtime accepts it (in advance)', () => {
+  const state = campaign({ recycler: 9 });
+  const target: QuickTarget = { node: node('empty') };
+  const recycle = evaluateQuickActions(state, target, RUNTIME).find((action) => action.id === 'recycle')!;
+  assert.equal(recycle.enabled, true, recycle.reason);
+  assert.deepEqual(recycle.plan?.fleet.ships, { recycler: 9 });
+  assert.equal(recycle.plan?.preview?.ok, true);
 });

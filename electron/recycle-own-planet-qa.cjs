@@ -76,7 +76,7 @@ async function closeMenu(win) {
 }
 
 /** Debris on the homeworld's orbit; recyclers, mega-transports and warships on it, recyclers on a colony. */
-function seed(recyclersHome, recyclersColony) {
+function seed(recyclersHome, recyclersColony, debris = 44100000) {
   return `(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
     const home = save.planets['helion-01'];
@@ -86,8 +86,9 @@ function seed(recyclersHome, recyclersColony) {
     save.planets['qa-colony-a'].fleet.ships = { ...save.planets['qa-colony-a'].fleet.ships, recycler: ${recyclersColony}, 'mega-transporter': 0, transporter: 0, cruiser: 0 };
     const coordinate = { galaxy: home.universeGalaxy ?? 1, system: home.universeSystem ?? 1, position: home.universePosition ?? 1 };
     save.espionage = { ...(save.espionage || {}), orbitalDebris: { ...((save.espionage || {}).orbitalDebris || {}), qaown: {
-      id: 'qaown', targetPlanetId: 'helion-01', targetPlanetName: home.name, targetOwnerId: save.profile.playerId, targetCoordinate: coordinate, debris: 44100000, createdAt: Date.now() - 1000,
+      id: 'qaown', targetPlanetId: 'helion-01', targetPlanetName: home.name, targetOwnerId: save.profile.playerId, targetCoordinate: coordinate, debris: ${debris}, createdAt: Date.now() - 1000,
     } } };
+    if (${debris} <= 0) delete save.espionage.orbitalDebris.qaown;
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     return coordinate.system;
   })()`;
@@ -129,7 +130,23 @@ async function main() {
   console.log('legs', JSON.stringify(legs));
   if (!legs.some((leg) => leg[0] === 'helion-01' && leg[1] === 'true')) throw new Error(`own planet is not a checked source: ${JSON.stringify(legs)}`);
   await capture(win, 'recycle-panel-own-planet-source');
-  await closeMenu(win);
+  const note = await js(win, `document.querySelector('[data-qa-quick-recycle-note]')?.textContent || ''`);
+  console.log('note', note);
+
+  // 1b. «Подробно»: the fleet screen's «Переработка» plan to the planet's own coordinate can be sent.
+  await js(win, `document.querySelector('[data-qa-quick-details]').click()`);
+  await sleep(1200);
+  await js(win, `[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'МАКС.' && b.closest('.fleet-ship-card, article, div'))?.click()`);
+  await sleep(300);
+  await js(win, `[...document.querySelectorAll('button')].find((b) => /ПРОДОЛЖИТЬ/.test(b.textContent))?.click()`);
+  await waitFor(win, `document.querySelector('[data-qa-flight-dispatch-confirm]')`, 15_000);
+  await sleep(600);
+  const dispatchState = await js(win, `(() => { const b = document.querySelector('[data-qa-flight-dispatch-confirm]'); return { disabled: b.disabled, text: document.querySelector('[data-qa-flight-dispatch-confirm]').closest('section,aside,div')?.innerText.slice(0, 400) }; })()`);
+  console.log('fleet screen send', JSON.stringify(dispatchState));
+  await capture(win, 'fleet-screen-recycle-own-orbit');
+  if (dispatchState.disabled) throw new Error('fleet screen: ОТПРАВИТЬ is disabled for recycle to own orbit');
+  await js(win, `document.querySelector('[data-qa-route="universe"]')?.click()`);
+  await waitFor(win, `document.querySelector('[data-qa-universe]')`);
 
   // 2. No recyclers on the planet, some on the colony: the colony is the source.
   await editSaveIdle(win, seed(0, 6), { label: 'recyclers only on colony', held: `${SAVE}.planets['helion-01'].fleet.ships.recycler === 0` });
@@ -152,6 +169,28 @@ async function main() {
   if (transport3?.enabled || !/на других ваших планетах/.test(transport3?.reason || '')) throw new Error(`transport reason: ${JSON.stringify(transport3)}`);
   await capture(win, 'menu-no-recyclers-anywhere');
   await closeMenu(win);
+
+  // 4. No debris anywhere: recycle is still offered and the fleet screen can send it (in advance).
+  await editSaveIdle(win, seed(2054, 0, 0), { label: 'no debris', held: `!(${SAVE}.espionage.orbitalDebris || {}).qaown && ${SAVE}.planets['helion-01'].fleet.ships.recycler === 2054` });
+  await openUniverseAt(win, system);
+  await rightClick(win, planet);
+  const menu4 = await menuSnapshot(win);
+  const recycle4 = menu4.actions.find((a) => a.id === 'recycle');
+  if (!recycle4?.enabled) throw new Error(`recycle without debris refused: ${JSON.stringify(menu4.actions)}`);
+  await capture(win, 'menu-no-debris-recycle-offered');
+  await js(win, `document.querySelector('[data-qa-quick-action="recycle"]').click()`);
+  await waitFor(win, `document.querySelector('[data-qa-quick-recycle-note]')`);
+  console.log('note 4', await js(win, `document.querySelector('[data-qa-quick-recycle-note]').textContent`));
+  await capture(win, 'recycle-panel-no-debris-note');
+  await js(win, `document.querySelector('[data-qa-quick-details]').click()`);
+  await sleep(1200);
+  await js(win, `[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'МАКС.')?.click()`);
+  await sleep(300);
+  await js(win, `[...document.querySelectorAll('button')].find((b) => /ПРОДОЛЖИТЬ/.test(b.textContent))?.click()`);
+  await waitFor(win, `document.querySelector('[data-qa-flight-dispatch-confirm]')`, 15_000);
+  await sleep(600);
+  if (await js(win, `document.querySelector('[data-qa-flight-dispatch-confirm]').disabled`)) throw new Error('fleet screen: ОТПРАВИТЬ disabled for recycle without debris');
+  await capture(win, 'fleet-screen-recycle-no-debris');
   win.destroy();
 }
 
