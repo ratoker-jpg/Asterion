@@ -12,7 +12,8 @@ import { createInitialSaveState, createPersistenceFacade } from './persistence.t
 import { dispatchNpcDeployment, dispatchNpcMission, npcDeploymentFreeCapacity } from './npc-missions.ts';
 import { reconcileFlights } from './flights.ts';
 import { assessNpcPlanetThreat, npcStayThreshold } from './npc-threat.ts';
-import { createNpcUtilityContext, chooseNpcAttackForce, npcForcePower, estimateRaidEconomics, estimateRevengeEconomics, npcRecyclerDeficit } from './npc-utility.ts';
+import type { BattleReport } from '../domain/combat/report.ts';
+import { createNpcUtilityContext, chooseNpcAttackForce, npcForcePower, estimateRaidEconomics, estimateRevengeEconomics, estimateAttackUtility, estimateEspionageUtility, npcAttackIntel, npcRecyclerDeficit } from './npc-utility.ts';
 import { getNpcMissionCandidates } from './npc-mission-policy.ts';
 import { seedNpcGrudgesFromReports } from './npc-grudges.ts';
 import { applyNpcAllianceHeraldry, npcAllianceEmblem, npcColonyName, npcColonySkin, npcNamingStyle } from './npc-identity.ts';
@@ -231,7 +232,7 @@ test('an attack is remembered until the end of the match and survives save and l
   assert.equal(profileOf(saveReload(legacy, 'npc-behaviour-grudge-legacy'), defender.ownerId).grudges?.[attacker.ownerId]?.attacks, 1);
 });
 
-test('revenge accepts a losing trade against an admissible offender, never against an inadmissible one', () => {
+test('revenge never sends a losing attack (owner rule 04.11.2026); it only ranks profitable ones, and never past the attack rule', () => {
   const campaign = makeCampaign('npc-behaviour-revenge');
   const [avenger, offender] = npcTargets(campaign);
   let state = withShips(campaign, avenger.id, { cruiser: 30 });
@@ -251,11 +252,14 @@ test('revenge accepts a losing trade against an admissible offender, never again
   state = { ...state, npc: { ...state.npc!, profiles: { ...state.npc!.profiles, [avenger.ownerId]: angry } } };
   const context = createNpcUtilityContext(state, angry, START + 1, 1);
   const force = chooseNpcAttackForce(context, origin, offender.id, origin.fleet.ships);
-  assert.ok(force, 'a grudge lowers the margin the owner asks for');
+  assert.ok(force, 'a grudge lowers the margin the owner asks for, down to even odds and no further');
   assert.equal(estimateRaidEconomics(context, origin, report, force).worthFlight, false, 'as a raid it does not pay');
   const revenge = estimateRevengeEconomics(context, origin, report, force);
-  assert.equal(revenge.worthFlight, true, 'as revenge it is worth the loss');
   assert.ok(revenge.damage > 0);
+  assert.equal(estimateAttackUtility(context, origin, offender.id, force), -2, 'a grudge does not turn a losing raid into an option');
+  // A force that cannot break the known defence is never sent, grudge or not.
+  const outgunned = chooseNpcAttackForce(context, origin, offender.id, { cruiser: 10 });
+  assert.equal(outgunned, null, 'revenge no longer throws the whole fleet at a stronger defence');
   assert.ok(getNpcMissionCandidates(state, angry, START + 1).some((candidate) => candidate.kind === 'attack'
     && candidate.payload.destinationPlanetId === offender.id), 'the offender is a candidate target');
 
@@ -268,6 +272,57 @@ test('revenge accepts a losing trade against an admissible offender, never again
     targetPlanetId: offender.id }, START + 1, 1);
   assert.equal(refused.ok, false);
   assert.equal(refused.reason, 'attack-not-allowed');
+});
+
+test('owner 04.11.2026: a defended planet is not attacked, a lost fight refutes the report, old intel is spied again, a clearly weaker planet is raided', () => {
+  const campaign = makeCampaign('npc-behaviour-suicide');
+  const [raider, victim] = npcTargets(campaign);
+  const rich = { metal: 2_000_000, minerals: 2_000_000, gas: 2_000_000, debris: 0, developmentEnergy: 0 };
+  const seen = (fleet: Record<string, number>, at: number) => ({ ...spyReport(raider, getEspionageTargets(campaign.espionage)[victim.id]!, fleet, at), resources: rich });
+  const base = (fleet: Record<string, number>, mine: Record<string, number>, at: number) => {
+    let state = withShips(campaign, raider.id, mine);
+    state = withTraits(state, raider.ownerId, { riskTolerance: 0.9, aggression: 0.95 });
+    state = withAttackEligiblePoints(state, [raider.ownerId, victim.ownerId], 20_000);
+    const report = seen(fleet, at);
+    return { state: { ...state, espionage: { ...state.espionage!, reports: [...state.espionage!.reports, report] } }, report };
+  };
+  const origin = (state: SaveState) => getEspionageTargets(state.espionage)[raider.id]!;
+  const hurt = (state: SaveState) => {
+    const profile = profileOf(state, raider.ownerId);
+    const angry = recordNpcGrievance(recordNpcGrievance(profile, victim.ownerId, 3 * 96_000, START - 3_600_000, 'battle-sd-1'), victim.ownerId, 3 * 96_000, START - 1_800_000, 'battle-sd-2');
+    return { state: { ...state, npc: { ...state.npc!, profiles: { ...state.npc!.profiles, [raider.ownerId]: angry } } }, angry };
+  };
+
+  // The defence is far stronger than the raider's fleet, and the raider is vengeful and bold: it never goes.
+  const strong = base({ cruiser: 200 }, { cruiser: 30 }, START);
+  const { state: angryState, angry } = hurt(strong.state);
+  const strongContext = createNpcUtilityContext(angryState, angry, START + 1, 1);
+  assert.equal(chooseNpcAttackForce(strongContext, origin(angryState), victim.id, origin(angryState).fleet.ships), null, 'no force breaks the known defence');
+  assert.equal(estimateAttackUtility(strongContext, origin(angryState), victim.id, { cruiser: 30 }), -2);
+
+  // Clearly stronger than a weak planet with fat stores: a fresh report carries the raid.
+  const weak = base({ cruiser: 2 }, { cruiser: 60 }, START);
+  const weakContext = createNpcUtilityContext(weak.state, profileOf(weak.state, raider.ownerId), START + 1, 1);
+  const force = chooseNpcAttackForce(weakContext, origin(weak.state), victim.id, origin(weak.state).fleet.ships);
+  assert.ok(force, 'the raider sees a win');
+  assert.equal(estimateRaidEconomics(weakContext, origin(weak.state), weak.report, force).worthFlight, true);
+  assert.equal(npcAttackIntel(weakContext, weak.report), 'fresh');
+
+  // Old intel is stale: spy again, then decide. The urge to spy rises when an attack waits on it.
+  const lateAt = START + 4 * 3_600_000;
+  const late = createNpcUtilityContext(weak.state, profileOf(weak.state, raider.ownerId), lateAt, 1);
+  assert.equal(npcAttackIntel(late, weak.report), 'stale');
+  assert.ok(estimateEspionageUtility(late, victim.id, 0, victim.ownerId, true) > estimateEspionageUtility(late, victim.id, 0, victim.ownerId, false));
+
+  // A lost attack on the planet after the report refutes it, however young the report is.
+  const lost = { id: 'battle-sd-lost', timestamp: new Date(START + 1_000).toISOString(), missionType: 'attack', winner: 'defender',
+    attacker: { playerId: raider.ownerId, playerName: 'a', side: 'attacker' }, defender: { playerId: victim.ownerId, playerName: 'd', side: 'defender',
+      coordinates: `[${victim.coordinate.galaxy}:${victim.coordinate.system}:${victim.coordinate.position}]` } } as unknown as BattleReport;
+  const beaten = { ...weak.state, combat: { ...weak.state.combat, reports: [...weak.state.combat.reports, lost] } };
+  const refuted = createNpcUtilityContext(beaten, profileOf(beaten, raider.ownerId), START + 2_000, 1);
+  assert.equal(npcAttackIntel(refuted, weak.report), 'refuted');
+  const respied = { ...weak.report, createdAt: START + 3_000 };
+  assert.equal(npcAttackIntel(createNpcUtilityContext(beaten, profileOf(beaten, raider.ownerId), START + 4_000, 1), respied), 'fresh', 'a report newer than the loss stands');
 });
 
 test('NPC colony names and looks: in the owner\'s style, without repeats, the same on every run', () => {

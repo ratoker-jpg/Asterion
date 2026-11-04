@@ -47,7 +47,7 @@ import { estimationError, NPC_MAX_UTILITY, utilityToWeight } from '../domain/npc
 import { getFactionShipCatalog, getFactionDefenseCatalog } from '../domain/combat/faction-catalog.ts';
 import {
   chooseNpcAttackForce, chooseNpcStrategy, combatEfficiency, createNpcUtilityContext, describeNpcPlanet,
-  estimateAttackUtility, estimateBuildingUtility, estimateRaidEconomics, estimateRevengeEconomics, estimateColonizeUtility, estimateEspionageUtility,
+  estimateAttackUtility, estimateBuildingUtility, estimateRaidEconomics, estimateColonizeUtility, npcAttackIntel, estimateEspionageUtility,
   estimateOperationUtility, estimateProductionItemUtility, flightRemoteness, estimateScienceUtility, npcProductionBatch,
   npcProductionPurpose, NPC_STRATEGY_FAMILY, strategyOf, type NpcStrategyDrives,
   estimateFleetSaveUtility, estimateCommanderUpgradeUtility, npcFleetValue, spaceFlightLegFor, estimateSpaceportUpgradeUtility, NPC_FLAGSHIP_ID,
@@ -217,7 +217,7 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     const destinationPlanetId = String(mission.payload.destinationPlanetId ?? '');
     const remoteness = flightRemoteness(origin.coordinate, { galaxy: Number(mission.payload.destinationGalaxy), system: Number(mission.payload.destinationSystem) });
     if (mission.kind === 'attack') return estimateAttackUtility(utility, origin, destinationPlanetId, attackShips(mission), remoteness);
-    if (mission.kind === 'espionage') return estimateEspionageUtility(utility, destinationPlanetId, remoteness, ownerOfPlanet(destinationPlanetId));
+    if (mission.kind === 'espionage') return estimateEspionageUtility(utility, destinationPlanetId, remoteness, ownerOfPlanet(destinationPlanetId), intelNeeded.has(destinationPlanetId));
     if (mission.kind === 'colonize') return estimateColonizeUtility(utility, origin,
       { galaxy: Number(mission.payload.destinationGalaxy), system: Number(mission.payload.destinationSystem) });
     if (mission.kind === 'expedition') return estimateOperationUtility(utility, 'expedition');
@@ -232,6 +232,7 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     ?? (state.planets[planetId] ? state.profile.playerId : undefined);
   // An attack sends the force the owner believes is enough, not everything.
   const attackForces = new Map<string, Record<string, number> | null>();
+  const intelNeeded = new Set<string>();
   function attackShips(mission: { id: string; payload: Readonly<Record<string, string | number | boolean | null>> }): Record<string, number> {
     let ships: Record<string, number> = {};
     try { ships = JSON.parse(String(mission.payload.selectedShips ?? '{}')) as Record<string, number>; } catch { ships = {}; }
@@ -566,6 +567,14 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
   for (const choice of getNpcPactChoices(state, profile, at, timeScale, utility, missions)) choices.push(choice);
   for (const choice of getNpcFortifyChoices(state, profile, utility, at, timeScale, fortifyInputs, scored)) choices.push(choice);
   state = scheduleNpcPlanCheck(state, ownerId, at, timeScale);
+  // Attacks held back for want of fresh intel: their targets are worth another look before anything else.
+  for (const mission of missions) {
+    if (mission.kind !== 'attack') continue;
+    const destination = String(mission.payload.destinationPlanetId ?? '');
+    const report = utility.latestReports.get(destination);
+    if (!report || npcAttackIntel(utility, report) === 'fresh' || !attackForces.get(mission.id)) continue;
+    intelNeeded.add(destination);
+  }
   for (const mission of missions) {
     // An attack the owner does not believe it wins with its own margin, even
     // with everything at hand, is not an option (a lone ship against a
@@ -580,9 +589,12 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
       const report = utility.latestReports.get(String(mission.payload.destinationPlanetId ?? ''));
       if (!origin || !report) continue;
       const destination = String(mission.payload.destinationPlanetId ?? '');
-      // A raid must pay; a revenge on an offender may cost (owner rule 26.10.2026), the attack rule still applies.
-      if (!utility.rivalGateHosts?.has(destination) && !estimateRaidEconomics(utility, origin, report, force).worthFlight
-        && !estimateRevengeEconomics(utility, origin, report, force).worthFlight) continue;
+      // A raid must pay, grudge or not (owner rule 04.11.2026: revenge only orders the profitable options), and on young intel:
+      // old or refuted reports send the owner to spy again first. A Gate under construction is attacked at all costs.
+      if (!utility.rivalGateHosts?.has(destination)) {
+        if (npcAttackIntel(utility, report) !== 'fresh') continue;
+        if (!estimateRaidEconomics(utility, origin, report, force).worthFlight) continue;
+      }
     }
     choices.push({
       candidate: { ...mission, weight: mission.weight * scored(mission.id, missionUtility(mission)),
