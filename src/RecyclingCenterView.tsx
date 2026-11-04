@@ -1,19 +1,25 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
 import { getBuildingDefinition } from './domain/buildings/resource-zone.ts';
 import type { BuildingFaction } from './domain/buildings/balance-v1.ts';
+import { getRecyclingBalance } from './domain/buildings/balance-v1.ts';
 import {
+  RECYCLING_MAX_LEVEL,
   RECYCLING_RESOURCES,
-  getRecyclingAllocationTotal,
-  getRecyclingDurationMs,
+  RECYCLING_STORAGE_MS,
+  getReadyRecyclingJobIds,
   getRecyclingEfficiencyPercent,
   getRecyclingMaxConcurrentJobs,
   getRecyclingOutput,
-  getRecyclingPreviewResourceOutput,
-  getRecyclingStartValidation,
+  getRecyclingRunDurationMs,
+  planRecyclingBatch,
+  rebalanceRecyclingAllocation,
+  type RecyclingJob,
   type RecyclingResource,
   type RecyclingState,
   type ResourceAllocationPercent,
 } from './domain/buildings/recycling.ts';
+import { ACTIVE_RUNTIME_MODE, getRuntimeElapsedScale, resolveTestTimeScale } from './domain/runtime/mode.ts';
+import { getPlanetZoneTerrainUrl } from './assets/planetZoneTerrainAssets.ts';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
 import './recycling-center.css';
 
@@ -23,278 +29,441 @@ type RecyclingCenterViewProps = {
   buildingLevel: number;
   recycling: RecyclingState;
   now: number;
-  onStart: (debrisAmount: number, allocation: ResourceAllocationPercent) => boolean;
+  onStart: (totalDebris: number, processCount: number, allocation: ResourceAllocationPercent) => boolean;
   onCollect: (jobId: string) => boolean;
+  onCollectAll: () => boolean;
   onBack: () => void;
 };
 
-const RESOURCE_META: Readonly<Record<RecyclingResource, { label: string; short: string }>> = {
-  metal: { label: 'Металл', short: 'М' },
-  minerals: { label: 'Минералы', short: 'Мин' },
-  gas: { label: 'Газ', short: 'Газ' },
+const RESOURCE_LABEL: Readonly<Record<RecyclingResource, string>> = {
+  metal: 'Металл',
+  minerals: 'Минералы',
+  gas: 'Газ',
 };
 
-function formatNumber(value: number) {
-  return new Intl.NumberFormat('ru-RU').format(Math.max(0, Math.floor(value)));
-}
+const DEBRIS_PILE_ART = './assets/generated/recycling-debris-pile.webp';
+const DEBRIS_SHARES = [25, 50, 75] as const;
+const ALLOCATION_STEP = 5;
+const ALLOCATION_CELLS = 10;
+// The big figure of the pile stays exact while it fits next to the art.
+const PILE_EXACT_LIMIT = 10_000_000_000;
 
-function formatClock(ms: number) {
+// The split the player chose last stays for the session: the point of this
+// screen is not to set the same thing up again after every batch.
+let lastAllocation: ResourceAllocationPercent = { metal: 34, minerals: 33, gas: 33 };
+
+const formatNumber = (value: number) => new Intl.NumberFormat('ru-RU').format(Math.max(0, Math.floor(value)));
+
+const formatAmount = (value: number) => {
+  const safe = Math.max(0, Math.floor(value));
+  if (safe >= 1e12) return `${(safe / 1e12).toLocaleString('ru-RU', { maximumFractionDigits: 2 })} трлн`;
+  if (safe >= 1e9) return `${(safe / 1e9).toLocaleString('ru-RU', { maximumFractionDigits: 2 })} млрд`;
+  if (safe >= 1e6) return `${(safe / 1e6).toLocaleString('ru-RU', { maximumFractionDigits: 2 })} млн`;
+  return formatNumber(safe);
+};
+
+const formatClock = (ms: number) => {
   const total = Math.max(0, Math.ceil(ms / 1000));
+  const days = Math.floor(total / 86_400);
+  // A slow building with a huge pile runs for weeks: «33 д 01:39», not «793:39:03». Up to two days stays a clock.
+  if (days >= 100) return `${days} д`;
+  if (days >= 2) return `${days} д ${String(Math.floor((total % 86_400) / 3600)).padStart(2, '0')}:${String(Math.floor((total % 3600) / 60)).padStart(2, '0')}`;
   const hours = Math.floor(total / 3600);
   const minutes = Math.floor((total % 3600) / 60);
   const seconds = total % 60;
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-}
+};
 
-function formatAllocation(allocation: ResourceAllocationPercent) {
-  return RECYCLING_RESOURCES
-    .map((resource) => `${allocation[resource]}% ${RESOURCE_META[resource].label.toLocaleLowerCase('ru-RU')}`)
-    .join(' · ');
-}
+const processWord = (count: number) => {
+  const tens = count % 100;
+  const ones = tens % 10;
+  if (tens > 10 && tens < 20) return 'процессов';
+  if (ones === 1) return 'процесс';
+  if (ones >= 2 && ones <= 4) return 'процесса';
+  return 'процессов';
+};
 
-function formatOutput(output: { metal: number; minerals: number; gas: number }) {
-  return RECYCLING_RESOURCES
-    .map((resource) => `${RESOURCE_META[resource].short} ${formatNumber(output[resource])}`)
-    .join(' · ');
-}
+const startLabel = (count: number) => {
+  if (count <= 0) return 'Запустить';
+  return count === 1 ? 'Запустить 1 процесс' : `Запустить ${count} ${processWord(count)}`;
+};
+
+const jobOutputTotal = (job: RecyclingJob) => job.output.metal + job.output.minerals + job.output.gas;
 
 export function RecyclingCenterView({
+  factionId,
   planetName,
   buildingLevel,
   recycling,
   now,
   onStart,
   onCollect,
+  onCollectAll,
   onBack,
-  factionId,
 }: RecyclingCenterViewProps) {
   const building = getBuildingDefinition('recycling', factionId);
-  const [debrisAmount, setDebrisAmount] = useState(0);
-  const [allocation, setAllocation] = useState<ResourceAllocationPercent>({ metal: 0, minerals: 0, gas: 0 });
-  const [toast, setToast] = useState<string | null>(null);
+  // null follows what is there: all free debris, all free processes.
+  const [pickedDebris, setPickedDebris] = useState<number | null>(null);
+  const [pickedCount, setPickedCount] = useState<number | null>(null);
+  const [allocation, setAllocationState] = useState<ResourceAllocationPercent>(lastAllocation);
 
-  useEffect(() => {
-    setDebrisAmount((current) => Math.min(current, recycling.availableDebris));
-  }, [recycling.availableDebris]);
-
-  useEffect(() => {
-    if (!toast) return;
-    const timer = window.setTimeout(() => setToast(null), 2400);
-    return () => window.clearTimeout(timer);
-  }, [toast]);
-
-  const efficiencyPercent = getRecyclingEfficiencyPercent(buildingLevel);
+  const available = recycling.availableDebris;
   const maxJobs = getRecyclingMaxConcurrentJobs(buildingLevel);
-  const allocationTotal = getRecyclingAllocationTotal(allocation);
-  const totalDebris = recycling.availableDebris + recycling.jobs.reduce((total, job) => total + job.debrisAmount, 0);
-  const durationMs = getRecyclingDurationMs(debrisAmount, buildingLevel);
-  const validation = getRecyclingStartValidation(recycling, buildingLevel, debrisAmount, allocation);
-  const exactPreview = allocationTotal === 100 ? getRecyclingOutput(debrisAmount, efficiencyPercent, allocation) : null;
+  const freeSlots = Math.max(0, maxJobs - recycling.jobs.length);
+  const totalDebris = Math.min(pickedDebris ?? available, available);
+  const processCount = Math.min(pickedCount ?? freeSlots, freeSlots, totalDebris);
+  const plan = planRecyclingBatch(recycling, buildingLevel, totalDebris, processCount, allocation);
+  const longestAmount = plan.amounts[0] ?? 0;
+  const timing = { mode: ACTIVE_RUNTIME_MODE, testTimeScale: resolveTestTimeScale() };
+  const durationMs = longestAmount > 0 ? getRecyclingRunDurationMs(longestAmount, buildingLevel, timing) : 0;
+  const efficiencyPercent = getRecyclingEfficiencyPercent(buildingLevel);
+  // On this world's clock: at ×5 a process really takes five times the balance figure.
+  const debrisPerSecond = getRecyclingBalance(Math.max(1, buildingLevel)).debrisPerSecond * getRuntimeElapsedScale(timing.mode, timing.testTimeScale);
 
-  const resourcePreview = useMemo(() => Object.fromEntries(RECYCLING_RESOURCES.map((resource) => [
-    resource,
-    exactPreview
-      ? exactPreview[resource]
-      : getRecyclingPreviewResourceOutput(debrisAmount, efficiencyPercent, allocation[resource]),
-  ])) as Record<RecyclingResource, number>, [debrisAmount, efficiencyPercent, allocation, exactPreview]);
+  const output = plan.amounts.reduce((sum, amount) => {
+    const part = getRecyclingOutput(amount, efficiencyPercent, allocation);
+    return { metal: sum.metal + part.metal, minerals: sum.minerals + part.minerals, gas: sum.gas + part.gas };
+  }, { metal: 0, minerals: 0, gas: 0 });
+  const outputTotal = output.metal + output.minerals + output.gas;
 
-  const changeDebris = (requested: number) => {
-    setDebrisAmount(Math.min(recycling.availableDebris, Math.max(0, Math.floor(requested))));
+  const readyIds = getReadyRecyclingJobIds(recycling, now);
+  const readyOutput = recycling.jobs
+    .filter((job) => readyIds.includes(job.id))
+    .reduce((sum, job) => sum + jobOutputTotal(job), 0);
+  const inJobs = recycling.jobs.reduce((total, job) => total + job.debrisAmount, 0);
+  // With nothing to start, the bays show what the running processes will bring.
+  const coming = recycling.jobs.reduce((sum, job) => ({
+    metal: sum.metal + job.output.metal,
+    minerals: sum.minerals + job.output.minerals,
+    gas: sum.gas + job.output.gas,
+  }), { metal: 0, minerals: 0, gas: 0 });
+
+  useEffect(() => {
+    // Back to «everything» once the picked amount is gone.
+    setPickedDebris((current) => (current !== null && current > available ? (available > 0 ? available : null) : current));
+  }, [available]);
+
+  const setAllocation = (resource: RecyclingResource, percent: number) => {
+    setAllocationState((current) => {
+      const next = rebalanceRecyclingAllocation(current, resource, percent);
+      lastAllocation = next;
+      return next;
+    });
   };
 
-  const changeAllocation = (resource: RecyclingResource, requested: number) => {
-    setAllocation((current) => ({
-      ...current,
-      [resource]: Math.min(100, Math.max(0, Math.floor(requested))),
-    }));
+  const pickDebris = (requested: number) => {
+    const safe = Number.isFinite(requested) ? Math.floor(requested) : 0;
+    setPickedDebris(Math.min(available, Math.max(0, safe)));
   };
 
-  const startProcess = () => {
-    if (!validation.canStart) return;
-    const started = onStart(debrisAmount, { ...allocation });
-    if (!started) return;
-    setDebrisAmount(0);
-    setToast('Переработка запущена');
+  const start = () => {
+    if (!plan.canStart) return;
+    if (!onStart(totalDebris, processCount, { ...allocation })) return;
+    setPickedDebris(null);
+    setPickedCount(null);
   };
 
-  const collect = (jobId: string) => {
-    if (!onCollect(jobId)) return;
-    setToast('Ресурсы получены');
-  };
+  const hint = available <= 0 && recycling.jobs.length === 0
+    ? 'Обломков нет. Их привозят переработчики: Флоты → Переработка'
+    : available <= 0
+      ? 'Все обломки уже в работе'
+      : freeSlots <= 0
+        ? 'Все процессы заняты. Забирайте готовые, и места освободятся'
+        : plan.reason;
 
   return (
-    <main className="recycling-center-view" data-qa-recycling-center>
-      <aside className="recycling-info-panel">
-        <div className="recycling-info-art">
-          <img src={building.art} alt={building.name} draggable={false} />
-        </div>
-        <div className="recycling-info-copy">
-          <small>ASTERION // ПРОМЫШЛЕННЫЙ МОДУЛЬ</small>
+    <main
+      className="recycling-center-view"
+      data-qa-recycling-center
+      data-qa-recycling-level={buildingLevel}
+      style={{ '--rc-terrain': `url("${getPlanetZoneTerrainUrl('industry')}")` } as CSSProperties}
+    >
+      <header className="rc-header">
+        <div>
           <h1>{building.name}</h1>
-          <p>{planetName}</p>
-          <div className="recycling-level">УРОВЕНЬ <strong data-qa-recycling-level>{buildingLevel}</strong></div>
+          <p>
+            Уровень {buildingLevel} · {planetName} · выход <b data-qa-recycling-efficiency>{efficiencyPercent}%</b>
+            {buildingLevel < building.maxLevel ? <> (на след. уровне <b data-qa-recycling-next-efficiency>{Math.min(120, efficiencyPercent + 5)}%</b>)</> : null}
+            {' '}· {formatNumber(debrisPerSecond)} обломков в секунду на процесс
+          </p>
         </div>
-
-        <dl className="recycling-info-stats">
-          <div><dt>Выход после переработки</dt><dd data-qa-recycling-efficiency>{efficiencyPercent}%</dd></div>
-          {buildingLevel < building.maxLevel ? <div><dt>Следующий уровень</dt><dd data-qa-recycling-next-efficiency>{Math.min(120, efficiencyPercent + 5)}%</dd></div> : null}
-          <div><dt>Максимум процессов</dt><dd data-qa-recycling-max-jobs={maxJobs}>{maxJobs}</dd></div>
-          <div><dt>Всего обломков</dt><dd data-qa-recycling-total-debris={totalDebris}>{formatNumber(totalDebris)}</dd></div>
-          <div><dt>Свободный остаток</dt><dd data-qa-recycling-free-debris={recycling.availableDebris}>{formatNumber(recycling.availableDebris)}</dd></div>
-          <div><dt>Занято процессов</dt><dd data-qa-recycling-job-count={recycling.jobs.length}>{recycling.jobs.length} / {maxJobs}</dd></div>
-        </dl>
-
-        <button className="recycling-back" type="button" data-qa-building-interior-back data-qa-recycling-back onClick={onBack}>
-          <span aria-hidden="true">←</span> Назад: {building.name}
+        <button className="rc-close" type="button" aria-label="Закрыть" data-qa-building-interior-back data-qa-recycling-back onClick={onBack}>
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
+            <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+          </svg>
         </button>
-      </aside>
+      </header>
 
-      <section className="recycling-workspace">
-        <section className="recycling-section recycling-jobs-section" aria-label="Переработка">
-          <header className="recycling-section-header">
-            <div><small>АКТИВНЫЕ И ГОТОВЫЕ</small><h2>ПЕРЕРАБОТКА</h2></div>
-            <strong>{recycling.jobs.length} / {maxJobs}</strong>
-          </header>
-
-          {recycling.jobs.length === 0 ? (
-            <div className="recycling-jobs-empty" data-qa-recycling-empty>
-              <span>◇</span><div><strong>Нет активных процессов</strong><small>Выбери обломки и распределение ресурсов ниже.</small></div>
-            </div>
-          ) : (
-            <div className="recycling-job-scroll" data-qa-recycling-job-list>
-              <div className="recycling-job-table">
-                <div className="recycling-job-table__header" data-qa-recycling-job-table-header>
-                  <span>ВРЕМЯ</span>
-                  <span>ОБЛОМКИ</span>
-                  <span>ПЕРЕРАБОТКА / ВЫХОД</span>
-                  <span>СТАТУС</span>
-                  <span>ДЕЙСТВИЕ</span>
-                </div>
-                <div className="recycling-job-rows">
-                  {recycling.jobs.map((job) => {
-                    const ready = job.status === 'ready' || now >= job.finishAt;
-                    const progress = ready
-                      ? 100
-                      : Math.min(100, Math.max(0, ((now - job.startedAt) / Math.max(1, job.finishAt - job.startedAt)) * 100));
-                    const expiresAt = job.collectExpiresAt ?? job.finishAt + 24 * 60 * 60 * 1000;
-                    const timerLabel = ready ? 'Получить до:' : 'Осталось:';
-                    const timerValue = ready ? formatClock(expiresAt - now) : formatClock(job.finishAt - now);
-
-                    return (
-                      <article className={`recycling-job-row ${ready ? 'ready' : 'processing'}`} key={job.id} data-qa-recycling-job={job.id} data-qa-recycling-status={ready ? 'ready' : 'processing'}>
-                        <div className="recycling-job-cell recycling-job-time" data-qa-recycling-job-timer>
-                          <small>{timerLabel}</small>
-                          <strong>{timerValue}</strong>
-                        </div>
-                        <div className="recycling-job-cell recycling-job-debris">
-                          <span className="recycling-job-debris-value"><span className="recycling-job-debris-icon"><ResourceIcon kind="debris" /></span><strong>{formatNumber(job.debrisAmount)}</strong></span>
-                          <small>обломков</small>
-                        </div>
-                        <div className="recycling-job-cell recycling-job-conversion">
-                          <span className="recycling-job-allocation" data-qa-recycling-job-allocation>{formatAllocation(job.allocationPercent)}</span>
-                          <strong className="recycling-job-output" data-qa-recycling-job-output>{formatOutput(job.output)}</strong>
-                        </div>
-                        <div className="recycling-job-cell recycling-job-status">
-                          <span className="recycling-job-state">{ready ? 'ГОТОВО' : 'В ПРОЦЕССЕ'}</span>
-                          <div className="recycling-job-progress" aria-hidden="true"><i style={{ width: `${progress}%` }} /></div>
-                        </div>
-                        <div className="recycling-job-cell recycling-job-action">
-                          <button type="button" data-qa-recycling-collect={job.id} disabled={!ready} onClick={() => collect(job.id)}>ВЗЯТЬ РЕСУРС</button>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
-        </section>
-
-        <section className="recycling-section recycling-distillation" aria-label="Дистилляция">
-          <header className="recycling-section-header">
-            <div><small>ВЫБОР ОБЪЁМА</small><h2>ДИСТИЛЛЯЦИЯ</h2></div>
-            <strong data-qa-recycling-free-slots>{Math.max(0, maxJobs - recycling.jobs.length)} СВОБ. СЛОТОВ</strong>
-          </header>
-          <div className="recycling-debris-control">
-            <label className="recycling-debris-field">
-              <small><span className="recycling-job-debris-icon"><ResourceIcon kind="debris" /></span><span>ОБЛОМКИ</span></small>
+      <section className="rc-flow" aria-label="Переработка">
+        <section className={`rc-pile${available > 0 ? '' : ' is-empty'}`} aria-label="Обломки">
+          <img className="rc-pile__art" src={DEBRIS_PILE_ART} alt="" draggable={false} />
+          <div className="rc-pile__body">
+            <span className="rc-pile__label"><ResourceIcon kind="debris" /> Свободные обломки</span>
+            <strong className="rc-pile__total" data-qa-recycling-free-debris={available}>{available >= PILE_EXACT_LIMIT ? formatAmount(available) : formatNumber(available)}</strong>
+            <span className={`rc-pile__busy${inJobs > 0 ? '' : ' is-empty'}`} data-qa-recycling-total-debris={available + inJobs}>
+              {inJobs > 0 ? `ещё ${formatAmount(inJobs)} в работе` : ' '}
+            </span>
+            <label className="rc-pile__field">
+              <span>Переработать</span>
               <input
                 type="number"
                 min={0}
-                max={recycling.availableDebris}
+                max={available}
                 step={1}
-                value={debrisAmount}
+                value={totalDebris}
                 inputMode="numeric"
-                aria-label="Количество обломков вручную"
+                disabled={available <= 0}
+                aria-label="Сколько обломков переработать"
                 data-qa-recycling-debris-input
-                data-qa-recycling-debris-value={debrisAmount}
-                onChange={(event) => changeDebris(Number(event.target.value))}
+                data-qa-recycling-debris-value={totalDebris}
+                onChange={(event) => pickDebris(Number(event.target.value))}
               />
             </label>
-            <div className="recycling-debris-time">
-              <small>ВРЕМЯ</small>
-              <strong data-qa-recycling-duration>{debrisAmount > 0 ? formatClock(durationMs) : '00:00:00'}</strong>
+            <div className="rc-pile__shares">
+              {DEBRIS_SHARES.map((share) => {
+                const amount = Math.floor(available * share / 100);
+                return (
+                  <button
+                    type="button"
+                    key={share}
+                    className={available > 0 && totalDebris === amount ? 'is-on' : ''}
+                    disabled={available <= 0}
+                    data-qa-recycling-debris-share={share}
+                    onClick={() => pickDebris(amount)}
+                  >{share}%</button>
+                );
+              })}
+              <button
+                type="button"
+                className={available > 0 && totalDebris === available ? 'is-on' : ''}
+                disabled={available <= 0}
+                data-qa-recycling-debris-max
+                onClick={() => setPickedDebris(null)}
+              >Всё</button>
             </div>
-            <button type="button" data-qa-recycling-debris-minus disabled={debrisAmount <= 0} onClick={() => changeDebris(debrisAmount - 1000)}>−</button>
-            <input
-              type="range"
-              min={0}
-              max={recycling.availableDebris}
-              step={1}
-              value={debrisAmount}
-              aria-label="Количество обломков"
-              data-qa-recycling-debris-slider
-              onChange={(event) => changeDebris(Number(event.target.value))}
-            />
-            <button type="button" data-qa-recycling-debris-plus disabled={debrisAmount >= recycling.availableDebris} onClick={() => changeDebris(debrisAmount + 1000)}>+</button>
-            <button type="button" className="recycling-max-button" data-qa-recycling-debris-max disabled={recycling.availableDebris <= 0} onClick={() => changeDebris(recycling.availableDebris)}>МАКС.</button>
           </div>
         </section>
 
-        <section className="recycling-section recycling-targets" aria-label="Целевые ресурсы">
-          <header className="recycling-section-header">
-            <div><small>РАСПРЕДЕЛЕНИЕ ВЫХОДА</small><h2>ЦЕЛЕВЫЕ РЕСУРСЫ</h2></div>
-            <strong data-qa-recycling-allocation-total={allocationTotal}>РАСПРЕДЕЛЕНО: {allocationTotal} / 100%</strong>
-          </header>
-
-          <div className="recycling-target-list">
-            {RECYCLING_RESOURCES.map((resource) => {
-              const meta = RESOURCE_META[resource];
-              const percent = allocation[resource];
-              return (
-                <div className="recycling-target-row" key={resource} data-qa-recycling-resource={resource}>
-                  <div className="recycling-target-resource"><span><ResourceIcon kind={resource} /></span><div><small>РЕСУРС</small><strong>{meta.label}</strong></div></div>
-                  <button type="button" data-qa-recycling-allocation-minus={resource} disabled={percent <= 0} onClick={() => changeAllocation(resource, percent - 1)}>−</button>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    step={1}
-                    value={percent}
-                    aria-label={`Доля: ${meta.label}`}
-                    data-qa-recycling-allocation-slider={resource}
-                    onChange={(event) => changeAllocation(resource, Number(event.target.value))}
-                  />
-                  <button type="button" data-qa-recycling-allocation-plus={resource} disabled={percent >= 100} onClick={() => changeAllocation(resource, percent + 1)}>+</button>
-                  <strong className="recycling-target-percent" data-qa-recycling-allocation-value={resource}>{percent}%</strong>
-                  <div className="recycling-target-preview"><small>ПОЛУЧИТЕ</small><strong data-qa-recycling-resource-output={resource}>{formatNumber(resourcePreview[resource])}</strong></div>
-                </div>
-              );
-            })}
+        <section className="rc-core" aria-label="Запуск">
+          <div className="rc-core__art">
+            <img src={building.art} alt={building.name} draggable={false} />
           </div>
+          <p className="rc-core__summary" aria-live="polite" data-qa-recycling-validation={plan.canStart ? 'ok' : hint ?? ''}>
+            {plan.canStart ? (
+              <>
+                <span><b data-qa-recycling-output-total={outputTotal}>{formatAmount(outputTotal)}</b> ресурсов за <b data-qa-recycling-duration>{formatClock(durationMs)}</b></span>
+                <small>
+                  {processCount === 1 ? '1 процесс' : `${processCount} ${processWord(processCount)} по ${formatAmount(longestAmount)}`}
+                </small>
+              </>
+            ) : <span className="rc-core__hint">{hint}</span>}
+          </p>
+          <button
+            className={`rc-start${plan.canStart ? ' is-ready' : ''}`}
+            type="button"
+            data-qa-recycling-start
+            data-qa-recycling-start-count={processCount}
+            disabled={!plan.canStart}
+            onClick={start}
+          >{startLabel(plan.canStart ? processCount : 0)}</button>
+        </section>
 
-          <footer className="recycling-target-footer">
-            <div className={`recycling-validation ${validation.canStart ? 'valid' : ''}`} data-qa-recycling-validation>
-              {validation.canStart ? 'Распределение готово' : validation.reason}
-            </div>
-            <button className="recycling-start" type="button" data-qa-recycling-start disabled={!validation.canStart} onClick={startProcess}>НАЧАТЬ ПЕРЕРАБОТКУ</button>
-          </footer>
+        <section className="rc-bays" aria-label="Что получите">
+          {RECYCLING_RESOURCES.map((resource) => (
+            <ResourceBay
+              key={resource}
+              resource={resource}
+              percent={allocation[resource]}
+              amount={plan.canStart ? output[resource] : coming[resource]}
+              caption={plan.canStart ? 'получите' : inJobs > 0 ? 'в работе' : ''}
+              onChange={(percent) => setAllocation(resource, percent)}
+            />
+          ))}
         </section>
       </section>
 
-      <div className={`recycling-toast ${toast ? 'visible' : ''}`} aria-live="polite" aria-atomic="true" data-qa-recycling-toast>
-        {toast ? <span><b aria-hidden="true">✓</b>{toast}</span> : null}
-      </div>
+      <section className="rc-floor" aria-label="Процессы">
+        <header className="rc-floor__head">
+          <h2>Процессы <b data-qa-recycling-job-count={recycling.jobs.length} data-qa-recycling-max-jobs={maxJobs}>{recycling.jobs.length} из {maxJobs}</b></h2>
+          <span className="rc-floor__free" data-qa-recycling-free-slots={freeSlots}>
+            {freeSlots <= 0
+              ? 'свободных мест нет'
+              : totalDebris > 0
+                ? `свободно ${freeSlots}. Нажмите на место, чтобы выбрать сколько запустить`
+                : `свободно ${freeSlots}`}
+          </span>
+          {readyIds.length > 0 ? (
+            <button type="button" className="rc-collect-all" data-qa-recycling-collect-all={readyIds.length} onClick={() => onCollectAll()}>
+              Забрать всё · {formatAmount(readyOutput)}
+            </button>
+          ) : null}
+        </header>
+        <div className="rc-slots" data-qa-recycling-job-list>
+          {Array.from({ length: RECYCLING_MAX_LEVEL }, (_, index) => {
+            const job = recycling.jobs[index];
+            if (job) return <JobSlot key={job.id} job={job} now={now} onCollect={onCollect} />;
+            if (index >= maxJobs) {
+              return (
+                <div className="rc-slot is-locked" key={index} data-qa-recycling-locked-slot={index + 1}>
+                  <span className="rc-ring" style={{ '--rc-progress': 0 } as CSSProperties}><LockGlyph /></span>
+                  <b>уровень {index + 1}</b>
+                </div>
+              );
+            }
+            const position = index - recycling.jobs.length;
+            const selected = plan.canStart && position < processCount;
+            return (
+              <button
+                type="button"
+                className={`rc-slot rc-slot--free${selected ? ' is-selected' : ''}`}
+                key={index}
+                data-qa-recycling-free-slot={position + 1}
+                aria-pressed={selected}
+                aria-label={`Запустить процессов: ${position + 1}`}
+                disabled={freeSlots <= 0 || totalDebris <= 0}
+                onClick={() => setPickedCount(position + 1)}
+              >
+                <span className="rc-ring" style={{ '--rc-progress': selected ? 100 : 0 } as CSSProperties}>
+                  <ResourceIcon kind="debris" />
+                </span>
+                <b>{selected ? formatAmount(plan.amounts[position] ?? 0) : 'свободно'}</b>
+              </button>
+            );
+          })}
+        </div>
+      </section>
     </main>
+  );
+}
+
+function JobSlot({ job, now, onCollect }: { job: RecyclingJob; now: number; onCollect: (jobId: string) => boolean }) {
+  const ready = job.status === 'ready' || now >= job.finishAt;
+  const progress = ready ? 100 : Math.min(100, Math.max(0, ((now - job.startedAt) / Math.max(1, job.finishAt - job.startedAt)) * 100));
+  const expiresAt = job.collectExpiresAt ?? job.finishAt + RECYCLING_STORAGE_MS;
+  return (
+    <button
+      type="button"
+      className={`rc-slot ${ready ? 'is-ready' : 'is-running'}`}
+      data-qa-recycling-job={job.id}
+      data-qa-recycling-status={ready ? 'ready' : 'processing'}
+      data-qa-recycling-collect={job.id}
+      disabled={!ready}
+      aria-label={ready ? `Забрать ${formatAmount(jobOutputTotal(job))} ресурсов` : `Перерабатывается, осталось ${formatClock(job.finishAt - now)}`}
+      onClick={() => onCollect(job.id)}
+    >
+      <span className="rc-ring" style={{ '--rc-progress': progress } as CSSProperties}>
+        <ResourceIcon kind={ready ? dominantResource(job) : 'debris'} />
+      </span>
+      <b data-qa-recycling-job-output={jobOutputTotal(job)}>{ready ? 'Забрать' : formatClock(job.finishAt - now)}</b>
+      <small data-qa-recycling-job-timer={ready ? 'expires' : 'remaining'}>
+        {ready ? `сами через ${formatClock(expiresAt - now)}` : `${formatAmount(job.debrisAmount)} обломков`}
+      </small>
+      <span className="rc-slot__tip" role="tooltip" data-qa-recycling-job-allocation>
+        {RECYCLING_RESOURCES.filter((resource) => job.output[resource] > 0).map((resource) => (
+          <span key={resource}><ResourceIcon kind={resource} /> {formatAmount(job.output[resource])}</span>
+        ))}
+      </span>
+    </button>
+  );
+}
+
+const dominantResource = (job: RecyclingJob): RecyclingResource => RECYCLING_RESOURCES
+  .reduce((best, resource) => (job.output[resource] > job.output[best] ? resource : best), RECYCLING_RESOURCES[0] as RecyclingResource);
+
+function LockGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true" focusable="false">
+      <path d="M7 11V8a5 5 0 0 1 10 0v3" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <rect x="5" y="11" width="14" height="10" rx="2.4" fill="currentColor" />
+    </svg>
+  );
+}
+
+// Ten cells of 10% over a native range input, like the robot places of the
+// factory: the input keeps keyboard control and the exact value, a click or a
+// drag over the cells sets tens, the steppers move by 5.
+function ResourceBay({
+  resource,
+  percent,
+  amount,
+  caption,
+  onChange,
+}: {
+  resource: RecyclingResource;
+  percent: number;
+  amount: number;
+  caption: string;
+  onChange: (percent: number) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const label = RESOURCE_LABEL[resource];
+  const cellAt = (event: PointerEvent<HTMLDivElement>) => {
+    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('[data-rc-cell]');
+    if (!target || !event.currentTarget.contains(target)) return null;
+    return Number(target.dataset.rcCell);
+  };
+  const lit = Math.round(percent / (100 / ALLOCATION_CELLS));
+
+  return (
+    <article className={`rc-bay rc-bay--${resource}`} data-qa-recycling-resource={resource}>
+      <div className="rc-bay__top">
+        <ResourceIcon kind={resource} />
+        <h3>{label}</h3>
+        <strong className="rc-bay__percent" data-qa-recycling-allocation-value={resource}>{percent}%</strong>
+      </div>
+      <p className="rc-bay__get"><strong key={amount} data-qa-recycling-resource-output={resource}>{formatAmount(amount)}</strong> <span>{caption}</span></p>
+      <div className="rc-bay__controls">
+        <button
+          type="button"
+          className="rc-step"
+          aria-label={`Меньше: ${label}`}
+          data-qa-recycling-allocation-minus={resource}
+          disabled={percent <= 0}
+          onClick={() => onChange(percent - ALLOCATION_STEP)}
+        >−</button>
+        <div
+          className="rc-cells"
+          onPointerDown={(event) => {
+            if (event.button !== 0) return;
+            event.preventDefault();
+            inputRef.current?.focus({ preventScroll: true });
+            const cell = cellAt(event);
+            if (cell === null) return;
+            event.currentTarget.setPointerCapture(event.pointerId);
+            onChange((cell + 1) * (100 / ALLOCATION_CELLS));
+          }}
+          onPointerMove={(event) => {
+            if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+            const cell = cellAt(event);
+            if (cell !== null) onChange((cell + 1) * (100 / ALLOCATION_CELLS));
+          }}
+        >
+          <span className="rc-cells__row" aria-hidden="true">
+            {Array.from({ length: ALLOCATION_CELLS }, (_, index) => (
+              <i key={index} data-rc-cell={index} className={index < lit ? 'is-on' : ''} />
+            ))}
+          </span>
+          <input
+            ref={inputRef}
+            type="range"
+            min={0}
+            max={100}
+            step={1}
+            value={percent}
+            aria-label={`Доля: ${label}`}
+            data-qa-recycling-allocation-slider={resource}
+            onChange={(event) => onChange(Number(event.target.value))}
+          />
+        </div>
+        <button
+          type="button"
+          className="rc-step"
+          aria-label={`Больше: ${label}`}
+          data-qa-recycling-allocation-plus={resource}
+          disabled={percent >= 100}
+          onClick={() => onChange(percent + ALLOCATION_STEP)}
+        >+</button>
+      </div>
+    </article>
   );
 }

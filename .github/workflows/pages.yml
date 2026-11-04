@@ -112,6 +112,17 @@ jobs:
           set -euo pipefail
           BASE="https://ratoker-jpg.github.io/Asterion"
           PREVIEW="${BASE}/pr/${PR_NUMBER}"
+          # Right after a deployment the Pages edge can hold a request for its whole
+          # timeout with no bytes. Say which address did it and ask again.
+          fetch() {
+            local try
+            for try in 1 2 3; do
+              if curl "$@"; then return 0; fi
+              echo "Attempt ${try} failed: ${*: -1}" >&2
+              sleep 10
+            done
+            return 1
+          }
           DEPLOYED=""
           for attempt in {1..24}; do
             # Use a distinct cache key for each retry so an early edge 404 cannot
@@ -124,13 +135,13 @@ jobs:
             echo "Preview version mismatch: expected ${PR_SHA}, got ${DEPLOYED}" >&2
             exit 1
           fi
-          HTML="$(curl -fsSL --max-time 30 "${PREVIEW}/?mode=test&sha=${PR_SHA}")"
+          HTML="$(fetch -fsSL --max-time 30 "${PREVIEW}/?mode=test&sha=${PR_SHA}")"
           printf "%s" "${HTML}" | grep -q "/Asterion/assets/"
           JS_PATH="$(printf "%s" "${HTML}" | grep -oE '/Asterion/assets/[^"]+\.js' | head -n1)"
           CSS_PATH="$(printf "%s" "${HTML}" | grep -oE '/Asterion/assets/[^"]+\.css' | head -n1)"
           test -n "${JS_PATH}" && test -n "${CSS_PATH}"
-          curl -fsSI --max-time 30 "${BASE%/Asterion}${JS_PATH}" > /dev/null
-          curl -fsSI --max-time 30 "${BASE%/Asterion}${CSS_PATH}" > /dev/null
+          fetch -fsSI --max-time 30 "${BASE%/Asterion}${JS_PATH}" > /dev/null
+          fetch -fsSI --max-time 30 "${BASE%/Asterion}${CSS_PATH}" > /dev/null
           CHROME="$(command -v google-chrome || command -v chromium || true)"
           if [[ -z "${CHROME}" ]]; then echo "Headless Chrome unavailable" >&2; exit 1; fi
           timeout 75s "${CHROME}" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage \
