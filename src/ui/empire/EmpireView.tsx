@@ -22,7 +22,7 @@ import './empire.css';
 
 const RESOURCE_LABELS: Record<EmpireResource, string> = { metal: 'Металл', minerals: 'Минералы', gas: 'Газ' };
 const MISSION_LABELS: Partial<Record<string, string>> = {
-  transport: 'Транспорт', deployment: 'Перебазирование', gas: 'Сбор газа', recycle: 'Обломки', attack: 'Атака',
+  transport: 'Транспорт', deployment: 'Дислокация', gas: 'Сбор газа', recycle: 'Обломки', attack: 'Атака',
   espionage: 'Шпионаж', colonize: 'Колонизация', expedition: 'Экспедиция', 'exploration-recon': 'Разведка', 'pirate-recon': 'Разведка', 'pirate-elimination': 'Пиратский рейд',
 };
 const SHOWN_SHIPS = 6;

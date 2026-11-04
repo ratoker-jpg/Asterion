@@ -9,8 +9,10 @@ import { SHIP_IDS, type ShipId } from '../domain/combat/ids.ts';
 import type { UniversePlanetNode } from '../domain/universe/types.ts';
 import type { SaveState } from './contracts.ts';
 import { dispatchFlight } from './flights.ts';
+import { emptyTransportCargo, getCargoFieldMaximum, getFleetCargoCapacity } from '../domain/flights/cargo.ts';
 import { getSunDebris, sunDebrisLedgerKey } from './sun-raid.ts';
 import {
+  QUICK_ACTION_LABELS,
   buildQuickCommand,
   defaultQuickFleet,
   isMultiSourceAction,
@@ -239,4 +241,61 @@ test('a Sun\'s debris: recyclers sized to it, the flight goes to the Sun\'s oper
   // The panel opens through these two; they must accept the Sun target as well.
   assert.ok(evaluateQuickActions(withDebris, target, RUNTIME).find((action) => action.id === 'recycle')?.enabled);
   assert.deepEqual(planQuickLegs(withDebris, 'recycle', target, RUNTIME).map((leg) => leg.originPlanetId), [home]);
+});
+
+// Cargo in the quick-send panel: the fleet screen's own limits (stock of the source, shared hold).
+function withStock(state: SaveState, planetId: string, stock: { metal?: number; minerals?: number; gas?: number; debris?: number }): SaveState {
+  const planet = state.planets[planetId]!;
+  return { ...state, planets: { ...state.planets, [planetId]: { ...planet,
+    resources: { metal: stock.metal ?? 0, minerals: stock.minerals ?? 0, gas: stock.gas ?? 100_000 },
+    recycling: { ...planet.recycling, availableDebris: stock.debris ?? 0 } } } };
+}
+
+test('transport from the panel carries debris, within the hold and the planet\'s debris stock', () => {
+  const base = withStock(campaign({ transporter: 2 }), campaign().currentPlanetId, { metal: 50_000, debris: 300 });
+  const origin = base.currentPlanetId;
+  const target = neutralTarget(base);
+  const fleet = defaultQuickFleet(base, 'transport', origin, target);
+  assert.equal(getCargoFieldMaximum('debris', emptyTransportCargo(), base.planets[origin]!.resources!, 300, 1_000_000), 300, 'debris is limited by the stock');
+  const command = buildQuickCommand(base, 'transport', target, origin, fleet, RUNTIME, { metal: 0, minerals: 0, gas: 0, debris: 250 })!;
+  const { state: next, outcomes } = sendQuickLegs(base, [command], RUNTIME, dispatchFlight);
+  assert.equal(outcomes[0]!.result.ok, true);
+  const flight = next.flights.records.find((record) => record.missionId === 'transport')!;
+  assert.equal(flight.cargo?.debris, 250);
+  assert.equal(next.planets[origin]!.recycling.availableDebris, 50, 'the debris left the planet with the fleet');
+});
+
+test('shared hold: cargo beyond the fleet\'s capacity or the debris stock never leaves', () => {
+  const base = withStock(campaign({ transporter: 1 }), campaign().currentPlanetId, { metal: 500_000, debris: 100 });
+  const origin = base.currentPlanetId;
+  const target = neutralTarget(base);
+  const fleet = defaultQuickFleet(base, 'transport', origin, target);
+  const capacity = getFleetCargoCapacity(fleet.ships, Object.fromEntries(getFactionShipCatalog(base.profile.factionId as CombatFactionId).map((e) => [e.id, { cargo: e.ship?.cargo ?? 0 }])));
+  assert.ok(capacity > 0);
+  const huge = buildQuickCommand(base, 'transport', target, origin, fleet, RUNTIME, { metal: capacity * 10, minerals: 0, gas: 0, debris: 10_000 })!;
+  const { state: next } = sendQuickLegs(base, [huge], RUNTIME, dispatchFlight);
+  const flight = next.flights.records.find((record) => record.missionId === 'transport');
+  const carried = flight ? Object.values(flight.cargo ?? {}).reduce((sum, value) => sum + value, 0) : 0;
+  assert.ok(carried <= capacity, `carried ${carried} of hold ${capacity}`);
+  assert.ok((flight?.cargo?.debris ?? 0) <= 100);
+  // The panel's slider limit already accounts for what the other fields hold.
+  assert.equal(getCargoFieldMaximum('debris', { metal: capacity, minerals: 0, gas: 0, debris: 0 }, base.planets[origin]!.resources!, 100, capacity), 0);
+});
+
+test('rebase takes no resources: «Дислокация» moves ships and commanders only', () => {
+  const home = campaign({});
+  const homeSystem = home.planets[home.currentPlanetId]!.universeSystem ?? 1;
+  const state = withColony(home, homeSystem + 3, { transporter: 2 }, 'colony-a');
+  const target: QuickTarget = { node: node('player', { id: home.currentPlanetId, ownerId: home.profile.playerId, coordinate: { galaxy: 1, system: homeSystem, position: home.planets[home.currentPlanetId]!.universePosition ?? 1 } }), relation: 'self' };
+  const leg = planQuickLegs(state, 'deployment', target, RUNTIME)[0]!;
+  const command = { ...leg.command!, cargo: { metal: 1_000, minerals: 0, gas: 0, debris: 0 } };
+  const { state: next, outcomes } = sendQuickLegs(state, [command], RUNTIME, dispatchFlight);
+  assert.equal(outcomes[0]!.result.ok, true);
+  const flight = next.flights.records.find((record) => record.missionId === 'deployment')!;
+  assert.equal(Object.values(flight.cargo ?? {}).reduce((sum, value) => sum + value, 0), 0);
+  assert.equal(next.planets["colony-a"]!.resources!.metal, state.planets["colony-a"]!.resources!.metal);
+});
+
+test('player-facing name of the rebase mission is «Дислокация»', () => {
+  assert.equal(QUICK_ACTION_LABELS.deployment, 'Дислокация');
 });

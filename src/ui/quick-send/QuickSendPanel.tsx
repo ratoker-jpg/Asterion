@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNod
 import { getFactionShipCatalog } from '../../domain/combat/faction-catalog.ts';
 import type { CombatFactionId } from '../../domain/combat/factions.ts';
 import type { ShipId } from '../../domain/combat/ids.ts';
-import { emptyTransportCargo, type TransportCargo } from '../../domain/flights/cargo.ts';
+import { emptyTransportCargo, getCargoFieldMaximum, type TransportCargo, type TransportCargoKey } from '../../domain/flights/cargo.ts';
 import { ACTIVE_RUNTIME_MODE, resolveTestTimeScale } from '../../domain/runtime/mode.ts';
 import { isFlightLimitExempt } from '../../domain/flights/limit.ts';
 import { formatUniverseCoordinate } from '../../domain/universe/runtime.ts';
@@ -32,6 +32,8 @@ const clock = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-dig
 const HOSTILE = new Set<QuickActionId>(['attack', 'exploration-attack', 'pirate-elimination']);
 const CARGO_KEYS = ['metal', 'minerals', 'gas'] as const;
 const CARGO_LABELS = { metal: 'Металл', minerals: 'Минералы', gas: 'Газ' } as const;
+const TRANSPORT_KEYS = ['metal', 'minerals', 'gas', 'debris'] as const satisfies readonly TransportCargoKey[];
+const TRANSPORT_LABELS = { metal: 'Металл', minerals: 'Минералы', gas: 'Газ', debris: 'Обломки' } as const;
 const NOTHING_KEPT: PlanetResources = { metal: 0, minerals: 0, gas: 0 };
 
 export function flightDurationLabel(ms: number) {
@@ -209,8 +211,9 @@ export function QuickSendPanel({ state, actionId, target, onSend, onClose, onDet
             const hidden = eligible.length - shipIds.length;
             const fixed = !multi;
             const error = sendErrors[planetId] ?? (draft.checked && !flight ? plan.error : undefined);
-            const capacity = shipIds.reduce((total, id) => total + (catalog.get(id)?.ship?.cargo ?? 0) * (draft.fleet.ships[id] ?? 0), 0);
+            const capacity = Object.entries(draft.fleet.ships).reduce((total, [id, n]) => total + (catalog.get(id as ShipId)?.ship?.cargo ?? 0) * (n ?? 0), 0);
             const resources = getPlanetResources(state, planetId);
+            const sourceDebris = state.planets[planetId]?.recycling.availableDebris ?? 0;
             return (
               <div key={planetId} className={`quick-send__leg ${draft.checked ? 'is-on' : ''}`} style={{ '--qa-i': index } as CSSProperties} data-qa-quick-leg={planetId} data-qa-quick-leg-checked={draft.checked ? 'true' : 'false'}>
                 <button type="button" role={multi ? 'checkbox' : 'radio'} aria-checked={draft.checked} className="quick-send__leg-toggle" onClick={() => toggle(planetId)} data-qa-quick-origin={planetId}>
@@ -218,6 +221,7 @@ export function QuickSendPanel({ state, actionId, target, onSend, onClose, onDet
                   <b>{state.planets[planetId]?.name ?? planetId}</b>
                   <span>{flight ? <>{flightDurationLabel(flight.oneWayDurationMs)} · <em>{clock.format(flight.arrivalAt)}</em></> : 'не может отправить'}</span>
                 </button>
+                {!flight && !draft.checked ? <p className="quick-send__why" data-qa-quick-why>{plan.error ?? 'Сейчас отсюда отправить нельзя.'}</p> : null}
                 {draft.checked ? (
                   <div className="quick-send__leg-body">
                     <ul className="quick-send__ships">
@@ -233,14 +237,14 @@ export function QuickSendPanel({ state, actionId, target, onSend, onClose, onDet
                           </li>
                         );
                       })}
-                      {actionId === 'transport' ? CARGO_KEYS.map((key) => {
-                        const others = draft.cargo.metal + draft.cargo.minerals + draft.cargo.gas - draft.cargo[key];
-                        const max = Math.max(0, Math.min(Math.floor(resources[key]), capacity - others));
+                      {actionId === 'transport' ? TRANSPORT_KEYS.map((key) => {
+                        // The fleet screen's own limit: stock of the source, then the shared hold.
+                        const max = getCargoFieldMaximum(key, draft.cargo, resources, sourceDebris, capacity);
                         return (
                           <li key={key} className="quick-send__cargo" data-qa-quick-cargo={key}>
                             <ResourceIcon kind={key} />
-                            <span><b>{CARGO_LABELS[key]}</b><em>{number.format(draft.cargo[key])}</em></span>
-                            <AmountSlider compact value={draft.cargo[key]} max={max} label={`${CARGO_LABELS[key]}, ${state.planets[planetId]?.name ?? ''}`}
+                            <span><b>{TRANSPORT_LABELS[key]}</b><em>{number.format(draft.cargo[key])}</em></span>
+                            <AmountSlider compact value={draft.cargo[key]} max={max} label={`${TRANSPORT_LABELS[key]}, ${state.planets[planetId]?.name ?? ''}`}
                               onChange={(value) => update(planetId, (current) => ({ ...current, cargo: { ...current.cargo, [key]: value } }))} />
                           </li>
                         );

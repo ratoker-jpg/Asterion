@@ -86,7 +86,7 @@ export const QUICK_ACTION_LABELS: Record<QuickActionId, string> = {
   spy: 'Шпионаж',
   attack: 'Атака',
   transport: 'Транспорт',
-  deployment: 'Перебазировать',
+  deployment: 'Дислокация',
   'exploration-recon': 'Исследовать зондом',
   expedition: 'Экспедиция',
   'exploration-attack': 'Атаковать',
