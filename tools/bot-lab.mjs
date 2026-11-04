@@ -318,6 +318,16 @@ export function describeDiversity(journal, owners) {
 }
 
 /** What the world looks like for the questions the owner asks. */
+/** Pirate raids resolved so far (owner rule 04.11.2026: raid size follows combat population only). */
+function pirateRaidTally(state) {
+  const reports = (state.combat?.reports ?? []).filter((report) => report.missionType === 'pirate-raid');
+  const piratePop = reports.map((report) => report.attackerForce?.populationBefore ?? 0);
+  const defenderPop = reports.map((report) => report.defenderForce?.populationBefore ?? 0);
+  const defenderLost = reports.map((report) => Math.max(0, (report.defenderForce?.populationBefore ?? 0) - (report.defenderForce?.populationAfter ?? 0)));
+  return { raids: reports.length, piratePopulation: sum(piratePop), defenderPopulation: sum(defenderPop), defenderLost: sum(defenderLost),
+    pirateWins: reports.filter((report) => report.winner === 'attacker').length };
+}
+
 export function describeWorld(state, journal = [], tally = null) {
   const playerId = state.profile.playerId;
   const npcPlanets = Object.values(state.espionage?.targets ?? {}).filter((target) => target.kind === 'npc');
@@ -407,6 +417,7 @@ export function describeWorld(state, journal = [], tally = null) {
   return {
     worldAt: new Date(state.npcReplay?.processedThroughAt ?? 0).toISOString(), owners: owners.length,
     alliances: state.command.alliances.filter((alliance) => alliance.members.some((member) => member.ownerId !== playerId)).map((alliance) => `${alliance.tag}:${alliance.members.length}`),
+    pirateRaids: pirateRaidTally(state),
     sun: {
       declared: raids.length, disbanded: raids.filter((raid) => raid.status === 'disbanded').length,
       flew: raids.filter((raid) => raid.status === 'incoming' || raid.status === 'resolved').length,

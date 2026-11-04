@@ -3,7 +3,7 @@ import { publicPlayerPlanetsKey } from './npc-knowledge-index.ts';
 import { getFactionShipCatalog, getFactionDefenseCatalog } from '../domain/combat/faction-catalog.ts';
 import type { CombatFactionId } from '../domain/combat/factions.ts';
 import { getHangarCapacity } from '../domain/buildings/balance-v1.ts';
-import { calculateFleetPopulation } from '../domain/fleet/runtime.ts';
+import { calculateCombatFleetPopulation } from '../domain/fleet/runtime.ts';
 import { calculateDefensePopulation } from '../domain/fleet/production.ts';
 import { calculateRouteDistance } from '../domain/flights/distance.ts';
 import { calculateOneWayDurationMs } from '../domain/flights/speed.ts';
@@ -29,6 +29,7 @@ type RaidTarget = Readonly<{
   coordinate: UniverseCoordinate;
   factionId: CombatFactionId;
   resources: Readonly<{ metal: number; minerals: number; gas: number }>;
+  /** Combat population only: defence + combat hulls + commanders. Civil ships never count (owner rule 04.11.2026). */
   population: number;
   hangarLevel: number;
   defensiveClasses: RaidDefenseComposition;
@@ -72,7 +73,7 @@ function targetsByOwner(state: SaveState, onlyOwnerId?: string): ReadonlyMap<str
         position: planet.universePosition ?? 1 },
       factionId: playerFaction,
       resources: planet.resources ?? { metal:0,minerals:0,gas:0 },
-      population: calculateFleetPopulation(planet.fleet, playerFaction)
+      population: calculateCombatFleetPopulation(planet.fleet, playerFaction)
         + calculateDefensePopulation(planet.defense, playerFaction),
       hangarLevel: safe(planet.buildings.hangar ?? 0),
       defensiveClasses: describe(playerFaction, planet.fleet.ships, planet.defense.defenses),
@@ -85,7 +86,7 @@ function targetsByOwner(state: SaveState, onlyOwnerId?: string): ReadonlyMap<str
       id: target.id, ownerId: target.ownerId, name: target.name,
       coordinate: { ...target.coordinate }, factionId: target.raceId,
       resources: target.resources,
-      population: calculateFleetPopulation(target.fleet, target.raceId)
+      population: calculateCombatFleetPopulation(target.fleet, target.raceId)
         + calculateDefensePopulation(target.defense, target.raceId),
       hangarLevel: safe(target.buildings.hangar ?? 0),
       defensiveClasses: describe(target.raceId, target.fleet.ships, target.defense.defenses),
