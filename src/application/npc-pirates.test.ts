@@ -8,6 +8,8 @@ import { getUniverseTimedObjectSchedule } from '../domain/universe/runtime.ts';
 import { getCurrentPirateContact } from './pirates.ts';
 import type { SpyTargetState } from '../domain/espionage/types.ts';
 import type { SaveState } from './contracts.ts';
+import { reconcileRuntime } from './reconcile.ts';
+import { createPersistenceFacade } from './persistence.ts';
 import { dispatchNpcPirateMission, getNpcPirateCandidates, resolveNpcPirateArrival } from './npc-pirates.ts';
 
 const OWNER = 'npc-pirate-contract-owner';
@@ -43,7 +45,8 @@ function withNpcOrigin(state: SaveState, ships: Partial<Record<string, number>>)
     commanders: {},
     population: { total: 0, fleet: 0, defense: 0 },
     hunterLevel: 0,
-    ownerProfile: { scienceLevels: {}, shipLevels: {}, commanderLevels: {} },
+    // Upgraded hulls: a fresh fleet at level 0 does not beat the garrison a scouted contact rolls.
+    ownerProfile: { scienceLevels: {}, shipLevels: { battleship: 10, cruiser: 2 }, commanderLevels: {} },
   };
   const npc = createNpcState([OWNER], 'npc-pirate-tests', contactSchedule.startAt);
   const targets = { ...getEspionageTargets(state.espionage), [ORIGIN_ID]: target };
@@ -55,10 +58,25 @@ function withNpcOrigin(state: SaveState, ships: Partial<Record<string, number>>)
   return next;
 }
 
+import { pirateOperationId } from './pirate-presentation.ts';
+function activeNpcOperationId(state: SaveState, at: number) { return pirateOperationId(activeNpcContact(state, at).contactCycleKey); }
+
 function activeNpcContact(state: SaveState, at: number) {
   const contact = getCurrentPirateContact(state, { galaxy: 1, system: 2, position: 1 }, at);
   assert.ok(contact, 'the scheduled system must expose its public active pirate contact');
   return contact;
+}
+
+/** The owner scouts the base: dispatches its recon probe and lets it arrive, so the recon report is in the ledger. */
+function scouted(state: SaveState, at: number): SaveState {
+  const recon = getNpcPirateCandidates(state, state.npc!.profiles[OWNER]!, at).find((item) => item.missionId === 'pirate-recon');
+  assert.ok(recon, 'the owner needs a probe to scout');
+  const sent = dispatchNpcPirateMission(state, OWNER, recon, at, 'npc-pirate-scout', TIME_SCALE);
+  assert.equal(sent.ok, true, sent.reason ?? undefined);
+  const arrived = resolveNpcPirateArrival(sent.state, sent.flight!, sent.flight!.arrivalAt);
+  assert.equal(arrived.ok, true, arrived.reason ?? undefined);
+  // The probe is not the subject: its flight leaves the ledger so the slot is free again.
+  return { ...arrived.state, flights: { ...arrived.state.flights, records: arrived.state.flights.records.filter((item) => item.id !== sent.flight!.id) } };
 }
 
 test('NPC pirate candidates use an owned public contact, own fleet, and canonical recon availability', () => {
@@ -66,12 +84,12 @@ test('NPC pirate candidates use an owned public contact, own fleet, and canonica
   const state = withNpcOrigin(createInitialSaveState('test', scheduled.startAt), { 'spy-probe': 1, cruiser: 4 });
   const contact = activeNpcContact(state, scheduled.startAt + 1);
   const candidates = getNpcPirateCandidates(state, state.npc!.profiles[OWNER]!, scheduled.startAt + 1);
-  assert.equal(candidates.length, 2);
+  // Only a scouted base with odds the owner trusts gets a raid: the first thing a fresh owner can do is look.
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0]!.missionId, 'pirate-recon');
   assert.ok(candidates.some((candidate) => candidate.missionId === 'pirate-recon'
     && candidate.contactCycleKey === contact.contactCycleKey
     && candidate.selectedShips['spy-probe'] === 1));
-  assert.ok(candidates.some((candidate) => candidate.missionId === 'pirate-elimination'
-    && candidate.selectedShips.cruiser === 4));
 
   const recon = candidates.find((candidate) => candidate.missionId === 'pirate-recon')!;
   const sent = dispatchNpcPirateMission(state, OWNER, recon, scheduled.startAt + 1, 'npc-pirate-recon-1', TIME_SCALE);
@@ -84,17 +102,34 @@ test('NPC pirate candidates use an owned public contact, own fleet, and canonica
   assert.deepEqual(sent.state.planets, state.planets);
 });
 
+test('NPC pirate raid waits for a scouted base and a fleet that wins by its own odds', () => {
+  const scheduled = firstScheduledContact();
+  const at = scheduled.startAt + 1;
+  const eliminations = (state: SaveState) => getNpcPirateCandidates(state, state.npc!.profiles[OWNER]!, at)
+    .filter((item) => item.missionId === 'pirate-elimination');
+  // Four cruisers are no match for the garrison this contact rolls: the owner scouts, sees it and stays home.
+  const weak = withNpcOrigin(createInitialSaveState('test', scheduled.startAt), { 'spy-probe': 1, cruiser: 4 });
+  assert.equal(eliminations(weak).length, 0, 'no raid on an unscouted base');
+  assert.equal(eliminations(scouted(weak, at)).length, 0, 'no raid with a fleet that loses to the scouted garrison');
+  // Cruisers are weak here, battleships pay: only the efficient part of the fleet goes, the rest stays.
+  const mixed = scouted(withNpcOrigin(createInitialSaveState('test', scheduled.startAt), { 'spy-probe': 1, cruiser: 8, battleship: 3 }), at);
+  const raid = eliminations(mixed);
+  assert.equal(raid.length, 1);
+  assert.deepEqual(raid[0]!.selectedShips, { battleship: 3 });
+});
+
 test('NPC elimination arrival runs canonical combat and isolates player-owned save fields', () => {
   const scheduled = firstScheduledContact();
-  const state = withNpcOrigin(createInitialSaveState('test', scheduled.startAt), { cruiser: 8, battleship: 3 });
+  const state = withNpcOrigin(createInitialSaveState('test', scheduled.startAt), { 'spy-probe': 1, cruiser: 8, battleship: 3 });
   const at = scheduled.startAt + 1;
-  const candidate = getNpcPirateCandidates(state, state.npc!.profiles[OWNER]!, at)
+  const scoutedState = scouted(state, at);
+  const candidate = getNpcPirateCandidates(scoutedState, scoutedState.npc!.profiles[OWNER]!, at)
     .find((item) => item.missionId === 'pirate-elimination');
   assert.ok(candidate);
-  const sent = dispatchNpcPirateMission(state, OWNER, candidate, at, 'npc-pirate-elimination-1', TIME_SCALE);
+  const sent = dispatchNpcPirateMission(scoutedState, OWNER, candidate, at, 'npc-pirate-elimination-1', TIME_SCALE);
   assert.equal(sent.ok, true, sent.reason ?? undefined);
   const afterDispatch = getEspionageTargets(sent.state.espionage)[ORIGIN_ID]!;
-  assert.equal(afterDispatch.fleet.ships.cruiser, 0);
+  assert.equal(afterDispatch.fleet.ships.cruiser, 8, 'the cruisers that would only enlarge the garrison stay home');
   assert.equal(afterDispatch.fleet.ships.battleship, 0);
 
   const playerFields = {
@@ -117,7 +152,7 @@ test('NPC elimination arrival runs canonical combat and isolates player-owned sa
   assert.deepEqual(resolved.state.combatPriority, playerFields.priority);
   const npcOriginAfter = getEspionageTargets(resolved.state.espionage)[ORIGIN_ID]!;
   const report = resolved.state.combat.reports.find((item) => item.id === `battle-pirate-${sent.flight!.id}`)!;
-  for (const shipId of ['cruiser', 'battleship'] as const) {
+  for (const shipId of ['battleship'] as const) {
     const destroyed = report.attackerForce.stacks?.find((stack) => stack.entityId === shipId)?.destroyed ?? 0;
     // A hull type wiped out leaves the manifest instead of staying as zero.
     assert.equal(resolved.flight!.selectedShips[shipId] ?? 0, sent.flight!.selectedShips[shipId]! - destroyed,
@@ -130,19 +165,50 @@ test('NPC elimination arrival runs canonical combat and isolates player-owned sa
 test('NPC pirate elimination follows the canonical combat-hull composition rule', () => {
   const scheduled = firstScheduledContact();
   const at = scheduled.startAt + 1;
-  const civilianOnly = withNpcOrigin(createInitialSaveState('test', scheduled.startAt), { transporter: 5, recycler: 2 });
-  assert.equal(getNpcPirateCandidates(civilianOnly, civilianOnly.npc!.profiles[OWNER]!, at)
+  const civilianOnly = withNpcOrigin(createInitialSaveState('test', scheduled.startAt), { 'spy-probe': 1, transporter: 5, recycler: 2 });
+  assert.equal(getNpcPirateCandidates(scouted(civilianOnly, at), civilianOnly.npc!.profiles[OWNER]!, at)
     .some((candidate) => candidate.missionId === 'pirate-elimination'), false,
   'civilian and service hulls cannot form an elimination fleet, exactly as for the player');
 
-  const mixed = withNpcOrigin(createInitialSaveState('test', scheduled.startAt), { transporter: 5, cruiser: 2 });
+  const mixed = scouted(withNpcOrigin(createInitialSaveState('test', scheduled.startAt), { 'spy-probe': 1, transporter: 5, battleship: 3 }), at);
   const candidate = getNpcPirateCandidates(mixed, mixed.npc!.profiles[OWNER]!, at)
     .find((item) => item.missionId === 'pirate-elimination');
   assert.ok(candidate);
-  assert.deepEqual(candidate.selectedShips, { cruiser: 2 });
+  assert.deepEqual(candidate.selectedShips, { battleship: 3 });
   const forged = { ...candidate, selectedShips: { ...candidate.selectedShips, transporter: 5 } };
   const denied = dispatchNpcPirateMission(mixed, OWNER, forged, at, 'npc-pirate-forged-composition', TIME_SCALE);
   assert.equal(denied.ok, false);
   assert.equal(denied.reason, 'invalid-elimination-composition');
   assert.equal(denied.state, mixed, 'a denied launch leaves wallet and fleet untouched');
+});
+
+// The pirates can destroy an NPC hunt to the last hull. Its resolved flight still flies home empty and
+// completes; the load validator used to drop it. NPC owners no longer choose such hunts, so it is forced here.
+test('an NPC pirate hunt wiped out by the pirates survives save and load', () => {
+  const scheduled = firstScheduledContact();
+  const at = scheduled.startAt + 1;
+  const state = withNpcOrigin(createInitialSaveState('test', scheduled.startAt), { cruiser: 2 });
+  const forged = { id: 'forged-hunt', kind: 'pve' as const, weight: 1, ownerId: OWNER, originPlanetId: ORIGIN_ID,
+    operationId: '', contactCycleKey: activeNpcContact(state, at).contactCycleKey, coordinate: activeNpcContact(state, at).coordinate,
+    missionId: 'pirate-elimination' as const, selectedShips: { cruiser: 2 } };
+  const real = getNpcPirateCandidates(scouted(withNpcOrigin(createInitialSaveState('test', scheduled.startAt), { 'spy-probe': 1, cruiser: 2 }), at), state.npc!.profiles[OWNER]!, at);
+  assert.equal(real.some((item) => item.missionId === 'pirate-elimination'), false, 'the owner would not send this hunt');
+  const candidate = { ...forged, operationId: activeNpcOperationId(state, at) };
+  const sent = dispatchNpcPirateMission(state, OWNER, candidate, at, 'npc-autonomy:npc-pirate-wrecked-hunt', TIME_SCALE);
+  assert.equal(sent.ok, true, sent.reason ?? undefined);
+  const later = reconcileRuntime(sent.state, { planetId: sent.state.currentPlanetId, now: sent.flight!.arrivalAt + 1, mode: 'production', testTimeScale: 1 }).state;
+  const wrecked = later.flights.records.filter((flight) => flight.ownerSide === 'npc' && flight.missionId === 'pirate-elimination'
+    && flight.attackResolution !== undefined && Object.keys(flight.selectedShips).length === 0);
+  assert.equal(wrecked.length, 1, 'the two cruisers are wiped out');
+  const facade = createPersistenceFacade({ mode: 'production', storage: { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => { store.set(k, v); }, removeItem: (k: string) => { store.delete(k); } } as Storage, saveKey: 'asterion.npc-pirate-wrecked', now: () => sent.flight!.arrivalAt + 1 });
+  const store = new Map<string, string>();
+  assert.equal(facade.write(later).ok, true);
+  const loaded = facade.load();
+  assert.equal(loaded.status, 'loaded');
+  if (loaded.status === 'loaded') {
+    const kept = loaded.state.flights.records.find((item) => item.id === wrecked[0]!.id);
+    assert.ok(kept, 'the empty return flight survives the load');
+    assert.deepEqual(kept.selectedShips, {});
+    assert.deepEqual(kept.attackResolution, JSON.parse(JSON.stringify(wrecked[0]!.attackResolution)));
+  }
 });

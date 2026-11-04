@@ -621,8 +621,9 @@ export function calculateCombatStackPreview(
   executionMode: CombatExecutionMode = 'production',
   alliedStacks: readonly CombatStackInput[] = [stack],
   activeCommanderId: CommanderId | null = null,
+  profile?: import('./side-entity.ts').CombatSideProfile,
 ): CombatStackPreview | null {
-  const own = runtimeFromInput('attacker', 'stacks', alliedStacks, technologies, executionMode, factionId);
+  const own = runtimeFromInput('attacker', 'stacks', alliedStacks, technologies, executionMode, factionId, profile);
   if (!own.some((candidate) => candidate.entityId === stack.entityId)) return null;
   applyRoundModifiers(own, [], activeCommanderId, null);
   const runtime = own.find((candidate) => candidate.entityId === stack.entityId);

@@ -24,23 +24,8 @@ function saveLoad(state: SaveState, targetAt: number) {
   return loaded.status === 'loaded' ? loaded.state : state;
 }
 
-const isWreckedNpcPirateHunt = (flight: SaveState['flights']['records'][number]) => flight.ownerSide === 'npc'
-  && flight.missionId === 'pirate-elimination' && flight.attackResolution !== undefined
-  && Object.keys(flight.selectedShips).length === 0;
-
-// The pirates can destroy an NPC hunt to the last hull. Its resolved flight
-// still flies home empty and completes; the load validator used to drop it.
-test('an NPC pirate hunt wiped out by the pirates survives save and load', () => {
-  const targetAt = START + 2 * DAY;
-  const first = slice(freezeNpcCatchupTarget(campaign(8, SEED), targetAt), targetAt);
-  const wrecked = first.flights.records.filter(isWreckedNpcPirateHunt);
-  assert.ok(wrecked.length > 0, 'the fixture slice must contain a wiped-out NPC pirate hunt');
-  const loaded = saveLoad(first, targetAt);
-  assert.deepEqual(loaded.flights.records.map((flight) => flight.id), first.flights.records.map((flight) => flight.id));
-  for (const flight of wrecked) {
-    assert.deepEqual(loaded.flights.records.find((item) => item.id === flight.id), JSON.parse(JSON.stringify(flight)));
-  }
-});
+// The wiped-out NPC pirate hunt (save/load keeps its empty return flight) is covered in npc-pirates.test.ts:
+// NPC owners no longer send hunts the pirates are sure to wipe out, so no campaign slice produces one on its own.
 
 function drain(start: SaveState, targetAt: number, reload: boolean) {
   let state = start;

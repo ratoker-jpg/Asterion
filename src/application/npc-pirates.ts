@@ -18,7 +18,10 @@ import { pirateDebrisRewardMultiplier } from '../domain/pirates/threat.ts';
 import { PIRATE_ELIMINATION_DEFEAT_MULTIPLIER, PIRATE_ELIMINATION_DRAW_MULTIPLIER } from '../domain/pirates/debris.ts';
 import { createDefaultPirateState, type PirateMissionSnapshot } from '../domain/pirates/mission.ts';
 import type { PirateReconReport } from '../domain/pirates/recon-report.ts';
-import { selectOwnerScores } from '../domain/rating/scoring.ts';
+import { selectOwnerScore, selectOwnerScores } from '../domain/rating/scoring.ts';
+import { estimateNpcPirateOdds } from './npc-pirate-odds.ts';
+import { getNpcJournalSink } from './npc-journal.ts';
+import { sideDestroyedValue } from './npc-grudges.ts';
 import { createDefaultEspionageState, getEspionageTargets } from '../domain/espionage/runtime.ts';
 import { getNpcMissionAvailableFleet } from './npc-missions.ts';
 import { getOwnerRelation } from './owner-relations.ts';
@@ -142,9 +145,22 @@ export function getNpcPirateCandidates(state: SaveState, profile: NpcProfile, at
       coordinate: { ...contact.coordinate }, missionId: 'pirate-recon', selectedShips: { 'spy-probe': 1 },
       ...(ownReconReport ? { ownReconReport } : {}),
     });
-    const combatShips = Object.fromEntries(Object.entries(free).filter(([id, count]) =>
+    const freeCombat = Object.fromEntries(Object.entries(free).filter(([id, count]) =>
       safeCount(count) > 0 && isPirateEliminationShip(id as ShipId, origin.raceId))) as Partial<Record<ShipId, number>>;
-    if (Object.keys(combatShips).length > 0 && ownerCanUseFlightSlot(state, ownerId, ownerProfile(state, origin), 'pirate-elimination')) candidates.push({
+    // A raid goes only on a base this owner has scouted and only with a force its own odds call a win:
+    // the garrison is rolled to match what is sent, so the ship mix decides, not the size of the fleet.
+    let combatShips: Partial<Record<ShipId, number>> = {};
+    if (Object.keys(freeCombat).length > 0 && ownReconReport?.intel && ownerCanUseFlightSlot(state, ownerId, ownerProfile(state, origin), 'pirate-elimination')) {
+      const own = ownerProfile(state, origin);
+      const snapshot = createBot01IncomingAttackSnapshot(origin, own);
+      const odds = estimateNpcPirateOdds({
+        raceId: origin.raceId, free: freeCombat, shipLevels: snapshot.attackerShipLevels,
+        technologies: snapshot.attackerTechnologies, report: ownReconReport,
+        resourcePoints: selectOwnerScore(state, ownerId)?.resourcePoints ?? 0,
+      });
+      if (odds?.ready) combatShips = { ...odds.ships };
+    }
+    if (Object.keys(combatShips).length > 0) candidates.push({
       id: `pirate-elimination:${JSON.stringify([ownerId, origin.id, contact.contactCycleKey])}`,
       kind: 'pve', weight: 1, ownerId, originPlanetId: origin.id,
       operationId: pirateOperationId(contact.contactCycleKey), contactCycleKey: contact.contactCycleKey,
@@ -325,6 +341,12 @@ export function resolveNpcPirateArrival(state: SaveState, flight: FlightRecord, 
   if (flight.missionId === 'pirate-elimination') {
     const report = result.state.combat.reports.find((item) => item.id === `battle-pirate-${flight.id}`);
     if (report) {
+      // The owner's ledger sees the raid like any other battle: the learning loop needs wins, losses and what the wreckage was worth.
+      getNpcJournalSink()?.outcome?.({ at, ownerId: flight.ownerId, kind: 'battle', data: {
+        side: 'attacker', won: report.winner === 'attacker' ? 1 : 0, vs: 'pirates', m: 'pirate-elimination',
+        base: report.winner === 'attacker' && report.defenderForce.populationAfter === 0 ? 1 : 0,
+        gain: Math.max(0, Math.floor(report.debris ?? 0)), loss: sideDestroyedValue(report, 'attacker', origin.raceId),
+        sent: Math.round(report.attackerForce.populationBefore), id: report.id } });
       for (const [id, raw] of Object.entries(flight.selectedShips) as [ShipId, number][]) {
         const destroyed = report.attackerForce.stacks.find((stack) => stack.entityId === id)?.destroyed ?? 0;
         const left = Math.max(0, safeCount(raw) - safeCount(destroyed));
