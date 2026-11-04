@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>mock</title>
+<style>
+@font-face{font-family:Montserrat;src:url("../../public/fonts/Montserrat-Variable.ttf") format("truetype");font-weight:100 900}
+:root{--a:#56d9f2;--am:#e6ad50;--r:#f0445e;--g:#35e58a;--l:#a9cbd3;--t:#e8faff}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%;background:#03080d;color:var(--t);font-family:Montserrat,sans-serif;font-variant-numeric:tabular-nums;overflow:hidden}
+body{background:radial-gradient(ellipse at 60% -10%,#0c2a38,transparent 60%),#03080d}
+button{font:inherit;color:inherit;cursor:pointer}
+.dlg{position:absolute;inset:20px;display:flex;flex-direction:column;gap:12px;padding:20px 26px;border-radius:18px;background:linear-gradient(180deg,rgba(9,26,36,.97),rgba(4,13,19,.98));box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 30px 70px #000}
+.head{display:flex;align-items:center;gap:18px}
+.head h1{font-size:24px;font-weight:800}
+.chips{display:flex;gap:6px;flex:1;min-width:0;overflow:hidden}
+.chip{display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:9px;background:rgba(86,217,242,.06);font-size:13px;font-weight:700;white-space:nowrap}
+.chip.on{background:rgba(86,217,242,.2);color:#fff}.chip small{font-size:12px;font-weight:700;color:var(--am)}.chip small.ok{color:var(--g)}.chip small.no{color:var(--l);font-weight:500}
+.x{width:40px;height:40px;border-radius:10px;border:1px solid rgba(240,68,94,.5);background:rgba(240,68,94,.1);font-size:18px;flex:none}
+.hang{display:grid;gap:6px}
+.hang p{display:flex;gap:18px;align-items:baseline;font-size:14px;color:var(--l)}.hang p b{color:#fff;font-size:17px;font-weight:800}.hang .over{margin-left:auto;color:var(--r);font-weight:700}
+.band{position:relative;height:22px;border-radius:9px;overflow:hidden;background:rgba(126,200,220,.08);display:flex}
+.band i{display:block;height:100%}.seg-now{background:linear-gradient(180deg,#7fe6fb,#2a9fc0)}.seg-q{background:repeating-linear-gradient(115deg,#e6ad50 0 7px,#a87a2f 7px 13px)}.seg-a{background:rgba(127,230,251,.32)}.seg-m{background:rgba(230,173,80,.16);box-shadow:inset 0 0 0 1px rgba(230,173,80,.4)}.seg-f{background:rgba(53,229,138,.14)}
+.dock{margin-top:auto;display:flex;align-items:center;gap:22px;padding-top:6px}
+.cost{display:flex;gap:18px;font-size:15px;font-weight:700}.cost em{font-style:normal}.cost .s{color:#ff7a6b}
+.cost u{text-decoration:none;display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;background:#b9c6d6}.cost u.mi{background:#7d8cff}.cost u.ga{background:#4ee0a0}
+.btn{height:48px;padding:0 22px;border-radius:10px;border:1px solid rgba(126,200,220,.3);background:rgba(86,217,242,.07);font-weight:700;font-size:14px;white-space:nowrap}
+.btn.pri{border:0;background:linear-gradient(180deg,#6fe3f8,#2aa7c9);color:#03202b;font-weight:800;font-size:16px;box-shadow:0 0 22px rgba(86,217,242,.35)}
+.grow{flex:1}
+
+/* A */
+.lanes{display:grid;gap:3px;min-height:0;overflow:hidden}
+.lane{display:grid;grid-template-columns:62px 170px minmax(0,1fr) 112px 118px 170px;align-items:center;gap:12px;padding:3px 10px 3px 4px;border-radius:13px;background:linear-gradient(90deg,rgba(86,217,242,.05),transparent 60%)}
+.lane img{width:62px;height:42px;object-fit:contain;filter:drop-shadow(0 4px 8px #000)}
+.lane .n b{display:block;font-size:15px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.lane .n small{font-size:12px;color:var(--l)}
+.track{display:grid;gap:3px}.track .bar{height:14px;border-radius:7px;overflow:hidden;display:flex;background:rgba(230,173,80,.1);box-shadow:inset 0 0 0 1px rgba(230,173,80,.25)}
+.track .bar i{display:block;height:100%}.track small{font-size:12px;color:var(--l);white-space:nowrap}
+.tgt{height:36px;border-radius:9px;background:rgba(0,0,0,.35);box-shadow:inset 0 0 0 1px rgba(126,200,220,.25);display:flex;align-items:center;justify-content:flex-end;padding:0 10px;font-size:15px;font-weight:800}
+.tgt.fill{color:#4ee0a0;box-shadow:inset 0 0 0 1px rgba(78,224,160,.5);font-size:13px}
+.miss{text-align:right}.miss b{display:block;font-size:17px;font-weight:800;color:var(--am)}.miss small{font-size:12px;color:var(--l)}.miss.ok b{color:var(--g)}
+.go{height:36px;border-radius:10px;border:0;background:rgba(86,217,242,.18);color:#dff8ff;font-weight:800;font-size:13px;white-space:nowrap;padding:0 10px}
+.go.part{background:rgba(230,173,80,.2);color:#ffe2ae}.go.done{background:none;color:var(--g)}.go.lock{background:none;color:#ff9d90;font-weight:600;font-size:12px;white-space:normal;line-height:1.15;cursor:default;text-align:right}
+.shelf{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--l)}.shelf button{display:flex;align-items:center;gap:6px;padding:3px 10px 3px 4px;border:0;border-radius:9px;background:rgba(86,217,242,.06);font-weight:700;font-size:13px;color:#cfe6ec}.shelf img{width:34px;height:24px;object-fit:contain}
+
+/* B */
+.bays{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;min-height:0;flex:1}
+.bay{position:relative;display:flex;flex-direction:column;align-items:center;padding:8px 10px 10px;border-radius:13px;background:radial-gradient(circle at 50% 20%,rgba(86,217,242,.12),transparent 60%),rgba(10,28,38,.7);min-height:0}
+.bay.off{opacity:.42}.bay img{height:44%;max-width:90%;object-fit:contain;filter:drop-shadow(0 6px 10px #000)}
+.bay b{font-size:14px;font-weight:800}.bay .num{font-size:13px;color:var(--l)}.bay .num em{font-style:normal;color:#fff;font-weight:800;font-size:16px}
+.bay .m{font-size:13px;color:var(--am);font-weight:800}.bay .go{margin-top:auto;width:100%}
+.bay .ring{position:absolute;top:8px;right:8px;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:800;background:conic-gradient(var(--a) calc(var(--p)*1%),rgba(126,200,220,.14) 0)}
+.bay .ring::before{content:'';position:absolute;inset:4px;border-radius:50%;background:#071722}.bay .ring span{position:relative}
+
+/* C */
+.map{display:flex;gap:6px;height:42%;min-height:0}
+.cell{position:relative;min-width:0;border-radius:13px;overflow:hidden;background:radial-gradient(circle at 50% 30%,rgba(86,217,242,.16),transparent 70%),rgba(10,28,38,.8);display:flex;flex-direction:column;justify-content:flex-end;padding:8px}
+.cell img{position:absolute;inset:6px;width:calc(100% - 12px);height:60%;object-fit:contain}
+.cell b{font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.cell small{font-size:12px;color:var(--am);font-weight:700;white-space:nowrap}
+.cell.sel{box-shadow:inset 0 0 0 2px var(--a)}.cell.free{background:rgba(53,229,138,.07);color:var(--g);align-items:center;justify-content:center}
+.insp{display:grid;grid-template-columns:230px minmax(0,1fr) 260px;gap:22px;align-items:center}
+.insp img{width:100%;height:150px;object-fit:contain}.insp h2{font-size:24px;font-weight:800}
+.rows{display:grid;grid-template-columns:repeat(4,1fr);gap:4px 18px;font-size:14px}.rows small{display:block;color:var(--l);font-size:12px}.rows b{font-size:20px;font-weight:800}
+.mini{display:flex;flex-wrap:wrap;gap:6px}.mini span{padding:4px 10px;border-radius:9px;background:rgba(86,217,242,.08);font-size:13px;font-weight:700}
+</style></head><body><div id="root"></div>
+<script>
+const v=new URLSearchParams(location.search).get('v')||'a';
+const art=(id)=>`../../assets/source/New assets/ship/aegis/ship.aegis.${id}.png`;
+const f=(n)=>n.toLocaleString('ru-RU');
+const L=[
+ {id:'scout',n:'Разведчик',t:1300,p:900,q:200,a:60,ok:1},
+ {id:'cruiser',n:'Крейсер',t:0,p:0,q:0,a:0,off:1},
+ {id:'defender',n:'Защитник',t:1300,p:1300,q:0,a:0,ok:1},
+ {id:'battleship',n:'Линкор',t:500,p:120,q:0,a:0,part:412},
+ {id:'destroyer',n:'Разрушитель',t:200,p:40,q:0,a:0,lock:'Нужна наука: Плазма 6'},
+ {id:'bomber',n:'Бомбардировщик',t:8240,p:1200,q:0,a:300,fill:1},
+ {id:'transporter',n:'Транспорт',t:0,off:1},{id:'mega-transporter',n:'Мегатранспорт',t:0,off:1},{id:'recycler',n:'Переработчик',t:60,p:18,q:0,a:0,ok:1},{id:'spy-probe',n:'Зонд',t:0,off:1},{id:'colonizer',n:'Колонизатор',t:0,off:1},{id:'solar-satellite',n:'Спутник',t:0,off:1},{id:'death-star',n:'Звезда смерти',t:0,off:1}];
+const planets=`<div class="chips"><span class="chip on">Москва <small>−9 462</small></span><span class="chip">Кассия <small class="ok">всё есть</small></span><span class="chip">Ферон Великая… <small>−240</small></span><span class="chip">Тавр <small class="no">нет плана</small></span><span class="chip">Нордин <small>−14 млн</small></span><span class="chip">Колония 17-11 <small class="no">нет плана</small></span></div>`;
+const head=(t)=>`<div class="head"><h1>${t}</h1>${planets}<button class="x">✕</button></div>`;
+const band=`<div class="hang"><p><span>Ангар</span><b>42 180</b><span>из 160 000 занято · с планом <b>160 000</b></span><span style="margin-left:auto">Бомбардировщик заполнит остаток</span></p><div class="band"><i class="seg-now" style="width:22%"></i><i class="seg-q" style="width:3%"></i><i class="seg-a" style="width:1.4%"></i><i class="seg-m" style="width:73.6%"></i></div></div>`;
+const dock=`<div class="dock"><div class="cost"><em><u></u>18,4 млн</em><em class="s"><u class="mi"></u>24,1 млн · не хватает 3,2 млн</em><em><u class="ga"></u>4,6 млн</em></div><span class="grow"></span><button class="btn">Взять план с планеты</button><button class="btn pri">Запустить всё · 3 линии</button></div>`;
+const btn=(l)=>{const m=l.t-(l.p+l.q+l.a);if(l.lock)return `<button class="go lock">${l.lock}</button>`;if(m<=0)return `<button class="go done">✓ Всё есть</button>`;if(l.part)return `<button class="go part">Запустить ${f(l.part)} из ${f(m)}</button>`;return `<button class="go">Запустить ${f(m)}</button>`};
+const A=()=>{const on=L.filter(l=>!l.off),off=L.filter(l=>l.off);return `<div class="dlg">${head('Эталонный флот')}${band}<div class="lanes">${on.map(l=>{const m=Math.max(0,l.t-(l.p+l.q+l.a));const w=x=>Math.min(100,x/l.t*100);return `<div class="lane"><img src="${art(l.id)}"><div class="n"><b>${l.n}</b><small>${l.fill?'на остаток':`население ${l.id==='bomber'?7:2}`}</small></div><div class="track"><div class="bar"><i class="seg-now" style="width:${w(l.p)}%"></i><i class="seg-q" style="width:${w(l.q)}%"></i><i class="seg-a" style="width:${w(l.a)}%"></i></div><small>на планете ${f(l.p)}${l.q?` · строится ${f(l.q)}`:''}${l.a?` · в рейсе ${f(l.a)}`:''}</small></div><div class="tgt ${l.fill?'fill':''}">${l.fill?'остаток':f(l.t)}</div><div class="miss ${m?'':'ok'}"><b>${m?'−'+f(m):'0'}</b><small>${m?'не хватает':'как в плане'}</small></div>${btn(l)}</div>`}).join('')}</div><div class="shelf"><span>Добавить в план:</span>${off.map(l=>`<button><img src="${art(l.id)}">${l.n}</button>`).join('')}</div>${dock}</div>`};
+const B=()=>`<div class="dlg">${head('Эталонный флот')}${band}<div class="bays">${L.map(l=>{const m=Math.max(0,(l.t||0)-((l.p||0)+(l.q||0)+(l.a||0)));const pc=l.t?Math.round(((l.p||0)+(l.q||0)+(l.a||0))/l.t*100):0;return `<div class="bay ${l.off?'off':''}"><div class="ring" style="--p:${pc}"><span>${pc}%</span></div><img src="${art(l.id)}"><b>${l.n}</b>${l.off?'<span class="num">не в плане</span>':`<span class="num"><em>${f((l.p||0)+(l.q||0)+(l.a||0))}</em> из ${l.fill?'остатка':f(l.t)}</span><span class="m">${m?'не хватает '+f(m):''}</span>${btn(l)}`}</div>`}).join('')}</div>${dock}</div>`;
+const C=()=>{const on=L.filter(l=>!l.off);const pop={scout:5,defender:9,battleship:16,destroyer:9,bomber:50,recycler:3};return `<div class="dlg">${head('Эталонный флот')}<div class="hang"><p><span>Ангар</span><b>42 180</b><span>из 160 000 занято · с планом <b>160 000</b></span></p></div><div class="map">${on.map(l=>{const m=Math.max(0,l.t-(l.p+l.q+l.a));return `<div class="cell ${l.id==='battleship'?'sel':''}" style="flex:${pop[l.id]} 1 0"><img src="${art(l.id)}"><b>${l.n}</b><small>${m?'−'+f(m):'✓'}</small></div>`}).join('')}<div class="cell free" style="flex:8 1 0">свободно</div></div><div class="insp"><img src="${art('battleship')}"><div><h2>Линкор</h2><div class="rows" style="margin-top:12px"><div><small>Нужно</small><b>500</b></div><div><small>На планете</small><b>120</b></div><div><small>Строится</small><b>0</b></div><div><small>В рейсе</small><b>0</b></div></div></div><div><button class="btn pri" style="width:100%">Запустить 412 из 380</button></div></div><div class="mini">${on.map(l=>`<span>${l.n}</span>`).join('')}</div>${dock}</div>`};
+document.getElementById('root').innerHTML={a:A,b:B,c:C}[v]();
+</script></body></html>

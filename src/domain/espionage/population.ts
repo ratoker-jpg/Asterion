@@ -9,12 +9,16 @@ import type { SpyReportPopulation } from './types.ts';
  * that will come back, «Космический рейс» included. Deployment and colonization
  * on their way out leave the planet for good and do not count.
  */
+export function flightComesBackToPlanet(flight: FlightRecord, planetId: string): boolean {
+  if (flight.originPlanetId !== planetId) return false;
+  if (flight.phase !== 'outbound' && flight.phase !== 'arrived' && flight.phase !== 'returning') return false;
+  return !(flight.phase === 'outbound' && (flight.missionId === 'deployment' || flight.missionId === 'colonize'));
+}
+
 export function awayFleetPopulation(flights: readonly FlightRecord[], planetId: string, factionId: CombatFactionId): number {
   let total = 0;
   for (const flight of flights) {
-    if (flight.originPlanetId !== planetId) continue;
-    if (flight.phase !== 'outbound' && flight.phase !== 'arrived' && flight.phase !== 'returning') continue;
-    if (flight.phase === 'outbound' && (flight.missionId === 'deployment' || flight.missionId === 'colonize')) continue;
+    if (!flightComesBackToPlanet(flight, planetId)) continue;
     total += calculateFleetPopulation({
       ships: { ...flight.selectedShips },
       commanders: { ...(flight.selectedCommanders ?? {}) },
