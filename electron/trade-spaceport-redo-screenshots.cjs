@@ -205,7 +205,7 @@ async function tradeScenes(win, directory) {
   // Within the limit but more than there is: the refusal names the shortage.
   await seed(win, { mutate: `save.metal = 1000; planet.resources = { ...planet.resources, metal: 1000 };` });
   await openTrade(win);
-  await setInput(win, '[data-qa-trade-amount-input]', '2000');
+  await setInput(win, '[data-qa-trade-amount-input]', '1000000');
   await capture(win, directory, 'trade-09-not-enough');
 
   // Near a billion of everything: the tiles and the result must still read.

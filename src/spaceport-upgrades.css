@@ -241,7 +241,6 @@ html body .spaceport-upgrades-v2 .spaceport-upgrade-cta-v2 {
   transition: translate var(--ut-motion-base) var(--ut-spring), filter var(--ut-motion-base) var(--ut-ease-out);
 }
 .spaceport-upgrades-v2 .spaceport-upgrade-cta-v2 { font-size: calc(15px * var(--text-scale-control, 1)) !important; }
-html body .spaceport-upgrades-v2 .spaceport-upgrade-cta-v2:not(:disabled) { border-color: transparent; background: linear-gradient(180deg, var(--sp-accent), var(--sp-accent-strong)); color: #04141a; }
 html body .spaceport-upgrades-v2 .spaceport-upgrade-cta-v2:disabled { border: 1px solid var(--ut-border); border-radius: var(--ut-r-btn); background: rgba(255, 255, 255, .04); box-shadow: none; color: #7f979e; cursor: not-allowed; }
 .spaceport-upgrade-cta-v2:focus-visible { outline: var(--ut-focus); outline-offset: 2px; }
 .sp-why { display: grid; gap: 2px; }

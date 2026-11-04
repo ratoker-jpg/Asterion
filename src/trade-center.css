@@ -221,7 +221,7 @@
 .tc-go{min-width:0;display:grid;gap:8px}
 .tc-go__submit{position:relative;height:72px;overflow:hidden;border:1px solid var(--ut-border);border-radius:var(--ut-r-btn);background:rgba(255,255,255,.04);color:#7f979e;font-family:inherit;font-weight:800;letter-spacing:1.4px;cursor:not-allowed;transition:translate var(--ut-motion-base) var(--ut-spring),filter var(--ut-motion-base) var(--ut-ease-out)}
 .trade-center-view .tc-go__submit{font-size:calc(22px * var(--text-scale-control,1)) !important}
-html body .trade-center-view .tc-go__submit:not(:disabled){cursor:pointer;border-color:transparent;background:linear-gradient(180deg,var(--tc-accent),var(--tc-accent-strong));box-shadow:0 0 24px var(--tc-glow);color:#04141a}
+.tc-go__submit:not(:disabled){cursor:pointer}
 .tc-go__submit:focus-visible{outline:var(--ut-focus);outline-offset:2px}
 /* The one bright thing on the screen: a slow gleam while the deal is ready. */
 .tc-go__submit:not(:disabled)::after{content:'';position:absolute;inset:0;background:linear-gradient(105deg,transparent 35%,rgba(255,255,255,.45) 50%,transparent 65%);translate:-110% 0;animation:tc-gleam 3.6s var(--ut-ease-in-out) infinite;pointer-events:none}
