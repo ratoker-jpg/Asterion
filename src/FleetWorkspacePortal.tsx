@@ -139,7 +139,7 @@ import {
   pickNextSourcePlanet,
   type FlightRepeatPlan,
 } from './application/flight-repeat.ts';
-import { FLEET_PLANNER_OPEN_EVENT, FLEET_UI_UPDATE_EVENT, isFavoriteTarget, type FleetFavoriteTarget, type FleetUiUpdate } from './domain/flights/fleet-ui.ts';
+import { FLEET_UI_UPDATE_EVENT, isFavoriteTarget, type FleetFavoriteTarget, type FleetUiUpdate } from './domain/flights/fleet-ui.ts';
 
 function queueKindForConstructionView(view: ConstructionView): FleetProductionQueueKind | null {
   if (view === 'ships') return 'ships';
@@ -1318,11 +1318,6 @@ function FleetWorkspace({
   };
 
   const chooseSection = (section: FleetSectionId) => {
-    // The planner opens over the fleet screen, which stays where it was.
-    if (section === 'fleet-plan') {
-      window.dispatchEvent(new CustomEvent(FLEET_PLANNER_OPEN_EVENT));
-      return;
-    }
     clearLaunchContext();
     setFleetSection(section);
 
