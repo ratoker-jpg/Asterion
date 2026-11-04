@@ -1,0 +1,21 @@
+name: tmp race without the fix
+on:
+  push:
+    branches: [claude/recycling-center-redo]
+jobs:
+  without-fix:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Switch the fix off
+        run: node -e "const fs=require('fs');const p='src/application/state.ts';const s=fs.readFileSync(p,'utf8');const n=s.replace(/if \(commandFlushDepth > 0\) setTimeout\(work, 0\);\s*else work\(\);/,'work();');if(n===s)throw new Error('not patched');fs.writeFileSync(p,n)"
+      - run: npm run build
+      - name: Race QA without the fix
+        run: npx electron electron/command-tick-race-qa.cjs
+        continue-on-error: true

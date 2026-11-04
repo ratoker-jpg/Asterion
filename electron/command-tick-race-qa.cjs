@@ -43,6 +43,56 @@ async function click(win, selector) {
   if (!clicked) throw new Error(`Clickable element not found/enabled: ${selector}`);
 }
 
+// The same gap on the build queue («Build queue did not persist»): each round
+// fills the three places of the queue, each click in the gap after a tick.
+const BUILD_ROUNDS = 4;
+const BUILD_ROLES = ['basic-energy', 'gas-production-1', 'hangar'];
+
+async function verifyBuildQueue(win) {
+  const lost = [];
+  for (let round = 0; round < BUILD_ROUNDS; round += 1) {
+    const value = await editSaveIdle(win, `(() => {
+      const save = PARSE_SAVE(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+      const planet = save.planets?.['helion-01'];
+      if (!planet) return false;
+      save.metal = 450000000;
+      save.minerals = 100000000;
+      planet.resources = { ...(planet.resources || {}), metal: 450000000, minerals: 100000000 };
+      planet.energy = 999999999;
+      save.queues = { ...(save.queues || {}), 'helion-01': [] };
+      save.resourceClock = { lastReconciledAt: Date.now(), remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
+      localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+      localStorage.setItem(${JSON.stringify(TEST_TIME_SCALE_KEY)}, '1');
+      return true;
+    })()`, { label: 'command tick race build seed' });
+    if (value === false) throw new Error('build fixture mutation was rejected');
+    await win.webContents.executeJavaScript(`document.querySelector('[data-qa-npc-catchup-close]')?.click()`);
+    await click(win, '[data-qa-zone="resource"]');
+    await waitFor(win, `document.querySelector('[data-resource-building-role="basic-energy"]')`);
+
+    for (const [index, role] of BUILD_ROLES.entries()) {
+      await click(win, `[data-resource-building-role="${role}"]`);
+      await waitFor(win, `document.querySelector('[data-qa-building-dialog="${role}"] [data-qa-build-button]:not([disabled])')`);
+      // Arm: the next commit (the header clock changes every second) clicks in the gap.
+      await win.webContents.executeJavaScript(`new Promise((resolve) => {
+        const observer = new MutationObserver(() => {
+          observer.disconnect();
+          document.querySelector('[data-qa-building-dialog="${role}"] [data-qa-build-button]').click();
+          resolve(true);
+        });
+        observer.observe(document.body, { subtree: true, characterData: true, childList: true });
+      })`);
+      await sleep(1_400);
+      const queue = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-qa-queue-role]')).map((item) => item.getAttribute('data-qa-queue-role'))`);
+      if (queue.length !== index + 1) {
+        lost.push({ round, role, queue });
+        break; // The next place of this round would measure nothing: the expected prefix is gone.
+      }
+    }
+  }
+  return lost;
+}
+
 app.whenReady().then(async () => {
   let win;
   try {
@@ -99,10 +149,15 @@ app.whenReady().then(async () => {
       const row = await win.webContents.executeJavaScript(`Boolean(document.querySelector('[data-qa-recycling-job="${id}"]'))`);
       results.push({ id, cameBack: row });
     }
-    const metal = await win.webContents.executeJavaScript(`document.querySelectorAll('[data-qa-recycling-job]').length`);
+    const left = await win.webContents.executeJavaScript(`document.querySelectorAll('[data-qa-recycling-job]').length`);
     const lost = results.filter((item) => item.cameBack);
-    console.log(`Command tick race: ${JOBS - lost.length}/${JOBS} commands survived; rows left ${metal}`);
-    if (lost.length) throw new Error(`A clock tick wrote over ${lost.length} of ${JOBS} commands: ${JSON.stringify(lost)}`);
+    console.log(`Command tick race, recycling: ${JOBS - lost.length}/${JOBS} commands survived; rows left ${left}`);
+
+    const buildLost = await verifyBuildQueue(win);
+    console.log(`Command tick race, build queue: ${BUILD_ROUNDS * BUILD_ROLES.length - buildLost.length}/${BUILD_ROUNDS * BUILD_ROLES.length} commands survived`);
+
+    if (lost.length) throw new Error(`A clock tick wrote over ${lost.length} of ${JOBS} recycling commands: ${JSON.stringify(lost)}`);
+    if (buildLost.length) throw new Error(`A clock tick wrote over ${buildLost.length} build commands: ${JSON.stringify(buildLost)}`);
     console.log('Command tick race QA passed.');
     win.destroy();
     app.exit(0);
