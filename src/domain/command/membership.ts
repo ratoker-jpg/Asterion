@@ -6,6 +6,8 @@ import {
   ALLIANCE_NAME_MIN,
   ALLIANCE_TAG_MAX,
   ALLIANCE_TAG_MIN,
+  DEPUTY_MIN_DELIVERED_UNITS,
+  DEPUTY_MIN_TENURE_MS,
   LEADER_ABSENCE_MS,
   MAX_ALLIANCE_MEMBERS,
   MAX_DEPARTURES,
@@ -435,8 +437,22 @@ export function kickMember(state: CommandState, actorOwnerId: string, targetOwne
   return { ok: true, state: leaveCooldown(recordDeparture(next, targetOwnerId, alliance.id, 'kicked', now), targetOwnerId, 'kicked', now) };
 }
 
-/** Only the leader names the single deputy. Pass `null` to dismiss the current one. */
-export function setDeputy(state: CommandState, actorOwnerId: string, targetOwnerId: string | null): CommandResult {
+/** Whether a member has earned the deputy's post: time in the alliance and aid delivered (one rule for everyone). */
+export function isDeputyEligible(member: AllianceMember, now: number): boolean {
+  return now - member.joinedAt >= DEPUTY_MIN_TENURE_MS && member.deliveredUnits >= DEPUTY_MIN_DELIVERED_UNITS;
+}
+
+/**
+ * The best member for the post among the eligible, by the order the alliance already uses for succession
+ * (aid delivered, then activity, joint operations, the draw made at joining). Null when nobody has earned it.
+ */
+export function pickDeputyCandidate(alliance: AllianceRecord, now: number): AllianceMember | null {
+  const eligible = alliance.members.filter((member) => member.ownerId !== alliance.leaderOwnerId && isDeputyEligible(member, now));
+  return eligible.length ? pickLeaderSuccessor({ ...alliance, members: eligible, deputyOwnerId: null, leaderOwnerId: alliance.leaderOwnerId }) : null;
+}
+
+/** Only the leader names the single deputy. Pass `null` to dismiss the current one. `now` enables the earned-post check. */
+export function setDeputy(state: CommandState, actorOwnerId: string, targetOwnerId: string | null, now?: number): CommandResult {
   const membership = selectOwnerMembership(state, actorOwnerId);
   if (!membership) return fail(state, 'not_member', 'Вы не состоите в союзе.');
   if (membership.role !== 'leader') return fail(state, 'not_allowed', 'Назначать заместителя может только лидер.');
@@ -448,6 +464,10 @@ export function setDeputy(state: CommandState, actorOwnerId: string, targetOwner
   }
   if (alliance.deputyOwnerId === targetOwnerId) return { ok: true, state };
   if (alliance.deputyOwnerId) return fail(state, 'deputy_exists', 'В союзе уже есть заместитель. Сначала снимите его.');
+  const target = alliance.members.find((member) => member.ownerId === targetOwnerId)!;
+  if (now !== undefined && !isDeputyEligible(target, now)) {
+    return fail(state, 'deputy_not_ready', 'Заместителем можно стать после срока в союзе и вклада помощью: этот участник пока не заслужил должность.');
+  }
   return { ok: true, state: replaceAlliance(state, { ...alliance, deputyOwnerId: targetOwnerId }) };
 }
 

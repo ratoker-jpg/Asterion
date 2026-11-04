@@ -7,6 +7,8 @@ import {
   applyToAlliance,
   createAlliance,
   leaveAlliance,
+  pickDeputyCandidate,
+  setDeputy,
   rejectApplication,
 } from '../domain/command/membership.ts';
 import {
@@ -43,7 +45,7 @@ import { npcGroupRegard, npcRegard } from './npc-relations.ts';
 export type NpcDiplomacyPayload = Readonly<Record<string, string | number | boolean | null>>;
 export type NpcDiplomacyCandidate = Readonly<{
   id: string;
-  kind: 'create-alliance' | 'apply-to-alliance' | 'leave-alliance' | 'accept-application' | 'reject-application' | 'declare-war' | 'propose-truce' | 'respond-truce';
+  kind: 'create-alliance' | 'apply-to-alliance' | 'leave-alliance' | 'appoint-deputy' | 'accept-application' | 'reject-application' | 'declare-war' | 'propose-truce' | 'respond-truce';
   weight: number;
   payload: NpcDiplomacyPayload;
 }>;
@@ -170,6 +172,15 @@ export function getNpcDiplomacyCandidates(
     }));
   }
 
+  // The leader names a deputy from the members who earned it (time and aid delivered; the same rule for the
+  // player and the bots, nobody is favoured). A cooperative leader does it sooner.
+  if (ownAlliance && ownRole === 'leader' && !ownAlliance.deputyOwnerId) {
+    const pick = pickDeputyCandidate(ownAlliance, at);
+    if (pick) candidates.push(makeCandidate('appoint-deputy', `appoint-deputy:${ownerId}:${ownAlliance.id}:${pick.ownerId}`, 0.1 + cooperation * 0.3, {
+      targetOwnerId: pick.ownerId,
+    }));
+  }
+
   if (ownAlliance && (ownRole === 'leader' || ownRole === 'deputy')) {
     for (const application of command.applications) {
       if (isAllianceFull(ownAlliance)) break;
@@ -254,6 +265,10 @@ export function applyNpcDiplomacyAction(
     case 'reject-application': {
       const applicationId = stringValue('applicationId');
       result = rejectApplication(command, ownerId, applicationId, at);
+      break;
+    }
+    case 'appoint-deputy': {
+      result = setDeputy(command, ownerId, stringValue('targetOwnerId'), at);
       break;
     }
     case 'leave-alliance': {

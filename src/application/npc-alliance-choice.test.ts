@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { MAX_DEPARTURES } from '../domain/command/catalog.ts';
-import { acceptApplication, applyToAlliance, createAlliance, kickMember, leaveAlliance } from '../domain/command/membership.ts';
+import { DEPUTY_MIN_DELIVERED_UNITS, DEPUTY_MIN_TENURE_MS, MAX_DEPARTURES } from '../domain/command/catalog.ts';
+import { acceptApplication, applyToAlliance, createAlliance, kickMember, leaveAlliance, setDeputy } from '../domain/command/membership.ts';
 import { declareWar, selectAllianceRelations } from '../domain/command/diplomacy.ts';
 import { migrateCommandState } from '../domain/command/repository.ts';
 import { selectOwnerMembership } from '../domain/command/selectors.ts';
@@ -278,6 +278,41 @@ test('C: leaving in a war or truce changes no diplomacy of the alliance; a sole 
   assert.equal(alone.ok && alone.disbanded, true);
   assert.equal(alone.state.alliances.some((alliance) => alliance.id === weakId), false);
   assert.deepEqual(selectAllianceRelations(alone.state, strongId), [], 'the stale view of the dissolved alliance is not shown (and is pruned on load)');
+});
+
+test('deputy: one rule for the player and the bots, earned by time and aid; the leader picks the best of the eligible', () => {
+  const { state: base, ids } = world('ALLIANCEDEP');
+  const [leader, bot] = ids as [string, string];
+  const playerId = base.profile.playerId;
+  let state = withTraits(found(base, leader, 'Вожак', 'VZH'), leader, { cooperation: 0.9, socialStyle: 0.9 });
+  state = join(join(state, bot, leader, T0), playerId, leader, T0);
+  const allianceId = selectOwnerMembership(state.command, leader)!.alliance.id;
+  const deliver = (units: Record<string, number>) => {
+    state = { ...state, command: { ...state.command, alliances: state.command.alliances.map((alliance) => alliance.id !== allianceId ? alliance
+      : { ...alliance, members: alliance.members.map((member) => ({ ...member, deliveredUnits: units[member.ownerId] ?? member.deliveredUnits })) }) } };
+  };
+  const ready = T0 + DEPUTY_MIN_TENURE_MS + HOUR;
+  const profile = () => state.npc!.profiles[leader]!;
+  const appoints = (at: number) => getNpcDiplomacyCandidates(state, profile(), at).filter((item) => item.kind === 'appoint-deputy');
+
+  // Right after joining nobody is eligible, whoever it is; time alone is not enough either.
+  assert.equal(setDeputy(state.command, leader, playerId, T0 + HOUR).ok, false);
+  assert.equal(appoints(T0 + HOUR).length, 0);
+  assert.equal(appoints(ready).length, 0, 'time without aid is not enough');
+  // Aid alone is not enough either: the player delivered a lot at once but has just joined.
+  deliver({ [playerId]: DEPUTY_MIN_DELIVERED_UNITS * 4 });
+  assert.equal(setDeputy(state.command, leader, playerId, T0 + HOUR).ok, false, 'a fresh member cannot buy the post');
+  // Both met: the one with more aid is chosen, the player has no priority and no handicap.
+  deliver({ [bot]: DEPUTY_MIN_DELIVERED_UNITS * 2 });
+  const picked = appoints(ready);
+  assert.equal(picked.length, 1);
+  assert.equal(picked[0]!.payload.targetOwnerId, playerId, 'the stronger contributor is picked, the player here');
+  deliver({ [bot]: DEPUTY_MIN_DELIVERED_UNITS * 9 });
+  assert.equal(appoints(ready)[0]!.payload.targetOwnerId, bot);
+  const applied = applyNpcDiplomacyAction(state, leader, appoints(ready)[0]!, ready, 'dep');
+  assert.equal(applied.ok, true);
+  assert.equal(selectOwnerMembership(applied.state.command, leader)!.alliance.deputyOwnerId, bot);
+  assert.equal(getNpcDiplomacyCandidates(applied.state, applied.state.npc!.profiles[leader]!, ready).some((item) => item.kind === 'appoint-deputy'), false, 'one deputy only');
 });
 
 /* ------------------------------------------------------------------ D: memory */

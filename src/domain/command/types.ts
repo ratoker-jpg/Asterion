@@ -290,6 +290,7 @@ export type CommandErrorCode =
   | 'target_not_member'
   | 'self_target'
   | 'deputy_exists'
+  | 'deputy_not_ready'
   | 'leader_must_transfer'
   | 'hall_required'
   | 'invalid_resource'

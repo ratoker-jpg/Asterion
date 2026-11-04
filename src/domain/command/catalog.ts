@@ -9,6 +9,13 @@ export const LEADER_ABSENCE_MS = 24 * 60 * 60 * 1000;
  */
 export const ACTIVITY_TOUCH_INTERVAL_MS = 10 * 60 * 1000;
 export const MAX_RESOLVED_APPLICATIONS = 100;
+/**
+ * Deputy eligibility (owner request 05.11.2026; the numbers are PROPOSED, they need the owner's word): a member
+ * becomes deputy only after this long in the alliance AND after delivering this many units of aid. One rule for
+ * the player and the bots, leader's choice among the eligible.
+ */
+export const DEPUTY_MIN_TENURE_MS = 48 * 60 * 60 * 1000;
+export const DEPUTY_MIN_DELIVERED_UNITS = 5_000;
 /** Leavers remembered in the save: a bounded list, the oldest drop first. */
 export const MAX_DEPARTURES = 40;
 
