@@ -46,6 +46,9 @@ export class LiveWorldEngine {
   private lastSaveAt = Number.NEGATIVE_INFINITY;
   private lastSaveCostMs = 0;
   private saveScheduled = false;
+  /** When the pending save is due, and which timer owns it (an earlier request replaces a later one). */
+  private saveDueAt = Number.POSITIVE_INFINITY;
+  private saveTimer = 0;
   private savedVersion: LiveWorldVersion = -1;
   private catchup: { rebase: WorldPatch[]; droppedFreeze: boolean } | null = null;
   private failed = false;
@@ -199,10 +202,18 @@ export class LiveWorldEngine {
   }
 
   private scheduleSave(delayMs: number): void {
-    if (this.saveScheduled) return;
+    // A clock tick asks for a save after a pause that grows with what a save costs
+    // (up to a minute on a late world); a player's command asks for one at once.
+    // The earlier request wins, or the command would wait out the tick's pause.
+    const dueAt = this.host.now() + delayMs;
+    if (this.saveScheduled && dueAt >= this.saveDueAt) return;
+    const timer = ++this.saveTimer;
     this.saveScheduled = true;
+    this.saveDueAt = dueAt;
     this.host.later(() => {
+      if (timer !== this.saveTimer) return;
       this.saveScheduled = false;
+      this.saveDueAt = Number.POSITIVE_INFINITY;
       if (!this.failed && !this.catchup) this.save();
     }, delayMs);
   }

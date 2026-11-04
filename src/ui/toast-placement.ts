@@ -22,8 +22,33 @@ export type ToastPick = { spot: ToastSpot; clear: boolean };
 
 type Box = { x: number; y: number; width: number; height: number };
 
-/** Weighted count of sample points with a control or a title under them. */
-function covers(box: Box, stack: HTMLElement | null): number {
+type Rect = { left: number; top: number; right: number; bottom: number };
+
+/**
+ * Boxes of everything a toast must not cover, taken once per probe (one layout
+ * read). A point outside all of them has no control or title under it, so only
+ * the points inside need the far dearer hit test below.
+ */
+function blockerRects(stack: HTMLElement | null): Rect[] {
+  const rects: Rect[] = [];
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  for (const element of document.querySelectorAll<HTMLElement>(`${CONTROLS},${TITLES}`)) {
+    if (stack?.contains(element)) continue;
+    const box = element.getBoundingClientRect();
+    if (box.width <= 0 || box.height <= 0 || box.right < 0 || box.bottom < 0 || box.left > vw || box.top > vh) continue;
+    rects.push({ left: box.left, top: box.top, right: box.right, bottom: box.bottom });
+  }
+  return rects;
+}
+
+/**
+ * Weighted count of sample points with a control or a title under them. Stops
+ * counting past `limit`: a spot that already covers as much as the best one so
+ * far cannot win, and on a busy screen (a table full of buttons) that is most of
+ * the probe.
+ */
+function covers(box: Box, stack: HTMLElement | null, blockers: readonly Rect[], limit: number): number {
   let hits = 0;
   // Dense enough that a 30 px button cannot slip between two points.
   const columns = Math.max(2, Math.ceil(box.width / 20) + 1);
@@ -33,11 +58,13 @@ function covers(box: Box, stack: HTMLElement | null): number {
       // From 4 px outside the edges: a control that only touches the toast counts too.
       const x = box.x - 4 + (box.width + 8) * (c / (columns - 1));
       const y = box.y - 4 + (box.height + 8) * (r / (rows - 1));
+      if (!blockers.some((rect) => x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom)) continue;
       for (const element of document.elementsFromPoint(x, y)) {
         if (stack?.contains(element)) continue;
         if (element.closest(CONTROLS)) { hits += CONTROL_WEIGHT; break; }
         if (element.closest(TITLES)) { hits += 1; break; }
       }
+      if (hits >= limit) return hits;
     }
   }
   return hits;
@@ -75,10 +102,11 @@ export function pickToastSpot(width: number, height: number, headerBottom: numbe
     const index = candidates.findIndex((candidate) => same(candidate.spot, prefer));
     if (index > 0) candidates.unshift(...candidates.splice(index, 1));
   }
+  const blockers = blockerRects(stack);
   let best = candidates[0]!;
   let bestHits = Infinity;
   for (const candidate of candidates) {
-    const hits = covers(candidate.box, stack);
+    const hits = covers(candidate.box, stack, blockers, bestHits);
     if (hits === 0) return { spot: candidate.spot, clear: true };
     if (hits < bestHits) { best = candidate; bestHits = hits; }
   }

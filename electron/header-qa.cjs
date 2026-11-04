@@ -290,6 +290,7 @@ async function assertRepresentativeRatios(win, file, label) {
         gas: Math.floor(TEST_RESOURCE_CAPACITIES.gas * ratio / 100),
       });
       await win.webContents.executeJavaScript(`localStorage.setItem(${JSON.stringify(TEST_SAVE_KEY)}, ${JSON.stringify(JSON.stringify(seeded))})`);
+      const seededAt = Date.now();
       await win.reload();
       await waitFor(win, `document.querySelector('[data-qa-header]')`);
       const expectedRatios = [
@@ -304,7 +305,12 @@ async function assertRepresentativeRatios(win, file, label) {
           const value = Number(document.querySelector('[data-qa-resource-chip="' + kind + '"]')?.getAttribute('data-qa-resource-ratio'));
           return Number.isFinite(value) && value > ratio - 0.0001 && value < ratio + RATIO_INCOME_ALLOWANCE;
         });
-      })()`);
+      })()`).catch(async (error) => {
+        // Say what the header showed: a ratio that grew past the income allowance (a slow reload) or one that never rendered.
+        const shown = await win.webContents.executeJavaScript(`JSON.stringify(['metal', 'mineral', 'gas'].map((kind) => [kind,
+          document.querySelector('[data-qa-resource-chip="' + kind + '"]')?.getAttribute('data-qa-resource-ratio') ?? null]))`).catch(String);
+        throw new Error(`${label}: ${ratio}% header ratios did not match; expected ${JSON.stringify(expectedRatios)}, shown ${shown}, ${Date.now() - seededAt} ms after seeding. ${error.message}`);
+      });
       await settle(win);
 
       const resources = await readResourceContract(win);
