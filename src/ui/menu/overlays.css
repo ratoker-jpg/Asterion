@@ -48,6 +48,12 @@ body .igo-pause .igo-pause__copy h2 { margin: 0; font-size: 26px !important; fon
 .igo-btn--primary { border-color: transparent; background: linear-gradient(135deg, var(--race-accent-strong), color-mix(in srgb, var(--race-accent-strong) 50%, #0b1720)); color: #fff; box-shadow: 0 8px 24px var(--race-glow); }
 .igo-btn--danger { border-color: rgba(240, 68, 94, .5); color: #ffb3bf; }
 .igo-btn--danger:hover { border-color: var(--ut-danger); background: rgba(240, 68, 94, .16); }
+/* 1280×720: every item of the pause menu fits, whichever of them this campaign has. */
+@media (max-height: 760px) {
+  .igo-pause__copy { gap: 8px; padding-top: 20px; padding-bottom: 16px; }
+  .igo-pause__nav { gap: 7px; }
+  .igo-pause .igo-btn { min-height: 38px; }
+}
 .igo-confirm { display: grid; gap: 10px; padding: 16px; border-radius: var(--ut-r-card); border: 1px solid rgba(240, 68, 94, .45); background: rgba(240, 68, 94, .08); }
 .igo-confirm b { font-size: 15px; }
 .igo-confirm span { color: #f3c4cb; font-size: 12px; line-height: 1.5; }

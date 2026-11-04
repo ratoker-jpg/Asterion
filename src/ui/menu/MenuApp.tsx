@@ -26,6 +26,7 @@ import { CrystalSet } from '../sun-raid/SunRaidArt.tsx';
 import { RACE_CARDS, raceCard } from './race-catalog.ts';
 import { NewGameWizard } from './NewGameWizard.tsx';
 import { GameUpdateRow } from './GameUpdateRow.tsx';
+import { WhatsNewDialog, WhatsNewMenuEntry, useWhatsNew } from './WhatsNew.tsx';
 import { consumeSeriesRound, isDesktopShell, quitDesktopApp, type MenuScreen } from './session.ts';
 import type { SolarCrystalId } from '../../domain/sun-raid/config.ts';
 import { useMusic } from '../../audio/hooks.ts';
@@ -184,6 +185,7 @@ function MainMenuScreen({ continueSlot, slotCount, onNavigate, onContinue }: Mai
   ];
   const firstRef = useRef<HTMLButtonElement>(null);
   useEffect(() => { firstRef.current?.focus(); }, []);
+  const whatsNew = useWhatsNew();
 
   return (
     <main className="menu-main">
@@ -214,6 +216,7 @@ function MainMenuScreen({ continueSlot, slotCount, onNavigate, onContinue }: Mai
           ))}
         </nav>
         <footer className="menu-foot">
+          <WhatsNewMenuEntry hasNew={whatsNew.hasNew} onOpen={whatsNew.show} />
           <GameUpdateRow variant="menu" />
           <span>Сохранения хранятся локально · схема {SAVE_SCHEMA_VERSION}</span>
           <span><kbd>↑</kbd><kbd>↓</kbd> выбор · <kbd>Enter</kbd> подтвердить</span>
@@ -222,6 +225,7 @@ function MainMenuScreen({ continueSlot, slotCount, onNavigate, onContinue }: Mai
       <section className="menu-main__right">
         {continueSlot ? <ContinueShowcase slot={continueSlot} onContinue={onContinue} /> : <RaceTeaser onStart={() => onNavigate('new')} />}
       </section>
+      {whatsNew.open ? <WhatsNewDialog seen={whatsNew.seenAtOpen} onClose={whatsNew.close} /> : null}
     </main>
   );
 }
