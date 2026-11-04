@@ -517,7 +517,7 @@ export function SpaceportUpgradeView({
                     disabled={!uiCanStart}
                     onClick={() => onUpgrade(activeTrack, entity.id)}
                   >
-                    {isMax ? 'БОЛЬШЕ НЕКУДА' : `УЛУЧШИТЬ ДО ${preview.nextLevel ?? preview.currentLevel}`}
+                    {isMax ? 'МАКСИМУМ' : `УЛУЧШИТЬ ДО ${preview.nextLevel ?? preview.currentLevel}`}
                   </button>
                   {/* Why the button is off, in words; nothing here when it is on. */}
                   <div className="sp-why" data-qa-spaceport-status>
