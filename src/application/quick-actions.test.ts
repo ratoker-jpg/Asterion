@@ -14,6 +14,8 @@ import {
   buildQuickCommand,
   defaultQuickFleet,
   isMultiSourceAction,
+  noShipsMessage,
+  planetCoordinate,
   planQuickLegs,
   sendQuickLegs,
   evaluateQuickActions,
@@ -239,4 +241,63 @@ test('a Sun\'s debris: recyclers sized to it, the flight goes to the Sun\'s oper
   // The panel opens through these two; they must accept the Sun target as well.
   assert.ok(evaluateQuickActions(withDebris, target, RUNTIME).find((action) => action.id === 'recycle')?.enabled);
   assert.deepEqual(planQuickLegs(withDebris, 'recycle', target, RUNTIME).map((leg) => leg.originPlanetId), [home]);
+});
+
+/** The player's homeworld as a map target with its own orbital debris (the owner's «Питер» case). */
+function ownPlanetWithDebris(state: SaveState, debris: number) {
+  const homeId = state.currentPlanetId;
+  const home = state.planets[homeId]!;
+  const coordinate = planetCoordinate(state, homeId);
+  const withDebris = {
+    ...state,
+    espionage: { ...state.espionage, orbitalDebris: { ...state.espionage?.orbitalDebris, own: {
+      id: 'own', targetPlanetId: homeId, targetPlanetName: home.name, targetOwnerId: state.profile.playerId, targetCoordinate: coordinate, debris, createdAt: NOW - 1,
+    } } },
+  } as SaveState;
+  const target: QuickTarget = {
+    node: node('player', { id: homeId, name: home.name, ownerId: state.profile.playerId, coordinate }),
+    relation: 'self', orbitalDebris: debris,
+  };
+  return { state: withDebris, target, homeId };
+}
+
+test('own orbit: debris on a planet is recycled by that planet\'s own recyclers, sized to the debris', () => {
+  const cargo = getFactionShipCatalog('aegis' as CombatFactionId).find((ship) => ship.id === 'recycler')!.ship!.cargo;
+  const { state, target, homeId } = ownPlanetWithDebris(campaign({ recycler: 50, transporter: 30 }), cargo * 4 + 1);
+  assert.deepEqual(quickOriginCandidates(state, 'recycle', target), [homeId]);
+  const recycle = evaluateQuickActions(state, target, RUNTIME).find((action) => action.id === 'recycle')!;
+  assert.equal(recycle.enabled, true, recycle.reason);
+  assert.equal(recycle.plan?.originPlanetId, homeId);
+  assert.deepEqual(recycle.plan?.fleet.ships, { recycler: 5 });
+  assert.equal(recycle.plan?.preview?.ok, true);
+  assert.deepEqual(planQuickLegs(state, 'recycle', target, RUNTIME).map((leg) => leg.originPlanetId), [homeId]);
+});
+
+test('own orbit: recyclers on another planet are still offered, the planet\'s own come first (distance zero)', () => {
+  const base = campaign({ recycler: 3 });
+  const { state: debrisState, target, homeId } = ownPlanetWithDebris(base, 1000);
+  const state = withColony(debrisState, (planetCoordinate(base, base.currentPlanetId).system) + 4, { recycler: 7 });
+  assert.deepEqual(planQuickLegs(state, 'recycle', target, RUNTIME).map((leg) => leg.originPlanetId), [homeId, 'colony-quick']);
+  const onlyElsewhere = withColony({ ...debrisState, planets: { ...debrisState.planets, [homeId]: { ...debrisState.planets[homeId]!, fleet: { ...debrisState.planets[homeId]!.fleet, ships: hangar({}) } } } }, 9, { recycler: 7 });
+  assert.equal(evaluateQuickActions(onlyElsewhere, target, RUNTIME).find((action) => action.id === 'recycle')?.plan?.originPlanetId, 'colony-quick');
+});
+
+test('own orbit: no recyclers anywhere gives the true «ни на одной» line; the planet itself is not excluded', () => {
+  const { state, target } = ownPlanetWithDebris(campaign({ transporter: 5 }), 1000);
+  const recycle = evaluateQuickActions(state, target, RUNTIME).find((action) => action.id === 'recycle')!;
+  assert.equal(recycle.enabled, false);
+  assert.equal(recycle.reason, 'Нет свободных переработчиков ни на одной вашей планете.');
+});
+
+test('own planet as target: transport and rebase exclude it, and the lines say «на других»', () => {
+  const { state, target, homeId } = ownPlanetWithDebris(campaign({ transporter: 5, recycler: 5 }), 1000);
+  assert.ok(!quickOriginCandidates(state, 'transport', target).includes(homeId));
+  assert.ok(!quickOriginCandidates(state, 'deployment', target).includes(homeId));
+  const actions = evaluateQuickActions(state, target, RUNTIME);
+  const transport = actions.find((action) => action.id === 'transport')!;
+  assert.equal(transport.enabled, false);
+  assert.equal(transport.reason, 'Нет свободных транспортов на других ваших планетах.');
+  assert.equal(noShipsMessage(state, 'deployment', target), 'Нет свободных кораблей на других ваших планетах.');
+  // A foreign target keeps the general wording.
+  assert.equal(noShipsMessage(state, 'transport', { node: node('npc') }), 'Нет свободных транспортов ни на одной вашей планете.');
 });

@@ -13,6 +13,7 @@ import {
   buildQuickCommand,
   defaultQuickFleet,
   isMultiSourceAction,
+  noShipsMessage,
   planFromOrigin,
   planQuickLegs,
   quickActionShipIds,
@@ -197,7 +198,7 @@ export function QuickSendPanel({ state, actionId, target, onSend, onClose, onDet
         </div>
       ) : null}
 
-      {legs.length === 0 ? (emptyAdvice ? emptyAdvice() : <p className="quick-send__error" role="alert" data-qa-quick-error>Нет свободных кораблей для этого действия ни на одной вашей планете.</p>) : (
+      {legs.length === 0 ? (emptyAdvice ? emptyAdvice() : <p className="quick-send__error" role="alert" data-qa-quick-error>{noShipsMessage(state, actionId, target)}</p>) : (
         <div className="quick-send__legs" role={multi ? 'group' : 'radiogroup'} aria-label={multi ? 'Планеты отправки' : 'Планета отправки'}>
           <small>{multi ? 'Откуда · можно несколько планет' : 'Откуда'}</small>
           {legs.map(({ planetId, draft, plan, flight }, index) => {
