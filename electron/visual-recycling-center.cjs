@@ -250,6 +250,9 @@ async function assertGeometry(win, label) {
     for (const element of root.querySelectorAll('.rc-pile__total, .rc-bay__get strong, .rc-slot > b, .rc-slot > small, .rc-start, .rc-core__summary, .rc-floor__head h2, .rc-floor__free, .rc-collect-all')) {
       if (element.scrollWidth > element.clientWidth + 1) problems.push('text is cut: ' + element.textContent);
     }
+    for (const body of root.querySelectorAll('.rc-pile__body')) {
+      if (boxOf(body).right > boxOf(body.parentElement).right - 8) problems.push('the pile text leans on the edge of its panel');
+    }
     const slots = [...root.querySelectorAll('.rc-slot')];
     if (slots.length !== 10) problems.push('expected 10 process places, got ' + slots.length);
     slots.forEach((slot, index) => {

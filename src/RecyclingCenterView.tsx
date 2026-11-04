@@ -45,6 +45,8 @@ const DEBRIS_PILE_ART = './assets/generated/recycling-debris-pile.webp';
 const DEBRIS_SHARES = [25, 50, 75] as const;
 const ALLOCATION_STEP = 5;
 const ALLOCATION_CELLS = 10;
+// The big figure of the pile stays exact while it fits next to the art.
+const PILE_EXACT_LIMIT = 10_000_000_000;
 
 // The split the player chose last stays for the session: the point of this
 // screen is not to set the same thing up again after every batch.
@@ -54,6 +56,7 @@ const formatNumber = (value: number) => new Intl.NumberFormat('ru-RU').format(Ma
 
 const formatAmount = (value: number) => {
   const safe = Math.max(0, Math.floor(value));
+  if (safe >= 1e12) return `${(safe / 1e12).toLocaleString('ru-RU', { maximumFractionDigits: 2 })} трлн`;
   if (safe >= 1e9) return `${(safe / 1e9).toLocaleString('ru-RU', { maximumFractionDigits: 2 })} млрд`;
   if (safe >= 1e6) return `${(safe / 1e6).toLocaleString('ru-RU', { maximumFractionDigits: 2 })} млн`;
   return formatNumber(safe);
@@ -63,6 +66,7 @@ const formatClock = (ms: number) => {
   const total = Math.max(0, Math.ceil(ms / 1000));
   const days = Math.floor(total / 86_400);
   // A slow building with a huge pile runs for weeks: «33 д 01:39», not «793:39:03». Up to two days stays a clock.
+  if (days >= 100) return `${days} д`;
   if (days >= 2) return `${days} д ${String(Math.floor((total % 86_400) / 3600)).padStart(2, '0')}:${String(Math.floor((total % 3600) / 60)).padStart(2, '0')}`;
   const hours = Math.floor(total / 3600);
   const minutes = Math.floor((total % 3600) / 60);
@@ -195,7 +199,7 @@ export function RecyclingCenterView({
           <img className="rc-pile__art" src={DEBRIS_PILE_ART} alt="" draggable={false} />
           <div className="rc-pile__body">
             <span className="rc-pile__label"><ResourceIcon kind="debris" /> Свободные обломки</span>
-            <strong className="rc-pile__total" data-qa-recycling-free-debris={available}>{formatNumber(available)}</strong>
+            <strong className="rc-pile__total" data-qa-recycling-free-debris={available}>{available >= PILE_EXACT_LIMIT ? formatAmount(available) : formatNumber(available)}</strong>
             <span className={`rc-pile__busy${inJobs > 0 ? '' : ' is-empty'}`} data-qa-recycling-total-debris={available + inJobs}>
               {inJobs > 0 ? `ещё ${formatAmount(inJobs)} в работе` : ' '}
             </span>
