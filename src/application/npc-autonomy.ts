@@ -503,7 +503,7 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
         const fill = describeNpcPlanet(planet, 0, 0, false).fill;
         const scarcest = (['metal', 'minerals', 'gas'] as const).reduce((best, key2) => fill[key2] < fill[best] ? key2 : best, 'metal' as 'metal' | 'minerals' | 'gas');
         const allocation = { metal: 0, minerals: 0, gas: 0, [scarcest]: 100 };
-        const started = startRecyclingJob(store, level, store.availableDebris, allocation, at, key);
+        const started = startRecyclingJob(store, level, store.availableDebris, allocation, at, key, { mode: 'production' });
         if (!started.canStart) return { state: current, started: false, reason: started.reason, planetId: target.id };
         return { state: withTarget(current, { ...planet, recycling: started.state }), started: true, reason: null, planetId: target.id };
       } });

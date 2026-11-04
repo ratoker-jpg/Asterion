@@ -43,8 +43,9 @@ type BuildingInteriorHostProps<PlanetId extends string> = {
   now: number;
   testTimeScale: TestTimeScale;
   onProductionBotsApply: (assignment: BotAssignment) => void;
-  onRecyclingStart: (debrisAmount: number, allocation: ResourceAllocationPercent) => boolean;
+  onRecyclingStart: (totalDebris: number, processCount: number, allocation: ResourceAllocationPercent) => boolean;
   onRecyclingCollect: (jobId: string) => boolean;
+  onRecyclingCollectAll: () => boolean;
   onTrade: (request: TradeRequest) => TradeExecution;
   onSpaceportUpgrade: (track: SpaceportUpgradeTrack, shipId: string) => boolean;
   onSpaceportCancel: (taskId: string) => boolean;
@@ -70,6 +71,7 @@ export function BuildingInteriorHost<PlanetId extends string>({
   onProductionBotsApply,
   onRecyclingStart,
   onRecyclingCollect,
+  onRecyclingCollectAll,
   onTrade,
   onSpaceportUpgrade,
   onSpaceportCancel,
@@ -85,6 +87,7 @@ export function BuildingInteriorHost<PlanetId extends string>({
         now={now}
         onStart={onRecyclingStart}
         onCollect={onRecyclingCollect}
+        onCollectAll={onRecyclingCollectAll}
         onBack={onBack}
       />
     );

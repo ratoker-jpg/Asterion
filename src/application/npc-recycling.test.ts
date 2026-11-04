@@ -8,7 +8,7 @@ import { getNextNpcEconomyCheckpoint, settleNpcRecycling } from './npc-economy.t
 test('an NPC recycling job left uncollected is credited a day after it is ready, exactly once', () => {
   const base = Object.values(createBot01Planets(0))[0]! as SpyTargetState;
   const planet: SpyTargetState = { ...base, buildings: { ...base.buildings, recycling: 1 }, resources: { ...base.resources, metal: 0, minerals: 0, gas: 0 } };
-  const started = startRecyclingJob({ availableDebris: 10_000, jobs: [] }, 1, 10_000, { metal: 100, minerals: 0, gas: 0 }, 0, 'job-1');
+  const started = startRecyclingJob({ availableDebris: 10_000, jobs: [] }, 1, 10_000, { metal: 100, minerals: 0, gas: 0 }, 0, 'job-1', { mode: 'production' });
   assert.equal(started.canStart, true);
   const withJob: SpyTargetState = { ...planet, recycling: started.state };
   const due = started.job!.finishAt + RECYCLING_STORAGE_MS;

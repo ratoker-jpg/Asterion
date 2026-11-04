@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Макеты: торговля и космодром</title>
+<style>
+:root{--acc:#b4ceff;--acc2:#5f9bff;--line:rgba(126,200,220,.16);--s1:rgba(12,20,24,.92);--s2:rgba(16,26,31,.88);--lab:#8fb6c0;--amb:#e6ad50;--pos:#35e58a;--r1:18px;--r2:13px;--r3:9px;--r4:10px}
+*{box-sizing:border-box}
+html,body{margin:0;background:#02050a;color:#e8faff;font-family:Montserrat,'Segoe UI',Arial,sans-serif}
+.frame{width:1920px;height:1080px;position:relative;overflow:hidden;background:radial-gradient(circle at 30% 20%,#071420,#02050a 70%)}
+.hdr{position:absolute;inset:0 36px auto;height:128px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0a151b,#060d12);display:flex;align-items:center;justify-content:center;color:#3f5c66;font-size:14px;letter-spacing:2px}
+.hub{position:absolute;left:50%;top:30px;width:120px;height:170px;translate:-50% 0;border-radius:60px;background:radial-gradient(circle at 50% 35%,#274a5c,#0a1820 70%);border:2px solid #24506a}
+.work{position:absolute;left:36px;right:36px;top:128px;bottom:0;padding:60px 56px 28px}
+h1,h2,h3,p{margin:0}
+.ttl{font-size:34px;font-weight:800;color:#f2fdff;line-height:1.1}
+.sub{margin-top:6px;color:#a9cbd3;font-size:16px}
+.back{height:46px;padding:0 20px;border-radius:var(--r4);border:1px solid rgba(126,200,220,.3);background:rgba(8,16,20,.9);color:#dcecf0;font:700 14px inherit;display:inline-flex;align-items:center;gap:9px}
+.pri{border:1px solid #8cefff;border-radius:var(--r4);background:linear-gradient(180deg,#5fe2f8,#2bb6d6);color:#03222b;font-weight:800;letter-spacing:1.2px;box-shadow:0 0 22px rgba(86,217,242,.32)}
+.num{font-variant-numeric:tabular-nums}
+.head{display:flex;align-items:flex-start;justify-content:space-between;gap:24px}
+.deals{display:flex;align-items:center;gap:18px}
+.deals b{font-size:20px}.deals small{display:block;color:var(--lab);font-size:14px;margin-top:2px}
+.pips{display:flex;gap:3px;margin-top:6px}.pips i{width:7px;height:12px;border-radius:2px;background:var(--acc2)}.pips i.o{background:rgba(255,255,255,.1)}
+.lab{color:var(--lab);font-size:15px;font-weight:700;letter-spacing:2px;text-transform:uppercase}
+/* resource tile */
+.tile{--c:#b9c6d6;position:relative;display:grid;grid-template-columns:64px minmax(0,1fr);align-items:center;gap:16px;padding:14px 20px;border-radius:var(--r2);background:radial-gradient(circle at 12% 50%,color-mix(in srgb,var(--c) 18%,transparent),transparent 42%),var(--s2);box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+.tile img{width:64px;height:64px;object-fit:contain}
+.tile strong{display:block;font-size:22px;font-weight:800;color:#f2fdff}
+.tile span{display:block;font-size:19px;color:#b8d4db;margin-top:2px}
+.tile.sel{box-shadow:inset 0 0 0 2px var(--acc),0 0 22px rgba(95,155,255,.35);background:radial-gradient(circle at 12% 50%,color-mix(in srgb,var(--c) 28%,transparent),transparent 46%),linear-gradient(90deg,rgba(95,155,255,.22),rgba(16,26,31,.9) 80%)}
+.tile.off{opacity:.42}.tile.off span{font-size:15px}
+.m{--c:#b9c6d6}.n{--c:#7d8cff}.g{--c:#4ee0a0}.d{--c:#d4a373}
+.seg{height:46px;padding:0 18px;border-radius:var(--r4);border:1px solid rgba(126,200,220,.3);background:rgba(86,217,242,.05);color:#dcecf0;font:700 16px inherit;display:inline-flex;align-items:center}
+.inp{height:62px;border-radius:var(--r3);background:rgba(0,0,0,.35);border:1px solid rgba(126,200,220,.3);display:flex;align-items:center;padding:0 18px;font-size:28px;font-weight:800}
+.sl{position:relative;height:8px;border-radius:8px;background:rgba(255,255,255,.1)}.sl i{position:absolute;left:0;top:0;bottom:0;border-radius:8px;background:linear-gradient(90deg,var(--acc2),var(--acc))}.sl b{position:absolute;top:50%;width:26px;height:26px;margin:-13px;border-radius:50%;background:#fff;box-shadow:0 0 14px var(--acc)}
+.dock{border-radius:var(--r1);background:linear-gradient(180deg,rgba(14,32,42,.7),rgba(6,16,22,.94));box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 20px 50px rgba(0,0,0,.35)}
+.hint{color:var(--lab);font-size:15px}
+.big{font-size:44px;font-weight:800;color:#f2fdff;line-height:1.05}
+.big.g2{color:var(--pos)}
+.res{display:flex;align-items:center;gap:12px;font-size:17px;color:#b8d4db}
+.res img{width:34px;height:34px;object-fit:contain}
+/* ---------- trade A: bridge ---------- */
+.ta{display:grid;grid-template-columns:minmax(0,1fr) 560px minmax(0,1fr);gap:28px;margin-top:26px;height:490px}
+.ta .col{display:grid;grid-template-rows:auto minmax(0,1fr);gap:12px;min-height:0}.ta .list{display:grid;gap:12px;min-height:0}
+.ta .mid{position:relative;border-radius:var(--r1);background:radial-gradient(circle at 50% 18%,rgba(95,155,255,.16),transparent 56%),linear-gradient(180deg,rgba(14,32,42,.6),rgba(6,16,22,.94));box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 20px 50px rgba(0,0,0,.35);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:18px 24px;text-align:center}
+.ta .mid>img{height:150px}
+.arrow{font-size:28px;color:var(--acc);line-height:1}
+.dockA{margin-top:24px;padding:20px 28px;display:grid;grid-template-columns:300px minmax(0,1fr) 340px;gap:32px;align-items:center}
+/* ---------- trade B: one column ---------- */
+.tb{width:880px;margin:18px auto 0;display:grid;gap:10px}
+.rowt{display:flex;gap:10px}.rowt .tile{flex:1;grid-template-columns:40px minmax(0,1fr);padding:10px 12px;gap:10px}.rowt .tile img{width:40px;height:40px}.rowt .tile strong{font-size:15px}.rowt .tile span{font-size:13px}
+.tbcard{padding:18px 24px;display:grid;gap:12px}
+/* ---------- trade C: ticket right ---------- */
+.tc{display:grid;grid-template-columns:minmax(0,1fr) 520px;gap:28px;margin-top:26px;height:760px}
+.tc .left{display:grid;gap:20px;align-content:start}
+.tc .row4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.tc .row3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.tc .tile{grid-template-columns:1fr;justify-items:center;text-align:center;padding:16px 10px}
+.ticket{padding:24px 28px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center}
+/* ---------- spaceport shared ---------- */
+.sp{display:grid;grid-template-columns:320px minmax(0,1fr);gap:18px;height:100%}
+.work.spw{padding:60px 0 0}
+.side{border:1px solid var(--line);border-radius:var(--r1);background:var(--s1);padding:20px 16px;display:flex;flex-direction:column;gap:18px;height:820px}
+.sh{display:grid;grid-template-columns:56px 1fr;gap:12px;align-items:center}.sh img{width:56px;height:56px;object-fit:contain}.sh h1{font-size:18px;letter-spacing:4px}.sh small{display:block;color:var(--lab);font-size:12px}
+.nav div{height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;border-radius:var(--r4);font-size:13px;color:#a9c4cc;margin-bottom:4px}.nav .on{color:#fff;background:linear-gradient(90deg,rgba(95,155,255,.25),transparent 85%);box-shadow:inset 3px 0 var(--acc2);border:1px solid rgba(180,206,255,.5)}
+.qc{display:grid;grid-template-columns:44px 1fr 28px;gap:8px 12px;padding:12px;border-radius:var(--r2);background:rgba(255,255,255,.035);margin-top:8px;align-items:center}.qc img{width:44px;height:44px;object-fit:contain}.qc strong{font-size:13px;display:block}.qc span{font-size:11px;color:var(--lab)}.qc u{width:28px;height:28px;border-radius:var(--r4);background:rgba(240,68,94,.1);color:#ff6b78;display:grid;place-items:center;text-decoration:none;font-weight:700}
+.bar{grid-column:2;height:4px;border-radius:4px;background:rgba(255,255,255,.08)}.bar b{display:block;height:100%;width:40%;border-radius:4px;background:linear-gradient(90deg,#5f9bff,#b4ceff)}
+.card{border:1px solid var(--line);border-radius:var(--r2);background:var(--s2)}
+.segs{display:flex;gap:3px;height:8px}.segs i{flex:1;background:rgba(255,255,255,.08)}.segs i.c{background:linear-gradient(180deg,var(--acc),var(--acc2))}.segs i.q{background:repeating-linear-gradient(135deg,rgba(231,187,78,.9) 0 3px,rgba(129,98,33,.8) 3px 6px)}
+.cost{display:flex;align-items:center;gap:6px 16px;flex-wrap:wrap}.cost span{display:inline-flex;align-items:center;gap:5px;font-size:14px;font-weight:700;color:#dcf0f5}.cost img{width:22px;height:22px;object-fit:contain}.cost .x{color:#ff9aa3}
+.reqs{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--lab)}.reqs span{display:inline-flex;align-items:center;gap:3px;padding:2px 7px 2px 2px;border-radius:var(--r3);background:rgba(255,255,255,.05);color:#dffaff;font-weight:700}.reqs img{width:24px;height:24px;object-fit:contain}.reqs .x{filter:grayscale(.6);color:#ff9aa3;box-shadow:inset 0 0 0 1px rgba(255,120,132,.55)}
+.ctab{height:44px;padding:0 14px;display:flex;align-items:center;justify-content:center;font-size:13px}.ctab.off{border:1px solid rgba(126,200,220,.25);border-radius:var(--r4);background:rgba(255,255,255,.04);color:#6f8b93;font-weight:800;letter-spacing:.4px}
+.why{font-size:12px;line-height:1.3;color:#e39aa1;text-align:center}.ok{font-size:12px;color:var(--lab);text-align:center}
+.lvl{font-size:12px;color:var(--lab);display:flex;gap:10px;align-items:baseline}.lvl b{color:#eefbff}.lvl em{font-style:normal;color:var(--amb)}.lvl i{font-style:normal;color:var(--acc);font-weight:800}
+.nm{font-size:17px;font-weight:800;color:#f0fcff}.rl{font-size:12px;color:#91abb3}
+/* A: full width compact row */
+.sa{display:grid;gap:10px}
+.sa .card{height:112px;display:grid;grid-template-columns:120px minmax(0,1.1fr) minmax(0,1fr) 214px;gap:20px;align-items:center;padding:8px 18px 8px 8px}
+.sa .card>img{width:112px;height:92px;object-fit:contain;filter:drop-shadow(0 0 14px rgba(37,202,245,.2))}
+.stack{display:grid;gap:7px;min-width:0}
+/* B: two-column cards */
+.sb{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.sb .card{height:186px;display:grid;grid-template-columns:128px minmax(0,1fr);grid-template-rows:auto auto;gap:6px 14px;padding:12px 14px}
+.sb .card>img{grid-row:1/3;width:128px;height:120px;object-fit:contain;align-self:center}
+.sb .foot{grid-column:1/3;display:grid;grid-template-columns:minmax(0,1fr) 200px;gap:12px;align-items:center}
+/* C: table */
+.sc .thead{display:grid;grid-template-columns:76px 300px minmax(0,1fr) 220px 150px 190px;gap:14px;padding:0 16px 8px;color:var(--lab);font-size:12px;letter-spacing:1px}
+.sc .trow{display:grid;grid-template-columns:76px 300px minmax(0,1fr) 220px 150px 190px;gap:14px;align-items:center;height:76px;padding:0 16px;border-top:1px solid var(--line)}
+.sc .trow img.a{width:70px;height:60px;object-fit:contain}
+.sc .wrap{border:1px solid var(--line);border-radius:var(--r1);background:var(--s1);padding:12px 0 6px}
+.mh{display:flex;gap:12px;align-items:baseline;padding:6px 4px 14px}.mh h2{font-size:14px;letter-spacing:2px}.mh span{color:var(--lab);font-size:12px}
+.vlabel{position:absolute;right:46px;bottom:12px;padding:6px 12px;border-radius:9px;background:#000a;color:var(--amb);font-size:14px;font-weight:700}
+</style></head><body>
+<div id="root"></div>
+<script>
+const A='../../../assets/';
+const IC={m:A+'ui/header-icons/metal.png',n:A+'ui/header-icons/mineral.png',g:A+'ui/header-icons/gas.png',d:A+'ui/header-icons/debris.png'};
+const TC=A+'source/New assets/buildings/aegis/building.aegis.trade-center.png';
+const SPC=A+'source/New assets/buildings/aegis/building.aegis.spaceport.png';
+const SHIP=(s)=>A+'source/New assets/ship/aegis/ship.aegis.'+s+'.png';
+const TECH=(s)=>A+'source/New assets/technologies/technology.shared.'+s+'.png';
+const IND=A+'source/New assets/buildings/aegis/building.aegis.shipyard.png';
+const tile=(k,name,val,cls='')=>`<div class="tile ${k} ${cls}"><img src="${IC[k]}"><div><strong>${name}</strong><span class="num">${val}</span></div></div>`;
+const shell=(inner,cls='')=>`<div class="frame"><div class="hdr">ШАПКА ИГРЫ</div><div class="hub"></div><div class="work ${cls}">${inner}</div></div>`;
+const pips=(n,o)=>`<div class="pips">${Array.from({length:n},(_,i)=>`<i class="${i>=n-o?'o':''}"></i>`).join('')}</div>`;
+const deals=`<div class="deals"><div><b class="num">29</b> <span style="color:#a9cbd3;font-size:16px">из 30 сделок</span>${pips(30,1)}</div><div style="text-align:right"><b class="num" style="font-size:18px">+1 через 00:06:24</b><small>одна сделка за 15 минут</small></div></div>`;
+const head=`<div class="head"><div><div class="ttl">Торговый центр</div><div class="sub">Уровень 10 · Москва · обмен сразу, без очереди</div></div><div style="display:flex;gap:28px;align-items:center">${deals}<div class="back">← Назад</div></div></div>`;
+
+const V={
+tA:()=>shell(`${head}
+<div class="ta">
+ <div class="col"><div class="lab">Отдаёте</div><div class="list">${tile('m','Металл','23 383 718')}${tile('n','Минералы','28 930 056')}${tile('g','Газ','24 420 616')}${tile('d','Обломки','202 278 751','sel')}</div></div>
+ <div class="mid"><img src="${TC}">
+   <div class="res"><img src="${IC.d}">Отдаёте обломки</div><div class="big num">26 340 750</div>
+   <div class="arrow">↓</div>
+   <div class="big g2 num">15 804 450</div><div class="res"><img src="${IC.n}">Получите минералы</div>
+   <div class="hint" style="margin-top:6px">Курс 1 : 0,6 · 40% обломков теряется при обмене</div></div>
+ <div class="col"><div class="lab">Получаете</div><div class="list">${tile('m','Металл','сейчас 23 383 718')}${tile('n','Минералы','сейчас 28 930 056','sel')}${tile('g','Газ','сейчас 24 420 616')}</div></div>
+</div>
+<div class="dock dockA">
+  <div><div class="lab" style="margin-bottom:8px">Сколько отдаёте</div><div class="inp num">26 340 750</div></div>
+  <div style="display:grid;gap:18px"><div class="sl"><i style="width:100%"></i><b style="left:100%"></b></div>
+  <div style="display:flex;gap:8px;align-items:center"><div class="seg">−</div><div class="seg">+</div><div class="seg" style="margin-left:10px">25%</div><div class="seg">50%</div><div class="seg">75%</div><div class="seg" style="border-color:var(--acc);color:#fff">Макс.</div><div class="hint" style="margin-left:auto">На одну сделку не больше 26 340 750 — растёт с рейтингом ресурсов</div></div></div>
+  <div class="pri" style="height:84px;display:grid;place-items:center;font-size:22px">ОБМЕНЯТЬ</div>
+</div>`),
+tB:()=>shell(`${head}
+<div class="tb">
+ <div class="dock tbcard"><div class="lab">Отдаёте</div><div class="rowt">${tile('m','Металл','23,4 млн')}${tile('n','Минералы','28,9 млн')}${tile('g','Газ','24,4 млн')}${tile('d','Обломки','202,3 млн','sel')}</div>
+  <div style="display:grid;grid-template-columns:320px 1fr;gap:18px;align-items:center"><div class="inp num">26 340 750</div><div style="display:grid;gap:12px"><div class="sl"><i style="width:100%"></i><b style="left:100%"></b></div><div style="display:flex;gap:8px"><div class="seg">25%</div><div class="seg">50%</div><div class="seg">75%</div><div class="seg">Макс.</div></div></div></div></div>
+ <div style="text-align:center;font-size:26px;color:var(--acc)">↓ <span class="hint">курс 1 : 0,6</span></div>
+ <div class="dock tbcard"><div class="lab">Получаете</div><div class="rowt">${tile('m','Металл','23,4 млн')}${tile('n','Минералы','28,9 млн','sel')}${tile('g','Газ','24,4 млн')}</div>
+  <div style="display:flex;align-items:center;justify-content:space-between"><div class="big g2 num">15 804 450</div><div class="res"><img src="${IC.n}">минералы</div></div></div>
+ <div class="pri" style="height:66px;display:grid;place-items:center;font-size:20px">ОБМЕНЯТЬ</div>
+</div>`),
+tC:()=>shell(`${head}
+<div class="tc"><div class="left">
+ <div><div class="lab" style="margin-bottom:10px">Отдаёте</div><div class="row4">${tile('m','Металл','23 383 718')}${tile('n','Минералы','28 930 056')}${tile('g','Газ','24 420 616')}${tile('d','Обломки','202 278 751','sel')}</div></div>
+ <div><div class="lab" style="margin-bottom:10px">Получаете</div><div class="row3">${tile('m','Металл','23 383 718')}${tile('n','Минералы','28 930 056','sel')}${tile('g','Газ','24 420 616')}</div></div>
+ <div><div class="lab" style="margin-bottom:10px">Сколько</div><div style="display:grid;grid-template-columns:320px 1fr;gap:18px;align-items:center"><div class="inp num">26 340 750</div><div style="display:grid;gap:12px"><div class="sl"><i style="width:100%"></i><b style="left:100%"></b></div><div style="display:flex;gap:8px"><div class="seg">25%</div><div class="seg">50%</div><div class="seg">75%</div><div class="seg">Макс.</div></div></div></div></div>
+</div>
+<div class="dock ticket"><img src="${TC}" style="height:190px"><div class="res"><img src="${IC.d}">Отдаёте обломки</div><div class="big num">26 340 750</div><div class="arrow">↓</div><div class="big g2 num">15 804 450</div><div class="res"><img src="${IC.n}">Получите минералы</div><div class="hint">Курс 1 : 0,6 · 40% теряется</div><div class="pri" style="height:66px;width:100%;display:grid;place-items:center;font-size:20px;margin-top:18px">ОБМЕНЯТЬ</div></div>
+</div>`),
+};
+const cost=(m,n,g,x)=>`<div class="cost"><span class="${x==='m'?'x':''}"><img src="${IC.m}">${m}</span><span class="${x==='n'?'x':''}"><img src="${IC.n}">${n}</span><span class="${x==='g'?'x':''}"><img src="${IC.g}">${g}</span><span style="color:#dcf0f5">◷ 00:27</span></div>`;
+const seg=(c,q,n=10)=>`<div class="segs">${Array.from({length:n},(_,i)=>`<i class="${i<c?'c':i<c+q?'q':''}"></i>`).join('')}</div>`;
+const reqs=(a,b,x)=>`<div class="reqs">Требуется <span><img src="${IND}">${a}</span><span class="${x?'x':''}"><img src="${TECH('jet-engines')}">${b}</span></div>`;
+const SHIPS=[
+ ['transporter','Транспорт','Транспортировщик · гражданский',0,0,'1 000','0','0',2,2],
+ ['mega-transporter','Мегатранспорт','Мегатранспортировщик · гражданский',1,0,'4 000','2 000','0',4,6],
+ ['scout','Скаут','Лёгкий боевой разведчик · боевой',3,1,'16 000','8 000','3 200',4,4],
+ ['defender','Дефендер','Защитник · боевой',0,0,'6 000','4 000','1 000',6,8,'x'],
+ ['cruiser','Крейсер','Тяжёлый крейсер · боевой',8,2,'2 560 000','1 280 000','512 000',8,8],
+ ['bomber','Бомбардировщик','Бомбардировщик · боевой',2,0,'120 000','80 000','40 000',8,10,'r'],
+ ['battleship','Линкор','Линейный корабль · боевой',10,0,'—','—','—',10,10,'max'],
+];
+const sideHtml=`<aside class="side"><div class="sh"><img src="${SPC}"><div><h1>КОСМОДРОМ</h1><small>Москва · уровень 10 из 10</small><small style="color:var(--acc)">−5% времени за уровень</small></div></div>
+<div class="nav"><div class="on">Улучшения кораблей <b>2/3</b></div><div>Улучшения командирских кораблей <b>0/3</b></div></div>
+<div><div style="display:flex;justify-content:space-between;font-size:13px;letter-spacing:1px;color:#bfeaf2"><span>ОЧЕРЕДЬ</span><span>2 / 3</span></div>
+<div class="qc"><img src="${SHIP('battleship')}"><div><strong>Линкор</strong><span>Уровень 8 → 9</span></div><u>×</u><div class="bar"><b></b></div><span style="font-size:12px;color:#e8fbff">00:04:26</span></div>
+<div class="qc"><img src="${SHIP('battleship')}"><div><strong>Линкор</strong><span>Уровень 9 → 10 · ждёт очереди</span></div><u>×</u></div></div>
+<div class="back" style="margin-top:auto;justify-content:center;font-size:13px">← Назад: Космодром</div></aside>`;
+const lvl=(c,q,mx=10)=>c>=mx?`<div class="lvl"><b style="color:var(--acc)">Максимальный уровень ${mx}</b></div>`:`<div class="lvl"><span>Уровень <b>${c}</b> из ${mx}</span>${q?`<em>+${q} в очереди</em>`:''}<i>→ ${c+q+1}</i></div>`;
+const btn=(s)=>s[10]==='max'?`<div class="ctab off">МАКСИМАЛЬНЫЙ УРОВЕНЬ</div>`:s[10]?`<div class="ctab off">УЛУЧШИТЬ ДО ${s[3]+s[4]+1}</div>`:`<div class="pri ctab">УЛУЧШИТЬ ДО ${s[3]+s[4]+1}</div>`;
+const why=(s)=>s[10]==='x'?`<div class="why">Нужны Ионная наука ур. 3, Топливные элементы ур. 2</div>`:s[10]==='r'?`<div class="why">Не хватает минералов</div>`:s[10]==='max'?'':`<div class="ok">В очереди 2 из 3</div>`;
+V.sA=()=>shell(`<div class="sp">${sideHtml}<main><div class="mh"><h2>УЛУЧШЕНИЯ КОРАБЛЕЙ</h2><span>9 кораблей</span></div><div class="sa">${SHIPS.map(s=>`<article class="card"><img src="${SHIP(s[0])}"><div class="stack"><div><span class="nm">${s[1]}</span> <span class="rl">${s[2]}</span></div>${lvl(s[3],s[4])}${seg(s[3],s[4])}</div><div class="stack">${cost(s[5],s[6],s[7],s[10]==='r'?'n':'')}${reqs(s[8],s[9],s[10]==='x')}</div><div class="stack">${btn(s)}${why(s)}</div></article>`).join('')}</div></main></div>`,'spw');
+V.sB=()=>shell(`<div class="sp">${sideHtml}<main><div class="mh"><h2>УЛУЧШЕНИЯ КОРАБЛЕЙ</h2><span>9 кораблей</span></div><div class="sb">${[...SHIPS].slice(0,8).map(s=>`<article class="card"><img src="${SHIP(s[0])}"><div class="stack"><span class="nm">${s[1]}</span>${lvl(s[3],s[4])}${seg(s[3],s[4])}</div><div class="stack">${cost(s[5],s[6],s[7],s[10]==='r'?'n':'')}${reqs(s[8],s[9],s[10]==='x')}</div><div class="foot">${why(s)}${btn(s)}</div></article>`).join('')}</div></main></div>`,'spw');
+V.sC=()=>shell(`<div class="sp">${sideHtml}<main class="sc"><div class="mh"><h2>УЛУЧШЕНИЯ КОРАБЛЕЙ</h2><span>9 кораблей</span></div><div class="wrap"><div class="thead"><span></span><span>Корабль</span><span>Уровень</span><span>Цена</span><span>Требуется</span><span></span></div>${SHIPS.concat(SHIPS.slice(0,2)).map(s=>`<div class="trow"><img class="a" src="${SHIP(s[0])}"><div><div class="nm" style="font-size:15px">${s[1]}</div><div class="rl">${s[2]}</div></div><div class="stack">${lvl(s[3],s[4])}${seg(s[3],s[4])}</div><div>${cost(s[5],s[6],s[7],s[10]==='r'?'n':'')}</div><div>${reqs(s[8],s[9],s[10]==='x').replace('Требуется ','')}</div><div>${btn(s)}</div></div>`).join('')}</div></main></div>`,'spw');
+const v=new URLSearchParams(location.search).get('v')||location.hash.slice(1)||'tA';
+document.getElementById('root').innerHTML=V[v]();
+document.getElementById('root').firstElementChild.insertAdjacentHTML('beforeend',`<div class="vlabel">Макет ${v}</div>`);
+</script>
+</body></html>
