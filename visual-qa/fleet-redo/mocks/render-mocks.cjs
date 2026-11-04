@@ -1,4 +1,4 @@
-// Renders mocks.html#<variant> to PNG (run in CI, never on the player's PC):
+// Renders mocks.html#<variant> to PNG, in CI only (never on the player PC):
 //   npx electron visual-qa/fleet-redo/mocks/render-mocks.cjs --out=<dir>
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
