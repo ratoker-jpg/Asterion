@@ -224,8 +224,8 @@ async function versusLayoutSnapshot(win, reportId) {
       await new Promise((resolve) => requestAnimationFrame(resolve));
       grid = card.querySelector('.battle-card-versus-grid-v1');
     }
-    // The row opens with an animation; the layout is measured at its end.
-    await Promise.all(card.getAnimations({ subtree: true }).map((animation) => animation.finished.catch(() => null)));
+    // The row opens with an animation; the layout is measured at its end (a looping glow never ends, so it is left alone).
+    card.getAnimations({ subtree: true }).forEach((animation) => { if (Number.isFinite(animation.effect?.getComputedTiming?.().endTime)) animation.finish(); });
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     if (!grid) { card.open = false; return { missingGrid: true }; }
     const center = grid.querySelector('.battle-card-versus-center-v1');
