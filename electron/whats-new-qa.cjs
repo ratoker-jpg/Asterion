@@ -235,6 +235,15 @@ async function runPause(win, directory, width, height) {
   check(!(await js(win, `Boolean(document.querySelector('[data-qa-whats-new]'))`)), `${width}: Esc did not close the dialog over the pause menu`);
   check(await js(win, `Boolean(document.querySelector('[data-qa-pause-menu]'))`), `${width}: Esc closed the pause menu along with the dialog`);
   check(!(await js(win, `Boolean(document.querySelector('[data-qa-pause="whats-new"] [data-qa-whats-new-mark]'))`)), `${width}: the pause mark stayed`);
+  // A click outside the panel is a real mouse press: it closes only the dialog, the game stays paused.
+  await click(win, '[data-qa-pause="whats-new"]');
+  await waitFor(win, `document.querySelector('[data-qa-whats-new]')`);
+  check(await js(win, `document.elementFromPoint(4, 4)?.hasAttribute('data-qa-whats-new')`), `${width}: the corner is not outside the panel`);
+  win.webContents.sendInputEvent({ type: 'mouseDown', x: 4, y: 4, button: 'left', clickCount: 1 });
+  win.webContents.sendInputEvent({ type: 'mouseUp', x: 4, y: 4, button: 'left', clickCount: 1 });
+  await settle(win);
+  check(!(await js(win, `Boolean(document.querySelector('[data-qa-whats-new]'))`)), `${width}: a click outside did not close the dialog over the pause menu`);
+  check(await js(win, `Boolean(document.querySelector('[data-qa-pause-menu]'))`), `${width}: a click outside closed the pause menu along with the dialog`);
   await key(win, 'Escape');
   check(!(await js(win, `Boolean(document.querySelector('[data-qa-pause-menu]'))`)), `${width}: the second Esc did not close the pause menu`);
 }

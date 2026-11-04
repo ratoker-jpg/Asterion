@@ -127,7 +127,12 @@ export function WhatsNewDialog({ seen, onClose }: { seen: string | null; onClose
   if (!release) return null;
   const date = formatReleaseDate(release.date);
   return createPortal(
-    <div className="whats-new" onMouseDown={onClose} data-qa-whats-new>
+    <div
+      className="whats-new"
+      // React events bubble through the portal: the pause menu behind must not take this press as «resume».
+      onMouseDown={(event) => { event.stopPropagation(); onClose(); }}
+      data-qa-whats-new
+    >
       <section ref={dialogRef} className="whats-new__panel" role="dialog" aria-modal="true" aria-label="Что нового" onMouseDown={(event) => event.stopPropagation()}>
         <header className="whats-new__head">
           <div><small>ЖУРНАЛ ОБНОВЛЕНИЙ</small><h2>Что нового</h2></div>
