@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { Component, Suspense, lazy, useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { WHATS_NEW_RELEASES } from 'virtual:asterion-whats-new';
 import { readSlotIndex } from '../../application/slots.ts';
 import { formatReleaseDate, isUnseenRelease, latestVersion, readSeenVersion, whatsNewStatus, writeSeenVersion, type WhatsNewItem } from './whats-new.ts';
 import './whats-new.css';
+
+// Its own chunk with the whole history: the menu stays as light as it was.
+const RoadmapView = lazy(() => import('./RoadmapView.tsx'));
 
 function localStore(): Storage | null {
   try {
@@ -74,10 +77,25 @@ function ReleaseItem({ item, index }: { item: WhatsNewItem; index: number }) {
   );
 }
 
+type DialogMode = 'news' | 'roadmap';
+
+/** The history is local, so this only guards the dialog from a broken install. */
+class RoadmapBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  override state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  override render() {
+    return this.state.failed ? <p className="whats-new__roadmap-note">Историю сейчас не удалось открыть. Закройте окно и попробуйте ещё раз.</p> : this.props.children;
+  }
+}
+
 /** The five latest updates: versions on the left, the chosen one on the right. Never blocks: Esc, ×, a click outside. */
 export function WhatsNewDialog({ seen, onClose }: { seen: string | null; onClose: () => void }) {
   const releases = WHATS_NEW_RELEASES;
   const [selected, setSelected] = useState(0);
+  const [mode, setMode] = useState<DialogMode>('news');
+  const [statsSlot, setStatsSlot] = useState<HTMLDivElement | null>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -133,41 +151,54 @@ export function WhatsNewDialog({ seen, onClose }: { seen: string | null; onClose
       onMouseDown={(event) => { event.stopPropagation(); onClose(); }}
       data-qa-whats-new
     >
-      <section ref={dialogRef} className="whats-new__panel" role="dialog" aria-modal="true" aria-label="Что нового" onMouseDown={(event) => event.stopPropagation()}>
+      <section ref={dialogRef} className={`whats-new__panel is-${mode}`} role="dialog" aria-modal="true" aria-label={mode === 'news' ? 'Что нового' : 'Весь роадмэп'} onMouseDown={(event) => event.stopPropagation()}>
         <header className="whats-new__head">
-          <div><small>ЖУРНАЛ ОБНОВЛЕНИЙ</small><h2>Что нового</h2></div>
+          <div className="whats-new__heading"><small>{mode === 'news' ? 'ЖУРНАЛ ОБНОВЛЕНИЙ' : 'ИСТОРИЯ ИГРЫ'}</small><h2>{mode === 'news' ? 'Что нового' : 'Весь роадмэп'}</h2></div>
+          <div className={`whats-new__switch is-${mode}`} role="group" aria-label="Что показать">
+            <button type="button" aria-pressed={mode === 'news'} onClick={() => setMode('news')} data-qa-roadmap-switch="news">Что нового</button>
+            <button type="button" aria-pressed={mode === 'roadmap'} onClick={() => setMode('roadmap')} data-qa-roadmap-switch="roadmap">Весь роадмэп</button>
+          </div>
+          <div ref={setStatsSlot} className="whats-new__stats" />
           <button type="button" className="whats-new__close" onClick={onClose} aria-label="Закрыть" data-qa-whats-new-close>
             <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" /></svg>
           </button>
         </header>
-        <div className="whats-new__body">
-          <div className="whats-new__rail" role="tablist" aria-orientation="vertical" aria-label="Версии игры">
-            {releases.map((entry, at) => (
-              <button
-                key={entry.version ?? 'next'}
-                ref={(element) => { tabRefs.current[at] = element; }}
-                type="button"
-                role="tab"
-                aria-selected={at === selected}
-                tabIndex={at === selected ? 0 : -1}
-                className={`whats-new__tab ${at === selected ? 'is-on' : ''}`}
-                onClick={() => setSelected(at)}
-                onKeyDown={(event) => onTabKey(event, at)}
-                data-qa-whats-new-tab={entry.version ?? 'next'}
-              >
-                <b>{versionLabel(entry.version)}{isUnseenRelease(entry, seen, releases) ? <NewMark /> : null}</b>
-                <small>{formatReleaseDate(entry.date) || 'следующая версия'}</small>
-              </button>
-            ))}
-          </div>
-          <div ref={scrollRef} className="whats-new__content" role="tabpanel" tabIndex={0} aria-label={`Версия ${versionLabel(release.version)}`} data-qa-whats-new-content>
-            <div key={release.version ?? 'next'} className="whats-new__release">
-              <small>{release.version ? `ВЕРСИЯ ${release.version}` : 'СЛЕДУЮЩАЯ ВЕРСИЯ'}{date ? ` · ${date.toUpperCase()}` : ''}</small>
-              <h3>{release.headline}</h3>
-              <ul>{release.items.map((item, at) => <ReleaseItem key={item.title} item={item} index={at} />)}</ul>
+        {mode === 'roadmap' ? (
+          <RoadmapBoundary>
+            <Suspense fallback={<p className="whats-new__roadmap-note">Открываем историю…</p>}>
+              <RoadmapView statsSlot={statsSlot} />
+            </Suspense>
+          </RoadmapBoundary>
+        ) : (
+          <div className="whats-new__body">
+            <div className="whats-new__rail" role="tablist" aria-orientation="vertical" aria-label="Версии игры">
+              {releases.map((entry, at) => (
+                <button
+                  key={entry.version ?? 'next'}
+                  ref={(element) => { tabRefs.current[at] = element; }}
+                  type="button"
+                  role="tab"
+                  aria-selected={at === selected}
+                  tabIndex={at === selected ? 0 : -1}
+                  className={`whats-new__tab ${at === selected ? 'is-on' : ''}`}
+                  onClick={() => setSelected(at)}
+                  onKeyDown={(event) => onTabKey(event, at)}
+                  data-qa-whats-new-tab={entry.version ?? 'next'}
+                >
+                  <b>{versionLabel(entry.version)}{isUnseenRelease(entry, seen, releases) ? <NewMark /> : null}</b>
+                  <small>{formatReleaseDate(entry.date) || 'следующая версия'}</small>
+                </button>
+              ))}
+            </div>
+            <div ref={scrollRef} className="whats-new__content" role="tabpanel" tabIndex={0} aria-label={`Версия ${versionLabel(release.version)}`} data-qa-whats-new-content>
+              <div key={release.version ?? 'next'} className="whats-new__release">
+                <small>{release.version ? `ВЕРСИЯ ${release.version}` : 'СЛЕДУЮЩАЯ ВЕРСИЯ'}{date ? ` · ${date.toUpperCase()}` : ''}</small>
+                <h3>{release.headline}</h3>
+                <ul>{release.items.map((item, at) => <ReleaseItem key={item.title} item={item} index={at} />)}</ul>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </section>
     </div>,
     document.body,
