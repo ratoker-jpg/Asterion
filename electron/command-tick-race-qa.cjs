@@ -50,6 +50,7 @@ const BUILD_ROLES = ['basic-energy', 'gas-production-1', 'hangar'];
 
 async function verifyBuildQueue(win) {
   const lost = [];
+  let tried = 0;
   for (let round = 0; round < BUILD_ROUNDS; round += 1) {
     const value = await editSaveIdle(win, `(() => {
       const save = PARSE_SAVE(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
@@ -82,6 +83,7 @@ async function verifyBuildQueue(win) {
         });
         observer.observe(document.body, { subtree: true, characterData: true, childList: true });
       })`);
+      tried += 1;
       await sleep(1_400);
       const queue = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-qa-queue-role]')).map((item) => item.getAttribute('data-qa-queue-role'))`);
       if (queue.length !== index + 1) {
@@ -90,7 +92,7 @@ async function verifyBuildQueue(win) {
       }
     }
   }
-  return lost;
+  return { lost, tried };
 }
 
 app.whenReady().then(async () => {
@@ -153,8 +155,8 @@ app.whenReady().then(async () => {
     const lost = results.filter((item) => item.cameBack);
     console.log(`Command tick race, recycling: ${JOBS - lost.length}/${JOBS} commands survived; rows left ${left}`);
 
-    const buildLost = await verifyBuildQueue(win);
-    console.log(`Command tick race, build queue: ${BUILD_ROUNDS * BUILD_ROLES.length - buildLost.length}/${BUILD_ROUNDS * BUILD_ROLES.length} commands survived`);
+    const { lost: buildLost, tried } = await verifyBuildQueue(win);
+    console.log(`Command tick race, build queue: ${tried - buildLost.length}/${tried} commands survived`);
 
     if (lost.length) throw new Error(`A clock tick wrote over ${lost.length} of ${JOBS} recycling commands: ${JSON.stringify(lost)}`);
     if (buildLost.length) throw new Error(`A clock tick wrote over ${buildLost.length} build commands: ${JSON.stringify(buildLost)}`);

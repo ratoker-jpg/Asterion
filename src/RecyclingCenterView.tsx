@@ -62,8 +62,8 @@ const formatAmount = (value: number) => {
 const formatClock = (ms: number) => {
   const total = Math.max(0, Math.ceil(ms / 1000));
   const days = Math.floor(total / 86_400);
-  // A slow building with a huge pile runs for weeks: «33 д 01:39», not «793:39:03».
-  if (days > 0) return `${days} д ${String(Math.floor((total % 86_400) / 3600)).padStart(2, '0')}:${String(Math.floor((total % 3600) / 60)).padStart(2, '0')}`;
+  // A slow building with a huge pile runs for weeks: «33 д 01:39», not «793:39:03». Up to two days stays a clock.
+  if (days >= 2) return `${days} д ${String(Math.floor((total % 86_400) / 3600)).padStart(2, '0')}:${String(Math.floor((total % 3600) / 60)).padStart(2, '0')}`;
   const hours = Math.floor(total / 3600);
   const minutes = Math.floor((total % 3600) / 60);
   const seconds = total % 60;
