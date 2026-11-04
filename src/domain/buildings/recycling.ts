@@ -1,6 +1,6 @@
 import type { BuildingLevels } from './resource-zone.ts';
 import { getRecyclingBalance } from './balance-v1.ts';
-import type { RuntimeMode } from '../runtime/mode.ts';
+import { getRuntimeElapsedScale, type RuntimeMode } from '../runtime/mode.ts';
 
 export const RECYCLING_MAX_LEVEL = 10;
 export const RECYCLING_INITIAL_DEBRIS = 100_000;
@@ -8,6 +8,8 @@ export const TEST_RECYCLING_DEBRIS_FIXTURE_ID = 'test-recycling-debris-v1' as co
 export const TEST_RECYCLING_DEBRIS_FIXTURE_VERSION = 1 as const;
 export const RECYCLING_STORAGE_MS = 24 * 60 * 60 * 1000;
 export const RECYCLING_RESOURCES = ['metal', 'minerals', 'gas'] as const;
+/** The smallest amount one process can take; a batch needs this much per process. */
+export const RECYCLING_MIN_DEBRIS_PER_JOB = 1;
 
 export type RecyclingResource = (typeof RECYCLING_RESOURCES)[number];
 
@@ -64,6 +66,12 @@ export function resolveRecyclingFixture(mode: RuntimeMode): RecyclingFixtureDesc
   return mode === 'test' ? TEST_RECYCLING_DEBRIS_FIXTURE : null;
 }
 
+/** Which clock a new job runs on: the campaign speed, or the Test Mode selector. */
+export type RecyclingTiming = {
+  mode: RuntimeMode;
+  testTimeScale?: unknown;
+};
+
 export type RecyclingStartValidation = {
   canStart: boolean;
   reason: string | null;
@@ -72,6 +80,16 @@ export type RecyclingStartValidation = {
 export type RecyclingStartTransition = RecyclingStartValidation & {
   state: RecyclingState;
   job: RecyclingJob | null;
+};
+
+export type RecyclingBatchPlan = RecyclingStartValidation & {
+  /** Debris of each process, largest first; empty when the batch cannot start. */
+  amounts: number[];
+};
+
+export type RecyclingBatchTransition = RecyclingStartValidation & {
+  state: RecyclingState;
+  jobs: RecyclingJob[];
 };
 
 export type RecyclingAdvanceTransition = {
@@ -148,11 +166,22 @@ export function getRecyclingMaxConcurrentJobs(level: number): number {
   return Math.min(RECYCLING_MAX_LEVEL, Math.max(0, Math.floor(level || 0)));
 }
 
-export function getRecyclingDurationMs(debrisAmount: number, level = 1): number {
+/**
+ * Whole seconds, at least one: a saved finishAt under a second after its start
+ * counts as malformed and would be derived anew on load (migrateRecyclingJob),
+ * so even a ×5 or a ×500 clock must not go below it.
+ */
+export function getRecyclingDurationMs(debrisAmount: number, level = 1, elapsedScale = 1): number {
   const safeAmount = Math.max(0, Number.isFinite(debrisAmount) ? debrisAmount : 0);
   const throughput = Math.max(1, getRecyclingBalance(Math.max(1, level)).debrisPerSecond);
-  const rawDuration = safeAmount / throughput * 1000;
+  const safeScale = Number.isFinite(elapsedScale) && elapsedScale > 0 ? elapsedScale : 1;
+  const rawDuration = safeAmount / throughput * 1000 / safeScale;
   return Math.max(1000, Math.ceil(rawDuration / 1000) * 1000);
+}
+
+/** How long a job started now runs: the balance time on this campaign's clock. */
+export function getRecyclingRunDurationMs(debrisAmount: number, level: number, timing: RecyclingTiming): number {
+  return getRecyclingDurationMs(debrisAmount, level, getRuntimeElapsedScale(timing.mode, timing.testTimeScale));
 }
 
 export function getRecyclingAllocationTotal(allocation: ResourceAllocationPercent): number {
@@ -344,6 +373,7 @@ export function startRecyclingJob(
   allocationPercent: ResourceAllocationPercent,
   startedAt: number,
   jobId: string,
+  timing: RecyclingTiming,
 ): RecyclingStartTransition {
   const validation = getRecyclingStartValidation(state, recyclingLevel, debrisAmount, allocationPercent);
   if (!validation.canStart) return { ...validation, state, job: null };
@@ -351,7 +381,7 @@ export function startRecyclingJob(
   const amount = toNonNegativeInteger(debrisAmount);
   const allocation = { ...allocationPercent };
   const efficiencyPercent = getRecyclingEfficiencyPercent(recyclingLevel);
-  const finishAt = startedAt + getRecyclingDurationMs(amount, recyclingLevel);
+  const finishAt = startedAt + getRecyclingRunDurationMs(amount, recyclingLevel, timing);
   const job: RecyclingJob = {
     id: jobId,
     debrisAmount: amount,
@@ -373,6 +403,71 @@ export function startRecyclingJob(
       jobs: [...state.jobs, job],
     },
   };
+}
+
+/**
+ * Splits `totalDebris` evenly over `processCount` processes; what does not
+ * divide goes one unit each to the first processes, so the amounts always add
+ * up to the total exactly.
+ */
+export function planRecyclingBatch(
+  state: RecyclingState,
+  recyclingLevel: number,
+  totalDebris: number,
+  processCount: number,
+  allocationPercent: ResourceAllocationPercent,
+): RecyclingBatchPlan {
+  const total = toNonNegativeInteger(totalDebris);
+  const validation = getRecyclingStartValidation(state, recyclingLevel, total, allocationPercent);
+  if (!validation.canStart) return { ...validation, amounts: [] };
+
+  const count = toNonNegativeInteger(processCount);
+  if (count <= 0) return { canStart: false, reason: 'Выберите число процессов', amounts: [] };
+  const free = getRecyclingMaxConcurrentJobs(recyclingLevel) - state.jobs.length;
+  if (count > free) return { canStart: false, reason: `Свободных процессов только ${free}`, amounts: [] };
+  if (total < count * RECYCLING_MIN_DEBRIS_PER_JOB) {
+    return { canStart: false, reason: `На ${count} процессов нужно хотя бы ${count * RECYCLING_MIN_DEBRIS_PER_JOB} обломков`, amounts: [] };
+  }
+
+  const base = Math.floor(total / count);
+  const remainder = total - base * count;
+  return {
+    canStart: true,
+    reason: null,
+    amounts: Array.from({ length: count }, (_, index) => base + (index < remainder ? 1 : 0)),
+  };
+}
+
+/** Starts a whole batch or nothing: each process is an ordinary job with its own id. */
+export function startRecyclingBatch(
+  state: RecyclingState,
+  recyclingLevel: number,
+  totalDebris: number,
+  processCount: number,
+  allocationPercent: ResourceAllocationPercent,
+  startedAt: number,
+  jobIds: readonly string[],
+  timing: RecyclingTiming,
+): RecyclingBatchTransition {
+  const plan = planRecyclingBatch(state, recyclingLevel, totalDebris, processCount, allocationPercent);
+  if (!plan.canStart) return { canStart: false, reason: plan.reason, state, jobs: [] };
+  if (jobIds.length !== plan.amounts.length || new Set(jobIds).size !== jobIds.length) {
+    return { canStart: false, reason: 'Переработка сейчас недоступна', state, jobs: [] };
+  }
+
+  let next = state;
+  const jobs: RecyclingJob[] = [];
+  for (const [index, amount] of plan.amounts.entries()) {
+    const transition = startRecyclingJob(next, recyclingLevel, amount, allocationPercent, startedAt, jobIds[index]!, timing);
+    if (!transition.canStart || !transition.job) return { canStart: false, reason: transition.reason, state, jobs: [] };
+    next = transition.state;
+    jobs.push(transition.job);
+  }
+  return { canStart: true, reason: null, state: next, jobs };
+}
+
+export function getReadyRecyclingJobIds(state: RecyclingState, now: number): string[] {
+  return state.jobs.filter((job) => now >= job.finishAt).map((job) => job.id);
 }
 
 export function collectRecyclingJob(

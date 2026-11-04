@@ -29,7 +29,10 @@ import {
 import {
   advanceRecyclingState,
   collectRecyclingJob,
+  getReadyRecyclingJobIds,
+  startRecyclingBatch as startRecyclingBatchJobs,
   startRecyclingJob,
+  type RecyclingOutput,
   type RecyclingState,
   type ResourceAllocationPercent,
 } from '../domain/buildings/recycling.ts';
@@ -370,6 +373,7 @@ export function startRecycling(
     allocation,
     context.now,
     jobId,
+    { mode: context.mode, testTimeScale: context.testTimeScale },
   );
   if (!transition.canStart) return { ok: false, state, reason: transition.reason ?? 'Переработка сейчас недоступна.' };
   return {
@@ -380,6 +384,59 @@ export function startRecycling(
     }),
     reason: null,
   };
+}
+
+/** One click, one state update: the total split evenly over the chosen processes. */
+export function startRecyclingBatch(
+  state: SaveState,
+  context: BuildingApplicationContext,
+  totalDebris: number,
+  processCount: number,
+  allocation: ResourceAllocationPercent,
+  jobIds: readonly string[],
+): BuildingActionResult {
+  if (isPlanetBlocked(state, context.planetId)) return { ok: false, state, reason: 'Планета заблокирована из-за перенаселения.' };
+  const planet = getPlanetState(state, context.planetId);
+  const transition = startRecyclingBatchJobs(
+    planet.recycling,
+    planet.buildings.recycling,
+    totalDebris,
+    processCount,
+    allocation,
+    context.now,
+    jobIds,
+    { mode: context.mode, testTimeScale: context.testTimeScale },
+  );
+  if (!transition.canStart) return { ok: false, state, reason: transition.reason ?? 'Переработка сейчас недоступна.' };
+  return {
+    ok: true,
+    state: replacePlanetState({ ...state, schemaVersion: SAVE_SCHEMA_VERSION }, context.planetId, {
+      ...planet,
+      recycling: transition.state,
+    }),
+    reason: null,
+  };
+}
+
+/** Every finished job of the planet, credited in one state update. */
+export function collectAllRecycling(
+  state: SaveState,
+  context: BuildingApplicationContext,
+): BuildingActionResult & { output: RecyclingOutput | null; collected: number } {
+  let next = state;
+  let collected = 0;
+  const output: RecyclingOutput = { metal: 0, minerals: 0, gas: 0 };
+  for (const jobId of getReadyRecyclingJobIds(getPlanetState(state, context.planetId).recycling, context.now)) {
+    const result = collectRecycling(next, context, jobId);
+    if (!result.ok || !result.output) return { ok: false, state, reason: result.reason, output: null, collected: 0 };
+    next = result.state;
+    collected += 1;
+    output.metal += result.output.metal;
+    output.minerals += result.output.minerals;
+    output.gas += result.output.gas;
+  }
+  if (collected === 0) return { ok: false, state, reason: 'Готовых процессов нет.', output: null, collected: 0 };
+  return { ok: true, state: next, reason: null, output, collected };
 }
 
 export function collectRecycling(

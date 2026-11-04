@@ -216,6 +216,7 @@ import type { UniverseCoordinate, UniverseObjectKind, UniverseOwnerProfile } fro
 import {
   APPLICATION_COMMAND_REQUEST_EVENTS,
   enqueueApplicationStateUpdate,
+  runOutsideApplicationCommand,
   isApplicationCommandBlocked,
   isGameplayCommandRequestEvent,
   NPC_CATCHUP_COMMAND_BLOCKED_MESSAGE,
@@ -614,13 +615,15 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   useEffect(() => {
     if (activeRoute !== 'operations') return;
     const liveIds = new Set(pirateContacts.map((contact) => pirateOperationId(contact.contactCycleKey)));
-    const current = stateRef.current;
-    const nextItems = current.operations.items.filter((item) => !item.id.startsWith('pirate:pirate-cycle-v1:') || liveIds.has(item.id));
-    if (nextItems.length !== current.operations.items.length) {
-      const next = { ...current, operations: { items: nextItems } };
-      stateRef.current = next;
-      setState(next);
-    }
+    runOutsideApplicationCommand(() => {
+      const current = stateRef.current;
+      const nextItems = current.operations.items.filter((item) => !item.id.startsWith('pirate:pirate-cycle-v1:') || liveIds.has(item.id));
+      if (nextItems.length !== current.operations.items.length) {
+        const next = { ...current, operations: { items: nextItems } };
+        stateRef.current = next;
+        setState(next);
+      }
+    });
   }, [activeRoute, pirateContacts, now]);
 
   const onPirateSystemChange = useCallback((selection: PirateSystemSelection) => {
@@ -629,11 +632,13 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const pirateProfileCycleSignature = pirateContacts.map((contact) => contact.contactCycleKey).join('|');
   useEffect(() => {
     const visible = activeRoute === 'operations' || activeRoute === 'universe' ? pirateContacts : [];
-    const next = materializePirateProfiles(stateRef.current, visible);
-    if (next !== stateRef.current) {
-      stateRef.current = next;
-      setState(next);
-    }
+    runOutsideApplicationCommand(() => {
+      const next = materializePirateProfiles(stateRef.current, visible);
+      if (next !== stateRef.current) {
+        stateRef.current = next;
+        setState(next);
+      }
+    });
     // Profile snapshots are frozen on observing a new cycle, not on countdown ticks.
   }, [activeRoute, pirateProfileCycleSignature]);
 
@@ -1345,7 +1350,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   }, [announceRuntimeEvents, commitToLiveWorld, startLiveWorld, testTimeScale]);
 
   useEffect(() => {
-    runRuntimeReconcile(now);
+    runOutsideApplicationCommand(() => runRuntimeReconcile(now));
   }, [now, runRuntimeReconcile]);
 
   // Long offline gaps are reconciled in bounded groups. Continue each persisted

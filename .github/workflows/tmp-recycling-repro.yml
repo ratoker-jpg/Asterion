@@ -13,5 +13,11 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: npx electron tools/tmp-mock/capture.cjs
       - run: npm run build
       - run: npx electron electron/command-tick-race-qa.cjs
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: tmp-shots
+          path: visual-qa/recycling-center-redo/**/*

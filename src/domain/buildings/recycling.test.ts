@@ -31,7 +31,7 @@ function start(
   id: string,
   split: ResourceAllocationPercent = allocation,
 ) {
-  return startRecyclingJob(state, level, debrisAmount, split, startedAt, id);
+  return startRecyclingJob(state, level, debrisAmount, split, startedAt, id, { mode: 'production' });
 }
 
 test('levels 1, 6 and 10 expose canonical efficiency and concurrent slots', () => {
