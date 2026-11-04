@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import raw from '../../../changelog/roadmap.json';
-import { RAIL_PLANS_AT, formatDay, formatRange, nextRow, pluralRu, railLayout, railPosition, roadmapStats, type EraBox, type RoadmapData, type RoadmapMilestone, type RoadmapPr } from './roadmap.ts';
+import { RAIL_PLANS_MARK, formatDay, formatRange, nextRow, pluralRu, railLayout, railPosition, roadmapStats, type EraBox, type RoadmapData, type RoadmapMilestone, type RoadmapPr } from './roadmap.ts';
 import './roadmap.css';
 
 const data = raw as unknown as RoadmapData;
@@ -138,7 +138,7 @@ function Rail({ current, atPlans, pointerRef, fillRef, onEra, onMilestone, onPla
       <button
         type="button"
         className={`rm-rail__plans ${atPlans ? 'is-on' : ''}`}
-        style={{ left: `${(RAIL_PLANS_AT + (1 - RAIL_PLANS_AT) / 2) * 100}%` }}
+        style={{ left: `${RAIL_PLANS_MARK * 100}%` }}
         aria-label="Дальше: планы"
         onClick={onPlans}
         onMouseEnter={() => setTip({ at: 0.97, title: 'Дальше', sub: 'планы, а не обещания' })}
@@ -318,7 +318,8 @@ export default function RoadmapView({ statsSlot }: { statsSlot: HTMLElement | nu
     if (!(event.target instanceof HTMLElement) || !event.target.hasAttribute('data-qa-roadmap-row')) return;
     if (!['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End'].includes(event.key)) return;
     event.preventDefault();
-    focusRow(nextRow(rows, active, event.key));
+    // From the row that has the focus: a focus event is not promised while the window itself has none.
+    focusRow(nextRow(rows, Number(event.target.getAttribute('data-qa-roadmap-row')), event.key));
   };
 
   return (

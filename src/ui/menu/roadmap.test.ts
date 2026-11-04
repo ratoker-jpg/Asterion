@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { RAIL_PLANS_AT, daysBetween, formatDay, formatRange, nextRow, pluralRu, railLayout, railPosition, roadmapStats, type EraBox, type RoadmapData } from './roadmap.ts';
+import { RAIL_PLANS_AT, RAIL_PLANS_MARK, daysBetween, formatDay, formatRange, nextRow, pluralRu, railLayout, railPosition, roadmapStats, type EraBox, type RoadmapData } from './roadmap.ts';
 
 const data = JSON.parse(readFileSync(new URL('../../../changelog/roadmap.json', import.meta.url), 'utf8')) as RoadmapData;
 
@@ -69,7 +69,7 @@ const boxes: EraBox[] = [
 
 test('the rail pointer starts at the start and ends at the end', () => {
   assert.deepEqual(railPosition(0, 500, 2500, boxes), { at: 0, era: 0, line: 0 });
-  assert.equal(railPosition(2000, 500, 2500, boxes).at, 1);
+  assert.equal(railPosition(2000, 500, 2500, boxes).at, RAIL_PLANS_MARK);
 });
 
 test('the rail pointer follows the reading line through the eras', () => {
@@ -78,7 +78,7 @@ test('the rail pointer follows the reading line through the eras', () => {
   assert.ok(Math.abs(inFirst.at - 0.3375) < 1e-9);
   assert.equal(railPosition(1000, 500, 2500, boxes).era, 1);
   // Past the last era, in the plans.
-  assert.equal(railPosition(1900, 500, 2500, boxes).at, 0.9);
+  assert.equal(railPosition(1900, 500, 2500, boxes).at, RAIL_PLANS_MARK);
 });
 
 test('keys walk the rows', () => {

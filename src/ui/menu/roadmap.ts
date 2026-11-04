@@ -78,6 +78,8 @@ export function roadmapStats(data: RoadmapData): RoadmapStats {
 
 /** The rail shares the width by work, not by calendar: the dense last days stay readable. */
 export const RAIL_PLANS_AT = 0.965;
+/** The «Дальше» mark: the pointer stops on it, not past it. */
+export const RAIL_PLANS_MARK = RAIL_PLANS_AT + (1 - RAIL_PLANS_AT) / 2;
 
 export type RailEra = { id: string; from: number; to: number; first: string; last: string; count: number };
 export type RailTick = { at: number; off: boolean };
@@ -123,8 +125,8 @@ export function railPosition(scrollTop: number, viewHeight: number, contentHeigh
   const line = scrollTop + viewHeight * 0.35 * settle;
   if (eras.length === 0) return { at: 0, era: 0, line };
   const last = eras[eras.length - 1] as EraBox;
-  if (scrollTop + viewHeight >= contentHeight - 2 && scrollTop > 0) return { at: 1, era: eras.length - 1, line };
-  if (line >= last.top + last.height) return { at: last.to, era: eras.length - 1, line };
+  if (scrollTop + viewHeight >= contentHeight - 2 && scrollTop > 0) return { at: RAIL_PLANS_MARK, era: eras.length - 1, line };
+  if (line >= last.top + last.height) return { at: RAIL_PLANS_MARK, era: eras.length - 1, line };
   let era = 0;
   for (let index = 0; index < eras.length; index += 1) if ((eras[index] as EraBox).top <= line) era = index;
   const box = eras[era] as EraBox;

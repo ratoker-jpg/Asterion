@@ -131,13 +131,29 @@ async function selectRelease(win, kind) {
 }
 
 /** Smooth scrolling has come to rest. */
-async function scrollRest(win) {
-  await waitFor(win, `new Promise((resolve) => {
+async function scrollRest(win, timeoutMs = 15000) {
+  const started = Date.now();
+  // waitFor only tests truthiness, so a promise would pass at once: this awaits each sample.
+  while (!(await js(win, `new Promise((resolve) => {
     const scroller = document.querySelector('[data-qa-roadmap-scroll]');
     const before = scroller.scrollTop;
     setTimeout(() => resolve(Math.abs(scroller.scrollTop - before) < 0.5), 220);
-  })`);
+  })`))) {
+    if (Date.now() - started > timeoutMs) throw new Error('The roadmap never stopped scrolling');
+  }
   await settle(win);
+}
+
+/** The history ships as its own file: the entry script knows only how to fetch it. */
+function checkRoadmapChunk() {
+  const assets = path.join(ROOT, 'dist', 'assets');
+  const html = fs.readFileSync(path.join(ROOT, 'dist', 'index.html'), 'utf8');
+  const entry = /<script[^>]+src="\.?\/?assets\/([^"]+\.js)"/.exec(html)?.[1];
+  check(Boolean(entry), 'the entry script is not found in the build', html.slice(0, 400));
+  if (!entry) return;
+  const holders = fs.readdirSync(assets).filter((name) => name.endsWith('.js') && fs.readFileSync(path.join(assets, name), 'utf8').includes('rm-rail__pointer'));
+  check(holders.length > 0, 'the roadmap is not in the build', holders);
+  check(!holders.includes(entry), 'the roadmap is in the entry script', { entry, holders });
 }
 
 const activeRow = (win) => js(win, `Number(document.activeElement?.getAttribute('data-qa-roadmap-row'))`);
@@ -196,7 +212,15 @@ async function runRoadmap(win, width, height) {
 
   await js(win, 'localStorage.clear()');
   await openMenu(win);
-  const chunkLoaded = `performance.getEntriesByType('resource').some((entry) => /RoadmapView/.test(entry.name))`;
+  // Its styles arrive with its file; a throwaway element shows whether they are here yet.
+  const chunkLoaded = `(() => {
+    const probe = document.createElement('div');
+    probe.className = 'rm-rail__tip';
+    document.body.append(probe);
+    const loaded = getComputedStyle(probe).position === 'absolute';
+    probe.remove();
+    return loaded;
+  })()`;
   check(!(await js(win, chunkLoaded)), `${width}: the history loaded with the menu`);
   await click(win, '[data-qa-whats-new-open]');
   await waitFor(win, `document.querySelector('[data-qa-whats-new-tab]')`);
@@ -249,7 +273,7 @@ async function runRoadmap(win, width, height) {
 
   // Tooltip on the rail is the game's own.
   const hover = await js(win, `(() => {
-    const box = document.querySelector('[data-qa-roadmap-mark]:nth-of-type(n)').getBoundingClientRect();
+    const box = document.querySelector('[data-qa-roadmap-mark]').getBoundingClientRect();
     return { x: Math.round(box.left), y: Math.round(box.top) };
   })()`);
   win.webContents.sendInputEvent({ type: 'mouseMove', x: hover.x, y: hover.y });
@@ -286,9 +310,12 @@ async function runRoadmap(win, width, height) {
   check(!(await js(win, `Boolean(document.querySelector('[data-qa-roadmap-details="${withDecision.n}"]'))`)), `${width}: the row did not close`);
 
   // A row that never shipped is said plainly.
+  await js(win, `document.querySelector('[data-qa-roadmap-row="${closed[0].n}"]').scrollIntoView({ block: 'center' })`);
+  await settle(win);
   await click(win, `[data-qa-roadmap-row="${closed[0].n}"]`);
   await scrollRest(win);
   await settle(win, 320);
+  check(await js(win, `document.querySelector('[data-qa-roadmap-entry="${closed[0].n}"] .rm-row__tag')?.textContent`) === 'не вошло в игру', `${width}: a row that never shipped is not marked`);
   await capture(win, directory, '04-not-shipped');
   await click(win, `[data-qa-roadmap-row="${closed[0].n}"]`);
 
@@ -499,6 +526,7 @@ app.whenReady().then(async () => {
   let win;
   try {
     fs.mkdirSync(OUTPUT, { recursive: true });
+    checkRoadmapChunk();
     win = new BrowserWindow({
       width: 1000, height: 700, show: false, backgroundColor: '#02050a',
       webPreferences: { offscreen: true, contextIsolation: true, nodeIntegration: false, sandbox: true, partition: 'qa-whats-new', preload: path.join(__dirname, 'whats-new-qa-preload.cjs') },
