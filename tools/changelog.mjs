@@ -39,7 +39,7 @@ const JARGON = [
 /** `2 × 3`, `a = b`: a formula instead of a description. */
 const FORMULA = /\d\s*[×*/=]\s*\d|\w\s=\s\w/;
 
-function checkText(errors, file, field, value, limit) {
+export function checkText(errors, file, field, value, limit) {
   if (typeof value !== 'string' || !value.trim()) {
     errors.push(`${file}: поле «${field}» обязательно`);
     return;
