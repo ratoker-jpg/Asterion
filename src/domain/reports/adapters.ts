@@ -331,7 +331,7 @@ export function recyclerArrivalReportToReportItem(report: RecyclerArrivalReport)
     title: `Переработчик прибыл к координатам ${coordinate}`,
     preview: `${coordinate} · собрано ${collected} · осталось на орбите ${remaining}.`,
     body: report.collectedDebris === 0 && report.remainingOrbitalDebris === 0
-      ? `${summary} К моменту прибытия флота здесь ничего не было, корабли возвращаются без груза.`
+      ? `${summary} К моменту прибытия флота здесь ничего не было, корабли возвращаются пустыми.`
       : `${summary} На орбите осталось свободных обломков: ${remaining}.`,
     timestamp: new Date(report.arrivedAtMs).toISOString(),
     statusLabel: 'ПРИБЫТИЕ ЗАВЕРШЕНО',
