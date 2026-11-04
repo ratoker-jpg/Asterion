@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import { MAX_DEPARTURES } from '../domain/command/catalog.ts';
 import { acceptApplication, applyToAlliance, createAlliance, kickMember, leaveAlliance } from '../domain/command/membership.ts';
-import { declareWar } from '../domain/command/diplomacy.ts';
+import { declareWar, selectAllianceRelations } from '../domain/command/diplomacy.ts';
 import { migrateCommandState } from '../domain/command/repository.ts';
 import { selectOwnerMembership } from '../domain/command/selectors.ts';
 import { createNpcState } from '../domain/npc/state.ts';
@@ -255,6 +255,29 @@ test('C: a leader hands the alliance over to the deputy when it leaves and a lon
   assert.equal(alone.ok, true);
   const onlyPlayer = { ...state, command: alone.state };
   assert.equal(selectNpcDefection(onlyPlayer, onlyPlayer.npc!.profiles[leader]!, LATER), null);
+});
+
+test('C: leaving in a war or truce changes no diplomacy of the alliance; a sole member leaving dissolves it and its relations', () => {
+  const { state, leaver, weakLeader, strongLeader } = discontented('ALLIANCEC5', { cooperation: 0.1 });
+  const weakId = selectOwnerMembership(state.command, weakLeader)!.alliance.id;
+  const strongId = selectOwnerMembership(state.command, strongLeader)!.alliance.id;
+  const war = declareWar(state.command, weakLeader, strongId, { now: T0 + 1 });
+  assert.equal(war.ok, true);
+  const atWar = { ...state, command: war.state };
+  const relationOf = (command: SaveState['command']) => JSON.stringify(command.diplomacy);
+  // Our alliance is the weaker side of the war: the war itself pushes the leaver out, and the war stays as it was.
+  const defection = selectNpcDefection(atWar, atWar.npc!.profiles[leaver]!, LATER);
+  assert.ok(defection);
+  const left = leaveAlliance(atWar.command, leaver, LATER, {});
+  assert.equal(left.ok, true);
+  assert.equal(relationOf(left.state), relationOf(atWar.command), 'the war between the alliances is untouched by a member leaving');
+  assert.equal(selectOwnerMembership(left.state, weakLeader)?.alliance.id, weakId);
+  // The last member leaving dissolves the alliance and leaves no relation to it visible.
+  const alone = leaveAlliance(left.state, weakLeader, LATER, {});
+  assert.equal(alone.ok, true);
+  assert.equal(alone.ok && alone.disbanded, true);
+  assert.equal(alone.state.alliances.some((alliance) => alliance.id === weakId), false);
+  assert.deepEqual(selectAllianceRelations(alone.state, strongId), [], 'the stale view of the dissolved alliance is not shown (and is pruned on load)');
 });
 
 /* ------------------------------------------------------------------ D: memory */
