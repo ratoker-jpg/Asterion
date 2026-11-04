@@ -1712,7 +1712,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       setNotice(result.reason ?? 'Обмен сейчас недоступен');
       return result;
     }
-    setNotice('Обмен выполнен');
+    // The screen shows the result itself; a second notice would cover the amount dock.
     return result;
   };
 
