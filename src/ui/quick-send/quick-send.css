@@ -65,8 +65,8 @@
 .quick-send__ships li:has(> span:last-child) { grid-template-columns: 28px minmax(0, 1fr); }
 .quick-send__ships img { width: 28px; height: 28px; object-fit: contain; }
 .quick-send__cargo img { width: 22px; height: 22px; justify-self: center; }
-.quick-send__ships span { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; min-width: 0; }
-.quick-send__ships b { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px !important; font-weight: 700; }
+.quick-send__ships span { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.quick-send__ships b { overflow-wrap: anywhere; font-size: 12px !important; font-weight: 700; line-height: 1.25; }
 .quick-send__ships em { flex: none; color: var(--qa-label); font-size: 11px !important; font-style: normal; font-weight: 700; font-variant-numeric: tabular-nums; }
 .quick-send__ships .amount-slider { width: 112px; }
 
@@ -80,6 +80,7 @@
 .quick-send__route dd { margin: 0; overflow: hidden; color: var(--qa-text); white-space: nowrap; text-overflow: ellipsis; font-size: 13px !important; font-weight: 800; font-variant-numeric: tabular-nums; }
 .quick-send__route div:first-child dd { color: #ffb36b; }
 
+.quick-send__why { margin: -2px 12px 6px 36px; color: var(--qa-muted); font-size: 11px !important; font-weight: 600; line-height: 1.4; }
 .quick-send__error { margin: 0; color: var(--qa-warn); font-size: 12px !important; font-weight: 600; line-height: 1.4; animation: quick-row-in 180ms ease both; }
 
 .quick-send__foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px 14px; }

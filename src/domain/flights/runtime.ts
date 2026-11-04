@@ -110,7 +110,7 @@ export function createFlightRecord(input: DispatchFlightInput): FlightRecord {
   if (input.missionId === 'gas' && (!Number.isSafeInteger(input.gasCapacity) || (input.gasCapacity ?? 0) <= 0)) {
     throw new Error('Gas extraction flights require a positive capacity snapshot.');
   }
-  const cargo = input.missionId === 'transport' || input.missionId === 'aid' || input.missionId === 'space-flight' || input.missionId === 'recycle' || input.missionId === 'gas'
+  const cargo = input.missionId === 'transport' || input.missionId === 'aid' || input.missionId === 'space-flight' || input.missionId === 'recycle' || input.missionId === 'gas' || (input.missionId === 'deployment' && input.cargo !== undefined)
     ? normalizeTransportCargo(input.cargo)
     : undefined;
   return {
