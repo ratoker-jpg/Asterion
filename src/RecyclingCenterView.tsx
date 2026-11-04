@@ -18,7 +18,7 @@ import {
   type RecyclingState,
   type ResourceAllocationPercent,
 } from './domain/buildings/recycling.ts';
-import { ACTIVE_RUNTIME_MODE, resolveTestTimeScale } from './domain/runtime/mode.ts';
+import { ACTIVE_RUNTIME_MODE, getRuntimeElapsedScale, resolveTestTimeScale } from './domain/runtime/mode.ts';
 import { getPlanetZoneTerrainUrl } from './assets/planetZoneTerrainAssets.ts';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
 import './recycling-center.css';
@@ -61,6 +61,9 @@ const formatAmount = (value: number) => {
 
 const formatClock = (ms: number) => {
   const total = Math.max(0, Math.ceil(ms / 1000));
+  const days = Math.floor(total / 86_400);
+  // A slow building with a huge pile runs for weeks: «33 д 01:39», not «793:39:03».
+  if (days > 0) return `${days} д ${String(Math.floor((total % 86_400) / 3600)).padStart(2, '0')}:${String(Math.floor((total % 3600) / 60)).padStart(2, '0')}`;
   const hours = Math.floor(total / 3600);
   const minutes = Math.floor((total % 3600) / 60);
   const seconds = total % 60;
@@ -110,7 +113,8 @@ export function RecyclingCenterView({
   const timing = { mode: ACTIVE_RUNTIME_MODE, testTimeScale: resolveTestTimeScale() };
   const durationMs = longestAmount > 0 ? getRecyclingRunDurationMs(longestAmount, buildingLevel, timing) : 0;
   const efficiencyPercent = getRecyclingEfficiencyPercent(buildingLevel);
-  const debrisPerSecond = getRecyclingBalance(Math.max(1, buildingLevel)).debrisPerSecond;
+  // On this world's clock: at ×5 a process really takes five times the balance figure.
+  const debrisPerSecond = getRecyclingBalance(Math.max(1, buildingLevel)).debrisPerSecond * getRuntimeElapsedScale(timing.mode, timing.testTimeScale);
 
   const output = plan.amounts.reduce((sum, amount) => {
     const part = getRecyclingOutput(amount, efficiencyPercent, allocation);
@@ -179,8 +183,10 @@ export function RecyclingCenterView({
             {' '}· {formatNumber(debrisPerSecond)} обломков в секунду на процесс
           </p>
         </div>
-        <button className="rc-back" type="button" data-qa-building-interior-back data-qa-recycling-back onClick={onBack}>
-          <span aria-hidden="true">←</span> Назад: {building.name}
+        <button className="rc-close" type="button" aria-label="Закрыть" data-qa-building-interior-back data-qa-recycling-back onClick={onBack}>
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
+            <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+          </svg>
         </button>
       </header>
 
@@ -346,7 +352,7 @@ function JobSlot({ job, now, onCollect }: { job: RecyclingJob; now: number; onCo
       </span>
       <b data-qa-recycling-job-output={jobOutputTotal(job)}>{ready ? 'Забрать' : formatClock(job.finishAt - now)}</b>
       <small data-qa-recycling-job-timer={ready ? 'expires' : 'remaining'}>
-        {ready ? `авто через ${formatClock(expiresAt - now)}` : `${formatAmount(job.debrisAmount)} обломков`}
+        {ready ? `сами через ${formatClock(expiresAt - now)}` : `${formatAmount(job.debrisAmount)} обломков`}
       </small>
       <span className="rc-slot__tip" role="tooltip" data-qa-recycling-job-allocation>
         {RECYCLING_RESOURCES.filter((resource) => job.output[resource] > 0).map((resource) => (

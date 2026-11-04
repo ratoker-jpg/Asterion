@@ -358,6 +358,7 @@ function enterLiveWorldStep(link: LiveWorldLink, version: LiveWorldVersion): num
  */
 const SILENT_NOTICE_PATTERNS: readonly RegExp[] = [
   /^Система готова/,
+  /внутренний модуль открыт\.$/,
   /^Галактика \d+ загружена/,
   /^Операции: доступные PvE-сценарии загружены/,
   /^Командование: союзный контур загружен/,

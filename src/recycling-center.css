@@ -55,10 +55,13 @@
 .recycling-center-view .rc-header h1{margin:0;color:#f2fdff;font-size:calc(34px * var(--text-scale-page-title,1)) !important;font-weight:800;line-height:1.1;letter-spacing:.3px}
 .recycling-center-view .rc-header p{margin:6px 0 0;color:var(--rc-muted);font-size:calc(16px * var(--text-scale-body,1)) !important}
 .recycling-center-view .rc-header p b{color:#e8faff;font-size:inherit !important}
-.rc-back{
+.rc-close{
   flex:0 0 auto;
+  width:46px;
   height:46px;
-  padding:0 20px;
+  display:grid;
+  place-items:center;
+  padding:0;
   border:1px solid var(--ut-border-strong);
   border-radius:var(--ut-r-btn);
   background:rgba(6,18,26,.72);
@@ -67,9 +70,9 @@
   cursor:pointer;
   transition:border-color var(--ut-motion-fast) ease,color var(--ut-motion-fast) ease;
 }
-.recycling-center-view .rc-back{font-size:calc(14px * var(--text-scale-control,1)) !important}
-.rc-back:hover{border-color:var(--ut-accent);color:#fff}
-.rc-back span{margin-right:9px}
+.rc-close:hover{border-color:var(--ut-accent);color:#fff}
+.rc-close svg{transition:rotate var(--ut-motion-fast) ease}
+.rc-close:hover svg{rotate:90deg}
 
 /* ---------- pile → building → bays ---------- */
 .rc-flow{min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 440px minmax(0,1fr);gap:24px}
@@ -326,7 +329,7 @@ button.rc-slot:not(:disabled):hover{translate:0 -3px}
 .rc-slot.is-ready .rc-ring{animation:rc-ready-glow 1.8s ease-in-out infinite}
 .recycling-center-view .rc-slot.is-ready>b{color:var(--rc-ready)}
 
-.rc-slot.is-locked{opacity:.38}
+.rc-slot.is-locked{opacity:.62}
 .rc-slot.is-locked .rc-ring{color:rgba(190,220,228,.55)}
 .recycling-center-view .rc-slot.is-locked>b{color:var(--rc-muted);font-weight:600;font-size:calc(15px * var(--text-scale-secondary,1)) !important}
 
@@ -364,6 +367,7 @@ button.rc-slot:not(:disabled):hover{translate:0 -3px}
 @keyframes rc-ready-glow{0%,100%{box-shadow:0 0 12px color-mix(in srgb,var(--rc-ready) 35%,transparent)}50%{box-shadow:0 0 26px color-mix(in srgb,var(--rc-ready) 65%,transparent)}}
 
 @media (prefers-reduced-motion:reduce){
+  .rc-close svg{transition:none}
   .rc-pile__art,
   .rc-core__art::before,
   .rc-start.is-ready,

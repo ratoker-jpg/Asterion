@@ -475,6 +475,70 @@ async function verifyWorstCases(win, label) {
   if (screen.maxJobs !== 1 || screen.lockedSlots !== 9 || screen.startCount !== 1 || screen.startText !== 'Запустить 1 процесс') throw new Error(`${label}: level 1 has one place ${JSON.stringify(screen)}`);
   await assertGeometry(win, `${label} level 1`);
   await capture(win, directory, 'level-1');
+
+  // Numbers far past anything a campaign reaches must still fit their places.
+  await seedWorstCase(win, 10, 987_654_321_098);
+  await assertGeometry(win, `${label} huge debris`);
+  await capture(win, directory, 'debris-huge');
+  await click(win, '[data-qa-recycling-start]');
+  await waitFor(win, `document.querySelectorAll('[data-qa-recycling-job]').length === 10`);
+  await assertGeometry(win, `${label} huge running`);
+  await capture(win, directory, 'huge-running');
+
+  await seedPartlyReady(win);
+  await waitFor(win, `document.querySelector('[data-qa-recycling-collect-all="4"]')`);
+  await assertGeometry(win, `${label} partly ready`);
+  await capture(win, directory, 'partly-ready');
+
+  await verifyNotBuilt(win, directory, label);
+}
+
+// Four ready, three running, three free, and debris left to start them.
+async function seedPartlyReady(win) {
+  await rendererMutationAndReload(win, `(() => {
+    const raw = localStorage.getItem(${JSON.stringify(SAVE_KEY)});
+    const save = raw ? JSON.parse(raw) : null;
+    const planet = save?.planets?.['helion-01'];
+    if (!planet?.buildings) return false;
+    const now = Date.now();
+    const allocation = { metal: 50, minerals: 30, gas: 20 };
+    const job = (id, startedAt, finishAt) => ({
+      id, debrisAmount: 10000000, allocationPercent: allocation, efficiencyPercent: 120,
+      output: { metal: 6000000, minerals: 3600000, gas: 2400000 },
+      startedAt, finishAt, collectExpiresAt: finishAt + 86400000, status: finishAt <= now ? 'ready' : 'processing',
+    });
+    planet.buildings.recycling = 10;
+    planet.recycling = { availableDebris: 45000000, jobs: [
+      ...[0, 1, 2, 3].map((index) => job('ready-' + index, now - 7200000, now - 600000 * (index + 1))),
+      ...[0, 1, 2].map((index) => job('running-' + index, now - 1800000, now + 1800000 * (index + 1))),
+    ] };
+    save.resourceClock = { lastReconciledAt: now, remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
+    localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+    localStorage.setItem(${JSON.stringify(TEST_TIME_SCALE_KEY)}, '1');
+    return true;
+  })()`, 'Could not seed the partly ready case');
+  await activateIndustry(win);
+  await openCenter(win);
+}
+
+// A building that is not built has no inside: its card offers to build it and no way in.
+async function verifyNotBuilt(win, directory, label) {
+  await rendererMutationAndReload(win, `(() => {
+    const raw = localStorage.getItem(${JSON.stringify(SAVE_KEY)});
+    const save = raw ? JSON.parse(raw) : null;
+    const planet = save?.planets?.['helion-01'];
+    if (!planet?.buildings) return false;
+    planet.buildings.recycling = 0;
+    planet.recycling = { availableDebris: 5000000, jobs: [] };
+    localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+    return true;
+  })()`, 'Could not seed the building that is not built');
+  await activateIndustry(win);
+  await click(win, '[data-zone-building-role="recycling"]');
+  await waitFor(win, `document.querySelector('[data-qa-building-dialog="recycling"]')`);
+  const canEnter = await win.webContents.executeJavaScript(`Boolean(document.querySelector('[data-qa-enter-building="recycling"]'))`);
+  if (canEnter) throw new Error(`${label}: a building that is not built must have no way in`);
+  await capture(win, directory, 'not-built');
 }
 
 async function waitForSavedJobs(win, count) {
