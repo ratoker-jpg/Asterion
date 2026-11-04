@@ -83,7 +83,7 @@ async function audit(win, name, label) {
     const scope = '.fleet-workspace-v1, [data-qa-flight-preview-backdrop]';
     for (const host of document.querySelectorAll(scope)) {
       for (const node of host.querySelectorAll('h2,h3,p,small,strong,b,em,span,dd,button,time')) {
-        if (node.closest('[role="tooltip"], .shipyard-stats-tooltip-v1, .fc-tip')) continue;
+        if (node.closest('[role="tooltip"], .shipyard-stats-tooltip-v1, .fc-tip') || node.querySelector(':scope > .fc-tip')) continue;
         const style = getComputedStyle(node);
         if (style.display === 'none' || style.visibility === 'hidden' || style.display === 'inline') continue;
         if (node.scrollWidth > node.clientWidth + 2 && node.clientWidth > 0) issues.push({ cut: node.tagName + '.' + node.className, text: node.textContent.trim().slice(0, 50), scroll: node.scrollWidth, client: node.clientWidth });
@@ -98,6 +98,14 @@ async function audit(win, name, label) {
         }
       }
     }
+    const dialog = document.querySelector('.flight-briefing-v2');
+    if (dialog) {
+      const edge = dialog.getBoundingClientRect();
+      for (const node of dialog.querySelectorAll('button, input:not(.game-select__native), .game-select__trigger')) {
+        const rect = node.getBoundingClientRect();
+        if (rect.width > 0 && rect.right > edge.right - 8) issues.push({ outsideDialog: node.className || node.tagName, text: node.textContent.trim().slice(0, 20) });
+      }
+    }
     const page = document.documentElement;
     if (page.scrollWidth > innerWidth + 2) issues.push({ horizontalOverflow: page.scrollWidth });
     return issues.slice(0, 12);
@@ -108,7 +116,24 @@ async function audit(win, name, label) {
   }
 }
 
+const INFLATE = `(() => {
+  // The save loader clamps a fleet to its hangar, so 9-digit fleets and 8-digit
+  // prices cannot come from a save: the longest realistic strings go straight
+  // into the rendered screen to prove the layout holds them.
+  const set = (node, value) => { if (node) node.textContent = value; };
+  document.querySelectorAll('[data-qa-fleet-owned]').forEach((node) => set(node, '987 654 321'));
+  document.querySelectorAll('.fc-ship__amount input').forEach((node) => { node.value = '987654321'; });
+  document.querySelectorAll('[data-qa-unit-owned]').forEach((node) => set(node, '987 654 321'));
+  document.querySelectorAll('.fc-unit__cost dd').forEach((node) => set(node, '88 888 888'));
+  document.querySelectorAll('.fc-unit__amount input').forEach((node) => { if (node.type === 'number') node.value = '987654321'; });
+  document.querySelectorAll('[data-qa-unit-can-build]').forEach((node) => set(node, 'можно до 987 654 321'));
+  document.querySelectorAll('.fc-unit__stock').forEach((node) => { if (!node.querySelector('em')) { const em = document.createElement('em'); em.textContent = '+987 654 321 строится'; node.append(em); } });
+  document.querySelectorAll('.fleet-production-order-main-v1 small').forEach((node) => set(node, 'осталось 123 456 789 из 987 654 321'));
+  document.querySelectorAll('.fc-dock > div > b').forEach((node) => set(node, '987 654 321'));
+})()`;
+
 async function capture(win, directory, name, label) {
+  await run(win, `document.querySelectorAll('.runtime-toast-stack').forEach((n) => { n.style.visibility = ${JSON.stringify(name === 'root-01-normal' ? 'visible' : 'hidden')}; })`);
   await settle(win);
   await sleep(250);
   const result = await win.webContents.debugger.sendCommand('Page.captureScreenshot', { format: 'png', fromSurface: true, captureBeyondViewport: false });
@@ -198,6 +223,10 @@ async function rootScenes(win, directory, label) {
   await seed(win, { mutate: `${HUGE_FLEET} planet.name = 'Новая Константинополия-на-Орбите Великой Туманности';` });
   await openRoot(win);
   await click(win, '[data-qa-fleet-select-all]');
+  await seed(win, { mutate: `planet.name = 'Новая Константинополия-на-Орбите Великой Туманности';` });
+  await openRoot(win);
+  await click(win, '[data-qa-fleet-select-all]');
+  await run(win, INFLATE);
   await shot('root-03-huge-long-name');
 
   await seed(win, { mutate: `planet.fleet.ships = Object.fromEntries(Object.keys(planet.fleet.ships).map((id) => [id, 0])); planet.fleet.commanders = Object.fromEntries(Object.keys(planet.fleet.commanders).map((id) => [id, 0]));` });
@@ -246,7 +275,9 @@ async function catalogueScenes(win, directory, label) {
 
   await seed(win, { mutate: `${HUGE_FLEET} planet.resources = { ...planet.resources, metal: 9000000000, minerals: 9000000000, gas: 9000000000 }; save.metal = 9000000000; save.minerals = 9000000000; save.gas = 9000000000; planet.fleetProduction.shipQueue = ${queueOf('ships', [['battleship', 123456789], ['destroyer', 98765432], ['scout', 8], ['transporter', 1000], ['recycler', 5], ['colonizer', 1]])};` });
   await openSection(win, 'ships', '[data-qa-construction-mode="ships"]');
-  await shot('ships-02-huge-busy-queue');
+  await shot('ships-02-busy-queue');
+  await run(win, INFLATE);
+  await shot('ships-02b-huge-numbers');
   await hover(win, '[data-qa-fleet-production-item="transporter"] .fc-unit__art');
   await shot('ships-03-stats-hover');
   await run(win, 'window.scrollTo(0, document.documentElement.scrollHeight)');

@@ -65,6 +65,7 @@ export function FleetUnitRow({
   onBuild: (quantity: number) => void;
 }) {
   const walletOf = { metal: wallet.metal, minerals: wallet.minerals, gas: wallet.gas, population: wallet.populationFree };
+  const resourceShort = cost.metal > wallet.metal || cost.minerals > wallet.minerals || cost.gas > wallet.gas;
 
   return (
     <article
@@ -126,7 +127,7 @@ export function FleetUnitRow({
             />
             <button type="button" data-qa-unit-max onClick={() => onQuantity(max)} disabled={max <= 0}>МАКС.</button>
             <button type="button" data-qa-unit-min onClick={() => onQuantity(0)} disabled={quantity <= 0}>МИН.</button>
-            <small data-qa-unit-can-build>{max > 0 ? `можно до ${formatNumber(max)}` : 'не хватает ресурсов'}</small>
+            <small data-qa-unit-can-build>{max > 0 ? `можно до ${formatNumber(max)}` : resourceShort ? 'не хватает ресурсов' : cost.population > wallet.populationFree ? 'нет свободного населения' : 'больше построить нельзя'}</small>
           </div>
           <button className="fc-unit__build asterion-button asterion-button--primary" type="button" data-qa-unit-build disabled={quantity <= 0 || max <= 0} onClick={() => onBuild(quantity)}>
             Построить

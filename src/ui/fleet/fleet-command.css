@@ -31,6 +31,8 @@ html:has(.fleet-workspace-v1){
 }
 .fleet-workspace-v1 .fleet-main-v1{min-width:0;min-height:0;height:100%}
 html.asterion-long-page .fleet-workspace-v1{grid-template-rows:auto auto;align-content:start}
+html.asterion-long-page:has(.fleet-workspace-v1) body,
+html.asterion-long-page:has(.fleet-workspace-v1) #root{overflow:visible !important}
 
 .fleet-workspace-v1{
 /* ---------- section tabs: two wings either side of the hub ---------- */
@@ -38,39 +40,41 @@ html.asterion-long-page .fleet-workspace-v1{grid-template-rows:auto auto;align-c
   display:grid;
   grid-template-columns:minmax(0,1fr) 170px minmax(0,1fr);
   align-items:stretch;
-  min-height:64px;
+  min-height:66px;
+  position:sticky;
+  top:0;
+  z-index:40;
 }
 .fc-wing{
   position:relative;
   min-width:0;
   display:grid;
-  grid-template-columns:auto minmax(0,1fr);
-  align-items:center;
-  gap:10px;
-  padding:6px 8px 6px 14px;
+  grid-template-rows:auto minmax(0,1fr);
+  gap:1px;
+  padding:3px 8px 5px;
   border-radius:var(--ut-r-card);
   background:rgba(8,18,24,.72);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.05);
 }
-.fc-wing--build{--fc-tone:var(--fc-build);background:linear-gradient(90deg,color-mix(in srgb,var(--fc-build) 14%,rgba(8,18,24,.8)),rgba(8,18,24,.72) 34%)}
-.fc-wing--command{--fc-tone:var(--fc-command);background:linear-gradient(90deg,color-mix(in srgb,var(--fc-command) 16%,rgba(8,18,24,.8)),rgba(8,18,24,.72) 34%)}
+.fc-wing--build{--fc-tone:var(--fc-build);background:linear-gradient(90deg,color-mix(in srgb,var(--fc-build) 16%,#0a141a),#0a141a 44%)}
+.fc-wing--command{--fc-tone:var(--fc-command);background:linear-gradient(90deg,color-mix(in srgb,var(--fc-command) 18%,#0a141a),#0a141a 44%)}
 .fc-wing>h3{
   margin:0;
-  max-width:118px;
+  padding-left:6px;
   color:var(--fc-tone);
   font-size:calc(13px * var(--text-scale-secondary,1)) !important;
   font-weight:800;
-  line-height:1.15;
-  letter-spacing:.02em;
+  line-height:1.2;
+  letter-spacing:.06em;
   text-transform:uppercase;
 }
-.fc-wing__tabs{min-width:0;display:flex;gap:4px;height:100%}
+.fc-wing__tabs{min-width:0;display:flex;gap:4px}
 .fc-wing__tabs>button{
   flex:1 1 0;
   min-width:0;
   height:100%;
-  min-height:50px;
-  padding:0 6px 0 4px;
+  min-height:44px;
+  padding:0 8px 0 5px;
   display:flex;
   align-items:center;
   gap:6px;
@@ -84,7 +88,7 @@ html.asterion-long-page .fleet-workspace-v1{grid-template-rows:auto auto;align-c
   cursor:pointer;
   transition:background-color var(--ut-motion-base) var(--ut-ease-out),color var(--ut-motion-base) ease,box-shadow var(--ut-motion-base) var(--ut-ease-out);
 }
-.fc-wing__tabs>button>span{font-size:calc(15px * var(--text-scale-control,1)) !important;line-height:1.1;min-width:0;overflow-wrap:break-word;hyphens:auto}
+.fc-wing__tabs>button>span{font-size:calc(15px * var(--text-scale-control,1)) !important;line-height:1.1;min-width:0}
 .fc-wing__tabs>button>img{flex:none;width:34px;height:34px;object-fit:contain;transition:scale 420ms var(--ut-spring)}
 .fc-wing__tabs>button:hover{background:color-mix(in srgb,var(--fc-tone) 12%,transparent);color:#fff}
 .fc-wing__tabs>button:hover>img{scale:1.1}
@@ -487,6 +491,14 @@ html.asterion-long-page .fleet-workspace-v1{grid-template-rows:auto auto;align-c
 .flight-briefing-v2 .flight-timeline-cargo-head>span,
 .flight-briefing-v2 .flight-cargo-sliders-v2 .amount-slider,
 .flight-briefing-v2 .flight-timeline-step>span{border:0 !important;background:none !important;box-shadow:none !important}
+.flight-briefing-v2 .flight-cargo-sliders-v2 .amount-slider{min-width:0;width:100%}
+@media (max-width:1500px){
+  .flight-briefing-v2 .flight-cargo-sliders-v2 .flight-timeline-cargo-field{display:grid !important;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) !important;gap:2px 8px !important}
+  .flight-briefing-v2 .flight-cargo-sliders-v2 .flight-timeline-cargo-field>.amount-slider{grid-column:1/-1}
+  .flight-briefing-v2 .flight-briefing-v2__hero{grid-template-columns:56px minmax(0,1fr) !important;gap:10px !important;padding:8px !important}
+  .flight-briefing-v2 .flight-briefing-v2__hero img{width:56px !important;height:56px !important;border-radius:12px !important}
+  .flight-briefing-v2 .flight-briefing-v2__hero p{display:none}
+}
 .flight-briefing-v2 .game-select__trigger{font-size:calc(13px * var(--text-scale-control,1)) !important}
 
 @keyframes fc-wing-in{from{opacity:0;translate:0 -10px}}

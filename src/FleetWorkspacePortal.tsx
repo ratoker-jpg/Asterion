@@ -1982,7 +1982,7 @@ function FleetWorkspace({
             </section>
             </div>
 
-            <footer className="fc-dock">
+            <footer className="fc-dock" data-toast-guard>
               <div><b data-qa-fleet-selected>{flightNumberLabel(selectedShipCount)}</b><small>кораблей выбрано</small></div>
               <div><b>{flightNumberLabel(selectedPopulation)}</b><small>население рейса</small></div>
               <div data-qa-fleet-population={fleetSummary.population} data-qa-fleet-capacity={fleetSummary.capacity} data-qa-fleet-available-ships={availableShipCount} data-qa-fleet-satellite-count={fleetSnapshot.solarSatellites}><b>{flightNumberLabel(fleetSummary.population)} / {flightNumberLabel(fleetSummary.capacity)}</b><small>население флота</small></div>
