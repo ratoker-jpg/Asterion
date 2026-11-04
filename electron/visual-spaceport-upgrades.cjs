@@ -157,7 +157,7 @@ async function measureLayout(win) {
 async function readUpgradeCosts(win, shipId) {
   return win.webContents.executeJavaScript(`(() => {
     const row = document.querySelector('[data-qa-spaceport-card=${JSON.stringify(shipId)}]');
-    return Array.from(row?.querySelectorAll('.spaceport-cost-chip-v2') ?? []).map((chip) => {
+    return Array.from(row?.querySelectorAll('[data-qa-spaceport-cost]') ?? []).map((chip) => {
       const icon = chip.querySelector('img[data-qa-resource-kind]');
       const rect = icon?.getBoundingClientRect();
       return {
@@ -165,7 +165,7 @@ async function readUpgradeCosts(win, shipId) {
         kind: icon?.getAttribute('data-qa-resource-kind') || '',
         asset: icon?.getAttribute('data-qa-resource-asset') || '',
         value: chip.querySelector('strong')?.textContent?.replace(/\\s+/g, '').trim() || '',
-        iconText: chip.querySelector('.spaceport-cost-icon-v2')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        iconText: chip.querySelector('.sp-cost__icon')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
         iconWidth: rect?.width || 0,
         iconHeight: rect?.height || 0,
       };

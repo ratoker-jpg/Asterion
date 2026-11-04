@@ -1,0 +1,48 @@
+name: tmp trade spaceport shots
+# Temporary: screenshots for claude/trade-spaceport-redo only. Removed before the PR is ready.
+on:
+  push:
+    branches: ['claude/trade-spaceport-redo']
+    paths-ignore: ['visual-qa/**', 'changelog/**']
+
+jobs:
+  shots:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Layout variants
+        shell: bash
+        run: npx electron electron/trade-spaceport-redo-screenshots.cjs --mocks --out=shots/mocks
+      - name: After
+        shell: bash
+        run: npx electron electron/trade-spaceport-redo-screenshots.cjs --dist=dist --out=shots/after
+      - name: Before (main)
+        if: contains(github.event.head_commit.message, '[before]')
+        shell: bash
+        run: |
+          git fetch --depth=1 origin main
+          git worktree add --detach ../base FETCH_HEAD
+          cmd //c "mklink /J ..\\base\\node_modules node_modules"
+          (cd ../base && npm run build)
+          npx electron electron/trade-spaceport-redo-screenshots.cjs --dist=../base/dist --before --out=shots/before
+      - name: Trade and spaceport QA
+        if: always()
+        shell: bash
+        run: |
+          export ASTERION_QA_OUTPUT="$PWD/shots/qa"
+          npm run qa:visual:trade || echo "::error::qa:visual:trade failed"
+          npm run test:spaceport-ui || echo "::error::test:spaceport-ui failed"
+          npx electron electron/visual-spaceport-upgrades.cjs || echo "::error::visual-spaceport failed"
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: trade-spaceport-shots
+          path: shots/**/*
+          retention-days: 7
