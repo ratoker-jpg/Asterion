@@ -156,7 +156,7 @@ html body .spaceport-upgrades-v2 .spaceport-row-v2 { overflow: visible !importan
 .sp-card__art img { width: 116px; height: 96px; object-fit: contain; filter: drop-shadow(0 0 14px rgba(37, 202, 245, .22)); }
 .sp-card__ship { min-width: 0; display: grid; gap: 7px; }
 .sp-card__ship > header { min-width: 0; display: flex; align-items: baseline; gap: 10px; }
-.spaceport-upgrades-v2 .sp-card__ship h3 { flex: 0 0 auto; margin: 0; color: #f0fcff; font-size: calc(19px * var(--text-scale-section-title, 1)) !important; font-weight: 800; letter-spacing: .3px; line-height: 1.2; }
+.spaceport-upgrades-v2 .sp-card__ship h3 { flex: 0 1 auto; min-width: 0; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #f0fcff; font-size: calc(19px * var(--text-scale-section-title, 1)) !important; font-weight: 800; letter-spacing: .3px; line-height: 1.2; }
 .spaceport-upgrades-v2 .sp-card__ship p { min-width: 0; margin: 0; color: #91abb3; font-size: calc(14px * var(--text-scale-secondary, 1)) !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .sp-level { min-width: 0; display: grid; gap: 6px; }

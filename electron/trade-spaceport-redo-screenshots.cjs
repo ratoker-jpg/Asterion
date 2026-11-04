@@ -180,7 +180,7 @@ async function tradeScenes(win, directory) {
   await click(win, '[data-qa-trade-share="50"]');
   await capture(win, directory, 'trade-03-metal-half');
 
-  await setInput(win, '[data-qa-trade-amount-input]', '999999999999');
+  await setInput(win, '[data-qa-trade-amount-input]', '999999999999999');
   await capture(win, directory, 'trade-04-over-limit');
 
   await click(win, '[data-qa-trade-max]');
@@ -201,6 +201,19 @@ async function tradeScenes(win, directory) {
   await seed(win, { mutate: `planet.buildings['trade-center'] = 1; planet.trade = { refillAtQueue: [now + 200_000, now + 1_100_000] }; planet.recycling.availableDebris = 1200; save.metal = 15880; save.minerals = 712; save.gas = 0; planet.resources = { ...planet.resources, metal: 15880, minerals: 712, gas: 0 };` });
   await openTrade(win);
   await capture(win, directory, 'trade-08-young-planet');
+
+  // Within the limit but more than there is: the refusal names the shortage.
+  await seed(win, { mutate: `save.metal = 1000; planet.resources = { ...planet.resources, metal: 1000 };` });
+  await openTrade(win);
+  await setInput(win, '[data-qa-trade-amount-input]', '2000');
+  await capture(win, directory, 'trade-09-not-enough');
+
+  // Near a billion of everything: the tiles and the result must still read.
+  await seed(win, { mutate: `planet.recycling.availableDebris = 999_999_999; save.metal = 999_999_999; save.minerals = 999_999_999; save.gas = 999_999_999; planet.resources = { ...planet.resources, metal: 999_999_999, minerals: 999_999_999, gas: 999_999_999 };` });
+  await openTrade(win);
+  await click(win, '[data-qa-trade-source="debris"]');
+  await click(win, '[data-qa-trade-max]');
+  await capture(win, directory, 'trade-10-huge');
 }
 
 async function spaceportScenes(win, directory) {
@@ -239,6 +252,26 @@ async function spaceportScenes(win, directory) {
   await seed(win, { mutate: `save.shipUpgradeLevels = { transporter: 10, 'mega-transporter': 10, scout: 9, defender: 9, cruiser: 9, bomber: 9, destroyer: 9, battleship: 9 };` });
   await openSpaceport(win);
   await capture(win, directory, 'spaceport-09-late-game');
+
+  // Long names, on a ship card and in the queue: nothing may push the card apart.
+  await seed(win);
+  await openSpaceport(win);
+  await click(win, '[data-qa-spaceport-upgrade="scout"]');
+  await run(win, `(() => {
+    const longName = 'Тяжёлый межзвёздный транспортный крейсер поддержки флота';
+    const card = document.querySelector('[data-qa-spaceport-card="scout"]');
+    card.querySelector('h3').textContent = longName;
+    const role = card.querySelector('.sp-card__ship p');
+    if (role) role.textContent = 'Дальний разведчик глубокого космоса с усиленной бронёй';
+    document.querySelector('[data-qa-spaceport-queue-task="scout"] strong').textContent = longName;
+  })()`);
+  await capture(win, directory, 'spaceport-10-long-names');
+
+  // Commander ships with nothing researched: every level locked.
+  await seed(win, { mutate: `save.science.levels = {}; planet.buildings.shipyard = 2;` });
+  await openSpaceport(win);
+  await click(win, '[data-qa-spaceport-tab="commanders"]');
+  await capture(win, directory, 'spaceport-11-commanders-locked');
 }
 
 async function raceScenes(win, directory) {
