@@ -46,6 +46,22 @@ export type ApplicationStateTransition<TResult> = {
 /** The state React last rendered (App assigns it during render, unlike `ApplicationStateRef` which commands assign too). */
 export type ApplicationRenderedState = { readonly current: SaveState };
 
+let commandFlushDepth = 0;
+
+/**
+ * For an effect that writes a world it read from `stateRef`. A command queues
+ * its update and flushes it; React then runs the effects of the previous commit
+ * first (a clock tick committed a moment before the click), inside that flush,
+ * while `stateRef` still holds the world without the command. Such an effect
+ * would queue its older world on top of the command and undo it after the
+ * command was acknowledged. So it runs right after the flush instead, on the
+ * command's world.
+ */
+export function runOutsideApplicationCommand(work: () => void): void {
+  if (commandFlushDepth > 0) setTimeout(work, 0);
+  else work();
+}
+
 /**
  * Resolve the action inside a functional React update and return the
  * transition that was actually applied. The caller supplies the synchronous
@@ -70,7 +86,15 @@ export function enqueueApplicationStateUpdate<TResult>(
 ): TResult {
   const renderedBefore = rendered?.current;
   const applied: { transition?: ApplicationStateTransition<TResult> } = {};
-  flush(() => {
+  const commandFlush: ApplicationStateFlush = (work) => {
+    commandFlushDepth += 1;
+    try {
+      flush(work);
+    } finally {
+      commandFlushDepth -= 1;
+    }
+  };
+  commandFlush(() => {
     setState((current) => {
       const resolved = update(current);
       applied.transition = resolved;
@@ -83,7 +107,7 @@ export function enqueueApplicationStateUpdate<TResult>(
   // step) may already contain the command or must not be replaced by an older one. The command is then
   // applied again as a functional update on whatever React holds now, never as the stale result.
   if (rendered && resolved.state !== renderedBefore && rendered.current === renderedBefore) {
-    flush(() => {
+    commandFlush(() => {
       setState((current) => {
         const again = update(current);
         applied.transition = again;
