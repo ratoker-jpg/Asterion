@@ -23,7 +23,12 @@ import {
   type BattleHistoryState,
 } from './domain/combat/battle-repository.ts';
 import {
-  filterBattleReports,
+  BATTLE_RECENT_RETENTION_MS,
+  battleRowSummary,
+  isDemoBattleReport,
+  selectBattleList,
+} from './domain/combat/battle-list.ts';
+import {
   isAsterionLocalPlayerId,
   type BattleListMode,
   type BattleReport,
@@ -67,6 +72,7 @@ import battlePlanet from '../assets/source/battle-report-v2/battle-planet-transp
 import battleSpaceBackground from '../assets/source/battle-report-v2/battle-space-background-v1.png';
 import './battle-reports.css';
 import './reports-comic-v6.css';
+import './battle-list.css';
 
 type SaveNotice = { kind: 'saved' | 'error'; message: string };
 type ScrollRef = { current: HTMLElement | null };
@@ -173,7 +179,6 @@ function SaveButton({ saved, onToggle, reportId }: { saved: boolean; onToggle: (
       className={`battle-save-v1 ${saved ? 'saved' : ''}`}
       aria-label={saved ? `Убрать отчёт ${reportId} из сохранённых` : `Сохранить отчёт ${reportId}`}
       aria-pressed={saved}
-      title={saved ? 'Убрать из сохранённых' : 'Сохранить отчёт'}
       onClick={onToggle}
     >
       <span aria-hidden="true">{saved ? '★' : '☆'}</span>
@@ -357,52 +362,110 @@ function BattleCardSummaryBody({ viewModel, saved, onToggleSaved, onOpen }: Batt
   );
 }
 
-/** Unsaved reports leave «Последние» after this window; starred ones stay in «Сохранённые». */
-export const BATTLE_RECENT_RETENTION_MS = 8 * 60 * 60 * 1_000;
-
-/** Test-mode demo fixtures (QA samples) are not real battles and never expire. */
-function isDemoBattleReport(reportId: string) {
-  return reportId.startsWith('battle-demo-');
-}
-
 function retentionLabel(msLeft: number) {
   const minutes = Math.max(0, Math.ceil(msLeft / 60_000));
   const hours = Math.floor(minutes / 60);
   return hours ? `${hours} ч ${String(minutes % 60).padStart(2, '0')} мин` : `${minutes} мин`;
 }
 
+/** A row's number stays readable in its narrow column; the exact value is one click away. */
+function formatRowNumber(value: number) {
+  const size = Math.abs(value);
+  if (size >= 1e9) return `${formatResourcePoints(Math.round(value / 1e8) / 10)} млрд`;
+  if (size >= 1e7) return `${formatResourcePoints(Math.round(value / 1e5) / 10)} млн`;
+  return formatNumber(value);
+}
+
+function signedRowNumber(value: number) {
+  return `${value < 0 ? '−' : '+'}${formatRowNumber(Math.abs(value))}`;
+}
+
+const rowTimeFormat = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' });
+const rowDateFormat = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit' });
+
+function rowTime(timestamp: string, nowMs: number) {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return BATTLE_MISSING_DATA;
+  const time = rowTimeFormat.format(date);
+  return rowDateFormat.format(date) === rowDateFormat.format(nowMs) ? time : `${rowDateFormat.format(date)} ${time}`;
+}
+
+function BattleRowSide({ participant, mine }: { participant: BattleParticipantViewModel; mine: boolean }) {
+  return (
+    <span className={`brow__side${mine ? ' is-mine' : ''}`}>
+      <b><span>{participant.playerName || participant.planetName || BATTLE_MISSING_DATA}</span>{mine ? <i>вы</i> : null}</b>
+      {participant.coordinates ? <small>{participant.coordinates}</small> : null}
+    </span>
+  );
+}
+
 export function BattleCard({
   viewModel,
+  playerId,
   saved,
   onToggleSaved,
   onOpen,
   expiresInMs,
+  nowMs,
+  index,
 }: {
   viewModel: BattleReportViewModel;
+  playerId: string;
   saved: boolean;
   onToggleSaved: () => void;
   onOpen: () => void;
   expiresInMs?: number | null;
+  nowMs: number;
+  /** Place in the list: the first rows arrive one after another. */
+  index: number;
 }) {
+  // The details are heavy and most rows are never opened. They appear when the
+  // pointer or focus comes to the row, so the opening animation knows their height.
+  const [detailsReady, setDetailsReady] = useState(false);
+  const prepareDetails = () => setDetailsReady(true);
   const result = resultLabel(viewModel);
+  const [resultWord, ...resultRest] = result.label.split(' ');
+  const summary = battleRowSummary(viewModel, playerId);
   return (
-    <details className={`battle-card-v1 ${result.tone}`} data-qa-battle-card={viewModel.id}>
-      <summary className="battle-card-summary-v1">
-        <span className={`battle-result-badge-v1 ${result.tone}`}>
+    <details
+      className={`battle-card-v1 brow ${result.tone}`}
+      data-qa-battle-card={viewModel.id}
+      style={{ '--brow-i': Math.min(index, 14) } as CSSProperties}
+      onPointerEnter={prepareDetails}
+      onFocus={prepareDetails}
+      onToggle={(event) => { if (event.currentTarget.open) prepareDetails(); }}
+    >
+      <summary className="brow__line">
+        <span className={`battle-result-badge-v1 brow__result ${result.tone}`}>
           <span className="battle-result-icon-v1" aria-hidden="true">{resultIcon(result.tone)}</span>
-          <strong>{result.label}</strong>
+          <span className="brow__verdict">
+            <strong>{resultWord}</strong>
+            <small>{(resultRest.join(' ') || missionLabel(viewModel.missionType)).toLowerCase()}</small>
+          </span>
         </span>
-        <span className="battle-card-summary-route-v1">
-          <strong>{participantLabel(viewModel.attacker.participant)}</strong>
-          <span aria-hidden="true">→</span>
-          <strong>{participantLabel(viewModel.defender.participant)}</strong>
+        <span className="brow__sides">
+          <BattleRowSide participant={viewModel.attacker.participant} mine={summary.ownSide === 'attacker'} />
+          <span className="brow__arrow" aria-label="против">→</span>
+          <BattleRowSide participant={viewModel.defender.participant} mine={summary.ownSide === 'defender'} />
         </span>
-        {saved ? <span className="bcard-keep is-saved" title="Сохранённый отчёт не удаляется">★ сохранён</span>
-          : expiresInMs != null ? <span className="bcard-keep" title="Несохранённые отчёты хранятся 8 часов">удалится через {retentionLabel(expiresInMs)}</span> : null}
-        <time dateTime={viewModel.timestamp}>{formatBattleDate(viewModel.timestamp)}</time>
+        <span className={`brow__num${summary.lost ? ' is-loss' : ''}`} data-qa-battle-row-lost>
+          <small>Потери</small>
+          {summary.lost == null ? '—' : summary.lost > 0 ? `−${formatRowNumber(summary.lost)}` : '0'}
+        </span>
+        <span className={`brow__num${summary.resources == null ? '' : summary.resources > 0 ? ' is-gain' : ' is-loss'}`} data-qa-battle-row-resources>
+          <small>Ресурсы</small>
+          {summary.resources == null ? '—' : signedRowNumber(summary.resources)}
+        </span>
+        <span className="brow__when">
+          <time dateTime={viewModel.timestamp}>{rowTime(viewModel.timestamp, nowMs)}</time>
+          {saved ? <small className="is-saved">сохранён</small> : expiresInMs != null ? <small>ещё {retentionLabel(expiresInMs)}</small> : null}
+        </span>
+        <span className="brow__star" onClick={(event) => event.preventDefault()}>
+          <SaveButton saved={saved} onToggle={onToggleSaved} reportId={viewModel.id} />
+        </span>
         <span className="battle-card-expand-v1" aria-hidden="true">⌄</span>
       </summary>
-      <BattleCardSummaryBody viewModel={viewModel} saved={saved} onToggleSaved={onToggleSaved} onOpen={onOpen} />
+      {detailsReady ? <BattleCardSummaryBody viewModel={viewModel} saved={saved} onToggleSaved={onToggleSaved} onOpen={onOpen} /> : null}
     </details>
   );
 }
@@ -1274,31 +1337,27 @@ export function BattleReportsView({ planetName, coords, onBack }: { planetName: 
     };
   }, []);
 
-  // View models depend on who is an NPC, the awards and the player only, not
-  // on the whole save the clock replaces every second.
-  const npcOwnerKey = Object.keys(saveState.npc?.profiles ?? {}).join(' ');
-  const npcOwners = useMemo(() => new Set(npcOwnerKey ? npcOwnerKey.split(' ') : []), [npcOwnerKey]);
-  const viewModels = useMemo(
-    () => new Map(history.reports.filter((report) => !npcOwners.has(report.attacker.playerId ?? '')
-      || !npcOwners.has(report.defender.playerId ?? '')).map((report) => [report.id, createBattleReportViewModel(report, {
-      awardedBattlePoints: selectRecordedBattlePointAwards(saveState.rating, report, saveState.profile.playerId),
-    })])),
-    [history.reports, npcOwners, saveState.rating, saveState.profile.playerId],
-  );
+  const playerId = saveState.profile.playerId;
   const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 30_000);
     return () => window.clearInterval(timer);
   }, []);
-  const recentReports = useMemo(
-    () => history.reports.filter((report) => isDemoBattleReport(report.id) || nowMs - Date.parse(report.timestamp) < BATTLE_RECENT_RETENTION_MS),
-    [history.reports, nowMs],
+  // Other owners' battles stay in the save for NPC decisions; only the player's reach this screen.
+  const battleList = useMemo(() => selectBattleList(history, playerId, nowMs), [history, playerId, nowMs]);
+  // View models depend on the listed reports, the awards and the player only,
+  // not on the whole save the clock replaces every second.
+  const viewModels = useMemo(
+    () => new Map([...battleList.recent, ...battleList.saved].map((report) => [report.id, createBattleReportViewModel(report, {
+      awardedBattlePoints: selectRecordedBattlePointAwards(saveState.rating, report, playerId),
+    })])),
+    [battleList, saveState.rating, playerId],
   );
   const visibleReports = useMemo(
-    () => filterBattleReports(mode === 'recent' ? recentReports : history.reports, history.savedReportIds, mode)
+    () => (mode === 'recent' ? battleList.recent : battleList.saved)
       .map((report) => viewModels.get(report.id))
       .filter((viewModel): viewModel is BattleReportViewModel => Boolean(viewModel)),
-    [history, mode, recentReports, viewModels],
+    [battleList, mode, viewModels],
   );
   const openReport = openReportId ? history.reports.find((report) => report.id === openReportId) ?? null : null;
   const openViewModel = openReport ? viewModels.get(openReport.id) ?? null : null;
@@ -1316,28 +1375,37 @@ export function BattleReportsView({ planetName, coords, onBack }: { planetName: 
   return (
     <section className="battle-view-v1 ops6 fleet-page-shell-v1">
       <header className="battle-page-head-v1 fleet-page-head-v1">
-        <div><small>УПРАВЛЕНИЕ ФЛОТОМ · {planetName} {coords}</small><h2>БИТВЫ</h2><p>Боевые отчёты флота</p></div>
+        <div><small>УПРАВЛЕНИЕ ФЛОТОМ · {planetName} {coords}</small><h2>БИТВЫ</h2><p>Бои с вашим участием</p></div>
         <div className="battle-page-actions-v1 fleet-page-actions-v1"><span className={`battle-save-notice-v1 ${saveNotice.kind}`} role="status" aria-live="polite">{saveNotice.message}</span><button type="button" className="battle-back-v1 fleet-page-back-v1" onClick={onBack}>← К ФЛОТАМ</button></div>
       </header>
 
       <div className="battle-tabs-v1" role="tablist" aria-label="Фильтр боевых отчётов">
-        <button type="button" role="tab" aria-selected={mode === 'recent'} className={mode === 'recent' ? 'active' : ''} onClick={() => setMode('recent')}>ПОСЛЕДНИЕ <b>{recentReports.length}</b></button>
-        <button type="button" role="tab" aria-selected={mode === 'saved'} className={mode === 'saved' ? 'active' : ''} onClick={() => setMode('saved')}>СОХРАНЁННЫЕ <b>{history.savedReportIds.length}</b></button>
+        <button type="button" role="tab" aria-selected={mode === 'recent'} className={mode === 'recent' ? 'active' : ''} onClick={() => setMode('recent')}>ПОСЛЕДНИЕ <b>{battleList.recent.length}</b></button>
+        <button type="button" role="tab" aria-selected={mode === 'saved'} className={mode === 'saved' ? 'active' : ''} onClick={() => setMode('saved')}>СОХРАНЁННЫЕ <b>{battleList.saved.length}</b></button>
         <span className="battle-tabs-v1__note">Отчёты хранятся 8 часов · отмеченные ★ — бессрочно</span>
       </div>
 
-      <div className="battle-list-v1">
-        {visibleReports.length ? visibleReports.map((viewModel) => (
-          <BattleCard
-            key={viewModel.id}
-            viewModel={viewModel}
-            saved={history.savedReportIds.includes(viewModel.id)}
-            onToggleSaved={() => toggleSaved(viewModel.id)}
-            onOpen={() => setOpenReportId(viewModel.id)}
-            expiresInMs={mode === 'recent' && !isDemoBattleReport(viewModel.id) ? Date.parse(viewModel.timestamp) + BATTLE_RECENT_RETENTION_MS - nowMs : null}
-          />
-        )) : (
-          <div className="battle-empty-v1"><img className="ui-empty-art" src={EMPTY_ART.battles} alt="" draggable={false} /><strong>{mode === 'recent' ? 'За последние 8 часов боёв не было.' : 'Нет сохранённых боевых отчётов.'}</strong><p>{mode === 'saved' ? 'Отметь нужный отчёт звездой во вкладке «Последние».' : 'Здесь появляются бои за последние 8 часов. Отметь отчёт звездой, чтобы сохранить его навсегда.'}</p></div>
+      {/* A new key on a tab change lets the rows arrive again. */}
+      <div className="battle-list-v1" key={mode}>
+        {visibleReports.length ? (
+          <>
+            <div className="brow-head" aria-hidden="true"><span>Итог</span><span>Кто против кого</span><span>Потери, нас.</span><span>Ресурсы</span><span>Когда</span></div>
+            {visibleReports.map((viewModel, index) => (
+              <BattleCard
+                key={viewModel.id}
+                viewModel={viewModel}
+                playerId={playerId}
+                saved={history.savedReportIds.includes(viewModel.id)}
+                onToggleSaved={() => toggleSaved(viewModel.id)}
+                onOpen={() => setOpenReportId(viewModel.id)}
+                expiresInMs={mode === 'recent' && !isDemoBattleReport(viewModel.id) ? Date.parse(viewModel.timestamp) + BATTLE_RECENT_RETENTION_MS - nowMs : null}
+                nowMs={nowMs}
+                index={index}
+              />
+            ))}
+          </>
+        ) : (
+          <div className="battle-empty-v1" data-qa-battle-empty={mode}><img className="ui-empty-art" src={EMPTY_ART.battles} alt="" draggable={false} /><strong>{mode === 'recent' ? 'За последние 8 часов вы не участвовали в боях.' : 'Нет сохранённых боевых отчётов.'}</strong><p>{mode === 'saved' ? 'Отметьте нужный отчёт звездой во вкладке «Последние».' : 'Здесь появляются только ваши бои: атаки, оборона планет, налёты пиратов и рейды на Солнце. Отчёт можно отметить звездой, чтобы сохранить его навсегда.'}</p></div>
         )}
       </div>
 

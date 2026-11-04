@@ -79,13 +79,40 @@ async function listSnapshot(win) {
   }))()`);
 }
 
+/** A row's details exist from the moment it opens (or is pointed at), not before. */
+async function expandRow(win, reportId) {
+  const selector = reportId ? `[data-qa-battle-card="${reportId}"]` : '[data-qa-battle-card]';
+  const opened = await win.webContents.executeJavaScript(`(() => {
+    const card = document.querySelector(${JSON.stringify(selector)});
+    if (!card) return false;
+    card.open = true;
+    return true;
+  })()`);
+  if (!opened) throw new Error(`Battle row not found: ${reportId || 'first'}`);
+  await waitFor(win, `document.querySelector(${JSON.stringify(`${selector} [data-qa-battle-open]`)})`);
+}
+
+async function rowsSnapshot(win) {
+  return win.webContents.executeJavaScript(`(() => {
+    const rows = Array.from(document.querySelectorAll('[data-qa-battle-card]'));
+    return {
+      lines: rows.map((row) => {
+        const line = row.querySelector('summary').getBoundingClientRect();
+        const time = row.querySelector('time').getBoundingClientRect();
+        return { height: Math.round(line.height), timeInside: time.right <= line.right + 1 && time.left >= line.left };
+      }),
+      tooltips: document.querySelectorAll('.battle-list-v1 [title]').length,
+      savedStars: rows.filter((row) => row.querySelector('summary .battle-save-v1')).length,
+    };
+  })()`);
+}
+
 async function openBattle(win, reportId) {
   const selector = reportId ? `[data-qa-battle-open="${reportId}"]` : '[data-qa-battle-open]';
+  await expandRow(win, reportId);
   const clicked = await win.webContents.executeJavaScript(`(() => {
     const button = document.querySelector(${JSON.stringify(selector)});
     if (!button) return false;
-    const card = button.closest('details');
-    if (card) card.open = true;
     button.focus();
     button.click();
     return true;
@@ -192,8 +219,14 @@ async function versusLayoutSnapshot(win, reportId) {
     const card = document.querySelector('[data-qa-battle-card="${reportId}"]');
     if (!card) return { missingCard: true };
     card.open = true;
+    let grid = null;
+    for (let frame = 0; frame < 120 && !grid; frame += 1) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      grid = card.querySelector('.battle-card-versus-grid-v1');
+    }
+    // The row opens with an animation; the layout is measured at its end.
+    await Promise.all(card.getAnimations({ subtree: true }).map((animation) => animation.finished.catch(() => null)));
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    const grid = card.querySelector('.battle-card-versus-grid-v1');
     if (!grid) { card.open = false; return { missingGrid: true }; }
     const center = grid.querySelector('.battle-card-versus-center-v1');
     const columns = Array.from(grid.querySelectorAll(':scope > .battle-card-versus-column-v1'));
@@ -712,10 +745,26 @@ async function runViewport(win, width, height) {
   await clickPrimary(win, 'fleets', `document.querySelector('[data-qa-fleet-section="battles"]')`);
   await clickBattleSection(win);
 
+  // Collapsed rows are one compact line: result, sides, numbers, time and a star; no details yet.
   const list = await listSnapshot(win);
-  if (list.cardCount !== 3 || list.collapsedCardCount !== 3 || list.cardLossCount !== 6 || list.openButtonCount !== 3 || list.resultIconCount !== 3 || JSON.stringify(list.resultLabels) !== JSON.stringify(['ПОБЕДА ПРИ АТАКЕ', 'ПОРАЖЕНИЕ ПРИ АТАКЕ', 'НИЧЬЯ']) || list.rootHorizontalOverflow || list.bodyHorizontalOverflow) {
+  if (list.cardCount !== 3 || list.collapsedCardCount !== 3 || list.cardLossCount !== 0 || list.openButtonCount !== 0 || list.resultIconCount !== 3 || JSON.stringify(list.resultLabels) !== JSON.stringify(['ПОБЕДА', 'ПОРАЖЕНИЕ', 'НИЧЬЯ']) || list.rootHorizontalOverflow || list.bodyHorizontalOverflow) {
     throw new Error(`Battle list contract failed at ${label}: ${JSON.stringify(list)}`);
   }
+  const rows = await rowsSnapshot(win);
+  const maxRowHeight = width < 720 ? 110 : 56;
+  if (rows.lines.some((line) => line.height > maxRowHeight || !line.timeInside) || rows.tooltips || rows.savedStars !== 3) {
+    throw new Error(`Battle row contract failed at ${label}: ${JSON.stringify(rows)}`);
+  }
+  await capture(win, directory, 'battle-list');
+
+  // Opening a row reveals the losses of both sides and the way to the full report.
+  await expandRow(win, 'battle-demo-round-limit-draw');
+  const expanded = await listSnapshot(win);
+  if (expanded.cardLossCount !== 2 || expanded.openButtonCount !== 1 || expanded.collapsedCardCount !== 2) {
+    throw new Error(`Battle row details failed at ${label}: ${JSON.stringify(expanded)}`);
+  }
+  await win.webContents.executeJavaScript(`document.querySelector('[data-qa-battle-card="battle-demo-round-limit-draw"]').open = false`);
+  await settle(win);
 
   const versus = await versusLayoutSnapshot(win, 'battle-demo-attacker-victory');
   assertVersusLayout(versus, width, label);
@@ -829,7 +878,7 @@ app.whenReady().then(async () => {
     const results = [];
     for (const [width, height] of VIEWPORTS) results.push(await runViewport(win, width, height));
     fs.writeFileSync(path.join(OUTPUT, 'results.json'), JSON.stringify({ results, screenshotsSkipped: skipScreenshots }, null, 2));
-    console.log('Battle report QA passed: list losses, population ledgers, readable technology rows, inline round analysis, simulator isolation, focus trap, Escape restoration, mobile overflow, versus grid stacking, reduced transparency, rewards and round transitions.');
+    console.log('Battle report QA passed: compact rows, row details with losses, population ledgers, readable technology rows, inline round analysis, simulator isolation, focus trap, Escape restoration, mobile overflow, versus grid stacking, reduced transparency, rewards and round transitions.');
     win.destroy();
     app.exit(0);
   } catch (error) {
