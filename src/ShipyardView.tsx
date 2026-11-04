@@ -252,6 +252,7 @@ export function ShipyardView({ planetName, coords, planetId, budget: providedBud
       data-qa-building-role="shipyard"
       data-qa-building-asset={shipyardPresentation.art}
       data-qa-building-faction={budget.factionId}
+      data-qa-building-name={shipyardPresentation.name}
       data-qa-fleet-population={fleetSummary.population}
       data-qa-fleet-capacity={fleetSummary.capacity}
     >

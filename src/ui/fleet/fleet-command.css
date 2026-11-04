@@ -137,6 +137,7 @@ html.asterion-long-page .fleet-workspace-v1{grid-template-rows:auto auto;align-c
 .fc-root-title,.fc-hangar h2,.fc-orders>h2{
   margin:0;color:#f2fdff;font-size:calc(20px * var(--text-scale-section-title,1)) !important;font-weight:800;letter-spacing:.2px;white-space:nowrap;
 }
+.fc-hangar__yard{color:var(--ut-label);font-size:calc(14px * var(--text-scale-secondary,1)) !important;white-space:nowrap}
 .fc-chips{display:flex;gap:4px}
 .fc-chips>button,.fc-hangar__all>button{
   height:34px;padding:0 12px;border:0;border-radius:var(--ut-r-chip);background:rgba(126,200,220,.07);box-shadow:none;color:#c8dde3;
@@ -151,6 +152,7 @@ html.asterion-long-page .fleet-workspace-v1{grid-template-rows:auto auto;align-c
 .fc-roster{
   min-width:0;min-height:0;
   display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-content:start;
+  overflow:hidden auto;padding:2px 4px 2px 2px;
 }
 .fc-ship{
   position:relative;min-width:0;

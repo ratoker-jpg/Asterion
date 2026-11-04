@@ -730,8 +730,8 @@ async function runViewport(width, height) {
     await clickAt(win, '[data-qa-universe-action="attack"]');
     await waitFor(win, `document.querySelector('[data-qa-attack-prep]') && document.querySelector('[data-qa-target-relation]')?.getAttribute('data-qa-target-relation') === 'neutral'`);
     const attackPrep = await win.webContents.executeJavaScript(`(() => ({
-      mission: document.querySelector('#fleet-mission')?.value || '',
-      rounds: Array.from(document.querySelectorAll('[data-qa-attack-rounds] option')).map((option) => option.value),
+      mission: document.querySelector('[data-qa-mission-current]')?.getAttribute('data-qa-mission-current') || '',
+      rounds: Array.from(document.querySelectorAll('[data-qa-attack-round]')).map((option) => option.getAttribute('data-qa-attack-round')),
       roster: Array.from(document.querySelectorAll('[data-qa-fleet-ship]')).map((row) => row.getAttribute('data-qa-fleet-ship')),
       relation: document.querySelector('[data-qa-target-relation]')?.getAttribute('data-qa-target-relation') || '',
     }))()`);
@@ -825,7 +825,7 @@ async function runViewport(width, height) {
     await waitFor(win, `document.querySelector('[data-qa-flight-preview-open]') && !document.querySelector('[data-qa-flight-preview-open]').disabled`);
     // Let the screen entrance (src/motion.css) settle before measuring geometry; ambient loops are infinite and ignored.
     await waitFor(win, `document.getAnimations().every((animation) => animation.playState !== 'running' || animation.effect?.getComputedTiming().iterations === Infinity)`);
-    const geometryBeforePreview = await win.webContents.executeJavaScript(`(() => { const rect = (selector) => document.querySelector(selector)?.getBoundingClientRect().toJSON() || null; return { fleet: rect('.fleet-workspace-v1'), sidebar: rect('.fleet-sidebar-v1'), horizontalOverflow: document.documentElement.scrollWidth > innerWidth + 2 || document.body.scrollWidth > innerWidth + 2 }; })()`);
+    const geometryBeforePreview = await win.webContents.executeJavaScript(`(() => { const rect = (selector) => document.querySelector(selector)?.getBoundingClientRect().toJSON() || null; return { fleet: rect('.fleet-workspace-v1'), sidebar: rect('.fc-wings'), horizontalOverflow: document.documentElement.scrollWidth > innerWidth + 2 || document.body.scrollWidth > innerWidth + 2 }; })()`);
     await clickAt(win, '[data-qa-flight-preview-open]', false, true, true);
     await waitFor(win, `document.querySelector('[data-qa-flight-preview-backdrop]')`);
     const timelineText = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-flight-preview-backdrop]')?.textContent?.replace(/\s+/g, ' ').trim() || ''`);
@@ -862,7 +862,7 @@ async function runViewport(width, height) {
       };
     })()`);
     if (timelineViewport.modalOverflowY !== 'hidden' || timelineViewport.modalScrollable || timelineViewport.backdropOverflowY === 'auto' || !timelineViewport.modalFitsViewport) throw new Error(`${label}: Mission Timeline must fit the viewport without an inner scrollbar ${JSON.stringify(timelineViewport)}`);
-    const geometryDuringPreview = await win.webContents.executeJavaScript(`(() => { const rect = (selector) => document.querySelector(selector)?.getBoundingClientRect().toJSON() || null; return { fleet: rect('.fleet-workspace-v1'), sidebar: rect('.fleet-sidebar-v1'), horizontalOverflow: document.documentElement.scrollWidth > innerWidth + 2 || document.body.scrollWidth > innerWidth + 2 }; })()`);
+    const geometryDuringPreview = await win.webContents.executeJavaScript(`(() => { const rect = (selector) => document.querySelector(selector)?.getBoundingClientRect().toJSON() || null; return { fleet: rect('.fleet-workspace-v1'), sidebar: rect('.fc-wings'), horizontalOverflow: document.documentElement.scrollWidth > innerWidth + 2 || document.body.scrollWidth > innerWidth + 2 }; })()`);
     const stableRect = (left, right) => left && right && ['x', 'y', 'width', 'height'].every((key) => Math.abs(left[key] - right[key]) <= 1);
     const stableFrame = (left, right) => left && right && ['x', 'y', 'width'].every((key) => Math.abs(left[key] - right[key]) <= 1);
     if (!stableRect(geometryBeforePreview.fleet, geometryDuringPreview.fleet) || !stableRect(geometryBeforePreview.sidebar, geometryDuringPreview.sidebar) || geometryBeforePreview.horizontalOverflow || geometryDuringPreview.horizontalOverflow) throw new Error(`${label}: flight preview changed page geometry or introduced horizontal overflow ${JSON.stringify({ before: geometryBeforePreview, during: geometryDuringPreview })}`);
@@ -915,7 +915,7 @@ async function runViewport(width, height) {
     })()`);
     if (dispatchedFlight.count !== 1 || dispatchedFlight.phase !== 'outbound' || dispatchedFlight.target !== freeAsteroid.targetCoordinate) throw new Error(`${label}: free asteroid colonization dispatch contract failed ${JSON.stringify({ dispatchedFlight, target: freeAsteroid.targetCoordinate })}`);
     await waitFor(win, `!document.querySelector('[data-qa-flight-preview-backdrop]')`);
-    const geometryAfterDispatch = await win.webContents.executeJavaScript(`(() => { const rect = (selector) => document.querySelector(selector)?.getBoundingClientRect().toJSON() || null; return { fleet: rect('.fleet-workspace-v1'), sidebar: rect('.fleet-sidebar-v1'), horizontalOverflow: document.documentElement.scrollWidth > innerWidth + 2 || document.body.scrollWidth > document.body.clientWidth + 2 }; })()`);
+    const geometryAfterDispatch = await win.webContents.executeJavaScript(`(() => { const rect = (selector) => document.querySelector(selector)?.getBoundingClientRect().toJSON() || null; return { fleet: rect('.fleet-workspace-v1'), sidebar: rect('.fc-wings'), horizontalOverflow: document.documentElement.scrollWidth > innerWidth + 2 || document.body.scrollWidth > document.body.clientWidth + 2 }; })()`);
     if (!stableFrame(geometryBeforePreview.fleet, geometryAfterDispatch.fleet) || !stableFrame(geometryBeforePreview.sidebar, geometryAfterDispatch.sidebar) || geometryAfterDispatch.horizontalOverflow) throw new Error(`${label}: flight dispatch shifted Fleet or introduced horizontal overflow ${JSON.stringify({ before: geometryBeforePreview, after: geometryAfterDispatch, dispatchedFlight })}`);
     const returnedToUniverse = await win.webContents.executeJavaScript(`(() => { const button = document.querySelector('[data-qa-route="universe"]'); if (!button) return false; button.click(); return true; })()`);
     if (!returnedToUniverse) throw new Error(`${label}: could not return to Universe after asteroid flight preview`);

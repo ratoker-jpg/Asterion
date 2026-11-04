@@ -1667,7 +1667,7 @@ function FleetWorkspace({
       : `[${previewTargetDraft.galaxy || '—'}:${previewTargetDraft.system || '—'}:${previewTargetDraft.position || '—'}]`;
 
   return (
-    <div className="fleet-workspace-v1" data-qa-flight-launch-context={launchContext?.destination ? flightCoordinateLabel(launchContext.destination.coordinate) : undefined} data-qa-target-relation={previewTargetRelation ?? (!previewOpen ? launchContext?.targetRelation : undefined)}>
+    <div className="fleet-workspace-v1" data-qa-fleet-planet={planetName} data-qa-fleet-yard-level={fleetSnapshot.shipyardLevel} data-qa-flight-launch-context={launchContext?.destination ? flightCoordinateLabel(launchContext.destination.coordinate) : undefined} data-qa-target-relation={previewTargetRelation ?? (!previewOpen ? launchContext?.targetRelation : undefined)}>
       <nav className="fc-wings" aria-label="Разделы флота" data-qa-fleet-nav>
         <FleetWing
           tone="build"
@@ -1857,6 +1857,7 @@ function FleetWorkspace({
             <section className="fc-hangar" aria-label="Корабли на планете">
               <header className="fc-hangar__head">
                 <h2>Корабли на планете</h2>
+                <small className="fc-hangar__yard">{shipyardPresentation.name} {fleetSnapshot.shipyardLevel} · {getBuildingPresentation('hangar', factionId).name} {fleetSnapshot.hangarLevel}</small>
                 <div className="fc-chips" role="group" aria-label="Фильтр кораблей">
                   {(['all', 'combat', 'civil'] as const).map((filter) => <button key={filter} type="button" className={shipFilter === filter ? 'is-on' : ''} aria-pressed={shipFilter === filter} onClick={() => setShipFilter(filter)}>{filter === 'all' ? 'Все' : filter === 'combat' ? 'Боевые' : 'Гражданские'}</button>)}
                 </div>

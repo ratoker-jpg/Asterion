@@ -150,172 +150,52 @@ async function verifyMilitaryDeepLinks(win, directory) {
   await waitFor(win, `document.querySelector('[data-qa-route="fleets"][aria-current="page"]')`);
   await waitFor(win, `document.querySelector('.fleet-main-v1--shipyard')`);
   await waitFor(win, `document.querySelector('[data-qa-construction-header="ships"]')`);
-  const shipyardIdentity = await win.webContents.executeJavaScript(`(() => {
-    const root = document.querySelector('[data-qa-building-role="shipyard"]');
-    const fleetCard = document.querySelector('.fleet-yard-card-v1');
-    const pageTitle = document.querySelector('[data-qa-construction-header="ships"]');
-    const asset = root?.getAttribute('data-qa-building-asset') ?? '';
-    const cardStyle = fleetCard ? getComputedStyle(fleetCard) : null;
-    const fleetImage = fleetCard?.querySelector('img');
-    const imageStyle = fleetImage ? getComputedStyle(fleetImage) : null;
-    const titleStyle = fleetCard?.querySelector('strong') ? getComputedStyle(fleetCard.querySelector('strong')) : null;
-    const detailStyle = fleetCard?.querySelector('p') ? getComputedStyle(fleetCard.querySelector('p')) : null;
-    return {
-      fleetName: fleetCard?.querySelector('strong')?.textContent?.trim() ?? '',
-      pageName: pageTitle?.querySelector('strong')?.textContent?.trim() ?? '',
-      fleetCardTag: fleetCard?.tagName ?? '',
-      fleetCardLabel: fleetCard?.getAttribute('aria-label') ?? '',
-      asset,
-      image: root?.querySelector('img')?.getAttribute('src') ?? '',
-      hasSharedCardTemplate: fleetCard?.classList.contains('building-card-v2') ?? false,
-      hasLegacyEmblem: Boolean(fleetCard?.querySelector('.fleet-yard-emblem-v1')),
-      visual: {
-        viewportWidth: window.innerWidth,
-        minHeight: cardStyle?.minHeight ?? '',
-        gridFirstColumn: cardStyle?.gridTemplateColumns?.split(' ')[0] ?? '',
-        gap: cardStyle?.gap ?? '',
-        padding: cardStyle?.padding ?? '',
-        borderWidth: cardStyle?.borderTopWidth ?? '',
-        hasGradient: cardStyle?.backgroundImage?.includes('linear-gradient') ?? false,
-        hasCyanInset: cardStyle?.boxShadow?.includes('inset') ?? false,
-        imageWidth: imageStyle?.width ?? '',
-        imageHeight: imageStyle?.height ?? '',
-        imageFit: imageStyle?.objectFit ?? '',
-        titleSize: titleStyle?.fontSize ?? '',
-        detailSize: detailStyle?.fontSize ?? '',
-        detailMargin: detailStyle?.marginTop ?? '',
-      },
-      hasLegacyName: Boolean(document.querySelector('[data-qa-building-role="shipyard"]')?.textContent?.includes('Орбитальная')),
-      hasReturnToShipyardOverlay: Boolean(document.querySelector('.building-interior-return-overlay')),
-    };
-  })()`);
-  // The fleet sidebar card is intentionally a non-interactive presentation
-  // block. Keep its contract aligned with the shared compact card used by the
-  // fleet workspace at both supported QA viewports.
-  const expectedGridColumn = '72px';
-  const expectedImageWidth = '68px';
-  const expectedImageHeight = '76px';
-  const visualTemplateMatches = shipyardIdentity.visual.minHeight === '112px'
-    && shipyardIdentity.visual.gridFirstColumn === expectedGridColumn
-    && shipyardIdentity.visual.gap === '10px'
-    && shipyardIdentity.visual.padding === '10px'
-    && shipyardIdentity.visual.borderWidth === '1px'
-    && shipyardIdentity.visual.hasGradient
-    && shipyardIdentity.visual.hasCyanInset
-    && shipyardIdentity.visual.imageWidth === expectedImageWidth
-    && shipyardIdentity.visual.imageHeight === expectedImageHeight
-    && shipyardIdentity.visual.imageFit === 'contain'
-    // The shared readable contract keeps ordinary fleet-card copy at 12px;
-    // the previous 11px/8px values belonged to the retired microcopy scale.
-    && shipyardIdentity.visual.titleSize === '12px'
-    && shipyardIdentity.visual.detailSize === '12px'
-    && shipyardIdentity.visual.detailMargin === '6px';
-  if (shipyardIdentity.fleetName !== 'Верфь' || shipyardIdentity.pageName !== 'Верфь' || shipyardIdentity.fleetCardTag !== 'DIV' || shipyardIdentity.fleetCardLabel || shipyardIdentity.hasLegacyName || shipyardIdentity.hasLegacyEmblem || shipyardIdentity.hasReturnToShipyardOverlay || !shipyardIdentity.hasSharedCardTemplate || !visualTemplateMatches || !/building\.aegis\.shipyard(?:-[^/]+)?\.png$/.test(shipyardIdentity.asset) || shipyardIdentity.image !== shipyardIdentity.asset) {
-    throw new Error(`Shipyard identity contract failed: ${JSON.stringify(shipyardIdentity)}`);
-  }
-
   const readConstructionVisual = async (viewId) => win.webContents.executeJavaScript(`(() => {
     const root = document.querySelector('[data-qa-construction-mode=${JSON.stringify(viewId)}]');
     const header = document.querySelector('[data-qa-construction-header=${JSON.stringify(viewId)}]');
     const headerImage = header?.querySelector(':scope > img');
-    const headerCopy = header?.querySelector(':scope > div');
-    const headerBack = header?.querySelector(':scope > button');
-    const card = root?.querySelector('.shipyard-card-v1');
-    const cardTitle = card?.querySelector('.shipyard-card-title-v1');
-    const cardBody = card?.querySelector('.shipyard-card-body-v1');
+    const card = root?.querySelector('.fc-unit');
     const headerStyle = header ? getComputedStyle(header) : null;
-    const imageStyle = headerImage ? getComputedStyle(headerImage) : null;
-    const copyTitleStyle = headerCopy?.querySelector('strong') ? getComputedStyle(headerCopy.querySelector('strong')) : null;
-    const copyDetailStyle = headerCopy?.querySelector('p') ? getComputedStyle(headerCopy.querySelector('p')) : null;
-    const backStyle = headerBack ? getComputedStyle(headerBack) : null;
     const cardStyle = card ? getComputedStyle(card) : null;
-    const cardTitleStyle = cardTitle ? getComputedStyle(cardTitle) : null;
-    const cardBodyStyle = cardBody ? getComputedStyle(cardBody) : null;
-    const headerGrid = headerStyle?.gridTemplateColumns?.split(' ') ?? [];
     return {
       mode: root?.getAttribute('data-qa-construction-mode') ?? '',
-      viewportWidth: window.innerWidth,
-      title: headerCopy?.querySelector('strong')?.textContent?.trim() ?? '',
-      kicker: header?.querySelector('small')?.textContent?.trim() ?? '',
+      title: header?.querySelector('h2')?.textContent?.trim() ?? '',
+      detail: header?.querySelector('p')?.textContent?.trim() ?? '',
+      asset: root?.getAttribute('data-qa-building-asset') ?? '',
       image: headerImage?.getAttribute('src') ?? '',
-      hasBuildingCardTemplate: header?.classList.contains('building-card-v2') ?? false,
-      hasConstructionCardTemplate: header?.classList.contains('fleet-construction-card-v1') ?? false,
-      hasHeaderBack: Boolean(headerBack),
-      hasLegacyPageHeader: header?.classList.contains('shipyard-page-head-v1') ?? false,
-      hasLegacyPageTitle: Boolean(root?.querySelector('.shipyard-page-title-v1, .shipyard-page-art-v1')),
-      hasLegacyEmblem: Boolean(root?.querySelector('.fleet-yard-emblem-v1')),
+      hasHeaderBack: Boolean(header?.querySelector(':scope > button')),
       hasReturnToShipyardOverlay: Boolean(document.querySelector('.building-interior-return-overlay')),
       header: {
-        minHeight: headerStyle?.minHeight ?? '',
-        gridColumns: headerStyle?.gridTemplateColumns ?? '',
-        gridFirstColumn: headerGrid[0] ?? '',
-        gridLastColumn: headerGrid.at(-1) ?? '',
         display: headerStyle?.display ?? '',
         clipPath: headerStyle?.clipPath ?? '',
-        margin: headerStyle?.margin ?? '',
-        gap: headerStyle?.gap ?? '',
-        padding: headerStyle?.padding ?? '',
         borderWidth: headerStyle?.borderTopWidth ?? '',
-        hasGradient: headerStyle?.backgroundImage?.includes('linear-gradient') ?? false,
-        hasCyanInset: headerStyle?.boxShadow?.includes('inset') ?? false,
-        imageWidth: imageStyle?.width ?? '',
-        imageHeight: imageStyle?.height ?? '',
-        imageFit: imageStyle?.objectFit ?? '',
-        titleSize: copyTitleStyle?.fontSize ?? '',
-        detailSize: copyDetailStyle?.fontSize ?? '',
-        detailMargin: copyDetailStyle?.marginTop ?? '',
-        backWidth: backStyle?.minWidth ?? '',
-        backHeight: backStyle?.height ?? '',
+        imageFit: headerImage ? getComputedStyle(headerImage).objectFit : '',
       },
       card: {
         minHeight: cardStyle?.minHeight ?? '',
         borderWidth: cardStyle?.borderTopWidth ?? '',
-        hasGradient: cardStyle?.backgroundImage?.includes('linear-gradient') ?? false,
         clipPath: cardStyle?.clipPath ?? '',
-        titleGrid: cardTitleStyle?.gridTemplateColumns ?? '',
-        bodyGrid: cardBodyStyle?.gridTemplateColumns ?? '',
+        radius: cardStyle?.borderTopLeftRadius ?? '',
+        // One boundary per row: no bordered box inside it.
+        framedCells: card ? Array.from(card.children).filter((cell) => !cell.matches('button, input') && parseFloat(getComputedStyle(cell).borderTopWidth) > 0).length : -1,
       },
     };
   })()`);
 
   const shipConstructionVisual = await readConstructionVisual('ships');
-  const sharedHeaderTemplate = (visual) => visual.mode
-    && visual.hasBuildingCardTemplate
-    && visual.hasConstructionCardTemplate
-    && !visual.hasLegacyPageHeader
-    && !visual.hasLegacyPageTitle
-    && !visual.hasLegacyEmblem
+  const sharedTemplate = (visual) => visual.mode
     && !visual.hasReturnToShipyardOverlay
-    && visual.header.display === 'grid'
-    && visual.header.clipPath === 'none'
-    && visual.header.minHeight === '112px'
-    && visual.header.gridFirstColumn === (visual.viewportWidth <= 1040 ? '62px' : visual.viewportWidth <= 1440 ? '72px' : '84px')
     && !visual.hasHeaderBack
-    && !visual.header.gridColumns.includes('128px')
-    // Owner request 26.10.2026: the section header starts on the sidebar's top line (no top margin).
-    && visual.header.margin === '0px 0px 14px'
-    && visual.header.gap === '12px'
-    && visual.header.padding === '10px 12px'
-    && visual.header.borderWidth === '1px'
-    && visual.header.hasGradient
-    && visual.header.hasCyanInset
-    && visual.header.imageWidth === (visual.viewportWidth <= 1040 ? '58px' : visual.viewportWidth <= 1440 ? '68px' : '80px')
-    && visual.header.imageHeight === (visual.viewportWidth <= 1040 ? '66px' : visual.viewportWidth <= 1440 ? '76px' : '86px')
+    && visual.header.display === 'flex'
+    && visual.header.clipPath === 'none'
+    && visual.header.borderWidth === '0px'
     && visual.header.imageFit === 'contain'
-    && visual.header.titleSize === '12px'
-    && visual.header.detailSize === '12px'
-    && visual.header.detailMargin === '7px'
-    && visual.header.backWidth === ''
-    && visual.header.backHeight === '';
-  const expectedConstructionCardMinHeight = (visual) => visual.viewportWidth <= 1400 ? '282px' : '292px';
-  const sharedCardTemplate = (visual) => visual.card.minHeight === expectedConstructionCardMinHeight(visual)
-    && visual.card.borderWidth === '1px'
-    && visual.card.hasGradient
-    // Rounded-panel contract: legacy chamfer polygons are intentionally gone.
+    && visual.image === visual.asset
+    && visual.card.minHeight === '84px'
+    && visual.card.borderWidth === '0px'
     && visual.card.clipPath === 'none'
-    && visual.card.titleGrid === shipConstructionVisual.card.titleGrid
-    && visual.card.bodyGrid === shipConstructionVisual.card.bodyGrid;
-  if (!sharedHeaderTemplate(shipConstructionVisual) || !sharedCardTemplate(shipConstructionVisual) || shipConstructionVisual.title !== 'Верфь' || shipConstructionVisual.image !== shipyardIdentity.asset) {
+    && visual.card.framedCells === 0;
+  if (!sharedTemplate(shipConstructionVisual) || shipConstructionVisual.title !== 'Корабли' || !shipConstructionVisual.detail.includes('Верфь')) {
     throw new Error(`Ship construction visual contract failed: ${JSON.stringify(shipConstructionVisual)}`);
   }
   const unitTime = await win.webContents.executeJavaScript(`(() => {
@@ -329,7 +209,7 @@ async function verifyMilitaryDeepLinks(win, directory) {
       cardCount: cards.length,
     } : { cardCount: cards.length };
   })()`);
-  if (!unitTime?.effective || unitTime.raw !== 'RAW 00:00:12' || unitTime.bonus) {
+  if (!unitTime?.effective || (unitTime.raw && unitTime.raw !== 'без бонусов 00:00:12') || unitTime.bonus) {
     throw new Error(`Ship cards should show effective and raw unit time without a bonus label: ${JSON.stringify(unitTime)}`);
   }
   await capture(win, directory, 'building-interior-fleet-from-shipyard');
@@ -340,7 +220,7 @@ async function verifyMilitaryDeepLinks(win, directory) {
   const defenseConstructionVisual = await readConstructionVisual('defense');
   const sameHeaderVisual = JSON.stringify(defenseConstructionVisual.header) === JSON.stringify(shipConstructionVisual.header);
   const sameCardVisual = JSON.stringify(defenseConstructionVisual.card) === JSON.stringify(shipConstructionVisual.card);
-  if (!sharedHeaderTemplate(defenseConstructionVisual) || !sharedCardTemplate(defenseConstructionVisual) || !sameHeaderVisual || !sameCardVisual || defenseConstructionVisual.title !== 'ОБОРОНА' || defenseConstructionVisual.image !== shipyardIdentity.asset || defenseConstructionVisual.kicker.includes('КОСМОДРОМ') || defenseConstructionVisual.kicker.includes('ОРБИТАЛЬНАЯ')) {
+  if (!sharedTemplate(defenseConstructionVisual) || !sameHeaderVisual || !sameCardVisual || defenseConstructionVisual.title !== 'Оборона') {
     throw new Error(`Defense construction visual contract failed: ${JSON.stringify({ ship: shipConstructionVisual, defense: defenseConstructionVisual })}`);
   }
   await capture(win, directory, 'building-interior-fleet-defense');

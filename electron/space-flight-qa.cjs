@@ -97,12 +97,10 @@ async function seedCommanderOnlySave(win) {
 
 async function setMission(win, missionId) {
   const changed = await win.webContents.executeJavaScript(`(() => {
-    const select = document.querySelector('#fleet-mission');
-    if (!select) return false;
-    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
-    setter?.call(select, ${JSON.stringify(missionId)});
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-    return select.value === ${JSON.stringify(missionId)};
+    const button = document.querySelector('[data-qa-mission-id=' + ${JSON.stringify(JSON.stringify(missionId))} + ']');
+    if (!button || button.disabled) return false;
+    button.click();
+    return true;
   })()`);
   if (!changed) throw new Error(`Could not select mission: ${missionId}`);
   await sleep(100);

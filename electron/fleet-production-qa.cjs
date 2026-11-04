@@ -30,7 +30,7 @@ const FAILURE_STATE = `(() => {
     // What the target step holds: the typed fields (and whether they are still open) and the target it names.
     targetInputs: Array.from(document.querySelectorAll('[name^="flight-preview-target-"]')).map((input) => input.name.replace('flight-preview-target-', '') + '=' + input.value),
     targetStep: text('[data-qa-flight-target-step]'),
-    mission: document.querySelector('#fleet-mission')?.value ?? null,
+    mission: document.querySelector('[data-qa-mission-current]')?.getAttribute('data-qa-mission-current') ?? null,
     orbitalDebris: (() => {
       try { return Object.values(JSON.parse(localStorage.getItem('asterion.vertical-slice.test.v1') || '{}').espionage?.orbitalDebris ?? {}).map((item) => item.targetCoordinate && [item.targetCoordinate.galaxy, item.targetCoordinate.system, item.targetCoordinate.position].join(':')); }
       catch (error) { return String(error); }
@@ -248,14 +248,13 @@ async function setFleetShipQuantity(win, shipId, quantity) {
 
 async function setFleetMission(win, missionId) {
   const result = await win.webContents.executeJavaScript(`(() => {
-    const select = document.querySelector('#fleet-mission');
-    if (!select) return false;
-    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
-    setter?.call(select, ${JSON.stringify(missionId)});
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-    return select.value === ${JSON.stringify(missionId)};
+    const button = document.querySelector('[data-qa-mission-id=' + ${JSON.stringify(JSON.stringify(missionId))} + ']');
+    if (!button || button.disabled) return false;
+    button.click();
+    return true;
   })()`);
   if (!result) throw new Error(`Could not choose fleet mission ${missionId}`);
+  await waitFor(win, `document.querySelector('[data-qa-mission-current]')?.getAttribute('data-qa-mission-current') === ${JSON.stringify(missionId)}`);
   await settle(win);
 }
 
@@ -691,7 +690,7 @@ async function runRecycleUiCycle(win, label) {
 
   await click(win, '[aria-label="Переработка"]');
   const selection = await win.webContents.executeJavaScript(`(() => ({
-    mission: document.querySelector('#fleet-mission')?.value || '',
+    mission: document.querySelector('[data-qa-mission-current]')?.getAttribute('data-qa-mission-current') || '',
     ships: Array.from(document.querySelectorAll('[data-qa-fleet-roster] [data-qa-fleet-ship]')).map((node) => node.getAttribute('data-qa-fleet-ship')),
     previewDisabled: Boolean(document.querySelector('[data-qa-flight-preview-open]')?.disabled),
     commanderControls: Boolean(document.querySelector('[data-qa-deployment-commanders], .fleet-attack-prep-v1')),
@@ -722,7 +721,7 @@ async function runRecycleUiCycle(win, label) {
   await click(win, '[data-qa-flight-target-step] .flight-timeline-edit');
   const preview = await win.webContents.executeJavaScript(`({
     sendDisabled: Boolean(document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled),
-    mission: document.querySelector('#fleet-mission')?.value || '',
+    mission: document.querySelector('[data-qa-mission-current]')?.getAttribute('data-qa-mission-current') || '',
     target: document.querySelector('[data-qa-flight-target-step]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
     arrivalTask: document.querySelector('[data-qa-flight-eta] .is-arrival em')?.textContent?.trim() || '',
     recallNote: document.querySelector('.flight-timeline-note-warning')?.textContent?.trim() || '',
@@ -802,9 +801,9 @@ async function runAsteroidRecyclerLaunch(win, label, directory) {
     throw new Error(`${label}: asteroid inspector must expose one combined recycler action ${JSON.stringify({ asteroidActions, asteroid })}`);
   }
   await click(win, '[data-qa-universe-special-action="asteroid-recycler"]');
-  await waitFor(win, `document.querySelector('.fleet-workspace-v1[data-qa-flight-launch-context]') && document.querySelector('#fleet-mission')?.value === 'gas'`);
+  await waitFor(win, `document.querySelector('.fleet-workspace-v1[data-qa-flight-launch-context]') && document.querySelector('[data-qa-mission-current]')?.getAttribute('data-qa-mission-current') === 'gas'`);
   const gasLaunch = await win.webContents.executeJavaScript(`({
-    mission: document.querySelector('#fleet-mission')?.value || '',
+    mission: document.querySelector('[data-qa-mission-current]')?.getAttribute('data-qa-mission-current') || '',
     coordinate: document.querySelector('.fleet-workspace-v1')?.getAttribute('data-qa-flight-launch-context') || '',
     roster: Array.from(document.querySelectorAll('[data-qa-fleet-roster] [data-qa-fleet-ship]')).map((node) => node.getAttribute('data-qa-fleet-ship')),
   })`);
@@ -1294,20 +1293,20 @@ async function runPlanetSwitchOnlyViewport(width, height) {
     await waitFor(win, `document.querySelector('.fleet-workspace-v1')`);
     const fleetRoster = await win.webContents.executeJavaScript(`(() => ({
       population: document.querySelector('[data-qa-fleet-population]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
-      bomberCount: document.querySelector('[data-qa-fleet-ship="bomber"] [data-qa-fleet-owned]')?.textContent?.trim() || '0',
+      bomberCount: document.querySelector('[data-qa-fleet-ship="bomber"] [data-qa-fleet-owned]')?.getAttribute('data-qa-fleet-owned') || '0',
     }))()`);
     await click(win, '[data-qa-fleet-section="ships"]');
     await waitFor(win, `document.querySelector('[data-qa-construction-mode="ships"]')`);
     const scoutRequirements = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-fleet-production-item="scout"]')?.getAttribute('data-qa-production-requirements') ?? ''`);
     if (scoutRequirements !== 'met') throw new Error(`${label}: colony scout requirements were not met in the fleet switch fixture`);
-    await click(win, '[data-qa-fleet-production-item="scout"] .shipyard-count-v1 button');
-    await waitFor(win, `document.querySelector('[data-qa-fleet-production-item="scout"] .shipyard-build-button-v1')?.disabled === false`);
+    await click(win, '[data-qa-fleet-production-item="scout"] [data-qa-unit-max]');
+    await waitFor(win, `document.querySelector('[data-qa-fleet-production-item="scout"] [data-qa-unit-build]')?.disabled === false`);
     const view = await win.webContents.executeJavaScript(`(() => ({
       selectedPlanetId: document.querySelector('[data-qa-current-planet]')?.getAttribute('data-planet-id') || '',
       fleetPopulation: document.querySelector('[data-qa-fleet-population]')?.getAttribute('data-qa-fleet-population') || '',
-      bomberCount: document.querySelector('[data-qa-fleet-ship="bomber"] [data-qa-fleet-owned]')?.textContent?.trim() || '0',
+      bomberCount: document.querySelector('[data-qa-fleet-ship="bomber"] [data-qa-fleet-owned]')?.getAttribute('data-qa-fleet-owned') || '0',
       headerName: document.querySelector('[data-qa-current-planet]')?.getAttribute('data-planet-name') || '',
-      buildButtonDisabled: document.querySelector('[data-qa-fleet-production-item="scout"] .shipyard-build-button-v1')?.disabled ?? true,
+      buildButtonDisabled: document.querySelector('[data-qa-fleet-production-item="scout"] [data-qa-unit-build]')?.disabled ?? true,
     }))()`);
     const persistedPlanetId = (await readSave(win)).currentPlanetId;
     await win.webContents.executeJavaScript(`(() => {
@@ -1341,7 +1340,7 @@ async function runPlanetSwitchRegression(win, label) {
   await waitFor(win, `document.querySelector('[data-qa-flight-preview-backdrop]')`);
   const homeDraft = {
     planetId: await win.webContents.executeJavaScript(`document.querySelector('[data-qa-current-planet]').getAttribute('data-planet-id')`),
-    yard: await win.webContents.executeJavaScript(`document.querySelector('.fleet-yard-level-v1').textContent.trim()`),
+    yard: await win.webContents.executeJavaScript(`document.querySelector('.fleet-workspace-v1').getAttribute('data-qa-fleet-yard-level')`),
     selected: await win.webContents.executeJavaScript(`document.querySelector('[data-qa-fleet-ship="scout"] input').value`),
     previewOpen: await win.webContents.executeJavaScript(`Boolean(document.querySelector('[data-qa-flight-preview-backdrop]'))`),
   };
@@ -1353,11 +1352,11 @@ async function runPlanetSwitchRegression(win, label) {
   // but keeps the mission and target; the typed 2 scouts follow, capped by the colony's 1.
   await selectPlanet(win, 'qa-colony-01');
   await waitFor(win, `!document.querySelector('[data-qa-flight-preview-backdrop]')`);
-  await waitFor(win, `document.querySelector('.fleet-yard-level-v1')?.textContent?.includes('4')`);
+  await waitFor(win, `document.querySelector('.fleet-workspace-v1')?.getAttribute('data-qa-fleet-yard-level') === '4'`);
   const colonyDraft = await win.webContents.executeJavaScript(`(() => ({
     planetId: document.querySelector('[data-qa-current-planet]')?.getAttribute('data-planet-id') || '',
-    name: document.querySelector('.fleet-yard-card-v1 small')?.textContent?.trim() || '',
-    yard: document.querySelector('.fleet-yard-level-v1')?.textContent?.trim() || '',
+    name: document.querySelector('.fleet-workspace-v1')?.getAttribute('data-qa-fleet-planet') || '',
+    yard: document.querySelector('.fleet-workspace-v1')?.getAttribute('data-qa-fleet-yard-level') || '',
     selected: document.querySelector('[data-qa-fleet-ship="scout"] input')?.value || '',
     previewOpen: Boolean(document.querySelector('[data-qa-flight-preview-backdrop]')),
     previewMetrics: Boolean(document.querySelector('[data-qa-flight-preview]')),
@@ -1369,7 +1368,7 @@ async function runPlanetSwitchRegression(win, label) {
   await click(win, '[data-qa-fleet-section="ships"]');
   await waitFor(win, `document.querySelector('[data-qa-construction-mode="ships"]')`);
   await setQuantity(win, 'scout', 1);
-  await click(win, '[data-qa-fleet-production-item="scout"] .shipyard-build-button-v1');
+  await click(win, '[data-qa-fleet-production-item="scout"] [data-qa-unit-build]');
   await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.planets?.['qa-colony-01']?.fleetProduction?.shipQueue?.length === 1`);
   const colonyQueue = await readSave(win);
   if (colonyQueue.planets['helion-01'].fleetProduction.shipQueue.length !== 0 || colonyQueue.planets['qa-colony-01'].fleetProduction.shipQueue.length !== 1) {
@@ -1377,13 +1376,13 @@ async function runPlanetSwitchRegression(win, label) {
   }
 
   await selectPlanet(win, 'helion-01');
-  await waitFor(win, `document.querySelector('.fleet-yard-level-v1')?.textContent?.includes('15')`);
+  await waitFor(win, `document.querySelector('.fleet-workspace-v1')?.getAttribute('data-qa-fleet-yard-level') === '15'`);
   const homeAfterSwitch = await readSave(win);
   // The open section (here «Верфь») stays open for the newly selected planet.
   const homeView = await win.webContents.executeJavaScript(`(() => ({
     shipyard: Boolean(document.querySelector('[data-qa-construction-mode="ships"]')),
     previewOpen: Boolean(document.querySelector('[data-qa-flight-preview-backdrop]')),
-    yard: document.querySelector('.fleet-yard-level-v1')?.textContent?.trim() || '',
+    yard: document.querySelector('.fleet-workspace-v1')?.getAttribute('data-qa-fleet-yard-level') || '',
   }))()`);
   if (!homeView.shipyard || homeView.previewOpen || !homeView.yard.includes('15') || homeAfterSwitch.planets['helion-01'].fleetProduction.shipQueue.length !== 0 || homeAfterSwitch.planets['qa-colony-01'].fleetProduction.shipQueue.length !== 1) {
     throw new Error(`${label}: Homeworld received colony state after switching back ${JSON.stringify({ homeView, queues: { home: homeAfterSwitch.planets['helion-01'].fleetProduction.shipQueue.length, colony: homeAfterSwitch.planets['qa-colony-01'].fleetProduction.shipQueue.length } })}`);
@@ -1436,7 +1435,7 @@ async function runPlanetoLomTrace(win, label) {
     return {
       status: row?.getAttribute('data-qa-production-requirements') || '',
       reason: row?.getAttribute('data-qa-production-requirement-reason') || '',
-      hasBuildButton: Boolean(row?.querySelector('.shipyard-build-button-v1')),
+      hasBuildButton: Boolean(row?.querySelector('[data-qa-unit-build]')),
     };
   })()`);
   if (blocked.status !== 'unmet' || !blocked.reason.includes('Параллельные вселенные уровня 1') || blocked.hasBuildButton) {
@@ -1446,13 +1445,13 @@ async function runPlanetoLomTrace(win, label) {
   await waitFor(win, `document.querySelector('[data-qa-fleet-production-item="death-star"]')?.getAttribute('data-qa-production-requirements') === 'met'`);
   const unlocked = await win.webContents.executeJavaScript(`(() => ({
     status: document.querySelector('[data-qa-fleet-production-item="death-star"]')?.getAttribute('data-qa-production-requirements') || '',
-    hasBuildButton: Boolean(document.querySelector('[data-qa-fleet-production-item="death-star"] .shipyard-build-button-v1')),
+    hasBuildButton: Boolean(document.querySelector('[data-qa-fleet-production-item="death-star"] [data-qa-unit-build]')),
   }))()`);
   if (unlocked.status !== 'met' || !unlocked.hasBuildButton) throw new Error(`${label}: Planeto-lom did not unlock without reload ${JSON.stringify(unlocked)}`);
 
   await setQuantity(win, 'death-star', 1);
   const before = await readSave(win);
-  await click(win, '[data-qa-fleet-production-item="death-star"] .shipyard-build-button-v1');
+  await click(win, '[data-qa-fleet-production-item="death-star"] [data-qa-unit-build]');
   await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.planets?.['helion-01']?.fleetProduction?.shipQueue?.length === 1`);
   await sleep(1_100);
   const afterTick = await readSave(win);
@@ -1506,7 +1505,7 @@ async function runViewport(width, height) {
     await waitFor(win, `document.querySelector('.fleet-workspace-v1')`);
     const baseCardTag = await win.webContents.executeJavaScript(`document.querySelector('.fleet-yard-card-v1')?.tagName ?? ''`);
     if (baseCardTag === 'BUTTON') throw new Error(`${label}: fleet base card is still a button`);
-    const missionSlots = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('.fleet-mission-icons-v1 button')).map((button) => {
+    const missionSlots = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('.fc-missions button')).map((button) => {
       const buttonRect = button.getBoundingClientRect();
       const image = button.querySelector('img');
       const imageRect = image?.getBoundingClientRect();
@@ -1543,38 +1542,43 @@ async function runViewport(width, height) {
       };
     })()`);
     if (!ordinaryLevel.text.includes('0/10') || !ordinaryLevel.visible) throw new Error(`${label}: ordinary level is not visibly rendered as 0/10: ${JSON.stringify(ordinaryLevel)}`);
+    const stockLayout = await win.webContents.executeJavaScript(`(() => {
+      const stock = document.querySelector('[data-qa-fleet-production-item="scout"] .fc-unit__stock');
+      const label = stock?.querySelector('small')?.getBoundingClientRect();
+      const count = stock?.querySelector('strong')?.getBoundingClientRect();
+      return { labelAboveCount: Boolean(label && count && label.bottom <= count.top + 2) };
+    })()`);
+    if (!stockLayout.labelAboveCount) throw new Error(`${label}: the stock label must sit above its number ${JSON.stringify(stockLayout)}`);
     const ordinaryTimerText = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-unit-time="scout"]')?.textContent ?? ''`);
     if (ordinaryTimerText.includes('УРОВЕНЬ')) throw new Error(`${label}: ordinary ship level still appears under the unit timer: ${ordinaryTimerText}`);
     const ordinaryDossierLevelLabel = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-fleet-level="scout"] small')?.textContent ?? ''`);
     if (!ordinaryDossierLevelLabel.includes('Уровень корабля')) throw new Error(`${label}: ordinary dossier level label is wrong: ${ordinaryDossierLevelLabel}`);
     const queuePlacement = await win.webContents.executeJavaScript(`(() => {
       const queue = document.querySelector('[data-qa-fleet-production-queue="ships"]');
-      const sidebar = queue?.closest('.fleet-sidebar-v1');
-      const main = queue?.closest('.fleet-main-v1');
-      const simulator = Array.from(document.querySelectorAll('.fleet-menu-group-v1 button'))
-        .find((node) => node.textContent?.replace(/\\s+/g, ' ').trim().includes('Симулятор'));
-      const followsSimulator = Boolean(queue && simulator && (simulator.compareDocumentPosition(queue) & Node.DOCUMENT_POSITION_FOLLOWING));
+      const list = document.querySelector('[data-qa-construction-mode="ships"]');
+      const queueRect = queue?.getBoundingClientRect();
+      const listRect = list?.getBoundingClientRect();
       return {
-        inSidebar: Boolean(sidebar),
-        inMain: Boolean(main),
-        followsSimulator,
-        hasMainStrip: Boolean(document.querySelector('.fleet-main-v1 .fleet-production-queue-v1')),
+        besideList: Boolean(queueRect && listRect && queueRect.left >= listRect.right),
+        sameBuild: Boolean(queue?.closest('.fc-build') && queue?.closest('.fc-build') === list?.closest('.fc-build')),
         heading: queue?.querySelector('.fleet-production-queue-head-v1')?.textContent?.replace(/\\s+/g, ' ').trim() ?? '',
       };
     })()`);
-    if (!queuePlacement.inSidebar || queuePlacement.inMain || !queuePlacement.followsSimulator || queuePlacement.hasMainStrip || !queuePlacement.heading.includes('ТЕКУЩИЕ ПРОЦЕССЫ')) {
+    if (!queuePlacement.besideList || !queuePlacement.sameBuild || !queuePlacement.heading.includes('Очередь')) {
       throw new Error(`${label}: fleet queue placement contract failed ${JSON.stringify(queuePlacement)}`);
     }
     if (!(await win.webContents.executeJavaScript(`document.querySelector('[data-qa-fleet-production-queue="ships"]')?.textContent?.includes('Очередь свободна')`))) {
       throw new Error(`${label}: empty ordinary queue is not visible`);
     }
-    const backButton = await win.webContents.executeJavaScript(`(() => {
-      const button = document.querySelector('[data-qa-fleet-production-back]');
-      return { text: button?.textContent?.replace(/\\s+/g, ' ').trim() ?? '', tag: button?.tagName ?? '' };
-    })()`);
-    if (backButton.tag !== 'BUTTON' || !backButton.text.includes('Назад к Флотам')) throw new Error(`${label}: fleet production back button is missing ${JSON.stringify(backButton)}`);
-    await click(win, '[data-qa-fleet-production-back]');
-    await waitFor(win, `!document.querySelector('[data-qa-construction-mode="ships"]')`);
+    // The two groups of section tabs stay visible on every page, the fleet screen included.
+    const tabs = await win.webContents.executeJavaScript(`(() => ({
+      rootTab: document.querySelector('[data-qa-fleet-section="root"]')?.textContent?.trim() ?? '',
+      groups: Array.from(document.querySelectorAll('.fc-wing > h3')).map((node) => node.textContent?.trim()),
+      simulator: Boolean(document.querySelector('[data-qa-fleet-section="simulator"]')),
+    }))()`);
+    if (tabs.rootTab !== 'Отправка флота' || tabs.groups.join('|') !== 'Строительство|Управление флотом' || !tabs.simulator) throw new Error(`${label}: section tabs contract failed ${JSON.stringify(tabs)}`);
+    await click(win, '[data-qa-fleet-section="root"]');
+    await waitFor(win, `!document.querySelector('[data-qa-construction-mode="ships"]') && document.querySelector('[data-qa-fleet-root]')`);
     await click(win, '[data-qa-fleet-section="ships"]');
     await waitFor(win, `document.querySelector('[data-qa-construction-mode="ships"]')`);
     await capture(win, directory, 'ships-empty');
@@ -1593,12 +1597,12 @@ async function runViewport(width, height) {
     const initialFleetPopulation = Number(await win.webContents.executeJavaScript(`document.querySelector('[data-qa-fleet-population]')?.getAttribute('data-qa-fleet-population') ?? '0'`));
 
     await setQuantity(win, 'scout', 2);
-    await click(win, '[data-qa-fleet-production-item="scout"] .shipyard-build-button-v1');
+    await click(win, '[data-qa-fleet-production-item="scout"] [data-qa-unit-build]');
     await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.planets?.['helion-01']?.fleetProduction?.shipQueue?.length === 1`);
     const afterFirstEnqueuePopulation = Number(await win.webContents.executeJavaScript(`document.querySelector('[data-qa-fleet-population]')?.getAttribute('data-qa-fleet-population') ?? '0'`));
     if (!(afterFirstEnqueuePopulation > initialFleetPopulation)) throw new Error(`${label}: fleet population did not reserve immediately after enqueue`);
     await setQuantity(win, 'scout', 1);
-    await click(win, '[data-qa-fleet-production-item="scout"] .shipyard-build-button-v1');
+    await click(win, '[data-qa-fleet-production-item="scout"] [data-qa-unit-build]');
     await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.planets?.['helion-01']?.fleetProduction?.shipQueue?.length === 2`);
     const ordinaryText = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-fleet-production-queue="ships"]')?.textContent ?? ''`);
     if (ordinaryText.includes('/3') || (await win.webContents.executeJavaScript(`document.querySelectorAll('[data-qa-fleet-production-order]').length`)) !== 2) {
@@ -1622,7 +1626,7 @@ async function runViewport(width, height) {
     }
     await capture(win, directory, 'defense-empty');
     await setQuantity(win, 'ballistic-turret', 1);
-    await click(win, '[data-qa-fleet-production-item="ballistic-turret"] .shipyard-build-button-v1');
+    await click(win, '[data-qa-fleet-production-item="ballistic-turret"] [data-qa-unit-build]');
     await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.planets?.['helion-01']?.fleetProduction?.defenseQueue?.length === 1`);
     const defenseQueuePersistedAtEnqueue = (await readSave(win)).planets['helion-01'].fleetProduction.defenseQueue.length === 1;
     if (!defenseQueuePersistedAtEnqueue) throw new Error(`${label}: defense queue was not persisted immediately after enqueue`);
@@ -1657,7 +1661,7 @@ async function runViewport(width, height) {
     await click(win, '.ship-info-close-v1');
     await waitFor(win, `!document.querySelector('.ship-info-modal-v1')`);
     await setQuantity(win, 'corsair', 1);
-    await click(win, '[data-qa-fleet-production-item="corsair"] .shipyard-build-button-v1');
+    await click(win, '[data-qa-fleet-production-item="corsair"] [data-qa-unit-build]');
     await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.planets?.['helion-01']?.fleetProduction?.commanderQueue?.length === 1`);
     await capture(win, directory, 'commanders-queue');
 
