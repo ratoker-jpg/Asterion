@@ -460,7 +460,7 @@ export function SpaceportUpgradeView({
                 <div className="sp-card__ship">
                   <header>
                     <h3>{entity.name}</h3>
-                    <p>{entity.role}</p>
+                    {entity.role !== entity.name ? <p>{entity.role}</p> : null}
                   </header>
                   <LevelProgress
                     track={activeTrack}
@@ -472,10 +472,12 @@ export function SpaceportUpgradeView({
                 </div>
 
                 <div className="sp-card__price">
+                  {isMax ? <span className="sp-card__done">{preview.currentLevel >= preview.projectedLevel ? 'Корабль улучшен полностью' : 'Последний уровень уже в очереди'}</span> : (
+                  <>
                   <div className="sp-costs" aria-label="Стоимость улучшения">
                     {resourceKeys.map((key) => (
                       <span
-                        className={`sp-cost ${!isMax && wallet[key] < preview.cost[key] ? 'is-short' : ''} ${preview.cost[key] === 0 ? 'is-free' : ''}`}
+                        className={`sp-cost ${wallet[key] < preview.cost[key] ? 'is-short' : ''} ${preview.cost[key] === 0 ? 'is-free' : ''}`}
                         key={key}
                         data-qa-spaceport-cost
                         data-resource={key}
@@ -503,6 +505,8 @@ export function SpaceportUpgradeView({
                       ))}
                     </div>
                   ) : <span className="sp-reqs__none">Без требований</span>}
+                  </>
+                  )}
                 </div>
 
                 <div className="sp-card__action">
@@ -513,7 +517,7 @@ export function SpaceportUpgradeView({
                     disabled={!uiCanStart}
                     onClick={() => onUpgrade(activeTrack, entity.id)}
                   >
-                    {isMax ? 'ВСЕ УРОВНИ ПОЛУЧЕНЫ' : `УЛУЧШИТЬ ДО ${preview.nextLevel ?? preview.currentLevel}`}
+                    {isMax ? 'БОЛЬШЕ НЕКУДА' : `УЛУЧШИТЬ ДО ${preview.nextLevel ?? preview.currentLevel}`}
                   </button>
                   {/* Why the button is off, in words; nothing here when it is on. */}
                   <div className="sp-why" data-qa-spaceport-status>

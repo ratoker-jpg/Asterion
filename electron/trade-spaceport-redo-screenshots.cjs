@@ -72,6 +72,7 @@ async function setInput(win, selector, value) {
 }
 
 async function hover(win, selector) {
+  // Through the debugger: the window is emulated, as in visual-trade-center.cjs.
   const point = await run(win, `(() => {
     const element = document.querySelector(${JSON.stringify(selector)});
     if (!element) return null;
@@ -81,23 +82,27 @@ async function hover(win, selector) {
   })()`);
   if (!point) throw new Error(`Hover target not found: ${selector}`);
   await sleep(120);
-  win.webContents.sendInputEvent({ type: 'mouseMove', x: 1, y: 1 });
+  await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 1, y: 1 });
   await sleep(60);
-  win.webContents.sendInputEvent({ type: 'mouseMove', ...point });
+  await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseMoved', ...point });
   await sleep(320);
 }
 
 async function capture(win, directory, name, { keepAnimations = false } = {}) {
   if (!keepAnimations) await settle(win);
-  win.webContents.invalidate();
   await sleep(300);
-  const { width, height } = await run(win, '({ width: innerWidth, height: innerHeight })');
-  const image = await win.capturePage({ x: 0, y: 0, width, height });
-  fs.writeFileSync(path.join(directory, `${name}.png`), image.toPNG());
+  const result = await win.webContents.debugger.sendCommand('Page.captureScreenshot', { format: 'png', fromSurface: true, captureBeyondViewport: false });
+  fs.writeFileSync(path.join(directory, `${name}.png`), Buffer.from(result.data, 'base64'));
   console.log(`[shots] ${path.relative(ROOT, path.join(directory, name))}.png`);
 }
 
 /** `mutate` is page-side code over `save`, `planet` and `now`. */
+// CI runners have a small screen: an unemulated window would be clamped to it.
+async function emulate(win, width, height) {
+  win.webContents.debugger.attach('1.3');
+  await win.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false, screenWidth: width, screenHeight: height });
+}
+
 async function seed(win, { race = 'aegis', mutate = '' } = {}) {
   const ok = await editSaveIdle(win, `(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
@@ -245,7 +250,7 @@ async function raceScenes(win, directory) {
     await capture(win, directory, `race-${race}-trade`);
     await seed(win, { race });
     await openSpaceport(win);
-    await click(win, '[data-qa-spaceport-upgrade="cruiser"]');
+    await click(win, '[data-qa-spaceport-upgrade]:not([disabled])');
     await capture(win, directory, `race-${race}-spaceport`);
   }
 }
@@ -256,6 +261,7 @@ async function runViewport(width, height) {
   fs.mkdirSync(directory, { recursive: true });
   const win = new BrowserWindow({ width, height, useContentSize: true, show: false, backgroundColor: '#02050a', webPreferences: { offscreen: true, sandbox: false, backgroundThrottling: false, partition: `qa-trade-spaceport-redo-${label}${BEFORE ? '-before' : ''}` } });
   await win.loadFile(path.join(DIST, 'index.html'), { search: '?mode=test' });
+  await emulate(win, width, height);
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await tradeScenes(win, directory);
   await spaceportScenes(win, directory);
@@ -267,6 +273,8 @@ async function runMocks() {
   fs.mkdirSync(OUTPUT, { recursive: true });
   const page = path.join(ROOT, 'visual-qa', 'trade-spaceport-redo', 'mocks', 'mocks.html');
   const win = new BrowserWindow({ width: 1920, height: 1080, useContentSize: true, show: false, backgroundColor: '#02050a', webPreferences: { offscreen: true, sandbox: false, backgroundThrottling: false } });
+  await win.loadFile(page);
+  await emulate(win, 1920, 1080);
   for (const variant of ['tA', 'tB', 'tC', 'sA', 'sB', 'sC']) {
     const url = pathToFileURL(page);
     url.searchParams.set('v', variant);
