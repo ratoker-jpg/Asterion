@@ -239,7 +239,13 @@ export function defaultQuickFleet(state: SaveState, actionId: QuickActionId, ori
     const ships = Object.fromEntries((Object.keys(free.ships) as ShipId[]).filter((id) => !SERVICE_SHIPS.has(id)).map((id) => [id, has(id)]));
     return { ships: positive(ships), commanders: getAttackCommanderSelection(state, originPlanetId) };
   }
-  if (actionId === 'expedition' || actionId === 'transport') {
+  if (actionId === 'transport') {
+    // Any ship with a hold can carry cargo (as on the fleet screen); transports and mega-transports first.
+    const carriers = quickActionShipIds(state, 'transport').filter((id) => shipCargo(factionId, id) > 0 && has(id) > 0);
+    const hulls = carriers.filter((id) => CARGO_SHIPS.includes(id));
+    return { ships: positive(Object.fromEntries((hulls.length > 0 ? hulls : carriers).map((id) => [id, has(id)]))) };
+  }
+  if (actionId === 'expedition') {
     return { ships: positive(Object.fromEntries(quickActionShipIds(state, 'expedition').filter((id) => actionId === 'expedition' || CARGO_SHIPS.includes(id)).map((id) => [id, has(id)]))) };
   }
   if (actionId === 'deployment') {
@@ -331,7 +337,7 @@ export function buildQuickCommand(
     case 'pirate-elimination':
       return { ...base, selectedCommanders: fleet.commanders ?? {}, maxRounds: 12 };
     case 'deployment':
-      return { ...base, selectedCommanders: fleet.commanders ?? {} };
+      return { ...base, selectedCommanders: fleet.commanders ?? {}, ...(cargo ? { cargo } : {}) };
     case 'transport':
       return { ...base, cargo: cargo ?? { metal: 0, minerals: 0, gas: 0, debris: 0 } };
     case 'expedition':
@@ -375,7 +381,7 @@ const NO_SHIPS: Partial<Record<QuickActionId, string>> = {
   'exploration-attack': 'Нет свободных боевых кораблей ни на одной вашей планете.',
   'pirate-elimination': 'Нет свободных боевых кораблей ни на одной вашей планете.',
   expedition: 'Нет свободных транспортов или переработчиков ни на одной вашей планете.',
-  transport: 'Нет свободных транспортов ни на одной вашей планете.',
+  transport: 'Нет свободных кораблей с грузовым отсеком ни на одной вашей планете.',
   deployment: 'Нет свободных кораблей на других ваших планетах.',
 };
 

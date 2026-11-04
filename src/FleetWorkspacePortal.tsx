@@ -937,7 +937,7 @@ function FleetWorkspace({
             : selectedQuantities,
       selectedCommanders: missionId === 'attack' || missionId === 'pirate-elimination' || missionId === 'deployment' || missionId === 'space-flight' || missionId === 'sun-support' ? selectedCommanders : undefined,
       maxRounds: missionId === 'attack' || missionId === 'pirate-elimination' ? attackRounds : undefined,
-      cargo: missionId === 'transport' || missionId === 'space-flight' || missionId === 'aid' ? transportCargoDraft : undefined,
+      cargo: missionId === 'transport' || missionId === 'space-flight' || missionId === 'aid' || missionId === 'deployment' ? transportCargoDraft : undefined,
       ...(missionId === 'aid' ? { aidRequestId: aidRequestForCommand!.id } : {}),
       // Sun missions and Sun-debris recycling carry the `sun:G:S` operation of their destination.
       operationId: missionId === 'expedition' ? expeditionTarget!.id
@@ -2263,15 +2263,15 @@ function FleetWorkspace({
                     <div><small>ПОЛНЫЙ ЦИКЛ</small><strong>{flightDurationLabel(previewResult.flight.oneWayDurationMs * 2)}</strong></div>
                     <div><small>ГАЗ</small><strong>{previewResult.flight.gasCost}</strong></div>
                     <div data-qa-flight-metric="population"><small>НАСЕЛЕНИЕ</small><strong>{flightNumberLabel(selectedPopulation)}</strong></div>
-                    {!((missionId === 'transport' || missionId === 'space-flight' || missionId === 'aid') && transportSummary) ? <div data-qa-flight-metric="hold"><small>{holdLabel}</small><strong>{flightNumberLabel(previewHoldCapacity)}</strong></div> : null}
-                    {(missionId === 'transport' || missionId === 'space-flight' || missionId === 'aid') && transportSummary ? <div data-qa-flight-metric="cargo-capacity"><small>ГРУЗ</small><strong>{flightNumberLabel(transportSummary.capacity.used)} / {flightNumberLabel(transportSummary.capacity.total)}</strong></div> : null}
+                    {!((missionId === 'transport' || missionId === 'space-flight' || missionId === 'aid' || missionId === 'deployment') && transportSummary) ? <div data-qa-flight-metric="hold"><small>{holdLabel}</small><strong>{flightNumberLabel(previewHoldCapacity)}</strong></div> : null}
+                    {(missionId === 'transport' || missionId === 'space-flight' || missionId === 'aid' || missionId === 'deployment') && transportSummary ? <div data-qa-flight-metric="cargo-capacity"><small>ГРУЗ</small><strong>{flightNumberLabel(transportSummary.capacity.used)} / {flightNumberLabel(transportSummary.capacity.total)}</strong></div> : null}
                   </div>
                   <section className="flight-timeline-eta" data-qa-flight-eta aria-label="Расписание рейса">
                     <div className="flight-timeline-eta-card is-arrival">
                       <small>{missionId === 'space-flight' ? 'ТОЧКА РАЗВОРОТА' : missionId === 'gas' ? 'ПРИБЫТИЕ' : 'ПРИБЫТИЕ · ЕСЛИ ОТПРАВИТЬ СЕЙЧАС'}</small>
                       <strong>через {flightDurationLabel(previewResult.flight.oneWayDurationMs)}</strong>
                       <span>{flightArrivalLabel(missionId === 'gas' || missionId === 'space-flight' ? previewResult.flight.arrivalAt : clockNow + previewResult.flight.oneWayDurationMs)} МСК</span>
-                      <em>{missionId === 'space-flight' ? 'начало обратного участка' : missionId === 'aid' ? 'зачисление принятого груза на планету запроса' : missionId === 'recycle' ? 'сбор обломков с орбиты' : missionId === 'gas' ? 'проверка позиции астероида' : 'проверка цели и создание планеты'}</em>
+                      <em>{missionId === 'space-flight' ? 'начало обратного участка' : missionId === 'aid' ? 'зачисление принятого груза на планету запроса' : missionId === 'recycle' ? 'сбор обломков с орбиты' : missionId === 'gas' ? 'проверка позиции астероида' : missionId === 'colonize' ? 'проверка цели и создание планеты' : missionId === 'transport' ? 'доставка груза на планету-цель' : missionId === 'deployment' ? 'перевод флота и груза на планету-цель' : missionId === 'attack' ? 'бой с целью' : missionId === 'espionage' ? 'разведка цели' : 'прибытие к цели'}</em>
                     </div>
                     <div className="flight-timeline-eta-card is-return">
                       <small>{missionId === 'space-flight' ? 'ВОЗВРАТ БЕЗ ОТЗЫВА' : 'ВОЗВРАТ ПРИ ОТЗЫВЕ'}</small>
@@ -2306,7 +2306,15 @@ function FleetWorkspace({
                         ? 'При отзыве до прибытия переработчик вернётся без обломков.'
                         : missionId === 'gas'
                           ? 'Координата назначения не меняется; астероид может переместиться до прибытия.'
-                          : 'При отзыве колонизатор возвращается, но газ не возвращается.'}</p>
+                          : missionId === 'colonize'
+                            ? 'При отзыве колонизатор возвращается, но газ не возвращается.'
+                            : missionId === 'transport'
+                              ? 'При отзыве до прибытия флот вернётся вместе с грузом; газ не возвращается.'
+                              : missionId === 'deployment'
+                                ? 'При отзыве до прибытия флот вернётся на исходную планету вместе с грузом; газ не возвращается.'
+                                : missionId === 'espionage'
+                                  ? 'При отзыве до прибытия зонд вернётся; газ не возвращается.'
+                                  : 'При отзыве до прибытия флот вернётся; газ не возвращается.'}</p>
                   </div>
                 </> : <>
                   {previewResult && !previewResult.ok ? <p className="flight-timeline-error" data-qa-flight-preview-error>{previewResult.error.message}</p> : null}
@@ -2340,7 +2348,7 @@ function FleetWorkspace({
                   </>}
                 </>}
               </section>
-              {(missionId === 'transport' || missionId === 'space-flight' || missionId === 'aid') && transportSummary ? <section className="flight-timeline-cargo" data-qa-flight-cargo data-qa-cargo-capacity={`${transportSummary.capacity.used}/${transportSummary.capacity.total}`} aria-label="Загрузка ресурсов">
+              {(missionId === 'transport' || missionId === 'space-flight' || missionId === 'aid' || missionId === 'deployment') && transportSummary ? <section className="flight-timeline-cargo" data-qa-flight-cargo data-qa-cargo-capacity={`${transportSummary.capacity.used}/${transportSummary.capacity.total}`} aria-label="Загрузка ресурсов">
                 <div className="flight-timeline-cargo-head">
                   <div>
                     <small>{missionId === 'space-flight' ? 'ГРУЗ КОСМИЧЕСКОГО РЕЙСА' : missionId === 'aid' ? 'ГРУЗ ПОМОЩИ СОЮЗУ' : 'ЗАГРУЗКА КОРАБЛЯ'}</small>

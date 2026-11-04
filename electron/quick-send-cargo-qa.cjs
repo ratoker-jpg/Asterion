@@ -187,10 +187,28 @@ async function runViewport(width, height) {
       return { names, cargo: panel.querySelectorAll('[data-qa-quick-cargo]').length, why: [...panel.querySelectorAll('[data-qa-quick-why]')].map((n) => n.textContent) };
     } catch (e) { return { err: String(e) }; } })()`);
     if (check.err) throw new Error(check.err);
-    if (check.cargo !== 0) throw new Error(`${label}: cargo rows in rebase`);
+    if (check.cargo !== 4) throw new Error(`${label}: «Дислокация» must have 4 cargo rows, has ${check.cargo}`);
     if (check.names.some((name) => name.clipped)) throw new Error(`${label}: clipped ship names ${JSON.stringify(check.names)}`);
     await capture(win, directory, 'dislocation-panel');
     console.log(label, JSON.stringify(check));
+    await closeMenu(win);
+
+    // Full fleet screen: «Дислокация» has the cargo editor and its own texts.
+    const click = (selector) => js(win, `(() => { const e = document.querySelector(${JSON.stringify(selector)}); if (!e || e.disabled) return false; e.click(); return true; })()`);
+    const setValue = (selector, proto, value, type) => js(win, `(() => { const e = document.querySelector(${JSON.stringify(selector)}); Object.getOwnPropertyDescriptor(${proto}.prototype, 'value').set.call(e, ${JSON.stringify(String(value))}); e.dispatchEvent(new Event(${JSON.stringify(type)}, { bubbles: true })); })()`);
+    await click('[data-qa-route="fleets"]');
+    await waitFor(win, `document.querySelector('[data-qa-fleet-root]')`);
+    await setValue('#fleet-mission', 'HTMLSelectElement', 'deployment', 'change');
+    await sleep(150);
+    await setValue('[data-qa-fleet-ship="transporter"] input[type="number"]', 'HTMLInputElement', 2, 'input');
+    await click('[data-qa-flight-preview-open]');
+    await waitFor(win, `document.querySelector('[data-qa-deployment-target-select] select')`);
+    await setValue('[data-qa-deployment-target-select] select', 'HTMLSelectElement', 'qa-colony-a', 'change');
+    await waitFor(win, `document.querySelector('[data-qa-flight-cargo]')`);
+    await sleep(300);
+    const plan = await js(win, `(() => ({ cargo: document.querySelectorAll('[data-qa-flight-cargo] [data-qa-cargo]').length, text: document.querySelector('.flight-timeline-notes')?.innerText || '' }))()`);
+    if (plan.cargo !== 4 || /колонизатор/.test(plan.text)) throw new Error(`${label}: fleet screen deployment ${JSON.stringify(plan)}`);
+    await capture(win, directory, 'fleet-screen-dislocation-cargo');
     if (!check.why.length || check.why.some((text) => !text || /undefined/.test(text))) throw new Error(`${label}: reason missing ${JSON.stringify(check.why)}`);
   } finally {
     win.destroy();

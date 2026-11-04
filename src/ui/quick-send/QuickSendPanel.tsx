@@ -106,6 +106,8 @@ export function QuickSendPanel({ state, actionId, target, onSend, onClose, onDet
   const factionId = state.profile.factionId as CombatFactionId;
   const catalog = useMemo(() => new Map(getFactionShipCatalog(factionId).map((ship) => [ship.id as ShipId, ship])), [factionId]);
   const multi = isMultiSourceAction(actionId);
+  // Transport and «Дислокация» both carry resources in the hold.
+  const carriesCargo = actionId === 'transport' || actionId === 'deployment';
   const planner = actionId === 'transport' ? gatherLoads : undefined;
   // Refills every checked leg from the planner; unchecked legs keep their draft.
   function fill(current: Record<string, LegDraft>, kept: PlanetResources): Record<string, LegDraft> {
@@ -129,7 +131,7 @@ export function QuickSendPanel({ state, actionId, target, onSend, onClose, onDet
 
   const legs = origins.filter((planetId) => drafts[planetId] && !drafts[planetId]!.sent).map((planetId) => {
     const draft = drafts[planetId]!;
-    const plan = planFromOrigin(state, actionId, target, planetId, quickRuntimeNow(), draft.fleet, actionId === 'transport' ? draft.cargo : undefined);
+    const plan = planFromOrigin(state, actionId, target, planetId, quickRuntimeNow(), draft.fleet, carriesCargo ? draft.cargo : undefined);
     return { planetId, draft, plan, flight: plan.preview?.ok ? plan.preview.flight : null };
   });
   const checked = legs.filter((leg) => leg.draft.checked);
@@ -160,7 +162,7 @@ export function QuickSendPanel({ state, actionId, target, onSend, onClose, onDet
     if (!ready || sending) return;
     const runtime = quickRuntimeNow();
     const commands = checked.flatMap((leg) => {
-      const command = buildQuickCommand(state, actionId, target, leg.planetId, leg.draft.fleet, runtime, actionId === 'transport' ? leg.draft.cargo : undefined);
+      const command = buildQuickCommand(state, actionId, target, leg.planetId, leg.draft.fleet, runtime, carriesCargo ? leg.draft.cargo : undefined);
       return command ? [command] : [];
     });
     setSending(true);
@@ -237,7 +239,7 @@ export function QuickSendPanel({ state, actionId, target, onSend, onClose, onDet
                           </li>
                         );
                       })}
-                      {actionId === 'transport' ? TRANSPORT_KEYS.map((key) => {
+                      {carriesCargo ? TRANSPORT_KEYS.map((key) => {
                         // The fleet screen's own limit: stock of the source, then the shared hold.
                         const max = getCargoFieldMaximum(key, draft.cargo, resources, sourceDebris, capacity);
                         return (
