@@ -74,7 +74,19 @@ html body .whats-new [data-asterion-typography] { font-size: calc(var(--asterion
   box-shadow: 0 30px 110px rgba(0, 0, 0, .7);
   animation: whats-new-rise 240ms cubic-bezier(.2, .8, .2, 1);
 }
-.whats-new__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 22px 26px 16px 30px; }
+.whats-new__head { display: flex; align-items: center; gap: 24px; padding: 20px 26px 14px 30px; }
+.whats-new__heading { flex: none; }
+.whats-new__stats { display: flex; flex: 1; justify-content: flex-end; min-width: 0; }
+
+/* «Что нового» / «Весь роадмэп»: the lit half slides. */
+.whats-new__switch { position: relative; display: grid; flex: none; grid-template-columns: 1fr 1fr; padding: 3px; border-radius: var(--ut-r-btn); background: rgba(126, 200, 220, .09); }
+.whats-new__switch::before { content: ""; position: absolute; left: 3px; top: 3px; bottom: 3px; width: calc(50% - 3px); border-radius: calc(var(--ut-r-btn) - 2px); background: color-mix(in srgb, var(--race-accent-strong) 62%, #0a1a24); box-shadow: 0 0 16px var(--race-glow, transparent); transition: transform 240ms cubic-bezier(.2, .8, .2, 1); }
+.whats-new__switch.is-roadmap::before { transform: translateX(100%); }
+.whats-new__switch button { position: relative; padding: 8px 16px; border: 0; border-radius: calc(var(--ut-r-btn) - 2px); background: none; color: #a8cbd6; font: 700 14px Montserrat, sans-serif; white-space: nowrap; cursor: pointer; transition: color 180ms; }
+.whats-new__switch button:hover { color: #fff; }
+.whats-new__switch button[aria-pressed="true"] { color: #fff; }
+.whats-new__switch button:focus-visible { outline: var(--ut-focus); outline-offset: 1px; }
+.whats-new__roadmap-note { margin: 0; padding: 40px 30px; color: #a9c6d0; font-size: 16px; text-align: center; }
 .whats-new__head small { display: block; margin-bottom: 4px; color: var(--race-accent); font-size: 12px; font-weight: 700; letter-spacing: .22em; }
 .whats-new__head h2 { margin: 0; color: #fff; font-size: 26px; font-weight: 800; }
 .whats-new__close {
@@ -154,7 +166,8 @@ html body .whats-new [data-asterion-typography] { font-size: calc(var(--asterion
 }
 @media (max-height: 760px) {
   .whats-new { padding: 14px; }
-  .whats-new__head { padding: 16px 20px 10px 26px; }
+  .whats-new__head { gap: 18px; padding: 14px 20px 8px 26px; }
+  .whats-new__switch button { padding: 7px 12px; font-size: 13px; }
   .whats-new__head h2 { font-size: 22px; }
   .whats-new__item { padding: 14px 0; }
   .whats-new__item img { max-height: 300px; }
@@ -167,4 +180,5 @@ html body .whats-new [data-asterion-typography] { font-size: calc(var(--asterion
 @media (prefers-reduced-motion: reduce) {
   .whats-new, .whats-new__panel, .whats-new__item, .whats-new-entry.is-new .whats-new-mark { animation: none; }
   .whats-new-entry, .whats-new-entry:hover { transition: none; transform: none; }
+  .whats-new__switch::before { transition: none; }
 }
