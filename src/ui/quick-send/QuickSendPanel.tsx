@@ -13,6 +13,7 @@ import {
   buildQuickCommand,
   defaultQuickFleet,
   isMultiSourceAction,
+  noShipsMessage,
   planFromOrigin,
   planQuickLegs,
   quickActionShipIds,
@@ -187,6 +188,13 @@ export function QuickSendPanel({ state, actionId, target, onSend, onClose, onDet
       </header>}
 
       {notice ? <p className="quick-send__notice" role="status" data-qa-quick-notice>{notice}</p> : null}
+      {actionId === 'recycle' && !target.sun ? (
+        <p className="quick-send__notice" role="status" data-qa-quick-recycle-note>
+          {(target.orbitalDebris ?? 0) > 0
+            ? 'Соберём то, что будет на орбите к моменту прибытия.'
+            : 'Обломков здесь сейчас нет. Если к прибытию их не будет, флот вернётся пустым.'}
+        </p>
+      ) : null}
 
       {planner && legs.length > 0 ? (
         <div className="quick-send__keep" data-qa-quick-keep>
@@ -201,7 +209,7 @@ export function QuickSendPanel({ state, actionId, target, onSend, onClose, onDet
         </div>
       ) : null}
 
-      {legs.length === 0 ? (emptyAdvice ? emptyAdvice() : <p className="quick-send__error" role="alert" data-qa-quick-error>Нет свободных кораблей для этого действия ни на одной вашей планете.</p>) : (
+      {legs.length === 0 ? (emptyAdvice ? emptyAdvice() : <p className="quick-send__error" role="alert" data-qa-quick-error>{noShipsMessage(state, actionId, target)}</p>) : (
         <div className="quick-send__legs" role={multi ? 'group' : 'radiogroup'} aria-label={multi ? 'Планеты отправки' : 'Планета отправки'}>
           <small>{multi ? 'Откуда · можно несколько планет' : 'Откуда'}</small>
           {legs.map(({ planetId, draft, plan, flight }, index) => {

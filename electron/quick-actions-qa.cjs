@@ -212,7 +212,7 @@ async function scenarios(win, directory, label) {
   // Own planet: transport, and a rebase gathered from the other planets.
   await selectSystem(win, 1);
   await rightClick(win, '[data-qa-universe-object="player-planet-helion-01"]');
-  expectActions(`${label} own planet`, await menuSnapshot(win), ['transport', 'deployment']);
+  expectActions(`${label} own planet`, await menuSnapshot(win), ['transport', 'deployment', 'recycle']);
   await chooseAction(win, label, 'deployment');
   await capture(win, directory, 'final/own-planet-rebase-panel');
   // A click outside closes it.

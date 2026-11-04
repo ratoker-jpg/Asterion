@@ -124,8 +124,8 @@ function rule(id: QuickActionId, enabled: boolean, reason?: string): QuickAction
  */
 export function listQuickActions(target: QuickTarget, currentOwnerId: string): QuickActionRule[] {
   const { node } = target;
-  const debris = (target.orbitalDebris ?? 0) > 0;
-  const recycle = debris ? [rule('recycle', true)] : [];
+  // Owner rule (04.11.2026): recyclers go to any coordinate in advance, debris or not.
+  const recycle = [rule('recycle', true)];
   switch (node.kind) {
     case 'player':
     case 'npc': {
@@ -390,10 +390,29 @@ export function planetCoordinate(state: SaveState, planetId: string): UniverseCo
   return { galaxy: planet?.universeGalaxy ?? 1, system: planet?.universeSystem ?? 1, position: planet?.universePosition ?? 1 };
 }
 
+/**
+ * Actions the runtime lets a planet launch at its own coordinate: debris on a
+ * planet's own orbit is recycled by the planet's own recyclers (`dispatchFlight`
+ * has no «target is origin» check for `recycle`; transport, rebase, spy and
+ * attack do, so those exclude the target planet).
+ */
+const OWN_ORBIT_ACTIONS: readonly QuickActionId[] = ['recycle'];
+
+/** True when the target is one of the player's own planets and the action cannot start from it. */
+function excludesTargetPlanet(state: SaveState, actionId: QuickActionId, target: QuickTarget): boolean {
+  return Boolean(state.planets[target.node.id]) && !OWN_ORBIT_ACTIONS.includes(actionId);
+}
+
+/** The «no free ships» line, true to which planets were actually searched. */
+export function noShipsMessage(state: SaveState, actionId: QuickActionId, target: QuickTarget): string {
+  const base = NO_SHIPS[actionId] ?? 'Нет свободных кораблей для этого действия ни на одной вашей планете.';
+  return excludesTargetPlanet(state, actionId, target) ? base.replace('ни на одной вашей планете', 'на других ваших планетах') : base;
+}
+
 /** Own planets that may launch this action, nearest first (the current planet wins a tie). */
 export function quickOriginCandidates(state: SaveState, actionId: QuickActionId, target: QuickTarget): string[] {
   return Object.keys(state.planets)
-    .filter((planetId) => planetId !== target.node.id)
+    .filter((planetId) => planetId !== target.node.id || !excludesTargetPlanet(state, actionId, target))
     .map((planetId) => ({ planetId, distance: calculateRouteDistance(planetCoordinate(state, planetId), target.node.coordinate) }))
     .sort((a, b) => a.distance - b.distance || Number(b.planetId === state.currentPlanetId) - Number(a.planetId === state.currentPlanetId))
     .map((item) => item.planetId);
@@ -434,7 +453,7 @@ export function planQuickSend(state: SaveState, actionId: QuickActionId, target:
   }
   return fallback ?? {
     actionId, originPlanetId: null, fleet: { ships: {} }, command: null, preview: null,
-    error: NO_SHIPS[actionId] ?? 'Нет свободных кораблей для этого действия.',
+    error: noShipsMessage(state, actionId, target),
   };
 }
 

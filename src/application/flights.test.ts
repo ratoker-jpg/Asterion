@@ -777,7 +777,6 @@ test('recycle requires the current explicit target kind and a recycler-only ship
   const withDebris = withOrbitalDebris(initial, empty.coordinate, 100);
   const invalidCommands = [
     { state: withDebris, command: recycleCommand('recycle-kind-mismatch', empty.coordinate, 'player') },
-    { state: initial, command: recycleCommand('recycle-empty-no-debris', empty.coordinate, 'empty') },
     { state: withDebris, command: recycleCommand('recycle-mixed-fleet', empty.coordinate, 'empty', { recycler: 1, scout: 1 }) },
     { state: withDebris, command: recycleCommand('recycle-satellite', empty.coordinate, 'empty', { recycler: 1, 'solar-satellite': 1 }) },
     { state: withDebris, command: { ...recycleCommand('recycle-commander', empty.coordinate, 'empty'), selectedCommanders: { corsair: 1 } } },
@@ -959,13 +958,59 @@ test('recycler target edits resolve the current map kind, preview and dispatch t
     assert.equal(sent.flight.targetKind, preview.flight.targetKind);
   }
 
-  const unavailableKind = resolveRecycleTargetKindAtCoordinate(state, unavailableTarget.coordinate, 1_000, 'production');
-  const rejected = previewFlight(state, recycleCommand('recycle-edited-target-unavailable', unavailableTarget.coordinate, unavailableKind!), {
+  // Owner rule (04.11.2026): a coordinate without debris is a valid target too.
+  const noDebrisKind = resolveRecycleTargetKindAtCoordinate(state, unavailableTarget.coordinate, 1_000, 'production');
+  const accepted = previewFlight(state, recycleCommand('recycle-edited-target-no-debris', unavailableTarget.coordinate, noDebrisKind!), {
     now: 1_000,
     mode: 'production',
   });
-  assert.equal(rejected.ok, false);
-  if (!rejected.ok) assert.equal(rejected.error.code, 'target-not-available');
+  assert.equal(accepted.ok, true);
+});
+
+test('recycle to a coordinate without debris: gas is spent, the fleet arrives, finds nothing, reports it and returns', () => {
+  const empty = emptyUniverseCoordinate();
+  const initial = withRecyclers(colonyReady(createInitialSaveState('production', 1_000)), 3);
+  const gasBefore = getPlanetResources(initial).gas;
+  const sent = dispatchFlight(initial, recycleCommand('recycle-in-advance', empty.coordinate, 'empty'), 1_000);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  assert.ok(getPlanetResources(sent.state).gas < gasBefore);
+  const arrived = reconcileFlights(sent.state, sent.flight.arrivalAt);
+  const returning = arrived.state.flights.records.find((flight) => flight.id === sent.flight.id)!;
+  assert.equal(returning.phase, 'returning');
+  assert.equal(returning.cargo?.debris, 0);
+  const report = arrived.state.reports.recyclerArrivalReports?.find((item) => item.flightId === sent.flight.id);
+  assert.equal(report?.collectedDebris, 0);
+  const home = reconcileFlights(arrived.state, returning.arrivalAt + returning.oneWayDurationMs * 2);
+  assert.equal(home.state.planets['helion-01'].fleet.ships.recycler, 3);
+  assert.equal(home.state.flights.records.some((flight) => flight.id === sent.flight.id && flight.phase === 'returning'), false);
+});
+
+test('recycle sent in advance collects debris that appears (a battle) before arrival, only what lies there at arrival', () => {
+  const empty = emptyUniverseCoordinate();
+  const initial = withRecyclers(colonyReady(createInitialSaveState('production', 1_000)), 2);
+  const sent = dispatchFlight(initial, recycleCommand('recycle-after-battle', empty.coordinate, 'empty'), 1_000);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  const afterBattle = withOrbitalDebris(sent.state, empty.coordinate, 120, 'battle-debris');
+  const arrived = reconcileFlights(afterBattle, sent.flight.arrivalAt);
+  const returning = arrived.state.flights.records.find((flight) => flight.id === sent.flight.id)!;
+  assert.equal(returning.cargo?.debris, 120);
+  assert.equal(arrived.state.reports.recyclerArrivalReports?.find((item) => item.flightId === sent.flight.id)?.collectedDebris, 120);
+});
+
+test('recycle from a planet to debris on its own orbit and to its own coordinate without debris', () => {
+  const initial = withRecyclers(colonyReady(createInitialSaveState('production', 1_000)), 2);
+  const home = initial.planets['helion-01']!;
+  const coordinate = { galaxy: home.universeGalaxy ?? 1, system: home.universeSystem ?? 1, position: home.universePosition ?? 1 };
+  const quiet = dispatchFlight(initial, recycleCommand('recycle-own-orbit-empty', coordinate, 'player'), 1_000);
+  assert.equal(quiet.ok, true);
+  const withDebris = withOrbitalDebris(initial, coordinate, 90, 'own-orbit-debris');
+  const sent = dispatchFlight(withDebris, recycleCommand('recycle-own-orbit', coordinate, 'player'), 1_000);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  const returning = reconcileFlights(sent.state, sent.flight.arrivalAt).state.flights.records.find((flight) => flight.id === sent.flight.id)!;
+  assert.equal(returning.cargo?.debris, 90);
 });
 
 test('recycle arrival collects only free orbital debris and reports zero without touching hidden asteroid cargo', () => {

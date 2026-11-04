@@ -711,14 +711,8 @@ async function runRecycleUiCycle(win, label) {
   await setFlightCoordinate(win, 'system', alternate.coordinate[1]);
   await setFlightCoordinate(win, 'position', alternate.coordinate[2]);
   await click(win, '[data-qa-flight-preview-open]');
-  await waitFor(win, `document.querySelector('[data-qa-flight-target-status].is-invalid')`);
-  const rejectedTarget = await win.webContents.executeJavaScript(`({
-    sendDisabled: Boolean(document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled),
-    message: document.querySelector('[data-qa-flight-target-status]')?.textContent?.trim() || '',
-  })`);
-  if (!rejectedTarget.sendDisabled || !/обломк/i.test(rejectedTarget.message)) {
-    throw new Error(`${label}: recycle preview bypassed target validation ${JSON.stringify(rejectedTarget)}`);
-  }
+  // Owner rule (04.11.2026): a coordinate without debris is a valid recycle target (sent in advance).
+  await waitFor(win, `document.querySelector('[data-qa-flight-preview]') && !document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled`);
 
   await setFlightCoordinate(win, 'galaxy', target.coordinate[0]);
   await setFlightCoordinate(win, 'system', target.coordinate[1]);

@@ -1533,11 +1533,9 @@ export function dispatchFlight(
       return failure(state, 'target-not-available', 'Тип цели больше не совпадает с картой вселенной.');
     }
     recycleTargetKind = actualTarget.kind;
-    if (actualTarget.kind === 'empty'
-      && !asteroidOverlayIsActive
-      && getOrbitalDebrisAtCoordinate(currentEspionageState(state), command.destination.coordinate) <= 0) {
-      return failure(state, 'target-not-available', 'На свободной координате нет обломков для переработки.');
-    }
+    // Owner rule (04.11.2026): recyclers may be sent to any coordinate in advance, with no
+    // debris there yet (for example to arrive after a battle). What lies on the orbit at the
+    // moment of arrival is collected; an empty orbit sends the fleet home with a report.
     }
     const cargoCatalog = Object.fromEntries(
       getFactionShipCatalog(state.profile.factionId as CombatFactionId)
@@ -3338,7 +3336,9 @@ export function reconcileFlights(
           events.push({
             flight: returning,
             status: 'delivered',
-            notice: `Переработчик собрал обломки: ${collectedDebris.collected}. Корабли возвращаются.`,
+            notice: collectedDebris.collected > 0
+              ? `Переработчик собрал обломки: ${collectedDebris.collected}. Корабли возвращаются.`
+              : 'Обломков не найдено. Корабли возвращаются.',
           });
           continue;
         }
