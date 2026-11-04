@@ -21,7 +21,6 @@ import { ACTIVE_RUNTIME_MODE, type TestTimeScale } from './domain/runtime/mode.t
 import { ResourceIcon } from './ui/resources/ResourceIcon';
 import './building-card.css';
 import './spaceport-upgrades.css';
-import './spaceport-upgrades-enhancements.css';
 
 type SpaceportUpgradeViewProps = {
   planetName: string;
@@ -43,21 +42,16 @@ const TRACK_LABELS: Readonly<Record<SpaceportUpgradeTrack, string>> = {
   commanders: 'Улучшения командирских кораблей',
 };
 
-const TYPE_LABELS: Readonly<Record<SpaceportUpgradeTrack, string>> = {
-  ships: 'КОРАБЛЬ',
-  commanders: 'КОМАНДИРСКИЙ КОРАБЛЬ',
-};
-
 const RESOURCE_LABELS: Readonly<Record<keyof SpaceportUpgradeWallet, string>> = {
   metal: 'металла',
   minerals: 'минералов',
   gas: 'газа',
 };
 
-const RESOURCE_SHORT_LABELS: Readonly<Record<keyof SpaceportUpgradeWallet, string>> = {
-  metal: 'МЕТАЛЛ',
-  minerals: 'МИНЕРАЛЫ',
-  gas: 'ГАЗ',
+const RESOURCE_NAMES: Readonly<Record<keyof SpaceportUpgradeWallet, string>> = {
+  metal: 'Металл',
+  minerals: 'Минералы',
+  gas: 'Газ',
 };
 
 const SCIENCE_ARTS = import.meta.glob('../assets/source/New assets/technologies/*.png', {
@@ -75,24 +69,8 @@ function formatCountdown(ms: number) {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
-function formatTaskTime(ms: number) {
-  const total = Math.max(0, Math.round(ms / 1000));
-  const hours = Math.floor(total / 3600);
-  const minutes = Math.floor((total % 3600) / 60);
-  const seconds = total % 60;
-  return hours > 0
-    ? `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
-    : `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-}
-
 function queueOf(upgrades: SpaceportUpgradeState, track: SpaceportUpgradeTrack) {
   return track === 'ships' ? upgrades.shipQueue : upgrades.commanderQueue;
-}
-
-function requirementValueLabel(requirement: SpaceportRequirementState) {
-  if (requirement.valueKind === 'quantity') return 'количество';
-  if (requirement.valueKind === 'unknown') return 'значение';
-  return 'ур.';
 }
 
 function requirementCurrentLabel(requirement: SpaceportRequirementState) {
@@ -107,17 +85,12 @@ function requirementRequiredLabel(requirement: SpaceportRequirementState) {
   return 'Требуется';
 }
 
-function requirementBlocker(requirement: SpaceportRequirementState, factionId: CombatFactionId) {
+/** A requirement the ship still misses, in the fewest plain words: «Ионная наука ур. 3». */
+function requirementShortLabel(requirement: SpaceportRequirementState, factionId: CombatFactionId) {
   const label = localizeBuildingNames(requirement.label, factionId);
-  const valueLabel = requirementValueLabel(requirement);
-  if (requirement.valueKind === 'level') {
-    if (requirement.currentLevel == null) return `Нужна ${label} ур. ${requirement.requiredLevel} · текущий уровень не подключён`;
-    return `Нужна ${label} ур. ${requirement.requiredLevel} · сейчас ${requirement.currentLevel}`;
-  }
-  if (requirement.currentLevel == null) {
-    return `Нужна ${label} · ${valueLabel} ${requirement.requiredLevel} · текущее ${valueLabel} не подключено`;
-  }
-  return `Нужна ${label} · ${valueLabel} ${requirement.requiredLevel} · сейчас ${requirement.currentLevel}`;
+  if (requirement.valueKind === 'level') return `${label} ур. ${requirement.requiredLevel}`;
+  if (requirement.valueKind === 'quantity') return `${label}: ${requirement.requiredLevel} шт.`;
+  return `${label}: ${requirement.requiredLevel}`;
 }
 
 function requirementArt(requirement: SpaceportRequirementState, factionId: CombatFactionId): string | null {
@@ -134,7 +107,6 @@ function RequirementBadge({ requirement, factionId }: { requirement: SpaceportRe
   const art = requirementArt(requirement, factionId);
   const status = requirement.met ? 'выполнено' : 'не выполнено';
   const current = requirement.currentLevel == null ? 'неизвестно' : String(requirement.currentLevel);
-  const valueLabel = requirementValueLabel(requirement);
   const currentLabel = requirementCurrentLabel(requirement);
   const requiredLabel = requirementRequiredLabel(requirement);
   const label = localizeBuildingNames(requirement.label, factionId);
@@ -174,7 +146,7 @@ function RequirementBadge({ requirement, factionId }: { requirement: SpaceportRe
         className="spaceport-requirement-fallback-v2"
         data-qa-spaceport-requirement-fallback={requirement.label}
       >
-        {label} · {valueLabel} {requirement.requiredLevel} · asset не найден
+        {requirementShortLabel(requirement, factionId)}
       </span>
     );
   }
@@ -210,13 +182,13 @@ function LevelProgress({
   track,
   currentLevel,
   projectedLevel,
-  queuedCount,
+  queuedPositions,
   nextLevel,
 }: {
   track: SpaceportUpgradeTrack;
   currentLevel: number;
   projectedLevel: number;
-  queuedCount: number;
+  queuedPositions: readonly { taskId: string; position: number }[];
   nextLevel: number | null;
 }) {
   const maxLevel = getSpaceportUpgradeMaxLevel(track);
@@ -224,21 +196,28 @@ function LevelProgress({
 
   return (
     <section
-      className={`spaceport-level-progress-v2 ${isMax ? 'is-max' : ''}`}
+      className={`sp-level ${isMax ? 'is-max' : ''}`}
       data-qa-spaceport-level-progress
       data-qa-current-level={currentLevel}
       data-qa-projected-level={projectedLevel}
       data-qa-max-level={maxLevel}
-      aria-label={`Текущий уровень ${currentLevel} из ${maxLevel}. Заказано уровней: ${queuedCount}.`}
+      aria-label={`Уровень ${currentLevel} из ${maxLevel}. В очереди уровней: ${queuedPositions.length}.`}
     >
-      <div className="spaceport-level-progress-meta-v2">
-        <span>Получено <b>{currentLevel}</b> / {maxLevel}</span>
+      <div className="sp-level__caption">
         {isMax ? (
-          <strong>Максимальный уровень</strong>
+          <strong>Максимальный уровень {maxLevel}</strong>
         ) : (
           <>
-            <span>Заказано <b>+{queuedCount}</b> → {projectedLevel}</span>
-            <span>Следующий заказ <b>{nextLevel ?? 'MAX'}</b></span>
+            <span>Уровень <b>{currentLevel}</b> из {maxLevel}</span>
+            {queuedPositions.length > 0 ? (
+              <span className="sp-level__queued">
+                в очереди
+                {queuedPositions.map(({ taskId, position }) => (
+                  <span key={taskId} data-qa-spaceport-queued-task data-qa-spaceport-queued-position={position}>№{position}</span>
+                ))}
+              </span>
+            ) : null}
+            {nextLevel !== null ? <span className="sp-level__next">→ <b>{nextLevel}</b></span> : null}
           </>
         )}
       </div>
@@ -273,7 +252,7 @@ function SelectedQueue({
   const queue = queueOf(upgrades, track);
 
   return (
-    <section className="spaceport-side-queue" data-qa-spaceport-queue={track}>
+    <section className="sp-queue" data-qa-spaceport-queue={track}>
       <header>
         <span>ОЧЕРЕДЬ</span>
         <strong data-qa-spaceport-queue-count={`${queue.length}/${SPACEPORT_UPGRADE_QUEUE_CAPACITY}`}>
@@ -282,52 +261,56 @@ function SelectedQueue({
       </header>
 
       {queue.length === 0 ? (
-        <div className="spaceport-queue-empty" data-qa-spaceport-queue-empty>
-          <span aria-hidden="true">◇</span>
-          <div>
-            <strong>Очередь свободна</strong>
-            <small>Можно запустить новое улучшение.</small>
-          </div>
-        </div>
-      ) : (
-        <div className="spaceport-queue-list">
-          {queue.map((task, index) => {
-            const entity = getSpaceportUpgradeEntity(track, task.shipId, factionId);
-            const active = index === 0;
-            return (
-              <article
-                key={task.id}
-                className={`spaceport-queue-task ${active ? 'is-active' : 'is-waiting'}`}
-                data-qa-spaceport-queue-task={task.shipId}
-                data-qa-spaceport-queue-task-id={task.id}
-                data-qa-spaceport-queue-position={index + 1}
-              >
-                {entity ? <img src={entity.art} alt="" draggable={false} /> : <span className="spaceport-queue-fallback">◇</span>}
-                <div>
-                  <strong>{entity?.name ?? task.shipId}</strong>
-                  <small>ур. {task.fromLevel} → {task.toLevel}</small>
-                  {active ? (
-                    <time>{now >= task.finishAt ? 'ЗАВЕРШЕНИЕ…' : formatCountdown(task.finishAt - now)}</time>
-                  ) : (
-                    <span>ОЖИДАЕТ · ПОЗИЦИЯ {index + 1}</span>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  className="spaceport-queue-cancel"
-                  data-qa-spaceport-cancel={task.id}
-                  disabled={task.refundEligible === false}
-                  title={task.refundEligible === false ? 'Отмена недоступна: сохранённая стоимость старого задания не подтверждена.' : 'Отменить улучшение'}
-                  aria-label={`Отменить улучшение «${entity?.name ?? task.shipId}»`}
-                  onClick={() => onCancel(task)}
-                >×</button>
-              </article>
-            );
-          })}
-        </div>
-      )}
+        <p className="sp-queue__empty" data-qa-spaceport-queue-empty>Очередь свободна — выберите улучшение.</p>
+      ) : queue.map((task, index) => {
+        const entity = getSpaceportUpgradeEntity(track, task.shipId, factionId);
+        const active = index === 0;
+        const progress = Math.min(100, Math.max(0, ((now - task.startedAt) / Math.max(1, task.finishAt - task.startedAt)) * 100));
+        const cancelBlocked = task.refundEligible === false;
+        return (
+          <article
+            key={task.id}
+            className={`sp-task ${active ? 'is-active' : 'is-waiting'}`}
+            data-qa-spaceport-queue-task={task.shipId}
+            data-qa-spaceport-queue-task-id={task.id}
+            data-qa-spaceport-queue-position={index + 1}
+          >
+            {entity ? <img src={entity.art} alt="" draggable={false} /> : <span className="sp-task__art-empty" aria-hidden="true" />}
+            <div className="sp-task__copy">
+              <strong>{entity?.name ?? task.shipId}</strong>
+              <span>Уровень {task.fromLevel} → {task.toLevel}</span>
+              {cancelBlocked ? <span>Старый заказ: отменить нельзя</span> : null}
+            </div>
+            <button
+              type="button"
+              className="sp-task__cancel"
+              data-qa-spaceport-cancel={task.id}
+              disabled={cancelBlocked}
+              aria-label={cancelBlocked ? `Отмена недоступна: «${entity?.name ?? task.shipId}», стоимость старого заказа не подтверждена` : `Отменить улучшение «${entity?.name ?? task.shipId}»`}
+              onClick={() => onCancel(task)}
+            >×</button>
+            {active ? (
+              <>
+                <i className="sp-task__bar"><b style={{ width: `${progress}%` }} /></i>
+                <time>{now >= task.finishAt ? 'Завершается…' : formatCountdown(task.finishAt - now)}</time>
+              </>
+            ) : (
+              <small className="sp-task__wait">Ждёт очереди · №{index + 1}</small>
+            )}
+          </article>
+        );
+      })}
     </section>
   );
+}
+
+function pluralShips(count: number) {
+  const tens = count % 100;
+  const ones = count % 10;
+  if (tens >= 11 && tens <= 14) return 'кораблей';
+  if (ones === 1) return 'корабль';
+  if (ones >= 2 && ones <= 4) return 'корабля';
+  return 'кораблей';
 }
 
 export function SpaceportUpgradeView({
@@ -394,19 +377,14 @@ export function SpaceportUpgradeView({
   return (
     <main className="spaceport-upgrades spaceport-upgrades-v2" data-qa-spaceport-upgrades data-qa-spaceport-track={activeTrack}>
       <aside className="spaceport-sidebar-v2" data-qa-spaceport-sidebar>
-        <header className="spaceport-sidebar-title-v2">
-          <small>ASTERION // ВОЕННАЯ ЗОНА</small>
-          <h1>{spaceport.name.toUpperCase()}</h1>
-        </header>
-
-        <section className="building-card-v2 spaceport-building-card-v2">
+        <header className="sp-side-head">
           <img src={spaceport.art} alt={spaceport.name} draggable={false} />
           <div>
-            <small>{planetName}</small>
-            <strong>УРОВЕНЬ {buildingLevel} / 10</strong>
-            <p>Каждый уровень ускоряет только новые улучшения на 5%.</p>
+            <h1>{spaceport.name.toUpperCase()}</h1>
+            <small>{planetName} <span className="sp-side-head__level">УРОВЕНЬ {buildingLevel} / 10</span></small>
+            <small className="sp-side-head__speed">−5% времени новых улучшений за уровень</small>
           </div>
-        </section>
+        </header>
 
         <nav className="spaceport-sections-v2" aria-label={`Разделы: ${spaceport.name}`}>
           {(['ships', 'commanders'] as const).map((track) => {
@@ -429,22 +407,16 @@ export function SpaceportUpgradeView({
 
         <SelectedQueue track={activeTrack} factionId={factionId} upgrades={upgrades} now={now} onCancel={setPendingCancellation} />
 
-        <button type="button" className="spaceport-back-v2" data-qa-building-interior-back onClick={onBack}>
-          <span aria-hidden="true">←</span>
-          Назад: {spaceport.name}
-        </button>
       </aside>
 
       <section className="spaceport-main-v2">
-        <header className="spaceport-main-heading-v2">
-          <div>
-            <small>{activeTrack === 'ships' ? 'КАТАЛОГ КОРАБЛЕЙ' : 'КАТАЛОГ КОМАНДИРСКИХ КОРАБЛЕЙ'}</small>
-            <h2>{TRACK_LABELS[activeTrack].toUpperCase()}</h2>
-          </div>
-          <div className="spaceport-heading-meta-v2">
-            <span>{catalog.length} ПОЗИЦИЙ</span>
-            <span>{selectedQueue.length} / {SPACEPORT_UPGRADE_QUEUE_CAPACITY} В ОЧЕРЕДИ</span>
-          </div>
+        <header className="sp-main-head">
+          <h2>{TRACK_LABELS[activeTrack].toUpperCase()}</h2>
+          <span>{catalog.length} {pluralShips(catalog.length)}</span>
+          <button type="button" className="spaceport-back-v2" data-qa-building-interior-back onClick={onBack}>
+            <span aria-hidden="true">←</span>
+            Назад: {spaceport.name}
+          </button>
         </header>
 
         <div className="spaceport-catalog-v2" data-qa-spaceport-catalog={activeTrack}>
@@ -459,82 +431,71 @@ export function SpaceportUpgradeView({
               mode: ACTIVE_RUNTIME_MODE,
               testTimeScale,
             }, activeTrack, entity.id);
-            const queuedTasks = selectedQueue
-              .map((task, index) => ({ task, index }))
-              .filter(({ task }) => task.shipId === entity.id);
-            const isQueued = queuedTasks.length > 0;
+            const queuedPositions = selectedQueue
+              .map((task, index) => ({ task, position: index + 1 }))
+              .filter(({ task }) => task.shipId === entity.id)
+              .map(({ task, position }) => ({ taskId: task.id, position }));
+            const isQueued = queuedPositions.length > 0;
             const missingRequirements = preview.requirements.filter((requirement) => !requirement.met);
             const resourceKeys = (Object.keys(preview.cost) as (keyof SpaceportUpgradeWallet)[])
               .filter((key) => key !== 'gas' || preview.gasSpecified);
-            const missingResources = resourceKeys
-              .filter((key) => wallet[key] < preview.cost[key]);
+            const isMax = preview.status === 'max-level';
+            const missingResources = isMax ? [] : resourceKeys.filter((key) => wallet[key] < preview.cost[key]);
             const uiCanStart = preview.canStart;
-            const ctaText = preview.status === 'max-level'
-              ? 'МАКСИМАЛЬНЫЙ УРОВЕНЬ'
-              : preview.status === 'queue-full'
-                ? 'ОЧЕРЕДЬ УЛУЧШЕНИЙ ЗАПОЛНЕНА'
-                : `ЗАКАЗАТЬ УРОВЕНЬ ${preview.nextLevel ?? preview.currentLevel}`;
-            const actionReason = missingRequirements.length > 0
-              ? missingRequirements.map((requirement) => requirementBlocker(requirement, factionId)).join('. ')
-              : missingResources.length > 0
-                ? missingResources.map((key) => `Недостаточно ${RESOURCE_LABELS[key]}`).join('. ')
-                : preview.reason ?? undefined;
+            const queueFull = preview.status === 'queue-full' && missingRequirements.length === 0;
 
             return (
               <article
                 key={entity.id}
-                className={`spaceport-row-v2 ${uiCanStart ? 'is-available' : 'is-blocked'} ${isQueued ? 'is-queued' : ''}`}
+                className={`spaceport-row-v2 sp-card ${uiCanStart ? 'is-available' : 'is-blocked'} ${isQueued ? 'is-queued' : ''}`}
                 data-qa-spaceport-card={entity.id}
                 data-qa-spaceport-row={entity.id}
-                data-qa-spaceport-queued-count={queuedTasks.length}
+                data-qa-spaceport-queued-count={queuedPositions.length}
                 data-qa-spaceport-duration-ms={preview.effectiveDurationMs}
               >
-                <div className="spaceport-row-art-v2">
+                <div className="sp-card__art">
                   <img src={entity.art} alt={entity.name} draggable={false} />
-                  <span>УР. {preview.currentLevel}</span>
                 </div>
 
-                <div className="spaceport-row-info-v2">
+                <div className="sp-card__ship">
                   <header>
-                    <small>{TYPE_LABELS[activeTrack]}</small>
                     <h3>{entity.name}</h3>
-                    <p>{entity.role} · {entity.category}</p>
+                    {entity.role !== entity.name ? <p>{entity.role}</p> : null}
                   </header>
-
                   <LevelProgress
                     track={activeTrack}
                     currentLevel={preview.currentLevel}
                     projectedLevel={preview.projectedLevel}
-                    queuedCount={preview.queuedCount}
+                    queuedPositions={queuedPositions}
                     nextLevel={preview.nextLevel}
                   />
+                </div>
 
-                  <div className="spaceport-level-line-v2">
-                    <span>Фактический уровень <b>{preview.currentLevel}</b></span>
-                    <i aria-hidden="true">→</i>
-                    <span>После очереди <b>{preview.projectedLevel}</b></span>
-                    <i aria-hidden="true">→</i>
-                    <span>Следующий клик <b>{preview.nextLevel ?? 'MAX'}</b></span>
-                  </div>
-
-                  <div className="spaceport-cost-line-v2" aria-label="Стоимость улучшения">
-                    <span className="spaceport-line-label-v2">СТОИМОСТЬ</span>
+                <div className="sp-card__price">
+                  {isMax ? <span className="sp-card__done">{preview.currentLevel >= preview.projectedLevel ? 'Корабль улучшен полностью' : 'Последний уровень уже в очереди'}</span> : (
+                  <>
+                  <div className="sp-costs" aria-label="Стоимость улучшения">
                     {resourceKeys.map((key) => (
-                      <span className="spaceport-cost-chip-v2" key={key} data-resource={key}>
-                        <span className="spaceport-cost-icon-v2">
-                          <ResourceIcon kind={key} />
-                        </span>
-                        <small>{RESOURCE_SHORT_LABELS[key]}</small>
+                      <span
+                        className={`sp-cost ${wallet[key] < preview.cost[key] ? 'is-short' : ''} ${preview.cost[key] === 0 ? 'is-free' : ''}`}
+                        key={key}
+                        data-qa-spaceport-cost
+                        data-resource={key}
+                        aria-label={`${RESOURCE_NAMES[key]}: нужно ${formatNumber(preview.cost[key])}, есть ${formatNumber(wallet[key])}`}
+                      >
+                        <span className="sp-cost__icon"><ResourceIcon kind={key} /></span>
                         <strong>{formatNumber(preview.cost[key])}</strong>
                       </span>
                     ))}
-                    {!preview.gasSpecified ? <span className="spaceport-cost-source-note-v2" data-qa-spaceport-gas-unspecified>ГАЗ · источник не указывает</span> : null}
+                    {!preview.gasSpecified ? <span className="sp-cost__note" data-qa-spaceport-gas-unspecified>Газ не нужен</span> : null}
+                    <span className="sp-time" aria-label="Время улучшения">
+                      <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25" /><path d="M8 4.6V8l2.4 1.6" /></svg>
+                      <strong>{formatCountdown(preview.effectiveDurationMs)}</strong>
+                    </span>
                   </div>
-
-                  <div className="spaceport-requirement-line-v2">
-                    <span className="spaceport-line-label-v2">ТРЕБОВАНИЯ</span>
-                    <div className="spaceport-requirement-badges-v2">
-                      {preview.requirements.length === 0 ? <span className="spaceport-no-requirements-v2">Нет дополнительных требований</span> : null}
+                  {preview.requirements.length > 0 ? (
+                    <div className="sp-reqs">
+                      <span>Требуется</span>
                       {preview.requirements.map((requirement) => (
                         <RequirementBadge
                           key={`${entity.id}-${requirement.kind}-${requirement.label}`}
@@ -543,72 +504,45 @@ export function SpaceportUpgradeView({
                         />
                       ))}
                     </div>
-                  </div>
-
-                  {/* One status line of constant height (as in «Наука»): ordering, a
-                      blocker or a full queue never changes the card height. */}
-                  <div className="spaceport-status-slot-v2" data-qa-spaceport-status>
-                    {queuedTasks.map(({ task, index }) => (
-                      <span
-                        className="spaceport-state-strip-v2 queued"
-                        data-qa-spaceport-queued-task={entity.id}
-                        data-qa-spaceport-queued-position={index + 1}
-                        key={task.id}
-                        title={`Заказано · позиция ${index + 1} в общей очереди · ур. ${task.fromLevel} → ${task.toLevel}`}
-                      >
-                        №{index + 1} · ур. {task.fromLevel} → {task.toLevel}
-                        {index === 0 ? ` · ${formatCountdown(task.finishAt - now)}` : ' · ожидает'}
-                      </span>
-                    ))}
-
-                    {missingRequirements.map((requirement) => (
-                      <span
-                        className="spaceport-state-strip-v2 blocked"
-                        data-qa-spaceport-blocker="requirement"
-                        key={`${entity.id}-block-${requirement.kind}-${requirement.label}`}
-                        title={requirementBlocker(requirement, factionId)}
-                      >
-                        {requirementBlocker(requirement, factionId)}
-                      </span>
-                    ))}
-
-                    {missingResources.map((key) => (
-                      <span className="spaceport-state-strip-v2 blocked" data-qa-spaceport-blocker="resource" key={`${entity.id}-resource-${key}`}
-                        title={`Недостаточно ${RESOURCE_LABELS[key]} · нужно ${formatNumber(preview.cost[key])}, есть ${formatNumber(wallet[key])}`}>
-                        Недостаточно {RESOURCE_LABELS[key]} · нужно {formatNumber(preview.cost[key])}
-                      </span>
-                    ))}
-
-                    {preview.status === 'queue-full' && missingRequirements.length === 0 ? (
-                      <span className="spaceport-state-strip-v2 muted" data-qa-spaceport-blocker="queue">Очередь улучшений заполнена · 3 / 3</span>
-                    ) : null}
-
-                    {preview.status === 'max-level' ? (
-                      <span className="spaceport-state-strip-v2 max" data-qa-spaceport-blocker="max">Максимальный уровень</span>
-                    ) : null}
-                  </div>
+                  ) : <span className="sp-reqs__none">Без требований</span>}
+                  </>
+                  )}
                 </div>
 
-                <aside className="spaceport-row-action-v2">
-                  <span>СЛЕДУЮЩИЙ ЗАКАЗ</span>
-                  <strong>{preview.nextLevel ?? 'MAX'}</strong>
-                  <div className="spaceport-row-time-v2">
-                    <small>ВРЕМЯ НОВОЙ ЗАДАЧИ</small>
-                    <time>{formatTaskTime(preview.effectiveDurationMs)}</time>
-                    <em>{spaceport.name} ур. {buildingLevel}</em>
-                  </div>
+                <div className="sp-card__action">
                   <button
                     type="button"
                     className="spaceport-upgrade-cta-v2"
                     data-qa-spaceport-upgrade={entity.id}
                     disabled={!uiCanStart}
-                    title={actionReason}
                     onClick={() => onUpgrade(activeTrack, entity.id)}
                   >
-                    {ctaText}
+                    {isMax ? 'МАКСИМУМ' : `УЛУЧШИТЬ ДО ${preview.nextLevel ?? preview.currentLevel}`}
                   </button>
-                  {!uiCanStart && actionReason ? <small className="spaceport-action-reason-v2">{actionReason}</small> : null}
-                </aside>
+                  {/* Why the button is off, in words; nothing here when it is on. */}
+                  <div className="sp-why" data-qa-spaceport-status>
+                    {missingRequirements.length > 0 ? (
+                      <span className="sp-why__line">
+                        Нужно:{' '}
+                        {missingRequirements.map((requirement, index) => (
+                          <span data-qa-spaceport-blocker="requirement" key={`${entity.id}-block-${requirement.kind}-${requirement.label}`}>
+                            {index > 0 ? ', ' : ''}{requirementShortLabel(requirement, factionId)}
+                          </span>
+                        ))}
+                      </span>
+                    ) : null}
+                    {missingRequirements.length === 0 && missingResources.length > 0 ? (
+                      <span className="sp-why__line">
+                        {missingResources.map((key, index) => (
+                          <span data-qa-spaceport-blocker="resource" key={`${entity.id}-resource-${key}`}>
+                            {index > 0 ? ', ' : 'Не хватает '}{RESOURCE_LABELS[key]}
+                          </span>
+                        ))}
+                      </span>
+                    ) : null}
+                    {queueFull ? <span className="sp-why__line is-muted" data-qa-spaceport-blocker="queue">Очередь улучшений заполнена</span> : null}
+                  </div>
+                </div>
               </article>
             );
           })}

@@ -158,7 +158,7 @@ async function readScreen(win) {
       rate: text('[data-qa-trade-rate]'),
       validation: text('[data-qa-trade-validation]'),
       submitDisabled: Boolean(root.querySelector('[data-qa-trade-submit]')?.disabled),
-      amount: input instanceof HTMLInputElement ? Number(input.value) : null,
+      amount: input instanceof HTMLInputElement ? Number(input.value.replace(/\\s/g, '')) : null,
       slider: slider instanceof HTMLInputElement ? Number(slider.value) : null,
       send: Number(attr('[data-qa-trade-send]', 'data-qa-trade-send')),
       receive: Number(attr('[data-qa-trade-receive]', 'data-qa-trade-receive')),
@@ -200,9 +200,9 @@ async function measure(win) {
       viewport: { width: window.innerWidth, height: window.innerHeight },
       document: { width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight },
       root: pick(root),
-      info: pick(root.querySelector('.trade-info-panel')),
-      workspace: pick(root.querySelector('.trade-workspace')),
-      flow: pick(root.querySelector('.trade-flow')),
+      give: pick(root.querySelector('[data-qa-trade-give]')),
+      result: pick(root.querySelector('[data-qa-trade-result]')),
+      get: pick(root.querySelector('[data-qa-trade-get]')),
       sourceCards: Array.from(root.querySelectorAll('[data-qa-trade-source]')).map(pick),
       targetCards: Array.from(root.querySelectorAll('[data-qa-trade-target]')).map(pick),
       input: pick(root.querySelector('[data-qa-trade-amount-input]')),
@@ -218,18 +218,19 @@ async function measure(win) {
 function assertGeometry(snapshot, label) {
   if (!snapshot) throw new Error(`${label}: missing Trade Center geometry`);
   const epsilon = 2;
-  const { viewport, document, root, info, workspace, flow, sourceCards, targetCards, input, slider, minus, plus, max, submit } = snapshot;
+  const { viewport, document, root, give, result, get, sourceCards, targetCards, input, slider, minus, plus, max, submit } = snapshot;
   if (document.width > viewport.width + epsilon) throw new Error(`${label}: horizontal page overflow ${JSON.stringify(snapshot)}`);
   if (root.left < -epsilon || root.right > viewport.width + epsilon || root.top < -epsilon) throw new Error(`${label}: Trade Center root clipped ${JSON.stringify(snapshot)}`);
-  if (!info || !workspace || info.right > workspace.left + epsilon) throw new Error(`${label}: main columns overlap`);
-  if (!flow || sourceCards.length !== 4 || targetCards.length !== 3) throw new Error(`${label}: resource flow incomplete`);
+  if (!give || !result || !get || give.right > result.left + epsilon || result.right > get.left + epsilon) throw new Error(`${label}: main columns overlap`);
+  if (sourceCards.length !== 4 || targetCards.length !== 3) throw new Error(`${label}: resource flow incomplete`);
+  if (submit && submit.bottom > viewport.height + epsilon) throw new Error(`${label}: the exchange button is below the window ${JSON.stringify(snapshot)}`);
   for (const card of [...sourceCards, ...targetCards]) {
     if (!card || card.width < 75 || card.height < 55) throw new Error(`${label}: resource card unreadable ${JSON.stringify(card)}`);
   }
   if (!input || input.width < 85 || !slider || slider.width < 100 || !minus || minus.width < 25 || !plus || plus.width < 25 || !max || max.width < 45 || !submit || submit.width < 150) {
     throw new Error(`${label}: amount/action controls too small ${JSON.stringify(snapshot)}`);
   }
-  if (minus.right > input.left + epsilon || input.right > slider.left + epsilon || slider.right > plus.left + epsilon || plus.right > max.left + epsilon) {
+  if (input.right > slider.left + epsilon || input.right > minus.left + epsilon || minus.right > plus.left + epsilon || plus.right > max.left + epsilon || slider.right > submit.left + epsilon || max.right > submit.left + epsilon) {
     throw new Error(`${label}: amount controls overlap ${JSON.stringify(snapshot)}`);
   }
 }
@@ -242,7 +243,7 @@ async function assertTooltip(win, label, selector) {
     if (!tip) return null;
     const style = getComputedStyle(tip);
     const rect = tip.getBoundingClientRect();
-    const panel = card.closest('.trade-resource-panel')?.getBoundingClientRect();
+    const panel = card.closest('.tc-side')?.getBoundingClientRect();
     return {
       opacity: Number(style.opacity),
       visibility: style.visibility,
