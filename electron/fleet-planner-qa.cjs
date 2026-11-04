@@ -8,6 +8,7 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { editSaveIdle } = require('./qa-save-edit.cjs');
 
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
@@ -73,10 +74,9 @@ async function click(win, selector) {
   await settle(win);
 }
 
-/** The world for a scenario; written with the reload in one renderer turn so no autosave lands in between. */
+/** The world for a scenario, written while no game is running (a running game would write over it). */
 async function seed(win, scenario = {}) {
-  const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-  const ok = await run(win, `(() => {
+  const ok = await editSaveIdle(win, `(() => {
     const scenario = ${JSON.stringify(scenario)};
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
     const home = save?.planets?.[${JSON.stringify(HOME)}];
@@ -122,12 +122,9 @@ async function seed(win, scenario = {}) {
     save.fleetUi = { favoriteTargets: [], ...(scenario.plans ? { plans: scenario.plans } : {}) };
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     localStorage.setItem('asterion.test-time-scale.v1', '1');
-    setTimeout(() => window.location.reload(), 0);
     return true;
-  })()`);
+  })()`, { ready: `document.querySelector('[data-qa-navigation="utility"]')`, label: 'planner fixture' });
   if (!ok) throw new Error('Could not seed the fixture');
-  await loaded;
-  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`, 20000);
   await run(win, 'document.fonts?.ready');
   await settle(win, 300);
 }
@@ -377,7 +374,7 @@ async function runViewport(win, directory) {
   // A fleet on a mission counts as «в рейсе» and is not ordered again.
   await seed(win, { ships: fleet, plans: homePlan(OWNER_PLAN) });
   await run(win, `window.__planFlight = null; window.addEventListener('asterion:flight-command-result', (event) => { window.__planFlight = event.detail?.ok ? 'ok' : JSON.stringify(event.detail?.error); }); window.dispatchEvent(new CustomEvent('asterion:flight-dispatch-request', { detail: {
-    missionId: 'transport', originPlanetId: ${JSON.stringify(HOME)}, targetRelation: 'self',
+    requestId: 'qa-plan-flight', missionId: 'transport', originPlanetId: ${JSON.stringify(HOME)}, targetRelation: 'self',
     destination: { kind: 'planet', planetId: 'planet-1-1-6', coordinate: { galaxy: 1, system: 1, position: 6 } },
     cargo: { metal: 100, minerals: 0, gas: 0, debris: 0 }, selectedShips: { scout: 60 }, selectedCommanders: {},
   } })); true`);
