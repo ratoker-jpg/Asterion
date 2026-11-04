@@ -1,8 +1,10 @@
 // «Империя» console QA: 7 planets with the worst cases (a long name, an empty
 // planet, full storages, every build queue empty) at 1920×1080 and 1280×720.
-// Checks the layout contract (all lanes on screen, no horizontal scroll, no
-// overlapping cells), queues a building from the console, gathers resources
-// from several planets in one send, and checks toasts never cover a control.
+// Checks the layout contract (all rows on screen, no horizontal scroll, no
+// overlapping cells, timers not cut), opens a planet's panel, queues a building
+// and a shipyard order from the console, gathers resources from several planets
+// in one send, the «no free ships» advice, the debris quick-send, and that
+// toasts never cover a control.
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
@@ -12,7 +14,7 @@ app.commandLine.appendSwitch('disable-gpu');
 app.on('window-all-closed', () => {});
 
 const ROOT = path.join(__dirname, '..');
-const OUTPUT = process.env.ASTERION_QA_OUTPUT || path.join(ROOT, 'visual-qa', 'empire-management');
+const OUTPUT = process.env.ASTERION_QA_OUTPUT || path.join(ROOT, 'visual-qa', 'empire-v2');
 const SKIP_SCREENSHOTS = process.env.ASTERION_SKIP_SCREENSHOTS === '1';
 const SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
@@ -66,15 +68,20 @@ async function click(win, selector) {
 }
 
 /** Seven planets; writes the save and reloads in one renderer turn so no autosave runs in between. */
-async function seed(win) {
+async function seed(win, { noShips = false } = {}) {
   const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
   const ok = await win.webContents.executeJavaScript(`(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
     const home = save?.planets?.['helion-01'];
     if (!home) return false;
     const now = Date.now();
-    const ships = (list) => Object.fromEntries(Object.keys(home.fleet.ships).map((id) => [id, list[id] || 0]));
-    home.fleet.ships = ships({ 'spy-probe': 5, transporter: 30, 'mega-transporter': 5, recycler: 15, cruiser: 60, battleship: 20, scout: 40 });
+    const noShips = ${JSON.stringify(noShips)};
+    const ships = (list) => Object.fromEntries(Object.keys(home.fleet.ships).map((id) => [id, noShips ? 0 : list[id] || 0]));
+    home.fleet.ships = ships({ 'spy-probe': 5, transporter: 30, 'mega-transporter': 5, recycler: 300, cruiser: 60, battleship: 20, scout: 40 });
+    home.buildings.shipyard = Math.max(home.buildings.shipyard || 0, 12);
+    home.buildings.hangar = Math.max(home.buildings.hangar || 0, 12);
+    home.fleetProduction = { shipQueue: [], defenseQueue: [], commanderQueue: [] };
+    for (const id of Object.keys(save.science.levels)) save.science.levels[id] = Math.max(save.science.levels[id] || 0, 6);
     save.currentPlanetId = 'helion-01';
     save.metal = 450100000; save.minerals = 300100000; save.gas = 189382930;
     save.queues = { 'helion-01': [] };
@@ -86,6 +93,10 @@ async function seed(win) {
       save.planets[id] = planet;
       save.queues[id] = [];
       if (save.resourceClock?.byPlanet) save.resourceClock.byPlanet[id] = { ...(save.resourceClock.byPlanet['helion-01'] || {}), lastReconciledAt: now };
+    }
+    if (noShips) {
+      // Only the home planet holds transports: the panel must say so and suggest where to build.
+      home.fleet.ships.transporter = 30;
     }
     save.flights = { records: [], requestIndex: {} };
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
@@ -108,12 +119,25 @@ function coveredControls(win) {
       .filter((node) => {
         const box = node.getBoundingClientRect();
         const style = getComputedStyle(node);
-        return box.width > 2 && box.height > 2 && style.visibility !== 'hidden' && style.opacity !== '0'
-          && toasts.some((toast) => box.left < toast.right && toast.left < box.right && box.top < toast.bottom && toast.top < box.bottom);
+        // A row scrolled out of the list is clipped, so only its visible part counts.
+        const list = node.closest('.empire__lanes')?.getBoundingClientRect();
+        const top = list ? Math.max(box.top, list.top) : box.top;
+        const bottom = list ? Math.min(box.bottom, list.bottom) : box.bottom;
+        return box.width > 2 && bottom - top > 2 && style.visibility !== 'hidden' && style.opacity !== '0' && !node.closest('[inert]')
+          && toasts.some((toast) => box.left < toast.right && toast.left < box.right && top < toast.bottom && toast.top < bottom);
       })
       .map((node) => (node.getAttribute('aria-label') || node.textContent || '').trim().slice(0, 40));
   })()`);
 }
+
+const onScreen = (selector) => `(() => { const b = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return b.left >= 0 && b.top >= 0 && b.right <= innerWidth + 0.5 && b.bottom <= innerHeight + 0.5; })()`;
+
+/** Every timer in the row is fully visible (not cut by an ellipsis or the row's edge). */
+const timersClipped = `Array.from(document.querySelectorAll('.empire-lane__row time')).filter((time) => {
+  const box = time.getBoundingClientRect();
+  const parent = time.parentElement.getBoundingClientRect();
+  return box.width === 0 || box.right > parent.right + 0.5;
+}).length`;
 
 async function runViewport(win, directory) {
   const metrics = {};
@@ -127,7 +151,8 @@ async function runViewport(win, directory) {
     const empire = document.querySelector('[data-qa-empire]');
     const overlaps = [];
     for (const lane of lanes) {
-      const cells = Array.from(lane.children).map((cell) => cell.getBoundingClientRect());
+      const row = lane.querySelector('.empire-lane__row');
+      const cells = Array.from(row.children).map((cell) => cell.getBoundingClientRect());
       for (let i = 1; i < cells.length; i += 1) if (cells[i].left < cells[i - 1].right - 1) overlaps.push(lane.dataset.qaEmpireRow + ':' + i);
       const box = lane.getBoundingClientRect();
       if (cells.some((cell) => cell.right > box.right + 1)) overlaps.push(lane.dataset.qaEmpireRow + ':out');
@@ -138,77 +163,160 @@ async function runViewport(win, directory) {
       viewport: [innerWidth, innerHeight],
       pageScrollX: document.documentElement.scrollWidth - innerWidth,
       empireScrollX: empire.scrollWidth - empire.clientWidth,
+      summaryOverflow: (() => { const s = document.querySelector('[data-qa-empire-summary]'); return s.scrollWidth - s.clientWidth; })(),
       overlaps,
       idle: Number(document.querySelector('[data-qa-empire-idle]').dataset.qaEmpireIdle),
       full: document.querySelectorAll('[data-qa-empire-row="planet-1-5-2"] [data-qa-empire-fill="full"]').length,
-      longNameClipped: (() => { const b = document.querySelector('[data-qa-empire-row="planet-1-2-4"] .empire-lane__planet b'); return b.scrollWidth > b.clientWidth; })(),
+      energyCells: document.querySelectorAll('[data-qa-empire-energy]').length,
+      footer: Array.from(document.querySelectorAll('[data-qa-empire-gather]')).map((button) => button.textContent.trim()),
     };
   })()`);
   const layout = metrics.layout;
   if (layout.lanes !== 7) fail('Not all 7 planets are listed', layout);
-  if (layout.lowestLane > layout.viewport[1]) fail('A planet lane is below the screen', layout);
+  if (layout.lowestLane > layout.viewport[1]) fail('A planet row is below the screen', layout);
   if (layout.pageScrollX > 0 || layout.empireScrollX > 0) fail('Horizontal scroll on the empire screen', layout);
-  if (layout.overlaps.length) fail('Lane cells overlap', layout.overlaps);
+  if (layout.summaryOverflow > 0) fail('The empire summary does not fit its strip', layout);
+  if (layout.overlaps.length) fail('Row cells overlap', layout.overlaps);
   if (layout.idle !== 7) fail('Idle markers: expected 7 planets with an empty queue', layout);
   if (layout.full !== 3) fail('Full storages are not marked on Нордин', layout);
-  await capture(win, directory, '01-empire-7-planets');
+  if (layout.energyCells !== 7) fail('Energy is not shown on every planet', layout);
+  if (layout.footer.join('|') !== 'Свезти ресурсы на планету|Собрать флот на планету') fail('Footer buttons name a planet', layout.footer);
+  await capture(win, directory, '01-collapsed-7-planets');
 
   // Queue a building on another planet without switching to it.
   await click(win, '[data-qa-empire-add="planet-1-1-6"]');
   await waitFor(win, `document.querySelector('[data-qa-empire-picker="planet-1-1-6"] [data-qa-empire-build]:not([aria-disabled="true"])')`);
-  metrics.pickerOnScreen = await win.webContents.executeJavaScript(`(() => { const b = document.querySelector('[data-qa-empire-picker]').getBoundingClientRect(); return b.left >= 0 && b.top >= 0 && b.right <= innerWidth && b.bottom <= innerHeight; })()`);
+  metrics.pickerOnScreen = await win.webContents.executeJavaScript(onScreen('[data-qa-empire-picker]'));
   if (!metrics.pickerOnScreen) fail('Build picker leaves the screen', metrics.pickerOnScreen);
   await capture(win, directory, '02-build-picker');
-  await click(win, '[data-qa-empire-picker] [data-qa-empire-build]:not([aria-disabled="true"])');
+  // The highest level on offer, so the timer in the row and on the screenshot runs for a while.
+  await win.webContents.executeJavaScript(`(() => {
+    const level = (button) => Number(/→ (\\d+)/.exec(button.textContent)?.[1] ?? 0);
+    const buttons = Array.from(document.querySelectorAll('[data-qa-empire-picker] [data-qa-empire-build]:not([aria-disabled="true"])'));
+    buttons.sort((a, b) => level(b) - level(a))[0].click();
+  })()`);
   await settle(win, 300);
   metrics.queued = await win.webContents.executeJavaScript(`({
     queue: Number(document.querySelector('[data-qa-empire-row="planet-1-1-6"] [data-qa-empire-queue]').dataset.qaEmpireQueue),
     current: JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}').currentPlanetId,
+    timer: document.querySelector('[data-qa-empire-row="planet-1-1-6"] [data-qa-empire-queue] time')?.textContent,
+    clipped: ${timersClipped},
   })`);
   if (metrics.queued.queue !== 1) fail('Building from the console did not enter the planet queue', metrics.queued);
+  if (!metrics.queued.timer) fail('The build cell shows no time left', metrics.queued);
+  if (metrics.queued.clipped) fail('A timer in the build cell is cut', metrics.queued);
   await click(win, '[data-qa-empire-picker] header button');
+  await sleep(700);
   metrics.buildToastCovers = await coveredControls(win);
   if (metrics.buildToastCovers.length) fail('Toast covers controls on the empire screen', metrics.buildToastCovers);
-  await capture(win, directory, '03-queued-from-console');
 
-  // «Сюда» on the empty planet: resources from the other planets, one send.
+  // The row opens into the planet's panel, the rest of the list stays reachable.
+  await click(win, '[data-qa-empire-more="planet-1-1-6"]');
+  await waitFor(win, `document.querySelector('[data-qa-empire-detail="planet-1-1-6"]')`);
+  await settle(win, 900);
+  metrics.detail = await win.webContents.executeJavaScript(`(() => {
+    const empire = document.querySelector('[data-qa-empire]');
+    const list = document.querySelector('.empire__lanes').getBoundingClientRect();
+    const lane = document.querySelector('[data-qa-empire-row="planet-1-1-6"]').getBoundingClientRect();
+    return {
+      laneVisible: lane.top >= list.top - 1 && lane.bottom <= list.bottom + 1,
+      scrollX: empire.scrollWidth - empire.clientWidth,
+      listScrollX: document.querySelector('.empire__lanes').scrollWidth - document.querySelector('.empire__lanes').clientWidth,
+      expanded: document.querySelector('[data-qa-empire-more="planet-1-1-6"]').getAttribute('aria-expanded'),
+      tasks: document.querySelectorAll('[data-qa-empire-detail="planet-1-1-6"] [data-qa-empire-task="building"]').length,
+      stock: document.querySelectorAll('[data-qa-empire-detail="planet-1-1-6"] [data-qa-empire-stock]').length,
+      built: document.querySelectorAll('[data-qa-empire-detail="planet-1-1-6"] [data-qa-empire-built]').length,
+    };
+  })()`);
+  if (!metrics.detail.laneVisible) fail('The opened planet panel does not fit the list', metrics.detail);
+  if (metrics.detail.scrollX > 0 || metrics.detail.listScrollX > 0) fail('Horizontal scroll with an opened panel', metrics.detail);
+  if (metrics.detail.expanded !== 'true') fail('The row does not report its open state', metrics.detail);
+  if (metrics.detail.tasks !== 1) fail('The panel does not list the queued building', metrics.detail);
+  if (metrics.detail.stock !== 4) fail('The panel does not show three storages and energy', metrics.detail);
+  await capture(win, directory, '03-expanded-planet');
+
+  // Shipyard: order on this planet, see it in the row with its time.
+  await click(win, '[data-qa-empire-detail="planet-1-1-6"] [data-qa-empire-yard-open="ships"]');
+  await waitFor(win, `document.querySelector('[data-qa-empire-yard="planet-1-1-6"] [data-qa-empire-produce-item]:not([aria-disabled="true"])')`);
+  metrics.yardOnScreen = await win.webContents.executeJavaScript(onScreen('[data-qa-empire-yard]'));
+  if (!metrics.yardOnScreen) fail('Shipyard picker leaves the screen', metrics.yardOnScreen);
+  await click(win, '[data-qa-empire-yard] [data-qa-empire-produce-item]:not([aria-disabled="true"])');
+  await waitFor(win, `document.querySelector('[data-qa-empire-produce-go]')`);
+  await capture(win, directory, '04-shipyard-picker');
+  await click(win, '[data-qa-empire-produce-max]');
+  await click(win, '[data-qa-empire-produce-go]');
+  await settle(win, 300);
+  metrics.ordered = await win.webContents.executeJavaScript(`({
+    orders: Number(document.querySelector('[data-qa-empire-row="planet-1-1-6"] [data-qa-empire-yard-orders]').dataset.qaEmpireYardOrders),
+    timer: document.querySelector('[data-qa-empire-row="planet-1-1-6"] [data-qa-empire-yard-orders] time')?.textContent,
+    tasks: document.querySelectorAll('[data-qa-empire-detail="planet-1-1-6"] [data-qa-empire-task="order"]').length,
+    current: JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}').currentPlanetId,
+  })`);
+  if (metrics.ordered.orders !== 1 || !metrics.ordered.timer) fail('The order is not shown in the row with its time', metrics.ordered);
+  if (metrics.ordered.tasks !== 1) fail('The order is not listed in the panel', metrics.ordered);
+  await click(win, '[data-qa-empire-yard-tab="defense"]');
+  await waitFor(win, `document.querySelector('[data-qa-empire-yard-kind="defense"] [data-qa-empire-produce-item]')`);
+  await capture(win, directory, '05-defense-picker');
+  await click(win, '[data-qa-empire-yard] header button');
+  await sleep(700);
+  metrics.orderToastCovers = await coveredControls(win);
+  if (metrics.orderToastCovers.length) fail('Toast covers controls after ordering', metrics.orderToastCovers);
+  await capture(win, directory, '06-order-in-progress');
+
+  // Cancel from the panel returns the row to «Верфь свободна».
+  await click(win, '[data-qa-empire-detail="planet-1-1-6"] [data-qa-empire-task="order"] .empire-task__x');
+  await settle(win, 300);
+  metrics.canceled = await win.webContents.executeJavaScript(`Number(document.querySelector('[data-qa-empire-row="planet-1-1-6"] [data-qa-empire-yard-orders]').dataset.qaEmpireYardOrders)`);
+  if (metrics.canceled !== 0) fail('Cancelling a shipyard order from the panel did not work', metrics.canceled);
+  await click(win, '[data-qa-empire-more="planet-1-1-6"]');
+  await settle(win, 500);
+
+  // Resources to the empty planet from the others, one send.
+  await click(win, '[data-qa-empire-more="planet-1-2-4"]');
+  await settle(win, 500);
   await click(win, '[data-qa-empire-here="planet-1-2-4"]');
   await waitFor(win, `document.querySelector('[data-qa-empire-drawer="transport"] [data-qa-quick-route="ok"]')`);
   metrics.drawer = await win.webContents.executeJavaScript(`(() => {
     const box = document.querySelector('[data-qa-empire-drawer]').getBoundingClientRect();
+    const close = document.querySelector('[data-qa-empire-drawer-close]').getBoundingClientRect();
     const legs = Array.from(document.querySelectorAll('[data-qa-quick-leg][data-qa-quick-leg-checked="true"]'));
     return {
       onScreen: box.left >= 0 && box.top >= 0 && box.right <= innerWidth && box.bottom <= innerHeight,
+      closeInCorner: box.right - close.right < 16 && close.top - box.top < 16,
+      innerClose: document.querySelectorAll('[data-qa-empire-drawer] .quick-send__close').length,
       checked: legs.map((leg) => leg.dataset.qaQuickLeg),
       cargo: legs.map((leg) => Array.from(leg.querySelectorAll('[data-qa-quick-cargo] em')).map((em) => em.textContent).join('/')),
     };
   })()`);
   if (!metrics.drawer.onScreen) fail('Logistics drawer leaves the screen', metrics.drawer);
+  if (!metrics.drawer.closeInCorner || metrics.drawer.innerClose) fail('The panel close button is not in its top-right corner', metrics.drawer);
   if (metrics.drawer.checked.length < 2) fail('Gather did not pre-check several source planets', metrics.drawer);
   if (metrics.drawer.cargo.some((cargo) => cargo === '0/0/0')) fail('A checked source has no cargo', metrics.drawer);
   // A toast that was already up must leave the drawer's controls once it opens.
   await sleep(700);
   metrics.drawerToastCovers = await coveredControls(win);
   if (metrics.drawerToastCovers.length) fail('Toast covers drawer controls', metrics.drawerToastCovers);
-  await capture(win, directory, '04-gather-resources');
+  await capture(win, directory, '07-transfer-panel');
   await click(win, '[data-qa-empire-drawer] [data-qa-quick-go]');
   await settle(win, 400);
   metrics.sent = await win.webContents.executeJavaScript(`({
     drawerOpen: Boolean(document.querySelector('[data-qa-empire-drawer]')),
     incoming: document.querySelector('[data-qa-empire-row="planet-1-2-4"] .empire-fleet small').textContent,
+    flights: Number(document.querySelector('[data-qa-empire-detail="planet-1-2-4"] [data-qa-empire-flights]')?.dataset.qaEmpireFlights ?? 0),
   })`);
   if (metrics.sent.drawerOpen) fail('Drawer stayed open after every leg was accepted', metrics.sent);
-  if (!/летят сюда/.test(metrics.sent.incoming)) fail('Incoming transports are not shown on the target lane', metrics.sent);
+  if (!/летят сюда/.test(metrics.sent.incoming)) fail('Incoming transports are not shown on the target row', metrics.sent);
+  if (metrics.sent.flights < 1) fail('Incoming flights are not listed in the panel', metrics.sent);
+  await sleep(700);
   metrics.sendToastCovers = await coveredControls(win);
   if (metrics.sendToastCovers.length) fail('Toast covers controls after sending', metrics.sendToastCovers);
-  await capture(win, directory, '05-sent');
+  await capture(win, directory, '08-sent');
 
   // Fleet mode of the same drawer.
   await click(win, '[data-qa-empire-gather="deployment"]');
   await waitFor(win, `document.querySelector('[data-qa-empire-drawer="deployment"] [data-qa-quick-leg]')`);
-  await capture(win, directory, '06-gather-fleet');
-  await win.webContents.executeJavaScript(`document.querySelector('[data-qa-empire-drawer] .quick-send__close')?.click()`);
-  await settle(win);
+  await capture(win, directory, '09-gather-fleet');
+  await click(win, '[data-qa-empire-drawer-close]');
 
   // «Текущая планета»: the switch does not sit on the planet title.
   await click(win, '[data-qa-planet-section="current"]');
@@ -220,7 +328,59 @@ async function runViewport(win, directory) {
     return !(a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom);
   })()`);
   if (!metrics.switchClear) fail('Section switch covers the planet title', metrics.switchClear);
-  await capture(win, directory, '07-current-planet');
+
+  // «Найти обломки» → «Отправить»: the map's quick panel with the recyclers already counted.
+  await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('button')).find((button) => button.textContent.trim() === 'Вселенная')?.click()`);
+  await waitFor(win, `document.querySelector('[data-qa-universe-find-debris]')`, 15000);
+  await click(win, '[data-qa-universe-find-debris]');
+  await waitFor(win, `document.querySelector('[data-qa-debris-finder]')`);
+  const row = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-debris-row]')?.getAttribute('data-qa-debris-row') ?? null`);
+  if (row) {
+    await click(win, `[data-qa-debris-send="${row}"]`);
+    await waitFor(win, `document.querySelector('[data-qa-quick-send="recycle"]')`);
+    await settle(win, 300);
+    metrics.debris = await win.webContents.executeJavaScript(`(() => {
+      const ships = Array.from(document.querySelectorAll('[data-qa-quick-send="recycle"] [data-qa-quick-leg-checked="true"] [data-qa-quick-ship]'));
+      const box = document.querySelector('[data-qa-quick-menu]').getBoundingClientRect();
+      return {
+        row: ${JSON.stringify(row)},
+        amount: document.querySelector('[data-qa-debris-row="${row}"] .universe-debris-finder__amount b')?.textContent,
+        ships: ships.map((node) => [node.dataset.qaQuickShip, Number(node.dataset.qaQuickShipCount)]),
+        route: document.querySelector('[data-qa-quick-route]')?.dataset.qaQuickRoute,
+        fleetScreen: Boolean(document.querySelector('[data-qa-mission-id="recycle"].active')),
+        onScreen: box.left >= 0 && box.top >= 0 && box.right <= innerWidth + 0.5 && box.bottom <= innerHeight + 0.5,
+        onTop: (() => { const hit = document.elementFromPoint(box.left + box.width / 2, box.top + 20); return Boolean(hit?.closest('[data-qa-quick-menu]')); })(),
+      };
+    })()`);
+    if (metrics.debris.fleetScreen) fail('«Отправить» opened the fleet screen instead of the quick panel', metrics.debris);
+    if (!metrics.debris.onScreen || !metrics.debris.onTop) fail('The debris quick panel is off screen or under the list', metrics.debris);
+    if (!metrics.debris.ships.some(([, count]) => count > 0)) fail('The debris quick panel did not pre-fill recyclers', metrics.debris);
+    await capture(win, directory, '11-debris-quick-send');
+    await click(win, '[data-qa-quick-send="recycle"] .quick-send__close');
+    await click(win, '[data-qa-debris-finder] [data-asterion-close]');
+  } else console.warn('[empire-qa] no debris in this test world; debris quick-send not exercised');
+
+  // Transports only on the target: the panel says what to do and where to build.
+  await seed(win, { noShips: true });
+  await click(win, '[data-qa-planet-section="empire"]');
+  await waitFor(win, `document.querySelectorAll('[data-qa-empire-row]').length === 7`);
+  await settle(win, 400);
+  await click(win, '[data-qa-empire-gather="transport"]');
+  await waitFor(win, `document.querySelector('[data-qa-empire-advice]')`);
+  metrics.advice = await win.webContents.executeJavaScript(`(() => {
+    const advice = document.querySelector('[data-qa-empire-advice]');
+    return { text: advice.textContent, route: Boolean(document.querySelector('[data-qa-empire-drawer] [data-qa-quick-route]')), build: advice.querySelector('[data-qa-empire-advice-build]')?.dataset.qaEmpireAdviceBuild ?? null };
+  })()`);
+  if (!/только на планете/.test(metrics.advice.text)) fail('The advice does not name the planet that holds the transports', metrics.advice);
+  if (metrics.advice.route) fail('The empty panel still shows an unusable route and Send', metrics.advice);
+  if (!metrics.advice.build) fail('The advice does not offer a planet to build on', metrics.advice);
+  await capture(win, directory, '10-no-free-ships');
+  if (metrics.advice.build) {
+    await click(win, `[data-qa-empire-advice-build="${metrics.advice.build}"]`);
+    await waitFor(win, `document.querySelector('[data-qa-empire-yard="${metrics.advice.build}"] [data-qa-empire-produce-go="transporter"]')`);
+    await capture(win, directory, '10b-advice-opens-shipyard');
+    await click(win, '[data-qa-empire-yard] header button');
+  }
   return metrics;
 }
 

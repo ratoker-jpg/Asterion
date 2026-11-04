@@ -7,19 +7,23 @@
  * flight still goes through `previewFlight` / `dispatchFlight` (see
  * `quick-actions.ts`).
  */
-import type { ShipId } from '../domain/combat/ids.ts';
+import { SOLAR_SATELLITE_ID, type ShipId } from '../domain/combat/ids.ts';
 import type { CombatFactionId } from '../domain/combat/factions.ts';
-import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
+import { getFactionDefenseCatalog, getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
 import { getBuildingResourceIncomePerHour, getStorageCapacities } from '../domain/buildings/balance-v1.ts';
 import { getProductionBotIncomePerHour } from '../domain/buildings/production-bots.ts';
 import { BUILDING_QUEUE_CAPACITY, type BuildingQueueItem } from '../domain/buildings/resource-zone.ts';
 import type { TransportCargo } from '../domain/flights/cargo.ts';
 import type { FlightRecord } from '../domain/flights/types.ts';
-import type { FleetProductionOrder } from '../domain/fleet/production.ts';
+import { calculateFleetProductionDurationMs, type FleetProductionOrder } from '../domain/fleet/production.ts';
+import { evaluateProductionRequirements } from '../domain/fleet/requirements.ts';
 import type { ScienceQueueTask } from '../domain/science/runtime.ts';
 import type { RuntimeMode, TestTimeScale } from '../domain/runtime/mode.ts';
 import { getPlanetResources, type PlanetResources, type SaveState } from './contracts.ts';
-import { getAvailableFleetForPlanet } from './flights.ts';
+import { energySummaryForPlanet } from './energy.ts';
+import { getFleetBuildBudget } from './fleet.ts';
+import { getAvailableFleetForPlanet, getPlayerFlightSlotUsage } from './flights.ts';
+import { isPlanetBlocked } from './overpopulation.ts';
 import { buildQuickCommand, previewQuickCommand, type QuickRuntime, type QuickTarget } from './quick-actions.ts';
 import { getEffectiveResourceIncomePerHour } from './resource-clock.ts';
 
@@ -35,6 +39,8 @@ export type EmpireResourceCell = {
   full: boolean;
 };
 
+export type EmpireEnergy = { produced: number; consumed: number; available: number };
+
 export type EmpireFlight = Pick<FlightRecord, 'id' | 'missionId' | 'phase' | 'arrivalAt' | 'returnAt' | 'selectedShips'> & { direction: 'out' | 'in' };
 
 export type EmpirePlanetRow = {
@@ -47,7 +53,16 @@ export type EmpirePlanetRow = {
   queue: BuildingQueueItem[];
   queueCapacity: number;
   research: ScienceQueueTask[];
+  /** Ship orders; `defense` and `commanders` run as queues of their own. */
   shipyard: FleetProductionOrder[];
+  defense: FleetProductionOrder[];
+  commanders: FleetProductionOrder[];
+  shipyardLevel: number;
+  energy: EmpireEnergy;
+  /** Fleet population against the hangar's capacity. */
+  population: { used: number; capacity: number };
+  solarSatellites: number;
+  defenseCount: number;
   /** Ships on orbit and free to fly (flights already subtracted). */
   ships: Partial<Record<ShipId, number>>;
   shipCount: number;
@@ -61,10 +76,14 @@ export type EmpirePlanetRow = {
 export type EmpireOverview = {
   rows: EmpirePlanetRow[];
   totals: Record<EmpireResource, { amount: number; perHour: number }>;
+  energy: EmpireEnergy;
   idleCount: number;
   queueUsed: number;
   queueCapacity: number;
   flightsInAir: number;
+  flightSlots: { used: number; limit: number; free: number };
+  /** Planets with at least one ship, defence or commander order running. */
+  shipyardsBusy: number;
   researchCount: number;
 };
 
@@ -104,6 +123,8 @@ export function buildEmpireOverview(state: SaveState, runtime: EmpireRuntime): E
       if (flight.destinationPlanetId === id && flight.phase === 'outbound') return [{ ...base, direction: 'in' }];
       return [];
     });
+    const energy = energySummaryForPlanet(planet, state.science.levels);
+    const summary = getFleetBuildBudget(state, id).summary;
     return {
       id,
       name: planet.name,
@@ -115,6 +136,13 @@ export function buildEmpireOverview(state: SaveState, runtime: EmpireRuntime): E
       queueCapacity: BUILDING_QUEUE_CAPACITY,
       research: state.science.queue.filter((task) => task.planetId === id),
       shipyard: planet.fleetProduction?.shipQueue ?? [],
+      defense: planet.fleetProduction?.defenseQueue ?? [],
+      commanders: planet.fleetProduction?.commanderQueue ?? [],
+      shipyardLevel: planet.buildings.shipyard,
+      energy: { produced: energy.producedEnergy, consumed: energy.consumedEnergy, available: energy.availableEnergy },
+      population: { used: summary.population, capacity: summary.capacity },
+      solarSatellites: Math.max(0, Math.floor(planet.solarSatellites ?? 0)),
+      defenseCount: Object.values(planet.defense?.defenses ?? {}).reduce((total, count) => total + Math.max(0, Math.floor(count ?? 0)), 0),
       ships,
       shipCount: Object.values(ships).reduce((total, count) => total + (count ?? 0), 0),
       flights,
@@ -129,11 +157,131 @@ export function buildEmpireOverview(state: SaveState, runtime: EmpireRuntime): E
   return {
     rows,
     totals,
+    energy: {
+      produced: rows.reduce((total, row) => total + row.energy.produced, 0),
+      consumed: rows.reduce((total, row) => total + row.energy.consumed, 0),
+      available: rows.reduce((total, row) => total + row.energy.available, 0),
+    },
     idleCount: rows.filter((row) => row.idle).length,
     queueUsed: rows.reduce((total, row) => total + row.queue.length, 0),
     queueCapacity: rows.length * BUILDING_QUEUE_CAPACITY,
     flightsInAir: records.length,
+    flightSlots: getPlayerFlightSlotUsage(state),
+    shipyardsBusy: rows.filter((row) => row.shipyard.length + row.defense.length + row.commanders.length > 0).length,
     researchCount: state.science.queue.length,
+  };
+}
+
+/* ---------- Shipyard picker ---------- */
+
+export type EmpireProductionKind = 'ships' | 'defense';
+
+export type EmpireProductionItem = {
+  id: string;
+  name: string;
+  role: string;
+  art: string;
+  owned: number;
+  /** Units still waiting in this planet's queue. */
+  pending: number;
+  unitCost: PlanetResources;
+  population: number;
+  unitMs: number;
+  /** How many the planet can order right now (wallet, population, single-copy limit). */
+  max: number;
+  unlocked: boolean;
+  /** Why it is locked, in the runtime's words. */
+  reason: string | null;
+};
+
+const SINGLE_COPY_DEFENSES = new Set(['tower-shield', 'planetary-shield']);
+
+/**
+ * The catalogue of one planet's shipyard: the same requirement check and the
+ * same limits as the shipyard screen. Ordering itself goes through
+ * `startFleetProduction`, which has the last word.
+ */
+export function buildProductionItems(state: SaveState, planetId: string, kind: EmpireProductionKind, runtime: EmpireRuntime): EmpireProductionItem[] {
+  const budget = getFleetBuildBudget(state, planetId);
+  const blocked = isPlanetBlocked(state, planetId);
+  const pool = kind === 'defense' ? budget.defenseSummary : budget.summary;
+  const catalog = kind === 'defense' ? getFactionDefenseCatalog(budget.factionId) : getFactionShipCatalog(budget.factionId);
+  const queue = kind === 'defense' ? budget.fleetProduction.defenseQueue : budget.fleetProduction.shipQueue;
+  const stock = (kind === 'defense' ? budget.defense.defenses : budget.fleet.ships) as Record<string, number>;
+  return catalog.map((entity) => {
+    const requirements = evaluateProductionRequirements(entity, {
+      planetId,
+      scienceLevels: budget.scienceLevels,
+      shipyardLevel: budget.shipyardLevel,
+      hangarLevel: budget.hangarLevel,
+      advancedFactoryLevel: budget.advancedFactoryLevel,
+      fleet: budget.fleet,
+      defense: budget.defense,
+      queues: budget.fleetProduction,
+      wallet: { metal: budget.metal, minerals: budget.minerals, gas: budget.gas },
+      factionId: budget.factionId,
+      mode: runtime.mode,
+    });
+    const owned = Math.max(0, Math.floor(entity.id === SOLAR_SATELLITE_ID ? budget.solarSatellites : stock[entity.id] ?? 0));
+    const pending = queue.filter((order) => order.itemId === entity.id).reduce((total, order) => total + Math.max(0, order.quantity - order.completedQuantity), 0);
+    const limits = [
+      entity.cost.metal > 0 ? Math.floor(budget.metal / entity.cost.metal) : Infinity,
+      entity.cost.minerals > 0 ? Math.floor(budget.minerals / entity.cost.minerals) : Infinity,
+      entity.cost.gas > 0 ? Math.floor(budget.gas / entity.cost.gas) : Infinity,
+      entity.population > 0 ? Math.floor(Math.max(0, pool.capacity - pool.population) / entity.population) : Infinity,
+      kind === 'defense' && SINGLE_COPY_DEFENSES.has(entity.id) ? Math.max(0, 1 - owned - pending) : Infinity,
+      entity.maxOwned != null ? Math.max(0, entity.maxOwned - owned - pending) : Infinity,
+    ];
+    const unlocked = requirements.met && !blocked;
+    const smallest = Math.min(...limits);
+    return {
+      id: entity.id,
+      name: entity.name,
+      role: entity.role,
+      art: entity.art,
+      owned,
+      pending,
+      unitCost: { metal: entity.cost.metal, minerals: entity.cost.minerals, gas: entity.cost.gas },
+      population: entity.population,
+      unitMs: calculateFleetProductionDurationMs(kind, entity.id, {
+        factionId: budget.factionId, shipyardLevel: budget.shipyardLevel, advancedFactoryLevel: budget.advancedFactoryLevel,
+        mode: runtime.mode, testTimeScale: runtime.testTimeScale,
+      }),
+      max: unlocked && Number.isFinite(smallest) ? Math.max(0, smallest) : 0,
+      unlocked,
+      reason: blocked ? 'Планета заблокирована из-за перенаселения.' : requirements.reason,
+    };
+  });
+}
+
+/** Text and a next step for the logistics panel when no planet can send anything. */
+export type EmpireEmptyAdvice = {
+  message: string;
+  /** Where to order the ships, if any planet can. */
+  build: { planetId: string; planetName: string; shipId: ShipId; shipName: string } | null;
+};
+
+const TRANSPORT_SHIPS: readonly ShipId[] = ['transporter', 'mega-transporter'];
+
+export function adviseEmptyGather(state: SaveState, rows: readonly EmpirePlanetRow[], targetId: string, mode: 'transport' | 'deployment', runtime: EmpireRuntime): EmpireEmptyAdvice {
+  const targetRow = rows.find((row) => row.id === targetId);
+  const usable = (row: EmpirePlanetRow) => mode === 'deployment' ? row.shipCount > 0 : TRANSPORT_SHIPS.some((id) => (row.ships[id] ?? 0) > 0);
+  const onTargetOnly = Boolean(targetRow && usable(targetRow));
+  const noun = mode === 'deployment' ? 'кораблей' : 'транспортов';
+  const inFlight = rows.some((row) => row.flights.some((flight) => flight.direction === 'out' && (mode === 'deployment'
+    || TRANSPORT_SHIPS.some((id) => (flight.selectedShips?.[id] ?? 0) > 0))));
+  const lead = onTargetOnly
+    ? `Свободных ${noun} нет на других планетах: они есть только на планете ${targetRow!.name}, куда вы хотите отправить. Выберите другую планету назначения.`
+    : `Свободных ${noun} нет ни на одной планете.${inFlight ? ' Часть кораблей сейчас в рейсах: дождитесь их возвращения.' : ''}`;
+  const shipId: ShipId = 'transporter';
+  const best = rows.filter((row) => row.id !== targetId)
+    .map((row) => ({ row, item: buildProductionItems(state, row.id, 'ships', runtime).find((candidate) => candidate.id === shipId) }))
+    .filter((entry) => (entry.item?.max ?? 0) > 0)
+    .sort((a, b) => b.item!.max - a.item!.max)[0];
+  if (!best) return { message: `${lead} Заказать транспортники сейчас негде: на других планетах не выполнены требования или не хватает ресурсов.`, build: null };
+  return {
+    message: `${lead} Или постройте их на планете ${best.row.name}: там хватит ресурсов на ${best.item!.max.toLocaleString('ru-RU')} шт.`,
+    build: { planetId: best.row.id, planetName: best.row.name, shipId, shipName: best.item!.name },
   };
 }
 

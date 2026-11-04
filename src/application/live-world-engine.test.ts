@@ -147,3 +147,50 @@ test('a command made on the world before the freeze reached App cancels the catc
   ui.receive();
   assert.equal(text(worker()), text(ui.state));
 });
+
+test('a command is saved soon after, not after the pause a clock tick asked for', async () => {
+  const world = campaign(12);
+  const start = world.npcReplay!.processedThroughAt;
+  applyCampaignRuntimeForCatchup(world, start);
+  let wall = start;
+  let cpu = 0;
+  const timers: { task: () => void; delayMs: number }[] = [];
+  let ui: Ui;
+  // Every read of the clock costs a second, so a save "costs" a second and the next tick save waits 50 s.
+  const engine = new LiveWorldEngine({
+    post: (message) => ui.received.push(structuredClone(message)),
+    now: () => wall,
+    yieldToMessages: () => new Promise((resolve) => setImmediate(resolve)),
+    later: (task, delayMs) => { timers.push({ task, delayMs }); },
+    clock: () => (cpu += 1_000),
+  });
+  ui = new Ui(structuredClone(world), (message) => engine.handle(message));
+  await engine.handle(structuredClone({ type: 'init', version: 0, state: world, clockOffsetMs: 0, persist: PERSIST }));
+  const fire = () => { for (const { task } of timers.splice(0).sort((a, b) => a.delayMs - b.delayMs)) task(); };
+  await ui.tick(wall);
+  ui.receive();
+  fire();
+  ui.receive();
+  const savedBefore = ui.saves.length;
+  assert.ok(savedBefore > 0, 'the first tick was saved');
+  wall += 1_000;
+  await ui.tick(wall);
+  ui.receive();
+  assert.ok(timers.some((timer) => timer.delayMs > 10_000), 'the second tick asked for a long pause');
+  const planet = ui.state.planets[ui.state.currentPlanetId]!;
+  await ui.commit({ ...ui.state, planets: { ...ui.state.planets, [ui.state.currentPlanetId]: { ...planet, name: 'Closed' } } });
+  const soonest = timers.reduce((best, timer) => (timer.delayMs < best.delayMs ? timer : best));
+  assert.ok(soonest.delayMs <= 50, `the command asked for its own save at once (got ${soonest.delayMs} ms)`);
+  // Only the soonest timer fires: the save it makes already holds the command.
+  timers.splice(timers.indexOf(soonest), 1);
+  soonest.task();
+  ui.receive();
+  const last = ui.saves.at(-1)!;
+  assert.ok(ui.saves.length > savedBefore, 'a save was written for the command');
+  assert.ok(last.text.includes('Closed'), 'the save holds the command');
+  // The superseded long timer fires later and writes nothing more.
+  const count = ui.saves.length;
+  fire();
+  ui.receive();
+  assert.equal(ui.saves.length, count);
+});

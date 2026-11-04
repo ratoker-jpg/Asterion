@@ -452,7 +452,14 @@ async function runScenario() {
         catch { return false; }
       })()`, 10_000)
       .then(() => true, () => false);
-    if (bannerGone === false) throw new Error('NPC catch-up window stayed open (or its summary stayed saved) after it was closed.');
+    if (bannerGone === false) {
+      const halves = await run(win, `(() => {
+        let summaryStillSaved = null;
+        try { summaryStillSaved = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(saveKey)}) || '{}').npcReplay?.summary !== undefined; } catch { summaryStillSaved = 'unreadable'; }
+        return JSON.stringify({ windowStillOpen: Boolean(document.querySelector('[data-qa-npc-catchup]')), summaryStillSaved });
+      })()`).catch((error) => String(error));
+      throw new Error(`NPC catch-up window stayed open (or its summary stayed saved) after it was closed: ${halves}.`);
+    }
     if (catchupWaitError) {
       const failedResults = {
         status: 'timeout',
