@@ -142,7 +142,8 @@ import {
   executeTradeAction,
   previewBuilding,
   startBuilding as startBuildingAction,
-  startRecycling as startRecyclingAction,
+  collectAllRecycling as collectAllRecyclingAction,
+  startRecyclingBatch as startRecyclingBatchAction,
   startSpaceportUpgrade as startSpaceportUpgradeAction,
 } from './application/buildings.ts';
 import {
@@ -216,6 +217,7 @@ import type { UniverseCoordinate, UniverseObjectKind, UniverseOwnerProfile } fro
 import {
   APPLICATION_COMMAND_REQUEST_EVENTS,
   enqueueApplicationStateUpdate,
+  runOutsideApplicationCommand,
   isApplicationCommandBlocked,
   isGameplayCommandRequestEvent,
   NPC_CATCHUP_COMMAND_BLOCKED_MESSAGE,
@@ -356,6 +358,7 @@ function enterLiveWorldStep(link: LiveWorldLink, version: LiveWorldVersion): num
  */
 const SILENT_NOTICE_PATTERNS: readonly RegExp[] = [
   /^Система готова/,
+  /внутренний модуль открыт\.$/,
   /^Галактика \d+ загружена/,
   /^Операции: доступные PvE-сценарии загружены/,
   /^Командование: союзный контур загружен/,
@@ -614,13 +617,15 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   useEffect(() => {
     if (activeRoute !== 'operations') return;
     const liveIds = new Set(pirateContacts.map((contact) => pirateOperationId(contact.contactCycleKey)));
-    const current = stateRef.current;
-    const nextItems = current.operations.items.filter((item) => !item.id.startsWith('pirate:pirate-cycle-v1:') || liveIds.has(item.id));
-    if (nextItems.length !== current.operations.items.length) {
-      const next = { ...current, operations: { items: nextItems } };
-      stateRef.current = next;
-      setState(next);
-    }
+    runOutsideApplicationCommand(() => {
+      const current = stateRef.current;
+      const nextItems = current.operations.items.filter((item) => !item.id.startsWith('pirate:pirate-cycle-v1:') || liveIds.has(item.id));
+      if (nextItems.length !== current.operations.items.length) {
+        const next = { ...current, operations: { items: nextItems } };
+        stateRef.current = next;
+        setState(next);
+      }
+    });
   }, [activeRoute, pirateContacts, now]);
 
   const onPirateSystemChange = useCallback((selection: PirateSystemSelection) => {
@@ -629,11 +634,13 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const pirateProfileCycleSignature = pirateContacts.map((contact) => contact.contactCycleKey).join('|');
   useEffect(() => {
     const visible = activeRoute === 'operations' || activeRoute === 'universe' ? pirateContacts : [];
-    const next = materializePirateProfiles(stateRef.current, visible);
-    if (next !== stateRef.current) {
-      stateRef.current = next;
-      setState(next);
-    }
+    runOutsideApplicationCommand(() => {
+      const next = materializePirateProfiles(stateRef.current, visible);
+      if (next !== stateRef.current) {
+        stateRef.current = next;
+        setState(next);
+      }
+    });
     // Profile snapshots are frozen on observing a new cycle, not on countdown ticks.
   }, [activeRoute, pirateProfileCycleSignature]);
 
@@ -1345,7 +1352,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   }, [announceRuntimeEvents, commitToLiveWorld, startLiveWorld, testTimeScale]);
 
   useEffect(() => {
-    runRuntimeReconcile(now);
+    runOutsideApplicationCommand(() => runRuntimeReconcile(now));
   }, [now, runRuntimeReconcile]);
 
   // Long offline gaps are reconciled in bounded groups. Continue each persisted
@@ -1609,17 +1616,19 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     setNotice('Роботы перераспределены');
   };
 
-  const startRecycling = (debrisAmount: number, allocation: ResourceAllocationPercent) => {
+  const startRecycling = (totalDebris: number, processCount: number, allocation: ResourceAllocationPercent) => {
     if (rejectNpcCatchupCommand()) return false;
     const startedAt = Date.now();
-    const jobId = globalThis.crypto?.randomUUID?.() ?? `recycling-${startedAt}-${Math.random().toString(36).slice(2, 9)}`;
+    const jobIds = Array.from({ length: Math.max(0, Math.floor(processCount)) }, () => (
+      globalThis.crypto?.randomUUID?.() ?? `recycling-${startedAt}-${Math.random().toString(36).slice(2, 11)}`
+    ));
     const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
-      const transition = startRecyclingAction(current, {
+      const transition = startRecyclingBatchAction(current, {
         planetId: state.currentPlanetId,
         now: startedAt,
         mode: RUNTIME_MODE,
         testTimeScale,
-      }, debrisAmount, allocation, jobId);
+      }, totalDebris, processCount, allocation, jobIds);
       return {
         state: transition.ok ? transition.state : current,
         result: transition,
@@ -1630,6 +1639,26 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       return false;
     }
     setNotice('Переработка запущена');
+    return true;
+  };
+
+  const collectAllRecycling = () => {
+    if (rejectNpcCatchupCommand()) return false;
+    const collectedAt = Date.now();
+    const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
+      const transition = collectAllRecyclingAction(current, {
+        planetId: state.currentPlanetId,
+        now: collectedAt,
+        mode: RUNTIME_MODE,
+        testTimeScale,
+      });
+      return { state: transition.state, result: transition };
+    }, flushSync, renderedStateRef, noteStateHeal);
+    if (!result.ok) {
+      setNotice(result.reason ?? 'Ресурс пока недоступен');
+      return false;
+    }
+    setNotice('Ресурсы получены');
     return true;
   };
 
@@ -2901,6 +2930,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               onProductionBotsApply={applyProductionBots}
               onRecyclingStart={startRecycling}
               onRecyclingCollect={collectRecycling}
+              onRecyclingCollectAll={collectAllRecycling}
               onTrade={tradeResources}
               onSpaceportUpgrade={startSpaceportUpgrade}
               onSpaceportCancel={cancelSpaceportUpgrade}

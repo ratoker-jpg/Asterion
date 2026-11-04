@@ -657,8 +657,6 @@ html.asterion-repair-page .repair-page-head-v1::after{
 .production-bots-building-panel,
 .production-bots-targets,
 .production-bots-distribute,
-.recycling-info-panel,
-.recycling-section,
 .trade-info-panel,
 .trade-workspace{
   clip-path:none !important;
@@ -827,32 +825,6 @@ html.asterion-repair-page .repair-page-head-v1::after{
   font-weight:600;
 }
 
-/* --- recycling interior --- */
-.recycling-info-panel{
-  border-radius:var(--ut-r-panel);
-  background:var(--ut-surface);
-  border:1px solid var(--ut-border);
-}
-.recycling-info-art{ border-radius:var(--ut-r-card); }
-.recycling-level{ border-radius:var(--ut-r-chip); }
-.recycling-info-stats{ border-radius:var(--ut-r-card); }
-.recycling-back{ border-radius:var(--ut-r-btn); }
-.recycling-section{
-  border-radius:var(--ut-r-panel);
-  background:var(--ut-surface-2);
-  border:1px solid var(--ut-border);
-}
-.recycling-debris-time,
-.recycling-target-preview,
-.recycling-target-footer,
-.recycling-validation{ border-radius:var(--ut-r-chip); }
-.recycling-max-button{ border-radius:var(--ut-r-btn); }
-.recycling-start{
-  border-radius:var(--ut-r-btn);
-  min-height:38px;
-  font-weight:600;
-}
-
 /* --- trade interior --- */
 .trade-info-panel{
   border-radius:var(--ut-r-panel);
@@ -956,7 +928,6 @@ html.asterion-repair-page .repair-page-head-v1::after{
 .preview-table-v2{ border-radius:var(--ut-r-chip); }
 .production-bot-target__icon{ border-radius:8px; }
 .science-art-v2 img{ border-radius:inherit; }
-.recycling-section-header strong{ border-radius:7px; }
 .asterion-header__test-mode-banner{ border-radius:8px; }
 .asterion-header__resource-energy-half{ border-radius:6px; }
 .asterion-header__resource-population-breakdown{ border-radius:10px; }
@@ -1215,8 +1186,6 @@ html.asterion-repair-page .repair-page-head-v1::after{
 .flight-timeline-error,
 .summary-planet-row,
 .universe-special-preview,
-.recycling-job-row,
-.recycling-job-table__header,
 .ship-info-head-v1,
 .ship-info-hero-v1,
 .ship-info-ident-v1 > div,
@@ -1287,9 +1256,6 @@ html.asterion-repair-page .repair-page-head-v1::after{
 .reports-preview-actions button,
 .reports-preview-footer button,
 .reports-delete-actions button,
-.recycling-job-action button,
-.recycling-debris-control button,
-.recycling-target-row > button,
 .fleet-selection-line-v1 button,
 .fleet-mission-icons-v1 button,
 .flight-timeline-close,
@@ -1325,7 +1291,6 @@ html.asterion-repair-page .repair-page-head-v1::after{
 .reports-search,
 .command-form-grid input,
 .command-form-grid textarea,
-.recycling-debris-field input,
 .trade-amount-input,
 .flight-timeline-cargo-field input,
 .flight-timeline-coordinate-inputs input,
@@ -1349,8 +1314,7 @@ html.asterion-repair-page .repair-page-head-v1::after{
 /* === P4.5 micro-fills & small icons ========================= */
 .asterion-header__resource-fill,
 .stability i,
-.stability-v2 i,
-.recycling-job-progress{
+.stability-v2 i{
   border-radius:4px;
 }
 .command-operation-glyph,
@@ -1363,7 +1327,6 @@ html.asterion-repair-page .repair-page-head-v1::after{
 .resource-building-max-state{ border-radius:var(--ut-r-chip); }
 
 /* === P4.6 stragglers caught by the second sweep run ========= */
-.recycling-toast span,
 .repair-card-title-v1,
 .repair-available-v1,
 .repair-payment-reason-v1,
