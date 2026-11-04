@@ -16,6 +16,7 @@ import { getPlayerFlightSlotUsage, type DispatchFlightCommand } from '../../appl
 import type { QuickLegOutcome, QuickTarget } from '../../application/quick-actions.ts';
 import { QuickSendPanel, quickRuntimeNow } from '../quick-send/QuickSendPanel.tsx';
 import { ResourceIcon } from '../resources/ResourceIcon.tsx';
+import { fleetPlanGlance, type FleetPlanGlance, type FleetPlanStartResult } from '../../application/fleet-plan.ts';
 import { compactAmount, countdown, formatNumber, plural, signedAmount, taskProgress } from './empire-format.ts';
 import { BUILD_ZONES, BuildPicker, ProductionPicker, type BuildPickerState, type ProductionPickerState } from './EmpirePickers.tsx';
 import './empire.css';
@@ -43,6 +44,10 @@ export type EmpireViewProps = {
   onProduce: (planetId: string, kind: EmpireProductionKind, itemId: string, quantity: number) => boolean;
   onCancelProduction: (planetId: string, orderId: string) => void;
   onSend: (commands: DispatchFlightCommand[]) => QuickLegOutcome[];
+  /** Opens «Эталонный флот» on that planet. */
+  onOpenPlanner: (planetId: string) => void;
+  /** Starts every line of that planet's plan; null when refused (App shows why). */
+  onStartPlan: (planetId: string) => FleetPlanStartResult | null;
 };
 
 type Drawer = { targetId: string; mode: 'transport' | 'deployment'; origins?: string[] };
@@ -70,7 +75,7 @@ function Bar({ value }: { value: number }) {
  * can be done without leaving the console. Every action goes through the same
  * command as its own screen.
  */
-export function EmpireView({ state, now, mode, testTimeScale, planetArt, onOpenPlanet, onBuild, onCancelBuilding, onProduce, onCancelProduction, onSend }: EmpireViewProps) {
+export function EmpireView({ state, now, mode, testTimeScale, planetArt, onOpenPlanet, onBuild, onCancelBuilding, onProduce, onCancelProduction, onSend, onOpenPlanner, onStartPlan }: EmpireViewProps) {
   const overview = useMemo(() => buildEmpireOverview(state, { now, mode, testTimeScale }), [state, now, mode, testTimeScale]);
   const factionId = state.profile.factionId as CombatFactionId;
   const units = useMemo(() => new Map<string, Unit>([...getFactionShipCatalog(factionId), ...getFactionDefenseCatalog(factionId), ...COMMANDER_COMBAT_CATALOG].map((entity) => [entity.id, { name: entity.name, art: entity.art }])), [factionId]);
@@ -107,6 +112,8 @@ export function EmpireView({ state, now, mode, testTimeScale, planetArt, onOpenP
         </li>
         {overview.rows.map((row, index) => (
           <Lane key={row.id} row={row} index={index} now={now} art={planetArt[row.id]} factionId={factionId} units={units} state={state}
+            plan={state.fleetUi?.plans?.[row.id] ? fleetPlanGlance(state, row.id, { now, mode, testTimeScale }) : null}
+            onOpenPlanner={() => onOpenPlanner(row.id)} onStartPlan={() => onStartPlan(row.id)}
             open={openId === row.id} single={overview.rows.length < 2} targeted={drawer?.targetId === row.id}
             onToggle={() => setOpenId((was) => (was === row.id ? null : row.id))}
             onOpenPlanet={() => onOpenPlanet(row.id)}
@@ -212,7 +219,21 @@ type LaneProps = {
   onCancelProduction: (orderId: string) => void;
   onGather: (mode: 'transport' | 'deployment') => void;
   onSendFrom: () => void;
+  /** Null when the planet has no «Эталонный флот». */
+  plan: FleetPlanGlance | null;
+  onOpenPlanner: () => void;
+  onStartPlan: () => void;
 };
+
+function planLabel(plan: FleetPlanGlance): string {
+  if (plan.overBy > 0) return `план больше ангара`;
+  return plan.missing > 0 ? `не хватает ${compactAmount(plan.missing)}` : 'всё по плану';
+}
+
+function planTone(plan: FleetPlanGlance): string {
+  if (plan.overBy > 0) return 'is-bad';
+  return plan.missing > 0 ? 'is-warn' : 'is-ok';
+}
 
 /** One line of work in a collapsed row: what is running, its progress, the time left, what follows. */
 function WorkCell({ qa, count, art, title, level, timer, progress, more, empty, action }: {
@@ -239,7 +260,7 @@ function orderTitle(order: FleetProductionOrder, units: Map<string, Unit>) {
   return `${units.get(order.itemId)?.name ?? order.itemId} ×${formatNumber(Math.max(0, order.quantity - order.completedQuantity))}`;
 }
 
-function Lane({ row, state, index, now, art, factionId, units, open, single, targeted, onToggle, onOpenPlanet, onPick, onYard, onCancelBuilding, onCancelProduction, onGather, onSendFrom }: LaneProps) {
+function Lane({ row, state, index, now, art, factionId, units, open, single, targeted, onToggle, onOpenPlanet, onPick, onYard, onCancelBuilding, onCancelProduction, onGather, onSendFrom, plan, onOpenPlanner, onStartPlan }: LaneProps) {
   const rootRef = useRef<HTMLLIElement>(null);
   // The panel stays mounted while it folds away, and the opened row scrolls fully into view.
   const [mounted, setMounted] = useState(open);
@@ -326,12 +347,16 @@ function Lane({ row, state, index, now, art, factionId, units, open, single, tar
               <b>{compactAmount(row.shipCount)}</b> <span>{plural(row.shipCount, 'корабль', 'корабля', 'кораблей')}</span>
             </span>
           ) : <span className="empire-fleet__none">На орбите пусто</span>}
-          <small>
-            {out.length ? `в рейсе: ${out.length}` : ''}
-            {out.length && incoming.length ? ' · ' : ''}
-            {incoming.length ? `летят сюда: ${incoming.length}` : ''}
-            {!out.length && !incoming.length ? 'рейсов нет' : ''}
-          </small>
+          {plan ? (
+            <button type="button" className={`empire-fleet__plan ${planTone(plan)}`} onClick={onOpenPlanner} data-qa-empire-plan={row.id} data-qa-empire-plan-missing={plan.missing}>{planLabel(plan)}</button>
+          ) : (
+            <small>
+              {out.length ? `в рейсе: ${out.length}` : ''}
+              {out.length && incoming.length ? ' · ' : ''}
+              {incoming.length ? `летят сюда: ${incoming.length}` : ''}
+              {!out.length && !incoming.length ? 'рейсов нет' : ''}
+            </small>
+          )}
         </div>
 
         <button type="button" className="empire-lane__more" aria-expanded={open} aria-controls={`empire-detail-${row.id}`} onClick={onToggle} data-qa-empire-more={row.id}>
@@ -343,7 +368,7 @@ function Lane({ row, state, index, now, art, factionId, units, open, single, tar
       <div className="empire-lane__fold" id={`empire-detail-${row.id}`} {...(open ? {} : { inert: true })}>
         <div className="empire-lane__fold-inner">
           {mounted ? (
-            <PlanetDetail row={row} state={state} now={now} factionId={factionId} units={units} single={single}
+            <PlanetDetail row={row} state={state} now={now} factionId={factionId} units={units} single={single} plan={plan} onOpenPlanner={onOpenPlanner} onStartPlan={onStartPlan}
               onOpenPlanet={onOpenPlanet} onPick={onPick} onYard={onYard} onCancelBuilding={onCancelBuilding} onCancelProduction={onCancelProduction} onGather={onGather} onSendFrom={onSendFrom} />
           ) : null}
         </div>
@@ -377,9 +402,9 @@ function flightLine(flight: EmpireFlight, now: number) {
   return { arrow: '↗', text: `${mission}: прибудет через`, time };
 }
 
-function PlanetDetail({ row, state, now, factionId, units, single, onOpenPlanet, onPick, onYard, onCancelBuilding, onCancelProduction, onGather, onSendFrom }: {
+function PlanetDetail({ row, state, now, factionId, units, single, plan, onOpenPlanner, onStartPlan, onOpenPlanet, onPick, onYard, onCancelBuilding, onCancelProduction, onGather, onSendFrom }: {
   row: EmpirePlanetRow; state: SaveState; now: number; factionId: CombatFactionId; units: Map<string, Unit>; single: boolean;
-} & Pick<LaneProps, 'onOpenPlanet' | 'onPick' | 'onYard' | 'onCancelBuilding' | 'onCancelProduction' | 'onGather' | 'onSendFrom'>) {
+} & Pick<LaneProps, 'plan' | 'onOpenPlanner' | 'onStartPlan' | 'onOpenPlanet' | 'onPick' | 'onYard' | 'onCancelBuilding' | 'onCancelProduction' | 'onGather' | 'onSendFrom'>) {
   const levels = state.planets[row.id]?.buildings;
   const built = BUILD_ZONES.flatMap((zone) => getBuildingsForZone(zone.id, factionId)
     .filter((def) => (levels?.[def.assetRole] ?? 0) > 0)
@@ -441,6 +466,11 @@ function PlanetDetail({ row, state, now, factionId, units, single, onOpenPlanet,
           {fleet.length > SHOWN_SHIPS ? `и ещё ${fleet.length - SHOWN_SHIPS} ${plural(fleet.length - SHOWN_SHIPS, 'вид', 'вида', 'видов')} · ` : ''}
           спутники {formatNumber(row.solarSatellites)} · оборона {formatNumber(row.defenseCount)}
         </p>
+        <h4 className="is-sub">Эталонный флот {plan ? <span className={planTone(plan)}>{planLabel(plan)}</span> : <span>нет плана</span>}</h4>
+        <div className="empire-detail__btns">
+          <button type="button" className="empire__btn" onClick={onOpenPlanner} data-qa-empire-plan-open={row.id}>{plan ? 'Открыть план' : 'Составить план'}</button>
+          {plan && plan.startable > 0 ? <button type="button" className="empire__btn empire__btn--pri" onClick={onStartPlan} data-qa-empire-plan-start={row.id}>Запустить {compactAmount(plan.startable)}</button> : null}
+        </div>
         <h4 className="is-sub">Рейсы <span>{row.flights.length}</span></h4>
         {row.flights.length ? (
           <ul className="empire-flights" data-qa-empire-flights={row.flights.length}>

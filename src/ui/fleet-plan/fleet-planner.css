@@ -1,0 +1,411 @@
+/* «Эталонный флот». One surface (the dialog); lines sit directly on it with no
+   boxes of their own. Sizes step up on large windows through --fp-*. Font sizes
+   carry !important and the text-scale multiplier because the global typography
+   observer pins text nodes to their category size (see production-bots.css). */
+.fplan-veil{
+  position:fixed;
+  z-index:30200;
+  inset:0;
+  display:grid;
+  place-items:center;
+  padding:14px;
+  background:rgba(1,6,10,.72);
+  backdrop-filter:blur(3px);
+  animation:fplan-veil-in var(--ut-motion-base) var(--ut-ease-out) both;
+}
+.fplan{
+  --fp-lane:58px;
+  --fp-art:64px;
+  --fp-t-title:24px;
+  --fp-t-name:15px;
+  --fp-t-big:16px;
+  --fp-t-small:13px;
+  --fp-here:var(--race-accent,#56d9f2);
+  --fp-queued:var(--ut-amber,#e6ad50);
+  --fp-bad:#ff7a6b;
+  position:relative;
+  isolation:isolate;
+  width:min(1252px,100%);
+  height:100%;
+  max-height:692px;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  padding:16px 22px 16px;
+  overflow:hidden;
+  border-radius:var(--ut-r-panel);
+  background:radial-gradient(ellipse 70% 42% at 72% -6%,color-mix(in srgb,var(--fp-here) 13%,transparent),transparent 70%),linear-gradient(180deg,rgba(9,25,34,.98),rgba(4,12,18,.99));
+  box-shadow:inset 0 0 0 1px rgba(126,200,220,.16),0 30px 80px rgba(0,0,0,.6);
+  color:#e8faff;
+  font-variant-numeric:tabular-nums;
+  animation:ut-pop-in var(--ut-motion-modal) var(--ut-spring-pop) backwards;
+}
+@media (min-width:1600px) and (min-height:900px){
+  .fplan{
+    --fp-lane:70px;
+    --fp-art:82px;
+    --fp-t-title:30px;
+    --fp-t-name:18px;
+    --fp-t-big:19px;
+    --fp-t-small:15px;
+    width:min(1660px,100%);
+    max-height:980px;
+    gap:14px;
+    padding:24px 32px;
+  }
+}
+.fplan button{font-family:inherit}
+.fplan :is(button,input):focus-visible{outline:var(--ut-focus);outline-offset:2px}
+
+/* ---------- head ---------- */
+.fplan__head{display:flex;align-items:center;gap:18px;min-width:0;flex:none}
+.fplan__title{flex:none;max-width:250px;min-width:0}
+.fplan .fplan__title h2{margin:0;color:#f2fdff;font-size:calc(var(--fp-t-title) * var(--text-scale-page-title,1)) !important;font-weight:800;line-height:1.1;white-space:nowrap}
+.fplan .fplan__title small{display:block;margin-top:2px;overflow:hidden;color:#a9cbd3;font-size:calc(var(--fp-t-small) * var(--text-scale-secondary,1)) !important;white-space:nowrap;text-overflow:ellipsis}
+.fplan__planets{flex:1 1 auto;min-width:0;display:flex;gap:4px;justify-content:flex-end;flex-wrap:wrap;max-height:88px;overflow:hidden}
+.fplan__planets button{
+  flex:0 1 auto;
+  min-width:0;
+  max-width:190px;
+  height:40px;
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr);
+  grid-template-rows:1fr 1fr;
+  column-gap:7px;
+  align-items:center;
+  padding:3px 11px 3px 6px;
+  border:0;
+  border-radius:var(--ut-r-btn);
+  background:rgba(86,217,242,.05);
+  color:#cfe6ec;
+  text-align:left;
+  cursor:pointer;
+  transition:background var(--ut-motion-fast) ease,color var(--ut-motion-fast) ease,scale var(--ut-motion-press) var(--ut-ease-out);
+}
+.fplan__planets button:hover{background:rgba(86,217,242,.12);color:#fff}
+.fplan__planets button:active{scale:.97}
+.fplan__planets button.is-on{background:color-mix(in srgb,var(--fp-here) 24%,transparent);color:#fff}
+.fplan__planets img{grid-row:1 / 3;width:28px;height:28px;object-fit:contain}
+.fplan .fplan__planets span{overflow:hidden;font-size:calc(13px * var(--text-scale-control,1)) !important;font-weight:700;line-height:1.1;white-space:nowrap;text-overflow:ellipsis}
+.fplan .fplan__planets small{font-size:calc(12px * var(--text-scale-secondary,1)) !important;font-weight:700;line-height:1.1;white-space:nowrap}
+.fplan__planets small.is-none{color:#8fb6c0;font-weight:500}
+.fplan__planets small.is-warn{color:var(--fp-queued)}
+.fplan__planets small.is-bad{color:var(--fp-bad)}
+.fplan__planets small.is-ok{color:var(--ut-positive)}
+.fplan__close{
+  flex:none;
+  width:var(--ut-close-size,40px);
+  height:var(--ut-close-size,40px);
+  border:1px solid rgba(240,68,94,.45);
+  border-radius:var(--ut-r-btn);
+  background:rgba(240,68,94,.1);
+  color:#ffd6dc;
+  line-height:1;
+  cursor:pointer;
+  transition:background var(--ut-motion-fast) ease,scale var(--ut-motion-press) var(--ut-ease-out);
+}
+.fplan .fplan__close{font-size:calc(17px * var(--text-scale-control,1)) !important}
+.fplan__close:hover{background:rgba(240,68,94,.24)}
+.fplan__close:active{scale:.92}
+
+/* ---------- hangar ---------- */
+.fplan-hangar{flex:none;display:grid;gap:6px}
+.fplan-hangar p{margin:0;display:flex;align-items:baseline;gap:8px;min-width:0;white-space:nowrap}
+.fplan .fplan-hangar p>*{font-size:calc(var(--fp-t-small) * var(--text-scale-body,1)) !important;color:#a9cbd3}
+.fplan .fplan-hangar p b{color:#fff;font-size:calc(var(--fp-t-big) * var(--text-scale-table,1)) !important;font-weight:800}
+.fplan-hangar__plan{margin-left:12px}
+.fplan .fplan-hangar__free{margin-left:auto;font-style:normal}
+.fplan .fplan-hangar__over{margin-left:auto;overflow:hidden;color:var(--fp-bad);font-weight:800;text-overflow:ellipsis}
+.fplan-hangar__band{position:relative;height:16px;overflow:hidden;border-radius:8px;background:rgba(126,200,220,.09)}
+.fplan-hangar__band i{
+  position:absolute;
+  inset:0;
+  transform-origin:left center;
+  transition:transform 620ms var(--ut-ease-expo);
+}
+.fplan-hangar__used{transform:scaleX(var(--share));background:linear-gradient(180deg,color-mix(in srgb,var(--fp-here) 92%,#fff),color-mix(in srgb,var(--fp-here) 62%,#04202a))}
+.fplan-hangar__plan-part{transform:translateX(calc(var(--from) * 100%)) scaleX(var(--share));background:repeating-linear-gradient(115deg,rgba(230,173,80,.34) 0 6px,rgba(230,173,80,.14) 6px 12px)}
+.is-over .fplan-hangar__plan-part{background:repeating-linear-gradient(115deg,rgba(255,122,107,.5) 0 6px,rgba(255,122,107,.2) 6px 12px)}
+.fplan-hangar__band .fplan-hangar__cap{inset:0 auto 0 calc(var(--at) * 100%);width:2px;margin-left:-1px;background:#fff;transition:none}
+
+.fplan .fplan__note{flex:none;margin:0;padding:7px 12px;border-radius:var(--ut-r-chip);background:rgba(230,173,80,.1);color:#ffe2ae;font-size:calc(var(--fp-t-small) * var(--text-scale-body,1)) !important;font-weight:600}
+
+/* ---------- lanes ---------- */
+.fplan__lanes{
+  flex:1 1 auto;
+  min-height:0;
+  margin:0 -8px;
+  padding:2px 8px;
+  list-style:none;
+  overflow-y:auto;
+  scrollbar-width:thin;
+  scrollbar-color:rgba(126,200,220,.3) transparent;
+}
+.fplan-lane{
+  position:relative;
+  min-height:var(--fp-lane);
+  display:grid;
+  grid-template-columns:var(--fp-art) minmax(120px,178px) minmax(0,1fr) 196px 176px 26px;
+  align-items:center;
+  column-gap:14px;
+  padding:2px 2px 2px 0;
+  border-radius:var(--ut-r-card);
+  transition:background var(--ut-motion-fast) ease;
+  animation:fplan-lane-in var(--ut-motion-item) var(--ut-ease-out) backwards;
+  animation-delay:calc(var(--i) * 28ms);
+}
+.fplan-lane:hover,.fplan-lane:focus-within{background:rgba(86,217,242,.04)}
+.fplan-lane.is-fill{background:linear-gradient(90deg,rgba(78,224,160,.07),transparent 70%)}
+.fplan-lane__art{position:relative;height:calc(var(--fp-lane) - 8px);display:grid;place-items:center}
+.fplan-lane__art::after{content:'';position:absolute;left:12%;right:12%;bottom:3%;height:20%;border-radius:50%;background:radial-gradient(ellipse,color-mix(in srgb,var(--fp-here) 30%,transparent),transparent 70%)}
+.fplan-lane__art img{position:relative;z-index:1;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 5px 8px rgba(0,0,0,.6))}
+.fplan-lane.is-locked .fplan-lane__art img{filter:grayscale(.75) brightness(.62)}
+.fplan-lane.is-done .fplan-lane__art::after{background:radial-gradient(ellipse,color-mix(in srgb,var(--ut-positive) 30%,transparent),transparent 70%)}
+
+.fplan-lane__name{min-width:0}
+.fplan .fplan-lane__name b{display:block;color:#f2fdff;font-size:calc(var(--fp-t-name) * var(--text-scale-table,1)) !important;font-weight:800;line-height:1.15;overflow-wrap:anywhere}
+.fplan .fplan-lane__name small{display:block;margin-top:1px;overflow:hidden;color:#8fb6c0;font-size:calc(12px * var(--text-scale-secondary,1)) !important;line-height:1.2;white-space:nowrap;text-overflow:ellipsis}
+.fplan-lane.is-fill .fplan-lane__name small{color:#4ee0a0}
+
+.fplan-lane__track{min-width:0;display:grid;gap:5px}
+.fplan-lane__bar{position:relative;height:12px;overflow:hidden;border-radius:6px;background:rgba(230,173,80,.09);box-shadow:inset 0 0 0 1px rgba(230,173,80,.22)}
+.fplan-lane.is-done .fplan-lane__bar{background:rgba(53,229,138,.08);box-shadow:none}
+.fplan-lane.is-locked .fplan-lane__bar{background:rgba(126,200,220,.06);box-shadow:none}
+.fplan-lane__bar i{
+  position:absolute;
+  inset:0;
+  transform:translateX(calc(var(--from) * 100%)) scaleX(var(--share));
+  transform-origin:left center;
+  transition:transform 720ms var(--ut-ease-expo);
+}
+.fplan-lane__bar .is-here{background:linear-gradient(180deg,color-mix(in srgb,var(--fp-here) 92%,#fff),color-mix(in srgb,var(--fp-here) 62%,#04202a))}
+.fplan-lane.is-done .fplan-lane__bar .is-here{background:linear-gradient(180deg,#67f0a7,#1f9d62)}
+.fplan-lane__bar .is-queued{background:repeating-linear-gradient(115deg,#f0be6b 0 7px,#a87a2f 7px 14px)}
+.fplan-lane__bar .is-away{background:color-mix(in srgb,var(--fp-here) 36%,transparent)}
+.fplan-lane__parts{display:flex;gap:4px 12px;flex-wrap:wrap;min-width:0;line-height:1.15}
+.fplan .fplan-lane__parts span{color:#8fb6c0;font-size:calc(12px * var(--text-scale-secondary,1)) !important;white-space:nowrap}
+.fplan .fplan-lane__parts b{color:#dcecf0;font-size:inherit !important;font-weight:700}
+.fplan .fplan-lane__parts .is-queued b{color:var(--fp-queued)}
+.fplan .fplan-lane__parts .is-surplus b{color:var(--ut-positive)}
+
+.fplan-lane__target{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:5px}
+.fplan-lane__input,.fplan-lane__fill-value{
+  width:100%;
+  min-width:0;
+  height:36px;
+  padding:0 8px;
+  border:1px solid var(--ut-border-strong);
+  border-radius:var(--ut-r-input);
+  background:rgba(0,0,0,.34);
+  color:#fff;
+  text-align:right;
+  line-height:34px;
+  transition:border-color var(--ut-motion-fast) ease,background var(--ut-motion-fast) ease;
+}
+.fplan .fplan-lane__input,.fplan .fplan-lane__fill-value{font-size:calc(var(--fp-t-big) * var(--text-scale-table,1)) !important;font-weight:800;font-variant-numeric:tabular-nums}
+.fplan-lane__input:hover{border-color:var(--ut-accent)}
+.fplan-lane__input:focus{border-color:var(--ut-accent);background:rgba(86,217,242,.08);outline:none}
+.fplan-lane__fill-value{overflow:hidden;border-color:rgba(78,224,160,.45);color:#7df0b8;white-space:nowrap;text-overflow:ellipsis}
+.fplan-lane__fill{
+  height:36px;
+  padding:0 7px;
+  border:0;
+  border-radius:var(--ut-r-chip);
+  background:transparent;
+  color:#8fb6c0;
+  white-space:nowrap;
+  cursor:pointer;
+  transition:background var(--ut-motion-fast) ease,color var(--ut-motion-fast) ease,scale var(--ut-motion-press) var(--ut-ease-out);
+}
+.fplan .fplan-lane__fill{font-size:calc(12px * var(--text-scale-control,1)) !important;font-weight:700}
+.fplan-lane__fill:hover{background:rgba(78,224,160,.12);color:#c9f7df}
+.fplan-lane__fill:active{scale:.94}
+.fplan-lane__fill.is-on{background:rgba(78,224,160,.2);color:#7df0b8}
+
+.fplan-lane__action{min-width:0;display:grid;gap:2px;justify-items:stretch}
+.fplan-lane__go{
+  min-height:34px;
+  display:flex;
+  align-items:baseline;
+  justify-content:center;
+  gap:5px;
+  padding:6px 8px;
+  border:0;
+  border-radius:var(--ut-r-btn);
+  background:linear-gradient(180deg,color-mix(in srgb,var(--fp-here) 34%,transparent),color-mix(in srgb,var(--fp-here) 18%,transparent));
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--fp-here) 40%,transparent);
+  color:#eafcff;
+  white-space:nowrap;
+  cursor:pointer;
+  transition:background var(--ut-motion-fast) ease,box-shadow var(--ut-motion-fast) ease,scale var(--ut-motion-press) var(--ut-ease-out);
+}
+.fplan .fplan-lane__go :is(span,small){font-size:calc(12px * var(--text-scale-control,1)) !important;font-weight:700}
+.fplan .fplan-lane__go b{font-size:calc(14px * var(--text-scale-control,1)) !important;font-weight:800}
+.fplan-lane__go:hover{background:color-mix(in srgb,var(--fp-here) 46%,transparent);box-shadow:inset 0 0 0 1px var(--fp-here),0 0 16px color-mix(in srgb,var(--fp-here) 34%,transparent)}
+.fplan-lane__go:active{scale:.96}
+.fplan-lane__go.is-part{background:rgba(230,173,80,.2);box-shadow:inset 0 0 0 1px rgba(230,173,80,.5);color:#ffe7bd}
+.fplan-lane__go.is-part:hover{background:rgba(230,173,80,.32);box-shadow:inset 0 0 0 1px var(--fp-queued),0 0 16px rgba(230,173,80,.3)}
+.fplan .fplan-lane__hint{overflow:hidden;color:#8fb6c0;font-size:calc(12px * var(--text-scale-secondary,1)) !important;line-height:1.15;text-align:center;white-space:nowrap;text-overflow:ellipsis}
+.fplan .fplan-lane__hint.is-warn{color:#ffcb7a}
+.fplan .fplan-lane__done{margin:0;color:var(--ut-positive);font-size:calc(14px * var(--text-scale-body,1)) !important;font-weight:700;text-align:center}
+.fplan .fplan-lane__done::before{content:'✓ '}
+.fplan .fplan-lane__why{margin:0;display:-webkit-box;overflow:hidden;color:#ff9d90;font-size:calc(12px * var(--text-scale-body,1)) !important;font-weight:600;line-height:1.2;text-align:right;-webkit-line-clamp:3;-webkit-box-orient:vertical}
+.fplan .fplan-lane__stuck{margin:0;text-align:center;line-height:1.2}
+.fplan .fplan-lane__stuck b{display:block;color:var(--fp-queued);font-size:calc(14px * var(--text-scale-body,1)) !important;font-weight:800}
+.fplan .fplan-lane__stuck small{display:block;overflow:hidden;color:#ffcb7a;font-size:calc(12px * var(--text-scale-secondary,1)) !important;white-space:nowrap;text-overflow:ellipsis}
+
+.fplan-lane__remove{
+  width:26px;
+  height:26px;
+  padding:0;
+  border:0;
+  border-radius:var(--ut-r-chip);
+  background:transparent;
+  color:rgba(200,225,232,.34);
+  cursor:pointer;
+  transition:background var(--ut-motion-fast) ease,color var(--ut-motion-fast) ease;
+}
+.fplan .fplan-lane__remove{font-size:calc(12px * var(--text-scale-control,1)) !important}
+.fplan-lane:hover .fplan-lane__remove,.fplan-lane__remove:focus-visible{color:#cfe6ec}
+.fplan-lane__remove:hover{background:rgba(240,68,94,.16);color:#ffd6dc}
+
+/* A started line: the ship lifts off and settles, the bar grows, the line glows once. */
+.fplan-lane.is-launched{animation:fplan-launched 1200ms var(--ut-ease-out) both}
+.fplan-lane.is-launched .fplan-lane__art img{animation:fplan-liftoff 900ms var(--ut-spring-pop) both}
+
+/* ---------- shelf ---------- */
+.fplan__shelf{flex:none;display:flex;align-items:center;gap:10px;min-width:0}
+.fplan .fplan__shelf>span{flex:none;color:#8fb6c0;font-size:calc(12px * var(--text-scale-secondary,1)) !important}
+.fplan__shelf>div{min-width:0;display:flex;flex-wrap:wrap;gap:4px;max-height:66px;overflow:hidden}
+.fplan__shelf button{
+  height:30px;
+  display:flex;
+  align-items:center;
+  gap:5px;
+  padding:0 9px 0 3px;
+  border:0;
+  border-radius:var(--ut-r-chip);
+  background:rgba(86,217,242,.05);
+  color:#cfe6ec;
+  cursor:pointer;
+  transition:background var(--ut-motion-fast) ease,scale var(--ut-motion-press) var(--ut-ease-out);
+}
+.fplan__shelf button:hover{background:rgba(86,217,242,.14);color:#fff}
+.fplan__shelf button:active{scale:.96}
+.fplan__shelf img{width:30px;height:24px;object-fit:contain}
+.fplan .fplan__shelf b{font-size:calc(12px * var(--text-scale-control,1)) !important;font-weight:700;white-space:nowrap}
+
+/* ---------- empty plan ---------- */
+.fplan-empty{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:minmax(260px,330px) minmax(0,1fr);gap:26px;align-items:center}
+.fplan .fplan-empty__lead h3{margin:0;color:#f2fdff;font-size:calc(var(--fp-t-title) * var(--text-scale-section-title,1)) !important;font-weight:800;line-height:1.15}
+.fplan .fplan-empty__lead p{margin:10px 0 16px;color:#a9cbd3;font-size:calc(var(--fp-t-name) * var(--text-scale-body,1)) !important;line-height:1.45}
+.fplan-empty__lead>div{display:grid;gap:8px}
+.fplan-empty__grid{min-height:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px;align-content:center;overflow-y:auto}
+.fplan-empty__grid button{
+  display:grid;
+  justify-items:center;
+  gap:1px;
+  min-width:0;
+  padding:8px 6px 8px;
+  border:0;
+  border-radius:var(--ut-r-card);
+  background:radial-gradient(circle at 50% 30%,color-mix(in srgb,var(--fp-here) 11%,transparent),transparent 70%);
+  color:#e8faff;
+  cursor:pointer;
+  transition:background var(--ut-motion-fast) ease,translate var(--ut-motion-base) var(--ut-ease-out),scale var(--ut-motion-press) var(--ut-ease-out);
+  animation:fplan-lane-in var(--ut-motion-item) var(--ut-ease-out) backwards;
+  animation-delay:calc(var(--i) * 24ms);
+}
+.fplan-empty__grid button:hover{background:radial-gradient(circle at 50% 30%,color-mix(in srgb,var(--fp-here) 26%,transparent),transparent 72%);translate:0 -3px}
+.fplan-empty__grid button:active{scale:.97}
+.fplan-empty__grid img{width:100%;height:calc(var(--fp-lane) + 10px);object-fit:contain;filter:drop-shadow(0 6px 9px rgba(0,0,0,.6))}
+.fplan .fplan-empty__grid b{max-width:100%;overflow:hidden;font-size:calc(14px * var(--text-scale-control,1)) !important;font-weight:700;white-space:nowrap;text-overflow:ellipsis}
+.fplan .fplan-empty__grid small{color:#8fb6c0;font-size:calc(12px * var(--text-scale-secondary,1)) !important}
+
+/* ---------- dock ---------- */
+.fplan__dock{position:relative;flex:none;min-height:50px;display:flex;align-items:center;gap:18px}
+.fplan__summary{flex:1 1 auto;min-width:0}
+.fplan__costs{display:flex;align-items:center;gap:6px 18px;flex-wrap:wrap}
+.fplan .fplan__costs>small{color:#8fb6c0;font-size:calc(12px * var(--text-scale-secondary,1)) !important}
+.fplan__costs>span{display:flex;align-items:center;gap:6px}
+.fplan__costs .asterion-resource-icon{width:24px;height:24px;object-fit:contain}
+.fplan .fplan__costs b{color:#fff;font-size:calc(var(--fp-t-big) * var(--text-scale-table,1)) !important;font-weight:800}
+.fplan .fplan__costs span small{color:var(--fp-bad);font-size:calc(12px * var(--text-scale-secondary,1)) !important;font-weight:700}
+.fplan .fplan__costs .is-short b{color:var(--fp-bad)}
+.fplan__report{min-width:0;display:grid;gap:2px;justify-items:start;animation:fplan-report-in var(--ut-motion-base) var(--ut-ease-out) both}
+.fplan .fplan__report b{color:#7df0b8;font-size:calc(var(--fp-t-small) * var(--text-scale-body,1)) !important;font-weight:700;line-height:1.25}
+.fplan .fplan__report small{color:#ffcb7a;font-size:calc(12px * var(--text-scale-secondary,1)) !important;font-weight:600;line-height:1.25}
+.fplan__report.is-calm b{color:var(--ut-positive)}
+.fplan__undo{padding:0;border:0;background:none;color:var(--ut-accent);text-decoration:underline;cursor:pointer}
+.fplan .fplan__undo{font-size:calc(12px * var(--text-scale-control,1)) !important;font-weight:700}
+.fplan__actions{flex:none;display:flex;gap:8px;align-items:center}
+.fplan__btn{
+  min-height:46px;
+  padding:0 18px;
+  border:1px solid var(--ut-border-strong);
+  border-radius:var(--ut-r-btn);
+  background:rgba(86,217,242,.07);
+  color:#e8faff;
+  white-space:nowrap;
+  cursor:pointer;
+  transition:border-color var(--ut-motion-fast) ease,background var(--ut-motion-fast) ease,scale var(--ut-motion-press) var(--ut-ease-out);
+}
+.fplan .fplan__btn{font-size:calc(14px * var(--text-scale-control,1)) !important;font-weight:700}
+.fplan__btn:hover:not(:disabled){border-color:var(--ut-accent);background:rgba(86,217,242,.14)}
+.fplan__btn:active:not(:disabled){scale:.97}
+.fplan__btn:disabled{border-color:rgba(126,200,220,.12);background:transparent;color:rgba(200,225,232,.36);cursor:default}
+.fplan__btn--pri:not(:disabled){
+  min-width:210px;
+  border:0;
+  background:linear-gradient(180deg,#6fe3f8,#2aa7c9);
+  color:#02202b;
+  box-shadow:0 0 22px rgba(86,217,242,.32);
+}
+.fplan .fplan__btn--pri{font-size:calc(16px * var(--text-scale-control,1)) !important;font-weight:800}
+.fplan__btn--pri:hover:not(:disabled){background:linear-gradient(180deg,#8aecfb,#34b5d7)}
+
+.fplan__copy{
+  position:absolute;
+  z-index:4;
+  right:0;
+  bottom:calc(100% + 8px);
+  width:340px;
+  max-height:330px;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  border-radius:var(--ut-r-card);
+  background:#0a1d27;
+  box-shadow:inset 0 0 0 1px var(--ut-border-strong),0 20px 50px rgba(0,0,0,.6);
+  transform-origin:bottom right;
+  animation:ut-pop-in var(--ut-motion-base) var(--ut-spring-pop) backwards;
+}
+.fplan__copy header{display:grid;gap:1px;padding:10px 14px 8px}
+.fplan .fplan__copy header b{font-size:calc(14px * var(--text-scale-section-title,1)) !important;font-weight:800}
+.fplan .fplan__copy header small{color:#ffcb7a;font-size:calc(12px * var(--text-scale-secondary,1)) !important}
+.fplan__copy ul{margin:0;padding:0 6px 6px;list-style:none;overflow-y:auto}
+.fplan__copy li button{width:100%;display:flex;align-items:center;gap:9px;padding:6px 8px;border:0;border-radius:var(--ut-r-chip);background:transparent;color:#e8faff;text-align:left;cursor:pointer;transition:background var(--ut-motion-fast) ease}
+.fplan__copy li button:hover{background:rgba(86,217,242,.12)}
+.fplan__copy img{flex:none;width:32px;height:32px;object-fit:contain}
+.fplan__copy li span{min-width:0;display:grid}
+.fplan .fplan__copy li b{overflow:hidden;font-size:calc(14px * var(--text-scale-control,1)) !important;font-weight:700;white-space:nowrap;text-overflow:ellipsis}
+.fplan .fplan__copy li small{color:#8fb6c0;font-size:calc(12px * var(--text-scale-secondary,1)) !important}
+
+@keyframes fplan-veil-in{from{opacity:0}to{opacity:1}}
+@keyframes fplan-lane-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes fplan-report-in{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+@keyframes fplan-liftoff{
+  0%{transform:none}
+  30%{transform:translate(16px,-9px) rotate(-7deg) scale(1.12)}
+  100%{transform:none}
+}
+@keyframes fplan-launched{
+  0%{background:color-mix(in srgb,var(--fp-queued) 22%,transparent)}
+  100%{background:transparent}
+}
+@media (prefers-reduced-motion:reduce){
+  .fplan,.fplan-veil,.fplan-lane,.fplan-lane__art img,.fplan__report,.fplan__copy,.fplan-empty__grid button{animation:none !important}
+  .fplan-lane__bar i,.fplan-hangar__band i{transition:none}
+  .fplan-empty__grid button:hover{translate:none}
+}

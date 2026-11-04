@@ -24,6 +24,8 @@ export type FleetUiState = {
 
 /** The fleet screen asks App to change the saved FleetUiState (detail: FleetUiUpdate). */
 export const FLEET_UI_UPDATE_EVENT = 'asterion:fleet-ui-update';
+/** Opens the fleet planner (detail: { planetId?: string }; the current planet without one). */
+export const FLEET_PLANNER_OPEN_EVENT = 'asterion:fleet-planner-open';
 export const FLEET_FAVORITE_LIMIT = 12;
 const NAME_LIMIT = 60;
 

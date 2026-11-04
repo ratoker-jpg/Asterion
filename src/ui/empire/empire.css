@@ -371,3 +371,11 @@ html body :is(.empire, .planet-sections, .empire-pick, .empire-drawer__advice, .
 /* «Текущая планета»: the switch takes the top-left corner, the title block moves under it. */
 .planet-sections ~ .planet-orbit .planet-orbit__name { top: 80px; }
 .planet-sections ~ .planet-orbit .planet-orbit__vitals { top: 206px; }
+
+/* «Эталонный флот» at a glance: a planet with a plan shows what it lacks. */
+.empire-fleet__plan { justify-self: start; max-width: 100%; padding: 0; overflow: hidden; border: 0; background: none; font-size: 13px !important; font-weight: 700; white-space: nowrap; text-overflow: ellipsis; text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); text-underline-offset: 3px; cursor: pointer; transition: color 140ms ease; }
+.empire-fleet__plan:hover { color: #fff; }
+.empire-fleet__plan:focus-visible { outline: var(--ut-focus); outline-offset: 2px; }
+:is(.empire-fleet__plan, .empire-detail__col h4 span).is-warn { color: var(--ut-amber); }
+:is(.empire-fleet__plan, .empire-detail__col h4 span).is-bad { color: #ff7a6b; }
+:is(.empire-fleet__plan, .empire-detail__col h4 span).is-ok { color: var(--ut-positive); }

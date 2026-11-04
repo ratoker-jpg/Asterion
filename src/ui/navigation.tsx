@@ -59,6 +59,7 @@ export const UTILITY_NAVIGATION = [
 
 export type FleetSectionId =
   | 'ships'
+  | 'fleet-plan'
   | 'defense'
   | 'commander-ships'
   | 'repair'
@@ -73,6 +74,7 @@ export type FleetSectionItem = {
 
 export const FLEET_SECTION_LABELS: Record<FleetSectionId, string> = {
   ships: 'Корабли',
+  'fleet-plan': 'Эталонный флот',
   defense: 'Оборона',
   'commander-ships': 'Командирские корабли',
   repair: 'Ремонтная мастерская',
@@ -83,6 +85,7 @@ export const FLEET_SECTION_LABELS: Record<FleetSectionId, string> = {
 
 export const FLEET_CONSTRUCTION_NAVIGATION: readonly FleetSectionItem[] = [
   { id: 'ships', label: FLEET_SECTION_LABELS.ships },
+  { id: 'fleet-plan', label: FLEET_SECTION_LABELS['fleet-plan'] },
   { id: 'defense', label: FLEET_SECTION_LABELS.defense },
   { id: 'commander-ships', label: FLEET_SECTION_LABELS['commander-ships'] },
   { id: 'repair', label: FLEET_SECTION_LABELS.repair },
