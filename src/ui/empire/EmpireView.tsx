@@ -78,6 +78,7 @@ export function EmpireView({ state, now, mode, testTimeScale, planetArt, onOpenP
   const [drawer, setDrawer] = useState<Drawer | null>(null);
   const [picker, setPicker] = useState<BuildPickerState | null>(null);
   const [yard, setYard] = useState<ProductionPickerState | null>(null);
+  const yardName = getBuildingDefinition('shipyard', factionId).name;
   const current = overview.rows.find((row) => row.isCurrent) ?? overview.rows[0];
   const anyHome = overview.rows[0];
 
@@ -97,12 +98,12 @@ export function EmpireView({ state, now, mode, testTimeScale, planetArt, onOpenP
 
   return (
     <section className="empire" data-qa-empire aria-label="Империя: все планеты">
-      <EmpireSummary overview={overview} state={state} now={now} />
+      <EmpireSummary overview={overview} state={state} now={now} yardName={yardName} />
 
       <ol className="empire__lanes">
         {/* Inside the scrolling list, so the captions keep the rows' exact columns and stay on top. */}
         <li className="empire__cols" aria-hidden="true" data-toast-guard>
-          <span>Планета</span>{EMPIRE_RESOURCES.map((key) => <span key={key}>{RESOURCE_LABELS[key]}</span>)}<span>Энергия</span><span>Стройка</span><span>Верфь</span><span>Флот</span><span />
+          <span>Планета</span>{EMPIRE_RESOURCES.map((key) => <span key={key}>{RESOURCE_LABELS[key]}</span>)}<span>Энергия</span><span>Стройка</span><span>{yardName}</span><span>Флот</span><span />
         </li>
         {overview.rows.map((row, index) => (
           <Lane key={row.id} row={row} index={index} now={now} art={planetArt[row.id]} factionId={factionId} units={units} state={state}
@@ -165,7 +166,7 @@ function SummaryCell({ label, value, note, tone, children }: { label: string; va
   );
 }
 
-function EmpireSummary({ overview, state, now }: { overview: EmpireOverview; state: SaveState; now: number }) {
+function EmpireSummary({ overview, state, now, yardName }: { overview: EmpireOverview; state: SaveState; now: number; yardName: string }) {
   const count = overview.rows.length;
   const research = [...state.science.queue].sort((a, b) => a.finishAt - b.finishAt)[0];
   const science = research ? SCIENCE_CATALOG.find((item) => item.id === research.scienceId) : null;
@@ -185,8 +186,8 @@ function EmpireSummary({ overview, state, now }: { overview: EmpireOverview; sta
         <SummaryCell label="Стройка" value={`занято ${overview.queueUsed} из ${overview.queueCapacity}`}
           note={overview.idleCount ? `не строит: ${overview.idleCount} ${plural(overview.idleCount, 'планета', 'планеты', 'планет')}` : 'строят все планеты'} tone={overview.idleCount ? 'warn' : undefined} />
       </div>
-      <SummaryCell label="Верфи" value={overview.shipyardsBusy ? `работают: ${overview.shipyardsBusy}` : 'все свободны'} note={overview.shipyardsBusy ? `свободны: ${count - overview.shipyardsBusy}` : 'заказов нет'} />
-      <SummaryCell label="Наука" value={science ? `${science.name} ${research!.toLevel}` : 'не идёт'} note={science ? `${countdown(research!.finishAt - now)}${moreResearch > 0 ? ` · ещё ${moreResearch}` : ''}` : 'лаборатории свободны'} />
+      <SummaryCell label={yardName} value={`занято ${overview.shipyardsBusy} из ${count}`} note={overview.shipyardsBusy ? `свободно: ${count - overview.shipyardsBusy}` : 'заказов нет'} />
+      <SummaryCell label="Наука" value={science ? `${science.name} ${research!.toLevel}` : 'не идёт'} note={science ? `${countdown(research!.finishAt - now)}${moreResearch > 0 ? ` · ещё ${moreResearch}` : ''}` : 'ничего не изучается'} />
       <SummaryCell label="Рейсы" value={`${overview.flightSlots.used} из ${overview.flightSlots.limit}`} note={`свободно: ${overview.flightSlots.free}`} />
     </div>
   );
@@ -262,6 +263,7 @@ function Lane({ row, state, index, now, art, factionId, units, open, single, tar
   const incoming = row.flights.filter((flight) => flight.direction === 'in');
   const free = row.queueCapacity - row.queue.length;
   const hasYard = row.shipyardLevel > 0;
+  const yardName = getBuildingDefinition('shipyard', factionId).name;
   const toggleFromRow = (event: ReactMouseEvent<HTMLDivElement>) => {
     if (!(event.target as HTMLElement).closest('button')) onToggle();
   };
@@ -310,7 +312,7 @@ function Lane({ row, state, index, now, art, factionId, units, open, single, tar
           art={orderArt} title={order ? orderTitle(order, units) : undefined}
           timer={order ? countdown(order.finishAt - now) : undefined} progress={order ? taskProgress(now, order.startedAt, order.finishAt) : 0}
           more={orders.length > 1 ? `ещё ${orders.length - 1}` : undefined}
-          empty={hasYard ? 'Верфь свободна' : 'Верфи нет'}
+          empty={hasYard ? `${yardName}: заказов нет` : `${yardName}: не построено`}
           action={hasYard && !row.blocked ? (
             <button type="button" className={`empire-add ${orders.length ? '' : 'is-wide'}`} aria-label={`Заказать корабли: ${row.name}`} onClick={(event) => onYard('ships', event.currentTarget)} data-qa-empire-order={row.id} data-empire-pick-trigger>
               +{orders.length ? null : <span>Заказать</span>}
@@ -386,6 +388,7 @@ function PlanetDetail({ row, state, now, factionId, units, single, onOpenPlanet,
   const orderGroups: [string, FleetProductionOrder[]][] = [['Корабли', row.shipyard], ['Оборона', row.defense], ['Командиры', row.commanders]];
   const orders = orderGroups.flatMap(([, list]) => list.map((order, position) => ({ order, waiting: position > 0 })));
   const hasYard = row.shipyardLevel > 0;
+  const yardName = getBuildingDefinition('shipyard', factionId).name;
   return (
     <div className="empire-detail" data-qa-empire-detail={row.id}>
       <section className="empire-detail__col">
@@ -405,7 +408,7 @@ function PlanetDetail({ row, state, now, factionId, units, single, onOpenPlanet,
       </section>
 
       <section className="empire-detail__col">
-        <h4>Верфь и оборона <span>{hasYard ? `верфь ур. ${row.shipyardLevel}` : 'верфи нет'}</span></h4>
+        <h4>{yardName} и оборона <span>{hasYard ? `ур. ${row.shipyardLevel}` : 'не построено'}</span></h4>
         {orders.length ? (
           <ul className="empire-tasks" data-toast-guard>
             {orders.map(({ order, waiting }) => (
@@ -413,7 +416,7 @@ function PlanetDetail({ row, state, now, factionId, units, single, onOpenPlanet,
                 cancelLabel={`Отменить заказ: ${units.get(order.itemId)?.name ?? order.itemId}`} onCancel={() => onCancelProduction(order.id)} qa="order" />
             ))}
           </ul>
-        ) : <p>{hasYard ? 'Заказов нет: верфь свободна.' : 'Постройте верфь в промышленной зоне, чтобы заказывать корабли и оборону.'}</p>}
+        ) : <p>{hasYard ? 'Заказов нет.' : `Чтобы заказывать корабли и оборону, постройте в военной зоне: ${yardName}.`}</p>}
         {hasYard && !row.blocked ? (
           <div className="empire-detail__btns">
             <button type="button" className="empire__btn empire__btn--pri" onClick={(event) => onYard('ships', event.currentTarget)} data-empire-pick-trigger data-qa-empire-yard-open="ships">+ Корабли</button>
@@ -511,7 +514,7 @@ function LabLine({ row, now }: { row: EmpirePlanetRow; now: number }) {
   const science = research ? SCIENCE_CATALOG.find((item) => item.id === research.scienceId) : null;
   return (
     <p className="empire-detail__line">
-      {science ? <>Лаборатория: {science.name} {research!.toLevel}, осталось <time>{countdown(research!.finishAt - now)}</time></> : 'Лаборатория на этой планете свободна.'}
+      {science ? <>Исследование: {science.name} {research!.toLevel}, осталось <time>{countdown(research!.finishAt - now)}</time></> : 'На этой планете ничего не изучается.'}
     </p>
   );
 }

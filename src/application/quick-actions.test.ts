@@ -218,7 +218,8 @@ test('a refusal a smaller fleet can fix keeps the action open for adjusting', ()
 test('a Sun\'s debris: recyclers sized to it, the flight goes to the Sun\'s operation and the runtime accepts it', () => {
   const state = campaign({ recycler: 50 });
   const home = state.currentPlanetId;
-  const coordinate = { galaxy: state.planets[home]!.universeGalaxy ?? 1, system: state.planets[home]!.universeSystem ?? 1, position: 0 };
+  // As «Найти обломки» builds it: the route is the system's first position.
+  const coordinate = { galaxy: state.planets[home]!.universeGalaxy ?? 1, system: state.planets[home]!.universeSystem ?? 1, position: 1 };
   const target: QuickTarget = {
     node: { id: `debris:${coordinate.system}`, kind: 'empty', name: 'Обломки Солнца', art: '', statusLabel: '', description: '', coordinate },
     orbitalDebris: 1,
@@ -235,4 +236,7 @@ test('a Sun\'s debris: recyclers sized to it, the flight goes to the Sun\'s oper
   const withDebris = { ...state, espionage: { ...state.espionage, orbitalDebris: { ...state.espionage?.orbitalDebris, [ledgerKey]: { debris: 1 } } } } as SaveState;
   assert.equal(getSunDebris(withDebris, coordinate.galaxy, coordinate.system), 1);
   assert.equal(previewQuickCommand(withDebris, command, RUNTIME).ok, true);
+  // The panel opens through these two; they must accept the Sun target as well.
+  assert.ok(evaluateQuickActions(withDebris, target, RUNTIME).find((action) => action.id === 'recycle')?.enabled);
+  assert.deepEqual(planQuickLegs(withDebris, 'recycle', target, RUNTIME).map((leg) => leg.originPlanetId), [home]);
 });

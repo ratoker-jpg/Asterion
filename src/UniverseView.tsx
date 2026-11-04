@@ -884,9 +884,10 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
     const { coordinate, debris } = entry;
     const isSun = coordinate.position === 0;
     const atPosition = isSun ? undefined : [...nodesById.values()].find((node) => node.kind !== 'asteroid' && node.coordinate.galaxy === coordinate.galaxy && node.coordinate.system === coordinate.system && node.coordinate.position === coordinate.position);
+    // Flights to a Sun are routed to its system's first position; position 0 only labels its debris.
     const node: UniversePlanetNode = atPosition ?? {
       id: `debris:${formatUniverseCoordinate(coordinate)}`, kind: 'empty', art: isSun ? SUN_DEBRIS_ART : '', statusLabel: '', description: '',
-      name: isSun ? `Обломки Солнца ${coordinate.galaxy}:${coordinate.system}` : 'Свободная позиция', coordinate,
+      name: isSun ? `Обломки Солнца ${coordinate.galaxy}:${coordinate.system}` : 'Свободная позиция', coordinate: isSun ? { ...coordinate, position: 1 } : coordinate,
     };
     setDebrisQuick({ anchor, target: { node, orbitalDebris: debris, ...(isSun ? { sun: { galaxy: coordinate.galaxy, system: coordinate.system } } : {}) } });
   };

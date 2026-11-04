@@ -178,7 +178,7 @@ export function QuickSendPanel({ state, actionId, target, onSend, onClose, onDet
       {bare ? null : <header className="quick-send__head">
         {onBack ? <button type="button" className="quick-send__back" onClick={onBack} aria-label="Назад к списку действий">‹</button> : <span />}
         <img src={QUICK_ACTION_ICONS[actionId]} alt="" draggable={false} />
-        <div><b>{QUICK_ACTION_LABELS[actionId]}</b><span>{target.node.name} · {formatUniverseCoordinate(target.node.coordinate)}</span></div>
+        <div><b>{QUICK_ACTION_LABELS[actionId]}</b><span>{target.node.name} · {formatUniverseCoordinate(target.sun ? { ...target.sun, position: 0 } : target.node.coordinate)}</span></div>
         <button type="button" className="quick-send__close" onClick={onClose} aria-label="Закрыть">✕</button>
       </header>}
 

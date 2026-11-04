@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { localizeBuildingNames, type BuildingRole, type BuildingZone } from '../../domain/buildings/balance-v1.ts';
-import { getBuildingsForZone } from '../../domain/buildings/resource-zone.ts';
+import { getBuildingDefinition, getBuildingsForZone } from '../../domain/buildings/resource-zone.ts';
 import type { RuntimeMode, TestTimeScale } from '../../domain/runtime/mode.ts';
 import { previewBuilding } from '../../application/buildings.ts';
 import { getPlanetResources, type SaveState } from '../../application/contracts.ts';
@@ -144,6 +144,7 @@ export function ProductionPicker({ state, picker, mode, testTimeScale, now, onKi
   }, [picker.focus]);
   if (!planet) return null;
   const budget = getFleetBuildBudget(state, picker.planetId);
+  const yardName = getBuildingDefinition('shipyard', budget.factionId).name;
   const pool = picker.kind === 'defense' ? budget.defenseSummary : budget.summary;
   const wallet = getPlanetResources(state, picker.planetId);
   const open = items.filter((item) => item.unlocked).length;
@@ -151,7 +152,7 @@ export function ProductionPicker({ state, picker, mode, testTimeScale, now, onKi
     <div ref={ref} className="empire-pick empire-pick--yard" style={placePopover(picker.left, picker.top, 450, 600)} role="dialog" aria-label={`Производство на планете ${planet.name}`} data-qa-empire-yard={picker.planetId} data-qa-empire-yard-kind={picker.kind}>
       <header>
         <b>{planet.name}</b>
-        <span>верфь ур. {budget.shipyardLevel}</span>
+        <span>{yardName}, ур. {budget.shipyardLevel}</span>
         <button type="button" onClick={onClose} aria-label="Закрыть">✕</button>
       </header>
       <nav role="tablist" aria-label="Что заказать">
@@ -159,7 +160,7 @@ export function ProductionPicker({ state, picker, mode, testTimeScale, now, onKi
         <button type="button" role="tab" aria-selected={picker.kind === 'defense'} className={picker.kind === 'defense' ? 'is-on' : ''} onClick={() => onKind('defense')} data-qa-empire-yard-tab="defense">Оборона</button>
       </nav>
       <p className="empire-pick__note">
-        {budget.shipyardLevel <= 0 ? 'На этой планете нет верфи. Постройте её в промышленной зоне, и здесь можно будет заказывать.'
+        {budget.shipyardLevel <= 0 ? `Чтобы заказывать здесь корабли и оборону, постройте в военной зоне: ${yardName}.`
           : `Население ${picker.kind === 'defense' ? 'обороны' : 'флота'}: ${formatNumber(pool.population)} из ${formatNumber(pool.capacity)}${open === 0 ? '. Пока ничего не открыто.' : ''}`}
       </p>
       <ul>

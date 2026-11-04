@@ -278,7 +278,7 @@ export function adviseEmptyGather(state: SaveState, rows: readonly EmpirePlanetR
     .map((row) => ({ row, item: buildProductionItems(state, row.id, 'ships', runtime).find((candidate) => candidate.id === shipId) }))
     .filter((entry) => (entry.item?.max ?? 0) > 0)
     .sort((a, b) => b.item!.max - a.item!.max)[0];
-  if (!best) return { message: `${lead} Заказать транспортники сейчас негде: на других планетах нет верфи нужного уровня или ресурсов.`, build: null };
+  if (!best) return { message: `${lead} Заказать транспортники сейчас негде: на других планетах не выполнены требования или не хватает ресурсов.`, build: null };
   return {
     message: `${lead} Или постройте их на планете ${best.row.name}: там хватит ресурсов на ${best.item!.max.toLocaleString('ru-RU')} шт.`,
     build: { planetId: best.row.id, planetName: best.row.name, shipId, shipName: best.item!.name },
