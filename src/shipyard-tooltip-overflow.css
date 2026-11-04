@@ -2,29 +2,9 @@
    The card frame clips overflowing children, so release that clipping only
    while the card is hovered and raise it above the next grid row. */
 
-.shipyard-grid-v1 {
-  overflow: visible;
-}
-
-.shipyard-card-v1:hover {
-  z-index: 40;
-  overflow: visible;
-  clip-path: none;
-}
-
-.shipyard-card-v1:hover .shipyard-art-v1,
-.shipyard-card-v1:hover .shipyard-art-hover-v1 {
-  overflow: visible;
-}
-
-.shipyard-card-v1:hover .shipyard-stats-tooltip-v1 {
-  z-index: 100;
-}
-
 /* Long shipyard pages keep the same shell backdrop as the normal Fleet
    screen. Extending .stage to ~2860px would otherwise make background-size:
    cover recrop the 1920x1080 starfield. Pin it to the base canvas instead. */
-
 
 /* The App-level placeholder sits underneath the Fleet portal. Hide only that
    placeholder while the long shipyard is open, so its old “ФЛОТЫ” text cannot

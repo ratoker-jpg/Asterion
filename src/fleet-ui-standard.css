@@ -38,11 +38,10 @@
 }
 
 .fleet-page-shell-v1,
-.shipyard-view-v1,
 .repair-workshop-v1,
 .combat-priority-view-v1,
 .battle-view-v1,
-.simulator-view-v1 {
+.simulator-view-v1{
   width: 100%;
   min-width: 0;
   min-height: 0 !important;
@@ -55,10 +54,7 @@
    Two pseudo-layers draw one identical clipped frame for Ships, Defense, Commanders, Repair,
    Combat Priority, Battles and future Fleet screens. */
 .fleet-page-head-v1,
-.shipyard-page-head-v1,
-.repair-page-head-v1,
-.combat-priority-page-head-v1,
-.battle-page-head-v1 {
+.battle-page-head-v1{
   position: relative !important;
   min-height: var(--fleet-page-head-height) !important;
   display: flex !important;
@@ -76,15 +72,9 @@
 }
 
 .fleet-page-head-v1::before,
-.shipyard-page-head-v1::before,
-.repair-page-head-v1::before,
-.combat-priority-page-head-v1::before,
 .battle-page-head-v1::before,
 .fleet-page-head-v1::after,
-.shipyard-page-head-v1::after,
-.repair-page-head-v1::after,
-.combat-priority-page-head-v1::after,
-.battle-page-head-v1::after {
+.battle-page-head-v1::after{
   content: '' !important;
   position: absolute !important;
   pointer-events: none !important;
@@ -92,10 +82,7 @@
 }
 
 .fleet-page-head-v1::before,
-.shipyard-page-head-v1::before,
-.repair-page-head-v1::before,
-.combat-priority-page-head-v1::before,
-.battle-page-head-v1::before {
+.battle-page-head-v1::before{
   z-index: 0 !important;
   inset: 0 !important;
   width: auto !important;
@@ -104,10 +91,7 @@
 }
 
 .fleet-page-head-v1::after,
-.shipyard-page-head-v1::after,
-.repair-page-head-v1::after,
-.combat-priority-page-head-v1::after,
-.battle-page-head-v1::after {
+.battle-page-head-v1::after{
   z-index: 0 !important;
   top: 2px !important;
   right: 1px !important;
@@ -122,28 +106,19 @@
 }
 
 .fleet-page-head-v1 > *,
-.shipyard-page-head-v1 > *,
-.repair-page-head-v1 > *,
-.combat-priority-page-head-v1 > *,
-.battle-page-head-v1 > * {
+.battle-page-head-v1 > *{
   position: relative;
   z-index: 1;
 }
 
 .fleet-page-head-v1 > div:first-child,
-.shipyard-page-head-v1 > div:first-child,
-.repair-page-head-v1 > div:first-child,
-.combat-priority-page-head-v1 > div:first-child,
-.battle-page-head-v1 > div:first-child {
+.battle-page-head-v1 > div:first-child{
   min-width: 0;
   max-width: 920px;
 }
 
 .fleet-page-head-v1 small,
-.shipyard-page-head-v1 small,
-.repair-page-head-v1 small,
-.combat-priority-page-head-v1 small,
-.battle-page-head-v1 small {
+.battle-page-head-v1 small{
   color: #62b7ce !important;
   font-size: 10px !important;
   font-weight: 700;
@@ -151,10 +126,7 @@
 }
 
 .fleet-page-head-v1 h2,
-.shipyard-page-head-v1 h2,
-.repair-page-head-v1 h2,
-.combat-priority-page-head-v1 h2,
-.battle-page-head-v1 h2 {
+.battle-page-head-v1 h2{
   margin: 4px 0 3px !important;
   color: #effcff !important;
   font-size: 24px !important;
@@ -163,10 +135,7 @@
 }
 
 .fleet-page-head-v1 p,
-.shipyard-page-head-v1 p,
-.repair-page-head-v1 p,
-.combat-priority-page-head-v1 p,
-.battle-page-head-v1 p {
+.battle-page-head-v1 p{
   margin: 0 !important;
   color: #7199a7 !important;
   font-size: 11px !important;
@@ -174,9 +143,7 @@
 }
 
 .fleet-page-actions-v1,
-.repair-head-actions-v1,
-.combat-priority-page-actions-v1,
-.battle-page-actions-v1 {
+.battle-page-actions-v1{
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -186,11 +153,8 @@
 
 /* Shared back/action button geometry. A longer label may grow, but height, surface and typography stay fixed. */
 .fleet-page-back-v1,
-.shipyard-page-head-v1 > button,
-.repair-back-v1,
-.combat-priority-back-v1,
 .battle-back-v1,
-.battle-list-back-v1 {
+.battle-list-back-v1{
   min-width: var(--fleet-page-back-min-width) !important;
   height: var(--fleet-page-back-height) !important;
   min-height: var(--fleet-page-back-height) !important;
@@ -210,22 +174,14 @@
 
 .fleet-page-back-v1:hover,
 .fleet-page-back-v1:focus-visible,
-.shipyard-page-head-v1 > button:hover,
-.shipyard-page-head-v1 > button:focus-visible,
-.repair-back-v1:hover,
-.repair-back-v1:focus-visible,
-.combat-priority-back-v1:hover,
-.combat-priority-back-v1:focus-visible,
 .battle-back-v1:hover,
 .battle-back-v1:focus-visible,
 .battle-list-back-v1:hover,
-.battle-list-back-v1:focus-visible {
+.battle-list-back-v1:focus-visible{
   color: #fff !important;
   border-color: #42d9fb !important;
   outline: none !important;
 }
 
 /* The catalog used a fixed 2490px minimum as a legacy scrolling aid. Content now sizes the page. */
-.shipyard-view-v1 {
-  min-height: 0 !important;
-}
+

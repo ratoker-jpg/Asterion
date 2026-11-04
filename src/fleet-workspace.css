@@ -14,51 +14,6 @@
   overflow: hidden;
 }
 
-.fleet-sidebar-v1,
-.fleet-panel-v1 {
-  border: 1px solid rgba(67, 210, 255, .19);
-  background: linear-gradient(180deg, rgba(4, 29, 43, .94), rgba(3, 17, 27, .96));
-  box-shadow: inset 0 0 34px rgba(0, 151, 214, .035), 0 14px 30px rgba(0, 0, 0, .24);
-}
-
-.fleet-sidebar-v1 {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  padding: 16px 14px 14px;
-  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%);
-}
-
-.fleet-sidebar-title-v1,
-.fleet-panel-header-v1 { border-bottom: 1px solid rgba(55, 205, 255, .2); }
-.fleet-sidebar-title-v1 { padding: 2px 8px 16px; }
-.fleet-sidebar-title-v1 span,
-.fleet-panel-header-v1 h2 { color: #eefcff; letter-spacing: .1em; }
-.fleet-sidebar-title-v1 span { display: block; margin-top: 7px; font-size: 24px; line-height: 1; font-weight: 800; letter-spacing: .16em; }
-.fleet-sidebar-title-v1 small,
-.fleet-panel-header-v1 small,
-.fleet-ship-info-v1 small { color: #6bb9d3; letter-spacing: .13em; font-size: 9px; }
-.fleet-sidebar-title-v1 > small { color: #5fd4eb; font-size: 8px; letter-spacing: .17em; }
-.fleet-sidebar-title-v1 em { display: block; margin-top: 6px; color: #6bb9d3; font-size: 8px; font-style: normal; letter-spacing: .12em; }
-
-.fleet-yard-card-v1 {
-  width: 100%;
-  min-height: 112px;
-  margin: 14px 0;
-  grid-template-columns: 72px minmax(0, 1fr);
-  gap: 10px;
-  padding: 10px;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: default;
-}
-.fleet-yard-card-v1 img { width: 68px; height: 76px; }
-.fleet-yard-card-v1 small { color: #6ca0ad; font-size: 8px; letter-spacing: .1em; }
-.fleet-yard-card-v1 strong { margin-top: 6px; color: #dff9ff; font-size: 11px; letter-spacing: .04em; }
-.fleet-yard-card-v1 .fleet-yard-level-v1 { display: block; margin-top: 3px; color: #6bb9d3; font-size: 8px; letter-spacing: .08em; }
-.fleet-yard-card-v1 p { margin-top: 6px; color: #7899a4; font-size: 8px; line-height: 1.35; }
-
 .fleet-menu-group-v1 { margin-top: 10px; }
 .fleet-menu-group-v1 h3 {
   min-height: 31px;
@@ -106,21 +61,6 @@
   align-content: start;
   gap: 16px;
 }
-.fleet-panel-v1 {
-  min-height: 0;
-  padding: 15px 18px;
-  clip-path: polygon(0 0, calc(100% - 20px) 0, 100% 20px, 100% 100%, 0 100%);
-}
-.fleet-panel-header-v1 {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  min-height: 44px;
-  padding-bottom: 9px;
-}
-.fleet-panel-header-v1 h2 { margin: 2px 0 0; font-size: 20px; }
-.fleet-panel-header-v1 > span { color: #5aaac6; font-size: 10px; letter-spacing: .07em; }
-.fleet-panel-header-v1.compact h2 { font-size: 17px; }
 
 .fleet-flight-table-v1 { margin-top: 11px; border: 1px solid rgba(42, 193, 238, .16); }
 .fleet-flight-row-v1 { display: grid; grid-template-columns: 1.15fr 2.4fr 1fr .8fr .7fr; }
@@ -170,8 +110,7 @@
 .fleet-flight-row-v1 button:disabled { opacity: .4; cursor: default; }
 .fleet-flight-mission-icon { width: 20px; height: 20px; object-fit: contain; vertical-align: middle; margin-right: 5px; }
 .fleet-flight-actions-v1 { display: flex; justify-content: center; gap: 9px; margin-top: 11px; }
-.fleet-flight-actions-v1 button,
-.fleet-compose-footer-v1 button {
+.fleet-flight-actions-v1 button{
   border: 1px solid #168cb3;
   background: linear-gradient(180deg, #087ca5, #064864);
   color: #eafbff;
@@ -180,280 +119,20 @@
 }
 .fleet-flight-actions-v1 button { min-height: 34px; padding: 0 14px; font-size: 10px; }
 
-.fleet-compose-v1 {
-  display: grid;
-  grid-template-rows: auto auto auto auto auto;
-  gap: 10px;
-  overflow: visible;
-}
-
-.fleet-satellite-presence-v1 {
-  display: grid;
-  grid-template-columns: 72px minmax(0, 1fr) 42px;
-  gap: 12px;
-  align-items: center;
-  min-height: 68px;
-  padding: 7px 12px;
-  border: 1px solid rgba(244, 94, 83, .28);
-  background: linear-gradient(90deg, rgba(111, 42, 37, .28), rgba(3, 25, 36, .3));
-}
-.fleet-satellite-art-v1 { display: grid; place-items: center; height: 54px; border-right: 1px solid rgba(244, 94, 83, .18); }
-.fleet-satellite-art-v1 img { width: 52px; height: 52px; object-fit: contain; filter: drop-shadow(0 0 9px rgba(255, 121, 72, .28)); }
-.fleet-satellite-copy-v1 { display: grid; gap: 4px; min-width: 0; }
-.fleet-satellite-copy-v1 small { color: #e78b80; font-size: 8px; letter-spacing: .12em; }
-.fleet-satellite-copy-v1 strong { color: #fff0ec; font-size: 14px; }
-.fleet-satellite-copy-v1 span { color: #c99891; font-size: 10px; }
-.fleet-satellite-dismantle-v1 {
-  width: 32px;
-  height: 32px;
-  border: 1px solid rgba(255, 93, 81, .72);
-  background: rgba(105, 26, 25, .72);
-  color: #ff9e94;
-  font-size: 15px;
-  font-weight: 800;
-  cursor: pointer;
-}
-.fleet-satellite-dismantle-v1:hover,
-.fleet-satellite-dismantle-v1:focus-visible { border-color: #ffb0a8; background: rgba(167, 44, 36, .86); color: #fff; outline: 0; }
-.fleet-satellite-dismantle-v1:disabled { opacity: .32; cursor: default; }
-
 /* Nemexia-inspired roster: every owned ordinary ship gets its own selectable row. */
-.fleet-ship-roster-v1 {
-  min-height: auto;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  align-content: start;
-  overflow: visible;
-  padding-right: 4px;
-}
-.fleet-ship-roster-empty-v1 {
-  grid-column: 1 / -1;
-  min-height: 86px;
-  display: grid;
-  place-items: center;
-  border: 1px solid rgba(58, 196, 236, .14);
-  color: #8bb7c7;
-  font-size: 11px;
-}
-.fleet-ship-line-v1 {
-  display: grid;
-  grid-template-columns: 104px minmax(0, 1fr) 188px;
-  gap: 14px;
-  align-items: center;
-  min-height: 82px;
-  padding: 7px 12px;
-  border-bottom: 1px solid rgba(58, 196, 236, .18);
-  background: linear-gradient(90deg, rgba(8, 61, 83, .38), rgba(3, 25, 36, .12));
-}
-.fleet-ship-art-v1 {
-  display: grid;
-  place-items: center;
-  height: 68px;
-  border-right: 1px solid rgba(50, 190, 235, .11);
-}
-.fleet-ship-art-v1 img { width: 64px; height: 64px; object-fit: contain; filter: drop-shadow(0 0 10px rgba(39, 169, 255, .28)); }
-.fleet-ship-info-v1 h3 { margin: 4px 0 7px; font-size: 17px; }
-.fleet-ship-meta-v1 { display: flex; gap: 16px; color: #75abc0; font-size: 10px; }
-.fleet-ship-meta-v1 b { color: #eefcff; }
 
-.fleet-quantity-v1 { display: grid; grid-template-columns: 1fr; gap: 5px; }
-.fleet-quantity-v1 > span { color: #70b4cb; font-size: 9px; letter-spacing: .1em; }
-.fleet-quantity-v1 input {
-  width: 100%;
-  height: 34px;
-  box-sizing: border-box;
-  border: 1px solid #16799c;
-  background: rgba(2, 24, 35, .94);
-  color: #fff;
-  text-align: center;
-  font-size: 15px;
-  outline: none;
-}
-.fleet-quantity-shortcuts-v1 { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
-.fleet-quantity-shortcuts-v1 button {
-  height: 26px;
-  border: 1px solid rgba(31, 151, 187, .75);
-  background: rgba(4, 42, 58, .72);
-  color: #a9dbea;
-  font-size: 9px;
-  cursor: pointer;
-}
-.fleet-quantity-shortcuts-v1 button:hover { color: #fff; border-color: #38d7ff; }
-
-.fleet-selection-line-v1 {
-  min-height: 34px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 10px;
-  border-bottom: 1px solid rgba(58, 196, 236, .15);
-  color: #8bb7c7;
-  font-size: 10px;
-}
-.fleet-selection-line-v1 button {
-  padding: 0;
-  border: 0;
-  border-bottom: 1px solid #4bcce9;
-  background: transparent;
-  color: #dffaff;
-  font-size: 10px;
-  cursor: pointer;
-}
-.fleet-selection-line-v1 i { flex: 1; }
-.fleet-selection-line-v1 strong { color: #eefcff; font-size: 14px; min-width: 24px; text-align: right; }
-.fleet-selection-line-v1 strong.accent { color: #43e5ff; }
-
-.fleet-mission-picker-v1 {
-  min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(210px, .34fr) minmax(390px, .66fr);
-  grid-template-rows: auto 1fr;
-  column-gap: 22px;
-  row-gap: 8px;
-  align-content: start;
-  padding: 3px 10px 0;
-}
-.fleet-mission-select-v1 {
-  grid-column: 1;
-  grid-row: 1;
-  display: grid;
-  grid-template-columns: 66px 1fr;
-  align-items: center;
-  gap: 8px;
-}
-.fleet-mission-select-v1 label { color: #9bc8d6; font-size: 10px; text-align: right; }
-.fleet-mission-select-v1 select {
-  height: 30px;
-  border: 1px solid #16799c;
-  background: #031d2a;
-  color: #eaffff;
-  padding: 0 8px;
-  font-size: 11px;
-}
-
-.fleet-mission-icons-v1 {
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  display: grid;
-  grid-template-columns: repeat(6, 54px);
-  grid-auto-rows: 54px;
-  gap: 8px;
-  justify-content: start;
-  align-content: start;
-}
-.fleet-mission-icons-v1 button {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 54px;
-  height: 54px;
-  box-sizing: border-box;
-  padding: 0;
-  border: 1px solid rgba(56, 177, 211, .38);
-  background: linear-gradient(180deg, rgba(5, 43, 58, .84), rgba(2, 22, 33, .92));
-  color: #6aa5b8;
-  cursor: pointer;
-  transition: color .12s ease, border-color .12s ease, background .12s ease, box-shadow .12s ease;
-}
-.fleet-mission-icons-v1 button img { display: block; width: 100%; height: 100%; object-fit: contain; }
-.fleet-mission-icons-v1 button:hover,
-.fleet-mission-icons-v1 button:focus-visible,
-.fleet-mission-icons-v1 button.active {
-  color: #effcff;
-  border-color: #55dfff;
-  background: linear-gradient(180deg, rgba(8, 74, 96, .94), rgba(3, 31, 43, .96));
-  box-shadow: inset 0 0 16px rgba(48, 214, 255, .08), 0 0 10px rgba(28, 190, 235, .12);
-  outline: 0;
-}
-.fleet-mission-icons-v1 button.active { box-shadow: inset 0 0 18px rgba(48, 214, 255, .12), 0 0 12px rgba(28, 190, 235, .2); }
-.fleet-mission-icons-v1 button span {
-  position: absolute;
-  z-index: 20;
-  left: 50%;
-  bottom: calc(100% + 6px);
-  transform: translate(-50%, 4px);
-  padding: 5px 7px;
-  border: 1px solid rgba(67, 211, 242, .42);
-  background: #061722;
-  color: #eaffff;
-  font-size: 9px;
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity .12s ease, transform .12s ease;
-}
-.fleet-mission-icons-v1 button:hover span,
-.fleet-mission-icons-v1 button:focus-visible span { opacity: 1; transform: translate(-50%, 0); }
-
-.fleet-mission-description-v1 {
-  grid-column: 1;
-  grid-row: 2;
-  align-self: start;
-  margin: 2px 0 0 74px;
-  max-width: 310px;
-  color: #7faebd;
-  font-size: 10px;
-  line-height: 1.45;
-}
-.fleet-mission-description-v1 strong { color: #dffaff; font-weight: 700; }
-
-.fleet-attack-prep-v1 { display: grid; gap: 12px; margin-top: 14px; padding: 12px 14px; border: 1px solid rgba(214, 116, 116, .28); background: rgba(94, 32, 40, .13); }
-.fleet-space-flight-prep-v1 { border-color: rgba(74, 197, 208, .36); background: rgba(14, 70, 78, .16); }
-.fleet-space-flight-prep-v1 small { color: #75dbe5; }
-.fleet-space-flight-duration-v1 { display: grid; grid-template-columns: minmax(0, 1fr) 92px auto; align-items: center; gap: 9px; padding-bottom: 10px; border-bottom: 1px solid rgba(74, 197, 208, .2); }
-.fleet-space-flight-duration-v1 > span { display: grid; gap: 3px; }
-.fleet-space-flight-duration-v1 em { color: #9cb2bb; font-size: 9px; font-style: normal; line-height: 1.35; }
-.fleet-space-flight-duration-v1 input { width: 100%; box-sizing: border-box; min-height: 34px; padding: 5px 8px; border: 1px solid rgba(74, 197, 208, .44); border-radius: 5px; background: #101e25; color: #e8fcff; font: inherit; text-align: right; }
-.fleet-space-flight-duration-v1 input:focus-visible { outline: 2px solid #75dbe5; outline-offset: 2px; }
-.fleet-space-flight-duration-v1 > strong { color: #a4edf1; font-size: 10px; }
-.fleet-attack-rounds-v1, .fleet-attack-commanders-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
-.fleet-attack-rounds-v1 > div, .fleet-attack-commanders-head > div { display: grid; gap: 4px; }
-.fleet-attack-prep-v1 small { color: #d99191; font-size: 9px; letter-spacing: .12em; }
-.fleet-attack-prep-v1 span, .fleet-attack-commanders-head span { color: #9cb2bb; font-size: 10px; line-height: 1.35; }
-.fleet-attack-rounds-v1 select { min-width: 120px; padding: 7px 9px; border: 1px solid rgba(224, 127, 127, .48); border-radius: 5px; background: #17171f; color: #ffe4e4; font: inherit; }
-.fleet-attack-rounds-v1 select:focus-visible, .fleet-attack-commanders-v1 input:focus-visible { outline: 2px solid #ec8c8c; outline-offset: 2px; }
-.fleet-attack-commanders-v1 { display: grid; gap: 8px; }
-.fleet-attack-commanders-head b { color: #ffd2a0; font-size: 10px; white-space: nowrap; }
-.fleet-attack-commanders-list { display: flex; flex-wrap: wrap; gap: 7px; }
-.fleet-attack-commanders-list label { display: inline-flex; align-items: center; gap: 7px; min-width: 130px; padding: 7px 8px; border: 1px solid rgba(137, 168, 178, .2); border-radius: 5px; background: rgba(7, 21, 29, .5); cursor: pointer; }
-.fleet-attack-commanders-list label.is-selected { border-color: rgba(237, 139, 139, .72); background: rgba(129, 47, 54, .28); }
-.fleet-attack-commanders-list input { accent-color: #e88686; }
-.fleet-attack-commanders-list label span { display: grid; gap: 2px; }
-.fleet-attack-commanders-list label strong { color: #e9f4f5; font-size: 10px; font-weight: 600; }
-.fleet-attack-commanders-list label small { color: #8ea9b1; font-size: 8px; }
 .fleet-attack-commanders-empty { margin: 0; color: #b98585; font-size: 10px; }
-
-.fleet-compose-footer-v1 {
-  align-self: end;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  padding-top: 9px;
-  border-top: 1px solid rgba(45, 196, 240, .13);
-}
-.fleet-compose-footer-v1 span { color: #6ea8bb; font-size: 10px; }
-.fleet-compose-footer-v1 button { min-width: 170px; height: 38px; font-weight: 800; font-size: 11px; letter-spacing: .07em; }
-.fleet-compose-footer-v1 button:disabled { opacity: .35; cursor: default; }
 
 /* Once the shared controller promotes the page to document scrolling, keep every
    roster row in normal flow so adding ships grows the page instead of creating a
    nested scrollbar inside the formation panel. */
-html.asterion-long-page .fleet-compose-v1 {
-  grid-template-rows: auto auto auto auto auto;
-}
-html.asterion-long-page .fleet-ship-roster-v1 {
-  min-height: auto;
-  overflow: visible;
-}
 
 @media (max-width: 1400px) {
   .fleet-workspace-v1 { grid-template-columns: 260px minmax(0, 1fr); gap: 14px; padding-inline: 22px; }
-  .fleet-ship-line-v1 { grid-template-columns: 92px minmax(0, 1fr) 166px; }
-  .fleet-ship-art-v1 img { width: 78px; height: 78px; }
-  .fleet-mission-icons-v1 { grid-template-columns: repeat(5, 50px); grid-auto-rows: 50px; }
-  .fleet-mission-icons-v1 button { width: 50px; height: 50px; }
+  
+  
+  
+  
 }
 
 .resource-building-action-confirm.flight-timeline-modal {
@@ -495,21 +174,12 @@ html.asterion-long-page .fleet-ship-roster-v1 {
 .flight-timeline-step em { display: block; color: #80b5c5; font-size: 10px; font-style: normal; line-height: 1.3; }
 .flight-timeline-step select { width: 100%; height: 30px; margin: 0 0 4px; padding: 0 7px; border: 1px solid #16799c; background: #031d2a; color: #eaffff; font: inherit; font-size: 11px; }
 .flight-timeline-step select:focus-visible,
-.flight-timeline-edit:focus-visible,
-.flight-timeline-back:focus-visible { outline: 2px solid #55dfff; outline-offset: 2px; }
+.flight-timeline-edit:focus-visible{ outline: 2px solid #55dfff; outline-offset: 2px; }
 .flight-timeline-edit { display: inline-block; min-height: 22px; margin-left: 5px; padding: 0 7px; border: 1px solid rgba(81, 188, 214, .48); background: transparent; color: #b9e7f2; font-size: 9px; letter-spacing: .04em; line-height: 20px; cursor: pointer; }
 .flight-timeline-edit:hover,
 .flight-timeline-edit:focus-visible { border-color: #78edff; color: #effcff; }
 .flight-timeline-summary { min-width: 0; padding-left: 22px; border-left: 1px solid rgba(65, 192, 228, .18); text-align: left; }
-.flight-timeline-route-label { display: block; margin-bottom: 8px; font-size: 10px !important; text-align: left; }
-.flight-timeline-route { display: grid; grid-template-columns: minmax(0, 1fr) 100px minmax(0, 1fr); gap: 12px; align-items: stretch; text-align: center; }
-.flight-timeline-route > div { min-width: 0; min-height: 78px; padding: 12px 14px; border: 1px solid rgba(65, 192, 228, .2); background: rgba(3, 25, 37, .42); }
-.flight-timeline-route div { display: block; }
-.flight-timeline-route strong { display: block; overflow-wrap: anywhere; color: #effcff; font-size: 14px; line-height: 1.25; }
-.flight-timeline-route em { display: block; margin-top: 6px; color: #82b7c7; font-size: 10px; font-style: normal; line-height: 1.25; }
-.flight-timeline-route > span { display: grid; align-content: center; justify-items: center; gap: 2px; color: #54dcf6; text-align: center; }
-.flight-timeline-route-arrow strong { font-size: 26px; font-weight: 400; line-height: 1; }
-.flight-timeline-route-arrow small { font-size: 9px; letter-spacing: 0; white-space: nowrap; }
+
 .flight-timeline-ship { display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; gap: 12px; align-items: center; margin-top: 12px; padding: 10px 14px; border-left: 4px solid #4be0ff; background: rgba(6, 68, 91, .24); }
 .flight-timeline-ship img { width: 48px; height: 48px; object-fit: contain; }
 .flight-timeline-ship div { display: grid; gap: 3px; }
@@ -556,7 +226,7 @@ html.asterion-long-page .fleet-ship-roster-v1 {
 .flight-timeline-meta { padding-top: 10px; border-top: 1px solid rgba(65, 192, 228, .16); color: #5d9cac; font-size: 9px; letter-spacing: .1em; line-height: 1.35; }
 .flight-timeline-actions { flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 12px; padding: 12px 0 0; border-top: 1px solid rgba(65, 192, 228, .16); }
 .flight-timeline-actions button { min-height: 38px; padding: 0 16px; font-size: 10px; letter-spacing: .08em; }
-.flight-timeline-actions .flight-timeline-back { margin-right: auto; border-color: rgba(81, 188, 214, .48); background: transparent; color: #b9e7f2; }
+
 @media (max-width: 900px) {
   .resource-building-action-confirm.flight-timeline-modal { width: calc(100vw - 32px); max-width: calc(100vw - 32px); max-height: calc(100vh - 24px); padding: 18px 20px 16px; }
   .flight-timeline-body { grid-template-columns: 1fr; gap: 16px; }
@@ -573,15 +243,15 @@ html.asterion-long-page .fleet-ship-roster-v1 {
   .flight-timeline-head p { font-size: 10px; }
   .flight-timeline-body { grid-template-columns: 1fr; gap: 10px; }
   .flight-timeline-summary { padding: 10px 0 0; border-top: 1px solid rgba(65, 192, 228, .18); border-left: 0; }
-  .flight-timeline-route { grid-template-columns: minmax(0, 1fr) 64px minmax(0, 1fr); gap: 6px; }
-  .flight-timeline-route > div { padding: 9px 7px; }
-  .flight-timeline-route strong { font-size: 11px; }
-  .flight-timeline-route em { font-size: 9px; }
+  
+  
+  
+  
   .flight-timeline-eta { grid-template-columns: 1fr; }
   .flight-timeline-cargo-grid { grid-template-columns: 1fr; }
   .flight-timeline-actions { justify-content: stretch; }
   .flight-timeline-actions button { flex: 1 1 150px; }
-  .flight-timeline-actions .flight-timeline-back { margin-right: 0; }
+  
 }
 
 /* Keep the html scrolling context alive while locking the app shell behind
@@ -650,81 +320,7 @@ html.asterion-long-page .fleet-ship-roster-v1 {
   padding-left: 20px;
   border-left: 1px solid rgba(65, 192, 228, .18);
 }
-.flight-timeline-route-panel {
-  padding: 11px 13px 10px;
-  border: 1px solid rgba(65, 192, 228, .22);
-  background: linear-gradient(110deg, rgba(4, 36, 48, .72), rgba(3, 24, 37, .46));
-  box-shadow: inset 0 0 20px rgba(45, 205, 235, .035);
-}
-.flight-timeline-route-panel-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-.flight-timeline-route-panel-head .flight-timeline-route-label { margin: 0; }
-.flight-timeline-route-panel-head > span {
-  color: #729aa6;
-  font-size: 8px;
-  letter-spacing: .09em;
-  text-align: right;
-}
-.flight-timeline-route {
-  display: grid;
-  grid-template-columns: auto minmax(60px, 1fr) auto;
-  gap: 12px;
-  align-items: center;
-  min-height: 42px;
-}
-.flight-timeline-route-node {
-  display: grid !important;
-  grid-template-columns: auto auto;
-  grid-template-rows: auto auto;
-  align-items: center;
-  justify-items: start !important;
-  gap: 2px 7px !important;
-  min-width: 60px;
-  color: #c8eaf1 !important;
-  text-align: left !important;
-}
-.flight-timeline-route-node b {
-  color: #67cce6;
-  font-size: 9px;
-  letter-spacing: .12em;
-}
-.flight-timeline-route-node em {
-  grid-row: 1 / span 2;
-  grid-column: 2;
-  margin: 0;
-  color: #66e1f7;
-  font-size: 22px;
-  line-height: 1;
-}
-.flight-timeline-route-node.is-target em { color: #f0c66e; }
-.flight-timeline-route-node small {
-  grid-column: 1;
-  color: #82b7c7;
-  font-size: 8px;
-  letter-spacing: .02em;
-  white-space: nowrap;
-}
-.flight-timeline-route-arrow {
-  display: grid !important;
-  grid-template-columns: minmax(0, 1fr) auto auto minmax(0, 1fr);
-  align-items: center;
-  gap: 7px !important;
-  min-width: 0;
-  color: #55dfff !important;
-}
-.flight-timeline-route-arrow i {
-  display: block;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(83, 220, 246, .72));
-}
-.flight-timeline-route-arrow i:last-child { background: linear-gradient(90deg, rgba(83, 220, 246, .72), transparent); }
-.flight-timeline-route-arrow strong { font-size: 20px; font-weight: 400; line-height: 1; }
-.flight-timeline-route-arrow small { font-size: 9px; white-space: nowrap; }
+
 .flight-timeline-ship { margin-top: 9px; padding: 7px 11px; }
 .flight-timeline-ship img { width: 42px; height: 42px; object-fit: contain; }
 .flight-timeline-ship > div strong { font-size: 12px; }
@@ -811,7 +407,7 @@ html.asterion-long-page .fleet-ship-roster-v1 {
 .flight-timeline-meta { padding-top: 7px; font-size: 8px; }
 .flight-timeline-actions { gap: 9px; margin-top: 7px; padding-top: 9px; }
 .flight-timeline-actions button { min-height: 38px; padding-inline: 18px; }
-.flight-timeline-actions .flight-timeline-back { display: none; }
+
 .flight-timeline-actions button[data-qa-flight-preview-cancel] {
   border-color: rgba(246, 101, 101, .54);
   background: rgba(112, 27, 34, .24);
@@ -840,15 +436,14 @@ html.asterion-long-page .fleet-ship-roster-v1 {
   .flight-timeline-step strong { font-size: 12px; }
   .flight-timeline-step em { font-size: 8px; }
   .flight-timeline-summary { padding-left: 14px; }
-  .flight-timeline-route-panel { padding: 8px 9px; }
-  .flight-timeline-route-panel-head { margin-bottom: 7px; }
-  .flight-timeline-route-panel-head > span { font-size: 7px; }
-  .flight-timeline-route { gap: 7px; min-height: 34px; }
-  .flight-timeline-route-node b { font-size: 8px; }
-  .flight-timeline-route-node em { font-size: 18px; }
-  .flight-timeline-route-node small,
-  .flight-timeline-route-arrow small { font-size: 7px; }
-  .flight-timeline-route-arrow strong { font-size: 17px; }
+  
+  
+  
+  
+  
+  
+  
+  
   .flight-timeline-ship { margin-top: 7px; padding: 5px 8px; }
   .flight-timeline-ship img { width: 35px; height: 35px; }
   .flight-timeline-ship > div strong { font-size: 11px; }
@@ -880,45 +475,8 @@ html.asterion-long-page .fleet-ship-roster-v1 {
 }
 
 /* Espionage operations rail: compact enough for 1280px, still readable at 1920px. */
-.fleet-spy-operations-v1 {
-  margin: 18px 20px 0;
-  border: 1px solid rgba(93, 190, 218, .23);
-  background: linear-gradient(135deg, rgba(8, 21, 30, .94), rgba(13, 27, 34, .82));
-  box-shadow: inset 0 0 26px rgba(0, 190, 230, .05);
-}
-.fleet-spy-operations-head-v1,
-.fleet-spy-reports-v1 > header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 16px;
-  border-bottom: 1px solid rgba(93, 190, 218, .15);
-}
-.fleet-spy-operations-head-v1 small,
-.fleet-spy-reports-v1 small { color: #74b9c7; font-size: 9px; letter-spacing: .16em; }
-.fleet-spy-operations-head-v1 h3 { margin: 3px 0 0; color: #e8fbff; font-size: 14px; letter-spacing: .09em; }
-.fleet-spy-operations-head-v1 > span { color: #7ce6ed; font-size: 10px; letter-spacing: .12em; }
-.fleet-spy-table-v1 { overflow-x: auto; }
-.fleet-spy-row-v1 {
-  display: grid;
-  grid-template-columns: 52px minmax(150px, 1fr) minmax(190px, 1.35fr) 100px 120px minmax(155px, 1fr) minmax(210px, .95fr);
-  align-items: center;
-  min-width: 1050px;
-  gap: 12px;
-  padding: 11px 16px;
-  border-bottom: 1px solid rgba(93, 190, 218, .09);
-  color: #c9e2e8;
-  font-size: 11px;
-}
-.fleet-spy-row-v1:last-child { border-bottom: 0; }
-.fleet-spy-row-head-v1 { color: #6c9ba5; font-size: 9px; letter-spacing: .13em; }
-.fleet-spy-row-v1 strong { display: block; color: #effcff; font-size: 12px; }
-.fleet-spy-row-v1 small { display: block; margin-top: 3px; color: #7fa5ad; font-size: 10px; }
-.fleet-spy-status-v1 { color: #82e2d2; font-variant-numeric: tabular-nums; }
-.fleet-spy-row-actions-v1 { display: flex; flex-wrap: wrap; gap: 6px; }
-.fleet-spy-row-actions-v1 button,
-.fleet-flight-actions-v1 button {
+
+.fleet-flight-actions-v1 button{
   border: 1px solid rgba(118, 201, 215, .28);
   background: rgba(13, 45, 55, .62);
   color: #bcecf1;
@@ -927,23 +485,11 @@ html.asterion-long-page .fleet-ship-roster-v1 {
   font-size: 9px;
   letter-spacing: .08em;
 }
-.fleet-spy-row-actions-v1 button:hover,
-.fleet-flight-actions-v1 button:hover { border-color: rgba(126, 232, 255, .7); color: #f2feff; }
-.fleet-spy-row-actions-v1 button:disabled { opacity: .38; cursor: not-allowed; }
+.fleet-flight-actions-v1 button:hover{ border-color: rgba(126, 232, 255, .7); color: #f2feff; }
+
 .fleet-spy-empty-v1 { margin: 0; padding: 18px 16px; color: #8badb4; font-size: 11px; }
-.fleet-spy-reports-v1 { border-top: 1px solid rgba(93, 190, 218, .15); }
-.fleet-spy-reports-v1 > header { padding-block: 10px; }
-.fleet-spy-reports-v1 > header strong { color: #d7f7fb; font-size: 10px; letter-spacing: .12em; }
-.fleet-spy-reports-v1 article { display: grid; grid-template-columns: minmax(160px, 1fr) 170px 100px; gap: 10px; padding: 9px 16px; border-bottom: 1px solid rgba(93, 190, 218, .08); font-size: 10px; }
-.fleet-spy-reports-v1 article strong { color: #e5fbff; }
-.fleet-spy-reports-v1 article span { color: #80bbc4; letter-spacing: .08em; }
-.fleet-spy-reports-v1 article small { color: #c6e7eb; font-variant-numeric: tabular-nums; text-align: right; }
-.fleet-spy-reports-v1 > p { padding: 0 16px 14px; color: #8badb4; font-size: 11px; }
+
 .fleet-flight-actions-v1 { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 12px; }
-@media (max-width: 980px) {
-  .fleet-spy-operations-v1 { margin-inline: 12px; }
-  .fleet-spy-row-v1 { grid-template-columns: 40px minmax(140px, 1fr) minmax(165px, 1.2fr) 80px 105px minmax(140px, 1fr) minmax(190px, .9fr); padding-inline: 12px; }
-}
 
 @media (max-width: 1050px) and (min-width: 761px) {
   .resource-building-action-confirm.flight-timeline-modal { width: calc(100vw - 32px); max-width: calc(100vw - 32px); padding-inline: 16px; }
@@ -968,7 +514,7 @@ html.asterion-long-page .fleet-ship-roster-v1 {
   .flight-timeline-step > span { width: 22px; height: 22px; font-size: 8px; }
   .flight-timeline-step strong { font-size: 10px; }
   .flight-timeline-step em { font-size: 7px; }
-  .flight-timeline-route-panel-head > span { display: none; }
+  
   .flight-timeline-cargo { padding: 8px; }
   .flight-timeline-cargo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
   .flight-timeline-cargo-field { grid-template-columns: minmax(0, 1fr) 45px; gap: 4px; padding-bottom: 4px; }
@@ -1387,11 +933,10 @@ html.asterion-long-page .fleet-ship-roster-v1 {
   box-shadow: 0 0 8px rgba(53, 229, 138, .5);
   transition: width .25s ease, background .25s ease, box-shadow .25s ease;
 }
-.resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-capacity-fill.is-positive i { background: #8be36b; box-shadow: 0 0 8px rgba(139, 227, 107, .5); }
-.resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-capacity-fill.is-watch i { background: #d9ed79; box-shadow: 0 0 8px rgba(217, 237, 121, .5); }
+
 .resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-capacity-fill.is-warning i { background: #ffe15a; box-shadow: 0 0 8px rgba(255, 225, 90, .5); }
 .resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-capacity-fill.is-danger i { background: #ffb347; box-shadow: 0 0 8px rgba(255, 179, 71, .5); }
-.resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-capacity-fill.is-critical i { background: #f0445e; box-shadow: 0 0 9px rgba(240, 68, 94, .54); }
+
 .resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-head > span em {
   font-style: normal;
   font-size: 11.5px;
@@ -1498,41 +1043,12 @@ html.asterion-long-page .fleet-ship-roster-v1 {
 }
 .spy-operations-modal__close:hover,
 .spy-operations-modal__close:focus-visible { outline: none; border-color: #ffd0c7; box-shadow: 0 0 16px rgba(255, 104, 91, .2); }
-.spy-operations-table-shell {
-  min-height: 0;
-  overflow: auto;
-  border: 1px solid rgba(78, 188, 213, .22);
-  border-radius: 12px;
-  background: rgba(1, 17, 26, .72);
-}
-.spy-operations-row {
-  min-width: 1080px;
-  display: grid;
-  grid-template-columns: 58px minmax(145px, 1fr) minmax(190px, 1.2fr) 120px 120px minmax(200px, 1.2fr) 230px;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  border-bottom: 1px solid rgba(74, 173, 197, .12);
-  color: #bad9df;
-  font-size: 11px;
-}
-.spy-operations-row:last-child { border-bottom: 0; }
-.spy-operations-row--head { position: sticky; top: 0; z-index: 1; padding-top: 11px; padding-bottom: 11px; background: #061d29; color: #6da5b1; font-size: 9px; letter-spacing: .12em; }
-.spy-operations-row > span:not(.fleet-spy-status-v1),
-.spy-operations-row > label { min-width: 0; }
-.spy-operations-row strong,
-.spy-operations-row small { display: block; }
-.spy-operations-row strong { color: #e7f8fb; font-size: 11px; }
-.spy-operations-row small { margin-top: 4px; color: #779ca7; font-size: 9px; line-height: 1.35; }
-.spy-operations-row .fleet-spy-status-v1 { color: #6de0d1; font-size: 10px; letter-spacing: .06em; }
+
 .spy-operations-select { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .spy-operations-select input { width: 16px; height: 16px; margin: 0; accent-color: #43d7ed; cursor: pointer; }
 .spy-operations-select input:focus-visible { outline: 2px solid #b4f7ff; outline-offset: 3px; }
-.spy-operations-row-actions-v1,
-.spy-operations-row .fleet-spy-row-actions-v1 { display: flex; flex-wrap: wrap; gap: 7px; }
-.spy-operations-row-actions-v1 button,
-.spy-operations-row .fleet-spy-row-actions-v1 button,
-.spy-operations-modal__actions button {
+
+.spy-operations-modal__actions button{
   min-height: 30px;
   padding: 0 11px;
   border: 1px solid rgba(76, 190, 216, .36);
@@ -1544,15 +1060,9 @@ html.asterion-long-page .fleet-ship-roster-v1 {
   font-weight: 700;
   cursor: pointer;
 }
-.spy-operations-row-actions-v1 button:hover:not(:disabled),
-.spy-operations-row-actions-v1 button:focus-visible,
-.spy-operations-row .fleet-spy-row-actions-v1 button:hover:not(:disabled),
-.spy-operations-row .fleet-spy-row-actions-v1 button:focus-visible,
 .spy-operations-modal__actions button:hover:not(:disabled),
-.spy-operations-modal__actions button:focus-visible { outline: none; border-color: #86efff; color: #eaffff; box-shadow: 0 0 13px rgba(48, 206, 241, .16); }
-.spy-operations-row-actions-v1 button:disabled,
-.spy-operations-row .fleet-spy-row-actions-v1 button:disabled,
-.spy-operations-modal__actions button:disabled { opacity: .38; cursor: not-allowed; }
+.spy-operations-modal__actions button:focus-visible{ outline: none; border-color: #86efff; color: #eaffff; box-shadow: 0 0 13px rgba(48, 206, 241, .16); }
+.spy-operations-modal__actions button:disabled{ opacity: .38; cursor: not-allowed; }
 .spy-operations-modal__footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-top: 2px; }
 .spy-operations-modal__footer > span { color: #73b8c5; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
 .spy-operations-modal__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
@@ -1591,7 +1101,6 @@ html.asterion-long-page .fleet-ship-roster-v1 {
   }
   .resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-field input { height: 32px; }
 }
-
 
 /* PR92 QA: actionable expedition row and readable live extraction dossier. */
 .fleet-expedition-details-trigger { color:#93ebfa!important; background:rgba(15,85,115,.23)!important; border:1px solid rgba(85,205,228,.45)!important; border-radius:5px; cursor:pointer; font-weight:750; font-size:10px!important; white-space:normal; text-align:left; padding:5px 7px!important; }

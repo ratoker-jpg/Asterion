@@ -108,7 +108,7 @@ html.asterion-long-page:has(.fleet-workspace-v1) #root{overflow:visible !importa
   color:#a9cbd3;
 }
 .fleet-root-v2 .fleet-flights-v2__label{color:#a9cbd3 !important;font-size:calc(15px * var(--text-scale-body,1)) !important;font-weight:600 !important;letter-spacing:0 !important}
-.fleet-flights-v2__label b{color:#fff;font-weight:800}
+.fleet-flights-v2__label b{color:#fff;font-size:inherit !important;font-weight:800}
 .fleet-root-v2 .fleet-flights-v2__slots{align-items:baseline;gap:8px;padding:0;border:0;background:none;position:relative;cursor:help}
 .fleet-root-v2 .fleet-flights-v2__slots small{color:#a9cbd3;font-size:calc(15px * var(--text-scale-body,1)) !important;font-weight:600;letter-spacing:0}
 .fleet-root-v2 .fleet-flights-v2__slots b{font-size:calc(17px * var(--text-scale-table,1)) !important}
@@ -139,7 +139,7 @@ html.asterion-long-page:has(.fleet-workspace-v1) #root{overflow:visible !importa
 /* hangar: the ships on this planet */
 .fc-hangar{min-width:0;min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr);gap:8px}
 .fc-hangar__head{display:flex;align-items:center;gap:16px;min-height:38px}
-.fc-root-title,.fc-hangar h2,.fc-orders>h2{
+.fc-hangar h2,.fc-orders>h2{
   margin:0;color:#f2fdff;font-size:calc(20px * var(--text-scale-section-title,1)) !important;font-weight:800;letter-spacing:.2px;white-space:nowrap;
 }
 .fc-hangar__yard{color:var(--ut-label);font-size:calc(14px * var(--text-scale-secondary,1)) !important;white-space:nowrap}
@@ -242,7 +242,7 @@ html.asterion-long-page:has(.fleet-workspace-v1) #root{overflow:visible !importa
 .fc-missions>button:focus-visible{outline:var(--ut-focus);outline-offset:1px}
 .fc-missions>button:disabled{opacity:.38;filter:saturate(.3);cursor:not-allowed}
 .fc-mission-text{margin:2px 0 0;min-height:44px;color:#cfe4ea;font-size:calc(15px * var(--text-scale-body,1)) !important;line-height:1.3}
-.fc-mission-text strong{color:#fff;font-weight:800}
+.fc-mission-text strong{color:#fff;font-size:inherit !important;font-weight:800}
 
 .fc-prep{display:grid;gap:10px}
 .fc-prep h3{margin:0;color:var(--ut-label);font-size:calc(13px * var(--text-scale-secondary,1)) !important;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
@@ -304,7 +304,7 @@ html.asterion-long-page:has(.fleet-workspace-v1) #root{overflow:visible !importa
 .fc-unit{
   position:relative;min-width:0;
   display:grid;
-  grid-template-columns:92px minmax(150px,1fr) 118px 290px 156px 266px 118px 30px;
+  grid-template-columns:92px minmax(150px,1fr) 136px 290px 156px 266px 118px 30px;
   align-items:center;column-gap:12px;
   min-height:84px;padding:5px 8px 5px 6px;
   border-radius:var(--ut-r-card);

@@ -44,20 +44,14 @@
   line-height: 1.35;
 }
 
-.fleet-construction-card-v1 {
-  width: 100%;
-  grid-template-columns: 84px minmax(0, 1fr);
-  text-align: left;
-}
-
 @media (max-width: 1440px) {
   .building-card-v2 { grid-template-columns: 72px minmax(0, 1fr); }
-  .fleet-construction-card-v1 { grid-template-columns: 72px minmax(0, 1fr); }
+  
   .building-card-v2 img { width: 68px; height: 76px; }
 }
 
 @media (max-width: 1040px) {
   .building-card-v2 { grid-template-columns: 62px minmax(0, 1fr); padding: 9px; }
-  .fleet-construction-card-v1 { grid-template-columns: 62px minmax(0, 1fr); }
+  
   .building-card-v2 img { width: 58px; height: 66px; }
 }

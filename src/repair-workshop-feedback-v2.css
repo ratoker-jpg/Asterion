@@ -8,34 +8,8 @@ html.asterion-repair-page .fleet-workspace-v1 {
 }
 
 /* Keep the help tooltip available without changing the catalog-style header silhouette. */
-html.asterion-repair-page .repair-page-head-v1 {
-  position: relative;
-  z-index: 30;
-  overflow: visible;
-  clip-path: none;
-}
-
-html.asterion-repair-page .repair-page-head-v1::after {
-  content: '';
-  position: absolute;
-  z-index: 31;
-  top: -2px;
-  right: -1px;
-  width: 23px;
-  height: 23px;
-  pointer-events: none;
-  background:
-    radial-gradient(circle at 74% 18%, rgba(19, 128, 174, .06), transparent 28%),
-    linear-gradient(180deg, rgba(1, 10, 17, .38), rgba(1, 7, 12, .74));
-  clip-path: polygon(100% 0, 100% 100%, 0 0);
-}
 
 /* The right side now matches Ships / Defense / Commander Ships: only the back button stays there. */
-html.asterion-repair-page .repair-head-actions-v1 {
-  position: static;
-  z-index: 32;
-  display: block;
-}
 
 html.asterion-repair-page .repair-help-v1 {
   position: absolute;
@@ -50,11 +24,6 @@ html.asterion-repair-page .repair-help-v1 > button {
   font-size: 12px;
 }
 
-html.asterion-repair-page .repair-back-v1 {
-  min-width: 124px;
-  background: rgba(3, 31, 43, .92);
-}
-
 html.asterion-repair-page .repair-help-popover-v1 {
   z-index: 1000;
   top: 32px;
@@ -62,142 +31,3 @@ html.asterion-repair-page .repair-help-popover-v1 {
   right: auto;
 }
 
-html.asterion-repair-page .repair-summary-v1,
-html.asterion-repair-page .repair-notice-v1,
-html.asterion-repair-page .repair-section-v1 {
-  position: relative;
-  z-index: 1;
-}
-
-.repair-summary-card-v1 {
-  grid-template-columns: 42px minmax(0, 1fr);
-  align-items: center;
-  align-content: initial;
-  gap: 11px;
-}
-
-.repair-summary-icon-v2 {
-  width: 38px;
-  height: 38px;
-  display: grid;
-  place-items: center;
-  border: 1px solid rgba(70, 211, 243, .34);
-  background: rgba(3, 39, 52, .9);
-  color: #71ddf7;
-  box-sizing: border-box;
-}
-
-.repair-summary-icon-v2--tokens {
-  border-color: rgba(67, 221, 255, .54);
-  background: linear-gradient(180deg, rgba(6, 90, 112, .7), rgba(3, 39, 52, .92));
-  color: #8cecff;
-}
-
-.repair-summary-icon-v2--population {
-  color: #7bd9c7;
-}
-
-.repair-summary-icon-v2 svg {
-  width: 23px;
-  height: 23px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.55;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.repair-summary-copy-v2 {
-  min-width: 0;
-  display: grid;
-  gap: 5px;
-}
-
-.repair-summary-copy-v2 > small {
-  overflow: hidden;
-  color: #77aec0;
-  font-size: 8px;
-  font-weight: 750;
-  letter-spacing: .1em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.repair-summary-copy-v2 .repair-summary-value-v1 strong {
-  font-size: 23px;
-}
-
-.repair-summary-copy-v2 .repair-summary-value-v1 span {
-  font-size: 9px;
-}
-
-.repair-button-v1--remove {
-  min-height: 30px;
-  padding: 0 10px;
-  border-color: rgba(190, 88, 83, .78);
-  background: linear-gradient(180deg, rgba(116, 47, 48, .92), rgba(69, 29, 34, .96));
-  color: #ffd9d3;
-  font-size: 9px;
-}
-
-.repair-button-v1--remove:hover {
-  border-color: #ff8d82;
-  background: linear-gradient(180deg, rgba(147, 57, 55, .96), rgba(83, 31, 37, .98));
-}
-
-.repair-remove-confirm-v1 {
-  display: grid;
-  gap: 4px;
-  padding: 7px 8px;
-  border: 1px solid rgba(239, 129, 116, .55);
-  background: rgba(70, 27, 31, .88);
-  color: #ffd9d3;
-}
-
-.repair-remove-confirm-v1 > strong {
-  font-size: 10px;
-  line-height: 1.2;
-}
-
-.repair-remove-confirm-v1 > span {
-  color: #dca49c;
-  font-size: 8px;
-  line-height: 1.2;
-}
-
-.repair-remove-confirm-actions-v1 {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 5px;
-  margin-top: 2px;
-}
-
-.repair-remove-confirm-button-v1 {
-  min-height: 25px;
-  border: 1px solid rgba(126, 181, 192, .48);
-  background: rgba(9, 39, 49, .9);
-  color: #b9e4ec;
-  cursor: pointer;
-  font-size: 8px;
-  font-weight: 850;
-  letter-spacing: .03em;
-}
-
-.repair-remove-confirm-button-v1:hover,
-.repair-remove-confirm-button-v1:focus-visible {
-  border-color: #71dcf1;
-  color: #fff;
-  outline: none;
-}
-
-.repair-remove-confirm-button-v1--danger {
-  border-color: rgba(255, 133, 119, .72);
-  background: rgba(121, 43, 42, .92);
-  color: #fff0e9;
-}
-
-.repair-remove-confirm-button-v1--danger:hover,
-.repair-remove-confirm-button-v1--danger:focus-visible {
-  border-color: #ffad9e;
-  background: rgba(157, 54, 50, .96);
-}
