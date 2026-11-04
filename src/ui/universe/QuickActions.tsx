@@ -46,6 +46,8 @@ export type QuickActionsProps = {
   /** Opens the object's «Звёздный атлас» card (the left-click dialog). */
   onOpenCard: () => void;
   onPirateReport?: (reportId: string) => void;
+  /** Opens directly on this action's send panel, with no way back to the menu («Найти обломки»). */
+  initialAction?: QuickActionId;
 };
 
 type Placement = { left: number; top: number; side: 'right' | 'left' };
@@ -61,10 +63,10 @@ function place(anchor: DOMRect, width: number, height: number): Placement {
   return { left: Math.max(8, left), top: Math.max(8, top), side };
 }
 
-export function QuickActions({ target, anchor, onClose, onSend, onDetails, onOpenCard, onPirateReport }: QuickActionsProps) {
+export function QuickActions({ target, anchor, onClose, onSend, onDetails, onOpenCard, onPirateReport, initialAction }: QuickActionsProps) {
   const state = useLiveSaveState();
   const rootRef = useRef<HTMLDivElement>(null);
-  const [actionId, setActionId] = useState<QuickActionId | null>(null);
+  const [actionId, setActionId] = useState<QuickActionId | null>(initialAction ?? null);
   const [placement, setPlacement] = useState<Placement | null>(null);
   const actions = useMemo(() => (state ? evaluateQuickActions(state, target, quickRuntimeNow()) : []), [state, target]);
 
@@ -131,10 +133,10 @@ export function QuickActions({ target, anchor, onClose, onSend, onDetails, onOpe
   const kindTone = { '--qa-k': actionId ? (HOSTILE.has(actionId) ? '#f0445e' : '#56d9f2') : target.node.kind === 'pirate' || target.relation === 'enemy' || target.relation === 'neutral' ? '#f0445e' : target.node.kind === 'unique' || target.node.kind === 'asteroid' ? '#e6ad50' : target.node.kind === 'anomaly' ? '#a98bff' : '#56d9f2' } as CSSProperties;
 
   return createPortal(
-    <div ref={rootRef} className={`quick-pop quick-pop--${placement?.side ?? 'right'} ${actionId ? 'is-panel' : 'is-menu'}`} style={{ ...style, ...kindTone }}
+    <div ref={rootRef} className={`quick-pop quick-pop--${placement?.side ?? 'right'} ${actionId ? 'is-panel' : 'is-menu'} ${initialAction ? 'is-over-dialog' : ''}`} style={{ ...style, ...kindTone }}
       data-qa-quick-menu={actionId ? 'panel' : 'menu'} data-qa-quick-target={target.node.id}>
       {actionId && state
-        ? <QuickSendPanel key={actionId} state={state} actionId={actionId} target={target} onBack={() => setActionId(null)} onClose={onClose} onSend={onSend} onDetails={onDetails}
+        ? <QuickSendPanel key={actionId} state={state} actionId={actionId} target={target} onBack={initialAction ? undefined : () => setActionId(null)} onClose={onClose} onSend={onSend} onDetails={onDetails}
             initialOrigins={actions.find((action) => action.id === actionId)?.plan?.originPlanetId ? [actions.find((action) => action.id === actionId)!.plan!.originPlanetId!] : undefined} />
         : <QuickMenu target={target} actions={actions} onChoose={choose} onOpenCard={() => { onClose(); onOpenCard(); }} />}
     </div>,

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { getFactionShipCatalog } from '../../domain/combat/faction-catalog.ts';
 import type { CombatFactionId } from '../../domain/combat/factions.ts';
 import type { ShipId } from '../../domain/combat/ids.ts';
@@ -74,6 +74,9 @@ export function quickRuntimeNow() {
  *   refilled when a planet is checked or the kept amount changes; slider
  *   changes in between stay.
  * - `notice`: one line above the planets (e.g. «склады цели полны»).
+ * - `bare`: no own header; the host already shows the title and the close button.
+ * - `emptyAdvice`: replaces the «no free ships» line and hides the route and
+ *   Send when no planet can launch (say what to do instead).
  *
  * Probe and colonizer actions are single-source (checking one planet
  * unchecks the others); the rest gather fleets from several planets. The
@@ -90,12 +93,14 @@ export type QuickSendPanelProps = {
   onBack?: () => void;
   initialOrigins?: readonly string[];
   notice?: string | null;
+  bare?: boolean;
+  emptyAdvice?: () => ReactNode;
   gatherLoads?: (originPlanetIds: readonly string[], keep: PlanetResources) => Record<string, { ships: QuickFleet['ships']; cargo: TransportCargo }>;
 };
 
 type LegDraft = { checked: boolean; fleet: QuickFleet; cargo: TransportCargo; sent?: boolean; allShips?: boolean };
 
-export function QuickSendPanel({ state, actionId, target, onSend, onClose, onDetails, onBack, initialOrigins, gatherLoads, notice }: QuickSendPanelProps) {
+export function QuickSendPanel({ state, actionId, target, onSend, onClose, onDetails, onBack, initialOrigins, gatherLoads, notice, bare, emptyAdvice }: QuickSendPanelProps) {
   const factionId = state.profile.factionId as CombatFactionId;
   const catalog = useMemo(() => new Map(getFactionShipCatalog(factionId).map((ship) => [ship.id as ShipId, ship])), [factionId]);
   const multi = isMultiSourceAction(actionId);
@@ -170,12 +175,12 @@ export function QuickSendPanel({ state, actionId, target, onSend, onClose, onDet
 
   return (
     <section className={`quick-send ${HOSTILE.has(actionId) ? 'quick-send--hostile' : ''}`} aria-label={`${QUICK_ACTION_LABELS[actionId]}: ${target.node.name}`} data-qa-quick-send={actionId}>
-      <header className="quick-send__head">
+      {bare ? null : <header className="quick-send__head">
         {onBack ? <button type="button" className="quick-send__back" onClick={onBack} aria-label="Назад к списку действий">‹</button> : <span />}
         <img src={QUICK_ACTION_ICONS[actionId]} alt="" draggable={false} />
-        <div><b>{QUICK_ACTION_LABELS[actionId]}</b><span>{target.node.name} · {formatUniverseCoordinate(target.node.coordinate)}</span></div>
+        <div><b>{QUICK_ACTION_LABELS[actionId]}</b><span>{target.node.name} · {formatUniverseCoordinate(target.sun ? { ...target.sun, position: 0 } : target.node.coordinate)}</span></div>
         <button type="button" className="quick-send__close" onClick={onClose} aria-label="Закрыть">✕</button>
-      </header>
+      </header>}
 
       {notice ? <p className="quick-send__notice" role="status" data-qa-quick-notice>{notice}</p> : null}
 
@@ -192,7 +197,7 @@ export function QuickSendPanel({ state, actionId, target, onSend, onClose, onDet
         </div>
       ) : null}
 
-      {legs.length === 0 ? <p className="quick-send__error" role="alert" data-qa-quick-error>Нет свободных кораблей для этого действия ни на одной вашей планете.</p> : (
+      {legs.length === 0 ? (emptyAdvice ? emptyAdvice() : <p className="quick-send__error" role="alert" data-qa-quick-error>Нет свободных кораблей для этого действия ни на одной вашей планете.</p>) : (
         <div className="quick-send__legs" role={multi ? 'group' : 'radiogroup'} aria-label={multi ? 'Планеты отправки' : 'Планета отправки'}>
           <small>{multi ? 'Откуда · можно несколько планет' : 'Откуда'}</small>
           {legs.map(({ planetId, draft, plan, flight }, index) => {
@@ -257,6 +262,7 @@ export function QuickSendPanel({ state, actionId, target, onSend, onClose, onDet
       )}
 
  {overLimit ? <p className="quick-send__error quick-send__limit" role="alert" data-qa-quick-error>Свободных полётов: {slots.free} из {slots.limit}. Снимите лишние планеты.</p> : null}
+      {legs.length === 0 && emptyAdvice ? null : <>
       <dl className="quick-send__route" data-qa-quick-route={ready ? 'ok' : 'off'}>
         <div><dt>{checked.length > 1 ? 'Прибытие' : 'В пути'}</dt><dd>{arrivals.length === 0 ? '—' : checked.length > 1 ? (spread > 0 ? `${clock.format(Math.min(...arrivals))}–${clock.format(Math.max(...arrivals))}` : clock.format(arrivals[0]!)) : checked[0]?.flight ? flightDurationLabel(checked[0].flight.oneWayDurationMs) : '—'}</dd></div>
         <div><dt>{checked.length > 1 ? 'Разница' : 'Прибытие'}</dt><dd>{arrivals.length === 0 ? '—' : checked.length > 1 ? (spread > 0 ? flightDurationLabel(spread) : 'одновременно') : clock.format(arrivals[0]!)}</dd></div>
@@ -269,6 +275,7 @@ export function QuickSendPanel({ state, actionId, target, onSend, onClose, onDet
           {checked.length > 1 ? `Отправить · ${checked.length}` : 'Отправить'}
         </button>
       </footer>
+      </>}
     </section>
   );
 }

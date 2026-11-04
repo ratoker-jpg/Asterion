@@ -626,7 +626,12 @@ async function runRecycleUiCycle(win, label) {
   })).filter((node) => node.coordinate.length === 3 && node.coordinate.every(Number.isInteger))`);
   if (emptyTargets.length < 1) throw new Error(`${label}: recycle fixture needs an empty coordinate for the validation check`);
   const target = { id: 'qa-recycle-target', coordinate: [1, 1, 3] };
-  const alternate = emptyTargets.find((item) => item.coordinate.join(':') !== target.coordinate.join(':'));
+  // A recycler may also fly to an asteroid, so a coordinate with one on it (now or next) would pass the check below.
+  const asteroidKeys = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-qa-universe-kind="asteroid"]')).flatMap((node) => [
+    node.getAttribute('aria-label')?.match(/\\[(\\d+:\\d+:\\d+)\\]/)?.[1],
+    node.getAttribute('data-qa-universe-asteroid-next-coordinate')?.replace(/[\\[\\]]/g, ''),
+  ].filter(Boolean))`);
+  const alternate = emptyTargets.find((item) => item.coordinate.join(':') !== target.coordinate.join(':') && !asteroidKeys.includes(item.coordinate.join(':')));
   if (!alternate) throw new Error(`${label}: recycle fixture needs a second coordinate for the validation check`);
 
   await click(win, '[data-qa-route="fleets"]');

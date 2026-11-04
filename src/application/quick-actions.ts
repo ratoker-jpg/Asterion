@@ -57,6 +57,8 @@ export type QuickTarget = {
   underlyingKind?: UniverseObjectKind;
   /** Free orbital debris at the coordinate. */
   orbitalDebris?: number;
+  /** Debris of a Sun («Найти обломки», position 0): the flight goes to the Sun's operation. */
+  sun?: { galaxy: number; system: number };
   /** Unique objects and anomalies: undefined means out of expedition range. */
   explorationStatus?: 'free' | 'self' | 'occupied';
   pirate?: {
@@ -265,7 +267,15 @@ export function quickLaunchContext(actionId: QuickActionId, target: QuickTarget)
   switch (actionId) {
     case 'colonize': return { missionId: 'colonize', targetKind: 'empty', destination: { kind: 'coordinate', coordinate } };
     case 'gas': return { missionId: 'gas', targetKind: 'asteroid', destination: { kind: 'coordinate', coordinate } };
-    case 'recycle': return { missionId: 'recycle', destination: { kind: 'coordinate', coordinate } };
+    case 'recycle':
+      if (target.sun) {
+        const operationId = `sun:${target.sun.galaxy}:${target.sun.system}`;
+        return {
+          missionId: 'recycle', operationId, targetKind: 'empty', targetPlanetName: `Обломки Солнца ${target.sun.galaxy}:${target.sun.system}`,
+          destination: { kind: 'operation', operationId, coordinate: { galaxy: target.sun.galaxy, system: target.sun.system, position: 1 } },
+        };
+      }
+      return { missionId: 'recycle', destination: { kind: 'coordinate', coordinate } };
     case 'transport': return { missionId: 'transport', targetRelation: target.relation, destination: { kind: 'planet', planetId: node.id, coordinate } };
     case 'deployment': return { missionId: 'deployment', targetRelation: 'self', destination: { kind: 'planet', planetId: node.id, coordinate } };
     case 'spy':
@@ -315,7 +325,7 @@ export function buildQuickCommand(
   const base: DispatchFlightCommand = { ...context, ...common };
   switch (actionId) {
     case 'recycle':
-      return { ...base, targetKind: resolveRecycleTargetKindAtCoordinate(state, node.coordinate, runtime.now, runtime.mode) };
+      return target.sun ? base : { ...base, targetKind: resolveRecycleTargetKindAtCoordinate(state, node.coordinate, runtime.now, runtime.mode) };
     case 'attack':
     case 'exploration-attack':
     case 'pirate-elimination':
