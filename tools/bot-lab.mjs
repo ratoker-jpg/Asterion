@@ -265,6 +265,12 @@ export function sampleEmpire(tally, state, at) {
     tally.known[planet.id] = { ownerId: planet.ownerId, main: planet.id === `${planet.ownerId}-planet`, buildings: sum(Object.values(planet.buildings ?? {}).map(Number)),
       income: Math.round(getNpcPlanetIncomePerHour(planet, 1)) };
   }
+  // Alliances once an hour (owner order 04.11.2026): how many NPC sit in one, and how many alliances there are.
+  const npcIds = Object.keys(state.npc?.profiles ?? {});
+  const allied = new Set(state.command.alliances.flatMap((alliance) => alliance.members.map((member) => member.ownerId)));
+  tally.allianceSamples = (tally.allianceSamples ?? 0) + 1;
+  tally.alliedShareSum = (tally.alliedShareSum ?? 0) + (npcIds.length ? npcIds.filter((id) => allied.has(id)).length / npcIds.length : 0);
+  tally.allianceCountSum = (tally.allianceCountSum ?? 0) + state.command.alliances.filter((alliance) => alliance.members.some((member) => npcIds.includes(member.ownerId))).length;
   for (const report of state.combat?.reports ?? []) {
     if (tally.seenReports.has(report.id)) continue;
     tally.seenReports.add(report.id);
@@ -315,6 +321,37 @@ export function describeDiversity(journal, owners) {
   const distances = shares.map((row) => sum([...kinds].map((kind) => Math.abs(row[kind] - mean[kind]))));
   return { styleEntropy: +entropyOf(Object.values(styleCounts)).toFixed(3), styleKinds: Object.keys(styleCounts).length,
     actionMixSpread: +(sum(distances) / Math.max(1, distances.length)).toFixed(3) };
+}
+
+/**
+ * Alliance life (owner order 04.11.2026): sizes, share of NPC in alliances, applications, answers, joins and
+ * leaves per game day, wars, and how often the strongest alliances are chosen. Read from the state and the
+ * journal only, so it works on any revision.
+ */
+export function describeAlliances(state, journal, tally, hours) {
+  const npcIds = new Set(Object.keys(state.npc?.profiles ?? {}));
+  const days = Math.max(1, hours / 24);
+  const alliances = state.command.alliances.filter((alliance) => alliance.members.some((member) => npcIds.has(member.ownerId)));
+  const strength = (alliance) => sum(alliance.members.map((member) => selectOwnerScore(state, member.ownerId)?.totalPoints ?? 0));
+  const ranked = [...state.command.alliances].sort((a, b) => strength(b) - strength(a) || (a.id < b.id ? -1 : 1)).map((alliance) => alliance.id);
+  const started = (prefix) => journal.filter((entry) => entry.ok === 1 && typeof entry.c === 'string' && entry.c.startsWith(prefix));
+  const applies = started('apply-to-alliance:');
+  const chosenRank = applies.map((entry) => ranked.indexOf(entry.c.split(':').slice(2).join(':')));
+  const sizes = alliances.map((alliance) => alliance.members.length).sort((a, b) => b - a);
+  const joins = started('accept-application:').length;
+  const leaves = started('leave-alliance:').length;
+  const wars = state.command.diplomacy.filter((relation) => relation.status === 'war').length;
+  return {
+    alliances: alliances.length, sizes, largest: sizes[0] ?? 0,
+    alliedShareNow: npcIds.size ? +(sum(alliances.map((alliance) => alliance.members.filter((member) => npcIds.has(member.ownerId)).length)) / npcIds.size).toFixed(3) : 0,
+    alliedShareMean: tally?.allianceSamples ? +(tally.alliedShareSum / tally.allianceSamples).toFixed(3) : 0,
+    alliancesMean: tally?.allianceSamples ? +(tally.allianceCountSum / tally.allianceSamples).toFixed(2) : 0,
+    applications: applies.length, accepted: joins, rejected: started('reject-application:').length,
+    joinsPerDay: +(joins / days).toFixed(2), leavesPerDay: +(leaves / days).toFixed(2), leaves, created: started('create-alliance:').length,
+    wars,
+    topChosen: applies.length ? +(chosenRank.filter((rank) => rank === 0).length / applies.length).toFixed(3) : 0,
+    top3Chosen: applies.length ? +(chosenRank.filter((rank) => rank >= 0 && rank < 3).length / applies.length).toFixed(3) : 0,
+  };
 }
 
 /** What the world looks like for the questions the owner asks. */
@@ -417,6 +454,7 @@ export function describeWorld(state, journal = [], tally = null) {
   return {
     worldAt: new Date(state.npcReplay?.processedThroughAt ?? 0).toISOString(), owners: owners.length,
     alliances: state.command.alliances.filter((alliance) => alliance.members.some((member) => member.ownerId !== playerId)).map((alliance) => `${alliance.tag}:${alliance.members.length}`),
+    allianceLife: describeAlliances(state, journal, tally, tally?.allianceSamples ?? 24),
     pirateRaids: pirateRaidTally(state),
     sun: {
       declared: raids.length, disbanded: raids.filter((raid) => raid.status === 'disbanded').length,

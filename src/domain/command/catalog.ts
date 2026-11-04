@@ -9,6 +9,8 @@ export const LEADER_ABSENCE_MS = 24 * 60 * 60 * 1000;
  */
 export const ACTIVITY_TOUCH_INTERVAL_MS = 10 * 60 * 1000;
 export const MAX_RESOLVED_APPLICATIONS = 100;
+/** Leavers remembered in the save: a bounded list, the oldest drop first. */
+export const MAX_DEPARTURES = 40;
 
 export const ALLIANCE_NAME_MIN = 3;
 export const ALLIANCE_NAME_MAX = 42;

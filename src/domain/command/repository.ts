@@ -13,6 +13,7 @@ import {
   TEST_BOT_DISPLAY_NAME,
   TEST_BOT_FIXTURE_ID,
   TEST_BOT_OWNER_ID,
+  MAX_DEPARTURES,
 } from './catalog.ts';
 import { normalizeEmblem } from './emblem.ts';
 import { pruneDiplomacy } from './diplomacy.ts';
@@ -31,6 +32,7 @@ import type {
   AidLedger,
   AllianceApplication,
   AllianceCooldown,
+  AllianceDeparture,
   AllianceEmblem,
   AllianceFixtureId,
   AllianceMember,
@@ -305,6 +307,15 @@ function parseCooldown(value: unknown): AllianceCooldown | null {
   };
 }
 
+function parseDeparture(value: unknown): AllianceDeparture | null {
+  if (!isRecord(value)) return null;
+  const ownerId = text(value.ownerId, '', 96, 1);
+  const allianceId = text(value.allianceId, '', 96, 1);
+  const at = value.at;
+  if (!ownerId || !allianceId || typeof at !== 'number' || !Number.isFinite(at)) return null;
+  return { ownerId, allianceId, at, cause: value.cause === 'kicked' ? 'kicked' : 'left' };
+}
+
 function parseDiplomacy(value: unknown): DiplomaticRelation[] {
   const relations: DiplomaticRelation[] = [];
   for (const raw of Array.isArray(value) ? value : []) {
@@ -524,6 +535,11 @@ function migrateV2(value: Record<string, unknown>, mode: RuntimeMode): CommandSt
     aidEvents.push(event);
   }
 
+  const departures = (Array.isArray(value.departures) ? value.departures : [])
+    .map(parseDeparture)
+    .filter((entry): entry is AllianceDeparture => entry !== null)
+    .slice(-MAX_DEPARTURES);
+
   const highestSerial = Math.max(
     0,
     ...alliances.map((alliance) => serialOf(alliance.id)),
@@ -540,6 +556,7 @@ function migrateV2(value: Record<string, unknown>, mode: RuntimeMode): CommandSt
     requests: requests.filter((request) => request.status === 'open' || keepClosed.has(request.id)),
     aidLedgers,
     aidEvents: aidEvents.slice(-MAX_AID_EVENTS),
+    ...(departures.length ? { departures } : {}),
     nextSerial: Math.max(nonNegativeInteger(value.nextSerial, 1), highestSerial + 1, 1),
   };
 }

@@ -241,6 +241,18 @@ export type AidEvent = {
   reason?: string;
 };
 
+/**
+ * Who walked out of which alliance and when. Only a memory for the NPC
+ * (a defector is remembered); it grants no right. Bounded and optional, so an
+ * old save without it loads as before.
+ */
+export type AllianceDeparture = {
+  ownerId: string;
+  allianceId: string;
+  at: number;
+  cause: 'left' | 'kicked';
+};
+
 export type CommandState = {
   version: 3;
   alliances: AllianceRecord[];
@@ -251,6 +263,8 @@ export type CommandState = {
   requests: ResourceRequest[];
   aidLedgers: AidLedger[];
   aidEvents: AidEvent[];
+  /** Recent leavers (newest last); absent in saves from before NPC alliance choice. */
+  departures?: AllianceDeparture[];
   /** Monotonic counter for stable alliance/application/request ids; ids are never reused. */
   nextSerial: number;
 };

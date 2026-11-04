@@ -966,6 +966,10 @@ function reconcileRuntimeSlice(
         completeNpcScience(checkpoint, lockedOwners);
       }
     }
+    // A decision that changed who is in an alliance (an NPC left or joined) ends the aid it depended on at
+    // THIS moment: aid flights turn and requests close with the event's time, not with the end of the
+    // calculation slice (which depends on where slices happen to fall).
+    if (relationStructureToken(next.command) !== relationsBefore) next = reconcileAidMembership(next, checkpoint);
     // A decision that changed who is allied (a member joined) can make an orbiting
     // probe's station illegal. Those probes go home at this moment, not at whichever
     // reconcile call happens to run next: that call would read a later world, and

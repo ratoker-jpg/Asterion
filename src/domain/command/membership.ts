@@ -8,6 +8,7 @@ import {
   ALLIANCE_TAG_MIN,
   LEADER_ABSENCE_MS,
   MAX_ALLIANCE_MEMBERS,
+  MAX_DEPARTURES,
   MAX_RESOLVED_APPLICATIONS,
   REAPPLY_COOLDOWN_MS,
 } from './catalog.ts';
@@ -159,6 +160,11 @@ function autoRejectPending(state: CommandState, allianceId: string, reason: Appl
         : application
     ))),
   };
+}
+
+function recordDeparture(state: CommandState, ownerId: string, allianceId: string, cause: 'left' | 'kicked', now: number): CommandState {
+  const kept = (state.departures ?? []).filter((entry) => !(entry.ownerId === ownerId && entry.allianceId === allianceId));
+  return { ...state, departures: [...kept, { ownerId, allianceId, at: now, cause }].slice(-MAX_DEPARTURES) };
 }
 
 function addCooldown(state: CommandState, cooldown: AllianceCooldown, now: number): CommandState {
@@ -410,7 +416,7 @@ export function leaveAlliance(
   }
   next = removeMemberFromAlliance(next, ownerId);
   const left = closeRequestsOfAuthor(replaceAlliance(state, next), ownerId, alliance.id, 'author_left', now);
-  return { ok: true, disbanded: false, state: leaveCooldown(left, ownerId, 'left', now) };
+  return { ok: true, disbanded: false, state: leaveCooldown(recordDeparture(left, ownerId, alliance.id, 'left', now), ownerId, 'left', now) };
 }
 
 /** Leader may remove anyone; the deputy may remove ordinary members only. Nobody removes themselves this way. */
@@ -426,7 +432,7 @@ export function kickMember(state: CommandState, actorOwnerId: string, targetOwne
   if (targetRole === 'deputy' && membership.role !== 'leader') return fail(state, 'not_allowed', 'Заместителя может исключить только лидер.');
   const removed = replaceAlliance(state, removeMemberFromAlliance(alliance, targetOwnerId));
   const next = closeRequestsOfAuthor(removed, targetOwnerId, alliance.id, 'author_left', now);
-  return { ok: true, state: leaveCooldown(next, targetOwnerId, 'kicked', now) };
+  return { ok: true, state: leaveCooldown(recordDeparture(next, targetOwnerId, alliance.id, 'kicked', now), targetOwnerId, 'kicked', now) };
 }
 
 /** Only the leader names the single deputy. Pass `null` to dismiss the current one. */
