@@ -271,6 +271,8 @@ export function sampleEmpire(tally, state, at) {
   tally.allianceSamples = (tally.allianceSamples ?? 0) + 1;
   tally.alliedShareSum = (tally.alliedShareSum ?? 0) + (npcIds.length ? npcIds.filter((id) => allied.has(id)).length / npcIds.length : 0);
   tally.allianceCountSum = (tally.allianceCountSum ?? 0) + state.command.alliances.filter((alliance) => alliance.members.some((member) => npcIds.includes(member.ownerId))).length;
+  const npcAlliances = state.command.alliances.filter((alliance) => alliance.members.some((member) => npcIds.includes(member.ownerId)));
+  tally.smallShareSum = (tally.smallShareSum ?? 0) + (npcAlliances.length ? npcAlliances.filter((alliance) => alliance.members.length <= 2).length / npcAlliances.length : 0);
   for (const report of state.combat?.reports ?? []) {
     if (tally.seenReports.has(report.id)) continue;
     tally.seenReports.add(report.id);
@@ -345,6 +347,8 @@ export function describeAlliances(state, journal, tally, hours) {
     alliances: alliances.length, sizes, largest: sizes[0] ?? 0,
     alliedShareNow: npcIds.size ? +(sum(alliances.map((alliance) => alliance.members.filter((member) => npcIds.has(member.ownerId)).length)) / npcIds.size).toFixed(3) : 0,
     alliedShareMean: tally?.allianceSamples ? +(tally.alliedShareSum / tally.allianceSamples).toFixed(3) : 0,
+    smallNow: alliances.length ? +(sizes.filter((size) => size <= 2).length / alliances.length).toFixed(3) : 0,
+    smallShareMean: tally?.allianceSamples ? +(tally.smallShareSum / tally.allianceSamples).toFixed(3) : 0,
     alliancesMean: tally?.allianceSamples ? +(tally.allianceCountSum / tally.allianceSamples).toFixed(2) : 0,
     applications: applies.length, accepted: joins, rejected: started('reject-application:').length,
     joinsPerDay: +(joins / days).toFixed(2), leavesPerDay: +(leaves / days).toFixed(2), leaves, created: started('create-alliance:').length,

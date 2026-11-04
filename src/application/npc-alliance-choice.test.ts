@@ -332,3 +332,51 @@ test('D: kicked members are not defectors; the list stays bounded and old saves 
   const { departures: _gone, ...legacy } = command;
   assert.equal(migrateCommandState(JSON.parse(JSON.stringify(legacy)), 'production').departures, undefined);
 });
+
+/* ------------------------------------------------------------------ E: consolidation */
+
+/** A pair alliance (leader + one) that has stood still, next to a bigger one of equal strength. */
+function stagnant(seed: string, traits: Partial<NpcProfile['traits']> = {}) {
+  const { state: base, ids } = world(seed);
+  const [leader, mate, big1, big2, big3] = ids as [string, string, string, string, string];
+  let state = found(found(base, leader, 'Двое', 'TWO'), big1, 'Трое', 'BIG');
+  state = join(state, mate, leader);
+  state = join(join(state, big2, big1), big3, big1);
+  state = withTraits(state, leader, { cooperation: 0.5, socialStyle: 0.5, persistence: 0, ...traits });
+  state = withTraits(state, mate, { cooperation: 0.5, socialStyle: 0.5, persistence: 0, ...traits });
+  return { state, leader, mate, big1 };
+}
+const DAY = 24 * HOUR;
+
+test('E: a pair alliance that has not grown for long looks for a bigger one; a growing or fresh one does not', () => {
+  const { state, leader, mate } = stagnant('ALLIANCEE1');
+  assert.equal(selectNpcDefection(state, state.npc!.profiles[mate]!, T0 + 1 * DAY), null, 'too early');
+  assert.ok(selectNpcDefection(state, state.npc!.profiles[mate]!, T0 + 6 * DAY), 'long enough');
+  // The leader hands over to the mate, then the mate is alone and goes too: the small alliance dissolves by the ordinary laws.
+  const candidate = getNpcDiplomacyCandidates(state, state.npc!.profiles[leader]!, T0 + 8 * DAY).find((item) => item.kind === 'leave-alliance')!;
+  const left = applyNpcDiplomacyAction(state, leader, candidate, T0 + 8 * DAY, candidate.id);
+  assert.equal(left.ok, true);
+  assert.equal(selectOwnerMembership(left.state.command, mate)!.alliance.leaderOwnerId, mate);
+  // A fresh join resets the clock.
+  const third = Object.keys(state.npc!.profiles).sort()[5]!;
+  const grown = join(state, third, leader, T0 + 5 * DAY);
+  assert.equal(selectNpcDefection(grown, grown.npc!.profiles[mate]!, T0 + 6 * DAY), null);
+});
+
+test('E: the delay scales with world speed; proud leaders and loners hold on; an alliance with the player is left alone', () => {
+  const { state, mate } = stagnant('ALLIANCEE2');
+  const at = T0 + 3 * DAY;
+  assert.equal(selectNpcDefection(state, state.npc!.profiles[mate]!, at), null, 'standard speed: 3 days is not yet long');
+  const fast = { ...state, worldConfig: { ...state.worldConfig!, world: { ...state.worldConfig!.world, campaignSpeed: 'fast' as const } } };
+  assert.ok(selectNpcDefection(fast, fast.npc!.profiles[mate]!, at), 'a fast world is impatient sooner');
+  const slow = { ...state, worldConfig: { ...state.worldConfig!, world: { ...state.worldConfig!.world, campaignSpeed: 'slow' as const } } };
+  assert.equal(selectNpcDefection(slow, slow.npc!.profiles[mate]!, T0 + 5 * DAY), null, 'a slow world waits longer');
+
+  const proud = stagnant('ALLIANCEE3', { cooperation: 0.15, socialStyle: 0.6 });
+  assert.equal(selectNpcDefection(proud.state, proud.state.npc!.profiles[proud.mate]!, T0 + 6 * DAY), null, 'proud holds on');
+  const loner = stagnant('ALLIANCEE4', { cooperation: 0.1, socialStyle: 0.1 });
+  assert.equal(selectNpcDefection(loner.state, loner.state.npc!.profiles[loner.mate]!, T0 + 30 * DAY), null, 'a loner stays');
+
+  const withPlayer = join(state, state.profile.playerId, selectOwnerMembership(state.command, mate)!.alliance.leaderOwnerId);
+  assert.equal(selectNpcDefection(withPlayer, withPlayer.npc!.profiles[mate]!, T0 + 30 * DAY), null, 'the player decides for his own');
+});

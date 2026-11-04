@@ -128,6 +128,8 @@ export function labMetrics(summary) {
     pactsAgainstPlayer: day.social?.againstPlayer ?? 0,
     strategyBytes: day.social?.strategyBytes ?? 0,
     alliancesMean: day.allianceLife?.alliancesMean ?? 0,
+    allianceSmallShareMean: day.allianceLife?.smallShareMean ?? 0,
+    allianceSmallNow: day.allianceLife?.smallNow ?? 0,
     allianceLargest: day.allianceLife?.largest ?? 0,
     alliedShareMean: day.allianceLife?.alliedShareMean ?? 0,
     allianceApplications: day.allianceLife?.applications ?? 0,

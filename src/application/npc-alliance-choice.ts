@@ -3,6 +3,7 @@ import { selectAllianceRelations } from '../domain/command/diplomacy.ts';
 import { isAllianceFull, selectOwnerMembership, selectReapplyBlock } from '../domain/command/selectors.ts';
 import type { AllianceRecord, CommandState } from '../domain/command/types.ts';
 import type { NpcProfile } from '../domain/npc/types.ts';
+import { CAMPAIGN_SPEED_SCALE } from '../domain/runtime/mode.ts';
 import { selectOwnerScore } from '../domain/rating/scoring.ts';
 import type { SaveState } from './contracts.ts';
 import { npcGroupRegard, npcRegard, recordNpcRelation } from './npc-relations.ts';
@@ -27,6 +28,10 @@ export const NPC_ALLIANCE_CHOICE = Object.freeze({
   regardToLeave: -0.15,
   /** A war against an alliance this much stronger in total points counts as being lost. */
   losingWarRatio: 1.5,
+  /** An alliance of one or two that has not grown for this long (at the standard world speed) has no point. */
+  stagnantAfterMs: 72 * 3_600_000,
+  /** Largest alliance that consolidates. */
+  smallSize: 2,
   /** Below this the owner stays. */
   restlessnessToLeave: 0.15,
   /** A member refuses a former colleague who attacked the alliance. */
@@ -181,12 +186,17 @@ export function selectNpcDefection(state: SaveState, profile: NpcProfile, at: nu
   const ownFit = allianceFit(taste, own, best);
 
   let bestOther = 0;
+  let biggerMatch = false;
   const left72 = recentlyLeftAlliances(command, ownerId, at);
   for (const other of command.alliances) {
     if (other.id === alliance.id || isAllianceFull(other) || left72.has(other.id) || selectReapplyBlock(command, ownerId, other.id, at)) continue;
     if (npcGroupRegard(state, profile, other.members.map((entry) => entry.ownerId), at) <= rules.vetoRegard) continue;
     const strength = strengths.get(other.id);
-    if (strength) bestOther = Math.max(bestOther, allianceFit(taste, strength, best));
+    if (strength) {
+      const otherFit = allianceFit(taste, strength, best);
+      bestOther = Math.max(bestOther, otherFit);
+      if (other.members.length > alliance.members.length && otherFit >= ownFit - 0.05) biggerMatch = true;
+    }
   }
   const gapTerm = clamp01((bestOther - ownFit - rules.fitGapToLeave) / 0.5);
 
@@ -205,9 +215,22 @@ export function selectNpcDefection(state: SaveState, profile: NpcProfile, at: nu
   }
   if (winning) return null;
 
+  // Consolidation (owner order 04.11.2026): a tiny alliance that stopped growing has no reason to exist. Its members
+  // look for a bigger matching alliance with room one by one, by the ordinary laws (leave, then apply); a leader
+  // hands over, a last one disbands. Proud and uncooperative leaders hold on longer, loners who are alone may stay
+  // solo, and an alliance with the player in it is never touched.
+  let stagnantTerm = 0;
+  if (alliance.members.length <= rules.smallSize && biggerMatch && !alliance.members.some((entry) => entry.ownerId === state.profile.playerId)) {
+    const scale = CAMPAIGN_SPEED_SCALE[state.worldConfig?.world.campaignSpeed ?? 'standard'] ?? 1;
+    const lastGrowth = Math.max(alliance.createdAt, ...alliance.members.map((entry) => entry.joinedAt));
+    const pride = 1 + 1.5 * (1 - clamp01(profile.traits.cooperation)) + 0.5 * clamp01(profile.traits.persistence) + (role === 'leader' ? 0.5 : 0);
+    const loner = profile.traits.cooperation + profile.traits.socialStyle < 0.6;
+    if (!loner && at - lastGrowth >= (rules.stagnantAfterMs * pride) / Math.max(0.1, scale)) stagnantTerm = 0.6;
+  }
   const discontent = Math.max(gapTerm, unhappyTerm, warTerm);
   const loyalty = clamp01(0.55 * profile.traits.cooperation + 0.25 * profile.traits.persistence + 0.2 * (1 - profile.traits.adaptability));
-  const restlessness = discontent * (1 - 0.9 * loyalty) * (role === 'leader' && alliance.members.length > 1 ? 0.5 : 1);
+  // Stagnation is its own reason: pride is already in its delay, loyalty to an alliance of two does not hold it.
+  const restlessness = Math.max(stagnantTerm, discontent * (1 - 0.9 * loyalty) * (role === 'leader' && alliance.members.length > 1 ? 0.5 : 1));
   if (restlessness < rules.restlessnessToLeave) return null;
   return { score: 0.04 + 0.3 * restlessness, successorOwnerId };
 }
