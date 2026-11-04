@@ -146,7 +146,7 @@ export function FleetPlannerDialog({ state, now, mode, testTimeScale, planetId, 
         <header className="fplan__head" data-toast-guard>
           <div className="fplan__title">
             <h2>Эталонный флот</h2>
-            <small>{planet.name} · {formatUniverseCoordinate({ galaxy: planet.universeGalaxy ?? 1, system: planet.universeSystem ?? 1, position: planet.universePosition ?? 1 })}</small>
+            <small>{formatUniverseCoordinate({ galaxy: planet.universeGalaxy ?? 1, system: planet.universeSystem ?? 1, position: planet.universePosition ?? 1 })} · {planet.name}</small>
           </div>
           <nav className="fplan__planets" aria-label="Планеты">
             {planets.map((other) => (
@@ -208,7 +208,7 @@ export function FleetPlannerDialog({ state, now, mode, testTimeScale, planetId, 
                 <b>План взят с планеты {undo.label}.</b>
                 <button type="button" className="fplan__undo" onClick={() => { save(undo.plan); setUndo(null); }} data-qa-fleet-plan-undo>Вернуть как было</button>
               </div>
-            ) : view.missing > 0 ? (
+            ) : view.cost.metal + view.cost.minerals + view.cost.gas > 0 ? (
               <div className="fplan__costs" data-qa-fleet-plan-costs>
                 <small>Вся нехватка стоит</small>
                 {FLEET_PLAN_RESOURCES.map((key) => (
@@ -219,7 +219,7 @@ export function FleetPlannerDialog({ state, now, mode, testTimeScale, planetId, 
                   </span>
                 ))}
               </div>
-            ) : !view.empty ? (
+            ) : !view.empty && view.missing <= 0 ? (
               <div className="fplan__report is-calm"><b>На этой планете всё по плану.</b></div>
             ) : null}
           </div>
@@ -273,7 +273,7 @@ function HangarBand({ view, name }: { view: FleetPlanView; name: string }) {
         {!view.empty ? <span className="fplan-hangar__plan">по плану будет <b>{planAmount(withPlan)}</b></span> : null}
         {overBy > 0
           ? <strong className="fplan-hangar__over" data-qa-fleet-plan-over-text>План не помещается: больше ангара на {planAmount(overBy)} населения</strong>
-          : !view.empty ? <em className="fplan-hangar__free">{free > 0 ? `останется ${planAmount(free)} места` : 'ангар будет заполнен'}</em> : null}
+          : !view.empty ? <em className="fplan-hangar__free">{free > 0 ? `останется ${planAmount(free)} ${plural(free, 'место', 'места', 'мест')}` : 'ангар будет заполнен'}</em> : null}
       </p>
       <div className="fplan-hangar__band" role="meter" aria-valuemin={0} aria-valuemax={capacity} aria-valuenow={used} aria-label={`${name}: занято ${formatNumber(used)} из ${formatNumber(capacity)}`}>
         <i className="fplan-hangar__plan-part" style={{ '--from': usedShare, '--share': planShare } as CSSProperties} />

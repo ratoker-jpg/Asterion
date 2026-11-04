@@ -348,7 +348,7 @@ function Lane({ row, state, index, now, art, factionId, units, open, single, tar
           art={orderArt} title={order ? orderTitle(order, units) : undefined}
           timer={order ? countdown(order.finishAt - now) : undefined} progress={order ? taskProgress(now, order.startedAt, order.finishAt) : 0}
           more={orders.length > 1 ? `ещё ${orders.length - 1}` : undefined}
-          empty={hasYard ? `${yardName}: заказов нет` : `${yardName}: не построено`}
+          empty={hasYard ? 'заказов нет' : 'не построено'}
           action={hasYard && !row.blocked ? (
             <button type="button" className={`empire-add ${orders.length ? '' : 'is-wide'}`} aria-label={`Заказать корабли: ${row.name}`} onClick={(event) => onYard('ships', event.currentTarget)} data-qa-empire-order={row.id} data-empire-pick-trigger>
               +{orders.length ? null : <span>Заказать</span>}
