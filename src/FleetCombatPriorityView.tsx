@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type DragEvent, type KeyboardEvent } from 'react';
+import { useEffect, useState, type DragEvent, type KeyboardEvent } from 'react';
 
 import { COMMANDER_ABILITIES, formatCommanderAbilityEffect, type CommanderId } from './domain/combat/commanders.ts';
 import { COMMANDER_COMBAT_CATALOG } from './domain/combat/catalog.ts';
@@ -72,8 +72,7 @@ function PriorityList({
   return (
     <section className="combat-priority-column-v1" aria-label={`Приоритет: ${title}`}>
       <header className="combat-priority-column-head-v1">
-        <span>{side === 'defense' ? '◆' : '◇'}</span>
-        <div><small>ПОРЯДОК СПОСОБНОСТЕЙ</small><h3>{title}</h3></div>
+        <h3>{title}</h3>
         <b>{order.length}</b>
       </header>
 
@@ -109,7 +108,7 @@ function PriorityList({
                 type="button"
                 className="combat-priority-handle-v1"
                 aria-label={`${commander.name}: переместить. Стрелка вверх или вниз меняет позицию.`}
-                title="Перетащи или используй ↑ / ↓"
+                
                 onKeyDown={(event) => moveByKeyboard(event, commanderId)}
               >
                 <span aria-hidden="true">⋮⋮</span>
@@ -141,12 +140,10 @@ export function FleetCombatPriorityView({
   planetName,
   coords,
   entityLevels,
-  onBack,
 }: {
   planetName: string;
   coords: string;
   entityLevels?: Record<string, number>;
-  onBack: () => void;
 }) {
   const [priority, setPriority] = useState<CombatPriorityState>(() => readCombatPriority(undefined, ACTIVE_RUNTIME_MODE));
   const [dragState, setDragState] = useState<DragState>(null);
@@ -164,8 +161,6 @@ export function FleetCombatPriorityView({
     };
   }, []);
 
-  const commanderCount = useMemo(() => new Set([...priority.attack, ...priority.defense]).size, [priority]);
-
   const reorder = (side: PrioritySide, nextOrder: CommanderId[]) => {
     const nextPriority = { ...priority, [side]: nextOrder };
     const result = persistCombatPriority(nextPriority, undefined, ACTIVE_RUNTIME_MODE);
@@ -177,28 +172,18 @@ export function FleetCombatPriorityView({
 
   return (
     <section className="combat-priority-view-v1">
-      <header className="combat-priority-page-head-v1">
-        <div>
-          <small>УПРАВЛЕНИЕ ФЛОТОМ · {planetName} {coords}</small>
-          <h2>БОЕВОЙ ПРИОРИТЕТ</h2>
-          <p>Если в бою участвует несколько командирских кораблей, используется способность первого доступного командира в списке.</p>
+      <header className="fc-head fc-head--plain">
+        <div className="fc-head__title">
+          <h2>Боевой приоритет</h2>
+          <p>{planetName} {coords} · в бою работает способность первого доступного командира в списке. Защита и атака настраиваются отдельно.</p>
         </div>
-        <div className="combat-priority-page-actions-v1">
-          <span className={`combat-priority-save-v1 ${saveState.kind}`} role="status" aria-live="polite">{saveState.message}</span>
-          <button className="combat-priority-back-v1" type="button" onClick={onBack}>← К ФЛОТАМ</button>
-        </div>
+        <span className={`combat-priority-save-v1 ${saveState.kind}`} role="status" aria-live="polite">{saveState.message}</span>
       </header>
-
-      <div className="combat-priority-rule-v1">
-        <span>01</span>
-        <p><strong>Два независимых порядка.</strong> Перестановка защитного приоритета не меняет атакующий и наоборот.</p>
-        <b>{commanderCount} КОМАНДИРОВ</b>
-      </div>
 
       <div className="combat-priority-grid-v1">
         <PriorityList
           side="defense"
-          title="ЗАЩИЩАЮЩИЙСЯ"
+          title="Когда защищаетесь"
           order={priority.defense}
           dragState={dragState}
           onDragState={setDragState}
@@ -207,7 +192,7 @@ export function FleetCombatPriorityView({
         />
         <PriorityList
           side="attack"
-          title="АТАКУЮЩИЙ"
+          title="Когда атакуете"
           order={priority.attack}
           dragState={dragState}
           onDragState={setDragState}

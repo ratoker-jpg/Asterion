@@ -128,7 +128,7 @@ export function FleetUnitRow({
             <button type="button" data-qa-unit-min onClick={() => onQuantity(0)} disabled={quantity <= 0}>МИН.</button>
             <small data-qa-unit-can-build>{max > 0 ? `можно до ${formatNumber(max)}` : 'не хватает ресурсов'}</small>
           </div>
-          <button className="fc-unit__build" type="button" data-qa-unit-build disabled={quantity <= 0 || max <= 0} onClick={() => onBuild(quantity)}>
+          <button className="fc-unit__build asterion-button asterion-button--primary" type="button" data-qa-unit-build disabled={quantity <= 0 || max <= 0} onClick={() => onBuild(quantity)}>
             Построить
           </button>
         </>
