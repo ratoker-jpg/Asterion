@@ -346,7 +346,7 @@ function shortRefusal(reason: string): string {
   if (text.includes('ваша планета') || text.includes('своей планет')) return 'своя';
   if (text.includes('союзн')) return 'союзник';
   if (text.includes('диапазон') || text.includes('очк')) return 'вне диапазона';
-  if (text.includes('нет свободн') || text.includes('нет корабл') || text.includes('нет зонд') || text.includes('нет переработ') || text.includes('нет транспорт')) return 'нет кораблей';
+  if (text.includes('нет свободн') || text.includes('нет корабл') || text.includes('нет зонд') || text.includes('нет переработ') || text.includes('нет транспорт')) return 'нет флота';
   if (text.includes('газ')) return 'мало газа';
   return 'нельзя';
 }

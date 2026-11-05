@@ -156,7 +156,7 @@
 }
 .star-atlas__point img { grid-row: 1 / span 2; width: clamp(44px, 6.6vh, 70px); height: clamp(44px, 6.6vh, 70px); object-fit: contain; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, .6)); }
 .star-atlas__point dt { min-width: 0; color: var(--atlas-muted); font-size: clamp(12px, 1.55vh, 17px) !important; font-weight: 600; letter-spacing: 0; text-transform: none; }
-.star-atlas__point dd { min-width: 0; margin: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: clamp(17px, 2.6vh, 29px) !important; font-weight: 800; font-variant-numeric: tabular-nums; }
+.star-atlas__point dd { min-width: 0; margin: 0; white-space: nowrap; font-size: clamp(17px, 2.6vh, 29px) !important; font-weight: 800; font-variant-numeric: tabular-nums; }
 .star-atlas__points.is-empty dd { color: var(--atlas-muted); }
 
 /* ---- planet list ---- */
@@ -265,3 +265,11 @@ html body .star-atlas [data-asterion-typography],
 html body .quick-pop.is-menu [data-asterion-typography] {
   font-size: calc(var(--asterion-base-font-size) * var(--text-scale-body, 1)) !important;
 }
+/* Headings are tagged as section titles, which the theme pins hardest: name their sizes outright. */
+html body .universe-inspector.star-atlas .star-atlas__head h2,
+html body .universe-inspector.star-atlas .star-atlas__head h2 span { font-size: calc(clamp(24px, 4vh, 44px) * var(--text-scale-section-title, 1)) !important; }
+html body .universe-inspector.star-atlas .star-atlas__head h2 b { font-size: calc(clamp(15px, 2.2vh, 24px) * var(--text-scale-section-title, 1)) !important; }
+html body .universe-inspector.star-atlas .star-atlas__who h3 { font-size: calc(clamp(20px, 3.3vh, 36px) * var(--text-scale-section-title, 1)) !important; }
+html body .universe-inspector.star-atlas .star-atlas__list-head h3 { font-size: calc(clamp(16px, 2.4vh, 26px) * var(--text-scale-section-title, 1)) !important; }
+/* Twelve-digit scores stay whole on a 1280 px window. */
+html body .universe-inspector.star-atlas .star-atlas__point dd { font-size: calc(max(14px, min(2.6vh, 1.32vw)) * var(--text-scale-table, 1)) !important; }

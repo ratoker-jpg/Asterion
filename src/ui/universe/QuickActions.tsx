@@ -61,7 +61,9 @@ function place(anchor: DOMRect, width: number, height: number, centred = false):
   const side = right + width <= viewportWidth - 8 || anchor.left - gap - width < 8 ? 'right' : 'left';
   const left = side === 'right' ? Math.min(right, viewportWidth - width - 8) : anchor.left - gap - width;
   const wanted = centred ? anchor.top + anchor.height / 2 - height / 2 : anchor.top + anchor.height / 2 - Math.min(height, 120) / 2 - 22;
-  const top = Math.min(Math.max(8, wanted), viewportHeight - height - 8);
+  // The column keeps clear of the map's filter bar at the bottom.
+  const bottomGap = centred ? 92 : 8;
+  const top = Math.min(Math.max(8, wanted), viewportHeight - height - bottomGap);
   return { left: Math.max(8, left), top: Math.max(8, top), side };
 }
 
