@@ -14,6 +14,8 @@ import { applyFleetUiUpdate, FLEET_UI_UPDATE_EVENT, type FleetUiUpdate } from '.
 import type { FleetPlan } from './domain/fleet/fleet-plan.ts';
 import type { ShipId } from './domain/combat/ids.ts';
 import { startFleetPlanLines, type FleetPlanStartResult } from './application/fleet-plan.ts';
+import { runBuildPlans } from './application/build-plan.ts';
+import type { BuildPlan } from './domain/buildings/build-plan.ts';
 import { fleetPlanReport } from './ui/fleet-plan/fleet-plan-text.ts';
 import { OperationsView } from './OperationsView';
 import { createOperationsVariantAQaFixture, getOperationsVariantAQaStatus } from './operations-variant-a-qa-fixture.ts';
@@ -943,6 +945,24 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, []);
+  // Build planner: starts the next planned upgrade, but only while the player is in the game
+  // (window visible and focused, no catch-up running). Never from a background, offline or server tick.
+  const hasBuildPlans = Boolean(state.fleetUi?.buildPlans);
+  useEffect(() => {
+    if (!hasBuildPlans) return;
+    if (document.visibilityState !== 'visible' || !document.hasFocus()) return;
+    const at = Date.now();
+    const current = stateRef.current;
+    if (isApplicationCommandBlocked(current) || needsNpcCatchupBefore(current, at)) return;
+    const run = enqueueApplicationStateUpdate(stateRef, setState, (latest) => {
+      const result = runBuildPlans(latest, { now: at, mode: RUNTIME_MODE, testTimeScale });
+      return { state: result.state, result };
+    }, flushSync, renderedStateRef, noteStateHeal);
+    if (run.started.length) {
+      const names = (id: string) => stateRef.current.planets[id]?.name ?? id;
+      setNotice(`Планировщик стройки: ${run.started.map((item) => `${names(item.planetId)} · ${item.name} до ур. ${item.level}`).join('; ')}.`);
+    }
+  }, [now, hasBuildPlans, testTimeScale, setNotice]);
   // The map's timed-object schedules (pirates, unique worlds, anomalies) run
   // from the 2026-01-01 epoch; build them in idle time instead of inside the
   // frame of the first NPC decision or system view that needs them.
@@ -1791,6 +1811,16 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     if (rejectNpcCatchupCommand()) return false;
     enqueueApplicationStateUpdate(stateRef, setState, (current) => ({
       state: { ...current, fleetUi: applyFleetUiUpdate(current.fleetUi, { kind: 'set-fleet-plan', planetId, plan }) },
+      result: true,
+    }), flushSync, renderedStateRef, noteStateHeal);
+    return true;
+  };
+
+  /** Build planner: a plan edit, as a command, so a clock tick cannot write over it. */
+  const saveBuildPlan = (planetId: string, plan: BuildPlan) => {
+    if (rejectNpcCatchupCommand()) return false;
+    enqueueApplicationStateUpdate(stateRef, setState, (current) => ({
+      state: { ...current, fleetUi: applyFleetUiUpdate(current.fleetUi, { kind: 'set-build-plan', planetId, plan }) },
       result: true,
     }), flushSync, renderedStateRef, noteStateHeal);
     return true;
@@ -3179,6 +3209,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
                 onSend={sendQuickFlights}
                 onSavePlan={saveFleetPlan}
                 onStartPlan={startFleetPlan}
+                onSaveBuildPlan={saveBuildPlan}
               />
             </>
           ) : activeRoute === 'planet' ? (
