@@ -79,7 +79,7 @@ test('every ship fights by its own race, technology and level (no lead-race stat
     for (const id of SHIPS) {
       const stack = report.attackerForce.stacks.find((item) => combatBaseEntityId(item.entityId) === id && combatGroupTag(item.entityId) === owner.tag)!;
       const expected = calculateCombatStackPreview({ entityId: id, count: owner.counts[id]!, level: owner.level }, owner.factionId, technologies(owner.laser), 'production')!;
-      const first = report.initialSnapshot.attacker.stacks.find((item) => item.entityId === stack.entityId)!;
+      const first = report.initialSnapshot!.attacker.stacks.find((item) => item.entityId === stack.entityId)!;
       assert.equal(first.attackPerUnit, expected.attackPerUnit, `${owner.factionId} ${id}: own attack`);
       assert.equal(first.lifePerUnit, expected.lifePerUnit, `${owner.factionId} ${id}: own life`);
     }
