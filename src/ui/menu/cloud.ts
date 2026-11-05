@@ -335,7 +335,7 @@ export function localSaveChars(slot: Pick<SaveSlotMeta, 'storageKey'>): number |
 /** One line for a wait without its window (a campaign opened from «На сервере»). */
 export function describeServerWait(wait: CloudServerWait): string {
   const live = wait.campaign.live;
-  if (wait.reason === 'game-older') return `Мир на сервере живёт в версии ${live?.gameVersion ?? '?'} — новее этой игры (${wait.appVersion}). Обновите игру.`;
+  if (wait.reason === 'game-older') return `Мир на сервере живёт в версии ${live?.gameVersion ?? '?'} — новее этой игры (${wait.appVersion}). Обновите игру (если не скачивается, установщик лежит на github.com/ratoker-jpg/Asterion/releases/latest).`;
   if (wait.reason === 'server-updating') return `Сервер переносит мир в версию ${wait.appVersion}: загрузите кампанию через несколько минут.`;
   const hours = Math.round(((live?.lagMs ?? 0) / 3_600_000) * 10) / 10;
   return `Мир ещё догоняется на сервере (осталось ${hours.toLocaleString('ru-RU')} игровых ч): загрузите его, когда сервер догонит.`;

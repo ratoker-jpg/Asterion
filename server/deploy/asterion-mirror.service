@@ -1,0 +1,10 @@
+# Copies the latest release installer to /srv/asterion-updates (mirror-installer.sh).
+[Unit]
+Description=Mirror the Asterion installer for game updates
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/asterion-mirror
+Nice=10
