@@ -295,7 +295,7 @@ async function mapSnapshot(win) {
       asteroidCount: document.querySelectorAll('[data-qa-universe-kind="asteroid"]').length,
       asteroidToggle: document.querySelector('[data-qa-universe-asteroids-toggle]')?.getAttribute('aria-pressed') || '',
       homeCaption: document.querySelector('[data-qa-universe-object="player-planet-helion-01"] [data-qa-map-caption]')?.textContent?.trim() || '',
-      legend: Array.from(document.querySelectorAll('.universe-map-legend span')).map((node) => ({ text: node.textContent?.trim() || '', className: node.className })),
+      legend: Array.from(document.querySelectorAll('.universe-map-legend button > span:not(.map-mark)')).map((node) => ({ text: node.textContent?.trim() || '', className: node.className })),
       ownerRelations: Array.from(document.querySelectorAll('[data-qa-universe-kind="player"], [data-qa-universe-kind="npc"]')).map((node) => ({ id: node.getAttribute('data-qa-universe-object'), relation: node.getAttribute('data-qa-universe-relation') || '', className: node.className })),
       mapCaptions: Array.from(document.querySelectorAll('[data-qa-map-caption]')).map((node) => node.textContent?.trim() || ''),
       debrisMarkers: Array.from(document.querySelectorAll('.universe-debris-marker')).map((marker) => {
@@ -634,7 +634,7 @@ async function runViewport(width, height) {
       throw new Error(`${label}: object fixture coverage failed ${JSON.stringify(map)}`);
     }
     if (map.homeCaption !== '★ Dendrilion' || map.coordinateLineCount !== 0 || map.mapCaptions.some((caption) => /\\[\\d+:\\d+:\\d+\\]/.test(caption))) throw new Error(`${label}: map caption contract failed ${JSON.stringify(map)}`);
-    const expectedLegend = ['Ваш мир', 'Союзная', 'Вражеская', 'Нейтральная', 'Необитаемые', 'Уникальные', 'Отступники', 'Аномалии'];
+    const expectedLegend = ['Ваш мир', 'Союзная', 'Вражеская', 'В диапазоне атаки', 'Нейтральная', 'Необитаемые', 'Уникальные', 'Отступники', 'Аномалии'];
     if (JSON.stringify(map.legend.map((item) => item.text)) !== JSON.stringify(expectedLegend)
       || map.ownerRelations.find((item) => item.id === 'player-planet-helion-01')?.relation !== 'self'
       || map.ownerRelations.find((item) => item.id === 'test-mode-ally-ira-vel-v1')?.relation !== 'ally') {
