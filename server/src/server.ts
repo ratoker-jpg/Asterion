@@ -21,7 +21,7 @@ import {
   type Campaign, type LiveRecovery, type RetentionPolicy, type Snapshot,
 } from './store.ts';
 import type { RunnerMessage, RunnerRequest, RunnerStart, RunnerWritten } from './runner.ts';
-import { compareGameVersions } from '../../src/application/cloud/cloud-sync.ts';
+import { CLOUD_LEASE_MS, compareGameVersions } from '../../src/application/cloud/cloud-sync.ts';
 import { formatNpcJournalLines, parseNpcJournalLines } from '../../src/application/npc-journal.ts';
 
 declare const __ASTERION_SERVER_VERSION__: string | undefined;
@@ -41,6 +41,10 @@ export type ServerConfig = {
   stepMs: number;
   stepBudgetMs: number;
   checkpointEveryMs: number;
+  /** A game silent for this long loses its campaign to the server (cloud-sync.ts CLOUD_LEASE_MS). */
+  leaseMs: number;
+  /** How often the server looks for lapsed leases. */
+  leaseCheckMs: number;
   maxUploadGzBytes: number;
   maxSaveBytes: number;
   retention: RetentionPolicy;
@@ -119,6 +123,8 @@ export function configFromEnv(env: NodeJS.ProcessEnv = process.env): ServerConfi
     stepMs: Number(env.ASTERION_STEP_MS ?? 10_000),
     stepBudgetMs: Number(env.ASTERION_STEP_BUDGET_MS ?? 4_000),
     checkpointEveryMs: Number(env.ASTERION_CHECKPOINT_MS ?? 10 * 60_000),
+    leaseMs: Number(env.ASTERION_LEASE_MS ?? CLOUD_LEASE_MS),
+    leaseCheckMs: Number(env.ASTERION_LEASE_CHECK_MS ?? 15_000),
     maxUploadGzBytes: Number(env.ASTERION_MAX_UPLOAD_BYTES ?? 160 * 1024 ** 2),
     maxSaveBytes: Number(env.ASTERION_MAX_SAVE_BYTES ?? 900 * 1024 ** 2),
     retention: {
@@ -696,8 +702,13 @@ export function createCloudServer(config: ServerConfig) {
             status: 'running', baseRevision: added.snapshot.revision, gameVersion, startedAt: Date.now(), clockOffsetMs,
             worldAt, reportedAt: Date.now(), checkpointWorldAt: null,
           } };
+          delete campaign.lease;
+        } else {
+          // The player is still in the game: the world is theirs until the lease runs out (takeOver).
+          campaign = { ...campaign, lease: { deviceId, seenAt: Date.now(), baseRevision: added.snapshot.revision, gameVersion, clockOffsetMs } };
         }
         writeCampaign(config.dataDir, campaign);
+        if (!left) releaseOtherWorld(id);
         if (campaign.live) {
           // A game older than every kept release: its world goes on in this one instead of waiting for a runner that will not come.
           const from = runnerFor(campaign.live.gameVersion) ? null : migrateLive(campaign);
@@ -737,6 +748,7 @@ export function createCloudServer(config: ServerConfig) {
     const body = await readJson(request);
     const baseRevision = Number(body.baseRevision);
     const gameVersion = String(body.gameVersion ?? '');
+    const deviceId = String(body.deviceId ?? '');
     if (!Number.isSafeInteger(baseRevision) || !VERSION.test(gameVersion)) throw new HttpError(400, 'bad-request', 'Bad claim.');
     const result = await withLock(id, async () => {
       let campaign = readCampaign(config.dataDir, id);
@@ -749,9 +761,17 @@ export function createCloudServer(config: ServerConfig) {
           if (compareGameVersions(gameVersion, config.version) > 0) requestUpdate(gameVersion);
           throw new HttpError(409, 'version-mismatch', `Мир на сервере живёт в версии ${campaign.live.gameVersion}, а игра — ${gameVersion}.`, { worldVersion: campaign.live.gameVersion });
         }
+        const clockOffsetMs = campaign.live.clockOffsetMs;
         const ended = await endLive(campaign, 'claim');
         campaign = ended.campaign;
-        if (ended.snapshot) return { campaign, snapshot: ended.snapshot };
+        if (ended.snapshot) {
+          // The game that took the world is the player now; it reports from here on.
+          if (DEVICE.test(deviceId)) {
+            campaign = { ...campaign, lease: { deviceId, seenAt: Date.now(), baseRevision: ended.snapshot.revision, gameVersion, clockOffsetMs } };
+            writeCampaign(config.dataDir, campaign);
+          }
+          return { campaign, snapshot: ended.snapshot };
+        }
       }
       if (campaign.head === baseRevision) return { campaign, snapshot: null };
       return { campaign, snapshot: headSnapshot(campaign) };
@@ -799,6 +819,97 @@ export function createCloudServer(config: ServerConfig) {
       config.log(`live ${id}: raised by the operator from ${used}`);
       return { from: used, campaign: describeCampaign(readCampaign(config.dataDir, id)!, Date.now()) };
     });
+  }
+
+  /**
+   * The game's «still here» (every CLOUD_HEARTBEAT_EVERY_MS while a campaign
+   * is open). It renews the lease on the revision the game continues. The
+   * answer says whether the server has taken the world over meanwhile (the
+   * game then uploads its own save, which wins), and one living world is
+   * enough: another campaign's world is finished into its revision here, so an
+   * idle one does not hold the server's memory while this one is played.
+   */
+  async function heartbeat(request: http.IncomingMessage, id: string): Promise<unknown> {
+    const body = await readJson(request);
+    const deviceId = String(body.deviceId ?? '');
+    const baseRevision = Number(body.baseRevision);
+    const gameVersion = String(body.gameVersion ?? '');
+    const clockOffsetMs = Math.round(Number(body.clockOffsetMs ?? 0));
+    if (!DEVICE.test(deviceId) || !Number.isSafeInteger(baseRevision) || !VERSION.test(gameVersion) || !Number.isFinite(clockOffsetMs) || Math.abs(clockOffsetMs) > 400 * 86_400_000) {
+      throw new HttpError(400, 'bad-request', 'Bad heartbeat.');
+    }
+    return withLock(id, async () => {
+      const campaign = readCampaign(config.dataDir, id);
+      if (!campaign) throw new HttpError(404, 'not-found', 'Кампании нет на сервере.');
+      if (baseRevision !== campaign.head) throw new HttpError(409, 'stale-base', 'Сервер хранит другую версию кампании.', { head: campaign.head });
+      if (campaign.live) return { takenOver: true, leaseMs: config.leaseMs };
+      const now = Date.now();
+      const held = campaign.lease;
+      if (held && held.deviceId !== deviceId && now - held.seenAt < config.leaseMs) {
+        throw new HttpError(409, 'other-device', 'Эту кампанию сейчас играет другой компьютер.', { head: campaign.head });
+      }
+      writeCampaign(config.dataDir, { ...campaign, lease: { deviceId, seenAt: now, baseRevision, gameVersion, clockOffsetMs } });
+      releaseOtherWorld(id);
+      return { takenOver: false, leaseMs: config.leaseMs };
+    });
+  }
+
+  /** The campaign `id` is being played: the living world of any other campaign is finished into a revision (in the background). */
+  function releaseOtherWorld(id: string): void {
+    const other = live && !live.exited && live.campaignId !== id ? live.campaignId : null;
+    if (!other || closing) return;
+    void withLock(other, async () => {
+      const campaign = readCampaign(config.dataDir, other);
+      if (campaign?.live && live?.campaignId === other) {
+        await endLive(campaign, 'hand-over');
+        config.log(`live ${other}: finished, ${id} is being played`);
+      }
+    }).catch((error) => config.log(`live ${other}: hand-over failed: ${String(error)}`));
+  }
+
+  /**
+   * A game that stopped reporting (power cut, sleep, crash, no network) loses
+   * its campaign: the server starts the last uploaded revision as the living
+   * world, exactly as after a clean exit. Orders given after that upload are
+   * gone by nature (the game uploads every CLOUD_UPLOAD_EVERY_MS). Of several
+   * silent campaigns the one played last lives; the others stay revisions.
+   */
+  async function takeOverLapsed(): Promise<void> {
+    if (closing) return;
+    const now = Date.now();
+    const lapsed = listCampaigns(config.dataDir).filter((campaign) => campaign.lease && now - campaign.lease.seenAt >= config.leaseMs)
+      .sort((left, right) => right.lease!.seenAt - left.lease!.seenAt);
+    for (const [index, campaign] of lapsed.entries()) {
+      try {
+        await withLock(campaign.id, () => takeOver(campaign.id, index === 0));
+      } catch (error) { config.log(`takeover ${campaign.id} failed: ${String(error)}`); }
+    }
+  }
+
+  async function takeOver(id: string, start: boolean): Promise<void> {
+    let campaign = readCampaign(config.dataDir, id);
+    const lease = campaign?.lease;
+    if (!campaign || !lease || Date.now() - lease.seenAt < config.leaseMs) return;
+    const head = headSnapshot(campaign);
+    if (campaign.live || !head || head.revision !== lease.baseRevision || !start) {
+      // Nothing to carry on (already living, a newer head the lease does not know, or a campaign that was not played last).
+      const { lease: _lapsed, ...rest } = campaign;
+      writeCampaign(config.dataDir, rest);
+      return;
+    }
+    if (live && live.campaignId !== id) {
+      const other = readCampaign(config.dataDir, live.campaignId);
+      if (other) await endLive(other, 'hand-over');
+    }
+    const { lease: _taken, ...rest } = campaign;
+    campaign = { ...rest, live: {
+      status: 'running', baseRevision: head.revision, gameVersion: lease.gameVersion, startedAt: Date.now(), clockOffsetMs: lease.clockOffsetMs,
+      worldAt: head.worldAt, reportedAt: Date.now(), checkpointWorldAt: null,
+    } };
+    writeCampaign(config.dataDir, campaign);
+    const from = runnerFor(lease.gameVersion) ? null : migrateLive(campaign);
+    startRun(from ? readCampaign(config.dataDir, id)! : campaign, false, from ?? undefined);
+    config.log(`live ${id}: the server took over, the game was silent for ${Math.round((Date.now() - lease.seenAt) / 1000)} s (revision ${head.revision})`);
   }
 
   async function release(request: http.IncomingMessage, id: string): Promise<unknown> {
@@ -871,7 +982,7 @@ export function createCloudServer(config: ServerConfig) {
     if (request.method === 'GET' && url.pathname === '/v1/campaigns') {
       return json(response, 200, { campaigns: listCampaigns(config.dataDir).map(liveView) });
     }
-    const match = /^\/v1\/campaigns\/([^/]+)(?:\/(revisions|claim|release|recover|snapshots|bot-journal)(?:\/(\d+))?)?$/.exec(url.pathname);
+    const match = /^\/v1\/campaigns\/([^/]+)(?:\/(revisions|claim|release|recover|heartbeat|snapshots|bot-journal)(?:\/(\d+))?)?$/.exec(url.pathname);
     if (!match || !CAMPAIGN_ID.test(match[1]!)) throw new HttpError(404, 'not-found', 'Not found.');
     const [, id, action, snapshotId] = match as unknown as [string, string, string | undefined, string | undefined];
     if (!action && request.method === 'GET') {
@@ -881,6 +992,7 @@ export function createCloudServer(config: ServerConfig) {
     }
     if (action === 'revisions' && request.method === 'PUT' && !snapshotId) return json(response, 200, await upload(request, id));
     if (action === 'claim' && request.method === 'POST') return claim(request, response, id);
+    if (action === 'heartbeat' && request.method === 'POST' && !snapshotId) return json(response, 200, await heartbeat(request, id));
     if (action === 'release' && request.method === 'POST') return json(response, 200, await release(request, id));
     if (action === 'recover' && request.method === 'POST' && !snapshotId) return json(response, 200, await recoverWorld(request, id));
     if (action === 'bot-journal' && request.method === 'GET' && !snapshotId) {
@@ -916,6 +1028,8 @@ export function createCloudServer(config: ServerConfig) {
   server.requestTimeout = 10 * 60_000;
   server.headersTimeout = 30_000;
 
+  let leaseTimer: NodeJS.Timeout | null = null;
+
   return {
     server,
     config,
@@ -950,12 +1064,15 @@ export function createCloudServer(config: ServerConfig) {
           writeCampaign(config.dataDir, { ...campaign, live: { ...campaign.live!, status: 'paused' } });
         }
       }
+      leaseTimer = setInterval(() => void takeOverLapsed(), config.leaseCheckMs);
+      leaseTimer.unref();
       config.log(`asterion cloud ${config.version} listening on ${config.host}:${typeof address === 'object' && address ? address.port : config.port}`);
       return typeof address === 'object' && address ? address.port : config.port;
     },
     /** Shutdown (update, reboot): the living world writes a checkpoint and resumes on the next start. */
     async close(): Promise<void> {
       closing = true;
+      if (leaseTimer) clearInterval(leaseTimer);
       for (const id of [...retryTimers.keys()]) cancelRetry(id);
       server.close();
       const run = live;

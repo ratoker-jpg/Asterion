@@ -70,6 +70,8 @@ export type CloudCampaignView = {
   createdAt: number;
   head: CloudSnapshotView | null;
   live: CloudLiveView | null;
+  /** The computer that is playing the campaign and how long ago its game last reported (older servers omit it). */
+  lease?: { deviceId: string; ageMs: number } | null;
   snapshots: CloudSnapshotView[];
 };
 
@@ -89,7 +91,34 @@ export type CloudEntryInput = {
    * living world now (or, when this version cannot take it, go on locally).
    */
   takeNow?: boolean;
+  /** Game time the local save was lived to (null: no local save). */
+  localWorldAt?: number | null;
 };
+
+/**
+ * The server's lease (server.ts): a game that played this campaign and then
+ * went silent for CLOUD_LEASE_MS (power cut, sleep, crash, no network) loses
+ * the world to the server, which carries on from the last uploaded revision.
+ * The game reports every CLOUD_HEARTBEAT_EVERY_MS, so a lease survives four
+ * missed reports of a flaky connection, yet a night off is never idle. A
+ * takeover that came too early costs nothing: the game that is still there
+ * uploads its own save, which wins over the server's world (kept as a backup).
+ */
+export const CLOUD_LEASE_MS = 5 * 60_000;
+export const CLOUD_HEARTBEAT_EVERY_MS = 60_000;
+
+/**
+ * Orders a power cut can lose are the ones given after the last upload; the
+ * game uploads every CLOUD_UPLOAD_EVERY_MS (a save is ~3 MB compressed).
+ */
+export const CLOUD_UPLOAD_EVERY_MS = 3 * 60_000;
+
+/**
+ * A local save that played on past the last upload by more than this holds
+ * orders the server never saw: it is kept as a copy before the server's world
+ * replaces it.
+ */
+export const LOCAL_COPY_MIN_MS = 30_000;
 
 /**
  * A living world further behind the clock than this is still catching up on
@@ -152,7 +181,7 @@ export type CloudConflictReason =
 
 export type CloudEntryDecision =
   /** The server keeps the world alive for exactly this save: take it (claim). */
-  | { action: 'claim'; baseRevision: number }
+  | { action: 'claim'; baseRevision: number; keepLocalCopy?: boolean }
   /**
    * The server has a newer revision continuing this save (another computer,
    * or a finished live world). `release`: a living world on top of it cannot
@@ -216,9 +245,20 @@ export function decideCloudEntry(input: CloudEntryInput): CloudEntryDecision {
   }
   if (!record) return { action: 'ask', reason: 'unknown-local' };
   if (head.revision < record.revision) return { action: 'ask', reason: 'server-behind' };
+  // Another computer's game is still reporting: this one never takes the campaign from under it.
+  if (!live && campaign.lease && campaign.lease.deviceId !== input.deviceId && campaign.lease.ageMs < CLOUD_LEASE_MS) return { action: 'ask', reason: 'other-device' };
   if (!unchanged) {
-    // This computer played on (offline, or the server was unreachable on entry).
-    if (head.revision === record.revision) return { action: 'local', reason: 'local-newer', release: Boolean(live) };
+    if (head.revision === record.revision) {
+      // The one rule: the world that is further along in game time wins. The server took this campaign over (the game
+      // stopped without leaving) and has lived past where this save stops; what this save did after the last upload
+      // is kept as a copy. A save that is as far or further along stays: the server's world is released.
+      if (live && live.baseRevision === head.revision && input.localWorldAt != null && live.worldAt > input.localWorldAt) {
+        const taken = claimOrLocal(input, head.revision, live);
+        if (taken.action === 'claim') return { ...taken, keepLocalCopy: input.localWorldAt > head.worldAt + LOCAL_COPY_MIN_MS };
+        if (taken.action === 'wait') return taken;
+      }
+      return { action: 'local', reason: 'local-newer', release: Boolean(live) };
+    }
     return { action: 'ask', reason: 'diverged' };
   }
   if (head.revision === record.revision) {

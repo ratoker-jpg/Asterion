@@ -155,7 +155,7 @@ function upload(id, name, text, meta, hooks = {}) {
       const cfg = config();
       const digest = digestOf(text);
       const record = syncState().campaigns[id] || null;
-      if (record && record.digest === digest && record.revision > 0 && !meta.left && !record.forceNext) {
+      if (record && record.digest === digest && record.revision > 0 && !meta.left && !record.forceNext && !meta.takeBack) {
         // Nothing changed since the last upload or download.
         return { ...result, ok: true, revision: record.revision, unchanged: true };
       }
@@ -285,6 +285,17 @@ function registerCloud() {
     running.finally(() => exitUploads.delete(entry));
     event.returnValue = { queued: true };
   });
+  // «Still here» (every minute while a campaign is open): the server's lease on the revision this save continues.
+  ipcMain.handle('asterion:cloud:heartbeat', (_event, id, clockOffsetMs) => guard(async () => {
+    if (!CAMPAIGN_ID.test(id)) throw new CloudError('bad-id', 'Неверный слот');
+    const record = syncState().campaigns[id];
+    if (!record || !(record.revision > 0)) throw new CloudError('no-record', 'Кампания ещё не выгружена');
+    const result = await request(`/v1/campaigns/${id}/heartbeat`, {
+      method: 'POST', timeoutMs: 8_000, headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ deviceId: settings().deviceId, baseRevision: record.revision, gameVersion: app.getVersion(), clockOffsetMs: Math.round(Number(clockOffsetMs) || 0) }),
+    });
+    return { takenOver: Boolean(result && result.takenOver) };
+  }));
   ipcMain.handle('asterion:cloud:wait', async (_event, id) => {
     const pending = queues.get(id);
     if (pending) await Promise.race([pending, new Promise((resolve) => setTimeout(resolve, 60_000))]);
