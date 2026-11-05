@@ -54,3 +54,11 @@ test('Typhoon «Форсаж» adds +0.1% speed per level to the whole fleet, ad
   const typhoonLevel0 = calculateEffectiveFleetSpeed('aegis', {}, {}, { typhoon: 1 }, { typhoon: 0 });
   assert.equal(typhoonAlone / typhoonLevel0, 1.01);
 });
+
+test('the real-time floor keeps every one-way flight at 60 seconds or more', async () => {
+  const { applyRealFlightFloor, MIN_REAL_ONE_WAY_DURATION_MS } = await import('./speed.ts');
+  assert.equal(MIN_REAL_ONE_WAY_DURATION_MS, 60_000);
+  assert.equal(applyRealFlightFloor(3_000), 60_000);
+  assert.equal(applyRealFlightFloor(36_000), 60_000);
+  assert.equal(applyRealFlightFloor(120_000), 120_000);
+});

@@ -71,6 +71,16 @@ export const MIN_ONE_WAY_DURATION_MS = 3 * 60_000;
 /** Recon (a fleet of spy probes only) is bounded by the probe's speed alone: at least 3 seconds. */
 export const MIN_RECON_ONE_WAY_DURATION_MS = 3_000;
 
+/**
+ * Real-time floor for a one-way flight, after the world speed is applied: no
+ * mission, player or bot arrives sooner than this. Gas and speeds are untouched.
+ */
+export const MIN_REAL_ONE_WAY_DURATION_MS = 60_000;
+/** Applies the real-time floor to an already world-speed-scaled one-way duration. */
+export function applyRealFlightFloor(scaledMs: number): number {
+  return Math.max(MIN_REAL_ONE_WAY_DURATION_MS, scaledMs);
+}
+
 /** True for a recon fleet: spy probes only, no commanders. */
 export function isReconOnlyFleet(
   selectedShips: Partial<Record<ShipId, number>>,

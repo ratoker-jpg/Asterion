@@ -1,4 +1,5 @@
 import { selectOwnerMembership } from '../domain/command/selectors.ts';
+import { applyRealFlightFloor } from '../domain/flights/speed.ts';
 import { recordNpcJointRaid } from './npc-relations.ts';
 import { TEST_ALLY_OWNER_ID, TEST_BOT_OWNER_ID } from '../domain/command/catalog.ts';
 import { getCombatFactionName, isCombatFactionId, type CombatFactionId } from '../domain/combat/factions.ts';
@@ -368,7 +369,7 @@ function createSunFlight(
   // uses the ordinary route so defenders inside the galaxy can arrive in time.
   const oneWayDurationMs = input.missionId === 'sun-attack'
     ? scaleSunDuration(SUN_RAID_CONFIG.flightOneWayMs, options)
-    : scaleSunDuration(base.oneWayDurationMs, options);
+    : applyRealFlightFloor(scaleSunDuration(base.oneWayDurationMs, options));
   const snapshot: SunFlightSnapshot = {
     version: 1,
     raidId: input.raidId,
