@@ -16,7 +16,7 @@ import { ACTIVE_RUNTIME_MODE, resolveTestTimeScale } from './domain/runtime/mode
 import { FLEET_PRODUCTION_START_REQUEST_EVENT } from './application/fleet-production.ts';
 import { readFleetBuildBudget, type FleetBuildBudget } from './application/fleet.ts';
 import { FleetConstructionHeader } from './FleetConstructionHeader';
-import { ResourceIcon } from './ui/resources/ResourceIcon';
+import { FleetUnitRow } from './ui/fleet/FleetUnitRow';
 import { evaluateProductionRequirements } from './domain/fleet/requirements.ts';
 
 type ShipDefinition = {
@@ -49,8 +49,6 @@ type ShipCombatStats = {
 };
 
 type ShipyardBudget = FleetBuildBudget;
-
-type ResourceKind = 'metal' | 'minerals' | 'gas' | 'population';
 
 function getShipDefinitions(factionId: CombatFactionId): ShipDefinition[] {
   return getFactionShipCatalog(factionId).map((entity) => ({
@@ -92,15 +90,6 @@ function calculateMax(ship: ShipDefinition, budget: ShipyardBudget) {
   if (ship.gas > 0) limits.push(Math.floor(budget.gas / ship.gas));
   if (ship.population > 0) limits.push(Math.floor(Math.max(0, budget.populationMax - budget.population) / ship.population));
   return Math.max(0, Math.min(...(limits.length ? limits : [0])));
-}
-
-function CostRow({ kind, label, value }: { kind: ResourceKind; label: string; value: number }) {
-  return (
-    <div className={`shipyard-cost-row-v1 ${kind}`}>
-      <span className="shipyard-cost-icon-v1"><ResourceIcon kind={kind} /></span>
-      <span className="shipyard-cost-copy-v1"><small>{label}</small><strong>{formatNumber(value)}</strong></span>
-    </div>
-  );
 }
 
 function formatMetric(value: number | null) {
@@ -182,84 +171,31 @@ function ShipCard({
   const shipLevel = Math.min(10, Math.max(0, Math.floor(budget.spaceportUpgrades.shipLevels[ship.id] ?? 0)));
 
   return (
-    <article className={`shipyard-card-v1 ${unlocked ? '' : 'locked'}`} data-qa-fleet-production-item={ship.id} data-qa-production-requirements={unlocked ? 'met' : 'unmet'} data-qa-production-requirement-reason={requirements.reason ?? undefined}>
-      <header className="shipyard-card-title-v1">
-        <div className={`shipyard-owned-v1 ${ship.owned > 0 ? 'has-ships' : ''}`}>
-          <small>В СТРОЮ</small>
-          <strong>{formatNumber(ship.owned)}</strong>
-        </div>
-        <div className="shipyard-title-copy-v1"><strong>{ship.name}</strong><small>{ship.role}</small></div>
-        <button type="button" title={ship.role} aria-label={`Информация: ${ship.name}`}>i</button>
-      </header>
-
-      <div className="shipyard-card-body-v1">
-        <div className="shipyard-art-v1">
-          <div className="shipyard-art-hover-v1" aria-label={`Характеристики корабля ${ship.name}`}>
-            <img src={ship.art} alt={ship.name} draggable={false} />
-            <ShipStatsTooltip ship={ship} stats={stats} level={shipLevel} />
-          </div>
-          <div className="shipyard-time-v1" data-qa-unit-time={ship.id}>
-            <small>ВРЕМЯ ЗА ЕДИНИЦУ</small>
-            <b data-qa-unit-time-effective>{formatClockDurationMs(effectiveTimeMs)}</b>
-            <span data-qa-unit-time-raw>RAW {ship.time}</span>
-          </div>
-        </div>
-
-        <div className="shipyard-card-data-v1">
-          <div className="shipyard-costs-v1">
-            <div className="shipyard-costs-title-v1">
-              <span>СТОИМОСТЬ ЕДИНИЦЫ</span>
-              <i />
-              <span
-                className="shipyard-visible-level-v1"
-                data-qa-fleet-visible-level={ship.id}
-                aria-label={`Уровень корабля ${ship.name}: ${shipLevel} из 10`}
-              >
-                <small>УРОВЕНЬ</small>
-                <b>{shipLevel}/10</b>
-              </span>
-            </div>
-            <div className="shipyard-cost-grid-v1">
-              <CostRow kind="metal" label="Металл" value={ship.metal} />
-              <CostRow kind="minerals" label="Минералы" value={ship.minerals} />
-              <CostRow kind="gas" label="Газ" value={ship.gas} />
-              <CostRow kind="population" label="Население" value={ship.population} />
-            </div>
-          </div>
-
-          {unlocked ? (
-            <div className="shipyard-build-v1">
-              <div className="shipyard-count-v1">
-                <input
-                  type="number"
-                  min="0"
-                  max={max}
-                  value={quantity}
-                  aria-label={`Количество: ${ship.name}`}
-                  onChange={(event) => onQuantity(ship, Number(event.target.value))}
-                />
-                <button type="button" onClick={() => onQuantity(ship, max)}>Макс. {max}</button>
-                <button type="button" onClick={() => onQuantity(ship, 0)}>Мин.</button>
-              </div>
-              <button className="shipyard-build-button-v1" type="button" disabled={quantity <= 0 || max <= 0} onClick={() => onBuild(ship, quantity)}>
-                В ПРОИЗВОДСТВО
-              </button>
-            </div>
-          ) : (
-            <div className="shipyard-requirements-v1">
-              <div className="shipyard-requirements-head-v1">
-                <span className="shipyard-lock-v1" aria-hidden="true">◆</span>
-                <div><small>КОРПУС НЕДОСТУПЕН</small><strong>Требования для постройки</strong></div>
-              </div>
-              <div className="shipyard-requirements-list-v1">
-                {requirements.reason ? <strong data-qa-production-requirement-error>{localizeBuildingNames(requirements.reason, budget.factionId)}</strong> : null}
-                {ship.requirements.map((requirement) => <span key={requirement}>{localizeBuildingNames(requirement, budget.factionId)}</span>)}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </article>
+    <FleetUnitRow
+      id={ship.id}
+      name={ship.name}
+      role={ship.role}
+      art={ship.art}
+      owned={ship.owned}
+      pending={ship.pending}
+      levelNode={(
+        <span className="fc-unit__level" data-qa-fleet-visible-level={ship.id} aria-label={`Уровень корабля ${ship.name}: ${shipLevel} из 10`}>
+          Уровень <b>{shipLevel}/10</b>
+        </span>
+      )}
+      cost={{ metal: ship.metal, minerals: ship.minerals, gas: ship.gas, population: ship.population }}
+      wallet={{ metal: budget.metal, minerals: budget.minerals, gas: budget.gas, populationFree: Math.max(0, budget.populationMax - budget.population) }}
+      effectiveTime={formatClockDurationMs(effectiveTimeMs)}
+      rawTime={ship.time}
+      quantity={quantity}
+      max={max}
+      locked={!unlocked}
+      lockReason={requirements.reason ? localizeBuildingNames(requirements.reason, budget.factionId) : null}
+      requirements={ship.requirements.map((requirement) => localizeBuildingNames(requirement, budget.factionId))}
+      dossier={<ShipStatsTooltip ship={ship} stats={stats} level={shipLevel} />}
+      onQuantity={(next) => onQuantity(ship, next)}
+      onBuild={(next) => onBuild(ship, next)}
+    />
   );
 }
 
@@ -311,25 +247,28 @@ export function ShipyardView({ planetName, coords, planetId, budget: providedBud
 
   return (
     <section
-      className="shipyard-view-v1"
+      className="fc-catalog"
       data-qa-construction-mode="ships"
       data-qa-building-role="shipyard"
       data-qa-building-asset={shipyardPresentation.art}
       data-qa-building-faction={budget.factionId}
+      data-qa-building-name={shipyardPresentation.name}
       data-qa-fleet-population={fleetSummary.population}
       data-qa-fleet-capacity={fleetSummary.capacity}
     >
       <FleetConstructionHeader
         viewId="ships"
         shipyardPresentation={shipyardPresentation}
-        kicker={`${shipyardPresentation.name.toUpperCase()} · УРОВЕНЬ ${budget.shipyardLevel}`}
-        title={shipyardPresentation.name}
-        description={`полный каталог стандартных корпусов ${factionName}`}
-        planetName={planetName}
-        coords={coords}
+        title="Корабли"
+        detail={`${planetName} ${coords} · ${shipyardPresentation.name}, уровень ${budget.shipyardLevel} · ${factionName}`}
+        noShipyard={budget.shipyardLevel <= 0}
+        populationLabel="Население флота"
+        population={fleetSummary.population}
+        capacity={fleetSummary.capacity}
+        free={fleetSummary.available}
       />
 
-      <div className="shipyard-grid-v1">
+      <div className="fc-unit-list">
         {ownedShips.map((ship) => (
           <ShipCard
             key={ship.id}
@@ -346,7 +285,6 @@ export function ShipyardView({ planetName, coords, planetId, budget: providedBud
           />
         ))}
       </div>
-
     </section>
   );
 }

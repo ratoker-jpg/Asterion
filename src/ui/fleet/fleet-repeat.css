@@ -31,4 +31,4 @@
    and the mission picker; «Свернуть» brings them back. */
 .fleet-root-v2 .fleet-flights-drop-v2.is-open { flex: 1 1 auto; min-height: 0; height: auto; margin-top: 0; }
 .fleet-root-v2 .fleet-flights-drop-v2.is-open .fleet-flights-drop-v2__panel { position: static; height: 100%; max-height: none; box-shadow: none; }
-.fleet-root-v2:has(> .fleet-flights-drop-v2.is-open) > .fleet-root-v2__row { display: none; }
+.fleet-root-v2:has(> .fleet-flights-drop-v2.is-open) > .fc-deck { display: none; }

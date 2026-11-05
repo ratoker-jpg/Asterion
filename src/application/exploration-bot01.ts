@@ -1,4 +1,5 @@
 import type { ShipId } from '../domain/combat/ids.ts';
+import { applyRealFlightFloor } from '../domain/flights/speed.ts';
 import type { FlightRecord } from '../domain/flights/types.ts';
 import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
 import { getEspionageTargets } from '../domain/espionage/runtime.ts';
@@ -60,7 +61,8 @@ export function dispatchBot01Exploration(state: SaveState, selected: UniversePla
     const speed=calculateEffectiveFleetSpeed(source.raceId,selectedShips);
     const distance=calculateRouteDistance(source.coordinate,node.coordinate);
     if(distance<=0)continue;
-    const duration=scaleRuntimeDuration(calculateOneWayDurationMs(source.coordinate,node.coordinate,speed),mode,testTimeScale);
+    const scaledDuration=scaleRuntimeDuration(calculateOneWayDurationMs(source.coordinate,node.coordinate,speed),mode,testTimeScale);
+    const duration=mode==='test'?scaledDuration:applyRealFlightFloor(scaledDuration);
     if(at+duration+30_000>=node.special!.expiresAt)continue;
     prepared={source,selectedShips,speed,duration,distance};break;
   }

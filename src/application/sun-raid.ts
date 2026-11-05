@@ -1,4 +1,5 @@
 import { selectOwnerMembership } from '../domain/command/selectors.ts';
+import { applyRealFlightFloor } from '../domain/flights/speed.ts';
 import { recordNpcJointRaid } from './npc-relations.ts';
 import { TEST_ALLY_OWNER_ID, TEST_BOT_OWNER_ID } from '../domain/command/catalog.ts';
 import { getCombatFactionName, isCombatFactionId, type CombatFactionId } from '../domain/combat/factions.ts';
@@ -82,6 +83,12 @@ function scaleSunDuration(durationMs: number, options: SunRuntimeOptions): numbe
     return Math.max(1, Math.round(Math.max(1, Math.round(durationMs)) / options.timeScale));
   }
   return scaleRuntimeDuration(durationMs, options.mode, options.testTimeScale);
+}
+
+/** The 60 s real-time floor is for real play; the test-mode time accelerator (x200..x500) stays unfloored. */
+export function floorSunSupportFlight(scaledMs: number, options: SunRuntimeOptions): number {
+  const acceleratedTest = options.mode === 'test' && !(options.timeScale !== undefined && options.timeScale > 0);
+  return acceleratedTest ? scaledMs : applyRealFlightFloor(scaledMs);
 }
 
 /** Reason codes shared with FlightErrorCode, so the Fleets screen gets the real cause. */
@@ -368,7 +375,7 @@ function createSunFlight(
   // uses the ordinary route so defenders inside the galaxy can arrive in time.
   const oneWayDurationMs = input.missionId === 'sun-attack'
     ? scaleSunDuration(SUN_RAID_CONFIG.flightOneWayMs, options)
-    : scaleSunDuration(base.oneWayDurationMs, options);
+    : floorSunSupportFlight(scaleSunDuration(base.oneWayDurationMs, options), options);
   const snapshot: SunFlightSnapshot = {
     version: 1,
     raidId: input.raidId,

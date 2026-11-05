@@ -80,10 +80,6 @@ export function RepairWorkshopPortal() {
       planetName={planet.name}
       coords={planet.coords}
       snapshot={snapshot}
-      onBack={() => {
-        setFleetSection('ships');
-        window.setTimeout(() => window.dispatchEvent(new Event(FLEET_ROOT_REQUEST_EVENT)), 0);
-      }}
     />,
     target,
   );

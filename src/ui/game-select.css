@@ -1,0 +1,40 @@
+/* In-game dropdown (GameSelect). One surface for the trigger, one for the list;
+   the list lives in document.body, above every dialog. */
+.game-select{position:relative;display:block;min-width:0}
+.game-select__native{position:absolute;inset:0;width:100%;height:100%;opacity:0;pointer-events:none}
+.game-select__trigger{
+  width:100%;min-height:40px;padding:8px 38px 8px 12px;position:relative;display:flex;align-items:center;
+  border:1px solid var(--ut-border-strong);border-radius:var(--ut-r-input);
+  background:rgba(4,12,16,.72);color:#eefaff;font:inherit;font-weight:700;text-align:left;cursor:pointer;
+  transition:border-color var(--ut-motion-fast) ease,background-color var(--ut-motion-fast) ease;
+}
+.game-select__trigger>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.game-select__trigger>span.is-placeholder{color:var(--ut-label);font-weight:600}
+.game-select__trigger>i{
+  position:absolute;right:14px;top:50%;width:9px;height:9px;margin-top:-7px;
+  border-right:2px solid var(--race-accent,var(--ut-accent));border-bottom:2px solid var(--race-accent,var(--ut-accent));
+  rotate:45deg;transition:rotate var(--ut-motion-base) var(--ut-ease-out),translate var(--ut-motion-base) var(--ut-ease-out);
+}
+.game-select.is-open .game-select__trigger>i{rotate:225deg;translate:0 5px}
+.game-select__trigger:hover:not(:disabled),.game-select.is-open .game-select__trigger{border-color:var(--race-accent,var(--ut-accent));background:rgba(10,24,32,.86)}
+.game-select__trigger:focus-visible{outline:var(--ut-focus);outline-offset:2px}
+.game-select__trigger:disabled{opacity:.5;cursor:not-allowed}
+
+.game-select__list{
+  position:fixed;z-index:10050;overflow-y:auto;padding:6px;display:grid;gap:2px;align-content:start;
+  border-radius:var(--ut-r-card);background:#0b161c;
+  box-shadow:0 0 0 1px var(--ut-border-strong),0 22px 48px rgba(0,0,0,.6);
+  animation:game-select-in var(--ut-motion-base) var(--ut-ease-out) both;
+  transform-origin:top center;
+}
+@keyframes game-select-in{from{opacity:0;transform:translateY(-6px) scale(.98)}}
+.game-select__list>button{
+  width:100%;min-height:36px;padding:7px 10px;display:grid;gap:1px;border:0;border-radius:var(--ut-r-chip);
+  background:transparent;color:#e8faff;font:inherit;font-size:calc(13px * var(--text-scale-control,1));font-weight:600;text-align:left;cursor:pointer;
+}
+.game-select__list>button>span{overflow-wrap:anywhere}
+.game-select__list>button>small{color:var(--ut-label);font-size:calc(11px * var(--text-scale-secondary,1));font-weight:500}
+.game-select__list>button.is-active:not(:disabled){background:rgba(126,200,220,.12)}
+.game-select__list>button[aria-selected="true"]{background:color-mix(in srgb,var(--race-accent,var(--ut-accent)) 22%,transparent);color:#fff}
+.game-select__list>button:disabled{opacity:.48;cursor:not-allowed}
+@media (prefers-reduced-motion:reduce){.game-select__list{animation:none}.game-select__trigger>i{transition:none}}

@@ -271,9 +271,9 @@ async function assertCanonicalShipyard(win) {
   const identity = await win.webContents.executeJavaScript(`(() => {
     const root = document.querySelector('[data-qa-building-role="shipyard"]');
     return {
-      name: root?.querySelector('strong')?.textContent?.trim() || document.querySelector('.shipyard-page-title-v1 h2')?.textContent?.trim() || '',
+      name: root?.getAttribute('data-qa-building-name') || '',
       asset: root?.getAttribute('data-qa-building-asset') || '',
-      image: root?.querySelector('img')?.getAttribute('src') || '',
+      image: root?.querySelector('[data-qa-construction-header] img')?.getAttribute('src') || '',
     };
   })()`);
   if (identity.name !== 'Верфь' || !/building\.aegis\.shipyard(?:-[^/]+)?\.png$/.test(assetName(identity.asset)) || identity.image !== identity.asset) {
@@ -367,16 +367,15 @@ async function verifyViewport(width, height) {
     await closeBuildingDialog(win);
 
     await activateRoute(win, 'fleets', '.fleet-workspace-v1');
-    await assertCanonicalShipyard(win);
     await click(win, '[data-qa-fleet-section="ships"]');
-    await waitFor(win, `document.querySelector('.shipyard-view-v1')`);
-    await waitForResourceImages(win, '.shipyard-view-v1');
-    assertResourceImages('shipyard', await readResourceImages(win, '.shipyard-view-v1'), ['metal', 'minerals', 'gas', 'population']);
+    await waitFor(win, `document.querySelector('.fc-catalog')`);
+    await waitForResourceImages(win, '.fc-catalog');
+    assertResourceImages('shipyard', await readResourceImages(win, '.fc-catalog'), ['metal', 'minerals', 'gas', 'population']);
     await assertCanonicalShipyard(win);
     await click(win, '[data-qa-fleet-section="defense"]');
-    await waitFor(win, `document.querySelector('.shipyard-view-v1')`);
-    await waitForResourceImages(win, '.shipyard-view-v1');
-    assertResourceImages('defense catalog', await readResourceImages(win, '.shipyard-view-v1'), ['metal', 'minerals', 'gas', 'population']);
+    await waitFor(win, `document.querySelector('.fc-catalog')`);
+    await waitForResourceImages(win, '.fc-catalog');
+    assertResourceImages('defense catalog', await readResourceImages(win, '.fc-catalog'), ['metal', 'minerals', 'gas', 'population']);
     await click(win, '[data-qa-fleet-section="repair"]');
     await waitFor(win, `document.querySelector('.repair-workshop-v1')`);
     await waitForResourceImages(win, '.repair-workshop-v1');

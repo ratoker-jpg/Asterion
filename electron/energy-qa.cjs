@@ -170,21 +170,21 @@ async function runViewport(width, height) {
       const row = document.querySelector('[data-qa-fleet-satellites]');
       return {
         text: row?.textContent?.replace(/\\s+/g, ' ').trim() || '',
-        dismantleDisabled: Boolean(row?.querySelector('.fleet-satellite-dismantle-v1')?.disabled),
+        dismantleDisabled: Boolean(row?.querySelector('[data-qa-satellite-dismantle]')?.disabled),
         ordinarySatelliteRow: Boolean(document.querySelector('[data-qa-fleet-ship="solar-satellite"]')),
-        population: document.querySelector('[data-qa-fleet-population]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        satelliteCount: document.querySelector('[data-qa-fleet-population]')?.getAttribute('data-qa-fleet-satellite-count') || '',
         headerPopulation: document.querySelector('[data-qa-resource-chip="population"] strong')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
-        fleetPopulation: Number((document.querySelector('[data-qa-fleet-population]')?.textContent?.match(/ФЛОТ: ([0-9]+(?: [0-9]{3})*)/)?.[1] || '').replace(/ /g, '')),
+        fleetPopulation: Number(document.querySelector('[data-qa-fleet-population]')?.getAttribute('data-qa-fleet-population') ?? NaN),
       };
     })()`);
     const parsePopulation = (value) => Number(value.replace(/[^0-9-]/g, ''));
-    if (!satellite.text.includes('На орбите: 2') || satellite.dismantleDisabled || satellite.ordinarySatelliteRow || !satellite.population.includes('СПУТНИКИ 2') || !Number.isFinite(satellite.fleetPopulation) || parsePopulation(satellite.headerPopulation) !== satellite.fleetPopulation) {
+    if (!satellite.text.includes('На орбите: 2') || satellite.dismantleDisabled || satellite.ordinarySatelliteRow || satellite.satelliteCount !== '2' || !Number.isFinite(satellite.fleetPopulation) || parsePopulation(satellite.headerPopulation) !== satellite.fleetPopulation) {
       throw new Error(`${label}: satellite presence UI contract failed: ${JSON.stringify(satellite)}`);
     }
     await capture(win, directory, 'satellite-presence', width, height);
 
     win.showInactive();
-    await click(win, '.fleet-satellite-dismantle-v1');
+    await click(win, '[data-qa-satellite-dismantle]');
     await waitFor(win, `document.querySelector('[data-qa-satellite-dismantle-confirm]')`);
     const confirmation = await win.webContents.executeJavaScript(`(() => {
       const dialog = document.querySelector('[data-qa-satellite-dismantle-confirm]');
@@ -206,7 +206,7 @@ async function runViewport(width, height) {
     await win.webContents.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); true`);
     await waitFor(win, `!document.querySelector('[data-qa-satellite-dismantle-confirm]')`);
     win.showInactive();
-    await click(win, '.fleet-satellite-dismantle-v1');
+    await click(win, '[data-qa-satellite-dismantle]');
     await waitFor(win, `document.querySelector('[data-qa-satellite-dismantle-confirm]')`);
     await click(win, '[data-qa-satellite-dismantle-confirm-yes]');
     await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}')?.planets?.['helion-01']?.solarSatellites === 0`);

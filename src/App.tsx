@@ -2536,7 +2536,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     else if (nextRoute === 'command') setNotice('Командование: союзный контур загружен.');
     else if (nextRoute === 'reports') setNotice('Отчёты: центр сообщений и боевых журналов загружен.');
     else if (nextRoute === 'planet') setNotice(`${currentPlanetName}: обзор планеты.`);
-    else setNotice(`Экран «${APP_ROUTE_LABELS[nextRoute]}» открыт.`);
+    // Fleets: the notice would only cover the summary bar and says nothing the tabs do not.
+    else if (nextRoute !== 'fleets') setNotice(`Экран «${APP_ROUTE_LABELS[nextRoute]}» открыт.`);
   };
 
   const openSettingsFromPause = () => {

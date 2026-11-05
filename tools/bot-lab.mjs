@@ -495,6 +495,7 @@ export function describeWorld(state, journal = [], tally = null) {
       notDone: Object.entries(reasons).sort((a, b) => b[1] - a[1]),
       meanAbsError: plans.filter((entry) => typeof entry.d?.err === 'number').length
         ? +(sum(plans.filter((entry) => typeof entry.d?.err === 'number').map((entry) => Math.abs(entry.d.err))) / plans.filter((entry) => typeof entry.d?.err === 'number').length).toFixed(3) : null },
+    raidSizing: raidSizing(journal),
     battles: { attacks: attacks.length, attacksWon: attacks.filter((entry) => entry.d?.won === 1).length,
       raidGain: Math.round(sum(attacks.map((entry) => entry.d?.gain ?? 0))), raidLoss: Math.round(sum(attacks.map((entry) => entry.d?.loss ?? 0))),
       defences: defences.length, defenceLoss: Math.round(sum(defences.map((entry) => entry.d?.loss ?? 0))) },
@@ -504,6 +505,25 @@ export function describeWorld(state, journal = [], tally = null) {
     styleChanges: styles.length, styles: Object.entries(styles.reduce((counts, entry) => ({ ...counts, [entry.s]: (counts[entry.s] ?? 0) + 1 }), {})),
     perOwner,
   };
+}
+
+/** How big the raids were (owner report 05.11): the share of the planet's combat fleet sent, and the share of the target's stores carried off. */
+export function raidSizing(journal) {
+  const sum = (list, pick) => list.reduce((total, entry) => total + (Number(pick(entry)) || 0), 0);
+  const sends = journal.filter((entry) => entry.k === 'send' && entry.d?.fl !== undefined);
+  const waves = journal.filter((entry) => entry.k === 'send' && entry.d?.wave);
+  const raids = journal.filter((entry) => entry.k === 'battle' && entry.d?.side === 'attacker' && entry.d?.m === 'attack');
+  const fleetAvailable = sum(sends, (entry) => entry.d.av);
+  const held = sum(raids, (entry) => entry.d.held);
+  const ratio = (a, b) => (b > 0 ? +(a / b).toFixed(3) : 0);
+  const lone = raids.filter((entry) => (entry.d.held ?? 0) > 0);
+  return { sends: sends.length, waves: sum(waves, (entry) => entry.d.wave), waveCargo: Math.round(sum(waves, (entry) => entry.d.cargo)), fleetSent: Math.round(sum(sends, (entry) => entry.d.fl)), fleetAvailable: Math.round(fleetAvailable),
+    fleetShare: ratio(sum(sends, (entry) => entry.d.fl), fleetAvailable),
+    raids: raids.length, raidsWon: raids.filter((entry) => entry.d.won === 1).length, loot: Math.round(sum(raids, (entry) => entry.d.gain)), held: Math.round(held),
+    lootShare: ratio(sum(raids, (entry) => entry.d.gain), held),
+    lootShareWon: ratio(sum(raids.filter((entry) => entry.d.won === 1), (entry) => entry.d.gain), sum(raids.filter((entry) => entry.d.won === 1), (entry) => entry.d.held)),
+    lootShareMedian: lone.length ? +[...lone].map((entry) => entry.d.gain / entry.d.held).sort((a, b) => a - b)[Math.floor(lone.length / 2)].toFixed(3) : 0,
+    broughtValue: Math.round(sum(raids, (entry) => entry.d.sent)), lostValue: Math.round(sum(raids, (entry) => entry.d.loss)) };
 }
 
 /** The problems the summary names, in the owner's words. */

@@ -254,11 +254,11 @@ export function DefenseInfoController() {
       const definition = defenseInfoByName[name];
       if (!definition) return;
 
-      const card = button.closest('.shipyard-card-v1');
+      const card = button.closest('.fc-unit');
       if (!card) return;
 
-      const art = (card.querySelector('.shipyard-art-v1 img') ?? card.querySelector('img')) as HTMLImageElement | null;
-      const role = normalizeText(button.getAttribute('title'));
+      const art = (card.querySelector('.fc-unit__art img') ?? card.querySelector('img')) as HTMLImageElement | null;
+      const role = normalizeText(button.getAttribute('data-role'));
       const { category, stats } = readStats(card);
 
       setOpenInfo({

@@ -1,0 +1,571 @@
+/* ==========================================================================
+   FLEETS: the command screen. Judged against the factory robots screen:
+   one surface per thing, no frames inside frames, radii only from --ut-r-*.
+   Sizes are stage pixels (1920×1080 scaled to the window). Font sizes carry
+   !important because the global typography observer pins text to its category
+   size; the player's text-size settings still multiply them.
+   Loaded last (main.tsx); selectors are new, so nothing legacy applies.
+   ========================================================================== */
+
+html:has(.fleet-workspace-v1){
+  /* Fleets starts right under the navigation row: the section tabs sit beside
+     the header hub, in the band that used to stay empty. */
+  --hud-base-workspace-top:140px;
+  --hud-workspace-top:140px;
+}
+
+.fleet-workspace-v1{
+  --fc-build:var(--ut-amber);
+  --fc-command:var(--race-accent,var(--ut-accent));
+  --fc-surface:linear-gradient(180deg,rgba(14,32,42,.6),rgba(6,16,22,.94));
+  --fc-depth:inset 0 1px 0 rgba(255,255,255,.06),0 20px 50px rgba(0,0,0,.35);
+  --fc-tile:rgba(16,26,31,.68);
+  --fc-well:rgba(2,8,12,.62);
+  display:grid !important;
+  grid-template-columns:minmax(0,1fr) !important;
+  grid-template-rows:auto minmax(0,1fr);
+  gap:10px !important;
+  padding:2px 30px 18px !important;
+  background:none !important;
+  border-radius:0 !important;
+}
+.fleet-workspace-v1 .fleet-main-v1{min-width:0;min-height:0;height:100%}
+html.asterion-long-page .fleet-workspace-v1{grid-template-rows:auto auto;align-content:start}
+html.asterion-long-page:has(.fleet-workspace-v1) body,
+html.asterion-long-page:has(.fleet-workspace-v1) #root{overflow-x:clip !important;overflow-y:visible !important}
+
+.fleet-workspace-v1{
+/* ---------- section tabs: two wings either side of the hub ---------- */
+.fc-wings{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 170px minmax(0,1fr);
+  align-items:stretch;
+  min-height:66px;
+  position:sticky;
+  top:0;
+  z-index:40;
+}
+.fc-wing{
+  position:relative;
+  min-width:0;
+  display:grid;
+  grid-template-rows:auto minmax(0,1fr);
+  gap:1px;
+  padding:3px 8px 5px;
+  border-radius:var(--ut-r-card);
+  background:rgba(8,18,24,.72);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05);
+}
+.fc-wing--build{--fc-tone:var(--fc-build);background:linear-gradient(90deg,color-mix(in srgb,var(--fc-build) 16%,#0a141a),#0a141a 44%)}
+.fc-wing--command{--fc-tone:var(--fc-command);background:linear-gradient(90deg,color-mix(in srgb,var(--fc-command) 18%,#0a141a),#0a141a 44%)}
+.fc-wing>h3{
+  margin:0;
+  padding-left:6px;
+  color:var(--fc-tone);
+  font-size:calc(13px * var(--text-scale-secondary,1)) !important;
+  font-weight:800;
+  line-height:1.2;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+}
+.fc-wing__tabs{min-width:0;display:flex;gap:4px}
+.fc-wing__tabs>button{
+  flex:1 1 0;
+  min-width:0;
+  height:100%;
+  min-height:44px;
+  padding:0 8px 0 5px;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  border:0;
+  border-radius:var(--ut-r-btn);
+  background:transparent;
+  box-shadow:none;
+  color:#b7cfd6;
+  font-weight:700;
+  text-align:left;
+  cursor:pointer;
+  transition:background-color var(--ut-motion-base) var(--ut-ease-out),color var(--ut-motion-base) ease,box-shadow var(--ut-motion-base) var(--ut-ease-out);
+}
+.fc-wing__tabs>button>span{font-size:calc(15px * var(--text-scale-control,1)) !important;line-height:1.1;min-width:0}
+.fc-wing__tabs>button>img{flex:none;width:34px;height:34px;object-fit:contain;transition:scale 420ms var(--ut-spring)}
+.fc-wing__tabs>button:hover{background:color-mix(in srgb,var(--fc-tone) 12%,transparent);color:#fff}
+.fc-wing__tabs>button:hover>img{scale:1.1}
+.fc-wing__tabs>button:focus-visible{outline:var(--ut-focus);outline-offset:1px}
+.fc-wing__tabs>button.is-on{
+  background:linear-gradient(180deg,color-mix(in srgb,var(--fc-tone) 30%,transparent),color-mix(in srgb,var(--fc-tone) 9%,transparent));
+  box-shadow:inset 0 -3px 0 var(--fc-tone);
+  color:#fff;
+}
+
+/* ---------- the send-a-fleet screen ---------- */
+.fleet-root-v2{display:grid !important;grid-template-rows:auto auto minmax(0,1fr) auto;gap:10px !important;height:100%;min-height:0}
+.fleet-root-v2 .fleet-flights-v2{
+  position:relative;z-index:6;
+  display:flex;align-items:center;gap:18px;flex-wrap:wrap;
+  min-height:44px;padding:0 4px;
+  color:#a9cbd3;
+}
+.fleet-root-v2 .fleet-flights-v2__label{color:#a9cbd3 !important;font-size:calc(15px * var(--text-scale-body,1)) !important;font-weight:600 !important;letter-spacing:0 !important}
+.fleet-flights-v2__label b{color:#fff;font-size:inherit !important;font-weight:800}
+.fleet-root-v2 .fleet-flights-v2__slots{align-items:baseline;gap:8px;padding:0;border:0;background:none;position:relative;cursor:help}
+.fleet-root-v2 .fleet-flights-v2__slots small{color:#a9cbd3;font-size:calc(15px * var(--text-scale-body,1)) !important;font-weight:600;letter-spacing:0}
+.fleet-root-v2 .fleet-flights-v2__slots b{font-size:calc(17px * var(--text-scale-table,1)) !important}
+.fleet-root-v2 .fleet-flights-v2__slots em{font-size:calc(14px * var(--text-scale-secondary,1)) !important}
+.fleet-root-v2 .fleet-flights-v2__slots.is-full{background:none}
+.fleet-flights-v2__empty{color:#7f98a0 !important;font-size:calc(15px * var(--text-scale-body,1)) !important}
+.fleet-root-v2 .fleet-flights-v2__count{height:40px;border:0;background:var(--fc-tile);font-size:calc(14px * var(--text-scale-control,1)) !important}
+.fleet-root-v2 .fleet-flights-v2__next small{font-size:calc(13px * var(--text-scale-secondary,1)) !important;letter-spacing:.04em}
+.fleet-root-v2 .fleet-flights-v2__next strong{font-size:calc(15px * var(--text-scale-table,1)) !important}
+.fleet-root-v2 .fleet-flights-v2>button{height:42px;padding:0 16px;font-size:calc(14px * var(--text-scale-control,1)) !important;letter-spacing:.02em;margin-left:0}
+.fleet-root-v2 .fleet-flights-v2.is-sent>div{flex:1;min-width:0}
+.fleet-sent-strip-v1{flex:1;min-width:0}
+.fleet-flights-drop-v2__panel{font-size:calc(14px * var(--text-scale-body,1))}
+/* The expanded flights list takes the place of the ships and the mission (fleet-repeat.css). */
+.fleet-root-v2:has(> .fleet-flights-drop-v2.is-open){grid-template-rows:auto minmax(0,1fr) auto}
+
+.fc-tip{
+  position:absolute;left:0;top:calc(100% + 8px);z-index:60;
+  width:360px;padding:10px 12px;
+  border-radius:var(--ut-r-chip);
+  background:#0b161c;box-shadow:0 0 0 1px var(--ut-border-strong),0 16px 36px rgba(0,0,0,.6);
+  color:#dcecf0;font-size:calc(14px * var(--text-scale-helper,1)) !important;font-weight:500;line-height:1.35;white-space:normal;
+  opacity:0;visibility:hidden;translate:0 4px;pointer-events:none;
+  transition:opacity var(--ut-motion-fast) ease,translate var(--ut-motion-fast) var(--ut-ease-out),visibility var(--ut-motion-fast);
+}
+.fc-tip-host:hover>.fc-tip,.fc-tip-host:focus-visible>.fc-tip{opacity:1;visibility:visible;translate:0 0}
+
+.fc-deck{position:relative;z-index:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 500px;gap:18px}
+
+/* hangar: the ships on this planet */
+.fc-hangar{min-width:0;min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr);gap:8px}
+.fc-hangar__head{display:flex;align-items:center;gap:16px;min-height:38px}
+.fc-hangar h2,.fc-orders>h2{
+  margin:0;color:#f2fdff;font-size:calc(20px * var(--text-scale-section-title,1)) !important;font-weight:800;letter-spacing:.2px;white-space:nowrap;
+}
+.fc-hangar__yard{color:var(--ut-label);font-size:calc(14px * var(--text-scale-secondary,1)) !important;white-space:nowrap}
+.fc-chips{display:flex;gap:4px}
+.fc-chips>button,.fc-hangar__all>button{
+  height:34px;padding:0 12px;border:0;border-radius:var(--ut-r-chip);background:rgba(126,200,220,.07);box-shadow:none;color:#c8dde3;
+  font-size:calc(13px * var(--text-scale-control,1)) !important;font-weight:700;letter-spacing:0;cursor:pointer;white-space:nowrap;
+  transition:background-color var(--ut-motion-base) ease,color var(--ut-motion-base) ease;
+}
+.fc-chips>button:hover,.fc-hangar__all>button:hover:not(:disabled){background:rgba(126,200,220,.16);color:#fff}
+.fc-chips>button.is-on{background:color-mix(in srgb,var(--fc-command) 28%,transparent);color:#fff}
+.fc-hangar__all{margin-left:auto;display:flex;gap:4px}
+.fc-hangar__all>button:disabled{opacity:.45;cursor:default}
+
+.fc-roster{
+  min-width:0;min-height:0;
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-content:start;
+  overflow:hidden auto;padding:2px 4px 2px 2px;
+}
+.fc-ship{
+  position:relative;min-width:0;
+  display:grid;grid-template-columns:88px minmax(0,1fr);grid-template-rows:auto auto auto auto;column-gap:10px;row-gap:1px;
+  padding:8px 12px 6px;
+  border-radius:var(--ut-r-card);
+  background:radial-gradient(circle at 15% 28%,color-mix(in srgb,var(--fc-command) 15%,transparent),transparent 46%),var(--fc-tile);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.04);
+  transition:background-color var(--ut-motion-base) ease,box-shadow var(--ut-motion-base) var(--ut-ease-out),translate var(--ut-motion-base) var(--ut-ease-out);
+}
+.fc-ship:hover{translate:0 -2px}
+.fc-ship.is-picked{
+  background:radial-gradient(circle at 15% 28%,color-mix(in srgb,var(--fc-command) 32%,transparent),transparent 56%),rgba(22,38,52,.92);
+  box-shadow:inset 0 0 0 2px var(--fc-command),0 0 22px color-mix(in srgb,var(--fc-command) 22%,transparent);
+}
+.fc-ship__art{grid-row:1/3;align-self:center;height:52px;display:grid;place-items:center}
+.fc-ship__art img{max-width:88px;max-height:52px;object-fit:contain;filter:drop-shadow(0 8px 12px rgba(0,0,0,.6));transition:scale 520ms var(--ut-spring)}
+.fc-ship:hover .fc-ship__art img,.fc-ship.is-picked .fc-ship__art img{scale:1.08}
+.fc-ship>h3{margin:0;min-width:0;color:#f2fdff;font-size:calc(18px * var(--text-scale-section-title,1)) !important;font-weight:800;line-height:1.15;overflow-wrap:anywhere}
+.fc-ship__have{margin:0;min-width:0;display:flex;align-items:baseline;gap:5px;color:#a9cbd3;font-size:calc(14px * var(--text-scale-secondary,1)) !important;line-height:1.25}
+.fc-ship__have>b{color:#fff;font-size:calc(16px * var(--text-scale-table,1)) !important;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+.fc-ship__pop{margin-left:auto;display:inline-flex;align-items:center;gap:4px;color:#b8d4db;font-size:calc(14px * var(--text-scale-table,1)) !important;font-weight:700}
+.fc-ship__pop img{width:16px;height:16px;align-self:center}
+.fc-ship__amount{grid-column:1/3;display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:5px;margin-top:5px}
+.fc-ship__amount input,.fc-unit__amount input{
+  width:100%;min-width:0;height:38px;padding:0 10px;
+  border:1px solid var(--ut-border-strong);border-radius:var(--ut-r-input);
+  background:var(--fc-well);color:#fff;
+  font-size:calc(16px * var(--text-scale-table,1)) !important;font-weight:800;text-align:right;font-variant-numeric:tabular-nums;
+  appearance:textfield;
+}
+.fc-ship__amount input::-webkit-inner-spin-button,.fc-unit__amount input::-webkit-inner-spin-button{appearance:none;margin:0}
+.fc-ship__amount>button,.fc-unit__amount>button{
+  height:38px;min-width:58px;padding:0 9px;border:1px solid var(--ut-border);border-radius:var(--ut-r-btn);background:rgba(126,200,220,.07);box-shadow:none;color:#dcecf0;
+  font-size:calc(13px * var(--text-scale-control,1)) !important;font-weight:800;letter-spacing:.02em;cursor:pointer;white-space:nowrap;
+  transition:background-color var(--ut-motion-fast) ease,border-color var(--ut-motion-fast) ease,scale var(--ut-motion-press) var(--ut-ease-out);
+}
+.fc-ship__amount>button:hover:not(:disabled),.fc-unit__amount>button:hover:not(:disabled){background:rgba(126,200,220,.18);border-color:var(--ut-border-strong);color:#fff}
+.fc-ship__amount>button:active:not(:disabled),.fc-unit__amount>button:active:not(:disabled){scale:.95}
+.fc-ship__amount>button:disabled,.fc-unit__amount>button:disabled{opacity:.42;cursor:default}
+.fc-ship>.amount-slider{grid-column:1/3;margin-top:1px}
+
+.fc-empty{
+  grid-column:1/-1;align-self:center;justify-self:center;
+  display:grid;justify-items:center;gap:8px;padding:40px 24px;text-align:center;
+}
+.fc-empty img{width:150px;height:150px;object-fit:contain;opacity:.86}
+.fc-empty strong{color:#f2fdff;font-size:calc(20px * var(--text-scale-section-title,1)) !important;font-weight:800}
+.fc-empty span{color:#a9cbd3;font-size:calc(15px * var(--text-scale-body,1)) !important}
+.fc-empty>button{margin-top:10px;height:46px;padding:0 22px;font-size:calc(15px * var(--text-scale-control,1)) !important;font-weight:800;cursor:pointer}
+
+.fc-orbit{display:flex;align-items:center;gap:8px;min-width:0;color:#c8dde3;font-size:calc(14px * var(--text-scale-body,1)) !important}
+.fc-orbit>img{width:34px;height:34px;object-fit:contain}
+.fc-orbit__remove{
+  width:30px;height:30px;padding:0;margin-left:2px;display:grid;place-items:center;border:0;border-radius:var(--ut-r-chip);background:rgba(240,68,94,.12);box-shadow:none;color:#ff9aa8;
+  font-size:calc(17px * var(--text-scale-control,1)) !important;line-height:1;cursor:pointer;transition:background-color var(--ut-motion-fast) ease;
+}
+.fc-orbit__remove:hover:not(:disabled){background:rgba(240,68,94,.34);color:#fff}
+.fc-orbit__remove:disabled{visibility:hidden}
+
+/* orders: what the fleet will do */
+.fc-orders{
+  min-width:0;min-height:0;display:flex;flex-direction:column;gap:10px;
+  padding:14px 16px 16px;overflow:hidden auto;
+  border-radius:var(--ut-r-panel);background:var(--fc-surface);box-shadow:var(--fc-depth);
+}
+.fc-missions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+.fc-missions>button{
+  min-width:0;height:86px;padding:5px 4px 4px;
+  display:grid;grid-template-rows:46px minmax(0,1fr);justify-items:center;align-items:center;gap:2px;
+  border:0;border-radius:var(--ut-r-card);background:rgba(126,200,220,.055);box-shadow:none;color:#c8dde3;text-align:center;cursor:pointer;
+  transition:background-color var(--ut-motion-base) ease,box-shadow var(--ut-motion-base) var(--ut-ease-out),color var(--ut-motion-base) ease;
+}
+.fc-missions>button img{width:44px;height:44px;object-fit:contain;transition:scale 420ms var(--ut-spring)}
+.fc-missions>button span{font-size:calc(14px * var(--text-scale-secondary,1)) !important;font-weight:700;line-height:1.05}
+.fc-missions>button:hover:not(:disabled){background:rgba(126,200,220,.13);color:#fff}
+.fc-missions>button:hover:not(:disabled) img{scale:1.1}
+.fc-missions>button.is-on{
+  background:linear-gradient(180deg,color-mix(in srgb,var(--fc-command) 34%,transparent),color-mix(in srgb,var(--fc-command) 11%,transparent));
+  box-shadow:inset 0 0 0 2px var(--fc-command);color:#fff;
+}
+.fc-missions>button:focus-visible{outline:var(--ut-focus);outline-offset:1px}
+.fc-missions>button:disabled{opacity:.38;filter:saturate(.3);cursor:not-allowed}
+.fc-mission-text{margin:2px 0 0;min-height:44px;color:#cfe4ea;font-size:calc(15px * var(--text-scale-body,1)) !important;line-height:1.3}
+.fc-mission-text strong{color:#fff;font-size:inherit !important;font-weight:800}
+
+.fc-prep{display:grid;gap:10px}
+.fc-prep h3{margin:0;color:var(--ut-label);font-size:calc(13px * var(--text-scale-secondary,1)) !important;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
+.fc-prep__line{display:flex;align-items:center;gap:7px;color:#b8d4db;font-size:calc(14px * var(--text-scale-body,1)) !important}
+.fc-prep__line>h3{margin-right:8px}
+.fc-prep__line>button{
+  width:52px;height:36px;padding:0;border:0;border-radius:var(--ut-r-btn);background:rgba(126,200,220,.08);box-shadow:none;color:#dcecf0;
+  font-size:calc(15px * var(--text-scale-control,1)) !important;font-weight:800;cursor:pointer;transition:background-color var(--ut-motion-base) ease;
+}
+.fc-prep__line>button:hover{background:rgba(126,200,220,.18)}
+.fc-prep__line>button.is-on{background:color-mix(in srgb,var(--fc-command) 42%,transparent);color:#fff;box-shadow:inset 0 0 0 1px var(--fc-command)}
+.fc-prep__line>input{width:90px;height:36px;padding:0 8px;border:1px solid var(--ut-border-strong);border-radius:var(--ut-r-input);background:var(--fc-well);color:#fff;font-size:calc(15px * var(--text-scale-table,1)) !important;font-weight:800;text-align:right}
+.fc-prep__commanders>h3>b{color:#fff;margin-left:4px}
+.fc-prep__commanders>p{margin:3px 0 6px;color:#92b2bb;font-size:calc(13px * var(--text-scale-helper,1)) !important;line-height:1.25}
+.fc-prep__list{display:flex;flex-wrap:wrap;gap:5px}
+.fc-prep__list>label{
+  display:flex;align-items:center;height:32px;padding:0 11px;border-radius:var(--ut-r-chip);background:rgba(126,200,220,.08);color:#dcecf0;cursor:pointer;
+  font-size:calc(13px * var(--text-scale-control,1)) !important;font-weight:700;transition:background-color var(--ut-motion-base) ease;position:relative;
+}
+.fc-prep__list>label:hover{background:rgba(126,200,220,.18)}
+.fc-prep__list>label.is-on{background:color-mix(in srgb,var(--fc-command) 42%,transparent);color:#fff;box-shadow:inset 0 0 0 1px var(--fc-command)}
+.fc-prep__list>label>input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+
+/* dock: the one action */
+.fc-dock{
+  position:relative;z-index:1;
+  display:flex;align-items:center;gap:34px;min-height:84px;padding:10px 12px 10px 26px;
+  border-radius:var(--ut-r-panel);background:var(--fc-surface);box-shadow:var(--fc-depth);
+}
+.fc-dock>div{flex:none;min-width:0}
+.fc-dock>div>b{display:block;color:#f2fdff;font-size:calc(24px * var(--text-scale-table,1)) !important;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums;white-space:nowrap}
+.fc-dock>div>small{display:block;margin-top:3px;color:var(--ut-label);font-size:calc(14px * var(--text-scale-secondary,1)) !important}
+.fc-dock__status{flex:1 1 0;min-width:0;color:#a9cbd3;font-size:calc(15px * var(--text-scale-body,1)) !important;line-height:1.25}
+.fc-dock__go{
+  flex:none;height:60px;min-width:300px;padding:0 30px;
+  font-size:calc(18px * var(--text-scale-control,1)) !important;font-weight:800;letter-spacing:.2px;cursor:pointer;
+  transition:scale var(--ut-motion-press) var(--ut-ease-out),box-shadow var(--ut-motion-base) ease,opacity var(--ut-motion-base) ease;
+}
+.fc-dock__go:active:not(:disabled){scale:.97}
+.fc-dock__go:focus-visible{outline:var(--ut-focus);outline-offset:3px}
+.fc-dock__go:disabled{opacity:.5;cursor:not-allowed}
+
+/* ---------- catalogue: ships, defence, commander ships ---------- */
+.fleet-main-v1:has(> .fc-build){display:block !important;overflow:visible !important;padding-right:0 !important}
+.fc-build{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start;min-height:0}
+.fc-catalog{min-width:0;display:grid;gap:8px;padding:0}
+.fc-head{display:flex;align-items:center;gap:14px;min-height:58px;padding:0 4px}
+.fc-head>img{flex:none;width:58px;height:58px;object-fit:contain;filter:drop-shadow(0 6px 10px rgba(0,0,0,.6))}
+.fc-head__title{min-width:0;flex:1 1 0}
+.fc-head__title>h2{margin:0;color:#f2fdff;font-size:calc(26px * var(--text-scale-page-title,1)) !important;font-weight:800;line-height:1.1;letter-spacing:.2px}
+.fc-head__title>p{margin:3px 0 0;color:#a9cbd3;font-size:calc(14px * var(--text-scale-body,1)) !important;line-height:1.25;overflow-wrap:anywhere}
+.fc-head__warning{flex:0 1 420px;margin:0;padding:8px 12px;border-radius:var(--ut-r-chip);background:rgba(230,173,80,.13);color:#ffd892;font-size:calc(14px * var(--text-scale-body,1)) !important;font-weight:600;line-height:1.25}
+.fc-head__pool{flex:none;display:grid;justify-items:end;text-align:right;line-height:1.15}
+.fc-head__pool>small{color:var(--ut-label);font-size:calc(13px * var(--text-scale-secondary,1)) !important}
+.fc-head__pool>strong{color:#fff;font-size:calc(19px * var(--text-scale-table,1)) !important;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+.fc-head__pool>span{color:#92b2bb;font-size:calc(13px * var(--text-scale-helper,1)) !important}
+
+.fc-unit-list{display:grid;gap:6px}
+.fc-unit{
+  position:relative;min-width:0;
+  display:grid;
+  grid-template-columns:92px minmax(150px,1fr) 136px 290px 156px 266px 118px 30px;
+  align-items:center;column-gap:12px;
+  min-height:84px;padding:5px 8px 5px 6px;
+  border-radius:var(--ut-r-card);
+  background:radial-gradient(circle at 46px 50%,color-mix(in srgb,var(--fc-build) 11%,transparent),transparent 92px),var(--fc-tile);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.04);
+  transition:box-shadow var(--ut-motion-base) var(--ut-ease-out),background-color var(--ut-motion-base) ease;
+}
+.fc-unit:hover,.fc-unit:focus-within{z-index:30}
+.fc-unit:hover{box-shadow:inset 0 0 0 1px var(--ut-border-strong)}
+.fc-unit.is-picked{box-shadow:inset 0 0 0 2px var(--fc-build)}
+.fc-unit.is-locked{background:rgba(16,26,31,.42)}
+.fc-unit.is-locked .fc-unit__art>img{filter:grayscale(.7) brightness(.75)}
+.fc-unit.is-locked .fc-unit__name>h3{color:#c5d6db}
+.fc-unit__art{position:relative;height:72px;display:grid;place-items:center}
+.fc-unit__art>img{max-width:90px;max-height:72px;width:auto;height:auto;object-fit:contain;filter:drop-shadow(0 8px 12px rgba(0,0,0,.6));transition:scale 520ms var(--ut-spring)}
+.fc-unit:hover .fc-unit__art>img{scale:1.08}
+.fc-unit__name{min-width:0}
+.fc-unit__name>h3{margin:0;color:#f2fdff;font-size:calc(17px * var(--text-scale-section-title,1)) !important;font-weight:800;line-height:1.12;overflow-wrap:anywhere}
+.fc-unit__name>small{display:block;margin-top:2px;color:#92b2bb;font-size:calc(13px * var(--text-scale-secondary,1)) !important;line-height:1.15}
+.fc-unit__level{display:block;margin-top:2px;color:#92b2bb;font-size:calc(13px * var(--text-scale-secondary,1)) !important}
+.fc-unit__level>b{color:var(--race-accent,var(--ut-accent));font-weight:800}
+/* Stock: label over number, never side by side. The planner's target line lands here too. */
+.fc-unit__stock{min-width:0;display:grid;gap:1px;line-height:1.1}
+.fc-unit__stock>small{color:var(--ut-label);font-size:calc(13px * var(--text-scale-secondary,1)) !important}
+.fc-unit__stock>strong{color:#8ea6ad;font-size:calc(18px * var(--text-scale-table,1)) !important;font-weight:800;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.fc-unit__stock.has-units>strong{color:#fff}
+.fc-unit__stock>em{color:var(--fc-build);font-size:calc(13px * var(--text-scale-helper,1)) !important;font-style:normal;font-weight:700;overflow-wrap:anywhere}
+.fc-unit__cost{margin:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3px 10px}
+.fc-unit__cost>div{min-width:0;display:flex;align-items:center;gap:6px}
+.fc-unit__cost dt{flex:none;line-height:0}
+.fc-unit__cost dt img{width:22px;height:22px}
+.fc-unit__cost dd{margin:0;min-width:0;color:#eefaff;font-size:calc(15px * var(--text-scale-table,1)) !important;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.fc-unit__cost>.is-short dd{color:#ff9a8a}
+.fc-unit__time{min-width:0;display:grid;line-height:1.15}
+.fc-unit__time>small{color:var(--ut-label);font-size:calc(13px * var(--text-scale-secondary,1)) !important}
+.fc-unit__time>b{color:#fff;font-size:calc(15px * var(--text-scale-table,1)) !important;font-weight:800;font-variant-numeric:tabular-nums}
+.fc-unit__time>span{color:#7f9ca5;font-size:calc(13px * var(--text-scale-helper,1)) !important}
+.fc-unit__amount{min-width:0;display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:4px;align-items:center}
+.fc-unit__amount>small{grid-column:1/-1;color:#92b2bb;font-size:calc(13px * var(--text-scale-helper,1)) !important;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fc-unit__build,.fc-unit__token{
+  width:100%;height:44px;padding:0 6px;
+  font-size:calc(14px * var(--text-scale-control,1)) !important;font-weight:800;cursor:pointer;
+  transition:scale var(--ut-motion-press) var(--ut-ease-out),opacity var(--ut-motion-base) ease,box-shadow var(--ut-motion-base) ease;
+}
+.fc-unit__build:active:not(:disabled),.fc-unit__token:active:not(:disabled){scale:.96}
+.fc-unit__build:disabled,.fc-unit__token:disabled{opacity:.42;cursor:not-allowed}
+.fc-unit__info{
+  width:28px;height:28px;padding:0;display:grid;place-items:center;border:0;border-radius:50%;background:rgba(126,200,220,.1);box-shadow:none;color:#c8dde3;
+  font-size:calc(14px * var(--text-scale-control,1)) !important;font-weight:800;cursor:pointer;transition:background-color var(--ut-motion-fast) ease;
+}
+.fc-unit__info:hover{background:rgba(126,200,220,.26);color:#fff}
+.fc-unit__lock{grid-column:6/8;min-width:0;display:flex;align-items:center;gap:9px}
+.fc-unit__lock-mark{flex:none;width:12px;height:12px;rotate:45deg;border-radius:3px;background:color-mix(in srgb,var(--fc-build) 70%,transparent)}
+.fc-unit__lock>div{min-width:0;display:grid;gap:2px;line-height:1.18}
+.fc-unit__lock strong{color:#ffd892;font-size:calc(14px * var(--text-scale-body,1)) !important;font-weight:700;overflow-wrap:anywhere}
+.fc-unit__lock small{color:#92b2bb;font-size:calc(13px * var(--text-scale-helper,1)) !important;overflow-wrap:anywhere}
+
+/* The old hover card, repositioned: it reads next to the art, above the row below. */
+.fc-unit__art .shipyard-stats-tooltip-v1{top:0;left:calc(100% + 8px);z-index:80;border:0;border-radius:var(--ut-r-card);background:#0b161c;box-shadow:0 0 0 1px var(--ut-border-strong),0 18px 40px rgba(0,0,0,.65)}
+.fc-unit__art:hover .shipyard-stats-tooltip-v1{visibility:visible;opacity:1;transform:translateY(0) scale(1)}
+.fc-unit-list>.fc-unit:nth-last-child(-n+3) .shipyard-stats-tooltip-v1{top:auto;bottom:0}
+
+/* queue beside the catalogue */
+.fleet-production-queue-v1{
+  position:sticky;top:84px;min-width:0;display:grid;gap:8px;max-height:calc(100vh - 100px);margin:0;padding:14px;
+  overflow:hidden auto;border:0;border-radius:var(--ut-r-panel);background:var(--fc-surface);box-shadow:var(--fc-depth);
+}
+.fleet-production-queue-head-v1{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:0;border:0;background:none;color:#f2fdff}
+.fleet-production-queue-head-v1>span{font-size:calc(16px * var(--text-scale-section-title,1)) !important;font-weight:800;letter-spacing:0}
+.fleet-production-queue-head-v1>strong{color:var(--fc-build);font-size:calc(18px * var(--text-scale-table,1)) !important;font-weight:800}
+.fleet-production-queue-empty-v1{display:grid;grid-template-columns:minmax(0,1fr);gap:3px;padding:0;border:0;background:none}
+.fleet-production-queue-empty-v1 strong{color:#dcecf0;font-size:calc(15px * var(--text-scale-body,1)) !important}
+.fleet-production-queue-empty-v1 small{color:#92b2bb;font-size:calc(13px * var(--text-scale-helper,1)) !important}
+.fleet-production-queue-list-v1{display:grid;gap:6px;max-height:none;overflow:visible;padding:0}
+.fleet-production-order-v1{
+  position:relative;display:grid;grid-template-columns:54px minmax(0,1fr) 26px;gap:8px;align-items:center;padding:7px 8px;
+  border:0;border-radius:var(--ut-r-chip);background:var(--fc-tile);clip-path:none;
+}
+.fleet-production-order-art-v1{width:54px;height:46px;display:grid;place-items:center;border:0;background:none}
+.fleet-production-order-art-v1 img{max-width:100%;max-height:100%;object-fit:contain}
+.fleet-production-order-main-v1{min-width:0;display:grid;gap:1px;line-height:1.15}
+.fleet-production-order-main-v1 strong{color:#f2fdff;font-size:calc(14px * var(--text-scale-body,1)) !important;font-weight:800;overflow-wrap:anywhere}
+.fleet-production-order-main-v1 small,.fleet-production-order-main-v1 span{color:#a9cbd3;font-size:calc(13px * var(--text-scale-helper,1)) !important;overflow-wrap:anywhere}
+.fleet-production-order-main-v1 time{color:var(--fc-build);font-size:calc(14px * var(--text-scale-table,1)) !important;font-weight:800;font-variant-numeric:tabular-nums}
+.fleet-production-order-meta-v1 button{width:26px;height:26px;padding:0;border:0;border-radius:var(--ut-r-chip);background:rgba(240,68,94,.12);box-shadow:none;color:#ff9aa8;font-size:calc(15px * var(--text-scale-control,1)) !important;cursor:pointer}
+.fleet-production-order-meta-v1 button:hover{background:rgba(240,68,94,.34);color:#fff}
+.fleet-production-order-progress-v1{position:absolute;left:8px;right:8px;bottom:3px;height:3px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden}
+.fleet-production-order-progress-v1>i{display:block;height:100%;background:var(--fc-build);transform-origin:left center}
+
+/* ---------- repair workshop ---------- */
+.fc-repair{display:grid;gap:10px;padding:0 !important}
+.fc-head--plain{min-height:50px}
+.fc-repair__stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;padding:12px 20px;border-radius:var(--ut-r-panel);background:var(--fc-surface);box-shadow:var(--fc-depth)}
+.fc-repair__stat{min-width:0;display:grid;grid-template-columns:38px minmax(0,1fr);column-gap:10px;line-height:1.15}
+.fc-repair__stat-icon{grid-row:1/4;align-self:center;display:grid;place-items:center;width:38px;height:38px;color:var(--fc-build)}
+.fc-repair__stat-icon img,.fc-repair__stat-icon svg{width:32px;height:32px}
+.fc-repair__stat-icon svg,.fc-unit__token svg{fill:none;stroke:currentColor;stroke-width:1.6}
+.fc-repair__stat>small{color:var(--ut-label);font-size:calc(13px * var(--text-scale-secondary,1)) !important}
+.fc-repair__stat>div{min-width:0;color:#a9cbd3;font-size:calc(13px * var(--text-scale-secondary,1)) !important;overflow-wrap:anywhere}
+.fc-repair__stat strong{color:#fff;font-size:calc(21px * var(--text-scale-table,1)) !important;font-weight:800;font-variant-numeric:tabular-nums}
+.fc-repair__stat>em{color:#92b2bb;font-size:calc(13px * var(--text-scale-helper,1)) !important;font-style:normal;overflow-wrap:anywhere}
+.fc-repair__notice{margin:0;padding:0 4px;color:#cfe4ea;font-size:calc(15px * var(--text-scale-body,1)) !important}
+.fc-repair__group{display:grid;gap:6px}
+.fc-repair__section{display:flex;align-items:baseline;gap:12px;margin:4px 4px 0;color:#f2fdff;font-size:calc(18px * var(--text-scale-section-title,1)) !important;font-weight:800}
+.fc-repair__section>small{color:var(--ut-label);font-size:calc(13px * var(--text-scale-secondary,1)) !important;font-weight:500}
+.fc-unit--repair{grid-template-columns:92px minmax(150px,1fr) 128px 290px 340px 290px 30px;row-gap:3px}
+.fc-unit__amount--stepper{grid-template-columns:38px minmax(0,1fr) 38px auto auto}
+.fc-unit__amount--stepper>button:not(.repair-shortcut-v1){min-width:0;padding:0;font-size:calc(17px * var(--text-scale-control,1)) !important}
+.fc-unit__pay{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.fc-unit__token{display:flex;align-items:center;justify-content:center;gap:5px;border:1px solid var(--ut-border-strong);border-radius:var(--ut-r-btn);background:rgba(126,200,220,.08);box-shadow:none;color:#e8faff;line-height:1.05}
+.fc-unit__token:hover:not(:disabled){background:rgba(126,200,220,.2)}
+.fc-unit__token svg{flex:none;width:18px;height:18px}
+.fc-unit__remove{width:28px;height:28px;padding:0;display:grid;place-items:center;border:0;border-radius:var(--ut-r-chip);background:rgba(240,68,94,.12);box-shadow:none;color:#ff9aa8;font-size:calc(17px * var(--text-scale-control,1)) !important;line-height:1;cursor:pointer}
+.fc-unit__remove:hover{background:rgba(240,68,94,.34);color:#fff}
+.fc-unit__confirm{grid-column:3/-1;grid-row:2;display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:2px;color:#ffd0c9}
+.fc-unit__confirm>strong{font-size:calc(14px * var(--text-scale-body,1)) !important;font-weight:700}
+.fc-unit__confirm>button{height:36px;padding:0 13px;border:1px solid var(--ut-border-strong);border-radius:var(--ut-r-btn);background:rgba(126,200,220,.08);box-shadow:none;color:#e8faff;font-size:calc(13px * var(--text-scale-control,1)) !important;font-weight:800;cursor:pointer}
+.fc-unit__confirm>button.is-danger{border-color:rgba(255,128,112,.5);background:rgba(157,36,42,.48);color:#fff}
+.fc-unit__reason{grid-column:3/-1;grid-row:3;color:#ffc58e;font-size:calc(13px * var(--text-scale-helper,1)) !important;line-height:1.2;text-align:right}
+.fc-repair .repair-help-v1{position:relative !important;inset:auto !important;flex:none;display:block !important}
+.fc-repair .repair-help-v1>button{width:40px;height:40px;border-radius:50%;font-size:calc(15px * var(--text-scale-control,1)) !important;font-weight:800}
+
+/* ---------- combat priority ---------- */
+.combat-priority-view-v1{display:grid;gap:10px;padding:0 !important}
+.combat-priority-save-v1{flex:none;color:var(--ut-positive);font-size:calc(14px * var(--text-scale-secondary,1)) !important;font-weight:700}
+.combat-priority-save-v1.error{color:var(--ut-danger)}
+.combat-priority-grid-v1{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;align-items:start}
+.combat-priority-column-v1{padding:14px 16px;border:0 !important;background:var(--fc-surface) !important;box-shadow:var(--fc-depth) !important;overflow:visible !important}
+.combat-priority-column-head-v1{display:flex !important;align-items:baseline;justify-content:space-between;gap:12px;min-height:0;padding:0 0 8px !important;border:0 !important;background:none !important}
+.combat-priority-column-head-v1 h3{margin:0;color:#f2fdff;font-size:calc(19px * var(--text-scale-section-title,1)) !important;font-weight:800;letter-spacing:0}
+.combat-priority-column-head-v1>b{color:var(--ut-label);font-size:calc(15px * var(--text-scale-table,1)) !important}
+.combat-priority-list-v1{display:grid;gap:5px;margin:0;padding:0;list-style:none}
+.combat-priority-list-v1>li{
+  display:grid !important;grid-template-columns:28px 30px 54px minmax(0,1fr) 30px !important;align-items:center;gap:8px;min-height:47px !important;padding:2px 8px 2px 4px !important;
+  border:0 !important;border-radius:var(--ut-r-chip) !important;background:var(--fc-tile) !important;cursor:grab;
+  transition:background-color var(--ut-motion-base) ease,opacity var(--ut-motion-base) ease;
+}
+.combat-priority-list-v1>li:hover{background:rgba(26,42,50,.9);z-index:20;position:relative}
+.combat-priority-list-v1>li.dragging{opacity:.45}
+.combat-priority-handle-v1{width:28px;height:36px;padding:0;border:0;background:none;box-shadow:none;color:#7f9ca5;cursor:grab}
+.combat-priority-number-v1{color:#fff;font-size:calc(16px * var(--text-scale-table,1)) !important;font-weight:800;text-align:center}
+.combat-priority-art-v1{width:54px;height:42px;display:grid;place-items:center;border:0;background:none}
+.combat-priority-art-v1 img{max-width:100%;max-height:100%;object-fit:contain}
+.combat-priority-name-v1{min-width:0;display:grid;line-height:1.15}
+.combat-priority-name-v1 strong{color:#f2fdff;font-size:calc(15px * var(--text-scale-body,1)) !important;font-weight:800;overflow-wrap:anywhere}
+.combat-priority-name-v1 small{color:#92b2bb;font-size:calc(13px * var(--text-scale-secondary,1)) !important;overflow-wrap:anywhere}
+.combat-priority-info-v1{width:28px;height:28px;padding:0;border:0;border-radius:50%;background:rgba(126,200,220,.1);box-shadow:none;color:#c8dde3;font-size:calc(14px * var(--text-scale-control,1)) !important;font-weight:800}
+
+/* ---------- motion: entrances (see motion.css for the shared curves) ---------- */
+@media (prefers-reduced-motion:no-preference){
+  .fc-wing{animation:fc-wing-in var(--ut-motion-screen) var(--ut-spring) backwards}
+  .fc-wing--command{animation-delay:60ms}
+  .fc-ship,.fc-missions>button,.fc-unit{animation:fc-rise var(--ut-motion-item) var(--ut-ease-expo) backwards;animation-delay:calc(var(--fc-i,0) * var(--ut-stagger))}
+  .fc-ship:nth-child(2),.fc-missions>button:nth-child(2),.fc-unit:nth-child(2){--fc-i:1}
+  .fc-ship:nth-child(3),.fc-missions>button:nth-child(3),.fc-unit:nth-child(3){--fc-i:2}
+  .fc-ship:nth-child(4),.fc-missions>button:nth-child(4),.fc-unit:nth-child(4){--fc-i:3}
+  .fc-ship:nth-child(5),.fc-missions>button:nth-child(5),.fc-unit:nth-child(5){--fc-i:4}
+  .fc-ship:nth-child(6),.fc-missions>button:nth-child(6),.fc-unit:nth-child(6){--fc-i:5}
+  .fc-ship:nth-child(n+7),.fc-missions>button:nth-child(n+7),.fc-unit:nth-child(n+7){--fc-i:6}
+  .fc-dock{animation:fc-rise var(--ut-motion-screen) var(--ut-spring) 120ms backwards}
+}
+}
+
+/* ---------- the flight plan: where from and where to, then the fleet and the calculation, then the cargo ---------- */
+.flight-briefing-v2{--fp-tile:rgba(126,200,220,.06);border-radius:var(--ut-r-panel) !important}
+.flight-briefing-v2 .flight-timeline-head{display:grid !important;grid-template-columns:48px minmax(0,1fr) auto;align-items:center;gap:12px;padding:0 0 10px !important;border:0 !important;background:none !important;min-height:0 !important}
+.flight-briefing-v2 .flight-timeline-head>img{width:48px;height:48px;object-fit:contain}
+.flight-briefing-v2 .flight-timeline-head h3{margin:0;font-size:18px !important;line-height:1.15}
+.flight-briefing-v2 .flight-timeline-head p{display:block !important;margin:1px 0 0;color:#a9cbd3;font-size:12px !important;line-height:1.25}
+.resource-building-action-confirm.flight-timeline-modal.flight-briefing-v2 .flight-timeline-body{
+  display:grid !important;grid-template-columns:minmax(280px,30%) minmax(0,1fr) !important;gap:22px !important;
+  min-height:0;padding:2px 0 10px !important;border:0 !important;
+}
+.flight-briefing-v2 .flight-briefing-v2__left{overflow:hidden auto !important;padding-right:4px;border:0 !important}
+.flight-briefing-v2 .flight-briefing-v2__left>.flight-timeline-steps{flex:none !important;overflow:visible !important;border:0 !important;padding:0 !important}
+/* No cargo: the fleet and the calculation share the room. Cargo: they stack and the cargo takes the second column. */
+.flight-briefing-v2 .flight-briefing-v2__right{
+  display:grid !important;grid-template-columns:minmax(0,1fr) minmax(0,1fr) !important;grid-template-rows:auto minmax(0,1fr);
+  gap:12px 22px !important;align-content:start;overflow:hidden auto !important;padding-left:0 !important;border:0 !important;
+}
+.flight-briefing-v2 .flight-briefing-v2__right>.flight-plan-fleet{grid-column:1;grid-row:1}
+.flight-briefing-v2 .flight-briefing-v2__right>.flight-timeline-summary{grid-column:2;grid-row:1 / span 2}
+.flight-briefing-v2 .flight-briefing-v2__right:has(>.flight-timeline-cargo)>.flight-timeline-summary{grid-column:1;grid-row:2}
+.flight-briefing-v2 .flight-briefing-v2__right>.flight-timeline-cargo{grid-column:2;grid-row:1 / span 2;padding:0 !important}
+.flight-plan-fleet>small,.flight-briefing-v2 .flight-timeline-summary-head>small{color:var(--ut-label);font-size:12px !important;font-weight:800;letter-spacing:.08em}
+.flight-briefing-v2 .flight-timeline-summary-head{border:0 !important;padding:0 0 4px !important;margin:0 !important}
+.flight-briefing-v2 .flight-timeline-summary-head>span{font-size:11px !important;letter-spacing:.02em}
+.flight-plan-fleet .flight-timeline-ship-list{display:grid !important;grid-template-columns:repeat(auto-fill,minmax(190px,1fr)) !important;gap:5px !important;margin-top:5px;border:0 !important;background:none !important;padding:0 !important}
+.flight-plan-fleet .flight-timeline-ship-card div small{white-space:normal !important;line-height:1.15}
+.flight-plan-fleet .flight-composition-v3__total{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 12px;padding:3px 2px 0;border:0 !important;background:none !important}
+.flight-briefing-v2 .flight-timeline-step,
+.flight-briefing-v2 .flight-timeline-summary,
+.flight-briefing-v2 .flight-timeline-cargo,
+.flight-briefing-v2 .flight-timeline-metrics>div,
+.flight-briefing-v2 .flight-timeline-eta-card,
+.flight-briefing-v2 .flight-composition-v3__row,
+.flight-briefing-v2 .flight-timeline-cargo-field,
+.flight-briefing-v2 .flight-timeline-cargo-head>span,
+.flight-briefing-v2 .flight-briefing-v2__axis,
+.flight-briefing-v2 .flight-cargo-sliders-v2 .amount-slider,
+.flight-briefing-v2 .flight-timeline-step>span,
+.flight-briefing-v2 .flight-timeline-notes p{
+  border:0 !important;
+  box-shadow:none !important;
+  clip-path:none !important;
+}
+.flight-briefing-v2 .flight-timeline-step,
+.flight-briefing-v2 .flight-timeline-summary,
+.flight-briefing-v2 .flight-timeline-cargo,
+.flight-briefing-v2 .flight-timeline-cargo-field,
+.flight-briefing-v2 .flight-timeline-cargo-head>span,
+.flight-briefing-v2 .flight-briefing-v2__axis,
+.flight-briefing-v2 .flight-cargo-sliders-v2 .amount-slider,
+.flight-briefing-v2 .flight-timeline-step>span{background:transparent !important}
+.flight-briefing-v2 .flight-timeline-step{padding:0 0 8px !important;margin:0 !important}
+.flight-briefing-v2 .flight-timeline-step-connector{display:none !important}
+.flight-briefing-v2 .flight-briefing-v2__axis{height:58px;margin:0 0 4px}
+.flight-briefing-v2 .flight-timeline-metrics>div,
+.flight-briefing-v2 .flight-timeline-eta-card,
+.flight-briefing-v2 .flight-composition-v3__row{background:var(--fp-tile) !important;border-radius:var(--ut-r-chip) !important}
+.flight-briefing-v2 .flight-timeline-notes p{background:none !important;padding:2px 0 !important;margin:0 !important}
+.flight-briefing-v2 .flight-cargo-sliders-v2 .amount-slider{min-width:0;width:100%}
+.flight-briefing-v2 .flight-timeline-actions{display:flex !important;align-items:center;justify-content:flex-end;gap:10px;margin:0 !important;padding:8px 0 0 !important;border:0 !important}
+.flight-briefing-v2 .flight-timeline-actions>.flight-timeline-meta{flex:1;min-width:0;margin:0 !important;padding:0 !important;border:0 !important;color:#a9cbd3;font-size:12px !important;letter-spacing:.02em;text-align:left}
+.flight-briefing-v2 .flight-timeline-actions>button{flex:none}
+.flight-briefing-v2 .game-select__trigger{font-size:calc(13px * var(--text-scale-control,1)) !important}
+.resource-building-action-confirm.flight-timeline-modal.flight-briefing-v2 .flight-timeline-head>div{background:none !important;border:0 !important;box-shadow:none !important;padding:0 !important;min-height:0 !important}
+.resource-building-action-confirm.flight-timeline-modal.flight-briefing-v2 .flight-timeline-head::before,.resource-building-action-confirm.flight-timeline-modal.flight-briefing-v2 .flight-timeline-head::after{display:none !important}
+.resource-building-action-confirm.flight-timeline-modal.flight-briefing-v2 .flight-timeline-cargo-head>span,.resource-building-action-confirm.flight-timeline-modal.flight-briefing-v2 .flight-timeline-cargo-head{border:0 !important;background:none !important;box-shadow:none !important}
+.resource-building-action-confirm.flight-timeline-modal.flight-briefing-v2 .flight-timeline-metrics{grid-template-columns:repeat(auto-fit,minmax(150px,1fr)) !important}
+.resource-building-action-confirm.flight-timeline-modal.flight-briefing-v2 .flight-timeline-metrics small{letter-spacing:.02em}
+.resource-building-action-confirm.flight-timeline-modal.flight-briefing-v2 .flight-timeline-target-status{flex-wrap:wrap;gap:4px 6px}
+.resource-building-action-confirm.flight-timeline-modal.flight-briefing-v2 .flight-timeline-target-status>span{flex:1 1 100%}
+/* A window under 1500 wide: one line per resource and its slider below, so all four stay in view. */
+@media (max-width:1500px){
+  .resource-building-action-confirm.flight-timeline-modal.flight-briefing-v2 .flight-timeline-body{gap:16px !important}
+  .flight-briefing-v2 .flight-briefing-v2__right{gap:8px 16px !important}
+  .flight-briefing-v2 .flight-timeline-metrics{grid-template-columns:repeat(2,minmax(0,1fr)) !important;gap:4px !important}
+  .flight-briefing-v2 .flight-timeline-metrics>div{padding:3px 8px !important;min-height:0 !important}
+  .flight-briefing-v2 .flight-timeline-eta{gap:4px !important;margin:4px 0 !important}
+  .flight-briefing-v2 .flight-timeline-eta-card{padding:4px 8px !important}
+  .flight-briefing-v2 .flight-cargo-sliders-v2{gap:6px !important;margin-top:6px !important}
+  .flight-briefing-v2 .flight-cargo-sliders-v2 .flight-timeline-cargo-field{display:grid !important;grid-template-columns:auto minmax(0,1fr) !important;gap:1px 8px !important;padding:0 !important}
+  .flight-briefing-v2 .flight-cargo-sliders-v2 .flight-timeline-cargo-field>.amount-slider{grid-column:1/-1;padding:0 !important;gap:4px !important}
+  .flight-briefing-v2 .flight-cargo-sliders-v2 .amount-slider>button:first-child,
+  .flight-briefing-v2 .flight-cargo-sliders-v2 .amount-slider__scale{display:none !important}
+  .flight-briefing-v2 .flight-cargo-sliders-v2 .amount-slider{grid-template-columns:30px minmax(0,1fr) 30px auto !important;grid-template-rows:auto !important}
+  .flight-briefing-v2 .flight-briefing-v2__axis{display:none !important}
+  .flight-plan-fleet .flight-timeline-ship-card div small{display:none !important}
+  .flight-plan-fleet .flight-timeline-ship-card{min-height:0 !important;height:auto !important;padding:2px 6px !important;grid-template-columns:30px minmax(0,1fr) auto !important;gap:5px !important}
+  .flight-plan-fleet .flight-timeline-ship-card img{width:30px !important;height:26px !important}
+  .flight-plan-fleet .flight-timeline-ship-list{grid-template-columns:repeat(auto-fill,minmax(170px,1fr)) !important;gap:4px !important}
+  .resource-building-action-confirm.flight-timeline-modal.flight-briefing-v2 .flight-timeline-metrics{grid-template-columns:repeat(2,minmax(0,1fr)) !important}
+  .flight-briefing-v2 .flight-timeline-cargo-input{display:flex !important;align-items:center;justify-content:flex-end;gap:6px}
+  .flight-briefing-v2 .flight-timeline-cargo-input input{order:2;width:96px !important;height:26px !important}
+  .flight-briefing-v2 .flight-timeline-cargo-input em{order:1;white-space:nowrap}
+  .flight-briefing-v2 .flight-timeline-cargo-head>span{padding:2px 0 !important}
+  .flight-briefing-v2 .flight-timeline-cargo>p{margin:4px 0 0 !important}
+}
+@keyframes fc-wing-in{from{opacity:0;translate:0 -10px}}
+@keyframes fc-rise{from{opacity:0;translate:0 12px}}
+.npc-catchup-active .fleet-workspace-v1 :is(.fc-ship,.fc-unit,.fc-missions>button,.fc-wing,.fc-dock){animation:none}

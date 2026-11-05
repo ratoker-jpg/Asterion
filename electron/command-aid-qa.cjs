@@ -204,7 +204,7 @@ async function testModeScenario(win, label) {
   await capture(win, label, 'requests-incoming');
   await click(win, '[data-qa-request-help]');
   await waitFor(win, `document.querySelector('.fleet-workspace-v1')`);
-  await waitFor(win, `document.querySelector('#fleet-mission')?.value === 'aid'`);
+  await waitFor(win, `document.querySelector('[data-qa-mission-current]')?.getAttribute('data-qa-mission-current') === 'aid'`);
   await setField(win, '[data-qa-fleet-ship="mega-transporter"] input[type="number"]', '3');
   await click(win, '[data-qa-flight-preview-open]');
   await waitFor(win, `document.querySelector('[data-qa-aid-request-summary]')`);
@@ -242,7 +242,7 @@ async function testModeScenario(win, label) {
   await click(win, '[data-qa-test-ira-request]');
   await waitFor(win, `document.querySelectorAll('[data-qa-incoming-requests] > li').length === 1`);
   await openRoute(win, 'fleets', '.fleet-workspace-v1');
-  await setField(win, '#fleet-mission', 'aid');
+  await click(win, '[data-qa-mission-id="aid"]');
   await setField(win, '[data-qa-fleet-ship="mega-transporter"] input[type="number"]', '2');
   await click(win, '[data-qa-flight-preview-open]');
   await waitFor(win, `document.querySelector('[data-qa-aid-request-select]')`);

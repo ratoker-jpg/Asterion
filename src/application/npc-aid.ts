@@ -1,4 +1,5 @@
 import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
+import { applyRealFlightFloor } from '../domain/flights/speed.ts';
 import { npcHelpWeight, npcRegard, recordNpcHelp } from './npc-relations.ts';
 import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
 import type { ShipId } from '../domain/combat/ids.ts';
@@ -273,7 +274,7 @@ export function dispatchNpcAid(
       resource: request.resource,
     },
   });
-  const duration = Math.max(1, Math.round(dispatched.flight.oneWayDurationMs / timeScale));
+  const duration = applyRealFlightFloor(Math.max(1, Math.round(dispatched.flight.oneWayDurationMs / timeScale)));
   const flight: FlightRecord = { ...dispatched.flight, oneWayDurationMs: duration, arrivalAt: at + duration };
   const fuel = flight.gasCost;
   if (source.resources.gas < fuel + (request.resource === 'gas' ? fresh.units : 0)) return failure(state, 'Source lacks gas for cargo and outbound fuel.');

@@ -198,7 +198,7 @@ async function runViewport(width, height) {
     const setValue = (selector, proto, value, type) => js(win, `(() => { const e = document.querySelector(${JSON.stringify(selector)}); Object.getOwnPropertyDescriptor(${proto}.prototype, 'value').set.call(e, ${JSON.stringify(String(value))}); e.dispatchEvent(new Event(${JSON.stringify(type)}, { bubbles: true })); })()`);
     await click('[data-qa-route="fleets"]');
     await waitFor(win, `document.querySelector('[data-qa-fleet-root]')`);
-    await setValue('#fleet-mission', 'HTMLSelectElement', 'deployment', 'change');
+    await click('[data-qa-mission-id="deployment"]');
     await sleep(150);
     await setValue('[data-qa-fleet-ship="transporter"] input[type="number"]', 'HTMLInputElement', 2, 'input');
     await click('[data-qa-flight-preview-open]');
