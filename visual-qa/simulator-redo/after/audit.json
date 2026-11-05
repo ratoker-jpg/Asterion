@@ -1,0 +1,109 @@
+{
+ "problems": [],
+ "notes": [
+  {
+   "label": "1280x720",
+   "scene": "usual",
+   "winner": "defender",
+   "rounds": "Раунд 4 из 8"
+  },
+  {
+   "label": "1280x720",
+   "scene": "all-aegis",
+   "winner": "defender",
+   "rounds": "Раунд 4 из 8"
+  },
+  {
+   "label": "1280x720",
+   "scene": "all-synod",
+   "winner": "defender",
+   "rounds": "Раунд 5 из 8"
+  },
+  {
+   "label": "1280x720",
+   "scene": "all-veyra",
+   "winner": "defender",
+   "rounds": "Раунд 4 из 8"
+  },
+  {
+   "label": "1280x720",
+   "scene": "long",
+   "winner": "draw",
+   "rounds": "Раунд 12 из 12"
+  },
+  {
+   "label": "1280x720",
+   "scene": "draw-try-cruiser",
+   "winner": "draw",
+   "rounds": "Раунд 5 из 5"
+  },
+  {
+   "label": "1280x720",
+   "scene": "keyboard",
+   "keyboard": "seen,seen,seen,seen,seen,seen,seen,seen,seen,seen,seen,seen,seen,seen"
+  },
+  {
+   "label": "1280x720",
+   "scene": "spy-report-offered",
+   "hasReport": true
+  },
+  {
+   "label": "1280x720",
+   "scene": "spy-report",
+   "winner": "attacker",
+   "rounds": "Раунд 1 из 8"
+  },
+  {
+   "label": "1920x1080",
+   "scene": "usual",
+   "winner": "defender",
+   "rounds": "Раунд 4 из 8"
+  },
+  {
+   "label": "1920x1080",
+   "scene": "all-aegis",
+   "winner": "defender",
+   "rounds": "Раунд 4 из 8"
+  },
+  {
+   "label": "1920x1080",
+   "scene": "all-synod",
+   "winner": "defender",
+   "rounds": "Раунд 5 из 8"
+  },
+  {
+   "label": "1920x1080",
+   "scene": "all-veyra",
+   "winner": "defender",
+   "rounds": "Раунд 4 из 8"
+  },
+  {
+   "label": "1920x1080",
+   "scene": "long",
+   "winner": "draw",
+   "rounds": "Раунд 12 из 12"
+  },
+  {
+   "label": "1920x1080",
+   "scene": "draw-try-cruiser",
+   "winner": "draw",
+   "rounds": "Раунд 5 из 5"
+  },
+  {
+   "label": "1920x1080",
+   "scene": "keyboard",
+   "keyboard": "seen,seen,seen,seen,seen,seen,seen,seen,seen,seen,seen,seen,seen,seen"
+  },
+  {
+   "label": "1920x1080",
+   "scene": "spy-report-offered",
+   "hasReport": true
+  },
+  {
+   "label": "1920x1080",
+   "scene": "spy-report",
+   "winner": "attacker",
+   "rounds": "Раунд 1 из 8"
+  }
+ ]
+}
