@@ -2,7 +2,7 @@ import { createDefaultCombatTechnologies, COMBAT_TECHNOLOGIES, normalizeCombatTe
 import { createEmptySimulatorScenario, type CombatStackInput, type SimulatorScenario } from '../domain/combat/simulator.ts';
 import { getOwnerShipUpgradeLevels, type SaveState } from './contracts.ts';
 import type { SpyReportSnapshot } from '../domain/espionage/types.ts';
-import type { CombatEntityId } from '../domain/combat/ids.ts';
+import { SOLAR_SATELLITE_ID, type CombatEntityId } from '../domain/combat/ids.ts';
 
 export const SIMULATOR_HANDOFF_REQUEST_EVENT = 'asterion:simulator-handoff-request';
 
@@ -82,6 +82,32 @@ export function createSimulatorScenarioFromSpyReport(state: SaveState, report: S
       defenses: stacksFromRecord(report.defense ?? {}),
     },
   };
+}
+
+/** One side of the simulator filled from a planet's real fleet, with the player's levels and science. */
+export function simulatorSideFromPlanet(state: SaveState, planetId: string, withDefense: boolean) {
+  const planet = state.planets[planetId];
+  const levels = getOwnerShipUpgradeLevels(state);
+  // Satellites never fly: only the defending side may stand with them (SAT-01).
+  const ships = stacksFromRecord(planet?.fleet.ships ?? {}, withDefense ? [] : [SOLAR_SATELLITE_ID], levels);
+  const commanders = stacksFromRecord(planet?.fleet.commanders ?? {}, [], levels);
+  return {
+    factionId: state.profile.factionId,
+    technologies: technologiesFromScience(state),
+    ships,
+    commanders,
+    commander: commanders[0] ?? null,
+    activeCommanderId: handoffActiveCommander(commanders),
+    defenses: withDefense ? stacksFromRecord(planet?.defense.defenses ?? {}) : [],
+  };
+}
+
+/** Full spy reports of this player, newest first: the ones that know what stands at the target. */
+export function simulatorSpyReports(state: SaveState): SpyReportSnapshot[] {
+  return (state.espionage?.reports ?? [])
+    .filter((report) => (!report.ownerId || report.ownerId === state.profile.playerId) && Boolean(report.fleet || report.defense))
+    .sort((left, right) => right.createdAt - left.createdAt)
+    .slice(0, 30);
 }
 
 let pendingScenario: SimulatorScenario | null = null;

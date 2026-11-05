@@ -635,7 +635,7 @@ async function exerciseSimulatorModalFlow(win) {
   if (!opened) throw new Error('Simulator fleet section not found');
   await waitFor(win, `document.querySelector('.simulator-view-v1')`);
   const attackerAdded = await win.webContents.executeJavaScript(`(() => {
-    const button = document.querySelector('#sim-attacker-ships [data-qa-simulator-unit="scout"] button[aria-label^="Увеличить"]');
+    const button = document.querySelector('#sim-attacker-ships [data-qa-simulator-add="scout"]');
     if (!button) return false;
     button.click();
     return true;
@@ -643,7 +643,7 @@ async function exerciseSimulatorModalFlow(win) {
   if (!attackerAdded) throw new Error('Simulator attacker unit control not available');
   await settle(win);
   const defenderAdded = await win.webContents.executeJavaScript(`(() => {
-    const button = document.querySelector('#sim-defender-ships [data-qa-simulator-unit="scout"] button[aria-label^="Увеличить"]');
+    const button = document.querySelector('#sim-defender-ships [data-qa-simulator-add="scout"]');
     if (!button) return false;
     button.click();
     return true;
@@ -660,9 +660,7 @@ async function exerciseSimulatorModalFlow(win) {
   if (!run) {
     const state = await win.webContents.executeJavaScript(`(() => ({
       disabled: Boolean(document.querySelector('.sim-run-v1')?.disabled),
-      notice: document.querySelector('.sim-validation-v1')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
-      attackerUnits: document.querySelector('#sim-attacker-ships')?.textContent?.match(/Выбрано: [^\\n]+/)?.[0] || '',
-      defenderUnits: document.querySelector('#sim-defender-ships')?.textContent?.match(/Выбрано: [^\\n]+/)?.[0] || '',
+      notice: document.querySelector('.simx-core')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
       attackerButtons: Array.from(document.querySelectorAll('#sim-attacker-ships button[aria-label^="Увеличить"]')).slice(0, 2).map((button) => ({ disabled: button.disabled, label: button.getAttribute('aria-label') || '' })),
       defenderButtons: Array.from(document.querySelectorAll('#sim-defender-ships button[aria-label^="Увеличить"]')).slice(0, 2).map((button) => ({ disabled: button.disabled, label: button.getAttribute('aria-label') || '' })),
       attackerInputs: Array.from(document.querySelectorAll('#sim-attacker-ships input[type="number"]')).slice(0, 2).map((input) => ({ value: input.value, disabled: input.disabled })),
@@ -670,6 +668,9 @@ async function exerciseSimulatorModalFlow(win) {
     }))()`);
     throw new Error(`Simulator run button did not become enabled: ${JSON.stringify(state)}`);
   }
+  await waitFor(win, `document.querySelector('[data-qa-sim-result]')`);
+  // The outcome stands on the screen; the round-by-round report opens on request.
+  await win.webContents.executeJavaScript(`document.querySelector('[data-qa-sim-details]')?.click()`);
   await waitFor(win, `document.querySelector('[role="dialog"][data-qa-battle-report-modal][data-qa-battle-report-source="simulation"]')`);
   await settle(win);
 
@@ -683,10 +684,10 @@ async function exerciseSimulatorModalFlow(win) {
       hasGenericAttacker: text.includes('Атакующий'),
       hasGenericDefender: text.includes('Защитник'),
       hasTechnicalLabels: /CONFIRMED|INFERRED|NOT CALIBRATED|REPLAYABLE|SNAPSHOT|CALIBRATION|PRODUCTION|SHARED|INDEPENDENT|ПРОФИЛЬ И ВОСПРОИЗВОДИМОСТЬ/i.test(text),
-      hasInlineResult: Boolean(document.querySelector('.sim-result-v1')),
+      hasInlineResult: Boolean(document.querySelector('[data-qa-sim-result]')),
     };
   })()`);
-  if (!simulationModal.present || !simulationModal.hasVisualReport || simulationModal.hasInitialSnapshot || simulationModal.hasProvenance || simulationModal.hasRoundSummary || simulationModal.hasRoundLog || !simulationModal.roundAnalysisValid || simulationModal.roundCount < 1 || simulationModal.internalHorizontalOverflow || simulationPresentation.source !== 'simulation' || simulationPresentation.hasSaveButton || simulationPresentation.hasTechnicalLabels || !simulationPresentation.hasGenericAttacker || !simulationPresentation.hasGenericDefender || simulationPresentation.hasInlineResult) {
+  if (!simulationModal.present || !simulationModal.hasVisualReport || simulationModal.hasInitialSnapshot || simulationModal.hasProvenance || simulationModal.hasRoundSummary || simulationModal.hasRoundLog || !simulationModal.roundAnalysisValid || simulationModal.roundCount < 1 || simulationModal.internalHorizontalOverflow || simulationPresentation.source !== 'simulation' || simulationPresentation.hasSaveButton || simulationPresentation.hasTechnicalLabels || !simulationPresentation.hasGenericAttacker || !simulationPresentation.hasGenericDefender || !simulationPresentation.hasInlineResult) {
     throw new Error(`Simulator modal contract failed: ${JSON.stringify({ simulationModal, simulationPresentation })}`);
   }
 
@@ -711,12 +712,12 @@ async function exerciseSimulatorModalFlow(win) {
     return {
       reportIds: state.combat?.reports?.map((report) => report.id) || [],
       savedReportIds: state.combat?.savedReportIds || [],
-      hasInlineResult: Boolean(document.querySelector('.sim-result-v1')),
+      hasInlineResult: Boolean(document.querySelector('[data-qa-sim-result]')),
       attackerSelected: attackerInputs.some((input) => Number(input.value) > 0),
       defenderSelected: defenderInputs.some((input) => Number(input.value) > 0),
     };
   })()`);
-  if (JSON.stringify(beforeCloseState) !== JSON.stringify({ reportIds: afterCloseState.reportIds, savedReportIds: afterCloseState.savedReportIds }) || afterCloseState.hasInlineResult || !afterCloseState.attackerSelected || !afterCloseState.defenderSelected) {
+  if (JSON.stringify(beforeCloseState) !== JSON.stringify({ reportIds: afterCloseState.reportIds, savedReportIds: afterCloseState.savedReportIds }) || !afterCloseState.hasInlineResult || !afterCloseState.attackerSelected || !afterCloseState.defenderSelected) {
     throw new Error(`Simulator isolation contract failed: ${JSON.stringify({ beforeCloseState, afterCloseState })}`);
   }
 
@@ -727,6 +728,8 @@ async function exerciseSimulatorModalFlow(win) {
     return true;
   })()`);
   if (!rerun) throw new Error('Simulator rerun button not available after closing result');
+  await waitFor(win, `document.querySelector('[data-qa-sim-details]')`);
+  await win.webContents.executeJavaScript(`document.querySelector('[data-qa-sim-details]')?.click()`);
   await waitFor(win, `document.querySelector('[role="dialog"][data-qa-battle-report-source="simulation"]')`);
   await settle(win);
   await win.webContents.executeJavaScript(`document.querySelector('.battle-report-modal-close-v1')?.click()`);

@@ -1725,7 +1725,7 @@ function FleetWorkspace({
         ) : selectedSection === 'battles' ? (
           <BattleReportsView planetName={planetName} coords={coords} onBack={openFleetRoot} />
         ) : selectedSection === 'simulator' ? (
-          <SimulatorView planetName={planetName} coords={coords} onBack={openFleetRoot} initialScenario={simulatorHandoff} />
+          <SimulatorView planetId={planetId} planetName={planetName} coords={coords} saveState={saveState} onBack={openFleetRoot} initialScenario={simulatorHandoff} />
         ) : selectedSection === 'repair' ? (
           // The Repair Workshop is portaled into this container by RepairWorkshopPortal;
           // the fleet root must not render underneath it.

@@ -1,5 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject, type SetStateAction } from 'react';
 
+import { calculateAttackDebris, calculateAttackLoot } from './application/attack.ts';
+import type { SaveState } from './application/contracts.ts';
+import { createSimulatorScenarioFromSpyReport, simulatorSideFromPlanet, simulatorSpyReports } from './application/simulator-handoff.ts';
 import { BattleReportModal } from './BattleReportsView';
 import { COMMANDER_COMBAT_CATALOG, type CatalogEntity } from './domain/combat/catalog.ts';
 import { getCombatEntityForStack } from './domain/combat/side-entity.ts';
@@ -46,7 +49,9 @@ import {
   type CombatTechnologyId,
   type CombatTechnologyLevels,
 } from './domain/combat/technologies.ts';
-import type { BattleReport } from './domain/combat/report.ts';
+import type { BattleReport, BattleStackSnapshot } from './domain/combat/report.ts';
+import { GameSelect, type GameSelectOption } from './ui/GameSelect';
+import { ResourceIcon } from './ui/resources/ResourceIcon';
 import criticalHitArt from '../assets/source/New assets/technologies/technology.shared.critical-hit.png';
 import heavyArmorArt from '../assets/source/New assets/technologies/technology.shared.heavy-armor.png';
 import ionScienceArt from '../assets/source/New assets/technologies/technology.shared.ion-science.png';
@@ -73,25 +78,13 @@ function formatNumber(value: number) {
 type ScenarioSide = 'attacker' | 'defender';
 type ScenarioCategory = 'ships' | 'commanders' | 'defenses';
 
-type ExpandedState = {
-  attackerShips: boolean;
-  attackerCommanders: boolean;
-  attackerTechnologies: boolean;
-  defenderShips: boolean;
-  defenderCommanders: boolean;
-  defenderDefenses: boolean;
-  defenderTechnologies: boolean;
-};
+/** The planet a spy report filled the defender from: only then the loot has real figures. */
+type LootTarget = { name: string; resources: { metal: number; minerals: number; gas: number } };
 
-const DEFAULT_EXPANDED: ExpandedState = {
-  attackerShips: true,
-  attackerCommanders: false,
-  attackerTechnologies: false,
-  defenderShips: true,
-  defenderCommanders: false,
-  defenderDefenses: false,
-  defenderTechnologies: false,
-};
+function activeTechnologies(levels?: CombatTechnologyLevels) {
+  const normalized = normalizeCombatTechnologies(levels);
+  return COMBAT_TECHNOLOGIES.filter((technology) => normalized[technology.id] > 0).length;
+}
 
 function getStacks(scenario: SimulatorScenario, side: ScenarioSide, category: ScenarioCategory): CombatStackInput[] {
   if (side === 'attacker') {
@@ -237,6 +230,17 @@ function maxForEntity(
   return Math.min(ownedMax, populationMax);
 }
 
+/** Long stats on a one-line row: tens of millions read better shortened. */
+function formatShort(value: number) {
+  if (Math.abs(value) >= 1_000_000_000) return `${formatNumber(Math.round(value / 100_000_000) / 10)} млрд`;
+  if (Math.abs(value) >= 1_000_000) return `${formatNumber(Math.round(value / 100_000) / 10)} млн`;
+  return formatNumber(Math.round(value));
+}
+
+/**
+ * A number field with small arrows. Emptying it or typing 0 stays a draft while
+ * the field has focus, so a row that disappears at 0 does not vanish mid-typing.
+ */
 function NumberStepper({
   value,
   min,
@@ -244,6 +248,7 @@ function NumberStepper({
   label,
   invalid,
   errorId,
+  inputRef,
   onChange,
 }: {
   value: number;
@@ -252,34 +257,86 @@ function NumberStepper({
   label: string;
   invalid?: boolean;
   errorId?: string;
+  inputRef?: RefObject<HTMLInputElement | null>;
   onChange: (value: number) => void;
 }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  useEffect(() => setDraft(null), [value]);
   const update = (next: number) => onChange(Math.min(max, Math.max(min, Math.floor(next))));
   return (
-    <span className="sim-number-stepper-v1">
+    <span className="simx-num">
       <input
+        ref={inputRef}
         type="number"
         min={min}
         max={max}
-        value={value}
+        value={draft ?? value}
         aria-label={label}
         aria-invalid={invalid ? true : undefined}
         aria-describedby={invalid ? errorId : undefined}
         onChange={(event) => {
           const next = Number(event.target.value);
-          update(Number.isFinite(next) ? next : min);
+          if (event.target.value === '' || !Number.isFinite(next) || next <= 0) {
+            setDraft(event.target.value);
+            return;
+          }
+          setDraft(null);
+          update(next);
+        }}
+        onBlur={() => {
+          if (draft === null) return;
+          setDraft(null);
+          update(min);
         }}
       />
-      <span className="sim-number-stepper-arrows-v1">
-        <button type="button" aria-label={`Увеличить: ${label}`} disabled={value >= max} onClick={() => update(value + 1)}>↑</button>
-        <button type="button" aria-label={`Уменьшить: ${label}`} disabled={value <= min} onClick={() => update(value - 1)}>↓</button>
+      <span className="simx-num__arrows">
+        <button type="button" aria-label={`Увеличить: ${label}`} disabled={value >= max} onClick={() => update(value + 1)}><i aria-hidden="true" /></button>
+        <button type="button" aria-label={`Уменьшить: ${label}`} disabled={value <= min} onClick={() => update(value - 1)}><i aria-hidden="true" /></button>
       </span>
     </span>
   );
 }
 
+const prefersReducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+
+/** Numbers of the result run up from zero. Timers, not frames: a covered window still ends on the true value. */
+function CountUp({ value, duration = 760 }: { value: number; duration?: number }) {
+  const [shown, setShown] = useState(() => (prefersReducedMotion() ? value : 0));
+  useEffect(() => {
+    if (prefersReducedMotion() || value === 0) {
+      setShown(value);
+      return;
+    }
+    const started = performance.now();
+    const timer = window.setInterval(() => {
+      const progress = Math.min(1, (performance.now() - started) / duration);
+      setShown(Math.round(value * (1 - (1 - progress) ** 3)));
+      if (progress >= 1) window.clearInterval(timer);
+    }, 32);
+    return () => window.clearInterval(timer);
+  }, [value, duration]);
+  return <>{formatNumber(shown)}</>;
+}
+
+function PopulationMeter({ label, value, max }: { label: string; value: number; max: number }) {
+  return (
+    <div className={`simx-meter${value > max ? ' is-over' : ''}`}>
+      <span>{label}</span>
+      <i aria-hidden="true"><b style={{ transform: `scaleX(${Math.min(1, value / Math.max(1, max))})` }} /></i>
+      <strong>{formatNumber(value)} / {formatNumber(max)}</strong>
+    </div>
+  );
+}
+
+function stackOutcome(report: BattleReport | null, side: ScenarioSide, entityId: string) {
+  if (!report) return null;
+  const force = side === 'attacker' ? report.attackerForce : report.defenderForce;
+  return [...force.stacks, ...(force.defenses ?? [])].find((stack) => stack.entityId === entityId) ?? null;
+}
+
 function UnitRow({
   entity,
+  side,
   count,
   max,
   level,
@@ -287,12 +344,15 @@ function UnitRow({
   showLevel,
   preview,
   ability,
+  outcome,
   invalid,
   errorId,
+  autoFocus,
   onChange,
   onLevelChange,
 }: {
   entity: CatalogEntity;
+  side: ScenarioSide;
   count: number;
   max: number;
   level: number;
@@ -300,113 +360,148 @@ function UnitRow({
   showLevel: boolean;
   preview?: CombatStackPreview;
   ability?: string;
+  outcome: BattleStackSnapshot | null;
   invalid?: boolean;
   errorId?: string;
+  autoFocus: boolean;
   onChange: (count: number) => void;
   onLevelChange: (level: number) => void;
 }) {
+  const countRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (!autoFocus) return;
+    countRef.current?.focus();
+    countRef.current?.select();
+  }, [autoFocus]);
   return (
-    <div className="sim-unit-row-v1" data-qa-simulator-unit={entity.id}>
-      <img src={entity.art} alt="" draggable={false} />
-      <div className="sim-unit-copy-v1">
-        <strong>{entity.name}</strong>
-        <span>{entity.role}</span>
-        <small>Население: {entity.population} · Оружие: {entity.combat.weaponType} · Броня: {entity.combat.armorType}</small>
-        {ability ? <em>Способность: {ability}</em> : null}
-        {preview ? <em className="sim-unit-stats-v1">Атака группы: {formatNumber(preview.totalAttack)} · Жизнь группы: {formatNumber(preview.hpPool)}</em> : null}
+    <div className={`simx-row${outcome && outcome.destroyed > 0 ? ' has-losses' : ''}`} data-qa-simulator-unit={entity.id}>
+      <div className="simx-row__who">
+        <img src={entity.art} alt="" draggable={false} />
+        <div className="simx-row__name">
+          <strong>{entity.name}</strong>
+          {outcome ? (
+            <small className="simx-row__outcome">
+              {outcome.destroyed > 0 ? <><em>−{formatShort(outcome.destroyed)}</em> осталось {formatShort(outcome.countAfter)}</> : 'без потерь'}
+            </small>
+          ) : preview ? (
+            <small>Атака {formatShort(preview.totalAttack)} · Жизнь {formatShort(preview.hpPool)}</small>
+          ) : <small>{entity.role}</small>}
+        </div>
+        <span className="simx-tip" role="tooltip">
+          <b>{entity.role}</b>
+          <span>Население {formatNumber(entity.population)} · Оружие: {entity.combat.weaponType} · Броня: {entity.combat.armorType}</span>
+          {ability ? <span>Способность: {ability}</span> : null}
+        </span>
       </div>
-      <div className="sim-unit-controls-v1">
-        <label className="sim-count-control-v1">
-          <span>КОЛИЧЕСТВО</span>
-          <NumberStepper value={count} min={0} max={max} label={`Количество ${entity.name}`} invalid={invalid} errorId={errorId} onChange={onChange} />
-        </label>
-        {showLevel ? (
-          <label className="sim-level-control-v1">
-            <span>УРОВЕНЬ</span>
-            <NumberStepper value={level} min={0} max={levelMax} label={`Уровень ${entity.name}`} invalid={invalid} errorId={errorId} onChange={onLevelChange} />
-          </label>
-        ) : null}
-      </div>
+      <NumberStepper value={count} min={0} max={max} label={`Количество ${entity.name}`} invalid={invalid} errorId={errorId} inputRef={countRef} onChange={onChange} />
+      {showLevel ? (
+        <div className="simx-row__level" data-qa-sim-level>
+          <NumberStepper value={level} min={0} max={levelMax} label={`Уровень ${entity.name}`} invalid={invalid} errorId={errorId} onChange={onLevelChange} />
+        </div>
+      ) : <span />}
+      <button type="button" className="simx-row__remove" aria-label={`Убрать: ${entity.name}, ${side === 'attacker' ? 'атакующий' : 'защитник'}`} onClick={() => onChange(0)}><i aria-hidden="true" /></button>
     </div>
   );
 }
 
-function UnitSection({
+function UnitGroup({
   id,
   title,
-  open,
+  meter,
   entities,
   scenario,
   side,
   category,
   technologies,
-  executionMode,
+  report,
   invalid,
   errorId,
-  onToggle,
   onScenario,
 }: {
   id: string;
   title: string;
-  open: boolean;
+  meter: { label: string; value: number; max: number };
   entities: readonly CatalogEntity[];
   scenario: SimulatorScenario;
   side: ScenarioSide;
   category: ScenarioCategory;
   technologies?: CombatTechnologyLevels;
-  executionMode?: 'production' | 'calibration';
+  report: BattleReport | null;
   invalid?: boolean;
   errorId?: string;
-  onToggle: () => void;
   onScenario: (scenario: SimulatorScenario) => void;
 }) {
+  const [justAdded, setJustAdded] = useState<string | null>(null);
   const stacks = getStacks(scenario, side, category);
   const previewStacks = [
     ...getStacks(scenario, side, 'ships'),
     ...getStacks(scenario, side, 'commanders'),
     ...getStacks(scenario, side, 'defenses'),
   ];
-  const selected = stacks.reduce((total, stack) => total + stack.count, 0);
   const activeCommanderId = scenario[side].activeCommanderId ?? null;
+  const factionId = normalizeCombatFactionId(side === 'attacker' ? scenario.attackerFactionId : scenario.defenderFactionId);
+  // Rows keep the catalogue order, so a row added in the middle does not shuffle the others.
+  const inBattle = entities.filter((entity) => getCount(scenario, side, category, entity.id) > 0);
+  const waiting = entities.filter((entity) => getCount(scenario, side, category, entity.id) <= 0);
   return (
-    <section className={`sim-unit-section-v1 ${open ? 'open' : ''}`}>
-      <button type="button" className="sim-section-toggle-v1" aria-expanded={open} aria-controls={id} onClick={onToggle}>
-        <span><strong>{title}</strong><small>{selected ? `Выбрано: ${formatNumber(selected)}` : 'Не выбрано'}</small></span>
-        <b aria-hidden="true">{open ? '−' : '+'}</b>
-      </button>
-      <div id={id} className="sim-unit-list-v1" hidden={!open}>
-        {open ? entities.map((entity) => {
-          const count = getCount(scenario, side, category, entity.id);
-          const previewStack = stacks.find((stack) => stack.entityId === entity.id);
-          const preview = previewStack && technologies
-            ? calculateCombatStackPreview(
-                previewStack,
-                normalizeCombatFactionId(side === 'attacker' ? scenario.attackerFactionId : scenario.defenderFactionId),
-                technologies,
-                executionMode ?? 'production',
-                previewStacks,
-                activeCommanderId,
-              ) ?? undefined
-            : undefined;
-          return (
-            <UnitRow
+    <section id={id} className="simx-group">
+      <header className="simx-group__head">
+        <h4>{title}</h4>
+        <PopulationMeter {...meter} />
+      </header>
+      {inBattle.length ? (
+        <div className="simx-rows">
+          {inBattle.map((entity) => {
+            const stack = stacks.find((item) => item.entityId === entity.id);
+            const max = maxForEntity(scenario, side, category, entity);
+            const preview = stack && technologies
+              ? calculateCombatStackPreview(stack, factionId, technologies, 'production', previewStacks, activeCommanderId) ?? undefined
+              : undefined;
+            return (
+              <UnitRow
+                key={entity.id}
+                entity={entity}
+                side={side}
+                count={stack?.count ?? 0}
+                max={max}
+                level={stack?.level ?? 0}
+                levelMax={COMBAT_ENTITY_LEVEL_LIMITS[entity.kind]}
+                showLevel={entity.kind !== 'defense'}
+                preview={preview}
+                ability={entity.kind === 'commander' ? COMMANDER_ABILITIES[entity.id as CommanderId].ability : undefined}
+                outcome={stackOutcome(report, side, entity.id)}
+                invalid={invalid}
+                errorId={errorId}
+                autoFocus={justAdded === entity.id}
+                onChange={(next) => onScenario(replaceStackCount(scenario, side, category, entity.id, Math.min(max, next)))}
+                onLevelChange={(next) => onScenario(replaceStackLevel(scenario, side, category, entity.id, next))}
+              />
+            );
+          })}
+        </div>
+      ) : null}
+      {waiting.length ? (
+        <div className="simx-shelf">
+          {waiting.map((entity) => (
+            <button
               key={entity.id}
-              entity={entity}
-              count={count}
-              max={maxForEntity(scenario, side, category, entity)}
-              level={getStacks(scenario, side, category).find((stack) => stack.entityId === entity.id)?.level ?? 0}
-              levelMax={COMBAT_ENTITY_LEVEL_LIMITS[entity.kind]}
-              showLevel={entity.kind !== 'defense'}
-              preview={preview}
-              ability={entity.kind === 'commander' ? COMMANDER_ABILITIES[entity.id as CommanderId].ability : undefined}
-              invalid={invalid}
-              errorId={errorId}
-              onChange={(next) => onScenario(replaceStackCount(scenario, side, category, entity.id, Math.min(maxForEntity(scenario, side, category, entity), next)))}
-              onLevelChange={(next) => onScenario(replaceStackLevel(scenario, side, category, entity.id, next))}
-            />
-          );
-        }) : null}
-      </div>
+              type="button"
+              className="simx-tile"
+              data-qa-simulator-add={entity.id}
+              aria-label={`Добавить: ${entity.name}`}
+              disabled={maxForEntity(scenario, side, category, entity) < 1}
+              onClick={() => {
+                setJustAdded(entity.id);
+                onScenario(replaceStackCount(scenario, side, category, entity.id, 1));
+              }}
+            >
+              <img src={entity.art} alt="" draggable={false} />
+              <span>{entity.name}</span>
+              <i aria-hidden="true" />
+            </button>
+          ))}
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -424,13 +519,13 @@ const COMBAT_TECHNOLOGY_ART: Record<CombatTechnologyId, string> = {
   criticalHit: criticalHitArt,
 };
 
-function TechnologySection({
+function TechnologyPanel({
   id,
   open,
   levels,
   invalid,
   errorId,
-  onToggle,
+  onCopy,
   onChange,
 }: {
   id: string;
@@ -438,117 +533,166 @@ function TechnologySection({
   levels?: CombatTechnologyLevels;
   invalid?: boolean;
   errorId?: string;
-  onToggle: () => void;
+  onCopy?: () => void;
   onChange: (levels: CombatTechnologyLevels) => void;
 }) {
   const normalized = useMemo(() => normalizeCombatTechnologies(levels), [levels]);
-  const activeCount = COMBAT_TECHNOLOGIES.filter((technology) => normalized[technology.id] > 0).length;
 
   const updateLevel = (technologyId: CombatTechnologyId, nextValue: number) => {
     const nextLevel = normalizeTechnologyLevel(technologyId, nextValue);
     const exclusiveIds: readonly CombatTechnologyId[] = ['piercingAttack', 'maneuverDefense', 'criticalHit'];
     const nextLevels = { ...normalized, [technologyId]: nextLevel };
     if (nextLevel > 0 && exclusiveIds.includes(technologyId)) {
-      exclusiveIds.forEach((id) => {
-        if (id !== technologyId) nextLevels[id] = 0;
+      exclusiveIds.forEach((other) => {
+        if (other !== technologyId) nextLevels[other] = 0;
       });
     }
-    onChange({
-      ...nextLevels,
-    });
+    onChange({ ...nextLevels });
   };
 
   return (
-    <section className={`sim-unit-section-v1 sim-tech-section-v1 ${open ? 'open' : ''}`}>
-      <button type="button" className="sim-section-toggle-v1" aria-expanded={open} aria-controls={id} onClick={onToggle}>
-        <span><strong>ТЕХНОЛОГИИ</strong><small>{activeCount ? `Активно: ${activeCount}` : 'Все уровни 0'}</small></span>
-        <b aria-hidden="true">{open ? '−' : '+'}</b>
-      </button>
-      <div id={id} className="sim-tech-list-v1" hidden={!open}>
-        {open ? COMBAT_TECHNOLOGIES.map((technology) => {
-          const level = normalized[technology.id];
-          return (
-            <div className="sim-tech-row-v1" key={technology.id} data-qa-simulator-technology={technology.id}>
-              <img src={COMBAT_TECHNOLOGY_ART[technology.id]} alt="" draggable={false} />
-              <div>
-                <strong>{technology.name}</strong>
-                <small>{technology.effect}</small>
-              </div>
-              <div className="sim-tech-controls-v1">
-                <NumberStepper value={level} min={0} max={technology.maxLevel} label={`${technology.name}, уровень`} invalid={invalid} errorId={errorId} onChange={(next) => updateLevel(technology.id, next)} />
-              </div>
-            </div>
-          );
-        }) : null}
-      </div>
-    </section>
-  );
-}
-
-function PopulationMeter({ label, value, max }: { label: string; value: number; max: number }) {
-  const overflow = value > max;
-  const available = Math.max(0, max - value);
-  return (
-    <div className={`sim-population-v1 ${overflow ? 'error' : ''}`}>
-      <span>{label}</span>
-      <div>
-        <strong>{formatNumber(value)} / {formatNumber(max)}</strong>
-        <small>Свободно: {formatNumber(available)}</small>
-      </div>
+    <div id={id} className="simx-techs" hidden={!open}>
+      {open ? COMBAT_TECHNOLOGIES.map((technology) => (
+        <div className="simx-tech" key={technology.id} data-qa-simulator-technology={technology.id}>
+          <div className="simx-tech__who">
+            <img src={COMBAT_TECHNOLOGY_ART[technology.id]} alt="" draggable={false} />
+            <strong>{technology.name}</strong>
+            <span className="simx-tip" role="tooltip">{technology.effect}</span>
+          </div>
+          <NumberStepper value={normalized[technology.id]} min={0} max={technology.maxLevel} label={`${technology.name}, уровень`} invalid={invalid} errorId={errorId} onChange={(next) => updateLevel(technology.id, next)} />
+        </div>
+      )) : null}
+      {open && onCopy ? <button type="button" className="simx-ghost simx-techs__copy" data-qa-sim-copy-tech onClick={onCopy}>Скопировать науки атакующего</button> : null}
     </div>
   );
 }
 
-function CommanderSelector({
+function SideStrip({
   side,
   scenario,
-  onChange,
+  factionId,
+  technologyCount,
+  technologyId,
+  technologiesOpen,
+  onFaction,
+  onCommander,
+  onToggleTechnologies,
 }: {
   side: ScenarioSide;
   scenario: SimulatorScenario;
-  onChange: (commanderId: CommanderId | null) => void;
+  factionId: CombatFactionId;
+  technologyCount: number;
+  technologyId: string;
+  technologiesOpen: boolean;
+  onFaction: (factionId: CombatFactionId) => void;
+  onCommander: (commanderId: CommanderId | null) => void;
+  onToggleTechnologies: () => void;
 }) {
-  const selected = selectedCommanders(scenario, side);
-  const active = scenario[side].activeCommanderId;
-  const activeEntity = COMMANDER_COMBAT_CATALOG.find((entity) => entity.id === active);
-  const selectedLabel = selected.length === 0
-    ? 'Нет ведущего командира'
-    : activeEntity
-      ? `Ведущий: ${activeEntity.name}`
-      : 'Выбери ведущего командира';
+  const sideName = side === 'attacker' ? 'атакующего' : 'защитника';
+  const commanderOptions: GameSelectOption[] = selectedCommanders(scenario, side).flatMap((stack) => {
+    const entity = COMMANDER_COMBAT_CATALOG.find((item) => item.id === stack.entityId);
+    return entity ? [{ value: entity.id, label: entity.name }] : [];
+  });
   return (
-    <label className="sim-commander-select-v1" htmlFor={`sim-leading-commander-${side}`}>
-      <span>ВЕДУЩИЙ КОМАНДИР</span>
-      <select
-        id={`sim-leading-commander-${side}`}
-        data-qa-simulator-leading-commander={side}
-        value={active ?? ''}
-        onChange={(event) => onChange(event.target.value ? event.target.value as CommanderId : null)}
-        aria-describedby={`sim-leading-commander-help-${side}`}
-      >
-        <option value="">{selectedLabel}</option>
-        {selected.map((stack) => {
-          const entity = COMMANDER_COMBAT_CATALOG.find((item) => item.id === stack.entityId);
-          return entity ? <option key={entity.id} value={entity.id}>{entity.name}</option> : null;
-        })}
-      </select>
-      <small id={`sim-leading-commander-help-${side}`}>Добавь по одному кораблю каждого типа в разделе «Командирские». Здесь выбери ведущего; остальные командирские корабли тоже участвуют в бою.</small>
-    </label>
+    <div className="simx-strip">
+      <div className="simx-field">
+        <span>Раса</span>
+        <GameSelect
+          label={`Раса ${sideName}`}
+          value={factionId}
+          options={COMBAT_FACTIONS.map((faction) => ({ value: faction.id, label: faction.name }))}
+          selectProps={{ id: `sim-${side}-race` }}
+          onChange={(value) => onFaction(value as CombatFactionId)}
+        />
+      </div>
+      <div className="simx-field">
+        <span>Ведущий командир</span>
+        <GameSelect
+          label={`Ведущий командир ${sideName}`}
+          value={scenario[side].activeCommanderId ?? ''}
+          options={commanderOptions.length ? [{ value: '', label: 'Без ведущего' }, ...commanderOptions] : []}
+          placeholder={commanderOptions.length ? 'Без ведущего' : 'Нет командира'}
+          disabled={!commanderOptions.length}
+          selectProps={{ id: `sim-leading-commander-${side}`, 'data-qa-simulator-leading-commander': side }}
+          onChange={(value) => onCommander(value ? value as CommanderId : null)}
+        />
+      </div>
+      <button type="button" className={`simx-tech-toggle${technologiesOpen ? ' is-open' : ''}`} aria-expanded={technologiesOpen} aria-controls={technologyId} onClick={onToggleTechnologies}>
+        <span>Технологии</span>
+        <strong>{technologyCount ? `Активно: ${technologyCount}` : 'Все уровни 0'}</strong>
+        <i aria-hidden="true" />
+      </button>
+    </div>
   );
 }
 
-function RaceSelector({ id, label, value, onChange }: { id: string; label: string; value?: CombatFactionId; onChange: (factionId: CombatFactionId) => void }) {
+const WINNER_TITLE: Record<BattleReport['winner'], string> = {
+  attacker: 'Победа атакующего',
+  defender: 'Победа защитника',
+  draw: 'Ничья',
+};
+
+function destroyedUnits(force: BattleReport['attackerForce']) {
+  return [...force.stacks, ...(force.defenses ?? [])].reduce((total, stack) => total + stack.destroyed, 0);
+}
+
+function ForceOutcome({ name, tone, force }: { name: string; tone: ScenarioSide; force: BattleReport['attackerForce'] }) {
+  const left = force.populationBefore > 0 ? Math.max(0, force.populationAfter / force.populationBefore) : 0;
+  const lost = destroyedUnits(force);
   return (
-    <label className="sim-race-v1" htmlFor={id}>
-      <span>{label}</span>
-      <select id={id} value={value ?? 'aegis'} onChange={(event) => onChange(event.target.value as CombatFactionId)}>
-        {COMBAT_FACTIONS.map((faction) => <option key={faction.id} value={faction.id}>{faction.name}</option>)}
-      </select>
-    </label>
+    <div className={`simx-force is-${tone}`} data-qa-sim-force={tone}>
+      <span>{name}</span>
+      <strong className={lost > 0 ? 'is-loss' : ''}>{lost > 0 ? '−' : ''}<CountUp value={lost} /></strong>
+      <i aria-hidden="true"><b style={{ transform: `scaleX(${left})` }} /></i>
+      <small>{lost > 0 ? `Уцелело ${Math.round(left * 100)}% состава` : 'Без потерь'}</small>
+    </div>
   );
 }
 
-export function SimulatorView({ planetName, coords, onBack, initialScenario }: { planetName: string; coords: string; onBack: () => void; initialScenario?: SimulatorScenario | null }) {
+function BattleOutcome({
+  report,
+  maxRounds,
+  attackerFactionId,
+  defenderFactionId,
+  target,
+  onDetails,
+}: {
+  report: BattleReport;
+  maxRounds: number;
+  attackerFactionId: CombatFactionId;
+  defenderFactionId: CombatFactionId;
+  target: LootTarget | null;
+  onDetails: () => void;
+}) {
+  const debris = useMemo(() => calculateAttackDebris(report, attackerFactionId, defenderFactionId), [report, attackerFactionId, defenderFactionId]);
+  // No planet behind a hand-built defender: a bottomless target shows what the survivors' holds can carry.
+  const hold = useMemo(() => calculateAttackLoot(report, { metal: Number.MAX_SAFE_INTEGER, minerals: 0, gas: 0 }, attackerFactionId).metal, [report, attackerFactionId]);
+  const loot = useMemo(() => (target ? calculateAttackLoot(report, target.resources, attackerFactionId) : null), [report, target, attackerFactionId]);
+  return (
+    <div className="simx-outcome" data-qa-sim-result data-qa-sim-winner={report.winner}>
+      <div className={`simx-verdict is-${report.winner}`}>
+        <small>Итог боя</small>
+        <strong>{WINNER_TITLE[report.winner]}</strong>
+        <span data-qa-sim-rounds>Раунд {report.roundCount} из {maxRounds}</span>
+      </div>
+      <ForceOutcome name="Атакующий" tone="attacker" force={report.attackerForce} />
+      <ForceOutcome name="Защитник" tone="defender" force={report.defenderForce} />
+      <div className="simx-gain" data-qa-sim-debris>
+        <span className="simx-gain__title">Обломки</span>
+        <span className="simx-gain__line"><ResourceIcon kind="debris" /><strong><CountUp value={debris} /></strong></span>
+      </div>
+      <div className="simx-gain" data-qa-sim-loot>
+        <span className="simx-gain__title">{target ? `Добыча: ${target.name}` : 'Добыча'}</span>
+        {report.winner !== 'attacker' ? <small>Только при победе атакующего</small> : loot ? (['metal', 'minerals', 'gas'] as const).map((kind) => (
+          <span className="simx-gain__line" key={kind}><ResourceIcon kind={kind} /><strong><CountUp value={loot[kind]} /></strong></span>
+        )) : <><span className="simx-gain__line"><strong><CountUp value={hold} /></strong></span><small>столько увезут трюмы уцелевших</small></>}
+      </div>
+      <button type="button" className="simx-ghost simx-outcome__more" data-qa-sim-details onClick={onDetails}>Подробный отчёт по раундам</button>
+    </div>
+  );
+}
+
+export function SimulatorView({ planetId, planetName, coords, saveState, onBack, initialScenario }: { planetId: string; planetName: string; coords: string; saveState: SaveState; onBack: () => void; initialScenario?: SimulatorScenario | null }) {
   const initialPersistence = useMemo(() => readSimulatorState(undefined, ACTIVE_RUNTIME_MODE), []);
   const [scenario, setScenario] = useState<SimulatorScenario>(() => {
     if (initialScenario) return initialScenario;
@@ -562,16 +706,16 @@ export function SimulatorView({ planetName, coords, onBack, initialScenario }: {
     };
   });
   const [simulatorState, setSimulatorState] = useState<SimulatorState>(initialPersistence);
-  const [expanded, setExpanded] = useState<ExpandedState>(DEFAULT_EXPANDED);
+  const [technologiesOpen, setTechnologiesOpen] = useState<Record<ScenarioSide, boolean>>({ attacker: false, defender: false });
   const [presetName, setPresetName] = useState('');
   const [selectedPresetId, setSelectedPresetId] = useState('');
   const [result, setResult] = useState<BattleReport | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [lootTarget, setLootTarget] = useState<LootTarget | null>(null);
   const [notice, setNotice] = useState('Готов к расчёту.');
   const resetRevision = useRef(0);
-  const closeResult = useCallback(() => {
-    setResult(null);
-    setNotice('Расчёт закрыт.');
-  }, []);
+  const closeDetails = useCallback(() => setDetailsOpen(false), []);
+  const spyReports = useMemo(() => simulatorSpyReports(saveState), [saveState.espionage?.reports, saveState.profile.playerId]);
 
   const updateScenario = (next: SetStateAction<SimulatorScenario>) => {
     setScenario(next);
@@ -628,9 +772,10 @@ export function SimulatorView({ planetName, coords, onBack, initialScenario }: {
     return () => window.clearTimeout(timer);
   }, [scenario]);
 
-  const toggleExpanded = (key: keyof ExpandedState) => setExpanded((current) => ({ ...current, [key]: !current[key] }));
+  const toggleTechnologies = (side: ScenarioSide) => setTechnologiesOpen((current) => ({ ...current, [side]: !current[side] }));
 
   const clearSide = (side: ScenarioSide) => {
+    if (side === 'defender') setLootTarget(null);
     updateScenario((current) => side === 'attacker'
       ? {
           ...current,
@@ -656,7 +801,41 @@ export function SimulatorView({ planetName, coords, onBack, initialScenario }: {
     setNotice(side === 'attacker' ? 'Атакующая сторона очищена.' : 'Защищающаяся сторона очищена.');
   };
 
+  const fillFromPlanet = (side: ScenarioSide) => {
+    const filled = simulatorSideFromPlanet(saveState, planetId, side === 'defender');
+    if (!filled.ships.length && !filled.commanders.length && !filled.defenses.length) {
+      setNotice(`На планете ${planetName} сейчас нет кораблей${side === 'defender' ? ' и обороны' : ''}.`);
+      return;
+    }
+    const { factionId, technologies, ...units } = filled;
+    updateScenario((current) => {
+      const raced = setScenarioFaction(current, side, factionId);
+      return side === 'attacker'
+        ? { ...raced, attackerTechnologies: technologies, technologyMode: 'independent', executionMode: 'production', attacker: { ...raced.attacker, ships: units.ships, commanders: units.commanders, commander: units.commander, activeCommanderId: units.activeCommanderId } }
+        : { ...raced, defenderTechnologies: technologies, technologyMode: 'independent', executionMode: 'production', defender: { ...raced.defender, ...units } };
+    });
+    if (side === 'defender') setLootTarget(null);
+    setNotice(`${side === 'attacker' ? 'Атакующий' : 'Защитник'}: состав, уровни и науки взяты с планеты ${planetName}.`);
+  };
+
+  const fillFromReport = (reportId: string) => {
+    const report = spyReports.find((item) => item.id === reportId);
+    if (!report) return;
+    const filled = createSimulatorScenarioFromSpyReport(saveState, report);
+    updateScenario((current) => ({
+      ...current,
+      defenderFactionId: filled.defenderFactionId,
+      defenderTechnologies: filled.defenderTechnologies,
+      technologyMode: 'independent',
+      executionMode: 'production',
+      defender: filled.defender,
+    }));
+    setLootTarget({ name: report.targetPlanetName, resources: report.resources });
+    setNotice(`Защитник собран по отчёту разведки: ${report.targetPlanetName}.`);
+  };
+
   const changeFaction = (side: ScenarioSide, factionId: CombatFactionId) => {
+    if (side === 'defender') setLootTarget(null);
     updateScenario((current) => setScenarioFaction(current, side, factionId));
     const sideLabel = side === 'attacker' ? 'атакующего' : 'защитника';
     setNotice(`Раса ${sideLabel} изменена на «${getCombatFactionName(factionId)}». Показан её набор кораблей${side === 'defender' ? ' и обороны' : ''}; состав стороны очищен.`);
@@ -681,6 +860,7 @@ export function SimulatorView({ planetName, coords, onBack, initialScenario }: {
   };
 
   const clearAll = () => {
+    setLootTarget(null);
     updateScenario(createEmptySimulatorScenario());
     setNotice('Сценарий очищен. Обе стороны возвращены к расе «Астеры», технологии — к уровню 0.');
   };
@@ -705,6 +885,7 @@ export function SimulatorView({ planetName, coords, onBack, initialScenario }: {
     }
     const report = resolveCombat(checked.value, { reportId: nextIdentity('simulation') });
     setResult(report);
+    setDetailsOpen(false);
     setNotice(`Расчёт завершён: ${report.roundCount} раунд(ов), результат — ${report.winner === 'draw' ? 'ничья' : report.winner === 'attacker' ? 'победа атакующего' : 'победа защитника'}.`);
   };
 
@@ -724,6 +905,7 @@ export function SimulatorView({ planetName, coords, onBack, initialScenario }: {
   const loadPreset = () => {
     const preset = simulatorState.presets.find((item) => item.id === selectedPresetId);
     if (!preset) return;
+    setLootTarget(null);
     updateScenario(preset.input);
     setNotice(`Сценарий «${preset.name}» загружен.`);
   };
@@ -755,61 +937,96 @@ export function SimulatorView({ planetName, coords, onBack, initialScenario }: {
   };
 
   return (
-    <section className="simulator-view-v1 fleet-page-shell-v1">
-      <header className="fleet-page-head-v1">
-          <div><small>УПРАВЛЕНИЕ ФЛОТОМ · {planetName} {coords}</small><h2>СИМУЛЯТОР</h2><p>Собери состав, выбери уровни и запусти расчёт.</p></div>
-        <button type="button" className="fleet-page-back-v1" onClick={onBack}>← К ФЛОТАМ</button>
+    <section className="simulator-view-v1 simx">
+      <header className="simx-head">
+        <div className="simx-head__title">
+          <h2>Симулятор</h2>
+          <p>{planetName} {coords}</p>
+        </div>
+        <div className="simx-scenarios" aria-label="Сценарии симулятора" role="group">
+          <GameSelect
+            className="simx-scenarios__list"
+            label="Сохранённые сценарии"
+            value={selectedPresetId}
+            options={simulatorState.presets.map((preset) => ({ value: preset.id, label: preset.name }))}
+            placeholder={simulatorState.presets.length ? 'Выбрать сценарий' : 'Сохранённых сценариев нет'}
+            disabled={!simulatorState.presets.length}
+            selectProps={{ id: 'sim-preset-select' }}
+            onChange={setSelectedPresetId}
+          />
+          <button type="button" className="simx-ghost" data-qa-sim-load disabled={!selectedPresetId} onClick={loadPreset}>Загрузить</button>
+          <button type="button" className="simx-ghost" data-qa-sim-delete disabled={!selectedPresetId} onClick={deletePreset}>Удалить</button>
+          <input id="sim-preset-name" aria-label="Имя сценария" value={presetName} maxLength={48} placeholder="Имя нового сценария" onChange={(event) => setPresetName(event.target.value)} />
+          <button type="button" className="simx-ghost" data-qa-sim-save onClick={savePreset}>Сохранить</button>
+        </div>
+        <button type="button" className="simx-ghost" data-qa-sim-clear-all onClick={clearAll}>Очистить всё</button>
+        <button type="button" className="simx-close" aria-label="Закрыть симулятор" data-asterion-close onClick={onBack}><i aria-hidden="true" /></button>
       </header>
 
-      <section className="simulator-toolbar-v1">
-        <div className="sim-rounds-v1" role="group" aria-label="Максимум раундов">
-          <span>МАКС. РАУНДОВ</span>
-          {SIMULATOR_MAX_ROUNDS.map((rounds) => (
-            <button key={rounds} type="button" className={scenario.maxRounds === rounds ? 'active' : ''} aria-pressed={scenario.maxRounds === rounds} onClick={() => updateScenario((current) => ({ ...current, maxRounds: rounds }))}>{rounds}</button>
-          ))}
-        </div>
-        <button type="button" className="sim-clear-v1" onClick={clearAll}>ОЧИСТИТЬ ВСЁ</button>
-      </section>
-
-      <section className="sim-presets-v1" aria-label="Сценарии симулятора">
-        <div><label htmlFor="sim-preset-name">ИМЯ СЦЕНАРИЯ</label><input id="sim-preset-name" value={presetName} maxLength={48} placeholder="Например: Линкоры против матриц" onChange={(event) => setPresetName(event.target.value)} /><button type="button" onClick={savePreset}>СОХРАНИТЬ</button></div>
-        <div><label htmlFor="sim-preset-select">СОХРАНЁННЫЕ СЦЕНАРИИ</label><select id="sim-preset-select" value={selectedPresetId} onChange={(event) => setSelectedPresetId(event.target.value)}><option value="">Выбери сценарий</option>{simulatorState.presets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}</select><button type="button" disabled={!selectedPresetId} onClick={loadPreset}>ЗАГРУЗИТЬ</button><button type="button" disabled={!selectedPresetId} onClick={deletePreset}>УДАЛИТЬ</button></div>
-      </section>
-
-      <div className="sim-sides-v1">
-        <section className="sim-side-v1">
-          <header><div><small>СТОРОНА 01</small><h3>АТАКУЮЩИЙ</h3></div><button type="button" onClick={() => clearSide('attacker')}>ОЧИСТИТЬ СТОРОНУ</button></header>
-           <RaceSelector id="sim-attacker-race" label="РАСА АТАКУЮЩЕГО" value={attackerFactionId} onChange={(factionId) => changeFaction('attacker', factionId)} />
-           <PopulationMeter label="ФЛОТ АТАКУЮЩЕГО" value={population.attackerFleet} max={SIMULATOR_POPULATION_LIMITS.attackerFleet} />
-           <PopulationMeter label="КОМАНДИР АТАКУЮЩЕГО · В ЛИМИТЕ ФЛОТА" value={population.attackerCommander} max={SIMULATOR_POPULATION_LIMITS.attackerFleet} />
-           <CommanderSelector side="attacker" scenario={scenario} onChange={(commanderId) => changeActiveCommander('attacker', commanderId)} />
-          <TechnologySection id="sim-attacker-technologies" open={expanded.attackerTechnologies} levels={scenario.attackerTechnologies} invalid={hasValidationError('attackerTechnologies')} errorId={validationErrorId} onToggle={() => toggleExpanded('attackerTechnologies')} onChange={(levels) => changeTechnologies('attacker', levels)} />
-          <UnitSection id="sim-attacker-ships" title={`КОРАБЛИ · ${getCombatFactionName(attackerFactionId).toUpperCase()}`} open={expanded.attackerShips} entities={attackerShips} scenario={scenario} side="attacker" category="ships" technologies={scenario.attackerTechnologies} executionMode="production" invalid={hasSideCategoryError('attacker', 'ships')} errorId={validationErrorId} onToggle={() => toggleExpanded('attackerShips')} onScenario={updateScenario} />
-          <UnitSection id="sim-attacker-commanders" title="КОМАНДИРСКИЕ" open={expanded.attackerCommanders} entities={COMMANDER_COMBAT_CATALOG} scenario={scenario} side="attacker" category="commanders" technologies={scenario.attackerTechnologies} executionMode="production" invalid={hasSideCategoryError('attacker', 'commanders')} errorId={validationErrorId} onToggle={() => toggleExpanded('attackerCommanders')} onScenario={updateScenario} />
+      <div className="simx-arena">
+        <section className="simx-side is-attacker" data-qa-sim-side="attacker">
+          <header className="simx-side__head">
+            <h3>Атакующий</h3>
+            <div className="simx-side__fill">
+              <button type="button" className="simx-ghost" data-qa-sim-fill-planet="attacker" onClick={() => fillFromPlanet('attacker')}>Флот с планеты</button>
+              <button type="button" className="simx-ghost" data-qa-sim-clear="attacker" onClick={() => clearSide('attacker')}>Очистить</button>
+            </div>
+          </header>
+          <SideStrip side="attacker" scenario={scenario} factionId={attackerFactionId} technologyCount={activeTechnologies(scenario.attackerTechnologies)} technologyId="sim-attacker-technologies" technologiesOpen={technologiesOpen.attacker} onFaction={(factionId) => changeFaction('attacker', factionId)} onCommander={(commanderId) => changeActiveCommander('attacker', commanderId)} onToggleTechnologies={() => toggleTechnologies('attacker')} />
+          <TechnologyPanel id="sim-attacker-technologies" open={technologiesOpen.attacker} levels={scenario.attackerTechnologies} invalid={hasValidationError('attackerTechnologies')} errorId={validationErrorId} onChange={(levels) => changeTechnologies('attacker', levels)} />
+          <UnitGroup id="sim-attacker-ships" title={`Корабли · ${getCombatFactionName(attackerFactionId)}`} meter={{ label: 'Флот', value: population.attackerFleet, max: SIMULATOR_POPULATION_LIMITS.attackerFleet }} entities={attackerShips} scenario={scenario} side="attacker" category="ships" technologies={scenario.attackerTechnologies} report={result} invalid={hasSideCategoryError('attacker', 'ships')} errorId={validationErrorId} onScenario={updateScenario} />
+          <UnitGroup id="sim-attacker-commanders" title="Командирские" meter={{ label: 'В лимите флота', value: population.attackerCommander, max: SIMULATOR_POPULATION_LIMITS.attackerFleet }} entities={COMMANDER_COMBAT_CATALOG} scenario={scenario} side="attacker" category="commanders" technologies={scenario.attackerTechnologies} report={result} invalid={hasSideCategoryError('attacker', 'commanders')} errorId={validationErrorId} onScenario={updateScenario} />
         </section>
 
-        <section className="sim-side-v1">
-          <header><div><small>СТОРОНА 02</small><h3>ЗАЩИТНИК</h3></div><button type="button" onClick={() => clearSide('defender')}>ОЧИСТИТЬ СТОРОНУ</button></header>
-           <RaceSelector id="sim-defender-race" label="РАСА ЗАЩИТНИКА" value={defenderFactionId} onChange={(factionId) => changeFaction('defender', factionId)} />
-           <PopulationMeter label="ФЛОТ ЗАЩИТНИКА" value={population.defenderFleet} max={SIMULATOR_POPULATION_LIMITS.defenderFleet} />
-           <PopulationMeter label="КОМАНДИР ЗАЩИТНИКА · В ЛИМИТЕ ФЛОТА" value={population.defenderCommander} max={SIMULATOR_POPULATION_LIMITS.defenderFleet} />
-           <PopulationMeter label="ОБОРОНА ЗАЩИТНИКА" value={population.defenderDefense} max={SIMULATOR_POPULATION_LIMITS.defenderDefense} />
-           <CommanderSelector side="defender" scenario={scenario} onChange={(commanderId) => changeActiveCommander('defender', commanderId)} />
-          <TechnologySection id="sim-defender-technologies" open={expanded.defenderTechnologies} levels={scenario.defenderTechnologies} invalid={hasValidationError('defenderTechnologies')} errorId={validationErrorId} onToggle={() => toggleExpanded('defenderTechnologies')} onChange={(levels) => changeTechnologies('defender', levels)} />
-           <button type="button" className="sim-copy-tech-v1" onClick={copyAttackerTechnologies}>СКОПИРОВАТЬ НАУКИ АТАКУЮЩЕГО</button>
-          <UnitSection id="sim-defender-ships" title={`КОРАБЛИ · ${getCombatFactionName(defenderFactionId).toUpperCase()}`} open={expanded.defenderShips} entities={defenderShips} scenario={scenario} side="defender" category="ships" technologies={scenario.defenderTechnologies} executionMode="production" invalid={hasSideCategoryError('defender', 'ships')} errorId={validationErrorId} onToggle={() => toggleExpanded('defenderShips')} onScenario={updateScenario} />
-          <UnitSection id="sim-defender-commanders" title="КОМАНДИРСКИЕ" open={expanded.defenderCommanders} entities={COMMANDER_COMBAT_CATALOG} scenario={scenario} side="defender" category="commanders" technologies={scenario.defenderTechnologies} executionMode="production" invalid={hasSideCategoryError('defender', 'commanders')} errorId={validationErrorId} onToggle={() => toggleExpanded('defenderCommanders')} onScenario={updateScenario} />
-          <UnitSection id="sim-defender-defenses" title={`ОБОРОНА · ${getCombatFactionName(defenderFactionId).toUpperCase()}`} open={expanded.defenderDefenses} entities={defenderDefenses} scenario={scenario} side="defender" category="defenses" technologies={scenario.defenderTechnologies} executionMode="production" invalid={hasSideCategoryError('defender', 'defenses')} errorId={validationErrorId} onToggle={() => toggleExpanded('defenderDefenses')} onScenario={updateScenario} />
+        <aside className="simx-core">
+          <div className="simx-rounds" role="group" aria-label="Максимум раундов">
+            <span>Раундов не больше</span>
+            <div>
+              {SIMULATOR_MAX_ROUNDS.map((rounds) => (
+                <button key={rounds} type="button" className={scenario.maxRounds === rounds ? 'is-on' : ''} aria-pressed={scenario.maxRounds === rounds} onClick={() => updateScenario((current) => ({ ...current, maxRounds: rounds }))}>{rounds}</button>
+              ))}
+            </div>
+          </div>
+          <button type="button" className="sim-run-v1 simx-run" disabled={!validation.ok} onClick={runSimulation}>{result ? 'Рассчитать ещё раз' : 'Рассчитать бой'}</button>
+          {result ? (
+            <BattleOutcome key={result.id} report={result} maxRounds={scenario.maxRounds} attackerFactionId={attackerFactionId} defenderFactionId={defenderFactionId} target={lootTarget} onDetails={() => setDetailsOpen(true)} />
+          ) : validation.ok ? (
+            <p className="simx-idle">Обе стороны готовы. Итог появится здесь: победитель, потери, обломки и добыча.</p>
+          ) : (
+            <ul id={validationErrorId} className="simx-errors">
+              {validation.errors.slice(0, 4).map((error, index) => <li key={`${error.path}-${index}`}>{error.message}</li>)}
+            </ul>
+          )}
+          <p className="simx-notice" aria-live="polite">{notice}</p>
+        </aside>
+
+        <section className="simx-side is-defender" data-qa-sim-side="defender">
+          <header className="simx-side__head">
+            <h3>Защитник</h3>
+            <div className="simx-side__fill">
+              <GameSelect
+                className="simx-side__report"
+                label="Защитник из отчёта разведки"
+                value=""
+                options={spyReports.map((report) => ({ value: report.id, label: report.targetPlanetName, hint: `[${report.targetCoordinate.galaxy}:${report.targetCoordinate.system}:${report.targetCoordinate.position}] · ${report.targetOwnerName}` }))}
+                placeholder={spyReports.length ? 'Из отчёта разведки' : 'Отчётов разведки нет'}
+                disabled={!spyReports.length}
+                selectProps={{ 'data-qa-sim-fill-report': true }}
+                onChange={fillFromReport}
+              />
+              <button type="button" className="simx-ghost" data-qa-sim-fill-planet="defender" onClick={() => fillFromPlanet('defender')}>С планеты</button>
+              <button type="button" className="simx-ghost" data-qa-sim-clear="defender" onClick={() => clearSide('defender')}>Очистить</button>
+            </div>
+          </header>
+          <SideStrip side="defender" scenario={scenario} factionId={defenderFactionId} technologyCount={activeTechnologies(scenario.defenderTechnologies)} technologyId="sim-defender-technologies" technologiesOpen={technologiesOpen.defender} onFaction={(factionId) => changeFaction('defender', factionId)} onCommander={(commanderId) => changeActiveCommander('defender', commanderId)} onToggleTechnologies={() => toggleTechnologies('defender')} />
+          <TechnologyPanel id="sim-defender-technologies" open={technologiesOpen.defender} levels={scenario.defenderTechnologies} invalid={hasValidationError('defenderTechnologies')} errorId={validationErrorId} onCopy={copyAttackerTechnologies} onChange={(levels) => changeTechnologies('defender', levels)} />
+          <UnitGroup id="sim-defender-ships" title={`Корабли · ${getCombatFactionName(defenderFactionId)}`} meter={{ label: 'Флот', value: population.defenderFleet, max: SIMULATOR_POPULATION_LIMITS.defenderFleet }} entities={defenderShips} scenario={scenario} side="defender" category="ships" technologies={scenario.defenderTechnologies} report={result} invalid={hasSideCategoryError('defender', 'ships')} errorId={validationErrorId} onScenario={updateScenario} />
+          <UnitGroup id="sim-defender-commanders" title="Командирские" meter={{ label: 'В лимите флота', value: population.defenderCommander, max: SIMULATOR_POPULATION_LIMITS.defenderFleet }} entities={COMMANDER_COMBAT_CATALOG} scenario={scenario} side="defender" category="commanders" technologies={scenario.defenderTechnologies} report={result} invalid={hasSideCategoryError('defender', 'commanders')} errorId={validationErrorId} onScenario={updateScenario} />
+          <UnitGroup id="sim-defender-defenses" title={`Оборона · ${getCombatFactionName(defenderFactionId)}`} meter={{ label: 'Оборона', value: population.defenderDefense, max: SIMULATOR_POPULATION_LIMITS.defenderDefense }} entities={defenderDefenses} scenario={scenario} side="defender" category="defenses" technologies={scenario.defenderTechnologies} report={result} invalid={hasSideCategoryError('defender', 'defenses')} errorId={validationErrorId} onScenario={updateScenario} />
         </section>
       </div>
 
-      <section className={`sim-validation-v1 ${validation.ok ? 'ok' : 'error'}`} aria-live="polite">
-        <div><strong>{validation.ok ? 'СЦЕНАРИЙ ГОТОВ' : 'НУЖНО ИСПРАВИТЬ СЦЕНАРИЙ'}</strong><span>{notice}</span></div>
-        {!validation.ok ? <ul id={validationErrorId}>{validation.errors.slice(0, 5).map((error, index) => <li key={`${error.path}-${index}`}>{error.message}</li>)}</ul> : null}
-        <button type="button" className="sim-run-v1" disabled={!validation.ok} onClick={runSimulation}>СИМУЛИРОВАТЬ БОЙ</button>
-      </section>
-
-      {result ? <BattleReportModal report={result} context="simulation" onClose={closeResult} /> : null}
+      {result && detailsOpen ? <BattleReportModal report={result} context="simulation" onClose={closeDetails} /> : null}
     </section>
   );
 }

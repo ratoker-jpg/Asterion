@@ -47,6 +47,7 @@ export function GameSelect({ value, options, onChange, placeholder, label, disab
   const [active, setActive] = useState(-1);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const movedByKeyboard = useRef(false);
   const listId = useId();
   const selected = options.find((option) => option.value === value && option.value !== '');
 
@@ -95,6 +96,14 @@ export function GameSelect({ value, options, onChange, placeholder, label, disab
     if (open) listRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
   }, [open, place === null]);
 
+  // Arrow keys must keep the highlighted option in view. Hovering must not: the
+  // list would slide under a resting pointer.
+  useEffect(() => {
+    if (!open || !movedByKeyboard.current) return;
+    movedByKeyboard.current = false;
+    listRef.current?.querySelector('.is-active')?.scrollIntoView({ block: 'nearest' });
+  }, [open, active]);
+
   const enabledIndexes = options.flatMap((option, index) => (option.disabled ? [] : [index]));
 
   const step = (direction: 1 | -1) => {
@@ -103,6 +112,7 @@ export function GameSelect({ value, options, onChange, placeholder, label, disab
     const next = position < 0
       ? (direction > 0 ? 0 : enabledIndexes.length - 1)
       : (position + direction + enabledIndexes.length) % enabledIndexes.length;
+    movedByKeyboard.current = true;
     setActive(enabledIndexes[next]);
   };
 
