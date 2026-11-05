@@ -137,6 +137,23 @@ export function npcAllianceVeto(state: SaveState, alliance: AllianceRecord, answ
   return known > 0 && sum / known <= NPC_ALLIANCE_CHOICE.vetoRegard;
 }
 
+/**
+ * Would the bot members of `alliance` refuse this owner for what they remember of it (a betrayal)? Used by an
+ * applicant before it asks: members who remember a defector do not take it back, so it does not apply.
+ */
+export function npcMembersRefuse(state: SaveState, alliance: AllianceRecord, applicantId: string, at: number): boolean {
+  let sum = 0;
+  let known = 0;
+  for (const id of npcMembers(state, alliance)) {
+    if (id === applicantId) continue;
+    const regard = npcRegard(state, state.npc!.profiles[id]!, applicantId, at);
+    if (regard === 0) continue;
+    sum += regard;
+    known += 1;
+  }
+  return known > 0 && sum / known <= NPC_ALLIANCE_CHOICE.vetoRegard;
+}
+
 export type NpcDefection = Readonly<{ score: number; successorOwnerId: string | null }>;
 
 /** True while the alliance has something at stake that a defector would forfeit or break. */

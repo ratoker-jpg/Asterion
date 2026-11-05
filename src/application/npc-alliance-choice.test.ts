@@ -14,7 +14,7 @@ import type { SaveState } from './contracts.ts';
 import { createInitialSaveState } from './persistence.ts';
 import { allianceFit, bestStrengths, joinPull, npcAllianceTaste, selectAllianceStrengths, selectNpcDefection } from './npc-alliance-choice.ts';
 import { applyNpcDiplomacyAction, getNpcDiplomacyCandidates } from './npc-diplomacy.ts';
-import { npcRegard, recordNpcBattleRelations } from './npc-relations.ts';
+import { npcGroupRegard, npcRegard, recordNpcBattleRelations, recordNpcRelation } from './npc-relations.ts';
 
 const T0 = Date.UTC(2026, 10, 1, 12);
 const HOUR = 3_600_000;
@@ -276,6 +276,7 @@ test('C: leaving in a war or truce changes no diplomacy of the alliance; a sole 
   const alone = leaveAlliance(left.state, weakLeader, LATER, {});
   assert.equal(alone.ok, true);
   assert.equal(alone.ok && alone.disbanded, true);
+  assert.deepEqual(alone.state.departures?.filter((entry) => entry.ownerId === weakLeader).map((entry) => [entry.allianceId, entry.cause]), [[weakId, 'left']], 'the last one out is a leaver too: the pause after leaving applies');
   assert.equal(alone.state.alliances.some((alliance) => alliance.id === weakId), false);
   assert.deepEqual(selectAllianceRelations(alone.state, strongId), [], 'the stale view of the dissolved alliance is not shown (and is pruned on load)');
 });
@@ -347,6 +348,13 @@ test('D: a defector who then fights its old alliance is remembered, refused, and
   // And it does not ask them in the first place.
   const asking = getNpcDiplomacyCandidates(fought, fought.npc!.profiles[defector]!, T0 + 100 * HOUR).some((item) => item.kind === 'apply-to-alliance' && item.payload.allianceId === oldAlliance);
   assert.equal(asking, false);
+  // The refusal reads what the MEMBERS remember, not only the applicant's own feelings: here the defector has no
+  // grudge at all (it never fought), yet the colleagues who remember a betrayal are not asked.
+  let remembered = state;
+  for (const member of [old1, old2]) remembered = recordNpcRelation(remembered, member, defector, { kind: 'betrayed' }, T0 + 40 * HOUR);
+  assert.ok(npcGroupRegard(remembered, remembered.npc!.profiles[defector]!, [old1, old2], T0 + 100 * HOUR) > -0.25, 'the defector itself holds no grudge');
+  assert.equal(getNpcDiplomacyCandidates(remembered, remembered.npc!.profiles[defector]!, T0 + 100 * HOUR)
+    .some((item) => item.kind === 'apply-to-alliance' && item.payload.allianceId === oldAlliance), false, 'members remember: it does not ask');
 });
 
 test('D: the player who left a bot\'s alliance and attacked it is remembered the same way, with no new score', () => {

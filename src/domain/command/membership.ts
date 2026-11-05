@@ -404,7 +404,7 @@ export function leaveAlliance(
 
   if (!others.length) {
     const closed = closeRequestsOfAlliance(state, alliance.id, now);
-    return { ok: true, disbanded: true, state: leaveCooldown(disband(closed, alliance.id, now), ownerId, 'left', now) };
+    return { ok: true, disbanded: true, state: leaveCooldown(recordDeparture(disband(closed, alliance.id, now), ownerId, alliance.id, 'left', now), ownerId, 'left', now) };
   }
 
   let next: AllianceRecord = alliance;

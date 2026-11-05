@@ -621,7 +621,9 @@ export function resolveAttackAtTarget(state: SaveState, flight: FlightRecord, no
 
   const input = createAttackInput(state, flight, target);
   if (input.attacker.ships.length === 0) return null;
-  const rawReport = resolveCombat(input, { reportId, missionType: 'attack' });
+  // A bot's fleet may exceed the single-fleet cap of the simulator (an overfull planet before attrition catches up,
+  // or a big bot raid); the battle must resolve instead of throwing inside the world's clock. Players' own fleets keep the cap.
+  const rawReport = resolveCombat(input, { reportId, missionType: 'attack', allowPopulationOverflow: flight.ownerSide === 'npc' || target.kind === 'npc' });
   const debris = calculateAttackDebris(rawReport, input.attacker.factionId!, input.defender.factionId!, battleDebrisRoll(reportId));
   const loot = calculateAttackLoot(rawReport, target.resources, input.attacker.factionId!);
   const reportWithOutcome: BattleReport = {
@@ -824,7 +826,8 @@ function resolveOwnedIncomingAttack(state: SaveState, flight: FlightRecord, now:
 
   const input = createBot01IncomingAttackInput(state, flight, source, target);
   if (input.attacker.ships.length === 0) return null;
-  const rawReport = resolveCombat(input, { reportId, missionType: 'attack' });
+  // The attacker is always a bot here; see the same note in resolveAttackAtTarget.
+  const rawReport = resolveCombat(input, { reportId, missionType: 'attack', allowPopulationOverflow: true });
   const debris = calculateAttackDebris(rawReport, input.attacker.factionId!, input.defender.factionId!, battleDebrisRoll(reportId));
   const targetResources = getPlanetResources(state, flight.destinationPlanetId);
   const loot = calculateAttackLoot(rawReport, targetResources, input.attacker.factionId!);

@@ -35,6 +35,7 @@ import {
   NPC_ALLIANCE_CHOICE,
   npcAllianceTaste,
   npcAllianceVeto,
+  npcMembersRefuse,
   recentlyLeftAlliances,
   recordNpcDeparture,
   selectAllianceStrengths,
@@ -154,7 +155,7 @@ export function getNpcDiplomacyCandidates(
         if (isAllianceFull(alliance) || left.has(alliance.id) || selectReapplyBlock(command, ownerId, alliance.id, at)) continue;
         const regard = npcGroupRegard(state, profile, alliance.members.map((member) => member.ownerId), at);
         // Members who remember a betrayal by this owner would not take it: it does not ask.
-        if (regard <= NPC_ALLIANCE_CHOICE.vetoRegard) continue;
+        if (regard <= NPC_ALLIANCE_CHOICE.vetoRegard || npcMembersRefuse(state, alliance, ownerId, at)) continue;
         const strength = strengths.get(alliance.id);
         const pull = strength ? joinPull(allianceFit(taste, strength, best)) : joinPull(0);
         candidates.push(makeCandidate('apply-to-alliance', `apply-to-alliance:${ownerId}:${alliance.id}`, (0.16 + cooperation * 0.58 + social * 0.12) * pull + 0.2 * regard, {
