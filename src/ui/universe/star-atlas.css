@@ -58,7 +58,8 @@
   position: absolute; z-index: 3; top: clamp(16px, 2.6vh, 28px); right: clamp(16px, 1.7vw, 32px);
   width: 54px; height: 54px; display: grid; place-items: center; padding: 0;
   border-radius: 12px; border: 1px solid rgba(240, 68, 94, .5); background: rgba(240, 68, 94, .12);
-  color: #ff8c9c; font-size: 22px !important; font-weight: 700; line-height: 1; cursor: pointer;
+  /* The cross itself is drawn by the theme (ui-polish.css, [data-asterion-close]). */
+  color: #ff8c9c; cursor: pointer;
   transition: background 160ms ease, border-color 160ms ease, color 160ms ease, scale 160ms cubic-bezier(.23, 1, .32, 1);
 }
 .universe-inspector.star-atlas .star-atlas__close:hover { background: rgba(240, 68, 94, .26); border-color: rgba(240, 68, 94, .85); color: #fff; }
@@ -165,7 +166,8 @@
 .star-atlas__list-head h3 { margin: 0; font-size: clamp(17px, 2.5vh, 26px) !important; font-weight: 800; }
 .star-atlas__list-head span { text-align: center; color: var(--atlas-muted); font-size: clamp(12px, 1.5vh, 16px) !important; font-weight: 700; }
 
-.star-atlas__planets { flex: 0 1 auto; min-height: 0; margin: 0; padding: 0; list-style: none; overflow: hidden auto; scrollbar-width: thin; }
+/* Seven rows always fit (row height follows the window), so the list never scrolls and hints may leave it. */
+.star-atlas__planets { flex: 0 1 auto; min-height: 0; margin: 0; padding: 0; list-style: none; overflow: visible; }
 .star-atlas__planets li {
   position: relative; height: var(--atlas-row); padding: 0 12px 0 8px; border-radius: 14px;
   animation: atlas-row-in 420ms cubic-bezier(.23, 1, .32, 1) both; animation-delay: calc(200ms + var(--i, 0) * 45ms);
@@ -194,7 +196,8 @@
 .star-atlas__act button {
   width: var(--atlas-circle); height: var(--atlas-circle); padding: 0; border: 0; border-radius: 50%;
   background: #0b141b; cursor: pointer;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, .14), 0 6px 16px rgba(0, 0, 0, .55);
+  /* A light rim keeps the darkest pictures (probe, flight, report) round on dark backdrops. */
+  box-shadow: 0 0 0 1.5px rgba(150, 214, 240, .38), 0 6px 16px rgba(0, 0, 0, .55);
   animation: atlas-pop 380ms cubic-bezier(.34, 1.56, .64, 1) both; animation-delay: calc(260ms + var(--i, 0) * 45ms);
   transition: scale 200ms cubic-bezier(.23, 1, .32, 1), box-shadow 200ms ease;
 }
@@ -253,4 +256,12 @@
 
 @media (prefers-reduced-motion: reduce) {
   .universe-inspector.star-atlas, .star-atlas *, .star-atlas *::before, .star-atlas *::after { animation-duration: 1ms !important; animation-delay: 0ms !important; animation-iteration-count: 1 !important; }
+}
+
+/* The shared theme pins every tagged text to one small size per category
+   (asterion-unified-theme.css); the atlas keeps its own scale, still
+   multiplied by the player's text setting (same approach as «Империя»). */
+html body .star-atlas [data-asterion-typography],
+html body .quick-pop.is-menu [data-asterion-typography] {
+  font-size: calc(var(--asterion-base-font-size) * var(--text-scale-body, 1)) !important;
 }

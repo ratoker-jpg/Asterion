@@ -54,7 +54,7 @@ export type QuickActionsProps = {
 type Placement = { left: number; top: number; side: 'right' | 'left' };
 
 function place(anchor: DOMRect, width: number, height: number, centred = false): Placement {
-  const gap = centred ? 22 : 14;
+  const gap = centred ? 28 : 14;
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
   const right = anchor.right + gap;
