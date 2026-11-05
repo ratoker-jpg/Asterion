@@ -28,6 +28,7 @@ import {
   selectReapplyBlock,
   selectRole,
 } from './selectors.ts';
+import { pruneDiplomacy } from './diplomacy.ts';
 import { parseCrest } from './crest.ts';
 import { normalizeEmblem } from './emblem.ts';
 import type {
@@ -374,7 +375,10 @@ function removeMemberFromAlliance(alliance: AllianceRecord, ownerId: string): Al
 
 function disband(state: CommandState, allianceId: string, now: number): CommandState {
   const closed = autoRejectPending(state, allianceId, 'disbanded', now);
-  return { ...closed, alliances: closed.alliances.filter((alliance) => alliance.id !== allianceId) };
+  const alliances = closed.alliances.filter((alliance) => alliance.id !== allianceId);
+  // Relations of the dissolved alliance go with it at once, as loading would prune them: a world that is saved and
+  // loaded after every slice must end up the same as one that never was.
+  return { ...closed, alliances, diplomacy: pruneDiplomacy(closed.diplomacy, new Set(alliances.map((alliance) => alliance.id))) };
 }
 
 function promote(alliance: AllianceRecord, successorOwnerId: string, now: number): AllianceRecord {
