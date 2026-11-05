@@ -224,13 +224,21 @@ async function checkRelations(win, label) {
 
 /** The reason a hover shows must be readable: fully inside the scene, not clipped by it. */
 async function checkTip(win, label, selector, expectedTitle) {
-  const tip = await js(win, `(() => {
+  // CI renders on the CPU: the fade-in advances with slow frames, so the check waits for it to end.
+  const read = () => js(win, `(() => {
     const node = document.querySelector(${JSON.stringify(selector)} + ' [data-qa-map-status-tip]');
     const style = getComputedStyle(node);
     const box = node.getBoundingClientRect();
     const scene = document.querySelector('[data-qa-universe-scene]').getBoundingClientRect();
-    return { text: node.textContent, visible: style.visibility === 'visible' && Number(style.opacity) > 0.9, inside: box.top >= scene.top && box.left >= scene.left && box.right <= scene.right && box.bottom <= scene.bottom };
+    const planet = document.querySelector(${JSON.stringify(selector)});
+    return { text: node.textContent, hovered: planet.matches(':hover'), under: document.querySelector('.system-planet:hover')?.getAttribute('data-qa-universe-object') ?? null, visible: style.visibility === 'visible' && Number(style.opacity) > 0.9, inside: box.top >= scene.top && box.left >= scene.left && box.right <= scene.right && box.bottom <= scene.bottom };
   })()`);
+  const started = Date.now();
+  let tip = await read();
+  while (!tip.visible && Date.now() - started < 4_000) {
+    await sleep(100);
+    tip = await read();
+  }
   if (!tip.visible || !tip.inside || !tip.text.includes(expectedTitle)) throw new Error(`${label}: hover reason ${JSON.stringify(tip)}, expected «${expectedTitle}»`);
 }
 
