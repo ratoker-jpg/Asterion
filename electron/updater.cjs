@@ -109,7 +109,17 @@ function registerUpdater() {
       log.info(`update available: ${info.version}`);
       setState({ status: 'available', version: info.version });
     });
-    updater.on('update-not-available', () => { attempt = 0; setState({ status: 'latest' }); });
+    updater.on('update-not-available', () => {
+      // The mirror can lag a release by up to ~30 min: before saying «latest», ask GitHub too (one small file).
+      if (feedIndex < feeds.length - 1) {
+        log.info('mirror has no newer version, asking the next feed');
+        useFeed(feedIndex + 1);
+        setTimeout(runCheck, 500);
+        return;
+      }
+      attempt = 0;
+      setState({ status: 'latest' });
+    });
     updater.on('download-progress', (progress) => setState({
       status: 'downloading',
       version: state.version,
