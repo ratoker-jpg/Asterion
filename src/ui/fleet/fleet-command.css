@@ -556,7 +556,8 @@ html.asterion-long-page:has(.fleet-workspace-v1) #root{overflow-x:clip !importan
   .flight-briefing-v2 .flight-cargo-sliders-v2 .amount-slider{grid-template-columns:30px minmax(0,1fr) 30px auto !important;grid-template-rows:auto !important}
   .flight-briefing-v2 .flight-briefing-v2__axis{display:none !important}
   .flight-plan-fleet .flight-timeline-ship-card div small{display:none !important}
-  .flight-plan-fleet .flight-timeline-ship-card{padding:3px 8px !important;grid-template-columns:36px minmax(0,1fr) auto !important;gap:6px !important}
+  .flight-plan-fleet .flight-timeline-ship-card{min-height:0 !important;height:auto !important;padding:2px 6px !important;grid-template-columns:30px minmax(0,1fr) auto !important;gap:5px !important}
+  .flight-plan-fleet .flight-timeline-ship-card img{width:30px !important;height:26px !important}
   .flight-plan-fleet .flight-timeline-ship-list{grid-template-columns:repeat(auto-fill,minmax(170px,1fr)) !important;gap:4px !important}
   .resource-building-action-confirm.flight-timeline-modal.flight-briefing-v2 .flight-timeline-metrics{grid-template-columns:repeat(2,minmax(0,1fr)) !important}
   .flight-briefing-v2 .flight-timeline-cargo-input{display:flex !important;align-items:center;justify-content:flex-end;gap:6px}
