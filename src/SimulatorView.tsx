@@ -705,7 +705,7 @@ function BattleOutcome({
   const loot = useMemo(() => (target ? calculateAttackLoot(report, target.resources, attackerFactionId) : null), [report, target, attackerFactionId]);
   return (
     <div className="simx-outcome" data-qa-sim-result data-qa-sim-winner={report.winner}>
-      <div className={`simx-verdict is-${report.winner}`}>
+      <div className={`simx-verdict is-${report.winner}`} role="status">
         <small>Итог боя</small>
         <strong>{WINNER_TITLE[report.winner]}</strong>
         <span data-qa-sim-rounds>Раунд {report.roundCount} из {maxRounds}</span>
@@ -817,7 +817,7 @@ export function SimulatorView({ planetId, planetName, coords, saveState, onBack,
       if (!arena) return;
       const rect = arena.getBoundingClientRect();
       const scale = rect.width / Math.max(1, arena.offsetWidth);
-      const free = (window.innerHeight - rect.top - window.scrollY) / scale - 26;
+      const free = (window.innerHeight - rect.top - window.scrollY) / scale - 44;
       arena.style.setProperty('--simx-height', `${Math.max(440, Math.floor(free))}px`);
     };
     measure();
@@ -1052,7 +1052,7 @@ export function SimulatorView({ planetId, planetName, coords, saveState, onBack,
               {[...new Set(validation.errors.map((error) => error.message))].slice(0, 4).map((message) => <li key={message}>{message}</li>)}
             </ul>
           )}
-          <p className="simx-notice" aria-live="polite">{notice}</p>
+          {result ? null : <p className="simx-notice" aria-live="polite">{notice}</p>}
         </aside>
 
         <section className="simx-side is-defender" data-qa-sim-side="defender">
