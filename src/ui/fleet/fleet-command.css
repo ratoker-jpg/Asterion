@@ -533,6 +533,13 @@ html.asterion-long-page:has(.fleet-workspace-v1) #root{overflow-x:clip !importan
 .flight-briefing-v2 .flight-timeline-actions>.flight-timeline-meta{flex:1;min-width:0;margin:0 !important;padding:0 !important;border:0 !important;color:#a9cbd3;font-size:12px !important;letter-spacing:.02em;text-align:left}
 .flight-briefing-v2 .flight-timeline-actions>button{flex:none}
 .flight-briefing-v2 .game-select__trigger{font-size:calc(13px * var(--text-scale-control,1)) !important}
+.resource-building-action-confirm.flight-timeline-modal.flight-briefing-v2 .flight-timeline-head>div{background:none !important;border:0 !important;box-shadow:none !important;padding:0 !important;min-height:0 !important}
+.resource-building-action-confirm.flight-timeline-modal.flight-briefing-v2 .flight-timeline-head::before,.resource-building-action-confirm.flight-timeline-modal.flight-briefing-v2 .flight-timeline-head::after{display:none !important}
+.resource-building-action-confirm.flight-timeline-modal.flight-briefing-v2 .flight-timeline-cargo-head>span,.resource-building-action-confirm.flight-timeline-modal.flight-briefing-v2 .flight-timeline-cargo-head{border:0 !important;background:none !important;box-shadow:none !important}
+.resource-building-action-confirm.flight-timeline-modal.flight-briefing-v2 .flight-timeline-metrics{grid-template-columns:repeat(auto-fit,minmax(150px,1fr)) !important}
+.resource-building-action-confirm.flight-timeline-modal.flight-briefing-v2 .flight-timeline-metrics small{letter-spacing:.02em}
+.resource-building-action-confirm.flight-timeline-modal.flight-briefing-v2 .flight-timeline-target-status{flex-wrap:wrap;gap:4px 6px}
+.resource-building-action-confirm.flight-timeline-modal.flight-briefing-v2 .flight-timeline-target-status>span{flex:1 1 100%}
 /* A window under 1500 wide: one line per resource and its slider below, so all four stay in view. */
 @media (max-width:1500px){
   .resource-building-action-confirm.flight-timeline-modal.flight-briefing-v2 .flight-timeline-body{gap:16px !important}
@@ -546,6 +553,12 @@ html.asterion-long-page:has(.fleet-workspace-v1) #root{overflow-x:clip !importan
   .flight-briefing-v2 .flight-cargo-sliders-v2 .flight-timeline-cargo-field>.amount-slider{grid-column:1/-1;padding:0 !important;gap:4px !important}
   .flight-briefing-v2 .flight-cargo-sliders-v2 .amount-slider>button:first-child,
   .flight-briefing-v2 .flight-cargo-sliders-v2 .amount-slider__scale{display:none !important}
+  .flight-briefing-v2 .flight-cargo-sliders-v2 .amount-slider{grid-template-columns:30px minmax(0,1fr) 30px auto !important;grid-template-rows:auto !important}
+  .flight-briefing-v2 .flight-briefing-v2__axis{display:none !important}
+  .flight-plan-fleet .flight-timeline-ship-card div small{display:none !important}
+  .flight-plan-fleet .flight-timeline-ship-card{padding:3px 8px !important;grid-template-columns:36px minmax(0,1fr) auto !important;gap:6px !important}
+  .flight-plan-fleet .flight-timeline-ship-list{grid-template-columns:repeat(auto-fill,minmax(170px,1fr)) !important;gap:4px !important}
+  .resource-building-action-confirm.flight-timeline-modal.flight-briefing-v2 .flight-timeline-metrics{grid-template-columns:repeat(2,minmax(0,1fr)) !important}
   .flight-briefing-v2 .flight-timeline-cargo-input{display:flex !important;align-items:center;justify-content:flex-end;gap:6px}
   .flight-briefing-v2 .flight-timeline-cargo-input input{order:2;width:96px !important;height:26px !important}
   .flight-briefing-v2 .flight-timeline-cargo-input em{order:1;white-space:nowrap}
