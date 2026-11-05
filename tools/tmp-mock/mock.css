@@ -12,7 +12,7 @@ b,strong{font-weight:800}
 .btn{display:inline-flex;align-items:center;justify-content:center;height:48px;padding:0 22px;border-radius:var(--r);background:var(--sf2);color:var(--tx);font-weight:700;font-size:18px;white-space:nowrap;border:0}
 .btn.pri{background:linear-gradient(180deg,#7ee2ff,#2fb2ee);color:#04202e;font-weight:800;box-shadow:0 0 34px rgba(95,212,255,.35)}
 .btn.big{height:84px;font-size:28px;padding:0 54px}
-.x{position:absolute;top:28px;right:32px;width:56px;height:56px;border-radius:var(--r);display:grid;place-items:center;background:rgba(255,90,110,.16);color:var(--re);z-index:50}
+.x{position:absolute;top:28px;right:32px;width:56px;height:56px;border-radius:var(--r);display:grid;place-items:center;background:#2a0f18;box-shadow:inset 0 0 0 2px #ff6a7866;color:#ff8a95;z-index:50}
 .x svg{width:26px;height:26px}
 .field{display:inline-flex;align-items:center;justify-content:center;height:48px;min-width:64px;padding:0 14px;background:rgba(0,0,0,.45);border-radius:var(--r);font-weight:800}
 .mirror{transform:scaleX(-1)}

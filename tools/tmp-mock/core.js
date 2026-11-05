@@ -37,8 +37,8 @@ const MI={
 const BAN=m=>u(`/src/assets/ui/missions/banner-${m}.webp`);
 const PL=i=>u(`/assets/source/universe-navigation/planets/planet.variant-0${i}.png`);
 const GAL=i=>u(`/src/assets/ui/atlas/galaxy-0${i}.webp`);
-const HOME=PL(4);
-const ORI={name:HUGE?'Новая Александрия-на-Орбите':'Москва',c:[1,17,17],art:HOME};
+const HOME=PL(5);
+const ORI={name:HUGE?'Новая Александрия-на-Орбите':'Москва',gen:HUGE?'Новой Александрии-на-Орбите':'Москвы',c:[1,17,17],art:HOME};
 const coord=c=>`[${c.join(':')}]`;
 const RES=[['metal','Металл',15468832],['mineral','Минералы',20055258],['gas','Газ',13908963]].map(r=>HUGE?[r[0],r[1],r[2]*97+13]:r);
 const posD=(a,b)=>{const R=p=>Math.floor((p-1)/6),Z=p=>(p-1)%6;const s=Math.abs(Z(a)-Z(b));return 6*Math.abs(R(a)-R(b))+Math.min(s,6-s)};
@@ -56,12 +56,12 @@ const hms=s=>[s/3600|0,(s%3600)/60|0,s%60].map(v=>String(v).padStart(2,'0')).joi
 const at=s=>hms((NOW+s)%86400);
 const kS=HUGE?2719:1;
 const SC={
- transport:{m:'transport',ships:{transporter:400*kS,mega:60*kS},tgt:{name:HUGE?'Верхний Предел Колонии Тау':'Самара',c:[2,8,11],who:'Своя планета',art:PL(2)},cargo:[1800000*kS,900000*kS,200000*kS]},
- attack:{m:'attack',ships:{cruiser:500*kS,battleship:430*kS,destroyer:167*kS,scout:94*kS},tgt:{name:'Вершина',c:[3,23,10],who:'Игрок Тарок',art:PL(5)}},
- spy:{m:'espionage',ships:{probe:12},tgt:{name:'Вершина',c:[3,23,10],who:'Игрок Тарок',art:PL(5)}},
+ transport:{m:'transport',ships:{transporter:400*kS,mega:60*kS},tgt:{name:HUGE?'Верхний Предел Колонии Тау':'Самара',acc:HUGE?'Верхний Предел Колонии Тау':'Самару',c:[2,8,11],who:'Своя планета',art:PL(2)},cargo:[1800000*kS,900000*kS,200000*kS]},
+ attack:{m:'attack',ships:{cruiser:500*kS,battleship:430*kS,destroyer:167*kS,scout:94*kS},tgt:{name:'Вершина',acc:'Вершину',c:[3,23,10],who:'Игрок Тарок',art:PL(7)}},
+ spy:{m:'espionage',ships:{probe:12},tgt:{name:'Вершина',acc:'Вершину',c:[3,23,10],who:'Игрок Тарок',art:PL(7)}},
  none:{m:'transport',ships:{transporter:400*kS,mega:60*kS},tgt:null,cargo:[1800000*kS,900000*kS,200000*kS]},
 };
-const NEAR=[['Самара','своя',[2,8,11],PL(2)],['Тверь','своя',[1,17,9],PL(6)],['Новосибирск','своя',[1,17,4],PL(7)],['Вершина','недавняя цель',[3,23,10],PL(5)]];
+const NEAR=[['Самара','своя',[2,8,11],PL(2)],['Тверь','своя',[1,17,9],PL(6)],['Новосибирск','своя',[1,17,4],PL(8)],['Вершина','недавняя цель',[3,23,10],PL(7)]];
 const REP={metal:4120556,mineral:2388104,gas:961230,fleet:1020,def:340,ago:'12 мин назад'};
 const SIM={a:{cruiser:[500,118],battleship:[430,42],destroyer:[167,6],scout:[94,31]},d:{cruiser:[300,300],battleship:[260,260],defender:[120,120],destroyer:[80,80]},round:4,rounds:8,verdict:'Победа атакующего',debris:14148674};
 const X='<div class="x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 5l14 14M19 5L5 19"/></svg></div>';
