@@ -121,6 +121,13 @@ export const CLOUD_UPLOAD_EVERY_MS = 3 * 60_000;
 export const LOCAL_COPY_MIN_MS = 30_000;
 
 /**
+ * More than this of play past the last upload is not the tail of a cut-off
+ * session (that is at most a few upload periods) but real offline play: the
+ * player decides which world goes on.
+ */
+export const LOCAL_UNSYNCED_MAX_MS = 15 * 60_000;
+
+/**
  * A living world further behind the clock than this is still catching up on
  * the server: the game waits for it instead of taking it and replaying the
  * rest itself. In the steady state the server's lag is 0–10 s (a step every
@@ -249,10 +256,13 @@ export function decideCloudEntry(input: CloudEntryInput): CloudEntryDecision {
   if (!live && campaign.lease && campaign.lease.deviceId !== input.deviceId && campaign.lease.ageMs < CLOUD_LEASE_MS) return { action: 'ask', reason: 'other-device' };
   if (!unchanged) {
     if (head.revision === record.revision) {
-      // The one rule: the world that is further along in game time wins. The server took this campaign over (the game
-      // stopped without leaving) and has lived past where this save stops; what this save did after the last upload
-      // is kept as a copy. A save that is as far or further along stays: the server's world is released.
-      if (live && live.baseRevision === head.revision && input.localWorldAt != null && live.worldAt > input.localWorldAt) {
+      // The server took this campaign over because its game stopped without leaving (the head is a plain upload,
+      // not a hand-over) and has lived past where this save stops: its world wins, and what this save did after the
+      // last upload (at most the tail of a cut-off session) is kept as a copy. Much more play than that is real
+      // offline play: the player chooses. A save that is as far or further along, or one that followed a clean exit,
+      // stays and the server's world is released.
+      if (live && live.baseRevision === head.revision && !head.left && input.localWorldAt != null && live.worldAt > input.localWorldAt) {
+        if (input.localWorldAt - head.worldAt > LOCAL_UNSYNCED_MAX_MS) return { action: 'ask', reason: 'diverged' };
         const taken = claimOrLocal(input, head.revision, live);
         if (taken.action === 'claim') return { ...taken, keepLocalCopy: input.localWorldAt > head.worldAt + LOCAL_COPY_MIN_MS };
         if (taken.action === 'wait') return taken;
