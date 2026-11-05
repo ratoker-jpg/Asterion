@@ -33,7 +33,7 @@ export const NPC_ALLIANCE_CHOICE = Object.freeze({
   /** Largest alliance that consolidates. */
   smallSize: 2,
   /** Below this the owner stays. */
-  restlessnessToLeave: 0.15,
+  restlessnessToLeave: 0.3,
   /** A member refuses a former colleague who attacked the alliance. */
   vetoRegard: -0.25,
 });
@@ -204,17 +204,21 @@ export function selectNpcDefection(state: SaveState, profile: NpcProfile, at: nu
 
   let bestOther = 0;
   let biggerMatch = false;
+  let hasDestination = false;
   const left72 = recentlyLeftAlliances(command, ownerId, at);
   for (const other of command.alliances) {
     if (other.id === alliance.id || isAllianceFull(other) || left72.has(other.id) || selectReapplyBlock(command, ownerId, other.id, at)) continue;
     if (npcGroupRegard(state, profile, other.members.map((entry) => entry.ownerId), at) <= rules.vetoRegard) continue;
     const strength = strengths.get(other.id);
+    hasDestination = true;
     if (strength) {
       const otherFit = allianceFit(taste, strength, best);
       bestOther = Math.max(bestOther, otherFit);
       if (other.members.length > alliance.members.length && otherFit >= ownFit - 0.05) biggerMatch = true;
     }
   }
+  // Nobody walks out into nothing: a departure needs an alliance that could take the owner in, or the world fills with loners.
+  if (!hasDestination) return null;
   const gapTerm = clamp01((bestOther - ownFit - rules.fitGapToLeave) / 0.5);
 
   const colleagues = alliance.members.map((entry) => entry.ownerId).filter((id) => id !== ownerId);
