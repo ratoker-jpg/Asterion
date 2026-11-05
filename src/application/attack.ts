@@ -621,14 +621,7 @@ export function resolveAttackAtTarget(state: SaveState, flight: FlightRecord, no
 
   const input = createAttackInput(state, flight, target);
   if (input.attacker.ships.length === 0) return null;
-  let rawReport: BattleReport;
-  try { rawReport = resolveCombat(input, { reportId, missionType: 'attack' }); } catch (error) {
-    // TMP-DIAG
-    const ownerOf = (id: string) => JSON.stringify(state.command.alliances.map((a) => [a.id, a.members.length, a.members.some((m) => m.ownerId === id)]).filter((a) => a[2]));
-    const tgt = target as unknown as { ownerId: string; fleet: { ships: Record<string, number> }; id?: string; buildings?: Record<string, number> };
-    const info = { flight: flight.id, origin: flight.originPlanetId, ownerSide: flight.ownerSide, dest: flight.destinationPlanetId, targetOwner: tgt.ownerId, targetAlliance: ownerOf(tgt.ownerId), hangar: tgt.buildings?.hangar, ships: tgt.fleet.ships, dep: flight.departedAt, arr: flight.arrivalAt, sel: flight.selectedShips };
-    throw new Error(`TMP-DIAG ${String(error)} ${JSON.stringify(info)}`);
-  }
+  const rawReport = resolveCombat(input, { reportId, missionType: 'attack' });
   const debris = calculateAttackDebris(rawReport, input.attacker.factionId!, input.defender.factionId!, battleDebrisRoll(reportId));
   const loot = calculateAttackLoot(rawReport, target.resources, input.attacker.factionId!);
   const reportWithOutcome: BattleReport = {
