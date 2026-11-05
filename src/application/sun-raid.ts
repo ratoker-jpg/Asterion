@@ -828,23 +828,27 @@ type SideParticipant = { flight: FlightRecord; snapshot: SunFlightSnapshot; popu
  * the others are tagged (`g2`, `g3`...) so no ship is dropped or re-skinned.
  */
 function sideInput(participants: readonly SideParticipant[]) {
-  type Group = { ownerId: string; factionId: CombatFactionId; technologies: CombatTechnologyLevels; levels: Partial<Record<ShipId, number>>; population: number; firstFlightId: string; stacks: Map<ShipId, number> };
+  type Group = { key: string; flightIds: string[]; ownerId: string; factionId: CombatFactionId; technologies: CombatTechnologyLevels; levels: Partial<Record<ShipId, number>>; population: number; firstFlightId: string; stacks: Map<ShipId, number> };
   const groups = new Map<string, Group>();
   for (const { flight, snapshot, population } of participants) {
-    const group = groups.get(snapshot.ownerId) ?? {
-      ownerId: snapshot.ownerId, factionId: snapshot.factionId, technologies: snapshot.technologies,
+    // Flights of one owner share a group only while their race, science and ship levels are identical
+    // (an upgrade finished between two flights keeps each flight's own snapshot).
+    const key = JSON.stringify([snapshot.ownerId, snapshot.factionId, snapshot.technologies, snapshot.shipLevels]);
+    const group = groups.get(key) ?? {
+      key, flightIds: [], ownerId: snapshot.ownerId, factionId: snapshot.factionId, technologies: snapshot.technologies,
       levels: snapshot.shipLevels, population: 0, firstFlightId: flight.id, stacks: new Map<ShipId, number>(),
     };
+    group.flightIds.push(flight.id);
     group.population += population;
     if (flight.id < group.firstFlightId) group.firstFlightId = flight.id;
     for (const [id, count] of Object.entries(flight.selectedShips) as [ShipId, number][]) {
       if (safeCount(count) > 0) group.stacks.set(id, (group.stacks.get(id) ?? 0) + safeCount(count));
     }
-    groups.set(snapshot.ownerId, group);
+    groups.set(key, group);
   }
   const ordered = [...groups.values()].sort((left, right) => right.population - left.population || left.firstFlightId.localeCompare(right.firstFlightId));
   const lead = [...participants].sort((left, right) => right.population - left.population || left.flight.id.localeCompare(right.flight.id))
-    .find((item) => item.snapshot.ownerId === ordered[0]?.ownerId) ?? participants[0];
+    .find((item) => ordered[0]?.flightIds.includes(item.flight.id)) ?? participants[0];
   const toShips = (group: Group): CombatStackInput[] => {
     const catalog = new Set(getFactionShipCatalog(group.factionId).map((entity) => entity.id));
     return [...group.stacks.entries()]
@@ -856,9 +860,9 @@ function sideInput(participants: readonly SideParticipant[]) {
   const factionId = first?.factionId ?? 'aegis';
   const technologies = first ? mergeSideTechnologies([first.technologies]) : createDefaultCombatTechnologies();
   const ships = first ? toShips(first) : [];
-  const groupTags = new Map<string, string | null>(ordered.map((group, index) => [group.ownerId, index === 0 ? null : `g${index + 1}`]));
+  const groupTags = new Map<string, string | null>(ordered.flatMap((group, index) => group.flightIds.map((id) => [id, index === 0 ? null : `g${index + 1}`] as const)));
   const allyGroups: CombatAllyGroupInput[] = ordered.slice(1).map((group) => ({
-    tag: groupTags.get(group.ownerId)!, ownerId: group.ownerId, factionId: group.factionId,
+    tag: groupTags.get(group.flightIds[0]!)!, ownerId: group.ownerId, factionId: group.factionId,
     technologies: mergeSideTechnologies([group.technologies]), ships: toShips(group),
   })).filter((group) => group.ships.length > 0);
   // Commander ships: one per commander type, the highest level sent by any participant
@@ -905,7 +909,7 @@ function distributeLosses(participants: readonly SideParticipant[], force: Battl
     let destroyed = safeCount(stack.destroyed);
     if (!destroyed) continue;
     // Losses of an owner group fall only on that owner's own flights.
-    const holders = participants.filter((item) => (groupTags.get(item.snapshot.ownerId) ?? null) === tag && safeCount(item.flight.selectedShips[id]) > 0);
+    const holders = participants.filter((item) => (groupTags.get(item.flight.id) ?? null) === tag && safeCount(item.flight.selectedShips[id]) > 0);
     const total = holders.reduce((sum, item) => sum + safeCount(item.flight.selectedShips[id]), 0);
     if (!total) continue;
     const shares = holders.map((item) => {

@@ -75,3 +75,17 @@ test('three owners of three races in one Sun raid: every ship fights as its own 
     assert.equal((flight.selectedShips.cruiser ?? 0), stack.countAfter, `${flightId}: survivors equal its own stack`);
   }
 });
+
+test('one owner, two flights with different ship levels (upgrade finished in between): each flight keeps its own levels', () => {
+  const { state: armed, raidId, mineId, iraId } = threeRaceRaid();
+  const base = armed.flights.records.find((flight) => flight.id === iraId)!;
+  const twin = { ...base, id: `${base.id}-late`, requestId: `${base.requestId}-late`, selectedShips: { cruiser: 10 } as Partial<Record<ShipId, number>>,
+    sunRaid: { ...base.sunRaid!, shipLevels: { cruiser: 9 } } };
+  const withTwin = { ...armed, flights: { ...armed.flights, records: [...armed.flights.records, twin] } };
+  const raid = currentSunRaidState(withTwin).raids[0]!;
+  const state = reconcileRuntime(withTwin, { planetId: withTwin.currentPlanetId, now: raid.arrivesAt!, mode: 'test', testTimeScale: 1 }).state;
+  const report = state.combat.reports.find((item) => item.id === currentSunRaidState(state).raids.find((r) => r.id === raidId)!.result!.reportId)!;
+  const levels = report.attackerForce.stacks.filter((stack) => combatBaseEntityId(stack.entityId) === 'cruiser').map((stack) => stack.level);
+  assert.ok(levels.includes(4) && levels.includes(9), `both level 4 and level 9 fought: ${levels.join(',')}`);
+  assert.ok(mineId);
+});
