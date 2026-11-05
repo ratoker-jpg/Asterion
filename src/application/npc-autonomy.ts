@@ -242,6 +242,19 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     }
     return attackForces.get(mission.id) ?? ships;
   }
+  /** Journal only: how much of what the planet could send an attack sent, and what the scouted stores were worth. */
+  function journalNpcAttackSizing(owner: string, at0: SaveState, mission: { payload: Readonly<Record<string, string | number | boolean | null>> }, sent: Record<string, number> | null | undefined, when: number): void {
+    const journal = getNpcJournalSink();
+    const origin = at0.espionage?.targets?.[String(mission.payload.originPlanetId)];
+    const report = utility.latestReports.get(String(mission.payload.destinationPlanetId ?? ''));
+    if (!journal?.outcome || !origin || !sent) return;
+    let all: Record<string, number> = {};
+    try { all = JSON.parse(String(mission.payload.selectedShips ?? '{}')) as Record<string, number>; } catch { all = {}; }
+    const combat = new Set(getFactionShipCatalog(origin.raceId).filter((entity) => entity.category === 'Боевой корабль').map((entity) => entity.id as string));
+    const onlyCombat = (ships: Record<string, number>) => Object.fromEntries(Object.entries(ships).filter(([id]) => combat.has(id)));
+    const stores = report ? report.resources.metal + report.resources.minerals + report.resources.gas : 0;
+    journal.outcome({ at: when, ownerId: owner, kind: 'send', data: { fl: Math.round(npcFleetValue(origin.raceId, sent)), av: Math.round(npcFleetValue(origin.raceId, onlyCombat(all))), st: Math.round(stores) } });
+  }
   const drives = npcReactionDrives(state, ownerId, at, strategyOf(utility));
   const planets = Object.values(state.espionage?.targets ?? {}).filter((target) => target.kind === 'npc' && target.ownerId === ownerId)
     .sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
@@ -616,6 +629,7 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
             attackPriority: npcCombatPriority(profile.traits, origin?.ownerProfile?.commanderLevels ?? {}, shape, COMMANDER_IDS) };
         }
         const result = dispatchNpcMission(current, armed, at, timeScale);
+        if (mission.kind === 'attack' && result.ok) journalNpcAttackSizing(ownerId, current, mission, chosen, at);
         // The planet the fleet leaves is touched by this action (its gas pays the flight).
         return { state: result.state, started: result.ok, reason: result.reason, planetId: armed.originPlanetId };
       },
