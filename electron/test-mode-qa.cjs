@@ -458,11 +458,10 @@ async function readQaState(win) {
       })(),
       fleetRoster: Array.from(document.querySelectorAll('[data-qa-fleet-ship]')).map((node) => ({
         id: node.getAttribute('data-qa-fleet-ship'),
-        owned: Number(node.querySelector('[data-qa-fleet-owned]')?.textContent || 0),
+        owned: Number(node.querySelector('[data-qa-fleet-owned]')?.getAttribute('data-qa-fleet-owned') || 0),
         population: Number(node.querySelector('[data-qa-fleet-unit-population]')?.textContent || 0),
       })),
-      fleetBaseCardTag: document.querySelector('.fleet-yard-card-v1')?.tagName ?? '',
-      fleetProductionQueues: {
+            fleetProductionQueues: {
         ships: planet?.fleetProduction?.shipQueue?.length ?? -1,
         defense: planet?.fleetProduction?.defenseQueue?.length ?? -1,
         commanders: planet?.fleetProduction?.commanderQueue?.length ?? -1,
@@ -744,13 +743,12 @@ async function runViewport(width, height) {
       { id: 'scout', owned: 20, population: 2 },
     ];
     if (JSON.stringify(fleetRoot.fleetRoster) !== JSON.stringify(expectedFleetRoster)) throw new Error(`${label}: current fleet roster UI mismatch ${JSON.stringify(fleetRoot.fleetRoster)}`);
-    if (fleetRoot.fleetBaseCardTag === 'BUTTON') throw new Error(`${label}: fleet base card must be informational, not a button`);
     if (fleetRoot.fleetRosterOverflow || fleetRoot.fleetRosterOverflowY !== 'auto') throw new Error(`${label}: compact fleet roster scroll contract failed ${JSON.stringify(fleetRoot)}`);
     const expectedFleetFlightActions = ['ЗАПУСТИТЬ АТАКУ BOT 01', 'BOT 01 · ЗАХВАТИТЬ ОБЪЕКТ (ТЕСТ)'];
     const actions = fleetRoot.fleetFlightActions;
     const spyAction = fleetRoot.fleetSpyAction;
     const spyPanel = spyAction?.panel;
-    const spyClipped = !spyAction || spyAction.text !== 'ШПИОНСКИЕ ОТЧЁТЫ'
+    const spyClipped = !spyAction || spyAction.text !== 'Шпионские отчёты'
       || !spyPanel || spyAction.top < spyPanel.top - 2 || spyAction.bottom > spyPanel.bottom + 2
       || spyAction.left < spyPanel.left - 2 || spyAction.right > spyPanel.right + 2
       || spyAction.clientWidth < spyAction.scrollWidth - 2;
@@ -780,7 +778,7 @@ async function runViewport(width, height) {
     if (restoredFleet.fleetPageLong || restoredFleet.fleetRosterOverflowY !== 'auto' || !restoredFleet.fleetPopulation.includes('58 / 120')) {
       throw new Error(`${label}: canonical fleet restore after roster-scroll QA failed ${JSON.stringify(restoredFleet)}`);
     }
-    await clickText(win, '.fleet-sidebar-v1 button', 'Корабли');
+    await clickText(win, '.fc-wings button', 'Корабли');
     await waitFor(win, `document.querySelector('[data-qa-construction-mode="ships"]')`);
     const fleetUi = await readQaState(win);
     if (!(await documentHasNoOverflow(win))) throw new Error(`${label}: fleet construction UI mismatch`);

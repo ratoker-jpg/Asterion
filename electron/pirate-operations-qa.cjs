@@ -218,7 +218,7 @@ async function reselectContact(win, contact) {
 
 async function selectAllAvailableShips(win) {
   const result = await win.webContents.executeJavaScript(`(() => {
-    const button = Array.from(document.querySelectorAll('.fleet-selection-line-v1 button')).find((item) => item.textContent?.trim() === 'Макс.');
+    const button = document.querySelector('[data-qa-fleet-select-all]');
     if (!button) return { ok: false, reason: 'fleet-wide Max button missing' };
     button.click();
     return { ok: true };
@@ -230,8 +230,8 @@ async function selectAllAvailableShips(win) {
     const button = document.querySelector('[data-qa-flight-preview-open]');
     return {
       launchable: Boolean(button && !button.disabled),
-      selectedCount: document.querySelector('.fleet-selection-line-v1 strong')?.textContent?.trim() || '',
-      rows: rows.map((row) => ({ id: row.getAttribute('data-qa-fleet-ship'), owned: row.querySelector('[data-qa-fleet-owned]')?.textContent?.trim() || '', selected: row.querySelector('input')?.value || '' })),
+      selectedCount: document.querySelector('[data-qa-fleet-selected]')?.textContent?.trim() || '',
+      rows: rows.map((row) => ({ id: row.getAttribute('data-qa-fleet-ship'), owned: row.querySelector('[data-qa-fleet-owned]')?.getAttribute('data-qa-fleet-owned') || '', selected: row.querySelector('input')?.value || '' })),
       timeScale: document.querySelector('[data-qa-test-time-scale]')?.textContent?.trim() || '',
     };
   })()`);
@@ -521,14 +521,14 @@ async function runViewport(width, height) {
     await waitFor(win, `document.querySelector('.fleet-workspace-v1[data-qa-flight-launch-context] [data-qa-attack-prep]')`);
     const launchContext = await win.webContents.executeJavaScript(`(() => {
       const root = document.querySelector('.fleet-workspace-v1');
-      return { target: root?.getAttribute('data-qa-flight-launch-context') || '', relation: root?.getAttribute('data-qa-target-relation') || '', mission: document.querySelector('#fleet-mission')?.value || '' };
+      return { target: root?.getAttribute('data-qa-flight-launch-context') || '', relation: root?.getAttribute('data-qa-target-relation') || '', mission: document.querySelector('[data-qa-mission-current]')?.getAttribute('data-qa-mission-current') || '' };
     })()`);
     if (launchContext.mission !== 'pirate-elimination' || launchContext.relation !== 'neutral' || !launchContext.target) {
       throw new Error(`Pirate elimination launch context was not preserved: ${JSON.stringify(launchContext)}`);
     }
     const fleetRosterState = await win.webContents.executeJavaScript(`(() => {
       const scout = document.querySelector('[data-qa-fleet-ship="scout"]');
-      return { scoutOwned: Number(scout?.querySelector('[data-qa-fleet-owned]')?.textContent || 0), rowCount: document.querySelectorAll('[data-qa-fleet-ship]').length };
+      return { scoutOwned: Number(scout?.querySelector('[data-qa-fleet-owned]')?.getAttribute('data-qa-fleet-owned') || 0), rowCount: document.querySelectorAll('[data-qa-fleet-ship]').length };
     })()`);
     if (fleetRosterState.scoutOwned < 1) throw new Error(`The normal fleet preparation roster does not expose the seeded scout: ${JSON.stringify(fleetRosterState)}`);
     await capture(win, directory, 'pirate-elimination-fleet-roster');
@@ -541,7 +541,7 @@ async function runViewport(width, height) {
     if (!previewOpened) {
       const buttonState = await win.webContents.executeJavaScript(`(() => {
         const button = document.querySelector('[data-qa-flight-preview-open]');
-        return { buttonText: button?.textContent?.trim() || '', disabled: Boolean(button?.disabled), mission: document.querySelector('#fleet-mission')?.value || '', root: document.querySelector('.fleet-workspace-v1')?.outerHTML?.slice(0, 800) || '' };
+        return { buttonText: button?.textContent?.trim() || '', disabled: Boolean(button?.disabled), mission: document.querySelector('[data-qa-mission-current]')?.getAttribute('data-qa-mission-current') || '', root: document.querySelector('.fleet-workspace-v1')?.outerHTML?.slice(0, 800) || '' };
       })()`);
       throw new Error(`The fleet preview did not open after the primary action: ${JSON.stringify(buttonState)}`);
     }
@@ -549,7 +549,7 @@ async function runViewport(width, height) {
       error: document.querySelector('[data-qa-flight-preview-error]')?.textContent?.trim() || '',
       confirmDisabled: Boolean(document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled),
       targetRelation: document.querySelector('.fleet-workspace-v1')?.getAttribute('data-qa-target-relation') || '',
-      selectedCount: document.querySelector('.fleet-selection-line-v1 strong')?.textContent?.trim() || '',
+      selectedCount: document.querySelector('[data-qa-fleet-selected]')?.textContent?.trim() || '',
     }))()`);
     if (previewState.confirmDisabled) throw new Error(`Pirate elimination preview cannot be dispatched at ${label}: ${JSON.stringify(previewState)}`);
     await capture(win, directory, 'pirate-elimination-flight-preview');

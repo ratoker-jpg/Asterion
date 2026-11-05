@@ -14,7 +14,6 @@ type FleetProductionQueueViewProps = {
   queueKind: FleetProductionQueueKind;
   state: FleetProductionState;
   factionId: CombatFactionId;
-  onBack: () => void;
 };
 
 const queueLabels: Record<FleetProductionQueueKind, string> = {
@@ -23,13 +22,15 @@ const queueLabels: Record<FleetProductionQueueKind, string> = {
   commanders: 'Командиры',
 };
 
+const formatCount = (value: number) => new Intl.NumberFormat('ru-RU').format(value);
+
 function cancelOrder(orderId: string) {
   window.dispatchEvent(new CustomEvent(FLEET_PRODUCTION_CANCEL_REQUEST_EVENT, {
     detail: { orderId, now: Date.now() },
   }));
 }
 
-export function FleetProductionQueueView({ queueKind, state, factionId, onBack }: FleetProductionQueueViewProps) {
+export function FleetProductionQueueView({ queueKind, state, factionId }: FleetProductionQueueViewProps) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1_000);
@@ -44,16 +45,13 @@ export function FleetProductionQueueView({ queueKind, state, factionId, onBack }
       aria-label={`Очередь: ${queueLabels[queueKind]}`}
     >
       <header className="fleet-production-queue-head-v1">
-        <span>ТЕКУЩИЕ ПРОЦЕССЫ</span>
+        <span>Очередь: {queueLabels[queueKind]}</span>
         <strong data-qa-fleet-production-queue-count>{queue.length}</strong>
       </header>
       {queue.length === 0 ? (
         <div className="fleet-production-queue-empty-v1">
-          <span aria-hidden="true">◇</span>
-          <div>
-            <strong>Очередь свободна</strong>
-            <small>Можно запустить новое производство.</small>
-          </div>
+          <strong>Очередь свободна</strong>
+          <small>Можно запустить новое производство.</small>
         </div>
       ) : (
         <div className="fleet-production-queue-list-v1">
@@ -78,11 +76,11 @@ export function FleetProductionQueueView({ queueKind, state, factionId, onBack }
                 </div>
                 <div className="fleet-production-order-main-v1">
                   <strong>{entity?.name ?? order.itemId}</strong>
-                  <small>{order.quantity} ед. · готово {completed} · осталось {pending}</small>
+                  <small>осталось {formatCount(pending)} из {formatCount(order.quantity)}</small>
                   {active ? (
-                    <time>{remainingMs > 0 ? formatClockDurationMs(remainingMs) : 'ЗАВЕРШЕНИЕ…'}</time>
+                    <time>{remainingMs > 0 ? formatClockDurationMs(remainingMs) : 'Завершается…'}</time>
                   ) : (
-                    <span>ОЖИДАЕТ · ПОЗИЦИЯ {index + 1}</span>
+                    <span>Ждёт очереди · №{index + 1}</span>
                   )}
                 </div>
                 <div className="fleet-production-order-meta-v1">
@@ -96,16 +94,6 @@ export function FleetProductionQueueView({ queueKind, state, factionId, onBack }
           })}
         </div>
       )}
-      <footer className="fleet-production-queue-foot-v1">
-        <button
-          type="button"
-          className="fleet-production-back-v1 fleet-page-back-v1"
-          data-qa-fleet-production-back
-          onClick={onBack}
-        >
-          ← Назад к Флотам
-        </button>
-      </footer>
     </section>
   );
 }

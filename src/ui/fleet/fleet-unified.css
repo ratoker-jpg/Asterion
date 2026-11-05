@@ -34,17 +34,10 @@
   clip-path: none !important;
 }
 .fleet-workspace-v1 :is(.shipyard-card-v1, .repair-card-v1, .combat-priority-column-v1) { overflow: hidden; }
-.fleet-workspace-v1 .shipyard-card-v1:hover { overflow: visible; }
+
 /* A notice strip is a slim panel, not a full card. */
-.fleet-workspace-v1 :is(.repair-notice-v1, .combat-priority-rule-v1, .fleet-defense-population-v1) { border-radius: var(--ut-r-card) !important; box-shadow: none !important; }
 
 /* The summary row holds cards itself: no second frame behind them. */
-.fleet-workspace-v1 .repair-summary-v1 {
-  padding: 0 !important;
-  border: 0 !important;
-  background: transparent !important;
-  box-shadow: none !important;
-}
 
 /* ---------- page heads (repair, priority, battles, simulator) ----------
    They paint themselves with two pseudo layers (::before = frame, ::after =
@@ -86,39 +79,12 @@ html body .fleet-workspace-v1 :is(.fleet-page-head-v1, .repair-page-head-v1, .co
   background: var(--fu-card) !important;
   box-shadow: none !important;
 }
-.fleet-workspace-v1 :is(.shipyard-owned-v1, .repair-available-v1, .fleet-commander-level-v1) {
-  border: 1px solid var(--fu-line-strong) !important;
-  border-radius: var(--ut-r-card) !important;
-  background: var(--fu-well) !important;
-  box-shadow: none !important;
-}
+
 /* Owning ships is the one state that takes the race colour. */
-.fleet-workspace-v1 .shipyard-owned-v1.has-ships,
-.fleet-workspace-v1 .repair-available-v1 {
-  border-color: var(--race-border) !important;
-  background: linear-gradient(90deg, var(--race-fill), var(--fu-well)) !important;
-}
-.fleet-workspace-v1 .shipyard-visible-level-v1 {
-  border: 1px solid var(--race-border-soft) !important;
-  border-radius: var(--ut-r-chip) !important;
-  background: var(--race-fill-soft) !important;
-}
 
 /* ---------- section headers ---------- */
-.fleet-workspace-v1 :is(.fleet-construction-card-v1, .fleet-yard-card-v1) {
-  background: linear-gradient(90deg, color-mix(in srgb, var(--race-accent-strong) 10%, var(--fu-panel)), var(--fu-panel) 60%) !important;
-}
-.fleet-workspace-v1 .fleet-construction-card-v1 {
-  box-shadow: 0 18px 40px rgba(0, 0, 0, .22), inset 0 0 0 1px rgba(86, 217, 242, .08), inset 0 1px 0 rgba(255, 255, 255, .04) !important;
-}
-.fleet-workspace-v1 .fleet-yard-card-v1 {
-  border: 1px solid var(--fu-line) !important;
-  border-radius: var(--ut-r-card) !important;
-  /* The shared compact card keeps its cyan inner rim (visual-building-interiors contract). */
-  box-shadow: inset 0 0 0 1px rgba(86, 217, 242, .08), inset 0 1px 0 rgba(255, 255, 255, .04) !important;
-}
+
 /* Every section starts on the same line as the sidebar (the shipyard header carried a 14 px margin). */
-.fleet-workspace-v1 .shipyard-view-v1 > .fleet-construction-card-v1 { margin-top: 0 !important; }
 
 /* ---------- sidebar navigation (same recipe as Settings / Science) ---------- */
 .fleet-workspace-v1 .fleet-menu-group-v1 h3 {
@@ -281,7 +247,7 @@ html body .flight-briefing-v2 .flight-composition-v3__row > img { width: 36px; h
 html body .flight-briefing-v2 .flight-composition-v3__row > b { flex-direction: column; }
 .flight-details-v3 .flight-composition-v3__row, .flight-details-v3 .flight-composition-v3__row * { text-align: left; }
 .flight-details-v3 .flight-composition-v3__row > b { text-align: right; }
-.flight-timeline-eta-note { display: block; margin-top: 2px; color: var(--ut-label); font-size: 10px; font-style: normal; letter-spacing: .08em; text-transform: uppercase; }
+
 /* The plan stays short enough that the cargo editor fits the window (fleet-production-qa). */
 html body .flight-briefing-v2 .flight-composition-v3__total { display: none; }
 html body .flight-briefing-v2 .flight-composition-v3__row { min-height: 0; padding: 4px 8px 4px 4px !important; }

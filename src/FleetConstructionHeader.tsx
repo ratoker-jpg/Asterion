@@ -3,29 +3,45 @@ import type { BuildingPresentation } from './domain/buildings/balance-v1.ts';
 type FleetConstructionHeaderProps = {
   viewId: string;
   shipyardPresentation: Pick<BuildingPresentation, 'art' | 'name'>;
-  kicker: string;
   title: string;
-  description: string;
-  planetName: string;
-  coords: string;
+  detail: string;
+  /** The planet has no shipyard yet: say so once instead of on every locked row. */
+  noShipyard: boolean;
+  populationLabel: string;
+  population: number;
+  capacity: number;
+  free: number;
 };
+
+const formatNumber = (value: number) => new Intl.NumberFormat('ru-RU').format(value);
 
 export function FleetConstructionHeader({
   viewId,
   shipyardPresentation,
-  kicker,
   title,
-  description,
-  planetName,
-  coords,
+  detail,
+  noShipyard,
+  populationLabel,
+  population,
+  capacity,
+  free,
 }: FleetConstructionHeaderProps) {
   return (
-    <header className="building-card-v2 fleet-construction-card-v1" data-qa-construction-header={viewId}>
+    <header className="fc-head" data-qa-construction-header={viewId}>
       <img src={shipyardPresentation.art} alt="" aria-hidden="true" draggable={false} />
-      <div>
-        <small>{kicker}</small>
-        <strong>{title}</strong>
-        <p>{planetName} {coords} · {description}</p>
+      <div className="fc-head__title">
+        <h2>{title}</h2>
+        <p>{detail}</p>
+      </div>
+      {noShipyard ? (
+        <p className="fc-head__warning" role="status" data-qa-no-shipyard>
+          На этой планете нет верфи: строить нельзя, пока она не построена.
+        </p>
+      ) : null}
+      <div className="fc-head__pool" data-qa-population-scope={populationLabel.toUpperCase()}>
+        <small>{populationLabel}</small>
+        <strong>{formatNumber(population)} / {formatNumber(capacity)}</strong>
+        <span>свободно {formatNumber(free)}</span>
       </div>
     </header>
   );

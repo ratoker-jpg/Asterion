@@ -138,7 +138,7 @@ async function main() {
   await sleep(1200);
   await js(win, `[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'МАКС.' && b.closest('.fleet-ship-card, article, div'))?.click()`);
   await sleep(300);
-  await js(win, `[...document.querySelectorAll('button')].find((b) => /ПРОДОЛЖИТЬ/.test(b.textContent))?.click()`);
+  await js(win, `[...document.querySelectorAll('button')].find((b) => b.hasAttribute('data-qa-flight-preview-open'))?.click()`);
   await waitFor(win, `document.querySelector('[data-qa-flight-dispatch-confirm]')`, 15_000);
   await sleep(600);
   const dispatchState = await js(win, `(() => { const b = document.querySelector('[data-qa-flight-dispatch-confirm]'); return { disabled: b.disabled, text: document.querySelector('[data-qa-flight-dispatch-confirm]').closest('section,aside,div')?.innerText.slice(0, 400) }; })()`);
@@ -186,7 +186,7 @@ async function main() {
   await sleep(1200);
   await js(win, `[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'МАКС.')?.click()`);
   await sleep(300);
-  await js(win, `[...document.querySelectorAll('button')].find((b) => /ПРОДОЛЖИТЬ/.test(b.textContent))?.click()`);
+  await js(win, `[...document.querySelectorAll('button')].find((b) => b.hasAttribute('data-qa-flight-preview-open'))?.click()`);
   await waitFor(win, `document.querySelector('[data-qa-flight-dispatch-confirm]')`, 15_000);
   await sleep(600);
   if (await js(win, `document.querySelector('[data-qa-flight-dispatch-confirm]').disabled`)) throw new Error('fleet screen: ОТПРАВИТЬ disabled for recycle without debris');

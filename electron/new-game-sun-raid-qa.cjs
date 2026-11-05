@@ -166,7 +166,7 @@ async function testMode(win, label) {
   await capture(win, label, '10-test-incoming-sun-raid');
   // «Поддержка солнца» is a Fleets mission: the panel opens «Флоты» with the Sun preselected.
   await click(win, '[data-qa-sun-support]');
-  await waitFor(win, `document.querySelector('[data-qa-mission-id="sun-support"].active')`);
+  await waitFor(win, `document.querySelector('[data-qa-mission-id="sun-support"].is-on')`);
   const civil = await run(win, `[...document.querySelectorAll('[data-qa-fleet-roster] [data-qa-fleet-ship]')].map((row) => row.getAttribute('data-qa-fleet-ship')).filter((id) => ['spy-probe','colonizer','recycler','transporter','mega-transporter','solar-satellite'].includes(id))`);
   if (civil.length) throw new Error('Civil hulls offered for Sun support: ' + civil.join(', '));
   await run(win, `(() => { const row = document.querySelector('[data-qa-fleet-roster] [data-qa-fleet-ship]'); [...row.querySelectorAll('button')].find((item) => item.textContent.trim() === 'МАКС.').click(); })()`);
@@ -202,7 +202,7 @@ async function testMode(win, label) {
   await waitFor(win, `document.querySelector('[data-qa-sun-raid-panel]')`);
   if (await run(win, `Number(document.querySelector('[data-qa-sun-debris]')?.getAttribute('data-qa-sun-debris') ?? 0) > 0`)) {
     await click(win, '[data-qa-sun-recycle]');
-    await waitFor(win, `document.querySelector('[data-qa-mission-id="recycle"].active')`);
+    await waitFor(win, `document.querySelector('[data-qa-mission-id="recycle"].is-on')`);
     await capture(win, label, '12b-test-sun-debris-recycle');
     await clickText(win, 'Командование');
     await click(win, '[data-qa-command-tab="operations"]');

@@ -26,7 +26,7 @@ async function waitFor(win, expression, timeoutMs = 10_000) {
     if (await js(win, `Boolean(${expression})`)) return;
     await sleep(60);
   }
-  throw new Error(`Timed out waiting for: ${expression}\n${await js(win, `(document.querySelector('.flight-timeline-modal')?.innerText || document.querySelector('.fleet-compose-footer-v1')?.innerText || '').slice(0, 1500)`)}`);
+  throw new Error(`Timed out waiting for: ${expression}\n${await js(win, `(document.querySelector('.flight-timeline-modal')?.innerText || document.querySelector('[data-qa-fleet-status]')?.innerText || '').slice(0, 1500)`)}`);
 }
 
 async function capture(win, directory, name) {
@@ -145,7 +145,7 @@ async function scenarios(win, directory, label) {
   // Scenario 9: the rebase opens on the last own target.
   await openFleets(win);
   const deploy = async () => {
-    await choose(win, '#fleet-mission', 'deployment');
+    await click(win, '[data-qa-mission-id="deployment"]');
     await typeNumber(win, '[data-qa-fleet-ship="scout"] input[type="number"]', 2);
     await click(win, '[data-qa-flight-preview-open]');
     await waitFor(win, `document.querySelector('[data-qa-deployment-target-select] select')`);
@@ -198,7 +198,7 @@ async function scenarios(win, directory, label) {
   await waitFor(win, `document.querySelector('[data-qa-universe-inspector] [data-qa-universe-action="attack"]')`);
   await click(win, '[data-qa-universe-inspector] [data-qa-universe-action="attack"]');
   await waitFor(win, `document.querySelector('[data-qa-attack-prep]')`);
-  await click(win, '.fleet-selection-line-v1 button');
+  await click(win, '[data-qa-fleet-select-all]');
   await click(win, '[data-qa-flight-preview-open]');
   await waitFor(win, `document.querySelector('[data-qa-flight-favorite-toggle]')`);
   await click(win, '[data-qa-flight-favorite-toggle]');
@@ -207,7 +207,7 @@ async function scenarios(win, directory, label) {
   await waitFor(win, `!document.querySelector('[data-qa-flight-dispatch-confirm]').disabled`);
   await click(win, '[data-qa-flight-dispatch-confirm]');
   await waitFor(win, `document.querySelector('[data-qa-fleet-sent-strip]')`);
-  const kept = await js(win, `({ mission: document.querySelector('#fleet-mission')?.value, target: document.querySelector('[data-qa-flight-launch-context]')?.getAttribute('data-qa-flight-launch-context') })`);
+  const kept = await js(win, `({ mission: document.querySelector('[data-qa-mission-current]')?.getAttribute('data-qa-mission-current'), target: document.querySelector('[data-qa-flight-launch-context]')?.getAttribute('data-qa-flight-launch-context') })`);
   if (kept.mission !== 'attack' || !kept.target) throw new Error(`${label}: after «Отправить» the screen forgot the target ${JSON.stringify(kept)}`);
   await capture(win, directory, '05-after-send-strip');
 
@@ -239,13 +239,13 @@ async function scenarios(win, directory, label) {
   await waitFor(win, `document.querySelector('[data-qa-planet-option="${unused}"]')`);
   await click(win, `[data-qa-planet-option="${unused}"]`);
   await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})).currentPlanetId === ${JSON.stringify(unused)}`);
-  const afterSwitch = await js(win, `({ mission: document.querySelector('#fleet-mission')?.value, target: document.querySelector('[data-qa-flight-launch-context]')?.getAttribute('data-qa-flight-launch-context') })`);
+  const afterSwitch = await js(win, `({ mission: document.querySelector('[data-qa-mission-current]')?.getAttribute('data-qa-mission-current'), target: document.querySelector('[data-qa-flight-launch-context]')?.getAttribute('data-qa-flight-launch-context') })`);
   if (afterSwitch.mission !== 'attack' || afterSwitch.target !== kept.target) throw new Error(`${label}: the header switch reset the screen ${JSON.stringify(afterSwitch)}`);
   await capture(win, directory, '05-header-switch-keeps-target');
 
   // The favourite is in the save (UI data) and listed in step 02.
   await waitFor(win, `(JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})).fleetUi?.favoriteTargets || []).length === 1`, 8_000);
-  await click(win, '.fleet-selection-line-v1 button');
+  await click(win, '[data-qa-fleet-select-all]');
   await click(win, '[data-qa-flight-preview-open]');
   // The list shows while the target is being changed.
   await click(win, '[data-qa-flight-target-status] .flight-timeline-edit:not([data-qa-flight-favorite-toggle])');

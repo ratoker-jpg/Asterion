@@ -58,15 +58,6 @@ function TicketIcon() {
   );
 }
 
-function CostRow({ kind, label, value }: { kind: ResourceKind; label: string; value: number }) {
-  return (
-    <div className={`repair-cost-row-v1 repair-cost-row-v1--${kind}`}>
-      <span className="repair-cost-icon-v1"><CanonicalResourceIcon kind={kind === 'population' ? 'population' : kind} /></span>
-      <span><small>{label}</small><strong>{formatNumber(value)}</strong></span>
-    </div>
-  );
-}
-
 function RepairCard({
   unit,
   available,
@@ -95,137 +86,122 @@ function RepairCard({
   const disabledReason = capacityReason ?? paymentReasons;
 
   return (
-    <article className="repair-card-v1" data-qa-repair-card={unit.id}>
-      <header className="repair-card-title-v1">
-        <div className="repair-available-v1">
-          <small>ДОСТУПНО</small>
-          <strong data-qa-repair-available>{available}</strong>
-        </div>
-        <div className="repair-card-name-v1">
-          <strong>{unit.name}</strong>
-          <small>{unit.role}</small>
-        </div>
-        <span className="repair-ready-mark-v1" title="Готово к мгновенному ремонту">✓</span>
-      </header>
+    <article className="fc-unit fc-unit--repair" data-qa-repair-card={unit.id}>
+      <div className="fc-unit__art"><img src={unit.art} alt={unit.name} draggable={false} /></div>
 
-      <div className="repair-card-body-v1">
-        <div className="repair-card-art-v1">
-          <img src={unit.art} alt={unit.name} draggable={false} />
-        </div>
-
-        <div className="repair-card-data-v1">
-          <section className="repair-costs-v1" data-qa-repair-resource-cost={JSON.stringify(availability.cost)}>
-            <div className="repair-mini-title-v1"><span>2 × КАНОНИЧЕСКАЯ СТОИМОСТЬ</span><i /></div>
-            <div className="repair-cost-grid-v1">
-              <CostRow kind="metal" label="Металл" value={availability.cost.metal} />
-              <CostRow kind="minerals" label="Минералы" value={availability.cost.minerals} />
-              <CostRow kind="gas" label="Газ" value={availability.cost.gas} />
-              <CostRow kind="population" label="Население" value={availability.capacity.addedPopulation} />
-            </div>
-          </section>
-
-          <section className="repair-quantity-v1">
-            <div className="repair-mini-title-v1"><span>КОЛИЧЕСТВО</span><i /></div>
-            <div className="repair-stepper-v1">
-              <button type="button" onClick={() => onQuantity(unit, selected - 1)} aria-label={`Уменьшить количество ${unit.name}`}>−</button>
-              <input
-                type="number"
-                min="1"
-                max={available}
-                value={selected}
-                data-qa-repair-quantity={unit.id}
-                aria-label={`Количество для ремонта: ${unit.name}`}
-                onChange={(event) => onQuantity(unit, Number(event.target.value))}
-              />
-              <button type="button" onClick={() => onQuantity(unit, selected + 1)} aria-label={`Увеличить количество ${unit.name}`}>+</button>
-              <button className="repair-shortcut-v1" type="button" onClick={() => onQuantity(unit, 1)}>МИН.</button>
-              <button className="repair-shortcut-v1" type="button" onClick={() => onQuantity(unit, available)}>МАКС.</button>
-            </div>
-          </section>
-
-          {disabledReason ? (
-            <div className="repair-payment-reason-v1" data-qa-repair-disabled-reason role="status">
-              {disabledReason}
-            </div>
-          ) : null}
-
-          <div className="repair-payment-v1">
-            <button
-              className="repair-button-v1 repair-button-v1--resources"
-              type="button"
-              data-qa-repair-resource-button={unit.id}
-              disabled={!availability.canPayResources}
-              title={availability.resourceReason ?? undefined}
-              onClick={() => onRepair(unit, 'resources')}
-            >
-              ВОССТАНОВИТЬ ЗА РЕСУРСЫ
-            </button>
-            <button
-              className="repair-button-v1 repair-button-v1--tokens"
-              type="button"
-              data-qa-repair-token-button={unit.id}
-              disabled={!availability.canPayTokens}
-              title={availability.tokenReason ?? undefined}
-              onClick={() => onRepair(unit, 'tokens')}
-            >
-              <TicketIcon />
-              <span>РЕМОНТ ЗА {availability.tokenCost} {tokenWord(availability.tokenCost)} · {tokens} ДОСТУПНО</span>
-            </button>
-            {removeConfirmationOpen ? (
-              <div
-                className="repair-remove-confirm-v1"
-                role="alertdialog"
-                aria-label={`Подтверждение удаления ${unit.name}`}
-                data-qa-repair-remove-confirm={unit.id}
-              >
-                <strong>Удалить {selected} {selected === 1 ? 'единицу' : 'единицы'}?</strong>
-                <span>Возврата ресурсов не будет.</span>
-                <div className="repair-remove-confirm-actions-v1">
-                  <button
-                    className="repair-remove-confirm-button-v1 repair-remove-confirm-button-v1--danger"
-                    type="button"
-                    data-qa-repair-remove-confirm-action={unit.id}
-                    onClick={() => {
-                      onRemove(unit);
-                      setRemoveConfirmationOpen(false);
-                    }}
-                  >
-                    УДАЛИТЬ
-                  </button>
-                  <button
-                    className="repair-remove-confirm-button-v1"
-                    type="button"
-                    data-qa-repair-remove-cancel={unit.id}
-                    onClick={() => setRemoveConfirmationOpen(false)}
-                  >
-                    ОТМЕНИТЬ
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button
-                className="repair-button-v1 repair-button-v1--remove"
-                type="button"
-                data-qa-repair-remove-button={unit.id}
-                aria-label={`Удалить ${selected} единиц ${unit.name} из ремонтной мастерской`}
-                onClick={() => setRemoveConfirmationOpen(true)}
-              >
-                УДАЛИТЬ ИЗ МАСТЕРСКОЙ
-              </button>
-            )}
-          </div>
-        </div>
+      <div className="fc-unit__name">
+        <h3>{unit.name}</h3>
+        <small>{unit.role}</small>
       </div>
+
+      <div className="fc-unit__stock has-units">
+        <small>Можно вернуть</small>
+        <strong data-qa-repair-available>{formatNumber(available)}</strong>
+      </div>
+
+      <dl className="fc-unit__cost" aria-label={`Цена за ${formatNumber(selected)}: вдвое дороже постройки`} data-qa-repair-resource-cost={JSON.stringify(availability.cost)}>
+        {([
+          ['metal', 'Металл', availability.cost.metal],
+          ['minerals', 'Минералы', availability.cost.minerals],
+          ['gas', 'Газ', availability.cost.gas],
+          ['population', 'Население', availability.capacity.addedPopulation],
+        ] as const).map(([kind, label, value]) => (
+          <div key={kind}>
+            <dt><CanonicalResourceIcon kind={kind} label={label} /></dt>
+            <dd>{formatNumber(value)}</dd>
+          </div>
+        ))}
+      </dl>
+
+      <div className="fc-unit__amount fc-unit__amount--stepper">
+        <button type="button" onClick={() => onQuantity(unit, selected - 1)} aria-label={`Уменьшить количество ${unit.name}`}>−</button>
+        <input
+          type="number"
+          min="1"
+          max={available}
+          value={selected}
+          data-qa-repair-quantity={unit.id}
+          aria-label={`Количество для ремонта: ${unit.name}`}
+          onChange={(event) => onQuantity(unit, Number(event.target.value))}
+        />
+        <button type="button" onClick={() => onQuantity(unit, selected + 1)} aria-label={`Увеличить количество ${unit.name}`}>+</button>
+        <button className="repair-shortcut-v1" type="button" onClick={() => onQuantity(unit, 1)}>МИН.</button>
+        <button className="repair-shortcut-v1" type="button" onClick={() => onQuantity(unit, available)}>МАКС.</button>
+      </div>
+
+      <div className="fc-unit__pay">
+        <button
+          className="fc-unit__build asterion-button asterion-button--primary"
+          type="button"
+          data-qa-repair-resource-button={unit.id}
+          disabled={!availability.canPayResources}
+          onClick={() => onRepair(unit, 'resources')}
+        >
+          За ресурсы
+        </button>
+        <button
+          className="fc-unit__token"
+          type="button"
+          data-qa-repair-token-button={unit.id}
+          disabled={!availability.canPayTokens}
+          onClick={() => onRepair(unit, 'tokens')}
+        >
+          <TicketIcon />
+          <span>За {formatNumber(availability.tokenCost)} {tokenWord(availability.tokenCost)}</span>
+        </button>
+      </div>
+
+      {removeConfirmationOpen ? (
+        <div
+          className="fc-unit__confirm"
+          role="alertdialog"
+          aria-label={`Подтверждение удаления ${unit.name}`}
+          data-qa-repair-remove-confirm={unit.id}
+        >
+          <strong>Удалить {formatNumber(selected)} шт.? Возврата ресурсов не будет.</strong>
+          <button
+            className="is-danger"
+            type="button"
+            data-qa-repair-remove-confirm-action={unit.id}
+            onClick={() => {
+              onRemove(unit);
+              setRemoveConfirmationOpen(false);
+            }}
+          >
+            УДАЛИТЬ
+          </button>
+          <button
+            type="button"
+            data-qa-repair-remove-cancel={unit.id}
+            onClick={() => setRemoveConfirmationOpen(false)}
+          >
+            ОТМЕНИТЬ
+          </button>
+        </div>
+      ) : (
+        <button
+          className="fc-unit__remove"
+          type="button"
+          data-qa-repair-remove-button={unit.id}
+          aria-label={`Удалить ${selected} единиц ${unit.name} из ремонтной мастерской`}
+          onClick={() => setRemoveConfirmationOpen(true)}
+        >
+          ×
+        </button>
+      )}
+
+      {disabledReason ? (
+        <div className="fc-unit__reason" data-qa-repair-disabled-reason role="status">
+          {disabledReason}
+        </div>
+      ) : null}
     </article>
   );
 }
 
 function SectionTitle({ title, units, population }: { title: string; units: number; population: number }) {
   return (
-    <div className="repair-section-title-v1">
-      <div><span>{title}</span><i /></div>
-      <small>{units} ТИПА · {formatNumber(population)} НАС.</small>
-    </div>
+    <h3 className="fc-repair__section">{title}<small>типов: {units} · население {formatNumber(population)}</small></h3>
   );
 }
 
@@ -260,15 +236,13 @@ function SummaryCard({
   meta?: string;
 }) {
   return (
-    <div className="repair-summary-card-v1">
-      <span className={`repair-summary-icon-v2 repair-summary-icon-v2--${icon}`}>
+    <div className="fc-repair__stat">
+      <span className="fc-repair__stat-icon">
         {icon === 'tokens' ? <TicketIcon /> : <CanonicalResourceIcon kind="population" />}
       </span>
-      <div className="repair-summary-copy-v2">
-        <small>{label}</small>
-        <div className="repair-summary-value-v1"><strong data-qa-repair-summary-population={label}>{formatNumber(value)}</strong><span>{unit}</span></div>
-        {meta ? <em data-qa-repair-summary-capacity={label}>{meta}</em> : null}
-      </div>
+      <small>{label}</small>
+      <div><strong data-qa-repair-summary-population={label}>{formatNumber(value)}</strong> <span>{unit}</span></div>
+      {meta ? <em data-qa-repair-summary-capacity={label}>{meta}</em> : null}
     </div>
   );
 }
@@ -283,12 +257,10 @@ export function RepairWorkshopView({
   planetName,
   coords,
   snapshot,
-  onBack,
 }: {
   planetName: string;
   coords: string;
   snapshot: RepairWorkshopSnapshot;
-  onBack: () => void;
 }) {
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [notice, setNotice] = useState('Выберите количество и способ действия. Ремонт выполняется мгновенно.');
@@ -412,58 +384,54 @@ export function RepairWorkshopView({
   });
 
   return (
-    <section className="repair-workshop-v1">
-      <header className="repair-page-head-v1">
-        <div>
-          <small>СЕРВИСНЫЙ МОДУЛЬ · ОБОРОНИТЕЛЬНЫЕ ПОТЕРИ</small>
-          <h2>РЕМОНТНАЯ МАСТЕРСКАЯ</h2>
-          <p>{planetName} {coords} · корабли и планетарная оборона</p>
+    <section className="repair-workshop-v1 fc-repair">
+      <header className="fc-head fc-head--plain">
+        <div className="fc-head__title">
+          <h2>Ремонтная мастерская</h2>
+          <p>{planetName} {coords} · возврат техники, потерянной в обороне</p>
         </div>
-        <div className="repair-head-actions-v1">
-          <WorkshopHelp />
-          <button className="repair-back-v1" type="button" onClick={onBack}>← К ФЛОТАМ</button>
-        </div>
+        <WorkshopHelp />
       </header>
 
-      <section className="repair-summary-v1" aria-label="Сводка ремонтной мастерской">
+      <section className="fc-repair__stats" aria-label="Сводка ремонтной мастерской">
         <SummaryCard label="ЖЕТОНЫ" value={snapshot.repair.tokens} unit={tokenWord(snapshot.repair.tokens)} icon="tokens" />
-        <SummaryCard label="ДОСТУПНО К ВОССТАНОВЛЕНИЮ" value={totalPopulation} unit="НАС." icon="population" />
+        <SummaryCard label="МОЖНО ВЕРНУТЬ" value={totalPopulation} unit="население" icon="population" />
         <SummaryCard
           label="КОРАБЛИ"
           value={shipPopulation}
-          unit="НАС."
+          unit="население"
           icon="population"
           meta={`ФЛОТ ${formatNumber(fleetCapacity.population)} / ${formatNumber(fleetCapacity.capacity)}`}
         />
         <SummaryCard
           label="ОБОРОНА"
           value={defensePopulation}
-          unit="НАС."
+          unit="население"
           icon="population"
           meta={`ОБОРОНА ${formatNumber(defenseCapacity.population)} / ${formatNumber(defenseCapacity.capacity)}`}
         />
       </section>
 
-      <div className="repair-notice-v1"><span>●</span><strong>{notice}</strong></div>
+      <p className="fc-repair__notice">{notice}</p>
 
       {visibleShips.length > 0 ? (
-        <section className="repair-section-v1">
+        <section className="fc-repair__group">
           <SectionTitle title="КОРАБЛИ" units={visibleShips.length} population={shipPopulation} />
-          <div className="repair-grid-v1">{renderCards(visibleShips)}</div>
+          <div className="fc-unit-list">{renderCards(visibleShips)}</div>
         </section>
       ) : null}
 
       {visibleDefense.length > 0 ? (
-        <section className="repair-section-v1">
+        <section className="fc-repair__group">
           <SectionTitle title="ОБОРОНА" units={visibleDefense.length} population={defensePopulation} />
-          <div className="repair-grid-v1">{renderCards(visibleDefense)}</div>
+          <div className="fc-unit-list">{renderCards(visibleDefense)}</div>
         </section>
       ) : null}
 
       {totalUnits === 0 ? (
-        <section className="repair-empty-v1">
+        <section className="fc-empty">
           <img className="ui-empty-art" src={EMPTY_ART.repair} alt="" draggable={false} />
-          <strong>РЕМОНТНАЯ МАСТЕРСКАЯ ПУСТА</strong>
+          <strong>Ремонтная мастерская пуста</strong>
           <span>После следующего оборонительного боя доступная для восстановления техника появится здесь.</span>
         </section>
       ) : null}
