@@ -295,7 +295,7 @@ async function mapSnapshot(win) {
       asteroidCount: document.querySelectorAll('[data-qa-universe-kind="asteroid"]').length,
       asteroidToggle: document.querySelector('[data-qa-universe-asteroids-toggle]')?.getAttribute('aria-pressed') || '',
       homeCaption: document.querySelector('[data-qa-universe-object="player-planet-helion-01"] [data-qa-map-caption]')?.textContent?.trim() || '',
-      legend: Array.from(document.querySelectorAll('.universe-map-legend span')).map((node) => ({ text: node.textContent?.trim() || '', className: node.className })),
+      legend: Array.from(document.querySelectorAll('.universe-map-legend button > span:not(.map-mark)')).map((node) => ({ text: node.textContent?.trim() || '', className: node.className })),
       ownerRelations: Array.from(document.querySelectorAll('[data-qa-universe-kind="player"], [data-qa-universe-kind="npc"]')).map((node) => ({ id: node.getAttribute('data-qa-universe-object'), relation: node.getAttribute('data-qa-universe-relation') || '', className: node.className })),
       mapCaptions: Array.from(document.querySelectorAll('[data-qa-map-caption]')).map((node) => node.textContent?.trim() || ''),
       debrisMarkers: Array.from(document.querySelectorAll('.universe-debris-marker')).map((marker) => {
