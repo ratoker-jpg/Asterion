@@ -897,7 +897,10 @@ export function estimateRaidEconomics(context: NpcUtilityContext, origin: SpyTar
   const risked = fleetCost(ownCatalog, selectedShips);
   const win = estimateWinProbability(ownPower, estimateReportedPower(context, report, ownPower));
   const gain = win * 0.5 * costValue(report.resources);
-  const expectedLoss = (1 - win) * risked * 0.85 + win * risked * 0.1;
+  // A decisive force loses little when it wins: the square law, never worse than the flat tenth a bare win cost.
+  const advantage = ownPower / Math.max(1, estimateReportedPower(context, report, ownPower));
+  const winLossShare = Math.min(0.1, Math.max(0.02, 0.5 / (advantage * advantage)));
+  const expectedLoss = (1 - win) * risked * 0.85 + win * risked * winLossShare;
   const risk = (1 - unit(traits.riskTolerance)) * win * (1 - win) * risked;
   const fuel = calculateFlightFuel(origin.raceId as CombatFactionId, selectedShips,
     calculateRouteDistance(origin.coordinate, report.targetCoordinate));
@@ -933,14 +936,34 @@ export function estimateReportedPower(context: NpcUtilityContext, report: SpyRep
   return (known ? reportedPower : ownPower * 1.3) * (1 + Math.min(1, ageHours / 72));
 }
 
+/** How bold an owner is in a raid, 0 (careful) to 1 (all in): the owner's aggression and appetite for risk. */
+export function npcRaidBoldness(traits: Readonly<Record<string, number>>): number {
+  return (unit(traits.aggression) + unit(traits.riskTolerance)) / 2;
+}
+
+/** How many times the expected defence the owner wants its force to be (2 for the careful, 4 for the bold): enough to win decisively. */
+export function npcDecisiveMargin(traits: Readonly<Record<string, number>>, targetOnline = false): number {
+  // A planet whose owner is looking can call its fleet home or add to it: no half measures there.
+  return 2 + 2 * npcRaidBoldness(traits) + (targetOnline ? 0.5 : 0);
+}
+
+/** The owner's belief that this force beats the planet in the report (the same estimate the raid is judged by). */
+export function estimateRaidWin(context: NpcUtilityContext, origin: SpyTargetState, report: SpyReportSnapshot,
+  selectedShips: Readonly<Partial<Record<ShipId, number>>>): number {
+  const ownPower = estimateForcePower(stacks(getFactionShipCatalog(origin.raceId) as Catalog, selectedShips));
+  return estimateWinProbability(ownPower, estimateReportedPower(context, report, ownPower));
+}
+
 /**
  * The attack force a player would send: the cheapest prefix of its combat
  * ships (strongest per price first) that the owner believes wins with its
  * required margin; risk-averse owners want a larger margin. Returns null
- * when even everything available is not expected to win.
+ * when even everything available is not expected to win. The force sent is
+ * then raised to a decisive one (owner report 05.11.2026: a player does not
+ * send the bare minimum a planet can be beaten with, he sends what ends it).
  */
 export function chooseNpcAttackForce(context: NpcUtilityContext, origin: SpyTargetState, targetPlanetId: string,
-  available: Readonly<Partial<Record<string, number>>>): Record<string, number> | null {
+  available: Readonly<Partial<Record<string, number>>>, targetOnline = false): Record<string, number> | null {
   const report = context.latestReports.get(targetPlanetId);
   if (!report) return null;
   const catalog = (getFactionShipCatalog(origin.raceId) as Catalog)
@@ -960,16 +983,27 @@ export function chooseNpcAttackForce(context: NpcUtilityContext, origin: SpyTarg
   if (winWithAll < wanted) return null;
   // Against a Gate the owner throws everything it has: the campaign is at stake.
   if (context.rivalGateHosts?.has(targetPlanetId)) return all;
-  // Smallest share of the available force (in tenths) that still meets the margin.
-  for (let tenths = 1; tenths <= 10; tenths += 1) {
+  // Smallest share of the available force (in tenths) that meets the margin, then the share that is decisive:
+  // a multiple of the expected defence that grows with the owner's boldness (a careful owner still sends twice).
+  const decisive = npcDecisiveMargin(context.profile.traits, targetOnline) * enemy;
+  let minimal = 0;
+  let enough = 0;
+  const share = (tenths: number): Record<string, number> => {
     const force: Record<string, number> = {};
     for (const entity of catalog) {
       const count = Math.ceil(all[entity.id]! * tenths / 10);
       if (count > 0) force[entity.id] = count;
     }
-    if (estimateWinProbability(estimateForcePower(stacks(catalog, force)), enemy) >= wanted) return force;
+    return force;
+  };
+  for (let tenths = 1; tenths <= 10 && !(minimal && enough); tenths += 1) {
+    const power = estimateForcePower(stacks(catalog, share(tenths)));
+    if (!minimal && estimateWinProbability(power, enemy) >= wanted) minimal = tenths;
+    if (!enough && power >= decisive) enough = tenths;
   }
-  return all;
+  if (!minimal) return all;
+  // Decisive is out of reach: more than the bare minimum all the same, short of everything.
+  return share(Math.max(minimal, enough || Math.ceil((minimal + 10) / 2)));
 }
 
 /**

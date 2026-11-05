@@ -1,4 +1,6 @@
 import { getNpcJournalSink, NPC_JOURNAL_ALTERNATIVES } from './npc-journal.ts';
+import { dispatchNpcLootWaves } from './npc-loot-wave.ts';
+import { describeOwnerPresence, selectOwnerPresence } from './owner-presence.ts';
 import { npcStyleBias, readNpcPlayStyle } from './npc-style.ts';
 import { chooseNpcAutonomyAction, updateNpcAutonomyMemory, type NpcAutonomyCandidate } from '../domain/npc/autonomy-policy.ts';
 import { explorationContactForFlight, updateExpeditionContact } from './exploration-flight.ts';
@@ -46,7 +48,7 @@ import type { ShipId } from '../domain/combat/ids.ts';
 import { estimationError, NPC_MAX_UTILITY, utilityToWeight } from '../domain/npc/utility.ts';
 import { getFactionShipCatalog, getFactionDefenseCatalog } from '../domain/combat/faction-catalog.ts';
 import {
-  chooseNpcAttackForce, chooseNpcStrategy, combatEfficiency, createNpcUtilityContext, describeNpcPlanet,
+  chooseNpcAttackForce, estimateRaidWin, npcRaidBoldness, chooseNpcStrategy, combatEfficiency, createNpcUtilityContext, describeNpcPlanet,
   estimateAttackUtility, estimateBuildingUtility, estimateRaidEconomics, estimateColonizeUtility, npcAttackIntel, estimateEspionageUtility,
   estimateOperationUtility, estimateProductionItemUtility, flightRemoteness, estimateScienceUtility, npcProductionBatch,
   npcProductionPurpose, NPC_STRATEGY_FAMILY, strategyOf, type NpcStrategyDrives,
@@ -230,6 +232,12 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
   // Planet owners are public (the map shows them).
   const ownerOfPlanet = (planetId: string): string | undefined => state.espionage?.targets?.[planetId]?.ownerId
     ?? (state.planets[planetId] ? state.profile.playerId : undefined);
+  // «В сети» as the map shows it to a stranger (a visit's end is blurred by a grace period): no hidden schedule is read.
+  const presence = selectOwnerPresence(state);
+  const targetIsOnline = (planetId: string): boolean => {
+    const owner = ownerOfPlanet(planetId);
+    return Boolean(owner) && describeOwnerPresence(presence[owner!], at, false).tone === 'online';
+  };
   // An attack sends the force the owner believes is enough, not everything.
   const attackForces = new Map<string, Record<string, number> | null>();
   const intelNeeded = new Set<string>();
@@ -238,7 +246,8 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     try { ships = JSON.parse(String(mission.payload.selectedShips ?? '{}')) as Record<string, number>; } catch { ships = {}; }
     if (!attackForces.has(mission.id)) {
       const origin = state.espionage?.targets?.[String(mission.payload.originPlanetId)];
-      attackForces.set(mission.id, origin ? chooseNpcAttackForce(utility, origin, String(mission.payload.destinationPlanetId ?? ''), ships) : null);
+      const destination = String(mission.payload.destinationPlanetId ?? '');
+      attackForces.set(mission.id, origin ? chooseNpcAttackForce(utility, origin, destination, ships, targetIsOnline(destination)) : null);
     }
     return attackForces.get(mission.id) ?? ships;
   }
@@ -628,8 +637,22 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
             ...((origin?.fleet.commanders?.[main] ?? 0) > 0 ? { selectedCommanders: { [main]: 1 } } : {}),
             attackPriority: npcCombatPriority(profile.traits, origin?.ownerProfile?.commanderLevels ?? {}, shape, COMMANDER_IDS) };
         }
-        const result = dispatchNpcMission(current, armed, at, timeScale);
-        if (mission.kind === 'attack' && result.ok) journalNpcAttackSizing(ownerId, current, mission, chosen, at);
+        let result = dispatchNpcMission(current, armed, at, timeScale);
+        if (mission.kind === 'attack' && result.ok) {
+          journalNpcAttackSizing(ownerId, current, mission, chosen, at);
+          // The cargo behind the battle fleet, when the owner is sure of the fight: it carries the stores the warships cannot.
+          const destination = String(mission.payload.destinationPlanetId ?? '');
+          const report = utility.latestReports.get(destination);
+          const source = current.espionage?.targets?.[armed.originPlanetId];
+          const boldness = npcRaidBoldness(profile.traits);
+          if (result.flight && report && source && chosen && estimateRaidWin(utility, source, report, chosen as Partial<Record<ShipId, number>>) >= 0.85 - 0.1 * boldness) {
+            const waves = dispatchNpcLootWaves(result.state, armed, result.flight, report, targetIsOnline(destination), at, timeScale);
+            if (waves.waves > 0) {
+              result = { ...result, state: waves.state };
+              getNpcJournalSink()?.outcome?.({ at, ownerId, kind: 'send', data: { wave: waves.waves, cargo: Math.round(waves.carried) } });
+            }
+          }
+        }
         // The planet the fleet leaves is touched by this action (its gas pays the flight).
         return { state: result.state, started: result.ok, reason: result.reason, planetId: armed.originPlanetId };
       },

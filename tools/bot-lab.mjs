@@ -468,13 +468,14 @@ export function describeWorld(state, journal = [], tally = null) {
 /** How big the raids were (owner report 05.11): the share of the planet's combat fleet sent, and the share of the target's stores carried off. */
 export function raidSizing(journal) {
   const sum = (list, pick) => list.reduce((total, entry) => total + (Number(pick(entry)) || 0), 0);
-  const sends = journal.filter((entry) => entry.k === 'send');
+  const sends = journal.filter((entry) => entry.k === 'send' && entry.d?.fl !== undefined);
+  const waves = journal.filter((entry) => entry.k === 'send' && entry.d?.wave);
   const raids = journal.filter((entry) => entry.k === 'battle' && entry.d?.side === 'attacker' && entry.d?.m === 'attack');
   const fleetAvailable = sum(sends, (entry) => entry.d.av);
   const held = sum(raids, (entry) => entry.d.held);
   const ratio = (a, b) => (b > 0 ? +(a / b).toFixed(3) : 0);
   const lone = raids.filter((entry) => (entry.d.held ?? 0) > 0);
-  return { sends: sends.length, fleetSent: Math.round(sum(sends, (entry) => entry.d.fl)), fleetAvailable: Math.round(fleetAvailable),
+  return { sends: sends.length, waves: sum(waves, (entry) => entry.d.wave), waveCargo: Math.round(sum(waves, (entry) => entry.d.cargo)), fleetSent: Math.round(sum(sends, (entry) => entry.d.fl)), fleetAvailable: Math.round(fleetAvailable),
     fleetShare: ratio(sum(sends, (entry) => entry.d.fl), fleetAvailable),
     raids: raids.length, raidsWon: raids.filter((entry) => entry.d.won === 1).length, loot: Math.round(sum(raids, (entry) => entry.d.gain)), held: Math.round(held),
     lootShare: ratio(sum(raids, (entry) => entry.d.gain), held),
