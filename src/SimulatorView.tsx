@@ -62,7 +62,6 @@ import mediumArmorArt from '../assets/source/New assets/technologies/technology.
 import piercingAttackArt from '../assets/source/New assets/technologies/technology.shared.piercing-attack.png';
 import plasmaScienceArt from '../assets/source/New assets/technologies/technology.shared.plasma-science.png';
 import shipArmorArt from '../assets/source/New assets/technologies/technology.shared.ship-armor.png';
-import './simulator.css';
 
 let identityCounter = 0;
 
@@ -994,7 +993,7 @@ export function SimulatorView({ planetId, planetName, coords, saveState, onBack,
             <p className="simx-idle">Обе стороны готовы. Итог появится здесь: победитель, потери, обломки и добыча.</p>
           ) : (
             <ul id={validationErrorId} className="simx-errors">
-              {validation.errors.slice(0, 4).map((error, index) => <li key={`${error.path}-${index}`}>{error.message}</li>)}
+              {[...new Set(validation.errors.map((error) => error.message))].slice(0, 4).map((message) => <li key={message}>{message}</li>)}
             </ul>
           )}
           <p className="simx-notice" aria-live="polite">{notice}</p>

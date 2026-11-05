@@ -121,7 +121,7 @@ async function audit(win, name, label) {
     }
     const core = host.querySelector('.simx-core')?.getBoundingClientRect();
     if (core && core.bottom > innerHeight + 1 && document.documentElement.scrollTop > 0) issues.push({ coreBelowWindow: core.bottom });
-    const fontFloor = [...host.querySelectorAll('strong,small,span,button,h4')].filter((node) => visible(node) && node.closest('.simx') && !node.closest('.simx-tip') && parseFloat(getComputedStyle(node).fontSize) < 12);
+    const fontFloor = [...host.querySelectorAll('strong,small,span,button,h4')].filter((node) => visible(node) && node.textContent.trim() && !node.closest('.simx-tip') && parseFloat(getComputedStyle(node).fontSize) < 12);
     if (fontFloor.length) issues.push({ tinyText: fontFloor.slice(0, 3).map((node) => node.className + ':' + getComputedStyle(node).fontSize) });
     if (document.documentElement.scrollWidth > innerWidth + 2) issues.push({ horizontalOverflow: document.documentElement.scrollWidth });
     if (host.querySelector('select:not(.game-select__native)')) issues.push({ systemSelect: true });
@@ -158,7 +158,7 @@ async function seed(win, { race = 'aegis', mutate = '' } = {}) {
     planet.fleet.commanders = { ...planet.fleet.commanders, corsair: 1, judge: 1 };
     planet.defense.defenses = { ...planet.defense.defenses, 'tower-shield': 1 };
     save.science = save.science || { levels: {}, queue: [] };
-    save.science.levels = Object.fromEntries(Array.from({ length: 21 }, (_, i) => [i + 1, 12]));
+    save.science.levels = Object.fromEntries(Array.from({ length: 21 }, (_, i) => [i + 1, i + 1 === 19 || i + 1 === 20 ? 0 : 12]));
     save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 13);
     if (save.combatSimulator) { save.combatSimulator.presets = []; delete save.combatSimulator.lastScenario; }
     ${mutate}
