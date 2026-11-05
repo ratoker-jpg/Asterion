@@ -1,4 +1,4 @@
-name: Временный: снимки вариантов Флотов
+name: tmp fleet variants shots
 on:
   push:
     branches: [claude/fleet-variants]
