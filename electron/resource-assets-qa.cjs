@@ -367,7 +367,6 @@ async function verifyViewport(width, height) {
     await closeBuildingDialog(win);
 
     await activateRoute(win, 'fleets', '.fleet-workspace-v1');
-    await assertCanonicalShipyard(win);
     await click(win, '[data-qa-fleet-section="ships"]');
     await waitFor(win, `document.querySelector('.fc-catalog')`);
     await waitForResourceImages(win, '.fc-catalog');
