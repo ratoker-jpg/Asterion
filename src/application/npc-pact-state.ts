@@ -1,4 +1,5 @@
 import type { BattleReport } from '../domain/combat/report.ts';
+import { applyRealFlightFloor } from '../domain/flights/speed.ts';
 import { calculateEffectiveFleetSpeed, calculateOneWayDurationMs } from '../domain/flights/speed.ts';
 import type { ShipId } from '../domain/combat/ids.ts';
 import type { SpyTargetState } from '../domain/espionage/types.ts';
@@ -139,7 +140,7 @@ export function recordNpcGiftDelivery(state: SaveState, flight: FlightRecord, re
 /** How long a fleet flies from `origin` to `target`, by the player's formula at this campaign's speed. */
 export function npcFleetFlightMs(origin: SpyTargetState, target: Pick<SpyTargetState, 'coordinate'>, ships: Readonly<Record<string, number>>, timeScale: number): number {
   const speed = calculateEffectiveFleetSpeed(origin.raceId, ships as Partial<Record<ShipId, number>>, (origin.ownerProfile?.scienceLevels ?? {}) as FlightScienceLevels);
-  return Math.max(1, Math.round(calculateOneWayDurationMs(origin.coordinate, target.coordinate, speed) / Math.max(1, timeScale)));
+  return applyRealFlightFloor(Math.max(1, Math.round(calculateOneWayDurationMs(origin.coordinate, target.coordinate, speed) / Math.max(1, timeScale))));
 }
 
 /**

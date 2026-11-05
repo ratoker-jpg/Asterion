@@ -1,4 +1,5 @@
 import { ownerFlights } from './npc-knowledge-index.ts';
+import { applyRealFlightFloor } from '../domain/flights/speed.ts';
 import { MAX_COMMANDERS_PER_PLANET, calculateFleetPopulation, createEmptyFleetState, getSolarSatelliteFleetCount, removeSolarSatellitesFromFleet, resolveSavedFleetState } from '../domain/fleet/runtime.ts';
 import { calculatePlanetCapacity, calculatePlanetPopulation } from '../domain/fleet/overpopulation.ts';
 import { migrateBuildingLevels } from '../domain/buildings/resource-zone.ts';
@@ -370,7 +371,7 @@ export function dispatchNpcMission(
     ...(command.missionId === 'recycle' ? { recycleCapacity, cargo: { metal: 0, minerals: 0, gas: 0, debris: 0 } } : {}),
     speedCommanderLevels: { typhoon: profile.commanderLevels.typhoon ?? 0 },
   });
-  const duration = Math.max(1, Math.round(domainResult.flight.oneWayDurationMs / timeScale));
+  const duration = applyRealFlightFloor(Math.max(1, Math.round(domainResult.flight.oneWayDurationMs / timeScale)));
   // Only exploration launches record the owner's score; price that one owner alone.
   const ownResourcePoints = explorationNode ? selectOwnerScore(state, command.ownerId)?.resourcePoints ?? 0 : 0;
   const explorationLaunchResourcePoints = command.missionId === 'expedition' || command.missionId === 'exploration-recon'
@@ -602,7 +603,7 @@ export function dispatchNpcTransport(state: SaveState, command: NpcTransportComm
     cargo,
     speedCommanderLevels: { typhoon: profile.commanderLevels.typhoon ?? 0 },
   });
-  const duration = Math.max(1, Math.round(domainResult.flight.oneWayDurationMs / timeScale));
+  const duration = applyRealFlightFloor(Math.max(1, Math.round(domainResult.flight.oneWayDurationMs / timeScale)));
   const flight: FlightRecord = { ...domainResult.flight, oneWayDurationMs: duration, arrivalAt: at + duration, cargoState: 'loaded' };
   if (origin.resources.gas < cargo.gas + flight.gasCost) return fail(state, 'insufficient-gas');
   const ships = { ...origin.fleet.ships };
@@ -731,7 +732,7 @@ export function dispatchNpcDeployment(state: SaveState, command: NpcDeploymentCo
     populationReserved: population,
     speedCommanderLevels: { typhoon: profile.commanderLevels.typhoon ?? 0 },
   });
-  const duration = Math.max(1, Math.round(domainResult.flight.oneWayDurationMs / timeScale));
+  const duration = applyRealFlightFloor(Math.max(1, Math.round(domainResult.flight.oneWayDurationMs / timeScale)));
   const flight: FlightRecord = { ...domainResult.flight, oneWayDurationMs: duration, arrivalAt: at + duration };
   if (origin.resources.gas < flight.gasCost) return fail(state, 'insufficient-gas');
   const ships = { ...origin.fleet.ships };
@@ -834,7 +835,7 @@ export function dispatchNpcGas(state: SaveState, command: NpcGasCommand, at: num
     gasCapacity,
     speedCommanderLevels: { typhoon: profile.commanderLevels.typhoon ?? 0 },
   });
-  const duration = Math.max(1, Math.round(domainResult.flight.oneWayDurationMs / timeScale));
+  const duration = applyRealFlightFloor(Math.max(1, Math.round(domainResult.flight.oneWayDurationMs / timeScale)));
   const flight: FlightRecord = { ...domainResult.flight, oneWayDurationMs: duration, arrivalAt: at + duration, cargoState: 'loaded' };
   if (origin.resources.gas < flight.gasCost) return fail(state, 'insufficient-gas');
   const ships = { ...origin.fleet.ships };

@@ -1,4 +1,5 @@
 import type { PirateContactDefeatRecord } from '../domain/pirates/contact-schedule.ts';
+import { applyRealFlightFloor } from '../domain/flights/speed.ts';
 import type { SpyTargetState } from '../domain/espionage/types.ts';
 import { publicPlayerPlanetsKey } from './npc-knowledge-index.ts';
 import { COMMANDER_IDS, type CommanderId } from '../domain/combat/commanders.ts';
@@ -506,7 +507,8 @@ export function dispatchPirateFlight(
     science: state.science.levels,
   });
   const timeOptions: FlightRuntimeOptions = runtimeOptions;
-  const duration = scaleRuntimeDuration(domainResult.flight.oneWayDurationMs, timeOptions.mode ?? 'production', timeOptions.testTimeScale);
+  const scaledDuration = scaleRuntimeDuration(domainResult.flight.oneWayDurationMs, timeOptions.mode ?? 'production', timeOptions.testTimeScale);
+  const duration = (timeOptions.mode ?? 'production') === 'test' ? scaledDuration : applyRealFlightFloor(scaledDuration);
   const flight = {
     ...domainResult.flight,
     oneWayDurationMs: duration,
