@@ -1,0 +1,68 @@
+{
+  "empty": {
+    "problems": [],
+    "lanes": 0,
+    "listScroll": 0,
+    "listHeight": 0
+  },
+  "owner": {
+    "problems": [],
+    "lanes": 5,
+    "listScroll": 0,
+    "listHeight": 294
+  },
+  "all": {
+    "problems": [],
+    "lanes": 13,
+    "listScroll": 267,
+    "listHeight": 491
+  },
+  "huge": {
+    "problems": [],
+    "lanes": 6,
+    "listScroll": 0,
+    "listHeight": 352
+  },
+  "over": {
+    "problems": [],
+    "lanes": 5,
+    "listScroll": 0,
+    "listHeight": 294
+  },
+  "noYard": {
+    "problems": [],
+    "lanes": 5,
+    "listScroll": 0,
+    "listHeight": 294
+  },
+  "noMoney": {
+    "problems": [],
+    "lanes": 5,
+    "listScroll": 0,
+    "listHeight": 294
+  },
+  "partial": {
+    "problems": [],
+    "lanes": 5,
+    "listScroll": 0,
+    "listHeight": 294
+  },
+  "queue": {
+    "problems": [],
+    "lanes": 5,
+    "listScroll": 0,
+    "listHeight": 294
+  },
+  "locked": {
+    "problems": [],
+    "lanes": 5,
+    "listScroll": 0,
+    "listHeight": 294
+  },
+  "stress": {
+    "problems": [],
+    "lanes": 24,
+    "listScroll": 905,
+    "listHeight": 491
+  }
+}
