@@ -127,8 +127,9 @@
 :root .workspace--universe .universe-view-v3.universe-radar .system-planet .map-status-tip {
   position: absolute;
   z-index: 30;
-  left: 50%;
-  bottom: calc(100% + 6px);
+  /* left and top are set on hover by placeMapTip: inside the map, off the panels. */
+  left: 0;
+  top: 0;
   display: grid;
   gap: 3px;
   width: max-content;
@@ -145,12 +146,11 @@
   white-space: normal;
   opacity: 0;
   visibility: hidden;
-  translate: -50% 5px;
+  translate: 0 5px;
   transition: opacity 140ms ease, translate 200ms var(--ut-ease-out, ease), visibility 140ms;
   pointer-events: none;
 }
-:root .workspace--universe .universe-view-v3.universe-radar .system-planet.has-claim .map-status-tip { bottom: calc(100% + 26px); }
-:root .workspace--universe .universe-view-v3.universe-radar .system-planet:is(:hover, :focus-visible) .map-status-tip { opacity: 1; visibility: visible; translate: -50% 0; }
+:root .workspace--universe .universe-view-v3.universe-radar .system-planet:is(:hover, :focus-visible) .map-status-tip { opacity: 1; visibility: visible; translate: 0 0; }
 .universe-radar .map-status-tip strong { font-size: 12px; font-weight: 700; color: #fff; }
 .universe-radar .map-status-tip strong span { font-size: 10.5px; font-weight: 500; color: #8fb6c0; }
 .universe-radar .map-status-tip em { display: flex; align-items: center; gap: 5px; font-style: normal; font-weight: 700; color: color-mix(in srgb, var(--tone-k) 80%, #fff); }
