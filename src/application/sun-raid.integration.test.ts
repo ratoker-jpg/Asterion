@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { isOwnBattleReport } from '../domain/combat/battle-list.ts';
+import type { BattleReport } from '../domain/combat/report.ts';
+
 import { TEST_ALLY_OWNER_ID, TEST_BOT_OWNER_ID } from '../domain/command/catalog.ts';
 import { leaveAlliance } from '../domain/command/membership.ts';
 import { selectOwnerMembership } from '../domain/command/selectors.ts';
@@ -93,6 +96,7 @@ test('Bot 01 raids the home Sun: the galaxy is warned, the player defends and ge
   assert.equal(resultA.defenders, 2);
   const report = resolvedA.combat.reports.find((item) => item.id === resultA.reportId)! as unknown as { sunRaid: { brightnessBefore: number }; attacker: { playerName: string } };
   assert.ok(report, 'the defending player receives the battle report');
+  assert.equal(isOwnBattleReport(report as unknown as BattleReport, resolvedA.profile.playerId), true, 'support at a Sun counts as his battle in Fleets → Битвы');
   assert.equal(report.sunRaid.brightnessBefore, 70);
   if (resultA.winner === 'attacker') assert.equal(resultA.brightnessAfter, 65);
   else assert.equal(resultA.brightnessAfter, 70);
@@ -162,6 +166,7 @@ test('Ira joins the raid, Bot 01 defends: one battle, both sides merged, max tec
   assert.equal(result.defenders, 1);
   const report = state.combat.reports.find((item) => item.id === result.reportId)!;
   assert.match(report.attacker.playerName, /\+1/);
+  assert.equal(isOwnBattleReport(report, state.profile.playerId), true, 'a joint raid counts as his battle in Fleets → Битвы');
   // Bot 01's ships came off its planet; survivors are restored when they fly home.
   const after = tick(state, raid.arrivesAt + 12 * HOUR);
   assert.ok(after.flights.records.filter((flight) => flight.sunRaid?.raidId === raid.id).every((flight) => flight.phase === 'completed'));
