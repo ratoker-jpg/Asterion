@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject, type SetStateAction } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject, type SetStateAction } from 'react';
+import { createPortal } from 'react-dom';
 
 import { calculateAttackDebris, calculateAttackLoot } from './application/attack.ts';
 import type { SaveState } from './application/contracts.ts';
@@ -317,6 +318,38 @@ function CountUp({ value, duration = 760 }: { value: number; duration?: number }
   return <>{formatNumber(shown)}</>;
 }
 
+/**
+ * A game tooltip. It lives in document.body at window coordinates: the fleet lists
+ * scroll on their own and would cut anything hanging out of a row.
+ */
+function HoverTip({ className, tip, children }: { className: string; tip: ReactNode; children: ReactNode }) {
+  const [place, setPlace] = useState<{ left: number; top?: number; bottom?: number } | null>(null);
+  const timer = useRef(0);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  const hide = () => {
+    window.clearTimeout(timer.current);
+    setPlace(null);
+  };
+  return (
+    <div
+      className={className}
+      onPointerEnter={(event) => {
+        const rect = event.currentTarget.getBoundingClientRect();
+        window.clearTimeout(timer.current);
+        timer.current = window.setTimeout(() => setPlace({
+          left: Math.min(rect.left, window.innerWidth - 320),
+          ...(rect.top > 130 ? { bottom: window.innerHeight - rect.top + 6 } : { top: rect.bottom + 6 }),
+        }), 220);
+      }}
+      onPointerLeave={hide}
+      onWheel={hide}
+    >
+      {children}
+      {place ? createPortal(<div className="simx-tip" role="tooltip" style={place}>{tip}</div>, document.body) : null}
+    </div>
+  );
+}
+
 function PopulationMeter({ label, value, max }: { label: string; value: number; max: number }) {
   return (
     <div className={`simx-meter${value > max ? ' is-over' : ''}`}>
@@ -374,7 +407,16 @@ function UnitRow({
   }, [autoFocus]);
   return (
     <div className={`simx-row${outcome && outcome.destroyed > 0 ? ' has-losses' : ''}`} data-qa-simulator-unit={entity.id}>
-      <div className="simx-row__who">
+      <HoverTip
+        className="simx-row__who"
+        tip={(
+          <>
+            <b>{entity.role}</b>
+            <span>Население {formatNumber(entity.population)} · Оружие: {entity.combat.weaponType} · Броня: {entity.combat.armorType}</span>
+            {ability ? <span>Способность: {ability}</span> : null}
+          </>
+        )}
+      >
         <img src={entity.art} alt="" draggable={false} />
         <div className="simx-row__name">
           <strong>{entity.name}</strong>
@@ -386,12 +428,7 @@ function UnitRow({
             <small>Атака {formatShort(preview.totalAttack)} · Жизнь {formatShort(preview.hpPool)}</small>
           ) : <small>{entity.role}</small>}
         </div>
-        <span className="simx-tip" role="tooltip">
-          <b>{entity.role}</b>
-          <span>Население {formatNumber(entity.population)} · Оружие: {entity.combat.weaponType} · Броня: {entity.combat.armorType}</span>
-          {ability ? <span>Способность: {ability}</span> : null}
-        </span>
-      </div>
+      </HoverTip>
       <NumberStepper value={count} min={0} max={max} label={`Количество ${entity.name}`} invalid={invalid} errorId={errorId} inputRef={countRef} onChange={onChange} />
       {showLevel ? (
         <div className="simx-row__level" data-qa-sim-level>
@@ -553,11 +590,10 @@ function TechnologyPanel({
     <div id={id} className="simx-techs" hidden={!open}>
       {open ? COMBAT_TECHNOLOGIES.map((technology) => (
         <div className="simx-tech" key={technology.id} data-qa-simulator-technology={technology.id}>
-          <div className="simx-tech__who">
+          <HoverTip className="simx-tech__who" tip={technology.effect}>
             <img src={COMBAT_TECHNOLOGY_ART[technology.id]} alt="" draggable={false} />
             <strong>{technology.name}</strong>
-            <span className="simx-tip" role="tooltip">{technology.effect}</span>
-          </div>
+          </HoverTip>
           <NumberStepper value={normalized[technology.id]} min={0} max={technology.maxLevel} label={`${technology.name}, уровень`} invalid={invalid} errorId={errorId} onChange={(next) => updateLevel(technology.id, next)} />
         </div>
       )) : null}
@@ -771,6 +807,24 @@ export function SimulatorView({ planetId, planetName, coords, saveState, onBack,
     return () => window.clearTimeout(timer);
   }, [scenario]);
 
+  // The whole screen fits the window and only the fleet lists scroll, so the outcome
+  // cannot leave the screen. Sticky cannot do this here: the stage is scaled by a
+  // transform, and a sticky element drifts away at any scale but 1.
+  const arenaRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const measure = () => {
+      const arena = arenaRef.current;
+      if (!arena) return;
+      const rect = arena.getBoundingClientRect();
+      const scale = rect.width / Math.max(1, arena.offsetWidth);
+      const free = (window.innerHeight - rect.top - window.scrollY) / scale - 26;
+      arena.style.setProperty('--simx-height', `${Math.max(440, Math.floor(free))}px`);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
+
   const toggleTechnologies = (side: ScenarioSide) => setTechnologiesOpen((current) => ({ ...current, [side]: !current[side] }));
 
   const clearSide = (side: ScenarioSide) => {
@@ -962,7 +1016,7 @@ export function SimulatorView({ planetId, planetName, coords, saveState, onBack,
         <button type="button" className="simx-close" aria-label="Закрыть симулятор" data-asterion-close onClick={onBack}><i aria-hidden="true" /></button>
       </header>
 
-      <div className="simx-arena">
+      <div className="simx-arena" ref={arenaRef}>
         <section className="simx-side is-attacker" data-qa-sim-side="attacker">
           <header className="simx-side__head">
             <h3>Атакующий</h3>
@@ -972,9 +1026,11 @@ export function SimulatorView({ planetId, planetName, coords, saveState, onBack,
             </div>
           </header>
           <SideStrip side="attacker" scenario={scenario} factionId={attackerFactionId} technologyCount={activeTechnologies(scenario.attackerTechnologies)} technologyId="sim-attacker-technologies" technologiesOpen={technologiesOpen.attacker} onFaction={(factionId) => changeFaction('attacker', factionId)} onCommander={(commanderId) => changeActiveCommander('attacker', commanderId)} onToggleTechnologies={() => toggleTechnologies('attacker')} />
+          <div className="simx-side__list">
           <TechnologyPanel id="sim-attacker-technologies" open={technologiesOpen.attacker} levels={scenario.attackerTechnologies} invalid={hasValidationError('attackerTechnologies')} errorId={validationErrorId} onChange={(levels) => changeTechnologies('attacker', levels)} />
           <UnitGroup id="sim-attacker-ships" title={`Корабли · ${getCombatFactionName(attackerFactionId)}`} meter={{ label: 'Флот', value: population.attackerFleet, max: SIMULATOR_POPULATION_LIMITS.attackerFleet }} entities={attackerShips} scenario={scenario} side="attacker" category="ships" technologies={scenario.attackerTechnologies} report={result} invalid={hasSideCategoryError('attacker', 'ships')} errorId={validationErrorId} onScenario={updateScenario} />
           <UnitGroup id="sim-attacker-commanders" title="Командирские" meter={{ label: 'В лимите флота', value: population.attackerCommander, max: SIMULATOR_POPULATION_LIMITS.attackerFleet }} entities={COMMANDER_COMBAT_CATALOG} scenario={scenario} side="attacker" category="commanders" technologies={scenario.attackerTechnologies} report={result} invalid={hasSideCategoryError('attacker', 'commanders')} errorId={validationErrorId} onScenario={updateScenario} />
+          </div>
         </section>
 
         <aside className="simx-core">
@@ -1018,10 +1074,12 @@ export function SimulatorView({ planetId, planetName, coords, saveState, onBack,
             </div>
           </header>
           <SideStrip side="defender" scenario={scenario} factionId={defenderFactionId} technologyCount={activeTechnologies(scenario.defenderTechnologies)} technologyId="sim-defender-technologies" technologiesOpen={technologiesOpen.defender} onFaction={(factionId) => changeFaction('defender', factionId)} onCommander={(commanderId) => changeActiveCommander('defender', commanderId)} onToggleTechnologies={() => toggleTechnologies('defender')} />
+          <div className="simx-side__list">
           <TechnologyPanel id="sim-defender-technologies" open={technologiesOpen.defender} levels={scenario.defenderTechnologies} invalid={hasValidationError('defenderTechnologies')} errorId={validationErrorId} onCopy={copyAttackerTechnologies} onChange={(levels) => changeTechnologies('defender', levels)} />
           <UnitGroup id="sim-defender-ships" title={`Корабли · ${getCombatFactionName(defenderFactionId)}`} meter={{ label: 'Флот', value: population.defenderFleet, max: SIMULATOR_POPULATION_LIMITS.defenderFleet }} entities={defenderShips} scenario={scenario} side="defender" category="ships" technologies={scenario.defenderTechnologies} report={result} invalid={hasSideCategoryError('defender', 'ships')} errorId={validationErrorId} onScenario={updateScenario} />
           <UnitGroup id="sim-defender-commanders" title="Командирские" meter={{ label: 'В лимите флота', value: population.defenderCommander, max: SIMULATOR_POPULATION_LIMITS.defenderFleet }} entities={COMMANDER_COMBAT_CATALOG} scenario={scenario} side="defender" category="commanders" technologies={scenario.defenderTechnologies} report={result} invalid={hasSideCategoryError('defender', 'commanders')} errorId={validationErrorId} onScenario={updateScenario} />
           <UnitGroup id="sim-defender-defenses" title={`Оборона · ${getCombatFactionName(defenderFactionId)}`} meter={{ label: 'Оборона', value: population.defenderDefense, max: SIMULATOR_POPULATION_LIMITS.defenderDefense }} entities={defenderDefenses} scenario={scenario} side="defender" category="defenses" technologies={scenario.defenderTechnologies} report={result} invalid={hasSideCategoryError('defender', 'defenses')} errorId={validationErrorId} onScenario={updateScenario} />
+          </div>
         </section>
       </div>
 

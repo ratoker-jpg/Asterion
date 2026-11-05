@@ -106,7 +106,7 @@ async function audit(win, name, label) {
     if (!host) return ['no screen'];
     const visible = (node) => { const rect = node.getBoundingClientRect(); return rect.width > 0 && rect.height > 0; };
     for (const node of host.querySelectorAll('h2,h3,h4,p,small,strong,b,em,span,button,li')) {
-      if (node.closest('.simx-tip')) continue;
+      if (node.closest('.game-select__trigger')) continue;
       const style = getComputedStyle(node);
       if (style.display === 'none' || style.visibility === 'hidden' || style.display === 'inline' || !visible(node)) continue;
       if (node.scrollWidth > node.clientWidth + 2 && node.clientWidth > 0) issues.push({ cut: node.tagName + '.' + node.className, text: node.textContent.trim().slice(0, 50), scroll: node.scrollWidth, client: node.clientWidth });
@@ -119,8 +119,9 @@ async function audit(win, name, label) {
         if (a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) issues.push({ overlap: [cells[i].className, cells[j].className], row: row.className });
       }
     }
-    const core = host.querySelector('.simx-core')?.getBoundingClientRect();
-    if (core && core.bottom > innerHeight + 1 && document.documentElement.scrollTop > 0) issues.push({ coreBelowWindow: core.bottom });
+    const core = host.querySelector('.simx-core');
+    if (core && (core.scrollHeight > core.clientHeight + 1 || core.getBoundingClientRect().bottom > innerHeight + 1)) issues.push({ coreDoesNotFit: [core.scrollHeight, core.clientHeight] });
+    if (document.documentElement.scrollHeight > innerHeight + 2) issues.push({ pageScrolls: document.documentElement.scrollHeight });
     const fontFloor = [...host.querySelectorAll('strong,small,span,button,h4')].filter((node) => visible(node) && node.textContent.trim() && !node.closest('.simx-tip') && parseFloat(getComputedStyle(node).fontSize) < 12);
     if (fontFloor.length) issues.push({ tinyText: fontFloor.slice(0, 3).map((node) => node.className + ':' + getComputedStyle(node).fontSize) });
     if (document.documentElement.scrollWidth > innerWidth + 2) issues.push({ horizontalOverflow: document.documentElement.scrollWidth });
@@ -178,8 +179,8 @@ async function openSimulator(win) {
   await settle(win);
 }
 
-const toTop = (win) => run(win, 'window.scrollTo(0, 0)');
-const toBottom = async (win) => { await run(win, 'window.scrollTo(0, document.documentElement.scrollHeight)'); await settle(win); };
+const toTop = (win) => run(win, `document.querySelectorAll('.simx-side__list').forEach((list) => { list.scrollTop = 0; }); window.scrollTo(0, 0)`);
+const toBottom = async (win) => { await run(win, `document.querySelectorAll('.simx-side__list').forEach((list) => { list.scrollTop = list.scrollHeight; }); window.scrollTo(0, document.documentElement.scrollHeight)`); await settle(win); };
 
 async function fight(win) {
   await click(win, '.sim-run-v1');
@@ -375,6 +376,12 @@ async function scenes(win, directory, label) {
   if (hasReport) {
     await setField(win, '[data-qa-sim-fill-report]', 'qa-spy-1');
     await shot('17-defender-from-report');
+    // Bot profiles of the test mode carry all three additional sciences; the screen asks to leave one.
+    await click(win, `${D} .simx-tech-toggle`);
+    for (const id of ['maneuverDefense', 'criticalHit']) {
+      await run(win, `(() => { const down = () => document.querySelector('[data-qa-simulator-technology="${id}"] button[aria-label^="Уменьшить"]'); return new Promise((done) => { const tick = () => { const b = down(); if (!b || b.disabled) return done(); b.click(); setTimeout(tick, 30); }; tick(); }); })()`);
+    }
+    await click(win, `${D} .simx-tech-toggle`);
     const fromReport = await fight(win);
     notes.push({ label, scene: 'spy-report', ...fromReport });
     await shot('18-loot-from-report');

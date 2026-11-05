@@ -315,11 +315,11 @@ async function runViewport(win, width, height) {
   }
   await capture(win, directory, 'simulator-inline-result');
   // Scrolling down the fleets does not take the outcome away.
-  await win.webContents.executeJavaScript('window.scrollTo(0, document.documentElement.scrollHeight)');
+  await win.webContents.executeJavaScript(`document.querySelectorAll('.simx-side__list').forEach((list) => { list.scrollTop = list.scrollHeight; }); window.scrollTo(0, document.documentElement.scrollHeight)`);
   await settle(win);
   const scrolled = (await snapshot(win)).inlineResult;
-  await win.webContents.executeJavaScript('window.scrollTo(0, 0)');
-  if (!scrolled.verdictInWindow || !scrolled.debrisInWindow) throw new Error(`${label}: the outcome scrolled away ${JSON.stringify(scrolled)}`);
+  await win.webContents.executeJavaScript(`document.querySelectorAll('.simx-side__list').forEach((list) => { list.scrollTop = 0; }); window.scrollTo(0, 0)`);
+  if (!scrolled.verdictInWindow || !scrolled.debrisInWindow || !scrolled.runInWindow) throw new Error(`${label}: the outcome scrolled away ${JSON.stringify(scrolled)}`);
 
   await click(win, '[data-qa-sim-details]');
   await waitFor(win, `document.querySelector('[role="dialog"][data-qa-battle-report-modal][data-qa-battle-report-source="simulation"]')`);
