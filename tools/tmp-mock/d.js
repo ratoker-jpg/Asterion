@@ -5,7 +5,7 @@ const CSS=`
 .q-c i{display:block;width:84px;height:84px;border-radius:50%;background-size:auto 180%;background-position:88% 50%;box-shadow:0 0 0 2px rgba(150,200,255,.4),0 6px 18px #000c}
 .q-c b{display:block;font-size:22px;line-height:1.1;text-shadow:0 2px 8px #000}.q-c em{display:block;font-style:normal;color:var(--ac);font-weight:700;font-size:19px;text-shadow:0 2px 8px #000}
 .q-c.off i{filter:grayscale(1) brightness(.5);box-shadow:0 0 0 2px rgba(255,255,255,.14)}.q-c.off b{color:#9fb0c2}.q-c.off em{color:var(--am);font-weight:600;font-size:17px;line-height:1.15}
-.at-sky{position:absolute;inset:0;background-size:cover;background-position:center;opacity:.28}
+.at-sky{position:absolute;inset:0;background-size:cover;background-position:center;opacity:.15}
 .at-c{display:block;border-radius:50%;background-size:auto 180%;background-position:88% 50%;box-shadow:0 0 0 2px rgba(150,200,255,.4),0 4px 12px #000b;flex:none}
 .at-c.off{filter:grayscale(1) brightness(.45);box-shadow:0 0 0 2px rgba(255,255,255,.12)}
 .at-m{display:flex;align-items:center;gap:10px}.at-m img{width:68px;height:68px}.at-m small{display:block;font-size:17px;color:var(--mu);line-height:1.1}.at-m b{font-size:27px;line-height:1.15;white-space:nowrap}
@@ -32,9 +32,9 @@ function quick(k){const o=OBJ[k];const r=o.d/2;
  <div class="abs" style="left:${o.x+r+34}px;top:${top}px;width:520px"><div style="text-shadow:0 2px 8px #000"><b style="font-size:26px">${o.t}</b> <span class="ac" style="font-weight:700;font-size:20px">${o.c}</span></div><div class="mu" style="margin-bottom:8px;text-shadow:0 2px 8px #000">${o.who}</div>${rows}<div class="mu" style="margin:6px 0 0 98px;font-size:18px;font-weight:700;text-shadow:0 2px 8px #000">Карточка объекта</div></div>`}
 /* данные атласа */
 const OWNERS={
- '7':{name:'скаус',status:'В сети',rel:'Враг · в диапазоне атаки',reason:'У него 509 090 общих очков, тебе можно атаковать от 407 272 до 1 018 180.',pts:[412780,96310,509090,1240],ok:1,
+ '7':{name:'скаус',status:'В сети',rel:'Враг · в диапазоне атаки',reason:'У него 509 090 общих очков, тебе можно атаковать от 407 272 до 1 018 180.',pts:[412780,96310,509090,1240],ok:1,
   pl:[['Ксенон-4-2',[1,27,19],PL(8),1],['Цитадель Север',[1,25,8],PL(3),0,1240000],['Нерида',[1,34,6],PL(6)],['Фобос',[1,27,3],PL(1)],['Ярь',[2,8,14],PL(2)],['Кальдера',[2,11,21],PL(7),0,86400],['Новый Предел',[3,40,2],PL(5)]]},
- '2':{name:'скаус',status:'В сети',rel:'Враг · вне диапазона атаки · доступен шпионаж',reason:'У него 6 687 общих очков, тебе можно атаковать от 1 161 до 4 642.',pts:[6687,0,6687,0],ok:0,
+ '2':{name:'скаус',status:'В сети',rel:'Враг · вне диапазона атаки · доступен шпионаж',reason:'У него 6 687 общих очков, тебе можно атаковать от 1 161 до 4 642.',pts:[6687,0,6687,0],ok:0,
   pl:[['Ксенон-4-2',[1,27,19],PL(8),1],['Цитадель Север',[1,25,8],PL(3)]]},
 };
 const MED=[['resource-crystal','Ресурсные'],['battle','Боевые'],['overall-star','Общие'],['achievement-trophy','Достижения']];
@@ -53,14 +53,15 @@ const ally=s=>`<div style="display:flex;align-items:center;gap:14px">${crest(s)}
 const relation=o=>`<div style="color:${o.ok?'#ff8a95':'var(--am)'};font-size:22px;font-weight:800;line-height:1.15">${o.rel}</div><div class="mu" style="font-size:18px;margin-top:3px">${o.reason}</div>`;
 /* 1: ряд планет */
 function at1(k){const o=OWNERS[k],N=o.pl.length,big=N<=3;const w=big?440:252;
- const card=p=>{const on=p[3];const s=big?104:56;return `<div style="width:${w}px;text-align:center;position:relative;${on?'background:rgba(255,90,110,.1);box-shadow:inset 0 0 0 2px #ff6a7899;':''}border-radius:var(--r);padding:12px 4px 10px;height:${big?500:440}px">
- <img src="${p[2]}" style="width:${big?210:150}px;height:${big?210:150}px;margin:0 auto;${on?'filter:drop-shadow(0 0 24px #ff6a78aa)':''}"><div style="font-size:${big?26:21}px;font-weight:800;line-height:1.15;margin-top:6px;white-space:nowrap">${p[0]}</div><div class="ac" style="font-weight:700;font-size:18px">${coord(p[1])}</div>
+ const card=p=>{const on=p[3];const s=big?104:70;const A=acts(o,p);const T=times(p);return `<div style="width:${w}px;text-align:center;position:relative;${on?'background:rgba(255,90,110,.1);box-shadow:inset 0 0 0 2px #ff6a7899;':''}border-radius:var(--r);padding:14px 4px 10px;height:${big?500:560}px">
+ <img src="${p[2]}" style="width:${big?210:204}px;height:${big?210:204}px;margin:0 auto;${on?'filter:drop-shadow(0 0 24px #ff6a78aa)':''}"><div style="font-size:${big?26:22}px;font-weight:800;line-height:1.15;margin-top:8px;white-space:nowrap">${p[0]}</div><div class="ac" style="font-weight:700;font-size:18px">${coord(p[1])}</div>
  <div style="height:24px;font-size:17px;color:var(--am);font-weight:600;white-space:nowrap">${p[4]?'обломки '+n(p[4]):''}</div>
- <div style="display:flex;justify-content:center;gap:${big?22:7}px;margin-top:6px">${acts(o,p).slice(0,big?4:3).map(a=>`<div style="width:${s+(big?16:18)}px">${circ(a[0],s,a[3]).replace('class="at-c','style_x class="at-c').replace('style_x ','')}<div style="font-size:${big?18:17}px;font-weight:700;line-height:1.1;margin-top:4px;white-space:nowrap;margin-left:-8px;margin-right:-8px" class="${a[3]?'mu':'ac'}">${a[3]?'нельзя':a[2]}</div></div>`).join('')}</div></div>`};
+ <div style="display:flex;justify-content:center;gap:${big?22:9}px;margin-top:10px">${A.slice(0,big?4:3).map(a=>`<div style="width:${big?s+16:s}px">${circ(a[0],s,a[3]).replace('<i class="at-c','<i style_y class="at-c').replace('style_y ','')}${big?`<div style="font-size:18px;font-weight:700;margin-top:4px;white-space:nowrap" class="${a[3]?'mu':'ac'}">${a[3]?'нельзя':a[2]}</div>`:''}</div>`).join('')}</div>
+ ${big?'':`<div style="font-size:18px;font-weight:700;margin-top:14px;white-space:nowrap"><span class="mu">Зонд</span> <span class="ac">${T[0]}</span></div><div style="font-size:18px;font-weight:700;white-space:nowrap"><span class="mu">Флот</span> <span class="ac">${T[1]}</span></div>`}</div>`};
  return st+`<div class="ov" style="background:#04080ff5">${bg}${X}
  <div class="abs" style="left:60px;top:44px;right:130px;display:grid;grid-template-columns:auto auto 1fr;gap:64px;align-items:center">${owner(o,150)}${ally(120)}<div style="display:grid;grid-template-columns:auto auto;gap:14px 50px;justify-content:end">${[0,1,2,3].map(i=>medal(o,i)).join('')}</div></div>
  <div class="abs" style="left:60px;right:60px;top:238px;display:flex;align-items:baseline;gap:18px"><span style="font-size:30px;font-weight:900">Планеты игрока</span><span class="mu" style="font-size:22px;font-weight:700">${N}</span><span class="mu" style="margin-left:auto">Шпионаж, атака и транспорт на любую планету в один клик</span></div>
- <div class="abs" style="left:60px;right:60px;top:${big?300:306}px;display:flex;justify-content:${big?'center':'space-between'};gap:${big?40:0}px">${o.pl.map(card).join('')}</div>
+ <div class="abs" style="left:60px;right:60px;top:${big?300:298}px;display:flex;justify-content:${big?'center':'space-between'};gap:${big?40:0}px">${o.pl.map(card).join('')}</div>
  <div class="abs" style="left:60px;right:60px;bottom:30px;display:flex;align-items:center;gap:30px"><div style="flex:1">${relation(o)}</div><span class="btn" style="height:60px;font-size:20px">Показать на карте</span></div></div>`}
 /* 2: планета и список */
 function at2(k){const o=OWNERS[k],p0=o.pl[0],few=o.pl.length<=3;const rh=few?150:96;
@@ -75,7 +76,7 @@ function at2(k){const o=OWNERS[k],p0=o.pl[0],few=o.pl.length<=3;const rh=few?150
 /* 3: планеты на орбите вокруг выбранной */
 function at3(k){const o=OWNERS[k],p0=o.pl[0],rest=o.pl.slice(1);const cx=1150,cy=560,Rx=490,Ry=395;
  const ANG=rest.length>2?[-150,-90,-30,30,90,150]:[-30,150];
- const tok=rest.map((p,i)=>{const a=ANG[i]*Math.PI/180,x=cx+Rx*Math.cos(a),y=cy+Ry*Math.sin(a);const ac=acts(o,p).slice(0,2);return `<div class="abs" style="left:${x-50}px;top:${y-58}px;width:300px;display:flex;gap:6px;align-items:flex-start"><div style="width:100px;flex:none;text-align:center;position:relative"><img src="${p[2]}" style="width:92px;height:92px;margin:0 auto"></div><div style="display:flex;gap:6px;padding-top:22px">${ac.map(c=>`<div style="text-align:center;width:60px">${circ(c[0],52,c[3]).replace('display:block','')}<div class="${c[3]?'mu':'ac'}" style="font-size:17px;font-weight:700;white-space:nowrap;margin:0 -10px">${c[3]?'нельзя':c[2]}</div></div>`).join('')}</div>
+ const tok=rest.map((p,i)=>{const a=ANG[i]*Math.PI/180,x=cx+Rx*Math.cos(a),y=cy+Ry*Math.sin(a);const ac=acts(o,p).slice(0,2);return `<div class="abs" style="left:${x-50}px;top:${y-58}px;width:300px;display:flex;gap:6px;align-items:flex-start"><div style="width:100px;flex:none;text-align:center;position:relative"><img src="${p[2]}" style="width:92px;height:92px;margin:0 auto"></div><div style="display:flex;gap:2px;padding-top:4px">${ac.map(c=>`<div style="width:80px;display:flex;flex-direction:column;align-items:center">${circ(c[0],52,c[3]).replace('display:block','')}<div class="${c[3]?'mu':'ac'}" style="font-size:17px;font-weight:700;white-space:nowrap">${c[3]?'нельзя':c[2]}</div></div>`).join('')}</div>
  <div class="abs" style="left:-50px;top:92px;width:200px;text-align:center;line-height:1.1"><div style="font-size:18px;font-weight:800;white-space:nowrap;text-shadow:0 2px 6px #000">${p[0]}</div><div class="ac" style="font-size:17px;font-weight:700">${coord(p[1])}</div>${p[4]?`<div class="am" style="font-size:17px;font-weight:600;white-space:nowrap">обломки ${n(p[4])}</div>`:''}</div></div>`}).join('');
  const main=acts(o,p0).map(a=>`<div class="q-c ${a[3]?'off':''}" style="height:84px;grid-template-columns:72px 1fr"><i style="width:72px;height:72px;background-image:url(${BAN(a[0])})"></i><div><b style="font-size:20px">${a[1]}</b><em>${a[3]?'вне диапазона':a[2]}</em></div></div>`).join('');
  return st+`<div class="ov" style="background:#04080ff5">${bg}${X}
