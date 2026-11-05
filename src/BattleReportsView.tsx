@@ -1360,7 +1360,13 @@ export function BattleReportsView({ planetName, coords, onBack }: { planetName: 
     [battleList, mode, viewModels],
   );
   const openReport = openReportId ? history.reports.find((report) => report.id === openReportId) ?? null : null;
-  const openViewModel = openReport ? viewModels.get(openReport.id) ?? null : null;
+  // An open report does not depend on the lists: removing its star must not close it.
+  const openViewModel = useMemo(() => {
+    if (!openReport) return null;
+    return viewModels.get(openReport.id) ?? createBattleReportViewModel(openReport, {
+      awardedBattlePoints: selectRecordedBattlePointAwards(saveState.rating, openReport, playerId),
+    });
+  }, [openReport, viewModels, saveState.rating, playerId]);
 
   const toggleSaved = (reportId: string) => {
     const currentlySaved = history.savedReportIds.includes(reportId);

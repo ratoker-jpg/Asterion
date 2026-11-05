@@ -243,6 +243,19 @@ async function runViewport(win, width, directory) {
   if (metrics.starredForeign.tabs[0] !== DEMO_BATTLES || metrics.starredForeign.tabs[1] !== 1 || metrics.starredForeign.rows.join() !== 'qa-foreign-1') fail('starred battle of others', metrics.starredForeign);
   await capture(win, directory, 'saved-foreign');
 
+  // An open report outlives its star: it leaves the lists, the window stays until closed.
+  await win.webContents.executeJavaScript(`document.querySelector('[data-qa-battle-card="qa-foreign-1"]').open = true`);
+  await waitFor(win, `document.querySelector('[data-qa-battle-open="qa-foreign-1"]')`);
+  await win.webContents.executeJavaScript(`document.querySelector('[data-qa-battle-open="qa-foreign-1"]').click()`);
+  await waitFor(win, `document.querySelector('[data-qa-battle-report-modal="qa-foreign-1"]')`);
+  await win.webContents.executeJavaScript(`document.querySelector('[data-qa-battle-report-modal="qa-foreign-1"] .battle-save-v1').click()`);
+  await settle(win, 300);
+  metrics.unstarOpen = { modal: await win.webContents.executeJavaScript(`Boolean(document.querySelector('[data-qa-battle-report-modal="qa-foreign-1"]'))`), tabs: await tabs(win) };
+  if (!metrics.unstarOpen.modal || metrics.unstarOpen.tabs[1] !== 0) fail('removing the star closed the open report', metrics.unstarOpen);
+  await win.webContents.executeJavaScript(`document.querySelector('.battle-report-modal-close-v1').click()`);
+  await settle(win, 200);
+  if (!await win.webContents.executeJavaScript(`Boolean(document.querySelector('[data-qa-battle-empty="saved"]'))`)) fail('the report without a star stays in the starred tab');
+
   // No battles of his at all: the demo reports of test mode are someone else's for this profile.
   await openBattles(win, { nobody: true, foreign: true }, `document.querySelector('[data-qa-navigation="utility"]')`);
   metrics.noBattles = { tabs: await tabs(win), empty: await win.webContents.executeJavaScript(`Boolean(document.querySelector('[data-qa-battle-empty="recent"]'))`) };
