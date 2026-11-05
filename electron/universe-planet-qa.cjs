@@ -480,7 +480,8 @@ async function inspectorSnapshot(win) {
       action: node.getAttribute('data-qa-universe-action'),
       status: node.getAttribute('data-qa-universe-action-status'),
       disabled: Boolean(node.disabled),
-      title: node.getAttribute('title') || '',
+      // The atlas shows reasons in its own hint (no system tooltips); the full text sits on the button.
+      title: node.getAttribute('data-qa-universe-action-reason') || node.getAttribute('title') || '',
     }));
     const specialActions = Array.from(document.querySelectorAll('[data-qa-universe-special-action]')).map((node) => ({
       action: node.getAttribute('data-qa-universe-special-action'),

@@ -14,11 +14,11 @@
 .quick-send small { display: block; color: var(--qa-label); font-size: 10px !important; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
 .quick-send--hostile { --qa-k: #f0445e; }
 .quick-send__head {
-  display: grid; grid-template-columns: 26px 30px minmax(0, 1fr) 28px; align-items: center; gap: 8px;
+  display: grid; grid-template-columns: 26px 40px minmax(0, 1fr) 28px; align-items: center; gap: 8px;
   padding: 10px 10px 10px 8px; border-bottom: 1px solid var(--qa-line);
   background: linear-gradient(90deg, color-mix(in srgb, var(--qa-k, #56d9f2) 10%, transparent), transparent 70%);
 }
-.quick-send__head img { width: 30px; height: 30px; object-fit: contain; }
+.quick-send__head img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 1px rgba(255, 255, 255, .12), 0 0 14px rgba(0, 0, 0, .5); }
 .quick-send__head div { display: grid; min-width: 0; }
 .quick-send__head b { font-size: 13px !important; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
 .quick-send__head span { overflow: hidden; color: var(--qa-muted); white-space: nowrap; text-overflow: ellipsis; font-size: 11px !important; font-weight: 600; }

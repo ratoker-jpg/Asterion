@@ -1,12 +1,13 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { RUNTIME_STATE_CHANGED_EVENT } from '../../domain/runtime/mode.ts';
-import { formatUniverseCoordinate } from '../../domain/universe/runtime.ts';
+import { formatUniverseCoordinate, getUniverseObjectKindLabel } from '../../domain/universe/runtime.ts';
+import { flightClock } from './atlas-plans.ts';
 import type { SaveState } from '../../application/contracts.ts';
 import { getLiveSaveState } from '../../application/runtime.ts';
 import { FLIGHT_COMMAND_RESULT_EVENT, type DispatchFlightCommand, type FlightCommandResult, type FlightLaunchContext } from '../../application/flights.ts';
 import { evaluateQuickActions, type QuickActionId, type QuickActionView, type QuickLegOutcome, type QuickTarget } from '../../application/quick-actions.ts';
-import { QuickSendPanel, flightDurationLabel, quickRuntimeNow } from '../quick-send/QuickSendPanel.tsx';
+import { QuickSendPanel, quickRuntimeNow } from '../quick-send/QuickSendPanel.tsx';
 import { QUICK_ACTION_ICONS as ACTION_ICONS } from '../quick-send/quick-action-icons.ts';
 import './quick-actions.css';
 
@@ -52,14 +53,15 @@ export type QuickActionsProps = {
 
 type Placement = { left: number; top: number; side: 'right' | 'left' };
 
-function place(anchor: DOMRect, width: number, height: number): Placement {
-  const gap = 14;
+function place(anchor: DOMRect, width: number, height: number, centred = false): Placement {
+  const gap = centred ? 22 : 14;
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
   const right = anchor.right + gap;
   const side = right + width <= viewportWidth - 8 || anchor.left - gap - width < 8 ? 'right' : 'left';
   const left = side === 'right' ? Math.min(right, viewportWidth - width - 8) : anchor.left - gap - width;
-  const top = Math.min(Math.max(8, anchor.top + anchor.height / 2 - Math.min(height, 120) / 2 - 22), viewportHeight - height - 8);
+  const wanted = centred ? anchor.top + anchor.height / 2 - height / 2 : anchor.top + anchor.height / 2 - Math.min(height, 120) / 2 - 22;
+  const top = Math.min(Math.max(8, wanted), viewportHeight - height - 8);
   return { left: Math.max(8, left), top: Math.max(8, top), side };
 }
 
@@ -76,7 +78,7 @@ export function QuickActions({ target, anchor, onClose, onSend, onDetails, onOpe
     const root = rootRef.current;
     if (!root) return;
     // The panel grows downwards as planets are checked: reserve its full height (see .quick-pop.is-panel).
-    const next = place(rect, root.offsetWidth, actionId ? Math.min(640, window.innerHeight - 16) : root.offsetHeight);
+    const next = place(rect, root.offsetWidth, actionId ? Math.min(640, window.innerHeight - 16) : root.offsetHeight, !actionId);
     setPlacement((current) => (current && current.left === next.left && current.top === next.top && current.side === next.side ? current : next));
   };
   useLayoutEffect(reposition);
@@ -144,6 +146,13 @@ export function QuickActions({ target, anchor, onClose, onSend, onDetails, onOpe
   );
 }
 
+const RELATION_WORD: Record<string, string> = { self: 'ваша планета', ally: 'союзник', enemy: 'враг', neutral: 'нейтральный' };
+
+function targetCaption(target: QuickTarget): string {
+  if (target.owner) return `${target.owner.displayName} · ${RELATION_WORD[target.relation ?? 'neutral'] ?? ''}`;
+  return getUniverseObjectKindLabel(target.node.kind);
+}
+
 function QuickMenu({ target, actions, onChoose, onOpenCard }: { target: QuickTarget; actions: QuickActionView[]; onChoose: (action: QuickActionView) => void; onOpenCard: () => void }) {
   const listRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -160,12 +169,11 @@ function QuickMenu({ target, actions, onChoose, onOpenCard }: { target: QuickTar
       : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
     items[next]?.focus();
   };
-  const planetName = (planetId: string | null | undefined) => (planetId ? getLiveSaveState()?.planets[planetId]?.name : undefined);
   return (
     <div ref={listRef} role="menu" aria-label={`Быстрые действия: ${target.node.name}`} onKeyDown={onKeyDown}>
       <header className="quick-pop__head">
-        {target.node.art ? <img src={target.node.art} alt="" draggable={false} /> : <i aria-hidden="true" />}
-        <div><b>{target.node.name}</b><span>{formatUniverseCoordinate(target.node.coordinate)}</span></div>
+        <b><span>{target.node.name}</span> <em>{formatUniverseCoordinate(target.node.coordinate)}</em></b>
+        <small>{targetCaption(target)}</small>
       </header>
       {actions.length === 0 ? <p className="quick-pop__empty">Для этого объекта нет быстрых действий.</p> : null}
       {actions.map((action, index) => {
@@ -182,10 +190,9 @@ function QuickMenu({ target, actions, onChoose, onOpenCard }: { target: QuickTar
               {action.enabled && action.adjust
                 ? <small className="quick-pop__reason" data-qa-quick-adjust>{action.adjust} Состав можно изменить.</small>
                 : action.enabled
-                ? <small>{flight ? `${planetName(action.plan?.originPlanetId) ?? 'Планета'} · ${flightDurationLabel(flight.oneWayDurationMs)}` : action.id === 'pirate-report' ? 'Последний отчёт по базе' : 'Готово к отправке'}</small>
+                ? <small className="quick-pop__time">{flight ? flightClock(flight.oneWayDurationMs) : action.id === 'pirate-report' ? 'Последний отчёт по базе' : 'Готово к отправке'}</small>
                 : <small className="quick-pop__reason" data-qa-quick-reason>{action.reason}</small>}
             </span>
-            {action.enabled ? <em aria-hidden="true">›</em> : null}
           </button>
         );
       })}
