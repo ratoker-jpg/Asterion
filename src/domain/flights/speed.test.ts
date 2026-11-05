@@ -62,3 +62,10 @@ test('the real-time floor keeps every one-way flight at 60 seconds or more', asy
   assert.equal(applyRealFlightFloor(36_000), 60_000);
   assert.equal(applyRealFlightFloor(120_000), 120_000);
 });
+
+test('Sun support flights: floor in real play, none under the test-mode accelerator', async () => {
+  const { floorSunSupportFlight } = await import('../../application/sun-raid.ts');
+  assert.equal(floorSunSupportFlight(500, { now: 0, mode: 'test', testTimeScale: 500 }), 500);
+  assert.equal(floorSunSupportFlight(500, { now: 0, mode: 'production' }), 60_000);
+  assert.equal(floorSunSupportFlight(500, { now: 0, mode: 'test', timeScale: 5 }), 60_000);
+});
