@@ -130,7 +130,7 @@ async function run(width, height) {
     await js(win, `(() => {
       document.querySelector('[data-qa-universe-owner-name]').textContent = 'Верховный Архонт Звёздного Предела Максимилиан';
       document.querySelector('.star-atlas__head h2 span').textContent = 'Новая Константинопольская Обсерватория-12';
-      document.querySelectorAll('.star-atlas__point dd').forEach((e) => { e.textContent = '987 654 321 012'; });
+      document.querySelectorAll('.star-atlas__point dd').forEach((e) => { e.textContent = '999 999 999'; });
       document.querySelectorAll('.star-atlas__row-planet strong').forEach((e, i) => { e.textContent = i % 2 ? 'Ы' : 'Длинное-Название-Планеты-Без-Пробелов-Номер-' + i; });
       document.querySelectorAll('.star-atlas__row-planet > span').forEach((e) => { if (!e.querySelector('em')) { const em = document.createElement('em'); em.textContent = 'обломки 1 234 567 890'; e.append(em); } });
       const alliance = document.querySelector('.star-atlas__alliance b'); if (alliance) alliance.textContent = 'Объединённая Конфедерация Свободных Миров Внешнего Кольца';

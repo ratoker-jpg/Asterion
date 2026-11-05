@@ -287,6 +287,11 @@ export const SPECIAL_TONE: Partial<Record<UniversePlanetNode['kind'], string>> =
   empty: '#8fb6c0', uninhabited: '#8fb6c0', asteroid: '#c9b48a', pirate: MAP_TONE_COLOR.pirate, unique: MAP_TONE_COLOR.unique, anomaly: MAP_TONE_COLOR.anomaly,
 };
 
+/** Score medals stay exact below a billion; beyond that «987,7 млрд» keeps four medals in one row. */
+function scoreLabel(value: number) {
+  return value >= 1e9 ? compactAmount(value) : numberFormat.format(value);
+}
+
 /** Large orbital debris stays readable in a fixed column: 168 801 300 → «168,8 млн». */
 function compactAmount(value: number) {
   if (value >= 1e9) return `${(value / 1e9).toLocaleString('ru-RU', { maximumFractionDigits: 1 })} млрд`;
@@ -489,7 +494,7 @@ function OwnerInspector({
             <div key={key} className="star-atlas__point" style={{ '--i': index } as CSSProperties}>
               <img src={asterionAssetIntegrationAssets.scoreIcons[SCORE_ICON_KEYS[key]]} alt="" aria-hidden="true" draggable={false} />
               <dt>{SHORT_POINT_LABELS[key]}</dt>
-              <dd>{owner.points ? numberFormat.format(owner.points[key] ?? 0) : '—'}</dd>
+              <dd>{owner.points ? scoreLabel(owner.points[key] ?? 0) : '—'}</dd>
             </div>
           ))}
         </dl>
