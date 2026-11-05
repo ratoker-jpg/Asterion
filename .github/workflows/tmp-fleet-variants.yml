@@ -1,0 +1,26 @@
+name: Временный: снимки вариантов Флотов
+on:
+  push:
+    branches: [claude/fleet-variants]
+    paths: ['tools/tmp-mock/**', '.github/workflows/tmp-fleet-variants.yml']
+jobs:
+  shoot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: |
+          mkdir -p /tmp/pw && cd /tmp/pw && npm init -y >/dev/null && npm i playwright@1.49.1
+          npx playwright install --with-deps chromium
+          cp /tmp/pw/package.json /tmp/pw/pw.json
+      - run: |
+          ln -s /tmp/pw/node_modules node_modules
+          sudo apt-get install -y fonts-noto-core >/dev/null 2>&1 || true
+          OUT=shots node tools/tmp-mock/shoot.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fleet-variants
+          path: shots
+          compression-level: 0

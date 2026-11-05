@@ -1,0 +1,36 @@
+@font-face{font-family:Mont;src:url(/public/fonts/Montserrat-Variable.ttf);font-weight:100 900}
+*{box-sizing:border-box;margin:0;padding:0;min-width:0}
+:root{--bg:#04080f;--sf:rgba(150,200,255,.055);--sf2:rgba(150,200,255,.1);--tx:#eef5ff;--mu:#93a7bd;--ac:#5fd4ff;--ac2:#3f8cff;--am:#ffc14d;--re:#ff6a78;--gr:#4fe3a0;--r:14px;--line:rgba(150,200,255,.16)}
+html,body{height:100%;background:var(--bg);overflow:hidden}
+#z{width:1920px;height:1080px;transform-origin:0 0;position:relative;overflow:hidden;font:500 18px/1.25 Mont,sans-serif;color:var(--tx);font-variant-numeric:tabular-nums;
+ background:radial-gradient(1px 1px at 12% 22%,#fff8,transparent),radial-gradient(1px 1px at 72% 12%,#fff6,transparent),radial-gradient(1.5px 1.5px at 42% 62%,#fff5,transparent),radial-gradient(1px 1px at 85% 78%,#fff7,transparent),radial-gradient(1px 1px at 28% 88%,#fff5,transparent),radial-gradient(1.5px 1.5px at 58% 34%,#fff4,transparent),radial-gradient(1px 1px at 93% 41%,#fff6,transparent),radial-gradient(1px 1px at 6% 56%,#fff5,transparent),radial-gradient(1200px 700px at 70% 30%,#0d2240 0,transparent 70%),var(--bg)}
+#app{position:absolute;inset:0}
+.abs{position:absolute}img{display:block;max-width:none}
+b,strong{font-weight:800}
+.mu{color:var(--mu)}.ac{color:var(--ac)}.am{color:var(--am)}.re{color:var(--re)}.gr{color:var(--gr)}
+.k{font-size:17px;letter-spacing:.12em;color:var(--ac);font-weight:700;text-transform:uppercase}
+.btn{display:inline-flex;align-items:center;justify-content:center;height:48px;padding:0 22px;border-radius:var(--r);background:var(--sf2);color:var(--tx);font-weight:700;font-size:18px;white-space:nowrap;border:0}
+.btn.pri{background:linear-gradient(180deg,#7ee2ff,#2fb2ee);color:#04202e;font-weight:800;box-shadow:0 0 34px rgba(95,212,255,.35)}
+.btn.big{height:84px;font-size:28px;padding:0 54px}
+.x{position:absolute;top:28px;right:32px;width:56px;height:56px;border-radius:var(--r);display:grid;place-items:center;background:rgba(255,90,110,.16);color:var(--re);z-index:50}
+.x svg{width:26px;height:26px}
+.field{display:inline-flex;align-items:center;justify-content:center;height:48px;min-width:64px;padding:0 14px;background:rgba(0,0,0,.45);border-radius:var(--r);font-weight:800}
+.mirror{transform:scaleX(-1)}
+/* шапка игры */
+.top{position:absolute;left:0;right:0;top:0;height:56px;display:flex;gap:6px;padding:7px 12px;background:linear-gradient(#0a1420,#070d16);align-items:center}
+.top .it{display:flex;align-items:center;gap:8px;padding:0 12px;height:42px;background:rgba(255,255,255,.035);border-radius:10px}
+.top .it img{width:28px;height:28px}.top .it small{display:block;font-size:12px;color:var(--mu);line-height:1.1}.top .it b{font-size:19px;line-height:1.1;white-space:nowrap}
+.nav{position:absolute;left:0;right:0;top:56px;height:78px;display:grid;grid-template-columns:repeat(3,1fr) 360px repeat(3,1fr);align-items:center;background:linear-gradient(#0a1420e8,#060c15e0);border-top:1px solid #4da3ff40;border-bottom:1px solid #4da3ff22}
+.nav div{display:flex;align-items:center;gap:12px;justify-content:center;font-size:17px;color:#c5d3e2}.nav img{width:46px;height:46px;padding:9px;border-radius:50%;background:#12233a}
+.nav .on{color:#fff}.nav .on span{box-shadow:0 8px 0 -6px #5ea4ff}
+.orb{position:absolute;left:880px;top:20px;width:160px;height:160px;border-radius:50%;border:3px solid #2b65b8;background:#050a14}.orb img{position:absolute;inset:14px;width:126px;height:126px;border-radius:50%}
+.ob{position:absolute;width:50px;height:50px;border-radius:50%;background:#0b1a2e;border:2px solid #2bb1cf;display:grid;place-items:center}.ob img{width:32px;height:32px}
+/* вкладки раздела */
+.tabs{position:absolute;top:142px;left:40px;right:40px;display:grid;grid-template-columns:1fr 170px 1fr;height:52px}
+.tabs>div{display:flex;gap:34px;align-items:center}.tabs>div:last-child{justify-content:flex-end}
+.tabs span{font-size:18px;font-weight:600;color:#a5b7ca;white-space:nowrap;padding:8px 0}.tabs span.on{color:#fff;box-shadow:0 3px 0 0 var(--ac)}
+/* оверлей плана */
+.ov{position:absolute;inset:0;background:rgba(3,7,14,.94);z-index:20}
+.bar{height:12px;border-radius:6px;background:rgba(255,255,255,.08);overflow:hidden}.bar i{display:block;height:100%;background:linear-gradient(90deg,#3f8cff,#5fd4ff);border-radius:6px}
+.ell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.round{border-radius:50%}
