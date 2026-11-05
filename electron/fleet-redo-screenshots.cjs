@@ -193,10 +193,13 @@ async function openSection(win, section, ready) {
   await settle(win);
 }
 
-const queueOf = (kind, ids) => `[${ids.map(([itemId, quantity], index) => `{
-  id: 'qa-order-${index}', queueKind: '${kind}', itemId: '${itemId}', quantity: ${quantity}, completedQuantity: ${index === 0 ? Math.floor(quantity / 3) : 0},
-  enqueuedAt: now, startedAt: now, finishAt: now + 3600000 * ${index + 1}, effectiveDurationMs: 2000, cost: { metal: 1, minerals: 1, gas: 0 }, refundEligible: true,
-}`).join(',')}]`;
+const queueOf = (kind, ids) => `(() => {
+  let finishAt = now;
+  return [${ids.map(([itemId, quantity], index) => `(() => { const startedAt = finishAt; finishAt = startedAt + 2000 * ${quantity}; return {
+    id: 'qa-order-${index}', queueKind: '${kind}', itemId: '${itemId}', quantity: ${quantity}, completedQuantity: 0,
+    enqueuedAt: now, startedAt, finishAt, effectiveDurationMs: 2000, cost: { metal: 1, minerals: 1, gas: 0 }, refundEligible: true,
+  }; })()`).join(',')}];
+})()`;
 
 const HUGE_FLEET = `planet.fleet.ships = { ...planet.fleet.ships, 'spy-probe': 123456789, scout: 987654321, battleship: 456789012, destroyer: 111222333, bomber: 99999999, transporter: 999999999, 'mega-transporter': 876543210, recycler: 765432109, colonizer: 654321098, cruiser: 543210987, defender: 432109876, 'death-star': 12345678 };`;
 const COLONY = `{
@@ -235,7 +238,7 @@ async function rootScenes(win, directory, label) {
 
   await seed(win, { mutate: `planet.fleet.ships = Object.fromEntries(Object.keys(planet.fleet.ships).map((id) => [id, id === 'transporter' ? 5 : 0]));` });
   await openRoot(win);
-  await click(win, '[data-qa-mission-id="attack"]');
+  await click(win, '[data-qa-mission-id="recycle"]');
   await shot('root-05-mission-without-ships');
 
   // The QA runners open a 1008×655 window, with the flights list expanded and four ships.
@@ -279,7 +282,7 @@ async function catalogueScenes(win, directory, label) {
   await openSection(win, 'simulator', '.simulator-view-v1');
   await shot('simulator-01-shell');
 
-  await seed(win, { mutate: `${HUGE_FLEET} planet.resources = { ...planet.resources, metal: 9000000000, minerals: 9000000000, gas: 9000000000 }; save.metal = 9000000000; save.minerals = 9000000000; save.gas = 9000000000; planet.fleetProduction.shipQueue = ${queueOf('ships', [['battleship', 123456789], ['destroyer', 98765432], ['scout', 8], ['transporter', 1000], ['recycler', 5], ['colonizer', 1]])};` });
+  await seed(win, { mutate: `planet.fleetProduction.shipQueue = ${queueOf('ships', [['battleship', 100], ['destroyer', 50], ['scout', 8], ['transporter', 100], ['recycler', 5], ['colonizer', 1]])};` });
   await openSection(win, 'ships', '[data-qa-construction-mode="ships"]');
   await shot('ships-02-busy-queue');
   await run(win, INFLATE);
