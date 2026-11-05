@@ -7,6 +7,7 @@ import { previewBuilding } from '../../application/buildings.ts';
 import { getPlanetResources, type SaveState } from '../../application/contracts.ts';
 import { EMPIRE_RESOURCES, buildProductionItems, type EmpireProductionItem, type EmpireProductionKind } from '../../application/empire.ts';
 import { getFleetBuildBudget } from '../../application/fleet.ts';
+import { buildFleetPlanView } from '../../application/fleet-plan.ts';
 import { AmountSlider } from '../AmountSlider.tsx';
 import { ResourceIcon } from '../resources/ResourceIcon.tsx';
 import { compactAmount, countdown, formatNumber } from './empire-format.ts';
@@ -117,13 +118,19 @@ function productionOrder(item: EmpireProductionItem) {
   return item.max > 0 ? 0 : 1;
 }
 
-export function ProductionPicker({ state, picker, mode, testTimeScale, now, onKind, onClose, onProduce }: {
+export function ProductionPicker({ state, picker, mode, testTimeScale, now, onKind, onClose, onProduce, onPlanner }: {
   state: SaveState; picker: ProductionPickerState; now: number; mode: RuntimeMode; testTimeScale: TestTimeScale;
   onKind: (kind: EmpireProductionKind) => void; onClose: () => void;
   onProduce: (kind: EmpireProductionKind, itemId: string, quantity: number) => boolean;
+  /** Opens «Эталонный флот» of this planet. */
+  onPlanner: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const planet = state.planets[picker.planetId];
+  // Ships the planet's plan still lacks: the order starts at that number.
+  const lacking = useMemo(() => new Map(picker.kind === 'ships'
+    ? buildFleetPlanView(state, picker.planetId, { now, mode, testTimeScale }).lines.filter((line) => line.missing > 0).map((line) => [line.id as string, line.missing])
+    : []), [state, picker.planetId, picker.kind, now, mode, testTimeScale]);
   const items = useMemo(() => buildProductionItems(state, picker.planetId, picker.kind, { now, mode, testTimeScale })
     .map((item, index) => ({ item, index }))
     .sort((a, b) => productionOrder(a.item) - productionOrder(b.item) || a.index - b.index)
@@ -158,6 +165,7 @@ export function ProductionPicker({ state, picker, mode, testTimeScale, now, onKi
       <nav role="tablist" aria-label="Что заказать">
         <button type="button" role="tab" aria-selected={picker.kind === 'ships'} className={picker.kind === 'ships' ? 'is-on' : ''} onClick={() => onKind('ships')} data-qa-empire-yard-tab="ships">Корабли</button>
         <button type="button" role="tab" aria-selected={picker.kind === 'defense'} className={picker.kind === 'defense' ? 'is-on' : ''} onClick={() => onKind('defense')} data-qa-empire-yard-tab="defense">Оборона</button>
+        <button type="button" onClick={onPlanner} data-qa-empire-yard-planner>Эталонный флот</button>
       </nav>
       <p className="empire-pick__note">
         {budget.shipyardLevel <= 0 ? `Чтобы заказывать здесь корабли и оборону, постройте в военной зоне: ${yardName}.`
@@ -170,12 +178,12 @@ export function ProductionPicker({ state, picker, mode, testTimeScale, now, onKi
           return (
             <li key={item.id} className={selected ? 'is-chosen' : ''} data-qa-empire-produce-row={item.id}>
               <button type="button" aria-disabled={item.max <= 0} aria-expanded={selected} className={`${item.max > 0 ? '' : 'is-off'} ${justOrdered === item.id ? 'is-done' : ''}`}
-                onClick={() => { if (item.max > 0) { setChosen(selected ? null : item.id); setQuantity(1); } }} data-qa-empire-produce-item={item.id}>
+                onClick={() => { if (item.max > 0) { setChosen(selected ? null : item.id); setQuantity(Math.max(1, Math.min(item.max, lacking.get(item.id) ?? 1))); } }} data-qa-empire-produce-item={item.id} data-qa-empire-produce-lacking={lacking.get(item.id)}>
                 <img src={item.art} alt="" draggable={false} />
                 <span>
                   <b>{item.name}</b>
                   <small>{item.unlocked
-                    ? `есть ${formatNumber(item.owned)}${item.pending ? ` · в очереди ${formatNumber(item.pending)}` : ''} · ${countdown(item.unitMs)} за шт.`
+                    ? `есть ${formatNumber(item.owned)}${item.pending ? ` · в очереди ${formatNumber(item.pending)}` : ''} · ${lacking.has(item.id) ? `по плану не хватает ${compactAmount(lacking.get(item.id)!)}` : `${countdown(item.unitMs)} за шт.`}`
                     : item.reason ? localizeBuildingNames(item.reason, budget.factionId) : 'Пока недоступно'}</small>
                 </span>
                 {item.unlocked ? (

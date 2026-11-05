@@ -11,6 +11,10 @@ import './planet-skins.css';
 import './universe.css';
 import { UniverseView } from './UniverseView';
 import { applyFleetUiUpdate, FLEET_UI_UPDATE_EVENT, type FleetUiUpdate } from './domain/flights/fleet-ui.ts';
+import type { FleetPlan } from './domain/fleet/fleet-plan.ts';
+import type { ShipId } from './domain/combat/ids.ts';
+import { startFleetPlanLines, type FleetPlanStartResult } from './application/fleet-plan.ts';
+import { fleetPlanReport } from './ui/fleet-plan/fleet-plan-text.ts';
 import { OperationsView } from './OperationsView';
 import { createOperationsVariantAQaFixture, getOperationsVariantAQaStatus } from './operations-variant-a-qa-fixture.ts';
 import { createUniverseNpcOwnerProfile, rerollTestUniverseLayout, TEST_MODE_ALLY_PLANET_FIXTURE, UNIVERSE_NPC_OWNER_ID } from './domain/universe/runtime.ts';
@@ -1708,7 +1712,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       setNotice(result.reason ?? 'Обмен сейчас недоступен');
       return result;
     }
-    setNotice('Обмен выполнен');
+    // The screen shows the result itself; a second notice would cover the amount dock.
     return result;
   };
 
@@ -1780,6 +1784,32 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     }
     setNotice(`${state.planets[planetId]?.name ?? currentPlanetName}: ${getBuildingDefinition(assetRole, state.profile.factionId).name} добавлено в общую очередь.`);
     return true;
+  };
+
+  /** Planner: a plan edit, as a command, so a clock tick cannot write over it. */
+  const saveFleetPlan = (planetId: string, plan: FleetPlan) => {
+    if (rejectNpcCatchupCommand()) return false;
+    enqueueApplicationStateUpdate(stateRef, setState, (current) => ({
+      state: { ...current, fleetUi: applyFleetUiUpdate(current.fleetUi, { kind: 'set-fleet-plan', planetId, plan }) },
+      result: true,
+    }), flushSync, renderedStateRef, noteStateHeal);
+    return true;
+  };
+
+  /** Planner: starts the missing ships of some lines (or all) in one update, through the ordinary shipyard command. */
+  const startFleetPlan = (planetId: string, shipIds?: readonly ShipId[], announce = false): FleetPlanStartResult | null => {
+    if (rejectNpcCatchupCommand()) return null;
+    const orderedAt = Date.now();
+    const runtime = { now: orderedAt, mode: RUNTIME_MODE, testTimeScale };
+    const started = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
+      const action = startFleetPlanLines(current, { planetId: planetId as PlanetId, ...runtime }, runtime, shipIds);
+      return { state: action.state, result: action };
+    }, flushSync, renderedStateRef, noteStateHeal);
+    if (announce) {
+      const report = fleetPlanReport(started);
+      setNotice(`${state.planets[planetId]?.name ?? currentPlanetName}: ${report.text}${report.warn ? ` ${report.warn}` : ''}`);
+    }
+    return started;
   };
 
   /** «Империя»: an order on any own planet's shipyard, through the same command as the shipyard screen. */
@@ -3146,6 +3176,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
                 onProduce={(id, kind, itemId, quantity) => orderProduction(id as PlanetId, kind, itemId, quantity)}
                 onCancelProduction={(id, orderId) => cancelProduction(id as PlanetId, orderId)}
                 onSend={sendQuickFlights}
+                onSavePlan={saveFleetPlan}
+                onStartPlan={startFleetPlan}
               />
             </>
           ) : activeRoute === 'planet' ? (
