@@ -181,8 +181,9 @@ function battlePointTotals(rating: RatingPrototypeState): Readonly<Record<string
 }
 
 function reportBattlePoints(report: BattleReport) {
-  const asStacks = (stacks: readonly { entityId: string; countBefore: number; countAfter: number }[] | undefined) => (stacks ?? []).map((stack) => ({
+  const asStacks = (stacks: readonly { entityId: string; factionId?: CombatFactionId; countBefore: number; countAfter: number }[] | undefined) => (stacks ?? []).map((stack) => ({
     entityId: stack.entityId,
+    ...(stack.factionId ? { factionId: stack.factionId } : {}),
     countBefore: stack.countBefore,
     countAfter: stack.countAfter,
   }));

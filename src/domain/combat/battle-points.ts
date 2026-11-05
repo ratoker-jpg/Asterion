@@ -1,13 +1,15 @@
 import { COMBAT_ENTITY_BY_ID } from './catalog.ts';
 import { getFactionCombatEntity } from './faction-catalog.ts';
 import type { CombatFactionId } from './factions.ts';
-import type { CombatEntityId } from './ids.ts';
+import { combatBaseEntityId, type CombatEntityId } from './ids.ts';
 import type { BattleWinner } from './report.ts';
 
 const RESOURCE_UNITS_PER_POINT = 1_000;
 
 export type BattlePointStack = {
   entityId: string;
+  /** Race of this stack on a joint side; overrides the side's race. */
+  factionId?: CombatFactionId;
   countBefore: number | null;
   countAfter: number | null;
 };
@@ -56,7 +58,7 @@ export function calculateResourcePointsLost(
 ) {
   return [...stacks, ...defenses].reduce((total, stack) => {
     const destroyed = destroyedCount(stack);
-    const entity = resolveEntity(stack.entityId, factionId);
+    const entity = resolveEntity(combatBaseEntityId(stack.entityId), stack.factionId ?? factionId);
     if (!destroyed || !entity) return total;
     const cost = entity.cost.metal + entity.cost.minerals + entity.cost.gas;
     return total + destroyed * cost / RESOURCE_UNITS_PER_POINT;

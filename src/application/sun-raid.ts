@@ -3,14 +3,14 @@ import { recordNpcJointRaid } from './npc-relations.ts';
 import { TEST_ALLY_OWNER_ID, TEST_BOT_OWNER_ID } from '../domain/command/catalog.ts';
 import { getCombatFactionName, isCombatFactionId, type CombatFactionId } from '../domain/combat/factions.ts';
 import { getFactionCombatEntity, getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
-import { SHIP_IDS, SOLAR_SATELLITE_ID, type ShipId } from '../domain/combat/ids.ts';
+import { SHIP_IDS, SOLAR_SATELLITE_ID, combatBaseEntityId, combatGroupTag, type ShipId } from '../domain/combat/ids.ts';
 import { COMMANDER_IDS, type CommanderId } from '../domain/combat/commanders.ts';
 import { addDebris } from '../domain/flights/cargo.ts';
 import { DEFAULT_COMBAT_PRIORITY } from '../domain/combat/priority.ts';
 import { resolveCombat } from '../domain/combat/resolver.ts';
 import { createDefaultCombatTechnologies, type CombatTechnologyLevels } from '../domain/combat/technologies.ts';
 import type { BattleForceSnapshot, BattleReport } from '../domain/combat/report.ts';
-import type { CombatInput, CombatStackInput } from '../domain/combat/simulator.ts';
+import type { CombatAllyGroupInput, CombatInput, CombatStackInput } from '../domain/combat/simulator.ts';
 import { setSunBrightnessOverrides } from '../domain/energy/runtime.ts';
 import { getEspionageTargets } from '../domain/espionage/runtime.ts';
 import type { SpyTargetState } from '../domain/espionage/types.ts';
@@ -822,22 +822,45 @@ export function previewSunLaunch(
 
 type SideParticipant = { flight: FlightRecord; snapshot: SunFlightSnapshot; population: number };
 
+/**
+ * One side of a joint raid. Every owner's fleet fights as its own group with its own
+ * race, technologies and ship levels; the biggest group leads and keeps the plain ids,
+ * the others are tagged (`g2`, `g3`...) so no ship is dropped or re-skinned.
+ */
 function sideInput(participants: readonly SideParticipant[]) {
-  const stacks = new Map<ShipId, number>();
-  for (const { flight } of participants) {
+  type Group = { ownerId: string; factionId: CombatFactionId; technologies: CombatTechnologyLevels; levels: Partial<Record<ShipId, number>>; population: number; firstFlightId: string; stacks: Map<ShipId, number> };
+  const groups = new Map<string, Group>();
+  for (const { flight, snapshot, population } of participants) {
+    const group = groups.get(snapshot.ownerId) ?? {
+      ownerId: snapshot.ownerId, factionId: snapshot.factionId, technologies: snapshot.technologies,
+      levels: snapshot.shipLevels, population: 0, firstFlightId: flight.id, stacks: new Map<ShipId, number>(),
+    };
+    group.population += population;
+    if (flight.id < group.firstFlightId) group.firstFlightId = flight.id;
     for (const [id, count] of Object.entries(flight.selectedShips) as [ShipId, number][]) {
-      if (safeCount(count) > 0) stacks.set(id, (stacks.get(id) ?? 0) + safeCount(count));
+      if (safeCount(count) > 0) group.stacks.set(id, (group.stacks.get(id) ?? 0) + safeCount(count));
     }
+    groups.set(snapshot.ownerId, group);
   }
-  const lead = [...participants].sort((left, right) => right.population - left.population || left.flight.id.localeCompare(right.flight.id))[0];
-  const factionId = lead?.snapshot.factionId ?? 'aegis';
-  const levels = mergeSideShipLevels(participants.map((item) => item.snapshot.shipLevels));
-  const technologies = mergeSideTechnologies(participants.map((item) => item.snapshot.technologies));
-  const catalog = new Set(getFactionShipCatalog(factionId).map((entity) => entity.id));
-  const ships: CombatStackInput[] = [...stacks.entries()]
-    .filter(([id]) => catalog.has(id))
-    .sort(([left], [right]) => SHIP_IDS.indexOf(left) - SHIP_IDS.indexOf(right))
-    .map(([id, count]) => ({ entityId: id, count, level: levels[id] ?? 0 }));
+  const ordered = [...groups.values()].sort((left, right) => right.population - left.population || left.firstFlightId.localeCompare(right.firstFlightId));
+  const lead = [...participants].sort((left, right) => right.population - left.population || left.flight.id.localeCompare(right.flight.id))
+    .find((item) => item.snapshot.ownerId === ordered[0]?.ownerId) ?? participants[0];
+  const toShips = (group: Group): CombatStackInput[] => {
+    const catalog = new Set(getFactionShipCatalog(group.factionId).map((entity) => entity.id));
+    return [...group.stacks.entries()]
+      .filter(([id]) => catalog.has(id))
+      .sort(([left], [right]) => SHIP_IDS.indexOf(left) - SHIP_IDS.indexOf(right))
+      .map(([id, count]) => ({ entityId: id, count, level: group.levels[id] ?? 0 }));
+  };
+  const first = ordered[0];
+  const factionId = first?.factionId ?? 'aegis';
+  const technologies = first ? mergeSideTechnologies([first.technologies]) : createDefaultCombatTechnologies();
+  const ships = first ? toShips(first) : [];
+  const groupTags = new Map<string, string | null>(ordered.map((group, index) => [group.ownerId, index === 0 ? null : `g${index + 1}`]));
+  const allyGroups: CombatAllyGroupInput[] = ordered.slice(1).map((group) => ({
+    tag: groupTags.get(group.ownerId)!, ownerId: group.ownerId, factionId: group.factionId,
+    technologies: mergeSideTechnologies([group.technologies]), ships: toShips(group),
+  })).filter((group) => group.ships.length > 0);
   // Commander ships: one per commander type, the highest level sent by any participant
   // fights; the highest-level commander overall leads the side and heads the priority.
   const commanderSources = new Map<CommanderId, { level: number; flightId: string }>();
@@ -853,7 +876,7 @@ function sideInput(participants: readonly SideParticipant[]) {
     .sort(([leftId, left], [rightId, right]) => right.level - left.level || COMMANDER_IDS.indexOf(leftId) - COMMANDER_IDS.indexOf(rightId))
     .map(([id, source]) => ({ entityId: id, count: 1, level: source.level }));
   const priority = commanders.map((stack) => stack.entityId as CommanderId);
-  return { lead, factionId, technologies, ships, commanders, commanderSources, priority };
+  return { lead, factionId, technologies, ships, allyGroups, groupTags, commanders, commanderSources, priority };
 }
 
 function sidePriority(priority: readonly CommanderId[], fallback: readonly CommanderId[]): CommanderId[] {
@@ -873,14 +896,16 @@ function commanderLosses(participants: readonly SideParticipant[], force: Battle
   return survivors;
 }
 
-function distributeLosses(participants: readonly SideParticipant[], force: BattleForceSnapshot): Map<string, Partial<Record<ShipId, number>>> {
+function distributeLosses(participants: readonly SideParticipant[], force: BattleForceSnapshot, groupTags: ReadonlyMap<string, string | null>): Map<string, Partial<Record<ShipId, number>>> {
   const survivors = new Map(participants.map((item) => [item.flight.id, { ...item.flight.selectedShips } as Partial<Record<ShipId, number>>]));
   for (const stack of force.stacks) {
     if (COMMANDER_IDS.includes(stack.entityId as CommanderId)) continue;
-    const id = stack.entityId as ShipId;
+    const id = combatBaseEntityId(stack.entityId) as ShipId;
+    const tag = combatGroupTag(stack.entityId);
     let destroyed = safeCount(stack.destroyed);
     if (!destroyed) continue;
-    const holders = participants.filter((item) => safeCount(item.flight.selectedShips[id]) > 0);
+    // Losses of an owner group fall only on that owner's own flights.
+    const holders = participants.filter((item) => (groupTags.get(item.snapshot.ownerId) ?? null) === tag && safeCount(item.flight.selectedShips[id]) > 0);
     const total = holders.reduce((sum, item) => sum + safeCount(item.flight.selectedShips[id]), 0);
     if (!total) continue;
     const shares = holders.map((item) => {
@@ -988,7 +1013,7 @@ function resolveRaid(state: SaveState, raid: SunRaidRecord, at: number, options:
         planetName: `Рейд на Солнце ${sunLabel}`,
         coordinates: sunLabel, race: getCombatFactionName(attack.factionId),
       },
-      factionId: attack.factionId, ships: attack.ships, commanders: attack.commanders,
+      factionId: attack.factionId, ships: attack.ships, allyGroups: attack.allyGroups, commanders: attack.commanders,
       commander: attack.commanders[0] ?? null,
       activeCommanderId: (attack.commanders[0]?.entityId as CommanderId | undefined) ?? null,
     },
@@ -999,15 +1024,15 @@ function resolveRaid(state: SaveState, raid: SunRaidRecord, at: number, options:
         planetName: `Солнце ${sunLabel}`,
         coordinates: sunLabel, race: getCombatFactionName(defense.factionId),
       },
-      factionId: defense.factionId, ships: defense.ships, commanders: defense.commanders,
+      factionId: defense.factionId, ships: defense.ships, allyGroups: defense.allyGroups, commanders: defense.commanders,
       commander: defense.commanders[0] ?? null,
       activeCommanderId: (defense.commanders[0]?.entityId as CommanderId | undefined) ?? null,
     },
   };
   const reportId = `battle-sun-${raid.id}`;
   const report = resolveCombat(input, { reportId, missionType: 'attack', allowPopulationOverflow: true });
-  const attackerSurvivors = distributeLosses(attackers, report.attackerForce);
-  const defenderSurvivors = distributeLosses(defenders, report.defenderForce);
+  const attackerSurvivors = distributeLosses(attackers, report.attackerForce, attack.groupTags);
+  const defenderSurvivors = distributeLosses(defenders, report.defenderForce, defense.groupTags);
   const attackerCommanderSurvivors = commanderLosses(attackers, report.attackerForce, attack.commanderSources);
   const defenderCommanderSurvivors = commanderLosses(defenders, report.defenderForce, defense.commanderSources);
   const winner = report.winner;

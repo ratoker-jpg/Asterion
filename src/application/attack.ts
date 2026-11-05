@@ -1,7 +1,7 @@
 import { COMMANDER_IDS, type CommanderId } from '../domain/combat/commanders.ts';
 import { getCombatFactionName, type CombatFactionId } from '../domain/combat/factions.ts';
 import { getFactionCombatEntity, getFactionDefenseCatalog, getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
-import { SOLAR_SATELLITE_ID, type CombatEntityId, type DefenseId, type ShipId } from '../domain/combat/ids.ts';
+import { SOLAR_SATELLITE_ID, combatBaseEntityId, type CombatEntityId, type DefenseId, type ShipId } from '../domain/combat/ids.ts';
 import { DEFAULT_COMBAT_PRIORITY as DEFAULT_PRIORITY } from '../domain/combat/priority.ts';
 import { resolveCombat } from '../domain/combat/resolver.ts';
 import { resolvePlanetSiege } from '../domain/combat/planet-siege.ts';
@@ -197,8 +197,10 @@ function reportDestroyedLife(report: BattleReport, side: 'attacker' | 'defender'
   let life = 0;
   for (const stack of [...(force.stacks ?? []), ...(force.defenses ?? [])]) {
     if (isPirateShipId(stack.entityId)) continue;
-    if (BATTLE_DEBRIS_EXCLUDED_IDS.has(stack.entityId)) continue;
-    const entity = getFactionCombatEntity(factionId, stack.entityId);
+    const baseId = combatBaseEntityId(stack.entityId) as CombatEntityId;
+    if (BATTLE_DEBRIS_EXCLUDED_IDS.has(baseId)) continue;
+    // A joint side keeps each owner group's own race for the scrap value.
+    const entity = getFactionCombatEntity(stack.factionId ?? factionId, baseId);
     // Ships (satellites included), commanders and defenses all leave scrap.
     if (entity.kind !== 'ship' && entity.kind !== 'commander' && entity.kind !== 'defense') continue;
     life += entity.combat.life * safeCount(stack.destroyed);
