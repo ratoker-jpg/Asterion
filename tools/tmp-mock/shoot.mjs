@@ -7,7 +7,7 @@ const srv=http.createServer((q,r)=>{const p=path.join(ROOT,decodeURI(q.url.split
 const SCREENS=[['01-flot','main'],['02-korabli','ships'],['03-plan-gruz','plan-transport'],['04-plan-ataka','plan-attack'],['05-plan-zond','plan-spy'],['06-plan-bez-celi','plan-none'],['07-simulyator','sim'],['08-karta-planety','card'],['09-flot-dlinnye-chisla','main',1],['10-plan-dlinnye-chisla','plan-transport',1],['11-karta-dlinnye-imena','card',1]];
 const SIZES=[[1920,1080],[1280,720]];
 const only=(process.env.ONLY||'a,b,c').split(',');
-const b=await chromium.launch();const report=[];
+const b=await chromium.launch({channel:'chrome'});const report=[];
 const check=()=>{const leaf=[];const w=document.createTreeWalker(document.getElementById('app'),NodeFilter.SHOW_TEXT);
  while(w.nextNode()){const t=w.currentNode;if(!t.textContent.trim())continue;const el=t.parentElement;const cs=getComputedStyle(el);if(cs.visibility==='hidden'||cs.display==='none'||el.closest('style'))continue;const g=document.createRange();g.selectNodeContents(t);const rs=[...g.getClientRects()].filter(x=>x.width>1);for(const x of rs)leaf.push({t:t.textContent.trim().slice(0,26),x:x.left,y:x.top,r:x.right,b:x.bottom,el})}
  const out=[];for(let i=0;i<leaf.length;i++){const a=leaf[i];if(a.r>innerWidth+1||a.b>innerHeight+1||a.x<-1||a.y<-1)out.push('за экраном: '+a.t);
