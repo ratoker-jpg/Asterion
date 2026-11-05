@@ -1,4 +1,5 @@
 import type { UniverseCoordinate } from '../universe/types.ts';
+import { migrateFleetPlans, type FleetPlan, type FleetPlans } from '../fleet/fleet-plan.ts';
 import { isFlightCoordinate } from './distance.ts';
 
 /**
@@ -17,6 +18,8 @@ export type FleetOwnTargetMission = 'transport' | 'deployment';
 export type FleetUiState = {
   favoriteTargets: FleetFavoriteTarget[];
   lastOwnTargets?: Partial<Record<FleetOwnTargetMission, string>>;
+  /** «Эталонный флот» of each own planet; a planet without a plan has no entry. */
+  plans?: FleetPlans;
 };
 
 /** The fleet screen asks App to change the saved FleetUiState (detail: FleetUiUpdate). */
@@ -56,7 +59,7 @@ export function rememberOwnTarget(state: FleetUiState | undefined, missionId: Fl
 /** Save migration: anything malformed is dropped, an absent field stays absent. */
 export function migrateFleetUiState(value: unknown): FleetUiState | undefined {
   if (!value || typeof value !== 'object') return undefined;
-  const source = value as { favoriteTargets?: unknown; lastOwnTargets?: unknown };
+  const source = value as { favoriteTargets?: unknown; lastOwnTargets?: unknown; plans?: unknown };
   const favoriteTargets: FleetFavoriteTarget[] = [];
   for (const item of Array.isArray(source.favoriteTargets) ? source.favoriteTargets : []) {
     if (!item || typeof item !== 'object') continue;
@@ -74,15 +77,26 @@ export function migrateFleetUiState(value: unknown): FleetUiState | undefined {
     const planetId = rawLast[missionId];
     if (typeof planetId === 'string' && planetId.length > 0 && planetId.length <= 120) lastOwnTargets[missionId] = planetId;
   }
-  return { favoriteTargets, ...(Object.keys(lastOwnTargets).length ? { lastOwnTargets } : {}) };
+  const plans = migrateFleetPlans(source.plans);
+  return { favoriteTargets, ...(Object.keys(lastOwnTargets).length ? { lastOwnTargets } : {}), ...(plans ? { plans } : {}) };
 }
 
 export type FleetUiUpdate =
   | { kind: 'toggle-favorite'; target: FleetFavoriteTarget }
-  | { kind: 'remember-own-target'; missionId: FleetOwnTargetMission; planetId: string };
+  | { kind: 'remember-own-target'; missionId: FleetOwnTargetMission; planetId: string }
+  | { kind: 'set-fleet-plan'; planetId: string; plan: FleetPlan };
+
+/** Stores a planet's plan; an empty plan removes the entry. */
+export function setFleetPlan(state: FleetUiState | undefined, planetId: string, plan: FleetPlan): FleetUiState {
+  const { plans: previous, ...rest } = state ?? emptyFleetUiState();
+  const plans = { ...previous };
+  if (Object.keys(plan.targets).length > 0 || plan.fillShipId) plans[planetId] = plan;
+  else delete plans[planetId];
+  return { ...rest, ...(Object.keys(plans).length ? { plans } : {}) };
+}
 
 export function applyFleetUiUpdate(state: FleetUiState | undefined, update: FleetUiUpdate): FleetUiState {
-  return update.kind === 'toggle-favorite'
-    ? toggleFavoriteTarget(state, update.target)
-    : rememberOwnTarget(state, update.missionId, update.planetId);
+  if (update.kind === 'toggle-favorite') return toggleFavoriteTarget(state, update.target);
+  if (update.kind === 'set-fleet-plan') return setFleetPlan(state, update.planetId, update.plan);
+  return rememberOwnTarget(state, update.missionId, update.planetId);
 }
