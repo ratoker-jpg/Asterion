@@ -13,6 +13,8 @@ import { ResourceIcon } from './ui/resources/ResourceIcon.tsx';
 import pirateWarlordArt from '../assets/source/characters/pirates/pirate_warlord.png';
 import debrisIcon from './assets/ui/header-icons/debris.png';
 import './ui/universe/universe-radar.css';
+import './ui/universe/map-relations.css';
+import { classifyMapPlanet, type MapRelationStatus, type MapTone } from './application/map-relation.ts';
 import './ui/sun-raid/universe-sun.css';
 import asteroid01 from '../assets/source/universe-navigation/asteroids/asteroid.variant-01.png';
 import asteroid02 from '../assets/source/universe-navigation/asteroids/asteroid.variant-02.png';
@@ -172,19 +174,48 @@ const POINT_LABELS: ReadonlyArray<{ key: keyof UniverseOwnerPoints; label: strin
 const numberFormat = new Intl.NumberFormat('ru-RU');
 
 /** Map filter keys; the labels are the map legend (Electron QA reads them in this order). */
-type LegendKey = 'self' | 'ally' | 'enemy' | 'neutral' | 'wild' | 'unique' | 'pirate' | 'anomaly';
-const LEGEND: readonly (readonly [LegendKey, string])[] = [
-  ['self', 'Ваш мир'], ['ally', 'Союзная'], ['enemy', 'Вражеская'], ['neutral', 'Нейтральная'],
+const LEGEND: readonly (readonly [MapTone, string])[] = [
+  ['self', 'Ваш мир'], ['ally', 'Союзная'], ['enemy', 'Вражеская'], ['range', 'В диапазоне атаки'], ['neutral', 'Нейтральная'],
   ['wild', 'Необитаемые'], ['unique', 'Уникальные'], ['pirate', 'Отступники'], ['anomaly', 'Аномалии'],
 ];
 const LISTED_KINDS = new Set<UniversePlanetNode['kind']>(['player', 'npc', 'pirate', 'unique', 'anomaly']);
 
-function legendKeyOf(node: UniversePlanetNode, relation: UniverseOwnerRelation | null): LegendKey {
-  if (relation) return relation;
-  if (node.kind === 'unique') return 'unique';
-  if (node.kind === 'pirate') return 'pirate';
-  if (node.kind === 'anomaly') return 'anomaly';
-  return 'wild';
+/** Keep in step with the --map-* colours in ui/universe/map-relations.css. */
+const MAP_TONE_COLOR: Record<MapTone, string> = {
+  self: 'var(--race-accent-strong)', ally: '#4fe08a', enemy: '#ff2e48', range: '#ff8f8f', neutral: '#8397a3',
+  wild: '#8fb6c0', unique: '#f2cc5b', pirate: '#ffa23a', anomaly: '#b58cff',
+};
+
+/** Colour is never the only signal: every tone has its own shape, the same on the map, the list and the filters. */
+const MAP_MARK_SHAPES: Record<MapTone, ReactNode> = {
+  self: <><path d="M3 1.2v9.6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /><path d="M3.4 1.6h6.8L8.4 4l1.8 2.4H3.4z" fill="currentColor" /></>,
+  ally: <path d="M6 1l4.2 1.6v3.2c0 2.6-1.8 4.3-4.2 5.2C3.6 10.1 1.8 8.4 1.8 5.8V2.6z" fill="currentColor" />,
+  enemy: <path d="M2.2 2.2l7.6 7.6M9.8 2.2L2.2 9.8" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />,
+  range: <><circle cx="6" cy="6" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.5" /><path d="M6 .4v2.4M6 9.2v2.4M.4 6h2.4M9.2 6h2.4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></>,
+  neutral: <><rect x="2.2" y="5.2" width="7.6" height="5.6" rx="1.2" fill="currentColor" /><path d="M3.9 5.2V3.8a2.1 2.1 0 0 1 4.2 0v1.4" fill="none" stroke="currentColor" strokeWidth="1.4" /></>,
+  wild: <circle cx="6" cy="6" r="3.8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="1.6 1.6" />,
+  unique: <path d="M6 .8L11.2 6 6 11.2.8 6z" fill="currentColor" />,
+  pirate: <path d="M6 1l5.4 9.8H.6z" fill="currentColor" />,
+  anomaly: <path d="M6 .4C6.5 4 8 5.5 11.6 6 8 6.5 6.5 8 6 11.6 5.5 8 4 6.5.4 6 4 5.5 5.5 4 6 .4z" fill="currentColor" />,
+};
+
+/**
+ * Worlds higher on the screen lie on top: a name chip hangs below its planet, so
+ * the planet underneath slides behind the chip instead of covering the name.
+ * Even numbers: an asteroid parked on a planet takes the odd one right above it.
+ */
+function mapStackOrder(y: number): number {
+  return 6 + 2 * Math.round((100 - y) / 4);
+}
+
+function MapMark({ tone, blocked = false }: { tone: MapTone; blocked?: boolean }) {
+  return (
+    <span className={`map-mark map-mark--${tone}`} aria-hidden="true">
+      <svg viewBox="0 0 12 12">{MAP_MARK_SHAPES[tone]}</svg>
+      {/* An enemy out of reach stays strong red, the lock says it cannot be hit now. */}
+      {blocked && tone === 'enemy' ? <svg className="map-mark__lock" viewBox="0 0 12 12">{MAP_MARK_SHAPES.neutral}</svg> : null}
+    </span>
+  );
 }
 
 function ownerPoints(score: OwnerScore | undefined): UniverseOwnerPoints {
@@ -254,15 +285,21 @@ function UniverseActionButton({
   node,
   currentOwnerId,
   relation,
+  attackBlockedReason,
   onAction,
 }: {
   action: UniverseAction;
   node: UniversePlanetNode;
   currentOwnerId: string;
   relation: ReturnType<typeof getUniverseOwnerRelation>;
+  /** The launch gate's refusal: the attack button says it instead of promising a flight that cannot start. */
+  attackBlockedReason?: string | null;
   onAction: (action: UniverseAction, node: UniversePlanetNode) => void;
 }) {
-  const state = getUniverseActionState(action, node, currentOwnerId, relation);
+  const baseState = getUniverseActionState(action, node, currentOwnerId, relation);
+  const state = action === 'attack' && attackBlockedReason && baseState.enabled
+    ? { ...baseState, enabled: false, status: 'disabled' as const, reason: attackBlockedReason }
+    : baseState;
   const Icon = action === 'spy' ? EyeIcon : action === 'attack' ? AttackIcon : FleetIcon;
   const label = action === 'spy' ? 'Отправить шпионский зонд' : action === 'attack' ? 'Начать атаку' : 'Отправить флот';
   const title = `${label}: ${state.reason}`;
@@ -289,18 +326,13 @@ const SCORE_ICON_KEYS: Record<keyof UniverseOwnerPoints, 'resourcePoints' | 'bat
 const SHORT_POINT_LABELS: Record<keyof UniverseOwnerPoints, string> = {
   resource: 'Ресурсные', battle: 'Боевые', total: 'Общие', achievements: 'Достижения',
 };
-const RELATION_TONE: Record<ReturnType<typeof getUniverseOwnerRelation>, string> = {
-  // The player's own world uses the race accent (docs/ui/race-accent.md); ally/enemy keep their meaning.
-  self: 'var(--race-accent-strong)', ally: '#35e58a', enemy: '#f0445e', neutral: '#f0445e',
-};
-const RELATION_COPY: Record<ReturnType<typeof getUniverseOwnerRelation>, string> = {
-  self: 'Ваш мир · принимает транспорт',
-  ally: 'Союзник · принимает транспорт',
-  enemy: 'Враг · доступны шпионаж и атака',
-  neutral: 'Чужой мир · доступны шпионаж и атака',
-};
+function relationCopy(status: MapRelationStatus): string {
+  if (status.tone === 'self') return 'Ваш мир · принимает транспорт';
+  if (status.tone === 'ally') return 'Союзник · принимает транспорт';
+  return status.attackable ? `${status.title} · доступны шпионаж и атака` : `${status.title} · доступен шпионаж`;
+}
 export const SPECIAL_TONE: Partial<Record<UniversePlanetNode['kind'], string>> = {
-  empty: '#8fb6c0', uninhabited: '#8fb6c0', asteroid: '#c9b48a', pirate: '#ff7a62', unique: '#e6ad50', anomaly: '#a98bff',
+  empty: '#8fb6c0', uninhabited: '#8fb6c0', asteroid: '#c9b48a', pirate: MAP_TONE_COLOR.pirate, unique: MAP_TONE_COLOR.unique, anomaly: MAP_TONE_COLOR.anomaly,
 };
 
 /** Large orbital debris stays readable in a fixed column: 168 801 300 → «168,8 млн». */
@@ -346,6 +378,7 @@ function OwnerInspector({
   currentAlliance,
   diplomacy,
   debrisAt,
+  mapStatus,
   onAction,
   onVisit,
   presence,
@@ -358,6 +391,8 @@ function OwnerInspector({
   currentAlliance: UniverseOwnerAlliance | null | undefined;
   diplomacy: CommandState['diplomacy'];
   debrisAt: (coordinate: UniverseCoordinate) => number;
+  /** The owner's look on the map; one owner, one answer for all their planets. */
+  mapStatus: MapRelationStatus;
   onAction: (action: UniverseAction, node: UniversePlanetNode) => void;
   onVisit: (node: UniversePlanetNode) => void;
   presence: OwnerPresence | undefined;
@@ -367,7 +402,7 @@ function OwnerInspector({
   const relation = getUniverseOwnerRelation(node, currentOwnerId, currentAlliance, owner, diplomacy);
   const presenceLabel = describeOwnerPresence(presence, nowMs, relation === 'self' || relation === 'ally');
   return (
-    <div className="uw-main uw-main--owner" data-qa-universe-owner={owner.id} data-qa-universe-owner-profile style={{ '--uw-k': RELATION_TONE[relation] } as CSSProperties}>
+    <div className="uw-main uw-main--owner" data-qa-universe-owner={owner.id} data-qa-universe-owner-profile style={{ '--uw-k': MAP_TONE_COLOR[mapStatus.tone] } as CSSProperties}>
       <div className="uw-side">
         <InspectorHero art={node.art} />
         <section className="uw-card uw-owner">
@@ -430,17 +465,17 @@ function OwnerInspector({
                   <div className="uw-planet-actions">
                     <UniverseActionButton action="spy" node={planet} currentOwnerId={currentOwnerId} relation={rowRelation} onAction={onAction} />
                     <UniverseActionButton action="fleet" node={planet} currentOwnerId={currentOwnerId} relation={rowRelation} onAction={onAction} />
-                    <UniverseActionButton action="attack" node={planet} currentOwnerId={currentOwnerId} relation={rowRelation} onAction={onAction} />
+                    <UniverseActionButton action="attack" node={planet} currentOwnerId={currentOwnerId} relation={rowRelation} attackBlockedReason={mapStatus.attackable === false ? mapStatus.detail ?? mapStatus.title : null} onAction={onAction} />
                   </div>
                 </li>
               );
             })}
           </ul>
-          <p className="uw-note">Нажмите на планету, чтобы перейти к её системе. Свои и союзные миры принимают транспорт, вражеские и нейтральные доступны для шпионажа и атаки.</p>
+          <p className="uw-note">Нажмите на планету, чтобы перейти к её системе. Свои и союзные миры принимают транспорт, чужие доступны для шпионажа, а для атаки должны быть в диапазоне.</p>
         </section>
       </div>
       <footer className="uw-foot">
-        <div className="uw-foot-status"><small>ОТНОШЕНИЕ</small><b>{RELATION_COPY[relation]}</b></div>
+        <div className="uw-foot-status" data-qa-universe-map-status={mapStatus.tone}><small>ОТНОШЕНИЕ</small><b><MapMark tone={mapStatus.tone} blocked={mapStatus.attackable === false} />{relationCopy(mapStatus)}</b>{mapStatus.attackable === false && mapStatus.detail ? <p className="uw-foot-why">{mapStatus.detail}</p> : null}</div>
         <div className="uw-foot-actions">
           <button type="button" className="uw-btn" onClick={() => onVisit(node)}>ПОКАЗАТЬ НА КАРТЕ</button>
         </div>
@@ -628,7 +663,7 @@ function MovingAsteroid({ node, underlyingKind, nowMs, hasDebris, occupiedNodes,
   // collide with the planet's, so only the debris chip stays visible.
   const attached = Boolean(point.offsetX || point.offsetY);
   const nextCoordinate = node.asteroid?.nextCoordinate ? formatUniverseCoordinate(node.asteroid.nextCoordinate) : 'маршрут завершён';
-  return <button ref={ref} type="button" className={`system-asteroid ${attached ? 'is-attached' : ''} ${hasDebris ? 'has-debris' : ''}`} style={toStyle(point)}
+  return <button ref={ref} type="button" className={`system-asteroid ${attached ? 'is-attached' : ''} ${hasDebris ? 'has-debris' : ''}`} style={{ ...toStyle(point), ...(attached ? { zIndex: mapStackOrder(point.y) + 1 } : {}) }}
     title={`${node.name} · ${formatUniverseCoordinate(node.coordinate)} · далее ${nextCoordinate}`} aria-label={`${node.name} · ${formatUniverseCoordinate(node.coordinate)}`}
     aria-describedby={hasDebris ? `universe-asteroid-debris-tooltip-${node.asteroid?.spawnIndex}` : undefined}
     data-qa-universe-asteroid-position={node.coordinate.position}
@@ -652,7 +687,7 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
   const [showSlotLabels, setShowSlotLabels] = useState(true);
   const [showAsteroids, setShowAsteroids] = useState(true);
   const [showDebris, setShowDebris] = useState(true);
-  const [hiddenLegend, setHiddenLegend] = useState<ReadonlySet<LegendKey>>(() => new Set());
+  const [hiddenLegend, setHiddenLegend] = useState<ReadonlySet<MapTone>>(() => new Set());
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [debrisSearch, setDebrisSearch] = useState<null | { origin: { planetName: string; coordinate: UniverseCoordinate }; from: number; to: number; results: Array<{ coordinate: UniverseCoordinate; debris: number }> }>(null);
   const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(null);
@@ -905,12 +940,13 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
       highlightTimerRef.current = window.setTimeout(() => setHighlightedNodeId(null), 3_000);
     }
   };
-  const listedNodes = systemData.positions.filter((node) => LISTED_KINDS.has(node.kind)).map((node) => ({
+  const mapStatusOf = (node: UniversePlanetNode): MapRelationStatus => classifyMapPlanet(
     node,
-    legend: legendKeyOf(node, node.kind === 'player' || node.kind === 'npc'
-      ? getUniverseOwnerRelation(node, owner.id, owner.alliance, owners.get(node.ownerId ?? ''), allianceDiplomacy)
-      : null),
-  }));
+    node.kind === 'player' || node.kind === 'npc' ? getUniverseOwnerRelation(node, owner.id, owner.alliance, owners.get(node.ownerId ?? ''), allianceDiplomacy) : null,
+    owner.id,
+    (ownerId) => ownerScores[ownerId],
+  );
+  const listedNodes = systemData.positions.filter((node) => LISTED_KINDS.has(node.kind)).map((node) => ({ node, status: mapStatusOf(node) }));
   const homeWorld = playerPlanets.find((planet) => planet.isHomeworld)?.coordinate ?? playerPlanets[0]?.coordinate;
   const sunUnderAttack = sunAlerts.some((alert) => alert.galaxy === galaxy && alert.system === system);
   const pad2 = (value: number) => String(value).padStart(2, '0');
@@ -960,9 +996,8 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
   const selectedOwner = selectedNode && (selectedNode.kind === 'player' || selectedNode.kind === 'npc')
     ? owners.get(selectedNode.ownerId ?? '') ?? null
     : null;
-  const inspectorRelationTone = selectedNode && selectedOwner
-    ? RELATION_TONE[getUniverseOwnerRelation(selectedNode, owner.id, owner.alliance, selectedOwner, allianceDiplomacy)]
-    : undefined;
+  const selectedMapStatus = selectedNode && selectedOwner ? mapStatusOf(selectedNode) : null;
+  const inspectorRelationTone = selectedMapStatus ? MAP_TONE_COLOR[selectedMapStatus.tone] : undefined;
 
   return (
     <main
@@ -1005,6 +1040,7 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
             : null;
           const ariaLabel = `${caption} · ${getUniverseObjectKindLabel(node.kind)} · ${coordinate}`;
           const claim = node.kind === 'anomaly' || node.kind === 'unique' ? explorationEligibility[node.id] ?? 'out' : null;
+          const mapStatus = mapStatusOf(node);
           if (node.kind === 'empty') {
             return (
               <button
@@ -1029,14 +1065,15 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
             <button
               type="button"
               key={node.id}
-              className={`system-planet system-planet--${node.kind} ${claim ? `has-claim has-claim--${claim}` : ''} ${relation ? `system-planet--${relation}` : ''} ${node.isHomeworld ? 'owned' : ''} ${highlightedNodeId === node.id ? 'system-planet--highlight' : ''} ${orbitalDebris > 0 ? 'system-planet--with-debris' : ''} ${hiddenLegend.has(legendKeyOf(node, relation)) ? 'is-filtered' : ''}`}
-              style={toStyle(point)}
-              title={`${node.name} · ${node.statusLabel} · ${coordinate}`}
-              aria-label={`${ariaLabel}${debrisDescription}`}
+              className={`system-planet system-planet--${node.kind} ${claim ? `has-claim has-claim--${claim}` : ''} ${relation ? `system-planet--${relation}` : ''} ${node.isHomeworld ? 'owned' : ''} ${highlightedNodeId === node.id ? 'system-planet--highlight' : ''} ${orbitalDebris > 0 ? 'system-planet--with-debris' : ''} map-tone--${mapStatus.tone} ${mapStatus.attackable === true ? 'is-attackable' : ''} ${mapStatus.attackable === false ? 'is-blocked' : ''} ${hiddenLegend.has(mapStatus.tone) ? 'is-filtered' : ''}`}
+              style={{ ...toStyle(point), zIndex: mapStackOrder(point.y) }}
+              aria-label={`${ariaLabel} · ${mapStatus.title}${debrisDescription}`}
               aria-describedby={orbitalDebris > 0 ? `universe-debris-tooltip-${node.id}` : undefined}
               data-qa-universe-object={node.isHomeworld ? 'player-planet-helion-01' : node.id}
               data-qa-universe-kind={node.kind}
               data-qa-universe-relation={relation ?? undefined}
+              data-qa-map-tone={mapStatus.tone}
+              data-qa-map-attackable={mapStatus.attackable === null ? undefined : String(mapStatus.attackable)}
               onClick={() => selectNode(node)}
               onContextMenu={(event) => openQuick(node, event)}
             >
@@ -1048,7 +1085,12 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
                     <i aria-hidden="true" />{CLAIM_COPY[claim]}
                   </span> : null}
               {showSlotLabels ? <span className="planet-slot">{node.coordinate.position}</span> : null}
-              <span className="planet-name" data-qa-map-caption>{caption}</span>
+              <span className="planet-name" data-qa-map-caption><MapMark tone={mapStatus.tone} blocked={mapStatus.attackable === false} />{caption}</span>
+              <span className="map-status-tip" data-qa-map-status-tip>
+                <strong>{node.name} <span>{coordinate}</span></strong>
+                <em><MapMark tone={mapStatus.tone} blocked={mapStatus.attackable === false} />{mapStatus.title}</em>
+                {mapStatus.detail ? <span className="map-status-tip__why">{mapStatus.detail}</span> : null}
+              </span>
               {orbitalDebris > 0 && showDebris ? <span className="universe-debris-marker"><DebrisChip label={compactAmount(orbitalDebris)} /><span className="universe-debris-tooltip" id={`universe-debris-tooltip-${node.id}`} role="tooltip">Обломки на орбите: {numberFormat.format(orbitalDebris)}</span></span> : null}
             </button>
           );
@@ -1068,18 +1110,18 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
           title={listPinned ? 'Открепить список' : 'Закрепить список открытым'}>
           <small>В СИСТЕМЕ</small>
           <span className="universe-radar__list-dots" aria-hidden="true">
-            {listedNodes.map(({ node, legend }) => <i key={node.id} className={`legend-${legend}`} />)}
+            {listedNodes.map(({ node, status }) => <i key={node.id} className={`legend-${status.tone}`}><MapMark tone={status.tone} /></i>)}
           </span>
           <b>{listedNodes.length}</b>
           <em aria-hidden="true">{listPinned ? '−' : '+'}</em>
         </button>
         <div className="universe-radar__list-body">
-          {listedNodes.map(({ node, legend }) => (
-            <button type="button" key={node.id} className={`universe-radar__row legend-${legend} ${selectedNodeId === node.id ? 'is-selected' : ''}`} onClick={() => selectNode(node)} onContextMenu={(event) => openQuick(node, event)}>
+          {listedNodes.map(({ node, status }) => (
+            <button type="button" key={node.id} className={`universe-radar__row legend-${status.tone} ${selectedNodeId === node.id ? 'is-selected' : ''}`} onClick={() => selectNode(node)} onContextMenu={(event) => openQuick(node, event)}>
               <span className="universe-radar__pos">{node.coordinate.position}</span>
               <img src={node.art} alt="" draggable={false} />
               <strong>{getUniverseNodeCaption(node, profile.displayName, owners.get(node.ownerId ?? '')?.displayName, owner.id)}</strong>
-              <i aria-hidden="true" />
+              <i aria-hidden="true"><MapMark tone={status.tone} blocked={status.attackable === false} /></i>
             </button>
           ))}
           <p>+ {systemData.positions.filter((node) => node.kind === 'uninhabited').length} необитаемых · {systemData.asteroids.length} астероидов · {systemData.positions.filter((node) => node.kind === 'empty').length} свободных</p>
@@ -1137,7 +1179,7 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
                 className={`legend-${key} ${hiddenLegend.has(key) ? '' : 'is-on'}`}
                 aria-pressed={!hiddenLegend.has(key)}
                 onClick={() => setHiddenLegend((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; })}
-              ><i aria-hidden="true" /><span>{label}</span></button>
+              ><MapMark tone={key} /><span>{label}</span></button>
             ))}
           </div>
         </div>
@@ -1219,7 +1261,7 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
             <button ref={closeButtonRef} type="button" className="universe-inspector-close uw-close" data-asterion-close aria-label="Закрыть инспектор" title="Закрыть инспектор" onClick={() => setSelectedNodeId(null)}>✕</button>
           </header>
           <div className="universe-inspector-body uw-body">
-          {selectedOwner ? <OwnerInspector node={selectedNode} owner={selectedOwner} presence={ownerPresence?.[selectedOwner.id]} nowMs={nowMs} planets={ownerPlanets} currentOwnerId={owner.id} currentAlliance={owner.alliance} diplomacy={allianceDiplomacy} debrisAt={(coordinate) => orbitalDebrisByKey.get(`${coordinate.galaxy}:${coordinate.system}:${coordinate.position}`) ?? 0} onAction={handleAction} onVisit={(planet) => { goSystem(planet.coordinate.system); requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-qa-universe-object="${planet.id}"]`)?.focus()); }} /> : <SpecialInspector node={selectedNode} underlyingNode={selectedUnderlyingNode} nowMs={nowMs} asteroidHasDebris={Boolean(selectedNode.kind === 'asteroid' && selectedNode.asteroid && asteroidDebrisPresenceBySpawnIndex?.[String(selectedNode.asteroid.spawnIndex)])} pirateContact={selectedNode.kind === 'pirate' ? pirateContacts.find((contact) => contact.contactCycleKey === selectedNode.pirate?.contactCycleKey) : undefined} onColonize={onColonize} onAsteroidRecycler={onAsteroidRecycler} onExpedition={onExpedition} onExplorationRecon={onExplorationRecon} onExplorationAttack={onExplorationAttack} explorationStatus={explorationEligibility[selectedNode.id]} onPirateRecon={onPirateRecon} onPirateAttack={onPirateAttack} onPirateReport={onPirateReport} />}
+          {selectedOwner ? <OwnerInspector node={selectedNode} owner={selectedOwner} presence={ownerPresence?.[selectedOwner.id]} nowMs={nowMs} planets={ownerPlanets} currentOwnerId={owner.id} currentAlliance={owner.alliance} diplomacy={allianceDiplomacy} debrisAt={(coordinate) => orbitalDebrisByKey.get(`${coordinate.galaxy}:${coordinate.system}:${coordinate.position}`) ?? 0} mapStatus={selectedMapStatus ?? mapStatusOf(selectedNode)} onAction={handleAction} onVisit={(planet) => { goSystem(planet.coordinate.system); requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-qa-universe-object="${planet.id}"]`)?.focus()); }} /> : <SpecialInspector node={selectedNode} underlyingNode={selectedUnderlyingNode} nowMs={nowMs} asteroidHasDebris={Boolean(selectedNode.kind === 'asteroid' && selectedNode.asteroid && asteroidDebrisPresenceBySpawnIndex?.[String(selectedNode.asteroid.spawnIndex)])} pirateContact={selectedNode.kind === 'pirate' ? pirateContacts.find((contact) => contact.contactCycleKey === selectedNode.pirate?.contactCycleKey) : undefined} onColonize={onColonize} onAsteroidRecycler={onAsteroidRecycler} onExpedition={onExpedition} onExplorationRecon={onExplorationRecon} onExplorationAttack={onExplorationAttack} explorationStatus={explorationEligibility[selectedNode.id]} onPirateRecon={onPirateRecon} onPirateAttack={onPirateAttack} onPirateReport={onPirateReport} />}
           </div>
         </aside>
         </div>, document.body) : null}
