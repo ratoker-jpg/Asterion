@@ -9,7 +9,7 @@ import {
   selectActiveAidLedger,
   selectRequestById,
 } from '../domain/command/aid.ts';
-import { TEST_ALLY_OWNER_ID } from '../domain/command/catalog.ts';
+import { DEPUTY_MIN_DELIVERED_UNITS, TEST_ALLY_OWNER_ID } from '../domain/command/catalog.ts';
 import { kickMember, leaveAlliance } from '../domain/command/membership.ts';
 import { aidInFlightUnits } from '../domain/flights/aid-mission.ts';
 import {
@@ -434,7 +434,7 @@ test('Ira Vel helps the player through the same runtime: real ships, stock debit
   const request = selectRequestById(arrived.state.command, created.requestId!)!;
   assert.equal(request.status, 'completed');
   const iraMember = arrived.state.command.alliances[0].members.find((m) => m.ownerId === TEST_ALLY_OWNER_ID)!;
-  assert.equal(iraMember.deliveredUnits, 50_000);
+  assert.equal(iraMember.deliveredUnits, DEPUTY_MIN_DELIVERED_UNITS + 50_000);
   assert.equal(reconcileFlights(arrived.state, flight.arrivalAt, undefined, { mode: 'test' }).changed, false);
 
   const back = reconcileFlights(arrived.state, arrived.state.flights.records[0].returnAt!, undefined, { mode: 'test' });

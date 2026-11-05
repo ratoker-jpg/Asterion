@@ -1128,7 +1128,9 @@ export function resolvePirateIncomingRaid(state: SaveState, flight: FlightRecord
     seed:`pirate-raid-combat-v1:${flight.id}`,
     profileId:'asterion-pirate-raid-v1',
   };
-  const rawReport = resolveCombat(input,{reportId,missionType:'pirate-raid'});
+  const rawReport = resolveCombat(input,{reportId,missionType:'pirate-raid',
+    // A bot planet may hold more than the simulator cap (its fleet is not clamped to the hangar); a bot battle never throws.
+    allowPopulationOverflow:!playerTarget});
   const debris = calculateAttackDebris(rawReport,factionId,factionId,battleDebrisRoll(reportId));
   const targetResources = playerTarget
     ? getPlanetResources(state,flight.destinationPlanetId)

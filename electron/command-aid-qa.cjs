@@ -194,7 +194,7 @@ async function testModeScenario(win, label) {
   assert(state.mine.length === 0 && state.closed >= 1, `${label}: a delivered request leaves the open list`, state);
   save = await readSave(win, TEST_KEY);
   const ira = save.command.alliances[0].members.find((m) => m.ownerId === 'member-ira-vel');
-  assert(save.command.requests[0].status === 'completed' && ira.deliveredUnits === 50000, `${label}: delivery closes the request and credits Ira's contribution`, { request: save.command.requests[0], ira });
+  assert(save.command.requests[0].status === 'completed' && ira.deliveredUnits === 55000, `${label}: delivery closes the request and credits Ira's contribution`, { request: save.command.requests[0], ira });
   await capture(win, label, 'requests-delivered-by-ira');
 
   // 4. The player helps Ira Vel with a real "Помощь союзу" fleet prepared from her request.
@@ -231,7 +231,7 @@ async function testModeScenario(win, label) {
   const after = await readSave(win, TEST_KEY);
   const afterMe = after.command.alliances[0].members.find((m) => m.ownerId === after.profile.playerId);
   const afterIra = after.command.alliances[0].members.find((m) => m.ownerId === 'member-ira-vel');
-  assert(afterMe.deliveredUnits === 60000 && afterIra.deliveredUnits === 50000, `${label}: no double credit after reload`, { afterMe, afterIra });
+  assert(afterMe.deliveredUnits === 60000 && afterIra.deliveredUnits === 55000, `${label}: no double credit after reload`, { afterMe, afterIra });
   assert(after.command.aidEvents.filter((e) => e.kind === 'aid_delivered').length === 2, `${label}: exactly two delivery events`, after.command.aidEvents);
   await openRequestsTab(win);
   state = await view(win);
