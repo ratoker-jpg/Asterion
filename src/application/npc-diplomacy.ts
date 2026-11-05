@@ -25,7 +25,7 @@ import {
   selectPendingApplication,
   selectReapplyBlock,
 } from '../domain/command/selectors.ts';
-import type { AllianceSettingsInput, CommandState } from '../domain/command/types.ts';
+import type { AllianceRecord, AllianceSettingsInput, CommandState } from '../domain/command/types.ts';
 import type { SaveState } from './contracts.ts';
 import { applyNpcAllianceHeraldry } from './npc-identity.ts';
 import {
@@ -151,15 +151,21 @@ export function getNpcDiplomacyCandidates(
       const best = bestStrengths(strengths);
       const taste = npcAllianceTaste(profile);
       const left = recentlyLeftAlliances(command, ownerId, at);
+      // The best alliance open to this owner weighs as an alliance did before the choice by strength, the others
+      // in proportion to their pull: choosing by strength shifts the applicants, it does not make bots found their own.
+      const open: Array<{ alliance: AllianceRecord; regard: number; pull: number }> = [];
       for (const alliance of command.alliances) {
         if (isAllianceFull(alliance) || left.has(alliance.id) || selectReapplyBlock(command, ownerId, alliance.id, at)) continue;
         const regard = npcGroupRegard(state, profile, alliance.members.map((member) => member.ownerId), at);
         // Members who remember a betrayal by this owner would not take it: it does not ask.
         if (regard <= NPC_ALLIANCE_CHOICE.vetoRegard || npcMembersRefuse(state, alliance, ownerId, at)) continue;
         const strength = strengths.get(alliance.id);
-        const pull = strength ? joinPull(allianceFit(taste, strength, best)) : joinPull(0);
-        candidates.push(makeCandidate('apply-to-alliance', `apply-to-alliance:${ownerId}:${alliance.id}`, (0.16 + cooperation * 0.58 + social * 0.12) * pull + 0.2 * regard, {
-          allianceId: alliance.id,
+        open.push({ alliance, regard, pull: strength ? joinPull(allianceFit(taste, strength, best)) : joinPull(0) });
+      }
+      const topPull = open.reduce((max, entry) => Math.max(max, entry.pull), 0);
+      for (const entry of open) {
+        candidates.push(makeCandidate('apply-to-alliance', `apply-to-alliance:${ownerId}:${entry.alliance.id}`, (0.16 + cooperation * 0.58 + social * 0.12) * (topPull > 0 ? entry.pull / topPull : 0) + 0.2 * entry.regard, {
+          allianceId: entry.alliance.id,
         }));
       }
     }
