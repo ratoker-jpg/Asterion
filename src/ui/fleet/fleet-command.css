@@ -122,6 +122,8 @@ html.asterion-long-page:has(.fleet-workspace-v1) #root{overflow-x:clip !importan
 .fleet-root-v2 .fleet-flights-v2.is-sent>div{flex:1;min-width:0}
 .fleet-sent-strip-v1{flex:1;min-width:0}
 .fleet-flights-drop-v2__panel{font-size:calc(14px * var(--text-scale-body,1))}
+/* The expanded flights list takes the place of the ships and the mission (fleet-repeat.css). */
+.fleet-root-v2:has(> .fleet-flights-drop-v2.is-open){grid-template-rows:auto minmax(0,1fr) auto}
 
 .fc-tip{
   position:absolute;left:0;top:calc(100% + 8px);z-index:60;

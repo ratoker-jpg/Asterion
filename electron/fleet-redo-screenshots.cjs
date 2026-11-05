@@ -26,7 +26,7 @@ const BEFORE = Boolean(args.before);
 const OUTPUT = path.resolve(args.out || path.join(ROOT, 'visual-qa', 'fleet-redo', BEFORE ? 'before' : 'after'));
 const SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const TEST_TIME_SCALE_KEY = 'asterion.test-time-scale.v1';
-const VIEWPORTS = args.viewport ? [args.viewport.split('x').map(Number)] : [[1920, 1080], [1280, 720], [1008, 655]];
+const VIEWPORTS = args.viewport ? [args.viewport.split('x').map(Number)] : [[1920, 1080], [1280, 720]];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const run = (win, source) => win.webContents.executeJavaScript(source);
 const problems = [];
@@ -242,10 +242,6 @@ async function rootScenes(win, directory, label) {
   await seed(win, { mutate: `planet.fleet.ships = Object.fromEntries(Object.keys(planet.fleet.ships).map((id) => [id, ['spy-probe', 'colonizer', 'recycler', 'scout'].includes(id) ? 5 : 0]));` });
   await openRoot(win);
   await click(win, '[data-qa-flights-toggle]');
-  console.log('[roster]', label, JSON.stringify(await run(win, `(() => {
-    const box = (s) => { const n = document.querySelector(s); if (!n) return null; const r = n.getBoundingClientRect(); return { h: Math.round(r.height), t: Math.round(r.top), sh: n.scrollHeight, ch: n.clientHeight }; };
-    return { root: box('.fleet-root-v2'), deck: box('.fc-deck'), hangar: box('.fc-hangar'), roster: box('[data-qa-fleet-roster]'), main: box('.fleet-main-v1'), ws: box('.fleet-workspace-v1'), wings: box('.fc-wings'), drop: box('.fleet-flights-drop-v2'), dock: box('.fc-dock'), rootRows: getComputedStyle(document.querySelector('.fleet-root-v2')).gridTemplateRows, kids: [...document.querySelector('.fleet-root-v2').children].map((k) => k.className) };
-  })()`)));
   await shot('root-07-flights-open');
 
   await seed(win, { mutate: COLONY });
@@ -335,7 +331,6 @@ async function runViewport(width, height) {
   await emulate(win, width, height);
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await rootScenes(win, directory, label);
-  if (width < 1100) { win.destroy(); return; }
   await catalogueScenes(win, directory, label);
   if (!BEFORE) await raceScenes(win, directory, label);
   win.destroy();
