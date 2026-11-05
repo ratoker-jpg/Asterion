@@ -1,4 +1,5 @@
 import { selectOwnerAlliance, selectOwnerMembership } from '../domain/command/selectors.ts';
+import { applyRealFlightFloor } from '../domain/flights/speed.ts';
 import { dispatchSunMission, getSunDebris, parseSunOperationId, sunDebrisCoordinate } from './sun-raid.ts';
 import { COMPUTER_SYSTEMS_SCIENCE_ID, getFlightSlotUsage, isFlightLimitExempt, type FlightSlotUsage } from '../domain/flights/limit.ts';
 import {
@@ -688,7 +689,10 @@ function selectedColonizerOnly(selectedShips: Partial<Record<ShipId, number>>): 
 }
 
 function scaledRecord(record: FlightRecord, options: FlightRuntimeOptions): FlightRecord {
-  const duration = scaleRuntimeDuration(record.oneWayDurationMs, options.mode ?? 'production', options.testTimeScale);
+  const mode = options.mode ?? 'production';
+  const scaled = scaleRuntimeDuration(record.oneWayDurationMs, mode, options.testTimeScale);
+  // The 60 s real-time floor is a campaign rule; the test-mode accelerator stays free to go faster.
+  const duration = mode === 'test' ? scaled : applyRealFlightFloor(scaled);
   return {
     ...record,
     oneWayDurationMs: duration,
@@ -2172,11 +2176,13 @@ export function estimateFlightRoute(
     const routeDistance = calculateRouteDistance(originCoordinate, destination);
     const effectiveSpeed = calculateEffectiveFleetSpeed(factionId, ships, science, selectedCommanders, { typhoon: getOwnerShipUpgradeLevel(state, 'typhoon') });
     const minimum = isReconOnlyFleet(ships, selectedCommanders) ? MIN_RECON_ONE_WAY_DURATION_MS : MIN_ONE_WAY_DURATION_MS;
-    const oneWayDurationMs = scaleRuntimeDuration(
+    const mode = options.mode ?? 'production';
+    const scaled = scaleRuntimeDuration(
       calculateOneWayDurationMs(originCoordinate, destination, effectiveSpeed, minimum),
-      options.mode ?? 'production',
+      mode,
       options.testTimeScale,
     );
+    const oneWayDurationMs = mode === 'test' ? scaled : applyRealFlightFloor(scaled);
     const gasCost = calculateFlightFuel(factionId, ships, routeDistance, science, selectedCommanders);
     return { routeDistance, effectiveSpeed, oneWayDurationMs, gasCost };
   } catch {

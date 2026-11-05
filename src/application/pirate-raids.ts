@@ -1,4 +1,5 @@
 import type { PirateContactDefeatRecord } from '../domain/pirates/contact-schedule.ts';
+import { applyRealFlightFloor } from '../domain/flights/speed.ts';
 import { publicPlayerPlanetsKey } from './npc-knowledge-index.ts';
 import { getFactionShipCatalog, getFactionDefenseCatalog } from '../domain/combat/faction-catalog.ts';
 import type { CombatFactionId } from '../domain/combat/factions.ts';
@@ -272,8 +273,9 @@ export function resolveDuePirateRoll(
         .filter(([,count])=>count>0)
         .map(([shipId]) => PIRATE_CATALOG_BY_ID[shipId as keyof typeof PIRATE_CATALOG_BY_ID].flightSpeed));
       if (Number.isFinite(speed) && speed > 0 && routeDistance > 0) {
-        const duration = scaleRuntimeDuration(
+        const scaledDuration = scaleRuntimeDuration(
           calculateOneWayDurationMs(contact.coordinate,selected.coordinate,speed),mode,testTimeScale);
+        const duration = mode === 'test' ? scaledDuration : applyRealFlightFloor(scaledDuration);
         const requestId = `pirate-raid:${event.ownerId}:${event.contactCycleKey}`;
         flight = {
           id: `flight-${requestId}`, requestId,

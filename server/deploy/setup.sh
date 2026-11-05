@@ -84,6 +84,9 @@ mv /etc/caddy/Caddyfile.new /etc/caddy/Caddyfile
 systemctl enable caddy >/dev/null
 systemctl reload-or-restart caddy
 
+log "installer mirror (game updates from this server)"
+bash "$HERE/install-mirror.sh" "$DOMAIN" || echo "installer mirror failed (the game falls back to GitHub)"
+
 log "firewall"
 ufw default deny incoming >/dev/null
 ufw default allow outgoing >/dev/null

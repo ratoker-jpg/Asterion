@@ -23,6 +23,15 @@ export function sideDestroyedValue(report: BattleReport, side: 'attacker' | 'def
     .reduce((sum, stack) => sum + safeCount(stack.destroyed) * (prices.get(stack.entityId) ?? 0), 0);
 }
 
+/** Ships one side brought to a battle (before it), at its race's catalog prices; journal only. */
+export function sideBroughtValue(report: BattleReport, side: 'attacker' | 'defender', raceId: CombatFactionId | undefined): number {
+  if (!raceId) return 0;
+  const prices = new Map<string, number>(getFactionShipCatalog(raceId)
+    .map((entity) => [entity.id, safeCount(entity.cost?.metal) + safeCount(entity.cost?.minerals) + safeCount(entity.cost?.gas)]));
+  const force = side === 'attacker' ? report.attackerForce : report.defenderForce;
+  return force.stacks.reduce((sum, stack) => sum + (safeCount(stack.countAfter) + safeCount(stack.destroyed)) * (prices.get(stack.entityId) ?? 0), 0);
+}
+
 /** What the defender lost in one battle: destroyed ships and turrets at catalog prices, plus the loot taken. */
 export function defenderBattleLoss(report: BattleReport, raceId: CombatFactionId | undefined): number {
   return sideDestroyedValue(report, 'defender', raceId) + battleLoot(report);

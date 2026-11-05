@@ -27,7 +27,7 @@ import { resolveSpyTarget } from './espionage-targets.ts';
 import { getOwnerRelation } from './owner-relations.ts';
 import { updateNpcAutonomyMemory } from '../domain/npc/autonomy-policy.ts';
 import { recordNpcGrievance } from '../domain/npc/grudges.ts';
-import { battleLoot, defenderBattleLoss, isGrievanceBattle, sideDestroyedValue } from './npc-grudges.ts';
+import { battleLoot, defenderBattleLoss, isGrievanceBattle, sideBroughtValue, sideDestroyedValue } from './npc-grudges.ts';
 import { getNpcJournalSink } from './npc-journal.ts';
 import { resolveNpcPlanBattle } from './npc-plans.ts';
 import { breakNpcPactByAttack } from './npc-pact-state.ts';
@@ -400,6 +400,13 @@ function reportLoot(report: BattleReport): AttackLoot {
   };
 }
 
+/** Metal, minerals and gas the attacked planet held before the loot left it (journal only; the state is already after the battle). */
+function heldBeforeLoot(state: SaveState, flightId: string | undefined, report: BattleReport): number {
+  const destination = flightId ? state.flights.records.find((flight) => flight.id === flightId)?.destinationPlanetId : undefined;
+  const resources = destination ? (getEspionageTargets(state.espionage)[destination]?.resources ?? state.planets[destination]?.resources) : undefined;
+  return battleLoot(report) + (resources ? safeCount(resources.metal) + safeCount(resources.minerals) + safeCount(resources.gas) : 0);
+}
+
 /** Both owners learn only from the battle in which they actually participated. */
 function rememberNpcBattle(state: SaveState, report: BattleReport, at: number, flightId?: string): SaveState {
   if (!state.npc) return state;
@@ -418,7 +425,9 @@ function rememberNpcBattle(state: SaveState, report: BattleReport, at: number, f
       const lost = sideDestroyedValue(report, side, raceOf(ownerId));
       journal.outcome({ at, ownerId, kind: 'battle', data: { side, won: won ? 1 : 0, vs: other.playerId ?? null, m: report.missionType,
         gain: side === 'attacker' ? loot : 0, loss: side === 'defender' ? lost + loot : lost,
-        hit: sideDestroyedValue(report, side === 'attacker' ? 'defender' : 'attacker', raceOf(other.playerId)), id: report.id } });
+        hit: sideDestroyedValue(report, side === 'attacker' ? 'defender' : 'attacker', raceOf(other.playerId)), id: report.id,
+        // Sizing of a raid (journal only): what the attacker brought, and what the target held before the loot was taken.
+        ...(side === 'attacker' ? { sent: sideBroughtValue(report, 'attacker', raceOf(ownerId)), held: heldBeforeLoot(state, flightId, report) } : {}) } });
     }
     let remembered = updateNpcAutonomyMemory(profile, report.id, at,
       won ? 'battle-win' : 'battle-loss', won, [report.id]);
