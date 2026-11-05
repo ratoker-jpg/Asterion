@@ -19,6 +19,8 @@
   --atlas-circle: clamp(40px, 5.6vh, 62px);
   --atlas-row: clamp(58px, 8.9vh, 98px);
   --atlas-col: clamp(88px, 6.6vw, 124px);
+  /* The left column; the title above it never runs into the score medals. */
+  --atlas-side: max(320px, 36vw);
   position: fixed; inset: 0;
   width: 100vw; height: 100dvh; max-height: none;
   display: block; overflow: hidden;
@@ -42,7 +44,7 @@
 }
 
 /* ---- title and close ---- */
-.star-atlas__head { position: absolute; z-index: 2; left: clamp(28px, 3.2vw, 60px); top: clamp(18px, 3.6vh, 40px); right: 45%; }
+.star-atlas__head { position: absolute; z-index: 2; left: clamp(28px, 3.2vw, 60px); top: clamp(18px, 3.6vh, 40px); width: var(--atlas-side); }
 .star-atlas__head small {
   display: block; color: var(--atlas-cyan);
   font-size: clamp(11px, 1.2vh, 14px) !important; font-weight: 800; letter-spacing: .18em; text-transform: uppercase;
@@ -69,7 +71,7 @@
 /* ---- layout ---- */
 .star-atlas__main {
   position: absolute; inset: 0;
-  display: grid; grid-template-columns: minmax(320px, 36%) minmax(0, 1fr);
+  display: grid; grid-template-columns: var(--atlas-side) minmax(0, 1fr);
   column-gap: clamp(20px, 2.4vw, 48px);
   padding: clamp(84px, 13vh, 132px) clamp(28px, 3.2vw, 60px) clamp(20px, 3vh, 36px);
 }
@@ -154,7 +156,7 @@
   display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 10px; align-items: center; min-width: 0;
   animation: atlas-rise 420ms cubic-bezier(.23, 1, .32, 1) both; animation-delay: calc(120ms + var(--i, 0) * 50ms);
 }
-.star-atlas__point img { grid-row: 1 / span 2; width: clamp(44px, 6.6vh, 70px); height: clamp(44px, 6.6vh, 70px); object-fit: contain; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, .6)); }
+.star-atlas__point img { grid-row: 1 / span 2; width: clamp(40px, min(6.6vh, 3.6vw), 70px); height: clamp(40px, min(6.6vh, 3.6vw), 70px); object-fit: contain; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, .6)); }
 .star-atlas__point dt { min-width: 0; color: var(--atlas-muted); font-size: clamp(12px, 1.55vh, 17px) !important; font-weight: 600; letter-spacing: 0; text-transform: none; }
 .star-atlas__point dd { min-width: 0; margin: 0; white-space: nowrap; font-size: clamp(17px, 2.6vh, 29px) !important; font-weight: 800; font-variant-numeric: tabular-nums; }
 .star-atlas__points.is-empty dd { color: var(--atlas-muted); }
@@ -250,7 +252,7 @@
 .star-atlas__map:hover, .star-atlas__map:focus-visible { color: var(--atlas-cyan); outline: none; }
 
 @media (max-width: 1440px) {
-  .star-atlas__main { grid-template-columns: minmax(300px, 33%) minmax(0, 1fr); }
+  .universe-inspector.star-atlas { --atlas-side: max(300px, 33vw); }
   .star-atlas__content { padding-right: 40px; }
 }
 
@@ -272,4 +274,4 @@ html body .universe-inspector.star-atlas .star-atlas__head h2 b { font-size: cal
 html body .universe-inspector.star-atlas .star-atlas__who h3 { font-size: calc(clamp(20px, 3.3vh, 36px) * var(--text-scale-section-title, 1)) !important; }
 html body .universe-inspector.star-atlas .star-atlas__list-head h3 { font-size: calc(clamp(16px, 2.4vh, 26px) * var(--text-scale-section-title, 1)) !important; }
 /* Twelve-digit scores stay whole on a 1280 px window. */
-html body .universe-inspector.star-atlas .star-atlas__point dd { font-size: calc(max(14px, min(2.6vh, 1.32vw)) * var(--text-scale-table, 1)) !important; }
+html body .universe-inspector.star-atlas .star-atlas__point dd { font-size: calc(max(13px, min(2.6vh, 1.12vw)) * var(--text-scale-table, 1)) !important; }
