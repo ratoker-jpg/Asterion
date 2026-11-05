@@ -8,11 +8,12 @@ import { formatUniverseCoordinate } from '../../domain/universe/runtime.ts';
 import type { RuntimeMode, TestTimeScale } from '../../domain/runtime/mode.ts';
 import type { SaveState } from '../../application/contracts.ts';
 import { buildBuildPlanView, type BuildPlanLine, type BuildPlanView } from '../../application/build-plan.ts';
-import { formatNumber } from '../empire/empire-format.ts';
+import { compactAmount, formatNumber } from '../empire/empire-format.ts';
 import '../fleet-plan/fleet-planner.css';
 import './build-planner.css';
 
 /** Presets: one click sets many targets. Levels come from how the owner really played (journal 05.11). */
+const COST_LABEL = { metal: 'мет.', minerals: 'мин.', gas: 'газ', energy: 'эн.' } as const;
 const PRESET_LEVELS = [10, 15, 20, 25] as const;
 const PRESET_GROUPS: { label: string; roles: readonly BuildingRole[] }[] = [
   { label: 'Добыча и энергия', roles: ['metal-production-1', 'metal-production-2', 'metal-production-3', 'mineral-production-1', 'mineral-production-2', 'gas-production-1', 'gas-production-2', 'basic-energy'] },
@@ -31,6 +32,8 @@ export type BuildPlannerDialogProps = {
   onSavePlan: (planetId: string, plan: BuildPlan) => boolean;
   /** One ordinary «Построить» order on that planet. */
   onBuild: (planetId: string, role: BuildingRole) => boolean;
+  /** «Запустить сейчас»: starts what the plan allows right now. */
+  onRun: (planetId: string) => number;
 };
 
 /**
@@ -38,7 +41,7 @@ export type BuildPlannerDialogProps = {
  * starts the upgrades itself, only while the player is in the game. Every
  * number comes from `buildBuildPlanView`; no rule lives here.
  */
-export function BuildPlannerDialog({ state, now, mode, testTimeScale, planetId, planetArt, onPlanet, onClose, onSavePlan, onBuild }: BuildPlannerDialogProps) {
+export function BuildPlannerDialog({ state, now, mode, testTimeScale, planetId, planetArt, onPlanet, onClose, onSavePlan, onBuild, onRun }: BuildPlannerDialogProps) {
   const factionId = state.profile.factionId as BuildingFaction;
   const runtime = useMemo(() => ({ now, mode, testTimeScale }), [now, mode, testTimeScale]);
   const view = useMemo(() => buildBuildPlanView(state, planetId, runtime), [state, planetId, runtime]);
@@ -76,6 +79,12 @@ export function BuildPlannerDialog({ state, now, mode, testTimeScale, planetId, 
     }
     save(plan);
   };
+  const fromCurrent = () => {
+    let plan = view.plan;
+    for (const role of BUILDING_ROLES) if (levelOf(role) > 0) plan = setBuildTarget(plan, role, levelOf(role));
+    save(plan);
+  };
+  const hasBuildings = BUILDING_ROLES.some((role) => levelOf(role) > 0);
   const copySources = planets.filter((other) => other.id !== planetId && !other.empty);
   const copyFrom = (sourceId: string) => {
     const source = state.fleetUi?.buildPlans?.[sourceId];
@@ -127,6 +136,7 @@ export function BuildPlannerDialog({ state, now, mode, testTimeScale, planetId, 
               <p>Выберите здания и уровни. Пока вы в игре, она сама начнёт следующее улучшение, как только хватит ресурсов и освободится очередь. Если не хватает энергии, сначала построит самый выгодный источник.</p>
               {presets}
               <div>
+                <button type="button" className="fplan__btn" onClick={fromCurrent} disabled={!hasBuildings} data-qa-build-plan-from-current>Взять то, что уже есть</button>
                 <button type="button" className="fplan__btn" onClick={() => setCopyOpen((was) => !was)} disabled={!copySources.length} data-qa-build-plan-copy>Взять план с планеты</button>
               </div>
             </div>
@@ -184,10 +194,13 @@ export function BuildPlannerDialog({ state, now, mode, testTimeScale, planetId, 
               </button>
             ) : null}
             {!view.empty ? (
-              <button type="button" className={`fplan__btn ${view.paused ? 'fplan__btn--pri' : ''}`} onClick={() => save(setBuildPlanPaused(view.plan, !view.paused))} aria-pressed={!view.paused} data-qa-build-plan-toggle data-sfx="none">
-                {view.paused ? 'Включить автостарт' : 'Автостарт включён · выключить'}
+              <button type="button" className="fplan__btn" onClick={() => save(setBuildPlanPaused(view.plan, !view.paused))} aria-pressed={!view.paused} data-qa-build-plan-toggle data-sfx="none">
+                {view.paused ? 'Включить автостарт' : 'Выключить автостарт'}
               </button>
             ) : null}
+            <button type="button" className="fplan__btn fplan__btn--pri" disabled={!view.next} onClick={() => onRun(planetId)} data-qa-build-plan-start-all data-sfx="none">
+              Запустить всё
+            </button>
           </div>
           {copyOpen ? (
             <div className="fplan__copy" role="dialog" aria-label="Взять план с планеты" data-qa-build-plan-copy-list>
@@ -240,7 +253,8 @@ function Lane({ line, index, autoFocus, onTarget, onRemove, onBuild }: {
           <i className="is-queued" style={{ '--from': line.current / scale, '--share': line.queued / scale } as CSSProperties} />
           <i className="is-here" style={{ '--from': 0, '--share': Math.min(line.current, scale) / scale } as CSSProperties} />
         </div>
-        <small className="fplan-lane__parts"><span>ур. <b>{line.current}</b> из <b>{line.target}</b></span></small>
+        <small className="fplan-lane__parts"><span>ур. <b>{line.current}</b> из <b>{line.target}</b></span>
+          {line.cost ? <span data-qa-build-plan-cost>след. уровень: {(['metal', 'minerals', 'gas', 'energy'] as const).filter((key) => line.cost![key] > 0).map((key) => `${compactAmount(line.cost![key])} ${COST_LABEL[key]}`).join(', ')}</span> : null}</small>
       </div>
       <div className="bplan-lane__target">
         <button type="button" onClick={() => onTarget(line.target - 1)} disabled={line.implied || line.target <= 1} aria-label={`Уровень ниже: ${line.name}`}>−</button>

@@ -258,12 +258,12 @@ export type BuildPlanRun = { state: SaveState; started: BuildPlanStart[] };
  * ordinary build orders: each next one sees what the previous one spent.
  * The caller decides when it may run (only while the player is in the game).
  */
-export function runBuildPlans(state: SaveState, runtime: BuildRuntime): BuildPlanRun {
+export function runBuildPlans(state: SaveState, runtime: BuildRuntime, onlyPlanetId?: string): BuildPlanRun {
   let current = state;
   const started: BuildPlanStart[] = [];
-  const planetIds = Object.keys(state.fleetUi?.buildPlans ?? {}).filter((id) => state.planets[id]).sort();
+  const planetIds = Object.keys(state.fleetUi?.buildPlans ?? {}).filter((id) => state.planets[id] && (!onlyPlanetId || id === onlyPlanetId)).sort();
   for (const planetId of planetIds) {
-    if (getBuildPlan(current, planetId).paused) continue;
+    if (getBuildPlan(current, planetId).paused && !onlyPlanetId) continue;
     for (let guard = 0; guard <= BUILDING_QUEUE_CAPACITY; guard += 1) {
       const { decision } = evaluate(current, planetId as PlanetId, runtime);
       if (!decision) break;

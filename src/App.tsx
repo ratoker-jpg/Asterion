@@ -1826,6 +1826,20 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     return true;
   };
 
+  /** Build planner: «Запустить сейчас», one click on a button; works even with the auto-start off. */
+  const runBuildPlanNow = (planetId: string) => {
+    if (rejectNpcCatchupCommand()) return 0;
+    const at = Date.now();
+    const run = enqueueApplicationStateUpdate(stateRef, setState, (latest) => {
+      const result = runBuildPlans(latest, { now: at, mode: RUNTIME_MODE, testTimeScale }, planetId);
+      return { state: result.state, result };
+    }, flushSync, renderedStateRef, noteStateHeal);
+    setNotice(run.started.length
+      ? `${state.planets[planetId]?.name ?? ''}: ${run.started.map((item) => `${item.name} до ур. ${item.level}`).join(', ')} добавлено в очередь.`
+      : 'Сейчас ничего не запустить: проверьте, чего не хватает у строк.');
+    return run.started.length;
+  };
+
   /** Planner: starts the missing ships of some lines (or all) in one update, through the ordinary shipyard command. */
   const startFleetPlan = (planetId: string, shipIds?: readonly ShipId[], announce = false): FleetPlanStartResult | null => {
     if (rejectNpcCatchupCommand()) return null;
@@ -3210,6 +3224,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
                 onSavePlan={saveFleetPlan}
                 onStartPlan={startFleetPlan}
                 onSaveBuildPlan={saveBuildPlan}
+                onRunBuildPlan={runBuildPlanNow}
               />
             </>
           ) : activeRoute === 'planet' ? (

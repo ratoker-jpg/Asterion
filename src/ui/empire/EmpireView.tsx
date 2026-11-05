@@ -55,6 +55,8 @@ export type EmpireViewProps = {
   onStartPlan: (planetId: string, shipIds?: readonly PlanShipId[], announce?: boolean) => FleetPlanStartResult | null;
   /** «Планировщик стройки»: stores a planet's build plan; false when refused (App shows why). */
   onSaveBuildPlan: (planetId: string, plan: BuildPlan) => boolean;
+  /** Starts what the planet's build plan allows right now; returns how many upgrades started. */
+  onRunBuildPlan: (planetId: string) => number;
 };
 
 type Drawer = { targetId: string; mode: 'transport' | 'deployment'; origins?: string[] };
@@ -82,7 +84,7 @@ function Bar({ value }: { value: number }) {
  * can be done without leaving the console. Every action goes through the same
  * command as its own screen.
  */
-export function EmpireView({ state, now, mode, testTimeScale, planetArt, onOpenPlanet, onBuild, onCancelBuilding, onProduce, onCancelProduction, onSend, onSavePlan, onStartPlan, onSaveBuildPlan }: EmpireViewProps) {
+export function EmpireView({ state, now, mode, testTimeScale, planetArt, onOpenPlanet, onBuild, onCancelBuilding, onProduce, onCancelProduction, onSend, onSavePlan, onStartPlan, onSaveBuildPlan, onRunBuildPlan }: EmpireViewProps) {
   const overview = useMemo(() => buildEmpireOverview(state, { now, mode, testTimeScale }), [state, now, mode, testTimeScale]);
   const factionId = state.profile.factionId as CombatFactionId;
   const units = useMemo(() => new Map<string, Unit>([...getFactionShipCatalog(factionId), ...getFactionDefenseCatalog(factionId), ...COMMANDER_COMBAT_CATALOG].map((entity) => [entity.id, { name: entity.name, art: entity.art }])), [factionId]);
@@ -171,7 +173,7 @@ export function EmpireView({ state, now, mode, testTimeScale, planetArt, onOpenP
 
       {buildPlannerId && state.planets[buildPlannerId] ? (
         <BuildPlannerDialog state={state} now={now} mode={mode} testTimeScale={testTimeScale} planetId={buildPlannerId} planetArt={planetArt}
-          onPlanet={setBuildPlannerId} onClose={() => setBuildPlannerId(null)} onSavePlan={onSaveBuildPlan} onBuild={onBuild} />
+          onPlanet={setBuildPlannerId} onClose={() => setBuildPlannerId(null)} onSavePlan={onSaveBuildPlan} onBuild={onBuild} onRun={onRunBuildPlan} />
       ) : null}
 
       {drawer ? createPortal(
