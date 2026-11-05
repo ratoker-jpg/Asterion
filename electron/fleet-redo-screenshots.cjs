@@ -116,6 +116,35 @@ async function audit(win, name, label) {
   }
 }
 
+// The flight plan for every mission that changes its layout: cargo or none, a target list or typed coordinates.
+async function planScenes(win, directory, label) {
+  await seed(win, { mutate: `${COLONY} planet.fleet.ships = { ...planet.fleet.ships, 'mega-transporter': 40 };` });
+  await openRoot(win);
+  const fill = async (field, value) => {
+    await run(win, `(() => { const n = document.querySelector('[name="flight-preview-target-${field}"]'); if (!n) return; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(n, ${JSON.stringify(String(value))}); n.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+  };
+  for (const [mission, target] of [['transport', 'own'], ['deployment', 'own'], ['space-flight', null], ['attack', 'typed'], ['espionage', 'typed'], ['colonize', 'typed'], ['recycle', 'typed'], ['gas', 'typed'], ['expedition', null], ['pirate-elimination', null], ['sun-support', null]]) {
+    await click(win, `[data-qa-mission-id="${mission}"]`);
+    await click(win, '[data-qa-fleet-select-all]');
+    if (await run(win, `Boolean(document.querySelector('[data-qa-flight-preview-open]')?.disabled)`)) { console.log('[plan] no launch for', mission); continue; }
+    await click(win, '[data-qa-flight-preview-open]');
+    await waitFor(win, `document.querySelector('[data-qa-flight-preview-backdrop]')`);
+    await capture(win, directory, `plan-${mission}-1-no-target`, label);
+    if (target === 'own') {
+      await run(win, `(() => { const s = document.querySelector('.flight-briefing-v2__left .game-select__native:not([data-qa-flight-source-select])'); const v = [...s.options].find((o) => o.value && !o.disabled)?.value; Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(s, v); s.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+      await capture(win, directory, `plan-${mission}-2-target`, label);
+    } else if (target === 'typed') {
+      await fill('galaxy', 1);
+      await fill('system', 2);
+      await fill('position', 7);
+      await settle(win);
+      await capture(win, directory, `plan-${mission}-2-target`, label);
+    }
+    await click(win, '[data-qa-flight-preview-cancel]');
+    await waitFor(win, `!document.querySelector('[data-qa-flight-preview-backdrop]')`);
+  }
+}
+
 const INFLATE = `(() => {
   // The save loader clamps a fleet to its hangar, so 9-digit fleets and 8-digit
   // prices cannot come from a save: the longest realistic strings go straight
@@ -333,6 +362,14 @@ async function runViewport(width, height) {
   await win.loadFile(path.join(DIST, 'index.html'), { search: '?mode=test' });
   await emulate(win, width, height);
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+  if (args.only === 'plan') {
+    await seed(win);
+    await openRoot(win);
+    await capture(win, directory, 'root-01-normal', label);
+    await planScenes(win, directory, label);
+    win.destroy();
+    return;
+  }
   await rootScenes(win, directory, label);
   await catalogueScenes(win, directory, label);
   if (!BEFORE) await raceScenes(win, directory, label);

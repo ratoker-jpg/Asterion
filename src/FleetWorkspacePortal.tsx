@@ -2117,25 +2117,18 @@ function FleetWorkspace({
       ) : null}
       {previewOpen ? createPortal(
         <div className="resource-building-action-confirm-backdrop" data-qa-flight-preview-backdrop onMouseDown={closeFlightPreview}>
-          <section className={`resource-building-action-confirm flight-preview-modal flight-timeline-modal flight-briefing-v2${MISSION_BANNERS[missionId] ? ' has-banner' : ''}`} style={MISSION_BANNERS[missionId] ? { '--mission-banner': `url("${MISSION_BANNERS[missionId]}")` } as CSSProperties : undefined} role="dialog" aria-modal="true" aria-labelledby="flight-preview-title" onMouseDown={(event) => event.stopPropagation()}>
+          <section className={`resource-building-action-confirm flight-preview-modal flight-timeline-modal flight-briefing-v2`} role="dialog" aria-modal="true" aria-labelledby="flight-preview-title" onMouseDown={(event) => event.stopPropagation()}>
             <header className="flight-timeline-head">
+              <MissionIcon mission={selectedMission} />
               <div>
                 <small>ФЛОТЫ · {selectedMission.label.toUpperCase()}</small>
                 <h3 id="flight-preview-title">ПЛАН ПЕРЕЛЁТА</h3>
-                <p>Последовательность подготовки: источник → цель → состав флота → подтверждение.</p>
+                <p>{selectedMission.description}</p>
               </div>
               <button type="button" className="flight-timeline-close" data-asterion-close aria-label="Закрыть план перелёта" onClick={closeFlightPreview}>×</button>
               </header>
             <div className="flight-timeline-body">
               <div className="flight-briefing-v2__left">
-              <section className="flight-briefing-v2__hero" aria-label="Миссия">
-                <MissionIcon mission={selectedMission} />
-                <div>
-                  <small>МИССИЯ</small>
-                  <strong>{selectedMission.label}</strong>
-                  <p>{selectedMission.description}</p>
-                </div>
-              </section>
               <ol className="flight-timeline-steps" aria-label="Шаги подготовки рейса">
                 <li className="flight-timeline-step is-complete" data-qa-flight-source-step>
                   <span aria-hidden="true">01</span>
@@ -2256,11 +2249,11 @@ function FleetWorkspace({
                     </>}
                   </div>
                 </li>
-                <li className="flight-timeline-step-connector" aria-hidden="true"><span>↓</span></li>
-                <li className="flight-timeline-step is-ship-step">
-                  <span aria-hidden="true">03</span>
-                  <div>
-                    <small>СОСТАВ ФЛОТА</small>
+              </ol>
+              </div>
+              <div className="flight-briefing-v2__right">
+              <section className="flight-plan-fleet" aria-label="Состав флота">
+                <small>СОСТАВ ФЛОТА</small>
                     <div className="flight-timeline-ship-list flight-composition-v3" data-qa-flight-ships>{visibleShipDefinitions.filter((ship) => (selectedQuantities[ship.id] ?? 0) > 0).map((ship) => {
                       const quantity = selectedQuantities[ship.id] ?? 0;
                       const entity = shipDefinitions.find((item) => item.id === ship.id);
@@ -2272,11 +2265,7 @@ function FleetWorkspace({
                     })}
                     <footer className="flight-composition-v3__total" data-qa-flight-composition-total><span>ИТОГО</span><b>{flightNumberLabel(draftFleetStats.count)} {shipCountLabel(draftFleetStats.count)}</b><span>население {flightNumberLabel(selectedPopulation)}</span><span>{holdLabel.toLowerCase()} {flightNumberLabel(previewHoldCapacity)}</span></footer>
                     </div>
-                  </div>
-                </li>
-              </ol>
-              </div>
-              <div className="flight-briefing-v2__right">
+              </section>
               <section className="flight-timeline-summary" aria-live="polite">
                 <div className="flight-timeline-summary-head">
                   <small>ПАРАМЕТРЫ ПЕРЕЛЁТА</small>
@@ -2416,8 +2405,8 @@ function FleetWorkspace({
               </section> : null}
               </div>
             </div>
-            <div className="flight-timeline-meta">{previewResult?.ok && previewFlightRecord ? <>РАСЧЁТ РЕЙСА · ПРИБЫТИЕ: {flightArrivalLabel(missionId === 'gas' || missionId === 'space-flight' ? previewFlightRecord.arrivalAt : clockNow + previewFlightRecord.oneWayDurationMs)} · МОСКОВСКОЕ ВРЕМЯ · {flightMissionLabel(missionId).toUpperCase()}</> : routeEstimate ? <>ОЦЕНКА ПО КООРДИНАТАМ · ПРИБЫТИЕ: {flightArrivalLabel(clockNow + routeEstimate.oneWayDurationMs)} · МОСКОВСКОЕ ВРЕМЯ · ЦЕЛЬ ПРОВЕРЯЕТСЯ ПРИ ОТПРАВКЕ</> : 'РАСЧЁТ ПОЯВИТСЯ ПОСЛЕ ВЫБОРА ЦЕЛИ'}</div>
             <div className="resource-building-action-confirm-actions flight-timeline-actions">
+            <div className="flight-timeline-meta">{previewResult?.ok && previewFlightRecord ? <>РАСЧЁТ РЕЙСА · ПРИБЫТИЕ: {flightArrivalLabel(missionId === 'gas' || missionId === 'space-flight' ? previewFlightRecord.arrivalAt : clockNow + previewFlightRecord.oneWayDurationMs)} · МОСКОВСКОЕ ВРЕМЯ · {flightMissionLabel(missionId).toUpperCase()}</> : routeEstimate ? <>ОЦЕНКА ПО КООРДИНАТАМ · ПРИБЫТИЕ: {flightArrivalLabel(clockNow + routeEstimate.oneWayDurationMs)} · МОСКОВСКОЕ ВРЕМЯ · ЦЕЛЬ ПРОВЕРЯЕТСЯ ПРИ ОТПРАВКЕ</> : 'РАСЧЁТ ПОЯВИТСЯ ПОСЛЕ ВЫБОРА ЦЕЛИ'}</div>
               <button type="button" data-qa-flight-preview-cancel onClick={closeFlightPreview}>ОТМЕНА</button>
               <button type="button" data-qa-flight-dispatch-confirm disabled={!canDispatchPreview} onClick={confirmFlightDispatch}>ОТПРАВИТЬ</button>
             </div>

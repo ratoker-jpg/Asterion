@@ -470,32 +470,77 @@ html.asterion-long-page:has(.fleet-workspace-v1) #root{overflow-x:clip !importan
 }
 }
 
-/* ---------- the flight plan: one surface, flat steps ---------- */
-.flight-briefing-v2{border-radius:var(--ut-r-panel) !important}
+/* ---------- the flight plan: where from and where to, then the fleet and the calculation, then the cargo ---------- */
+.flight-briefing-v2{--fp-tile:rgba(126,200,220,.06);border-radius:var(--ut-r-panel) !important}
+.flight-briefing-v2 .flight-timeline-head{display:grid !important;grid-template-columns:48px minmax(0,1fr) auto;align-items:center;gap:12px;padding:0 0 10px !important;border:0 !important;background:none !important;min-height:0 !important}
+.flight-briefing-v2 .flight-timeline-head>img{width:48px;height:48px;object-fit:contain}
+.flight-briefing-v2 .flight-timeline-head h3{margin:0;font-size:18px !important;line-height:1.15}
+.flight-briefing-v2 .flight-timeline-head p{display:block !important;margin:1px 0 0;color:#a9cbd3;font-size:12px !important;line-height:1.25}
+.resource-building-action-confirm.flight-timeline-modal.flight-briefing-v2 .flight-timeline-body{
+  display:grid !important;grid-template-columns:minmax(280px,30%) minmax(0,1fr) !important;gap:22px !important;
+  min-height:0;padding:2px 0 10px !important;border:0 !important;
+}
+.flight-briefing-v2 .flight-briefing-v2__left{overflow:hidden auto !important;padding-right:4px;border:0 !important}
+.flight-briefing-v2 .flight-briefing-v2__left>.flight-timeline-steps{flex:none !important;overflow:visible !important;border:0 !important;padding:0 !important}
+/* No cargo: the fleet and the calculation share the room. Cargo: they stack and the cargo takes the second column. */
+.flight-briefing-v2 .flight-briefing-v2__right{
+  display:grid !important;grid-template-columns:minmax(0,1fr) minmax(0,1fr) !important;grid-template-rows:auto minmax(0,1fr);
+  gap:12px 22px !important;align-content:start;overflow:hidden auto !important;padding-left:0 !important;border:0 !important;
+}
+.flight-briefing-v2 .flight-briefing-v2__right>.flight-plan-fleet{grid-column:1;grid-row:1}
+.flight-briefing-v2 .flight-briefing-v2__right>.flight-timeline-summary{grid-column:2;grid-row:1 / span 2}
+.flight-briefing-v2 .flight-briefing-v2__right:has(>.flight-timeline-cargo)>.flight-timeline-summary{grid-column:1;grid-row:2}
+.flight-briefing-v2 .flight-briefing-v2__right>.flight-timeline-cargo{grid-column:2;grid-row:1 / span 2;padding:0 !important}
+.flight-plan-fleet>small,.flight-briefing-v2 .flight-timeline-summary-head>small{color:var(--ut-label);font-size:12px !important;font-weight:800;letter-spacing:.08em}
+.flight-briefing-v2 .flight-timeline-summary-head{border:0 !important;padding:0 0 4px !important;margin:0 !important}
+.flight-briefing-v2 .flight-timeline-summary-head>span{font-size:11px !important;letter-spacing:.02em}
+.flight-plan-fleet .flight-timeline-ship-list{display:grid !important;grid-template-columns:repeat(auto-fill,minmax(190px,1fr)) !important;gap:5px !important;margin-top:5px;border:0 !important;background:none !important;padding:0 !important}
+.flight-plan-fleet .flight-timeline-ship-card div small{white-space:normal !important;line-height:1.15}
+.flight-plan-fleet .flight-composition-v3__total{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 12px;padding:3px 2px 0;border:0 !important;background:none !important}
 .flight-briefing-v2 .flight-timeline-step,
 .flight-briefing-v2 .flight-timeline-summary,
 .flight-briefing-v2 .flight-timeline-cargo,
-.flight-briefing-v2 .flight-briefing-v2__hero,
 .flight-briefing-v2 .flight-timeline-metrics>div,
 .flight-briefing-v2 .flight-timeline-eta-card,
 .flight-briefing-v2 .flight-composition-v3__row,
-.flight-briefing-v2 .flight-timeline-cargo-field{
+.flight-briefing-v2 .flight-timeline-cargo-field,
+.flight-briefing-v2 .flight-timeline-cargo-head>span,
+.flight-briefing-v2 .flight-briefing-v2__axis,
+.flight-briefing-v2 .flight-cargo-sliders-v2 .amount-slider,
+.flight-briefing-v2 .flight-timeline-step>span,
+.flight-briefing-v2 .flight-timeline-notes p{
   border:0 !important;
   box-shadow:none !important;
   clip-path:none !important;
 }
 .flight-briefing-v2 .flight-timeline-step,
 .flight-briefing-v2 .flight-timeline-summary,
-.flight-briefing-v2 .flight-timeline-cargo{background:transparent !important}
+.flight-briefing-v2 .flight-timeline-cargo,
+.flight-briefing-v2 .flight-timeline-cargo-field,
+.flight-briefing-v2 .flight-timeline-cargo-head>span,
+.flight-briefing-v2 .flight-briefing-v2__axis,
+.flight-briefing-v2 .flight-cargo-sliders-v2 .amount-slider,
+.flight-briefing-v2 .flight-timeline-step>span{background:transparent !important}
+.flight-briefing-v2 .flight-timeline-step{padding:0 0 8px !important;margin:0 !important}
+.flight-briefing-v2 .flight-timeline-step-connector{display:none !important}
+.flight-briefing-v2 .flight-briefing-v2__axis{height:58px;margin:0 0 4px}
 .flight-briefing-v2 .flight-timeline-metrics>div,
 .flight-briefing-v2 .flight-timeline-eta-card,
-.flight-briefing-v2 .flight-composition-v3__row{background:rgba(126,200,220,.055) !important;border-radius:var(--ut-r-chip) !important}
-.flight-briefing-v2 .flight-timeline-cargo-head>span,
-.flight-briefing-v2 .flight-cargo-sliders-v2 .amount-slider,
-.flight-briefing-v2 .flight-timeline-step>span{border:0 !important;background:none !important;box-shadow:none !important}
+.flight-briefing-v2 .flight-composition-v3__row{background:var(--fp-tile) !important;border-radius:var(--ut-r-chip) !important}
+.flight-briefing-v2 .flight-timeline-notes p{background:none !important;padding:2px 0 !important;margin:0 !important}
 .flight-briefing-v2 .flight-cargo-sliders-v2 .amount-slider{min-width:0;width:100%}
+.flight-briefing-v2 .flight-timeline-actions{display:flex !important;align-items:center;justify-content:flex-end;gap:10px;margin:0 !important;padding:8px 0 0 !important;border:0 !important}
+.flight-briefing-v2 .flight-timeline-actions>.flight-timeline-meta{flex:1;min-width:0;margin:0 !important;padding:0 !important;border:0 !important;color:#a9cbd3;font-size:12px !important;letter-spacing:.02em;text-align:left}
+.flight-briefing-v2 .flight-timeline-actions>button{flex:none}
+.flight-briefing-v2 .game-select__trigger{font-size:calc(13px * var(--text-scale-control,1)) !important}
 /* A window under 1500 wide: one line per resource and its slider below, so all four stay in view. */
-@media (min-width:1101px) and (max-width:1500px){
+@media (max-width:1500px){
+  .resource-building-action-confirm.flight-timeline-modal.flight-briefing-v2 .flight-timeline-body{gap:16px !important}
+  .flight-briefing-v2 .flight-briefing-v2__right{gap:8px 16px !important}
+  .flight-briefing-v2 .flight-timeline-metrics{grid-template-columns:repeat(2,minmax(0,1fr)) !important;gap:4px !important}
+  .flight-briefing-v2 .flight-timeline-metrics>div{padding:3px 8px !important;min-height:0 !important}
+  .flight-briefing-v2 .flight-timeline-eta{gap:4px !important;margin:4px 0 !important}
+  .flight-briefing-v2 .flight-timeline-eta-card{padding:4px 8px !important}
   .flight-briefing-v2 .flight-cargo-sliders-v2{gap:6px !important;margin-top:6px !important}
   .flight-briefing-v2 .flight-cargo-sliders-v2 .flight-timeline-cargo-field{display:grid !important;grid-template-columns:auto minmax(0,1fr) !important;gap:1px 8px !important;padding:0 !important}
   .flight-briefing-v2 .flight-cargo-sliders-v2 .flight-timeline-cargo-field>.amount-slider{grid-column:1/-1;padding:0 !important;gap:4px !important}
@@ -504,14 +549,9 @@ html.asterion-long-page:has(.fleet-workspace-v1) #root{overflow-x:clip !importan
   .flight-briefing-v2 .flight-timeline-cargo-input{display:flex !important;align-items:center;justify-content:flex-end;gap:6px}
   .flight-briefing-v2 .flight-timeline-cargo-input input{order:2;width:96px !important;height:26px !important}
   .flight-briefing-v2 .flight-timeline-cargo-input em{order:1;white-space:nowrap}
-  .flight-briefing-v2 .flight-timeline-cargo-head>span{padding:4px 0 !important}
+  .flight-briefing-v2 .flight-timeline-cargo-head>span{padding:2px 0 !important}
   .flight-briefing-v2 .flight-timeline-cargo>p{margin:4px 0 0 !important}
-  .flight-briefing-v2 .flight-briefing-v2__hero{grid-template-columns:56px minmax(0,1fr) !important;gap:10px !important;padding:8px !important}
-  .flight-briefing-v2 .flight-briefing-v2__hero img{width:56px !important;height:56px !important;border-radius:12px !important}
-  .flight-briefing-v2 .flight-briefing-v2__hero p{display:none}
 }
-.flight-briefing-v2 .game-select__trigger{font-size:calc(13px * var(--text-scale-control,1)) !important}
-
 @keyframes fc-wing-in{from{opacity:0;translate:0 -10px}}
 @keyframes fc-rise{from{opacity:0;translate:0 12px}}
 .npc-catchup-active .fleet-workspace-v1 :is(.fc-ship,.fc-unit,.fc-missions>button,.fc-wing,.fc-dock){animation:none}
