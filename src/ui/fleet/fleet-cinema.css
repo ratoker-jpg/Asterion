@@ -273,3 +273,70 @@
 .fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__cost>.is-zero{display:none}
 .fleet-workspace-v1 .fc-catalog .fc-unit.is-locked .fc-unit__art>img{filter:grayscale(.75) brightness(.7) drop-shadow(0 12px 24px rgba(0,0,0,.75))}
 .fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__name>h3{white-space:normal;overflow-wrap:anywhere}
+
+/* ==========================================================================
+   «Все рейсы»: the open list in the same style — no frame around it, every
+   flight is a tile, calm words instead of capitals, bigger text.
+   ========================================================================== */
+.fleet-workspace-v1 .fleet-root-v2 .fleet-flights-v2>button{
+  height:44px;padding:0 18px;border:0;border-radius:12px;background:var(--fa-tile-2);box-shadow:none;color:#fff;
+  font-size:calc(16px * var(--text-scale-control,1)) !important;font-weight:700;letter-spacing:0;
+  transition:background-color var(--ut-motion-base) ease,translate var(--ut-motion-base) var(--ut-ease-out);
+}
+.fleet-workspace-v1 .fleet-root-v2 .fleet-flights-v2>button:hover{background:rgba(95,212,255,.22);translate:0 -2px}
+.fleet-workspace-v1 .fleet-root-v2 .fleet-flights-v2>button.is-on{background:rgba(95,212,255,.24);box-shadow:inset 0 0 0 2px var(--fa-ac)}
+.fleet-workspace-v1 .fleet-root-v2 .fleet-flights-drop-v2.is-open .fleet-flights-drop-v2__panel{
+  padding:0;border:0;border-radius:0;background:none;box-shadow:none;overflow-y:auto;
+  animation:fa-tile-in var(--ut-motion-item) var(--ut-ease-out) both;
+}
+.fleet-workspace-v1 .fleet-flights-drop-v2 .fleet-flight-table-v1{margin:0;border:0;border-radius:0;overflow:visible;display:grid;gap:8px}
+.fleet-workspace-v1 .fleet-flights-drop-v2 .fleet-flight-row-v1{border:0;border-radius:var(--fa-r)}
+.fleet-workspace-v1 .fleet-flights-drop-v2 .fleet-flight-head-v1{
+  min-height:0;padding:0 4px;background:none;border:0;box-shadow:none;color:var(--fa-mu);
+}
+.fleet-workspace-v1 .fleet-flights-drop-v2 .fleet-flight-head-v1>span{
+  display:inline-block;padding:0 14px;font-size:calc(15px * var(--text-scale-secondary,1)) !important;font-weight:600;letter-spacing:0;text-transform:lowercase;
+}
+.fleet-workspace-v1 .fleet-flights-drop-v2 .fleet-flight-head-v1>span::first-letter{text-transform:uppercase}
+.fleet-workspace-v1 .fleet-flights-drop-v2 .fleet-flight-row-v1:not(.fleet-flight-head-v1){
+  min-height:76px;padding:6px 6px;border:0;background:var(--fa-tile);box-shadow:none;color:#dbe7f2;
+  font-size:calc(16px * var(--text-scale-body,1)) !important;
+  transition:background-color var(--ut-motion-base) ease;
+}
+.fleet-workspace-v1 .fleet-flights-drop-v2 .fleet-flight-row-v1:not(.fleet-flight-head-v1):hover{background:var(--fa-tile-2)}
+.fleet-workspace-v1 .fleet-flights-drop-v2 .fleet-flight-row-v1:not(.fleet-flight-head-v1)>span{padding:0 14px}
+.fleet-workspace-v1 .fleet-flights-drop-v2 .fleet-flight-row-v1:not(.fleet-flight-head-v1)>span>strong{font-size:calc(17px * var(--text-scale-table,1)) !important;color:#fff}
+.fleet-workspace-v1 .fleet-flights-drop-v2 .fleet-flight-row-v1:not(.fleet-flight-head-v1)>span>small,
+.fleet-workspace-v1 .fleet-flights-drop-v2 .fleet-flight-route-cell small{color:var(--fa-mu);font-size:calc(14px * var(--text-scale-secondary,1)) !important}
+.fleet-workspace-v1 .fleet-flights-drop-v2 .fleet-flight-mission-icon{width:52px;height:52px;border-radius:12px;object-fit:cover}
+.fleet-workspace-v1 .fleet-flights-drop-v2 [data-qa-flight-status]{
+  display:inline-block;color:var(--fa-ac) !important;font-size:calc(15px * var(--text-scale-table,1)) !important;font-weight:700;letter-spacing:0 !important;text-transform:lowercase;
+}
+.fleet-workspace-v1 .fleet-flights-drop-v2 [data-qa-flight-status]::first-letter{text-transform:uppercase}
+.fleet-workspace-v1 .fleet-flights-drop-v2 .fleet-flight-row-v1--incoming-attack:not(.fleet-flight-head-v1){background:rgba(255,106,120,.12);box-shadow:inset 0 0 0 2px rgba(255,106,120,.5)}
+.fleet-workspace-v1 .fleet-flights-drop-v2 .fleet-flight-row-v1--incoming-attack [data-qa-flight-status]{color:#ff8a95 !important}
+.fleet-workspace-v1 .fleet-flights-drop-v2 .fleet-flight-row-v1 button{
+  min-height:42px;padding:0 16px;border:0;border-radius:12px;background:var(--fa-tile-2);box-shadow:none;color:#fff;
+  font-size:calc(15px * var(--text-scale-control,1)) !important;font-weight:700;letter-spacing:0;text-transform:lowercase;cursor:pointer;
+  transition:background-color var(--ut-motion-base) ease;
+}
+.fleet-workspace-v1 .fleet-flights-drop-v2 .fleet-flight-row-v1 button::first-letter{text-transform:uppercase}
+.fleet-workspace-v1 .fleet-flights-drop-v2 .fleet-flight-row-v1 button:hover:not(:disabled){background:rgba(95,212,255,.24)}
+.fleet-workspace-v1 .fleet-flights-drop-v2 .fleet-flight-row-v1 button[data-qa-flight-recall]:hover:not(:disabled){background:rgba(255,106,120,.28)}
+.fleet-workspace-v1 .fleet-flights-drop-v2 .fleet-expedition-details-trigger{min-height:0;padding:0;background:none;color:#fff;font-size:calc(17px * var(--text-scale-table,1)) !important;text-align:left}
+.fleet-workspace-v1 .fleet-flights-drop-v2 .fleet-expedition-details-trigger:hover:not(:disabled){background:none;color:var(--fa-ac)}
+.fleet-workspace-v1 .fleet-flights-drop-v2 .fleet-flight-recent-head-v1{margin:10px 4px 0;color:var(--fa-mu);font-size:calc(15px * var(--text-scale-secondary,1)) !important;font-weight:600;letter-spacing:0;text-transform:lowercase}
+.fleet-workspace-v1 .fleet-flights-drop-v2 .fleet-flight-recent-head-v1::first-letter{text-transform:uppercase}
+.fleet-workspace-v1 .fleet-flights-drop-v2 .fleet-flight-empty-v1{
+  min-height:300px;display:grid;place-content:center;justify-items:center;gap:8px;border:0;border-radius:var(--fa-r);background:var(--fa-tile);
+}
+.fleet-workspace-v1 .fleet-flights-drop-v2 .fleet-flight-empty-v1 img{width:260px;height:auto}
+.fleet-workspace-v1 .fleet-flights-drop-v2 .fleet-flight-empty-v1 strong{font-size:calc(22px * var(--text-scale-section-title,1)) !important;font-weight:800;color:#fff}
+.fleet-workspace-v1 .fleet-flights-drop-v2 .fleet-flight-empty-v1 span{font-size:calc(16px * var(--text-scale-body,1)) !important;color:var(--fa-mu)}
+.fleet-workspace-v1 .fleet-flights-drop-v2 .fleet-flight-actions-v1{margin-top:10px;gap:8px}
+.fleet-workspace-v1 .fleet-flights-drop-v2 .fleet-flight-actions-v1:empty{display:none}
+.fleet-workspace-v1 .fleet-flights-drop-v2 .fleet-flight-actions-v1 button{
+  min-height:44px;padding:0 18px;border:0;border-radius:12px;background:var(--fa-tile-2);box-shadow:none;color:#fff;
+  font-size:calc(15px * var(--text-scale-control,1)) !important;font-weight:700;letter-spacing:0;text-transform:lowercase;
+}
+.fleet-workspace-v1 .fleet-flights-drop-v2 .fleet-flight-actions-v1 button::first-letter{text-transform:uppercase}

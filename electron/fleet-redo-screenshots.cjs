@@ -275,6 +275,11 @@ async function rootScenes(win, directory, label) {
   await openRoot(win);
   await click(win, '[data-qa-flights-toggle]');
   await shot('root-07-flights-open');
+  if (await run(win, `Boolean(document.querySelector('[data-qa-bot01-scenario]:not(:disabled)'))`)) {
+    await click(win, '[data-qa-bot01-scenario]');
+    await sleep(600);
+    await shot('root-08-flights-incoming');
+  }
 
   await seed(win, { mutate: COLONY });
   await openRoot(win);
