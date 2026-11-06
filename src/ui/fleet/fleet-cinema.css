@@ -358,3 +358,14 @@
 .fleet-workspace-v1 .fleet-root-v2>.fleet-incoming-alert-v2>button{height:44px;padding:0 18px;border:0;border-radius:12px;background:rgba(255,106,120,.3);color:#fff;font-size:calc(15px * var(--text-scale-control,1)) !important;letter-spacing:0;text-transform:lowercase}
 .fleet-workspace-v1 .fleet-root-v2>.fleet-incoming-alert-v2>button::first-letter{text-transform:uppercase}
 .fleet-workspace-v1 .fleet-root-v2.has-incoming::before{display:none}
+
+/* Ship tile amount: one dark bar «− 0 +» and a separate «Все», nothing overlaps. */
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__amount{grid-template-columns:36px minmax(0,1fr) 36px auto;gap:0}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__amount>*{min-width:0;margin:0;border:0;box-shadow:none}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__amount>button{min-width:0;width:100%;padding:0;background:rgba(4,8,15,.86);color:#fff}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__amount>button:first-child{border-radius:12px 0 0 12px}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__amount>input{width:100%;border-radius:0;background:rgba(4,8,15,.86);text-align:center}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__amount>button:nth-of-type(2){border-radius:0 12px 12px 0}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__amount>button:last-of-type{width:auto;margin-left:6px;padding:0 14px;border-radius:12px;background:rgba(40,60,86,.92)}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__amount>button:disabled{color:#5d6f82;opacity:1}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__amount>button:hover:not(:disabled){background:rgba(95,212,255,.3)}
