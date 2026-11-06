@@ -24,6 +24,7 @@ import {
   overpopulationEpisodeReportToReportItem,
   preservePersistentReportCollections,
   recyclerArrivalReportToReportItem,
+  reportReadCheck,
   upsertGasExtractionArrivalReport,
   upsertRecyclerArrivalReport,
   upsertOverpopulationEpisodeReport,
@@ -39,7 +40,7 @@ import {
   persistReportsState,
   readReportsState,
 } from './repository.ts';
-import type { GasExtractionArrivalReport } from './types.ts';
+import type { GasExtractionArrivalReport, ReportItem } from './types.ts';
 
 class MemoryStorage {
   private values = new Map<string, string>();
@@ -679,4 +680,40 @@ test('a battle with no rounds reads as one capture-without-a-fight sentence with
   assert.doesNotMatch(JSON.stringify(item), /ПОБЕДА ПРИ АТАКЕ|0 раундов|Бой не состоялся/);
   assert.equal(noCombatVerdict(3, 'attacker', 'attack'), null);
   assert.equal(noCombatVerdict(0, 'defender', 'attack')?.summary, 'Бой не состоялся: у атакующего не было сил.');
+});
+
+test('«Отметить все прочитанными» clears every section, however long the archive', () => {
+  const categories = ['system', 'battle', 'flights', 'command', 'alliances'] as const;
+  const base = Date.parse('2026-11-01T00:00:00.000Z');
+  // 1 400 messages: far more than the 500 ids the read list keeps.
+  const items = Array.from({ length: 1400 }, (_, index) => ({
+    id: `mail-${index}`,
+    category: categories[index % categories.length],
+    timestamp: new Date(base + index * 60_000).toISOString(),
+  })) as unknown as ReportItem[];
+  const before = getReportUnreadCounts(items, createDefaultReportsState());
+  assert.equal(Object.values(before).reduce((sum, count) => sum + count, 0), 1400);
+
+  const marked = markAllReportsRead(createDefaultReportsState(), items);
+  assert.ok(Object.values(getReportUnreadCounts(items, marked)).every((count) => count === 0));
+  // It survives the save round trip, and the id list stays small.
+  const reloaded = migrateReportsState(JSON.parse(JSON.stringify(marked)));
+  assert.ok(Object.values(getReportUnreadCounts(items, reloaded)).every((count) => count === 0));
+  assert.ok(reloaded.readIds.length <= 500);
+
+  // A message that arrives later is new again.
+  const later = [...items, { id: 'mail-new', category: 'system', timestamp: new Date(base + 1400 * 60_000).toISOString() } as unknown as ReportItem];
+  assert.equal(getReportUnreadCounts(later, reloaded).system, 1);
+});
+
+test('the message open in the reading pane stays listed under «Непрочитанные» once read', () => {
+  const items = [
+    { id: 'a', category: 'system', timestamp: '2026-11-06T10:00:00.000Z', title: 'A', summary: '' },
+    { id: 'b', category: 'system', timestamp: '2026-11-06T11:00:00.000Z', title: 'B', summary: '' },
+  ] as unknown as ReportItem[];
+  const read = markReportRead(createDefaultReportsState(), 'a');
+  const query = { category: 'system' as const, filter: 'unread' as const, search: '' };
+  assert.deepEqual(filterReportItems(items, read, query).map((item) => item.id), ['b']);
+  assert.deepEqual(filterReportItems(items, read, { ...query, keepId: 'a' }).map((item) => item.id), ['a', 'b']);
+  assert.equal(reportReadCheck(read)(items[0]!), true);
 });

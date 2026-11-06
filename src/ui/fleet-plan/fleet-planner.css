@@ -194,12 +194,14 @@
 .fplan-lane__bar .is-here{background:linear-gradient(180deg,color-mix(in srgb,var(--fp-here) 92%,#fff),color-mix(in srgb,var(--fp-here) 62%,#04202a))}
 .fplan-lane.is-done .fplan-lane__bar .is-here{background:linear-gradient(180deg,#67f0a7,#1f9d62)}
 .fplan-lane__bar .is-queued{background:repeating-linear-gradient(115deg,#f0be6b 0 7px,#a87a2f 7px 14px)}
-.fplan-lane__bar .is-away{background:color-mix(in srgb,var(--fp-here) 36%,transparent)}
+.fplan-lane__bar .is-away{background:repeating-linear-gradient(115deg,color-mix(in srgb,var(--fp-here) 78%,#fff) 0 7px,color-mix(in srgb,var(--fp-here) 52%,#04202a) 7px 14px)}
+.fplan-lane.is-done .fplan-lane__bar .is-away{background:repeating-linear-gradient(115deg,#5fe39d 0 7px,#1f8f59 7px 14px)}
 .fplan-lane__parts{display:flex;gap:4px 12px;flex-wrap:wrap;min-width:0;line-height:1.15}
 .fplan .fplan-lane__parts span{color:#8fb6c0;font-size:calc(12px * var(--text-scale-secondary,1)) !important;white-space:nowrap}
 .fplan .fplan-lane__parts b{color:#dcecf0;font-size:inherit !important;font-weight:700}
 .fplan .fplan-lane__parts .is-queued b{color:var(--fp-queued)}
 .fplan .fplan-lane__parts .is-surplus b{color:var(--ut-positive)}
+.fplan .fplan-lane__parts .is-total{color:#dcecf0}
 
 .fplan-lane__target{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:5px}
 .fplan-lane__input,.fplan-lane__fill-value{

@@ -51,7 +51,7 @@ export type BuildPlanLine = {
   /** Cost of the next level; null when nothing is left to build. */
   cost: ResourceCost | null;
   timeMs: number | null;
-  /** `title` replaces the usual two-word title («Копит на …»). */
+  /** `title` replaces the usual two-word title («Копит: …»). */
   wait: { kind: BuildWaitKind; text: string; title?: string } | null;
 };
 
@@ -263,7 +263,7 @@ function evaluate(state: SaveState, planetId: PlanetId, runtime: BuildRuntime): 
       else if (choice.affordable) {
         setWait(line, 'energy', `${sentence} Сначала строим ${source}: у неё лучшая отдача.`);
         decision = { role: choice.affordable.role, name: source, level: choice.affordable.level, startedFor: line.role };
-      } else setWait(line, 'energy', `${sentence} Копим на ${source}: у неё лучшая отдача.`);
+      } else setWait(line, 'energy', `${sentence} Копим: ${source}, у неё лучшая отдача.`);
       behind(index, 'Ждёт, пока появится энергия.');
       break;
     }
@@ -290,7 +290,7 @@ function evaluate(state: SaveState, planetId: PlanetId, runtime: BuildRuntime): 
         setWait(line, 'saving', `${sentence} Сначала строим ${storageName}.`, title);
         decision = { role: storageRole, name: storageName, level: storage.nextLevel, startedFor: line.role };
       } else {
-        setWait(line, 'saving', `${sentence} Копим на ${storageName}.`, title);
+        setWait(line, 'saving', `${sentence} Копим: ${storageName}.`, title);
       }
       behind(index, 'Ждёт, пока вырастет склад.');
       break;
@@ -314,7 +314,7 @@ function evaluate(state: SaveState, planetId: PlanetId, runtime: BuildRuntime): 
       continue;
     }
     if (saver && !paysBackFirst(line, saver.hours)) {
-      setWait(line, 'saving', `Копим на ${saver.line.name} ур. ${saver.line.current + saver.line.queued + 1}: это улучшение не окупится раньше, чем накопится нужное.`, `Копит на ${saver.line.name}`);
+      setWait(line, 'saving', `Копим: ${saver.line.name} ур. ${saver.line.current + saver.line.queued + 1}. Это улучшение не окупится раньше, чем накопится нужное.`, `Копит: ${saver.line.name}`);
       continue;
     }
     decision = { role: line.role, name: line.name, level: line.current + line.queued + 1, startedFor: null };
@@ -352,7 +352,7 @@ export function buildBuildPlanView(state: SaveState, planetId: string, runtime: 
     : `Дальше: ${next.name} до ур. ${next.level}.`;
   else {
     const pick = (kind: BuildWaitKind) => open.find((line) => line.wait?.kind === kind)?.wait?.text;
-    headline = pick('saving') ?? (result.saving ? `Копим на ${result.saving.name} ур. ${result.saving.level}.` : undefined) ?? pick('energy') ?? pick('queue') ?? pick('resources') ?? open.find((line) => line.wait)?.wait?.text ?? '';
+    headline = pick('saving') ?? (result.saving ? `Копим: ${result.saving.name} ур. ${result.saving.level}.` : undefined) ?? pick('energy') ?? pick('queue') ?? pick('resources') ?? open.find((line) => line.wait)?.wait?.text ?? '';
   }
   return { planetId, plan, empty: isBuildPlanEmpty(plan), paused, lines: result.lines, queueUsed: result.queueUsed, queueCapacity: BUILDING_QUEUE_CAPACITY, energy: result.energy, next, headline, saving: paused ? null : result.saving, helpers: { robots: plan.noRobots !== true, exchange: plan.noExchange !== true } };
 }

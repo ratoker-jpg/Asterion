@@ -15,7 +15,7 @@ import {
 } from '../domain/fleet/production.ts';
 import type { PlanetId, SaveState } from './contracts.ts';
 import { getOwnerShipUpgradeLevels, getPlanetResources } from './contracts.ts';
-import { getAvailableFleetForPlanet, getReservedCommandersForPlanet, getReservedShipsForPlanet } from './flights.ts';
+import { getAvailableFleetForPlanet, getReservedCommandersForPlanet, getReservedShipsForPlanet, getShipsAwayForPlanet } from './flights.ts';
 import { createPersistenceFacade, type PersistenceOptions } from './persistence.ts';
 import type { CombatFactionId } from '../domain/combat/factions.ts';
 import type { ShipId } from '../domain/combat/ids.ts';
@@ -49,6 +49,8 @@ export type FleetBuildBudget = {
   advancedFactoryLevel: number;
   hangarLevel: number;
   fleet: OwnedFleetState;
+  /** Own ships away that come back here; `fleet` holds only those on the planet. */
+  shipsAway?: Partial<Record<ShipId, number>>;
   defense: OwnedDefenseState;
   fleetProduction: FleetProductionState;
   spaceportUpgrades: SpaceportUpgradeState;
@@ -180,6 +182,7 @@ export function getFleetBuildBudget(state: SaveState, planetId: PlanetId = state
     advancedFactoryLevel: snapshot.advancedFactoryLevel,
     hangarLevel: snapshot.hangarLevel,
     fleet: snapshot.fleet,
+    shipsAway: getShipsAwayForPlanet(state, planetId),
     defense: snapshot.defense,
     fleetProduction: snapshot.fleetProduction,
     spaceportUpgrades: snapshot.spaceportUpgrades,

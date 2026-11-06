@@ -285,6 +285,43 @@ async function closeQuick(win) {
 }
 
 /** Rendering pace on a crowded system: printed for the PR, CI renders on the CPU. */
+/**
+ * Owner (06.11): a shielded planet must read at a glance on the map. Shields go
+ * on every third crowded owner, two relation owners and the player, then the
+ * dome is checked in the map, the Star Atlas list and the planet card.
+ */
+async function checkShields(win, directory, worlds, label) {
+  await editSaveIdle(win, `(() => {
+    const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+    const now = Date.now();
+    const record = { activatedAt: now - 60_000, activeUntil: now + 5 * 3600_000, readyAt: now + 29 * 3600_000 };
+    const owners = ['qa-owner-range', 'qa-owner-enemy', save.profile.playerId];
+    for (let index = 0; index < 40; index += 3) owners.push('qa-owner-crowd-' + index);
+    save.shields = Object.fromEntries(owners.map((id) => [id, record]));
+    localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+    return true;
+  })()`, {
+    label: 'map shields',
+    held: `Boolean(JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}').shields?.['qa-owner-range'])`,
+  });
+  await openUniverse(win);
+  await selectSystem(win, worlds.crowded.system);
+  await sleep(600);
+  const crowded = await js(win, `({ auras: document.querySelectorAll('[data-qa-map-shield-aura]').length, list: document.querySelectorAll('.universe-radar__row.is-shielded').length, titles: document.querySelectorAll('.shield-mark[title]').length })`);
+  if (crowded.auras < 3 || crowded.list < 1 || crowded.titles) throw new Error(`${label}: shield dome on the crowded system ${JSON.stringify(crowded)}`);
+  await capture(win, directory, 'shield-crowded');
+  await selectSystem(win, worlds.relations.system);
+  await sleep(600);
+  const domes = await js(win, `document.querySelectorAll('[data-qa-map-shield-aura]').length`);
+  if (domes < 2) throw new Error(`${label}: shield domes on the relations system: ${domes}`);
+  await capture(win, directory, 'shield-relations');
+  await js(win, `document.querySelector('[data-qa-universe-object="qa-target-range"]').click()`);
+  await waitFor(win, `document.querySelector('[data-qa-universe-inspector] [data-qa-atlas-shield]')`);
+  await capture(win, directory, 'shield-atlas-card');
+  await js(win, `document.querySelector('[data-qa-universe-inspector] [data-asterion-close]').click()`);
+  await waitFor(win, `!document.querySelector('[data-qa-universe-inspector]')`);
+}
+
 async function framePace(win) {
   return js(win, `new Promise((resolve) => { let frames = 0; const start = performance.now(); const step = () => { frames += 1; if (performance.now() - start < 2000) requestAnimationFrame(step); else resolve(Math.round(frames / ((performance.now() - start) / 1000))); }; requestAnimationFrame(step); })`);
 }
@@ -365,6 +402,8 @@ async function runViewport(width, height) {
     await capture(win, directory, 'hover-position-22');
     await clearHover(win);
     console.log(`${label}: frames per second on the crowded system: ${await framePace(win)}`);
+    await checkShields(win, directory, worlds, label);
+    console.log(`${label}: frames per second with shields (relations system): ${await framePace(win)}`);
   } finally {
     win.destroy();
   }

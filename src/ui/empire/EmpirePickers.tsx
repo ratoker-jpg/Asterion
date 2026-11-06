@@ -183,7 +183,7 @@ export function ProductionPicker({ state, picker, mode, testTimeScale, now, onKi
                 <span>
                   <b>{item.name}</b>
                   <small>{item.unlocked
-                    ? `есть ${formatNumber(item.owned)}${item.pending ? ` · в очереди ${formatNumber(item.pending)}` : ''} · ${lacking.has(item.id) ? `по плану не хватает ${compactAmount(lacking.get(item.id)!)}` : `${countdown(item.unitMs)} за шт.`}`
+                    ? `есть ${formatNumber(item.owned + item.away)}${item.away ? ` (в рейсе ${formatNumber(item.away)})` : ''}${item.pending ? ` · в очереди ${formatNumber(item.pending)}` : ''} · ${lacking.has(item.id) ? `по плану не хватает ${compactAmount(lacking.get(item.id)!)}` : `${countdown(item.unitMs)} за шт.`}`
                     : item.reason ? localizeBuildingNames(item.reason, budget.factionId) : 'Пока недоступно'}</small>
                 </span>
                 {item.unlocked ? (

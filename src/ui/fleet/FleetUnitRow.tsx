@@ -28,6 +28,7 @@ export function FleetUnitRow({
   role,
   art,
   owned,
+  away = 0,
   pending,
   levelNode,
   cost,
@@ -49,6 +50,8 @@ export function FleetUnitRow({
   role: string;
   art: string;
   owned: number;
+  /** Own ships away that come back: still counted in «Есть». */
+  away?: number;
   pending: number;
   levelNode?: ReactNode;
   cost: FleetUnitCost;
@@ -88,9 +91,10 @@ export function FleetUnitRow({
         {levelNode}
       </div>
 
-      <div className={`fc-unit__stock${owned > 0 ? ' has-units' : ''}`}>
+      <div className={`fc-unit__stock${owned + away > 0 ? ' has-units' : ''}`}>
         <small>Есть</small>
-        <strong data-qa-unit-owned>{formatNumber(owned)}</strong>
+        <strong data-qa-unit-owned={owned + away}>{formatNumber(owned + away)}</strong>
+        {away > 0 ? <em className="is-away" data-qa-unit-away={away}>{formatNumber(away)} в рейсе</em> : null}
         {pending > 0 ? <em data-qa-unit-pending>+{formatNumber(pending)} строится</em> : null}
       </div>
 

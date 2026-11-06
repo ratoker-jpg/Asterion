@@ -14,6 +14,7 @@ import pirateWarlordArt from '../assets/source/characters/pirates/pirate_warlord
 import debrisIcon from './assets/ui/header-icons/debris.png';
 import './ui/universe/universe-radar.css';
 import './ui/universe/map-relations.css';
+import './ui/shield/shield.css';
 import { applyMapShield, classifyMapPlanet, type MapRelationStatus, type MapTone } from './application/map-relation.ts';
 import { placeMapTip } from './ui/universe/map-tip-placement.ts';
 import './ui/sun-raid/universe-sun.css';
@@ -487,7 +488,8 @@ function OwnerInspector({
         </section>
         <div className="star-atlas__status" data-qa-universe-map-status={mapStatus.tone}>
           <b><MapMark tone={mapStatus.tone} blocked={mapStatus.attackable === false} />{RELATION_WORD[relation]}{statusTail ? ` · ${statusTail}` : ''}</b>
-          {mapStatus.attackable === false && mapStatus.detail ? <p className="uw-foot-why">{mapStatus.detail}</p> : null}
+          {mapStatus.shieldLeft ? <p className="shield-badge" data-qa-atlas-shield><i className="shield-mark" aria-hidden="true" />Под щитом, ещё {mapStatus.shieldLeft}</p>
+            : mapStatus.attackable === false && mapStatus.detail ? <p className="uw-foot-why">{mapStatus.detail}</p> : null}
         </div>
       </div>
 
@@ -1155,7 +1157,7 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
                     <i aria-hidden="true" />{CLAIM_COPY[claim]}
                   </span> : null}
               {showSlotLabels ? <span className="planet-slot">{node.coordinate.position}</span> : null}
-              <span className="planet-name" data-qa-map-caption><MapMark tone={mapStatus.tone} blocked={mapStatus.attackable === false} />{caption}{mapStatus.shieldLeft ? <i className="shield-mark" title={`Щит, ещё ${mapStatus.shieldLeft}`} data-qa-map-shield /> : null}</span>
+              <span className="planet-name" data-qa-map-caption><MapMark tone={mapStatus.tone} blocked={mapStatus.attackable === false} />{caption}{mapStatus.shieldLeft ? <i className="shield-mark" aria-label={`Щит, ещё ${mapStatus.shieldLeft}`} data-qa-map-shield /> : null}</span>
               <span className="map-status-tip" data-map-status-tip data-qa-map-status-tip>
                 <strong>{node.name} <span>{coordinate}</span></strong>
                 <em><MapMark tone={mapStatus.tone} blocked={mapStatus.attackable === false} />{mapStatus.title}</em>
@@ -1188,10 +1190,10 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
         </button>
         <div className="universe-radar__list-body">
           {listedNodes.map(({ node, status }) => (
-            <button type="button" key={node.id} className={`universe-radar__row legend-${status.tone} ${selectedNodeId === node.id ? 'is-selected' : ''}`} onClick={() => selectNode(node)} onContextMenu={(event) => openQuick(node, event)}>
+            <button type="button" key={node.id} className={`universe-radar__row legend-${status.tone} ${selectedNodeId === node.id ? 'is-selected' : ''} ${status.shieldLeft ? 'is-shielded' : ''}`} onClick={() => selectNode(node)} onContextMenu={(event) => openQuick(node, event)}>
               <span className="universe-radar__pos">{node.coordinate.position}</span>
               <img src={node.art} alt="" draggable={false} />
-              <strong>{getUniverseNodeCaption(node, profile.displayName, owners.get(node.ownerId ?? '')?.displayName, owner.id)}{status.shieldLeft ? <i className="shield-mark" title={`Под щитом, ещё ${status.shieldLeft}`} data-qa-list-shield /> : null}</strong>
+              <strong>{getUniverseNodeCaption(node, profile.displayName, owners.get(node.ownerId ?? '')?.displayName, owner.id)}{status.shieldLeft ? <i className="shield-mark" aria-label={`Под щитом, ещё ${status.shieldLeft}`} data-qa-list-shield /> : null}</strong>
               <i aria-hidden="true"><MapMark tone={status.tone} blocked={status.attackable === false} /></i>
             </button>
           ))}

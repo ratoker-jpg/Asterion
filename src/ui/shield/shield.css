@@ -11,12 +11,33 @@
 .shield-ctl--compact small { display: none; }
 .shield-mark { display: inline-block; width: 9px; height: 11px; margin-left: 4px; vertical-align: -1px; background: #5fe6a8; clip-path: polygon(50% 0, 100% 18%, 100% 55%, 50% 100%, 0 55%, 0 18%); }
 
-/* Map: a soft bubble around a shielded planet. Only opacity and transform move; stills under reduced motion. */
-.shield-aura { position: absolute; inset: -14%; border-radius: 50%; pointer-events: none; z-index: 0;
-  background: radial-gradient(circle, transparent 58%, color-mix(in srgb, #5fe6a8 16%, transparent) 70%, color-mix(in srgb, #7ff0ff 34%, transparent) 78%, transparent 80%);
-  box-shadow: 0 0 14px color-mix(in srgb, #5fe6a8 38%, transparent), inset 0 0 12px color-mix(in srgb, #7ff0ff 22%, transparent);
-  border: 1px solid color-mix(in srgb, #7ff0ff 45%, transparent); animation: shield-aura-breath 3.6s ease-in-out infinite; }
-@keyframes shield-aura-breath { 0%, 100% { opacity: .6; transform: scale(.98); } 50% { opacity: 1; transform: scale(1.03); } }
-@media (prefers-reduced-motion: reduce) { .shield-aura { animation: none; opacity: .85; } }
-.shield-badge { display: inline-flex; align-items: center; gap: 4px; color: #5fe6a8; font-weight: 700; }
+/* Map: a glowing dome around a shielded planet (owner 06.11: the thin ring was barely visible).
+   A tinted glass cap over the planet, a bright rim, an outer glow and a slow shimmer
+   running round the rim. Only opacity and transform move; stills under reduced motion. */
+.shield-aura { position: absolute; left: 50%; top: -18px; width: 124px; height: 124px; margin-left: -62px; border-radius: 50%;
+  pointer-events: none; z-index: 2;
+  background:
+    radial-gradient(ellipse 46% 30% at 38% 26%, rgba(235, 255, 255, .34), transparent 70%),
+    radial-gradient(circle, rgba(150, 245, 255, .12) 0 50%, rgba(150, 245, 255, .22) 68%, rgba(190, 252, 255, .85) 80%, rgba(150, 245, 255, .32) 84%, rgba(150, 245, 255, .1) 90%, transparent 95%);
+  box-shadow: 0 0 26px 4px rgba(120, 236, 255, .5), 0 0 60px 10px rgba(120, 236, 255, .18), inset 0 0 22px rgba(170, 250, 255, .35);
+  animation: shield-aura-breath 3.8s ease-in-out infinite; }
+.shield-aura::before { content: ''; position: absolute; inset: 0; border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0 58%, rgba(255, 255, 255, .95) 70%, transparent 82% 100%);
+  -webkit-mask: radial-gradient(circle, transparent 0 74%, #000 79%, #000 82%, transparent 90%); mask: radial-gradient(circle, transparent 0 74%, #000 79%, #000 82%, transparent 90%);
+  animation: shield-aura-spin 6s linear infinite; }
+.shield-aura::after { content: ''; position: absolute; inset: 9%; border-radius: 50%; opacity: .5;
+  background: repeating-conic-gradient(from 15deg, rgba(190, 252, 255, .14) 0 2deg, transparent 2deg 30deg);
+  -webkit-mask: radial-gradient(circle, transparent 0 40%, #000 85%); mask: radial-gradient(circle, transparent 0 40%, #000 85%); }
+@keyframes shield-aura-breath { 0%, 100% { opacity: .78; transform: scale(.985); } 50% { opacity: 1; transform: scale(1.025); } }
+@keyframes shield-aura-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .shield-aura, .shield-aura::before { animation: none; } }
+.shield-mark { background: #9ff6ff; }
+.system-planet:has(> .shield-aura) > :is(.planet-name, .planet-slot, .universe-map-occupancy, .universe-debris-marker) { z-index: 3; }
+.shield-mark { filter: drop-shadow(0 0 3px rgba(120, 236, 255, .95)); }
+
+/* Star Atlas list: the same dome in small around the planet. */
+.universe-radar .universe-radar__row.is-shielded img { border-radius: 50%;
+  background: radial-gradient(circle, rgba(150, 245, 255, .12) 0 56%, rgba(150, 245, 255, .25) 74%, rgba(190, 252, 255, .8) 88%, transparent 98%);
+  box-shadow: 0 0 10px 2px rgba(120, 236, 255, .6); }
+.shield-badge { display: inline-flex; align-items: center; gap: 4px; color: #9ff6ff; font-weight: 700; }
 .universe-radar__row .shield-mark { margin-left: 6px; }

@@ -157,6 +157,40 @@ async function updateAllianceThroughCommand(win) {
   await settle(win);
 }
 
+const UNREAD_BADGE_EXPR = `Number(document.querySelector('[data-qa-navigation="primary"] [data-qa-route="reports"] .asterion-header__nav-badge')?.textContent?.replace(/\D/g, '') || 0)`;
+async function unreadBadge(win) {
+  return win.webContents.executeJavaScript(UNREAD_BADGE_EXPR);
+}
+
+/**
+ * Owner rule (06.11): «Отметить все прочитанными» reads every message in every
+ * section, more than the 500 ids the read list keeps, and the badges drop to 0.
+ */
+async function checkMarkAllRead(win, directory, label) {
+  const now = Date.now();
+  const many = Array.from({ length: 600 }, (_, index) => ({
+    id: `recycler-arrival:qa-bulk-${index}`, flightId: `qa-bulk-${index}`, coordinate: { galaxy: 1, system: 2, position: 1 + (index % 15) },
+    arrivedAtMs: now - (index + 1) * 60_000, collectedDebris: index, remainingOrbitalDebris: 0,
+  }));
+  await editSaveAndReload(win, `(() => {
+    const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+    save.reports = { ...(save.reports || {}), readIds: [], readUpTo: undefined, recyclerArrivalReports: ${JSON.stringify(many)} };
+    localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+    return true;
+  })()`, `${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}').reports?.recyclerArrivalReports?.length === 600`);
+  await clickPrimary(win, 'reports');
+  const folderSum = `Array.from(document.querySelectorAll('[data-message-folder] .reports-v2-unread-count')).map((node) => Number(node.textContent || 0)).reduce((sum, count) => sum + count, 0)`;
+  const before = await win.webContents.executeJavaScript(folderSum);
+  if (before < 600) throw new Error(`Mark-all fixture did not show 600+ unread at ${label}: ${before}`);
+  await win.webContents.executeJavaScript(`document.querySelector('[data-qa-mark-all-read]')?.click()`);
+  await waitFor(win, `!document.querySelector('[data-qa-navigation="primary"] [data-qa-route="reports"] .asterion-header__nav-badge')`);
+  const folderUnread = await win.webContents.executeJavaScript(folderSum);
+  if (folderUnread !== 0) throw new Error(`Mark-all left unread counts in sections at ${label}: ${folderUnread}`);
+  await capture(win, directory, 'mark-all-read');
+  await reload(win);
+  if (await unreadBadge(win) !== 0) throw new Error(`Mark-all did not survive a reload at ${label}: ${await unreadBadge(win)}`);
+}
+
 async function clickFolder(win, id) {
   const clicked = await win.webContents.executeJavaScript(`(() => {
     const button = document.querySelector('[data-message-folder="${id}"]');
@@ -363,13 +397,17 @@ async function runViewport(win, width, height) {
 
   // Extraction messages were moved to Flights while retaining their stable IDs.
   // Keep the overpopulation assertion in System, then verify both arrivals in Flights.
+  const beforeFlights = await unreadBadge(win);
+  if (beforeFlights !== initialUnreadBadge + 3) throw new Error(`Unread badge before Flights at ${label}: expected ${initialUnreadBadge + 3}, got ${beforeFlights}`);
   await clickFolder(win, 'flights');
+  // Owner rule (06.11): the message opened on entering a section is read at once.
+  await waitFor(win, `document.querySelector('.reports-list-item.active.read')`);
+  await waitFor(win, `${UNREAD_BADGE_EXPR} === ${beforeFlights - 1}`);
   for (const [index, report] of recyclerArrivalReports.entries()) {
     const selector = `[data-report-item-id="${report.id}"] .reports-list-open`;
     await waitFor(win, `document.querySelector(${JSON.stringify(selector)})`);
-    const unreadBefore = String(initialUnreadBadge + 3 - index);
-    const currentBadge = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-navigation="primary"] [data-qa-route="reports"] .asterion-header__nav-badge')?.textContent?.trim() ?? ''`);
-    if (currentBadge !== unreadBefore) throw new Error(`Recycler unread badge before reading ${report.id} at ${label}: expected ${unreadBefore}, got ${currentBadge || 'none'}`);
+    const wasUnread = await win.webContents.executeJavaScript(`Boolean(document.querySelector('[data-report-item-id="${report.id}"]')?.classList.contains('unread'))`);
+    const badgeBefore = await unreadBadge(win);
     const opened = await win.webContents.executeJavaScript(`(() => {
       const button = document.querySelector(${JSON.stringify(selector)});
       if (!button) return false;
@@ -377,12 +415,7 @@ async function runViewport(win, width, height) {
       return true;
     })()`);
     if (!opened) throw new Error(`Recycler arrival report row could not be opened at ${label}: ${report.id}`);
-    const expectedUnread = String(initialUnreadBadge + 2 - index);
-    if (expectedUnread === '0') {
-      await waitFor(win, `!document.querySelector('[data-qa-navigation="primary"] [data-qa-route="reports"] .asterion-header__nav-badge')`);
-    } else {
-      await waitFor(win, `document.querySelector('[data-qa-navigation="primary"] [data-qa-route="reports"] .asterion-header__nav-badge')?.textContent?.trim() === ${JSON.stringify(expectedUnread)}`);
-    }
+    await waitFor(win, `${UNREAD_BADGE_EXPR} === ${badgeBefore - (wasUnread ? 1 : 0)} && document.querySelector('[data-report-item-id="${report.id}"]')?.classList.contains('read')`);
     await waitFor(win, `document.querySelector('.reports-dossier--generic')?.textContent?.includes(${JSON.stringify(`[${report.coordinate.galaxy}:${report.coordinate.system}:${report.coordinate.position}]`)})`);
     const dossier = await win.webContents.executeJavaScript(`(() => {
       const node = document.querySelector('.reports-dossier--generic');
@@ -413,8 +446,8 @@ async function runViewport(win, width, height) {
   }
   const gasReportSelector = `[data-report-item-id="${gasExtractionArrivalReport.id}"] .reports-list-open`;
   await waitFor(win, `document.querySelector(${JSON.stringify(gasReportSelector)})`);
-  const gasUnreadBefore = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-navigation="primary"] [data-qa-route="reports"] .asterion-header__nav-badge')?.textContent?.trim() ?? ''`);
-  if (gasUnreadBefore !== String(initialUnreadBadge + 1)) throw new Error(`Gas extraction unread badge before reading at ${label}: expected ${initialUnreadBadge + 1}, got ${gasUnreadBefore || 'none'}`);
+  const gasWasUnread = await win.webContents.executeJavaScript(`Boolean(document.querySelector('[data-report-item-id="${gasExtractionArrivalReport.id}"]')?.classList.contains('unread'))`);
+  const gasUnreadBefore = await unreadBadge(win);
   await win.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(gasReportSelector)})?.click()`);
   await waitFor(win, `document.querySelector(${JSON.stringify(gasReportSelector)})?.getAttribute('aria-current') === 'true' && document.querySelector('.reports-dossier--generic')?.textContent?.includes('Астероид не найден по координатам [2:19:5]')`);
   const gasDossier = await win.webContents.executeJavaScript(`(() => {
@@ -432,8 +465,7 @@ async function runViewport(win, width, height) {
     throw new Error(`Gas extraction report dossier contract failed at ${label}: ${JSON.stringify(gasDossier)}`);
   }
   // An empty badge is not rendered, exactly as the recycler loop above expects.
-  const gasUnreadAfter = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-navigation="primary"] [data-qa-route="reports"] .asterion-header__nav-badge')?.textContent?.trim() ?? ''`);
-  if (gasUnreadAfter !== (initialUnreadBadge === 0 ? '' : String(initialUnreadBadge))) throw new Error(`Gas extraction report did not clear its unread count at ${label}: expected ${initialUnreadBadge}, got ${gasUnreadAfter || 'none'}`);
+  await waitFor(win, `${UNREAD_BADGE_EXPR} === ${gasUnreadBefore - (gasWasUnread ? 1 : 0)}`);
   await win.webContents.executeJavaScript(`new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
   await capture(win, directory, 'gas-extraction-arrival');
   await clickPrimary(win, 'universe', `document.querySelector('[data-qa-universe]')`);
@@ -580,6 +612,8 @@ async function runViewport(win, width, height) {
     return !visible && Boolean(document.querySelector('[data-qa-delete-selected]')?.disabled);
   })()`);
   if (!persisted || !reloaded.reports?.hiddenIds?.includes(`battle:${canonicalBattleId}`)) throw new Error(`Tombstone reload failed at ${label}: ${JSON.stringify({ persisted, reports: reloaded.reports })}`);
+
+  await checkMarkAllRead(win, directory, label);
 
   return { viewport: label, profile, overpopulationDossier, initialRating, updatedProfile, updatedRating, reloadedProfile, reloadedRating, metricFocus, allianceBefore, canonicalBattleId, horizontalOverflow: profile.horizontalOverflow || profile.bodyHorizontalOverflow };
 }

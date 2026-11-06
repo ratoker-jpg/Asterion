@@ -20,6 +20,7 @@ import {
   getReportCategoryCounts,
   getReportUnreadCounts,
   getVisibleReportItems,
+  reportReadCheck,
   preservePersistentReportCollections,
   dropExpiredReportItems,
 } from './domain/reports/adapters.ts';
@@ -650,7 +651,8 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
   const activeFolderMeta = MESSAGE_FOLDERS.find((folder) => folder.id === activeFolder) ?? MESSAGE_FOLDERS[0];
   const activeCategory = activeFolderMeta.category;
   const folderItems = useMemo(() => activeCategory ? getVisibleReportItems(items, state).filter((item) => item.category === activeCategory) : [], [activeCategory, items, state]);
-  const visibleItems = useMemo(() => activeCategory ? filterReportItems(items, state, { category: activeCategory, filter, search }, savedBattleReportIds) : [], [activeCategory, items, state, filter, search, savedBattleReportIds]);
+  const isRead = useMemo(() => reportReadCheck(state), [state]);
+  const visibleItems = useMemo(() => activeCategory ? filterReportItems(items, state, { category: activeCategory, filter, search, keepId: selectedId || undefined }, savedBattleReportIds) : [], [activeCategory, items, state, filter, search, selectedId, savedBattleReportIds]);
   const recentProfileItems = getVisibleReportItems(items, state).slice(0, 3);
   const pageCount = Math.max(1, Math.ceil(visibleItems.length / PAGE_SIZE));
   const pagedItems = visibleItems.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -734,8 +736,13 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
     setSelectedId(item.id);
     const index = visibleItems.findIndex((candidate) => candidate.id === item.id);
     if (index >= 0) setPage(Math.floor(index / PAGE_SIZE) + 1);
-    if (!state.readIds.includes(item.id)) onStateChange(withOverpopulationReports(markReportRead(state, item.id), state));
+    if (!isRead(item)) onStateChange(withOverpopulationReports(markReportRead(state, item.id), state));
   };
+  // Owner rule (06.11.2026): what is open in the reading pane is read, the first
+  // message opened on entering a section included; no extra click.
+  useEffect(() => {
+    if (selectedItem && !isRead(selectedItem)) onStateChange(withOverpopulationReports(markReportRead(state, selectedItem.id), state));
+  }, [selectedItem, isRead, state, onStateChange]);
 
   const navigateSelected = (direction: -1 | 1) => {
     if (!visibleItems.length) return;
@@ -769,6 +776,7 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
   const selectedIndex = selectedItem ? visibleItems.findIndex((item) => item.id === selectedItem.id) : -1;
   const availableFilters: ReportFilter[] = activeCategory === 'battle' ? ['all', 'unread', 'saved'] : ['all', 'unread'];
   const markableItems = getVisibleReportItems(items, state);
+  const markAll = () => onStateChange(withOverpopulationReports(markAllReportsRead(state, markableItems), state));
 
   return (
     <main className={`reports-view reports-v2 ${activeFolder === 'profile' ? 'reports-view--profile' : 'reports-view--folder'}`} aria-label="Центр сообщений Asterion">
@@ -782,7 +790,7 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
             return <button key={folder.id} type="button" data-message-folder={folder.id} className={activeFolder === folder.id ? 'active' : ''} onClick={() => openFolder(folder.id)} aria-current={activeFolder === folder.id ? 'page' : undefined} aria-label={`${folder.label}: ${unread} непрочитанных из ${total}`}><span className="reports-v2-art reports-v2-nav-art"><ReportGlyph kind={folder.glyph} /></span><strong>{folder.label}</strong>{folder.count ? <b className={`reports-v2-unread-count ${unread > 0 ? 'is-new' : ''}`} aria-label={`${unread} непрочитанных`}>{unread}</b> : <b className="reports-folder-action-label">+</b>}{unread > 0 ? <i className="reports-category-unread" title={`${unread} непрочитанных`} /> : null}</button>;
           })}
         </nav>
-        <button className="reports-mark-all" type="button" disabled={!markableItems.some((item) => !state.readIds.includes(item.id))} onClick={() => onStateChange(withOverpopulationReports(markAllReportsRead(state, markableItems.map((item) => item.id)), state))}><span>✓</span> ОТМЕТИТЬ ВСЕ ПРОЧИТАННЫМИ</button>
+        <button className="reports-mark-all" type="button" data-qa-mark-all-read disabled={!markableItems.some((item) => !isRead(item))} onClick={markAll}><span>✓</span> ОТМЕТИТЬ ВСЕ ПРОЧИТАННЫМИ</button>
       </aside>
 
       {activeFolder === 'profile' ? <PlayerProfile profile={profile} score={score} command={command} mode={mode} recentItems={recentProfileItems} onOpenCommand={onOpenCommand} /> : <section className="reports-folder-workspace" data-qa-folder-view={activeFolder}>
@@ -791,7 +799,7 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
           {activeCategory ? <FolderActions folder={activeFolderMeta} items={folderItems} selectedIds={selectedIds} onSelectAll={selectAll} onDeleteAll={deleteAll} onDeleteSelected={deleteSelected} /> : null}
           {activeCategory ? <label className="reports-search"><span aria-hidden="true"><SearchGlyph /></span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск в разделе..." aria-label="Поиск в разделе сообщений" /></label> : null}
           <div className="reports-list" data-qa-message-list>
-            {activeCategory ? pagedItems.length ? pagedItems.map((item) => <ReportListItem key={item.id} item={item} active={item.id === selectedId} read={state.readIds.includes(item.id)} selected={selectedIds.has(item.id)} saved={Boolean(item.battleReportId && savedBattleReportIds.includes(item.battleReportId))} onOpen={() => openItem(item)} onSelect={(checked) => toggleSelected(item.id, checked)} />) : <p className="reports-list-empty-status" role="status">Сообщений в этом разделе пока нет.</p> : <EmptyFolder folder={activeFolderMeta} />}
+            {activeCategory ? pagedItems.length ? pagedItems.map((item) => <ReportListItem key={item.id} item={item} active={item.id === selectedId} read={isRead(item)} selected={selectedIds.has(item.id)} saved={Boolean(item.battleReportId && savedBattleReportIds.includes(item.battleReportId))} onOpen={() => openItem(item)} onSelect={(checked) => toggleSelected(item.id, checked)} />) : <p className="reports-list-empty-status" role="status">Сообщений в этом разделе пока нет.</p> : <EmptyFolder folder={activeFolderMeta} />}
           </div>
           {activeCategory ? <footer className="reports-pagination"><button type="button" aria-label="Предыдущая страница" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}><ActionGlyph kind="prev" /></button><span><b>{page}</b> / {pageCount}<small>{visibleItems.length} сообщений</small></span><button type="button" aria-label="Следующая страница" disabled={page >= pageCount} onClick={() => setPage((current) => Math.min(pageCount, current + 1))}><ActionGlyph kind="next" /></button></footer> : null}
         </section>

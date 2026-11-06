@@ -479,13 +479,30 @@ function searchableText(item: ReportItem) {
   ].join(' ').toLocaleLowerCase('ru-RU');
 }
 
+/**
+ * Owner rule (06.11.2026): a message is read when it was opened, or when it is
+ * not newer than the last «Отметить все прочитанными». The watermark covers any
+ * number of messages; the id list alone is capped and would let old mail turn
+ * unread again.
+ */
+export function reportReadCheck(state: ReportsState): (item: ReportItem) => boolean {
+  const read = new Set(state.readIds);
+  const upTo = state.readUpTo ? Date.parse(state.readUpTo) : Number.NaN;
+  return (item) => {
+    if (read.has(item.id)) return true;
+    if (!Number.isFinite(upTo) || !item.timestamp) return false;
+    const at = Date.parse(item.timestamp);
+    return Number.isFinite(at) && at <= upTo;
+  };
+}
+
 export function filterReportItems(
   items: readonly ReportItem[],
   state: ReportsState,
   query: ReportQuery,
   savedBattleReportIds: readonly string[] = [],
 ) {
-  const read = new Set(state.readIds);
+  const isRead = reportReadCheck(state);
   const saved = new Set(savedBattleReportIds);
   const needle = query.search.trim().toLocaleLowerCase('ru-RU');
   const hidden = new Set(state.hiddenIds);
@@ -493,7 +510,7 @@ export function filterReportItems(
   return items.filter((item) => {
     if (hidden.has(item.id)) return false;
     if (item.category !== query.category) return false;
-    if (query.filter === 'unread' && read.has(item.id)) return false;
+    if (query.filter === 'unread' && isRead(item) && item.id !== query.keepId) return false;
     if (query.filter === 'saved' && (!item.battleReportId || !saved.has(item.battleReportId))) return false;
     if (needle && !searchableText(item).includes(needle)) return false;
     return true;
@@ -513,9 +530,9 @@ export function getReportCategoryCounts(items: readonly ReportItem[], state?: Re
 
 export function getReportUnreadCounts(items: readonly ReportItem[], state: ReportsState): ReportUnreadCounts {
   const counts = EMPTY_COUNTS() as ReportUnreadCounts;
-  const read = new Set(state.readIds);
+  const isRead = reportReadCheck(state);
   getVisibleReportItems(items, state).forEach((item) => {
-    if (!read.has(item.id)) counts[item.category] += 1;
+    if (!isRead(item)) counts[item.category] += 1;
   });
   return counts;
 }

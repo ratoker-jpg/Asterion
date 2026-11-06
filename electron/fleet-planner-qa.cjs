@@ -383,8 +383,19 @@ async function runViewport(win, directory) {
   const flying = await run(win, `Number(document.querySelector('[data-qa-fleet-plan-line="scout"] [data-qa-fleet-plan-line-away]')?.dataset.qaFleetPlanLineAway ?? 0)`);
   check(flying === 60, 'A fleet on a mission shows as «в рейсе»', { flying, result: await run(win, 'window.__planFlight') });
   check((await lineData(win, 'scout'))?.missing === 120, 'A fleet on a mission is not ordered again', await lineData(win, 'scout'));
+  // Owner rule (06.11): ships away are the planet's own, so the line reads «есть» with them.
+  const flyingTotal = await run(win, `Number(document.querySelector('[data-qa-fleet-plan-line="scout"] [data-qa-fleet-plan-line-total]')?.dataset.qaFleetPlanLineTotal ?? -1)`);
+  check(flyingTotal === (await lineData(win, 'scout'))?.current, 'The line total counts ships in flight', { flyingTotal });
   await checkLayout(win, '23-fleet-in-flight');
   await capture(win, directory, '23-fleet-in-flight');
+  await click(win, '[data-qa-fleet-planner-close]');
+  await click(win, '[data-qa-planet-section="empire"]');
+  await waitFor(win, `document.querySelector('[data-qa-empire-ship-total]')`);
+  await click(win, `[data-qa-empire-more="${HOME}"]`);
+  await settle(win, 600);
+  const empireTotal = await run(win, `Number(document.querySelector('[data-qa-empire-row="${HOME}"] [data-qa-empire-ship-total]')?.dataset.qaEmpireShipTotal ?? 0)`);
+  check(empireTotal === Object.values(fleet).reduce((sum, count) => sum + count, 0) - (fleet['solar-satellite'] ?? 0), 'Империя counts ships in flight in the planet fleet', { empireTotal });
+  await capture(win, directory, '23b-empire-fleet-in-flight');
 
   // A stress beyond the catalogue: 24 lines (the game has 13), the list scrolls and nothing breaks.
   await seed(win, { ships: fleet, plans: homePlan({ targets: Object.fromEntries(ALL_SHIPS.map((id, index) => [id, 500 + index * 700])) }) });
