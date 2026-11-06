@@ -8,9 +8,9 @@ import {
  * Passive counters for the bot lab (never read by a game rule): how often the
  * shield turned something away. Reset by the tool that measures.
  */
-export const SHIELD_TELEMETRY = { activations: 0, attacksBlocked: 0, bounces: 0, lootWithheld: 0 };
+export const SHIELD_TELEMETRY = { activations: 0, attacksBlocked: 0, bounces: 0, lootWithheld: 0, reasons: {} as Record<string, number> };
 export function resetShieldTelemetry(): void {
-  SHIELD_TELEMETRY.activations = 0; SHIELD_TELEMETRY.attacksBlocked = 0; SHIELD_TELEMETRY.bounces = 0; SHIELD_TELEMETRY.lootWithheld = 0;
+  SHIELD_TELEMETRY.activations = 0; SHIELD_TELEMETRY.attacksBlocked = 0; SHIELD_TELEMETRY.bounces = 0; SHIELD_TELEMETRY.lootWithheld = 0; SHIELD_TELEMETRY.reasons = {};
 }
 
 /** Missions that hurt someone: forbidden for a shielded owner. Spying, transport, deployment stay open. */
@@ -72,11 +72,12 @@ export function checkShieldActivation(state: SaveState, ownerId: string, at: num
   return { ok: true };
 }
 
-export function activateShield(state: SaveState, ownerId: string, at: number): { ok: true; state: SaveState } | { ok: false; code: ShieldActivationBlock; message: string } {
+export function activateShield(state: SaveState, ownerId: string, at: number, reason?: string): { ok: true; state: SaveState } | { ok: false; code: ShieldActivationBlock; message: string } {
   const check = checkShieldActivation(state, ownerId, at);
   if (!check.ok) return check;
   SHIELD_TELEMETRY.activations += 1;
-  const record = createShieldRecord(state.worldConfig?.world.campaignSpeed, at);
+  if (reason) SHIELD_TELEMETRY.reasons[reason] = (SHIELD_TELEMETRY.reasons[reason] ?? 0) + 1;
+  const record = createShieldRecord(state.worldConfig?.world.campaignSpeed, at, reason);
   return { ok: true, state: { ...state, shields: { ...(state.shields ?? {}), [ownerId]: record } } };
 }
 

@@ -100,7 +100,7 @@ export function applyMapShield(
   const own = seen(shields[attackerOwnerId]);
   const shieldLeft = theirs.phase === 'active' ? formatShieldRemaining(theirs.remainingMs) : undefined;
   if (status.attackable !== true) return shieldLeft ? { ...status, shieldLeft } : status;
-  if (shieldLeft) return { ...status, attackable: false, detail: `Планета под щитом, ещё ${shieldLeft}`, shieldLeft };
+  if (shieldLeft) return { ...status, attackable: false, detail: `Под щитом, ещё ${shieldLeft}`, shieldLeft };
   if (own.phase === 'active') return { ...status, attackable: false, detail: `Ваш щит активен, ещё ${formatShieldRemaining(own.remainingMs)}: нападать нельзя` };
   return status;
 }

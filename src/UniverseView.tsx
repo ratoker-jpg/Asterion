@@ -1147,6 +1147,7 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
               onContextMenu={(event) => openQuick(node, event)}
             >
               {claim ? <span className={`uv-claim-ring uv-claim-ring--${claim}`} aria-hidden="true" /> : null}
+              {mapStatus.shieldLeft ? <span className="shield-aura" aria-hidden="true" data-qa-map-shield-aura /> : null}
               <img src={node.art} alt="" draggable={false} />
               {claim
                 ? <span className={'universe-map-occupancy universe-map-occupancy--' + claim}
@@ -1158,7 +1159,8 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
               <span className="map-status-tip" data-map-status-tip data-qa-map-status-tip>
                 <strong>{node.name} <span>{coordinate}</span></strong>
                 <em><MapMark tone={mapStatus.tone} blocked={mapStatus.attackable === false} />{mapStatus.title}</em>
-                {mapStatus.detail ? <span className="map-status-tip__why">{mapStatus.detail}</span> : null}
+                {mapStatus.shieldLeft ? <span className="shield-badge" data-qa-map-shield-badge><i className="shield-mark" aria-hidden="true" />Под щитом, ещё {mapStatus.shieldLeft}</span> : null}
+                {mapStatus.detail && !mapStatus.shieldLeft ? <span className="map-status-tip__why">{mapStatus.detail}</span> : null}
               </span>
               {orbitalDebris > 0 && showDebris ? <span className="universe-debris-marker"><DebrisChip label={compactAmount(orbitalDebris)} /><span className="universe-debris-tooltip" id={`universe-debris-tooltip-${node.id}`} role="tooltip">Обломки на орбите: {numberFormat.format(orbitalDebris)}</span></span> : null}
             </button>
@@ -1189,7 +1191,7 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
             <button type="button" key={node.id} className={`universe-radar__row legend-${status.tone} ${selectedNodeId === node.id ? 'is-selected' : ''}`} onClick={() => selectNode(node)} onContextMenu={(event) => openQuick(node, event)}>
               <span className="universe-radar__pos">{node.coordinate.position}</span>
               <img src={node.art} alt="" draggable={false} />
-              <strong>{getUniverseNodeCaption(node, profile.displayName, owners.get(node.ownerId ?? '')?.displayName, owner.id)}</strong>
+              <strong>{getUniverseNodeCaption(node, profile.displayName, owners.get(node.ownerId ?? '')?.displayName, owner.id)}{status.shieldLeft ? <i className="shield-mark" title={`Под щитом, ещё ${status.shieldLeft}`} data-qa-list-shield /> : null}</strong>
               <i aria-hidden="true"><MapMark tone={status.tone} blocked={status.attackable === false} /></i>
             </button>
           ))}

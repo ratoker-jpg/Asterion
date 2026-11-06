@@ -32,6 +32,8 @@ export type ShieldRecord = Readonly<{
   activeUntil: number;
   /** The next activation is allowed from here (activeUntil + cooldown). */
   readyAt: number;
+  /** Why an NPC raised it (journal / lab only); the player's has none. */
+  reason?: string;
 }>;
 
 export type ShieldStatus =
@@ -50,9 +52,9 @@ export function isShieldActive(record: ShieldRecord | undefined, at: number): bo
   return shieldStatus(record, at).phase === 'active';
 }
 
-export function createShieldRecord(speed: CampaignSpeed | undefined, at: number): ShieldRecord {
+export function createShieldRecord(speed: CampaignSpeed | undefined, at: number, reason?: string): ShieldRecord {
   const { durationMs, cooldownMs } = shieldTiming(speed);
-  return { activatedAt: at, activeUntil: at + durationMs, readyAt: at + durationMs + cooldownMs };
+  return { activatedAt: at, activeUntil: at + durationMs, readyAt: at + durationMs + cooldownMs, ...(reason ? { reason } : {}) };
 }
 
 export function migrateShieldRecord(value: unknown): ShieldRecord | undefined {
@@ -61,7 +63,7 @@ export function migrateShieldRecord(value: unknown): ShieldRecord | undefined {
   const [a, u, r] = [raw.activatedAt, raw.activeUntil, raw.readyAt];
   if (typeof a !== 'number' || typeof u !== 'number' || typeof r !== 'number'
     || !Number.isFinite(a) || !Number.isFinite(u) || !Number.isFinite(r) || u < a || r < u) return undefined;
-  return { activatedAt: Math.floor(a), activeUntil: Math.floor(u), readyAt: Math.floor(r) };
+  return { activatedAt: Math.floor(a), activeUntil: Math.floor(u), readyAt: Math.floor(r), ...(typeof raw.reason === 'string' ? { reason: raw.reason.slice(0, 40) } : {}) };
 }
 
 /** «00:42» for under an hour, «2:05:09» otherwise (minutes:seconds / hours:minutes:seconds). */

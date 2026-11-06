@@ -10,3 +10,13 @@
 .shield-ctl--compact.shield-ctl--ready span { display: none; }
 .shield-ctl--compact small { display: none; }
 .shield-mark { display: inline-block; width: 9px; height: 11px; margin-left: 4px; vertical-align: -1px; background: #5fe6a8; clip-path: polygon(50% 0, 100% 18%, 100% 55%, 50% 100%, 0 55%, 0 18%); }
+
+/* Map: a soft bubble around a shielded planet. Only opacity and transform move; stills under reduced motion. */
+.shield-aura { position: absolute; inset: -14%; border-radius: 50%; pointer-events: none; z-index: 0;
+  background: radial-gradient(circle, transparent 58%, color-mix(in srgb, #5fe6a8 16%, transparent) 70%, color-mix(in srgb, #7ff0ff 34%, transparent) 78%, transparent 80%);
+  box-shadow: 0 0 14px color-mix(in srgb, #5fe6a8 38%, transparent), inset 0 0 12px color-mix(in srgb, #7ff0ff 22%, transparent);
+  border: 1px solid color-mix(in srgb, #7ff0ff 45%, transparent); animation: shield-aura-breath 3.6s ease-in-out infinite; }
+@keyframes shield-aura-breath { 0%, 100% { opacity: .6; transform: scale(.98); } 50% { opacity: 1; transform: scale(1.03); } }
+@media (prefers-reduced-motion: reduce) { .shield-aura { animation: none; opacity: .85; } }
+.shield-badge { display: inline-flex; align-items: center; gap: 4px; color: #5fe6a8; font-weight: 700; }
+.universe-radar__row .shield-mark { margin-left: 6px; }
