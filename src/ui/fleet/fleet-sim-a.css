@@ -121,3 +121,17 @@
 @media (prefers-reduced-motion:reduce){
   .fleet-workspace-v1 .sim-a *{animation:none !important}
 }
+
+/* round 2: no frames inside frames, readable states */
+.fleet-workspace-v1 .sim-a .sim-side-v1,
+.fleet-workspace-v1 .sim-a .sim-validation-v1,
+.fleet-workspace-v1 .sim-a .sim-population-v1,
+.fleet-workspace-v1 .sim-a .sim-presets-v1{border:0 !important;background:none !important;box-shadow:none !important;clip-path:none !important;padding-left:0 !important;padding-right:0 !important}
+.fleet-workspace-v1 .sim-a .sim-side-v1::before,.fleet-workspace-v1 .sim-a .sim-side-v1::after,
+.fleet-workspace-v1 .sim-a .sim-validation-v1::before,.fleet-workspace-v1 .sim-a .sim-validation-v1::after{display:none !important}
+.fleet-workspace-v1 .sim-a .sim-validation-v1{flex-wrap:wrap}
+.fleet-workspace-v1 .sim-a .sim-population-v1 *{color:var(--sm) !important;text-transform:none !important}
+.fleet-workspace-v1 .sim-a .sim-population-v1 strong,.fleet-workspace-v1 .sim-a .sim-population-v1 b{color:#fff !important}
+.fleet-workspace-v1 .sim-a .sim-a-chips select{max-width:none !important;width:auto !important}
+.fleet-workspace-v1 .sim-a-tile>small{display:none}
+.fleet-workspace-v1 .sim-a .sim-run-v1:disabled{opacity:1 !important;background:rgba(8,16,28,.9) !important;color:#9fb3c6 !important}

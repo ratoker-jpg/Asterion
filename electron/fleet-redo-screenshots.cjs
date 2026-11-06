@@ -324,6 +324,8 @@ async function catalogueScenes(win, directory, label) {
     input.dispatchEvent(new Event('blur', { bubbles: true }));
     return true;
   })()`);
+  await seed(win, { mutate: 'save.science.levels = {};' });
+  await openSection(win, 'simulator', '.simulator-view-v1');
   for (const [side, id, value] of [['attacker', 'cruiser', 500], ['attacker', 'battleship', 430], ['attacker', 'destroyer', 167], ['attacker', 'scout', 94], ['defender', 'cruiser', 300], ['defender', 'battleship', 260], ['defender', 'destroyer', 80]]) await setSim(side, id, value);
   await settle(win);
   await shot('simulator-02-editing');
