@@ -38,8 +38,9 @@ export function flightOwnerId(state: SaveState, flight: FlightRecord): string | 
 }
 
 /** Hostile flights of the owner still heading out; they must be recalled before the shield goes up. */
-export function ownerOutboundHostileFlights(state: SaveState, ownerId: string): FlightRecord[] {
-  return (state.flights?.records ?? []).filter((flight) => flight.phase === 'outbound'
+export function ownerOutboundHostileFlights(state: SaveState, ownerId: string, at: number): FlightRecord[] {
+  // A flight whose arrival time has passed is no longer en route, whether or not it was reconciled yet (chunk-size independent).
+  return (state.flights?.records ?? []).filter((flight) => flight.phase === 'outbound' && flight.arrivalAt > at
     && isHostileMission(flight.missionId) && flightOwnerId(state, flight) === ownerId);
 }
 
@@ -65,7 +66,7 @@ export function checkShieldActivation(state: SaveState, ownerId: string, at: num
   const status = ownerShieldStatus(state, ownerId, at);
   if (status.phase === 'active') return { ok: false, code: 'active', message: `Щит уже включён, ещё ${formatShieldRemaining(status.remainingMs)}` };
   if (status.phase === 'cooldown') return { ok: false, code: 'cooldown', message: `Щит перезаряжается, ещё ${formatShieldRemaining(status.remainingMs)}` };
-  const hostile = ownerOutboundHostileFlights(state, ownerId);
+  const hostile = ownerOutboundHostileFlights(state, ownerId, at);
   if (hostile.length > 0) {
     return { ok: false, code: 'hostile-flights', message: `Сначала отзовите боевые полёты: ${hostile.length}` };
   }

@@ -31,7 +31,7 @@ export function ShieldControl({ state, now, variant, onActivate }: ShieldControl
       type="button"
       className={`shield-ctl shield-ctl--${variant} shield-ctl--${status.phase}`}
       disabled={status.phase !== 'ready' || Boolean(blocked)}
-      title={title}
+      title={variant === 'compact' ? undefined : title}
       aria-label={title}
       onClick={onActivate}
       data-qa-shield={status.phase}
