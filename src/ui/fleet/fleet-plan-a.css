@@ -352,3 +352,4 @@ html body .flight-briefing-v2 .fa-route__asteroid b{font-size:20px !important;fo
 html body .flight-briefing-v2 .fa-route__asteroid.is-miss b{color:#ffc14d}
 html body .flight-briefing-v2 .fa-route__asteroid.is-unknown b{color:var(--pm)}
 html body .flight-briefing-v2 .fa-route__asteroid span{font-size:16px !important;color:var(--pm)}
+html body .flight-briefing-v2 [data-qa-flight-source-step] .game-select__trigger i{position:static !important;inset:auto !important;flex:none;margin-left:2px}
