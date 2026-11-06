@@ -169,7 +169,7 @@ async function testMode(win, label) {
   await waitFor(win, `document.querySelector('[data-qa-mission-id="sun-support"].is-on')`);
   const civil = await run(win, `[...document.querySelectorAll('[data-qa-fleet-roster] [data-qa-fleet-ship]')].map((row) => row.getAttribute('data-qa-fleet-ship')).filter((id) => ['spy-probe','colonizer','recycler','transporter','mega-transporter','solar-satellite'].includes(id))`);
   if (civil.length) throw new Error('Civil hulls offered for Sun support: ' + civil.join(', '));
-  await run(win, `(() => { const row = document.querySelector('[data-qa-fleet-roster] [data-qa-fleet-ship]'); [...row.querySelectorAll('button')].find((item) => item.textContent.trim() === 'МАКС.').click(); })()`);
+  await run(win, `(() => { const row = document.querySelector('[data-qa-fleet-roster] [data-qa-fleet-ship]'); [...row.querySelectorAll('button')].find((item) => item.textContent.trim() === 'Все').click(); })()`);
   await sleep(300);
   await capture(win, label, '11-test-support-fleets');
   await click(win, '[data-qa-flight-preview-open]');

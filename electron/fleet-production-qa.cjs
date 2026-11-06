@@ -1546,9 +1546,9 @@ async function runViewport(width, height) {
       const stock = document.querySelector('[data-qa-fleet-production-item="scout"] .fc-unit__stock');
       const label = stock?.querySelector('small')?.getBoundingClientRect();
       const count = stock?.querySelector('strong')?.getBoundingClientRect();
-      return { labelAboveCount: Boolean(label && count && label.bottom <= count.top + 2) };
+      return { labelBeforeCount: Boolean(label && count && label.right <= count.left + 2 && Math.abs(label.bottom - count.bottom) < 12) };
     })()`);
-    if (!stockLayout.labelAboveCount) throw new Error(`${label}: the stock label must sit above its number ${JSON.stringify(stockLayout)}`);
+    if (!stockLayout.labelBeforeCount) throw new Error(`${label}: the stock label must stand right before its number ${JSON.stringify(stockLayout)}`);
     const ordinaryTimerText = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-unit-time="scout"]')?.textContent ?? ''`);
     if (ordinaryTimerText.includes('УРОВЕНЬ')) throw new Error(`${label}: ordinary ship level still appears under the unit timer: ${ordinaryTimerText}`);
     const ordinaryDossierLevelLabel = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-fleet-level="scout"] small')?.textContent ?? ''`);

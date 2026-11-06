@@ -163,7 +163,7 @@ async function verifyMilitaryDeepLinks(win, directory) {
       detail: header?.querySelector('p')?.textContent?.trim() ?? '',
       asset: root?.getAttribute('data-qa-building-asset') ?? '',
       image: headerImage?.getAttribute('src') ?? '',
-      hasHeaderBack: Boolean(header?.querySelector(':scope > button')),
+      hasHeaderBack: Boolean(header?.querySelector(':scope > button:not(.fc-head__plan)')),
       hasReturnToShipyardOverlay: Boolean(document.querySelector('.building-interior-return-overlay')),
       header: {
         display: headerStyle?.display ?? '',
@@ -191,7 +191,7 @@ async function verifyMilitaryDeepLinks(win, directory) {
     && visual.header.borderWidth === '0px'
     && visual.header.imageFit === 'contain'
     && visual.image === visual.asset
-    && visual.card.minHeight === '84px'
+    && visual.card.minHeight === '0px'
     && visual.card.borderWidth === '0px'
     && visual.card.clipPath === 'none'
     && visual.card.framedCells === 0;

@@ -387,7 +387,7 @@ async function universeScenes(win) {
 async function flightScenes(win, objectId, npc) {
   await click(win, '[data-qa-universe-action="attack"]');
   await waitFor(win, `document.querySelector('[data-qa-attack-prep]')`);
-  await run(win, `(() => { const tile = document.querySelector('[data-qa-fleet-ship="scout"]'); [...tile.querySelectorAll('button')].find((button) => button.textContent.trim() === 'МАКС.')?.click(); })()`);
+  await run(win, `(() => { const tile = document.querySelector('[data-qa-fleet-ship="scout"]'); [...tile.querySelectorAll('button')].find((button) => ['МАКС.', 'Все'].includes(button.textContent.trim()))?.click(); })()`);
   await settle(win, 400);
   await capture(win, '05-attack-prep-ship-count', `Вселенная → ${npc.ownerName} → Атаковать: ship tiles, count field, «Продолжить · план перелёта»`);
   await click(win, '[data-qa-flight-preview-open]');
