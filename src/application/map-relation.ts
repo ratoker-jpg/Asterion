@@ -94,8 +94,10 @@ export function applyMapShield(
   at: number,
 ): MapRelationStatus {
   if (!shields || (node.kind !== 'player' && node.kind !== 'npc') || !node.ownerId) return status;
-  const theirs = shieldStatus(shields[node.ownerId], at);
-  const own = shieldStatus(shields[attackerOwnerId], at);
+  // The screen clock can lag a tick behind the click that raised a shield.
+  const seen = (record: ShieldRecord | undefined) => shieldStatus(record, Math.max(at, record?.activatedAt ?? 0));
+  const theirs = seen(shields[node.ownerId]);
+  const own = seen(shields[attackerOwnerId]);
   const shieldLeft = theirs.phase === 'active' ? formatShieldRemaining(theirs.remainingMs) : undefined;
   if (status.attackable !== true) return shieldLeft ? { ...status, shieldLeft } : status;
   if (shieldLeft) return { ...status, attackable: false, detail: `Планета под щитом, ещё ${shieldLeft}`, shieldLeft };

@@ -5,8 +5,8 @@
 .shield-ctl--cooldown { --shield-tone: #a8b0c0; }
 .shield-ctl:disabled { cursor: default; opacity: .85; }
 .shield-ctl:disabled.shield-ctl--ready { opacity: .6; }
-.shield-ctl--compact { position: absolute; right: 30px; top: 50%; transform: translateY(-50%); padding: 3px 7px; font-size: 10px; z-index: 5; font-variant-numeric: tabular-nums; }
+.shield-ctl--compact { position: absolute; right: 30px; bottom: 5px; padding: 1px 6px; font-size: 9px; line-height: 11px; z-index: 5; font-variant-numeric: tabular-nums; gap: 4px; }
+.shield-ctl--compact i { width: 7px; height: 9px; }
 .shield-ctl--compact.shield-ctl--ready span { display: none; }
-.hdr-planet-control .hdr-planet-select__copy { padding-right: 62px; }
 .shield-ctl--compact small { display: none; }
 .shield-mark { display: inline-block; width: 9px; height: 11px; margin-left: 4px; vertical-align: -1px; background: #5fe6a8; clip-path: polygon(50% 0, 100% 18%, 100% 55%, 50% 100%, 0 55%, 0 18%); }

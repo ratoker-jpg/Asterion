@@ -14,12 +14,14 @@ export type ShieldControlProps = {
 /** One button for all planets: shows the time left, the cooldown, or why it cannot be raised. */
 export function ShieldControl({ state, now, variant, onActivate }: ShieldControlProps) {
   const ownerId = state.profile.playerId;
-  const status = ownerShieldStatus(state, ownerId, now);
-  const check = status.phase === 'ready' ? checkShieldActivation(state, ownerId, now) : null;
+  // The clock of the screen can lag a tick behind the click that raised the shield.
+  const at = Math.max(now, state.shields?.[ownerId]?.activatedAt ?? 0);
+  const status = ownerShieldStatus(state, ownerId, at);
+  const check = status.phase === 'ready' ? checkShieldActivation(state, ownerId, at) : null;
   const blocked = check && !check.ok ? check.message : null;
   const label = status.phase === 'active'
-    ? `Щит ${formatShieldRemaining(status.remainingMs)}`
-    : status.phase === 'cooldown' ? `Перезарядка ${formatShieldRemaining(status.remainingMs)}` : 'Включить щит';
+    ? (variant === 'compact' ? formatShieldRemaining(status.remainingMs) : `Щит ${formatShieldRemaining(status.remainingMs)}`)
+    : status.phase === 'cooldown' ? (variant === 'compact' ? formatShieldRemaining(status.remainingMs) : `Перезарядка ${formatShieldRemaining(status.remainingMs)}`) : 'Включить щит';
   const title = status.phase === 'active'
     ? `Щит закрывает все ваши планеты, ещё ${formatShieldRemaining(status.remainingMs)}. Нападать самому нельзя.`
     : status.phase === 'cooldown' ? `Щит можно включить снова через ${formatShieldRemaining(status.remainingMs)}`
