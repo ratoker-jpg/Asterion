@@ -43,7 +43,7 @@ import type { NpcProfile } from '../domain/npc/types.ts';
 import { settleNpcRecycling, getNextNpcEconomyCheckpoint, getNpcOverpopulationUnlockAt, settleNpcPlanet } from './npc-economy.ts';
 import { getNextNpcScienceCheckpoint, pauseNpcScienceForSettlement, projectNpcScienceLedger, reconcileNpcScienceAt } from './npc-science.ts';
 import { getReplayNpcOwnerIds, isNpcCatchupPending, NPC_CATCHUP_COMMAND_GRACE_MS, NPC_REPLAY_GENERATION_STEP_MS, NPC_REPLAY_MAX_GROUPS, NPC_REPLAY_WINDOW_MS } from './npc-catchup.ts';
-import { accumulateWorldCatchupSummary, countNewWorldBattles, startWorldCatchupSummary } from './world-catchup-summary.ts';
+import { accumulateCommandNews, accumulateWorldCatchupSummary, countNewWorldBattles, startWorldCatchupSummary } from './world-catchup-summary.ts';
 import type { WorldCatchupSummary } from '../domain/npc/world-catchup-summary.ts';
 import { CAMPAIGN_SPEED_SCALE } from '../domain/runtime/mode.ts';
 import { LEADER_ABSENCE_MS } from '../domain/command/catalog.ts';
@@ -830,6 +830,7 @@ function reconcileRuntimeSlice(
     const dueOwners = new Set<string>();
     // Who is allied with whom before this moment's decisions (see the check after the group).
     const relationsBefore = relationStructureToken(next.command);
+    const commandBeforeGroup = next.command;
     // Flight records before this checkpoint's arrivals, raids and burns (see ownersTouchedAtCheckpoint).
     let recordsAtCheckpoint: readonly FlightRecord[] | undefined;
     // Replay owners settled at this checkpoint. Only these can be read or
@@ -980,6 +981,8 @@ function reconcileRuntimeSlice(
     // Archive limits hold after every group, so what NPCs can still read never
     // depends on where a catch-up slice ended.
     if (replay) {
+      // Alliance and war news per group, so it does not depend on where slices fall.
+      if (worldSummary && next.command !== commandBeforeGroup) worldSummary = accumulateCommandNews(worldSummary, commandBeforeGroup, next.command);
       countWorldBattles();
       next = pruneCampaignHistory(next, checkpoint);
     }
@@ -1019,7 +1022,7 @@ function reconcileRuntimeSlice(
   if (replay) {
     // World news is counted before pruning, so nothing archived in this slice is lost.
     countWorldBattles();
-    const summary = worldSummary ? accumulateWorldCatchupSummary(worldSummary, state, next) : replay.summary;
+    const summary = worldSummary ? accumulateWorldCatchupSummary(worldSummary, state, next, { commandCounted: true }) : replay.summary;
     next = { ...next, npcReplay: { version: 1, processedThroughAt: context.now, targetAt: replay.targetAt, ...(summary ? { summary } : {}) } };
   }
   // Archive records nothing reads any more leave the save after each pass.
