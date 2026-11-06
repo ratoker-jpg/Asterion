@@ -315,6 +315,23 @@ async function catalogueScenes(win, directory, label) {
   await shot('battles-01-shell');
   await openSection(win, 'simulator', '.simulator-view-v1');
   await shot('simulator-01-shell');
+  const setSim = async (side, id, value) => run(win, `(() => {
+    const input = document.querySelector('[id="sim-${side}-ships"] [data-qa-simulator-unit="${id}"] .sim-count-control-v1 input');
+    if (!input) return false;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '${value}');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    input.dispatchEvent(new Event('blur', { bubbles: true }));
+    return true;
+  })()`);
+  for (const [side, id, value] of [['attacker', 'cruiser', 500], ['attacker', 'battleship', 430], ['attacker', 'destroyer', 167], ['attacker', 'scout', 94], ['defender', 'cruiser', 300], ['defender', 'battleship', 260], ['defender', 'destroyer', 80]]) await setSim(side, id, value);
+  await settle(win);
+  await shot('simulator-02-editing');
+  if (await run(win, `Boolean(document.querySelector('.sim-run-v1:not(:disabled)'))`)) {
+    await click(win, '.sim-run-v1');
+    await settle(win, 1400);
+    await shot('simulator-03-result');
+  }
 
   await seed(win, { mutate: `planet.fleetProduction.shipQueue = ${queueOf('ships', [['battleship', 100], ['destroyer', 50], ['scout', 8], ['transporter', 100], ['recycler', 5], ['colonizer', 1]])};` });
   await openSection(win, 'ships', '[data-qa-construction-mode="ships"]');

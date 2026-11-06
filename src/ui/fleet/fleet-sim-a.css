@@ -1,0 +1,123 @@
+/* ==========================================================================
+   SIMULATOR, variant A «Кино» (approved mockup 07-simulyator, commit 729efb1).
+   The result is a big picture on top (who won, on which round, the round
+   bar), the two sides below as tiles with losses, debris and loot along the
+   bottom. The full unit editor opens on «Изменить состав».
+   ========================================================================== */
+.fleet-workspace-v1 .simulator-view-v1.sim-a{
+  --sa:#5fd4ff;--sm:#93a7bd;--st:rgba(150,200,255,.055);--st2:rgba(150,200,255,.1);--sr:14px;--sg:#4fe3a0;--sd:#ff6a78;
+  display:flex !important;flex-direction:column;gap:14px !important;padding:0 !important;background:none !important;border:0 !important;box-shadow:none !important;
+}
+.fleet-workspace-v1 .sim-a>.fleet-page-head-v1{display:none !important}
+
+/* the result picture */
+.fleet-workspace-v1 .sim-a-hero{
+  position:relative;isolation:isolate;overflow:hidden;min-height:246px;padding:26px 30px 24px 34px;border-radius:var(--sr);background:#04080f;
+  display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto auto 1fr;column-gap:24px;
+}
+.fleet-workspace-v1 .sim-a-hero::before{content:"";position:absolute;inset:0;z-index:-2;background:var(--sim-banner) right center/cover no-repeat}
+.fleet-workspace-v1 .sim-a-hero::after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(90deg,#04080f 0,rgba(4,8,15,.82) 30%,transparent 62%)}
+.fleet-workspace-v1 .sim-a-kicker{grid-column:1;color:var(--sa);font-size:calc(17px * var(--text-scale-secondary,1)) !important;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
+.fleet-workspace-v1 .sim-a-hero>h2{
+  grid-column:1;margin:2px 0 0;color:#fff;font-size:calc(60px * var(--text-scale-page-title,1)) !important;font-weight:900;line-height:1.1;
+  animation:sim-title 620ms var(--ut-ease-expo,ease-out) both;
+}
+@keyframes sim-title{from{opacity:0;translate:0 14px}to{opacity:1;translate:0 0}}
+.fleet-workspace-v1 .sim-a-hero.is-attacker>h2{color:var(--sg)}
+.fleet-workspace-v1 .sim-a-hero.is-defender>h2{color:var(--sd)}
+.fleet-workspace-v1 .sim-a-hero.is-draw>h2{color:#ffc14d}
+.fleet-workspace-v1 .sim-a-hero>p{grid-column:1;margin:6px 0 0;color:#eef5ff;font-size:calc(22px * var(--text-scale-body,1)) !important}
+.fleet-workspace-v1 .sim-a-roundbar{grid-column:1;align-self:end;display:flex;gap:6px;margin-top:22px;max-width:720px}
+.fleet-workspace-v1 .sim-a-roundbar>i{flex:1 1 0;height:12px;border-radius:6px;background:rgba(255,255,255,.1)}
+.fleet-workspace-v1 .sim-a-hero.is-attacker .sim-a-roundbar>i.is-on{background:var(--sg)}
+.fleet-workspace-v1 .sim-a-hero.is-defender .sim-a-roundbar>i.is-on{background:var(--sd)}
+.fleet-workspace-v1 .sim-a-hero.is-draw .sim-a-roundbar>i.is-on{background:#ffc14d}
+.fleet-workspace-v1 .sim-a-roundbar>i.is-on{animation:sim-round 360ms var(--ut-ease-out,ease-out) both;animation-delay:calc(var(--sim-i,0) * 110ms + 200ms)}
+@keyframes sim-round{from{scale:0 1;opacity:.3}to{scale:1 1;opacity:1}}
+.fleet-workspace-v1 .sim-a-go{grid-column:2;grid-row:1/5;align-self:end;display:flex;align-items:center;gap:16px}
+.fleet-workspace-v1 .sim-a .sim-rounds-v1{display:flex;align-items:center;gap:6px;padding:0 6px 0 14px;height:56px;border-radius:var(--sr);background:rgba(4,8,15,.72);border:0}
+.fleet-workspace-v1 .sim-a .sim-rounds-v1>span{color:#fff;font-size:calc(18px * var(--text-scale-control,1)) !important;font-weight:700;margin-right:4px;letter-spacing:0}
+.fleet-workspace-v1 .sim-a .sim-rounds-v1>button{min-width:44px;height:42px;padding:0 10px;border:0;border-radius:12px;background:var(--st2);color:#fff;font-size:calc(17px * var(--text-scale-control,1)) !important;font-weight:800;box-shadow:none}
+.fleet-workspace-v1 .sim-a .sim-rounds-v1>button.active{background:rgba(95,212,255,.26);box-shadow:inset 0 0 0 2px var(--sa)}
+.fleet-workspace-v1 .sim-a .sim-run-v1{
+  position:relative;overflow:hidden;height:64px;padding:0 30px;border:0;border-radius:var(--sr);background:linear-gradient(180deg,#7ee2ff,#2fb2ee);color:#04202e;
+  box-shadow:0 0 34px rgba(95,212,255,.35);font-size:calc(24px * var(--text-scale-control,1)) !important;font-weight:800;letter-spacing:0;text-transform:none;white-space:nowrap;cursor:pointer;
+  transition:scale 140ms ease,filter 200ms ease;
+}
+.fleet-workspace-v1 .sim-a .sim-run-v1:hover:not(:disabled){filter:brightness(1.08)}
+.fleet-workspace-v1 .sim-a .sim-run-v1:active:not(:disabled){scale:.97}
+.fleet-workspace-v1 .sim-a .sim-run-v1:disabled{background:rgba(8,16,28,.88);color:#8ea3b6;box-shadow:inset 0 0 0 2px rgba(150,200,255,.22);cursor:not-allowed}
+
+/* one quiet status line */
+.fleet-workspace-v1 .sim-a .sim-validation-v1{display:flex;align-items:baseline;gap:16px;margin:0;padding:0 4px;border:0;border-radius:0;background:none;box-shadow:none}
+.fleet-workspace-v1 .sim-a .sim-validation-v1>div{display:flex;gap:12px;align-items:baseline;min-width:0}
+.fleet-workspace-v1 .sim-a .sim-validation-v1 strong{color:var(--sm);font-size:calc(15px * var(--text-scale-secondary,1)) !important;letter-spacing:0;text-transform:none;white-space:nowrap}
+.fleet-workspace-v1 .sim-a .sim-validation-v1.error strong{color:var(--sd)}
+.fleet-workspace-v1 .sim-a .sim-validation-v1 span{color:var(--sm);font-size:calc(15px * var(--text-scale-body,1)) !important}
+.fleet-workspace-v1 .sim-a .sim-validation-v1 ul{margin:0;padding:0;list-style:none;color:#ff8a95;font-size:calc(15px * var(--text-scale-body,1)) !important}
+
+/* the two sides */
+.fleet-workspace-v1 .sim-a .sim-sides-v1{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:40px;align-items:start}
+.fleet-workspace-v1 .sim-a .sim-side-v1{display:flex;flex-direction:column;gap:12px;padding:0;border:0;border-radius:0;background:none;box-shadow:none;min-width:0}
+.fleet-workspace-v1 .sim-a .sim-side-v1>header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:0;border:0;background:none}
+.fleet-workspace-v1 .sim-a .sim-side-v1>header small{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.fleet-workspace-v1 .sim-a .sim-side-v1>header h3{margin:0;color:var(--sa);font-size:calc(28px * var(--text-scale-section-title,1)) !important;font-weight:800;letter-spacing:0;text-transform:none}
+.fleet-workspace-v1 .sim-a .sim-side-v1.is-defender>header h3{color:var(--sd)}
+.fleet-workspace-v1 .sim-a-chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;align-items:center}
+.fleet-workspace-v1 .sim-a-chip,
+.fleet-workspace-v1 .sim-a .sim-a-chips select{
+  height:46px;padding:0 18px;border:0;border-radius:var(--sr);background:var(--st2);color:#fff;box-shadow:none;
+  font-size:calc(17px * var(--text-scale-control,1)) !important;font-weight:700;letter-spacing:0;text-transform:none;cursor:pointer;
+  transition:background-color 200ms ease;
+}
+.fleet-workspace-v1 .sim-a-chip:hover,.fleet-workspace-v1 .sim-a .sim-a-chips select:hover{background:rgba(95,212,255,.2)}
+.fleet-workspace-v1 .sim-a-chip.is-on{background:rgba(95,212,255,.24);box-shadow:inset 0 0 0 2px var(--sa)}
+.fleet-workspace-v1 .sim-a .sim-a-chips label{display:flex;align-items:center;gap:0;margin:0;padding:0;border:0;background:none}
+.fleet-workspace-v1 .sim-a .sim-a-chips label>span,.fleet-workspace-v1 .sim-a .sim-a-chips label>small{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.fleet-workspace-v1 .sim-a .sim-a-chips select{appearance:none;padding-right:18px;max-width:240px}
+.fleet-workspace-v1 .sim-a-meters{display:flex;flex-wrap:wrap;gap:6px 22px}
+.fleet-workspace-v1 .sim-a .sim-population-v1{display:flex;align-items:baseline;gap:8px;margin:0;padding:0;border:0;background:none}
+.fleet-workspace-v1 .sim-a .sim-population-v1 *{font-size:calc(14px * var(--text-scale-secondary,1)) !important;letter-spacing:0}
+.fleet-workspace-v1 .sim-a .sim-population-v1.error *{color:#ff8a95}
+.fleet-workspace-v1 .sim-a .sim-tech-section-v1>.sim-section-toggle-v1{display:none}
+.fleet-workspace-v1 .sim-a .sim-tech-section-v1:not(.open){display:none}
+.fleet-workspace-v1 .sim-a .sim-copy-tech-v1{align-self:flex-start;height:40px;padding:0 16px;border:0;border-radius:12px;background:var(--st2);color:#fff;font-size:calc(15px * var(--text-scale-control,1)) !important;letter-spacing:0;text-transform:none}
+
+/* tiles, mockup 07: art, name, count, losses */
+.fleet-workspace-v1 .sim-a-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-auto-rows:minmax(300px,auto);gap:10px}
+.fleet-workspace-v1 .sim-a-tile{
+  display:flex;flex-direction:column;justify-content:flex-end;gap:2px;padding:12px;border-radius:var(--sr);background:var(--st);min-width:0;
+  animation:sim-tile 460ms var(--ut-ease-out,ease-out) both;animation-delay:calc(var(--sim-i,0) * 50ms);
+}
+@keyframes sim-tile{from{opacity:0;translate:0 14px}to{opacity:1;translate:0 0}}
+.fleet-workspace-v1 .sim-a-tile>img{flex:1 1 auto;width:100%;min-height:0;max-height:200px;object-fit:contain;margin-bottom:auto;filter:drop-shadow(0 12px 24px rgba(0,0,0,.75))}
+.fleet-workspace-v1 .sim-a-tile>strong{color:#fff;font-size:calc(20px * var(--text-scale-section-title,1)) !important;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fleet-workspace-v1 .sim-a-tile>b{color:#fff;font-size:calc(26px * var(--text-scale-table,1)) !important;font-weight:900;line-height:1.1;white-space:nowrap}
+.fleet-workspace-v1 .sim-a-tile>em{color:#ff8a95;font-style:normal;font-size:calc(17px * var(--text-scale-table,1)) !important;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fleet-workspace-v1 .sim-a-tile>small{color:var(--sm);font-size:calc(15px * var(--text-scale-secondary,1)) !important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fleet-workspace-v1 .sim-a-tile.is-gone>img{filter:grayscale(.8) brightness(.55)}
+
+/* the full editor, when open */
+.fleet-workspace-v1 .sim-a-editor{display:grid;gap:8px}
+.fleet-workspace-v1 .sim-a-editor[hidden]{display:none}
+
+/* debris, loot and actions along the bottom */
+.fleet-workspace-v1 .sim-a-foot{display:flex;align-items:center;gap:60px;padding:6px 4px 0}
+.fleet-workspace-v1 .sim-a-foot>div{display:flex;align-items:baseline;gap:10px}
+.fleet-workspace-v1 .sim-a-foot small{color:var(--sm);font-size:calc(20px * var(--text-scale-secondary,1)) !important}
+.fleet-workspace-v1 .sim-a-foot b{color:#fff;font-size:calc(28px * var(--text-scale-table,1)) !important;font-weight:900;white-space:nowrap}
+.fleet-workspace-v1 .sim-a-foot__gap{flex:1}
+.fleet-workspace-v1 .sim-a-btn{height:52px;padding:0 22px;border:0;border-radius:var(--sr);background:var(--st2);color:#fff;font-size:calc(18px * var(--text-scale-control,1)) !important;font-weight:700;cursor:pointer;transition:background-color 200ms ease}
+.fleet-workspace-v1 .sim-a-btn:hover:not(:disabled){background:rgba(95,212,255,.22)}
+.fleet-workspace-v1 .sim-a-btn:disabled{opacity:.45;cursor:default}
+.fleet-workspace-v1 .sim-a .sim-presets-v1{display:flex;flex-wrap:wrap;gap:10px 30px;margin:0;padding:0 4px;border:0;background:none;box-shadow:none}
+.fleet-workspace-v1 .sim-a .sim-presets-v1>div{display:flex;align-items:center;gap:8px}
+.fleet-workspace-v1 .sim-a .sim-presets-v1 label{color:var(--sm);font-size:calc(15px * var(--text-scale-secondary,1)) !important;letter-spacing:0;text-transform:none}
+.fleet-workspace-v1 .sim-a .sim-presets-v1 input,
+.fleet-workspace-v1 .sim-a .sim-presets-v1 select{height:44px;border:0;border-radius:12px;background:rgba(0,0,0,.45);color:#fff;padding:0 12px;font-size:calc(15px * var(--text-scale-control,1)) !important}
+.fleet-workspace-v1 .sim-a .sim-presets-v1 button{height:44px;padding:0 16px;border:0;border-radius:12px;background:var(--st2);color:#fff;font-size:calc(15px * var(--text-scale-control,1)) !important;font-weight:700;letter-spacing:0;text-transform:none}
+.fleet-workspace-v1 .sim-a .sim-presets-v1 button:disabled{opacity:.45}
+
+@media (prefers-reduced-motion:reduce){
+  .fleet-workspace-v1 .sim-a *{animation:none !important}
+}
