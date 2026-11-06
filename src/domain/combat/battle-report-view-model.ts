@@ -8,8 +8,8 @@ import {
 import { COMMANDER_ABILITIES, isCommanderId, type CommanderId } from './commanders.ts';
 import { calculateBattlePoints, type BattlePointResult } from './battle-points.ts';
 import { getFactionDefenseCatalog, getFactionShipCatalog } from './faction-catalog.ts';
-import { getCombatFactionId, type CombatFactionId } from './factions.ts';
-import type { CombatEntityId } from './ids.ts';
+import { getCombatFactionId, isCombatFactionId, type CombatFactionId } from './factions.ts';
+import { combatBaseEntityId, type CombatEntityId } from './ids.ts';
 import { getCombatEntityForStack, isPirateShipId } from './side-entity.ts';
 import { calculatePirateResourcePointsLost } from '../pirates/resource-points.ts';
 import {
@@ -57,6 +57,8 @@ export type BattleTooltipViewModel = {
 export type BattleStackViewModel = {
   key: string;
   entityId: string;
+  /** Race of this stack on a joint side; absent when it is the side's own race. */
+  factionId?: CombatFactionId;
   kind: BattleEntityKind;
   name: string;
   role: string;
@@ -496,7 +498,9 @@ function readStack(
 ): BattleStackViewModel {
   const record = asRecord(value);
   const entityId = readString(record.entityId) ?? `unknown-${kindHint}-${index}`;
-  const resolved = resolveEntity(factionId, entityId, kindHint);
+  // On a joint side a stack may belong to another owner's race (`cruiser#g2`).
+  const stackFactionId = isCombatFactionId(record.factionId) ? record.factionId : factionId;
+  const resolved = resolveEntity(stackFactionId, combatBaseEntityId(entityId), kindHint);
   const countBefore = readCount(record.countBefore);
   const countAfter = readCount(record.countAfter);
   const destroyed = readCount(record.destroyed) ?? (
@@ -526,6 +530,7 @@ function readStack(
   return {
     key: `${kindHint}:${entityId}:${index}`,
     entityId,
+    ...(stackFactionId !== factionId || isCombatFactionId(record.factionId) ? { factionId: stackFactionId } : {}),
     kind: resolved.kind,
     name: resolved.name,
     role: resolved.role,
@@ -547,7 +552,7 @@ function readStack(
 function readStacks(value: unknown, factionId: CombatFactionId, fallbackKind: BattleEntityKind) {
   return asArray(value).map((item, index) => {
     const entityId = readString(asRecord(item).entityId) ?? '';
-    const kind = entityKindFromCatalog(factionId, entityId, fallbackKind);
+    const kind = entityKindFromCatalog(factionId, combatBaseEntityId(entityId), fallbackKind);
     return readStack(item, index, factionId, kind);
   });
 }
@@ -627,7 +632,7 @@ function readForce(value: unknown, participant: BattleParticipantViewModel, fact
   };
 }
 
-function readEvent(value: unknown, index: number, attackerFactionId: CombatFactionId, defenderFactionId: CombatFactionId): BattleEventViewModel {
+function readEvent(value: unknown, index: number, attackerFactionId: CombatFactionId, defenderFactionId: CombatFactionId, groupFactions: ReadonlyMap<string, CombatFactionId> = new Map()): BattleEventViewModel {
   const record = asRecord(value);
   const actorSide = readSide(record.actorSide, 'attacker');
   const targetSide = readSide(record.targetSide, actorSide === 'attacker' ? 'defender' : 'attacker');
@@ -635,11 +640,13 @@ function readEvent(value: unknown, index: number, attackerFactionId: CombatFacti
   const targetEntityId = readString(record.targetEntityId);
   const actorFactionId = actorSide === 'attacker' ? attackerFactionId : defenderFactionId;
   const targetFactionId = targetSide === 'attacker' ? attackerFactionId : defenderFactionId;
-  const actorKind = entityKindFromCatalog(actorFactionId, actorEntityId, 'unknown');
-  const targetKind = entityKindFromCatalog(targetFactionId, targetEntityId ?? `unknown-target-${index}`, 'unknown');
+  const actorKind = entityKindFromCatalog(actorFactionId, combatBaseEntityId(actorEntityId), 'unknown');
+  const targetKind = entityKindFromCatalog(targetFactionId, combatBaseEntityId(targetEntityId ?? `unknown-target-${index}`), 'unknown');
+  const actorGroupFaction = groupFactions.get(`${actorSide}:${actorEntityId}`);
+  const targetGroupFaction = targetEntityId ? groupFactions.get(`${targetSide}:${targetEntityId}`) : undefined;
 
-  const actor = readStack({ entityId: actorEntityId, countAfter: readCount(record.actorCount) }, index, actorFactionId, actorKind);
-  const target = readStack({ entityId: targetEntityId ?? `unknown-target-${index}`, countAfter: readCount(record.targetCount) }, index, targetFactionId, targetKind);
+  const actor = readStack({ entityId: actorEntityId, countAfter: readCount(record.actorCount), factionId: actorGroupFaction }, index, actorFactionId, actorKind);
+  const target = readStack({ entityId: targetEntityId ?? `unknown-target-${index}`, countAfter: readCount(record.targetCount), factionId: targetGroupFaction }, index, targetFactionId, targetKind);
   const commanderAbilityId = readString(record.commanderAbilityId);
   const safeCommanderAbilityId = commanderAbilityId && isCommanderId(commanderAbilityId) ? commanderAbilityId : null;
   // Reports saved before the fix stored an ordinary hull's critical roll in abilityDraw.
@@ -810,11 +817,11 @@ function visibleRows(snapshot: BattleRoundSnapshotViewModel | null) {
   return Math.ceil(regular / 5) + (commanders ? 1 : 0);
 }
 
-function readRound(value: unknown, index: number, attackerFactionId: CombatFactionId, defenderFactionId: CombatFactionId): BattleRoundViewModel {
+function readRound(value: unknown, index: number, attackerFactionId: CombatFactionId, defenderFactionId: CombatFactionId, groupFactions: ReadonlyMap<string, CombatFactionId> = new Map()): BattleRoundViewModel {
   const record = asRecord(value);
   const attackerSnapshot = readSnapshot(record.attackerSnapshot, attackerFactionId);
   const defenderSnapshot = readSnapshot(record.defenderSnapshot, defenderFactionId);
-  const events = asArray(record.events).map((event, eventIndex) => readEvent(event, eventIndex, attackerFactionId, defenderFactionId));
+  const events = asArray(record.events).map((event, eventIndex) => readEvent(event, eventIndex, attackerFactionId, defenderFactionId, groupFactions));
   return {
     index: readCount(record.index) ?? index + 1,
     events,
@@ -952,8 +959,16 @@ export function createBattleReportViewModel(
   const defender = readParticipant(record.defender, 'defender');
   const attackerFactionId = getCombatFactionId(attacker.race);
   const defenderFactionId = getCombatFactionId(defender.race);
+  const groupFactions = new Map<string, CombatFactionId>();
+  for (const [side, force] of [['attacker', record.attackerForce], ['defender', record.defenderForce]] as const) {
+    for (const item of asArray(asRecord(force).stacks)) {
+      const stack = asRecord(item);
+      const id = readString(stack.entityId);
+      if (id && isCombatFactionId(stack.factionId)) groupFactions.set(`${side}:${id}`, stack.factionId);
+    }
+  }
   const rounds = asArray(record.rounds)
-    .map((round, index) => readRound(round, index, attackerFactionId, defenderFactionId))
+    .map((round, index) => readRound(round, index, attackerFactionId, defenderFactionId, groupFactions))
     .sort((left, right) => left.index - right.index);
   const attackerViewModel = readForce(record.attackerForce, attacker, attackerFactionId);
   const defenderViewModel = readForce(record.defenderForce, defender, defenderFactionId);

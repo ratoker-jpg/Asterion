@@ -41,9 +41,21 @@ export type CombatStackInput = {
   level?: number;
 };
 
+/** Another owner's fleet on the same side: its own race, technologies and ship levels. */
+export type CombatAllyGroupInput = {
+  /** Short unique tag (`g2`); the group's stacks are reported as `cruiser#g2`. */
+  tag: string;
+  ownerId?: string;
+  factionId: CombatFactionId;
+  technologies: CombatTechnologyLevels;
+  ships: CombatStackInput[];
+};
+
 export type CombatSideInput = {
   participant: BattleParticipant;
   factionId?: CombatFactionId;
+  /** Joint fleets of other owners; `ships` and `factionId` stay the first group. */
+  allyGroups?: CombatAllyGroupInput[];
   /** Explicit opt-in for neutral NPC combat entities. */
   combatProfile?: CombatSideProfile;
   ships: CombatStackInput[];
@@ -393,6 +405,11 @@ export function validateCombatInput(input: CombatInput, options: CombatValidatio
   validateStackCollection(input.defender.ships, 'ship', 'defender.ships', errors, defenderFactionId, input.defender.combatProfile);
   validateStackCollection(defenderCommanders, 'commander', 'defender.commander', errors, defenderFactionId, input.defender.combatProfile);
   validateStackCollection(input.defender.defenses, 'defense', 'defender.defenses', errors, defenderFactionId, input.defender.combatProfile);
+  for (const [sideName, side] of [['attacker', input.attacker], ['defender', input.defender]] as const) {
+    (side.allyGroups ?? []).forEach((group, index) => {
+      validateStackCollection(group.ships, 'ship', `${sideName}.allyGroups[${index}].ships`, errors, group.factionId);
+    });
+  }
 
   for (const [sideName, side] of [['attacker', input.attacker], ['defender', input.defender]] as const) {
     if (side.combatProfile?.kind === 'pirate') {

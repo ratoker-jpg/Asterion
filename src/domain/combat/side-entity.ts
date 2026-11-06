@@ -1,7 +1,7 @@
 import { COMBAT_ENTITY_BY_ID, getCombatEntity, type CatalogEntity } from './catalog.ts';
 import { getFactionCombatEntity } from './faction-catalog.ts';
 import type { CombatFactionId } from './factions.ts';
-import type { CombatEntityId, CombatStackEntityId } from './ids.ts';
+import { combatBaseEntityId, type CombatEntityId, type CombatStackEntityId } from './ids.ts';
 import { PIRATE_CATALOG_BY_ID, type PirateAbility, type PirateShipId } from '../pirates/catalog.ts';
 import type { PirateProfile } from '../pirates/profile.ts';
 import type { CombatEntityDefinition } from './types.ts';
@@ -59,7 +59,8 @@ function asPirateCombatEntity(entityId: PirateShipId): ResolvedCombatEntity {
 }
 
 /** Entity lookup for report presentation and generic combat diagnostics. */
-export function getCombatEntityForStack(entityId: CombatStackEntityId): ResolvedCombatEntity {
+export function getCombatEntityForStack(stackId: CombatStackEntityId): ResolvedCombatEntity {
+  const entityId = combatBaseEntityId(stackId);
   return isPirateShipId(entityId)
     ? asPirateCombatEntity(entityId)
     : getCombatEntity(entityId as CombatEntityId);
