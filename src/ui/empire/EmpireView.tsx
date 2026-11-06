@@ -20,6 +20,8 @@ import { fleetPlanGlance, type FleetPlanGlance, type FleetPlanStartResult } from
 import type { ShipId as PlanShipId } from '../../domain/combat/ids.ts';
 import type { FleetPlan } from '../../domain/fleet/fleet-plan.ts';
 import { FleetPlannerDialog } from '../fleet-plan/FleetPlannerDialog.tsx';
+import { BuildPlannerDialog } from '../build-plan/BuildPlannerDialog.tsx';
+import type { BuildPlan } from '../../domain/buildings/build-plan.ts';
 import { compactAmount, countdown, formatNumber, plural, signedAmount, taskProgress } from './empire-format.ts';
 import { BUILD_ZONES, BuildPicker, ProductionPicker, type BuildPickerState, type ProductionPickerState } from './EmpirePickers.tsx';
 import './empire.css';
@@ -51,6 +53,10 @@ export type EmpireViewProps = {
   onSavePlan: (planetId: string, plan: FleetPlan) => boolean;
   /** Starts lines of a planet's plan, all of them without `shipIds`; null when refused (App shows why). */
   onStartPlan: (planetId: string, shipIds?: readonly PlanShipId[], announce?: boolean) => FleetPlanStartResult | null;
+  /** «Планировщик стройки»: stores a planet's build plan; false when refused (App shows why). */
+  onSaveBuildPlan: (planetId: string, plan: BuildPlan) => boolean;
+  /** Starts what the planet's build plan allows right now; returns how many upgrades started. */
+  onRunBuildPlan: (planetId: string) => number;
 };
 
 type Drawer = { targetId: string; mode: 'transport' | 'deployment'; origins?: string[] };
@@ -78,7 +84,7 @@ function Bar({ value }: { value: number }) {
  * can be done without leaving the console. Every action goes through the same
  * command as its own screen.
  */
-export function EmpireView({ state, now, mode, testTimeScale, planetArt, onOpenPlanet, onBuild, onCancelBuilding, onProduce, onCancelProduction, onSend, onSavePlan, onStartPlan }: EmpireViewProps) {
+export function EmpireView({ state, now, mode, testTimeScale, planetArt, onOpenPlanet, onBuild, onCancelBuilding, onProduce, onCancelProduction, onSend, onSavePlan, onStartPlan, onSaveBuildPlan, onRunBuildPlan }: EmpireViewProps) {
   const overview = useMemo(() => buildEmpireOverview(state, { now, mode, testTimeScale }), [state, now, mode, testTimeScale]);
   const factionId = state.profile.factionId as CombatFactionId;
   const units = useMemo(() => new Map<string, Unit>([...getFactionShipCatalog(factionId), ...getFactionDefenseCatalog(factionId), ...COMMANDER_COMBAT_CATALOG].map((entity) => [entity.id, { name: entity.name, art: entity.art }])), [factionId]);
@@ -87,6 +93,7 @@ export function EmpireView({ state, now, mode, testTimeScale, planetArt, onOpenP
   const [picker, setPicker] = useState<BuildPickerState | null>(null);
   const [yard, setYard] = useState<ProductionPickerState | null>(null);
   const [plannerId, setPlannerId] = useState<string | null>(null);
+  const [buildPlannerId, setBuildPlannerId] = useState<string | null>(null);
   const openPlanner = (planetId: string) => { setDrawer(null); setPicker(null); setYard(null); setPlannerId(planetId); };
   const yardName = getBuildingDefinition('shipyard', factionId).name;
   const current = overview.rows.find((row) => row.isCurrent) ?? overview.rows[0];
@@ -144,6 +151,7 @@ export function EmpireView({ state, now, mode, testTimeScale, planetArt, onOpenP
             </>
           ) : null}
           <button type="button" className="empire__btn" onClick={() => openPlanner(current.id)} data-qa-empire-planner>Эталонный флот</button>
+          <button type="button" className="empire__btn" onClick={() => { setDrawer(null); setPicker(null); setYard(null); setBuildPlannerId(current.id); }} data-qa-empire-build-planner>Планировщик стройки</button>
           {overview.rows.length > 1 ? <span className="empire__hint">Планету назначения выберете в панели. Каждая отправка занимает один рейс.</span> : null}
         </footer>
       ) : null}
@@ -161,6 +169,11 @@ export function EmpireView({ state, now, mode, testTimeScale, planetArt, onOpenP
       {plannerId && state.planets[plannerId] ? (
         <FleetPlannerDialog state={state} now={now} mode={mode} testTimeScale={testTimeScale} planetId={plannerId} planetArt={planetArt}
           onPlanet={setPlannerId} onClose={() => setPlannerId(null)} onSavePlan={onSavePlan} onStart={(id, shipIds) => onStartPlan(id, shipIds)} />
+      ) : null}
+
+      {buildPlannerId && state.planets[buildPlannerId] ? (
+        <BuildPlannerDialog state={state} now={now} mode={mode} testTimeScale={testTimeScale} planetId={buildPlannerId} planetArt={planetArt}
+          onPlanet={setBuildPlannerId} onClose={() => setBuildPlannerId(null)} onSavePlan={onSaveBuildPlan} onBuild={onBuild} onRun={onRunBuildPlan} />
       ) : null}
 
       {drawer ? createPortal(
