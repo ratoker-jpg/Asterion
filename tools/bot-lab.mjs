@@ -282,7 +282,7 @@ function defenceWorth(planet) {
  * Sun battles, from the world's own flights (no hook into the game, so any revision can be measured the same
  * way): every sampled hour records the ships of each Sun fleet when first seen and the survivors that fly home.
  * "Weak" hulls are those whose Lanchester strength per population (sqrt(attack x life) / population) is under
- * 80% of their race's best hull; "scouts" the race's lowest-tier hull. `stacksOwnerRule` is what one engine
+ * 80% of their race's strongest ordinary hull; "scouts" the race's lowest-tier hull. `stacksOwnerRule` is what one engine
  * stack per owner group would be (the old rule), `stacksMerged` what identical race/science/level groups give.
  */
 export function createSunTally() { return { seen: new Map(), home: new Map() }; }
@@ -292,7 +292,9 @@ function hullTier(factionId) {
   if (!hullTiers.has(factionId)) {
     const hulls = getFactionShipCatalog(factionId).filter((entity) => entity.category === 'Боевой корабль' && entity.combat);
     const power = (entity) => Math.sqrt(entity.combat.attack * entity.combat.life) / Math.max(1, entity.population);
-    const best = Math.max(...hulls.map(power));
+    // The race's flagship (planet-destroyer) is far above the rest: "best" is the strongest ordinary hull.
+    const sorted = hulls.map(power).sort((x, y) => y - x);
+    const best = sorted[1] ?? sorted[0];
     const lowest = hulls.reduce((low, entity) => (power(entity) < power(low) ? entity : low), hulls[0]);
     hullTiers.set(factionId, { best, lowest: lowest.id, byId: new Map(hulls.map((entity) => [entity.id, { population: entity.population, power: power(entity), cost: entity.cost, id: entity.id }])) });
   }
