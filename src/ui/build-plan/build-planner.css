@@ -1,0 +1,41 @@
+/* «Планировщик стройки» sits on the fleet planner's shell (fleet-planner.css). Only what differs lives here. */
+.fplan--build .bplan-lane{grid-template-columns:var(--fp-art) var(--fp-name) minmax(0,1fr) 250px var(--fp-action) 26px}
+.fplan--build .bplan-lanes{flex:1 1 auto;min-height:0}
+.fplan--build .fplan-lane.is-waiting .fplan-lane__bar{background:rgba(126,200,220,.06);box-shadow:none}
+
+.bplan-status{flex:none;display:flex;gap:6px 26px;flex-wrap:wrap;align-items:baseline}
+.bplan-status p{margin:0;display:flex;gap:7px;align-items:baseline}
+.fplan .bplan-status span{color:#8fb6c0;font-size:calc(var(--fp-t-small) * var(--text-scale-secondary,1)) !important}
+.fplan .bplan-status b{color:#fff;font-size:calc(var(--fp-t-big) * var(--text-scale-table,1)) !important;font-weight:800}
+.fplan .bplan-status .is-next b{color:var(--fp-here)}
+
+.bplan-presets{flex:none;display:flex;gap:8px 28px;flex-wrap:wrap;align-items:center}
+.bplan-presets>div{display:flex;gap:5px;align-items:center}
+.fplan-empty__lead .bplan-presets{display:grid;gap:10px;margin-bottom:14px}
+.fplan .bplan-presets span{color:#8fb6c0;font-size:calc(var(--fp-t-small) * var(--text-scale-secondary,1)) !important;margin-right:2px}
+.bplan-presets button{
+  min-width:42px;height:32px;padding:0 10px;border:0;border-radius:var(--ut-r-chip);
+  background:rgba(86,217,242,.08);color:#e8faff;cursor:pointer;
+  transition:background var(--ut-motion-fast) ease,scale var(--ut-motion-press) var(--ut-ease-out);
+}
+.fplan .bplan-presets button{font-size:calc(14px * var(--text-scale-control,1)) !important;font-weight:800}
+.bplan-presets button:hover{background:rgba(86,217,242,.22)}
+.bplan-presets button:active{scale:.94}
+
+.bplan-lane__target{display:grid;grid-template-columns:32px minmax(0,1fr) 32px auto;align-items:center;gap:4px}
+.bplan-lane__target>button{
+  height:36px;padding:0;border:0;border-radius:var(--ut-r-chip);background:rgba(86,217,242,.08);color:#e8faff;cursor:pointer;
+  transition:background var(--ut-motion-fast) ease,scale var(--ut-motion-press) var(--ut-ease-out);
+}
+.fplan .bplan-lane__target>button{font-size:calc(18px * var(--text-scale-control,1)) !important;font-weight:800}
+.fplan .bplan-lane__target>.bplan-lane__max{padding:0 8px;font-size:calc(12px * var(--text-scale-control,1)) !important;color:#8fb6c0}
+.bplan-lane__target>button:hover:not(:disabled){background:rgba(86,217,242,.22)}
+.bplan-lane__target>button:active:not(:disabled){scale:.92}
+.bplan-lane__target>button:disabled{opacity:.3;cursor:default}
+.bplan-lane__target .fplan-lane__input{text-align:center}
+
+.fplan .bplan-lane__wait{margin:0;display:-webkit-box;overflow:hidden;color:#ffcb7a;font-size:calc(12px * var(--text-scale-body,1)) !important;font-weight:600;line-height:1.2;text-align:right;-webkit-line-clamp:3;-webkit-box-orient:vertical}
+.fplan .bplan-lane__wait.is-science,.fplan .bplan-lane__wait.is-blocked{color:#ff9d90}
+.fplan .bplan-lane__wait.is-order,.fplan .bplan-lane__wait.is-requirement{color:#a9cbd3}
+.fplan .bplan-lane__building{color:var(--fp-queued);font-weight:700;text-align:center}
+.fplan--build .fplan-lane.is-next{background:linear-gradient(90deg,color-mix(in srgb,var(--fp-here) 9%,transparent),transparent 70%)}
