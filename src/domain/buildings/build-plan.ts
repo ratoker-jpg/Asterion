@@ -17,6 +17,10 @@ export type BuildPlan = {
    * missing from it follow in the default order (see `buildPriority`).
    */
   order?: BuildingRole[];
+  /** The player switched the planner's robot distribution off for this planet. */
+  noRobots?: boolean;
+  /** The player switched the planner's trade-centre exchanges off for this planet. */
+  noExchange?: boolean;
 };
 
 export type BuildPlans = Record<string, BuildPlan>;
@@ -90,9 +94,36 @@ export function setBuildPlanPaused(plan: BuildPlan, paused: boolean): BuildPlan 
   return paused ? { ...rest, paused: true } : rest;
 }
 
+/** The planner's two helpers are on unless the player switched them off. */
+export function setBuildPlanHelper(plan: BuildPlan, helper: 'robots' | 'exchange', on: boolean): BuildPlan {
+  const key = helper === 'robots' ? 'noRobots' : 'noExchange';
+  const { [key]: _was, ...rest } = plan;
+  return on ? rest : { ...rest, [key]: true };
+}
+
+/**
+ * «План как у меня»: the owner's own pattern read from his build journal
+ * (05.11): energy and the three mines first, the factory next (to 20, which
+ * gives the 20 robots of his 10 + 10 split), then the second and third metal
+ * and mineral lines, the three storages, the shipyard and the trade centre.
+ * Levels are what his colonies reached; a level no building has is cut to its last one.
+ */
+const OWNER_PLAN: ReadonlyArray<readonly [BuildingRole, number]> = [
+  ['basic-energy', 15], ['metal-production-1', 18], ['mineral-production-1', 13], ['gas-production-1', 10],
+  ['construction', 20], ['metal-production-2', 18], ['mineral-production-2', 13],
+  ['metal-storage', 10], ['mineral-storage', 10], ['gas-storage', 7],
+  ['metal-production-3', 18], ['shipyard', 4], ['trade-center', 3],
+];
+
+export function ownerBuildPlan(): BuildPlan {
+  let plan: BuildPlan = { targets: {} };
+  for (const [role, level] of OWNER_PLAN) plan = setBuildTarget(plan, role, level);
+  return { ...plan, order: OWNER_PLAN.map(([role]) => role) };
+}
+
 function migrateBuildPlan(value: unknown): BuildPlan | undefined {
   if (!value || typeof value !== 'object') return undefined;
-  const source = value as { targets?: unknown; paused?: unknown; order?: unknown };
+  const source = value as { targets?: unknown; paused?: unknown; order?: unknown; noRobots?: unknown; noExchange?: unknown };
   const targets: BuildPlan['targets'] = {};
   if (source.targets && typeof source.targets === 'object') {
     for (const role of BUILDING_ROLES) {
@@ -104,7 +135,7 @@ function migrateBuildPlan(value: unknown): BuildPlan | undefined {
   const order = Array.isArray(source.order)
     ? source.order.filter((role, index, list): role is BuildingRole => typeof role === 'string' && ROLE_INDEX.has(role as BuildingRole) && Boolean(targets[role as BuildingRole]) && list.indexOf(role) === index)
     : [];
-  return { targets, ...(source.paused === true ? { paused: true } : {}), ...(order.length ? { order } : {}) };
+  return { targets, ...(source.paused === true ? { paused: true } : {}), ...(order.length ? { order } : {}), ...(source.noRobots === true ? { noRobots: true } : {}), ...(source.noExchange === true ? { noExchange: true } : {}) };
 }
 
 export function migrateBuildPlans(value: unknown): BuildPlans | undefined {
