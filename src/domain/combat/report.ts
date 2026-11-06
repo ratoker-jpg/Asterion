@@ -102,6 +102,8 @@ export type BattleParticipant = {
 
 export type BattleStackSnapshot = {
   entityId: CombatStackEntityId;
+  /** Race of this stack on a joint side (several owners); absent on single-owner sides. */
+  factionId?: CombatFactionId;
   countBefore: number;
   countAfter: number;
   destroyed: number;
