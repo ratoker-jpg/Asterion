@@ -148,3 +148,15 @@ test('protected stores: loot never reaches into the protected share', () => {
   assert.equal(loot.minerals, Math.floor(kept * 100 * 0.75), 'a big stock keeps the old 75 % cap');
   assert.equal(loot.gas, 0, 'a stock inside the protected share is never taken');
 });
+
+test('a Sun fleet that arrived early is still committed: the shield stays blocked', () => {
+  const base = campaign();
+  const player = base.profile.playerId;
+  const flight = { id: 'sun-arrived', missionId: 'sun-support', phase: 'arrived', ownerSide: 'player', arrivalAt: START - 1000 } as never;
+  const state = { ...base, flights: { ...base.flights, records: [...base.flights.records, flight] } };
+  const check = checkShieldActivation(state, player, START);
+  assert.equal(check.ok, false);
+  assert.equal(check.ok ? '' : check.code, 'hostile-flights');
+  const home = { ...state, flights: { ...state.flights, records: [{ ...(flight as object), phase: 'returning' } as never] } };
+  assert.equal(checkShieldActivation(home, player, START).ok, true);
+});

@@ -39,9 +39,13 @@ export function flightOwnerId(state: SaveState, flight: FlightRecord): string | 
 
 /** Hostile flights of the owner still heading out; they must be recalled before the shield goes up. */
 export function ownerOutboundHostileFlights(state: SaveState, ownerId: string, at: number): FlightRecord[] {
-  // A flight whose arrival time has passed is no longer en route, whether or not it was reconciled yet (chunk-size independent).
-  return (state.flights?.records ?? []).filter((flight) => flight.phase === 'outbound' && flight.arrivalAt > at
-    && isHostileMission(flight.missionId) && flightOwnerId(state, flight) === ownerId);
+  return (state.flights?.records ?? []).filter((flight) => {
+    if (!isHostileMission(flight.missionId) || flightOwnerId(state, flight) !== ownerId) return false;
+    // A Sun fleet (support or raid) stays committed to the battle after it arrives early, until it turns home.
+    if (flight.missionId === 'sun-support' || flight.missionId === 'sun-attack') return flight.phase === 'outbound' || flight.phase === 'arrived';
+    // Other fleets: a flight whose arrival time has passed is no longer en route, reconciled or not (chunk-size independent).
+    return flight.phase === 'outbound' && flight.arrivalAt > at;
+  });
 }
 
 /** Text for an attack button / launch refusal when the target owner's planets sit under a shield. */
