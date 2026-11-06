@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { ownerBuildPlan, setBuildPlanHelper, buildPriority, moveBuildPriority, putBuildPriorityFirst, removeBuildTarget, swapBuildPriority, setBuildTarget, migrateBuildPlans, type BuildPlan } from '../domain/buildings/build-plan.ts';
+import { setBuildPlanHelper, buildPriority, moveBuildPriority, putBuildPriorityFirst, removeBuildTarget, swapBuildPriority, setBuildTarget, migrateBuildPlans, type BuildPlan } from '../domain/buildings/build-plan.ts';
 import { applyFleetUiUpdate, migrateFleetUiState } from '../domain/flights/fleet-ui.ts';
 import { createDefaultNewGameConfig } from '../domain/world/config.ts';
 import type { SaveState } from './contracts.ts';
@@ -192,7 +192,7 @@ test('an implied building stands just ahead of the building that needs it', () =
   assert.equal(view.lines[0]!.priority, 1);
 });
 
-// ---- Smart planner: storages, saving up, robots, exchanges, «План как у меня» ----
+// ---- Smart planner: storages, saving up, robots, exchanges ----
 
 function withBuildings(state: SaveState, levels: Partial<Record<BuildingRole, number>>): SaveState {
   const home = state.planets[PLANET]!;
@@ -289,13 +289,4 @@ test('no exchange without a trade centre, a free charge, or with the helper off'
 test('the smart planner decides the same way every time', () => {
   const state = withBuildings(world({ targets: { construction: 14, 'metal-storage': 2 } }, { metal: 77_000, minerals: 60_000, gas: 50_000 }), { construction: 13, 'trade-center': 2 });
   assert.deepEqual(runBuildPlans(state, RUNTIME), runBuildPlans(state, RUNTIME));
-});
-
-test('«План как у меня» is the owner pattern: factory to 20, in his order, within every last level', () => {
-  const plan = ownerBuildPlan();
-  assert.equal(plan.targets.construction, 20);
-  assert.equal(plan.order![0], 'basic-energy');
-  assert.equal(buildPriority(plan)[4], 'construction');
-  assert.deepEqual(migrateBuildPlans({ [PLANET]: plan })?.[PLANET], plan);
-  assert.equal(buildBuildPlanView(world(plan), PLANET, RUNTIME).empty, false);
 });

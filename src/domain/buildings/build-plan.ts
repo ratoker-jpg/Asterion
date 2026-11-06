@@ -101,26 +101,6 @@ export function setBuildPlanHelper(plan: BuildPlan, helper: 'robots' | 'exchange
   return on ? rest : { ...rest, [key]: true };
 }
 
-/**
- * «План как у меня»: the owner's own pattern read from his build journal
- * (05.11): energy and the three mines first, the factory next (to 20, which
- * gives the 20 robots of his 10 + 10 split), then the second and third metal
- * and mineral lines, the three storages, the shipyard and the trade centre.
- * Levels are what his colonies reached; a level no building has is cut to its last one.
- */
-const OWNER_PLAN: ReadonlyArray<readonly [BuildingRole, number]> = [
-  ['basic-energy', 15], ['metal-production-1', 18], ['mineral-production-1', 13], ['gas-production-1', 10],
-  ['construction', 20], ['metal-production-2', 18], ['mineral-production-2', 13],
-  ['metal-storage', 10], ['mineral-storage', 10], ['gas-storage', 7],
-  ['metal-production-3', 18], ['shipyard', 4], ['trade-center', 3],
-];
-
-export function ownerBuildPlan(): BuildPlan {
-  let plan: BuildPlan = { targets: {} };
-  for (const [role, level] of OWNER_PLAN) plan = setBuildTarget(plan, role, level);
-  return { ...plan, order: OWNER_PLAN.map(([role]) => role) };
-}
-
 function migrateBuildPlan(value: unknown): BuildPlan | undefined {
   if (!value || typeof value !== 'object') return undefined;
   const source = value as { targets?: unknown; paused?: unknown; order?: unknown; noRobots?: unknown; noExchange?: unknown };

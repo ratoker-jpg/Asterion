@@ -8,7 +8,7 @@ import {
   getBuildingPresentation,
   type BuildingRole,
 } from '../../domain/buildings/balance-v1.ts';
-import { ownerBuildPlan, putBuildPriorityFirst, removeBuildTarget, setBuildPlanHelper, setBuildPlanPaused, setBuildTarget, swapBuildPriority, type BuildPlan } from '../../domain/buildings/build-plan.ts';
+import { putBuildPriorityFirst, removeBuildTarget, setBuildPlanHelper, setBuildPlanPaused, setBuildTarget, swapBuildPriority, type BuildPlan } from '../../domain/buildings/build-plan.ts';
 import { calculateNuclearReactorContribution, calculateSolarStationContribution } from '../../domain/energy/runtime.ts';
 import { getPlanetEnergyCoordinates } from '../../application/energy.ts';
 import { getBuildingDefinition } from '../../domain/buildings/resource-zone.ts';
@@ -154,7 +154,7 @@ export function BuildPlannerDialog({ state, now, mode, testTimeScale, planetId, 
   const copySources = planets.filter((other) => other.id !== planetId && !other.empty);
   const copyFrom = (sourceId: string) => {
     const source = state.fleetUi?.buildPlans?.[sourceId];
-    if (source) save({ targets: { ...source.targets }, ...(source.order ? { order: [...source.order] } : {}), ...(view.paused ? { paused: true } : {}), ...(view.plan.noRobots ? { noRobots: true } : {}), ...(view.plan.noExchange ? { noExchange: true } : {}) });
+    if (source) save({ targets: { ...source.targets }, ...(view.paused ? { paused: true } : {}) });
     setCopyOpen(false);
   };
 
@@ -203,7 +203,6 @@ export function BuildPlannerDialog({ state, now, mode, testTimeScale, planetId, 
             {view.empty ? (
               <div className="bplan-lead__starts">
                 <button type="button" className="fplan__btn" onClick={fromCurrent} disabled={!hasBuildings} data-qa-build-plan-from-current>Взять то, что уже есть</button>
-                <button type="button" className="fplan__btn" onClick={() => save(ownerBuildPlan())} data-qa-build-plan-owner>План как у меня</button>
               </div>
             ) : null}
           </aside>
