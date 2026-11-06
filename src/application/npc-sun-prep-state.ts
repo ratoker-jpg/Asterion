@@ -50,6 +50,10 @@ export const NPC_SUN_PREP_BALANCE = Object.freeze({
   waitingLookMs: 30_000,
   /** A leader starts a plan when members like itself would bring this share of the side. */
   selfJudgeShare: 0.7,
+  /** The leader asks for this multiple of the side's cap, strongest force first: the surplus covers a member that cannot fly its share. */
+  allotmentMargin: 1.2,
+  /** An allotment smaller than this share of the participant's cap is not worth a flight: that member keeps its fleet home. */
+  allotmentMinShare: 0.05,
 });
 
 const HOUR = 3_600_000;

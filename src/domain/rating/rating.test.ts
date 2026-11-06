@@ -131,3 +131,13 @@ test('production standings list every real owner by canonical total points, the 
     [3, 'npc-gen-02', 1, 'xeno', false],
   ]);
 });
+
+test('splitBattlePoints shares a side total by weight, exactly, with no one over it', async () => {
+  const { splitBattlePoints } = await import('./scoring.ts');
+  const split = splitBattlePoints(166_347, { a: 1, b: 1, c: 1, d: 0.0001 });
+  assert.equal(Object.values(split).reduce((sum, value) => sum + value, 0), 166_347);
+  assert.ok(split.d! < 10, 'one scout among a fleet gets almost nothing');
+  assert.deepEqual(splitBattlePoints(10, { x: 1 }), { x: 10 });
+  assert.deepEqual(splitBattlePoints(10, {}), {});
+  assert.deepEqual(splitBattlePoints(7, { b: 1, a: 1 }), { a: 4, b: 3 }, 'ties go to the smaller owner id');
+});
