@@ -55,6 +55,8 @@ export type QuickTarget = {
   owner?: { id: string; displayName: string; raceId?: string; alliance?: UniverseOwnerAlliance | null };
   /** For an asteroid: the kind of the position it currently sits on. */
   underlyingKind?: UniverseObjectKind;
+  /** The attack gate's refusal for this owner, as the map shows it; the menu says it instead of a live action. */
+  attackBlockedReason?: string | null;
   /** Free orbital debris at the coordinate. */
   orbitalDebris?: number;
   /** Debris of a Sun («Найти обломки», position 0): the flight goes to the Sun's operation. */
@@ -139,7 +141,7 @@ export function listQuickActions(target: QuickTarget, currentOwnerId: string): Q
       const attack = getUniverseActionState('attack', node, currentOwnerId, relation);
       return [
         rule('spy', spy.enabled && Boolean(target.owner), spy.reason),
-        rule('attack', attack.enabled && Boolean(target.owner), attack.reason),
+        rule('attack', attack.enabled && Boolean(target.owner) && !target.attackBlockedReason, target.attackBlockedReason || attack.reason),
         rule('transport', transport.enabled, transport.reason),
         ...recycle,
       ];

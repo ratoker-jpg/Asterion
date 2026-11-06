@@ -15,6 +15,7 @@ import debrisIcon from './assets/ui/header-icons/debris.png';
 import './ui/universe/universe-radar.css';
 import './ui/universe/map-relations.css';
 import { classifyMapPlanet, type MapRelationStatus, type MapTone } from './application/map-relation.ts';
+import { placeMapTip } from './ui/universe/map-tip-placement.ts';
 import './ui/sun-raid/universe-sun.css';
 import asteroid01 from '../assets/source/universe-navigation/asteroids/asteroid.variant-01.png';
 import asteroid02 from '../assets/source/universe-navigation/asteroids/asteroid.variant-02.png';
@@ -1020,6 +1021,8 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
     setQuick({ nodeId: node.id, anchor: event.currentTarget });
   };
   const quickNode = quick ? systemNodesById.get(quick.nodeId) ?? null : null;
+  const quickNodeStatus = quickNode ? mapStatusOf(quickNode) : null;
+  const quickAttackBlockedReason = quickNodeStatus?.attackable === false ? quickNodeStatus.detail ?? quickNodeStatus.title : null;
   const quickTarget = useMemo<QuickTarget | null>(() => {
     if (!quickNode) return null;
     const key = `${quickNode.coordinate.galaxy}:${quickNode.coordinate.system}:${quickNode.coordinate.position}`;
@@ -1029,13 +1032,14 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
       ...(quickNode.kind === 'player' || quickNode.kind === 'npc' ? { relation: getUniverseOwnerRelation(quickNode, owner.id, owner.alliance, targetOwner, allianceDiplomacy) } : {}),
       ...(targetOwner ? { owner: { id: targetOwner.id, displayName: targetOwner.displayName, raceId: targetOwner.raceId, alliance: targetOwner.alliance ?? null } } : {}),
       ...(quickNode.kind === 'asteroid' ? { underlyingKind: systemData.positions.find((node) => node.coordinate.position === quickNode.coordinate.position)?.kind } : {}),
+      attackBlockedReason: quickAttackBlockedReason,
       orbitalDebris: quickNode.kind === 'asteroid' ? 0 : orbitalDebrisByKey.get(key) ?? 0,
       explorationStatus: explorationEligibility[quickNode.id],
       ...(quickNode.kind === 'pirate' ? { pirate: pirateContacts.find((contact) => contact.contactCycleKey === quickNode.pirate?.contactCycleKey) } : {}),
     };
     // Rebuilt when the object or what is known about it changes, not on every clock tick.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quickNode?.id, quickNode?.coordinate.position, owners, allianceDiplomacy, orbitalDebrisByKey, explorationEligibility[quickNode?.id ?? ''], pirateContacts]);
+  }, [quickNode?.id, quickNode?.coordinate.position, quickAttackBlockedReason, owners, allianceDiplomacy, orbitalDebrisByKey, explorationEligibility[quickNode?.id ?? ''], pirateContacts]);
 
   const handleAction = (action: UniverseAction, node: UniversePlanetNode) => {
     const targetOwner = owners.get(node.ownerId ?? '');
@@ -1135,6 +1139,8 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
               data-qa-universe-relation={relation ?? undefined}
               data-qa-map-tone={mapStatus.tone}
               data-qa-map-attackable={mapStatus.attackable === null ? undefined : String(mapStatus.attackable)}
+              onPointerEnter={(event) => placeMapTip(event.currentTarget)}
+              onFocus={(event) => placeMapTip(event.currentTarget)}
               onClick={() => selectNode(node)}
               onContextMenu={(event) => openQuick(node, event)}
             >
@@ -1147,7 +1153,7 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
                   </span> : null}
               {showSlotLabels ? <span className="planet-slot">{node.coordinate.position}</span> : null}
               <span className="planet-name" data-qa-map-caption><MapMark tone={mapStatus.tone} blocked={mapStatus.attackable === false} />{caption}</span>
-              <span className="map-status-tip" data-qa-map-status-tip>
+              <span className="map-status-tip" data-map-status-tip data-qa-map-status-tip>
                 <strong>{node.name} <span>{coordinate}</span></strong>
                 <em><MapMark tone={mapStatus.tone} blocked={mapStatus.attackable === false} />{mapStatus.title}</em>
                 {mapStatus.detail ? <span className="map-status-tip__why">{mapStatus.detail}</span> : null}
