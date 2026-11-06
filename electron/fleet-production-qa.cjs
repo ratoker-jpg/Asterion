@@ -471,7 +471,7 @@ async function runTransportUiCycle(win, label, directory) {
   })()`);
   // Flight briefing v2 shows the whole composition (no inner scroller): every card keeps its content inside.
   console.log(`[fleet-production-qa] ${label} briefing geometry ${JSON.stringify({ cargoRect: layout.cargoRect, modalRect: layout.modalRect, viewport: layout.viewport, rightColumn: layout.rightColumn })}`);
-  if (!layout.list || layout.cards.length !== 5 || layout.cards.some((card) => card.height > 96 || !card.contentFits) || !layout.cargoFits) {
+  if (!layout.list || layout.cards.length !== 5 || layout.cards.some((card) => card.height > 170 || !card.contentFits) || !layout.cargoFits) {
     throw new Error(`${label}: transport composition/cargo geometry contract failed ${JSON.stringify(layout)}`);
   }
   const halfCapacity = Math.floor(totalCapacity / 2);

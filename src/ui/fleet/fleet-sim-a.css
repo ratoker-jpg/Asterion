@@ -135,3 +135,6 @@
 .fleet-workspace-v1 .sim-a .sim-a-chips select{max-width:none !important;width:auto !important}
 .fleet-workspace-v1 .sim-a-tile>small{display:none}
 .fleet-workspace-v1 .sim-a .sim-run-v1:disabled{opacity:1 !important;background:rgba(8,16,28,.9) !important;color:#9fb3c6 !important}
+.fleet-workspace-v1 .sim-a-hero>p b{font-size:inherit !important;font-weight:800}
+.fleet-workspace-v1 .sim-a .sim-population-v1>span:first-child,.fleet-workspace-v1 .sim-a .sim-population-v1 small:first-child{display:inline-block;text-transform:lowercase !important}
+.fleet-workspace-v1 .sim-a .sim-population-v1>span:first-child::first-letter,.fleet-workspace-v1 .sim-a .sim-population-v1 small:first-child::first-letter{text-transform:uppercase}
