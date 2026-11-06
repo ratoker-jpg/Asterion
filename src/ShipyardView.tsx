@@ -16,6 +16,7 @@ import { ACTIVE_RUNTIME_MODE, resolveTestTimeScale } from './domain/runtime/mode
 import { FLEET_PRODUCTION_START_REQUEST_EVENT } from './application/fleet-production.ts';
 import { readFleetBuildBudget, type FleetBuildBudget } from './application/fleet.ts';
 import { FleetConstructionHeader } from './FleetConstructionHeader';
+import { FLEET_PLANNER_OPEN_EVENT } from './building-interior-navigation.ts';
 import { FleetUnitRow } from './ui/fleet/FleetUnitRow';
 import { evaluateProductionRequirements } from './domain/fleet/requirements.ts';
 
@@ -266,6 +267,12 @@ export function ShipyardView({ planetName, coords, planetId, budget: providedBud
         population={fleetSummary.population}
         capacity={fleetSummary.capacity}
         free={fleetSummary.available}
+        action={planetId ? (
+          <button type="button" className="fc-head__plan" data-qa-fleet-planner-open onClick={() => window.dispatchEvent(new CustomEvent(FLEET_PLANNER_OPEN_EVENT, { detail: { planetId } }))}>
+            <img src={ships.find((ship) => ship.id === 'battleship')?.art ?? ships[0]?.art} alt="" draggable={false} />
+            Эталонный флот
+          </button>
+        ) : null}
       />
 
       <div className="fc-unit-list">

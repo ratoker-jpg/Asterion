@@ -15,6 +15,7 @@ import type { FleetPlan } from './domain/fleet/fleet-plan.ts';
 import type { ShipId } from './domain/combat/ids.ts';
 import { startFleetPlanLines, type FleetPlanStartResult } from './application/fleet-plan.ts';
 import { fleetPlanReport } from './ui/fleet-plan/fleet-plan-text.ts';
+import { FleetPlannerDialog } from './ui/fleet-plan/FleetPlannerDialog.tsx';
 import { OperationsView } from './OperationsView';
 import { createOperationsVariantAQaFixture, getOperationsVariantAQaStatus } from './operations-variant-a-qa-fixture.ts';
 import { createUniverseNpcOwnerProfile, rerollTestUniverseLayout, TEST_MODE_ALLY_PLANET_FIXTURE, UNIVERSE_NPC_OWNER_ID } from './domain/universe/runtime.ts';
@@ -40,6 +41,7 @@ import { ApprovedZoneIcon } from './ui/header/HeaderAssetIcons';
 import { GameIcon } from './ui/header/HeaderIcons';
 import {
   FLEET_CONSTRUCTION_REQUEST_EVENT,
+  FLEET_PLANNER_OPEN_EVENT,
   canEnterBuildingInterior,
   createBuildingInteriorContext,
   getBuildingInteriorTarget,
@@ -2580,6 +2582,15 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const [commandFocus, setCommandFocus] = useState<{ tab: 'operations' | 'overview'; nonce: number } | null>(null);
   const [selectedSun, setSelectedSun] = useState<SunSelection>(() => ({ galaxy: homePlanet?.universeGalaxy ?? 1, system: homePlanet?.universeSystem ?? 1 }));
   const [gateDialogPlanetId, setGateDialogPlanetId] = useState<string | null>(null);
+  const [fleetPlannerPlanetId, setFleetPlannerPlanetId] = useState<string | null>(null);
+  useEffect(() => {
+    const onOpenPlanner = (event: Event) => {
+      const planetId = (event as CustomEvent<{ planetId?: string }>).detail?.planetId;
+      if (planetId) setFleetPlannerPlanetId(planetId);
+    };
+    window.addEventListener(FLEET_PLANNER_OPEN_EVENT, onOpenPlanner);
+    return () => window.removeEventListener(FLEET_PLANNER_OPEN_EVENT, onOpenPlanner);
+  }, []);
   const [pauseOpen, setPauseOpen] = useState(false);
   const openPauseMenu = useCallback(() => setPauseOpen(true), []);
   // The world summary stays in the save until the player closes it.
@@ -3283,6 +3294,20 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
           document.body,
         )}
 
+        {fleetPlannerPlanetId && state.planets[fleetPlannerPlanetId] ? (
+          <FleetPlannerDialog
+            state={state}
+            now={now}
+            mode={RUNTIME_MODE}
+            testTimeScale={testTimeScale}
+            planetId={fleetPlannerPlanetId}
+            planetArt={Object.fromEntries(ownedPlanets.map((planet) => [planet.id, planetSkins.find((skin) => skin.id === state.planets[planet.id].skin)?.art ?? planetSkins[0].art]))}
+            onPlanet={setFleetPlannerPlanetId}
+            onClose={() => setFleetPlannerPlanetId(null)}
+            onSavePlan={saveFleetPlan}
+            onStart={(id, shipIds) => startFleetPlan(id, shipIds)}
+          />
+        ) : null}
         {gateDialogPlanetId ? (
           <GateDialog
             state={state}

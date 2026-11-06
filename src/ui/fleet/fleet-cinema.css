@@ -1,0 +1,270 @@
+/* ==========================================================================
+   FLEETS, variant A «Кино» (owner's choice, 05.11): the mission is a big
+   picture, all missions are a ribbon of full pictures under it, the ships
+   are big tiles. Text tabs instead of framed wings. One corner style
+   (--fa-r), no frames inside frames. Loaded after fleet-command.css; every
+   selector starts at .fleet-workspace-v1 so it wins over the older layers.
+   Font sizes carry !important for the same reason as fleet-command.css.
+   ========================================================================== */
+
+.fleet-workspace-v1{
+  --fa-r:14px;
+  --fa-ac:#5fd4ff;
+  --fa-ink:#04080f;
+  --fa-tile:rgba(150,200,255,.055);
+  --fa-tile-2:rgba(150,200,255,.1);
+  --fa-mu:#93a7bd;
+  --fa-go:linear-gradient(180deg,#7ee2ff,#2fb2ee);
+}
+
+/* ---------- section tabs: plain words, the current one underlined ---------- */
+.fleet-workspace-v1 .fc-wings{min-height:52px;grid-template-columns:minmax(0,1fr) 170px minmax(0,1fr);padding:0 10px}
+.fleet-workspace-v1 .fc-wing,
+.fleet-workspace-v1 .fc-wing--build,
+.fleet-workspace-v1 .fc-wing--command{padding:0;background:none;box-shadow:none;border-radius:0;display:flex;align-items:center}
+.fleet-workspace-v1 .fc-wing>h3{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.fleet-workspace-v1 .fc-wing__tabs{display:flex;gap:34px;align-items:center;width:100%}
+.fleet-workspace-v1 .fc-wing--command .fc-wing__tabs{justify-content:flex-end}
+.fleet-workspace-v1 .fc-wing__tabs>button{
+  flex:none;height:auto;min-height:0;padding:8px 0;gap:0;border-radius:0;background:none;
+  color:#a5b7ca;font-weight:600;box-shadow:none;position:relative;
+}
+.fleet-workspace-v1 .fc-wing__tabs>button>img{display:none}
+.fleet-workspace-v1 .fc-wing__tabs>button>span{font-size:calc(18px * var(--text-scale-control,1)) !important;white-space:nowrap;line-height:1.2}
+.fleet-workspace-v1 .fc-wing__tabs>button::after{
+  content:"";position:absolute;left:0;right:0;bottom:0;height:3px;border-radius:2px;background:var(--fa-ac);
+  scale:0 1;transition:scale var(--ut-motion-base) var(--ut-ease-out);
+}
+.fleet-workspace-v1 .fc-wing__tabs>button:hover{background:none;color:#fff}
+.fleet-workspace-v1 .fc-wing__tabs>button.is-on{background:none;box-shadow:none;color:#fff}
+.fleet-workspace-v1 .fc-wing__tabs>button.is-on::after{scale:1 1}
+.fleet-workspace-v1 .fc-wing__tabs>button:focus-visible{outline:var(--ut-focus);outline-offset:4px}
+
+/* ---------- the send-a-fleet screen: one column ---------- */
+.fleet-workspace-v1 .fleet-root-v2{display:flex !important;flex-direction:column;gap:10px !important}
+.fleet-workspace-v1 .fleet-root-v2>.fleet-flights-v2{flex:none;min-height:40px}
+.fleet-workspace-v1 .fleet-root-v2:has(> .fleet-flights-drop-v2.is-open)>.fc-missions,
+.fleet-workspace-v1 .fleet-root-v2:has(> .fleet-flights-drop-v2.is-open)>.fc-hangar{display:none}
+
+/* the mission picture */
+.fleet-workspace-v1 .fa-hero{
+  position:relative;flex:none;isolation:isolate;
+  display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto;
+  min-height:244px;padding:22px 30px 20px 34px;gap:0;
+  border-radius:var(--fa-r);overflow:hidden;background:var(--fa-ink);box-shadow:none;
+}
+.fleet-workspace-v1 .fa-hero__art{position:absolute;inset:0 0 0 28%;z-index:-1}
+.fleet-workspace-v1 .fa-hero__art img{
+  position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:right center;
+  animation:fa-banner-in 620ms var(--ut-ease-expo) both;
+}
+.fleet-workspace-v1 .fa-hero__art::after{
+  content:"";position:absolute;inset:0;
+  background:linear-gradient(90deg,var(--fa-ink) 0,rgba(4,8,15,.82) 22%,rgba(4,8,15,.1) 62%),linear-gradient(0deg,rgba(4,8,15,.7),transparent 46%);
+}
+@keyframes fa-banner-in{from{opacity:0;scale:1.06}to{opacity:1;scale:1}}
+.fleet-workspace-v1 .fa-hero__text{max-width:820px;min-width:0}
+.fleet-workspace-v1 .fa-kicker{display:block;color:var(--fa-ac);font-size:calc(16px * var(--text-scale-secondary,1)) !important;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
+.fleet-workspace-v1 .fa-hero__text>h2{
+  margin:2px 0 4px;color:#fff;font-size:calc(54px * var(--text-scale-page-title,1)) !important;font-weight:900;line-height:1.08;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.fleet-workspace-v1 .fa-hero .fc-mission-text{
+  margin:0;color:#cfdbe8;font-size:calc(19px * var(--text-scale-body,1)) !important;line-height:1.3;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+}
+
+/* mission set-up inside the picture: rounds, flight length, commanders */
+.fleet-workspace-v1 .fa-hero .fc-prep{display:flex;flex-wrap:wrap;align-items:center;gap:8px 22px;margin-top:12px;max-width:1100px}
+.fleet-workspace-v1 .fa-hero .fc-prep h3{color:var(--fa-mu);font-size:calc(15px * var(--text-scale-secondary,1)) !important;letter-spacing:0;text-transform:none;font-weight:600}
+.fleet-workspace-v1 .fa-hero .fc-prep__line>button,
+.fleet-workspace-v1 .fa-hero .fc-prep__list>label{border-radius:10px;background:var(--fa-tile-2);box-shadow:none;border:0}
+.fleet-workspace-v1 .fa-hero .fc-prep__line>button.is-on,
+.fleet-workspace-v1 .fa-hero .fc-prep__list>label.is-on{background:rgba(95,212,255,.24);color:#fff;box-shadow:inset 0 0 0 2px var(--fa-ac)}
+.fleet-workspace-v1 .fa-hero .fc-prep__commanders{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;min-width:0}
+.fleet-workspace-v1 .fa-hero .fc-prep__commanders>p{margin:0;max-width:460px;color:var(--fa-mu);font-size:calc(14px * var(--text-scale-helper,1)) !important;line-height:1.25}
+.fleet-workspace-v1 .fa-hero .fc-prep__line>input{border:0;border-radius:10px;background:rgba(0,0,0,.45)}
+
+/* numbers and the go button at the bottom of the picture */
+.fleet-workspace-v1 .fa-hero .fc-dock{
+  grid-row:4;display:flex;align-items:flex-end;gap:36px;margin:14px 0 0;padding:0;min-height:0;
+  border:0;border-radius:0;background:none;box-shadow:none;position:static;
+}
+.fleet-workspace-v1 .fa-hero .fc-dock>div{display:flex;align-items:baseline;gap:8px;flex:none}
+.fleet-workspace-v1 .fa-hero .fc-dock>div>small{margin:0;color:var(--fa-mu);font-size:calc(18px * var(--text-scale-secondary,1)) !important;white-space:nowrap}
+.fleet-workspace-v1 .fa-hero .fc-dock>div>b{display:inline;color:#fff;font-size:calc(24px * var(--text-scale-table,1)) !important;font-weight:800;white-space:nowrap;font-variant-numeric:tabular-nums}
+.fleet-workspace-v1 .fa-hero .fc-dock__status{
+  flex:1 1 0;min-width:0;align-self:center;text-align:right;color:#dbe7f2;text-shadow:0 1px 8px #000;
+  font-size:calc(15px * var(--text-scale-body,1)) !important;line-height:1.25;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+}
+.fleet-workspace-v1 .fa-hero .fc-dock__go{
+  position:relative;overflow:hidden;flex:none;height:72px;padding:0 42px;border:0;border-radius:var(--fa-r);
+  background:var(--fa-go);color:#04202e;box-shadow:0 0 34px rgba(95,212,255,.35);
+  font-size:calc(25px * var(--text-scale-control,1)) !important;font-weight:800;letter-spacing:0;white-space:nowrap;cursor:pointer;
+  transition:scale var(--ut-motion-press) var(--ut-ease-out),filter var(--ut-motion-base) ease,box-shadow var(--ut-motion-base) ease;
+}
+.fleet-workspace-v1 .fa-hero .fc-dock__go::after{
+  content:"";position:absolute;inset:0;translate:-120% 0;
+  background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.55) 50%,transparent 70%);
+  animation:fa-sheen 3.6s var(--ut-ease-in-out) 1.2s infinite;
+}
+.fleet-workspace-v1 .fa-hero .fc-dock__go:hover:not(:disabled){filter:brightness(1.08);box-shadow:0 0 46px rgba(95,212,255,.55)}
+.fleet-workspace-v1 .fa-hero .fc-dock__go:active:not(:disabled){scale:.97}
+.fleet-workspace-v1 .fa-hero .fc-dock__go:disabled{background:rgba(150,200,255,.14);color:#8ea3b6;box-shadow:none;opacity:1;cursor:not-allowed}
+.fleet-workspace-v1 .fa-hero .fc-dock__go:disabled::after{display:none}
+@keyframes fa-sheen{0%,62%{translate:-120% 0}100%{translate:120% 0}}
+
+/* the ribbon of all missions: full pictures */
+.fleet-workspace-v1 .fleet-root-v2>.fc-missions{
+  flex:none;display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:8px;height:92px;
+}
+.fleet-workspace-v1 .fleet-root-v2>.fc-missions>button.fa-mission{
+  position:relative;overflow:hidden;isolation:isolate;
+  display:flex;align-items:flex-end;justify-content:flex-start;height:100%;min-height:0;padding:8px 10px;
+  border:0;border-radius:var(--fa-r);background:var(--fa-ink);box-shadow:none;color:#fff;text-align:left;cursor:pointer;
+  filter:saturate(.8) brightness(.78);
+  transition:filter var(--ut-motion-base) ease,translate var(--ut-motion-base) var(--ut-ease-out),box-shadow var(--ut-motion-base) ease;
+}
+.fleet-workspace-v1 .fleet-root-v2>.fc-missions>button.fa-mission img{
+  position:absolute;inset:0;z-index:-2;width:100%;height:100%;max-width:none;object-fit:cover;object-position:82% 50%;
+  transition:scale 620ms var(--ut-ease-expo);
+}
+.fleet-workspace-v1 .fleet-root-v2>.fc-missions>button.fa-mission::before{
+  content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(0deg,rgba(4,8,15,.92) 16%,transparent 76%);
+}
+.fleet-workspace-v1 .fleet-root-v2>.fc-missions>button.fa-mission span{
+  font-size:calc(16px * var(--text-scale-control,1)) !important;font-weight:700;line-height:1.1;text-shadow:0 1px 6px #000;
+  overflow-wrap:anywhere;hyphens:auto;
+}
+.fleet-workspace-v1 .fleet-root-v2>.fc-missions>button.fa-mission:hover:not(:disabled){filter:none;translate:0 -3px}
+.fleet-workspace-v1 .fleet-root-v2>.fc-missions>button.fa-mission:hover:not(:disabled) img{scale:1.08}
+.fleet-workspace-v1 .fleet-root-v2>.fc-missions>button.fa-mission.is-on{
+  filter:none;background:var(--fa-ink);box-shadow:inset 0 0 0 3px var(--fa-ac),0 0 26px rgba(95,212,255,.45);
+}
+.fleet-workspace-v1 .fleet-root-v2>.fc-missions>button.fa-mission:focus-visible{outline:var(--ut-focus);outline-offset:2px}
+.fleet-workspace-v1 .fleet-root-v2>.fc-missions>button.fa-mission:disabled{filter:grayscale(1) brightness(.5);opacity:1;cursor:not-allowed}
+
+/* ships on the planet */
+.fleet-workspace-v1 .fleet-root-v2>.fc-hangar{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;gap:8px}
+.fleet-workspace-v1 .fc-hangar__head{flex:none;min-height:40px;gap:18px}
+.fleet-workspace-v1 .fc-hangar__head>h2{font-size:calc(20px * var(--text-scale-section-title,1)) !important}
+.fleet-workspace-v1 .fc-hangar__yard{color:var(--fa-mu)}
+.fleet-workspace-v1 .fc-chips>button,
+.fleet-workspace-v1 .fc-hangar__all>button{height:36px;padding:0 14px;border-radius:10px;background:var(--fa-tile-2);font-size:calc(15px * var(--text-scale-control,1)) !important}
+.fleet-workspace-v1 .fc-chips>button.is-on{background:rgba(95,212,255,.24);color:#fff;box-shadow:inset 0 0 0 2px var(--fa-ac)}
+
+.fleet-workspace-v1 .fleet-root-v2 .fc-roster{
+  flex:1 1 auto;grid-template-columns:repeat(6,minmax(0,1fr));grid-auto-rows:minmax(212px,1fr);gap:10px;padding:2px;
+}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship{
+  position:relative;display:flex;flex-direction:column;align-items:stretch;gap:0;min-height:212px;padding:12px 14px 10px;
+  border-radius:var(--fa-r);background:var(--fa-tile);box-shadow:none;overflow:hidden;isolation:isolate;
+  animation:fa-tile-in var(--ut-motion-item) var(--ut-ease-out) both;animation-delay:calc(var(--fa-i,0) * 40ms);
+  transition:background-color var(--ut-motion-base) ease,box-shadow var(--ut-motion-base) ease,translate var(--ut-motion-base) var(--ut-ease-out);
+}
+@keyframes fa-tile-in{from{opacity:0;translate:0 14px}to{opacity:1;translate:0 0}}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship:hover{translate:0 -3px}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship.is-picked{background:rgba(95,212,255,.1);box-shadow:inset 0 0 0 2px var(--fa-ac)}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship.is-empty{opacity:.45}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship>h3{
+  position:relative;z-index:1;margin:0;font-size:calc(20px * var(--text-scale-section-title,1)) !important;font-weight:800;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 6px #000;
+}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__have{position:relative;z-index:1;margin:0;color:var(--fa-mu);gap:6px;font-size:calc(16px * var(--text-scale-secondary,1)) !important;text-shadow:0 1px 6px #000}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__have>b{color:#fff;font-size:calc(17px * var(--text-scale-table,1)) !important;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__pop{margin-left:auto;flex:none}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__art{
+  position:absolute;z-index:0;right:-6px;top:30px;bottom:66px;width:72%;height:auto;padding:0;
+  display:grid;place-items:center;border:0;border-radius:0;background:none;box-shadow:none;cursor:pointer;
+}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__art:disabled{cursor:default}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__art img{
+  width:100%;height:100%;max-width:none;max-height:none;object-fit:contain;
+  filter:drop-shadow(0 8px 16px rgba(0,0,0,.65));transition:scale 520ms var(--ut-spring),filter var(--ut-motion-base) ease;
+}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship:hover .fc-ship__art img{scale:1.07}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship.is-picked .fc-ship__art img{scale:1.07;filter:drop-shadow(0 8px 16px rgba(0,0,0,.65)) drop-shadow(0 0 14px rgba(95,212,255,.35))}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__art:focus-visible{outline:var(--ut-focus);outline-offset:-2px;border-radius:var(--fa-r)}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__amount{
+  position:relative;z-index:1;margin-top:auto;display:grid;grid-template-columns:38px minmax(0,1fr) 38px auto;gap:5px;
+}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__amount>*{height:42px;border:0;border-radius:12px}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__amount input{
+  min-width:0;padding:0 4px;background:rgba(0,0,0,.5);color:#fff;text-align:center;
+  font-size:calc(18px * var(--text-scale-control,1)) !important;font-weight:800;font-variant-numeric:tabular-nums;
+}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship.is-picked .fc-ship__amount input{color:var(--fa-ac)}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__amount>button{
+  padding:0 10px;background:rgba(0,0,0,.45);color:#fff;font-size:calc(18px * var(--text-scale-control,1)) !important;font-weight:800;
+}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__amount>button:last-of-type{background:var(--fa-tile-2);font-size:calc(16px * var(--text-scale-control,1)) !important}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__amount>button:hover:not(:disabled){background:rgba(95,212,255,.24)}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship>.amount-slider{position:relative;z-index:1;margin-top:6px}
+.fleet-workspace-v1 .fleet-root-v2 .fc-empty{grid-column:1/-1;border-radius:var(--fa-r);background:var(--fa-tile)}
+
+@media (prefers-reduced-motion:reduce){
+  .fleet-workspace-v1 .fa-hero__art img,
+  .fleet-workspace-v1 .fleet-root-v2 .fc-ship{animation:none}
+  .fleet-workspace-v1 .fa-hero .fc-dock__go::after{display:none}
+}
+
+/* ==========================================================================
+   Catalogue (ships, defence, commander ships): cards with a big picture,
+   the price under the name, the amount and «Построить» in one row.
+   The queue keeps its column on the right.
+   ========================================================================== */
+.fleet-workspace-v1 .fc-head{min-height:64px;gap:18px;padding:0 2px}
+.fleet-workspace-v1 .fc-head>img{display:none}
+.fleet-workspace-v1 .fc-head__title>h2{font-size:calc(38px * var(--text-scale-page-title,1)) !important;font-weight:900}
+.fleet-workspace-v1 .fc-head__title>p{color:var(--fa-mu);font-size:calc(16px * var(--text-scale-body,1)) !important}
+.fleet-workspace-v1 .fc-head__pool>small{color:var(--fa-mu);font-size:calc(15px * var(--text-scale-secondary,1)) !important}
+.fleet-workspace-v1 .fc-head__pool>strong{font-size:calc(22px * var(--text-scale-table,1)) !important}
+.fleet-workspace-v1 .fc-head__plan{
+  flex:none;display:flex;align-items:center;gap:10px;height:52px;padding:0 20px 0 8px;border:0;border-radius:var(--fa-r);
+  background:var(--fa-tile-2);color:#fff;font-size:calc(17px * var(--text-scale-control,1)) !important;font-weight:800;white-space:nowrap;cursor:pointer;
+  transition:background-color var(--ut-motion-base) ease,translate var(--ut-motion-base) var(--ut-ease-out);
+}
+.fleet-workspace-v1 .fc-head__plan img{width:40px;height:40px;border-radius:50%;object-fit:cover}
+.fleet-workspace-v1 .fc-head__plan:hover{background:rgba(95,212,255,.22);translate:0 -2px}
+.fleet-workspace-v1 .fc-head__plan:focus-visible{outline:var(--ut-focus);outline-offset:2px}
+
+.fleet-workspace-v1 .fc-catalog>.fc-unit-list{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair){
+  display:grid;grid-template-columns:minmax(0,1fr) auto;
+  grid-template-areas:"art art" "name stock" "cost cost" "time time" "amount build" "lock lock";
+  align-items:center;column-gap:8px;row-gap:6px;min-height:0;padding:0 16px 14px;
+  border-radius:var(--fa-r);background:var(--fa-tile);box-shadow:none;
+  animation:fa-tile-in var(--ut-motion-item) var(--ut-ease-out) both;
+}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair):hover{box-shadow:inset 0 0 0 1px rgba(150,200,255,.24)}
+.fleet-workspace-v1 .fc-catalog .fc-unit.is-picked{background:rgba(95,212,255,.08);box-shadow:inset 0 0 0 2px var(--fa-ac)}
+.fleet-workspace-v1 .fc-catalog .fc-unit.is-locked{background:rgba(150,200,255,.03)}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__art{grid-area:art;height:170px;margin:0 -16px}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__art>img{max-width:82%;max-height:160px;filter:drop-shadow(0 12px 24px rgba(0,0,0,.75))}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__name{grid-area:name;display:flex;flex-direction:column}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__name>h3{font-size:calc(21px * var(--text-scale-section-title,1)) !important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__name>small{color:var(--fa-mu);font-size:calc(14px * var(--text-scale-secondary,1)) !important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__level{color:var(--fa-mu);font-size:calc(14px * var(--text-scale-secondary,1)) !important}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__stock{grid-area:stock;align-self:start;justify-items:end;text-align:right;max-width:170px}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__stock>small{color:var(--fa-mu);font-size:calc(14px * var(--text-scale-secondary,1)) !important}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__stock>strong{font-size:calc(21px * var(--text-scale-table,1)) !important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;overflow-wrap:normal}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__stock>em{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;overflow-wrap:normal}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__cost{grid-area:cost;display:flex;flex-wrap:wrap;gap:4px 16px}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__cost dd{font-size:calc(17px * var(--text-scale-table,1)) !important}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__time{grid-area:time;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__time>small{color:var(--fa-mu);font-size:calc(14px * var(--text-scale-secondary,1)) !important}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__amount{grid-area:amount;grid-template-columns:minmax(0,1fr) auto;gap:6px}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__amount>input{height:48px;border:0;border-radius:12px;background:rgba(0,0,0,.5);text-align:center;font-size:calc(18px * var(--text-scale-control,1)) !important;font-weight:800}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__amount>button{height:48px;padding:0 14px;border:0;border-radius:12px;background:var(--fa-tile-2);font-size:calc(16px * var(--text-scale-control,1)) !important;font-weight:700}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__amount>button[data-qa-unit-min]{display:none}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__amount>small{color:var(--fa-mu)}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__build{
+  grid-area:build;align-self:start;width:auto;height:48px;padding:0 18px;border:0;border-radius:12px;
+  background:var(--fa-go);color:#04202e;box-shadow:0 0 22px rgba(95,212,255,.25);font-size:calc(17px * var(--text-scale-control,1)) !important;
+}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__build:disabled{background:rgba(150,200,255,.12);color:#8ea3b6;box-shadow:none;opacity:1}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__lock{grid-area:lock;align-self:stretch;padding:10px 12px;border-radius:12px;background:rgba(0,0,0,.35)}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__lock small{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__info{position:absolute;top:12px;right:12px;width:34px;height:34px;background:rgba(0,0,0,.4);font-size:calc(16px * var(--text-scale-control,1)) !important}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__art .shipyard-stats-tooltip-v1{left:12px;right:12px;top:8px;bottom:auto;width:auto}

@@ -1521,12 +1521,12 @@ async function runViewport(width, height) {
         objectFit: imageStyle?.objectFit || '',
       };
     })`);
-    // Fleets redesign: rectangular mission tiles (icon + label); the icon itself stays square and inside its tile.
+    // Fleets variant A: every mission tile is a full picture; it fills its tile exactly, cropped by cover, never stretched.
     const missionIconsFit = missionSlots.length >= 9 && missionSlots.every((slot) => {
       const button = slot.button;
       const image = slot.image;
       const epsilon = 0.5;
-      return button.width > 0 && button.height > 0 && image && image.width > 0 && Math.abs(image.width - image.height) <= epsilon && image.x >= button.x - epsilon && image.y >= button.y - epsilon && image.x + image.width <= button.x + button.width + epsilon && image.y + image.height <= button.y + button.height + epsilon && slot.naturalWidth > 0 && slot.naturalHeight > 0 && (slot.objectFit === 'contain' || (slot.objectFit === 'cover' && slot.naturalWidth === slot.naturalHeight));
+      return button.width > 0 && button.height > 0 && image && Math.abs(image.x - button.x) <= epsilon && Math.abs(image.y - button.y) <= epsilon && Math.abs(image.width - button.width) <= epsilon && Math.abs(image.height - button.height) <= epsilon && slot.naturalWidth > 0 && slot.naturalHeight > 0 && slot.objectFit === 'cover' && slot.buttonOverflow === 'hidden';
     });
     if (!missionIconsFit) throw new Error(`${label}: mission icon slot contract failed ${JSON.stringify(missionSlots)}`);
 
