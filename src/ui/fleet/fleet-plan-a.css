@@ -1,0 +1,289 @@
+/* ==========================================================================
+   FLIGHT PLAN, variant A «Кино» (approved mockups 03–06, 10, commit 729efb1).
+   A full screen: the route band on top (planet → line → planet, the time
+   and the gas on the line), then «Что летит», then cargo / target / probe,
+   and the numbers with «Отправить» along the bottom. The old blocks keep
+   their data-qa hooks; the ones the mockup has no place for are kept for
+   screen readers only. Loaded last; every selector starts at the dialog.
+   ========================================================================== */
+
+html body .resource-building-action-confirm-backdrop:has(> .flight-briefing-v2){
+  background:#04080f !important;backdrop-filter:none !important;padding:0 !important;
+}
+html body .resource-building-action-confirm.flight-timeline-modal.flight-briefing-v2{
+  --pa:#5fd4ff;--pm:#93a7bd;--pt:rgba(150,200,255,.055);--pt2:rgba(150,200,255,.1);--pr:14px;
+  position:fixed !important;left:0 !important;top:0 !important;right:auto !important;bottom:auto !important;zoom:var(--pa-z,1);width:calc(100vw / var(--pa-z,1)) !important;max-width:none !important;height:calc(100vh / var(--pa-z,1)) !important;max-height:none !important;
+  margin:0 !important;padding:0 0 140px !important;border:0 !important;border-radius:0 !important;
+  background:#04080f !important;box-shadow:none !important;clip-path:none !important;
+  display:block !important;overflow:hidden auto !important;color:#eef5ff;
+  animation:pa-in 420ms var(--ut-ease-expo,ease-out) both;
+}
+@keyframes pa-in{from{opacity:0}to{opacity:1}}
+html body .flight-briefing-v2::before,html body .flight-briefing-v2::after{display:none !important}
+
+/* hidden for the eye, kept for screen readers and checks */
+html body .flight-briefing-v2 .flight-timeline-head h3,
+html body .flight-briefing-v2 .flight-timeline-head p,
+html body .flight-briefing-v2 .flight-timeline-step>span,
+html body .flight-briefing-v2 .flight-timeline-step small:first-child,
+html body .flight-briefing-v2 .flight-timeline-step-connector,
+html body .flight-briefing-v2 .flight-plan-fleet>small,
+html body .flight-briefing-v2 .flight-composition-v3__total,
+html body .flight-briefing-v2 .flight-timeline-summary,
+html body .flight-briefing-v2 .flight-timeline-cargo-head>div,
+html body .flight-briefing-v2 .flight-timeline-cargo-head>span>small,
+html body .flight-briefing-v2 .flight-timeline-cargo-head>span>em,
+html body .flight-briefing-v2 .flight-timeline-meta,
+html body .flight-briefing-v2 [data-qa-flight-preview-cancel],
+html body .flight-briefing-v2 .fa-quiet{
+  position:absolute !important;width:1px !important;height:1px !important;overflow:hidden !important;clip-path:inset(50%) !important;white-space:nowrap !important;margin:0 !important;padding:0 !important;border:0 !important;
+}
+/* …except what the player must see: errors and the gas reminder */
+html body .flight-briefing-v2 .flight-timeline-summary:has(.flight-timeline-error, [data-qa-gas-preview-reconfirmation]){
+  position:fixed !important;left:60px !important;right:auto !important;bottom:124px !important;top:auto !important;width:auto !important;max-width:900px;height:auto !important;
+  clip-path:none !important;overflow:visible !important;white-space:normal !important;z-index:5;background:none !important;border:0 !important;
+}
+html body .flight-briefing-v2 .flight-timeline-summary:has(.flight-timeline-error, [data-qa-gas-preview-reconfirmation])>*:not(.flight-timeline-error):not(.flight-timeline-notes:has([data-qa-gas-preview-reconfirmation])){display:none !important}
+html body .flight-briefing-v2 .flight-timeline-error,
+html body .flight-briefing-v2 [data-qa-gas-preview-reconfirmation]{margin:0 !important;padding:0 !important;border:0 !important;background:none !important;color:#ff8a95 !important;font-size:18px !important;font-weight:700}
+
+/* ---------- head: kicker and the close cross ---------- */
+html body .flight-briefing-v2 .flight-timeline-head{
+  position:absolute !important;inset:0 0 auto 0;z-index:8;display:block !important;height:0;padding:0 !important;margin:0 !important;border:0 !important;background:none !important;
+}
+html body .flight-briefing-v2 .flight-timeline-head>img{display:none}
+html body .flight-briefing-v2 .fa-plan-kicker{
+  position:fixed;left:60px;top:34px;color:var(--pa) !important;font-size:17px !important;font-weight:700;letter-spacing:.12em;text-transform:uppercase;white-space:nowrap;
+}
+html body .flight-briefing-v2 .flight-timeline-close{
+  position:fixed !important;top:28px !important;right:32px !important;left:auto !important;width:56px !important;height:56px !important;
+  display:grid !important;place-items:center;border:0 !important;border-radius:var(--pr) !important;background:#2a0f18 !important;
+  box-shadow:inset 0 0 0 2px rgba(255,106,120,.4) !important;color:#ff8a95 !important;font-size:30px !important;line-height:1;cursor:pointer;
+  transition:background-color 200ms ease,scale 140ms ease;
+}
+html body .flight-briefing-v2 .flight-timeline-close:hover{background:#4a1626 !important}
+html body .flight-briefing-v2 .flight-timeline-close:active{scale:.94}
+
+/* ---------- the route band ---------- */
+html body .flight-briefing-v2 .fa-route{position:relative;width:1920px;max-width:100%;margin:0 auto;height:470px;isolation:isolate;overflow:hidden}
+html body .flight-briefing-v2 .fa-route::before{left:-100vw !important;right:-100vw !important}
+html body .flight-briefing-v2 .fa-route::before{
+  content:"";position:absolute;inset:0;z-index:-2;background:var(--fa-plan-banner) right center/cover no-repeat;opacity:.42;
+}
+html body .flight-briefing-v2 .fa-route::after{
+  content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(0deg,#04080f 4%,transparent 58%),linear-gradient(90deg,#04080f 0,transparent 40%);
+}
+html body .flight-briefing-v2 .fa-route__from{position:absolute;left:130px;top:115px;width:250px;height:250px;object-fit:contain;filter:drop-shadow(0 0 40px rgba(77,163,255,.4));animation:pa-planet 900ms var(--ut-ease-expo,ease-out) both}
+html body .flight-briefing-v2 .fa-route__to{position:absolute;left:1540px;top:95px;width:290px;height:290px;object-fit:contain;filter:drop-shadow(0 0 40px rgba(79,227,160,.4));animation:pa-planet 900ms 120ms var(--ut-ease-expo,ease-out) both}
+html body .flight-briefing-v2 .fa-route.is-hostile .fa-route__to{filter:drop-shadow(0 0 40px rgba(255,106,120,.45))}
+@keyframes pa-planet{from{opacity:0;scale:.86}to{opacity:1;scale:1}}
+html body .flight-briefing-v2 .fa-route__pick{
+  position:absolute;left:1570px;top:130px;width:230px;height:230px;border-radius:50%;border:3px dashed rgba(95,212,255,.55);
+  display:grid;place-items:center;text-align:center;color:var(--pa);font-size:20px;font-weight:700;line-height:1.3;
+  animation:pa-pulse 2.4s ease-in-out infinite;
+}
+@keyframes pa-pulse{0%,100%{border-color:rgba(95,212,255,.35)}50%{border-color:rgba(95,212,255,.8)}}
+html body .flight-briefing-v2 .fa-route__line{
+  position:absolute;left:370px;top:243px;width:1170px;height:4px;border-radius:2px;
+  background:repeating-linear-gradient(90deg,rgba(95,212,255,.8) 0 4px,transparent 4px 16px);
+}
+html body .flight-briefing-v2 .fa-route.is-set .fa-route__line{
+  height:5px;background:linear-gradient(90deg,#5fd4ff,#4fe3a0);box-shadow:0 0 10px rgba(95,212,255,.6);
+  transform-origin:left center;animation:pa-draw 700ms 200ms var(--ut-ease-expo,ease-out) both;
+}
+html body .flight-briefing-v2 .fa-route.is-set.is-hostile .fa-route__line{background:linear-gradient(90deg,#5fd4ff,#ff6a78)}
+html body .flight-briefing-v2 .fa-route.is-set .fa-route__line::after{
+  content:"";position:absolute;right:-6px;top:50%;width:22px;height:22px;border:solid #4fe3a0;border-width:4px 4px 0 0;translate:0 -50%;rotate:45deg;border-radius:2px;
+}
+html body .flight-briefing-v2 .fa-route.is-set.is-hostile .fa-route__line::after{border-color:#ff6a78}
+@keyframes pa-draw{from{scale:0 1}to{scale:1 1}}
+html body .flight-briefing-v2 .fa-route__ship{
+  position:absolute;left:885px;top:185px;width:150px;height:120px;object-fit:contain;filter:drop-shadow(0 10px 20px rgba(0,0,0,.7));
+  animation:pa-fly 5.6s var(--ut-ease-in-out,ease-in-out) 600ms infinite;
+}
+@keyframes pa-fly{0%{translate:-470px 0;opacity:0}10%{opacity:1}50%{translate:0 0}90%{opacity:1}100%{translate:470px 0;opacity:0}}
+html body .flight-briefing-v2 .fa-route__center{position:absolute;left:560px;top:96px;width:800px;text-align:center}
+html body .flight-briefing-v2 .fa-route__timer{display:block;color:#fff;font-size:66px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums}
+html body .flight-briefing-v2 .fa-route__ask{display:block;color:#fff;font-size:40px;font-weight:900;line-height:1.1;margin-top:-30px}
+html body .flight-briefing-v2 .fa-route__center>span{display:block;margin-top:6px;color:var(--pm);font-size:18px}
+html body .flight-briefing-v2 .fa-route__center>span b{color:#fff}
+html body .flight-briefing-v2 .fa-route__gas{
+  position:absolute;left:560px;top:310px;width:800px;display:flex;justify-content:center;align-items:center;gap:10px;color:var(--pm);font-size:18px;
+}
+html body .flight-briefing-v2 .fa-route__gas img{width:26px;height:26px}
+html body .flight-briefing-v2 .fa-route__gas b{color:#fff;font-size:24px;font-weight:800}
+html body .flight-briefing-v2 .fa-route__from-label{position:absolute;left:20px;top:370px;width:480px;text-align:center}
+html body .flight-briefing-v2 .fa-route__to-label{position:absolute;left:1440px;top:372px;width:440px;display:grid;justify-items:center;text-align:center}
+html body .flight-briefing-v2 .fa-route__from-label small,
+html body .flight-briefing-v2 .fa-route__to-label small{color:var(--pm);font-size:18px}
+html body .flight-briefing-v2 .fa-route__to-label b{max-width:100%;color:#fff;font-size:24px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* quick targets under the dotted line: own planets with time and gas */
+html body .flight-briefing-v2 .fa-route__quick{position:absolute;left:calc(50% - 960px + 430px);top:300px;z-index:3;display:flex;gap:10px}
+html body .flight-briefing-v2 .fa-route__quick>button{
+  width:252px;height:86px;display:flex;align-items:center;gap:12px;padding:0 14px;border:0;border-radius:var(--pr);background:rgba(10,20,36,.9);color:#fff;text-align:left;cursor:pointer;
+  transition:background-color 200ms ease,translate 240ms var(--ut-ease-out,ease-out);animation:pa-chip 460ms var(--ut-ease-out,ease-out) both;
+}
+html body .flight-briefing-v2 .fa-route__quick>button:nth-child(2){animation-delay:60ms}
+html body .flight-briefing-v2 .fa-route__quick>button:nth-child(3){animation-delay:120ms}
+html body .flight-briefing-v2 .fa-route__quick>button:nth-child(4){animation-delay:180ms}
+@keyframes pa-chip{from{opacity:0;translate:0 12px}to{opacity:1;translate:0 0}}
+html body .flight-briefing-v2 .fa-route__quick>button:hover{background:rgba(95,212,255,.2);translate:0 -3px}
+html body .flight-briefing-v2 .fa-route__quick img{width:48px;height:48px;border-radius:50%;object-fit:cover;flex:none}
+html body .flight-briefing-v2 .fa-route__quick span{display:grid;min-width:0;line-height:1.2}
+html body .flight-briefing-v2 .fa-route__quick b{font-size:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html body .flight-briefing-v2 .fa-route__quick em{font-style:normal;color:var(--pa);font-size:18px;font-weight:700}
+html body .flight-briefing-v2 .fa-route__quick small{color:var(--pm);font-size:16px}
+
+/* ---------- source and target steps sit under the planets ---------- */
+html body .resource-building-action-confirm.flight-timeline-modal.flight-briefing-v2 .flight-timeline-body{
+  display:block !important;height:auto !important;max-height:none !important;overflow:visible !important;padding:0 60px !important;margin:0 !important;grid-template-columns:none !important;
+}
+html body .flight-briefing-v2 .flight-briefing-v2__left,
+html body .flight-briefing-v2 .flight-timeline-steps{display:contents !important}
+html body .flight-briefing-v2 .flight-timeline-step{
+  position:absolute !important;z-index:4;display:block !important;padding:0 !important;margin:0 !important;border:0 !important;background:none !important;box-shadow:none !important;text-align:center;
+}
+html body .flight-briefing-v2 .flight-timeline-step>div{display:grid !important;justify-items:center;gap:4px;padding:0 !important;background:none !important;border:0 !important}
+html body .flight-briefing-v2 [data-qa-flight-source-step]{left:calc(50% - 960px + 20px);top:396px;width:480px}
+html body .flight-briefing-v2 [data-qa-flight-target-step]{left:calc(50% - 960px + 1400px);top:430px;width:500px}
+html body .flight-briefing-v2 [data-qa-flight-source-step] strong{color:#fff;font-size:24px !important;font-weight:800;letter-spacing:0;text-transform:none}
+html body .flight-briefing-v2 [data-qa-flight-source-step] em{color:var(--pa) !important;font-style:normal;font-size:16px !important;letter-spacing:0;text-transform:none}
+html body .flight-briefing-v2 [data-qa-flight-target-step] strong{color:var(--pa) !important;font-size:18px !important;font-weight:600;letter-spacing:0}
+html body .flight-briefing-v2 .flight-timeline-own-target{display:grid !important;gap:4px;width:100%;margin:0 !important;padding:0 !important;border:0 !important;background:none !important;text-align:left}
+html body .flight-briefing-v2 .flight-timeline-own-target>span{color:var(--pm) !important;font-size:15px !important;letter-spacing:0 !important;text-transform:none !important;font-weight:600}
+html body .flight-briefing-v2 .flight-timeline-own-target small{color:var(--pm) !important;font-size:14px !important;line-height:1.3}
+html body .flight-briefing-v2 .flight-timeline-step .game-select__trigger{min-height:46px !important;border:0 !important;border-radius:12px !important;background:rgba(10,20,36,.9) !important;font-size:16px !important}
+html body .flight-briefing-v2 .flight-timeline-target-status{display:flex !important;flex-wrap:wrap;justify-content:center;align-items:center;gap:6px 14px;margin:2px 0 0 !important;padding:0 !important;border:0 !important;background:none !important}
+html body .flight-briefing-v2 .flight-timeline-target-status>span{color:var(--pm) !important;font-size:16px !important;letter-spacing:0 !important;text-transform:none !important}
+html body .flight-briefing-v2 .flight-timeline-target-status.is-invalid>span{color:#ff8a95 !important}
+html body .flight-briefing-v2 .flight-timeline-edit{
+  min-height:0 !important;height:auto !important;padding:0 !important;border:0 !important;background:none !important;box-shadow:none !important;
+  color:var(--pm) !important;font-size:16px !important;font-weight:600;letter-spacing:0 !important;text-transform:lowercase !important;cursor:pointer;
+}
+html body .flight-briefing-v2 .flight-timeline-edit:hover{color:#fff !important;text-decoration:underline}
+html body .flight-briefing-v2 .flight-favorite-toggle-v1.is-on{color:#ffc14d !important}
+html body .flight-briefing-v2 .flight-timeline-coordinate-inputs{display:flex !important;justify-content:center;gap:8px}
+html body .flight-briefing-v2 .flight-timeline-coordinate-inputs label{display:grid;justify-items:center;gap:2px}
+html body .flight-briefing-v2 .flight-timeline-coordinate-inputs label>span{color:var(--pm);font-size:13px !important;text-transform:none !important;letter-spacing:0 !important}
+html body .flight-briefing-v2 .flight-timeline-coordinate-inputs input{
+  width:64px !important;height:48px !important;padding:0 !important;border:0 !important;border-radius:var(--pr) !important;background:rgba(0,0,0,.45) !important;
+  color:#fff !important;text-align:center;font-size:20px !important;font-weight:800 !important;
+}
+html body .flight-briefing-v2 .flight-timeline-space-flight-target,
+html body .flight-briefing-v2 .flight-timeline-readonly-target{display:grid !important;justify-items:center;padding:0 !important;border:0 !important;background:none !important}
+html body .flight-briefing-v2 .flight-timeline-space-flight-target span,
+html body .flight-briefing-v2 .flight-timeline-readonly-target span{color:var(--pm) !important;font-size:15px !important;letter-spacing:0 !important;text-transform:none !important}
+html body .flight-briefing-v2 .fleet-expedition-mining-warning{font-size:13px !important}
+
+/* ---------- what flies ---------- */
+html body .flight-briefing-v2 .flight-briefing-v2__right{display:grid !important;gap:34px;padding:16px 0 0 !important;overflow:visible !important;max-height:none !important;border:0 !important;background:none !important}
+html body .flight-briefing-v2 .flight-plan-fleet,
+html body .flight-briefing-v2 .flight-timeline-cargo,
+html body .flight-briefing-v2 .fa-plan-target,
+html body .flight-briefing-v2 .fa-plan-spy{position:relative;margin:0 !important;padding:30px 0 0 !important;border:0 !important;background:none !important;box-shadow:none !important}
+html body .flight-briefing-v2 .flight-plan-fleet::before,
+html body .flight-briefing-v2 .flight-timeline-cargo::before,
+html body .flight-briefing-v2 .fa-plan-target::before,
+html body .flight-briefing-v2 .fa-plan-spy::before{
+  position:absolute;left:0;top:0;color:var(--pa);font-size:17px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+}
+html body .flight-briefing-v2 .flight-plan-fleet::before{content:"Что летит"}
+html body .flight-briefing-v2 .flight-timeline-cargo::before{content:"Что везём"}
+html body .flight-briefing-v2 .fa-plan-target::before{content:"Что на цели"}
+html body .flight-briefing-v2 .fa-plan-spy::before{content:"Что принесём"}
+html body .flight-briefing-v2 .flight-composition-v3{display:flex !important;flex-wrap:wrap;align-items:center;gap:14px 40px;max-height:none !important;overflow:visible !important;padding:0 !important;border:0 !important;background:none !important}
+html body .flight-briefing-v2 .flight-timeline-ship-card{
+  display:grid !important;grid-template-columns:190px auto;grid-template-areas:"art count" "art name" "art hold";align-content:center;column-gap:18px;
+  min-height:0 !important;height:auto;padding:0 !important;border:0 !important;background:none !important;box-shadow:none !important;
+  animation:pa-chip 460ms var(--ut-ease-out,ease-out) both;
+}
+html body .flight-briefing-v2 .flight-timeline-ship-card:nth-child(2){animation-delay:60ms}
+html body .flight-briefing-v2 .flight-timeline-ship-card:nth-child(3){animation-delay:120ms}
+html body .flight-briefing-v2 .flight-timeline-ship-card:nth-child(4){animation-delay:180ms}
+html body .flight-briefing-v2 .flight-timeline-ship-card>img{grid-area:art;width:190px !important;height:150px !important;max-width:none !important;object-fit:contain;filter:drop-shadow(0 10px 20px rgba(0,0,0,.7))}
+html body .flight-briefing-v2 .flight-timeline-ship-card>div{display:contents !important}
+html body .flight-briefing-v2 .flight-timeline-ship-card>b{grid-area:count;align-self:end;color:#fff !important;font-size:34px !important;font-weight:900;line-height:1.05;white-space:nowrap}
+html body .flight-briefing-v2 .flight-timeline-ship-card>b>small{display:none}
+html body .flight-briefing-v2 .fa-x{font-size:0 !important}
+html body .flight-briefing-v2 .flight-timeline-ship-card strong{grid-area:name;color:#fff !important;font-size:21px !important;font-weight:800;white-space:nowrap}
+html body .flight-briefing-v2 .flight-timeline-ship-card div>small{grid-area:hold;align-self:start;color:var(--pm) !important;font-size:18px !important;white-space:nowrap}
+html body .flight-briefing-v2 .fa-plan-change{
+  margin-left:auto;height:48px;padding:0 22px;border:0;border-radius:var(--pr);background:var(--pt2);color:#fff;font-size:18px;font-weight:700;cursor:pointer;
+  transition:background-color 200ms ease;
+}
+html body .flight-briefing-v2 .fa-plan-change:hover{background:rgba(95,212,255,.24)}
+
+/* ---------- what we carry ---------- */
+html body .flight-briefing-v2 .flight-timeline-cargo{display:grid !important;grid-template-columns:minmax(0,3fr) minmax(0,1fr);gap:0 34px}
+html body .flight-briefing-v2 .flight-timeline-cargo-head{grid-column:2;grid-row:1;display:block !important;padding:0 !important;margin:0 !important;border:0 !important;background:none !important}
+html body .flight-briefing-v2 .flight-timeline-cargo-head>span{display:grid !important;gap:6px}
+html body .flight-briefing-v2 .fa-cargo-used{order:-1;display:block;color:var(--pm);font-size:18px}
+html body .flight-briefing-v2 .fa-cargo-used small{display:block;color:var(--pm);font-size:17px}
+html body .flight-briefing-v2 .fa-cargo-used b{color:#fff;font-size:24px;font-weight:800}
+html body .flight-briefing-v2 .flight-timeline-cargo-capacity-fill{display:block !important;height:12px !important;border-radius:6px !important;background:rgba(255,255,255,.08) !important;overflow:hidden;border:0 !important}
+html body .flight-briefing-v2 .flight-timeline-cargo-capacity-fill i{display:block;height:100%;width:var(--fill);border-radius:6px;background:linear-gradient(90deg,#3f8cff,#5fd4ff) !important;transition:width 300ms var(--ut-ease-out,ease-out)}
+html body .flight-briefing-v2 .flight-timeline-cargo-grid{grid-column:1;grid-row:1;display:grid !important;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px 34px;padding:0 !important;border:0 !important;background:none !important}
+html body .flight-briefing-v2 .flight-timeline-cargo-field{display:grid !important;grid-template-columns:auto minmax(0,1fr);grid-template-areas:"icon value" "bar bar" "label label";align-items:center;gap:6px 12px;padding:0 !important;border:0 !important;background:none !important;min-width:0}
+html body .flight-briefing-v2 .flight-timeline-cargo-resource{display:contents !important}
+html body .flight-briefing-v2 .flight-timeline-cargo-resource>img{grid-area:icon;width:30px !important;height:30px !important}
+html body .flight-briefing-v2 .flight-timeline-cargo-resource>b{grid-area:label;color:var(--pm) !important;font-size:18px !important;font-weight:500;letter-spacing:0 !important;text-transform:none !important}
+html body .flight-briefing-v2 .flight-timeline-cargo-input{display:contents !important}
+html body .flight-briefing-v2 .flight-timeline-cargo-input input{
+  grid-area:value;width:100% !important;min-width:0;height:44px !important;padding:0 !important;border:0 !important;background:none !important;box-shadow:none !important;
+  color:#fff !important;font-size:30px !important;font-weight:800 !important;text-align:left !important;font-variant-numeric:tabular-nums;
+}
+html body .flight-briefing-v2 .flight-timeline-cargo-input input:focus{outline:none;box-shadow:inset 0 -2px 0 var(--pa) !important}
+html body .flight-briefing-v2 .flight-timeline-cargo-input em{grid-area:label;justify-self:end;color:var(--pm) !important;font-style:normal;font-size:15px !important;letter-spacing:0 !important;text-transform:lowercase}
+html body .flight-briefing-v2 .flight-timeline-cargo-field>.amount-slider{grid-area:bar;margin:0}
+html body .flight-briefing-v2 .flight-timeline-cargo-field>.amount-slider>button,
+html body .flight-briefing-v2 .flight-timeline-cargo-field>.amount-slider .amount-slider__scale{display:none !important}
+html body .flight-briefing-v2 .flight-timeline-cargo>p{grid-column:1/-1;margin:10px 0 0 !important;color:var(--pm) !important;font-size:15px !important}
+html body .flight-briefing-v2 .flight-timeline-cargo>p[role="alert"]{color:#ffc14d !important}
+
+/* ---------- what is on the target / what the probe brings ---------- */
+html body .flight-briefing-v2 .fa-plan-target{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) minmax(0,1.2fr);gap:0 34px;align-items:start}
+html body .flight-briefing-v2 .fa-plan-target>div{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:4px 14px}
+html body .flight-briefing-v2 .fa-plan-target>div>img{width:30px;height:30px}
+html body .flight-briefing-v2 .fa-plan-target>div>b{color:#fff;font-size:30px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html body .flight-briefing-v2 .fa-plan-target>div>small{grid-column:1/-1;color:var(--pm);font-size:18px}
+html body .flight-briefing-v2 .fa-plan-target__none{grid-column:1/4;margin:6px 0 0;color:var(--pm);font-size:18px}
+html body .flight-briefing-v2 .fa-plan-target__hold{grid-column:4;display:grid !important;grid-template-columns:none !important;gap:2px !important}
+html body .flight-briefing-v2 .fa-plan-target__hold small{color:var(--pm);font-size:17px}
+html body .flight-briefing-v2 .fa-plan-target__hold b{color:#fff;font-size:26px;font-weight:800}
+html body .flight-briefing-v2 .fa-plan-target__hold em{color:var(--pm);font-style:normal;font-size:16px;line-height:1.35}
+html body .flight-briefing-v2 .fa-plan-spy{display:flex;align-items:center;flex-wrap:wrap;gap:16px 56px}
+html body .flight-briefing-v2 .fa-plan-spy>div{display:flex;align-items:center;gap:14px}
+html body .flight-briefing-v2 .fa-plan-spy>div>img:not([data-qa-resource-kind]){width:80px;height:60px;object-fit:contain}
+html body .flight-briefing-v2 .fa-plan-spy>div>img[data-qa-resource-kind]{width:34px;height:34px}
+html body .flight-briefing-v2 .fa-plan-spy b{color:#fff;font-size:26px;font-weight:800}
+html body .flight-briefing-v2 .fa-plan-spy p{margin:0 0 0 auto;color:#ffc14d;font-size:18px;font-weight:600}
+
+/* ---------- numbers and «Отправить» along the bottom ---------- */
+html body .resource-building-action-confirm.flight-timeline-modal.flight-briefing-v2 .flight-timeline-actions{
+  position:fixed !important;left:0 !important;right:0 !important;bottom:0 !important;top:auto !important;z-index:7;
+  display:flex !important;align-items:center;gap:40px;height:128px;margin:0 !important;padding:0 60px !important;border:0 !important;
+  background:linear-gradient(0deg,rgba(95,212,255,.09),transparent) ,#04080f !important;box-shadow:none !important;
+}
+html body .flight-briefing-v2 .fa-plan-foot{display:flex;gap:64px;margin:0;flex:1 1 auto;min-width:0}
+html body .flight-briefing-v2 .fa-plan-foot>div{min-width:0}
+html body .flight-briefing-v2 .fa-plan-foot dt{color:var(--pm);font-size:17px;white-space:nowrap}
+html body .flight-briefing-v2 .fa-plan-foot dd{margin:0;color:#fff;font-size:34px;font-weight:800;white-space:nowrap;font-variant-numeric:tabular-nums}
+html body .flight-briefing-v2 [data-qa-flight-dispatch-confirm]{
+  position:relative;overflow:hidden;flex:none;height:84px !important;min-width:272px;padding:0 54px !important;border:0 !important;border-radius:var(--pr) !important;
+  background:linear-gradient(180deg,#7ee2ff,#2fb2ee) !important;color:#04202e !important;box-shadow:0 0 34px rgba(95,212,255,.35) !important;
+  font-size:28px !important;font-weight:800 !important;letter-spacing:0 !important;text-transform:none !important;cursor:pointer;
+  transition:scale 140ms ease,filter 200ms ease;
+}
+html body .flight-briefing-v2 [data-qa-flight-dispatch-confirm]::after{
+  content:"";position:absolute;inset:0;translate:-120% 0;background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.55) 50%,transparent 70%);
+  animation:fa-sheen 3.6s ease-in-out 1.2s infinite;
+}
+html body .flight-briefing-v2 [data-qa-flight-dispatch-confirm]:hover:not(:disabled){filter:brightness(1.08)}
+html body .flight-briefing-v2 [data-qa-flight-dispatch-confirm]:active:not(:disabled){scale:.97}
+html body .flight-briefing-v2 [data-qa-flight-dispatch-confirm]:disabled{background:rgba(150,200,255,.08) !important;color:#5d7288 !important;box-shadow:none !important;cursor:not-allowed;opacity:1 !important}
+html body .flight-briefing-v2 [data-qa-flight-dispatch-confirm]:disabled::after{display:none}
+
+@media (prefers-reduced-motion:reduce){
+  html body .flight-briefing-v2 *,html body .resource-building-action-confirm.flight-timeline-modal.flight-briefing-v2{animation:none !important}
+}
