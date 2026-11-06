@@ -293,3 +293,4 @@
   .bplan-tile__bar i,.bplan-toggle i::after,.bplan-hint{transition:none}
   .bplan-add:hover,.bplan-tile:hover .bplan-tile__art img{translate:none;scale:none}
 }
+.fplan .bplan-status .is-saving b{color:#ffcb7a;white-space:normal;line-height:1.2}

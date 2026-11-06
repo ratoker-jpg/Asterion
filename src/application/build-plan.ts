@@ -11,22 +11,28 @@
 import {
   BUILDING_ROLES,
   SCIENCE_ID_PHYSICS,
+  getBuildingResourceIncomePerHour,
+  getStorageCapacities,
   type BuildingFaction,
   type BuildingRole,
   type ResourceCost,
 } from '../domain/buildings/balance-v1.ts';
 import { buildPriority, emptyBuildPlan, isBuildPlanEmpty, type BuildPlan } from '../domain/buildings/build-plan.ts';
 import { BUILDING_QUEUE_CAPACITY, getBuildingDefinition } from '../domain/buildings/resource-zone.ts';
+import { getAvailableProductionBots, getProductionBotIncomePerHour, BOT_RESOURCES, MAX_PRODUCTION_BOTS_PER_RESOURCE, type BotAssignment } from '../domain/buildings/production-bots.ts';
+import { getTradeAmountLimit, getTradeRefillInfo } from '../domain/buildings/trade.ts';
+import { selectOwnerScores } from '../domain/rating/scoring.ts';
 import { calculateNuclearReactorContribution, calculateSolarStationContribution } from '../domain/energy/runtime.ts';
 import { findScience } from '../domain/science/catalog.ts';
-import { previewBuilding, startBuilding, type BuildingApplicationContext } from './buildings.ts';
+import { applyProductionBots, executeTradeAction, previewBuilding, startBuilding, type BuildingApplicationContext } from './buildings.ts';
 import { getPlanetResources, getPlanetState, type PlanetId, type SaveState } from './contracts.ts';
 import { getPlanetEnergyCoordinates, getPlanetEnergyLedger } from './energy.ts';
 import { isPlanetBlocked } from './overpopulation.ts';
+import { getEffectiveResourceIncomePerHour } from './resource-clock.ts';
 
 export type BuildRuntime = Pick<BuildingApplicationContext, 'now' | 'mode' | 'testTimeScale'>;
 
-export type BuildWaitKind = 'resources' | 'energy' | 'queue' | 'requirement' | 'science' | 'blocked' | 'order';
+export type BuildWaitKind = 'resources' | 'energy' | 'queue' | 'requirement' | 'science' | 'blocked' | 'order' | 'saving';
 
 export type BuildPlanLine = {
   role: BuildingRole;
@@ -45,7 +51,8 @@ export type BuildPlanLine = {
   /** Cost of the next level; null when nothing is left to build. */
   cost: ResourceCost | null;
   timeMs: number | null;
-  wait: { kind: BuildWaitKind; text: string } | null;
+  /** `title` replaces the usual two-word title («Копит на …»). */
+  wait: { kind: BuildWaitKind; text: string; title?: string } | null;
 };
 
 /** The one upgrade the planner would start now. */
@@ -70,12 +77,22 @@ export type BuildPlanView = {
   next: BuildDecision | null;
   /** One sentence for the whole planet: what happens next or what it waits for. */
   headline: string;
+  /** The planner is saving up for a construction-speed building instead of spending on cheap levels. */
+  saving: { name: string; level: number; text: string } | null;
+  /** The two helpers: robots and trade-centre exchanges (on unless switched off for this planet). */
+  helpers: { robots: boolean; exchange: boolean };
 };
 
 const ROLE_ORDER = new Map(BUILDING_ROLES.map((role, index) => [role, index]));
 const RESOURCE_KEYS = ['metal', 'minerals', 'gas'] as const;
 const GENITIVE = { metal: 'металла', minerals: 'минералов', gas: 'газа' } as const;
 const ENERGY_ROLES: readonly BuildingRole[] = ['basic-energy', 'advanced-energy'];
+/** Buildings that make all later construction faster (and give production robots): worth saving for. */
+const FACTORY_ROLES: readonly BuildingRole[] = ['construction', 'advanced-factory'];
+const STORAGE_OF = { metal: 'metal-storage', minerals: 'mineral-storage', gas: 'gas-storage' } as const;
+const PRODUCTION_ROLES: readonly BuildingRole[] = [
+  'metal-production-1', 'metal-production-2', 'metal-production-3', 'mineral-production-1', 'mineral-production-2', 'gas-production-1', 'gas-production-2',
+];
 
 const compact = (value: number) => {
   const rounded = Math.ceil(value);
@@ -88,7 +105,19 @@ export function getBuildPlan(state: SaveState, planetId: string): BuildPlan {
   return state.fleetUi?.buildPlans?.[planetId] ?? emptyBuildPlan();
 }
 
-type Evaluation = { lines: BuildPlanLine[]; decision: BuildDecision | null; queueUsed: number; energy: number };
+/** The first planned building that only lacks resources (and fits in the storage): what an exchange would serve. */
+type Want = { role: BuildingRole; lack: ResourceCost; reserve: ResourceCost };
+type Saving = { name: string; level: number; text: string };
+type Evaluation = { lines: BuildPlanLine[]; decision: BuildDecision | null; queueUsed: number; energy: number; want: Want | null; saving: Saving | null };
+
+const hoursText = (hours: number) => (hours < 1 ? 'меньше часа' : hours < 48 ? `около ${Math.ceil(hours)} ч` : `около ${Math.ceil(hours / 24)} дн`);
+
+/** Resources per hour the planet really makes now (buildings, science, robots, the game's clock). */
+function incomePerHour(state: SaveState, planetId: string, runtime: BuildRuntime, levels?: Partial<Record<BuildingRole, number>>) {
+  const planet = getPlanetState(state, planetId as PlanetId);
+  const base = getBuildingResourceIncomePerHour(levels ?? planet.buildings, state.science.levels);
+  return getEffectiveResourceIncomePerHour(getProductionBotIncomePerHour(base, planet.productionBots), runtime.mode, runtime.testTimeScale);
+}
 
 /**
  * The energy source that pays off best: energy gained by its next level per
@@ -165,7 +194,8 @@ function evaluate(state: SaveState, planetId: PlanetId, runtime: BuildRuntime): 
         wait: null,
       } satisfies BuildPlanLine;
     });
-  const setWait = (line: BuildPlanLine, kind: BuildWaitKind, text: string) => { line.wait = { kind, text }; };
+  const setWait = (line: BuildPlanLine, kind: BuildWaitKind, text: string, title?: string) => { line.wait = { kind, text, ...(title ? { title } : {}) }; };
+  const queueOf = queuedOf;
 
   // Only buildings whose requirements are met can be started; the others say what they need.
   const open: BuildPlanLine[] = [];
@@ -187,6 +217,22 @@ function evaluate(state: SaveState, planetId: PlanetId, runtime: BuildRuntime): 
   for (const line of passes.length > 1 ? passes[1]! : []) setWait(line, 'order', 'Один уровень уже строится, свободные места в очереди отданы другим зданиям.');
 
   let decision: BuildDecision | null = null;
+  const capacities = getStorageCapacities(planet.buildings);
+  const income = incomePerHour(state, planetId, runtime);
+  const incomeSum = (levels: Partial<Record<BuildingRole, number>>) => {
+    const value = incomePerHour(state, planetId, runtime, levels);
+    return value.metal + value.minerals + value.gas;
+  };
+  // Saving up: set by a factory-type line that only lacks resources.
+  let saver: { line: BuildPlanLine; hours: number } | null = null;
+  let saving: Saving | null = null;
+  let want: Want | null = null;
+  // Spending now on a producing building is fine while saving only if it pays itself back before the factory is affordable.
+  const paysBackFirst = (line: BuildPlanLine, hours: number) => {
+    if (!PRODUCTION_ROLES.includes(line.role) || !line.cost) return false;
+    const gain = incomeSum({ ...planet.buildings, [line.role]: line.current + line.queued + 1 }) - incomeSum(planet.buildings);
+    return gain > 0 && (line.cost.metal + line.cost.minerals + line.cost.gas) / gain < hours;
+  };
   // An energy shortage holds the whole planet: no later pass may start something else meanwhile.
   let holdForEnergy = false;
   const energyOnTheWay = queue.some((item) => ENERGY_ROLES.includes(item.assetRole));
@@ -222,12 +268,53 @@ function evaluate(state: SaveState, planetId: PlanetId, runtime: BuildRuntime): 
       break;
     }
     const lacking = RESOURCE_KEYS.filter((key) => cost[key] > wallet[key]);
+    const lackText = `Не хватает ${lacking.map((key) => `${GENITIVE[key]} ${compact(cost[key] - wallet[key])}`).join(', ')}.`;
+    // The next level costs more than the storage holds: it can never be afforded until the storage grows.
+    const tooBig = lacking.find((key) => cost[key] > capacities[key]);
+    if (tooBig) {
+      holdForEnergy = true;
+      const storageRole = STORAGE_OF[tooBig];
+      const storageName = getBuildingDefinition(storageRole, factionId).name;
+      const storage = previewBuilding(state, context, storageRole).availability;
+      const sentence = `${line.name} ур. ${line.current + line.queued + 1} не помещается на склад (${GENITIVE[tooBig]} нужно ${compact(cost[tooBig])}, вмещает ${compact(capacities[tooBig])}).`;
+      const title = `Сначала ${storageName}`;
+      if (queueOf(storageRole) > 0) {
+        setWait(line, 'saving', `${sentence} ${storageName} уже строится.`, title);
+      } else if (storage.nextLevel == null || !storage.cost || storage.requirements.some((item) => !item.met) || storage.cost[tooBig] > capacities[tooBig]) {
+        setWait(line, 'resources', `${sentence} Увеличить склад не получается.`);
+        holdForEnergy = false;
+        continue;
+      } else if (queueFull) {
+        setWait(line, 'saving', `${sentence} Нужен ${storageName}, но очередь стройки занята.`, title);
+      } else if (RESOURCE_KEYS.every((key) => storage.cost![key] <= wallet[key]) && storage.cost.energy <= energy) {
+        setWait(line, 'saving', `${sentence} Сначала строим ${storageName}.`, title);
+        decision = { role: storageRole, name: storageName, level: storage.nextLevel, startedFor: line.role };
+      } else {
+        setWait(line, 'saving', `${sentence} Копим на ${storageName}.`, title);
+      }
+      behind(index, 'Ждёт, пока вырастет склад.');
+      break;
+    }
     if (lacking.length) {
-      setWait(line, 'resources', `Не хватает ${lacking.map((key) => `${GENITIVE[key]} ${compact(cost[key] - wallet[key])}`).join(', ')}.`);
+      if (!want && !queueFull) {
+        const lack = { metal: 0, minerals: 0, gas: 0, energy: 0 } as ResourceCost;
+        for (const key of lacking) lack[key] = cost[key] - wallet[key];
+        want = { role: line.role, lack, reserve: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
+      }
+      const hours = Math.max(...lacking.map((key) => (income[key as 'metal' | 'minerals' | 'gas'] > 0 ? (cost[key] - wallet[key]) / income[key as 'metal' | 'minerals' | 'gas'] : Infinity)));
+      if (!saver && FACTORY_ROLES.includes(line.role) && Number.isFinite(hours)) {
+        saver = { line, hours };
+        saving = { name: line.name, level: line.current + line.queued + 1, text: `${lackText} При нынешнем доходе накопится ${hoursText(hours)}.` };
+        setWait(line, 'resources', saving.text);
+      } else setWait(line, 'resources', lackText);
       continue;
     }
     if (queueFull) {
       setWait(line, 'queue', 'Очередь стройки занята.');
+      continue;
+    }
+    if (saver && !paysBackFirst(line, saver.hours)) {
+      setWait(line, 'saving', `Копим на ${saver.line.name} ур. ${saver.line.current + saver.line.queued + 1}: это улучшение не окупится раньше, чем накопится нужное.`, `Копит на ${saver.line.name}`);
       continue;
     }
     decision = { role: line.role, name: line.name, level: line.current + line.queued + 1, startedFor: null };
@@ -237,7 +324,16 @@ function evaluate(state: SaveState, planetId: PlanetId, runtime: BuildRuntime): 
   }
   const chosen = decision ? lines.find((line) => line.role === decision!.role) : undefined;
   if (chosen) { chosen.status = 'next'; chosen.wait = null; }
-  return { lines, decision, queueUsed: queue.length, energy };
+  if (want) {
+    // What the plan's other open steps still need of each resource: an exchange never takes that away.
+    const reserve = { metal: 0, minerals: 0, gas: 0, energy: 0 } as ResourceCost;
+    for (const line of lines) {
+      if (line.levelsLeft === 0 || !line.cost || (line.wait && ['requirement', 'science', 'blocked'].includes(line.wait.kind))) continue;
+      for (const key of RESOURCE_KEYS) reserve[key] += line.cost[key];
+    }
+    want.reserve = reserve;
+  }
+  return { lines, decision, queueUsed: queue.length, energy, want: decision ? null : want, saving };
 }
 
 /** The whole planner screen for one planet. */
@@ -251,38 +347,125 @@ export function buildBuildPlanView(state: SaveState, planetId: string, runtime: 
   if (isBuildPlanEmpty(plan)) headline = 'Выберите здания и уровни, до которых их нужно довести.';
   else if (!open.length) headline = result.queueUsed ? 'Остаётся достроить то, что уже в очереди.' : 'Всё построено до нужных уровней.';
   else if (paused) headline = 'Автостарт выключен: цели сохранены, само ничего не строится.';
-  else if (next) headline = next.startedFor ? `Дальше: ${next.name} до ур. ${next.level}, чтобы хватило энергии.` : `Дальше: ${next.name} до ур. ${next.level}.`;
+  else if (next) headline = next.startedFor
+    ? `Дальше: ${next.name} до ур. ${next.level}, чтобы ${ENERGY_ROLES.includes(next.role) ? 'хватило энергии' : 'поместилось в склад'}.`
+    : `Дальше: ${next.name} до ур. ${next.level}.`;
   else {
     const pick = (kind: BuildWaitKind) => open.find((line) => line.wait?.kind === kind)?.wait?.text;
-    headline = pick('energy') ?? pick('queue') ?? pick('resources') ?? open.find((line) => line.wait)?.wait?.text ?? '';
+    headline = pick('saving') ?? (result.saving ? `Копим на ${result.saving.name} ур. ${result.saving.level}.` : undefined) ?? pick('energy') ?? pick('queue') ?? pick('resources') ?? open.find((line) => line.wait)?.wait?.text ?? '';
   }
-  return { planetId, plan, empty: isBuildPlanEmpty(plan), paused, lines: result.lines, queueUsed: result.queueUsed, queueCapacity: BUILDING_QUEUE_CAPACITY, energy: result.energy, next, headline };
+  return { planetId, plan, empty: isBuildPlanEmpty(plan), paused, lines: result.lines, queueUsed: result.queueUsed, queueCapacity: BUILDING_QUEUE_CAPACITY, energy: result.energy, next, headline, saving: paused ? null : result.saving, helpers: { robots: plan.noRobots !== true, exchange: plan.noExchange !== true } };
 }
 
 export type BuildPlanStart = { planetId: string; role: BuildingRole; name: string; level: number; startedFor: BuildingRole | null };
-export type BuildPlanRun = { state: SaveState; started: BuildPlanStart[] };
+export type BuildPlanRobots = { planetId: string; assignment: BotAssignment };
+export type BuildPlanExchange = { planetId: string; from: 'metal' | 'minerals' | 'gas'; to: 'metal' | 'minerals' | 'gas'; amount: number; received: number };
+export type BuildPlanRun = { state: SaveState; started: BuildPlanStart[]; robots: BuildPlanRobots[]; exchanges: BuildPlanExchange[] };
+
+/**
+ * The owner's robot pattern: the factory's robots go 10 on metal, 10 on minerals,
+ * and what the Industrial complex adds goes to gas. Only free robots are placed:
+ * what the player assigned himself is never taken away.
+ */
+export function plannedRobotAssignment(current: BotAssignment, availableBots: number): BotAssignment {
+  const next = { ...current };
+  let free = Math.max(0, Math.floor(availableBots) - BOT_RESOURCES.reduce((total, key) => total + current[key], 0));
+  for (const key of BOT_RESOURCES) {
+    const add = Math.min(free, Math.max(0, MAX_PRODUCTION_BOTS_PER_RESOURCE - next[key]));
+    next[key] += add;
+    free -= add;
+  }
+  return next;
+}
+
+/**
+ * Covers what the next planned step lacks from a surplus of another resource
+ * through the trade centre, one exchange charge per `amountLimit`. Resources
+ * trade 1 to 1 (debris pays only 60% and is left for the recycler), so the
+ * best source is simply the biggest surplus; it never goes below what the
+ * plan's open steps still need of it. Nothing is exchanged unless the whole gap is covered.
+ */
+function exchangeFor(state: SaveState, planetId: string, runtime: BuildRuntime, want: Want): { state: SaveState; done: BuildPlanExchange[] } | null {
+  const planet = getPlanetState(state, planetId as PlanetId);
+  const level = planet.buildings['trade-center'] ?? 0;
+  if (level < 1) return null;
+  const refill = getTradeRefillInfo(planet.trade, level, runtime.now);
+  if (refill.availableSlots <= 0) return null;
+  const points = selectOwnerScores(state)[state.profile.playerId]?.resourcePoints ?? 0;
+  const limit = getTradeAmountLimit(points);
+  if (limit <= 0) return null;
+  const wallet = getPlanetResources(state, planetId as PlanetId);
+  const surplus = { metal: 0, minerals: 0, gas: 0 };
+  for (const key of RESOURCE_KEYS) surplus[key] = want.lack[key] > 0 ? 0 : Math.max(0, wallet[key] - want.reserve[key]);
+  const trades: Array<{ from: typeof RESOURCE_KEYS[number]; to: typeof RESOURCE_KEYS[number]; amount: number }> = [];
+  let slots = refill.availableSlots;
+  for (const to of RESOURCE_KEYS) {
+    let lack = want.lack[to];
+    if (lack <= 0) continue;
+    const from = RESOURCE_KEYS.filter((key) => key !== to).sort((a, b) => surplus[b] - surplus[a] || RESOURCE_KEYS.indexOf(a) - RESOURCE_KEYS.indexOf(b))[0]!;
+    if (surplus[from] < lack || Math.ceil(lack / limit) > slots) return null;
+    surplus[from] -= lack;
+    while (lack > 0) {
+      const amount = Math.min(lack, limit);
+      trades.push({ from, to, amount });
+      lack -= amount;
+      slots -= 1;
+    }
+  }
+  if (!trades.length) return null;
+  let current = state;
+  const done: BuildPlanExchange[] = [];
+  for (const trade of trades) {
+    const result = executeTradeAction(current, { planetId: planetId as PlanetId, ...runtime }, points, { source: trade.from, target: trade.to, amount: trade.amount });
+    if (!result.execution.ok) break;
+    current = result.state;
+    done.push({ planetId, ...trade, received: result.execution.received });
+  }
+  return done.length ? { state: current, done } : null;
+}
 
 /**
  * Starts every upgrade the plans allow right now, planet by planet, as
  * ordinary build orders: each next one sees what the previous one spent.
+ * Around them the planner does the owner's routine with ordinary commands too:
+ * it places free robots and exchanges a surplus for a missing resource.
  * The caller decides when it may run (only while the player is in the game).
  */
 export function runBuildPlans(state: SaveState, runtime: BuildRuntime, onlyPlanetId?: string): BuildPlanRun {
   let current = state;
   const started: BuildPlanStart[] = [];
+  const robots: BuildPlanRobots[] = [];
+  const exchanges: BuildPlanExchange[] = [];
   const planetIds = Object.keys(state.fleetUi?.buildPlans ?? {}).filter((id) => state.planets[id] && (!onlyPlanetId || id === onlyPlanetId)).sort();
   for (const planetId of planetIds) {
-    if (getBuildPlan(current, planetId).paused && !onlyPlanetId) continue;
-    for (let guard = 0; guard <= BUILDING_QUEUE_CAPACITY; guard += 1) {
-      const { decision } = evaluate(current, planetId as PlanetId, runtime);
-      if (!decision) break;
+    const plan = getBuildPlan(current, planetId);
+    if (plan.paused && !onlyPlanetId) continue;
+    for (let guard = 0; guard <= BUILDING_QUEUE_CAPACITY * 2 + 2; guard += 1) {
+      const evaluation = evaluate(current, planetId as PlanetId, runtime);
+      const { decision } = evaluation;
+      if (!decision) {
+        if (plan.noExchange || !evaluation.want) break;
+        const traded = exchangeFor(current, planetId, runtime, evaluation.want);
+        if (!traded) break;
+        current = traded.state;
+        exchanges.push(...traded.done);
+        continue;
+      }
       const action = startBuilding(current, { planetId: planetId as PlanetId, ...runtime }, decision.role);
       if (!action.ok) break;
       current = action.state;
       started.push({ planetId, role: decision.role, name: decision.name, level: decision.level, startedFor: decision.startedFor });
     }
+    if (!plan.noRobots && !isPlanetBlocked(current, planetId as PlanetId)) {
+      const planet = getPlanetState(current, planetId as PlanetId);
+      const assignment = plannedRobotAssignment(planet.productionBots, getAvailableProductionBots(planet.buildings));
+      if (BOT_RESOURCES.some((key) => assignment[key] !== planet.productionBots[key])) {
+        current = applyProductionBots(current, { planetId: planetId as PlanetId, ...runtime }, assignment);
+        robots.push({ planetId, assignment });
+      }
+    }
   }
-  return { state: current, started };
+  return { state: current, started, robots, exchanges };
 }
 
 /** «Империя»: a planet's glance at its build plan. */

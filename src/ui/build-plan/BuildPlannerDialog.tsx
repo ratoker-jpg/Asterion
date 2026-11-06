@@ -8,7 +8,7 @@ import {
   getBuildingPresentation,
   type BuildingRole,
 } from '../../domain/buildings/balance-v1.ts';
-import { putBuildPriorityFirst, removeBuildTarget, setBuildPlanPaused, setBuildTarget, swapBuildPriority, type BuildPlan } from '../../domain/buildings/build-plan.ts';
+import { putBuildPriorityFirst, removeBuildTarget, setBuildPlanHelper, setBuildPlanPaused, setBuildTarget, swapBuildPriority, type BuildPlan } from '../../domain/buildings/build-plan.ts';
 import { calculateNuclearReactorContribution, calculateSolarStationContribution } from '../../domain/energy/runtime.ts';
 import { getPlanetEnergyCoordinates } from '../../application/energy.ts';
 import { getBuildingDefinition } from '../../domain/buildings/resource-zone.ts';
@@ -45,6 +45,7 @@ const WAIT_TITLE: Record<BuildWaitKind, string> = {
   science: 'Нужна наука',
   blocked: 'Планета заблокирована',
   order: 'Ждёт своей очереди',
+  saving: 'Копим',
 };
 
 /** What a building gives at a level, in the player's words. */
@@ -263,6 +264,16 @@ export function BuildPlannerDialog({ state, now, mode, testTimeScale, planetId, 
                 <i aria-hidden="true" />{view.paused ? 'Автостарт выключен' : 'Автостарт включён'}
               </button>
             ) : null}
+            {!view.empty ? (
+              <>
+                <button type="button" className={`fplan__btn bplan-toggle ${view.helpers.robots ? 'is-on' : ''}`} onClick={() => save(setBuildPlanHelper(view.plan, 'robots', !view.helpers.robots))} aria-pressed={view.helpers.robots} data-qa-build-plan-robots data-sfx="none">
+                  <i aria-hidden="true" />Роботы сами
+                </button>
+                <button type="button" className={`fplan__btn bplan-toggle ${view.helpers.exchange ? 'is-on' : ''}`} onClick={() => save(setBuildPlanHelper(view.plan, 'exchange', !view.helpers.exchange))} aria-pressed={view.helpers.exchange} data-qa-build-plan-exchange data-sfx="none">
+                  <i aria-hidden="true" />Обмен сам
+                </button>
+              </>
+            ) : null}
             <button type="button" className="fplan__btn fplan__btn--pri" disabled={!view.next} onClick={() => onRun(planetId)} data-qa-build-plan-start-all data-sfx="none">
               Запустить всё
             </button>
@@ -302,6 +313,7 @@ function Status({ view }: { view: BuildPlanView }) {
         <i aria-hidden="true">{Array.from({ length: view.queueCapacity }, (_, slot) => <em key={slot} className={slot < view.queueUsed ? 'is-used' : ''} />)}</i>
       </p>
       <p><span>Энергия</span> <b className="bplan-status__energy"><ResourceIcon kind="energy" />{short(view.energy)}</b></p>
+      {view.saving ? <p className="is-saving" data-qa-build-plan-saving><span>Копит на</span> <b>{view.saving.name} → ур. {view.saving.level}</b></p> : null}
       {view.next ? <p className="is-next"><span>Дальше</span> <b>{view.next.name} → ур. {view.next.level}</b></p> : null}
     </div>
   );
@@ -395,7 +407,7 @@ function Tile({ line, index, wallet, autoFocus, hint, before, after, onSwap, onF
           <button type="button" className="bplan-tile__go" onClick={onBuild} data-qa-build-plan-build={line.role}>Построить сейчас</button>
         ) : (
           <p className={`bplan-tile__wait is-${line.wait?.kind ?? 'order'}`} data-qa-build-plan-wait={line.wait?.kind}>
-            <b>{WAIT_TITLE[line.wait?.kind ?? 'order']}</b>
+            <b>{line.wait?.title ?? WAIT_TITLE[line.wait?.kind ?? 'order']}</b>
             {line.wait && line.wait.kind !== 'order' && line.wait.kind !== 'queue' ? <small>{line.wait.text}</small> : null}
           </p>
         )}
