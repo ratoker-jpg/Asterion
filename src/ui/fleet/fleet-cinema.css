@@ -536,3 +536,4 @@
 .fleet-workspace-v1 .fc-build>.fleet-production-queue-v1{position:relative;bottom:auto}
 .fleet-workspace-v1 .fc-catalog>.fc-unit-list{max-height:690px;overflow-y:auto;overscroll-behavior:contain;padding-right:4px}
 .fleet-workspace-v1 .fa-hero .fc-prep__commanders>h3>b{margin:0 4px}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair){grid-template-rows:190px auto auto 1fr auto}
