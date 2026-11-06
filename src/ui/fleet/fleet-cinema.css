@@ -553,3 +553,5 @@
   .fleet-workspace-v1 .fleet-root-v2>.fc-missions::-webkit-scrollbar{display:none}
   .fleet-workspace-v1 .fleet-root-v2>.fc-missions>button.fa-mission:hover:not(:disabled){translate:none}
 }
+.fleet-workspace-v1 .fa-hero .fc-prep__commanders>h3{width:max-content !important;min-width:max-content;flex-shrink:0;padding-right:4px;overflow:visible}
+.fleet-workspace-v1 .fa-hero .fc-prep__commanders{column-gap:12px}
