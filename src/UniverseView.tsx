@@ -101,7 +101,11 @@ import type { TargetRelation } from './domain/flights/types.ts';
 import type { SpyTargetState } from './domain/espionage/types.ts';
 import { planetSkinMapArt } from './planet-skin-art.ts';
 import { QuickActions } from './ui/universe/QuickActions.tsx';
-import type { QuickLegOutcome, QuickTarget } from './application/quick-actions.ts';
+import type { QuickActionId, QuickLegOutcome, QuickTarget } from './application/quick-actions.ts';
+import { ACTION_ART, ATLAS_BACKDROPS } from './ui/actions/action-art.ts';
+import { FACTION_EMBLEMS } from './ui/header/faction-emblems.ts';
+import { flightClock, useAtlasPlans, type AtlasCell, type AtlasRowRequest } from './ui/universe/atlas-plans.ts';
+import './ui/universe/star-atlas.css';
 import type { DispatchFlightCommand, FlightLaunchContext } from './application/flights.ts';
 
 const planetArts = [
@@ -269,58 +273,6 @@ function AllianceMark({ alliance }: { alliance?: UniverseOwnerAlliance | null })
   );
 }
 
-function EyeIcon() {
-  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.4-5.2 9.5-5.2 9.5 5.2 9.5 5.2-3.4 5.2-9.5 5.2S2.5 12 2.5 12Z" /><circle cx="12" cy="12" r="2.6" /></svg>;
-}
-
-function FleetIcon() {
-  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2.5 4.1 12.3-4.1-2.5-4.1 2.5L12 2.5Z" /><path d="M8.5 12H4l3.4-3.4M15.5 12H20l-3.4-3.4M12 7v8" /></svg>;
-}
-
-function AttackIcon() {
-  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 19 5.4-5.4M13.6 10.4 19 5" /><path d="m14.5 4.5 5 0 0 5M4.5 14.5l0 5 5 0" /><circle cx="12" cy="12" r="2.3" /></svg>;
-}
-
-function UniverseActionButton({
-  action,
-  node,
-  currentOwnerId,
-  relation,
-  attackBlockedReason,
-  onAction,
-}: {
-  action: UniverseAction;
-  node: UniversePlanetNode;
-  currentOwnerId: string;
-  relation: ReturnType<typeof getUniverseOwnerRelation>;
-  /** The launch gate's refusal: the attack button says it instead of promising a flight that cannot start. */
-  attackBlockedReason?: string | null;
-  onAction: (action: UniverseAction, node: UniversePlanetNode) => void;
-}) {
-  const baseState = getUniverseActionState(action, node, currentOwnerId, relation);
-  const state = action === 'attack' && attackBlockedReason && baseState.enabled
-    ? { ...baseState, enabled: false, status: 'disabled' as const, reason: attackBlockedReason }
-    : baseState;
-  const Icon = action === 'spy' ? EyeIcon : action === 'attack' ? AttackIcon : FleetIcon;
-  const label = action === 'spy' ? 'Отправить шпионский зонд' : action === 'attack' ? 'Начать атаку' : 'Отправить флот';
-  const title = `${label}: ${state.reason}`;
-
-  return (
-    <button
-      type="button"
-      className={`universe-action-button universe-action-button--${action}`}
-      aria-label={`${label} к ${node.name} ${formatUniverseCoordinate(node.coordinate)}`}
-      title={title}
-      disabled={!state.enabled}
-      data-qa-universe-action={action}
-      data-qa-universe-action-status={state.status}
-      onClick={() => onAction(action, node)}
-    >
-      <Icon />
-    </button>
-  );
-}
-
 const SCORE_ICON_KEYS: Record<keyof UniverseOwnerPoints, 'resourcePoints' | 'battlePoints' | 'totalPoints' | 'achievementPoints'> = {
   resource: 'resourcePoints', battle: 'battlePoints', total: 'totalPoints', achievements: 'achievementPoints',
 };
@@ -335,6 +287,11 @@ function relationCopy(status: MapRelationStatus): string {
 export const SPECIAL_TONE: Partial<Record<UniversePlanetNode['kind'], string>> = {
   empty: '#8fb6c0', uninhabited: '#8fb6c0', asteroid: '#c9b48a', pirate: MAP_TONE_COLOR.pirate, unique: MAP_TONE_COLOR.unique, anomaly: MAP_TONE_COLOR.anomaly,
 };
+
+/** Score medals stay exact below a billion; beyond that «987,7 млрд» keeps four medals in one row. */
+function scoreLabel(value: number) {
+  return value >= 1e9 ? compactAmount(value) : numberFormat.format(value);
+}
 
 /** Large orbital debris stays readable in a fixed column: 168 801 300 → «168,8 млн». */
 function compactAmount(value: number) {
@@ -371,6 +328,72 @@ function InspectorTiles({ items }: { items: readonly InspectorTile[] }) {
   );
 }
 
+type AtlasColumn = {
+  key: 'spy' | 'attack' | 'transport' | 'recycle';
+  label: string;
+  quick: QuickActionId;
+  /** The old atlas button this circle replaces (Electron QA and the launch path read it). */
+  legacy?: UniverseAction;
+  art: string;
+};
+
+const ATLAS_COLUMNS: readonly AtlasColumn[] = [
+  { key: 'spy', label: 'Шпионаж', quick: 'spy', legacy: 'spy', art: ACTION_ART.espionage },
+  { key: 'attack', label: 'Атака', quick: 'attack', legacy: 'attack', art: ACTION_ART.attack },
+  { key: 'transport', label: 'Транспорт', quick: 'transport', legacy: 'fleet', art: ACTION_ART.transport },
+  { key: 'recycle', label: 'Обломки', quick: 'recycle', art: ACTION_ART.recycle },
+];
+
+const RELATION_WORD: Record<UniverseOwnerRelation, string> = { self: 'Ваш мир', ally: 'Союзник', enemy: 'Враг', neutral: 'Нейтральный' };
+
+/** A short word under a grey circle; the full reason is in the hint above it. */
+function shortRefusal(reason: string): string {
+  const text = reason.toLowerCase();
+  if (text.includes('ваша планета') || text.includes('своей планет')) return 'своя';
+  if (text.includes('союзн')) return 'союзник';
+  if (text.includes('диапазон') || text.includes('очк')) return 'вне диапазона';
+  if (text.includes('нет свободн') || text.includes('нет корабл') || text.includes('нет зонд') || text.includes('нет переработ') || text.includes('нет транспорт')) return 'нет флота';
+  if (text.includes('газ')) return 'мало газа';
+  return 'нельзя';
+}
+
+function AtlasActionCircle({
+  column, planet, enabled, reason, cell, status, onClick,
+}: {
+  column: AtlasColumn;
+  planet: UniversePlanetNode;
+  enabled: boolean;
+  reason: string;
+  cell: AtlasCell | undefined;
+  status?: string;
+  onClick: (event: ReactMouseEvent<HTMLButtonElement>) => void;
+}) {
+  const refused = enabled && cell?.kind === 'refused';
+  const hint = !enabled ? reason : cell?.kind === 'refused' ? cell.reason : undefined;
+  const caption = !enabled
+    ? <small className="star-atlas__why">{shortRefusal(reason)}</small>
+    : cell?.kind === 'ready' ? <small className="star-atlas__time">{flightClock(cell.durationMs)}</small>
+    : cell?.kind === 'refused' ? <small className="star-atlas__why is-warn">{shortRefusal(cell.reason)}</small>
+    : <small className="star-atlas__time is-pending" aria-hidden="true">··:··</small>;
+  const qa = column.legacy
+    ? { 'data-qa-universe-action': column.legacy, 'data-qa-universe-action-status': status, 'data-qa-universe-action-reason': reason }
+    : { 'data-qa-atlas-action': column.key };
+  return (
+    <div className={`star-atlas__act star-atlas__act--${column.key} ${!enabled ? 'is-off' : refused ? 'is-refused' : ''}`} data-hint={hint}>
+      <button
+        type="button"
+        disabled={!enabled}
+        aria-label={`${column.label}: ${planet.name} ${formatUniverseCoordinate(planet.coordinate)}${hint ? `. ${hint}` : ''}`}
+        {...qa}
+        onClick={onClick}
+      >
+        <img src={column.art} alt="" draggable={false} />
+      </button>
+      {caption}
+    </div>
+  );
+}
+
 function OwnerInspector({
   node,
   owner,
@@ -381,6 +404,7 @@ function OwnerInspector({
   debrisAt,
   mapStatus,
   onAction,
+  onRecycle,
   onVisit,
   presence,
   nowMs,
@@ -395,6 +419,8 @@ function OwnerInspector({
   /** The owner's look on the map; one owner, one answer for all their planets. */
   mapStatus: MapRelationStatus;
   onAction: (action: UniverseAction, node: UniversePlanetNode) => void;
+  /** «Обломки»: the right-click send panel for recycling, over the atlas. */
+  onRecycle: (target: QuickTarget, anchor: HTMLElement) => void;
   onVisit: (node: UniversePlanetNode) => void;
   presence: OwnerPresence | undefined;
   nowMs: number;
@@ -402,85 +428,115 @@ function OwnerInspector({
   const alliance = owner.alliance;
   const relation = getUniverseOwnerRelation(node, currentOwnerId, currentAlliance, owner, diplomacy);
   const presenceLabel = describeOwnerPresence(presence, nowMs, relation === 'self' || relation === 'ally');
+  const attackBlockedReason = mapStatus.attackable === false ? mapStatus.detail ?? mapStatus.title : null;
+  const shown = planets.slice(0, MAX_PLANETS_PER_OWNER);
+  const rows = shown.map((planet) => {
+    const rowRelation = getUniverseOwnerRelation(planet, currentOwnerId, currentAlliance, owner, diplomacy);
+    const debris = debrisAt(planet.coordinate);
+    const target: QuickTarget = {
+      node: planet, relation: rowRelation, orbitalDebris: debris,
+      owner: { id: owner.id, displayName: owner.displayName, raceId: owner.raceId, alliance: owner.alliance ?? null },
+    };
+    const stateOf = (action: UniverseAction) => {
+      const base = getUniverseActionState(action, planet, currentOwnerId, rowRelation);
+      return action === 'attack' && attackBlockedReason && base.enabled
+        ? { ...base, enabled: false, status: 'disabled' as const, reason: attackBlockedReason }
+        : base;
+    };
+    const states = { spy: stateOf('spy'), attack: stateOf('attack'), transport: stateOf('fleet') };
+    return { planet, debris, target, states };
+  });
+  const requests: AtlasRowRequest[] = rows.map(({ planet, debris, target, states }) => ({
+    rowId: planet.id,
+    target,
+    actions: ATLAS_COLUMNS.filter((column) => (column.key === 'recycle' ? debris > 0 : states[column.key].enabled)).map((column) => column.quick),
+  }));
+  const plans = useAtlasPlans(requests, `${owner.id}|${relation}|${attackBlockedReason ?? ''}|${rows.map((row) => `${row.planet.id}:${row.debris}`).join(',')}`);
+  const raceId = owner.raceId === 'aegis' || owner.raceId === 'synod' || owner.raceId === 'veyra' ? owner.raceId : null;
+  const backdrop = ATLAS_BACKDROPS[relation === 'self' ? 'self' : relation === 'ally' ? 'ally' : mapStatus.tone === 'enemy' || mapStatus.tone === 'range' ? 'enemy' : 'neutral'];
+  const statusTail = relationCopy(mapStatus).split(' · ').slice(1).join(' · ');
+
   return (
-    <div className="uw-main uw-main--owner" data-qa-universe-owner={owner.id} data-qa-universe-owner-profile style={{ '--uw-k': MAP_TONE_COLOR[mapStatus.tone] } as CSSProperties}>
-      <div className="uw-side">
-        <InspectorHero art={node.art} />
-        <section className="uw-card uw-owner">
-          <div className="uw-owner-avatar" data-qa-universe-avatar><OwnerAvatar owner={owner} /></div>
-          <div className="uw-owner-copy">
-            <small>ВЛАДЕЛЕЦ ОБЪЕКТА</small>
-            <h3 data-qa-universe-owner-name>{owner.displayName}</h3>
-            <span>{raceLabel(owner.raceId)}</span>
-            <em className={`uw-owner-presence is-${presenceLabel.tone}`} data-qa-universe-owner-presence={presenceLabel.tone}><i aria-hidden="true" />{presenceLabel.text}</em>
-            <strong>{owner.id === currentOwnerId ? 'ВАШ ПРОФИЛЬ' : 'ПРОФИЛЬ ВЛАДЕЛЬЦА'}</strong>
-          </div>
-        </section>
-        <section className={`uw-card uw-alliance ${alliance ? '' : 'is-none'}`}>
-          <div className="uw-alliance-crest"><AllianceMark alliance={alliance} /></div>
-          <div className="uw-alliance-copy">
-            <small>СОЮЗ</small>
-            <b>{alliance ? alliance.name : 'Без союза'}</b>
-            {alliance ? <em>[{alliance.tag}]</em> : <span>игрок не состоит в союзе</span>}
-          </div>
-        </section>
-      </div>
-      <div className="uw-content">
-        {owner.points ? (
-          <dl className="uw-tiles uw-points" data-qa-universe-points>
-            {POINT_LABELS.map(({ key, label }) => (
-              <div key={key} className="uw-tile uw-point" title={label}>
-                <img src={asterionAssetIntegrationAssets.scoreIcons[SCORE_ICON_KEYS[key]]} alt="" aria-hidden="true" draggable={false} />
-                <dt>{SHORT_POINT_LABELS[key]}</dt>
-                <dd>{numberFormat.format(owner.points?.[key] ?? 0)}</dd>
-                <span>очков</span>
-              </div>
-            ))}
-          </dl>
-        ) : (
-          <div className="uw-tiles uw-points is-empty" data-qa-universe-points>
-            {POINT_LABELS.map(({ key, label }) => (
-              <div key={key} className="uw-tile uw-point is-off" title={label}>
-                <img src={asterionAssetIntegrationAssets.scoreIcons[SCORE_ICON_KEYS[key]]} alt="" aria-hidden="true" draggable={false} />
-                <small>{SHORT_POINT_LABELS[key]}</small><b>—</b><span>рейтинг не задан</span>
-              </div>
-            ))}
-          </div>
-        )}
-        <section className="uw-block">
-          <header><b>ВЛАДЕНИЯ В ГАЛАКТИКЕ · {planets.length} {planets.length === 1 ? 'ПЛАНЕТА' : 'ПЛАНЕТ'}</b><span>обломки на орбите · шпионаж · флот · атака</span></header>
-          <ul className="uw-planets">
-            {planets.slice(0, MAX_PLANETS_PER_OWNER).map((planet) => {
-              const debris = debrisAt(planet.coordinate);
-              const rowRelation = getUniverseOwnerRelation(planet, currentOwnerId, currentAlliance, owner, diplomacy);
-              return (
-                <li key={planet.id} className={planet.id === node.id ? 'active' : ''} data-qa-universe-planet-row={planet.id}>
-                  <img className="uw-planet-art" src={planet.art} alt="" />
-                  <button type="button" className="uw-planet-copy" data-qa-universe-visit={planet.id} onClick={() => onVisit(planet)} title={`Показать на карте ${formatUniverseCoordinate(planet.coordinate)}`}>
-                    <strong>{planet.name}</strong>
-                    <small>Система {String(planet.coordinate.system).padStart(2, '0')} <span>{formatUniverseCoordinate(planet.coordinate)} ↗</span></small>
-                  </button>
-                  <span className="uw-planet-debris" title={debris > 0 ? `Обломки на орбите: ${numberFormat.format(debris)}` : undefined}>
-                    {debris > 0 ? <><ResourceIcon kind="debris" />{compactAmount(debris)}</> : null}
-                  </span>
-                  <div className="uw-planet-actions">
-                    <UniverseActionButton action="spy" node={planet} currentOwnerId={currentOwnerId} relation={rowRelation} onAction={onAction} />
-                    <UniverseActionButton action="fleet" node={planet} currentOwnerId={currentOwnerId} relation={rowRelation} onAction={onAction} />
-                    <UniverseActionButton action="attack" node={planet} currentOwnerId={currentOwnerId} relation={rowRelation} attackBlockedReason={mapStatus.attackable === false ? mapStatus.detail ?? mapStatus.title : null} onAction={onAction} />
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-          <p className="uw-note">Нажмите на планету, чтобы перейти к её системе. Свои и союзные миры принимают транспорт, чужие доступны для шпионажа, а для атаки должны быть в диапазоне.</p>
-        </section>
-      </div>
-      <footer className="uw-foot">
-        <div className="uw-foot-status" data-qa-universe-map-status={mapStatus.tone}><small>ОТНОШЕНИЕ</small><b><MapMark tone={mapStatus.tone} blocked={mapStatus.attackable === false} />{relationCopy(mapStatus)}</b>{mapStatus.attackable === false && mapStatus.detail ? <p className="uw-foot-why">{mapStatus.detail}</p> : null}</div>
-        <div className="uw-foot-actions">
-          <button type="button" className="uw-btn" onClick={() => onVisit(node)}>ПОКАЗАТЬ НА КАРТЕ</button>
+    <div className="star-atlas__main" data-qa-universe-owner={owner.id} data-qa-universe-owner-profile data-qa-atlas-relation={relation}>
+      <img className="star-atlas__bg" src={backdrop} alt="" aria-hidden="true" draggable={false} />
+      <div className="star-atlas__side">
+        <div className="star-atlas__planet" aria-hidden="true">
+          <span className="star-atlas__planet-glow" />
+          {node.art ? <img src={node.art} alt="" draggable={false} /> : null}
         </div>
-      </footer>
+        <section className="star-atlas__owner">
+          <div className="star-atlas__avatar" data-qa-universe-avatar>
+            <OwnerAvatar owner={owner} />
+            {raceId ? <img className="star-atlas__race" src={FACTION_EMBLEMS[raceId]} alt="" draggable={false} data-qa-atlas-race={raceId} /> : null}
+          </div>
+          <div className="star-atlas__who">
+            <h3 data-qa-universe-owner-name>{owner.displayName}</h3>
+            <span className={`star-atlas__race-name is-${raceId ?? 'none'}`}>{raceLabel(owner.raceId)}</span>
+            <em className={`star-atlas__presence is-${presenceLabel.tone}`} data-qa-universe-owner-presence={presenceLabel.tone}><i aria-hidden="true" />{presenceLabel.text}</em>
+          </div>
+        </section>
+        <section className={`star-atlas__alliance ${alliance ? '' : 'is-none'}`}>
+          <div className="star-atlas__crest"><AllianceMark alliance={alliance} /></div>
+          <div>
+            <small>Союз</small>
+            <b>{alliance ? alliance.name : 'Без союза'}</b>
+            {alliance ? <em>[{alliance.tag}]</em> : null}
+          </div>
+        </section>
+        <div className="star-atlas__status" data-qa-universe-map-status={mapStatus.tone}>
+          <b><MapMark tone={mapStatus.tone} blocked={mapStatus.attackable === false} />{RELATION_WORD[relation]}{statusTail ? ` · ${statusTail}` : ''}</b>
+          {mapStatus.attackable === false && mapStatus.detail ? <p className="uw-foot-why">{mapStatus.detail}</p> : null}
+        </div>
+      </div>
+
+      <div className="star-atlas__content">
+        <dl className={`star-atlas__points ${owner.points ? '' : 'is-empty'}`} data-qa-universe-points>
+          {POINT_LABELS.map(({ key }, index) => (
+            <div key={key} className="star-atlas__point" style={{ '--i': index } as CSSProperties}>
+              <img src={asterionAssetIntegrationAssets.scoreIcons[SCORE_ICON_KEYS[key]]} alt="" aria-hidden="true" draggable={false} />
+              <dt>{SHORT_POINT_LABELS[key]}</dt>
+              <dd>{owner.points ? scoreLabel(owner.points[key] ?? 0) : '—'}</dd>
+            </div>
+          ))}
+        </dl>
+
+        <div className="star-atlas__list-head">
+          <h3>Планеты игрока · {shown.length}</h3>
+          {ATLAS_COLUMNS.map((column) => <span key={column.key}>{column.label}</span>)}
+        </div>
+        <ul className={`star-atlas__planets is-n${shown.length}`}>
+          {rows.map(({ planet, debris, target, states }, index) => (
+            <li key={planet.id} className={planet.id === node.id ? 'is-current' : ''} style={{ '--i': index } as CSSProperties} data-qa-universe-planet-row={planet.id}>
+              <button type="button" className="star-atlas__row-planet" data-qa-universe-visit={planet.id} onClick={() => onVisit(planet)} aria-label={`Показать на карте: ${planet.name} ${formatUniverseCoordinate(planet.coordinate)}`}>
+                <img src={planet.art} alt="" draggable={false} />
+                <span>
+                  <strong>{planet.name}</strong>
+                  <small><span>{formatUniverseCoordinate(planet.coordinate)}</span></small>
+                  {debris > 0 ? <em>обломки {numberFormat.format(debris)}</em> : null}
+                </span>
+              </button>
+              {ATLAS_COLUMNS.map((column) => {
+                if (column.key === 'recycle') {
+                  return debris > 0
+                    ? <AtlasActionCircle key={column.key} column={column} planet={planet} enabled reason="" cell={plans[planet.id]?.recycle} onClick={(event) => onRecycle(target, event.currentTarget)} />
+                    : <span key={column.key} className="star-atlas__act is-empty" aria-hidden="true" />;
+                }
+                const state = states[column.key];
+                return (
+                  <AtlasActionCircle key={column.key} column={column} planet={planet} enabled={state.enabled} reason={state.reason} status={state.status}
+                    cell={plans[planet.id]?.[column.quick]} onClick={() => onAction(column.legacy!, planet)} />
+                );
+              })}
+            </li>
+          ))}
+        </ul>
+        <footer className="star-atlas__foot">
+          <button type="button" className="star-atlas__map" onClick={() => onVisit(node)}>
+            <img src={ACTION_ART['show-on-map']} alt="" draggable={false} />
+            <span>Показать на карте</span>
+          </button>
+        </footer>
+      </div>
     </div>
   );
 }
@@ -694,6 +750,8 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
   const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(null);
   const [quick, setQuick] = useState<{ nodeId: string; anchor: HTMLElement } | null>(null);
   const [debrisQuick, setDebrisQuick] = useState<{ target: QuickTarget; anchor: HTMLElement } | null>(null);
+  /** «Обломки» in the atlas: the recycle send panel over the atlas window. */
+  const [atlasQuick, setAtlasQuick] = useState<{ target: QuickTarget; anchor: HTMLElement } | null>(null);
   const highlightTimerRef = useRef(0);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const onPirateSystemChangeRef = useRef(onPirateSystemChange);
@@ -885,6 +943,8 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
         return;
       }
       if (event.key !== 'Escape') return;
+      // The recycle panel over the atlas closes first.
+      if (document.querySelector('[data-qa-quick-menu]')) return;
       event.preventDefault();
       event.stopPropagation();
       setSelectedNodeId(null);
@@ -900,6 +960,7 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
   useEffect(() => {
     if (selectedNodeId) closeButtonRef.current?.focus();
   }, [selectedNodeId]);
+  useEffect(() => { if (!selectedNodeId) setAtlasQuick(null); }, [selectedNodeId]);
 
   const goSystem = (next: number, nextGalaxy = galaxy) => {
     const boundedGalaxy = Math.min(galaxyCount, Math.max(1, nextGalaxy));
@@ -1253,7 +1314,27 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
           onOpenCard={() => setSelectedNodeId(quickTarget.node.id)} onPirateReport={onPirateReport} />
       ) : null}
 
-      {selectedNode ? createPortal(
+      {selectedNode && selectedOwner ? createPortal(
+        <div className="universe-modal-backdrop star-atlas-backdrop">
+        <aside className={`universe-inspector universe-inspector--${selectedNode.kind} star-atlas`} role="dialog" aria-modal="true" aria-label={`Звёздный атлас: ${selectedNode.name}`} data-qa-universe-inspector data-qa-inspector-kind={selectedNode.kind}
+          style={{ '--atlas-k': inspectorRelationTone } as CSSProperties}>
+          <header className="star-atlas__head">
+            <small>Звёздный атлас</small>
+            <h2><span>{selectedNode.name}</span> <b data-qa-atlas-coordinate>{formatUniverseCoordinate(selectedNode.coordinate)}</b></h2>
+          </header>
+          <button ref={closeButtonRef} type="button" className="universe-inspector-close star-atlas__close" data-asterion-close aria-label="Закрыть атлас" onClick={() => setSelectedNodeId(null)}>✕</button>
+          <OwnerInspector node={selectedNode} owner={selectedOwner} presence={ownerPresence?.[selectedOwner.id]} nowMs={nowMs} planets={ownerPlanets} currentOwnerId={owner.id} currentAlliance={owner.alliance} diplomacy={allianceDiplomacy} debrisAt={(coordinate) => orbitalDebrisByKey.get(`${coordinate.galaxy}:${coordinate.system}:${coordinate.position}`) ?? 0} mapStatus={selectedMapStatus ?? mapStatusOf(selectedNode)} onAction={handleAction}
+            onRecycle={(target, anchor) => { if (onQuickSend) setAtlasQuick({ target, anchor }); }}
+            onVisit={(planet) => { goSystem(planet.coordinate.system); requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-qa-universe-object="${planet.id}"]`)?.focus()); }} />
+        </aside>
+        </div>, document.body) : null}
+
+      {atlasQuick && selectedNode && selectedOwner && onQuickSend ? (
+        <QuickActions key={atlasQuick.target.node.id} initialAction="recycle" target={atlasQuick.target} anchor={atlasQuick.anchor} onClose={() => setAtlasQuick(null)} onSend={onQuickSend}
+          onDetails={(context, originPlanetId) => { setAtlasQuick(null); setSelectedNodeId(null); onQuickDetails?.(context, originPlanetId); }} onOpenCard={() => undefined} />
+      ) : null}
+
+      {selectedNode && !selectedOwner ? createPortal(
         <div className="universe-modal-backdrop" onClick={(event) => { if (event.target === event.currentTarget) setSelectedNodeId(null); }}>
         <aside className={`universe-inspector universe-inspector--${selectedNode.kind} uw`} role="dialog" aria-modal="true" aria-label={`Инспектор: ${selectedNode.name}`} data-qa-universe-inspector data-qa-inspector-kind={selectedNode.kind}
           style={{ '--uw-k': selectedOwner ? inspectorRelationTone : SPECIAL_TONE[selectedNode.kind] ?? '#8fb6c0' } as CSSProperties}>
@@ -1267,7 +1348,7 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
             <button ref={closeButtonRef} type="button" className="universe-inspector-close uw-close" data-asterion-close aria-label="Закрыть инспектор" title="Закрыть инспектор" onClick={() => setSelectedNodeId(null)}>✕</button>
           </header>
           <div className="universe-inspector-body uw-body">
-          {selectedOwner ? <OwnerInspector node={selectedNode} owner={selectedOwner} presence={ownerPresence?.[selectedOwner.id]} nowMs={nowMs} planets={ownerPlanets} currentOwnerId={owner.id} currentAlliance={owner.alliance} diplomacy={allianceDiplomacy} debrisAt={(coordinate) => orbitalDebrisByKey.get(`${coordinate.galaxy}:${coordinate.system}:${coordinate.position}`) ?? 0} mapStatus={selectedMapStatus ?? mapStatusOf(selectedNode)} onAction={handleAction} onVisit={(planet) => { goSystem(planet.coordinate.system); requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-qa-universe-object="${planet.id}"]`)?.focus()); }} /> : <SpecialInspector node={selectedNode} underlyingNode={selectedUnderlyingNode} nowMs={nowMs} asteroidHasDebris={Boolean(selectedNode.kind === 'asteroid' && selectedNode.asteroid && asteroidDebrisPresenceBySpawnIndex?.[String(selectedNode.asteroid.spawnIndex)])} pirateContact={selectedNode.kind === 'pirate' ? pirateContacts.find((contact) => contact.contactCycleKey === selectedNode.pirate?.contactCycleKey) : undefined} onColonize={onColonize} onAsteroidRecycler={onAsteroidRecycler} onExpedition={onExpedition} onExplorationRecon={onExplorationRecon} onExplorationAttack={onExplorationAttack} explorationStatus={explorationEligibility[selectedNode.id]} onPirateRecon={onPirateRecon} onPirateAttack={onPirateAttack} onPirateReport={onPirateReport} />}
+          {<SpecialInspector node={selectedNode} underlyingNode={selectedUnderlyingNode} nowMs={nowMs} asteroidHasDebris={Boolean(selectedNode.kind === 'asteroid' && selectedNode.asteroid && asteroidDebrisPresenceBySpawnIndex?.[String(selectedNode.asteroid.spawnIndex)])} pirateContact={selectedNode.kind === 'pirate' ? pirateContacts.find((contact) => contact.contactCycleKey === selectedNode.pirate?.contactCycleKey) : undefined} onColonize={onColonize} onAsteroidRecycler={onAsteroidRecycler} onExpedition={onExpedition} onExplorationRecon={onExplorationRecon} onExplorationAttack={onExplorationAttack} explorationStatus={explorationEligibility[selectedNode.id]} onPirateRecon={onPirateRecon} onPirateAttack={onPirateAttack} onPirateReport={onPirateReport} />}
           </div>
         </aside>
         </div>, document.body) : null}
