@@ -121,7 +121,7 @@ async function readResourceImages(win, scopeSelector) {
   return win.webContents.executeJavaScript(`(() => {
     const root = document.querySelector(${JSON.stringify(scopeSelector)});
     if (!root) return null;
-    return [...root.querySelectorAll('img[data-qa-resource-kind]')].map((image) => {
+    return [...root.querySelectorAll('img[data-qa-resource-kind]')].filter((image) => !image.closest('.is-zero')).map((image) => {
       const style = getComputedStyle(image);
       const transformValues = style.transform.match(/^matrix\\(([^)]+)\\)$/)?.[1].split(',').map(Number);
       const transformScaleX = transformValues ? Math.hypot(transformValues[0], transformValues[1]) : 1;
