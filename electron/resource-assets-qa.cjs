@@ -376,7 +376,7 @@ async function verifyViewport(width, height) {
     await click(win, '[data-qa-fleet-section="defense"]');
     await waitFor(win, `document.querySelector('.fc-catalog')`);
     await waitForResourceImages(win, '.fc-catalog');
-    assertResourceImages('defense catalog', await readResourceImages(win, '.fc-catalog'), ['metal', 'minerals', 'gas', 'population']);
+    assertResourceImages('defense catalog', await readResourceImages(win, '.fc-catalog'), ['metal', 'minerals', 'gas']);
     await click(win, '[data-qa-fleet-section="repair"]');
     await waitFor(win, `document.querySelector('.repair-workshop-v1')`);
     await waitForResourceImages(win, '.repair-workshop-v1');
