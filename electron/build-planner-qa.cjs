@@ -56,7 +56,12 @@ async function click(win, selector) {
   await settle(win);
 }
 const savedSave = (win) => run(win, `JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}))`);
-const setActive = (win, active) => run(win, `(() => { document.hasFocus = () => ${active ? 'true' : 'false'}; return true; })()`);
+// The QA window is hidden, so the page reports «not visible» by itself: say what «the player is in the game» means.
+const setActive = (win, active) => run(win, `(() => {
+  document.hasFocus = () => ${active ? 'true' : 'false'};
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => ${active ? "'visible'" : "'hidden'"} });
+  return true;
+})()`);
 
 async function seed(win, scenario = {}) {
   const ok = await editSaveIdle(win, `(() => {
@@ -151,7 +156,7 @@ async function runViewport(win, directory) {
   await sleep(2600);
   const active = await savedSave(win);
   const queue = active.queues?.[HOME] ?? [];
-  check(queue.length === 3, 'An active window fills the build queue', queue.map((item) => item.assetRole));
+  check(queue.length === 3, 'An active window fills the build queue', { roles: queue.map((item) => item.assetRole), page: await run(win, '({ v: document.visibilityState, f: document.hasFocus(), notice: document.querySelector("[role=status]")?.textContent ?? null })') });
   check(queue.every((item) => item.kind === 'building'), 'Auto-starts are ordinary build orders', queue);
   await waitFor(win, `document.querySelector('[data-qa-build-plan-line-state="building"], [data-qa-build-plan-line-state="next"]')`);
   await checkLayout(win, '03-building');
