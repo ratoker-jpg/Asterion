@@ -541,3 +541,15 @@
 .fleet-workspace-v1 .fleet-production-queue-list-v1{padding:4px 0}
 /* the ship level stays readable: a quiet mark in the top-left corner of the card */
 .fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__level{display:block;position:absolute;top:14px;left:18px;margin:0;color:var(--fa-mu);font-size:calc(15px * var(--text-scale-secondary,1)) !important}
+/* coordinator fixes 06.11: picture above the controls row, commanders label clear, ribbon fits at 1280 */
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__art{top:34px;bottom:64px;height:auto;max-height:none}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__art img{scale:1 !important}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship:hover .fc-ship__art img{scale:1.04 !important}
+.fleet-workspace-v1 .fa-hero .fc-prep__commanders>h3{flex:none;margin:0 6px 0 0;white-space:nowrap}
+.fleet-workspace-v1 .fa-hero .fc-prep__commanders>h3>b{display:inline-block;margin:0 0 0 6px}
+.fleet-workspace-v1 .fa-hero .fc-prep__list{flex:none}
+@media (max-width:1700px){
+  .fleet-workspace-v1 .fleet-root-v2>.fc-missions{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:minmax(128px,1fr);overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 56px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 56px),transparent)}
+  .fleet-workspace-v1 .fleet-root-v2>.fc-missions::-webkit-scrollbar{display:none}
+  .fleet-workspace-v1 .fleet-root-v2>.fc-missions>button.fa-mission:hover:not(:disabled){translate:none}
+}
