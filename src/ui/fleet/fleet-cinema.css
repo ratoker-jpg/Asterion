@@ -508,3 +508,22 @@
 .fleet-workspace-v1 .fleet-production-order-meta-v1 button{width:28px;height:28px;border:0;border-radius:50%;background:rgba(255,106,120,.18);color:#ff8a95}
 .fleet-workspace-v1 .fleet-production-order-progress-v1{grid-column:2/4;position:relative;height:10px;border-radius:6px;background:rgba(255,255,255,.08);overflow:hidden;inset:auto}
 .fleet-workspace-v1 .fleet-production-order-progress-v1 i{position:absolute;inset:0;transform-origin:left center;background:linear-gradient(90deg,#3f8cff,#5fd4ff);border-radius:6px}
+
+/* 1:1 pass, round 2 */
+/* mission set-up sits in the bottom row beside the numbers, so the picture keeps the mockup height */
+.fleet-workspace-v1 .fa-hero .fc-prep{grid-column:1;grid-row:4;justify-self:end;align-self:end;max-width:52%;margin:0;justify-content:flex-end}
+.fleet-workspace-v1 .fa-hero .fc-dock{justify-self:start;align-self:end}
+.fleet-workspace-v1 .fleet-root-v2>.fleet-flights-v2 .fc-orbit__remove:disabled{display:none}
+.fleet-workspace-v1 .fleet-root-v2>.fleet-flights-v2 .fc-orbit{overflow:hidden}
+
+/* catalogue: «Строить» sits inside the amount row, so the name keeps the full card width */
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair){grid-template-areas:"art art" "name stock" "cost cost" "amount amount" "lock lock"}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__amount{grid-area:amount;margin-right:124px}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__build{grid-area:amount;justify-self:end;width:118px;padding:0}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__build:disabled{background:var(--fa-go);color:#04202e;opacity:.45;box-shadow:none}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__cost>div:nth-child(4){display:none}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__cost{flex-wrap:nowrap;overflow:hidden}
+
+/* the queue bar stays inside the page */
+.fleet-workspace-v1 .fc-build>.fleet-production-queue-v1{width:100%;max-width:100%;box-sizing:border-box;overflow:hidden}
+.fleet-workspace-v1 .fleet-production-queue-list-v1{min-width:0}

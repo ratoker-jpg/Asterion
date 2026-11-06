@@ -125,8 +125,8 @@ export function FleetUnitRow({
               aria-label={`Количество: ${name}`}
               onChange={(event) => onQuantity(Number(event.target.value))}
             />
-            <button type="button" data-qa-unit-max onClick={() => onQuantity(max)} disabled={max <= 0}>МАКС.</button>
-            <button type="button" data-qa-unit-min onClick={() => onQuantity(0)} disabled={quantity <= 0}>МИН.</button>
+            <button type="button" data-qa-unit-max onClick={() => onQuantity(max)} disabled={max <= 0}>Макс</button>
+            <button type="button" data-qa-unit-min onClick={() => onQuantity(0)} disabled={quantity <= 0}>Мин</button>
             <small data-qa-unit-can-build>{max > 0 ? `можно до ${formatNumber(max)}` : resourceShort ? 'не хватает ресурсов' : cost.population > wallet.populationFree ? 'нет свободного населения' : 'больше построить нельзя'}</small>
           </div>
           <button className="fc-unit__build asterion-button asterion-button--primary" type="button" data-qa-unit-build disabled={quantity <= 0 || max <= 0} onClick={() => onBuild(quantity)}>
