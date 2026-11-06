@@ -357,3 +357,4 @@
 .fleet-workspace-v1 .fleet-root-v2>.fleet-incoming-alert-v2 span{font-size:calc(15px * var(--text-scale-body,1)) !important}
 .fleet-workspace-v1 .fleet-root-v2>.fleet-incoming-alert-v2>button{height:44px;padding:0 18px;border:0;border-radius:12px;background:rgba(255,106,120,.3);color:#fff;font-size:calc(15px * var(--text-scale-control,1)) !important;letter-spacing:0;text-transform:lowercase}
 .fleet-workspace-v1 .fleet-root-v2>.fleet-incoming-alert-v2>button::first-letter{text-transform:uppercase}
+.fleet-workspace-v1 .fleet-root-v2.has-incoming::before{display:none}
