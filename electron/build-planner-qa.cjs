@@ -237,13 +237,15 @@ async function runViewport(win, directory) {
   // Zones like the building screens; the picture shows a short hint in the game's style (keyboard focus here, hover for the mouse).
   const zones = await run(win, `Array.from(document.querySelectorAll('[data-qa-build-plan-zone]')).map((node) => node.dataset.qaBuildPlanZone)`);
   check(zones[0] === 'resource' && zones.includes('industry'), 'The planner is grouped by the planet zones', zones);
-  await run(win, `document.querySelector('[data-qa-build-plan-info="mineral-production-1"]').focus()`);
-  await settle(win, 500);
+  // A real mouse hover (the hidden QA window has no keyboard focus to show it with).
+  const spot = await run(win, `(() => { const node = document.querySelector('[data-qa-build-plan-info="mineral-production-1"]'); node.scrollIntoView({ block: 'nearest' }); const box = node.getBoundingClientRect(); return { x: box.left + box.width / 2, y: box.top + box.height / 3 }; })()`);
+  await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseMoved', x: Math.round(spot.x), y: Math.round(spot.y) });
+  await settle(win, 700);
   const hint = await run(win, `(() => { const node = document.querySelector('[data-qa-build-plan-info="mineral-production-1"] [data-qa-build-plan-hint]'); return node ? { text: node.textContent, opacity: getComputedStyle(node).opacity } : null; })()`);
   check(hint && Number(hint.opacity) > 0.9 && hint.text.includes('На ур. 12'), 'The hint says what the building does and gives at the planned level', hint);
   await checkLayout(win, '09-hint');
   await capture(win, directory, '09-hint');
-  await run(win, 'document.activeElement?.blur()');
+  await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 2, y: 2 });
   await click(win, '[data-qa-build-plan-down="metal-production-1"]');
   const order = await run(win, `Array.from(document.querySelectorAll('[data-qa-build-plan-line]')).map((node) => node.dataset.qaBuildPlanLine)`);
   check(order[0] !== 'metal-production-1' && order.indexOf('metal-production-1') > 0, 'The arrows move a building in the priority', order);
