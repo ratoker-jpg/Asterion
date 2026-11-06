@@ -369,3 +369,142 @@
 .fleet-workspace-v1 .fleet-root-v2 .fc-ship__amount>button:last-of-type{width:auto;margin-left:6px;padding:0 14px;border-radius:12px;background:rgba(40,60,86,.92)}
 .fleet-workspace-v1 .fleet-root-v2 .fc-ship__amount>button:disabled{color:#5d6f82;opacity:1}
 .fleet-workspace-v1 .fleet-root-v2 .fc-ship__amount>button:hover:not(:disabled){background:rgba(95,212,255,.3)}
+
+/* ==========================================================================
+   1:1 PASS with the approved mockups 01-flot and 02-korabli (owner, 06.11).
+   Values come from tools/tmp-mock/a.js of commit 729efb1.
+   ========================================================================== */
+.fleet-workspace-v1{padding:2px 40px 18px !important}
+.fleet-workspace-v1 .fc-wings{padding:0;min-height:52px}
+.fleet-workspace-v1 .fc-wing--build .fc-wing__tabs,
+.fleet-workspace-v1 .fc-wing--command .fc-wing__tabs{gap:34px}
+
+/* flights at a glance: a quiet line in the top-right corner of the picture */
+.fleet-workspace-v1 .fleet-root-v2>.fleet-flights-v2:not(.is-sent){
+  align-self:flex-end;position:relative;z-index:6;margin:0 24px -66px 0;min-height:56px;padding:0;gap:10px;flex-wrap:nowrap;
+  background:none;border:0;box-shadow:none;
+}
+.fleet-workspace-v1 .fleet-root-v2:has(> .fleet-flights-drop-v2.is-open)>.fleet-flights-v2{margin-bottom:0}
+.fleet-workspace-v1 .fleet-root-v2>.fleet-flights-v2 .fleet-flights-v2__slots,
+.fleet-workspace-v1 .fleet-root-v2>.fleet-flights-v2 .fleet-flights-v2__empty,
+.fleet-workspace-v1 .fleet-root-v2>.fleet-flights-v2 .fleet-flights-v2__spacer{display:none}
+.fleet-workspace-v1 .fleet-root-v2>.fleet-flights-v2 .fleet-flights-v2__label,
+.fleet-workspace-v1 .fleet-root-v2>.fleet-flights-v2 .fleet-flights-v2__count,
+.fleet-workspace-v1 .fleet-root-v2>.fleet-flights-v2 .fleet-flights-v2__next,
+.fleet-workspace-v1 .fleet-root-v2>.fleet-flights-v2 .fc-orbit{
+  height:40px;display:inline-flex;align-items:center;gap:6px;padding:0 12px;border:0;border-radius:12px;background:rgba(4,8,15,.62);white-space:nowrap;
+}
+.fleet-workspace-v1 .fleet-root-v2>.fleet-flights-v2 .fleet-flights-v2__next{flex-direction:row;gap:8px}
+.fleet-workspace-v1 .fleet-root-v2>.fleet-flights-v2 .fc-orbit img{width:26px;height:26px}
+.fleet-workspace-v1 .fleet-root-v2>.fleet-flights-v2 .fc-orbit span{font-size:calc(14px * var(--text-scale-secondary,1)) !important;color:#cfdbe8}
+.fleet-workspace-v1 .fleet-root-v2>.fleet-flights-v2>button{height:40px;background:rgba(4,8,15,.62)}
+.fleet-workspace-v1 .fleet-root-v2>.fleet-flights-v2>button:hover{background:rgba(95,212,255,.28)}
+
+/* the mission picture, mockup .a-hero: 246 high, banner across the whole width */
+.fleet-workspace-v1 .fa-hero{min-height:246px;padding:26px 30px 22px 34px;grid-template-columns:minmax(0,1fr) auto}
+.fleet-workspace-v1 .fa-hero__art{inset:0}
+.fleet-workspace-v1 .fa-hero__art::after{background:linear-gradient(90deg,#04080f 0,rgba(4,8,15,.82) 30%,transparent 62%)}
+.fleet-workspace-v1 .fa-kicker{font-size:calc(17px * var(--text-scale-secondary,1)) !important}
+.fleet-workspace-v1 .fa-hero__text>h2{margin:0;font-size:calc(60px * var(--text-scale-page-title,1)) !important;line-height:1.1}
+.fleet-workspace-v1 .fa-hero .fc-mission-text{max-width:680px;margin-top:6px;font-size:calc(20px * var(--text-scale-body,1)) !important}
+.fleet-workspace-v1 .fa-hero .fc-dock{gap:36px;margin-top:14px}
+.fleet-workspace-v1 .fa-hero .fc-dock>div>small{font-size:calc(18px * var(--text-scale-secondary,1)) !important}
+.fleet-workspace-v1 .fa-hero .fc-dock>div>b{font-size:calc(24px * var(--text-scale-table,1)) !important}
+.fleet-workspace-v1 .fa-hero__go{align-self:end;gap:0}
+.fleet-workspace-v1 .fa-hero .fc-dock__status{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.fleet-workspace-v1 .fa-hero .fc-dock__go{height:76px;padding:0 44px;font-size:calc(26px * var(--text-scale-control,1)) !important}
+.fleet-workspace-v1 .fa-hero .fc-prep{margin-top:10px;gap:6px 18px}
+.fleet-workspace-v1 .fa-hero .fc-prep__commanders>p{display:none}
+
+/* ribbon, mockup .a-film: 92 high, 8 apart */
+.fleet-workspace-v1 .fleet-root-v2>.fc-missions{height:92px;margin-top:0}
+.fleet-workspace-v1 .fleet-root-v2>.fc-missions>button.fa-mission span{font-size:calc(16px * var(--text-scale-control,1)) !important}
+.fleet-workspace-v1 .fleet-root-v2>.fc-missions>button.fa-mission{filter:saturate(.85) brightness(.82)}
+
+/* ships, mockup .a-gr / .a-t: 6 x 2 tiles straight under the ribbon */
+.fleet-workspace-v1 .fleet-root-v2>.fc-hangar{gap:0;margin-top:2px}
+.fleet-workspace-v1 .fleet-root-v2 .fc-hangar__head{display:none}
+.fleet-workspace-v1 .fleet-root-v2 .fc-roster{grid-auto-rows:minmax(232px,1fr);gap:10px;padding:0}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship{min-height:232px;padding:12px 14px}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship.is-empty{opacity:.42}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship>h3{font-size:calc(20px * var(--text-scale-section-title,1)) !important}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__have{font-size:calc(17px * var(--text-scale-secondary,1)) !important}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__have>b{font-size:calc(17px * var(--text-scale-table,1)) !important}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__pop{display:none}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__art{right:-6px;top:34px;bottom:auto;width:176px;height:146px;max-width:62%}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__amount{position:absolute;left:12px;right:12px;bottom:12px;margin:0;grid-template-columns:36px minmax(0,1fr) 36px 58px;gap:5px}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__amount>*{height:44px;border-radius:12px !important;margin:0}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__amount>button,
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__amount>input{background:rgba(0,0,0,.45);font-size:calc(18px * var(--text-scale-control,1)) !important;font-weight:800}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__amount>button:last-of-type{width:100%;margin:0;padding:0;background:var(--fa-tile-2);font-size:calc(16px * var(--text-scale-control,1)) !important}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__amount>button:disabled{color:#fff;opacity:.55}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__amount>button:hover:not(:disabled){background:rgba(95,212,255,.26)}
+
+/* ==========================================================================
+   Catalogue, mockup 02: title left, yard and population right; 5 cards a row;
+   the yard queue is a bar along the bottom.
+   ========================================================================== */
+.fleet-workspace-v1 .fc-build{display:flex !important;flex-direction:column;gap:12px}
+.fleet-workspace-v1 .fc-catalog{gap:12px}
+.fleet-workspace-v1 .fc-head{display:flex;align-items:baseline;gap:22px;min-height:52px}
+.fleet-workspace-v1 .fc-head__title{display:flex;align-items:baseline;gap:22px;flex:1 1 auto;min-width:0}
+.fleet-workspace-v1 .fc-head__title>h2{flex:0 1 auto;min-width:0;font-size:calc(40px * var(--text-scale-page-title,1)) !important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fleet-workspace-v1 .fc-head__title>p{margin:0 0 0 auto;flex:none;white-space:nowrap;color:var(--fa-mu);font-size:calc(18px * var(--text-scale-body,1)) !important}
+.fleet-workspace-v1 .fc-head__pool{display:flex;align-items:baseline;gap:8px;text-align:left}
+.fleet-workspace-v1 .fc-head__pool>small{font-size:calc(18px * var(--text-scale-secondary,1)) !important}
+.fleet-workspace-v1 .fc-head__pool>strong{font-size:calc(18px * var(--text-scale-table,1)) !important}
+.fleet-workspace-v1 .fc-head__pool>span{display:none}
+.fleet-workspace-v1 .fc-head__plan{align-self:center;height:46px;font-size:calc(16px * var(--text-scale-control,1)) !important}
+
+.fleet-workspace-v1 .fc-catalog>.fc-unit-list{grid-template-columns:repeat(5,minmax(0,1fr));grid-auto-rows:339px;gap:12px}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair){
+  grid-template-areas:"art art" "name stock" "cost cost" "amount build" "lock lock";
+  grid-template-rows:190px auto auto 1fr;align-items:start;row-gap:10px;padding:0 18px 16px;overflow:visible;
+}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__art{height:190px;margin:0 -18px}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__art>img{max-width:100%;width:100%;height:190px;max-height:190px;object-fit:contain}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__name>h3{font-size:calc(21px * var(--text-scale-section-title,1)) !important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__name>small,
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__level,
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__time,
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__amount>small,
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__stock>em,
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__info{display:none}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__stock{grid-area:stock;display:flex;flex-wrap:nowrap;align-items:baseline;justify-content:flex-end;gap:6px;align-self:baseline}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__stock>small{font-size:calc(17px * var(--text-scale-secondary,1)) !important;text-transform:lowercase;color:var(--fa-mu)}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__stock>strong{color:#fff;font-size:calc(17px * var(--text-scale-table,1)) !important}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__cost{gap:4px 14px}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__cost dt img{width:22px;height:22px}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__cost dd{font-size:calc(17px * var(--text-scale-table,1)) !important;font-weight:700}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__amount{align-self:end;grid-template-columns:minmax(0,1fr) auto}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__amount>input{border-radius:14px;background:rgba(0,0,0,.45)}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__amount>button{border-radius:14px;padding:0 12px;font-size:calc(18px * var(--text-scale-control,1)) !important;text-transform:capitalize}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__build{align-self:end;border-radius:14px;padding:0 14px;font-size:calc(18px * var(--text-scale-control,1)) !important;font-weight:800}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__lock{align-self:end}
+
+/* the yard queue as a bar along the bottom */
+.fleet-workspace-v1 .fc-build>.fleet-production-queue-v1{
+  position:sticky;bottom:16px;z-index:20;width:auto;min-height:92px;margin:0;padding:0 24px;
+  display:flex;align-items:center;gap:26px;border:0;border-radius:var(--fa-r);background:#0b1626;box-shadow:0 -10px 30px rgba(4,8,15,.7);
+}
+.fleet-workspace-v1 .fleet-production-queue-head-v1{flex:none;display:flex;flex-direction:column;gap:2px;padding:0;border:0;background:none}
+.fleet-workspace-v1 .fleet-production-queue-head-v1>span{color:#fff;font-size:calc(20px * var(--text-scale-section-title,1)) !important;font-weight:800;letter-spacing:0;text-transform:none}
+.fleet-workspace-v1 .fleet-production-queue-head-v1>strong{color:var(--fa-mu);font-size:calc(17px * var(--text-scale-secondary,1)) !important;font-weight:500}
+.fleet-workspace-v1 .fleet-production-queue-empty-v1{display:flex;align-items:baseline;gap:12px;padding:0;border:0;background:none}
+.fleet-workspace-v1 .fleet-production-queue-empty-v1 strong{font-size:calc(18px * var(--text-scale-body,1)) !important}
+.fleet-workspace-v1 .fleet-production-queue-empty-v1 small{color:var(--fa-mu);font-size:calc(16px * var(--text-scale-secondary,1)) !important}
+.fleet-workspace-v1 .fleet-production-queue-list-v1{flex:1 1 auto;min-width:0;display:flex;gap:26px;overflow-x:auto;overflow-y:hidden;max-height:none;padding:8px 0}
+.fleet-workspace-v1 .fleet-production-order-v1{
+  position:relative;flex:none;width:400px;display:grid;grid-template-columns:74px minmax(0,1fr) 28px;grid-template-rows:auto 10px;column-gap:14px;row-gap:8px;align-items:center;
+  padding:0;border:0;border-radius:0;background:none;box-shadow:none;
+}
+.fleet-workspace-v1 .fleet-production-order-art-v1{grid-row:1/3;width:74px;height:64px;display:grid;place-items:center}
+.fleet-workspace-v1 .fleet-production-order-art-v1 img{width:74px;height:64px;object-fit:contain}
+.fleet-workspace-v1 .fleet-production-order-main-v1{display:flex;align-items:baseline;flex-wrap:wrap;gap:2px 10px;min-width:0}
+.fleet-workspace-v1 .fleet-production-order-main-v1 strong{color:#fff;font-size:calc(18px * var(--text-scale-table,1)) !important}
+.fleet-workspace-v1 .fleet-production-order-main-v1 small{color:var(--fa-mu);font-size:calc(14px * var(--text-scale-secondary,1)) !important}
+.fleet-workspace-v1 .fleet-production-order-main-v1 time{margin-left:auto;color:var(--fa-ac);font-size:calc(17px * var(--text-scale-table,1)) !important;font-weight:700}
+.fleet-workspace-v1 .fleet-production-order-main-v1>span{margin-left:auto;color:var(--fa-mu);font-size:calc(15px * var(--text-scale-secondary,1)) !important;font-weight:500}
+.fleet-workspace-v1 .fleet-production-order-meta-v1 button{width:28px;height:28px;border:0;border-radius:50%;background:rgba(255,106,120,.18);color:#ff8a95}
+.fleet-workspace-v1 .fleet-production-order-progress-v1{grid-column:2/4;position:relative;height:10px;border-radius:6px;background:rgba(255,255,255,.08);overflow:hidden;inset:auto}
+.fleet-workspace-v1 .fleet-production-order-progress-v1 i{position:absolute;inset:0;transform-origin:left center;background:linear-gradient(90deg,#3f8cff,#5fd4ff);border-radius:6px}

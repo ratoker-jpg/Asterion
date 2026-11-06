@@ -130,7 +130,7 @@ export function FleetUnitRow({
             <small data-qa-unit-can-build>{max > 0 ? `можно до ${formatNumber(max)}` : resourceShort ? 'не хватает ресурсов' : cost.population > wallet.populationFree ? 'нет свободного населения' : 'больше построить нельзя'}</small>
           </div>
           <button className="fc-unit__build asterion-button asterion-button--primary" type="button" data-qa-unit-build disabled={quantity <= 0 || max <= 0} onClick={() => onBuild(quantity)}>
-            Построить
+            Строить
           </button>
         </>
       )}

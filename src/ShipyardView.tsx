@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { getFactionShipCatalog } from './domain/combat/faction-catalog.ts';
-import { getCombatFactionName, type CombatFactionId } from './domain/combat/factions.ts';
+import type { CombatFactionId } from './domain/combat/factions.ts';
 import type { ShipId } from './domain/combat/ids.ts';
 import type { CatalogEntity } from './domain/combat/catalog.ts';
 import {
@@ -203,7 +203,6 @@ function ShipCard({
 export function ShipyardView({ planetName, coords, planetId, budget: providedBudget }: { planetName: string; coords: string; planetId?: string; budget?: FleetBuildBudget }) {
   const savedBudget = useMemo(readFleetBuildBudget, []);
   const budget = providedBudget ?? savedBudget;
-  const factionName = getCombatFactionName(budget.factionId);
   const shipyardPresentation = useMemo(
     () => getBuildingPresentation('shipyard', budget.factionId),
     [budget.factionId],
@@ -260,10 +259,10 @@ export function ShipyardView({ planetName, coords, planetId, budget: providedBud
       <FleetConstructionHeader
         viewId="ships"
         shipyardPresentation={shipyardPresentation}
-        title="Корабли"
-        detail={`${planetName} ${coords} · ${shipyardPresentation.name}, уровень ${budget.shipyardLevel} · ${factionName}`}
+        title={`${shipyardPresentation.name} планеты ${planetName}`}
+        detail={`${shipyardPresentation.name}, уровень ${budget.shipyardLevel} · ${getBuildingPresentation('hangar', budget.factionId).name} ${budget.hangarLevel}`}
         noShipyard={budget.shipyardLevel <= 0}
-        populationLabel="Население флота"
+        populationLabel="Население"
         population={fleetSummary.population}
         capacity={fleetSummary.capacity}
         free={fleetSummary.available}

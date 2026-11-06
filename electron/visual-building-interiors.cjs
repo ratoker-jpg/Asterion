@@ -195,7 +195,7 @@ async function verifyMilitaryDeepLinks(win, directory) {
     && visual.card.borderWidth === '0px'
     && visual.card.clipPath === 'none'
     && visual.card.framedCells === 0;
-  if (!sharedTemplate(shipConstructionVisual) || shipConstructionVisual.title !== 'Корабли' || !shipConstructionVisual.detail.includes('Верфь')) {
+  if (!sharedTemplate(shipConstructionVisual) || !shipConstructionVisual.title.startsWith('Верфь планеты') || !shipConstructionVisual.detail.includes('Верфь')) {
     throw new Error(`Ship construction visual contract failed: ${JSON.stringify(shipConstructionVisual)}`);
   }
   const unitTime = await win.webContents.executeJavaScript(`(() => {

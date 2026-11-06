@@ -175,6 +175,9 @@ const flightCargoResources = [
   { kind: 'debris', label: 'ОБЛОМКИ' },
 ] as const;
 
+/** The mission ribbon of variant A, in the order of the approved mockup. */
+const RIBBON_ORDER: readonly MissionId[] = ['attack', 'pirate-elimination', 'espionage', 'expedition', 'transport', 'deployment', 'colonize', 'recycle', 'gas', 'aid', 'sun-support', 'space-flight'];
+
 function MissionIcon({ mission }: { mission: MissionDefinition }) {
   return <img src={mission.icon} alt="" draggable={false} />;
 }
@@ -1669,22 +1672,8 @@ function FleetWorkspace({
   return (
     <div className="fleet-workspace-v1" data-qa-fleet-planet={planetName} data-qa-fleet-yard-level={fleetSnapshot.shipyardLevel} data-qa-flight-launch-context={launchContext?.destination ? flightCoordinateLabel(launchContext.destination.coordinate) : undefined} data-qa-target-relation={previewTargetRelation ?? (!previewOpen ? launchContext?.targetRelation : undefined)}>
       <nav className="fc-wings" aria-label="Разделы флота" data-qa-fleet-nav>
-        <FleetWing
-          tone="build"
-          title="Строительство"
-          items={FLEET_CONSTRUCTION_NAVIGATION}
-          icons={{
-            ships: shipDefinitions.find((ship) => ship.id === 'battleship')?.art ?? shipDefinitions[0]?.art ?? '',
-            defense: getFactionDefenseCatalog(factionId)[0]?.art ?? '',
-            'commander-ships': COMMANDER_COMBAT_CATALOG[0]?.art ?? '',
-            repair: missionRepairIcon,
-          }}
-          isActive={(id) => selectedSection === id && (id !== 'ships' || constructionView === 'ships')}
-          onSelect={chooseSection}
-        />
-        <span className="fc-wings__gap" aria-hidden="true" />
-        <section className="fc-wing fc-wing--command">
-          <h3>Управление флотом</h3>
+        <section className="fc-wing fc-wing--build">
+          <h3>Строительство</h3>
           <div className="fc-wing__tabs">
             <button
               type="button"
@@ -1693,12 +1682,23 @@ function FleetWorkspace({
               data-qa-fleet-section="root"
               onClick={openFleetRoot}
             >
-              <img src={missionSpaceFlightIcon} alt="" draggable={false} />
               <span>Отправка флота</span>
             </button>
             <FleetWingTabs
-              items={FLEET_MANAGEMENT_NAVIGATION}
-              icons={{ 'combat-priority': missionPriorityIcon, battles: missionBattlesIcon, simulator: missionSimulatorIcon }}
+              items={FLEET_CONSTRUCTION_NAVIGATION.filter((item) => item.id !== 'repair')}
+              icons={{}}
+              isActive={(id) => selectedSection === id && (id !== 'ships' || constructionView === 'ships')}
+              onSelect={chooseSection}
+            />
+          </div>
+        </section>
+        <span className="fc-wings__gap" aria-hidden="true" />
+        <section className="fc-wing fc-wing--command">
+          <h3>Управление флотом</h3>
+          <div className="fc-wing__tabs">
+            <FleetWingTabs
+              items={[...FLEET_CONSTRUCTION_NAVIGATION.filter((item) => item.id === 'repair'), ...FLEET_MANAGEMENT_NAVIGATION]}
+              icons={{}}
               isActive={(id) => selectedSection === id}
               onSelect={chooseSection}
             />
@@ -1912,9 +1912,9 @@ function FleetWorkspace({
                 </div>
               </div> : null}
               <footer className="fc-dock" data-toast-guard>
-                <div><small>Выбрано</small><b data-qa-fleet-selected>{flightNumberLabel(selectedShipCount)}</b></div>
-                <div><small>Население рейса</small><b>{flightNumberLabel(selectedPopulation)}</b></div>
-                <div data-qa-fleet-population={fleetSummary.population} data-qa-fleet-capacity={fleetSummary.capacity} data-qa-fleet-available-ships={availableShipCount} data-qa-fleet-satellite-count={fleetSnapshot.solarSatellites}><small>Население флота</small><b>{flightNumberLabel(fleetSummary.population)} / {flightNumberLabel(fleetSummary.capacity)}</b></div>
+                <div><small>Кораблей</small><b data-qa-fleet-selected>{flightNumberLabel(selectedShipCount)}</b></div>
+                <div><small>Население</small><b>{flightNumberLabel(selectedPopulation)}</b></div>
+                <div data-qa-fleet-population={fleetSummary.population} data-qa-fleet-capacity={fleetSummary.capacity} data-qa-fleet-available-ships={availableShipCount} data-qa-fleet-satellite-count={fleetSnapshot.solarSatellites}><small>Рейсов</small><b>{flightSlots.used} из {flightSlots.limit}</b></div>
               </footer>
               <div className="fa-hero__go" data-toast-guard>
                 <span className="fc-dock__status" data-qa-fleet-status>{status}</span>
@@ -1923,7 +1923,7 @@ function FleetWorkspace({
             </section>
 
             <div className="fc-missions" role="group" aria-label="Выбор миссии">
-              {missions.map((mission) => (
+              {RIBBON_ORDER.map((id) => missions.find((mission) => mission.id === id)).filter((mission): mission is MissionDefinition => Boolean(mission)).map((mission) => (
                 <button
                   key={mission.id}
                   type="button"
@@ -1939,7 +1939,7 @@ function FleetWorkspace({
                   onClick={() => chooseMission(mission.id)}
                 >
                   <img src={MISSION_BANNERS[mission.id] ?? mission.icon} alt="" draggable={false} />
-                  <span>{mission.label.replace('Транспортировка', 'Транспорти­ровка')}</span>
+                  <span>{mission.id === 'transport' ? 'Транспорт' : mission.label}</span>
                 </button>
               ))}
             </div>
@@ -2501,6 +2501,13 @@ function FleetWorkspace({
   );
 }
 
+/** Variant A tab words: short, one line each. */
+const FLEET_TAB_SHORT_LABELS: Partial<Record<FleetSectionId, string>> = {
+  'commander-ships': 'Командирские',
+  repair: 'Мастерская',
+  'combat-priority': 'Приоритет',
+};
+
 function FleetWingTabs({ items, icons, isActive, onSelect }: {
   items: readonly FleetSectionItem[];
   icons: Partial<Record<FleetSectionId, string>>;
@@ -2512,7 +2519,7 @@ function FleetWingTabs({ items, icons, isActive, onSelect }: {
       {items.map((item) => (
         <button key={item.id} type="button" className={isActive(item.id) ? 'is-on' : ''} aria-current={isActive(item.id) ? 'page' : undefined} data-qa-fleet-section={item.id} onClick={() => onSelect(item.id)}>
           {icons[item.id] ? <img src={icons[item.id]} alt="" draggable={false} /> : null}
-          <span>{item.label}</span>
+          <span>{FLEET_TAB_SHORT_LABELS[item.id] ?? item.label}</span>
         </button>
       ))}
     </>
