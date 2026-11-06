@@ -782,6 +782,17 @@ export function SimulatorView({ planetName, coords, onBack, initialScenario }: {
       : result.winner === 'defender' ? 'Победа защитника' : 'Ничья';
   const resultTone = !result ? 'is-idle' : result.winner === 'attacker' ? 'is-attacker' : result.winner === 'defender' ? 'is-defender' : 'is-draw';
   const loot = result?.resources ? (result.resources.metal ?? 0) + (result.resources.minerals ?? 0) + (result.resources.gas ?? 0) : 0;
+  // An empty side opens its editor and keeps it open while the player types: the first digit
+  // must not swap the editor for tiles. «Готово» or a new calculation closes it.
+  const attackerEmpty = sideUnits('attacker').length === 0;
+  const defenderEmpty = sideUnits('defender').length === 0;
+  useEffect(() => {
+    if (!attackerEmpty && !defenderEmpty) return;
+    setEditing((current) => ({
+      attacker: current.attacker || attackerEmpty,
+      defender: current.defender || defenderEmpty,
+    }));
+  }, [attackerEmpty, defenderEmpty]);
 
   const renderSide = (side: ScenarioSide) => {
     const units = sideUnits(side);

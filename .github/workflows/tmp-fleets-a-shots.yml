@@ -1,0 +1,26 @@
+name: tmp fleets A shots
+# TEMPORARY: branch only, removed before merge.
+on:
+  push:
+    branches: [claude/fleets-plan-a]
+jobs:
+  shoot:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx electron electron/fleet-redo-screenshots.cjs --out=artifacts/fa/main
+      - run: npx electron electron/fleet-redo-screenshots.cjs --only=plan --out=artifacts/fa/plan
+        if: always()
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: fleets-a-shots
+          path: artifacts/fa
+          retention-days: 7

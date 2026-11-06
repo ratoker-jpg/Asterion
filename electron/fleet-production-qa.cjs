@@ -1753,6 +1753,31 @@ async function runViewport(width, height) {
     })()`);
     if (layout.horizontalOverflow || !layout.longPage || layout.orderCount !== 8 || layout.queueOverflowX !== 'auto' || layout.queueMaxHeight !== 'none' || layout.queueScrollWidth < layout.queueClientWidth) throw new Error(`${label}: fleet production layout overflow/long-page contract failed ${JSON.stringify(layout)}`);
     await capture(win, directory, 'fleet-production');
+    // Owner 06.11: the «i» on every ship and defence of every race opens that unit's card.
+    const unitCards = {};
+    for (const race of ['aegis', 'synod', 'veyra']) {
+      await seedProductionSave(win, (save, _planet, factionId) => { if (save.profile) save.profile.factionId = factionId; }, [race]);
+      for (const [section, mode] of [['ships', 'ships'], ['defense', 'defense']]) {
+        await click(win, '[data-qa-route="fleets"]');
+        await waitFor(win, `document.querySelector('.fleet-workspace-v1')`);
+        await click(win, `[data-qa-fleet-section="${section}"]`);
+        await waitFor(win, `document.querySelector('[data-qa-construction-mode="${mode}"] [data-qa-unit-info]')`);
+        const ids = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-qa-construction-mode="${mode}"] [data-qa-unit-info]')).map((button) => button.getAttribute('data-qa-unit-info'))`);
+        const failed = [];
+        for (const id of ids) {
+          await win.webContents.executeJavaScript(`document.querySelector('[data-qa-unit-info="${id}"]')?.click()`);
+          const opened = await win.webContents.executeJavaScript(`new Promise((resolve) => { let tries = 0; const tick = () => { const modal = document.querySelector('.ship-info-modal-v1'); if (modal || tries > 20) resolve(Boolean(modal)); else { tries += 1; setTimeout(tick, 50); } }; tick(); })`);
+          if (!opened) failed.push(id);
+          else {
+            await win.webContents.executeJavaScript(`document.querySelector('.ship-info-close-v1')?.click()`);
+            await waitFor(win, `!document.querySelector('.ship-info-modal-v1')`);
+          }
+        }
+        unitCards[`${race}:${mode}`] = ids.length;
+        if (!ids.length || failed.length) throw new Error(`${label}: unit info card did not open for ${race} ${mode}: ${JSON.stringify({ ids, failed })}`);
+      }
+    }
+    console.log(`[fleet-production-qa] ${label} unit info cards ${JSON.stringify(unitCards)}`);
     return { viewport: label, layout, missionSlots, transportCycle, flightCycle, recycleCycle, asteroidRecyclerLaunch, gasUiRegressions, gasFreshnessRegressions, planetSwitch, planetoLom, screenshotsSkipped: skipScreenshots };
   } finally {
     if (!win.isDestroyed()) await win.close();

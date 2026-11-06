@@ -2207,6 +2207,10 @@ function FleetWorkspace({
                 </>}
               </div>
               {planTiming ? <div className="fa-route__gas"><ResourceIcon kind="gas" label="Газ" /><b>{flightNumberLabel(planTiming.gas)}</b><span>газа на перелёт</span></div> : null}
+              {arrivalAsteroidPreview ? <div className={`fa-route__asteroid ${arrivalAsteroidPreview.unavailable ? 'is-unknown' : arrivalAsteroidPreview.hit ? 'is-hit' : 'is-miss'}`} data-qa-plan-asteroid={arrivalAsteroidPreview.unavailable ? 'unavailable' : arrivalAsteroidPreview.hit ? 'hit' : 'miss'}>
+                <b>{arrivalAsteroidPreview.unavailable ? 'Где будет астероид, неизвестно' : arrivalAsteroidPreview.hit ? 'Астероид будет на месте к прибытию' : 'К прибытию астероид уйдёт'}</b>
+                <span>{arrivalAsteroidPreview.asteroidCoordinate ? `при прибытии он в ${flightCoordinateLabel(arrivalAsteroidPreview.asteroidCoordinate)}` : 'астероид не найден в расчётный момент'}</span>
+              </div> : null}
               <span className="fa-route__from-label"><small>Откуда</small></span>
               {planTargetArt && (planTargetName || planTargetWho) ? <span className="fa-route__to-label"><small>Куда{planTargetWho ? ` · ${planTargetWho}` : ''}</small>{planTargetName ? <b>{planTargetName}</b> : null}</span> : <span className="fa-route__to-label"><small>Куда</small></span>}
             </div>

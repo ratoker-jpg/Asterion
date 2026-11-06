@@ -329,3 +329,26 @@ html body .flight-briefing-v2 .flight-timeline-cargo-field>.amount-slider{displa
 html body .flight-briefing-v2 .flight-timeline-cargo-field>.amount-slider>input[type="range"]{display:block;width:100% !important}
 html body .flight-briefing-v2 .flight-timeline-coordinate-inputs input{background:rgba(150,200,255,.12) !important;box-shadow:inset 0 0 0 1px rgba(150,200,255,.18) !important}
 html body .flight-briefing-v2 .fa-cargo-used small{color:var(--pm) !important;font-size:17px !important;font-weight:500 !important;letter-spacing:0 !important;text-transform:none !important}
+
+/* «Откуда»: the planet name itself is the picker, like the target name opposite */
+html body .flight-briefing-v2 [data-qa-flight-source-step] .flight-source-select-v1{justify-items:center !important;text-align:center}
+html body .flight-briefing-v2 [data-qa-flight-source-step] .game-select{width:auto !important;display:inline-block}
+html body .flight-briefing-v2 [data-qa-flight-source-step] .game-select__trigger{
+  display:inline-flex !important;align-items:center;gap:12px;width:auto !important;min-height:0 !important;height:auto !important;padding:4px 14px !important;
+  border:0 !important;border-radius:12px !important;background:none !important;box-shadow:none !important;
+  color:#fff !important;font-size:24px !important;font-weight:800 !important;transition:background-color 200ms ease;
+}
+html body .flight-briefing-v2 [data-qa-flight-source-step] .game-select__trigger span{font-size:24px !important;font-weight:800 !important;color:#fff !important}
+html body .flight-briefing-v2 [data-qa-flight-source-step] .game-select__trigger:hover,
+html body .flight-briefing-v2 [data-qa-flight-source-step] .game-select__trigger[aria-expanded="true"]{background:rgba(150,200,255,.12) !important}
+html body .flight-briefing-v2 [data-qa-flight-source-step] .game-select__trigger i{width:12px;height:12px;border:solid var(--pa);border-width:0 3px 3px 0;rotate:45deg;translate:0 -3px;background:none !important}
+
+/* gas: will the asteroid still be there on arrival */
+html body .flight-briefing-v2 .fa-route__asteroid{
+  position:absolute;left:560px;top:362px;width:800px;display:grid;justify-items:center;gap:2px;text-align:center;
+  animation:pa-chip 460ms 300ms var(--ut-ease-out,ease-out) both;
+}
+html body .flight-briefing-v2 .fa-route__asteroid b{font-size:20px !important;font-weight:800;color:#4fe3a0}
+html body .flight-briefing-v2 .fa-route__asteroid.is-miss b{color:#ffc14d}
+html body .flight-briefing-v2 .fa-route__asteroid.is-unknown b{color:var(--pm)}
+html body .flight-briefing-v2 .fa-route__asteroid span{font-size:16px !important;color:var(--pm)}
