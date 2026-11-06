@@ -1977,7 +1977,6 @@ function FleetWorkspace({
                         <button type="button" aria-label={`Больше: ${ship.name}`} onClick={() => setShipQuantity(ship.id, selected + 1)} disabled={selected >= available}>+</button>
                         <button type="button" onClick={() => setShipQuantity(ship.id, available)} disabled={selected >= available}>Все</button>
                       </div>
-                      <AmountSlider compact value={selected} max={available} label={`Количество: ${ship.name}`} onChange={(value) => setShipQuantity(ship.id, value)} qa={ship.id} />
                     </div>
                   );
                 })}
