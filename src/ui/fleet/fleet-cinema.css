@@ -552,3 +552,5 @@
 .fleet-workspace-v1 .fa-hero .fc-prep__commanders{column-gap:12px}
 .fleet-workspace-v1 .fleet-root-v2>.fc-missions>button.fa-mission{padding:8px}
 .fleet-workspace-v1 .fleet-root-v2>.fc-missions>button.fa-mission span{font-size:15px !important;max-width:100%;overflow:hidden}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__away{position:relative;z-index:1;margin:2px 0 0;color:#8fc9d6;font-size:calc(14px * var(--text-scale-secondary,1)) !important;text-shadow:0 1px 6px #000;white-space:nowrap}
+.fleet-workspace-v1 .fleet-root-v2 .fc-ship__away>b{color:#cfe9ef;font-weight:800}

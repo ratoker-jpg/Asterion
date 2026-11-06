@@ -101,7 +101,7 @@ import {
   syncSpyTargetCommanderCounts,
   SPY_REPORT_COOLDOWN_MS,
 } from '../domain/espionage/runtime.ts';
-import { spyReportPopulation } from '../domain/espionage/population.ts';
+import { flightComesBackToPlanet, spyReportPopulation } from '../domain/espionage/population.ts';
 import type { EspionageRollKind } from '../domain/espionage/runtime.ts';
 import type {
   EspionageState,
@@ -570,6 +570,43 @@ export function getReservedShipsForPlanet(
     }
   }
   return reserved;
+}
+
+/**
+ * Owner rule (06.11.2026): a planet's fleet is the ships on it plus its own
+ * ships in flight that will come back. This is the second half: per type, what
+ * is away and returns here. Deployment and colonization on the way out have
+ * left for good and are not counted.
+ */
+export function getShipsAwayForPlanet(
+  state: SaveState,
+  planetId: PlanetId,
+): Partial<Record<ShipId, number>> {
+  const away: Partial<Record<ShipId, number>> = {};
+  for (const flight of state.flights?.records ?? []) {
+    if (flight.ownerSide === 'bot01' || flight.ownerSide === 'npc' || flight.ownerSide === 'pirate') continue;
+    if (!flightComesBackToPlanet(flight, planetId)) continue;
+    for (const [shipId, quantity] of Object.entries(flight.selectedShips) as [ShipId, number][]) {
+      if (!Number.isFinite(quantity) || quantity <= 0) continue;
+      away[shipId] = (away[shipId] ?? 0) + Math.floor(quantity);
+    }
+  }
+  return away;
+}
+
+/** Ships of a planet per type: on it, away and coming back, and the two together. */
+export function planetShipTotals(
+  onPlanet: Partial<Record<ShipId, number>>,
+  away: Partial<Record<ShipId, number>>,
+): Partial<Record<ShipId, { onPlanet: number; away: number; total: number }>> {
+  const totals: Partial<Record<ShipId, { onPlanet: number; away: number; total: number }>> = {};
+  const count = (value: number | undefined) => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0);
+  for (const shipId of new Set([...Object.keys(onPlanet), ...Object.keys(away)]) as Set<ShipId>) {
+    const here = count(onPlanet[shipId]);
+    const gone = count(away[shipId]);
+    if (here + gone > 0) totals[shipId] = { onPlanet: here, away: gone, total: here + gone };
+  }
+  return totals;
 }
 
 export function getReservedCommandersForPlanet(

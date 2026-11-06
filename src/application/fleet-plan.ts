@@ -6,7 +6,6 @@
  * through `startFleetProduction`, which has the last word.
  */
 import type { ShipId } from '../domain/combat/ids.ts';
-import { flightComesBackToPlanet } from '../domain/espionage/population.ts';
 import {
   calculateFleetPlan,
   emptyFleetPlan,
@@ -78,19 +77,6 @@ export type FleetPlanGlance = {
   overBy: number;
 };
 
-function comingBackShips(state: SaveState, planetId: string): Partial<Record<ShipId, number>> {
-  const away: Partial<Record<ShipId, number>> = {};
-  for (const flight of state.flights?.records ?? []) {
-    if (flight.ownerSide === 'bot01' || flight.ownerSide === 'npc' || flight.ownerSide === 'pirate') continue;
-    if (!flightComesBackToPlanet(flight, planetId)) continue;
-    for (const [shipId, quantity] of Object.entries(flight.selectedShips) as [ShipId, number][]) {
-      if (!Number.isFinite(quantity) || quantity <= 0) continue;
-      away[shipId] = (away[shipId] ?? 0) + Math.floor(quantity);
-    }
-  }
-  return away;
-}
-
 const amounts = (pick: (key: FleetPlanResource) => number) =>
   Object.fromEntries(FLEET_PLAN_RESOURCES.map((key) => [key, pick(key)])) as ResourceAmounts;
 
@@ -109,7 +95,6 @@ export function buildFleetPlanView(state: SaveState, planetId: string, runtime: 
   const plan = getFleetPlan(state, planetId);
   const items = buildProductionItems(state, planetId, 'ships', runtime);
   const summary = getFleetSummaryForState(state, planetId);
-  const away = comingBackShips(state, planetId);
   const stored = getPlanetResources(state, planetId);
   const wallet = amounts((key) => Math.max(0, Math.floor(stored[key] ?? 0)));
   const calculation = calculateFleetPlan(plan, items.map((item) => ({
@@ -117,7 +102,7 @@ export function buildFleetPlanView(state: SaveState, planetId: string, runtime: 
     population: item.population,
     onPlanet: item.owned,
     queued: item.pending,
-    away: away[item.id as ShipId] ?? 0,
+    away: item.away,
   })), { used: summary.population, capacity: summary.capacity });
   const byId = new Map(items.map((item) => [item.id, item]));
   const room = Math.max(0, summary.capacity - summary.population);

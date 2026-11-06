@@ -22,7 +22,7 @@ import type { RuntimeMode, TestTimeScale } from '../domain/runtime/mode.ts';
 import { getPlanetResources, type PlanetResources, type SaveState } from './contracts.ts';
 import { energySummaryForPlanet } from './energy.ts';
 import { getFleetBuildBudget } from './fleet.ts';
-import { getAvailableFleetForPlanet, getPlayerFlightSlotUsage } from './flights.ts';
+import { getAvailableFleetForPlanet, getPlayerFlightSlotUsage, getShipsAwayForPlanet } from './flights.ts';
 import { isPlanetBlocked } from './overpopulation.ts';
 import { buildQuickCommand, previewQuickCommand, type QuickRuntime, type QuickTarget } from './quick-actions.ts';
 import { getEffectiveResourceIncomePerHour } from './resource-clock.ts';
@@ -66,6 +66,9 @@ export type EmpirePlanetRow = {
   /** Ships on orbit and free to fly (flights already subtracted). */
   ships: Partial<Record<ShipId, number>>;
   shipCount: number;
+  /** This planet's ships away that come back: still its own fleet. */
+  shipsAway: Partial<Record<ShipId, number>>;
+  shipCountAway: number;
   /** Own flights from this planet and own flights heading to it. */
   flights: EmpireFlight[];
   /** Nothing in the build queue. */
@@ -117,6 +120,7 @@ export function buildEmpireOverview(state: SaveState, runtime: EmpireRuntime): E
     })) as Record<EmpireResource, EmpireResourceCell>;
     const queue = state.queues[id] ?? [];
     const ships = positiveShips(getAvailableFleetForPlanet(state, id).ships);
+    const shipsAway = getShipsAwayForPlanet(state, id);
     const flights = records.flatMap((flight): EmpireFlight[] => {
       const base = { id: flight.id, missionId: flight.missionId, phase: flight.phase, arrivalAt: flight.arrivalAt, returnAt: flight.returnAt, selectedShips: flight.selectedShips };
       if (flight.originPlanetId === id) return [{ ...base, direction: 'out' }];
@@ -145,6 +149,8 @@ export function buildEmpireOverview(state: SaveState, runtime: EmpireRuntime): E
       defenseCount: Object.values(planet.defense?.defenses ?? {}).reduce((total, count) => total + Math.max(0, Math.floor(count ?? 0)), 0),
       ships,
       shipCount: Object.values(ships).reduce((total, count) => total + (count ?? 0), 0),
+      shipsAway,
+      shipCountAway: Object.values(shipsAway).reduce((total, count) => total + (count ?? 0), 0),
       flights,
       idle: queue.length === 0,
       blocked: Boolean(planet.overpopulation),
@@ -182,6 +188,8 @@ export type EmpireProductionItem = {
   role: string;
   art: string;
   owned: number;
+  /** Ships of this planet away in flight that come back (0 for defence). */
+  away: number;
   /** Units still waiting in this planet's queue. */
   pending: number;
   unitCost: PlanetResources;
@@ -208,6 +216,7 @@ export function buildProductionItems(state: SaveState, planetId: string, kind: E
   const catalog = kind === 'defense' ? getFactionDefenseCatalog(budget.factionId) : getFactionShipCatalog(budget.factionId);
   const queue = kind === 'defense' ? budget.fleetProduction.defenseQueue : budget.fleetProduction.shipQueue;
   const stock = (kind === 'defense' ? budget.defense.defenses : budget.fleet.ships) as Record<string, number>;
+  const awayStock = (kind === 'defense' ? {} : getShipsAwayForPlanet(state, planetId)) as Record<string, number>;
   return catalog.map((entity) => {
     const requirements = evaluateProductionRequirements(entity, {
       planetId,
@@ -240,6 +249,7 @@ export function buildProductionItems(state: SaveState, planetId: string, kind: E
       role: entity.role,
       art: entity.art,
       owned,
+      away: Math.max(0, Math.floor(awayStock[entity.id] ?? 0)),
       pending,
       unitCost: { metal: entity.cost.metal, minerals: entity.cost.minerals, gas: entity.cost.gas },
       population: entity.population,

@@ -118,13 +118,14 @@ export function FleetPlannerDialog({ state, now, mode, testTimeScale, planetId, 
 
   const addLine = (shipId: ShipId) => {
     const item = view.items.find((candidate) => candidate.id === shipId)!;
-    if (save(setFleetPlanTarget(view.plan, shipId, Math.max(1, item.owned + item.pending)))) setFocusId(shipId);
+    if (save(setFleetPlanTarget(view.plan, shipId, Math.max(1, item.owned + item.pending + item.away)))) setFocusId(shipId);
   };
 
   const fromCurrent = () => {
     let plan = emptyFleetPlan();
     for (const item of view.items) {
-      if (item.owned + item.pending > 0) plan = setFleetPlanTarget(plan, item.id as ShipId, item.owned + item.pending);
+      const have = item.owned + item.pending + item.away;
+      if (have > 0) plan = setFleetPlanTarget(plan, item.id as ShipId, have);
     }
     save(plan);
   };
@@ -285,7 +286,8 @@ function HangarBand({ view, name }: { view: FleetPlanView; name: string }) {
 }
 
 function EmptyPlan({ view, copyCount, onFromCurrent, onCopy, onAdd }: { view: FleetPlanView; copyCount: number; onFromCurrent: () => void; onCopy: () => void; onAdd: (shipId: ShipId) => void }) {
-  const hasFleet = view.items.some((item) => item.owned + item.pending > 0);
+  const have = (item: FleetPlanView['items'][number]) => item.owned + item.pending + item.away;
+  const hasFleet = view.items.some((item) => have(item) > 0);
   return (
     <div className="fplan-empty" data-qa-fleet-plan-empty>
       <div className="fplan-empty__lead">
@@ -301,7 +303,7 @@ function EmptyPlan({ view, copyCount, onFromCurrent, onCopy, onAdd }: { view: Fl
           <button key={item.id} type="button" style={{ '--i': index } as CSSProperties} onClick={() => onAdd(item.id as ShipId)} data-qa-fleet-plan-add={item.id}>
             <img src={item.art} alt="" draggable={false} />
             <b>{item.name}</b>
-            <small>{item.owned + item.pending > 0 ? `есть ${planAmount(item.owned + item.pending)}` : 'нет'}</small>
+            <small>{have(item) > 0 ? `есть ${planAmount(have(item))}` : 'нет'}</small>
           </button>
         ))}
       </div>
@@ -336,6 +338,7 @@ function Lane({ line, index, autoFocus, launchKey, faction, onTarget, onFill, on
           <i className="is-here" style={{ '--from': 0, '--share': line.onPlanet / scale } as CSSProperties} />
         </div>
         <small className="fplan-lane__parts">
+          {line.away ? <span className="is-total" data-qa-fleet-plan-line-total={line.current}>есть <b>{planAmount(line.current)}</b></span> : null}
           <span>на планете <b>{planAmount(line.onPlanet)}</b></span>
           {line.queued ? <span className="is-queued" data-qa-fleet-plan-line-queued={line.queued}>строится <b>{planAmount(line.queued)}</b></span> : null}
           {line.away ? <span data-qa-fleet-plan-line-away={line.away}>в рейсе <b>{planAmount(line.away)}</b></span> : null}

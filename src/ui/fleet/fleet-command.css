@@ -334,6 +334,7 @@ html.asterion-long-page:has(.fleet-workspace-v1) #root{overflow-x:clip !importan
 .fc-unit__stock>strong{color:#8ea6ad;font-size:calc(18px * var(--text-scale-table,1)) !important;font-weight:800;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .fc-unit__stock.has-units>strong{color:#fff}
 .fc-unit__stock>em{color:var(--fc-build);font-size:calc(13px * var(--text-scale-helper,1)) !important;font-style:normal;font-weight:700;overflow-wrap:anywhere}
+.fc-unit__stock>em.is-away{color:#8fc9d6}
 .fc-unit__cost{margin:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3px 10px}
 .fc-unit__cost>div{min-width:0;display:flex;align-items:center;gap:6px}
 .fc-unit__cost dt{flex:none;line-height:0}

@@ -12,7 +12,7 @@ import { SCIENCE_CATALOG } from '../../domain/science/catalog.ts';
 import { formatUniverseCoordinate } from '../../domain/universe/runtime.ts';
 import type { SaveState } from '../../application/contracts.ts';
 import { adviseEmptyGather, buildEmpireOverview, cargoHullsOnPlanet, EMPIRE_RESOURCES, holdOf, planGatherLoads, type EmpireFlight, type EmpireOverview, type EmpirePlanetRow, type EmpireProductionKind, type EmpireResource } from '../../application/empire.ts';
-import { getPlayerFlightSlotUsage, type DispatchFlightCommand } from '../../application/flights.ts';
+import { getPlayerFlightSlotUsage, planetShipTotals, type DispatchFlightCommand } from '../../application/flights.ts';
 import type { QuickLegOutcome, QuickTarget } from '../../application/quick-actions.ts';
 import { QuickSendPanel, quickRuntimeNow } from '../quick-send/QuickSendPanel.tsx';
 import { ResourceIcon } from '../resources/ResourceIcon.tsx';
@@ -61,6 +61,12 @@ export type EmpireViewProps = {
 
 type Drawer = { targetId: string; mode: 'transport' | 'deployment'; origins?: string[] };
 type Unit = { name: string; art: string };
+
+/** The planet's own fleet per type: on orbit plus away and coming back, biggest first. */
+function planetFleet(row: EmpirePlanetRow) {
+  return (Object.entries(planetShipTotals(row.ships, row.shipsAway)) as [ShipId, { onPlanet: number; away: number; total: number }][])
+    .sort((a, b) => b[1].total - a[1].total);
+}
 
 function ownTarget(state: SaveState, planetId: string, art: string): QuickTarget {
   const planet = state.planets[planetId]!;
@@ -307,7 +313,7 @@ function Lane({ row, state, index, now, art, factionId, units, open, single, tar
   const orders = [...row.shipyard, ...row.defense, ...row.commanders];
   const order = orders[0];
   const orderArt = order ? units.get(order.itemId)?.art : undefined;
-  const fleet = (Object.entries(row.ships) as [ShipId, number][]).sort((a, b) => b[1] - a[1]);
+  const fleet = planetFleet(row);
   const out = row.flights.filter((flight) => flight.direction === 'out');
   const incoming = row.flights.filter((flight) => flight.direction === 'in');
   const free = row.queueCapacity - row.queue.length;
@@ -372,7 +378,7 @@ function Lane({ row, state, index, now, art, factionId, units, open, single, tar
           {fleet.length ? (
             <span className="empire-fleet__ships">
               {units.get(fleet[0]![0])?.art ? <img src={units.get(fleet[0]![0])!.art} alt="" draggable={false} /> : null}
-              <b>{compactAmount(row.shipCount)}</b> <span>{plural(row.shipCount, 'корабль', 'корабля', 'кораблей')}</span>
+              <b data-qa-empire-ship-total={row.shipCount + row.shipCountAway}>{compactAmount(row.shipCount + row.shipCountAway)}</b> <span>{plural(row.shipCount + row.shipCountAway, 'корабль', 'корабля', 'кораблей')}{row.shipCountAway ? ` · в рейсе ${compactAmount(row.shipCountAway)}` : ''}</span>
             </span>
           ) : <span className="empire-fleet__none">На орбите пусто</span>}
           {plan ? (
@@ -437,7 +443,7 @@ function PlanetDetail({ row, state, now, factionId, units, single, plan, onOpenP
   const built = BUILD_ZONES.flatMap((zone) => getBuildingsForZone(zone.id, factionId)
     .filter((def) => (levels?.[def.assetRole] ?? 0) > 0)
     .map((def) => ({ def, zone: zone.id, level: levels![def.assetRole] })));
-  const fleet = (Object.entries(row.ships) as [ShipId, number][]).sort((a, b) => b[1] - a[1]);
+  const fleet = planetFleet(row);
   const orderGroups: [string, FleetProductionOrder[]][] = [['Корабли', row.shipyard], ['Оборона', row.defense], ['Командиры', row.commanders]];
   const orders = orderGroups.flatMap(([, list]) => list.map((order, position) => ({ order, waiting: position > 0 })));
   const hasYard = row.shipyardLevel > 0;
@@ -479,17 +485,17 @@ function PlanetDetail({ row, state, now, factionId, units, single, plan, onOpenP
       </section>
 
       <section className="empire-detail__col">
-        <h4>Флот на орбите <span>{formatNumber(row.population.used)} из {formatNumber(row.population.capacity)} населения</span></h4>
+        <h4>Флот планеты <span>{formatNumber(row.population.used)} из {formatNumber(row.population.capacity)} населения</span></h4>
         {fleet.length ? (
           <ul className="empire-orbit">
             {fleet.slice(0, SHOWN_SHIPS).map(([id, count]) => (
               <li key={id}>
                 {units.get(id)?.art ? <img src={units.get(id)!.art} alt="" draggable={false} /> : <i />}
-                <span><b>{compactAmount(count)}</b><small>{units.get(id)?.name ?? id}</small></span>
+                <span><b>{compactAmount(count.total)}</b><small>{units.get(id)?.name ?? id}{count.away ? ` · в рейсе ${compactAmount(count.away)}` : ''}</small></span>
               </li>
             ))}
           </ul>
-        ) : <p>На орбите нет свободных кораблей.</p>}
+        ) : <p>У планеты нет кораблей.</p>}
         <p className="empire-detail__line">
           {fleet.length > SHOWN_SHIPS ? `и ещё ${fleet.length - SHOWN_SHIPS} ${plural(fleet.length - SHOWN_SHIPS, 'вид', 'вида', 'видов')} · ` : ''}
           спутники {formatNumber(row.solarSatellites)} · оборона {formatNumber(row.defenseCount)}

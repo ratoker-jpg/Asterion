@@ -313,7 +313,7 @@ function Status({ view }: { view: BuildPlanView }) {
         <i aria-hidden="true">{Array.from({ length: view.queueCapacity }, (_, slot) => <em key={slot} className={slot < view.queueUsed ? 'is-used' : ''} />)}</i>
       </p>
       <p><span>Энергия</span> <b className="bplan-status__energy"><ResourceIcon kind="energy" />{short(view.energy)}</b></p>
-      {view.saving ? <p className="is-saving" data-qa-build-plan-saving><span>Копит на</span> <b>{view.saving.name} → ур. {view.saving.level}</b></p> : null}
+      {view.saving ? <p className="is-saving" data-qa-build-plan-saving><span>Копит:</span> <b>{view.saving.name} → ур. {view.saving.level}</b></p> : null}
       {view.next ? <p className="is-next"><span>Дальше</span> <b>{view.next.name} → ур. {view.next.level}</b></p> : null}
     </div>
   );

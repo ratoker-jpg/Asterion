@@ -55,6 +55,7 @@ import {
   resolveTransportTarget,
   resolveRecycleTargetKindAtCoordinate,
   previewFlight,
+  getShipsAwayForPlanet,
   type DispatchFlightCommand,
   type FlightCommandResult,
   type FlightLaunchContext,
@@ -456,6 +457,8 @@ function FleetWorkspace({
     () => launchPlanetId === planetId ? fleetSnapshot.fleet : getAvailableFleetForPlanet(saveState, launchPlanetId),
     [fleetSnapshot.fleet, launchPlanetId, planetId, saveState],
   );
+  /** The source planet's own ships away that come back: shown, but they cannot fly from here now. */
+  const sourceAway = useMemo(() => getShipsAwayForPlanet(saveState, launchPlanetId), [launchPlanetId, saveState]);
   const flightRecords = saveState.flights.records;
   const flightSlots = useMemo(() => getPlayerFlightSlotUsage(saveState), [saveState]);
   const espionageState = saveState.espionage ?? { missions: [], reports: [], hunterNotices: [] };
@@ -490,8 +493,8 @@ function FleetWorkspace({
     [fleetSnapshot.factionId, fleetSnapshot.fleet, fleetSnapshot.fleetProduction, fleetSnapshot.hangarLevel],
   );
   const ownedShipDefinitions = useMemo(
-    () => shipDefinitions.filter((ship) => ship.id !== SOLAR_SATELLITE_ID && (sourceFleet.ships[ship.id] ?? 0) > 0),
-    [sourceFleet, shipDefinitions],
+    () => shipDefinitions.filter((ship) => ship.id !== SOLAR_SATELLITE_ID && ((sourceFleet.ships[ship.id] ?? 0) > 0 || (sourceAway[ship.id as ShipId] ?? 0) > 0)),
+    [sourceFleet, sourceAway, shipDefinitions],
   );
   const availableShipCount = useMemo(
     () => ownedShipDefinitions.reduce((total, ship) => total + (sourceFleet.ships[ship.id] ?? 0), 0),
@@ -2019,14 +2022,16 @@ function FleetWorkspace({
               <div className="fc-roster" data-qa-fleet-roster>
                 {visibleShipDefinitions.filter((ship) => shipFilter === 'all' || (shipFilter === 'civil') === CIVIL_SHIP_IDS.has(ship.id)).map((ship, index) => {
                   const available = sourceFleet.ships[ship.id] ?? 0;
+                  const away = sourceAway[ship.id as ShipId] ?? 0;
                   const selected = selectedQuantities[ship.id] ?? 0;
                   return (
                     <div className={`fc-ship${selected > 0 ? ' is-picked' : ''}${available <= 0 ? ' is-empty' : ''}`} key={ship.id} data-qa-fleet-ship={ship.id} style={{ '--fa-i': index } as CSSProperties}>
                       <h3>{ship.name}</h3>
                       <p className="fc-ship__have">
-                        есть <b data-qa-fleet-owned={available}>{flightNumberLabel(available)}</b>
+                        {away > 0 ? 'на планете' : 'есть'} <b data-qa-fleet-owned={available}>{flightNumberLabel(available)}</b>
                         <span className="fc-ship__pop"><ResourceIcon kind="population" label="Население за штуку" /><span data-qa-fleet-unit-population>{ship.population}</span></span>
                       </p>
+                      {away > 0 ? <p className="fc-ship__away" data-qa-fleet-away={away}>в рейсе <b>{flightNumberLabel(away)}</b></p> : null}
                       <button type="button" className="fc-ship__art" aria-label={selected > 0 ? `Снять выбор: ${ship.name}` : `Выбрать всех: ${ship.name}`} disabled={available <= 0} onClick={() => setShipQuantity(ship.id, selected > 0 ? 0 : available)}>
                         <img src={ship.art} alt={ship.name} draggable={false} />
                       </button>

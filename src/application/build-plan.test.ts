@@ -223,7 +223,7 @@ test('a factory that only lacks resources makes the planner save instead of spen
   assert.match(view.saving!.text, /накопится/);
   const storage = view.lines.find((item) => item.role === 'metal-storage')!;
   assert.equal(storage.wait?.kind, 'saving');
-  assert.equal(storage.wait?.title, 'Копит на Фабрика');
+  assert.equal(storage.wait?.title, 'Копит: Фабрика');
   assert.deepEqual(runBuildPlans(state, RUNTIME).started, []);
   // The same storage plan without a factory goal starts at once: the wait comes from saving only.
   assert.equal(runBuildPlans(withBuildings(world({ targets: { 'metal-storage': 3 } }, { metal: 50_000, minerals: 50_000, gas: 50_000 }), { construction: 13 }), RUNTIME).started.length > 0, true);

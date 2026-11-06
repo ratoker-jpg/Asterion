@@ -12,7 +12,7 @@ import { getHolderCrystals, incomingRaidsOnSun, projectSun, readSun } from '../.
 import type { SunRaidEvent, SunRaidRecord } from '../../domain/sun-raid/types.ts';
 import { getActiveGalaxyCount } from '../../domain/universe/runtime.ts';
 import type { SaveState } from '../../application/contracts.ts';
-import { getAvailableFleetForPlanet } from '../../application/flights.ts';
+import { getAvailableFleetForPlanet, getShipsAwayForPlanet } from '../../application/flights.ts';
 import {
   currentSunRaidState,
   formatSun,
@@ -366,6 +366,7 @@ function SunLaunchDialog({ state, now, options, kind, raid, galaxy, system, onCl
   const catalog = useMemo(() => getFactionShipCatalog(factionId).filter((entity) => isSunCombatHull(entity.id as ShipId)), [factionId]);
   const fleet = getAvailableFleetForPlanet(state, originPlanetId);
   const available = fleet.ships;
+  const away = getShipsAwayForPlanet(state, originPlanetId);
   const commanderIds = COMMANDER_IDS.filter((id) => (fleet.commanders[id] ?? 0) > 0);
   const preview = previewSunLaunch(state, { kind, galaxy, system, raidId: raid?.id, originPlanetId, ships, commanders }, options);
   const used = preview.committed + preview.population;
@@ -429,7 +430,7 @@ function SunLaunchDialog({ state, now, options, kind, raid, galaxy, system, onCl
               <li key={id} className={have ? '' : 'is-empty'}>
                 <img src={entity.art} alt="" />
                 <span className="srp-ship-copy">
-                  <b>{entity.name}</b><small>есть {have.toLocaleString('ru-RU')} · {entity.population} нас.</small>
+                  <b>{entity.name}</b><small>{away[id] ? `на планете ${have.toLocaleString('ru-RU')} · в рейсе ${away[id]!.toLocaleString('ru-RU')}` : `есть ${have.toLocaleString('ru-RU')}`} · {entity.population} нас.</small>
                   <AmountSlider compact value={count} max={Math.max(count, maxFor(id))} onChange={(value) => setCount(id, value)} label={`${entity.name}: количество`} qa={`sun-ship-${id}`} />
                 </span>
                 <input type="number" min={0} max={have} value={count || ''} placeholder="0" disabled={!have} onChange={(event) => setCount(id, Number(event.target.value))} aria-label={`${entity.name}: количество`} />

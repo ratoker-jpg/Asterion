@@ -27,6 +27,7 @@ type ShipDefinition = {
   role: string;
   art: string;
   owned: number;
+  away?: number;
   pending: number;
   metal: number;
   minerals: number;
@@ -178,6 +179,7 @@ function ShipCard({
       role={ship.role}
       art={ship.art}
       owned={ship.owned}
+      away={ship.away}
       pending={ship.pending}
       levelNode={(
         <span className="fc-unit__level" data-qa-fleet-visible-level={ship.id} aria-label={`Уровень корабля ${ship.name}: ${shipLevel} из 10`}>
@@ -215,11 +217,12 @@ export function ShipyardView({ planetName, coords, planetId, budget: providedBud
     () => ships.map((ship) => ({
       ...ship,
       owned: budget.fleet.ships[ship.id] ?? 0,
+      away: budget.shipsAway?.[ship.id] ?? 0,
       pending: budget.fleetProduction.shipQueue
         .filter((order) => order.itemId === ship.id)
         .reduce((total, order) => total + Math.max(0, order.quantity - order.completedQuantity), 0),
     })),
-    [budget.fleet, budget.fleetProduction.shipQueue, ships],
+    [budget.fleet, budget.shipsAway, budget.fleetProduction.shipQueue, ships],
   );
   const [quantities, setQuantities] = useState<Partial<Record<ShipId, number>>>({});
 
