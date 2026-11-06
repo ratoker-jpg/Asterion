@@ -829,18 +829,26 @@ export function previewSunLaunch(
 
 type SideParticipant = { flight: FlightRecord; snapshot: SunFlightSnapshot; population: number };
 
+/** JSON with sorted object keys: equal science and levels give equal keys whatever the insertion order. */
+function stableKey(value: unknown): string {
+  return JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item)
+    ? Object.fromEntries(Object.entries(item as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : item);
+}
+
 /**
- * One side of a joint raid. Every owner's fleet fights as its own group with its own
- * race, technologies and ship levels; the biggest group leads and keeps the plain ids,
- * the others are tagged (`g2`, `g3`...) so no ship is dropped or re-skinned.
+ * One side of a joint raid. Fleets with the same race, technologies and ship levels fight as one
+ * group (whoever owns them); the biggest group leads and keeps the plain ids, the others are
+ * tagged (`g2`, `g3`...) so no ship is dropped or re-skinned.
  */
 function sideInput(participants: readonly SideParticipant[]) {
   type Group = { key: string; flightIds: string[]; ownerId: string; factionId: CombatFactionId; technologies: CombatTechnologyLevels; levels: Partial<Record<ShipId, number>>; population: number; firstFlightId: string; stacks: Map<ShipId, number> };
   const groups = new Map<string, Group>();
   for (const { flight, snapshot, population } of participants) {
-    // Flights of one owner share a group only while their race, science and ship levels are identical
-    // (an upgrade finished between two flights keeps each flight's own snapshot).
-    const key = JSON.stringify([snapshot.ownerId, snapshot.factionId, snapshot.technologies, snapshot.shipLevels]);
+    // Flights share a group while their race, science and ship levels are identical (an upgrade finished
+    // between two flights keeps each flight's own snapshot). The owner does not split a group: identical
+    // type + level stacks of different owners fight as one stack, so a 100-fleet side is a few stacks, not
+    // one per fleet. Losses still fall on the real holders of the group (distributeLosses).
+    const key = stableKey([snapshot.factionId, snapshot.technologies, snapshot.shipLevels]);
     const group = groups.get(key) ?? {
       key, flightIds: [], ownerId: snapshot.ownerId, factionId: snapshot.factionId, technologies: snapshot.technologies,
       levels: snapshot.shipLevels, population: 0, firstFlightId: flight.id, stacks: new Map<ShipId, number>(),

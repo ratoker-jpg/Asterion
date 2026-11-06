@@ -817,6 +817,15 @@ function SceneStack({ stack, side, roundIndex }: { stack: BattleStackViewModel; 
         <span>Жизнь 1 корабля: <b>{formatNumber(stack.lifePerUnit)}</b></span>
         <span>Жизнь всей группы: <b>{formatNumber(stack.hpPool)}</b></span>
         <span>Броня: <b>{formatNumber(stack.tooltip.armor)}</b></span>
+        {stack.contributors?.length ? (
+          <span data-qa-battle-stack-contributors={stack.contributors.length}>
+            Флотов в группе: <b>{formatNumber(stack.contributors.length)}</b>
+            {stack.contributors.slice(0, 5).map((part, index) => (
+              <span key={index}>{`ур. ${formatNumber(part.level)}: ${formatNumber(part.countBefore ?? part.countAfter)}`}</span>
+            ))}
+            {stack.contributors.length > 5 ? <span>{`и ещё ${formatNumber(stack.contributors.length - 5)}`}</span> : null}
+          </span>
+        ) : null}
       </span>
     </button>
   );

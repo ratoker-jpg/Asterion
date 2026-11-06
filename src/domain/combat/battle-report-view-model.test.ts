@@ -241,3 +241,29 @@ test('critical rolls read from one field; old reports with the roll in abilityDr
   const events = createBattleReportViewModel(report).rounds[0]!.events;
   assert.deepEqual(events.map((item) => [item.criticalDraw, item.abilityDraw]), [[0.05, null], [0.07, null], [null, 0.4]]);
 });
+
+test('a joint side shows one stack per ship type: owner-group stacks merge, other races stay apart', () => {
+  const source = DEMO_BATTLE_REPORTS[2]!;
+  const groups = Array.from({ length: 40 }, (_, index) => ({
+    entityId: index === 0 ? 'scout' : `scout#g${index + 1}`, countBefore: 10 + index, countAfter: 8 + index, destroyed: 2,
+    level: index % 3, attackPerUnit: 100 + index, lifePerUnit: 500, totalAttack: (10 + index) * (100 + index), hpPool: (8 + index) * 500,
+  }));
+  const report = {
+    ...source,
+    attackerForce: {
+      ...source.attackerForce,
+      stacks: [...groups, { entityId: 'scout#g41', factionId: 'veyra' as const, countBefore: 5, countAfter: 5, destroyed: 0 }],
+    },
+  };
+  const side = createBattleReportViewModel(report).attacker;
+  assert.equal(side.stacks.length, 2, 'one stack per type and race');
+  const merged = side.stacks[0]!;
+  assert.equal(merged.entityId, 'scout');
+  assert.equal(merged.countBefore, groups.reduce((sum, item) => sum + item.countBefore, 0));
+  assert.equal(merged.countAfter, groups.reduce((sum, item) => sum + item.countAfter, 0));
+  assert.equal(merged.destroyed, 80);
+  assert.equal(merged.contributors?.length, 40);
+  assert.equal(merged.totalAttack, groups.reduce((sum, item) => sum + item.totalAttack, 0));
+  assert.equal(side.fleet.countBefore, merged.countBefore! + 5, 'side totals stay the same');
+  assert.equal(side.stacks[1]!.contributors, undefined);
+});

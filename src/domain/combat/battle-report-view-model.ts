@@ -54,6 +54,14 @@ export type BattleTooltipViewModel = {
   count: number | null;
 };
 
+/** One fleet's share of a merged stack (a joint side shows one stack per ship type; the tooltip lists these). */
+export type BattleStackContributorViewModel = {
+  level: number | null;
+  countBefore: number | null;
+  countAfter: number | null;
+  destroyed: number | null;
+};
+
 export type BattleStackViewModel = {
   key: string;
   entityId: string;
@@ -74,6 +82,8 @@ export type BattleStackViewModel = {
   lifePerUnit: number | null;
   hpPool: number | null;
   tooltip: BattleTooltipViewModel;
+  /** Present when several joint-side groups of one ship type were merged into this stack. */
+  contributors?: BattleStackContributorViewModel[];
 };
 
 export type BattleEventViewModel = {
@@ -549,12 +559,68 @@ function readStack(
   };
 }
 
+/** Sum that stays unknown when any part is unknown. */
+function sumKnown(values: readonly (number | null)[]): number | null {
+  return values.every((value): value is number => value != null) ? values.reduce((total, value) => total + value, 0) : null;
+}
+
+/**
+ * A joint side (alliance raid, Sun) keeps one engine stack per contributing
+ * group (`cruiser`, `cruiser#g2`, ...), each with its own race and science.
+ * The report shows ONE stack per ship type and race: counts, hit points and
+ * attack add up, per-ship values are weighted by the ships, and the groups
+ * stay listed as `contributors` for the tooltip.
+ */
+function mergeStacks(stacks: readonly BattleStackViewModel[], sideFactionId: CombatFactionId): BattleStackViewModel[] {
+  const order: string[] = [];
+  const groups = new Map<string, BattleStackViewModel[]>();
+  for (const stack of stacks) {
+    const key = `${stack.kind}|${stack.factionId ?? sideFactionId}|${combatBaseEntityId(stack.entityId)}`;
+    const list = groups.get(key);
+    if (list) list.push(stack); else { groups.set(key, [stack]); order.push(key); }
+  }
+  if (order.length === stacks.length) return [...stacks];
+  return order.map((key, index) => {
+    const list = groups.get(key)!;
+    if (list.length === 1) return list[0]!;
+    const first = list[0]!;
+    const weight = (stack: BattleStackViewModel) => Math.max(0, stack.countBefore ?? stack.countAfter ?? 0);
+    const weighted = (read: (stack: BattleStackViewModel) => number | null) => {
+      if (!list.every((stack) => read(stack) != null)) return null;
+      const total = list.reduce((sum, stack) => sum + weight(stack), 0);
+      return total > 0 ? list.reduce((sum, stack) => sum + read(stack)! * weight(stack), 0) / total : read(first);
+    };
+    const countBefore = sumKnown(list.map((stack) => stack.countBefore));
+    const countAfter = sumKnown(list.map((stack) => stack.countAfter));
+    const destroyed = sumKnown(list.map((stack) => stack.destroyed));
+    const totalAttack = sumKnown(list.map((stack) => stack.totalAttack));
+    const hpPool = sumKnown(list.map((stack) => stack.hpPool));
+    const levels = list.map((stack) => stack.tooltip.level).filter((level): level is number => level != null);
+    const attackPerUnit = weighted((stack) => stack.attackPerUnit);
+    const lifePerUnit = weighted((stack) => stack.lifePerUnit);
+    const armor = weighted((stack) => stack.tooltip.armor);
+    const baseId = combatBaseEntityId(first.entityId);
+    return {
+      ...first,
+      key: `${first.kind}:${baseId}:${index}:${first.factionId ?? ''}`,
+      entityId: baseId,
+      countBefore, countAfter, destroyed, totalAttack, hpPool, attackPerUnit, lifePerUnit,
+      tooltip: {
+        ...first.tooltip,
+        level: levels.length ? Math.max(...levels) : null,
+        attack: totalAttack, attackPerUnit, totalAttack, life: hpPool, lifePerUnit, hpPool, armor, count: countAfter,
+      },
+      contributors: list.map((stack) => ({ level: stack.tooltip.level, countBefore: stack.countBefore, countAfter: stack.countAfter, destroyed: stack.destroyed })),
+    };
+  });
+}
+
 function readStacks(value: unknown, factionId: CombatFactionId, fallbackKind: BattleEntityKind) {
-  return asArray(value).map((item, index) => {
+  return mergeStacks(asArray(value).map((item, index) => {
     const entityId = readString(asRecord(item).entityId) ?? '';
     const kind = entityKindFromCatalog(factionId, combatBaseEntityId(entityId), fallbackKind);
     return readStack(item, index, factionId, kind);
-  });
+  }), factionId);
 }
 
 function splitStacks(stacks: BattleStackViewModel[]) {

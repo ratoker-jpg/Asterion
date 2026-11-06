@@ -27,6 +27,10 @@ export type NpcSunRsvp = Readonly<{
   orders?: number;
   /** What it really put into the gathering. */
   pledged?: number;
+  /** Strength per population of the force it would bring (its own answer, for the leader's split of the roles). */
+  quality?: number;
+  /** What the leader asked of it at the declaration: the strongest forces fill the side, the rest keep their fleets home. */
+  allotment?: number;
 }>;
 
 export type NpcSunRaidPrepPlan = Readonly<{
@@ -72,7 +76,9 @@ function isRsvp(value: unknown): value is NpcSunRsvp {
     && (value.freeTo === undefined || isTime(value.freeTo))
     && (value.rallyPlanetId === undefined || isId(value.rallyPlanetId))
     && (value.orders === undefined || isCount(value.orders))
-    && (value.pledged === undefined || isCount(value.pledged));
+    && (value.pledged === undefined || isCount(value.pledged))
+    && (value.quality === undefined || isCount(value.quality))
+    && (value.allotment === undefined || isCount(value.allotment));
 }
 
 export function isNpcSunRaidPrepPlan(value: unknown): value is NpcSunRaidPrepPlan {

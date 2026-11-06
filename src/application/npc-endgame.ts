@@ -1,4 +1,5 @@
 import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
+import { composeRaidForce, raidForceQuality, type RaidHull } from '../domain/npc/raid-composition.ts';
 import type { ShipId } from '../domain/combat/ids.ts';
 import { selectOwnerMembership } from '../domain/command/selectors.ts';
 import type { NpcAutonomyCandidate } from '../domain/npc/autonomy-policy.ts';
@@ -47,32 +48,50 @@ function sunOptions(at: number, timeScale: number): SunRuntimeOptions {
   return { now: at, mode: ACTIVE_RUNTIME_MODE, timeScale };
 }
 
-/** Combat hulls free on one planet, a share of them, trimmed to the side's population room. */
-export function npcSunForce(state: SaveState, ownerId: string, planetId: string, raceId: string, share: number, room: number): Partial<Record<ShipId, number>> {
+/** The combat hulls an owner has free on one planet (a share of them), as raid hulls. */
+function planetRaidHulls(state: SaveState, ownerId: string, planetId: string, raceId: string, share: number): RaidHull[] {
   const free = getNpcMissionAvailableFleet(state, ownerId, planetId) ?? {};
-  const combat = new Set(getFactionShipCatalog(raceId as never).filter((entity) => entity.category === 'Боевой корабль').map((entity) => entity.id));
-  let ships: Partial<Record<ShipId, number>> = {};
-  for (const [id, count] of Object.entries(free) as [ShipId, number][]) {
-    if (CIVIL_SHIPS.has(id) || !combat.has(id)) continue;
-    const sent = Math.floor((count ?? 0) * share);
-    if (sent > 0) ships[id] = sent;
+  const hulls: RaidHull[] = [];
+  for (const entity of getFactionShipCatalog(raceId as never)) {
+    const id = entity.id as ShipId;
+    if (entity.category !== 'Боевой корабль' || CIVIL_SHIPS.has(id) || !entity.combat) continue;
+    const count = Math.floor((free[id] ?? 0) * share);
+    if (count > 0) hulls.push({ key: `${planetId}|${id}`, population: entity.population, attack: entity.combat.attack, life: entity.combat.life, count });
   }
-  const population = sunFleetPopulation(ships, raceId as never);
-  if (population > room && population > 0) {
-    const scale = room / population;
-    ships = Object.fromEntries(Object.entries(ships).map(([id, count]) => [id, Math.floor((count ?? 0) * scale)]).filter(([, count]) => (count as number) > 0));
-    // Rounding down leaves a gap; the smallest hulls still at hand close it.
-    let left = room - sunFleetPopulation(ships, raceId as never);
-    const bySize = getFactionShipCatalog(raceId as never).filter((entity) => combat.has(entity.id) && !CIVIL_SHIPS.has(entity.id as ShipId))
-      .sort((a, b) => a.population - b.population || a.id.localeCompare(b.id));
-    for (const entity of bySize) {
-      const id = entity.id as ShipId;
-      const spare = Math.max(0, Math.floor((free[id] ?? 0) * share) - (ships[id] ?? 0));
-      const add = Math.min(spare, Math.floor(left / Math.max(1, entity.population)));
-      if (add > 0) { ships[id] = (ships[id] ?? 0) + add; left -= add * entity.population; }
-    }
+  return hulls;
+}
+
+function shipsOfHulls(hulls: readonly RaidHull[], counts: ReadonlyMap<string, number>, planetId: string): Partial<Record<ShipId, number>> {
+  const ships: Partial<Record<ShipId, number>> = {};
+  for (const hull of hulls) {
+    const count = counts.get(hull.key) ?? 0;
+    if (count > 0 && hull.key.startsWith(`${planetId}|`)) ships[hull.key.slice(planetId.length + 1) as ShipId] = count;
   }
   return ships;
+}
+
+/**
+ * Combat hulls free on one planet, a share of them, trimmed to the side's population room:
+ * with more than the room the strongest force for it (npc/raid-composition.ts), not a slice of each type.
+ */
+export function npcSunForce(state: SaveState, ownerId: string, planetId: string, raceId: string, share: number, room: number): Partial<Record<ShipId, number>> {
+  const hulls = planetRaidHulls(state, ownerId, planetId, raceId, share);
+  return shipsOfHulls(hulls, composeRaidForce(hulls, room), planetId);
+}
+
+/**
+ * One owner's strongest force of `room` population over all its planets at once (the best hulls first,
+ * wherever they stand), planet by planet.
+ */
+export function npcSunComposePool(state: SaveState, ownerId: string, planets: readonly { id: string; raceId: string }[], room: number): { hulls: RaidHull[]; counts: Map<string, number> } {
+  const hulls = planets.flatMap((planet) => planetRaidHulls(state, ownerId, planet.id, planet.raceId, 1));
+  return { hulls, counts: composeRaidForce(hulls, room) };
+}
+
+/** Strength per population of the force this owner would bring into `room`: what it tells its alliance. */
+export function npcSunForceQuality(state: SaveState, ownerId: string, planets: readonly { id: string; raceId: string }[], room: number): number {
+  const { hulls, counts } = npcSunComposePool(state, ownerId, planets, room);
+  return raidForceQuality(hulls, counts);
 }
 
 /** The part of a force its planet's gas can fly to this Sun: a fuller hold would only be refused at launch. */
@@ -94,25 +113,52 @@ function pledgeablePopulation(state: SaveState, ownerId: string, share: number):
   return Math.min(sunRaidCapsOf(state).participant, total);
 }
 
-/** Pledges this owner's share of combat hulls, planet by planet, into a gathering raid, up to `limit` (its own promise). */
+/**
+ * Pledges this owner's strongest force into a gathering raid, up to `limit` (its own promise or allotment):
+ * the best hulls of all its planets first, then each planet sends its part (a second pass spends room
+ * a planet's gas could not fly; ships that left are already off the planet's stock).
+ */
 export function npcSunPledgeFromPlanets(state: SaveState, ownerId: string, raidId: string, share: number, key: string, options: SunRuntimeOptions, limit = Number.POSITIVE_INFINITY): { state: SaveState; pledged: number } {
   let next = state;
   let pledged = 0;
   const planets = Object.values(next.espionage?.targets ?? {}).filter((target) => target.kind === 'npc' && target.ownerId === ownerId)
     .sort((left, right) => left.id.localeCompare(right.id));
-  for (const planet of planets) {
-    const raid = currentSunRaidState(next).raids.find((item) => item.id === raidId);
-    if (!raid || raid.status !== 'gathering') break;
-    const room = Math.min(raidPledgeRoom(next, raid, ownerId), limit - pledged);
+  for (let pass = 0; pass < 2; pass += 1) {
+    const first = currentSunRaidState(next).raids.find((item) => item.id === raidId);
+    if (!first || first.status !== 'gathering') break;
+    const room = Math.min(raidPledgeRoom(next, first, ownerId), limit - pledged);
     if (room <= 0) break;
-    const ships = npcSunAffordableForce(next, ownerId, planet.id, npcSunForce(next, ownerId, planet.id, planet.raceId, share, room), raid.galaxy, raid.system, options);
-    if (!Object.keys(ships).length) continue;
-    const result = joinNpcSunRaid(next, ownerId, { raidId, originPlanetId: planet.id, ships, requestId: `${key}:${planet.id}` }, options);
-    if (!result.ok) continue;
-    next = result.state;
-    pledged += sunFleetPopulation(ships, planet.raceId as never);
+    const pool = npcSunComposePool(next, ownerId, planets, room);
+    let sentAny = false;
+    for (const planet of planets) {
+      const raid = currentSunRaidState(next).raids.find((item) => item.id === raidId);
+      if (!raid || raid.status !== 'gathering') break;
+      const planetRoom = Math.min(raidPledgeRoom(next, raid, ownerId), limit - pledged);
+      if (planetRoom <= 0) break;
+      const planned = shipsOfHulls(pool.hulls, pool.counts, planet.id);
+      const ships = npcSunAffordableForce(next, ownerId, planet.id, npcSunTrim(planned, planet.raceId, planetRoom), raid.galaxy, raid.system, options);
+      if (!Object.keys(ships).length) continue;
+      const result = joinNpcSunRaid(next, ownerId, { raidId, originPlanetId: planet.id, ships, requestId: `${key}:${planet.id}${pass ? ':2' : ''}` }, options);
+      if (!result.ok) continue;
+      next = result.state;
+      pledged += sunFleetPopulation(ships, planet.raceId as never);
+      sentAny = true;
+    }
+    if (!sentAny) break;
   }
   return { state: next, pledged };
+}
+
+/** A planned force cut to a smaller room, the strongest part kept (the room may have shrunk while others joined). */
+function npcSunTrim(ships: Partial<Record<ShipId, number>>, raceId: string, room: number): Partial<Record<ShipId, number>> {
+  if (sunFleetPopulation(ships, raceId as never) <= room) return ships;
+  const hulls: RaidHull[] = [];
+  for (const entity of getFactionShipCatalog(raceId as never)) {
+    const count = ships[entity.id as ShipId] ?? 0;
+    if (count > 0 && entity.combat) hulls.push({ key: entity.id, population: entity.population, attack: entity.combat.attack, life: entity.combat.life, count });
+  }
+  const counts = composeRaidForce(hulls, room);
+  return Object.fromEntries([...counts].filter(([, count]) => count > 0)) as Partial<Record<ShipId, number>>;
 }
 
 export function getNpcEndgameChoices(state: SaveState, profile: NpcProfile, utility: NpcUtilityContext, at: number, timeScale: number,
@@ -180,7 +226,9 @@ export function getNpcEndgameChoices(state: SaveState, profile: NpcProfile, util
     if (motive < 0.6) continue;
     const origin = local.sort((left, right) => sunFleetPopulation(npcSunForce(state, ownerId, right.id, right.raceId, 1, Infinity), right.raceId as never)
       - sunFleetPopulation(npcSunForce(state, ownerId, left.id, left.raceId, 1, Infinity), left.raceId as never) || left.id.localeCompare(right.id))[0]!;
-    const ships = npcSunForce(state, ownerId, origin.id, origin.raceId, 0.2 + 0.35 * unit(traits.riskTolerance), room);
+    // A share of the fleet's population, but of its strongest hulls: a slice of every type would send the weak ones too.
+    const total = sunFleetPopulation(npcSunForce(state, ownerId, origin.id, origin.raceId, 1, Infinity), origin.raceId as never);
+    const ships = npcSunForce(state, ownerId, origin.id, origin.raceId, 1, Math.min(room, Math.floor(total * (0.2 + 0.35 * unit(traits.riskTolerance)))));
     if (!Object.keys(ships).length) continue;
     const id = `sun-support:${ownerId}:${raid.id}`;
     // (kind endgame: the Sun is its own family of choices, not one more PvE trip)
