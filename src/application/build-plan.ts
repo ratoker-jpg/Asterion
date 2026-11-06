@@ -180,23 +180,26 @@ function evaluate(state: SaveState, planetId: PlanetId, runtime: BuildRuntime): 
       setWait(line, 'requirement', `Сначала ${name} ур. ${building.requiredLevel}, сейчас ${building.currentLevel}${queuedOf(building.assetRole!) > 0 ? ', достраивается' : ''}.`);
     } else open.push(line);
   }
-  // `open` keeps the lines' priority order. One level per building at a time: a building with a level
-  // already in the queue lets the other open buildings have the free slots first.
-  const spread = open.some((line) => queuedOf(line.role) === 0);
+  // `open` keeps the lines' priority order. One level per building at a time: buildings with no level in
+  // the queue get the free slots first; only when none of them can start does a queued building get its next level.
+  const fresh = open.filter((line) => queuedOf(line.role) === 0);
+  const passes = fresh.length && fresh.length < open.length ? [fresh, open.filter((line) => queuedOf(line.role) > 0)] : [open];
+  for (const line of passes.length > 1 ? passes[1]! : []) setWait(line, 'order', 'Один уровень уже строится, свободные места в очереди отданы другим зданиям.');
 
   let decision: BuildDecision | null = null;
-  const behind = (index: number, text: string) => {
-    for (const rest of open.slice(index + 1)) setWait(rest, 'order', text);
-  };
+  // An energy shortage holds the whole planet: no later pass may start something else meanwhile.
+  let holdForEnergy = false;
   const energyOnTheWay = queue.some((item) => ENERGY_ROLES.includes(item.assetRole));
-  for (const [index, line] of open.entries()) {
+  for (const pass of passes) {
+    if (decision || holdForEnergy) break;
+  const behind = (index: number, text: string) => {
+    for (const rest of pass.slice(index + 1)) setWait(rest, 'order', text);
+  };
+  for (const [index, line] of pass.entries()) {
     const cost = line.cost;
     if (!cost) continue;
-    if (spread && queuedOf(line.role) > 0) {
-      setWait(line, 'order', 'Один уровень уже строится, свободные места в очереди отданы другим зданиям.');
-      continue;
-    }
     if (cost.energy > energy) {
+      holdForEnergy = true;
       // Energy is short: the best energy source comes first, and nothing else starts meanwhile.
       const sentence = `Не хватает энергии: нужно ${compact(cost.energy)}, есть ${compact(energy)}.`;
       if (energyOnTheWay) {
@@ -230,6 +233,7 @@ function evaluate(state: SaveState, planetId: PlanetId, runtime: BuildRuntime): 
     decision = { role: line.role, name: line.name, level: line.current + line.queued + 1, startedFor: null };
     behind(index, 'Ждёт своей очереди.');
     break;
+  }
   }
   const chosen = decision ? lines.find((line) => line.role === decision!.role) : undefined;
   if (chosen) { chosen.status = 'next'; chosen.wait = null; }

@@ -7,6 +7,7 @@ import { createDefaultNewGameConfig } from '../domain/world/config.ts';
 import type { SaveState } from './contracts.ts';
 import { getPlanetResources, replacePlanetResources } from './contracts.ts';
 import { buildBuildPlanView, runBuildPlans } from './build-plan.ts';
+import { startBuilding } from './buildings.ts';
 import { getPlanetEnergyLedger, spendPlanetEnergy } from './energy.ts';
 import { createInitialSaveState } from './persistence.ts';
 
@@ -137,6 +138,29 @@ test('the queue is spread: one level of each building, not three levels of the f
   assert.deepEqual(runBuildPlans(two, RUNTIME).started.map((item) => item.role), ['metal-production-1', 'mineral-production-1', 'metal-production-1']);
   const waiting = buildBuildPlanView(runBuildPlans(state, RUNTIME).state, PLANET, RUNTIME);
   assert.equal(waiting.lines.every((line) => line.queued <= 1), true);
+});
+
+test('a queued building takes a free slot when no other planned building can start', () => {
+  // One solar station level is already queued; the metal storage (not queued) costs more than the wallet holds, the solar station's next level does not.
+  const queued = startBuilding(world(), { planetId: PLANET, ...RUNTIME }, 'basic-energy');
+  assert.equal(queued.ok, true);
+  const plan: BuildPlan = { targets: { 'metal-storage': 15, 'basic-energy': 10 } };
+  const planned: SaveState = { ...queued.state, fleetUi: { favoriteTargets: [], buildPlans: { [PLANET]: plan } } };
+  const roomy = buildBuildPlanView(planned, PLANET, RUNTIME);
+  const solarCost = roomy.lines.find((line) => line.role === 'basic-energy')!.cost!;
+  const storageCost = roomy.lines.find((line) => line.role === 'metal-storage')!.cost!;
+  const wallet = { metal: solarCost.metal, minerals: solarCost.minerals, gas: solarCost.gas };
+  assert.equal(storageCost.metal > wallet.metal || storageCost.minerals > wallet.minerals || storageCost.gas > wallet.gas, true);
+  const poor = replacePlanetResources(planned, PLANET, { ...getPlanetResources(planned, PLANET), ...wallet });
+  const view = buildBuildPlanView(poor, PLANET, RUNTIME);
+  assert.equal(view.next?.role, 'basic-energy');
+  assert.equal(view.lines.find((line) => line.role === 'metal-storage')!.wait!.kind, 'resources');
+  const run = runBuildPlans(poor, RUNTIME);
+  assert.deepEqual(run.started.map((item) => item.role), ['basic-energy']);
+  assert.equal(queueRoles(run.state).length, 2);
+  // With money for both, the different building still comes first.
+  const rich = replacePlanetResources(planned, PLANET, { ...getPlanetResources(planned, PLANET), ...ROOMY });
+  assert.equal(buildBuildPlanView(rich, PLANET, RUNTIME).next?.role, 'metal-storage');
 });
 
 test('construction speed goes first by default, and the player can move any building up or down', () => {
