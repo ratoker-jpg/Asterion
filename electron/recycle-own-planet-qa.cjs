@@ -136,7 +136,7 @@ async function main() {
   // 1b. «Подробно»: the fleet screen's «Переработка» plan to the planet's own coordinate can be sent.
   await js(win, `document.querySelector('[data-qa-quick-details]').click()`);
   await sleep(1200);
-  await js(win, `[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'МАКС.' && b.closest('.fleet-ship-card, article, div'))?.click()`);
+  await js(win, `[...document.querySelectorAll('button')].find((b) => ['МАКС.', 'Все'].includes(b.textContent.trim()) && b.closest('.fleet-ship-card, article, div'))?.click()`);
   await sleep(300);
   await js(win, `[...document.querySelectorAll('button')].find((b) => b.hasAttribute('data-qa-flight-preview-open'))?.click()`);
   await waitFor(win, `document.querySelector('[data-qa-flight-dispatch-confirm]')`, 15_000);
@@ -184,7 +184,7 @@ async function main() {
   await capture(win, 'recycle-panel-no-debris-note');
   await js(win, `document.querySelector('[data-qa-quick-details]').click()`);
   await sleep(1200);
-  await js(win, `[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'МАКС.')?.click()`);
+  await js(win, `[...document.querySelectorAll('button')].find((b) => ['МАКС.', 'Все'].includes(b.textContent.trim()))?.click()`);
   await sleep(300);
   await js(win, `[...document.querySelectorAll('button')].find((b) => b.hasAttribute('data-qa-flight-preview-open'))?.click()`);
   await waitFor(win, `document.querySelector('[data-qa-flight-dispatch-confirm]')`, 15_000);

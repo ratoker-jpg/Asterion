@@ -1521,12 +1521,12 @@ async function runViewport(width, height) {
         objectFit: imageStyle?.objectFit || '',
       };
     })`);
-    // Fleets redesign: rectangular mission tiles (icon + label); the icon itself stays square and inside its tile.
+    // Fleets variant A: every mission tile is a full picture; it fills its tile exactly, cropped by cover, never stretched.
     const missionIconsFit = missionSlots.length >= 9 && missionSlots.every((slot) => {
       const button = slot.button;
       const image = slot.image;
       const epsilon = 0.5;
-      return button.width > 0 && button.height > 0 && image && image.width > 0 && Math.abs(image.width - image.height) <= epsilon && image.x >= button.x - epsilon && image.y >= button.y - epsilon && image.x + image.width <= button.x + button.width + epsilon && image.y + image.height <= button.y + button.height + epsilon && slot.naturalWidth > 0 && slot.naturalHeight > 0 && (slot.objectFit === 'contain' || (slot.objectFit === 'cover' && slot.naturalWidth === slot.naturalHeight));
+      return button.width > 0 && button.height > 0 && image && Math.abs(image.x - button.x) <= epsilon && Math.abs(image.y - button.y) <= epsilon && Math.abs(image.width - button.width) <= epsilon && Math.abs(image.height - button.height) <= epsilon && slot.naturalWidth > 0 && slot.naturalHeight > 0 && slot.objectFit === 'cover' && slot.buttonOverflow === 'hidden';
     });
     if (!missionIconsFit) throw new Error(`${label}: mission icon slot contract failed ${JSON.stringify(missionSlots)}`);
 
@@ -1546,9 +1546,9 @@ async function runViewport(width, height) {
       const stock = document.querySelector('[data-qa-fleet-production-item="scout"] .fc-unit__stock');
       const label = stock?.querySelector('small')?.getBoundingClientRect();
       const count = stock?.querySelector('strong')?.getBoundingClientRect();
-      return { labelAboveCount: Boolean(label && count && label.bottom <= count.top + 2) };
+      return { labelBeforeCount: Boolean(label && count && label.right <= count.left + 2 && Math.abs(label.bottom - count.bottom) < 12) };
     })()`);
-    if (!stockLayout.labelAboveCount) throw new Error(`${label}: the stock label must sit above its number ${JSON.stringify(stockLayout)}`);
+    if (!stockLayout.labelBeforeCount) throw new Error(`${label}: the stock label must stand right before its number ${JSON.stringify(stockLayout)}`);
     const ordinaryTimerText = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-unit-time="scout"]')?.textContent ?? ''`);
     if (ordinaryTimerText.includes('УРОВЕНЬ')) throw new Error(`${label}: ordinary ship level still appears under the unit timer: ${ordinaryTimerText}`);
     const ordinaryDossierLevelLabel = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-fleet-level="scout"] small')?.textContent ?? ''`);
@@ -1559,7 +1559,8 @@ async function runViewport(width, height) {
       const queueRect = queue?.getBoundingClientRect();
       const listRect = list?.getBoundingClientRect();
       return {
-        besideList: Boolean(queueRect && listRect && queueRect.left >= listRect.right),
+        // Variant A: the yard queue is a bar under the cards.
+        besideList: Boolean(queueRect && listRect && queueRect.top >= listRect.bottom - 1),
         sameBuild: Boolean(queue?.closest('.fc-build') && queue?.closest('.fc-build') === list?.closest('.fc-build')),
         heading: queue?.querySelector('.fleet-production-queue-head-v1')?.textContent?.replace(/\\s+/g, ' ').trim() ?? '',
       };
@@ -1743,13 +1744,14 @@ async function runViewport(width, height) {
         horizontalOverflow: document.documentElement.scrollWidth > innerWidth + 2 || document.body.scrollWidth > innerWidth + 2,
         longPage: document.documentElement.classList.contains('asterion-long-page'),
         orderCount: document.querySelectorAll('[data-qa-fleet-production-queue="ships"] [data-qa-fleet-production-order]').length,
-        queueOverflowY: styles?.overflowY ?? '',
+        // Variant A: the queue is one bar under the cards; long queues scroll sideways inside it.
+        queueOverflowX: styles?.overflowX ?? '',
         queueMaxHeight: styles?.maxHeight ?? '',
-        queueScrollHeight: list?.scrollHeight ?? 0,
-        queueClientHeight: list?.clientHeight ?? 0,
+        queueScrollWidth: list?.scrollWidth ?? 0,
+        queueClientWidth: list?.clientWidth ?? 0,
       };
     })()`);
-    if (layout.horizontalOverflow || !layout.longPage || layout.orderCount !== 8 || layout.queueOverflowY !== 'visible' || layout.queueMaxHeight !== 'none' || layout.queueScrollHeight < layout.queueClientHeight) throw new Error(`${label}: fleet production layout overflow/long-page contract failed ${JSON.stringify(layout)}`);
+    if (layout.horizontalOverflow || !layout.longPage || layout.orderCount !== 8 || layout.queueOverflowX !== 'auto' || layout.queueMaxHeight !== 'none' || layout.queueScrollWidth < layout.queueClientWidth) throw new Error(`${label}: fleet production layout overflow/long-page contract failed ${JSON.stringify(layout)}`);
     await capture(win, directory, 'fleet-production');
     return { viewport: label, layout, missionSlots, transportCycle, flightCycle, recycleCycle, asteroidRecyclerLaunch, gasUiRegressions, gasFreshnessRegressions, planetSwitch, planetoLom, screenshotsSkipped: skipScreenshots };
   } finally {

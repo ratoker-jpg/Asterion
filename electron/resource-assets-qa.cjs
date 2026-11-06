@@ -121,7 +121,7 @@ async function readResourceImages(win, scopeSelector) {
   return win.webContents.executeJavaScript(`(() => {
     const root = document.querySelector(${JSON.stringify(scopeSelector)});
     if (!root) return null;
-    return [...root.querySelectorAll('img[data-qa-resource-kind]')].map((image) => {
+    return [...root.querySelectorAll('img[data-qa-resource-kind]')].filter((image) => image.getClientRects().length > 0).map((image) => {
       const style = getComputedStyle(image);
       const transformValues = style.transform.match(/^matrix\\(([^)]+)\\)$/)?.[1].split(',').map(Number);
       const transformScaleX = transformValues ? Math.hypot(transformValues[0], transformValues[1]) : 1;
@@ -370,12 +370,13 @@ async function verifyViewport(width, height) {
     await click(win, '[data-qa-fleet-section="ships"]');
     await waitFor(win, `document.querySelector('.fc-catalog')`);
     await waitForResourceImages(win, '.fc-catalog');
-    assertResourceImages('shipyard', await readResourceImages(win, '.fc-catalog'), ['metal', 'minerals', 'gas', 'population']);
+    // Variant A cards show the price in metal, minerals and gas (approved mockup 02).
+    assertResourceImages('shipyard', await readResourceImages(win, '.fc-catalog'), ['metal', 'minerals', 'gas']);
     await assertCanonicalShipyard(win);
     await click(win, '[data-qa-fleet-section="defense"]');
     await waitFor(win, `document.querySelector('.fc-catalog')`);
     await waitForResourceImages(win, '.fc-catalog');
-    assertResourceImages('defense catalog', await readResourceImages(win, '.fc-catalog'), ['metal', 'minerals', 'gas', 'population']);
+    assertResourceImages('defense catalog', await readResourceImages(win, '.fc-catalog'), ['metal', 'minerals', 'gas']);
     await click(win, '[data-qa-fleet-section="repair"]');
     await waitFor(win, `document.querySelector('.repair-workshop-v1')`);
     await waitForResourceImages(win, '.repair-workshop-v1');

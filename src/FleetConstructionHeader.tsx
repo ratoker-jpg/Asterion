@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 import type { BuildingPresentation } from './domain/buildings/balance-v1.ts';
 
 type FleetConstructionHeaderProps = {
@@ -11,6 +13,8 @@ type FleetConstructionHeaderProps = {
   population: number;
   capacity: number;
   free: number;
+  /** One action beside the population, e.g. «Эталонный флот» on the ships page. */
+  action?: ReactNode;
 };
 
 const formatNumber = (value: number) => new Intl.NumberFormat('ru-RU').format(value);
@@ -25,6 +29,7 @@ export function FleetConstructionHeader({
   population,
   capacity,
   free,
+  action,
 }: FleetConstructionHeaderProps) {
   return (
     <header className="fc-head" data-qa-construction-header={viewId}>
@@ -43,6 +48,7 @@ export function FleetConstructionHeader({
         <strong>{formatNumber(population)} / {formatNumber(capacity)}</strong>
         <span>свободно {formatNumber(free)}</span>
       </div>
+      {action}
     </header>
   );
 }
