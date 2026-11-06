@@ -951,17 +951,22 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   useEffect(() => {
     if (!hasBuildPlans) return;
     if (document.visibilityState !== 'visible' || !document.hasFocus()) return;
-    const at = Date.now();
-    const current = stateRef.current;
-    if (isApplicationCommandBlocked(current) || needsNpcCatchupBefore(current, at)) return;
-    const run = enqueueApplicationStateUpdate(stateRef, setState, (latest) => {
-      const result = runBuildPlans(latest, { now: at, mode: RUNTIME_MODE, testTimeScale });
-      return { state: result.state, result };
-    }, flushSync, renderedStateRef, noteStateHeal);
-    if (run.started.length) {
-      const names = (id: string) => stateRef.current.planets[id]?.name ?? id;
-      setNotice(`Планировщик стройки: ${run.started.map((item) => `${names(item.planetId)} · ${item.name} до ур. ${item.level}`).join('; ')}.`);
-    }
+    // flushSync may not run inside an effect, so the command goes in its own task, like a click would.
+    const timer = window.setTimeout(() => {
+      if (document.visibilityState !== 'visible' || !document.hasFocus()) return;
+      const at = Date.now();
+      const current = stateRef.current;
+      if (isApplicationCommandBlocked(current) || needsNpcCatchupBefore(current, at)) return;
+      const run = enqueueApplicationStateUpdate(stateRef, setState, (latest) => {
+        const result = runBuildPlans(latest, { now: at, mode: RUNTIME_MODE, testTimeScale });
+        return { state: result.state, result };
+      }, flushSync, renderedStateRef, noteStateHeal);
+      if (run.started.length) {
+        const names = (id: string) => stateRef.current.planets[id]?.name ?? id;
+        setNotice(`Планировщик стройки: ${run.started.map((item) => `${names(item.planetId)} · ${item.name} до ур. ${item.level}`).join('; ')}.`);
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [now, hasBuildPlans, testTimeScale, setNotice]);
   // The map's timed-object schedules (pirates, unique worlds, anomalies) run
   // from the 2026-01-01 epoch; build them in idle time instead of inside the
