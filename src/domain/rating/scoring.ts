@@ -216,6 +216,13 @@ export function selectRecordedBattlePointAwards(
 ): { attacker: number | null; defender: number | null } | null {
   const awards = rating.battleAwardsByReportId[report.id];
   if (!awards) return null;
+  // A Sun battle shares each side's points by contribution: the viewer's own side shows the viewer's own share,
+  // the other side its total (the report lists every share).
+  const shares = (report as { sunRaid?: { pointShares?: { sidePoints: { attacker: number; defender: number }; entries: { ownerId: string; side: 'attacker' | 'defender'; points: number }[] } } }).sunRaid?.pointShares;
+  if (shares) {
+    const own = (side: 'attacker' | 'defender') => shares.entries.find((entry) => entry.ownerId === playerOwnerId && entry.side === side)?.points;
+    return { attacker: own('attacker') ?? shares.sidePoints.attacker, defender: own('defender') ?? shares.sidePoints.defender };
+  }
   const ownerId = (value: string | undefined) => {
     if (!value) return null;
     return isAsterionLocalPlayerId(value) ? playerOwnerId : value;
@@ -258,6 +265,44 @@ export function recordBattleScoreAward(
     ...rating,
     battleAwardsByReportId: { ...rating.battleAwardsByReportId, [report.id]: awards },
   };
+}
+
+/**
+ * A side's points shared by contribution: whole points by weight, largest remainder first (ties by owner id),
+ * so the shares add up to the side's total exactly and never exceed it. No weights: nobody gets points.
+ */
+export function splitBattlePoints(total: number, weights: Readonly<Record<string, number>>): Record<string, number> {
+  const entries = Object.entries(weights).filter(([, weight]) => Number.isFinite(weight) && weight > 0).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
+  const sum = entries.reduce((acc, [, weight]) => acc + weight, 0);
+  const whole = Math.max(0, Math.floor(total));
+  if (!entries.length || sum <= 0 || whole <= 0) return Object.fromEntries(entries.map(([id]) => [id, 0]));
+  const parts = entries.map(([id, weight]) => ({ id, exact: whole * weight / sum }));
+  const out: Record<string, number> = Object.fromEntries(parts.map((part) => [part.id, Math.floor(part.exact)]));
+  let left = whole - Object.values(out).reduce((acc, value) => acc + value, 0);
+  for (const part of [...parts].sort((x, y) => (y.exact - Math.floor(y.exact)) - (x.exact - Math.floor(x.exact)) || (x.id < y.id ? -1 : 1))) {
+    if (left <= 0) break;
+    out[part.id] += 1;
+    left -= 1;
+  }
+  return out;
+}
+
+/**
+ * A joint battle (the Sun): each side's points go to its participants in proportion to their own contribution
+ * (`weights`, by owner id), never the whole side's total to one of them. Returns the new rating and the split.
+ */
+export function recordSharedBattleScoreAward(
+  rating: RatingPrototypeState,
+  report: BattleReport,
+  weights: { attacker: Readonly<Record<string, number>>; defender: Readonly<Record<string, number>> },
+): { rating: RatingPrototypeState; side: { attacker: number; defender: number }; split: { attacker: Record<string, number>; defender: Record<string, number> } } {
+  const base = reportBattlePoints(report);
+  const split = { attacker: splitBattlePoints(base.attacker, weights.attacker), defender: splitBattlePoints(base.defender, weights.defender) };
+  const side = { attacker: base.attacker, defender: base.defender };
+  if (rating.battleAwardsByReportId[report.id] || !report.id) return { rating, side, split };
+  const awards: Record<string, number> = {};
+  for (const part of [split.attacker, split.defender]) for (const [ownerId, points] of Object.entries(part)) awards[ownerId] = (awards[ownerId] ?? 0) + points;
+  return { rating: { ...rating, battleAwardsByReportId: { ...rating.battleAwardsByReportId, [report.id]: awards } }, side, split };
 }
 
 /** Adds only the unrefunded portion of a canceled paid order to the owner ledger. */

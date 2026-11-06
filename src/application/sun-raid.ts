@@ -56,7 +56,7 @@ import type {
 import type { UniverseCoordinate } from '../domain/universe/types.ts';
 import { calculateAttackDebris, technologiesFromScience } from './attack.ts';
 import { battleDebrisRoll } from '../domain/combat/debris.ts';
-import { recordBattleScoreAward } from '../domain/rating/scoring.ts';
+import { recordSharedBattleScoreAward } from '../domain/rating/scoring.ts';
 import {
   getOwnerShipUpgradeLevel,
   getOwnerShipUpgradeLevels,
@@ -1128,6 +1128,33 @@ function resolveRaid(state: SaveState, raid: SunRaidRecord, at: number, options:
   }
   next = releaseFlights(next, [...attackers, ...defenders].map((item) => next.flights.records.find((flight) => flight.id === item.flight.id)!), at, raid.id);
 
+  // Combat points: each side's total is shared by contribution (share of the side's fleet value that flew),
+  // for players and bots alike: nobody gets the whole side's points for sending one ship.
+  const fleetValue = (items: readonly SideParticipant[]) => {
+    const byOwner: Record<string, number> = {};
+    for (const { flight, snapshot } of items) {
+      let value = 0;
+      for (const [id, count] of Object.entries(flight.selectedShips) as [ShipId, number][]) {
+        const cost = SHIP_IDS.includes(id) && id !== SOLAR_SATELLITE_ID ? getFactionCombatEntity(snapshot.factionId, id).cost : undefined;
+        value += safeCount(count) * ((cost?.metal ?? 0) + (cost?.minerals ?? 0) + (cost?.gas ?? 0));
+      }
+      byOwner[snapshot.ownerId] = (byOwner[snapshot.ownerId] ?? 0) + value;
+    }
+    return byOwner;
+  };
+  const weights = { attacker: fleetValue(attackers), defender: fleetValue(defenders) };
+  const scored = recordSharedBattleScoreAward(next.rating, report, weights);
+  next = { ...next, rating: scored.rating };
+  const names = new Map([...attackers, ...defenders].map((item) => [item.snapshot.ownerId, item.snapshot.ownerName]));
+  const pointShares: SunReportExtension['pointShares'] = {
+    basis: 'fleet-value',
+    sidePoints: scored.side,
+    entries: (['attacker', 'defender'] as const).flatMap((side) => {
+      const total = Object.values(weights[side]).reduce((sum, value) => sum + value, 0);
+      return Object.entries(scored.split[side]).sort(([left], [right]) => left.localeCompare(right))
+        .map(([ownerId, points]) => ({ ownerId, ownerName: names.get(ownerId) ?? ownerId, side, points, share: total > 0 ? Math.round(1000 * (weights[side][ownerId] ?? 0) / total) / 1000 : 0 }));
+    }),
+  };
   if (playerInvolved) {
     const enriched: BattleReport & { sunRaid: SunReportExtension } = {
       ...report,
@@ -1143,12 +1170,12 @@ function resolveRaid(state: SaveState, raid: SunRaidRecord, at: number, options:
         ...(crystalRoll ? { crystalRoll } : {}),
         attackers: attackers.length,
         defenders: defenders.length,
+        pointShares,
       },
     };
     next = {
       ...next,
       combat: { ...next.combat, reports: [...next.combat.reports.filter((item) => item.id !== reportId), enriched] },
-      rating: recordBattleScoreAward(next.rating, enriched, playerId),
     };
   }
   const playerSide = playerInvolved
@@ -1177,6 +1204,12 @@ export type SunReportExtension = {
   crystalRoll?: NonNullable<SunRaidRecord['result']>['crystalRoll'];
   attackers: number;
   defenders: number;
+  /** Combat points shared by contribution (absent in reports of older saves, which keep their recorded numbers). */
+  pointShares?: {
+    basis: 'fleet-value';
+    sidePoints: { attacker: number; defender: number };
+    entries: { ownerId: string; ownerName: string; side: 'attacker' | 'defender'; points: number; share: number }[];
+  };
 };
 
 /** Survivors fly home; a fleet without ships ends at the Sun. */

@@ -120,3 +120,24 @@ test('two owners with the same race, science and ship levels fight as ONE stack 
   const survivors = [mine.id, ira.id].map((id) => state.flights.records.find((item) => item.id === id)?.selectedShips.cruiser ?? 0);
   assert.equal(survivors[0]! + survivors[1]!, cruisers[0]!.countAfter, 'survivors of both flights add up to the merged stack');
 });
+
+test('combat points of a Sun battle are shared by contribution, never the whole side to one owner (owner report 06.11)', () => {
+  const { state: armed, raidId, mineId, iraId, thirdId } = threeRaceRaid();
+  const raid = currentSunRaidState(armed).raids[0]!;
+  const state = reconcileRuntime(armed, { planetId: armed.currentPlanetId, now: raid.arrivesAt!, mode: 'test', testTimeScale: 1 }).state;
+  const result = currentSunRaidState(state).raids.find((item) => item.id === raidId)!.result!;
+  const report = state.combat.reports.find((item) => item.id === result.reportId)! as typeof state.combat.reports[number] & { sunRaid: { pointShares: { sidePoints: { attacker: number; defender: number }; entries: { ownerId: string; side: string; points: number; share: number }[] } } };
+  const shares = report.sunRaid.pointShares;
+  const awards = state.rating.battleAwardsByReportId[report.id]!;
+  const owners = ['mine', 'ira', 'third'].map((_, index) => [mineId, iraId, thirdId][index]!).map((id) => state.flights.records.find((flight) => flight.id === id)?.sunRaid?.ownerId ?? '');
+  const attackers = shares.entries.filter((entry) => entry.side === 'attacker');
+  assert.equal(attackers.length, 3, 'three attacking owners each get a share');
+  assert.equal(attackers.reduce((sum, entry) => sum + entry.points, 0), shares.sidePoints.attacker, 'shares add up to the side total exactly');
+  for (const entry of attackers) assert.ok(entry.points < shares.sidePoints.attacker, 'no owner gets the whole side');
+  const [big, small] = [...attackers].sort((left, right) => right.points - left.points);
+  assert.ok(big!.points > small!.points, 'the bigger contribution gets more');
+  for (const ownerId of owners) assert.equal(awards[ownerId], shares.entries.filter((entry) => entry.ownerId === ownerId).reduce((sum, entry) => sum + entry.points, 0), 'recorded in the rating');
+  // The defender side is one owner here: it is the whole of its side.
+  const defenders = shares.entries.filter((entry) => entry.side === 'defender');
+  assert.equal(defenders.reduce((sum, entry) => sum + entry.points, 0), shares.sidePoints.defender);
+});

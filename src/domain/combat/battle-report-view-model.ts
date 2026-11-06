@@ -311,8 +311,32 @@ export type BattleReportViewModel = {
   battlePoints: BattlePointResult;
   /** Present only when the save contains a persisted award entry for this report. */
   awardedBattlePoints: { attacker: number | null; defender: number | null } | null;
+  /** Joint (Sun) battles: each side's points shared by contribution, every participant's share. */
+  pointShares: BattlePointSharesViewModel | null;
   timestampAvailable: boolean;
 };
+
+export type BattlePointSharesViewModel = {
+  sidePoints: { attacker: number; defender: number };
+  entries: { ownerId: string; ownerName: string; side: BattleSide; points: number; share: number }[];
+};
+
+function readPointShares(value: unknown): BattlePointSharesViewModel | null {
+  const record = asRecord(asRecord(value).pointShares);
+  const side = asRecord(record.sidePoints);
+  const attacker = readNumber(side.attacker);
+  const defender = readNumber(side.defender);
+  if (attacker == null || defender == null) return null;
+  const entries = asArray(record.entries).flatMap((item) => {
+    const entry = asRecord(item);
+    const ownerId = readString(entry.ownerId);
+    const points = readNumber(entry.points);
+    const share = readNumber(entry.share);
+    return ownerId && points != null && share != null && (entry.side === 'attacker' || entry.side === 'defender')
+      ? [{ ownerId, ownerName: readString(entry.ownerName) ?? ownerId, side: entry.side as BattleSide, points, share }] : [];
+  });
+  return { sidePoints: { attacker, defender }, entries };
+}
 
 export type RecordedBattlePointAwards = { attacker: number | null; defender: number | null } | null;
 
@@ -1102,6 +1126,7 @@ export function createBattleReportViewModel(
     siege,
     battlePoints,
     awardedBattlePoints: options.awardedBattlePoints ?? null,
+    pointShares: readPointShares(record.sunRaid),
     timestampAvailable: readString(record.timestamp) != null,
   };
 }
