@@ -1,4 +1,6 @@
 import { COMMANDER_IDS, type CommanderId } from '../domain/combat/commanders.ts';
+import { SHIELD_TELEMETRY } from './shield.ts';
+import { lootableAbove } from '../domain/shield/shield.ts';
 import { getCombatFactionName, type CombatFactionId } from '../domain/combat/factions.ts';
 import { getFactionCombatEntity, getFactionDefenseCatalog, getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
 import { SOLAR_SATELLITE_ID, combatBaseEntityId, type CombatEntityId, type DefenseId, type ShipId } from '../domain/combat/ids.ts';
@@ -251,14 +253,20 @@ export function calculateAttackLoot(
   report: BattleReport,
   targetResources: { metal: number; minerals: number; gas: number },
   attackerFactionId: CombatFactionId,
+  /** Planet buildings: the protected part of each store (min of stock and protected share) is never taken. */
+  targetBuildings?: Record<string, number>,
 ): AttackLoot {
   const survivors = survivorsCargo(report, attackerFactionId);
   const survivorCount = survivors.pirateSurvivors + Object.values(survivors.ships).reduce((total, count) => total + safeCount(count), 0);
   if (report.winner !== 'attacker' || survivorCount <= 0 || survivors.capacity <= 0) return { metal: 0, minerals: 0, gas: 0, debris: 0 };
+  const capacities = targetBuildings ? getStorageCapacities(targetBuildings) : undefined;
   let free = survivors.capacity;
   const loot = { metal: 0, minerals: 0, gas: 0, debris: 0 };
   for (const key of ['metal', 'minerals', 'gas'] as const) {
-    const maximum = Math.floor(Math.max(0, targetResources[key]) * 0.75);
+    const stock = Math.max(0, targetResources[key]);
+    const capacity = capacities?.[key];
+    const maximum = Math.floor(Math.min(stock * 0.75, capacity === undefined ? stock : lootableAbove(stock, capacity)));
+    if (capacities) SHIELD_TELEMETRY.lootWithheld += Math.max(0, Math.min(Math.floor(stock * 0.75), free) - Math.min(maximum, free));
     loot[key] = Math.min(maximum, free);
     free -= loot[key];
   }
@@ -636,7 +644,7 @@ export function resolveAttackAtTarget(state: SaveState, flight: FlightRecord, no
   // or a big bot raid); the battle must resolve instead of throwing inside the world's clock. Players' own fleets keep the cap.
   const rawReport = resolveCombat(input, { reportId, missionType: 'attack', allowPopulationOverflow: flight.ownerSide === 'npc' || target.kind === 'npc' });
   const debris = calculateAttackDebris(rawReport, input.attacker.factionId!, input.defender.factionId!, battleDebrisRoll(reportId));
-  const loot = calculateAttackLoot(rawReport, target.resources, input.attacker.factionId!);
+  const loot = calculateAttackLoot(rawReport, target.resources, input.attacker.factionId!, target.buildings);
   const reportWithOutcome: BattleReport = {
     ...rawReport,
     debris,
@@ -841,7 +849,7 @@ function resolveOwnedIncomingAttack(state: SaveState, flight: FlightRecord, now:
   const rawReport = resolveCombat(input, { reportId, missionType: 'attack', allowPopulationOverflow: true });
   const debris = calculateAttackDebris(rawReport, input.attacker.factionId!, input.defender.factionId!, battleDebrisRoll(reportId));
   const targetResources = getPlanetResources(state, flight.destinationPlanetId);
-  const loot = calculateAttackLoot(rawReport, targetResources, input.attacker.factionId!);
+  const loot = calculateAttackLoot(rawReport, targetResources, input.attacker.factionId!, target.buildings);
   const reportWithOutcome: BattleReport = {
     ...rawReport,
     debris,
@@ -1146,7 +1154,7 @@ export function resolvePirateIncomingRaid(state: SaveState, flight: FlightRecord
   const targetResources = playerTarget
     ? getPlanetResources(state,flight.destinationPlanetId)
     : npcTarget!.resources;
-  const loot = calculateAttackLoot(rawReport,targetResources,factionId);
+  const loot = calculateAttackLoot(rawReport,targetResources,factionId,(playerTarget ?? npcTarget)!.buildings);
   const outcome: BattleReport = {
     ...rawReport, debris, resources:{metal:loot.metal,minerals:loot.minerals,gas:loot.gas},
   };

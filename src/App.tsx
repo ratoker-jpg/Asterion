@@ -39,6 +39,8 @@ import {
   type AppRoute,
 } from './ui/navigation.tsx';
 import { AsterionHeader } from './ui/header/AsterionHeader';
+import { ShieldControl } from './ui/shield/ShieldControl';
+import { activateShield } from './application/shield.ts';
 import { selectHeaderAlerts, type HeaderAlert } from './ui/header/header-alerts.ts';
 import { ApprovedZoneIcon } from './ui/header/HeaderAssetIcons';
 import { GameIcon } from './ui/header/HeaderIcons';
@@ -1822,6 +1824,19 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   };
 
   /** Planner: a plan edit, as a command, so a clock tick cannot write over it. */
+  /** Planet shield: one button for all planets; the rule lives in application/shield.ts. */
+  const raiseShield = () => {
+    if (rejectNpcCatchupCommand()) return;
+    const at = Date.now();
+    const outcome = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
+      const result = activateShield(current, current.profile.playerId, at);
+      return result.ok ? { state: result.state, result: null as string | null } : { state: current, result: result.message };
+    }, flushSync, renderedStateRef, noteStateHeal);
+    const message = outcome;
+    if (message) setNotice(message, 'error');
+    else setNotice('Щит включён: все ваши планеты закрыты от нападений.', 'success');
+  };
+
   const saveFleetPlan = (planetId: string, plan: FleetPlan) => {
     if (rejectNpcCatchupCommand()) return false;
     enqueueApplicationStateUpdate(stateRef, setState, (current) => ({
@@ -2975,6 +2990,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
           onZoneChange={chooseZone}
           onPlanetChange={(planetId) => selectPlanet(planetId)}
           onPlanetMenuToggle={() => setPlanetMenuOpen((open) => !open)}
+          shield={<ShieldControl state={state} now={now} variant="compact" onActivate={raiseShield} />}
          />
         <NpcCatchupBanner replay={state.npcReplay} state={state} slot={catchupSlot} onDismissSummary={dismissWorldSummary} onOpenMenu={openPauseMenu} />
 
@@ -3037,6 +3053,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
             />
           ) : activeRoute === 'universe' ? (
             <UniverseView
+              shields={state.shields}
               ownerPresence={ownerPresence}
               pirateContacts={pirateContacts}
               pirateContactState={state.pirate?.contact}
@@ -3249,6 +3266,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
                 onStartPlan={startFleetPlan}
                 onSaveBuildPlan={saveBuildPlan}
                 onRunBuildPlan={runBuildPlanNow}
+                onActivateShield={raiseShield}
               />
             </>
           ) : activeRoute === 'planet' ? (

@@ -25,6 +25,11 @@ const { getNpcPolicy, setNpcPolicyOverride } = await import('../src/domain/npc/p
   if (error?.code !== 'ERR_MODULE_NOT_FOUND') throw error;
   return { getNpcPolicy: () => ({ version: null, params: null }), setNpcPolicyOverride: () => { throw new Error('this revision has no strategy policy; --policy needs one'); } };
 });
+// A revision without the planet shield (main before it) still runs in the lab: it simply reports no shield figures.
+const shieldModule = await import('../src/application/shield.ts').catch((error) => {
+  if (error?.code !== 'ERR_MODULE_NOT_FOUND') throw error;
+  return null;
+});
 import { applyCampaignRuntimeForCatchup } from '../src/application/npc-catchup-runner.ts';
 import { advanceLiveWorld, beginLiveWorld } from '../src/application/npc-live-world.ts';
 import { formatNpcJournalLines, setNpcJournalSink } from '../src/application/npc-journal.ts';
@@ -651,6 +656,13 @@ export function raidSizing(journal) {
     broughtValue: Math.round(sum(raids, (entry) => entry.d.sent)), lostValue: Math.round(sum(raids, (entry) => entry.d.loss)) };
 }
 
+/** Planet shield figures of one run (owner request 06.11.2026): who used it, what it turned away. */
+export function describeShield(state, telemetry) {
+  const npcOwners = getNpcOwnerIds(state.espionage?.targets, state.profile.playerId);
+  const used = npcOwners.filter((ownerId) => state.shields?.[ownerId]);
+  return { npcOwners: npcOwners.length, npcUsedShield: used.length, npcShare: npcOwners.length ? Math.round((used.length / npcOwners.length) * 1000) / 1000 : 0, ...telemetry };
+}
+
 /** The problems the summary names, in the owner's words. */
 export function listProblems(summary) {
   const problems = [];
@@ -706,6 +718,7 @@ function main() {
   const hours = save ? Number(option('hours', '6')) : option('hours') ? Number(option('hours')) : Number(option('days', '2')) * 24;
   const days = [];
   const startedAt = performance.now();
+  shieldModule?.resetShieldTelemetry();
   let groups;
   const tally = createEmpireTally();
   const sunTally = createSunTally();
@@ -723,7 +736,8 @@ function main() {
   }
   setNpcJournalSink(null);
   const result = { tool: 'bot-lab', policy: { file: option('policy') ? path.basename(option('policy')) : null, version: getNpcPolicy().version, params: getNpcPolicy().params }, source: save ? path.basename(save) : option('fixture') ? path.basename(option('fixture')) : 'fresh lab world',
-    hours, wallSeconds: Math.round((performance.now() - startedAt) / 1000), journalEntries: journal.length, days };
+    hours, wallSeconds: Math.round((performance.now() - startedAt) / 1000), journalEntries: journal.length, days,
+    shield: shieldModule ? describeShield(state, shieldModule.SHIELD_TELEMETRY) : null };
   if (out) {
     fs.writeFileSync(path.join(out, 'summary.json'), JSON.stringify(result, null, 2));
     fs.writeFileSync(path.join(out, 'bots-journal.jsonl'), formatNpcJournalLines(journal));

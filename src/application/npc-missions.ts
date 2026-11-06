@@ -1,4 +1,5 @@
 import { ownerFlights } from './npc-knowledge-index.ts';
+import { isHostileMission, ownShieldMessage } from './shield.ts';
 import { applyRealFlightFloor } from '../domain/flights/speed.ts';
 import { MAX_COMMANDERS_PER_PLANET, calculateFleetPopulation, createEmptyFleetState, getSolarSatelliteFleetCount, removeSolarSatellitesFromFleet, resolveSavedFleetState } from '../domain/fleet/runtime.ts';
 import { calculatePlanetCapacity, calculatePlanetPopulation } from '../domain/fleet/overpopulation.ts';
@@ -251,6 +252,7 @@ export function dispatchNpcMission(
   }
   const origin = validNpcOrigin(state, command.ownerId, command.originPlanetId);
   if (!origin) return fail(state, 'npc-origin-not-found');
+  if (isHostileMission(command.missionId) && ownShieldMessage(state, command.ownerId, at)) return fail(state, 'shield-active');
   const profile = ownerProfile(state, origin);
   if (!flightSlotsAvailable(state, command.ownerId, profile, command.missionId)) return fail(state, 'flight-limit-reached');
   const selectedShips = normalizeShips(command.selectedShips, origin.raceId);
@@ -279,7 +281,7 @@ export function dispatchNpcMission(
         || Object.keys(selectedShips).length !== 1 || selectedShips['spy-probe'] !== 1) return fail(state, 'invalid-espionage-composition');
       if (activeSpyMissionForTarget(state.espionage?.missions ?? [], command.ownerId, target.id)) return fail(state, 'spy-target-already-active');
     } else {
-      if (!evaluatePlanetAttackEligibility(state, command.ownerId, target.ownerId).allowed) return fail(state, 'attack-not-allowed');
+      if (!evaluatePlanetAttackEligibility(state, command.ownerId, target.ownerId, undefined, at).allowed) return fail(state, 'attack-not-allowed');
       if (Object.keys(selectedShips).some((shipId) => !isAttackCombatShip(shipId as ShipId, origin.raceId))) return fail(state, 'invalid-attack-composition');
       if (command.maxRounds !== undefined && ![5, 8, 12].includes(command.maxRounds)) return fail(state, 'invalid-round-limit');
       if (!takeCommanders(origin, command.selectedCommanders)) return fail(state, 'insufficient-commanders');

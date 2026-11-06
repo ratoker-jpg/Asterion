@@ -299,7 +299,7 @@ function judgeJointStrike(state: SaveState, profile: NpcProfile, utility: NpcUti
   const target = state.espionage?.targets?.[terms.targetPlanetId];
   if (!target || target.ownerId !== terms.targetOwnerId) return { accept: false, reason: 'target-gone' };
   const relation = getOwnerRelation(state, ownerId, target.ownerId);
-  if ((relation !== 'enemy' && relation !== 'neutral') || !evaluatePlanetAttackEligibility(state, ownerId, target.ownerId).allowed) return { accept: false, reason: 'attack-not-allowed' };
+  if ((relation !== 'enemy' && relation !== 'neutral') || !evaluatePlanetAttackEligibility(state, ownerId, target.ownerId, undefined, at).allowed) return { accept: false, reason: 'attack-not-allowed' };
   if (activeNpcPlans(state, ownerId).length || npcProposalsOf(state, ownerId).some((item) => item.proposalId !== pact.proposalId && item.kind === 'joint-strike' && item.status === 'accepted')) return { accept: false, reason: 'busy' };
   if (ownerUnderAttack(state, utility.ownPlanets, ownerId, at)) return { accept: false, reason: 'threat-at-home' };
   const report = freshReport(utility, terms.targetPlanetId, at, timeScale);
@@ -407,7 +407,7 @@ function considerJointStrike(state: SaveState, profile: NpcProfile, utility: Npc
     if (!target || target.ownerId !== report.targetOwnerId || target.ownerId === ownerId) continue;
     if ((utility.relations?.get(target.ownerId)?.regard ?? 0) >= NPC_PACT_BALANCE.friendRegard) continue;
     const relation = getOwnerRelation(state, ownerId, target.ownerId);
-    if ((relation !== 'enemy' && relation !== 'neutral') || !evaluatePlanetAttackEligibility(state, ownerId, target.ownerId).allowed) continue;
+    if ((relation !== 'enemy' && relation !== 'neutral') || !evaluatePlanetAttackEligibility(state, ownerId, target.ownerId, undefined, at).allowed) continue;
     if (!npcJointTargetAllowed(state, ownerId, target.ownerId, at)) continue;
     const enemy = npcBelievedPower(utility, report, force.power);
     const wanted = npcWantedWin(utility, target.ownerId);
@@ -416,7 +416,7 @@ function considerJointStrike(state: SaveState, profile: NpcProfile, utility: Npc
     for (const partner of candidates) {
       if (partner.ownerId === target.ownerId) continue;
       // The points are public: no use asking someone the attack rule would stop.
-      if (!evaluatePlanetAttackEligibility(state, partner.ownerId, target.ownerId).allowed) continue;
+      if (!evaluatePlanetAttackEligibility(state, partner.ownerId, target.ownerId, undefined, at).allowed) continue;
       const win = estimateWinProbability(force.power + npcPartnerPowerBelief(state, ownerId, partner.ownerId, force.power, at), enemy);
       if (win < 0.9 * wanted) continue;
       const value = Math.min(1.5, jointWorth(utility, force, report, win)) + 0.5 * npcRevengeIntensity(utility, target.ownerId) + (reaction?.offender === target.ownerId ? 0.5 : 0);
