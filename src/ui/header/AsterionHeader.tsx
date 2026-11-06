@@ -43,7 +43,7 @@ export type AsterionHeaderProps = {
   onZoneChange: (zone: HeaderZoneId) => void;
   onPlanetChange: (planetId: string) => void;
   onPlanetMenuToggle: () => void;
-  /** The planet shield pill next to the planet name. */
+  /** The planet shield field, right of the planet selector. */
   shield?: ReactNode;
 };
 
@@ -221,7 +221,6 @@ export function AsterionHeader({
           </span>
           <i className={planetMenuOpen ? 'is-open' : ''} aria-hidden="true" />
         </button>
-        {shield}
 
         <div
           className="hdr-planet-list"
@@ -254,6 +253,7 @@ export function AsterionHeader({
           <div>Новые планеты появятся здесь только после реальной колонизации.</div>
         </div>
       </div>
+      {shield ? <div className="hdr-shield-slot">{shield}</div> : null}
 
       <section className="hdr-core asterion-header__planet-module" style={{ '--storage-fill': storageFill } as CSSProperties}>
         <svg className="hdr-core__dial" viewBox="-120 -120 240 240" aria-hidden="true">
