@@ -62,12 +62,37 @@ export function countNewWorldBattles(
 }
 
 /**
+ * Alliance and diplomacy news between two command states. The replay counts it
+ * after every group, never over a whole slice: a war declared and ended inside
+ * one slice would otherwise be invisible, and where slices fall must not change
+ * what the summary reports.
+ */
+export function accumulateCommandNews(summary: WorldCatchupSummary, before: SaveState['command'], after: SaveState['command']): WorldCatchupSummary {
+  if (after === before) return summary;
+  const next = { ...summary };
+  const known = new Set(before.alliances.map((alliance) => alliance.id));
+  const current = new Set(after.alliances.map((alliance) => alliance.id));
+  for (const id of current) if (!known.has(id)) next.alliancesFounded += 1;
+  for (const id of known) if (!current.has(id)) next.alliancesDissolved += 1;
+  const warsBefore = relationPairs(before.diplomacy, WAR);
+  const warsAfter = relationPairs(after.diplomacy, WAR);
+  for (const pair of warsAfter) if (!warsBefore.has(pair)) next.warsDeclared += 1;
+  for (const pair of warsBefore) {
+    // A war that ended with both alliances standing ended in a truce.
+    if (!warsAfter.has(pair) && pair.split('\u0000').every((id) => current.has(id))) next.truces += 1;
+  }
+  const pactsBefore = relationPairs(before.diplomacy, PACT);
+  for (const pair of relationPairs(after.diplomacy, PACT)) if (!pactsBefore.has(pair)) next.pacts += 1;
+  return next;
+}
+
+/**
  * Adds the slow-moving world changes of one replay slice: colonies, alliances,
  * diplomacy, Sun raids and crystals. Battles are counted separately with
  * countNewWorldBattles before every history prune, because NPC battle reports
  * are archived after each replay group.
  */
-export function accumulateWorldCatchupSummary(summary: WorldCatchupSummary, before: SaveState, after: SaveState): WorldCatchupSummary {
+export function accumulateWorldCatchupSummary(summary: WorldCatchupSummary, before: SaveState, after: SaveState, options: { commandCounted?: boolean } = {}): WorldCatchupSummary {
   const next = { ...summary };
 
   const planetIds = (state: SaveState) => new Set([...Object.keys(state.espionage?.targets ?? {}), ...Object.keys(state.planets)]);
@@ -76,21 +101,7 @@ export function accumulateWorldCatchupSummary(summary: WorldCatchupSummary, befo
     for (const id of planetIds(after)) if (!known.has(id)) next.colonies += 1;
   }
 
-  if (after.command !== before.command) {
-    const known = new Set(before.command.alliances.map((alliance) => alliance.id));
-    const current = new Set(after.command.alliances.map((alliance) => alliance.id));
-    for (const id of current) if (!known.has(id)) next.alliancesFounded += 1;
-    for (const id of known) if (!current.has(id)) next.alliancesDissolved += 1;
-    const warsBefore = relationPairs(before.command.diplomacy, WAR);
-    const warsAfter = relationPairs(after.command.diplomacy, WAR);
-    for (const pair of warsAfter) if (!warsBefore.has(pair)) next.warsDeclared += 1;
-    for (const pair of warsBefore) {
-      // A war that ended with both alliances standing ended in a truce.
-      if (!warsAfter.has(pair) && pair.split('\u0000').every((id) => current.has(id))) next.truces += 1;
-    }
-    const pactsBefore = relationPairs(before.command.diplomacy, PACT);
-    for (const pair of relationPairs(after.command.diplomacy, PACT)) if (!pactsBefore.has(pair)) next.pacts += 1;
-  }
+  if (!options.commandCounted) Object.assign(next, accumulateCommandNews(next, before.command, after.command));
 
   if (after.sunRaid !== before.sunRaid && after.sunRaid) {
     const resolved = new Set((before.sunRaid?.raids ?? []).filter((raid) => raid.status === 'resolved').map((raid) => raid.id));
