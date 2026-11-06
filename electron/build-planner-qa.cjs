@@ -233,6 +233,19 @@ async function runViewport(win, directory) {
   await openPlanner(win);
   const below = await run(win, `document.querySelector('[data-qa-build-plan-line="metal-storage"] [data-qa-build-plan-levels]')?.textContent ?? null`);
   check(below && below.includes('уже') && !below.includes('5'), 'A passed target reads as already higher', { below, passed });
+  check(await run(win, `!document.querySelector('[data-qa-build-plan-preset="metal-storage:25"]') && Boolean(document.querySelector('[data-qa-build-plan-preset="metal-storage:20"]'))`), 'Storages offer no level above their last one (20)');
+  // The picture opens what the building does; the arrows move it in the priority.
+  await click(win, '[data-qa-build-plan-info="mineral-production-1"]');
+  const info = await run(win, `document.querySelector('[data-qa-build-plan-info-card]')?.textContent ?? ''`);
+  check(info.includes('Сейчас') && info.includes('По плану'), 'The info card says what the building gives now and by plan', info);
+  await checkLayout(win, '09-info');
+  await capture(win, directory, '09-info');
+  await click(win, '[data-qa-build-plan-info-back]');
+  await click(win, '[data-qa-build-plan-down="metal-production-1"]');
+  const order = await run(win, `Array.from(document.querySelectorAll('[data-qa-build-plan-line]')).map((node) => node.dataset.qaBuildPlanLine)`);
+  check(order[0] !== 'metal-production-1' && order.indexOf('metal-production-1') > 0, 'The arrows move a building in the priority', order);
+  const saved = await savedSave(win);
+  check(Array.isArray(saved.fleetUi?.buildPlans?.[HOME]?.order), 'The priority is saved', saved.fleetUi?.buildPlans?.[HOME]);
   await click(win, '[data-qa-build-plan-copy]');
   await waitFor(win, `document.querySelector('[data-qa-build-plan-copy-list]')`);
   await checkLayout(win, '08-copy-list');

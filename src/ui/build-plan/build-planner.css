@@ -4,11 +4,11 @@
    soft glow under the picture, like the fleet planner's ship grid. */
 .fplan--build{
   --bp-tile:164px;
-  --bp-art:78px;
+  --bp-art:92px;
   --bp-lead:290px;
 }
 @media (min-width:1600px) and (min-height:900px){
-  .fplan--build{--bp-tile:206px;--bp-art:104px;--bp-lead:360px}
+  .fplan--build{--bp-tile:206px;--bp-art:124px;--bp-lead:360px}
 }
 
 .bplan-body{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:var(--bp-lead) minmax(0,1fr);gap:24px}
@@ -90,7 +90,7 @@
 .bplan-tile__art{position:relative;height:var(--bp-art);display:grid;place-items:center}
 .bplan-tile__art::after{content:'';position:absolute;left:18%;right:18%;bottom:2%;height:18%;border-radius:50%;background:radial-gradient(ellipse,color-mix(in srgb,var(--fp-here) 34%,transparent),transparent 70%)}
 .bplan-tile.is-done .bplan-tile__art::after{background:radial-gradient(ellipse,rgba(53,229,138,.34),transparent 70%)}
-.bplan-tile__art img{position:absolute;inset:0;z-index:1;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 6px 9px rgba(0,0,0,.6));transition:translate var(--ut-motion-base) var(--ut-ease-out),scale var(--ut-motion-base) var(--ut-ease-out)}
+.bplan-tile__art img{position:absolute;inset:-6% -4% 0;z-index:1;width:108%;height:106%;object-fit:contain;filter:drop-shadow(0 6px 9px rgba(0,0,0,.6));transition:translate var(--ut-motion-base) var(--ut-ease-out),scale var(--ut-motion-base) var(--ut-ease-out)}
 .bplan-tile:hover .bplan-tile__art img{translate:0 -3px;scale:1.04}
 .bplan-tile.is-building .bplan-tile__art img{animation:bplan-build-bob 1.8s ease-in-out infinite}
 
@@ -201,6 +201,36 @@
 .bplan-tile:hover .bplan-tile__remove,.bplan-tile__remove:focus-visible{color:#cfe6ec}
 .bplan-tile__remove:hover{background:rgba(240,68,94,.18);color:#ffd6dc}
 
+/* Priority: the place in the plan, moved with ‹ ›. */
+.bplan-tile__rank{position:absolute;z-index:2;top:5px;left:5px;display:flex;align-items:center;gap:1px;border-radius:var(--ut-r-chip);background:rgba(0,0,0,.32)}
+.fplan .bplan-tile__rank b{min-width:20px;color:#e8faff;font-size:calc(13px * var(--text-scale-table,1)) !important;font-weight:800;text-align:center}
+.bplan-tile__rank button{width:22px;height:26px;padding:0;border:0;border-radius:var(--ut-r-chip);background:transparent;color:rgba(200,225,232,.0);cursor:pointer;transition:background var(--ut-motion-fast) ease,color var(--ut-motion-fast) ease,scale var(--ut-motion-press) var(--ut-ease-out)}
+.fplan .bplan-tile__rank button{font-size:calc(17px * var(--text-scale-control,1)) !important;font-weight:800}
+.bplan-tile:hover .bplan-tile__rank button:not(:disabled),.bplan-tile__rank button:focus-visible{color:#cfe6ec}
+.bplan-tile__rank button:hover:not(:disabled){background:color-mix(in srgb,var(--fp-here) 30%,transparent);color:#fff}
+.bplan-tile__rank button:active:not(:disabled){scale:.88}
+.bplan-tile__rank button:disabled{cursor:default}
+.bplan-tile.is-next .bplan-tile__rank b{color:var(--fp-here)}
+
+/* The picture and the name open what the building does. */
+.bplan-tile__about{display:grid;gap:6px;padding:0;border:0;background:none;color:inherit;cursor:pointer;text-align:center}
+.bplan-tile__about:hover .bplan-tile__name{color:var(--fp-here)}
+.bplan-tile.is-info{background:radial-gradient(ellipse 80% 46% at 50% 22%,color-mix(in srgb,var(--fp-here) 26%,transparent),transparent 72%),color-mix(in srgb,var(--fp-here) 10%,transparent)}
+
+.bplan-info{animation:bplan-info-in var(--ut-motion-base) var(--ut-ease-out) both}
+.bplan-info__back{align-self:flex-start;height:30px;padding:0 10px;border:0;border-radius:var(--ut-r-chip);background:rgba(86,217,242,.08);color:#cfe6ec;cursor:pointer;transition:background var(--ut-motion-fast) ease,scale var(--ut-motion-press) var(--ut-ease-out)}
+.fplan .bplan-info__back{font-size:calc(13px * var(--text-scale-control,1)) !important;font-weight:700}
+.bplan-info__back:hover{background:color-mix(in srgb,var(--fp-here) 26%,transparent);color:#fff}
+.bplan-info__back:active{scale:.95}
+.bplan-info__art{position:relative;height:calc(var(--bp-art) * 1.45);display:grid;place-items:center}
+.bplan-info__art::after{content:'';position:absolute;left:20%;right:20%;bottom:2%;height:16%;border-radius:50%;background:radial-gradient(ellipse,color-mix(in srgb,var(--fp-here) 38%,transparent),transparent 70%)}
+.bplan-info__art img{position:relative;z-index:1;max-width:100%;max-height:100%;object-fit:contain;filter:drop-shadow(0 8px 12px rgba(0,0,0,.6));animation:bplan-info-art var(--ut-motion-modal) var(--ut-spring-pop) both}
+.bplan-info dl{margin:0;display:grid;gap:10px}
+.bplan-info dl div{display:grid;gap:2px}
+.fplan .bplan-info dt{color:#8fb6c0;font-size:calc(12px * var(--text-scale-secondary,1)) !important}
+.fplan .bplan-info dd{margin:0;color:#fff;font-size:calc(var(--fp-t-small) * var(--text-scale-body,1)) !important;font-weight:700;line-height:1.3}
+.fplan .bplan-info .is-goal dd{color:var(--fp-here)}
+
 /* ---------- buildings not in the plan ---------- */
 .bplan-add{
   position:relative;
@@ -223,6 +253,7 @@
 .bplan-add.is-big img{height:var(--bp-art);opacity:1;filter:drop-shadow(0 6px 9px rgba(0,0,0,.6))}
 .fplan .bplan-add b{max-width:100%;overflow:hidden;color:#cfe6ec;font-size:calc(13px * var(--text-scale-control,1)) !important;font-weight:700;white-space:nowrap;text-overflow:ellipsis}
 .fplan .bplan-add.is-big b{color:#f2fdff;font-size:calc(14px * var(--text-scale-control,1)) !important}
+.fplan .bplan-add .bplan-add__what{max-width:100%;overflow:hidden;color:#a9cbd3;white-space:nowrap;text-overflow:ellipsis}
 .fplan .bplan-add small{color:#8fb6c0;font-size:calc(12px * var(--text-scale-secondary,1)) !important}
 .bplan-add i{position:absolute;top:6px;right:8px;width:24px;height:24px;display:grid;place-items:center;border-radius:50%;background:color-mix(in srgb,var(--fp-here) 30%,transparent);color:#fff;font-style:normal;font-weight:800;opacity:0;scale:.6;transition:opacity var(--ut-motion-fast) ease,scale var(--ut-motion-base) var(--ut-spring-pop)}
 .bplan-add:hover{background:radial-gradient(ellipse 80% 50% at 50% 30%,color-mix(in srgb,var(--fp-here) 20%,transparent),transparent 72%);translate:0 -3px}
@@ -238,13 +269,15 @@
 .bplan-toggle.is-on i{background:var(--ut-positive)}
 .bplan-toggle.is-on i::after{translate:14px 0;background:#fff}
 
+@keyframes bplan-info-in{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:none}}
+@keyframes bplan-info-art{from{opacity:0;transform:scale(.8) translateY(8px)}to{opacity:1;transform:none}}
 @keyframes bplan-tile-in{from{opacity:0;transform:translateY(10px) scale(.96)}to{opacity:1;transform:none}}
 @keyframes bplan-bump{0%{transform:scale(1.35)}100%{transform:none}}
 @keyframes bplan-next-glow{0%,100%{opacity:.55}50%{opacity:1}}
 @keyframes bplan-build-bob{0%,100%{translate:0 0}50%{translate:0 -3px}}
 @keyframes bplan-stripes{to{background-position:24px 0}}
 @media (prefers-reduced-motion:reduce){
-  .bplan-tile,.bplan-add,.bplan-tile.is-next::after,.bplan-tile__art img,.bplan-tile__bar .is-queued,.fplan .bplan-tile__levels strong{animation:none !important}
+  .bplan-tile,.bplan-add,.bplan-info,.bplan-info__art img,.bplan-tile.is-next::after,.bplan-tile__art img,.bplan-tile__bar .is-queued,.fplan .bplan-tile__levels strong{animation:none !important}
   .bplan-tile__bar i,.bplan-toggle i::after{transition:none}
   .bplan-add:hover,.bplan-tile:hover .bplan-tile__art img{translate:none;scale:none}
 }

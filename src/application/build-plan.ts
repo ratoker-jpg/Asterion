@@ -15,7 +15,7 @@ import {
   type BuildingRole,
   type ResourceCost,
 } from '../domain/buildings/balance-v1.ts';
-import { emptyBuildPlan, isBuildPlanEmpty, type BuildPlan } from '../domain/buildings/build-plan.ts';
+import { buildPriority, emptyBuildPlan, isBuildPlanEmpty, type BuildPlan } from '../domain/buildings/build-plan.ts';
 import { BUILDING_QUEUE_CAPACITY, getBuildingDefinition } from '../domain/buildings/resource-zone.ts';
 import { calculateNuclearReactorContribution, calculateSolarStationContribution } from '../domain/energy/runtime.ts';
 import { findScience } from '../domain/science/catalog.ts';
@@ -38,6 +38,8 @@ export type BuildPlanLine = {
   target: number;
   /** The player did not plan it: it is a requirement of a planned building. */
   implied: boolean;
+  /** Place in the priority, 1 is first; an implied line shares the place of the building that needs it. */
+  priority: number;
   levelsLeft: number;
   status: 'done' | 'building' | 'next' | 'waiting';
   /** Cost of the next level; null when nothing is left to build. */
@@ -128,12 +130,11 @@ function evaluate(state: SaveState, planetId: PlanetId, runtime: BuildRuntime): 
   const queuedOf = (role: BuildingRole) => queue.filter((item) => item.assetRole === role).length;
   const projectedOf = (role: BuildingRole) => Math.min(getBuildingDefinition(role).maxLevel, levelOf(role) + queuedOf(role));
 
-  // Planned buildings, then whatever they need first (building requirements only).
-  const wanted = new Map<BuildingRole, { level: number; implied: boolean }>();
-  for (const role of BUILDING_ROLES) {
-    const target = plan.targets[role];
-    if (target) wanted.set(role, { level: target, implied: false });
-  }
+  // Planned buildings in the player's priority, then whatever they need first (building requirements only).
+  // An implied building takes the place of the most important building that needs it, just ahead of it.
+  const priority = buildPriority(plan);
+  const wanted = new Map<BuildingRole, { level: number; implied: boolean; rank: number }>();
+  for (const [index, role] of priority.entries()) wanted.set(role, { level: plan.targets[role]!, implied: false, rank: index + 1 });
   for (let changed = true, guard = 0; changed && guard < BUILDING_ROLES.length; guard += 1) {
     changed = false;
     for (const [role, entry] of [...wanted]) {
@@ -142,7 +143,7 @@ function evaluate(state: SaveState, planetId: PlanetId, runtime: BuildRuntime): 
         if (requirement.kind !== 'building-level') continue;
         const have = wanted.get(requirement.assetRole);
         if (have && have.level >= requirement.level) continue;
-        wanted.set(requirement.assetRole, { level: requirement.level, implied: have ? have.implied : true });
+        wanted.set(requirement.assetRole, { level: requirement.level, implied: have ? have.implied : true, rank: have && !have.implied ? have.rank : Math.min(have?.rank ?? Infinity, entry.rank - 0.001) });
         changed = true;
       }
     }
@@ -150,14 +151,14 @@ function evaluate(state: SaveState, planetId: PlanetId, runtime: BuildRuntime): 
 
   const blocked = isPlanetBlocked(state, planetId);
   const lines: BuildPlanLine[] = [...wanted.entries()]
-    .sort((a, b) => ROLE_ORDER.get(a[0])! - ROLE_ORDER.get(b[0])!)
+    .sort((a, b) => a[1].rank - b[1].rank || ROLE_ORDER.get(a[0])! - ROLE_ORDER.get(b[0])!)
     .map(([role, entry]) => {
       const definition = getBuildingDefinition(role, factionId);
       const availability = previewBuilding(state, context, role).availability;
       const queued = queuedOf(role);
       const levelsLeft = Math.max(0, entry.level - projectedOf(role));
       return {
-        role, name: definition.name, art: definition.art, current: levelOf(role), queued, target: entry.level, implied: entry.implied, levelsLeft,
+        role, name: definition.name, art: definition.art, current: levelOf(role), queued, target: entry.level, implied: entry.implied, priority: Math.ceil(entry.rank), levelsLeft,
         status: levelsLeft > 0 ? 'waiting' : queued > 0 ? 'building' : 'done',
         cost: levelsLeft > 0 ? availability.cost : null,
         timeMs: levelsLeft > 0 ? availability.timeMs : null,
@@ -179,9 +180,9 @@ function evaluate(state: SaveState, planetId: PlanetId, runtime: BuildRuntime): 
       setWait(line, 'requirement', `Сначала ${name} ур. ${building.requiredLevel}, сейчас ${building.currentLevel}${queuedOf(building.assetRole!) > 0 ? ', достраивается' : ''}.`);
     } else open.push(line);
   }
-  // Cheapest upgrade first: it finishes soonest and frees the queue; the building order breaks a tie.
-  const price = (line: BuildPlanLine) => (line.cost ? line.cost.metal + line.cost.minerals + line.cost.gas : Infinity);
-  open.sort((a, b) => price(a) - price(b) || ROLE_ORDER.get(a.role)! - ROLE_ORDER.get(b.role)!);
+  // `open` keeps the lines' priority order. One level per building at a time: a building with a level
+  // already in the queue lets the other open buildings have the free slots first.
+  const spread = open.some((line) => queuedOf(line.role) === 0);
 
   let decision: BuildDecision | null = null;
   const behind = (index: number, text: string) => {
@@ -191,6 +192,10 @@ function evaluate(state: SaveState, planetId: PlanetId, runtime: BuildRuntime): 
   for (const [index, line] of open.entries()) {
     const cost = line.cost;
     if (!cost) continue;
+    if (spread && queuedOf(line.role) > 0) {
+      setWait(line, 'order', 'Один уровень уже строится, свободные места в очереди отданы другим зданиям.');
+      continue;
+    }
     if (cost.energy > energy) {
       // Energy is short: the best energy source comes first, and nothing else starts meanwhile.
       const sentence = `Не хватает энергии: нужно ${compact(cost.energy)}, есть ${compact(energy)}.`;

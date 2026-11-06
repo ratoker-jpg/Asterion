@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { setBuildTarget, migrateBuildPlans, type BuildPlan } from '../domain/buildings/build-plan.ts';
+import { buildPriority, moveBuildPriority, removeBuildTarget, setBuildTarget, migrateBuildPlans, type BuildPlan } from '../domain/buildings/build-plan.ts';
 import { applyFleetUiUpdate, migrateFleetUiState } from '../domain/flights/fleet-ui.ts';
 import { createDefaultNewGameConfig } from '../domain/world/config.ts';
 import type { SaveState } from './contracts.ts';
@@ -48,13 +48,13 @@ test('without a plan nothing is started', () => {
   assert.equal(buildBuildPlanView(state, PLANET, RUNTIME).empty, true);
 });
 
-test('a plan starts the cheapest upgrades first, up to the queue limit, as ordinary build orders', () => {
+test('a plan starts upgrades in priority order, up to the queue limit, as ordinary build orders', () => {
   const state = world({ targets: { 'metal-production-1': 3, 'mineral-production-1': 3, 'gas-production-1': 3 } });
   const run = runBuildPlans(state, RUNTIME);
   assert.equal(run.started.length, 3);
   assert.equal(queueRoles(run.state).length, 3);
-  // Metal level 2 (36 + 15) is the cheapest, then minerals (36 + 18), then gas.
-  assert.equal(run.started[0]!.role, 'metal-production-1');
+  // No order of his own: the usual building order, one level of each building.
+  assert.deepEqual(run.started.map((item) => item.role), ['metal-production-1', 'mineral-production-1', 'gas-production-1']);
   const view = buildBuildPlanView(run.state, PLANET, RUNTIME);
   assert.equal(view.queueUsed, 3);
   assert.equal(view.lines.every((line) => line.status === 'done' || line.status === 'building' || line.wait?.kind === 'queue' || line.wait?.kind === 'order'), true);
@@ -126,4 +126,40 @@ test('the plan is not read or run for a planet that is gone', () => {
   const state = world({ targets: { 'metal-production-1': 5 } });
   const lost: SaveState = { ...state, fleetUi: { favoriteTargets: [], buildPlans: { 'nowhere-01': { targets: { 'metal-production-1': 5 } } } } };
   assert.deepEqual(runBuildPlans(lost, RUNTIME).started, []);
+});
+
+test('the queue is spread: one level of each building, not three levels of the first one', () => {
+  const state = world({ targets: { 'metal-production-1': 20, 'mineral-production-1': 20, 'gas-production-1': 20 } });
+  const roles = runBuildPlans(state, RUNTIME).started.map((item) => item.role);
+  assert.deepEqual(roles, ['metal-production-1', 'mineral-production-1', 'gas-production-1']);
+  // With only two buildings left the third slot is not left empty: the first in priority gets its next level.
+  const two = world({ targets: { 'metal-production-1': 20, 'mineral-production-1': 20 } });
+  assert.deepEqual(runBuildPlans(two, RUNTIME).started.map((item) => item.role), ['metal-production-1', 'mineral-production-1', 'metal-production-1']);
+  const waiting = buildBuildPlanView(runBuildPlans(state, RUNTIME).state, PLANET, RUNTIME);
+  assert.equal(waiting.lines.every((line) => line.queued <= 1), true);
+});
+
+test('construction speed goes first by default, and the player can move any building up or down', () => {
+  const targets = { 'metal-production-1': 10, 'gas-production-1': 10, construction: 5 };
+  assert.deepEqual(buildPriority({ targets }), ['construction', 'metal-production-1', 'gas-production-1']);
+  assert.equal(runBuildPlans(world({ targets }), RUNTIME).started[0]!.role, 'construction');
+  let plan: BuildPlan = { targets };
+  plan = moveBuildPriority(plan, 'gas-production-1', -1);
+  plan = moveBuildPriority(plan, 'gas-production-1', -1);
+  assert.deepEqual(buildPriority(plan), ['gas-production-1', 'construction', 'metal-production-1']);
+  assert.equal(moveBuildPriority(plan, 'gas-production-1', -1), plan);
+  assert.deepEqual(runBuildPlans(world(plan), RUNTIME).started.map((item) => item.role), ['gas-production-1', 'construction', 'metal-production-1']);
+  const view = buildBuildPlanView(world(plan), PLANET, RUNTIME);
+  assert.deepEqual(view.lines.map((line) => [line.role, line.priority]), [['gas-production-1', 1], ['construction', 2], ['metal-production-1', 3]]);
+  // The order survives a save round trip; removed or unknown buildings drop out of it.
+  const saved = migrateBuildPlans(JSON.parse(JSON.stringify({ [PLANET]: { ...removeBuildTarget(plan, 'construction'), order: [...plan.order!, 'nope'] } })));
+  assert.deepEqual(saved?.[PLANET]?.order, ['gas-production-1', 'metal-production-1']);
+});
+
+test('an implied building stands just ahead of the building that needs it', () => {
+  let plan: BuildPlan = { targets: { 'gas-production-1': 5, 'metal-production-2': 1 } };
+  plan = moveBuildPriority(plan, 'metal-production-2', -1);
+  const view = buildBuildPlanView(world(plan), PLANET, RUNTIME);
+  assert.deepEqual(view.lines.map((line) => line.role).slice(0, 3), ['metal-production-1', 'metal-production-2', 'gas-production-1']);
+  assert.equal(view.lines[0]!.priority, 1);
 });

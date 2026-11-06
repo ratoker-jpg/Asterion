@@ -1,7 +1,16 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
-import { BUILDING_ROLES, type BuildingRole } from '../../domain/buildings/balance-v1.ts';
-import { removeBuildTarget, setBuildPlanPaused, setBuildTarget, type BuildPlan } from '../../domain/buildings/build-plan.ts';
+import {
+  BUILDING_ROLES,
+  SCIENCE_ID_PHYSICS,
+  formatBalanceEffect,
+  getBuildingEffectWithScience,
+  getBuildingPresentation,
+  type BuildingRole,
+} from '../../domain/buildings/balance-v1.ts';
+import { moveBuildPriority, removeBuildTarget, setBuildPlanPaused, setBuildTarget, type BuildPlan } from '../../domain/buildings/build-plan.ts';
+import { calculateNuclearReactorContribution, calculateSolarStationContribution } from '../../domain/energy/runtime.ts';
+import { getPlanetEnergyCoordinates } from '../../application/energy.ts';
 import { getBuildingDefinition } from '../../domain/buildings/resource-zone.ts';
 import type { BuildingFaction } from '../../domain/buildings/balance-v1.ts';
 import { formatUniverseCoordinate } from '../../domain/universe/runtime.ts';
@@ -31,6 +40,25 @@ const WAIT_TITLE: Record<BuildWaitKind, string> = {
   blocked: 'Планета заблокирована',
   order: 'Ждёт своей очереди',
 };
+
+/** What a building gives at a level, in the player's words. */
+function effectAt(state: SaveState, planetId: string, role: BuildingRole, level: number): string {
+  if (level <= 0) return 'Не построено';
+  const planet = state.planets[planetId]!;
+  if (role === 'basic-energy' || role === 'advanced-energy') {
+    const where = getPlanetEnergyCoordinates(planet);
+    const physics = state.science.levels[SCIENCE_ID_PHYSICS] ?? 0;
+    const value = role === 'basic-energy'
+      ? calculateSolarStationContribution(level, physics, where.system, where.position, where.galaxy)
+      : calculateNuclearReactorContribution(level, physics);
+    return `Энергия: ${formatNumber(value)}`;
+  }
+  const effect = getBuildingEffectWithScience(role, level, state.science.levels);
+  if (effect.kind === 'storage-capacity') return `Вместимость склада: ${formatNumber(effect.capacity)}`;
+  if (effect.kind === 'construction-time-factor') return `Стройка и производство идут за ${effect.factorPercent}% обычного времени`;
+  if (effect.kind === 'production-time-factor' || effect.kind === 'unit-production-time-factor') return `${effect.label}: ${effect.factorPercent}% обычного`;
+  return formatBalanceEffect(effect);
+}
 
 /** «81», «8 400», «252 тыс», «1,2 млн»: short enough for a tile. */
 function short(value: number): string {
@@ -71,6 +99,7 @@ export function BuildPlannerDialog({ state, now, mode, testTimeScale, planetId, 
   }), [state, runtime]);
   const [focusRole, setFocusRole] = useState<BuildingRole | null>(null);
   const [copyOpen, setCopyOpen] = useState(false);
+  const [infoRole, setInfoRole] = useState<BuildingRole | null>(null);
   const planet = state.planets[planetId]!;
   const stored = getPlanetResources(state, planetId);
   const wallet: Record<CostKey, number> = { metal: stored.metal, minerals: stored.minerals, gas: stored.gas, energy: view.energy };
@@ -81,12 +110,13 @@ export function BuildPlannerDialog({ state, now, mode, testTimeScale, planetId, 
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       if (copyOpen) setCopyOpen(false);
+      else if (infoRole) setInfoRole(null);
       else onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [copyOpen, onClose]);
-  useEffect(() => { setCopyOpen(false); setFocusRole(null); }, [planetId]);
+  }, [copyOpen, infoRole, onClose]);
+  useEffect(() => { setCopyOpen(false); setFocusRole(null); setInfoRole(null); }, [planetId]);
 
   const save = (plan: BuildPlan) => onSavePlan(planetId, plan);
   const levelOf = (role: BuildingRole) => planet.buildings[role] ?? 0;
@@ -137,6 +167,10 @@ export function BuildPlannerDialog({ state, now, mode, testTimeScale, planetId, 
         </header>
 
         <div className="bplan-body">
+          {infoRole ? (
+            <BuildingInfo key={infoRole} state={state} planetId={planetId} role={infoRole} faction={factionId}
+              target={view.lines.find((line) => line.role === infoRole)?.target ?? null} onBack={() => setInfoRole(null)} />
+          ) : (
           <aside className="bplan-lead">
             <h3>{view.empty ? 'До каких уровней довести здания?' : 'Здания растут сами'}</h3>
             <p>{view.empty
@@ -148,7 +182,8 @@ export function BuildPlannerDialog({ state, now, mode, testTimeScale, planetId, 
                 <div key={group.label}>
                   <span>{group.label} до ур.</span>
                   <p>
-                    {PRESET_LEVELS.map((level) => (
+                    {/* A level no building of the group can reach is not offered (storages stop at 20). */}
+                    {PRESET_LEVELS.filter((level) => group.roles.some((role) => getBuildingDefinition(role).maxLevel >= level)).map((level) => (
                       <button key={level} type="button" onClick={() => applyPreset(group.roles, level)} data-qa-build-plan-preset={`${group.roles[0]}:${level}`}>{level}</button>
                     ))}
                   </p>
@@ -161,10 +196,14 @@ export function BuildPlannerDialog({ state, now, mode, testTimeScale, planetId, 
               </div>
             ) : null}
           </aside>
+          )}
 
           <div className="bplan-grid" data-qa-build-plan-lanes={view.empty ? undefined : ''} data-qa-build-plan-empty={view.empty ? '' : undefined}>
             {view.lines.map((line, index) => (
               <Tile key={line.role} line={line} index={index} wallet={wallet} autoFocus={focusRole === line.role}
+                first={!line.implied && line.priority <= 1} last={!line.implied && line.priority >= planned.size} info={infoRole === line.role}
+                onInfo={() => setInfoRole((was) => (was === line.role ? null : line.role))}
+                onMove={(delta) => save(moveBuildPriority(view.plan, line.role, delta))}
                 onTarget={(level) => save(setBuildTarget(view.plan, line.role, level))}
                 onRemove={() => save(removeBuildTarget(view.plan, line.role))}
                 onBuild={() => onBuild(planetId, line.role)} />
@@ -178,6 +217,7 @@ export function BuildPlannerDialog({ state, now, mode, testTimeScale, planetId, 
                     <button key={role} type="button" className={`bplan-add ${view.empty ? 'is-big' : ''}`} style={{ '--i': view.lines.length + index } as CSSProperties} onClick={() => add(role)} data-qa-build-plan-add={role}>
                       <img src={definition.art} alt="" draggable={false} />
                       <b>{definition.name}</b>
+                      <small className="bplan-add__what">{getBuildingPresentation(role, factionId).purpose.replace(/\.$/, '')}</small>
                       <small>{levelOf(role) > 0 ? `сейчас ур. ${levelOf(role)}` : 'не построено'}</small>
                       <i aria-hidden="true">+</i>
                     </button>
@@ -248,9 +288,9 @@ function Status({ view }: { view: BuildPlanView }) {
   );
 }
 
-function Tile({ line, index, wallet, autoFocus, onTarget, onRemove, onBuild }: {
-  line: BuildPlanLine; index: number; wallet: Record<CostKey, number>; autoFocus: boolean;
-  onTarget: (level: number) => void; onRemove: () => void; onBuild: () => void;
+function Tile({ line, index, wallet, autoFocus, first, last, info, onInfo, onMove, onTarget, onRemove, onBuild }: {
+  line: BuildPlanLine; index: number; wallet: Record<CostKey, number>; autoFocus: boolean; first: boolean; last: boolean; info: boolean;
+  onInfo: () => void; onMove: (delta: -1 | 1) => void; onTarget: (level: number) => void; onRemove: () => void; onBuild: () => void;
 }) {
   const max = getBuildingDefinition(line.role).maxLevel;
   const state = line.status;
@@ -261,13 +301,22 @@ function Tile({ line, index, wallet, autoFocus, onTarget, onRemove, onBuild }: {
   const scale = Math.max(goal, 1);
   const costs = line.cost ? COST_KEYS.filter((key) => line.cost![key] > 0) : [];
   return (
-    <article className={`bplan-tile is-${state} ${line.implied ? 'is-implied' : ''}`} style={{ '--i': index } as CSSProperties}
+    <article className={`bplan-tile is-${state} ${line.implied ? 'is-implied' : ''} ${info ? 'is-info' : ''}`} style={{ '--i': index } as CSSProperties}
       data-qa-build-plan-line={line.role} data-qa-build-plan-line-state={state} data-qa-build-plan-line-target={line.target} data-qa-build-plan-line-current={line.current}>
       {!line.implied ? (
         <button type="button" className="bplan-tile__remove" onClick={onRemove} aria-label={`Убрать из плана: ${line.name}`} data-qa-build-plan-remove={line.role}>✕</button>
       ) : null}
-      <div className="bplan-tile__art"><img src={line.art} alt="" draggable={false} /></div>
-      <b className="bplan-tile__name">{line.name}</b>
+      {!line.implied ? (
+        <div className="bplan-tile__rank" data-qa-build-plan-priority={line.priority}>
+          <button type="button" onClick={() => onMove(-1)} disabled={first} aria-label={`Раньше: ${line.name}`} data-qa-build-plan-up={line.role}>‹</button>
+          <b>{line.priority}</b>
+          <button type="button" onClick={() => onMove(1)} disabled={last} aria-label={`Позже: ${line.name}`} data-qa-build-plan-down={line.role}>›</button>
+        </div>
+      ) : null}
+      <button type="button" className="bplan-tile__about" onClick={onInfo} aria-pressed={info} aria-label={`Что делает: ${line.name}`} data-qa-build-plan-info={line.role}>
+        <span className="bplan-tile__art"><img src={line.art} alt="" draggable={false} /></span>
+        <b className="bplan-tile__name">{line.name}</b>
+      </button>
 
       <div className="bplan-tile__levels" data-qa-build-plan-levels>
         {passed ? (
@@ -348,5 +397,24 @@ function TargetInput({ value, name, max, autoFocus, onCommit, qa }: { value: num
       onBlur={() => setDraft(null)}
       onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }}
     />
+  );
+}
+
+function BuildingInfo({ state, planetId, role, faction, target, onBack }: { state: SaveState; planetId: string; role: BuildingRole; faction: BuildingFaction; target: number | null; onBack: () => void }) {
+  const about = getBuildingPresentation(role, faction);
+  const current = state.planets[planetId]!.buildings[role] ?? 0;
+  const goal = target != null && target > current ? target : null;
+  return (
+    <aside className="bplan-lead bplan-info" data-qa-build-plan-info-card={role}>
+      <button type="button" className="bplan-info__back" onClick={onBack} data-qa-build-plan-info-back>‹ К плану</button>
+      <div className="bplan-info__art"><img src={about.art} alt="" draggable={false} /></div>
+      <h3>{about.name}</h3>
+      <p>{about.purpose}</p>
+      <dl>
+        <div><dt>Сейчас · ур. {current}</dt><dd>{effectAt(state, planetId, role, current)}</dd></div>
+        {goal ? <div className="is-goal"><dt>По плану · ур. {goal}</dt><dd>{effectAt(state, planetId, role, goal)}</dd></div> : null}
+        <div className="is-max"><dt>Последний уровень</dt><dd>{about.maxLevel}</dd></div>
+      </dl>
+    </aside>
   );
 }
