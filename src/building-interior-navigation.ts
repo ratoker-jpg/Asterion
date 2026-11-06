@@ -31,6 +31,8 @@ export type BuildingInteriorContext<PlanetId extends string> = {
 };
 
 export const FLEET_CONSTRUCTION_REQUEST_EVENT = 'asterion:fleet-construction-request';
+/** «Флоты → Корабли» opens the planet's «Эталонный флот»; detail: { planetId }. */
+export const FLEET_PLANNER_OPEN_EVENT = 'asterion:fleet-planner-open';
 
 const targets: Readonly<Record<BuildingInteriorRole, BuildingInteriorTarget>> = {
   construction: { kind: 'host', moduleTitle: 'ПРОИЗВОДСТВЕННЫЕ БОТЫ' },

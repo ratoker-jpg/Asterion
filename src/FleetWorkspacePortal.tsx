@@ -175,6 +175,9 @@ const flightCargoResources = [
   { kind: 'debris', label: 'ОБЛОМКИ' },
 ] as const;
 
+/** The mission ribbon of variant A, in the order of the approved mockup. */
+const RIBBON_ORDER: readonly MissionId[] = ['attack', 'pirate-elimination', 'espionage', 'expedition', 'transport', 'deployment', 'colonize', 'recycle', 'gas', 'aid', 'sun-support', 'space-flight'];
+
 function MissionIcon({ mission }: { mission: MissionDefinition }) {
   return <img src={mission.icon} alt="" draggable={false} />;
 }
@@ -1669,22 +1672,8 @@ function FleetWorkspace({
   return (
     <div className="fleet-workspace-v1" data-qa-fleet-planet={planetName} data-qa-fleet-yard-level={fleetSnapshot.shipyardLevel} data-qa-flight-launch-context={launchContext?.destination ? flightCoordinateLabel(launchContext.destination.coordinate) : undefined} data-qa-target-relation={previewTargetRelation ?? (!previewOpen ? launchContext?.targetRelation : undefined)}>
       <nav className="fc-wings" aria-label="Разделы флота" data-qa-fleet-nav>
-        <FleetWing
-          tone="build"
-          title="Строительство"
-          items={FLEET_CONSTRUCTION_NAVIGATION}
-          icons={{
-            ships: shipDefinitions.find((ship) => ship.id === 'battleship')?.art ?? shipDefinitions[0]?.art ?? '',
-            defense: getFactionDefenseCatalog(factionId)[0]?.art ?? '',
-            'commander-ships': COMMANDER_COMBAT_CATALOG[0]?.art ?? '',
-            repair: missionRepairIcon,
-          }}
-          isActive={(id) => selectedSection === id && (id !== 'ships' || constructionView === 'ships')}
-          onSelect={chooseSection}
-        />
-        <span className="fc-wings__gap" aria-hidden="true" />
-        <section className="fc-wing fc-wing--command">
-          <h3>Управление флотом</h3>
+        <section className="fc-wing fc-wing--build">
+          <h3>Строительство</h3>
           <div className="fc-wing__tabs">
             <button
               type="button"
@@ -1693,12 +1682,23 @@ function FleetWorkspace({
               data-qa-fleet-section="root"
               onClick={openFleetRoot}
             >
-              <img src={missionSpaceFlightIcon} alt="" draggable={false} />
               <span>Отправка флота</span>
             </button>
             <FleetWingTabs
-              items={FLEET_MANAGEMENT_NAVIGATION}
-              icons={{ 'combat-priority': missionPriorityIcon, battles: missionBattlesIcon, simulator: missionSimulatorIcon }}
+              items={FLEET_CONSTRUCTION_NAVIGATION.filter((item) => item.id !== 'repair')}
+              icons={{}}
+              isActive={(id) => selectedSection === id && (id !== 'ships' || constructionView === 'ships')}
+              onSelect={chooseSection}
+            />
+          </div>
+        </section>
+        <span className="fc-wings__gap" aria-hidden="true" />
+        <section className="fc-wing fc-wing--command">
+          <h3>Управление флотом</h3>
+          <div className="fc-wing__tabs">
+            <FleetWingTabs
+              items={[...FLEET_CONSTRUCTION_NAVIGATION.filter((item) => item.id === 'repair'), ...FLEET_MANAGEMENT_NAVIGATION]}
+              icons={{}}
               isActive={(id) => selectedSection === id}
               onSelect={chooseSection}
             />
@@ -1868,83 +1868,15 @@ function FleetWorkspace({
             </div>
             </div>
 
-            <div className="fc-deck">
-            <section className="fc-hangar" aria-label="Корабли на планете">
-              <header className="fc-hangar__head">
-                <h2>Корабли на планете</h2>
-                <small className="fc-hangar__yard">{shipyardPresentation.name} {fleetSnapshot.shipyardLevel} · {getBuildingPresentation('hangar', factionId).name} {fleetSnapshot.hangarLevel}</small>
-                <div className="fc-chips" role="group" aria-label="Фильтр кораблей">
-                  {(['all', 'combat', 'civil'] as const).map((filter) => <button key={filter} type="button" className={shipFilter === filter ? 'is-on' : ''} aria-pressed={shipFilter === filter} onClick={() => setShipFilter(filter)}>{filter === 'all' ? 'Все' : filter === 'combat' ? 'Боевые' : 'Гражданские'}</button>)}
-                </div>
-                <div className="fc-hangar__all">
-                  <button type="button" data-qa-fleet-select-all onClick={() => setAllShipQuantities(true)}>ВЫБРАТЬ ВСЕ</button>
-                  <button type="button" data-qa-fleet-select-none disabled={selectedShipCount <= 0} onClick={() => setAllShipQuantities(false)}>СБРОСИТЬ</button>
-                </div>
-              </header>
-
-              <div className="fc-roster" data-qa-fleet-roster>
-                {visibleShipDefinitions.filter((ship) => shipFilter === 'all' || (shipFilter === 'civil') === CIVIL_SHIP_IDS.has(ship.id)).map((ship) => {
-                  const available = sourceFleet.ships[ship.id] ?? 0;
-                  const selected = selectedQuantities[ship.id] ?? 0;
-                  return (
-                    <div className={`fc-ship${selected > 0 ? ' is-picked' : ''}`} key={ship.id} data-qa-fleet-ship={ship.id}>
-                      <div className="fc-ship__art"><img src={ship.art} alt={ship.name} draggable={false} /></div>
-                      <h3>{ship.name}</h3>
-                      <p className="fc-ship__have">
-                        на планете <b data-qa-fleet-owned={available}>{flightNumberLabel(available)}</b>
-                        <span className="fc-ship__pop"><ResourceIcon kind="population" label="Население за штуку" /><span data-qa-fleet-unit-population>{ship.population}</span></span>
-                      </p>
-                      <div className="fc-ship__amount">
-                        <input aria-label={`Количество ${ship.name}`} type="number" min="0" max={available} value={selected} onChange={(event) => setShipQuantity(ship.id, Number(event.target.value))} />
-                        <button type="button" onClick={() => setShipQuantity(ship.id, 0)} disabled={selected <= 0}>МИН.</button>
-                        <button type="button" onClick={() => setShipQuantity(ship.id, available)} disabled={selected >= available}>МАКС.</button>
-                      </div>
-                      <AmountSlider compact value={selected} max={available} label={`Количество: ${ship.name}`} onChange={(value) => setShipQuantity(ship.id, value)} qa={ship.id} />
-                    </div>
-                  );
-                })}
-                {ownedShipDefinitions.length === 0 ? (
-                  <div className="fc-empty" data-qa-fleet-roster-empty>
-                    <img className="ui-empty-art" src={EMPTY_ART.flights} alt="" draggable={false} />
-                    <strong>На этой планете нет кораблей</strong>
-                    <span>Постройте их на верфи или перебросьте с другой планеты.</span>
-                    <button type="button" className="asterion-button asterion-button--primary" onClick={() => chooseSection('ships')}>К строительству кораблей</button>
-                  </div>
-                ) : visibleShipDefinitions.length === 0 ? (
-                  <div className="fc-empty" data-qa-fleet-roster-empty>
-                    <strong>Для миссии «{selectedMission.label}» здесь нет подходящих кораблей</strong>
-                    <span>Выберите другую миссию или постройте нужные корабли.</span>
-                  </div>
-                ) : null}
+            <section className="fa-hero fc-orders" aria-label="Миссия" data-qa-mission-current={missionId} data-qa-mission-described={describedMission.id}>
+              <div className="fa-hero__art" aria-hidden="true">
+                {MISSION_BANNERS[describedMission.id] ? <img key={describedMission.id} src={MISSION_BANNERS[describedMission.id]} alt="" draggable={false} /> : null}
               </div>
-
-            </section>
-
-            <section className="fc-orders" aria-label="Миссия" data-qa-mission-current={missionId}>
-              <h2>Миссия</h2>
-              <div className="fc-missions" aria-label="Выбор миссии">
-                {missions.map((mission) => (
-                  <button
-                    key={mission.id}
-                    type="button"
-                    className={mission.id === missionId ? 'is-on' : ''}
-                    aria-label={mission.label}
-                    aria-pressed={mission.id === missionId}
-                    disabled={mission.enabled === false}
-                    data-qa-mission-id={mission.id}
-                    onMouseEnter={() => setHoveredMissionId(mission.id)}
-                    onMouseLeave={() => setHoveredMissionId(null)}
-                    onFocus={() => setHoveredMissionId(mission.id)}
-                    onBlur={() => setHoveredMissionId(null)}
-                    onClick={() => chooseMission(mission.id)}
-                  >
-                    <MissionIcon mission={mission} />
-                    <span>{mission.label}</span>
-                  </button>
-                ))}
+              <div className="fa-hero__text">
+                <small className="fa-kicker">Миссия</small>
+                <h2>{describedMission.label}</h2>
+                <p className="fc-mission-text">{describedMission.enabled === false ? 'Пока недоступно. ' : ''}{describedMission.description}</p>
               </div>
-              <p className="fc-mission-text"><strong>{describedMission.label}.</strong> {describedMission.enabled === false ? 'Пока недоступно. ' : ''}{describedMission.description}</p>
-
               {missionId === 'attack' || missionId === 'pirate-elimination' || missionId === 'deployment' || missionId === 'space-flight' || missionId === 'sun-support' ? <div className="fc-prep" data-qa-attack-prep={missionId === 'attack' || missionId === 'pirate-elimination' ? true : undefined} data-qa-deployment-commanders={missionId === 'deployment' ? true : undefined} data-qa-space-flight-prep={missionId === 'space-flight' ? true : undefined}>
                 {missionId === 'attack' || missionId === 'pirate-elimination' ? <div className="fc-prep__line" role="radiogroup" aria-label="Лимит раундов атаки" data-qa-attack-rounds>
                   <h3>Раундов боя</h3>
@@ -1979,16 +1911,90 @@ function FleetWorkspace({
                   </div> : <p className="fleet-attack-commanders-empty">Свободных командиров нет.</p>}
                 </div>
               </div> : null}
+              <footer className="fc-dock" data-toast-guard>
+                <div><small>Кораблей</small><b data-qa-fleet-selected>{flightNumberLabel(selectedShipCount)}</b></div>
+                <div><small>Население</small><b>{flightNumberLabel(selectedPopulation)}</b></div>
+                <div data-qa-fleet-population={fleetSummary.population} data-qa-fleet-capacity={fleetSummary.capacity} data-qa-fleet-available-ships={availableShipCount} data-qa-fleet-satellite-count={fleetSnapshot.solarSatellites}><small>Рейсов</small><b>{flightSlots.used} из {flightSlots.limit}</b></div>
+              </footer>
+              <div className="fa-hero__go" data-toast-guard>
+                <span className="fc-dock__status" data-qa-fleet-status>{status}</span>
+                <button type="button" className="fc-dock__go" data-qa-flight-preview-open disabled={!hasLaunchableComposition} onClick={() => openFlightPreview()}>К плану перелёта</button>
+              </div>
             </section>
+
+            <div className="fc-missions" role="group" aria-label="Выбор миссии">
+              {RIBBON_ORDER.map((id) => missions.find((mission) => mission.id === id)).filter((mission): mission is MissionDefinition => Boolean(mission)).map((mission) => (
+                <button
+                  key={mission.id}
+                  type="button"
+                  className={`fa-mission${mission.id === missionId ? ' is-on' : ''}`}
+                  aria-label={mission.label}
+                  aria-pressed={mission.id === missionId}
+                  disabled={mission.enabled === false}
+                  data-qa-mission-id={mission.id}
+                  onMouseEnter={() => setHoveredMissionId(mission.id)}
+                  onMouseLeave={() => setHoveredMissionId(null)}
+                  onFocus={() => setHoveredMissionId(mission.id)}
+                  onBlur={() => setHoveredMissionId(null)}
+                  onClick={() => chooseMission(mission.id)}
+                >
+                  <img src={MISSION_BANNERS[mission.id] ?? mission.icon} alt="" draggable={false} />
+                  <span>{mission.id === 'transport' ? 'Транспорт' : mission.label}</span>
+                </button>
+              ))}
             </div>
 
-            <footer className="fc-dock" data-toast-guard>
-              <div><b data-qa-fleet-selected>{flightNumberLabel(selectedShipCount)}</b><small>кораблей выбрано</small></div>
-              <div><b>{flightNumberLabel(selectedPopulation)}</b><small>население рейса</small></div>
-              <div data-qa-fleet-population={fleetSummary.population} data-qa-fleet-capacity={fleetSummary.capacity} data-qa-fleet-available-ships={availableShipCount} data-qa-fleet-satellite-count={fleetSnapshot.solarSatellites}><b>{flightNumberLabel(fleetSummary.population)} / {flightNumberLabel(fleetSummary.capacity)}</b><small>население флота</small></div>
-              <span className="fc-dock__status" data-qa-fleet-status>{status}</span>
-              <button type="button" className="fc-dock__go asterion-button asterion-button--primary" data-qa-flight-preview-open disabled={!hasLaunchableComposition} onClick={() => openFlightPreview()}>Дальше: план перелёта</button>
-            </footer>
+            <section className="fc-hangar" aria-label="Корабли на планете">
+              <header className="fc-hangar__head">
+                <h2>Корабли на планете</h2>
+                <small className="fc-hangar__yard">{shipyardPresentation.name} {fleetSnapshot.shipyardLevel} · {getBuildingPresentation('hangar', factionId).name} {fleetSnapshot.hangarLevel}</small>
+                <div className="fc-chips" role="group" aria-label="Фильтр кораблей">
+                  {(['all', 'combat', 'civil'] as const).map((filter) => <button key={filter} type="button" className={shipFilter === filter ? 'is-on' : ''} aria-pressed={shipFilter === filter} onClick={() => setShipFilter(filter)}>{filter === 'all' ? 'Все' : filter === 'combat' ? 'Боевые' : 'Гражданские'}</button>)}
+                </div>
+                <div className="fc-hangar__all">
+                  <button type="button" data-qa-fleet-select-all onClick={() => setAllShipQuantities(true)}>Выбрать все</button>
+                  <button type="button" data-qa-fleet-select-none disabled={selectedShipCount <= 0} onClick={() => setAllShipQuantities(false)}>Сбросить</button>
+                </div>
+              </header>
+
+              <div className="fc-roster" data-qa-fleet-roster>
+                {visibleShipDefinitions.filter((ship) => shipFilter === 'all' || (shipFilter === 'civil') === CIVIL_SHIP_IDS.has(ship.id)).map((ship, index) => {
+                  const available = sourceFleet.ships[ship.id] ?? 0;
+                  const selected = selectedQuantities[ship.id] ?? 0;
+                  return (
+                    <div className={`fc-ship${selected > 0 ? ' is-picked' : ''}${available <= 0 ? ' is-empty' : ''}`} key={ship.id} data-qa-fleet-ship={ship.id} style={{ '--fa-i': index } as CSSProperties}>
+                      <h3>{ship.name}</h3>
+                      <p className="fc-ship__have">
+                        есть <b data-qa-fleet-owned={available}>{flightNumberLabel(available)}</b>
+                        <span className="fc-ship__pop"><ResourceIcon kind="population" label="Население за штуку" /><span data-qa-fleet-unit-population>{ship.population}</span></span>
+                      </p>
+                      <button type="button" className="fc-ship__art" aria-label={selected > 0 ? `Снять выбор: ${ship.name}` : `Выбрать всех: ${ship.name}`} disabled={available <= 0} onClick={() => setShipQuantity(ship.id, selected > 0 ? 0 : available)}>
+                        <img src={ship.art} alt={ship.name} draggable={false} />
+                      </button>
+                      <div className="fc-ship__amount">
+                        <button type="button" aria-label={`Меньше: ${ship.name}`} onClick={() => setShipQuantity(ship.id, selected - 1)} disabled={selected <= 0}>−</button>
+                        <input aria-label={`Количество ${ship.name}`} type="number" min="0" max={available} value={selected} onChange={(event) => setShipQuantity(ship.id, Number(event.target.value))} />
+                        <button type="button" aria-label={`Больше: ${ship.name}`} onClick={() => setShipQuantity(ship.id, selected + 1)} disabled={selected >= available}>+</button>
+                        <button type="button" onClick={() => setShipQuantity(ship.id, available)} disabled={selected >= available}>Все</button>
+                      </div>
+                    </div>
+                  );
+                })}
+                {ownedShipDefinitions.length === 0 ? (
+                  <div className="fc-empty" data-qa-fleet-roster-empty>
+                    <img className="ui-empty-art" src={EMPTY_ART.flights} alt="" draggable={false} />
+                    <strong>На этой планете нет кораблей</strong>
+                    <span>Постройте их на верфи или перебросьте с другой планеты.</span>
+                    <button type="button" className="asterion-button asterion-button--primary" onClick={() => chooseSection('ships')}>К строительству кораблей</button>
+                  </div>
+                ) : visibleShipDefinitions.length === 0 ? (
+                  <div className="fc-empty" data-qa-fleet-roster-empty>
+                    <strong>Для миссии «{selectedMission.label}» здесь нет подходящих кораблей</strong>
+                    <span>Выберите другую миссию или постройте нужные корабли.</span>
+                  </div>
+                ) : null}
+              </div>
+            </section>
             </div>
           </>
         )}
@@ -2495,6 +2501,13 @@ function FleetWorkspace({
   );
 }
 
+/** Variant A tab words: short, one line each. */
+const FLEET_TAB_SHORT_LABELS: Partial<Record<FleetSectionId, string>> = {
+  'commander-ships': 'Командирские',
+  repair: 'Мастерская',
+  'combat-priority': 'Приоритет',
+};
+
 function FleetWingTabs({ items, icons, isActive, onSelect }: {
   items: readonly FleetSectionItem[];
   icons: Partial<Record<FleetSectionId, string>>;
@@ -2506,7 +2519,7 @@ function FleetWingTabs({ items, icons, isActive, onSelect }: {
       {items.map((item) => (
         <button key={item.id} type="button" className={isActive(item.id) ? 'is-on' : ''} aria-current={isActive(item.id) ? 'page' : undefined} data-qa-fleet-section={item.id} onClick={() => onSelect(item.id)}>
           {icons[item.id] ? <img src={icons[item.id]} alt="" draggable={false} /> : null}
-          <span>{item.label}</span>
+          <span>{FLEET_TAB_SHORT_LABELS[item.id] ?? item.label}</span>
         </button>
       ))}
     </>

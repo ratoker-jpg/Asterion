@@ -417,7 +417,7 @@ async function readQaState(win) {
           buttons: Array.from(document.querySelectorAll('[data-qa-test-speed]')).map(rect),
         };
       })(),
-      fleetPopulation: document.querySelector('[data-qa-fleet-population]')?.textContent?.trim() ?? '',
+      fleetPopulation: (() => { const node = document.querySelector('[data-qa-fleet-population]'); return node ? node.getAttribute('data-qa-fleet-population') + ' / ' + node.getAttribute('data-qa-fleet-capacity') : ''; })(),
       fleetSpyAction: (() => {
         const node = document.querySelector('.fleet-flights-v2 > button[aria-haspopup="dialog"]');
         if (!node) return null;
