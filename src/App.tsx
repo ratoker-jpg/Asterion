@@ -2277,7 +2277,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       'Участник исключён.',
     ),
     setDeputy: (targetOwnerId: string | null) => runCommandAction(
-      (command, _at, ownerId) => setDeputy(command, ownerId, targetOwnerId),
+      (command, at, ownerId) => setDeputy(command, ownerId, targetOwnerId, at),
       targetOwnerId ? 'Заместитель назначен.' : 'Заместитель снят.',
     ),
     transferLeadership: (targetOwnerId: string) => runCommandAction(

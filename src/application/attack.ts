@@ -632,7 +632,9 @@ export function resolveAttackAtTarget(state: SaveState, flight: FlightRecord, no
 
   const input = createAttackInput(state, flight, target);
   if (input.attacker.ships.length === 0) return null;
-  const rawReport = resolveCombat(input, { reportId, missionType: 'attack' });
+  // A bot's fleet may exceed the single-fleet cap of the simulator (an overfull planet before attrition catches up,
+  // or a big bot raid); the battle must resolve instead of throwing inside the world's clock. Players' own fleets keep the cap.
+  const rawReport = resolveCombat(input, { reportId, missionType: 'attack', allowPopulationOverflow: flight.ownerSide === 'npc' || target.kind === 'npc' });
   const debris = calculateAttackDebris(rawReport, input.attacker.factionId!, input.defender.factionId!, battleDebrisRoll(reportId));
   const loot = calculateAttackLoot(rawReport, target.resources, input.attacker.factionId!);
   const reportWithOutcome: BattleReport = {
@@ -835,7 +837,8 @@ function resolveOwnedIncomingAttack(state: SaveState, flight: FlightRecord, now:
 
   const input = createBot01IncomingAttackInput(state, flight, source, target);
   if (input.attacker.ships.length === 0) return null;
-  const rawReport = resolveCombat(input, { reportId, missionType: 'attack' });
+  // The attacker is always a bot here; see the same note in resolveAttackAtTarget.
+  const rawReport = resolveCombat(input, { reportId, missionType: 'attack', allowPopulationOverflow: true });
   const debris = calculateAttackDebris(rawReport, input.attacker.factionId!, input.defender.factionId!, battleDebrisRoll(reportId));
   const targetResources = getPlanetResources(state, flight.destinationPlanetId);
   const loot = calculateAttackLoot(rawReport, targetResources, input.attacker.factionId!);
@@ -1136,7 +1139,9 @@ export function resolvePirateIncomingRaid(state: SaveState, flight: FlightRecord
     seed:`pirate-raid-combat-v1:${flight.id}`,
     profileId:'asterion-pirate-raid-v1',
   };
-  const rawReport = resolveCombat(input,{reportId,missionType:'pirate-raid'});
+  const rawReport = resolveCombat(input,{reportId,missionType:'pirate-raid',
+    // A bot planet may hold more than the simulator cap (its fleet is not clamped to the hangar); a bot battle never throws.
+    allowPopulationOverflow:!playerTarget});
   const debris = calculateAttackDebris(rawReport,factionId,factionId,battleDebrisRoll(reportId));
   const targetResources = playerTarget
     ? getPlanetResources(state,flight.destinationPlanetId)

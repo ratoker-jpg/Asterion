@@ -6,6 +6,9 @@ import {
   acceptApplication,
   applyToAlliance,
   createAlliance,
+  leaveAlliance,
+  pickDeputyCandidate,
+  setDeputy,
   rejectApplication,
 } from '../domain/command/membership.ts';
 import {
@@ -22,15 +25,28 @@ import {
   selectPendingApplication,
   selectReapplyBlock,
 } from '../domain/command/selectors.ts';
-import type { AllianceSettingsInput, CommandState } from '../domain/command/types.ts';
+import type { AllianceRecord, AllianceSettingsInput, CommandState } from '../domain/command/types.ts';
 import type { SaveState } from './contracts.ts';
 import { applyNpcAllianceHeraldry } from './npc-identity.ts';
+import {
+  allianceFit,
+  bestStrengths,
+  joinPull,
+  NPC_ALLIANCE_CHOICE,
+  npcAllianceTaste,
+  npcAllianceVeto,
+  npcMembersRefuse,
+  recentlyLeftAlliances,
+  recordNpcDeparture,
+  selectAllianceStrengths,
+  selectNpcDefection,
+} from './npc-alliance-choice.ts';
 import { npcGroupRegard, npcRegard } from './npc-relations.ts';
 
 export type NpcDiplomacyPayload = Readonly<Record<string, string | number | boolean | null>>;
 export type NpcDiplomacyCandidate = Readonly<{
   id: string;
-  kind: 'create-alliance' | 'apply-to-alliance' | 'accept-application' | 'reject-application' | 'declare-war' | 'propose-truce' | 'respond-truce';
+  kind: 'create-alliance' | 'apply-to-alliance' | 'leave-alliance' | 'appoint-deputy' | 'accept-application' | 'reject-application' | 'declare-war' | 'propose-truce' | 'respond-truce';
   weight: number;
   payload: NpcDiplomacyPayload;
 }>;
@@ -129,23 +145,58 @@ export function getNpcDiplomacyCandidates(
     }
 
     if (!pendingOwnApplication) {
+      // Everyone wants to be with the strong, each by taste: the warlike look at combat points, the economists at
+      // resource points. Only public points of the members count; nobody gets a bonus for being the player.
+      const strengths = selectAllianceStrengths(state);
+      const best = bestStrengths(strengths);
+      const taste = npcAllianceTaste(profile);
+      const left = recentlyLeftAlliances(command, ownerId, at);
+      // The best alliance open to this owner weighs as an alliance did before the choice by strength, the others
+      // in proportion to their pull: choosing by strength shifts the applicants, it does not make bots found their own.
+      const open: Array<{ alliance: AllianceRecord; regard: number; pull: number }> = [];
       for (const alliance of command.alliances) {
-        if (isAllianceFull(alliance) || selectReapplyBlock(command, ownerId, alliance.id, at)) continue;
-        candidates.push(makeCandidate('apply-to-alliance', `apply-to-alliance:${ownerId}:${alliance.id}`, 0.16 + cooperation * 0.58 + social * 0.12 + 0.2 * npcGroupRegard(state, profile, alliance.members.map((member) => member.ownerId), at), {
-          allianceId: alliance.id,
+        if (isAllianceFull(alliance) || left.has(alliance.id) || selectReapplyBlock(command, ownerId, alliance.id, at)) continue;
+        const regard = npcGroupRegard(state, profile, alliance.members.map((member) => member.ownerId), at);
+        // Members who remember a betrayal by this owner would not take it: it does not ask.
+        if (regard <= NPC_ALLIANCE_CHOICE.vetoRegard || npcMembersRefuse(state, alliance, ownerId, at)) continue;
+        const strength = strengths.get(alliance.id);
+        open.push({ alliance, regard, pull: strength ? joinPull(allianceFit(taste, strength, best)) : joinPull(0) });
+      }
+      const topPull = open.reduce((max, entry) => Math.max(max, entry.pull), 0);
+      for (const entry of open) {
+        candidates.push(makeCandidate('apply-to-alliance', `apply-to-alliance:${ownerId}:${entry.alliance.id}`, (0.16 + cooperation * 0.58 + social * 0.12) * (topPull > 0 ? entry.pull / topPull : 0) + 0.2 * entry.regard, {
+          allianceId: entry.alliance.id,
         }));
       }
     }
+  }
+
+  if (ownMembership) {
+    const defection = selectNpcDefection(state, profile, at);
+    if (defection) candidates.push(makeCandidate('leave-alliance', `leave-alliance:${ownerId}:${ownAlliance!.id}`, defection.score, {
+      allianceId: ownAlliance!.id,
+      successorOwnerId: defection.successorOwnerId,
+    }));
+  }
+
+  // The leader names a deputy from the members who earned it (time and aid delivered; the same rule for the
+  // player and the bots, nobody is favoured). A cooperative leader does it sooner.
+  if (ownAlliance && ownRole === 'leader' && !ownAlliance.deputyOwnerId) {
+    const pick = pickDeputyCandidate(ownAlliance, at);
+    if (pick) candidates.push(makeCandidate('appoint-deputy', `appoint-deputy:${ownerId}:${ownAlliance.id}:${pick.ownerId}`, 0.1 + cooperation * 0.3, {
+      targetOwnerId: pick.ownerId,
+    }));
   }
 
   if (ownAlliance && (ownRole === 'leader' || ownRole === 'deputy')) {
     for (const application of command.applications) {
       if (isAllianceFull(ownAlliance)) break;
       if (application.allianceId !== ownAlliance.id || application.status !== 'pending') continue;
-      // Player requests remain for the player. Only answer known autonomous NPCs.
-      if (application.ownerId === state.profile.playerId || !state.npc?.profiles[application.ownerId]) continue;
-      // A familiar applicant tilts the answer, it does not decide it: the other side still has to choose.
-      const accepts = cooperation + social * 0.15 + 0.15 * npcRegard(state, profile, application.ownerId, at) >= 0.5;
+      // Every applicant gets an answer, the player included and with no priority: the character and what the
+      // answering owner and the members remember of the applicant decide (owner order 04.11.2026).
+      // A familiar applicant tilts the answer, it does not decide it, except a remembered betrayal, which refuses.
+      const accepts = cooperation + social * 0.15 + 0.15 * npcRegard(state, profile, application.ownerId, at) >= 0.5
+        && !npcAllianceVeto(state, ownAlliance, profile, application.ownerId, at);
       candidates.push(makeCandidate(accepts ? 'accept-application' : 'reject-application', `${accepts ? 'accept' : 'reject'}-application:${ownerId}:${application.id}`, accepts ? 0.25 + cooperation * 0.55 : 0.2 + (1 - cooperation) * 0.4, {
         applicationId: application.id,
       }));
@@ -215,17 +266,30 @@ export function applyNpcDiplomacyAction(
     }
     case 'accept-application': {
       const applicationId = stringValue('applicationId');
-      const application = command.applications.find((entry) => entry.id === applicationId);
-      if (application?.ownerId !== state.profile.playerId && state.npc?.profiles[application?.ownerId ?? '']) {
-        result = acceptApplication(command, ownerId, applicationId, { now: at, random: () => stableFraction(actionId) });
-      }
+      result = acceptApplication(command, ownerId, applicationId, { now: at, random: () => stableFraction(actionId) });
       break;
     }
     case 'reject-application': {
       const applicationId = stringValue('applicationId');
-      const application = command.applications.find((entry) => entry.id === applicationId);
-      if (application?.ownerId !== state.profile.playerId && state.npc?.profiles[application?.ownerId ?? '']) {
-        result = rejectApplication(command, ownerId, applicationId, at);
+      result = rejectApplication(command, ownerId, applicationId, at);
+      break;
+    }
+    case 'appoint-deputy': {
+      result = setDeputy(command, ownerId, stringValue('targetOwnerId'), at);
+      break;
+    }
+    case 'leave-alliance': {
+      // Re-checked at the moment of the act: the snapshot may be stale, the stakes or the tenure may have changed.
+      const defection = selectNpcDefection(state, state.npc!.profiles[ownerId]!, at);
+      const membership = selectOwnerMembership(command, ownerId);
+      if (defection && membership && membership.alliance.id === stringValue('allianceId')) {
+        result = leaveAlliance(command, ownerId, at, defection.successorOwnerId ? { successorOwnerId: defection.successorOwnerId } : {});
+        if (result.ok) {
+          const left = recordNpcDeparture({ ...state, command: result.state }, ownerId, membership.alliance, at);
+          const successor = defection.successorOwnerId;
+          const crested = successor ? applyNpcAllianceHeraldry(left.command, successor, state.npc!.profiles) : left.command;
+          return { state: crested === left.command ? left : { ...left, command: crested }, ok: true, reason: 'applied' };
+        }
       }
       break;
     }
