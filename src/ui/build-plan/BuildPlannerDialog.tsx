@@ -6,19 +6,39 @@ import { getBuildingDefinition } from '../../domain/buildings/resource-zone.ts';
 import type { BuildingFaction } from '../../domain/buildings/balance-v1.ts';
 import { formatUniverseCoordinate } from '../../domain/universe/runtime.ts';
 import type { RuntimeMode, TestTimeScale } from '../../domain/runtime/mode.ts';
-import type { SaveState } from '../../application/contracts.ts';
-import { buildBuildPlanView, type BuildPlanLine, type BuildPlanView } from '../../application/build-plan.ts';
-import { compactAmount, formatNumber } from '../empire/empire-format.ts';
+import { getPlanetResources, type SaveState } from '../../application/contracts.ts';
+import { buildBuildPlanView, type BuildPlanLine, type BuildPlanView, type BuildWaitKind } from '../../application/build-plan.ts';
+import { compactAmount, formatNumber, plural } from '../empire/empire-format.ts';
+import { ResourceIcon } from '../resources/ResourceIcon.tsx';
 import '../fleet-plan/fleet-planner.css';
 import './build-planner.css';
 
 /** Presets: one click sets many targets. Levels come from how the owner really played (journal 05.11). */
-const COST_LABEL = { metal: 'мет.', minerals: 'мин.', gas: 'газ', energy: 'эн.' } as const;
 const PRESET_LEVELS = [10, 15, 20, 25] as const;
 const PRESET_GROUPS: { label: string; roles: readonly BuildingRole[] }[] = [
   { label: 'Добыча и энергия', roles: ['metal-production-1', 'metal-production-2', 'metal-production-3', 'mineral-production-1', 'mineral-production-2', 'gas-production-1', 'gas-production-2', 'basic-energy'] },
   { label: 'Склады', roles: ['metal-storage', 'mineral-storage', 'gas-storage'] },
 ];
+const COST_KEYS = ['metal', 'minerals', 'gas', 'energy'] as const;
+type CostKey = (typeof COST_KEYS)[number];
+/** What a waiting tile is held by, in two words; the full sentence sits under it. */
+const WAIT_TITLE: Record<BuildWaitKind, string> = {
+  resources: 'Копит ресурсы',
+  energy: 'Мало энергии',
+  queue: 'Очередь занята',
+  requirement: 'Нужно другое здание',
+  science: 'Нужна наука',
+  blocked: 'Планета заблокирована',
+  order: 'Ждёт своей очереди',
+};
+
+/** «81», «8 400», «252 тыс», «1,2 млн»: short enough for a tile. */
+function short(value: number): string {
+  const n = Math.max(0, Math.ceil(value));
+  if (n >= 1_000_000) return compactAmount(n);
+  if (n >= 10_000) return `${Math.round(n / 1_000).toLocaleString('ru-RU')} тыс`;
+  return formatNumber(n);
+}
 
 export type BuildPlannerDialogProps = {
   state: SaveState;
@@ -52,8 +72,10 @@ export function BuildPlannerDialog({ state, now, mode, testTimeScale, planetId, 
   const [focusRole, setFocusRole] = useState<BuildingRole | null>(null);
   const [copyOpen, setCopyOpen] = useState(false);
   const planet = state.planets[planetId]!;
+  const stored = getPlanetResources(state, planetId);
+  const wallet: Record<CostKey, number> = { metal: stored.metal, minerals: stored.minerals, gas: stored.gas, energy: view.energy };
   const planned = new Set(view.lines.filter((line) => !line.implied).map((line) => line.role));
-  const shelf = BUILDING_ROLES.filter((role) => !planned.has(role) && (planet.buildings[role] ?? 0) < getBuildingDefinition(role).maxLevel);
+  const shelf = BUILDING_ROLES.filter((role) => !planned.has(role) && !view.lines.some((line) => line.role === role) && (planet.buildings[role] ?? 0) < getBuildingDefinition(role).maxLevel);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -92,22 +114,9 @@ export function BuildPlannerDialog({ state, now, mode, testTimeScale, planetId, 
     setCopyOpen(false);
   };
 
-  const presets = (
-    <div className="bplan-presets" data-qa-build-plan-presets>
-      {PRESET_GROUPS.map((group) => (
-        <div key={group.label}>
-          <span>{group.label} до ур.</span>
-          {PRESET_LEVELS.map((level) => (
-            <button key={level} type="button" onClick={() => applyPreset(group.roles, level)} data-qa-build-plan-preset={`${group.roles[0]}:${level}`}>{level}</button>
-          ))}
-        </div>
-      ))}
-    </div>
-  );
-
   return createPortal(
     <div className="fplan-veil" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="fplan fplan--build" role="dialog" aria-modal="true" aria-label={`Планировщик стройки: ${planet.name}`} data-qa-build-planner={planetId}>
+      <section className={`fplan fplan--build ${view.paused ? 'is-paused' : ''}`} role="dialog" aria-modal="true" aria-label={`Планировщик стройки: ${planet.name}`} data-qa-build-planner={planetId}>
         <header className="fplan__head" data-toast-guard>
           <div className="fplan__title">
             <h2>Планировщик стройки</h2>
@@ -120,82 +129,79 @@ export function BuildPlannerDialog({ state, now, mode, testTimeScale, planetId, 
                 <span>{other.name}</span>
                 {other.empty ? <small className="is-none">нет плана</small>
                   : other.paused ? <small className="is-none">выключен</small>
-                    : other.left > 0 ? <small className="is-warn">ещё {other.left}</small> : <small className="is-ok">всё есть</small>}
+                    : other.left > 0 ? <small className="is-warn">ещё {other.left} ур.</small> : <small className="is-ok">всё готово</small>}
               </button>
             ))}
           </nav>
           <button type="button" className="fplan__close" onClick={onClose} aria-label="Закрыть" data-qa-build-planner-close>✕</button>
         </header>
 
-        <Status view={view} />
-
-        {view.empty ? (
-          <div className="fplan-empty" data-qa-build-plan-empty>
-            <div className="fplan-empty__lead">
-              <h3>До каких уровней довести здания?</h3>
-              <p>Выберите здания и уровни. Пока вы в игре, она сама начнёт следующее улучшение, как только хватит ресурсов и освободится очередь. Если не хватает энергии, сначала построит самый выгодный источник.</p>
-              {presets}
-              <div>
-                <button type="button" className="fplan__btn" onClick={fromCurrent} disabled={!hasBuildings} data-qa-build-plan-from-current>Взять то, что уже есть</button>
-                <button type="button" className="fplan__btn" onClick={() => setCopyOpen((was) => !was)} disabled={!copySources.length} data-qa-build-plan-copy>Взять план с планеты</button>
-              </div>
-            </div>
-            <div className="fplan-empty__grid">
-              {shelf.map((role, index) => {
-                const definition = getBuildingDefinition(role, factionId);
-                return (
-                  <button key={role} type="button" style={{ '--i': index } as CSSProperties} onClick={() => add(role)} data-qa-build-plan-add={role}>
-                    <img src={definition.art} alt="" draggable={false} />
-                    <b>{definition.name}</b>
-                    <small>{levelOf(role) > 0 ? `ур. ${levelOf(role)}` : 'нет'}</small>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ) : (
-          <>
-            {presets}
-            <ol className="fplan__lanes bplan-lanes" data-qa-build-plan-lanes>
-              {view.lines.map((line, index) => (
-                <Lane key={line.role} line={line} index={index} autoFocus={focusRole === line.role}
-                  onTarget={(level) => save(setBuildTarget(view.plan, line.role, level))}
-                  onRemove={() => save(removeBuildTarget(view.plan, line.role))}
-                  onBuild={() => onBuild(planetId, line.role)} />
-              ))}
-            </ol>
-            {shelf.length ? (
-              <div className="fplan__shelf" data-qa-build-plan-shelf>
-                <span>Добавить</span>
-                <div>
-                  {shelf.map((role) => (
-                    <button key={role} type="button" onClick={() => add(role)} data-qa-build-plan-add={role}>
-                      <img src={getBuildingDefinition(role, factionId).art} alt="" draggable={false} />
-                      <b>{getBuildingDefinition(role, factionId).name}</b>
-                    </button>
-                  ))}
+        <div className="bplan-body">
+          <aside className="bplan-lead">
+            <h3>{view.empty ? 'До каких уровней довести здания?' : 'Здания растут сами'}</h3>
+            <p>{view.empty
+              ? 'Выберите здания или готовый набор. Пока вы в игре, она сама начнёт следующее улучшение.'
+              : 'Пока вы в игре, следующее улучшение начнётся само, как только хватит ресурсов и места в очереди.'}</p>
+            {!view.empty ? <Status view={view} /> : null}
+            <div className="bplan-presets" data-qa-build-plan-presets>
+              {PRESET_GROUPS.map((group) => (
+                <div key={group.label}>
+                  <span>{group.label} до ур.</span>
+                  <p>
+                    {PRESET_LEVELS.map((level) => (
+                      <button key={level} type="button" onClick={() => applyPreset(group.roles, level)} data-qa-build-plan-preset={`${group.roles[0]}:${level}`}>{level}</button>
+                    ))}
+                  </p>
                 </div>
+              ))}
+            </div>
+            {view.empty ? (
+              <div className="bplan-lead__starts">
+                <button type="button" className="fplan__btn" onClick={fromCurrent} disabled={!hasBuildings} data-qa-build-plan-from-current>Взять то, что уже есть</button>
               </div>
             ) : null}
-          </>
-        )}
+          </aside>
+
+          <div className="bplan-grid" data-qa-build-plan-lanes={view.empty ? undefined : ''} data-qa-build-plan-empty={view.empty ? '' : undefined}>
+            {view.lines.map((line, index) => (
+              <Tile key={line.role} line={line} index={index} wallet={wallet} autoFocus={focusRole === line.role}
+                onTarget={(level) => save(setBuildTarget(view.plan, line.role, level))}
+                onRemove={() => save(removeBuildTarget(view.plan, line.role))}
+                onBuild={() => onBuild(planetId, line.role)} />
+            ))}
+            {shelf.length ? (
+              <>
+                {!view.empty ? <p className="bplan-grid__label" data-qa-build-plan-shelf>Добавить в план</p> : null}
+                {shelf.map((role, index) => {
+                  const definition = getBuildingDefinition(role, factionId);
+                  return (
+                    <button key={role} type="button" className={`bplan-add ${view.empty ? 'is-big' : ''}`} style={{ '--i': view.lines.length + index } as CSSProperties} onClick={() => add(role)} data-qa-build-plan-add={role}>
+                      <img src={definition.art} alt="" draggable={false} />
+                      <b>{definition.name}</b>
+                      <small>{levelOf(role) > 0 ? `сейчас ур. ${levelOf(role)}` : 'не построено'}</small>
+                      <i aria-hidden="true">+</i>
+                    </button>
+                  );
+                })}
+              </>
+            ) : null}
+          </div>
+        </div>
 
         <footer className="fplan__dock" data-toast-guard>
           <div className="fplan__summary" aria-live="polite">
-            <div className="fplan__report" key={view.headline} data-qa-build-plan-headline>
+            <div className="fplan__report bplan-report" key={view.headline} data-qa-build-plan-headline>
               <b>{view.headline}</b>
-              <small>Работает, пока игра открыта и окно активно. В фоне, офлайн и на сервере ничего не строится.</small>
+              <small>Строит само, только пока игра открыта и активна.</small>
             </div>
           </div>
           <div className="fplan__actions">
+            <button type="button" className="fplan__btn" onClick={() => setCopyOpen((was) => !was)} disabled={!copySources.length} aria-expanded={copyOpen} data-qa-build-plan-copy>
+              Взять план с планеты
+            </button>
             {!view.empty ? (
-              <button type="button" className="fplan__btn" onClick={() => setCopyOpen((was) => !was)} disabled={!copySources.length} aria-expanded={copyOpen} data-qa-build-plan-copy>
-                Взять план с планеты
-              </button>
-            ) : null}
-            {!view.empty ? (
-              <button type="button" className="fplan__btn" onClick={() => save(setBuildPlanPaused(view.plan, !view.paused))} aria-pressed={!view.paused} data-qa-build-plan-toggle data-sfx="none">
-                {view.paused ? 'Включить автостарт' : 'Выключить автостарт'}
+              <button type="button" className={`fplan__btn bplan-toggle ${view.paused ? '' : 'is-on'}`} onClick={() => save(setBuildPlanPaused(view.plan, !view.paused))} aria-pressed={!view.paused} data-qa-build-plan-toggle data-sfx="none">
+                <i aria-hidden="true" />{view.paused ? 'Автостарт выключен' : 'Автостарт включён'}
               </button>
             ) : null}
             <button type="button" className="fplan__btn fplan__btn--pri" disabled={!view.next} onClick={() => onRun(planetId)} data-qa-build-plan-start-all data-sfx="none">
@@ -206,14 +212,17 @@ export function BuildPlannerDialog({ state, now, mode, testTimeScale, planetId, 
             <div className="fplan__copy" role="dialog" aria-label="Взять план с планеты" data-qa-build-plan-copy-list>
               <header><b>Взять план с планеты</b>{!view.empty ? <small>Текущий план {planet.name} заменится</small> : null}</header>
               <ul>
-                {copySources.map((other) => (
-                  <li key={other.id}>
-                    <button type="button" onClick={() => copyFrom(other.id)} data-qa-build-plan-copy-from={other.id}>
-                      {planetArt[other.id] ? <img src={planetArt[other.id]} alt="" draggable={false} /> : null}
-                      <span><b>{other.name}</b><small>{Object.keys(state.fleetUi?.buildPlans?.[other.id]?.targets ?? {}).length} зданий в плане</small></span>
-                    </button>
-                  </li>
-                ))}
+                {copySources.map((other) => {
+                  const count = Object.keys(state.fleetUi?.buildPlans?.[other.id]?.targets ?? {}).length;
+                  return (
+                    <li key={other.id}>
+                      <button type="button" onClick={() => copyFrom(other.id)} data-qa-build-plan-copy-from={other.id}>
+                        {planetArt[other.id] ? <img src={planetArt[other.id]} alt="" draggable={false} /> : null}
+                        <span><b>{other.name}</b><small>{count} {plural(count, 'здание', 'здания', 'зданий')} в плане</small></span>
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           ) : null}
@@ -225,59 +234,93 @@ export function BuildPlannerDialog({ state, now, mode, testTimeScale, planetId, 
 }
 
 function Status({ view }: { view: BuildPlanView }) {
+  const full = view.queueUsed >= view.queueCapacity;
   return (
     <div className="bplan-status" data-qa-build-plan-status>
-      <p><span>Очередь стройки</span> <b>{view.queueUsed} из {view.queueCapacity}</b></p>
-      <p><span>Энергия</span> <b>{formatNumber(view.energy)}</b></p>
+      <p className={full ? 'is-full' : ''}>
+        <span>Очередь</span>
+        <b>{view.queueUsed} из {view.queueCapacity}</b>
+        <i aria-hidden="true">{Array.from({ length: view.queueCapacity }, (_, slot) => <em key={slot} className={slot < view.queueUsed ? 'is-used' : ''} />)}</i>
+      </p>
+      <p><span>Энергия</span> <b className="bplan-status__energy"><ResourceIcon kind="energy" />{short(view.energy)}</b></p>
       {view.next ? <p className="is-next"><span>Дальше</span> <b>{view.next.name} → ур. {view.next.level}</b></p> : null}
     </div>
   );
 }
 
-function Lane({ line, index, autoFocus, onTarget, onRemove, onBuild }: {
-  line: BuildPlanLine; index: number; autoFocus: boolean; onTarget: (level: number) => void; onRemove: () => void; onBuild: () => void;
+function Tile({ line, index, wallet, autoFocus, onTarget, onRemove, onBuild }: {
+  line: BuildPlanLine; index: number; wallet: Record<CostKey, number>; autoFocus: boolean;
+  onTarget: (level: number) => void; onRemove: () => void; onBuild: () => void;
 }) {
   const max = getBuildingDefinition(line.role).maxLevel;
-  const scale = Math.max(line.target, 1);
   const state = line.status;
+  const projected = line.current + line.queued;
+  // A target the building already passed reads as «already higher», never «20 of 5».
+  const passed = line.target < line.current;
+  const goal = Math.max(line.target, projected);
+  const scale = Math.max(goal, 1);
+  const costs = line.cost ? COST_KEYS.filter((key) => line.cost![key] > 0) : [];
   return (
-    <li className={`fplan-lane bplan-lane is-${state === 'done' ? 'done' : state}`} style={{ '--i': index } as CSSProperties}
+    <article className={`bplan-tile is-${state} ${line.implied ? 'is-implied' : ''}`} style={{ '--i': index } as CSSProperties}
       data-qa-build-plan-line={line.role} data-qa-build-plan-line-state={state} data-qa-build-plan-line-target={line.target} data-qa-build-plan-line-current={line.current}>
-      <div className="fplan-lane__art"><img src={line.art} alt="" draggable={false} /></div>
-      <div className="fplan-lane__name">
-        <b>{line.name}</b>
-        <small>{line.implied ? 'нужно для другого здания' : `сейчас ур. ${line.current}${line.queued ? `, строится ещё ${line.queued}` : ''}`}</small>
+      {!line.implied ? (
+        <button type="button" className="bplan-tile__remove" onClick={onRemove} aria-label={`Убрать из плана: ${line.name}`} data-qa-build-plan-remove={line.role}>✕</button>
+      ) : null}
+      <div className="bplan-tile__art"><img src={line.art} alt="" draggable={false} /></div>
+      <b className="bplan-tile__name">{line.name}</b>
+
+      <div className="bplan-tile__levels" data-qa-build-plan-levels>
+        {passed ? (
+          <span className="is-passed">уже ур. <b>{line.current}</b></span>
+        ) : (
+          <span>ур. <b>{line.current}</b>{line.queued ? <em> +{line.queued}</em> : null}<i aria-hidden="true">→</i><strong key={line.target}>{line.target}</strong></span>
+        )}
       </div>
-      <div className="fplan-lane__track">
-        <div className="fplan-lane__bar" aria-hidden="true">
-          <i className="is-queued" style={{ '--from': line.current / scale, '--share': line.queued / scale } as CSSProperties} />
-          <i className="is-here" style={{ '--from': 0, '--share': Math.min(line.current, scale) / scale } as CSSProperties} />
+      <div className="bplan-tile__bar" aria-hidden="true">
+        <i className="is-queued" style={{ '--from': Math.min(line.current, scale) / scale, '--share': Math.min(line.queued, scale) / scale } as CSSProperties} />
+        <i className="is-here" style={{ '--from': 0, '--share': Math.min(line.current, scale) / scale } as CSSProperties} />
+      </div>
+
+      {line.implied ? (
+        <div className="bplan-tile__implied">
+          <small>Нужно для другого здания</small>
+          <button type="button" onClick={() => onTarget(line.target)} data-qa-build-plan-adopt={line.role}>Взять в план</button>
         </div>
-        <small className="fplan-lane__parts"><span>ур. <b>{line.current}</b> из <b>{line.target}</b></span>
-          {line.cost ? <span data-qa-build-plan-cost>след. уровень: {(['metal', 'minerals', 'gas', 'energy'] as const).filter((key) => line.cost![key] > 0).map((key) => `${compactAmount(line.cost![key])} ${COST_LABEL[key]}`).join(', ')}</span> : null}</small>
+      ) : (
+        <div className="bplan-tile__target">
+          <button type="button" onClick={() => onTarget(Math.max(1, line.target - 1))} disabled={line.target <= 1} aria-label={`Уровень ниже: ${line.name}`}>−</button>
+          <TargetInput value={line.target} name={line.name} max={max} autoFocus={autoFocus} onCommit={onTarget} qa={line.role} />
+          <button type="button" onClick={() => onTarget(Math.min(max, Math.max(line.target, projected) + 1))} disabled={Math.max(line.target, projected) >= max} aria-label={`Уровень выше: ${line.name}`}>+</button>
+          <button type="button" className="bplan-tile__max" onClick={() => onTarget(max)} disabled={line.target >= max} data-qa-build-plan-max={line.role}>макс</button>
+        </div>
+      )}
+
+      <div className="bplan-tile__foot">
+        {costs.length ? (
+          <p className="bplan-tile__cost" data-qa-build-plan-cost>
+            {costs.map((key) => (
+              <span key={key} className={line.cost![key] > wallet[key] ? 'is-short' : ''}><ResourceIcon kind={key} />{short(line.cost![key])}</span>
+            ))}
+          </p>
+        ) : null}
+        {state === 'done' ? (
+          <p className="bplan-tile__done">{passed ? 'Цель пройдена' : 'Готово'}</p>
+        ) : state === 'building' ? (
+          <p className="bplan-tile__building">Строится до ур. {projected}</p>
+        ) : state === 'next' ? (
+          <button type="button" className="bplan-tile__go" onClick={onBuild} data-qa-build-plan-build={line.role}>Построить сейчас</button>
+        ) : (
+          <p className={`bplan-tile__wait is-${line.wait?.kind ?? 'order'}`} data-qa-build-plan-wait={line.wait?.kind}>
+            <b>{WAIT_TITLE[line.wait?.kind ?? 'order']}</b>
+            {line.wait && line.wait.kind !== 'order' && line.wait.kind !== 'queue' ? <small>{line.wait.text}</small> : null}
+          </p>
+        )}
       </div>
-      <div className="bplan-lane__target">
-        <button type="button" onClick={() => onTarget(line.target - 1)} disabled={line.implied || line.target <= 1} aria-label={`Уровень ниже: ${line.name}`}>−</button>
-        <TargetInput value={line.target} name={line.name} max={max} autoFocus={autoFocus} disabled={line.implied} onCommit={onTarget} qa={line.role} />
-        <button type="button" onClick={() => onTarget(line.target + 1)} disabled={line.implied || line.target >= max} aria-label={`Уровень выше: ${line.name}`}>+</button>
-        <button type="button" className="bplan-lane__max" onClick={() => onTarget(max)} disabled={line.implied || line.target >= max} data-qa-build-plan-max={line.role}>макс</button>
-      </div>
-      <div className="fplan-lane__action">
-        {state === 'done' ? <p className="fplan-lane__done">Готово</p>
-          : state === 'building' ? <p className="fplan-lane__hint bplan-lane__building">Строится</p>
-            : state === 'next' ? (
-              <>
-                <button type="button" className="fplan-lane__go" onClick={onBuild} data-qa-build-plan-build={line.role}><span>Построить сейчас</span></button>
-                <small className="fplan-lane__hint">идёт следующей</small>
-              </>
-            ) : <p className={`bplan-lane__wait is-${line.wait?.kind ?? 'order'}`} data-qa-build-plan-wait={line.wait?.kind}>{line.wait?.text}</p>}
-      </div>
-      <button type="button" className="fplan-lane__remove" onClick={onRemove} disabled={line.implied} aria-label={`Убрать из плана: ${line.name}`} data-qa-build-plan-remove={line.role}>✕</button>
-    </li>
+    </article>
   );
 }
 
-function TargetInput({ value, name, max, autoFocus, disabled, onCommit, qa }: { value: number; name: string; max: number; autoFocus: boolean; disabled: boolean; onCommit: (level: number) => void; qa: string }) {
+function TargetInput({ value, name, max, autoFocus, onCommit, qa }: { value: number; name: string; max: number; autoFocus: boolean; onCommit: (level: number) => void; qa: string }) {
   const [draft, setDraft] = useState<string | null>(null);
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -288,11 +331,10 @@ function TargetInput({ value, name, max, autoFocus, disabled, onCommit, qa }: { 
   return (
     <input
       ref={ref}
-      className="fplan-lane__input"
+      className="bplan-tile__input"
       type="text"
       inputMode="numeric"
       autoComplete="off"
-      disabled={disabled}
       aria-label={`До какого уровня: ${name}`}
       data-qa-build-plan-target={qa}
       value={draft ?? String(value)}

@@ -1,41 +1,250 @@
-/* «Планировщик стройки» sits on the fleet planner's shell (fleet-planner.css). Only what differs lives here. */
-.fplan--build .bplan-lane{grid-template-columns:var(--fp-art) var(--fp-name) minmax(0,1fr) 250px var(--fp-action) 26px}
-.fplan--build .bplan-lanes{flex:1 1 auto;min-height:0}
-.fplan--build .fplan-lane.is-waiting .fplan-lane__bar{background:rgba(126,200,220,.06);box-shadow:none}
+/* «Планировщик стройки» sits on the fleet planner's shell (fleet-planner.css): same
+   dialog, head, planet tabs, dock and buttons. Here: the lead column on the left
+   and the grid of big building tiles. Tiles have no frame of their own, only a
+   soft glow under the picture, like the fleet planner's ship grid. */
+.fplan--build{
+  --bp-tile:164px;
+  --bp-art:78px;
+  --bp-lead:290px;
+}
+@media (min-width:1600px) and (min-height:900px){
+  .fplan--build{--bp-tile:206px;--bp-art:104px;--bp-lead:360px}
+}
 
-.bplan-status{flex:none;display:flex;gap:6px 26px;flex-wrap:wrap;align-items:baseline}
-.bplan-status p{margin:0;display:flex;gap:7px;align-items:baseline}
-.fplan .bplan-status span{color:#8fb6c0;font-size:calc(var(--fp-t-small) * var(--text-scale-secondary,1)) !important}
-.fplan .bplan-status b{color:#fff;font-size:calc(var(--fp-t-big) * var(--text-scale-table,1)) !important;font-weight:800}
-.fplan .bplan-status .is-next b{color:var(--fp-here)}
+.bplan-body{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:var(--bp-lead) minmax(0,1fr);gap:24px}
 
-.bplan-presets{flex:none;display:flex;gap:8px 28px;flex-wrap:wrap;align-items:center}
-.bplan-presets>div{display:flex;gap:5px;align-items:center}
-.fplan-empty__lead .bplan-presets{display:grid;gap:10px;margin-bottom:14px}
-.fplan .bplan-presets span{color:#8fb6c0;font-size:calc(var(--fp-t-small) * var(--text-scale-secondary,1)) !important;margin-right:2px}
+/* ---------- lead column ---------- */
+.bplan-lead{min-height:0;display:flex;flex-direction:column;gap:16px;overflow-y:auto;scrollbar-width:none;padding-top:6px}
+.fplan .bplan-lead h3{margin:0;color:#f2fdff;font-size:calc(var(--fp-t-title) * var(--text-scale-section-title,1)) !important;font-weight:800;line-height:1.15}
+.fplan .bplan-lead>p{margin:-6px 0 0;color:#a9cbd3;font-size:calc(var(--fp-t-small) * var(--text-scale-body,1)) !important;line-height:1.45}
+.bplan-lead__starts{display:grid}
+
+.bplan-status{display:grid;gap:8px}
+.bplan-status p{margin:0;display:flex;gap:8px;align-items:center;min-width:0}
+.fplan .bplan-status span{flex:none;width:76px;color:#8fb6c0;font-size:calc(var(--fp-t-small) * var(--text-scale-secondary,1)) !important}
+.fplan .bplan-status b{min-width:0;overflow:hidden;color:#fff;font-size:calc(var(--fp-t-big) * var(--text-scale-table,1)) !important;font-weight:800;white-space:nowrap;text-overflow:ellipsis}
+.fplan .bplan-status .is-next b{color:var(--fp-here);white-space:normal;line-height:1.2}
+.bplan-status p>i{display:flex;gap:3px;margin-left:4px}
+.bplan-status p>i em{width:16px;height:8px;border-radius:3px;background:rgba(126,200,220,.14);transition:background var(--ut-motion-base) ease}
+.bplan-status p>i em.is-used{background:var(--fp-queued);box-shadow:0 0 8px rgba(230,173,80,.45)}
+.bplan-status__energy{display:inline-flex;align-items:center;gap:5px}
+.bplan-status__energy .asterion-resource-icon{width:20px;height:20px;object-fit:contain}
+
+.bplan-presets{display:grid;gap:10px}
+.bplan-presets>div{display:grid;gap:5px}
+.fplan .bplan-presets span{color:#8fb6c0;font-size:calc(12px * var(--text-scale-secondary,1)) !important}
+.bplan-presets p{margin:0;display:flex;gap:5px}
 .bplan-presets button{
-  min-width:42px;height:32px;padding:0 10px;border:0;border-radius:var(--ut-r-chip);
-  background:rgba(86,217,242,.08);color:#e8faff;cursor:pointer;
-  transition:background var(--ut-motion-fast) ease,scale var(--ut-motion-press) var(--ut-ease-out);
+  flex:1 1 0;
+  height:34px;
+  padding:0;
+  border:0;
+  border-radius:var(--ut-r-chip);
+  background:rgba(86,217,242,.08);
+  color:#e8faff;
+  cursor:pointer;
+  transition:background var(--ut-motion-fast) ease,color var(--ut-motion-fast) ease,scale var(--ut-motion-press) var(--ut-ease-out);
 }
 .fplan .bplan-presets button{font-size:calc(14px * var(--text-scale-control,1)) !important;font-weight:800}
-.bplan-presets button:hover{background:rgba(86,217,242,.22)}
-.bplan-presets button:active{scale:.94}
+.bplan-presets button:hover{background:color-mix(in srgb,var(--fp-here) 26%,transparent);color:#fff}
+.bplan-presets button:active{scale:.93}
 
-.bplan-lane__target{display:grid;grid-template-columns:32px minmax(0,1fr) 32px auto;align-items:center;gap:4px}
-.bplan-lane__target>button{
-  height:36px;padding:0;border:0;border-radius:var(--ut-r-chip);background:rgba(86,217,242,.08);color:#e8faff;cursor:pointer;
+/* ---------- tile grid ---------- */
+.bplan-grid{
+  min-height:0;
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(var(--bp-tile),1fr));
+  grid-auto-rows:min-content;
+  align-content:start;
+  gap:8px;
+  margin:0 -6px;
+  padding:2px 6px 8px;
+  overflow-y:auto;
+  scrollbar-width:thin;
+  scrollbar-color:rgba(126,200,220,.3) transparent;
+}
+.fplan .bplan-grid__label{grid-column:1 / -1;margin:8px 0 -2px;color:#8fb6c0;font-size:calc(12px * var(--text-scale-secondary,1)) !important}
+
+.bplan-tile{
+  position:relative;
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  gap:6px;
+  padding:8px 10px 10px;
+  border-radius:var(--ut-r-card);
+  background:radial-gradient(ellipse 80% 46% at 50% 22%,color-mix(in srgb,var(--fp-here) 12%,transparent),transparent 72%),rgba(86,217,242,.03);
+  transition:background var(--ut-motion-fast) ease,translate var(--ut-motion-base) var(--ut-ease-out);
+  animation:bplan-tile-in var(--ut-motion-item) var(--ut-spring-pop) backwards;
+  animation-delay:calc(var(--i) * 26ms);
+}
+.bplan-tile:hover,.bplan-tile:focus-within{background:radial-gradient(ellipse 80% 46% at 50% 22%,color-mix(in srgb,var(--fp-here) 22%,transparent),transparent 72%),rgba(86,217,242,.06)}
+.bplan-tile.is-next{background:radial-gradient(ellipse 80% 46% at 50% 22%,color-mix(in srgb,var(--fp-here) 26%,transparent),transparent 72%),color-mix(in srgb,var(--fp-here) 9%,transparent)}
+.bplan-tile.is-next::after{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--fp-here) 55%,transparent);animation:bplan-next-glow 2.4s ease-in-out infinite}
+.bplan-tile.is-done{background:radial-gradient(ellipse 80% 46% at 50% 22%,rgba(53,229,138,.12),transparent 72%),rgba(53,229,138,.03)}
+.bplan-tile.is-implied{background:radial-gradient(ellipse 80% 46% at 50% 22%,rgba(126,200,220,.08),transparent 72%),transparent}
+.bplan-tile.is-implied .bplan-tile__art img{opacity:.8}
+.fplan--build.is-paused .bplan-tile:not(.is-done) .bplan-tile__art img{filter:grayscale(.55) brightness(.75) drop-shadow(0 6px 9px rgba(0,0,0,.6))}
+
+.bplan-tile__art{position:relative;height:var(--bp-art);display:grid;place-items:center}
+.bplan-tile__art::after{content:'';position:absolute;left:18%;right:18%;bottom:2%;height:18%;border-radius:50%;background:radial-gradient(ellipse,color-mix(in srgb,var(--fp-here) 34%,transparent),transparent 70%)}
+.bplan-tile.is-done .bplan-tile__art::after{background:radial-gradient(ellipse,rgba(53,229,138,.34),transparent 70%)}
+.bplan-tile__art img{position:absolute;inset:0;z-index:1;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 6px 9px rgba(0,0,0,.6));transition:translate var(--ut-motion-base) var(--ut-ease-out),scale var(--ut-motion-base) var(--ut-ease-out)}
+.bplan-tile:hover .bplan-tile__art img{translate:0 -3px;scale:1.04}
+.bplan-tile.is-building .bplan-tile__art img{animation:bplan-build-bob 1.8s ease-in-out infinite}
+
+.fplan .bplan-tile__name{display:-webkit-box;min-height:2.3em;overflow:hidden;color:#f2fdff;font-size:calc(var(--fp-t-name) * var(--text-scale-table,1)) !important;font-weight:800;line-height:1.15;text-align:center;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+
+.bplan-tile__levels{display:flex;justify-content:center;min-width:0}
+.fplan .bplan-tile__levels span{display:flex;align-items:baseline;gap:4px;color:#8fb6c0;font-size:calc(12px * var(--text-scale-secondary,1)) !important;white-space:nowrap}
+.fplan .bplan-tile__levels b{color:#fff;font-size:calc(var(--fp-t-big) * var(--text-scale-table,1)) !important;font-weight:800}
+.fplan .bplan-tile__levels em{color:var(--fp-queued);font-size:calc(13px * var(--text-scale-table,1)) !important;font-style:normal;font-weight:800}
+.fplan .bplan-tile__levels i{color:#8fb6c0;font-style:normal;font-size:calc(14px * var(--text-scale-table,1)) !important}
+.fplan .bplan-tile__levels strong{display:inline-block;color:var(--fp-here);font-size:calc(calc(var(--fp-t-big) + 4px) * var(--text-scale-table,1)) !important;font-weight:800;animation:bplan-bump var(--ut-motion-base) var(--ut-spring-pop)}
+.fplan .bplan-tile__levels .is-passed b{color:var(--ut-positive)}
+.bplan-tile.is-done .bplan-tile__levels strong{color:var(--ut-positive)}
+
+.bplan-tile__bar{position:relative;height:7px;overflow:hidden;border-radius:4px;background:rgba(126,200,220,.1)}
+.bplan-tile__bar i{position:absolute;inset:0;transform:translateX(calc(var(--from) * 100%)) scaleX(var(--share));transform-origin:left center;transition:transform 720ms var(--ut-ease-expo)}
+.bplan-tile__bar .is-here{background:linear-gradient(180deg,color-mix(in srgb,var(--fp-here) 92%,#fff),color-mix(in srgb,var(--fp-here) 62%,#04202a))}
+.bplan-tile.is-done .bplan-tile__bar .is-here{background:linear-gradient(180deg,#67f0a7,#1f9d62)}
+.bplan-tile__bar .is-queued{background:repeating-linear-gradient(115deg,#f0be6b 0 6px,#a87a2f 6px 12px);background-size:24px 100%;animation:bplan-stripes 1.2s linear infinite}
+
+.bplan-tile__target{display:grid;grid-template-columns:28px minmax(0,1fr) 28px auto;gap:3px;align-items:center}
+.bplan-tile__target>button{
+  height:32px;
+  padding:0;
+  border:0;
+  border-radius:var(--ut-r-chip);
+  background:rgba(86,217,242,.08);
+  color:#e8faff;
+  cursor:pointer;
   transition:background var(--ut-motion-fast) ease,scale var(--ut-motion-press) var(--ut-ease-out);
 }
-.fplan .bplan-lane__target>button{font-size:calc(18px * var(--text-scale-control,1)) !important;font-weight:800}
-.fplan .bplan-lane__target>.bplan-lane__max{padding:0 8px;font-size:calc(12px * var(--text-scale-control,1)) !important;color:#8fb6c0}
-.bplan-lane__target>button:hover:not(:disabled){background:rgba(86,217,242,.22)}
-.bplan-lane__target>button:active:not(:disabled){scale:.92}
-.bplan-lane__target>button:disabled{opacity:.3;cursor:default}
-.bplan-lane__target .fplan-lane__input{text-align:center}
+.fplan .bplan-tile__target>button{font-size:calc(17px * var(--text-scale-control,1)) !important;font-weight:800}
+.fplan .bplan-tile__target>.bplan-tile__max{padding:0 7px;color:#a9cbd3;font-size:calc(12px * var(--text-scale-control,1)) !important}
+.bplan-tile__target>button:hover:not(:disabled){background:color-mix(in srgb,var(--fp-here) 26%,transparent);color:#fff}
+.bplan-tile__target>button:active:not(:disabled){scale:.9}
+.bplan-tile__target>button:disabled{opacity:.3;cursor:default}
+.bplan-tile__input{
+  width:100%;
+  min-width:0;
+  height:32px;
+  padding:0 4px;
+  border:0;
+  border-radius:var(--ut-r-input);
+  background:rgba(0,0,0,.34);
+  color:#fff;
+  text-align:center;
+  transition:background var(--ut-motion-fast) ease,box-shadow var(--ut-motion-fast) ease;
+}
+.fplan .bplan-tile__input{font-size:calc(var(--fp-t-big) * var(--text-scale-table,1)) !important;font-weight:800;font-variant-numeric:tabular-nums}
+.bplan-tile__input:hover{box-shadow:inset 0 0 0 1px var(--ut-border-strong)}
+.bplan-tile__input:focus{outline:none;background:rgba(86,217,242,.1);box-shadow:inset 0 0 0 1px var(--ut-accent)}
 
-.fplan .bplan-lane__wait{margin:0;display:-webkit-box;overflow:hidden;color:#ffcb7a;font-size:calc(12px * var(--text-scale-body,1)) !important;font-weight:600;line-height:1.2;text-align:right;-webkit-line-clamp:3;-webkit-box-orient:vertical}
-.fplan .bplan-lane__wait.is-science,.fplan .bplan-lane__wait.is-blocked{color:#ff9d90}
-.fplan .bplan-lane__wait.is-order,.fplan .bplan-lane__wait.is-requirement{color:#a9cbd3}
-.fplan .bplan-lane__building{color:var(--fp-queued);font-weight:700;text-align:center}
-.fplan--build .fplan-lane.is-next{background:linear-gradient(90deg,color-mix(in srgb,var(--fp-here) 9%,transparent),transparent 70%)}
+.bplan-tile__implied{display:grid;gap:4px;justify-items:center}
+.fplan .bplan-tile__implied small{color:#a9cbd3;font-size:calc(12px * var(--text-scale-secondary,1)) !important;text-align:center;line-height:1.2}
+.bplan-tile__implied button{height:28px;padding:0 10px;border:0;border-radius:var(--ut-r-chip);background:rgba(86,217,242,.08);color:#e8faff;cursor:pointer;transition:background var(--ut-motion-fast) ease,scale var(--ut-motion-press) var(--ut-ease-out)}
+.fplan .bplan-tile__implied button{font-size:calc(12px * var(--text-scale-control,1)) !important;font-weight:700}
+.bplan-tile__implied button:hover{background:color-mix(in srgb,var(--fp-here) 26%,transparent)}
+.bplan-tile__implied button:active{scale:.95}
+
+.bplan-tile__foot{margin-top:auto;display:grid;gap:5px}
+.bplan-tile__cost{margin:0;display:flex;flex-wrap:wrap;justify-content:center;gap:2px 9px}
+.bplan-tile__cost span{display:inline-flex;align-items:center;gap:3px;color:#dcecf0;white-space:nowrap}
+.fplan .bplan-tile__cost span{font-size:calc(12px * var(--text-scale-table,1)) !important;font-weight:700}
+.bplan-tile__cost .asterion-resource-icon{width:16px;height:16px;object-fit:contain}
+.fplan .bplan-tile__cost .is-short{color:var(--fp-bad)}
+
+.fplan .bplan-tile__done{margin:0;color:var(--ut-positive);font-size:calc(14px * var(--text-scale-body,1)) !important;font-weight:800;text-align:center}
+.fplan .bplan-tile__done::before{content:'✓ '}
+.fplan .bplan-tile__building{margin:0;color:var(--fp-queued);font-size:calc(13px * var(--text-scale-body,1)) !important;font-weight:800;text-align:center}
+.bplan-tile__go{
+  height:32px;
+  border:0;
+  border-radius:var(--ut-r-btn);
+  background:linear-gradient(180deg,color-mix(in srgb,var(--fp-here) 40%,transparent),color-mix(in srgb,var(--fp-here) 22%,transparent));
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--fp-here) 45%,transparent);
+  color:#eafcff;
+  white-space:nowrap;
+  cursor:pointer;
+  transition:background var(--ut-motion-fast) ease,box-shadow var(--ut-motion-fast) ease,scale var(--ut-motion-press) var(--ut-ease-out);
+}
+.fplan .bplan-tile__go{font-size:calc(13px * var(--text-scale-control,1)) !important;font-weight:800}
+.bplan-tile__go:hover{background:color-mix(in srgb,var(--fp-here) 52%,transparent);box-shadow:inset 0 0 0 1px var(--fp-here),0 0 16px color-mix(in srgb,var(--fp-here) 34%,transparent)}
+.bplan-tile__go:active{scale:.95}
+.bplan-tile__wait{margin:0;display:grid;gap:1px;text-align:center}
+.fplan .bplan-tile__wait b{color:#ffcb7a;font-size:calc(13px * var(--text-scale-body,1)) !important;font-weight:800;line-height:1.2}
+.fplan .bplan-tile__wait small{display:-webkit-box;overflow:hidden;color:#c9b48f;font-size:calc(12px * var(--text-scale-secondary,1)) !important;line-height:1.2;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.fplan .bplan-tile__wait:is(.is-science,.is-blocked) b{color:#ff9d90}
+.fplan .bplan-tile__wait:is(.is-science,.is-blocked) small{color:#e0a59c}
+.fplan .bplan-tile__wait:is(.is-order,.is-requirement,.is-queue) b{color:#a9cbd3}
+.fplan .bplan-tile__wait:is(.is-order,.is-requirement,.is-queue) small{color:#8fb6c0}
+
+.bplan-tile__remove{
+  position:absolute;
+  z-index:2;
+  top:5px;
+  right:5px;
+  width:26px;
+  height:26px;
+  padding:0;
+  border:0;
+  border-radius:var(--ut-r-chip);
+  background:transparent;
+  color:rgba(200,225,232,0);
+  cursor:pointer;
+  transition:background var(--ut-motion-fast) ease,color var(--ut-motion-fast) ease;
+}
+.fplan .bplan-tile__remove{font-size:calc(12px * var(--text-scale-control,1)) !important}
+.bplan-tile:hover .bplan-tile__remove,.bplan-tile__remove:focus-visible{color:#cfe6ec}
+.bplan-tile__remove:hover{background:rgba(240,68,94,.18);color:#ffd6dc}
+
+/* ---------- buildings not in the plan ---------- */
+.bplan-add{
+  position:relative;
+  min-width:0;
+  display:grid;
+  justify-items:center;
+  align-content:start;
+  gap:1px;
+  padding:6px 6px 8px;
+  border:0;
+  border-radius:var(--ut-r-card);
+  background:transparent;
+  color:#e8faff;
+  cursor:pointer;
+  transition:background var(--ut-motion-fast) ease,translate var(--ut-motion-base) var(--ut-ease-out),scale var(--ut-motion-press) var(--ut-ease-out);
+  animation:bplan-tile-in var(--ut-motion-item) var(--ut-ease-out) backwards;
+  animation-delay:calc(var(--i) * 22ms);
+}
+.bplan-add img{width:100%;height:calc(var(--bp-art) * .62);object-fit:contain;opacity:.72;filter:saturate(.7) drop-shadow(0 5px 8px rgba(0,0,0,.6));transition:opacity var(--ut-motion-fast) ease,filter var(--ut-motion-fast) ease}
+.bplan-add.is-big img{height:var(--bp-art);opacity:1;filter:drop-shadow(0 6px 9px rgba(0,0,0,.6))}
+.fplan .bplan-add b{max-width:100%;overflow:hidden;color:#cfe6ec;font-size:calc(13px * var(--text-scale-control,1)) !important;font-weight:700;white-space:nowrap;text-overflow:ellipsis}
+.fplan .bplan-add.is-big b{color:#f2fdff;font-size:calc(14px * var(--text-scale-control,1)) !important}
+.fplan .bplan-add small{color:#8fb6c0;font-size:calc(12px * var(--text-scale-secondary,1)) !important}
+.bplan-add i{position:absolute;top:6px;right:8px;width:24px;height:24px;display:grid;place-items:center;border-radius:50%;background:color-mix(in srgb,var(--fp-here) 30%,transparent);color:#fff;font-style:normal;font-weight:800;opacity:0;scale:.6;transition:opacity var(--ut-motion-fast) ease,scale var(--ut-motion-base) var(--ut-spring-pop)}
+.bplan-add:hover{background:radial-gradient(ellipse 80% 50% at 50% 30%,color-mix(in srgb,var(--fp-here) 20%,transparent),transparent 72%);translate:0 -3px}
+.bplan-add:hover img{opacity:1;filter:drop-shadow(0 6px 9px rgba(0,0,0,.6))}
+.bplan-add:hover i,.bplan-add:focus-visible i{opacity:1;scale:1}
+.bplan-add:active{scale:.96}
+
+/* ---------- dock ---------- */
+.fplan .bplan-report small{color:#8fb6c0;font-weight:500}
+.bplan-toggle{display:inline-flex;align-items:center;gap:9px}
+.bplan-toggle i{position:relative;flex:none;width:30px;height:16px;border-radius:8px;background:rgba(126,200,220,.2);transition:background var(--ut-motion-base) ease}
+.bplan-toggle i::after{content:'';position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#cfe6ec;transition:translate var(--ut-motion-base) var(--ut-spring-pop)}
+.bplan-toggle.is-on i{background:var(--ut-positive)}
+.bplan-toggle.is-on i::after{translate:14px 0;background:#fff}
+
+@keyframes bplan-tile-in{from{opacity:0;transform:translateY(10px) scale(.96)}to{opacity:1;transform:none}}
+@keyframes bplan-bump{0%{transform:scale(1.35)}100%{transform:none}}
+@keyframes bplan-next-glow{0%,100%{opacity:.55}50%{opacity:1}}
+@keyframes bplan-build-bob{0%,100%{translate:0 0}50%{translate:0 -3px}}
+@keyframes bplan-stripes{to{background-position:24px 0}}
+@media (prefers-reduced-motion:reduce){
+  .bplan-tile,.bplan-add,.bplan-tile.is-next::after,.bplan-tile__art img,.bplan-tile__bar .is-queued,.fplan .bplan-tile__levels strong{animation:none !important}
+  .bplan-tile__bar i,.bplan-toggle i::after{transition:none}
+  .bplan-add:hover,.bplan-tile:hover .bplan-tile__art img{translate:none;scale:none}
+}

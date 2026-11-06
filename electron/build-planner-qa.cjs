@@ -17,6 +17,15 @@ const SKIP_SCREENSHOTS = process.env.ASTERION_SKIP_SCREENSHOTS === '1';
 const SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const VIEWPORTS = [[1280, 720], [1920, 1080]];
 const HOME = 'helion-01';
+// Seven planets like the owner's empire, one with a very long name.
+const COLONIES = [
+  ['planet-1-1-6', 'Кассия', 1, 6],
+  ['planet-1-2-4', 'Ферон Великая Северная Колония Альфа', 2, 4],
+  ['planet-1-3-9', 'Тавр', 3, 9],
+  ['planet-1-5-2', 'Нордин', 5, 2],
+  ['planet-1-17-11', 'Колония 17-11', 17, 11],
+  ['planet-1-17-5', 'Колония 17-5', 17, 5],
+];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const failures = [];
 const fail = (message, detail) => { failures.push({ message, detail }); console.error(`[build-plan-qa] ${message}`, JSON.stringify(detail ?? null)); };
@@ -71,18 +80,28 @@ async function seed(win, scenario = {}) {
     if (!home) return false;
     save.profile.factionId = scenario.race || 'aegis';
     if (save.worldConfig) save.worldConfig.factionId = save.profile.factionId;
-    home.name = 'Москва';
+    home.name = scenario.homeName || 'Москва';
     home.overpopulation = undefined;
     home.buildings['metal-production-1'] = 3;
     home.buildings['mineral-production-1'] = 3;
     home.buildings['gas-production-1'] = 2;
     home.buildings['basic-energy'] = 4;
+    home.buildings['metal-storage'] = 20;
     const wallet = scenario.wallet || { metal: 900000000, minerals: 900000000, gas: 900000000 };
     home.resources = wallet;
     Object.assign(save, wallet);
     save.currentPlanetId = ${JSON.stringify(HOME)};
     save.queues = { [${JSON.stringify(HOME)}]: [] };
-    save.fleetUi = { favoriteTargets: [], ...(scenario.plan ? { buildPlans: { [${JSON.stringify(HOME)}]: scenario.plan } } : {}) };
+    const now = Date.now();
+    for (const [id, name, system, position] of ${JSON.stringify(COLONIES)}) {
+      const planet = JSON.parse(JSON.stringify(home));
+      Object.assign(planet, { name, universeGalaxy: 1, universeSystem: system, universePosition: position, skin: 'colonized', resources: wallet });
+      save.planets[id] = planet;
+      save.queues[id] = [];
+      if (save.resourceClock?.byPlanet) save.resourceClock.byPlanet[id] = { ...(save.resourceClock.byPlanet[${JSON.stringify(HOME)}] || {}), lastReconciledAt: now };
+    }
+    const plans = { ...(scenario.others || {}), ...(scenario.plan ? { [${JSON.stringify(HOME)}]: scenario.plan } : {}) };
+    save.fleetUi = { favoriteTargets: [], ...(Object.keys(plans).length ? { buildPlans: plans } : {}) };
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     localStorage.setItem('asterion.test-time-scale.v1', '1');
     return true;
@@ -109,11 +128,18 @@ async function checkLayout(win, label) {
     if (box.left < 0 || box.top < 0 || box.right > innerWidth + 0.5 || box.bottom > innerHeight + 0.5) problems.push('dialog outside the window');
     if (dialog.scrollWidth > dialog.clientWidth + 1) problems.push('dialog scrolls sideways');
     if (dialog.querySelector('[title]')) problems.push('native tooltip');
-    for (const lane of dialog.querySelectorAll('[data-qa-build-plan-line]')) {
-      const cells = Array.from(lane.children).map((cell) => cell.getBoundingClientRect());
-      for (let i = 1; i < cells.length; i += 1) if (cells[i].left < cells[i - 1].right - 1) problems.push('overlap in ' + lane.dataset.qaBuildPlanLine + ' cell ' + i);
+    const grid = dialog.querySelector('.bplan-grid');
+    if (grid && grid.scrollWidth > grid.clientWidth + 1) problems.push('tile grid scrolls sideways');
+    for (const tile of dialog.querySelectorAll('[data-qa-build-plan-line]')) {
+      const box = tile.getBoundingClientRect();
+      for (const cell of tile.querySelectorAll('*')) {
+        const rect = cell.getBoundingClientRect();
+        if (rect.width && (rect.left < box.left - 1 || rect.right > box.right + 1)) { problems.push('outside the tile: ' + tile.dataset.qaBuildPlanLine + ' ' + cell.className); break; }
+      }
+      const levels = tile.querySelector('[data-qa-build-plan-levels]')?.textContent ?? '';
+      if (Number(tile.dataset.qaBuildPlanLineTarget) < Number(tile.dataset.qaBuildPlanLineCurrent) && !levels.includes('уже')) problems.push('target below current reads as progress: ' + levels);
     }
-    for (const node of dialog.querySelectorAll('.fplan-lane__go, .fplan__btn, .bplan-presets button, .bplan-status b')) {
+    for (const node of dialog.querySelectorAll('.bplan-tile__go, .fplan__btn, .bplan-presets button, .bplan-status p:not(.is-next) b, .bplan-tile__levels span, .bplan-tile__cost span, .bplan-tile__target>button')) {
       if (node.scrollWidth > node.clientWidth + 1) problems.push('text cut: ' + node.textContent.trim().slice(0, 50));
     }
     return { problems, lanes: dialog.querySelectorAll('[data-qa-build-plan-line]').length };
@@ -187,6 +213,30 @@ async function runViewport(win, directory) {
   check(poor.includes('resources'), 'Short lines say they lack resources', poor);
   await checkLayout(win, '05-poor');
   await capture(win, directory, '05-poor');
+
+  // 6. Worst case: seven planets, a very long home name, every building in the plan.
+  await setActive(win, false);
+  const everything = { targets: Object.fromEntries(['metal-production-1', 'metal-production-2', 'metal-production-3', 'mineral-production-1', 'mineral-production-2', 'gas-production-1', 'gas-production-2', 'basic-energy', 'advanced-energy', 'hangar', 'construction', 'advanced-factory', 'metal-storage', 'mineral-storage', 'gas-storage', 'recycling', 'trade-center'].map((role, index) => [role, 8 + (index % 5) * 4])) };
+  await seed(win, { plan: everything, homeName: 'Ферон Великая Северная Колония Бета', others: { 'planet-1-1-6': PLAN, 'planet-1-3-9': { ...PLAN, paused: true } } });
+  await openPlanner(win);
+  const tabs = await run(win, `document.querySelectorAll('[data-qa-build-plan-planet]').length`);
+  check(tabs === 7, 'All seven planets have a tab', tabs);
+  await checkLayout(win, '06-seven-planets-long-name');
+  await capture(win, directory, '06-seven-planets-long-name');
+  await run(win, `document.querySelector('.bplan-grid')?.scrollTo(0, 100000)`);
+  await settle(win, 200);
+  await capture(win, directory, '07-scrolled-to-shelf');
+
+  // 8. A target below the current level reads as «already higher», not «20 of 5».
+  const passed = await run(win, `document.querySelector('[data-qa-build-plan-line="metal-storage"] [data-qa-build-plan-levels]')?.textContent ?? null`);
+  await seed(win, { plan: PLAN, others: { 'planet-1-1-6': PLAN } });
+  await openPlanner(win);
+  const below = await run(win, `document.querySelector('[data-qa-build-plan-line="metal-storage"] [data-qa-build-plan-levels]')?.textContent ?? null`);
+  check(below && below.includes('уже') && !below.includes('5'), 'A passed target reads as already higher', { below, passed });
+  await click(win, '[data-qa-build-plan-copy]');
+  await waitFor(win, `document.querySelector('[data-qa-build-plan-copy-list]')`);
+  await checkLayout(win, '08-copy-list');
+  await capture(win, directory, '08-copy-list');
   return metrics;
 }
 
