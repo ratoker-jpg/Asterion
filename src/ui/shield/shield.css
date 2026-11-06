@@ -5,8 +5,11 @@
 .shield-ctl--cooldown { --shield-tone: #a8b0c0; }
 .shield-ctl:disabled { cursor: default; opacity: .85; }
 .shield-ctl:disabled.shield-ctl--ready { opacity: .6; }
-.shield-ctl--compact { position: absolute; right: 30px; bottom: 5px; padding: 1px 6px; font-size: 9px; line-height: 11px; z-index: 5; font-variant-numeric: tabular-nums; gap: 4px; }
-.shield-ctl--compact i { width: 7px; height: 9px; }
+.hdr-shield-slot { position: absolute; z-index: 8; left: 798px; top: 12px; width: 62px; height: 34px; }
+.shield-ctl--compact { width: 100%; height: 34px; justify-content: center; gap: 4px; padding: 0 3px; border-radius: 10px; font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; background: rgba(0, 0, 0, .3); }
+.shield-ctl--compact i { width: 11px; height: 14px; flex: none; }
+.shield-ctl--compact.shield-ctl--active i, .shield-ctl--compact.shield-ctl--cooldown i { display: none; }
+.shield-ctl--compact:not(:disabled):hover, .shield-ctl--compact:focus-visible { outline: 0; background: color-mix(in srgb, var(--shield-tone, #6fd3ff) 14%, transparent); box-shadow: inset 0 0 0 1px var(--shield-tone, #6fd3ff); }
 .shield-ctl--compact.shield-ctl--ready span { display: none; }
 .shield-ctl--compact small { display: none; }
 .shield-mark { display: inline-block; width: 9px; height: 11px; margin-left: 4px; vertical-align: -1px; background: #5fe6a8; clip-path: polygon(50% 0, 100% 18%, 100% 55%, 50% 100%, 0 55%, 0 18%); }
@@ -41,3 +44,6 @@
   box-shadow: 0 0 10px 2px rgba(120, 236, 255, .6); }
 .shield-badge { display: inline-flex; align-items: center; gap: 4px; color: #9ff6ff; font-weight: 700; }
 .universe-radar__row .shield-mark { margin-left: 6px; }
+
+/* The game's confirm dialog styles its buttons inside .menu-viewport; here it floats over the game, so the host stays see-through. */
+.shield-confirm-host.menu-viewport { z-index: 300; background: transparent; }
