@@ -234,13 +234,16 @@ async function runViewport(win, directory) {
   const below = await run(win, `document.querySelector('[data-qa-build-plan-line="metal-storage"] [data-qa-build-plan-levels]')?.textContent ?? null`);
   check(below && below.includes('уже') && !below.includes('5'), 'A passed target reads as already higher', { below, passed });
   check(await run(win, `!document.querySelector('[data-qa-build-plan-preset="metal-storage:25"]') && Boolean(document.querySelector('[data-qa-build-plan-preset="metal-storage:20"]'))`), 'Storages offer no level above their last one (20)');
-  // The picture opens what the building does; the arrows move it in the priority.
-  await click(win, '[data-qa-build-plan-info="mineral-production-1"]');
-  const info = await run(win, `document.querySelector('[data-qa-build-plan-info-card]')?.textContent ?? ''`);
-  check(info.includes('Сейчас') && info.includes('По плану'), 'The info card says what the building gives now and by plan', info);
-  await checkLayout(win, '09-info');
-  await capture(win, directory, '09-info');
-  await click(win, '[data-qa-build-plan-info-back]');
+  // Zones like the building screens; the picture shows a short hint in the game's style (keyboard focus here, hover for the mouse).
+  const zones = await run(win, `Array.from(document.querySelectorAll('[data-qa-build-plan-zone]')).map((node) => node.dataset.qaBuildPlanZone)`);
+  check(zones[0] === 'resource' && zones.includes('industry'), 'The planner is grouped by the planet zones', zones);
+  await run(win, `document.querySelector('[data-qa-build-plan-info="mineral-production-1"]').focus()`);
+  await settle(win, 500);
+  const hint = await run(win, `(() => { const node = document.querySelector('[data-qa-build-plan-info="mineral-production-1"] [data-qa-build-plan-hint]'); return node ? { text: node.textContent, opacity: getComputedStyle(node).opacity } : null; })()`);
+  check(hint && Number(hint.opacity) > 0.9 && hint.text.includes('На ур. 12'), 'The hint says what the building does and gives at the planned level', hint);
+  await checkLayout(win, '09-hint');
+  await capture(win, directory, '09-hint');
+  await run(win, 'document.activeElement?.blur()');
   await click(win, '[data-qa-build-plan-down="metal-production-1"]');
   const order = await run(win, `Array.from(document.querySelectorAll('[data-qa-build-plan-line]')).map((node) => node.dataset.qaBuildPlanLine)`);
   check(order[0] !== 'metal-production-1' && order.indexOf('metal-production-1') > 0, 'The arrows move a building in the priority', order);

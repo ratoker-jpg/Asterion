@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { buildPriority, moveBuildPriority, removeBuildTarget, setBuildTarget, migrateBuildPlans, type BuildPlan } from '../domain/buildings/build-plan.ts';
+import { buildPriority, moveBuildPriority, putBuildPriorityFirst, removeBuildTarget, swapBuildPriority, setBuildTarget, migrateBuildPlans, type BuildPlan } from '../domain/buildings/build-plan.ts';
 import { applyFleetUiUpdate, migrateFleetUiState } from '../domain/flights/fleet-ui.ts';
 import { createDefaultNewGameConfig } from '../domain/world/config.ts';
 import type { SaveState } from './contracts.ts';
@@ -151,6 +151,9 @@ test('construction speed goes first by default, and the player can move any buil
   assert.deepEqual(runBuildPlans(world(plan), RUNTIME).started.map((item) => item.role), ['gas-production-1', 'construction', 'metal-production-1']);
   const view = buildBuildPlanView(world(plan), PLANET, RUNTIME);
   assert.deepEqual(view.lines.map((line) => [line.role, line.priority]), [['gas-production-1', 1], ['construction', 2], ['metal-production-1', 3]]);
+  assert.deepEqual(buildPriority(swapBuildPriority(plan, 'gas-production-1', 'metal-production-1')), ['metal-production-1', 'construction', 'gas-production-1']);
+  assert.deepEqual(buildPriority(putBuildPriorityFirst(plan, 'metal-production-1')), ['metal-production-1', 'gas-production-1', 'construction']);
+  assert.equal(putBuildPriorityFirst(plan, 'gas-production-1'), plan);
   // The order survives a save round trip; removed or unknown buildings drop out of it.
   const saved = migrateBuildPlans(JSON.parse(JSON.stringify({ [PLANET]: { ...removeBuildTarget(plan, 'construction'), order: [...plan.order!, 'nope'] } })));
   assert.deepEqual(saved?.[PLANET]?.order, ['gas-production-1', 'metal-production-1']);

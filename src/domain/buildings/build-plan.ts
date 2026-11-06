@@ -64,11 +64,25 @@ export function buildPriority(plan: BuildPlan): BuildingRole[] {
 /** Moves one planned building up (−1) or down (+1) in the priority; the whole order is saved from then on. */
 export function moveBuildPriority(plan: BuildPlan, role: BuildingRole, delta: -1 | 1): BuildPlan {
   const order = buildPriority(plan);
-  const from = order.indexOf(role);
-  const to = from + delta;
-  if (from < 0 || to < 0 || to >= order.length) return plan;
-  [order[from], order[to]] = [order[to]!, order[from]!];
+  const to = order.indexOf(role) + delta;
+  return to < 0 || to >= order.length || !order.includes(role) ? plan : swapBuildPriority(plan, role, order[to]!);
+}
+
+/** Two planned buildings trade places in the priority (the planner moves a building past its neighbour in the same zone). */
+export function swapBuildPriority(plan: BuildPlan, role: BuildingRole, other: BuildingRole): BuildPlan {
+  const order = buildPriority(plan);
+  const a = order.indexOf(role);
+  const b = order.indexOf(other);
+  if (a < 0 || b < 0 || a === b) return plan;
+  [order[a], order[b]] = [order[b]!, order[a]!];
   return { ...plan, order };
+}
+
+/** «Важно»: the building goes to the head of the priority, the rest keep their order. */
+export function putBuildPriorityFirst(plan: BuildPlan, role: BuildingRole): BuildPlan {
+  const order = buildPriority(plan);
+  if (!order.includes(role) || order[0] === role) return plan;
+  return { ...plan, order: [role, ...order.filter((item) => item !== role)] };
 }
 
 export function setBuildPlanPaused(plan: BuildPlan, paused: boolean): BuildPlan {

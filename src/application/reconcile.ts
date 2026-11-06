@@ -163,7 +163,7 @@ export type RuntimeReconcileEvent =
   | { kind: 'npc-science'; ownerId: string; scienceId: ScienceId; at: number }
   | { kind: 'npc-fleet-production'; ownerId: string; planetId: string; at: number; completed: FleetProductionCompletion[] }
   | { kind: 'science'; scienceIds: ScienceId[] }
-  | { kind: 'building'; planetId: string; assetRole: BuildingRole }
+  | { kind: 'building'; planetId: string; assetRole: BuildingRole; durationMs?: number }
   | { kind: 'recycling'; planetId: string; jobIds: string[] }
   | { kind: 'spaceport'; planetId: string; tasks: Array<{ track: SpaceportUpgradeTrack; shipId: string }> }
   | { kind: 'fleet-production'; planetId: string; completed: FleetProductionCompletion[] }
@@ -514,10 +514,11 @@ function reconcileRuntimeSlice(
     for (const planetId of planetIds) {
       if (blockedPlanetIds.has(planetId)) continue;
       const planetContext = { ...context, planetId, now: at };
+      const finishing = next.queues[planetId]?.[0];
       const building = completeBuilding(next, planetContext);
       if (building.changed && building.completedRole) {
         next = building.state;
-        events.push({ kind: 'building', planetId, assetRole: building.completedRole });
+        events.push({ kind: 'building', planetId, assetRole: building.completedRole, ...(finishing?.durationMs != null ? { durationMs: finishing.durationMs } : {}) });
       }
 
       const recycling = reconcileRecycling(next, planetContext);
