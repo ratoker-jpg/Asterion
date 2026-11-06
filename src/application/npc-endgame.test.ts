@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
 import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
 import { DEFAULT_ALLIANCE_EMBLEM } from '../domain/command/catalog.ts';
 import { selectOpenRequestsOf } from '../domain/command/aid.ts';
@@ -332,4 +333,20 @@ test('a returning NPC fleet whose manifest lists a hull type lost to zero surviv
   assert.ok(kept, 'the returning fleet is not dropped');
   assert.equal(kept.phase, 'returning');
   assert.equal(kept.selectedShips.transporter, 10);
+});
+
+test('a short room is filled with the race\'s heavy hulls, not a slice of every type (owner report 06.11: scouts in the main attack)', () => {
+  const { state, owners } = world();
+  const owner = owners[0]!;
+  const planet = home(state, owner);
+  const rich = withTarget(state, { ...planet, fleet: { ...planet.fleet, ships: { ...planet.fleet.ships, scout: 4_000, cruiser: 1_500, destroyer: 400 } } });
+  const free = Object.keys(npcSunForce(rich, owner, planet.id, planet.raceId, 1, Number.POSITIVE_INFINITY));
+  assert.ok(free.includes('scout') && free.includes('destroyer'), 'with room for everything it all flies (the quorum needs it)');
+  const short = npcSunForce(rich, owner, planet.id, planet.raceId, 1, 12_000);
+  const population = (ships: Record<string, number | undefined>) => Object.entries(ships).reduce((sum, [id, count]) => sum
+    + (count ?? 0) * (getFactionShipCatalog(planet.raceId as never).find((entity) => entity.id === id)?.population ?? 0), 0);
+  assert.ok(population(short) <= 12_000);
+  assert.ok((short.destroyer ?? 0) > 0, 'the heaviest hull flies');
+  assert.ok((short.scout ?? 0) * 2 <= 12_000 * 0.1, 'scouts are at most a sliver of the force');
+  assert.deepEqual(npcSunForce(rich, owner, planet.id, planet.raceId, 1, 12_000), short, 'deterministic');
 });

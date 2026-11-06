@@ -817,6 +817,15 @@ function SceneStack({ stack, side, roundIndex }: { stack: BattleStackViewModel; 
         <span>Жизнь 1 корабля: <b>{formatNumber(stack.lifePerUnit)}</b></span>
         <span>Жизнь всей группы: <b>{formatNumber(stack.hpPool)}</b></span>
         <span>Броня: <b>{formatNumber(stack.tooltip.armor)}</b></span>
+        {stack.contributors?.length ? (
+          <span data-qa-battle-stack-contributors={stack.contributors.length}>
+            Флотов в группе: <b>{formatNumber(stack.contributors.length)}</b>
+            {stack.contributors.slice(0, 5).map((part, index) => (
+              <span key={index}>{`ур. ${formatNumber(part.level)}: ${formatNumber(part.countBefore ?? part.countAfter)}`}</span>
+            ))}
+            {stack.contributors.length > 5 ? <span>{`и ещё ${formatNumber(stack.contributors.length - 5)}`}</span> : null}
+          </span>
+        ) : null}
       </span>
     </button>
   );
@@ -1030,6 +1039,20 @@ function OutcomeMiniStateTable({ side, className = '' }: { side: BattleSideViewM
   );
 }
 
+/** Joint battles: the side's points are shared by contribution; the biggest shares are listed. */
+function SidePointShares({ viewModel, side }: { viewModel: BattleReportViewModel; side: 'attacker' | 'defender' }) {
+  const shares = viewModel.pointShares;
+  const entries = shares?.entries.filter((entry) => entry.side === side).sort((left, right) => right.points - left.points) ?? [];
+  if (!shares || !entries.length) return null;
+  return (
+    <p className="battle-empty-inline-v1" data-qa-battle-point-shares={side}>
+      {`Очки стороны ${formatNumber(shares.sidePoints[side])} делятся по вкладу флота: `}
+      {entries.slice(0, 3).map((entry) => `${entry.ownerName} ${formatNumber(entry.points)} (${Math.round(entry.share * 100)}%)`).join(' · ')}
+      {entries.length > 3 ? ` · ещё ${formatNumber(entries.length - 3)}` : ''}
+    </p>
+  );
+}
+
 function OutcomePointsPanel({
   sideLabel,
   missionType,
@@ -1082,6 +1105,7 @@ function BattleOutcomeSummary({ viewModel, result, winnerName }: { viewModel: Ba
           <article className={`battle-outcome-duel-side-v1 ${side.participant.side} ${viewModel.winner === side.participant.side ? 'winner' : ''}`} key={side.participant.side}>
             <OutcomeSideHeader side={side} winner={viewModel.winner === side.participant.side} />
             <OutcomeMiniStateTable side={side} />
+            <SidePointShares viewModel={viewModel} side={side.participant.side} />
             <OutcomePointsPanel sideLabel={label} missionType={viewModel.missionType} points={points} resourcePointsLost={resourcePointsLost} winner={viewModel.winner === side.participant.side || (viewModel.winner === 'draw' && points === Math.max(viewModel.battlePoints.attacker, viewModel.battlePoints.defender))} />
           </article>
         ))}
