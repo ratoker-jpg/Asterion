@@ -305,3 +305,10 @@ html body .flight-briefing-v2 .flight-timeline-cargo-resource>b{justify-self:sta
 html body .flight-briefing-v2 .flight-timeline-cargo-resource>b::first-letter{text-transform:uppercase}
 html body .flight-briefing-v2 .flight-timeline-cargo-input em{justify-self:end;align-self:center}
 html body .flight-briefing-v2 .flight-timeline-cargo-head{align-self:start}
+html body .flight-briefing-v2 .flight-timeline-ship-card{display:grid !important;grid-template-columns:190px auto !important;grid-template-rows:auto auto auto !important;grid-template-areas:"art count" "art name" "art hold" !important;align-items:center !important}
+html body .flight-briefing-v2 .flight-timeline-ship-card>img{grid-area:art !important;grid-row:1/4 !important;grid-column:1 !important}
+html body .flight-briefing-v2 .flight-timeline-ship-card>b{grid-area:count !important;grid-column:2 !important;grid-row:1 !important}
+html body .flight-briefing-v2 .flight-timeline-ship-card strong{grid-area:name !important;grid-column:2 !important;grid-row:2 !important}
+html body .flight-briefing-v2 .flight-timeline-ship-card div>small{grid-area:hold !important;grid-column:2 !important;grid-row:3 !important}
+html body .flight-briefing-v2 .fa-route__center>span b{font-size:inherit !important;font-weight:800}
+html body .flight-briefing-v2 .fa-route__gas span{font-size:18px !important;color:var(--pm)}
