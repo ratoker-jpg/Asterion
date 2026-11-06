@@ -158,7 +158,7 @@ async function runViewport(win, directory) {
   const queue = active.queues?.[HOME] ?? [];
   check(queue.length === 3, 'An active window fills the build queue', { roles: queue.map((item) => item.assetRole), page: await run(win, '({ v: document.visibilityState, f: document.hasFocus(), notice: document.querySelector("[role=status]")?.textContent ?? null })') });
   check(queue.every((item) => item.kind === 'building'), 'Auto-starts are ordinary build orders', queue);
-  await waitFor(win, `document.querySelector('[data-qa-build-plan-line-state="building"], [data-qa-build-plan-line-state="next"]')`);
+  await waitFor(win, `document.querySelector('.bplan-status')?.textContent.includes('3 из 3')`);
   await checkLayout(win, '03-building');
   await capture(win, directory, '03-building');
   await run(win, 'location.reload()');
