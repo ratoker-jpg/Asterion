@@ -63,6 +63,17 @@ test('the real-time floor keeps every one-way flight at 60 seconds or more', asy
   assert.equal(applyRealFlightFloor(120_000), 120_000);
 });
 
+test('probe-only recon has a 3 second real-time floor, mixed fleets keep 60 seconds', async () => {
+  const { applyRealFlightFloor, isReconOnlyFleet, MIN_REAL_RECON_ONE_WAY_DURATION_MS } = await import('./speed.ts');
+  assert.equal(MIN_REAL_RECON_ONE_WAY_DURATION_MS, 3_000);
+  const floorFor = (ms: number, ships: Parameters<typeof isReconOnlyFleet>[0]) => applyRealFlightFloor(ms, isReconOnlyFleet(ships));
+  assert.equal(floorFor(500, { 'spy-probe': 1 }), 3_000);
+  assert.equal(floorFor(500, { 'spy-probe': 5 }), 3_000);
+  assert.equal(floorFor(10_000, { 'spy-probe': 2 }), 10_000);
+  assert.equal(floorFor(500, { 'spy-probe': 2, cruiser: 1 }), 60_000);
+  assert.equal(floorFor(500, { cruiser: 1 }), 60_000);
+});
+
 test('Sun support flights: floor in real play, none under the test-mode accelerator', async () => {
   const { floorSunSupportFlight } = await import('../../application/sun-raid.ts');
   assert.equal(floorSunSupportFlight(500, { now: 0, mode: 'test', testTimeScale: 500 }), 500);

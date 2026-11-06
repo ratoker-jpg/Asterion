@@ -1,5 +1,5 @@
 import { ownerFlights } from './npc-knowledge-index.ts';
-import { applyRealFlightFloor } from '../domain/flights/speed.ts';
+import { applyRealFlightFloor, isReconOnlyFleet } from '../domain/flights/speed.ts';
 import { MAX_COMMANDERS_PER_PLANET, calculateFleetPopulation, createEmptyFleetState, getSolarSatelliteFleetCount, removeSolarSatellitesFromFleet, resolveSavedFleetState } from '../domain/fleet/runtime.ts';
 import { calculatePlanetCapacity, calculatePlanetPopulation } from '../domain/fleet/overpopulation.ts';
 import { migrateBuildingLevels } from '../domain/buildings/resource-zone.ts';
@@ -371,7 +371,7 @@ export function dispatchNpcMission(
     ...(command.missionId === 'recycle' ? { recycleCapacity, cargo: { metal: 0, minerals: 0, gas: 0, debris: 0 } } : {}),
     speedCommanderLevels: { typhoon: profile.commanderLevels.typhoon ?? 0 },
   });
-  const duration = applyRealFlightFloor(Math.max(1, Math.round(domainResult.flight.oneWayDurationMs / timeScale)));
+  const duration = applyRealFlightFloor(Math.max(1, Math.round(domainResult.flight.oneWayDurationMs / timeScale)), isReconOnlyFleet(selectedShips, attackCommanders));
   // Only exploration launches record the owner's score; price that one owner alone.
   const ownResourcePoints = explorationNode ? selectOwnerScore(state, command.ownerId)?.resourcePoints ?? 0 : 0;
   const explorationLaunchResourcePoints = command.missionId === 'expedition' || command.missionId === 'exploration-recon'
