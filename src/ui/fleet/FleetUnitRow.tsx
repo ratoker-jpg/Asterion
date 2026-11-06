@@ -40,6 +40,7 @@ export function FleetUnitRow({
   lockReason,
   requirements,
   dossier,
+  factionName,
   onQuantity,
   onBuild,
 }: {
@@ -61,6 +62,8 @@ export function FleetUnitRow({
   requirements: readonly string[];
   /** The stats card shown on hover; the info dialog reads its figures too. */
   dossier: ReactNode;
+  /** Race shown on the info card (the ship and defence names differ by race). */
+  factionName?: string;
   onQuantity: (quantity: number) => void;
   onBuild: (quantity: number) => void;
 }) {
@@ -135,7 +138,7 @@ export function FleetUnitRow({
         </>
       )}
 
-      <button className="fc-unit__info" type="button" data-role={role} aria-label={`Информация: ${name}`}>i</button>
+      <button className="fc-unit__info" type="button" data-role={role} data-faction={factionName} aria-label={`Информация: ${name}`} data-qa-unit-info={id}>i</button>
     </article>
   );
 }

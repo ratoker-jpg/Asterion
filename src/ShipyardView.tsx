@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { getFactionShipCatalog } from './domain/combat/faction-catalog.ts';
-import type { CombatFactionId } from './domain/combat/factions.ts';
+import { getCombatFactionName, type CombatFactionId } from './domain/combat/factions.ts';
 import type { ShipId } from './domain/combat/ids.ts';
 import type { CatalogEntity } from './domain/combat/catalog.ts';
 import {
@@ -194,6 +194,7 @@ function ShipCard({
       lockReason={requirements.reason ? localizeBuildingNames(requirements.reason, budget.factionId) : null}
       requirements={ship.requirements.map((requirement) => localizeBuildingNames(requirement, budget.factionId))}
       dossier={<ShipStatsTooltip ship={ship} stats={stats} level={shipLevel} />}
+      factionName={getCombatFactionName(budget.factionId)}
       onQuantity={(next) => onQuantity(ship, next)}
       onBuild={(next) => onBuild(ship, next)}
     />

@@ -220,6 +220,7 @@ function CatalogCard({
       lockReason={evaluated.reason ? localizeBuildingNames(evaluated.reason, budget.factionId) : null}
       requirements={item.requirements.map((requirement) => localizeBuildingNames(requirement, budget.factionId))}
       dossier={<CatalogStatsTooltip item={item} />}
+      factionName={getCombatFactionName(budget.factionId)}
       onQuantity={(next) => onQuantity(item, next)}
       onBuild={(next) => onBuild(item, next)}
     />

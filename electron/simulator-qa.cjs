@@ -264,6 +264,9 @@ async function runViewport(win, width, height) {
     throw new Error(`${label}: saved preset state did not match the current scenario ${JSON.stringify(savedPresetState)}`);
   }
   await click(win, '.sim-run-v1');
+  // Variant A: the result shows on the page; the round-by-round report opens on «Подробно по раундам».
+  await waitFor(win, `document.querySelector('[data-qa-simulator-details]:not(:disabled)')`);
+  await click(win, '[data-qa-simulator-details]');
   await waitFor(win, `document.querySelector('[role="dialog"][data-qa-battle-report-modal][data-qa-battle-report-source="simulation"]')`);
   await waitFor(win, `document.querySelector('.battle-round-analysis-v1')`);
 
