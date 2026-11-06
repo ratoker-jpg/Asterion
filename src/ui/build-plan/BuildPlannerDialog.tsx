@@ -145,10 +145,10 @@ export function BuildPlannerDialog({ state, now, mode, testTimeScale, planetId, 
   /** The hover hint: what the building does, and what it gives (at the planned level when there is one). */
   const hintFor = (role: BuildingRole, goal: number | null): HintText => {
     const level = goal ?? levelOf(role);
-    return {
-      what: getBuildingPresentation(role, factionId).purpose,
-      gives: level > 0 ? `${goal ? `На ур. ${goal}` : `Сейчас, ур. ${level}`}: ${effectAt(state, planetId, role, level)}` : null,
-    };
+    const what = getBuildingPresentation(role, factionId).purpose;
+    // «Добыча минералов: +48 400/ч» under «Добыча минералов.» reads as «На ур. 12: +48 400/ч».
+    const effect = effectAt(state, planetId, role, level).replace(new RegExp(`^${what.replace(/\.$/, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:\\s*`), '');
+    return { what, gives: level > 0 ? `${goal ? `На ур. ${goal}` : `Сейчас, ур. ${level}`}: ${effect}` : null };
   };
   const copySources = planets.filter((other) => other.id !== planetId && !other.empty);
   const copyFrom = (sourceId: string) => {
@@ -434,4 +434,4 @@ function TargetInput({ value, name, max, autoFocus, onCommit, qa }: { value: num
     />
   );
 }
-
+

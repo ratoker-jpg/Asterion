@@ -8,7 +8,7 @@
  */
 export const QUIET_BUILD_MS = 5 * 60_000;
 /** Completions closer than this to the previous one join its notice. */
-export const BUILD_NOTICE_WINDOW_MS = 4_000;
+export const BUILD_NOTICE_WINDOW_MS = 3_000;
 /** However busy the stream, a notice is never held back longer than this. */
 export const BUILD_NOTICE_MAX_WAIT_MS = 12_000;
 
