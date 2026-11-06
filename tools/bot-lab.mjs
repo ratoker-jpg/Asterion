@@ -25,6 +25,11 @@ const { getNpcPolicy, setNpcPolicyOverride } = await import('../src/domain/npc/p
   if (error?.code !== 'ERR_MODULE_NOT_FOUND') throw error;
   return { getNpcPolicy: () => ({ version: null, params: null }), setNpcPolicyOverride: () => { throw new Error('this revision has no strategy policy; --policy needs one'); } };
 });
+// A revision without the planet shield (main before it) still runs in the lab: it simply reports no shield figures.
+const shieldModule = await import('../src/application/shield.ts').catch((error) => {
+  if (error?.code !== 'ERR_MODULE_NOT_FOUND') throw error;
+  return null;
+});
 import { applyCampaignRuntimeForCatchup } from '../src/application/npc-catchup-runner.ts';
 import { advanceLiveWorld, beginLiveWorld } from '../src/application/npc-live-world.ts';
 import { formatNpcJournalLines, setNpcJournalSink } from '../src/application/npc-journal.ts';
@@ -389,6 +394,14 @@ export function sampleEmpire(tally, state, at) {
     tally.known[planet.id] = { ownerId: planet.ownerId, main: planet.id === `${planet.ownerId}-planet`, buildings: sum(Object.values(planet.buildings ?? {}).map(Number)),
       income: Math.round(getNpcPlanetIncomePerHour(planet, 1)) };
   }
+  // Alliances once an hour (owner order 04.11.2026): how many NPC sit in one, and how many alliances there are.
+  const npcIds = Object.keys(state.npc?.profiles ?? {});
+  const allied = new Set(state.command.alliances.flatMap((alliance) => alliance.members.map((member) => member.ownerId)));
+  tally.allianceSamples = (tally.allianceSamples ?? 0) + 1;
+  tally.alliedShareSum = (tally.alliedShareSum ?? 0) + (npcIds.length ? npcIds.filter((id) => allied.has(id)).length / npcIds.length : 0);
+  tally.allianceCountSum = (tally.allianceCountSum ?? 0) + state.command.alliances.filter((alliance) => alliance.members.some((member) => npcIds.includes(member.ownerId))).length;
+  const npcAlliances = state.command.alliances.filter((alliance) => alliance.members.some((member) => npcIds.includes(member.ownerId)));
+  tally.smallShareSum = (tally.smallShareSum ?? 0) + (npcAlliances.length ? npcAlliances.filter((alliance) => alliance.members.length <= 2).length / npcAlliances.length : 0);
   for (const report of state.combat?.reports ?? []) {
     if (tally.seenReports.has(report.id)) continue;
     tally.seenReports.add(report.id);
@@ -439,6 +452,39 @@ export function describeDiversity(journal, owners) {
   const distances = shares.map((row) => sum([...kinds].map((kind) => Math.abs(row[kind] - mean[kind]))));
   return { styleEntropy: +entropyOf(Object.values(styleCounts)).toFixed(3), styleKinds: Object.keys(styleCounts).length,
     actionMixSpread: +(sum(distances) / Math.max(1, distances.length)).toFixed(3) };
+}
+
+/**
+ * Alliance life (owner order 04.11.2026): sizes, share of NPC in alliances, applications, answers, joins and
+ * leaves per game day, wars, and how often the strongest alliances are chosen. Read from the state and the
+ * journal only, so it works on any revision.
+ */
+export function describeAlliances(state, journal, tally, hours) {
+  const npcIds = new Set(Object.keys(state.npc?.profiles ?? {}));
+  const days = Math.max(1, hours / 24);
+  const alliances = state.command.alliances.filter((alliance) => alliance.members.some((member) => npcIds.has(member.ownerId)));
+  const strength = (alliance) => sum(alliance.members.map((member) => selectOwnerScore(state, member.ownerId)?.totalPoints ?? 0));
+  const ranked = [...state.command.alliances].sort((a, b) => strength(b) - strength(a) || (a.id < b.id ? -1 : 1)).map((alliance) => alliance.id);
+  const started = (prefix) => journal.filter((entry) => entry.ok === 1 && typeof entry.c === 'string' && entry.c.startsWith(prefix));
+  const applies = started('apply-to-alliance:');
+  const chosenRank = applies.map((entry) => ranked.indexOf(entry.c.split(':').slice(2).join(':')));
+  const sizes = alliances.map((alliance) => alliance.members.length).sort((a, b) => b - a);
+  const joins = started('accept-application:').length;
+  const leaves = started('leave-alliance:').length;
+  const wars = state.command.diplomacy.filter((relation) => relation.status === 'war').length;
+  return {
+    alliances: alliances.length, sizes, largest: sizes[0] ?? 0,
+    alliedShareNow: npcIds.size ? +(sum(alliances.map((alliance) => alliance.members.filter((member) => npcIds.has(member.ownerId)).length)) / npcIds.size).toFixed(3) : 0,
+    alliedShareMean: tally?.allianceSamples ? +(tally.alliedShareSum / tally.allianceSamples).toFixed(3) : 0,
+    smallNow: alliances.length ? +(sizes.filter((size) => size <= 2).length / alliances.length).toFixed(3) : 0,
+    smallShareMean: tally?.allianceSamples ? +(tally.smallShareSum / tally.allianceSamples).toFixed(3) : 0,
+    alliancesMean: tally?.allianceSamples ? +(tally.allianceCountSum / tally.allianceSamples).toFixed(2) : 0,
+    applications: applies.length, accepted: joins, rejected: started('reject-application:').length,
+    joinsPerDay: +(joins / days).toFixed(2), leavesPerDay: +(leaves / days).toFixed(2), leaves, created: started('create-alliance:').length,
+    wars,
+    topChosen: applies.length ? +(chosenRank.filter((rank) => rank === 0).length / applies.length).toFixed(3) : 0,
+    top3Chosen: applies.length ? +(chosenRank.filter((rank) => rank >= 0 && rank < 3).length / applies.length).toFixed(3) : 0,
+  };
 }
 
 /** What the world looks like for the questions the owner asks. */
@@ -541,6 +587,7 @@ export function describeWorld(state, journal = [], tally = null, sunTally = null
   return {
     worldAt: new Date(state.npcReplay?.processedThroughAt ?? 0).toISOString(), owners: owners.length,
     alliances: state.command.alliances.filter((alliance) => alliance.members.some((member) => member.ownerId !== playerId)).map((alliance) => `${alliance.tag}:${alliance.members.length}`),
+    allianceLife: describeAlliances(state, journal, tally, tally?.allianceSamples ?? 24),
     pirateRaids: pirateRaidTally(state),
     sun: {
       declared: raids.length, disbanded: raids.filter((raid) => raid.status === 'disbanded').length,
@@ -609,6 +656,13 @@ export function raidSizing(journal) {
     broughtValue: Math.round(sum(raids, (entry) => entry.d.sent)), lostValue: Math.round(sum(raids, (entry) => entry.d.loss)) };
 }
 
+/** Planet shield figures of one run (owner request 06.11.2026): who used it, what it turned away. */
+export function describeShield(state, telemetry) {
+  const npcOwners = getNpcOwnerIds(state.espionage?.targets, state.profile.playerId);
+  const used = npcOwners.filter((ownerId) => state.shields?.[ownerId]);
+  return { npcOwners: npcOwners.length, npcUsedShield: used.length, npcShare: npcOwners.length ? Math.round((used.length / npcOwners.length) * 1000) / 1000 : 0, ...telemetry };
+}
+
 /** The problems the summary names, in the owner's words. */
 export function listProblems(summary) {
   const problems = [];
@@ -664,6 +718,7 @@ function main() {
   const hours = save ? Number(option('hours', '6')) : option('hours') ? Number(option('hours')) : Number(option('days', '2')) * 24;
   const days = [];
   const startedAt = performance.now();
+  shieldModule?.resetShieldTelemetry();
   let groups;
   const tally = createEmpireTally();
   const sunTally = createSunTally();
@@ -681,7 +736,8 @@ function main() {
   }
   setNpcJournalSink(null);
   const result = { tool: 'bot-lab', policy: { file: option('policy') ? path.basename(option('policy')) : null, version: getNpcPolicy().version, params: getNpcPolicy().params }, source: save ? path.basename(save) : option('fixture') ? path.basename(option('fixture')) : 'fresh lab world',
-    hours, wallSeconds: Math.round((performance.now() - startedAt) / 1000), journalEntries: journal.length, days };
+    hours, wallSeconds: Math.round((performance.now() - startedAt) / 1000), journalEntries: journal.length, days,
+    shield: shieldModule ? describeShield(state, shieldModule.SHIELD_TELEMETRY) : null };
   if (out) {
     fs.writeFileSync(path.join(out, 'summary.json'), JSON.stringify(result, null, 2));
     fs.writeFileSync(path.join(out, 'bots-journal.jsonl'), formatNpcJournalLines(journal));

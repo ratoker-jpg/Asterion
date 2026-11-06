@@ -1,4 +1,5 @@
 import { getNpcJournalSink, NPC_JOURNAL_ALTERNATIVES } from './npc-journal.ts';
+import { applyNpcShieldDecision } from './npc-shield.ts';
 import { dispatchNpcLootWaves } from './npc-loot-wave.ts';
 import { describeOwnerPresence, selectOwnerPresence } from './owner-presence.ts';
 import { npcStyleBias, readNpcPlayStyle } from './npc-style.ts';
@@ -203,6 +204,8 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     if (placed !== target) state = { ...state, espionage: { ...state.espionage!, targets: { ...state.espionage!.targets, [target.id]: placed } } };
   }
   const utility = createNpcUtilityContext(state, profile, at, timeScale);
+  // A hostile fleet it expects to lose to is on its way: the owner raises the planet shield.
+  state = applyNpcShieldDecision(state, profile, utility, at, timeScale);
   // The owner's plans move on by what it sees now (ships built, shares arrived, fresh news).
   state = refreshNpcPlans(state, profile, utility, at, timeScale);
   // The owner reviews what each of its planets should hold, a few times a day.

@@ -9,7 +9,7 @@ import {
   selectActiveAidLedger,
   selectRequestById,
 } from '../domain/command/aid.ts';
-import { TEST_ALLY_OWNER_ID } from '../domain/command/catalog.ts';
+import { DEPUTY_MIN_DELIVERED_UNITS, TEST_ALLY_OWNER_ID } from '../domain/command/catalog.ts';
 import { kickMember, leaveAlliance } from '../domain/command/membership.ts';
 import { aidInFlightUnits } from '../domain/flights/aid-mission.ts';
 import {
@@ -434,7 +434,7 @@ test('Ira Vel helps the player through the same runtime: real ships, stock debit
   const request = selectRequestById(arrived.state.command, created.requestId!)!;
   assert.equal(request.status, 'completed');
   const iraMember = arrived.state.command.alliances[0].members.find((m) => m.ownerId === TEST_ALLY_OWNER_ID)!;
-  assert.equal(iraMember.deliveredUnits, 50_000);
+  assert.equal(iraMember.deliveredUnits, DEPUTY_MIN_DELIVERED_UNITS + 50_000);
   assert.equal(reconcileFlights(arrived.state, flight.arrivalAt, undefined, { mode: 'test' }).changed, false);
 
   const back = reconcileFlights(arrived.state, arrived.state.flights.records[0].returnAt!, undefined, { mode: 'test' });
@@ -640,4 +640,21 @@ test('arriving after the planet is gone voids the cargo even without a prior swe
   assert.ok(left.ok);
   const cut = reconcileAidMembership({ ...sent.state, command: left.state }, T0 + 1_000);
   assert.equal(cut.flights.records[0].cargoState, 'loaded');
+});
+
+test('membership changes end aid at the moment of the change: a later sweep would only differ by its own clock', async () => {
+  const { state, requestId } = iraRequest(world(), 120_000);
+  const sent = launch(state, 'event-time', requestId, 3, { metal: 60_000 });
+  const eventAt = T0 + 1_000;
+  const left = leaveAlliance(sent.state.command, sent.state.profile.playerId, eventAt, { successorOwnerId: TEST_ALLY_OWNER_ID });
+  assert.ok(left.ok);
+  const left_ = { ...sent.state, command: left.state };
+  const atEvent = reconcileAidMembership(left_, eventAt);
+  const atChunkEnd = reconcileAidMembership(left_, eventAt + 30 * MIN);
+  assert.notDeepEqual(atEvent.flights.records, atChunkEnd.flights.records, 'the sweep reads its own clock (a chunk end would change the result)');
+  assert.equal(reconcileAidMembership(atEvent, eventAt + 30 * MIN), atEvent, 'once swept at the event time, a later sweep changes nothing');
+  // The replay loop sweeps at the checkpoint of a decision that changed who is in an alliance (NPC leaving or joining),
+  // so the result never depends on where calculation slices end.
+  const source = (await import('node:fs')).readFileSync(new URL('./reconcile.ts', import.meta.url), 'latin1');
+  assert.match(source, /relationStructureToken\(next\.command\) !== relationsBefore\) next = reconcileAidMembership\(next, checkpoint\)/);
 });

@@ -335,7 +335,7 @@ export function draftNpcStrike(state: SaveState, profile: NpcProfile, utility: N
     // A friend or a partner is no target for a plan of many days.
     if ((utility.relations?.get(target.ownerId)?.regard ?? 0) >= NPC_STRIKE_FRIEND_REGARD || utility.partners?.has(target.ownerId)) continue;
     // The owner points rule decides at launch; a target outside the band is no plan.
-    if (!evaluatePlanetAttackEligibility(state, ownerId, target.ownerId).allowed) continue;
+    if (!evaluatePlanetAttackEligibility(state, ownerId, target.ownerId, undefined, at).allowed) continue;
     const enemy = believedPower(utility, report, empirePower);
     const wanted = npcWantedWin(utility, target.ownerId);
     if (estimateWinProbability(singleBest, enemy) >= wanted) continue; // one planet can do it: an ordinary attack
@@ -601,7 +601,7 @@ export function refreshNpcPlans(state: SaveState, profile: NpcProfile, utility: 
     if (plan.phase === 'launch') {
       // Points or relations changed while the force gathered: the attack is no longer allowed.
       const relation = getOwnerRelation(next, ownerId, plan.targetOwnerId);
-      if ((relation !== 'enemy' && relation !== 'neutral') || !evaluatePlanetAttackEligibility(next, ownerId, plan.targetOwnerId).allowed) {
+      if ((relation !== 'enemy' && relation !== 'neutral') || !evaluatePlanetAttackEligibility(next, ownerId, plan.targetOwnerId, undefined, at).allowed) {
         next = closePlan(next, plan, 'cancelled', at, 'attack-not-allowed');
       }
     }

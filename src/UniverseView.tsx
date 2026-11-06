@@ -14,7 +14,7 @@ import pirateWarlordArt from '../assets/source/characters/pirates/pirate_warlord
 import debrisIcon from './assets/ui/header-icons/debris.png';
 import './ui/universe/universe-radar.css';
 import './ui/universe/map-relations.css';
-import { classifyMapPlanet, type MapRelationStatus, type MapTone } from './application/map-relation.ts';
+import { applyMapShield, classifyMapPlanet, type MapRelationStatus, type MapTone } from './application/map-relation.ts';
 import { placeMapTip } from './ui/universe/map-tip-placement.ts';
 import './ui/sun-raid/universe-sun.css';
 import asteroid01 from '../assets/source/universe-navigation/asteroids/asteroid.variant-01.png';
@@ -129,6 +129,8 @@ type UniverseViewProps = {
   ownedPlanetName: string;
   profile: PlayerProfileState;
   ownerScores: Readonly<Record<string, OwnerScore>>;
+  /** Planet shields by owner id; a shielded planet shows a mark and cannot be attacked. */
+  shields?: Readonly<Record<string, import('./domain/shield/shield.ts').ShieldRecord>>;
   command: CommandState;
   playerPlanets: readonly UniversePersistedPlayerPlanet[];
   spyTargets: readonly SpyTargetState[];
@@ -735,7 +737,7 @@ function MovingAsteroid({ node, underlyingKind, nowMs, hasDebris, occupiedNodes,
   </button>;
 }
 
-export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPlanetName, profile, ownerScores, command, playerPlanets: playerPlanetsProp, spyTargets: spyTargetsProp, orbitalDebrisByCoordinate, asteroidDebrisPresenceBySpawnIndex, asteroidStates, pirateContactState, pirateContacts = [], pirateFocusTarget, mode, onColonize, onAsteroidRecycler, onExpedition, onExplorationRecon, onExplorationAttack, explorationEligibility = {}, onTransport, onSpy, onAttack, onPirateRecon, onPirateAttack, onPirateReport, onPirateSystemChange, focusTarget, onFocusHandled, onSunSelect, sunAlerts = [], homeCoordinate, debrisOrigin, onQuickSend, onQuickDetails }: UniverseViewProps) {
+export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPlanetName, profile, ownerScores, shields, command, playerPlanets: playerPlanetsProp, spyTargets: spyTargetsProp, orbitalDebrisByCoordinate, asteroidDebrisPresenceBySpawnIndex, asteroidStates, pirateContactState, pirateContacts = [], pirateFocusTarget, mode, onColonize, onAsteroidRecycler, onExpedition, onExplorationRecon, onExplorationAttack, explorationEligibility = {}, onTransport, onSpy, onAttack, onPirateRecon, onPirateAttack, onPirateReport, onPirateSystemChange, focusTarget, onFocusHandled, onSunSelect, sunAlerts = [], homeCoordinate, debrisOrigin, onQuickSend, onQuickDetails }: UniverseViewProps) {
   const galaxyCount = getActiveGalaxyCount();
   const [galaxy, setGalaxy] = useState(homeCoordinate?.galaxy ?? GALAXY);
   const [system, setSystem] = useState(homeCoordinate?.system ?? 1);
@@ -1002,12 +1004,12 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
       highlightTimerRef.current = window.setTimeout(() => setHighlightedNodeId(null), 3_000);
     }
   };
-  const mapStatusOf = (node: UniversePlanetNode): MapRelationStatus => classifyMapPlanet(
+  const mapStatusOf = (node: UniversePlanetNode): MapRelationStatus => applyMapShield(classifyMapPlanet(
     node,
     node.kind === 'player' || node.kind === 'npc' ? getUniverseOwnerRelation(node, owner.id, owner.alliance, owners.get(node.ownerId ?? ''), allianceDiplomacy) : null,
     owner.id,
     (ownerId) => ownerScores[ownerId],
-  );
+  ), node, owner.id, shields, nowMs);
   const listedNodes = systemData.positions.filter((node) => LISTED_KINDS.has(node.kind)).map((node) => ({ node, status: mapStatusOf(node) }));
   const homeWorld = playerPlanets.find((planet) => planet.isHomeworld)?.coordinate ?? playerPlanets[0]?.coordinate;
   const sunUnderAttack = sunAlerts.some((alert) => alert.galaxy === galaxy && alert.system === system);
@@ -1145,6 +1147,7 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
               onContextMenu={(event) => openQuick(node, event)}
             >
               {claim ? <span className={`uv-claim-ring uv-claim-ring--${claim}`} aria-hidden="true" /> : null}
+              {mapStatus.shieldLeft ? <span className="shield-aura" aria-hidden="true" data-qa-map-shield-aura /> : null}
               <img src={node.art} alt="" draggable={false} />
               {claim
                 ? <span className={'universe-map-occupancy universe-map-occupancy--' + claim}
@@ -1152,11 +1155,12 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
                     <i aria-hidden="true" />{CLAIM_COPY[claim]}
                   </span> : null}
               {showSlotLabels ? <span className="planet-slot">{node.coordinate.position}</span> : null}
-              <span className="planet-name" data-qa-map-caption><MapMark tone={mapStatus.tone} blocked={mapStatus.attackable === false} />{caption}</span>
+              <span className="planet-name" data-qa-map-caption><MapMark tone={mapStatus.tone} blocked={mapStatus.attackable === false} />{caption}{mapStatus.shieldLeft ? <i className="shield-mark" title={`Щит, ещё ${mapStatus.shieldLeft}`} data-qa-map-shield /> : null}</span>
               <span className="map-status-tip" data-map-status-tip data-qa-map-status-tip>
                 <strong>{node.name} <span>{coordinate}</span></strong>
                 <em><MapMark tone={mapStatus.tone} blocked={mapStatus.attackable === false} />{mapStatus.title}</em>
-                {mapStatus.detail ? <span className="map-status-tip__why">{mapStatus.detail}</span> : null}
+                {mapStatus.shieldLeft ? <span className="shield-badge" data-qa-map-shield-badge><i className="shield-mark" aria-hidden="true" />Под щитом, ещё {mapStatus.shieldLeft}</span> : null}
+                {mapStatus.detail && !mapStatus.shieldLeft ? <span className="map-status-tip__why">{mapStatus.detail}</span> : null}
               </span>
               {orbitalDebris > 0 && showDebris ? <span className="universe-debris-marker"><DebrisChip label={compactAmount(orbitalDebris)} /><span className="universe-debris-tooltip" id={`universe-debris-tooltip-${node.id}`} role="tooltip">Обломки на орбите: {numberFormat.format(orbitalDebris)}</span></span> : null}
             </button>
@@ -1187,7 +1191,7 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
             <button type="button" key={node.id} className={`universe-radar__row legend-${status.tone} ${selectedNodeId === node.id ? 'is-selected' : ''}`} onClick={() => selectNode(node)} onContextMenu={(event) => openQuick(node, event)}>
               <span className="universe-radar__pos">{node.coordinate.position}</span>
               <img src={node.art} alt="" draggable={false} />
-              <strong>{getUniverseNodeCaption(node, profile.displayName, owners.get(node.ownerId ?? '')?.displayName, owner.id)}</strong>
+              <strong>{getUniverseNodeCaption(node, profile.displayName, owners.get(node.ownerId ?? '')?.displayName, owner.id)}{status.shieldLeft ? <i className="shield-mark" title={`Под щитом, ещё ${status.shieldLeft}`} data-qa-list-shield /> : null}</strong>
               <i aria-hidden="true"><MapMark tone={status.tone} blocked={status.attackable === false} /></i>
             </button>
           ))}

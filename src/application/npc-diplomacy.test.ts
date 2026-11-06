@@ -128,7 +128,7 @@ test('full alliances and active cooldowns do not produce illegal join or create 
   assert.equal(kinds.includes('create-alliance'), false);
 });
 
-test('NPC leaders leave player applications and truce offers pending, but can decide NPC applications', () => {
+test('NPC leaders answer player applications (owner order 04.11.2026) and NPC ones, but leave truce offers of the player pending', () => {
   let state = campaign('NPCDIPLOPENDING1');
   const { ownerId, profile } = firstNpc(state);
   state = addNpcHall(state, ownerId);
@@ -140,7 +140,7 @@ test('NPC leaders leave player applications and truce offers pending, but can de
   const playerApplication = applyToAlliance(state.command, { ownerId: state.profile.playerId, displayName: state.profile.displayName, allianceId }, { now: NOW });
   assert.equal(playerApplication.ok, true);
   state = { ...state, command: playerApplication.state };
-  assert.equal(getNpcDiplomacyCandidates(state, profile, NOW).some((candidate) => candidate.kind.endsWith('application') && candidate.payload.applicationId === playerApplication.applicationId), false);
+  assert.equal(getNpcDiplomacyCandidates(state, profile, NOW).some((candidate) => candidate.kind.endsWith('application') && candidate.payload.applicationId === playerApplication.applicationId), true);
 
   const otherOwnerId = Object.keys(state.npc!.profiles).sort().find((id) => id !== ownerId)!;
   const otherTarget = Object.values(state.espionage!.targets!).find((item) => item.ownerId === otherOwnerId && item.kind === 'npc')!;

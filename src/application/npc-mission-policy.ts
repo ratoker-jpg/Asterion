@@ -464,7 +464,7 @@ export function getNpcMissionCandidates(
         const relation = legalRelation(state, ownerId, target);
         if (!relation) continue;
         // The same launch gate as dispatch: an inadmissible target is never a candidate.
-        if (!evaluatePlanetAttackEligibility(state, ownerId, target.ownerId, attackScoreCache).allowed) continue;
+        if (!evaluatePlanetAttackEligibility(state, ownerId, target.ownerId, attackScoreCache, at).allowed) continue;
         addCandidate(candidateList, ownerId, 'attack', origin.id, target.coordinate, attackShips, {
           destinationPlanetId: target.id,
           targetRelation: relation,

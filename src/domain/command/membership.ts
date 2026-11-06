@@ -6,8 +6,11 @@ import {
   ALLIANCE_NAME_MIN,
   ALLIANCE_TAG_MAX,
   ALLIANCE_TAG_MIN,
+  DEPUTY_MIN_DELIVERED_UNITS,
+  DEPUTY_MIN_TENURE_MS,
   LEADER_ABSENCE_MS,
   MAX_ALLIANCE_MEMBERS,
+  MAX_DEPARTURES,
   MAX_RESOLVED_APPLICATIONS,
   REAPPLY_COOLDOWN_MS,
 } from './catalog.ts';
@@ -25,6 +28,7 @@ import {
   selectReapplyBlock,
   selectRole,
 } from './selectors.ts';
+import { pruneDiplomacy } from './diplomacy.ts';
 import { parseCrest } from './crest.ts';
 import { normalizeEmblem } from './emblem.ts';
 import type {
@@ -159,6 +163,11 @@ function autoRejectPending(state: CommandState, allianceId: string, reason: Appl
         : application
     ))),
   };
+}
+
+function recordDeparture(state: CommandState, ownerId: string, allianceId: string, cause: 'left' | 'kicked', now: number): CommandState {
+  const kept = (state.departures ?? []).filter((entry) => !(entry.ownerId === ownerId && entry.allianceId === allianceId));
+  return { ...state, departures: [...kept, { ownerId, allianceId, at: now, cause }].slice(-MAX_DEPARTURES) };
 }
 
 function addCooldown(state: CommandState, cooldown: AllianceCooldown, now: number): CommandState {
@@ -366,7 +375,10 @@ function removeMemberFromAlliance(alliance: AllianceRecord, ownerId: string): Al
 
 function disband(state: CommandState, allianceId: string, now: number): CommandState {
   const closed = autoRejectPending(state, allianceId, 'disbanded', now);
-  return { ...closed, alliances: closed.alliances.filter((alliance) => alliance.id !== allianceId) };
+  const alliances = closed.alliances.filter((alliance) => alliance.id !== allianceId);
+  // Relations of the dissolved alliance go with it at once, as loading would prune them: a world that is saved and
+  // loaded after every slice must end up the same as one that never was.
+  return { ...closed, alliances, diplomacy: pruneDiplomacy(closed.diplomacy, new Set(alliances.map((alliance) => alliance.id))) };
 }
 
 function promote(alliance: AllianceRecord, successorOwnerId: string, now: number): AllianceRecord {
@@ -396,7 +408,7 @@ export function leaveAlliance(
 
   if (!others.length) {
     const closed = closeRequestsOfAlliance(state, alliance.id, now);
-    return { ok: true, disbanded: true, state: leaveCooldown(disband(closed, alliance.id, now), ownerId, 'left', now) };
+    return { ok: true, disbanded: true, state: leaveCooldown(recordDeparture(disband(closed, alliance.id, now), ownerId, alliance.id, 'left', now), ownerId, 'left', now) };
   }
 
   let next: AllianceRecord = alliance;
@@ -410,7 +422,7 @@ export function leaveAlliance(
   }
   next = removeMemberFromAlliance(next, ownerId);
   const left = closeRequestsOfAuthor(replaceAlliance(state, next), ownerId, alliance.id, 'author_left', now);
-  return { ok: true, disbanded: false, state: leaveCooldown(left, ownerId, 'left', now) };
+  return { ok: true, disbanded: false, state: leaveCooldown(recordDeparture(left, ownerId, alliance.id, 'left', now), ownerId, 'left', now) };
 }
 
 /** Leader may remove anyone; the deputy may remove ordinary members only. Nobody removes themselves this way. */
@@ -426,11 +438,25 @@ export function kickMember(state: CommandState, actorOwnerId: string, targetOwne
   if (targetRole === 'deputy' && membership.role !== 'leader') return fail(state, 'not_allowed', 'Заместителя может исключить только лидер.');
   const removed = replaceAlliance(state, removeMemberFromAlliance(alliance, targetOwnerId));
   const next = closeRequestsOfAuthor(removed, targetOwnerId, alliance.id, 'author_left', now);
-  return { ok: true, state: leaveCooldown(next, targetOwnerId, 'kicked', now) };
+  return { ok: true, state: leaveCooldown(recordDeparture(next, targetOwnerId, alliance.id, 'kicked', now), targetOwnerId, 'kicked', now) };
 }
 
-/** Only the leader names the single deputy. Pass `null` to dismiss the current one. */
-export function setDeputy(state: CommandState, actorOwnerId: string, targetOwnerId: string | null): CommandResult {
+/** Whether a member has earned the deputy's post: time in the alliance and aid delivered (one rule for everyone). */
+export function isDeputyEligible(member: AllianceMember, now: number): boolean {
+  return now - member.joinedAt >= DEPUTY_MIN_TENURE_MS && member.deliveredUnits >= DEPUTY_MIN_DELIVERED_UNITS;
+}
+
+/**
+ * The best member for the post among the eligible, by the order the alliance already uses for succession
+ * (aid delivered, then activity, joint operations, the draw made at joining). Null when nobody has earned it.
+ */
+export function pickDeputyCandidate(alliance: AllianceRecord, now: number): AllianceMember | null {
+  const eligible = alliance.members.filter((member) => member.ownerId !== alliance.leaderOwnerId && isDeputyEligible(member, now));
+  return eligible.length ? pickLeaderSuccessor({ ...alliance, members: eligible, deputyOwnerId: null, leaderOwnerId: alliance.leaderOwnerId }) : null;
+}
+
+/** Only the leader names the single deputy. Pass `null` to dismiss the current one. `now` enables the earned-post check. */
+export function setDeputy(state: CommandState, actorOwnerId: string, targetOwnerId: string | null, now?: number): CommandResult {
   const membership = selectOwnerMembership(state, actorOwnerId);
   if (!membership) return fail(state, 'not_member', 'Вы не состоите в союзе.');
   if (membership.role !== 'leader') return fail(state, 'not_allowed', 'Назначать заместителя может только лидер.');
@@ -442,6 +468,10 @@ export function setDeputy(state: CommandState, actorOwnerId: string, targetOwner
   }
   if (alliance.deputyOwnerId === targetOwnerId) return { ok: true, state };
   if (alliance.deputyOwnerId) return fail(state, 'deputy_exists', 'В союзе уже есть заместитель. Сначала снимите его.');
+  const target = alliance.members.find((member) => member.ownerId === targetOwnerId)!;
+  if (now !== undefined && !isDeputyEligible(target, now)) {
+    return fail(state, 'deputy_not_ready', 'Заместителем можно стать после срока в союзе и вклада помощью: этот участник пока не заслужил должность.');
+  }
   return { ok: true, state: replaceAlliance(state, { ...alliance, deputyOwnerId: targetOwnerId }) };
 }
 
