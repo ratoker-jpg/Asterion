@@ -251,7 +251,6 @@ async function rootScenes(win, directory, label) {
   await clickAll(win, '[data-qa-fleet-ship="battleship"] .fc-ship__amount button:last-of-type, [data-qa-fleet-ship="scout"] .fc-ship__amount button:last-of-type');
   await click(win, '[data-qa-mission-id="attack"]');
   await shot('root-02-attack-picked');
-  console.log('[geom]', label, JSON.stringify(await run(win, `['.fc-prep__commanders', '.fc-prep__commanders > h3', '.fc-prep__commanders > h3 > b', '.fc-prep__list', '.fc-prep__list > label'].map((q) => { const e = document.querySelector(q); if (!e) return q + ':none'; const r = e.getBoundingClientRect(); const cs = getComputedStyle(e); return q + ':' + Math.round(r.left) + '-' + Math.round(r.right) + ' w=' + cs.width + ' fs=' + cs.fontSize + ' pos=' + cs.position + ' ml=' + cs.marginLeft; })`)));
 
   await seed(win, { mutate: `${HUGE_FLEET} planet.name = 'Новая Константинополия-на-Орбите Великой Туманности';` });
   await openRoot(win);

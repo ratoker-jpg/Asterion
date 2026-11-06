@@ -548,10 +548,7 @@
 .fleet-workspace-v1 .fa-hero .fc-prep__commanders>h3{flex:none;margin:0 6px 0 0;white-space:nowrap}
 .fleet-workspace-v1 .fa-hero .fc-prep__commanders>h3>b{display:inline-block;margin:0 0 0 6px}
 .fleet-workspace-v1 .fa-hero .fc-prep__list{flex:none}
-@media (max-width:1700px){
-  .fleet-workspace-v1 .fleet-root-v2>.fc-missions{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:minmax(128px,1fr);overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 56px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 56px),transparent)}
-  .fleet-workspace-v1 .fleet-root-v2>.fc-missions::-webkit-scrollbar{display:none}
-  .fleet-workspace-v1 .fleet-root-v2>.fc-missions>button.fa-mission:hover:not(:disabled){translate:none}
-}
 .fleet-workspace-v1 .fa-hero .fc-prep__commanders>h3{width:max-content !important;min-width:max-content;flex-shrink:0;padding-right:4px;overflow:visible}
 .fleet-workspace-v1 .fa-hero .fc-prep__commanders{column-gap:12px}
+.fleet-workspace-v1 .fleet-root-v2>.fc-missions>button.fa-mission{padding:8px}
+.fleet-workspace-v1 .fleet-root-v2>.fc-missions>button.fa-mission span{font-size:15px !important;max-width:100%;overflow:hidden}
