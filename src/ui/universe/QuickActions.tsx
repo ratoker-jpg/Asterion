@@ -175,7 +175,7 @@ function QuickMenu({ target, actions, onChoose, onOpenCard }: { target: QuickTar
     <div ref={listRef} role="menu" aria-label={`Быстрые действия: ${target.node.name}`} onKeyDown={onKeyDown}>
       <header className="quick-pop__head">
         <b><span>{target.node.name}</span> <em>{formatUniverseCoordinate(target.node.coordinate)}</em></b>
-        <small>{targetCaption(target)}</small>
+        {targetCaption(target) !== target.node.name ? <small>{targetCaption(target)}</small> : null}
       </header>
       {actions.length === 0 ? <p className="quick-pop__empty">Для этого объекта нет быстрых действий.</p> : null}
       {actions.map((action, index) => {
