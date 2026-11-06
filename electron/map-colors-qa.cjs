@@ -248,8 +248,10 @@ async function checkAllTips(win, label) {
   const covered = [];
   for (const id of ids) {
     const selector = `[data-qa-universe-object="${id}"]`;
+    // The world lives while the check runs: an anomaly can be explored or expire (probes arrive in 3 s), so a gone object is skipped.
+    if (!await js(win, `Boolean(document.querySelector(${JSON.stringify(selector + ' img')}))`)) continue;
     await hover(win, selector);
-    if (!await js(win, `document.querySelector(${JSON.stringify(selector)}).matches(':hover')`)) continue; // under a neighbour here; its other tips still count
+    if (!await js(win, `document.querySelector(${JSON.stringify(selector)})?.matches(':hover')`)) continue; // under a neighbour here; its other tips still count
     await waitFor(win, `Number(getComputedStyle(document.querySelector(${JSON.stringify(selector)} + ' [data-qa-map-status-tip]')).opacity) > 0.9`, 4_000);
     await sleep(240); // the rise ends: the box is measured at rest
     const tip = await js(win, `(() => {
