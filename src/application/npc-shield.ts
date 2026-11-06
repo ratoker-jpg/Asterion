@@ -31,14 +31,18 @@ export function chooseNpcShield(state: SaveState, profile: NpcProfile, utility: 
   const incoming = unit(-worstMargin * 2.5);
   const recentLosses = [...(utility.attackLossAt?.values() ?? [])].filter((when) => at - when < DAY / Math.max(1, timeScale)).length;
   const losingWar = utility.threat >= 0.34 ? unit(0.45 * utility.threat + 0.3 * Math.min(1, recentLosses / 2) + 0.2 * (utility.strategy?.war ?? 0)) : 0;
-  const rebuild = utility.threat >= 0.67 ? unit(0.8 * utility.threat) : 0;
+  const rebuild = utility.threat >= 1 ? 0.7 : 0;
   const needs: ReadonlyArray<readonly [NpcShieldReason, number]> = [['incoming-fleet', incoming], ['losing-war', losingWar], ['rebuild', rebuild]];
   const [reason, need] = needs.reduce((best, item) => (item[1] > best[1] ? item : best));
   if (need <= 0) return null;
   // What a fighter gives up: its own attacks, and the bolder it is the more they are worth.
   const cost = 0.15 + 0.3 * unit(traits.aggression) + 0.2 * (utility.strategy?.war ?? 0) + 0.1 * unit(traits.riskTolerance) - 0.15 * unit(traits.planningHorizon);
   const value = need * (1 - 0.35 * unit(traits.riskTolerance)) - cost + estimationError(profile, `shield:${Math.floor(at / 3_600_000)}`, reason) * 0.5;
-  return value > 0.1 ? reason : null;
+  if (value <= 0.25) return null;
+  // A breather, not a way of life: apart from a fleet it certainly cannot beat, it waits one more cooldown after the last one.
+  const last = state.shields?.[ownerId];
+  if (last && reason !== 'incoming-fleet' && at - last.readyAt < last.readyAt - last.activeUntil) return null;
+  return reason;
 }
 
 export function applyNpcShieldDecision(state: SaveState, profile: NpcProfile, utility: NpcUtilityContext, at: number, timeScale: number): SaveState {
