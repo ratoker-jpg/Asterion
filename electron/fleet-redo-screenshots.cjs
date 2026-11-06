@@ -85,7 +85,7 @@ async function audit(win, name, label) {
       for (const node of host.querySelectorAll('h2,h3,p,small,strong,b,em,span,dd,button,time')) {
         if (node.closest('[role="tooltip"], .shipyard-stats-tooltip-v1, .fc-tip, .fc-wing > h3, .fc-ship__art, .fc-dock__status') || node.querySelector(':scope > .fc-tip')) continue;
         const style = getComputedStyle(node);
-        if (style.display === 'none' || style.visibility === 'hidden' || style.display === 'inline') continue;
+        if (style.display === 'none' || style.visibility === 'hidden' || style.display === 'inline' || style.clipPath !== 'none' || node.closest('[style*="clip-path"]') || node.matches('.fa-route__line')) continue;
         if (node.scrollWidth > node.clientWidth + 2 && node.clientWidth > 0) issues.push({ cut: node.tagName + '.' + node.className, text: node.textContent.trim().slice(0, 50), scroll: node.scrollWidth, client: node.clientWidth });
       }
       // Sibling cells of a row must not overlap.

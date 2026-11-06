@@ -2208,7 +2208,7 @@ function FleetWorkspace({
               </div>
               {planTiming ? <div className="fa-route__gas"><ResourceIcon kind="gas" label="Газ" /><b>{flightNumberLabel(planTiming.gas)}</b><span>газа на перелёт</span></div> : null}
               <span className="fa-route__from-label"><small>Откуда</small></span>
-              {planTargetName || planTargetWho ? <span className="fa-route__to-label"><small>Куда{planTargetWho ? ` · ${planTargetWho}` : ''}</small>{planTargetName ? <b>{planTargetName}</b> : null}</span> : <span className="fa-route__to-label"><small>Куда</small></span>}
+              {planTargetArt && (planTargetName || planTargetWho) ? <span className="fa-route__to-label"><small>Куда{planTargetWho ? ` · ${planTargetWho}` : ''}</small>{planTargetName ? <b>{planTargetName}</b> : null}</span> : <span className="fa-route__to-label"><small>Куда</small></span>}
             </div>
             {planQuickTargets.length ? <div className="fa-route__quick" data-qa-plan-quick-targets>
               {planQuickTargets.map(({ target, art, estimate }) => (

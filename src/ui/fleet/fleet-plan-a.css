@@ -319,3 +319,9 @@ html body .flight-briefing-v2 .flight-composition-v3:has(> .flight-timeline-ship
 html body .flight-briefing-v2 .flight-composition-v3:has(> .flight-timeline-ship-card:nth-child(6)) .flight-timeline-ship-card>b{font-size:24px !important}
 html body .flight-briefing-v2 .flight-composition-v3:has(> .flight-timeline-ship-card:nth-child(6)) .flight-timeline-ship-card strong{font-size:17px !important}
 html body .flight-briefing-v2 .flight-composition-v3:has(> .flight-timeline-ship-card:nth-child(6)) .flight-timeline-ship-card div>small{font-size:15px !important}
+
+/* no target yet: the target controls need more room under the dashed circle */
+html body .flight-briefing-v2:has(.fa-route:not(.is-set)) [data-qa-flight-target-step]{top:372px !important}
+html body .flight-briefing-v2:has(.fa-route:not(.is-set)) .flight-briefing-v2__right{padding-top:150px !important}
+html body .flight-briefing-v2 .flight-timeline-cargo-field{grid-template-areas:"icon value" "bar bar" "label label" "max max" !important}
+html body .flight-briefing-v2 .flight-timeline-cargo-input em{grid-area:max !important;justify-self:start !important}
