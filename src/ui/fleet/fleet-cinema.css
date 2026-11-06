@@ -527,3 +527,12 @@
 /* the queue bar stays inside the page */
 .fleet-workspace-v1 .fc-build>.fleet-production-queue-v1{width:100%;max-width:100%;box-sizing:border-box;overflow:hidden}
 .fleet-workspace-v1 .fleet-production-queue-list-v1{min-width:0}
+/* round 3: prices and long names wrap, cards grow for long lock reasons */
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__cost{flex-wrap:wrap;overflow:visible}
+.fleet-workspace-v1 .fc-catalog>.fc-unit-list{grid-auto-rows:minmax(339px,auto)}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair){grid-template-rows:190px auto auto minmax(0,1fr) auto}
+.fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__name>h3{white-space:normal;overflow-wrap:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.15}
+/* the queue bar sits right under two rows of cards; more cards scroll inside the list (mockup: «ещё ниже: прокрутка») */
+.fleet-workspace-v1 .fc-build>.fleet-production-queue-v1{position:relative;bottom:auto}
+.fleet-workspace-v1 .fc-catalog>.fc-unit-list{max-height:690px;overflow-y:auto;overscroll-behavior:contain;padding-right:4px}
+.fleet-workspace-v1 .fa-hero .fc-prep__commanders>h3>b{margin:0 4px}
