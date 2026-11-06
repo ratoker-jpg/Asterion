@@ -1,7 +1,7 @@
 import { mergeBotJournal } from '../bot-journal-store.ts';
 import { useEffect, useRef } from 'react';
 import {
-  decideCloudEntry, describeConflict, describeLocalReason, describeServerStall, pageClockOffsetMs, saveSchemaVersion, saveWorldAt, sha256Text,
+  CLOUD_HEARTBEAT_EVERY_MS, CLOUD_UPLOAD_EVERY_MS, decideCloudEntry, describeConflict, describeLocalReason, describeServerStall, pageClockOffsetMs, saveSchemaVersion, saveWorldAt, sha256Text,
   type CloudCampaignView, type CloudConflictReason, type CloudSyncRecord, type CloudWaitReason,
 } from '../../application/cloud/cloud-sync.ts';
 import { getBrowserSaveStorage, MISSING_EXTERNAL_SAVE } from '../../application/save-storage.ts';
@@ -18,8 +18,7 @@ import type { ActiveSession } from './session.ts';
  * hands the save over so the server keeps the world alive.
  */
 
-/** A cloud copy while playing (a backup; the server does not move the world meanwhile). */
-export const CLOUD_UPLOAD_EVERY_MS = 12 * 60_000;
+export { CLOUD_HEARTBEAT_EVERY_MS, CLOUD_UPLOAD_EVERY_MS };
 
 export type CloudSettings = {
   url: string;
@@ -59,7 +58,7 @@ export type CloudWorld = {
 };
 
 type Failure = { ok: false; code: string; error: string };
-type UploadMeta = { left?: boolean; schemaVersion: number; worldAt: number; clockOffsetMs: number };
+type UploadMeta = { left?: boolean; schemaVersion: number; worldAt: number; clockOffsetMs: number; /** The server took the world over: send this save even if it equals the last upload. */ takeBack?: boolean };
 
 export type CloudServerStatus = {
   version: string;
@@ -85,6 +84,8 @@ export type CloudBridge = {
   release(id: string): Promise<({ ok: true }) | Failure>;
   /** A game newer than the server asks it to install its release (the server then moves the living world there). */
   requestUpdate(): Promise<({ ok: true; requested: boolean; serverVersion: string }) | Failure>;
+  /** «Still here»: renews the server's lease on the campaign (the server takes the world over when it runs out). */
+  heartbeat(id: string, clockOffsetMs: number): Promise<({ ok: true; takenOver: boolean }) | Failure>;
   markSynced(id: string, revision: number, digest: string): Promise<boolean>;
   preferLocal(id: string): Promise<boolean>;
 };
@@ -187,7 +188,7 @@ export async function prepareCloudEntry(slot: SaveSlotMeta, options: { onStage?:
     const campaign = found.campaign;
     const decision = decideCloudEntry({
       localDigest, localSavedAt: slot.updatedAt, record, campaign, appVersion: settings.appVersion, deviceId: settings.deviceId, schemaVersion: SAVE_SCHEMA_VERSION,
-      takeNow: options.takeNow,
+      takeNow: options.takeNow, localWorldAt: raw === null ? null : saveWorldAt(raw),
     });
     if (decision.action === 'wait') {
       // The server installs this game's release and moves the world there; the wait window asks again meanwhile.
@@ -211,13 +212,21 @@ export async function prepareCloudEntry(slot: SaveSlotMeta, options: { onStage?:
       return { kind: 'local', message: decision.reason === 'same' || decision.reason === 'not-on-server' ? null : text, tone: 'info' };
     }
     if (decision.action === 'claim') {
+      let copyNote = '';
+      if (decision.keepLocalCopy) {
+        // The server's world is further along; what this save did after its last upload is never thrown away.
+        const copy = duplicateSaveSlot(slot.id);
+        if (!copy.ok) return { kind: 'local', message: `Не удалось сохранить локальную копию (${copy.error}): ничего не заменено, играем локальное сохранение.`, tone: 'error' };
+        copyNote = ` Действия после последней выгрузки сохранены в слоте «${slot.name} (копия)».`;
+      }
       options.onStage?.('Получаем мир с сервера… сервер передаёт прожитый мир');
       const claimed = await bridge.claim(slot.id, decision.baseRevision);
       if (!claimed.ok) return { kind: 'local', message: `Мир с сервера не получен (${claimed.error}): досчитываем локально.`, tone: 'error' };
       if (!claimed.world) return { kind: 'local', message: null, tone: 'info' };
       options.onStage?.('Получаем мир с сервера… сохраняем');
       if (!await applyWorld(bridge, slot, claimed.world)) return { kind: 'local', message: 'Мир с сервера не записан: играем локальное сохранение.', tone: 'error' };
-      return withStallNote(appliedMessage(claimed.world, startedAt), describeServerStall(campaign!.live, 'took-server'));
+      const taken = withStallNote(appliedMessage(claimed.world, startedAt), describeServerStall(campaign!.live, 'took-server'));
+      return taken.kind === 'applied' && copyNote ? { ...taken, message: `${taken.message}${copyNote}` } : taken;
     }
     if (decision.release) await bridge.release(slot.id).catch(() => undefined);
     options.onStage?.('Получаем мир с сервера… скачиваем копию');
@@ -367,15 +376,28 @@ export function useCampaignCloudUploads(session: ActiveSession | null, saveKey: 
       } catch { return null; }
     };
     void activeCloudSettings().then((settings) => { if (alive) enabled.current = Boolean(settings); });
-    const timer = window.setInterval(() => {
+    const uploadNow = (takeBack = false) => {
       if (!enabled.current || inFlight) return;
       const text = stored();
       if (!text) return;
       inFlight = true;
-      bridge.upload(session.slotId, session.slotName, text, uploadMeta(text, false))
+      bridge.upload(session.slotId, session.slotName, text, { ...uploadMeta(text, false), ...(takeBack ? { takeBack: true } : {}) })
         .catch(() => undefined)
         .finally(() => { inFlight = false; });
-    }, CLOUD_UPLOAD_EVERY_MS);
+    };
+    const timer = window.setInterval(() => uploadNow(), CLOUD_UPLOAD_EVERY_MS);
+    // «Still here» keeps the server's lease on the campaign. Without a revision on the server yet, or after the
+    // server took the world over (this game was silent too long), the save goes up at once: it wins.
+    const beat = () => {
+      if (!enabled.current) return;
+      void bridge.heartbeat(session.slotId, pageClockOffsetMs()).then((result) => {
+        if (!alive) return;
+        if (result.ok && result.takenOver) uploadNow(true);
+        else if (!result.ok && (result.code === 'not-found' || result.code === 'no-record')) uploadNow();
+      }).catch(() => undefined);
+    };
+    const heartbeat = window.setInterval(beat, CLOUD_HEARTBEAT_EVERY_MS);
+    const first = window.setTimeout(beat, 4_000);
     const handOver = () => {
       if (!enabled.current) return;
       enabled.current = false;
@@ -387,6 +409,8 @@ export function useCampaignCloudUploads(session: ActiveSession | null, saveKey: 
     return () => {
       alive = false;
       window.clearInterval(timer);
+      window.clearInterval(heartbeat);
+      window.clearTimeout(first);
       window.removeEventListener('pagehide', handOver);
     };
   }, [session, saveKey]);

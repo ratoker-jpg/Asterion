@@ -85,6 +85,21 @@ export type LiveWorld = {
   recovery?: LiveRecovery;
 };
 
+/**
+ * Who is playing the campaign right now (server.ts heartbeat, upload, claim).
+ * When it runs out the server takes the world over from `baseRevision`.
+ */
+export type Lease = {
+  deviceId: string;
+  /** Wall time of the last upload or heartbeat. */
+  seenAt: number;
+  /** The head revision the player's game continues. */
+  baseRevision: number;
+  gameVersion: string;
+  /** The player's page clock offset (a world taken over lives on the same clock). */
+  clockOffsetMs: number;
+};
+
 export type Campaign = {
   version: 1;
   id: string;
@@ -94,6 +109,8 @@ export type Campaign = {
   nextSnapshotId: number;
   snapshots: Snapshot[];
   live: LiveWorld | null;
+  /** A player is in the game: the world is theirs until the lease runs out. */
+  lease?: Lease;
 };
 
 export type RetentionPolicy = {
@@ -273,6 +290,8 @@ export function describeCampaign(campaign: Campaign, now: number) {
       ...(campaign.live.error ? { error: campaign.live.error } : {}),
       ...(campaign.live.recovery ? { recovery: publicRecovery(campaign.live.recovery) } : {}),
     } : null,
+    /** Another computer asks before taking a campaign somebody is still playing: how long ago the game last reported. */
+    lease: campaign.lease ? { deviceId: campaign.lease.deviceId, ageMs: Math.max(0, now - campaign.lease.seenAt) } : null,
     snapshots: [...campaign.snapshots].sort((left, right) => right.id - left.id).map(publicSnapshot),
   };
 }

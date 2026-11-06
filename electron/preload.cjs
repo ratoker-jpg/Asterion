@@ -71,6 +71,7 @@ contextBridge.exposeInMainWorld('asterionDesktop', {
     download: (id, snapshotId) => ipcRenderer.invoke('asterion:cloud:download', id, snapshotId),
     release: (id) => ipcRenderer.invoke('asterion:cloud:release', id),
     requestUpdate: () => ipcRenderer.invoke('asterion:cloud:update-request'),
+    heartbeat: (id, clockOffsetMs) => ipcRenderer.invoke('asterion:cloud:heartbeat', id, clockOffsetMs),
     markSynced: (id, revision, digest) => ipcRenderer.invoke('asterion:cloud:mark-synced', id, revision, digest),
     preferLocal: (id) => ipcRenderer.invoke('asterion:cloud:prefer-local', id),
   },

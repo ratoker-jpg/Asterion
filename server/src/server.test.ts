@@ -20,6 +20,7 @@ import { createInitialSaveState, createPersistenceFacade, serializeSaveForStorag
 import { freezeNpcCatchupTarget } from '../../src/application/npc-catchup.ts';
 import { runNpcCatchup } from '../../src/application/npc-catchup-runner.ts';
 import { applyCampaignRuntimeForCatchup } from '../../src/application/npc-catchup-runner.ts';
+import { reconcileRuntime } from '../../src/application/reconcile.ts';
 import type { SaveState } from '../../src/application/contracts.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -553,4 +554,160 @@ test('recover-world.sh raises a failed world through the server and never prints
   const nothing = await run([]);
   assert.equal(nothing.status, 0);
   assert.match(nothing.stdout, /поднимать нечего/);
+});
+
+/* ------------------------------------------------------------------ lease and takeover */
+
+const LEASE_MS = 1_500;
+const takeoverConfig = (overrides: Partial<ServerConfig> = {}): Partial<ServerConfig> => ({ leaseMs: LEASE_MS, leaseCheckMs: 150, ...overrides });
+
+const heartbeat = (base: string, id: string, body: Record<string, unknown>) => api(base, `/v1/campaigns/${id}/heartbeat`, {
+  method: 'POST', body: JSON.stringify({ deviceId: DEVICE, baseRevision: 1, gameVersion: VERSION, clockOffsetMs: 0, ...body }),
+});
+
+/** The first place two JSON texts differ (a readable failure for «the same world»). */
+function firstDiff(left: string, right: string, path = ''): string | null {
+  const [a, b] = [JSON.parse(left) as unknown, JSON.parse(right) as unknown];
+  const walk = (x: unknown, y: unknown, at: string): string | null => {
+    if (JSON.stringify(x) === JSON.stringify(y)) return null;
+    if (x && y && typeof x === 'object' && typeof y === 'object') {
+      for (const key of new Set([...Object.keys(x as object), ...Object.keys(y as object)])) {
+        const found = walk((x as Record<string, unknown>)[key], (y as Record<string, unknown>)[key], `${at}.${key}`);
+        if (found) return found;
+      }
+    }
+    return `${at}: ${JSON.stringify(x)?.slice(0, 120)} <> ${JSON.stringify(y)?.slice(0, 120)}`;
+  };
+  return walk(a, b, path);
+}
+
+const view = async (base: string, id: string) => (await api(base, `/v1/campaigns/${id}`)).json();
+
+/** The world the game would have after a local catch-up from `text` to `target`, without the news summary (a hand-over closes it). */
+async function localWorldText(text: string, target: number): Promise<string> {
+  const state = load(text);
+  applyCampaignRuntimeForCatchup(state, target);
+  const caught = await runNpcCatchup(freezeNpcCatchupTarget(state, target), { now: () => target });
+  return withoutSummary(serializeSaveForStorage(caught.state as SaveState, 'production'));
+}
+
+/** The physical world as npc-catchup-slicing.test.ts compares it: what a time slice may legitimately move (the replay cursor's last step, report metadata) is left out. */
+async function physicalWorld(text: string, target: number): Promise<unknown> {
+  const state = load(text);
+  applyCampaignRuntimeForCatchup(state, target);
+  const caught = (await runNpcCatchup(freezeNpcCatchupTarget(state, target), { now: () => target })).state as SaveState;
+  // The clock tick that follows a catch-up brings every planet up to the same instant.
+  const world = reconcileRuntime(caught, { planetId: caught.currentPlanetId, now: target, mode: 'production', testTimeScale: 1 }).state;
+  return JSON.parse(JSON.stringify({
+    npc: world.npc, npcScience: world.npcScience,
+    targets: Object.fromEntries(Object.entries(world.espionage?.targets ?? {}).map(([id, entry]) => [id, { ...entry, repair: undefined }])),
+    flights: world.flights.records, missions: world.espionage?.missions, spyReports: world.espionage?.reports,
+    command: world.command, pirate: world.pirate, exploration: world.exploration, asteroids: world.asteroidSimulation,
+    battles: world.combat.reports.map((report) => report.id), rating: world.rating,
+  }));
+}
+
+/** A hand-over closes the absence's news summary; a game that never left keeps it open: everything else must be equal. */
+function withoutSummary(text: string): string {
+  const walk = (value: unknown): void => {
+    if (!value || typeof value !== 'object') return;
+    const record = value as Record<string, unknown>;
+    if (record.npcReplay && typeof record.npcReplay === 'object') delete (record.npcReplay as Record<string, unknown>).summary;
+    for (const child of Object.values(record)) walk(child);
+  };
+  const parsed = JSON.parse(text) as unknown;
+  walk(parsed);
+  return JSON.stringify(parsed);
+}
+const localWorld = localWorldText;
+
+test('a game that goes silent loses the campaign to the server; heartbeats keep it; the world equals a local catch-up', async (t) => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'asterion-cloud-'));
+  t.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+  const cloud = createCloudServer(config(dataDir, takeoverConfig()));
+  const base = `http://127.0.0.1:${await cloud.listen()}`;
+  t.after(() => cloud.close());
+  const id = 'slot-lease-0001';
+  const text = leftWorld(40);
+  const saved = load(text);
+  // A plain upload (the player is still in the game): no living world, but the game now holds the campaign.
+  assert.equal((await upload(base, id, text, {})).status, 200);
+  const held = await view(base, id);
+  assert.equal(held.live, null);
+  assert.equal(held.lease.deviceId, DEVICE);
+  assert.equal((await heartbeat(base, id, { baseRevision: 0 })).status, 409, 'a heartbeat for another revision is refused');
+
+  // Heartbeats for longer than the lease keep the world with the game.
+  for (let beat = 0; beat < 4; beat += 1) {
+    await new Promise((resolve) => setTimeout(resolve, LEASE_MS / 2));
+    const answer = await heartbeat(base, id, {});
+    assert.equal(answer.status, 200);
+    assert.equal((await answer.json()).takenOver, false);
+  }
+  assert.equal((await view(base, id)).live, null, 'a game that keeps reporting keeps its world');
+  const other = await heartbeat(base, id, { deviceId: 'device-other-0002' });
+  assert.equal(other.status, 409, 'two computers: the second does not take the campaign from the first');
+  assert.equal((await other.json()).error, 'other-device');
+
+  // Silence: the server carries on from the last uploaded revision.
+  const lived = await waitFor(() => view(base, id), (value) => value.live?.lagMs !== null && value.live?.lagMs < 5_000 && value.live.worldAt > saved.npcReplay!.processedThroughAt + 30 * 60_000);
+  assert.equal(lived.live.baseRevision, 1);
+  assert.equal(lived.lease, null);
+  assert.equal(cloud.liveCampaignId(), id);
+  // The game that is still there is told, and its own save wins over the server's world (kept as a backup).
+  const late = await heartbeat(base, id, {});
+  assert.equal((await late.json()).takenOver, true);
+
+  const claimed = await claimWorld(base, id, 1, VERSION);
+  assert.equal(claimed.status, 200);
+  const localText = await localWorldText(text, claimed.worldAt!);
+  assert.equal(withoutSummary(claimed.text!), localText, `${firstDiff(withoutSummary(claimed.text!), localText)} -- server takeover = local catch-up from the same save, byte for byte`);
+});
+
+test('the client returns while the server is still catching up: what is left replays locally to the same world', async (t) => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'asterion-cloud-'));
+  t.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+  const cloud = createCloudServer(config(dataDir, takeoverConfig({ stepBudgetMs: 60 })));
+  const base = `http://127.0.0.1:${await cloud.listen()}`;
+  t.after(() => cloud.close());
+  const id = 'slot-lease-0002';
+  const text = leftWorld(24 * 60);
+  const saved = load(text);
+  assert.equal((await upload(base, id, text, {})).status, 200);
+  const midway = await waitFor(() => view(base, id), (value) => value.live?.worldAt > saved.npcReplay!.processedThroughAt + 3_600_000 && value.live.lagMs > 3 * 3_600_000);
+  assert.equal(midway.live.baseRevision, 1);
+  const claimed = await claimWorld(base, id, 1, VERSION);
+  assert.equal(claimed.status, 200);
+  assert.ok(claimed.worldAt! < Date.now() - 3_600_000, 'the claim came in the middle of the catch-up');
+  const target = Date.now();
+  // The game continues the handed-over world to now; a game that never left it replays the whole absence itself: the same world.
+  const [continued, whole] = [await physicalWorld(claimed.text!, target) as Record<string, unknown>, await physicalWorld(text, target) as Record<string, unknown>];
+  for (const key of Object.keys(whole)) {
+    assert.deepEqual(continued[key], whole[key], `${key}: any time slicing gives the same physical world`);
+  }
+});
+
+test('a world left by an older game moves to this release on takeover, and the played-last campaign lives', async (t) => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'asterion-cloud-'));
+  t.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+  const cloud = createCloudServer(config(dataDir, takeoverConfig()));
+  const base = `http://127.0.0.1:${await cloud.listen()}`;
+  t.after(() => cloud.close());
+  // An old campaign lives (its player left it).
+  assert.equal((await upload(base, 'slot-old-0001', leftWorld(5), { 'x-asterion-left': '1' })).status, 200);
+  await waitFor(() => view(base, 'slot-old-0001'), (value) => value.live?.lagMs !== null && value.live?.lagMs < 5_000);
+  assert.equal(cloud.liveCampaignId(), 'slot-old-0001');
+  // The player plays another one, saved by an older game version: the idle world is finished at once (its memory is free).
+  const text = leftWorld(40);
+  assert.equal((await upload(base, 'slot-new-0001', text, { 'x-asterion-game-version': '1.0.0' })).status, 200);
+  await waitFor(async () => cloud.liveCampaignId(), (value) => value === null);
+  const old = await view(base, 'slot-old-0001');
+  assert.equal(old.live, null);
+  assert.equal(old.head.origin, 'server', 'the idle campaign is a finished revision');
+  // Silence: the campaign played last lives, in this release.
+  const lived = await waitFor(() => view(base, 'slot-new-0001'), (value) => value.live?.lagMs !== null && value.live?.lagMs < 5_000);
+  assert.equal(cloud.liveCampaignId(), 'slot-new-0001');
+  assert.equal(lived.live.gameVersion, VERSION);
+  assert.equal(lived.live.migratedFrom, '1.0.0');
+  assert.equal((await claimWorld(base, 'slot-new-0001', 1, VERSION)).status, 200);
 });

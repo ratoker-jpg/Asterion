@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  compareGameVersions, decideCloudEntry, describeLocalReason, describeServerStall, saveSchemaVersion, SERVER_CATCHUP_WAIT_LAG_MS, SERVER_UPDATE_QUIET_MS, saveWorldAt, sha256Text, waitPresentation,
+  CLOUD_LEASE_MS, compareGameVersions, decideCloudEntry, LOCAL_COPY_MIN_MS, LOCAL_UNSYNCED_MAX_MS, describeLocalReason, describeServerStall, saveSchemaVersion, SERVER_CATCHUP_WAIT_LAG_MS, SERVER_UPDATE_QUIET_MS, saveWorldAt, sha256Text, waitPresentation,
   type CloudCampaignView, type CloudEntryInput, type CloudSnapshotView,
 } from './cloud-sync.ts';
 import { createHash } from 'node:crypto';
@@ -176,4 +176,46 @@ test('server updated and caught up: the wait ends by itself (claim)', () => {
 
 test('local-entry notices carry no version numbers', () => {
   assert.doesNotMatch(describeLocalReason('version-mismatch', campaign(snapshot(3), { gameVersion: '1.0.9' })), /\d\.\d/);
+});
+
+test('the server took the campaign over after a power cut: its further world wins, what this save did after the last upload is kept as a copy', () => {
+  // The save differs from what was synced (the game saved after the last upload), the server lived on from that revision.
+  const head = snapshot(3, { worldAt: 1_000, left: false });
+  const lived = campaign(head, { worldAt: 10_000_000, lagMs: 0 });
+  const stale = { localDigest: 'newer-than-synced', record: { revision: 3, digest: 'synced', syncedAt: 1 }, campaign: lived };
+  assert.deepEqual(decideCloudEntry(input({ ...stale, localWorldAt: 1_000 + LOCAL_COPY_MIN_MS + 1 })), { action: 'claim', baseRevision: 3, keepLocalCopy: true });
+  assert.deepEqual(decideCloudEntry(input({ ...stale, localWorldAt: 1_000 + LOCAL_COPY_MIN_MS })), { action: 'claim', baseRevision: 3, keepLocalCopy: false },
+    'nothing worth a copy when the save barely moved after the last upload');
+  // Still catching up on the server: the game waits for it (the wait window shows how much is left), it does not replay from the old save.
+  assert.deepEqual(decideCloudEntry(input({ ...stale, localWorldAt: 1_500, campaign: campaign(head, { worldAt: 10_000_000, lagMs: 14 * 3_600_000 }) })),
+    { action: 'wait', reason: 'catching-up', baseRevision: 3 });
+  // «Досчитать на этом ПК» takes what the server has lived so far and finishes here.
+  assert.deepEqual(decideCloudEntry(input({ ...stale, localWorldAt: 1_500, takeNow: true, campaign: campaign(head, { worldAt: 10_000_000, lagMs: 14 * 3_600_000 }) })),
+    { action: 'claim', baseRevision: 3, keepLocalCopy: false });
+});
+
+test('a local save that is as far or further along than the server world is never replaced', () => {
+  const head = snapshot(3, { worldAt: 1_000, left: false });
+  const stale = { localDigest: 'newer-than-synced', record: { revision: 3, digest: 'synced', syncedAt: 1 } };
+  const lived = campaign(head, { worldAt: 40_000, lagMs: 0 });
+  assert.deepEqual(decideCloudEntry(input({ ...stale, campaign: lived, localWorldAt: 40_000 })), { action: 'local', reason: 'local-newer', release: true });
+  assert.deepEqual(decideCloudEntry(input({ ...stale, campaign: lived, localWorldAt: 90_000 })), { action: 'local', reason: 'local-newer', release: true });
+  // Unknown game time of the local save: the old rule, nothing is replaced.
+  assert.deepEqual(decideCloudEntry(input({ ...stale, campaign: lived })), { action: 'local', reason: 'local-newer', release: true });
+  // Long offline play past the last upload is not the tail of a cut-off session: the player chooses.
+  const far = campaign(head, { worldAt: 10_000_000, lagMs: 0 });
+  assert.deepEqual(decideCloudEntry(input({ ...stale, campaign: far, localWorldAt: 1_000 + LOCAL_UNSYNCED_MAX_MS + 1 })), { action: 'ask', reason: 'diverged' });
+  // After a clean exit the server's world is only the absence: this computer's offline play stays (the old rule).
+  const afterExit = campaign(snapshot(3, { worldAt: 1_000, left: true }), { worldAt: 10_000_000, lagMs: 0 });
+  assert.deepEqual(decideCloudEntry(input({ ...stale, campaign: afterExit, localWorldAt: 5_000 })), { action: 'local', reason: 'local-newer', release: true });
+  // The server moved on from a revision this computer never saw: still the player's choice.
+  assert.deepEqual(decideCloudEntry(input({ ...stale, localWorldAt: 1_000, campaign: campaign(snapshot(5, { worldAt: 9_000 })) })), { action: 'ask', reason: 'diverged' });
+});
+
+test('two computers: a campaign another computer is still playing is never taken from it', () => {
+  const head = snapshot(3, { left: false });
+  const playing = (ageMs: number): CloudCampaignView => ({ ...campaign(head), lease: { deviceId: OTHER, ageMs } });
+  assert.deepEqual(decideCloudEntry(input({ campaign: playing(30_000) })), { action: 'ask', reason: 'other-device' });
+  assert.deepEqual(decideCloudEntry(input({ campaign: playing(CLOUD_LEASE_MS) })), { action: 'local', reason: 'same', release: false }, 'the lease ran out: the lease is nobody-s');
+  assert.deepEqual(decideCloudEntry(input({ campaign: { ...campaign(head), lease: { deviceId: ME, ageMs: 1 } } })), { action: 'local', reason: 'same', release: false }, 'the same computer after a crash');
 });
