@@ -113,7 +113,7 @@
 }
 .fleet-workspace-v1 .fa-hero .fc-dock__go:hover:not(:disabled){filter:brightness(1.08);box-shadow:0 0 46px rgba(95,212,255,.55)}
 .fleet-workspace-v1 .fa-hero .fc-dock__go:active:not(:disabled){scale:.97}
-.fleet-workspace-v1 .fa-hero .fc-dock__go:disabled{background:rgba(150,200,255,.14);color:#8ea3b6;box-shadow:none;opacity:1;cursor:not-allowed}
+.fleet-workspace-v1 .fa-hero .fc-dock__go:disabled{background:rgba(8,16,28,.88);color:#9fb3c6;box-shadow:inset 0 0 0 2px rgba(150,200,255,.22);opacity:1;cursor:not-allowed}
 .fleet-workspace-v1 .fa-hero .fc-dock__go:disabled::after{display:none}
 @keyframes fa-sheen{0%,62%{translate:-120% 0}100%{translate:120% 0}}
 
