@@ -325,3 +325,7 @@ html body .flight-briefing-v2:has(.fa-route:not(.is-set)) [data-qa-flight-target
 html body .flight-briefing-v2:has(.fa-route:not(.is-set)) .flight-briefing-v2__right{padding-top:150px !important}
 html body .flight-briefing-v2 .flight-timeline-cargo-field{grid-template-areas:"icon value" "bar bar" "label label" "max max" !important}
 html body .flight-briefing-v2 .flight-timeline-cargo-input em{grid-area:max !important;justify-self:start !important}
+html body .flight-briefing-v2 .flight-timeline-cargo-field>.amount-slider{display:block !important;width:100% !important}
+html body .flight-briefing-v2 .flight-timeline-cargo-field>.amount-slider>input[type="range"]{display:block;width:100% !important}
+html body .flight-briefing-v2 .flight-timeline-coordinate-inputs input{background:rgba(150,200,255,.12) !important;box-shadow:inset 0 0 0 1px rgba(150,200,255,.18) !important}
+html body .flight-briefing-v2 .fa-cargo-used small{color:var(--pm) !important;font-size:17px !important;font-weight:500 !important;letter-spacing:0 !important;text-transform:none !important}
