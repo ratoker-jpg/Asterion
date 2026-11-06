@@ -15,6 +15,7 @@ import type { FleetPlan } from './domain/fleet/fleet-plan.ts';
 import type { ShipId } from './domain/combat/ids.ts';
 import { startFleetPlanLines, type FleetPlanStartResult } from './application/fleet-plan.ts';
 import { runBuildPlans } from './application/build-plan.ts';
+import { addBuildCompletion, buildNoticeDueAt, buildNoticeText, type BuildNoticeBatch } from './application/build-notices.ts';
 import type { BuildPlan } from './domain/buildings/build-plan.ts';
 import { fleetPlanReport } from './ui/fleet-plan/fleet-plan-text.ts';
 import { FleetPlannerDialog } from './ui/fleet-plan/FleetPlannerDialog.tsx';
@@ -959,17 +960,14 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       const at = Date.now();
       const current = stateRef.current;
       if (isApplicationCommandBlocked(current) || needsNpcCatchupBefore(current, at)) return;
-      const run = enqueueApplicationStateUpdate(stateRef, setState, (latest) => {
+      // Auto-starts are ordinary build orders and say nothing: the queue and the planner show them.
+      enqueueApplicationStateUpdate(stateRef, setState, (latest) => {
         const result = runBuildPlans(latest, { now: at, mode: RUNTIME_MODE, testTimeScale });
         return { state: result.state, result };
       }, flushSync, renderedStateRef, noteStateHeal);
-      if (run.started.length) {
-        const names = (id: string) => stateRef.current.planets[id]?.name ?? id;
-        setNotice(`Планировщик стройки: ${run.started.map((item) => `${names(item.planetId)} · ${item.name} до ур. ${item.level}`).join('; ')}.`);
-      }
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [now, hasBuildPlans, testTimeScale, setNotice]);
+  }, [now, hasBuildPlans, testTimeScale]);
   // The map's timed-object schedules (pirates, unique worlds, anomalies) run
   // from the 2026-01-01 epoch; build them in idle time instead of inside the
   // frame of the first NPC decision or system view that needs them.
@@ -1227,6 +1225,9 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
    * publishes only the last consistent prefix: React and autosave see one
    * state per task instead of one per 64-event chunk.
    */
+  const buildNoticeBatch = useRef<BuildNoticeBatch | null>(null);
+  const buildNoticeTimer = useRef<number | null>(null);
+  useEffect(() => () => { if (buildNoticeTimer.current != null) window.clearTimeout(buildNoticeTimer.current); }, []);
   /** Turns the player's runtime events (completions, arrivals, Sun raids) into notices. */
   const announceRuntimeEvents = useCallback((events: readonly RuntimeReconcileEvent[], resultState: SaveState) => {
     const result = { state: resultState };
@@ -1239,11 +1240,18 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       } else if (event.kind === 'building') {
         const planet = result.state.planets[event.planetId] ?? result.state.planets[result.state.currentPlanetId];
         const name = getBuildingDefinition(event.assetRole, result.state.profile.factionId).name;
-        setNotice(`${planet.name}: постройка завершена — ${name}.`, 'success', {
-          key: `building:${event.planetId}`,
-          item: name,
-          summarize: (items) => `${planet.name}: завершено построек — ${items.length}: ${items.join(', ')}.`,
-        });
+        // Short builds finish quietly; the rest wait a moment and come out as one notice with one sound.
+        const at = Date.now();
+        buildNoticeBatch.current = addBuildCompletion(buildNoticeBatch.current, { planetId: event.planetId, planetName: planet.name, name, durationMs: event.durationMs, at });
+        if (buildNoticeBatch.current) {
+          if (buildNoticeTimer.current != null) window.clearTimeout(buildNoticeTimer.current);
+          buildNoticeTimer.current = window.setTimeout(() => {
+            buildNoticeTimer.current = null;
+            const text = buildNoticeText(buildNoticeBatch.current);
+            buildNoticeBatch.current = null;
+            if (text) setNotice(text, 'success');
+          }, Math.max(0, buildNoticeDueAt(buildNoticeBatch.current) - at));
+        }
       } else if (event.kind === 'recycling') {
         const planet = result.state.planets[event.planetId] ?? result.state.planets[result.state.currentPlanetId];
         setNotice(`${planet.name}: результат переработки автоматически зачислен`, 'success');
