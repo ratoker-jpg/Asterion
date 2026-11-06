@@ -312,3 +312,10 @@ html body .flight-briefing-v2 .flight-timeline-ship-card strong{grid-area:name !
 html body .flight-briefing-v2 .flight-timeline-ship-card div>small{grid-area:hold !important;grid-column:2 !important;grid-row:3 !important}
 html body .flight-briefing-v2 .fa-route__center>span b{font-size:inherit !important;font-weight:800}
 html body .flight-briefing-v2 .fa-route__gas span{font-size:18px !important;color:var(--pm)}
+/* many ship types: smaller tiles so «Что везём» stays on screen */
+html body .flight-briefing-v2 .flight-composition-v3:has(> .flight-timeline-ship-card:nth-child(6)){gap:10px 26px}
+html body .flight-briefing-v2 .flight-composition-v3:has(> .flight-timeline-ship-card:nth-child(6)) .flight-timeline-ship-card{grid-template-columns:110px auto !important;column-gap:10px}
+html body .flight-briefing-v2 .flight-composition-v3:has(> .flight-timeline-ship-card:nth-child(6)) .flight-timeline-ship-card>img{width:110px !important;height:86px !important}
+html body .flight-briefing-v2 .flight-composition-v3:has(> .flight-timeline-ship-card:nth-child(6)) .flight-timeline-ship-card>b{font-size:24px !important}
+html body .flight-briefing-v2 .flight-composition-v3:has(> .flight-timeline-ship-card:nth-child(6)) .flight-timeline-ship-card strong{font-size:17px !important}
+html body .flight-briefing-v2 .flight-composition-v3:has(> .flight-timeline-ship-card:nth-child(6)) .flight-timeline-ship-card div>small{font-size:15px !important}
