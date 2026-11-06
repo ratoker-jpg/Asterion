@@ -776,10 +776,11 @@ async function runViewport(width, height) {
         || reopenedAttackActions.length !== 7 || reopenedAttackActions.some((action) => action.disabled || action.status !== 'supported' || !action.title.includes('доступна для атаки'))) {
         throw new Error(`${label}: visit did not reopen the same seven holdings ${JSON.stringify(reopened)}`);
       }
-      const selectedCoordinate = await win.webContents.executeJavaScript(`document.querySelector('.universe-inspector-header span')?.textContent`);
+      const selectedCoordinate = await win.webContents.executeJavaScript(`(document.querySelector('[data-qa-atlas-coordinate]') || document.querySelector('.universe-inspector-header span'))?.textContent`);
       if (selectedCoordinate !== row.coordinate) throw new Error(`${label}: visited planet coordinate mismatch ${selectedCoordinate}`);
     }
-    await clickAt(win, '.universe-modal-backdrop', true);
+    // The atlas covers the whole screen (no backdrop to click): it closes with its cross.
+    await dismissInspector(win);
     await checkRestoredFocus(win, npc.rows.find((row) => Number(row.coordinate.slice(1, -1).split(':')[1]) === npcSystem).id);
     await selectSystem(win, 1);
 

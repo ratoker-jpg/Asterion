@@ -1314,7 +1314,7 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
           style={{ '--atlas-k': inspectorRelationTone } as CSSProperties}>
           <header className="star-atlas__head">
             <small>Звёздный атлас</small>
-            <h2><span>{selectedNode.name}</span> <b>{formatUniverseCoordinate(selectedNode.coordinate)}</b></h2>
+            <h2><span>{selectedNode.name}</span> <b data-qa-atlas-coordinate>{formatUniverseCoordinate(selectedNode.coordinate)}</b></h2>
           </header>
           <button ref={closeButtonRef} type="button" className="universe-inspector-close star-atlas__close" data-asterion-close aria-label="Закрыть атлас" onClick={() => setSelectedNodeId(null)}>✕</button>
           <OwnerInspector node={selectedNode} owner={selectedOwner} presence={ownerPresence?.[selectedOwner.id]} nowMs={nowMs} planets={ownerPlanets} currentOwnerId={owner.id} currentAlliance={owner.alliance} diplomacy={allianceDiplomacy} debrisAt={(coordinate) => orbitalDebrisByKey.get(`${coordinate.galaxy}:${coordinate.system}:${coordinate.position}`) ?? 0} mapStatus={selectedMapStatus ?? mapStatusOf(selectedNode)} onAction={handleAction}
