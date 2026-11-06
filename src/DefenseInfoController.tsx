@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { DEFENSE_COMBAT_CATALOG } from './domain/combat/catalog.ts';
 import { createPortal } from 'react-dom';
 
 import aegisScoutArt from '../assets/source/New assets/ship/aegis/ship.aegis.scout.png';
@@ -251,11 +252,13 @@ export function DefenseInfoController() {
 
       const label = button.getAttribute('aria-label') ?? '';
       const name = normalizeText(label.replace(/^Информация:\s*/, ''));
-      const definition = defenseInfoByName[name];
-      if (!definition) return;
-
       const card = button.closest('.fc-unit');
       if (!card) return;
+      // Every race names its defence its own way; the card's unit id finds the shared description.
+      const unitId = card.getAttribute('data-qa-fleet-production-item') ?? '';
+      const baseName = DEFENSE_COMBAT_CATALOG.find((entity) => entity.id === unitId)?.name;
+      const definition = defenseInfoByName[name] ?? (baseName ? defenseInfoByName[baseName] : undefined);
+      if (!definition) return;
 
       const art = (card.querySelector('.fc-unit__art img') ?? card.querySelector('img')) as HTMLImageElement | null;
       const role = normalizeText(button.getAttribute('data-role'));

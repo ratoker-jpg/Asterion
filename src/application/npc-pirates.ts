@@ -1,4 +1,5 @@
 import { ownerFlights as ownerFlightIndex } from './npc-knowledge-index.ts';
+import { applyRealFlightFloor } from '../domain/flights/speed.ts';
 import { withoutNpcPlanReserve } from './npc-plan-reserve.ts';
 import { withoutNpcSunPrepHold } from './npc-sun-prep-state.ts';
 import { calculateFleetPopulation, createEmptyFleetState, resolveSavedFleetState } from '../domain/fleet/runtime.ts';
@@ -278,7 +279,7 @@ export function dispatchNpcPirateMission(
     science: profile.scienceLevels as FlightScienceLevels,
     speedCommanderLevels: { typhoon: profile.commanderLevels.typhoon ?? 0 },
   });
-  const duration = Math.max(1, Math.round(domain.flight.oneWayDurationMs / timeScale));
+  const duration = applyRealFlightFloor(Math.max(1, Math.round(domain.flight.oneWayDurationMs / timeScale)));
   const flight: FlightRecord = { ...domain.flight, oneWayDurationMs: duration, arrivalAt: at + duration };
   if (origin.resources.gas < flight.gasCost) return fail(state, 'insufficient-gas');
   const remainingShips = { ...origin.fleet.ships };

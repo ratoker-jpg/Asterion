@@ -10,7 +10,7 @@ import {
   type CombatTargetPriority,
   type CombatTechnologyMode,
 } from './config.ts';
-import type { CombatEntityId, CombatStackEntityId } from './ids.ts';
+import { combatBaseEntityId, combatGroupStackId, type CombatEntityId, type CombatStackEntityId } from './ids.ts';
 import { getCombatEntityForSide, getCombatEntityForStack, isPiratePlanetBreaker, isPirateShipId } from './side-entity.ts';
 import type { CombatEntityKind, CombatOrdinaryClass, CombatSpecialBonus } from './types.ts';
 import {
@@ -90,6 +90,8 @@ type RuntimeStack = {
   targetSelectionClass?: CombatMatchupClass;
   specialBonus?: CombatSpecialBonus;
   pirateAbility?: import('../pirates/catalog.ts').PirateAbility;
+  /** True on a joint side (it has other-owner groups); set on every stack of that side. */
+  group?: boolean;
 };
 
 export type TargetSelectionCandidate = {
@@ -211,14 +213,15 @@ const NEMEXIA_ORDINARY_RETARGET_FALLBACK: readonly CombatOrdinaryClass[] = [
   'bomber', 'destroyer', 'battleship', 'defender', 'cruiser', 'scout',
 ];
 
-function matchupClassForEntity(entityId: CombatStackEntityId): CombatMatchupClass | undefined {
+function matchupClassForEntity(stackId: CombatStackEntityId): CombatMatchupClass | undefined {
+  const entityId = combatBaseEntityId(stackId);
   if (entityId === 'death-star') return 'death-star';
   if (entityId === 'pirate-planet-breaker') return undefined;
   return getCombatEntityForStack(entityId).ordinaryClass;
 }
 
 function targetSelectionClassForEntity(entityId: CombatStackEntityId): CombatMatchupClass | undefined {
-  return entityId === 'pirate-planet-breaker' ? 'death-star' : undefined;
+  return combatBaseEntityId(entityId) === 'pirate-planet-breaker' ? 'death-star' : undefined;
 }
 
 function classForTargetSelection(entityId: CombatStackEntityId): CombatMatchupClass | undefined {
@@ -256,7 +259,7 @@ export function calculateEffectiveDamage(rawDamage: number, armorStrength: numbe
 }
 
 function catalogOrder(entityId: CombatStackEntityId) {
-  return CATALOG_ORDER.get(entityId) ?? Number.MAX_SAFE_INTEGER;
+  return CATALOG_ORDER.get(combatBaseEntityId(entityId)) ?? Number.MAX_SAFE_INTEGER;
 }
 
 /**
@@ -370,6 +373,7 @@ function runtimeFromInput(
   executionMode: CombatExecutionMode,
   factionId: CombatFactionId | undefined,
   profile?: import('./side-entity.ts').CombatSideProfile,
+  groupTag?: string,
 ): RuntimeStack[] {
   return stacks.map((stack) => {
     const entity = getCombatEntityForSide(stack.entityId, factionId, profile);
@@ -386,7 +390,7 @@ function runtimeFromInput(
       bucket,
       factionId,
       kind: entity.kind,
-      entityId: stack.entityId,
+      entityId: groupTag ? combatGroupStackId(stack.entityId, groupTag) : stack.entityId,
       level,
       startingCount: stack.count,
       count: stack.count,
@@ -650,6 +654,7 @@ function createRoundSnapshot(
       const lifeBefore = roundStartHp.get(stack.entityId) ?? 0;
       return {
         entityId: stack.entityId,
+        ...groupFaction(stack),
         countBefore,
         countAfter: stack.count,
         destroyed: Math.max(0, countBefore - stack.count),
@@ -685,6 +690,15 @@ function createRoundSnapshot(
   };
 }
 
+/** Joint sides carry each stack's race in the report; single-owner sides stay byte-identical. */
+function normalizeAllyShips(ships: readonly CombatStackInput[]): CombatStackInput[] {
+  return ships.filter((stack) => stack.count > 0).map((stack) => ({ ...stack, level: Math.max(0, Math.floor(stack.level ?? 0)) }));
+}
+
+function groupFaction(stack: RuntimeStack): { factionId?: CombatFactionId } {
+  return stack.factionId && stack.group ? { factionId: stack.factionId } : {};
+}
+
 function createForceSnapshot(
   stacks: readonly RuntimeStack[],
   activeCommanderId: CommanderId | null,
@@ -697,6 +711,7 @@ function createForceSnapshot(
     .filter((stack) => stack.bucket === bucket)
     .map((stack) => ({
       entityId: stack.entityId,
+      ...groupFaction(stack),
       countBefore: stack.startingCount,
       countAfter: stack.count,
       destroyed: Math.max(0, stack.startingCount - stack.count),
@@ -1122,7 +1137,7 @@ function isLivingCombatShipAbilityTarget(stack: RuntimeStack) {
 }
 
 function shmelFreezingChance(actor: RuntimeStack, actorCount: number) {
-  return actor.factionId === 'veyra' && actor.entityId === 'destroyer'
+  return actor.factionId === 'veyra' && combatBaseEntityId(actor.entityId) === 'destroyer'
     ? Math.min(SHMEL_FREEZING_MAX_CHANCE, SHMEL_FREEZING_CHANCE_PER_SHIP * actorCount)
     : 0;
 }
@@ -1216,14 +1231,17 @@ function resolveDestroyerRevival(
   sequence: { value: number },
   rng: CombatRng,
 ) {
-  if (factionId !== 'aegis') return;
-  const destroyerCount = stacks.find((stack) => stack.entityId === 'destroyer')?.count ?? 0;
+  // Only Aegis destroyers revive; a joint side may hold a destroyer group of another race.
+  const destroyerCount = stacks
+    .filter((stack) => stack.factionId === 'aegis' && combatBaseEntityId(stack.entityId) === 'destroyer')
+    .reduce((total, stack) => total + stack.count, 0);
+  void factionId;
   if (destroyerCount <= 0) return;
 
   const chance = Math.min(DESTROYER_REVIVAL_MAX_CHANCE, destroyerCount * DESTROYER_REVIVAL_CHANCE_PER_SHIP);
   const revivedShare = Math.min(DESTROYER_REVIVAL_MAX_SHARE, destroyerCount * DESTROYER_REVIVAL_BONUS_PER_SHIP);
   for (const target of sortRuntime(stacks)) {
-    if (target.kind !== 'ship' || target.entityId === 'destroyer') continue;
+    if (target.kind !== 'ship' || combatBaseEntityId(target.entityId) === 'destroyer') continue;
     const destroyedThisRound = events.reduce((total, event) => (
       event.actionType === 'attack'
         && event.targetSide === target.side
@@ -1598,15 +1616,24 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
   const attackerFactionId = normalized.attacker.combatProfile?.kind === 'pirate' ? undefined : normalized.attacker.factionId ?? getCombatFactionId(normalized.attacker.participant.race);
   const defenderFactionId = normalized.defender.combatProfile?.kind === 'pirate' ? undefined : normalized.defender.factionId ?? getCombatFactionId(normalized.defender.participant.race);
 
-  const attacker = [
+  const allyGroupStacks = (side: BattleSide, input: CombatInput['attacker']) => (input.allyGroups ?? []).flatMap((group) => runtimeFromInput(
+    side, 'stacks', normalizeAllyShips(group.ships), normalizeCombatTechnologies(group.technologies), executionMode, group.factionId, undefined, group.tag,
+  ));
+  const markJoint = (stacks: RuntimeStack[], input: CombatInput['attacker']) => {
+    if (input.allyGroups?.length) for (const stack of stacks) stack.group = true;
+    return stacks;
+  };
+  const attacker = markJoint([
     ...runtimeFromInput('attacker', 'stacks', normalized.attacker.ships, attackerTechnologies, executionMode, attackerFactionId, normalized.attacker.combatProfile),
+    ...allyGroupStacks('attacker', normalized.attacker),
     ...runtimeFromInput('attacker', 'stacks', getSideCommanders(normalized.attacker), attackerTechnologies, executionMode, attackerFactionId),
-  ];
-  const defender = [
+  ], normalized.attacker);
+  const defender = markJoint([
     ...runtimeFromInput('defender', 'stacks', normalized.defender.ships, defenderTechnologies, executionMode, defenderFactionId, normalized.defender.combatProfile),
+    ...allyGroupStacks('defender', normalized.defender),
     ...runtimeFromInput('defender', 'stacks', getSideCommanders(normalized.defender), defenderTechnologies, executionMode, defenderFactionId),
     ...runtimeFromInput('defender', 'defenses', normalized.defender.defenses ?? [], defenderTechnologies, executionMode, defenderFactionId),
-  ];
+  ], normalized.defender);
   const attackerActionOrder = createBattleActionOrder(attacker, rng);
   const defenderActionOrder = createBattleActionOrder(defender, rng);
 

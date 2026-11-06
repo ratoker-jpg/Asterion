@@ -9,7 +9,7 @@
 //   node --max-old-space-size=8192 --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs \
 //     tools/bot-lab.mjs [--days=2] [--bots=15] [--fixture=F | --write-fixture=F] [--out=DIR]
 //   ... tools/bot-lab.mjs --save=SAVE.json --hours=6 --owners=npc-gen-32[,..] [--out=DIR]
-//   ... tools/bot-lab.mjs --seed=3 [--scenario=seven-planets|familiar-solos|conflict] ...   (another lab galaxy; see bot-lab-batch.mjs)
+//   ... tools/bot-lab.mjs --seed=3 [--scenario=seven-planets|familiar-solos|conflict|sun-raids] ...   (another lab galaxy; see bot-lab-batch.mjs)
 //   ... tools/bot-lab.mjs --policy=FILE.json ...   (stage H: the whole run under another strategy policy; see tools/league.mjs)
 //
 // A fresh campaign draws ids from crypto entropy: before/after comparisons run
@@ -18,6 +18,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createInitialSaveState, loadSavedState, serializeSaveForStorage } from '../src/application/persistence.ts';
 import { getNpcOwnerIds } from '../src/application/npc-foundation.ts';
+import { DEFAULT_ALLIANCE_EMBLEM } from '../src/domain/command/catalog.ts';
+import { acceptApplication, applyToAlliance, createAlliance } from '../src/domain/command/membership.ts';
 // A revision without the strategy policy (main before stage H) still runs in the lab: it simply has no policy to report or override.
 const { getNpcPolicy, setNpcPolicyOverride } = await import('../src/domain/npc/policy.ts').catch((error) => {
   if (error?.code !== 'ERR_MODULE_NOT_FOUND') throw error;
@@ -131,6 +133,53 @@ export function applySevenPlanetsScenario(state) {
 }
 
 /**
+ * Scenario `sun-raids`: alliances of five, each member with a real mixed fleet (every combat hull of its race
+ * in equal population, 60 000–110 000: more than one participant may bring, so the choice of hulls matters),
+ * stores and a hangar for it, and calendars that keep most of them online. What is left is the Sun raid itself:
+ * who comes and with which hulls. It is meant to measure how raids are composed (tools/bot-lab-batch.mjs sun*).
+ */
+export function applySunRaidsScenario(initial) {
+  const owners = Object.keys(initial.npc.profiles).sort();
+  const stamp = { now: initial.npcReplay.processedThroughAt, random: () => 0.4 };
+  let state = initial;
+  const targets = { ...state.espionage.targets };
+  const profiles = { ...state.npc.profiles };
+  const SIZE = 5;
+  for (let group = 0; group + SIZE <= owners.length; group += SIZE) {
+    const team = owners.slice(group, group + SIZE);
+    const created = createAlliance(state.command, { ownerId: team[0], displayName: targets[`${team[0]}-planet`].ownerName,
+      settings: { name: `Sun Raids ${group}`, tag: `SR${group}`, motto: '', description: '', emblem: DEFAULT_ALLIANCE_EMBLEM } }, stamp);
+    if (!created.ok) throw new Error('alliance not created');
+    let command = created.state;
+    const allianceId = command.alliances.find((alliance) => alliance.leaderOwnerId === team[0]).id;
+    for (const ownerId of team.slice(1)) {
+      const applied = applyToAlliance(command, { ownerId, displayName: targets[`${ownerId}-planet`].ownerName, allianceId }, stamp);
+      if (!applied.ok) throw new Error('no application');
+      const accepted = acceptApplication(applied.state, team[0], applied.applicationId, stamp);
+      if (!accepted.ok) throw new Error('not accepted');
+      command = accepted.state;
+    }
+    state = { ...state, command };
+  }
+  owners.forEach((ownerId, index) => {
+    const planet = targets[`${ownerId}-planet`];
+    if (!planet) return;
+    const hulls = getFactionShipCatalog(planet.raceId).filter((entity) => entity.category === 'Боевой корабль' && entity.combat && entity.population > 0);
+    const population = 60_000 + ((index * 7919) % 50_000);
+    const ships = { ...planet.fleet.ships };
+    for (const hull of hulls) ships[hull.id] = (ships[hull.id] ?? 0) + Math.ceil(population / hulls.length / hull.population);
+    targets[planet.id] = { ...planet, fleet: { ...planet.fleet, ships },
+      buildings: { ...planet.buildings, hangar: Math.max(planet.buildings.hangar ?? 0, 40), shipyard: Math.max(planet.buildings.shipyard ?? 0, 12),
+        'gas-storage': Math.max(planet.buildings['gas-storage'] ?? 0, 12), 'metal-storage': Math.max(planet.buildings['metal-storage'] ?? 0, 10), 'mineral-storage': Math.max(planet.buildings['mineral-storage'] ?? 0, 10) },
+      resources: { ...planet.resources, metal: 3_000_000, minerals: 3_000_000, gas: 4_000_000 } };
+    const profile = profiles[ownerId];
+    profiles[ownerId] = { ...profile, activity: { ...profile.activity, propensity: 0.85 + 0.15 * ((index * 7) % 10) / 10 } };
+  });
+  log(`scenario sun-raids: ${Math.floor(owners.length / SIZE)} alliances of ${SIZE}`);
+  return { ...state, espionage: { ...state.espionage, targets }, npc: { ...state.npc, profiles } };
+}
+
+/**
  * Scenarios of stage E (ADR §7.б, §9.2). Solo owners by character who remember
  * each other from an earlier round, each strong, rich and with its own fresh
  * report of a neighbour behind batteries: too much for one (by the owner's own
@@ -229,6 +278,81 @@ function defenceWorth(planet) {
 }
 
 /** Queues and losses read once a game hour: what the end of the run cannot show. Only reads the world. */
+/**
+ * Sun battles, from the world's own flights (no hook into the game, so any revision can be measured the same
+ * way): every sampled hour records the ships of each Sun fleet when first seen and the survivors that fly home.
+ * "Weak" hulls are those whose Lanchester strength per population (sqrt(attack x life) / population) is under
+ * 80% of their race's strongest ordinary hull; "scouts" the race's lowest-tier hull. `stacksOwnerRule` is what one engine
+ * stack per owner group would be (the old rule), `stacksMerged` what identical race/science/level groups give.
+ */
+export function createSunTally() { return { seen: new Map(), home: new Map() }; }
+
+const hullTiers = new Map();
+function hullTier(factionId) {
+  if (!hullTiers.has(factionId)) {
+    const hulls = getFactionShipCatalog(factionId).filter((entity) => entity.category === 'Боевой корабль' && entity.combat);
+    const power = (entity) => Math.sqrt(entity.combat.attack * entity.combat.life) / Math.max(1, entity.population);
+    // The race's flagship (planet-destroyer) is far above the rest: "best" is the strongest ordinary hull.
+    const sorted = hulls.map(power).sort((x, y) => y - x);
+    const best = sorted[1] ?? sorted[0];
+    const lowest = hulls.reduce((low, entity) => (power(entity) < power(low) ? entity : low), hulls[0]);
+    hullTiers.set(factionId, { best, lowest: lowest.id, byId: new Map(hulls.map((entity) => [entity.id, { population: entity.population, power: power(entity), cost: entity.cost, id: entity.id }])) });
+  }
+  return hullTiers.get(factionId);
+}
+
+export function sampleSun(tally, state) {
+  for (const flight of state.flights.records) {
+    const snap = flight.sunRaid;
+    if (!snap || (flight.ownerSide ?? 'player') === 'player') continue;
+    if (!tally.seen.has(flight.id)) tally.seen.set(flight.id, { raidId: snap.raidId, side: snap.side, ownerId: snap.ownerId, factionId: snap.factionId,
+      group: JSON.stringify([snap.factionId, snap.technologies, snap.shipLevels]), ownerGroup: JSON.stringify([snap.ownerId, snap.factionId, snap.technologies, snap.shipLevels]), ships: { ...flight.selectedShips } });
+    if (flight.phase === 'returning') tally.home.set(flight.id, { ...flight.selectedShips });
+  }
+}
+
+function describeSunBattles(tally, state) {
+  const resolved = new Map((state.sunRaid?.raids ?? []).filter((raid) => raid.status === 'resolved').map((raid) => [raid.id, raid]));
+  const sides = { attacker: { pop: 0, weak: 0, scouts: 0, lost: 0, lostValue: 0, stacksOwnerRule: 0, stacksMerged: 0, fleets: 0 }, defender: { pop: 0, weak: 0, scouts: 0, lost: 0, lostValue: 0, stacksOwnerRule: 0, stacksMerged: 0, fleets: 0 } };
+  const perSide = new Map();
+  for (const [flightId, flight] of tally.seen) {
+    if (!resolved.has(flight.raidId)) continue;
+    const tier = hullTier(flight.factionId);
+    const side = sides[flight.side];
+    const entry = perSide.get(`${flight.raidId}:${flight.side}`) ?? { side: flight.side, owner: new Set(), merged: new Set() };
+    perSide.set(`${flight.raidId}:${flight.side}`, entry);
+    side.fleets += 1;
+    const home = tally.home.get(flightId) ?? {};
+    for (const [id, count] of Object.entries(flight.ships)) {
+      const hull = tier.byId.get(id);
+      if (!hull || !(count > 0)) continue;
+      const pop = hull.population * count;
+      side.pop += pop;
+      if (hull.power < 0.8 * tier.best) side.weak += pop;
+      if (id === tier.lowest) side.scouts += pop;
+      const lost = Math.max(0, count - (home[id] ?? 0));
+      side.lost += lost * hull.population;
+      side.lostValue += lost * (hull.cost.metal + hull.cost.minerals + hull.cost.gas);
+      entry.owner.add(`${flight.ownerGroup}|${id}`);
+      entry.merged.add(`${flight.group}|${id}`);
+    }
+  }
+  for (const entry of perSide.values()) { sides[entry.side].stacksOwnerRule += entry.owner.size; sides[entry.side].stacksMerged += entry.merged.size; }
+  const raids = [...resolved.values()];
+  const count = raids.length || 1;
+  const share = (part, whole) => (whole > 0 ? +(part / whole).toFixed(4) : 0);
+  const out = { raids: raids.length, attackersWon: raids.filter((raid) => raid.result?.winner === 'attacker').length };
+  for (const side of ['attacker', 'defender']) {
+    const item = sides[side];
+    Object.assign(out, {
+      [`${side}Pop`]: Math.round(item.pop / count), [`${side}WeakShare`]: share(item.weak, item.pop), [`${side}ScoutShare`]: share(item.scouts, item.pop),
+      [`${side}LossPop`]: Math.round(item.lost / count), [`${side}LossValue`]: Math.round(item.lostValue / count),
+      [`${side}StacksOwnerRule`]: +(item.stacksOwnerRule / count).toFixed(1), [`${side}StacksMerged`]: +(item.stacksMerged / count).toFixed(1), [`${side}Fleets`]: +(item.fleets / count).toFixed(1),
+    });
+  }
+  return out;
+}
+
 export function createEmpireTally() {
   return { samples: 0, defenseIdle: 0, shipIdle: 0, buildIdle: 0, allIdle: 0, richIdle: 0, lost: {}, known: {}, seenReports: new Set(), colonyDefenceLoss: 0, mainDefenceLoss: 0 };
 }
@@ -328,7 +452,7 @@ function pirateRaidTally(state) {
     pirateWins: reports.filter((report) => report.winner === 'attacker').length };
 }
 
-export function describeWorld(state, journal = [], tally = null) {
+export function describeWorld(state, journal = [], tally = null, sunTally = null) {
   const playerId = state.profile.playerId;
   const npcPlanets = Object.values(state.espionage?.targets ?? {}).filter((target) => target.kind === 'npc');
   const owners = Object.keys(state.npc?.profiles ?? {});
@@ -424,6 +548,7 @@ export function describeWorld(state, journal = [], tally = null) {
       won: raids.filter((raid) => raid.result?.winner === 'attacker').length,
       alliancesTried: new Set(raids.map((raid) => raid.allianceId)).size,
       crystals: sum(Object.values(state.sunRaid?.crystals ?? {}).map((list) => list.length)), gates: (state.sunRaid?.gates ?? []).length,
+      battles: sunTally ? describeSunBattles(sunTally, state) : null,
     },
     debris: { fields: debris.length, total: Math.round(sum(debris.map((field) => field.debris))), largest: Math.round(Math.max(0, ...debris.map((field) => field.debris))),
       recycleFlightsLive: flights.filter((flight) => flight.missionId === 'recycle').length,
@@ -453,6 +578,7 @@ export function describeWorld(state, journal = [], tally = null) {
       notDone: Object.entries(reasons).sort((a, b) => b[1] - a[1]),
       meanAbsError: plans.filter((entry) => typeof entry.d?.err === 'number').length
         ? +(sum(plans.filter((entry) => typeof entry.d?.err === 'number').map((entry) => Math.abs(entry.d.err))) / plans.filter((entry) => typeof entry.d?.err === 'number').length).toFixed(3) : null },
+    raidSizing: raidSizing(journal),
     battles: { attacks: attacks.length, attacksWon: attacks.filter((entry) => entry.d?.won === 1).length,
       raidGain: Math.round(sum(attacks.map((entry) => entry.d?.gain ?? 0))), raidLoss: Math.round(sum(attacks.map((entry) => entry.d?.loss ?? 0))),
       defences: defences.length, defenceLoss: Math.round(sum(defences.map((entry) => entry.d?.loss ?? 0))) },
@@ -462,6 +588,25 @@ export function describeWorld(state, journal = [], tally = null) {
     styleChanges: styles.length, styles: Object.entries(styles.reduce((counts, entry) => ({ ...counts, [entry.s]: (counts[entry.s] ?? 0) + 1 }), {})),
     perOwner,
   };
+}
+
+/** How big the raids were (owner report 05.11): the share of the planet's combat fleet sent, and the share of the target's stores carried off. */
+export function raidSizing(journal) {
+  const sum = (list, pick) => list.reduce((total, entry) => total + (Number(pick(entry)) || 0), 0);
+  const sends = journal.filter((entry) => entry.k === 'send' && entry.d?.fl !== undefined);
+  const waves = journal.filter((entry) => entry.k === 'send' && entry.d?.wave);
+  const raids = journal.filter((entry) => entry.k === 'battle' && entry.d?.side === 'attacker' && entry.d?.m === 'attack');
+  const fleetAvailable = sum(sends, (entry) => entry.d.av);
+  const held = sum(raids, (entry) => entry.d.held);
+  const ratio = (a, b) => (b > 0 ? +(a / b).toFixed(3) : 0);
+  const lone = raids.filter((entry) => (entry.d.held ?? 0) > 0);
+  return { sends: sends.length, waves: sum(waves, (entry) => entry.d.wave), waveCargo: Math.round(sum(waves, (entry) => entry.d.cargo)), fleetSent: Math.round(sum(sends, (entry) => entry.d.fl)), fleetAvailable: Math.round(fleetAvailable),
+    fleetShare: ratio(sum(sends, (entry) => entry.d.fl), fleetAvailable),
+    raids: raids.length, raidsWon: raids.filter((entry) => entry.d.won === 1).length, loot: Math.round(sum(raids, (entry) => entry.d.gain)), held: Math.round(held),
+    lootShare: ratio(sum(raids, (entry) => entry.d.gain), held),
+    lootShareWon: ratio(sum(raids.filter((entry) => entry.d.won === 1), (entry) => entry.d.gain), sum(raids.filter((entry) => entry.d.won === 1), (entry) => entry.d.held)),
+    lootShareMedian: lone.length ? +[...lone].map((entry) => entry.d.gain / entry.d.held).sort((a, b) => a - b)[Math.floor(lone.length / 2)].toFixed(3) : 0,
+    broughtValue: Math.round(sum(raids, (entry) => entry.d.sent)), lostValue: Math.round(sum(raids, (entry) => entry.d.loss)) };
 }
 
 /** The problems the summary names, in the owner's words. */
@@ -490,6 +635,7 @@ function main() {
     : createLabWorld(Number(option('bots', '15')), option('seed') ? `BOTLAB-${option('seed')}` : 'BOTLAB2026');
   if (option('scenario') === 'seven-planets' && !save && !option('fixture')) state = applySevenPlanetsScenario(state);
   if (['familiar-solos', 'conflict'].includes(option('scenario')) && !save && !option('fixture')) state = applySocialScenario(state, option('scenario'));
+  if (option('scenario') === 'sun-raids' && !save && !option('fixture')) state = applySunRaidsScenario(state);
   if (option('write-fixture')) fs.writeFileSync(option('write-fixture'), serializeSaveForStorage(state, 'production'));
   const at0 = state.npcReplay.processedThroughAt;
   applyCampaignRuntimeForCatchup(state, at0);
@@ -520,13 +666,15 @@ function main() {
   const startedAt = performance.now();
   let groups;
   const tally = createEmpireTally();
+  const sunTally = createSunTally();
   for (let hour = 1; hour <= hours; hour += 1) {
     const step = advanceLiveWorld(state, at0 + hour * HOUR, { groups });
     state = step.state;
     groups = step.groups;
     sampleEmpire(tally, state, at0 + hour * HOUR);
+    sampleSun(sunTally, state);
     if (hour % 24 === 0 || hour === hours) {
-      const summary = describeWorld(state, journal, tally);
+      const summary = describeWorld(state, journal, tally, sunTally);
       days.push({ hour, problems: listProblems(summary), ...summary });
       log(`lab h${hour} (${Math.round((performance.now() - startedAt) / 1000)} s): ${JSON.stringify({ sun: summary.sun, debris: summary.debris, points: summary.points, problems: listProblems(summary) })}`);
     }

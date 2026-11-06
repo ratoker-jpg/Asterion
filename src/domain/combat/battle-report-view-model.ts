@@ -8,8 +8,8 @@ import {
 import { COMMANDER_ABILITIES, isCommanderId, type CommanderId } from './commanders.ts';
 import { calculateBattlePoints, type BattlePointResult } from './battle-points.ts';
 import { getFactionDefenseCatalog, getFactionShipCatalog } from './faction-catalog.ts';
-import { getCombatFactionId, type CombatFactionId } from './factions.ts';
-import type { CombatEntityId } from './ids.ts';
+import { getCombatFactionId, isCombatFactionId, type CombatFactionId } from './factions.ts';
+import { combatBaseEntityId, type CombatEntityId } from './ids.ts';
 import { getCombatEntityForStack, isPirateShipId } from './side-entity.ts';
 import { calculatePirateResourcePointsLost } from '../pirates/resource-points.ts';
 import {
@@ -54,9 +54,19 @@ export type BattleTooltipViewModel = {
   count: number | null;
 };
 
+/** One fleet's share of a merged stack (a joint side shows one stack per ship type; the tooltip lists these). */
+export type BattleStackContributorViewModel = {
+  level: number | null;
+  countBefore: number | null;
+  countAfter: number | null;
+  destroyed: number | null;
+};
+
 export type BattleStackViewModel = {
   key: string;
   entityId: string;
+  /** Race of this stack on a joint side; absent when it is the side's own race. */
+  factionId?: CombatFactionId;
   kind: BattleEntityKind;
   name: string;
   role: string;
@@ -72,6 +82,8 @@ export type BattleStackViewModel = {
   lifePerUnit: number | null;
   hpPool: number | null;
   tooltip: BattleTooltipViewModel;
+  /** Present when several joint-side groups of one ship type were merged into this stack. */
+  contributors?: BattleStackContributorViewModel[];
 };
 
 export type BattleEventViewModel = {
@@ -299,8 +311,32 @@ export type BattleReportViewModel = {
   battlePoints: BattlePointResult;
   /** Present only when the save contains a persisted award entry for this report. */
   awardedBattlePoints: { attacker: number | null; defender: number | null } | null;
+  /** Joint (Sun) battles: each side's points shared by contribution, every participant's share. */
+  pointShares: BattlePointSharesViewModel | null;
   timestampAvailable: boolean;
 };
+
+export type BattlePointSharesViewModel = {
+  sidePoints: { attacker: number; defender: number };
+  entries: { ownerId: string; ownerName: string; side: BattleSide; points: number; share: number }[];
+};
+
+function readPointShares(value: unknown): BattlePointSharesViewModel | null {
+  const record = asRecord(asRecord(value).pointShares);
+  const side = asRecord(record.sidePoints);
+  const attacker = readNumber(side.attacker);
+  const defender = readNumber(side.defender);
+  if (attacker == null || defender == null) return null;
+  const entries = asArray(record.entries).flatMap((item) => {
+    const entry = asRecord(item);
+    const ownerId = readString(entry.ownerId);
+    const points = readNumber(entry.points);
+    const share = readNumber(entry.share);
+    return ownerId && points != null && share != null && (entry.side === 'attacker' || entry.side === 'defender')
+      ? [{ ownerId, ownerName: readString(entry.ownerName) ?? ownerId, side: entry.side as BattleSide, points, share }] : [];
+  });
+  return { sidePoints: { attacker, defender }, entries };
+}
 
 export type RecordedBattlePointAwards = { attacker: number | null; defender: number | null } | null;
 
@@ -496,7 +532,9 @@ function readStack(
 ): BattleStackViewModel {
   const record = asRecord(value);
   const entityId = readString(record.entityId) ?? `unknown-${kindHint}-${index}`;
-  const resolved = resolveEntity(factionId, entityId, kindHint);
+  // On a joint side a stack may belong to another owner's race (`cruiser#g2`).
+  const stackFactionId = isCombatFactionId(record.factionId) ? record.factionId : factionId;
+  const resolved = resolveEntity(stackFactionId, combatBaseEntityId(entityId), kindHint);
   const countBefore = readCount(record.countBefore);
   const countAfter = readCount(record.countAfter);
   const destroyed = readCount(record.destroyed) ?? (
@@ -526,6 +564,7 @@ function readStack(
   return {
     key: `${kindHint}:${entityId}:${index}`,
     entityId,
+    ...(stackFactionId !== factionId || isCombatFactionId(record.factionId) ? { factionId: stackFactionId } : {}),
     kind: resolved.kind,
     name: resolved.name,
     role: resolved.role,
@@ -544,12 +583,68 @@ function readStack(
   };
 }
 
-function readStacks(value: unknown, factionId: CombatFactionId, fallbackKind: BattleEntityKind) {
-  return asArray(value).map((item, index) => {
-    const entityId = readString(asRecord(item).entityId) ?? '';
-    const kind = entityKindFromCatalog(factionId, entityId, fallbackKind);
-    return readStack(item, index, factionId, kind);
+/** Sum that stays unknown when any part is unknown. */
+function sumKnown(values: readonly (number | null)[]): number | null {
+  return values.every((value): value is number => value != null) ? values.reduce((total, value) => total + value, 0) : null;
+}
+
+/**
+ * A joint side (alliance raid, Sun) keeps one engine stack per contributing
+ * group (`cruiser`, `cruiser#g2`, ...), each with its own race and science.
+ * The report shows ONE stack per ship type and race: counts, hit points and
+ * attack add up, per-ship values are weighted by the ships, and the groups
+ * stay listed as `contributors` for the tooltip.
+ */
+function mergeStacks(stacks: readonly BattleStackViewModel[], sideFactionId: CombatFactionId): BattleStackViewModel[] {
+  const order: string[] = [];
+  const groups = new Map<string, BattleStackViewModel[]>();
+  for (const stack of stacks) {
+    const key = `${stack.kind}|${stack.factionId ?? sideFactionId}|${combatBaseEntityId(stack.entityId)}`;
+    const list = groups.get(key);
+    if (list) list.push(stack); else { groups.set(key, [stack]); order.push(key); }
+  }
+  if (order.length === stacks.length) return [...stacks];
+  return order.map((key, index) => {
+    const list = groups.get(key)!;
+    if (list.length === 1) return list[0]!;
+    const first = list[0]!;
+    const weight = (stack: BattleStackViewModel) => Math.max(0, stack.countBefore ?? stack.countAfter ?? 0);
+    const weighted = (read: (stack: BattleStackViewModel) => number | null) => {
+      if (!list.every((stack) => read(stack) != null)) return null;
+      const total = list.reduce((sum, stack) => sum + weight(stack), 0);
+      return total > 0 ? list.reduce((sum, stack) => sum + read(stack)! * weight(stack), 0) / total : read(first);
+    };
+    const countBefore = sumKnown(list.map((stack) => stack.countBefore));
+    const countAfter = sumKnown(list.map((stack) => stack.countAfter));
+    const destroyed = sumKnown(list.map((stack) => stack.destroyed));
+    const totalAttack = sumKnown(list.map((stack) => stack.totalAttack));
+    const hpPool = sumKnown(list.map((stack) => stack.hpPool));
+    const levels = list.map((stack) => stack.tooltip.level).filter((level): level is number => level != null);
+    const attackPerUnit = weighted((stack) => stack.attackPerUnit);
+    const lifePerUnit = weighted((stack) => stack.lifePerUnit);
+    const armor = weighted((stack) => stack.tooltip.armor);
+    const baseId = combatBaseEntityId(first.entityId);
+    return {
+      ...first,
+      key: `${first.kind}:${baseId}:${index}:${first.factionId ?? ''}`,
+      entityId: baseId,
+      countBefore, countAfter, destroyed, totalAttack, hpPool, attackPerUnit, lifePerUnit,
+      tooltip: {
+        ...first.tooltip,
+        level: levels.length ? Math.max(...levels) : null,
+        attack: totalAttack, attackPerUnit, totalAttack, life: hpPool, lifePerUnit, hpPool, armor, count: countAfter,
+      },
+      contributors: list.map((stack) => ({ level: stack.tooltip.level, countBefore: stack.countBefore, countAfter: stack.countAfter, destroyed: stack.destroyed })),
+    };
   });
+}
+
+function readStacks(value: unknown, factionId: CombatFactionId, fallbackKind: BattleEntityKind) {
+  return mergeStacks(asArray(value).map((item, index) => {
+    const entityId = readString(asRecord(item).entityId) ?? '';
+    const kind = entityKindFromCatalog(factionId, combatBaseEntityId(entityId), fallbackKind);
+    return readStack(item, index, factionId, kind);
+  }), factionId);
 }
 
 function splitStacks(stacks: BattleStackViewModel[]) {
@@ -627,7 +722,7 @@ function readForce(value: unknown, participant: BattleParticipantViewModel, fact
   };
 }
 
-function readEvent(value: unknown, index: number, attackerFactionId: CombatFactionId, defenderFactionId: CombatFactionId): BattleEventViewModel {
+function readEvent(value: unknown, index: number, attackerFactionId: CombatFactionId, defenderFactionId: CombatFactionId, groupFactions: ReadonlyMap<string, CombatFactionId> = new Map()): BattleEventViewModel {
   const record = asRecord(value);
   const actorSide = readSide(record.actorSide, 'attacker');
   const targetSide = readSide(record.targetSide, actorSide === 'attacker' ? 'defender' : 'attacker');
@@ -635,11 +730,13 @@ function readEvent(value: unknown, index: number, attackerFactionId: CombatFacti
   const targetEntityId = readString(record.targetEntityId);
   const actorFactionId = actorSide === 'attacker' ? attackerFactionId : defenderFactionId;
   const targetFactionId = targetSide === 'attacker' ? attackerFactionId : defenderFactionId;
-  const actorKind = entityKindFromCatalog(actorFactionId, actorEntityId, 'unknown');
-  const targetKind = entityKindFromCatalog(targetFactionId, targetEntityId ?? `unknown-target-${index}`, 'unknown');
+  const actorKind = entityKindFromCatalog(actorFactionId, combatBaseEntityId(actorEntityId), 'unknown');
+  const targetKind = entityKindFromCatalog(targetFactionId, combatBaseEntityId(targetEntityId ?? `unknown-target-${index}`), 'unknown');
+  const actorGroupFaction = groupFactions.get(`${actorSide}:${actorEntityId}`);
+  const targetGroupFaction = targetEntityId ? groupFactions.get(`${targetSide}:${targetEntityId}`) : undefined;
 
-  const actor = readStack({ entityId: actorEntityId, countAfter: readCount(record.actorCount) }, index, actorFactionId, actorKind);
-  const target = readStack({ entityId: targetEntityId ?? `unknown-target-${index}`, countAfter: readCount(record.targetCount) }, index, targetFactionId, targetKind);
+  const actor = readStack({ entityId: actorEntityId, countAfter: readCount(record.actorCount), factionId: actorGroupFaction }, index, actorFactionId, actorKind);
+  const target = readStack({ entityId: targetEntityId ?? `unknown-target-${index}`, countAfter: readCount(record.targetCount), factionId: targetGroupFaction }, index, targetFactionId, targetKind);
   const commanderAbilityId = readString(record.commanderAbilityId);
   const safeCommanderAbilityId = commanderAbilityId && isCommanderId(commanderAbilityId) ? commanderAbilityId : null;
   // Reports saved before the fix stored an ordinary hull's critical roll in abilityDraw.
@@ -810,11 +907,11 @@ function visibleRows(snapshot: BattleRoundSnapshotViewModel | null) {
   return Math.ceil(regular / 5) + (commanders ? 1 : 0);
 }
 
-function readRound(value: unknown, index: number, attackerFactionId: CombatFactionId, defenderFactionId: CombatFactionId): BattleRoundViewModel {
+function readRound(value: unknown, index: number, attackerFactionId: CombatFactionId, defenderFactionId: CombatFactionId, groupFactions: ReadonlyMap<string, CombatFactionId> = new Map()): BattleRoundViewModel {
   const record = asRecord(value);
   const attackerSnapshot = readSnapshot(record.attackerSnapshot, attackerFactionId);
   const defenderSnapshot = readSnapshot(record.defenderSnapshot, defenderFactionId);
-  const events = asArray(record.events).map((event, eventIndex) => readEvent(event, eventIndex, attackerFactionId, defenderFactionId));
+  const events = asArray(record.events).map((event, eventIndex) => readEvent(event, eventIndex, attackerFactionId, defenderFactionId, groupFactions));
   return {
     index: readCount(record.index) ?? index + 1,
     events,
@@ -952,8 +1049,16 @@ export function createBattleReportViewModel(
   const defender = readParticipant(record.defender, 'defender');
   const attackerFactionId = getCombatFactionId(attacker.race);
   const defenderFactionId = getCombatFactionId(defender.race);
+  const groupFactions = new Map<string, CombatFactionId>();
+  for (const [side, force] of [['attacker', record.attackerForce], ['defender', record.defenderForce]] as const) {
+    for (const item of asArray(asRecord(force).stacks)) {
+      const stack = asRecord(item);
+      const id = readString(stack.entityId);
+      if (id && isCombatFactionId(stack.factionId)) groupFactions.set(`${side}:${id}`, stack.factionId);
+    }
+  }
   const rounds = asArray(record.rounds)
-    .map((round, index) => readRound(round, index, attackerFactionId, defenderFactionId))
+    .map((round, index) => readRound(round, index, attackerFactionId, defenderFactionId, groupFactions))
     .sort((left, right) => left.index - right.index);
   const attackerViewModel = readForce(record.attackerForce, attacker, attackerFactionId);
   const defenderViewModel = readForce(record.defenderForce, defender, defenderFactionId);
@@ -1021,6 +1126,7 @@ export function createBattleReportViewModel(
     siege,
     battlePoints,
     awardedBattlePoints: options.awardedBattlePoints ?? null,
+    pointShares: readPointShares(record.sunRaid),
     timestampAvailable: readString(record.timestamp) != null,
   };
 }

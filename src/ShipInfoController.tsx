@@ -46,10 +46,11 @@ import veyraPlasmaLaserDefenseArt from '../assets/source/New assets/defenses/vey
 import veyraIonPlasmaDefenseArt from '../assets/source/New assets/defenses/veyra/defense.veyra.ion-plasma-turret.png';
 
 import { COMMANDER_IDS, getCommanderPresentedAbility } from './domain/combat/commanders.ts';
+import { COMMANDER_COMBAT_CATALOG, SHIP_COMBAT_CATALOG } from './domain/combat/catalog.ts';
 import './ship-info-modal.css';
 
 type ShipInfoKind = 'ship' | 'commander';
-type ShipInfoFaction = 'Астеры' | 'Илары' | 'Рой' | 'Общий флот';
+type ShipInfoFaction = 'Астеры' | 'Илары' | 'Рой' | 'Общий флот' | (string & {});
 type TargetType = 'Корабль' | 'Оборона';
 
 type ShipTarget = {
@@ -553,11 +554,13 @@ export function ShipInfoController() {
 
       const label = button.getAttribute('aria-label') ?? '';
       const name = normalizeText(label.replace(/^Информация:\s*/, ''));
-      const definition = shipInfoByName[name];
-      if (!definition) return;
-
       const card = button.closest('.fc-unit');
       if (!card) return;
+      // Every race names its ships its own way; the card's unit id finds the shared description.
+      const unitId = card.getAttribute('data-qa-fleet-production-item') ?? '';
+      const baseName = [...SHIP_COMBAT_CATALOG, ...COMMANDER_COMBAT_CATALOG].find((entity) => entity.id === unitId)?.name;
+      const definition = shipInfoByName[name] ?? (baseName ? shipInfoByName[baseName] : undefined);
+      if (!definition) return;
 
       const art = (card.querySelector('.fc-unit__art img') ?? card.querySelector('img')) as HTMLImageElement | null;
       const role = normalizeText(button.getAttribute('data-role'));
@@ -570,7 +573,7 @@ export function ShipInfoController() {
         name,
         role,
         category,
-        faction: resolveFaction(definition),
+        faction: definition.kind === 'commander' ? 'Общий флот' : normalizeText(button.getAttribute('data-faction')) || resolveFaction(definition),
         art: art?.src ?? '',
         stats: visibleStats,
         definition,

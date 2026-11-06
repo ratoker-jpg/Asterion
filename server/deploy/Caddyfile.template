@@ -2,16 +2,28 @@
 # Asterion server on localhost. Uploads are gzip saves of a few MB; the limit
 # leaves room for very late worlds.
 # Caddy redacts the Authorization header in its logs (the access key never lands there).
+#
+# /updates/ is the game's update feed: only the files of /srv/asterion-updates
+# (latest.yml, Asterion-Setup-X.Y.Z.exe and .blockmap, see mirror-installer.sh).
+# Public, read-only, without a key. Ranged requests (also several ranges at once,
+# which GitHub refuses) let the game download only the changed part of an installer.
 __DOMAIN__ {
-	encode zstd gzip
-	request_body {
-		max_size 170MB
+	handle /updates/* {
+		uri strip_prefix /updates
+		root * /srv/asterion-updates
+		file_server
 	}
-	# Caddy sets X-Forwarded-For to the client address; server.ts trusts it from localhost only.
-	reverse_proxy 127.0.0.1:8787 {
-		transport http {
-			read_timeout 10m
-			write_timeout 10m
+	handle {
+		encode zstd gzip
+		request_body {
+			max_size 170MB
+		}
+		# Caddy sets X-Forwarded-For to the client address; server.ts trusts it from localhost only.
+		reverse_proxy 127.0.0.1:8787 {
+			transport http {
+				read_timeout 10m
+				write_timeout 10m
+			}
 		}
 	}
 	# Access log to the journal (journalctl -u caddy).

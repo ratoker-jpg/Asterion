@@ -85,6 +85,7 @@ import {
 } from './ui/navigation.tsx';
 import { AmountSlider } from './ui/AmountSlider';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
+import { planetSkinMapArt, planetSkins } from './planet-skin-art.ts';
 import { EMPTY_ART, MISSION_BANNERS } from './ui/ui-art.ts';
 import './building-card.css';
 import './fleet-workspace.css';
@@ -174,6 +175,9 @@ const flightCargoResources = [
   { kind: 'gas', label: 'ГАЗ' },
   { kind: 'debris', label: 'ОБЛОМКИ' },
 ] as const;
+
+/** The mission ribbon of variant A, in the order of the approved mockup. */
+const RIBBON_ORDER: readonly MissionId[] = ['attack', 'pirate-elimination', 'espionage', 'expedition', 'transport', 'deployment', 'colonize', 'recycle', 'gas', 'aid', 'sun-support', 'space-flight'];
 
 function MissionIcon({ mission }: { mission: MissionDefinition }) {
   return <img src={mission.icon} alt="" draggable={false} />;
@@ -409,6 +413,8 @@ function FleetWorkspace({
   const [oneWayDurationMinutes, setOneWayDurationMinutes] = useState(5);
   const [missionId, setMissionId] = useState<MissionId>('transport');
   const [hoveredMissionId, setHoveredMissionId] = useState<MissionId | null>(null);
+  /** The flight plan is drawn on a 1920 × 1080 canvas and zoomed to the window (approved mockups). */
+  const [planZoom, setPlanZoom] = useState(1);
   const [constructionView, setConstructionView] = useState<ConstructionView>(null);
   const [status, setStatus] = useState(FLEET_ROOT_STATUS);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -1660,6 +1666,62 @@ function FleetWorkspace({
     updateFleetUi({ kind: 'toggle-favorite', target });
   };
 
+  useEffect(() => {
+    if (!previewOpen) return undefined;
+    const fit = () => setPlanZoom(Math.max(0.5, Math.min(window.innerWidth / 1920, window.innerHeight / 1080)));
+    fit();
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, [previewOpen]);
+  /* ---------- Variant A flight plan: the route band and the footer numbers ---------- */
+  const planTiming = previewResult?.ok
+    ? {
+      oneWayMs: previewResult.flight.oneWayDurationMs,
+      arrivalAt: missionId === 'gas' || missionId === 'space-flight' ? previewResult.flight.arrivalAt : clockNow + previewResult.flight.oneWayDurationMs,
+      gas: previewResult.flight.gasCost,
+    }
+    : routeEstimate
+      ? { oneWayMs: routeEstimate.oneWayDurationMs, arrivalAt: clockNow + routeEstimate.oneWayDurationMs, gas: routeEstimate.gasCost }
+      : null;
+  const planNoReturn = missionId === 'deployment' || missionId === 'colonize';
+  const planState = previewRuntimeState ?? saveState;
+  const planSourceId = (previewSourceId ?? planetId) as SaveState["currentPlanetId"];
+  const planSource = planState.planets[planSourceId];
+  const planSourceArt = planetSkinMapArt(planSource?.skin) ?? planetSkins[0].art;
+  const planSpyTarget = previewCoordinate
+    ? Object.values(saveState.espionage?.targets ?? {}).find((target) => sameUniverseCoordinate(target.coordinate, previewCoordinate))
+    : undefined;
+  const planTargetCoordinate = missionId === 'space-flight' ? null : previewTargetDestination?.coordinate ?? previewCoordinate;
+  const planTargetArt = planTargetCoordinate
+    ? planetSkinMapArt(previewTargetPlanet?.skin) ?? planetSkinMapArt(planSpyTarget?.skin)
+      ?? planetSkins[Math.abs(planTargetCoordinate.galaxy * 31 + planTargetCoordinate.system * 7 + planTargetCoordinate.position) % planetSkins.length].art
+    : null;
+  const planTargetName = previewTargetPlanet?.name ?? planSpyTarget?.name ?? launchContext?.targetPlanetName ?? currentExpeditionTarget?.name ?? null;
+  const planTargetWho = previewTargetRelation === 'self' ? 'Своя планета'
+    : previewTargetRelation === 'ally' ? 'Союзник'
+      : planSpyTarget?.ownerName ? `Игрок ${planSpyTarget.ownerName}` : null;
+  const planLeadShip = visibleShipDefinitions.find((ship) => (selectedQuantities[ship.id] ?? 0) > 0) ?? null;
+  const planReports = previewCoordinate
+    ? espionageState.reports
+      .filter((report) => (!report.ownerId || report.ownerId === saveState.profile.playerId) && sameUniverseCoordinate(report.targetCoordinate, previewCoordinate))
+      .sort((left, right) => right.createdAt - left.createdAt)
+    : [];
+  const planLatestReport = planReports[0] ?? null;
+  const planClock = (ms: number) => {
+    const total = Math.max(0, Math.ceil(ms / 1000));
+    const pad = (value: number) => String(value).padStart(2, '0');
+    return `${pad(Math.floor(total / 3600))}:${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)}`;
+  };
+  const planTime = (timestamp: number) => new Date(timestamp).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Europe/Moscow' });
+  /** «Куда летим?»: own planets with time and gas, one click sets the target (transport and deployment). */
+  const planQuickTargets = !planTiming && (missionId === 'transport' || missionId === 'deployment')
+    ? transportTargetOptions.filter((target) => !(missionId === 'deployment' && target.blocked)).slice(0, 4).map((target) => ({
+      target,
+      art: planetSkinMapArt(planState.planets[target.id]?.skin) ?? planetSkins[0].art,
+      estimate: estimateFlightRoute(saveState, planSourceId, selectedQuantities, selectedCommanders, target.coordinate, { mode: ACTIVE_RUNTIME_MODE, testTimeScale: resolveTestTimeScale() }),
+    }))
+    : [];
+
   const previewTargetLabel = previewTargetError
     ? `[${previewTargetDraft.galaxy || '—'}:${previewTargetDraft.system || '—'}:${previewTargetDraft.position || '—'}]`
     : previewCoordinate
@@ -1669,22 +1731,8 @@ function FleetWorkspace({
   return (
     <div className="fleet-workspace-v1" data-qa-fleet-planet={planetName} data-qa-fleet-yard-level={fleetSnapshot.shipyardLevel} data-qa-flight-launch-context={launchContext?.destination ? flightCoordinateLabel(launchContext.destination.coordinate) : undefined} data-qa-target-relation={previewTargetRelation ?? (!previewOpen ? launchContext?.targetRelation : undefined)}>
       <nav className="fc-wings" aria-label="Разделы флота" data-qa-fleet-nav>
-        <FleetWing
-          tone="build"
-          title="Строительство"
-          items={FLEET_CONSTRUCTION_NAVIGATION}
-          icons={{
-            ships: shipDefinitions.find((ship) => ship.id === 'battleship')?.art ?? shipDefinitions[0]?.art ?? '',
-            defense: getFactionDefenseCatalog(factionId)[0]?.art ?? '',
-            'commander-ships': COMMANDER_COMBAT_CATALOG[0]?.art ?? '',
-            repair: missionRepairIcon,
-          }}
-          isActive={(id) => selectedSection === id && (id !== 'ships' || constructionView === 'ships')}
-          onSelect={chooseSection}
-        />
-        <span className="fc-wings__gap" aria-hidden="true" />
-        <section className="fc-wing fc-wing--command">
-          <h3>Управление флотом</h3>
+        <section className="fc-wing fc-wing--build">
+          <h3>Строительство</h3>
           <div className="fc-wing__tabs">
             <button
               type="button"
@@ -1693,12 +1741,23 @@ function FleetWorkspace({
               data-qa-fleet-section="root"
               onClick={openFleetRoot}
             >
-              <img src={missionSpaceFlightIcon} alt="" draggable={false} />
               <span>Отправка флота</span>
             </button>
             <FleetWingTabs
-              items={FLEET_MANAGEMENT_NAVIGATION}
-              icons={{ 'combat-priority': missionPriorityIcon, battles: missionBattlesIcon, simulator: missionSimulatorIcon }}
+              items={FLEET_CONSTRUCTION_NAVIGATION.filter((item) => item.id !== 'repair')}
+              icons={{}}
+              isActive={(id) => selectedSection === id && (id !== 'ships' || constructionView === 'ships')}
+              onSelect={chooseSection}
+            />
+          </div>
+        </section>
+        <span className="fc-wings__gap" aria-hidden="true" />
+        <section className="fc-wing fc-wing--command">
+          <h3>Управление флотом</h3>
+          <div className="fc-wing__tabs">
+            <FleetWingTabs
+              items={[...FLEET_CONSTRUCTION_NAVIGATION.filter((item) => item.id === 'repair'), ...FLEET_MANAGEMENT_NAVIGATION]}
+              icons={{}}
               isActive={(id) => selectedSection === id}
               onSelect={chooseSection}
             />
@@ -1868,83 +1927,15 @@ function FleetWorkspace({
             </div>
             </div>
 
-            <div className="fc-deck">
-            <section className="fc-hangar" aria-label="Корабли на планете">
-              <header className="fc-hangar__head">
-                <h2>Корабли на планете</h2>
-                <small className="fc-hangar__yard">{shipyardPresentation.name} {fleetSnapshot.shipyardLevel} · {getBuildingPresentation('hangar', factionId).name} {fleetSnapshot.hangarLevel}</small>
-                <div className="fc-chips" role="group" aria-label="Фильтр кораблей">
-                  {(['all', 'combat', 'civil'] as const).map((filter) => <button key={filter} type="button" className={shipFilter === filter ? 'is-on' : ''} aria-pressed={shipFilter === filter} onClick={() => setShipFilter(filter)}>{filter === 'all' ? 'Все' : filter === 'combat' ? 'Боевые' : 'Гражданские'}</button>)}
-                </div>
-                <div className="fc-hangar__all">
-                  <button type="button" data-qa-fleet-select-all onClick={() => setAllShipQuantities(true)}>ВЫБРАТЬ ВСЕ</button>
-                  <button type="button" data-qa-fleet-select-none disabled={selectedShipCount <= 0} onClick={() => setAllShipQuantities(false)}>СБРОСИТЬ</button>
-                </div>
-              </header>
-
-              <div className="fc-roster" data-qa-fleet-roster>
-                {visibleShipDefinitions.filter((ship) => shipFilter === 'all' || (shipFilter === 'civil') === CIVIL_SHIP_IDS.has(ship.id)).map((ship) => {
-                  const available = sourceFleet.ships[ship.id] ?? 0;
-                  const selected = selectedQuantities[ship.id] ?? 0;
-                  return (
-                    <div className={`fc-ship${selected > 0 ? ' is-picked' : ''}`} key={ship.id} data-qa-fleet-ship={ship.id}>
-                      <div className="fc-ship__art"><img src={ship.art} alt={ship.name} draggable={false} /></div>
-                      <h3>{ship.name}</h3>
-                      <p className="fc-ship__have">
-                        на планете <b data-qa-fleet-owned={available}>{flightNumberLabel(available)}</b>
-                        <span className="fc-ship__pop"><ResourceIcon kind="population" label="Население за штуку" /><span data-qa-fleet-unit-population>{ship.population}</span></span>
-                      </p>
-                      <div className="fc-ship__amount">
-                        <input aria-label={`Количество ${ship.name}`} type="number" min="0" max={available} value={selected} onChange={(event) => setShipQuantity(ship.id, Number(event.target.value))} />
-                        <button type="button" onClick={() => setShipQuantity(ship.id, 0)} disabled={selected <= 0}>МИН.</button>
-                        <button type="button" onClick={() => setShipQuantity(ship.id, available)} disabled={selected >= available}>МАКС.</button>
-                      </div>
-                      <AmountSlider compact value={selected} max={available} label={`Количество: ${ship.name}`} onChange={(value) => setShipQuantity(ship.id, value)} qa={ship.id} />
-                    </div>
-                  );
-                })}
-                {ownedShipDefinitions.length === 0 ? (
-                  <div className="fc-empty" data-qa-fleet-roster-empty>
-                    <img className="ui-empty-art" src={EMPTY_ART.flights} alt="" draggable={false} />
-                    <strong>На этой планете нет кораблей</strong>
-                    <span>Постройте их на верфи или перебросьте с другой планеты.</span>
-                    <button type="button" className="asterion-button asterion-button--primary" onClick={() => chooseSection('ships')}>К строительству кораблей</button>
-                  </div>
-                ) : visibleShipDefinitions.length === 0 ? (
-                  <div className="fc-empty" data-qa-fleet-roster-empty>
-                    <strong>Для миссии «{selectedMission.label}» здесь нет подходящих кораблей</strong>
-                    <span>Выберите другую миссию или постройте нужные корабли.</span>
-                  </div>
-                ) : null}
+            <section className="fa-hero fc-orders" aria-label="Миссия" data-qa-mission-current={missionId} data-qa-mission-described={describedMission.id}>
+              <div className="fa-hero__art" aria-hidden="true">
+                {MISSION_BANNERS[describedMission.id] ? <img key={describedMission.id} src={MISSION_BANNERS[describedMission.id]} alt="" draggable={false} /> : null}
               </div>
-
-            </section>
-
-            <section className="fc-orders" aria-label="Миссия" data-qa-mission-current={missionId}>
-              <h2>Миссия</h2>
-              <div className="fc-missions" aria-label="Выбор миссии">
-                {missions.map((mission) => (
-                  <button
-                    key={mission.id}
-                    type="button"
-                    className={mission.id === missionId ? 'is-on' : ''}
-                    aria-label={mission.label}
-                    aria-pressed={mission.id === missionId}
-                    disabled={mission.enabled === false}
-                    data-qa-mission-id={mission.id}
-                    onMouseEnter={() => setHoveredMissionId(mission.id)}
-                    onMouseLeave={() => setHoveredMissionId(null)}
-                    onFocus={() => setHoveredMissionId(mission.id)}
-                    onBlur={() => setHoveredMissionId(null)}
-                    onClick={() => chooseMission(mission.id)}
-                  >
-                    <MissionIcon mission={mission} />
-                    <span>{mission.label}</span>
-                  </button>
-                ))}
+              <div className="fa-hero__text">
+                <small className="fa-kicker">Миссия</small>
+                <h2>{describedMission.label}</h2>
+                <p className="fc-mission-text">{describedMission.enabled === false ? 'Пока недоступно. ' : ''}{describedMission.description}</p>
               </div>
-              <p className="fc-mission-text"><strong>{describedMission.label}.</strong> {describedMission.enabled === false ? 'Пока недоступно. ' : ''}{describedMission.description}</p>
-
               {missionId === 'attack' || missionId === 'pirate-elimination' || missionId === 'deployment' || missionId === 'space-flight' || missionId === 'sun-support' ? <div className="fc-prep" data-qa-attack-prep={missionId === 'attack' || missionId === 'pirate-elimination' ? true : undefined} data-qa-deployment-commanders={missionId === 'deployment' ? true : undefined} data-qa-space-flight-prep={missionId === 'space-flight' ? true : undefined}>
                 {missionId === 'attack' || missionId === 'pirate-elimination' ? <div className="fc-prep__line" role="radiogroup" aria-label="Лимит раундов атаки" data-qa-attack-rounds>
                   <h3>Раундов боя</h3>
@@ -1979,16 +1970,90 @@ function FleetWorkspace({
                   </div> : <p className="fleet-attack-commanders-empty">Свободных командиров нет.</p>}
                 </div>
               </div> : null}
+              <footer className="fc-dock" data-toast-guard>
+                <div><small>Кораблей</small><b data-qa-fleet-selected>{flightNumberLabel(selectedShipCount)}</b></div>
+                <div><small>Население</small><b>{flightNumberLabel(selectedPopulation)}</b></div>
+                <div data-qa-fleet-population={fleetSummary.population} data-qa-fleet-capacity={fleetSummary.capacity} data-qa-fleet-available-ships={availableShipCount} data-qa-fleet-satellite-count={fleetSnapshot.solarSatellites}><small>Рейсов</small><b>{flightSlots.used} из {flightSlots.limit}</b></div>
+              </footer>
+              <div className="fa-hero__go" data-toast-guard>
+                <span className="fc-dock__status" data-qa-fleet-status>{status}</span>
+                <button type="button" className="fc-dock__go" data-qa-flight-preview-open disabled={!hasLaunchableComposition} onClick={() => openFlightPreview()}>К плану перелёта</button>
+              </div>
             </section>
+
+            <div className="fc-missions" role="group" aria-label="Выбор миссии">
+              {RIBBON_ORDER.map((id) => missions.find((mission) => mission.id === id)).filter((mission): mission is MissionDefinition => Boolean(mission)).map((mission) => (
+                <button
+                  key={mission.id}
+                  type="button"
+                  className={`fa-mission${mission.id === missionId ? ' is-on' : ''}`}
+                  aria-label={mission.label}
+                  aria-pressed={mission.id === missionId}
+                  disabled={mission.enabled === false}
+                  data-qa-mission-id={mission.id}
+                  onMouseEnter={() => setHoveredMissionId(mission.id)}
+                  onMouseLeave={() => setHoveredMissionId(null)}
+                  onFocus={() => setHoveredMissionId(mission.id)}
+                  onBlur={() => setHoveredMissionId(null)}
+                  onClick={() => chooseMission(mission.id)}
+                >
+                  <img src={MISSION_BANNERS[mission.id] ?? mission.icon} alt="" draggable={false} />
+                  <span>{mission.id === 'transport' ? 'Транспорт' : mission.label}</span>
+                </button>
+              ))}
             </div>
 
-            <footer className="fc-dock" data-toast-guard>
-              <div><b data-qa-fleet-selected>{flightNumberLabel(selectedShipCount)}</b><small>кораблей выбрано</small></div>
-              <div><b>{flightNumberLabel(selectedPopulation)}</b><small>население рейса</small></div>
-              <div data-qa-fleet-population={fleetSummary.population} data-qa-fleet-capacity={fleetSummary.capacity} data-qa-fleet-available-ships={availableShipCount} data-qa-fleet-satellite-count={fleetSnapshot.solarSatellites}><b>{flightNumberLabel(fleetSummary.population)} / {flightNumberLabel(fleetSummary.capacity)}</b><small>население флота</small></div>
-              <span className="fc-dock__status" data-qa-fleet-status>{status}</span>
-              <button type="button" className="fc-dock__go asterion-button asterion-button--primary" data-qa-flight-preview-open disabled={!hasLaunchableComposition} onClick={() => openFlightPreview()}>Дальше: план перелёта</button>
-            </footer>
+            <section className="fc-hangar" aria-label="Корабли на планете">
+              <header className="fc-hangar__head">
+                <h2>Корабли на планете</h2>
+                <small className="fc-hangar__yard">{shipyardPresentation.name} {fleetSnapshot.shipyardLevel} · {getBuildingPresentation('hangar', factionId).name} {fleetSnapshot.hangarLevel}</small>
+                <div className="fc-chips" role="group" aria-label="Фильтр кораблей">
+                  {(['all', 'combat', 'civil'] as const).map((filter) => <button key={filter} type="button" className={shipFilter === filter ? 'is-on' : ''} aria-pressed={shipFilter === filter} onClick={() => setShipFilter(filter)}>{filter === 'all' ? 'Все' : filter === 'combat' ? 'Боевые' : 'Гражданские'}</button>)}
+                </div>
+                <div className="fc-hangar__all">
+                  <button type="button" data-qa-fleet-select-all onClick={() => setAllShipQuantities(true)}>Выбрать все</button>
+                  <button type="button" data-qa-fleet-select-none disabled={selectedShipCount <= 0} onClick={() => setAllShipQuantities(false)}>Сбросить</button>
+                </div>
+              </header>
+
+              <div className="fc-roster" data-qa-fleet-roster>
+                {visibleShipDefinitions.filter((ship) => shipFilter === 'all' || (shipFilter === 'civil') === CIVIL_SHIP_IDS.has(ship.id)).map((ship, index) => {
+                  const available = sourceFleet.ships[ship.id] ?? 0;
+                  const selected = selectedQuantities[ship.id] ?? 0;
+                  return (
+                    <div className={`fc-ship${selected > 0 ? ' is-picked' : ''}${available <= 0 ? ' is-empty' : ''}`} key={ship.id} data-qa-fleet-ship={ship.id} style={{ '--fa-i': index } as CSSProperties}>
+                      <h3>{ship.name}</h3>
+                      <p className="fc-ship__have">
+                        есть <b data-qa-fleet-owned={available}>{flightNumberLabel(available)}</b>
+                        <span className="fc-ship__pop"><ResourceIcon kind="population" label="Население за штуку" /><span data-qa-fleet-unit-population>{ship.population}</span></span>
+                      </p>
+                      <button type="button" className="fc-ship__art" aria-label={selected > 0 ? `Снять выбор: ${ship.name}` : `Выбрать всех: ${ship.name}`} disabled={available <= 0} onClick={() => setShipQuantity(ship.id, selected > 0 ? 0 : available)}>
+                        <img src={ship.art} alt={ship.name} draggable={false} />
+                      </button>
+                      <div className="fc-ship__amount">
+                        <button type="button" aria-label={`Меньше: ${ship.name}`} onClick={() => setShipQuantity(ship.id, selected - 1)} disabled={selected <= 0}>−</button>
+                        <input aria-label={`Количество ${ship.name}`} type="number" min="0" max={available} value={selected} onChange={(event) => setShipQuantity(ship.id, Number(event.target.value))} />
+                        <button type="button" aria-label={`Больше: ${ship.name}`} onClick={() => setShipQuantity(ship.id, selected + 1)} disabled={selected >= available}>+</button>
+                        <button type="button" onClick={() => setShipQuantity(ship.id, available)} disabled={selected >= available}>Все</button>
+                      </div>
+                    </div>
+                  );
+                })}
+                {ownedShipDefinitions.length === 0 ? (
+                  <div className="fc-empty" data-qa-fleet-roster-empty>
+                    <img className="ui-empty-art" src={EMPTY_ART.flights} alt="" draggable={false} />
+                    <strong>На этой планете нет кораблей</strong>
+                    <span>Постройте их на верфи или перебросьте с другой планеты.</span>
+                    <button type="button" className="asterion-button asterion-button--primary" onClick={() => chooseSection('ships')}>К строительству кораблей</button>
+                  </div>
+                ) : visibleShipDefinitions.length === 0 ? (
+                  <div className="fc-empty" data-qa-fleet-roster-empty>
+                    <strong>Для миссии «{selectedMission.label}» здесь нет подходящих кораблей</strong>
+                    <span>Выберите другую миссию или постройте нужные корабли.</span>
+                  </div>
+                ) : null}
+              </div>
+            </section>
             </div>
           </>
         )}
@@ -2117,16 +2182,46 @@ function FleetWorkspace({
       ) : null}
       {previewOpen ? createPortal(
         <div className="resource-building-action-confirm-backdrop" data-qa-flight-preview-backdrop onMouseDown={closeFlightPreview}>
-          <section className={`resource-building-action-confirm flight-preview-modal flight-timeline-modal flight-briefing-v2`} role="dialog" aria-modal="true" aria-labelledby="flight-preview-title" onMouseDown={(event) => event.stopPropagation()}>
+          <section className={`resource-building-action-confirm flight-preview-modal flight-timeline-modal flight-briefing-v2`} style={{ '--pa-z': planZoom } as CSSProperties} role="dialog" aria-modal="true" aria-labelledby="flight-preview-title" onMouseDown={(event) => event.stopPropagation()}>
             <header className="flight-timeline-head">
               <MissionIcon mission={selectedMission} />
               <div>
-                <small>ФЛОТЫ · {selectedMission.label.toUpperCase()}</small>
+                <small className="fa-plan-kicker" data-qa-plan-kicker={`ФЛОТЫ · ${selectedMission.label.toUpperCase()}`}>План перелёта · {selectedMission.label}</small>
                 <h3 id="flight-preview-title">ПЛАН ПЕРЕЛЁТА</h3>
                 <p>{selectedMission.description}</p>
               </div>
               <button type="button" className="flight-timeline-close" data-asterion-close aria-label="Закрыть план перелёта" onClick={closeFlightPreview}>×</button>
               </header>
+            <div className={`fa-route${planTiming ? ' is-set' : ''}${missionId === 'attack' || missionId === 'pirate-elimination' ? ' is-hostile' : ''}`} style={MISSION_BANNERS[missionId] ? { '--fa-plan-banner': `url("${MISSION_BANNERS[missionId]}")` } as CSSProperties : undefined} aria-hidden="true">
+              <img className="fa-route__from" src={planSourceArt} alt="" draggable={false} />
+              <span className="fa-route__line" />
+              {planTiming && planLeadShip ? <img key={planLeadShip.id} className="fa-route__ship" src={planLeadShip.art} alt="" draggable={false} /> : null}
+              {planTargetArt ? <img key={planTargetArt} className="fa-route__to" src={planTargetArt} alt="" draggable={false} /> : <span className="fa-route__pick">{missionId === 'space-flight' ? <>без цели,<br />назад сам</> : <>выбери<br />на карте</>}</span>}
+              <div className="fa-route__center">
+                {planTiming ? <>
+                  <strong className="fa-route__timer">{planClock(planTiming.oneWayMs)}</strong>
+                  <span>в пути · прибытие в <b>{planTime(planTiming.arrivalAt)}</b></span>
+                </> : <>
+                  <strong className="fa-route__ask">Куда летим?</strong>
+                  <span>Время и газ сразу появятся на линии</span>
+                </>}
+              </div>
+              {planTiming ? <div className="fa-route__gas"><ResourceIcon kind="gas" label="Газ" /><b>{flightNumberLabel(planTiming.gas)}</b><span>газа на перелёт</span></div> : null}
+              {arrivalAsteroidPreview ? <div className={`fa-route__asteroid ${arrivalAsteroidPreview.unavailable ? 'is-unknown' : arrivalAsteroidPreview.hit ? 'is-hit' : 'is-miss'}`} data-qa-plan-asteroid={arrivalAsteroidPreview.unavailable ? 'unavailable' : arrivalAsteroidPreview.hit ? 'hit' : 'miss'}>
+                <b>{arrivalAsteroidPreview.unavailable ? 'Где будет астероид, неизвестно' : arrivalAsteroidPreview.hit ? 'Астероид будет на месте к прибытию' : 'К прибытию астероид уйдёт'}</b>
+                <span>{arrivalAsteroidPreview.asteroidCoordinate ? `при прибытии он в ${flightCoordinateLabel(arrivalAsteroidPreview.asteroidCoordinate)}` : 'астероид не найден в расчётный момент'}</span>
+              </div> : null}
+              <span className="fa-route__from-label"><small>Откуда</small></span>
+              {planTargetArt && (planTargetName || planTargetWho) ? <span className="fa-route__to-label"><small>Куда{planTargetWho ? ` · ${planTargetWho}` : ''}</small>{planTargetName ? <b>{planTargetName}</b> : null}</span> : <span className="fa-route__to-label"><small>Куда</small></span>}
+            </div>
+            {planQuickTargets.length ? <div className="fa-route__quick" data-qa-plan-quick-targets>
+              {planQuickTargets.map(({ target, art, estimate }) => (
+                <button key={target.id} type="button" onClick={() => selectTransportTarget(target.id)} data-qa-plan-quick-target={target.id}>
+                  <img src={art} alt="" draggable={false} />
+                  <span><b>{target.name}</b>{estimate ? <><em>{planClock(estimate.oneWayDurationMs)}</em><small>{flightNumberLabel(estimate.gasCost)} газа</small></> : <small>{flightCoordinateLabel(target.coordinate)}</small>}</span>
+                </button>
+              ))}
+            </div> : null}
             <div className="flight-timeline-body">
               <div className="flight-briefing-v2__left">
               <ol className="flight-timeline-steps" aria-label="Шаги подготовки рейса">
@@ -2259,10 +2354,11 @@ function FleetWorkspace({
                       const entity = shipDefinitions.find((item) => item.id === ship.id);
                       return <article className="flight-timeline-ship-card flight-composition-v3__row" key={ship.id}>
                         <img src={ship.art} alt="" />
-                        <div><strong>{ship.name}</strong><small>Население: {quantity * ship.population} · трюм {flightNumberLabel((entity?.ship?.cargo ?? 0) * quantity)} · скорость {flightNumberLabel(entity?.ship?.speed ?? 0)}</small></div>
-                        <b>×{flightNumberLabel(quantity)}<small>{shipCountLabel(quantity)}</small></b>
+                        <div><strong>{ship.name}</strong><small><span className="fa-quiet">Население: {quantity * ship.population} · </span>трюм {flightNumberLabel((entity?.ship?.cargo ?? 0) * quantity)}<span className="fa-quiet"> · скорость {flightNumberLabel(entity?.ship?.speed ?? 0)}</span></small></div>
+                        <b><i className="fa-x">×</i>{flightNumberLabel(quantity)}<small>{shipCountLabel(quantity)}</small></b>
                       </article>;
                     })}
+                    <button type="button" className="fa-plan-change" onClick={closeFlightPreview}>Изменить</button>
                     <footer className="flight-composition-v3__total" data-qa-flight-composition-total><span>ИТОГО</span><b>{flightNumberLabel(draftFleetStats.count)} {shipCountLabel(draftFleetStats.count)}</b><span>население {flightNumberLabel(selectedPopulation)}</span><span>{holdLabel.toLowerCase()} {flightNumberLabel(previewHoldCapacity)}</span></footer>
                     </div>
               </section>
@@ -2384,6 +2480,7 @@ function FleetWorkspace({
                       <i style={{ '--fill': `${capacityFillPct(transportSummary.capacity.used, transportSummary.capacity.total)}%` } as CSSProperties} />
                     </span>
                     <em>СВОБОДНО: {flightNumberLabel(transportSummary.capacity.free)}</em>
+                    <span className="fa-cargo-used"><small>Трюм занят</small><b>{flightNumberLabel(transportSummary.capacity.used)}</b> из {flightNumberLabel(transportSummary.capacity.total)}</span>
                   </span>
                 </div>
                 <div className="flight-timeline-cargo-grid flight-cargo-sliders-v2">
@@ -2403,12 +2500,37 @@ function FleetWorkspace({
                 </div>
                 {transportSummary.overflowWarning ? <p role="alert" data-qa-transport-overflow-warning>Часть груза может сгореть: склады цели заполнены.</p> : <p>{missionId === 'space-flight' ? 'Груз ограничен запасами источника и вместимостью кораблей; 100 газа для отправки зарезервированы отдельно.' : missionId === 'aid' ? 'Можно везти только запрошенный ресурс и не больше свободного остатка запроса. Засчитывается только то, что планета реально примет.' : 'Загрузка ограничена запасом источника и свободной грузоподъёмностью.'}</p>}
               </section> : null}
+              {(missionId === 'attack' || missionId === 'pirate-elimination') ? <section className="fa-plan-target" data-qa-plan-target-intel>
+                {planLatestReport ? <>
+                  <div><ResourceIcon kind="metal" label="Металл" /><b>{flightNumberLabel(planLatestReport.resources.metal)}</b><small>Металл на цели</small></div>
+                  <div><ResourceIcon kind="minerals" label="Минералы" /><b>{flightNumberLabel(planLatestReport.resources.minerals)}</b><small>Минералы на цели</small></div>
+                  <div><ResourceIcon kind="gas" label="Газ" /><b>{flightNumberLabel(planLatestReport.resources.gas)}</b><small>Газ на цели</small></div>
+                </> : <p className="fa-plan-target__none">Отчёта по этой цели нет: что на ней, станет видно после шпионажа.</p>}
+                <div className="fa-plan-target__hold"><small>Трюм под добычу</small><b>{flightNumberLabel(previewHoldCapacity)}</b>{planLatestReport ? <em>Отчёт {Math.max(1, Math.round((clockNow - planLatestReport.createdAt) / 60_000))} мин назад{planLatestReport.population ? ` · флот ${flightNumberLabel(planLatestReport.population.fleet ?? 0)} · оборона ${flightNumberLabel(planLatestReport.population.defense ?? 0)}` : ''}</em> : null}</div>
+              </section> : missionId === 'espionage' ? <section className="fa-plan-spy" data-qa-plan-spy-intel>
+                <div><ResourceIcon kind="metal" label="Металл" /><ResourceIcon kind="minerals" label="Минералы" /><ResourceIcon kind="gas" label="Газ" /><b>Ресурсы цели</b></div>
+                <div>{shipDefinitions.find((ship) => ship.id === 'battleship')?.art ? <img src={shipDefinitions.find((ship) => ship.id === 'battleship')!.art} alt="" draggable={false} /> : null}<b>Её флот</b></div>
+                <div>{getFactionDefenseCatalog(factionId)[0]?.art ? <img src={getFactionDefenseCatalog(factionId)[0]!.art} alt="" draggable={false} /> : null}<b>Её оборону</b></div>
+                {planLatestReport ? <p>Повторный отчёт по этой цели: теряется 30 % зондов</p> : null}
+              </section> : null}
               </div>
             </div>
             <div className="resource-building-action-confirm-actions flight-timeline-actions">
+            <dl className="fa-plan-foot" data-qa-plan-footer>
+              {planTiming ? <>
+                <div><dt>Прибытие</dt><dd>{planTime(planTiming.arrivalAt)}</dd></div>
+                <div><dt>Возврат</dt><dd>{planNoReturn ? 'без возврата' : planTime(planTiming.arrivalAt + planTiming.oneWayMs)}</dd></div>
+                <div><dt>Газ на планете</dt><dd>{flightNumberLabel(Math.floor(planSource?.resources?.gas ?? 0))}</dd></div>
+                <div><dt>Население рейса</dt><dd>{flightNumberLabel(selectedPopulation)}</dd></div>
+                <div><dt>Рейсов</dt><dd>{flightSlots.used + (missionId === 'espionage' ? 0 : 1)} из {flightSlots.limit}</dd></div>
+              </> : <>
+                <div><dt>{holdLabel === 'ГРУЗОПОДЪЁМНОСТЬ' ? 'Трюм' : holdLabel === 'ТРЮМ ГАЗА' ? 'Трюм газа' : 'Трюм обломков'}</dt><dd>{flightNumberLabel(previewHoldCapacity)}</dd></div>
+                <div><dt>Скорость флота</dt><dd>{draftFleetStats.speed ? flightNumberLabel(draftFleetStats.speed) : '—'}</dd></div>
+              </>}
+            </dl>
             <div className="flight-timeline-meta">{previewResult?.ok && previewFlightRecord ? <>РАСЧЁТ РЕЙСА · ПРИБЫТИЕ: {flightArrivalLabel(missionId === 'gas' || missionId === 'space-flight' ? previewFlightRecord.arrivalAt : clockNow + previewFlightRecord.oneWayDurationMs)} · МОСКОВСКОЕ ВРЕМЯ · {flightMissionLabel(missionId).toUpperCase()}</> : routeEstimate ? <>ОЦЕНКА ПО КООРДИНАТАМ · ПРИБЫТИЕ: {flightArrivalLabel(clockNow + routeEstimate.oneWayDurationMs)} · МОСКОВСКОЕ ВРЕМЯ · ЦЕЛЬ ПРОВЕРЯЕТСЯ ПРИ ОТПРАВКЕ</> : 'РАСЧЁТ ПОЯВИТСЯ ПОСЛЕ ВЫБОРА ЦЕЛИ'}</div>
               <button type="button" data-qa-flight-preview-cancel onClick={closeFlightPreview}>ОТМЕНА</button>
-              <button type="button" data-qa-flight-dispatch-confirm disabled={!canDispatchPreview} onClick={confirmFlightDispatch}>ОТПРАВИТЬ</button>
+              <button type="button" data-qa-flight-dispatch-confirm disabled={!canDispatchPreview} onClick={confirmFlightDispatch}>{!planTiming && !canDispatchPreview ? 'Сначала цель' : 'Отправить'}</button>
             </div>
           </section>
         </div>,
@@ -2495,6 +2617,13 @@ function FleetWorkspace({
   );
 }
 
+/** Variant A tab words: short, one line each. */
+const FLEET_TAB_SHORT_LABELS: Partial<Record<FleetSectionId, string>> = {
+  'commander-ships': 'Командирские',
+  repair: 'Мастерская',
+  'combat-priority': 'Приоритет',
+};
+
 function FleetWingTabs({ items, icons, isActive, onSelect }: {
   items: readonly FleetSectionItem[];
   icons: Partial<Record<FleetSectionId, string>>;
@@ -2506,7 +2635,7 @@ function FleetWingTabs({ items, icons, isActive, onSelect }: {
       {items.map((item) => (
         <button key={item.id} type="button" className={isActive(item.id) ? 'is-on' : ''} aria-current={isActive(item.id) ? 'page' : undefined} data-qa-fleet-section={item.id} onClick={() => onSelect(item.id)}>
           {icons[item.id] ? <img src={icons[item.id]} alt="" draggable={false} /> : null}
-          <span>{item.label}</span>
+          <span>{FLEET_TAB_SHORT_LABELS[item.id] ?? item.label}</span>
         </button>
       ))}
     </>

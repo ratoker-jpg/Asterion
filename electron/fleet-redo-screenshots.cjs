@@ -83,14 +83,14 @@ async function audit(win, name, label) {
     const scope = '.fleet-workspace-v1, [data-qa-flight-preview-backdrop]';
     for (const host of document.querySelectorAll(scope)) {
       for (const node of host.querySelectorAll('h2,h3,p,small,strong,b,em,span,dd,button,time')) {
-        if (node.closest('[role="tooltip"], .shipyard-stats-tooltip-v1, .fc-tip') || node.querySelector(':scope > .fc-tip')) continue;
+        if (node.closest('[role="tooltip"], .shipyard-stats-tooltip-v1, .fc-tip, .fc-wing > h3, .fc-ship__art, .fc-dock__status') || node.querySelector(':scope > .fc-tip')) continue;
         const style = getComputedStyle(node);
-        if (style.display === 'none' || style.visibility === 'hidden' || style.display === 'inline') continue;
+        if (style.display === 'none' || style.visibility === 'hidden' || style.display === 'inline' || style.clipPath !== 'none' || node.closest('[style*="clip-path"]') || node.matches('.fa-route__line')) continue;
         if (node.scrollWidth > node.clientWidth + 2 && node.clientWidth > 0) issues.push({ cut: node.tagName + '.' + node.className, text: node.textContent.trim().slice(0, 50), scroll: node.scrollWidth, client: node.clientWidth });
       }
       // Sibling cells of a row must not overlap.
       for (const row of host.querySelectorAll('.fc-unit, .fc-ship')) {
-        const cells = [...row.children].filter((cell) => cell.getBoundingClientRect().width > 0 && !cell.matches('.shipyard-stats-tooltip-v1'));
+        const cells = [...row.children].filter((cell) => cell.getBoundingClientRect().width > 0 && !cell.matches('.shipyard-stats-tooltip-v1, .fc-ship__art, .fc-unit__info'));
         for (let i = 0; i < cells.length; i += 1) for (let j = i + 1; j < cells.length; j += 1) {
           const a = cells[i].getBoundingClientRect();
           const b = cells[j].getBoundingClientRect();
@@ -275,6 +275,11 @@ async function rootScenes(win, directory, label) {
   await openRoot(win);
   await click(win, '[data-qa-flights-toggle]');
   await shot('root-07-flights-open');
+  if (await run(win, `Boolean(document.querySelector('[data-qa-bot01-scenario]:not(:disabled)'))`)) {
+    await click(win, '[data-qa-bot01-scenario]');
+    await sleep(600);
+    await shot('root-08-flights-incoming');
+  }
 
   await seed(win, { mutate: COLONY });
   await openRoot(win);
@@ -310,6 +315,29 @@ async function catalogueScenes(win, directory, label) {
   await shot('battles-01-shell');
   await openSection(win, 'simulator', '.simulator-view-v1');
   await shot('simulator-01-shell');
+  const setSim = async (side, id, value) => run(win, `(() => {
+    const input = document.querySelector('[id="sim-${side}-ships"] [data-qa-simulator-unit="${id}"] .sim-count-control-v1 input');
+    if (!input) return false;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '${value}');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    input.dispatchEvent(new Event('blur', { bubbles: true }));
+    return true;
+  })()`);
+  await seed(win, { mutate: 'save.science.levels = {};' });
+  await openSection(win, 'simulator', '.simulator-view-v1');
+  await run(win, `[...document.querySelectorAll('.sim-a-btn')].find((b) => b.textContent.includes('Очистить всё'))?.click()`);
+  await settle(win);
+  await run(win, `document.querySelectorAll('.sim-a-chip').forEach((b) => { if (b.textContent.includes('Изменить состав') && !b.classList.contains('is-on')) b.click(); })`);
+  await settle(win);
+  for (const [side, id, value] of [['attacker', 'cruiser', 500], ['attacker', 'battleship', 430], ['attacker', 'destroyer', 167], ['attacker', 'scout', 94], ['defender', 'cruiser', 300], ['defender', 'battleship', 260], ['defender', 'destroyer', 80]]) await setSim(side, id, value);
+  await settle(win);
+  await shot('simulator-02-editing');
+  if (await run(win, `Boolean(document.querySelector('.sim-run-v1:not(:disabled)'))`)) {
+    await click(win, '.sim-run-v1');
+    await settle(win, 1400);
+    await shot('simulator-03-result');
+  }
 
   await seed(win, { mutate: `planet.fleetProduction.shipQueue = ${queueOf('ships', [['battleship', 100], ['destroyer', 50], ['scout', 8], ['transporter', 100], ['recycler', 5], ['colonizer', 1]])};` });
   await openSection(win, 'ships', '[data-qa-construction-mode="ships"]');

@@ -54,3 +54,18 @@ test('Typhoon «Форсаж» adds +0.1% speed per level to the whole fleet, ad
   const typhoonLevel0 = calculateEffectiveFleetSpeed('aegis', {}, {}, { typhoon: 1 }, { typhoon: 0 });
   assert.equal(typhoonAlone / typhoonLevel0, 1.01);
 });
+
+test('the real-time floor keeps every one-way flight at 60 seconds or more', async () => {
+  const { applyRealFlightFloor, MIN_REAL_ONE_WAY_DURATION_MS } = await import('./speed.ts');
+  assert.equal(MIN_REAL_ONE_WAY_DURATION_MS, 60_000);
+  assert.equal(applyRealFlightFloor(3_000), 60_000);
+  assert.equal(applyRealFlightFloor(36_000), 60_000);
+  assert.equal(applyRealFlightFloor(120_000), 120_000);
+});
+
+test('Sun support flights: floor in real play, none under the test-mode accelerator', async () => {
+  const { floorSunSupportFlight } = await import('../../application/sun-raid.ts');
+  assert.equal(floorSunSupportFlight(500, { now: 0, mode: 'test', testTimeScale: 500 }), 500);
+  assert.equal(floorSunSupportFlight(500, { now: 0, mode: 'production' }), 60_000);
+  assert.equal(floorSunSupportFlight(500, { now: 0, mode: 'test', timeScale: 5 }), 60_000);
+});

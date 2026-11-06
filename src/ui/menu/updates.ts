@@ -10,6 +10,10 @@ export type GameUpdateState = {
   version?: string;
   percent?: number;
   message?: string;
+  /** The game tries again by itself (the message says when). */
+  retrying?: boolean;
+  transferredMb?: number;
+  totalMb?: number;
 };
 
 type UpdatesBridge = {
@@ -30,9 +34,9 @@ export function updateStatusText(state: GameUpdateState): string {
   switch (state.status) {
     case 'checking': return 'Проверка обновлений…';
     case 'available': return `Доступна версия ${state.version ?? ''} · загрузка`;
-    case 'downloading': return `Скачивание ${state.version ?? 'обновления'} · ${state.percent ?? 0}%`;
+    case 'downloading': return `Скачивание ${state.version ?? 'обновления'} · ${state.percent ?? 0}%${state.totalMb ? ` (${state.transferredMb ?? 0} из ${state.totalMb} МБ)` : ''}`;
     case 'downloaded': return `Версия ${state.version ?? ''} готова к установке`;
-    case 'error': return `${state.message ?? 'Не удалось проверить обновления'} · попробуйте позже`;
+    case 'error': return `${state.message ?? 'Не удалось проверить обновления'} ${state.retrying ? '' : ' · попробуйте позже'}`;
     case 'latest': return 'Установлена последняя версия';
     default: return '';
   }

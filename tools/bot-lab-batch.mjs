@@ -59,6 +59,26 @@ async function batch() {
     results: results.sort((a, b) => a.seed - b.seed) }, null, 2));
 }
 
+/** Sun battles (tools/bot-lab.mjs describeSunBattles): composition, results and report size, per raid. */
+function sunBattleMetrics(battles) {
+  const b = battles ?? {};
+  return {
+    sunBattles: b.raids ?? 0,
+    sunWinRate: b.raids ? +((b.attackersWon ?? 0) / b.raids).toFixed(3) : 0,
+    sunAttackerWeakShare: b.attackerWeakShare ?? 0,
+    sunAttackerScoutShare: b.attackerScoutShare ?? 0,
+    sunDefenderWeakShare: b.defenderWeakShare ?? 0,
+    sunDefenderScoutShare: b.defenderScoutShare ?? 0,
+    sunAttackerLossPop: b.attackerLossPop ?? 0,
+    sunAttackerLossValue: b.attackerLossValue ?? 0,
+    sunDefenderLossPop: b.defenderLossPop ?? 0,
+    sunAttackerFleets: b.attackerFleets ?? 0,
+    sunDefenderFleets: b.defenderFleets ?? 0,
+    sunReportStacksOldRule: +((b.attackerStacksOwnerRule ?? 0) + (b.defenderStacksOwnerRule ?? 0)).toFixed(1),
+    sunReportStacksMerged: +((b.attackerStacksMerged ?? 0) + (b.defenderStacksMerged ?? 0)).toFixed(1),
+  };
+}
+
 /** The numbers compared per seed, from the last day of a lab summary. */
 export function labMetrics(summary) {
   const day = summary.days.at(-1);
@@ -104,6 +124,12 @@ export function labMetrics(summary) {
     planOrdinaryDone: day.planProfit?.ordinary.done ?? 0,
     planOrdinaryProfitable: day.planProfit?.ordinary.profitable ?? 0,
     planConsciousDone: day.planProfit?.conscious.done ?? 0,
+    sendFleetShare: day.raidSizing?.fleetShare ?? 0,
+    raidLootShare: day.raidSizing?.lootShare ?? 0,
+    raidLootShareWon: day.raidSizing?.lootShareWon ?? 0,
+    raidLootShareMedian: day.raidSizing?.lootShareMedian ?? 0,
+    raidLoot: day.raidSizing?.loot ?? 0,
+    raidLostValue: day.raidSizing?.lostValue ?? 0,
     attacks: day.battles?.attacks ?? 0,
     attacksWon: day.battles?.attacksWon ?? 0,
     raidNet: (day.battles?.raidGain ?? 0) - (day.battles?.raidLoss ?? 0),
@@ -129,6 +155,7 @@ export function labMetrics(summary) {
     strategyBytes: day.social?.strategyBytes ?? 0,
     actionsStarted: day.actions.started,
     wallSeconds: summary.wallSeconds,
+    ...sunBattleMetrics(day.sun?.battles),
   };
 }
 

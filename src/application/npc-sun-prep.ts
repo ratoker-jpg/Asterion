@@ -22,7 +22,7 @@ import { flightsToPlanet, ownerFlights } from './npc-knowledge-index.ts';
 import { getNpcFleetProductionCandidates, startNpcFleetProduction } from './npc-fleet-production.ts';
 import { dispatchNpcDeployment, npcDeploymentFreeCapacity } from './npc-missions.ts';
 import { combatEfficiency, strategyOf, type NpcUtilityContext } from './npc-utility.ts';
-import { npcSunAffordableForce, npcSunForce, npcSunPledgeFromPlanets } from './npc-endgame.ts';
+import { npcSunAffordableForce, npcSunForce, npcSunForceQuality, npcSunPledgeFromPlanets } from './npc-endgame.ts';
 import { activeNpcSunPrep, NPC_SUN_PREP_BALANCE, npcSunPrepOfOwner } from './npc-sun-prep-state.ts';
 import { crystalHolderOf, currentSunRaidState, launchNpcSunRaid, npcSunFlightGas, sunFleetPopulation, type SunRuntimeOptions } from './sun-raid.ts';
 
@@ -174,8 +174,9 @@ function buildOptions(state: SaveState, ownerId: string, planets: readonly SpyTa
         ? Math.floor(NPC_SUN_PREP_BALANCE.budgetShare * planet.resources[key] / preview.cost[key]) : Number.POSITIVE_INFINITY));
       const units = Math.min(byTime, byBudget);
       if (units <= 0 || !Number.isFinite(units)) continue;
-      // The side's quorum counts population: what it can add by T, weighed lightly by strength.
-      const score = units * entity.population * combatEfficiency(entity) ** 0.25;
+      // The side is capped in population, so the hull that adds the most strength by T wins (the Lanchester
+      // power of the batch): the heavy assault hulls, not the cheapest bulk.
+      const score = units * Math.sqrt(entity.combat.attack * entity.combat.life);
       if (!best || score > best.score || (score === best.score && preview.itemId < best.option.itemId)) {
         best = { option: { planet, itemId: preview.itemId, population: entity.population, units }, score };
       }
@@ -399,7 +400,8 @@ function answerInvitation(state: SaveState, profile: NpcProfile, utility: NpcUti
     next = { ...state, npc: { ...state.npc!, profiles: { ...state.npc!.profiles, [ownerId]: { ...current, session: withNpcVisitShift(current.session, shift, at) } } } };
     journal({ at, ownerId, planId: plan.planId, step: 'shift', detail: { deltaMinutes: Math.round(shift.deltaMs / MINUTE) } });
   }
-  return answer(promise >= caps.participant ? { answer: 'yes', population: promise } : { answer: 'limit', population: promise, reason: share < 1 ? 'caution' : 'force' }, next);
+  const quality = Math.round(npcSunForceQuality(state, ownerId, planets, Math.max(1, promise)) * 1000) / 1000;
+  return answer(promise >= caps.participant ? { answer: 'yes', population: promise, quality } : { answer: 'limit', population: promise, quality, reason: share < 1 ? 'caution' : 'force' }, next);
 }
 
 /**
@@ -417,8 +419,10 @@ function refreshPromise(state: SaveState, profile: NpcProfile, utility: NpcUtili
   const population = truth ? willing : Math.max(rsvp.population, willing);
   if (Math.abs(population - rsvp.population) < 0.01 * caps.participant) return state;
   const minimum = NPC_SUN_PREP_BALANCE.minPromiseShare * caps.participant;
+  const quality = population < minimum ? rsvp.quality : Math.round(npcSunForceQuality(state, profile.ownerId, planets, population) * 1000) / 1000;
   const updated: NpcSunRsvp = population < minimum ? { ...rsvp, answer: 'no', population: 0, reason: 'no-fleet', at }
-    : population >= caps.participant ? { ...rsvp, answer: 'yes', population, reason: undefined, at } : { ...rsvp, answer: 'limit', population, reason: share < 1 ? 'caution' : 'force', at };
+    : population >= caps.participant ? { ...rsvp, answer: 'yes', population, reason: undefined, at, ...(quality !== undefined ? { quality } : {}) }
+      : { ...rsvp, answer: 'limit', population, reason: share < 1 ? 'caution' : 'force', at, ...(quality !== undefined ? { quality } : {}) };
   const { reason, ...rest } = updated;
   return replacePlan(state, { ...plan, rsvps: { ...plan.rsvps, [profile.ownerId]: reason ? { ...rest, reason } : rest } });
 }
@@ -467,6 +471,25 @@ export function scheduleNpcSunPrepCheck(state: SaveState, ownerId: string, at: n
 
 /* ------------------------------------------------------------------- choices */
 
+/**
+ * The leader splits the roles at the declaration, from what the members told it (their promise and the
+ * quality of the force they would bring): the strongest forces fill the side first, up to a margin over the
+ * cap; a member the side does not need keeps its fleet at home instead of adding weak bulk.
+ */
+function allotRoles(rsvps: Readonly<Record<string, NpcSunRsvp>>, leaderId: string, leaderPledged: number, perSide: number, participantCap: number): Record<string, NpcSunRsvp> {
+  let remaining = perSide * NPC_SUN_PREP_BALANCE.allotmentMargin - leaderPledged;
+  const out: Record<string, NpcSunRsvp> = { ...rsvps };
+  const members = Object.entries(rsvps).filter(([ownerId, rsvp]) => ownerId !== leaderId && rsvp.population > 0 && rsvp.pledged === undefined)
+    .sort(([leftId, left], [rightId, right]) => (right.quality ?? 0) - (left.quality ?? 0) || (leftId < rightId ? -1 : 1));
+  for (const [ownerId, rsvp] of members) {
+    const wanted = Math.min(rsvp.population, participantCap, Math.max(0, remaining));
+    const allotment = wanted < NPC_SUN_PREP_BALANCE.allotmentMinShare * participantCap ? 0 : Math.floor(wanted);
+    remaining -= allotment;
+    out[ownerId] = allotment > 0 ? { ...rsvp, allotment } : { ...rsvp, allotment: 0, pledged: 0, reason: 'not-needed' };
+  }
+  return out;
+}
+
 function declareChoice(profile: NpcProfile, plan: NpcSunRaidPrepPlan, at: number, timeScale: number): NpcSunPrepChoice {
   const ownerId = profile.ownerId;
   const id = `sun-prep:declare:${plan.planId}`;
@@ -487,7 +510,8 @@ function declareChoice(profile: NpcProfile, plan: NpcSunRaidPrepPlan, at: number
     const pledged = origin.population + topped.pledged;
     journal({ at, ownerId, planId: own.planId, step: 'declared', detail: { raidId: launched.raidId, system: own.system, pledged: Math.round(pledged), promised: Math.round(npcSunPromised(own)) } });
     const rsvp: NpcSunRsvp = { ...(own.rsvps[ownerId] ?? { answer: 'yes', population: pledged, at }), pledged };
-    return { state: replacePlan(topped.state, { ...own, phase: 'gathering', raidId: launched.raidId, rsvps: { ...own.rsvps, [ownerId]: rsvp } }),
+    const rsvps = allotRoles(own.rsvps, ownerId, pledged, caps.perSide, caps.participant);
+    return { state: replacePlan(topped.state, { ...own, phase: 'gathering', raidId: launched.raidId, rsvps: { ...rsvps, [ownerId]: rsvp } }),
       started: true, reason: null, planetId: origin.planet.id };
   } };
 }
@@ -495,7 +519,7 @@ function declareChoice(profile: NpcProfile, plan: NpcSunRaidPrepPlan, at: number
 function joinChoice(ownerId: string, plan: NpcSunRaidPrepPlan, rsvp: NpcSunRsvp, at: number, timeScale: number): NpcSunPrepChoice {
   const id = `sun-prep:join:${plan.planId}:${ownerId}`;
   return { must: true, candidate: { id, kind: 'plan-step', weight: utilityToWeight(3), payload: { planId: plan.planId } }, run: (current, key) => {
-    const limit = rsvp.answer === 'limit' ? rsvp.population : sunRaidCapsOf(current).participant;
+    const limit = rsvp.allotment !== undefined ? rsvp.allotment : rsvp.answer === 'limit' ? rsvp.population : sunRaidCapsOf(current).participant;
     const result = npcSunPledgeFromPlanets(current, ownerId, plan.raidId!, 1, key, sunOptions(at, timeScale), limit);
     if (result.pledged <= 0) return { state: current, started: false, reason: 'nothing-to-pledge' };
     journal({ at, ownerId, planId: plan.planId, step: 'pledged', detail: { promised: Math.round(rsvp.population), pledged: Math.round(result.pledged) } });

@@ -135,7 +135,7 @@ async function productionAttackRefusal() {
     // All available scouts (the player's starting attack ships).
     await run(win, `(() => {
       const tile = document.querySelector('[data-qa-fleet-ship="scout"]');
-      [...tile.querySelectorAll('button')].find((button) => button.textContent.trim() === 'МАКС.').click();
+      [...tile.querySelectorAll('button')].find((button) => ['МАКС.', 'Все'].includes(button.textContent.trim())).click();
     })()`);
     await settle(win);
     await click(win, '[data-qa-flight-preview-open]');

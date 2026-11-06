@@ -175,7 +175,7 @@ async function scenarios(win, directory, label) {
   await click(win, '[data-qa-flight-repeat]');
   await waitFor(win, `document.querySelector('[data-qa-flight-source-step]') && document.querySelector('[data-qa-deployment-target-select] select')?.value === 'helion-01'`);
   const repeatSource = await js(win, `document.querySelector('[data-qa-flight-source-select]')?.value`);
-  const repeatShips = await js(win, `document.querySelector('[data-qa-flight-ships]')?.innerText || ''`);
+  const repeatShips = await js(win, `document.querySelector('[data-qa-flight-ships]')?.textContent || ''`);
   if (repeatSource !== 'qa-colony-a' || !/×2/.test(repeatShips)) throw new Error(`${label}: repeat source ${repeatSource}, ships ${repeatShips}`);
   await waitFor(win, `!document.querySelector('[data-qa-flight-dispatch-confirm]').disabled`);
   await capture(win, directory, '04-repeat-plan');
@@ -219,7 +219,7 @@ async function scenarios(win, directory, label) {
   if (firstChoice === 'qa-colony-a') throw new Error(`${label}: next wave offered the planet that just sent`);
   const other = firstChoice === 'helion-01' ? 'qa-colony-b' : 'helion-01';
   await choose(win, '[data-qa-flight-source-select]', other);
-  await waitFor(win, `document.querySelector('[data-qa-flight-source-select]').value === ${JSON.stringify(other)} && /×/.test(document.querySelector('[data-qa-flight-ships]')?.innerText || '')`);
+  await waitFor(win, `document.querySelector('[data-qa-flight-source-select]').value === ${JSON.stringify(other)} && /×/.test(document.querySelector('[data-qa-flight-ships]')?.textContent || '')`);
   const currentPlanet = await js(win, `JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})).currentPlanetId`);
   if (currentPlanet !== 'qa-colony-a') throw new Error(`${label}: changing the source switched the current planet to ${currentPlanet}`);
   await waitFor(win, `!document.querySelector('[data-qa-flight-dispatch-confirm]').disabled`);

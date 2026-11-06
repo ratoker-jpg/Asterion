@@ -14,7 +14,11 @@ import { applyFleetUiUpdate, FLEET_UI_UPDATE_EVENT, type FleetUiUpdate } from '.
 import type { FleetPlan } from './domain/fleet/fleet-plan.ts';
 import type { ShipId } from './domain/combat/ids.ts';
 import { startFleetPlanLines, type FleetPlanStartResult } from './application/fleet-plan.ts';
+import { runBuildPlans } from './application/build-plan.ts';
+import { addBuildCompletion, buildNoticeDueAt, buildNoticeText, type BuildNoticeBatch } from './application/build-notices.ts';
+import type { BuildPlan } from './domain/buildings/build-plan.ts';
 import { fleetPlanReport } from './ui/fleet-plan/fleet-plan-text.ts';
+import { FleetPlannerDialog } from './ui/fleet-plan/FleetPlannerDialog.tsx';
 import { OperationsView } from './OperationsView';
 import { createOperationsVariantAQaFixture, getOperationsVariantAQaStatus } from './operations-variant-a-qa-fixture.ts';
 import { createUniverseNpcOwnerProfile, rerollTestUniverseLayout, TEST_MODE_ALLY_PLANET_FIXTURE, UNIVERSE_NPC_OWNER_ID } from './domain/universe/runtime.ts';
@@ -40,6 +44,7 @@ import { ApprovedZoneIcon } from './ui/header/HeaderAssetIcons';
 import { GameIcon } from './ui/header/HeaderIcons';
 import {
   FLEET_CONSTRUCTION_REQUEST_EVENT,
+  FLEET_PLANNER_OPEN_EVENT,
   canEnterBuildingInterior,
   createBuildingInteriorContext,
   getBuildingInteriorTarget,
@@ -943,6 +948,26 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, []);
+  // Build planner: starts the next planned upgrade, but only while the player is in the game
+  // (window visible and focused, no catch-up running). Never from a background, offline or server tick.
+  const hasBuildPlans = Boolean(state.fleetUi?.buildPlans);
+  useEffect(() => {
+    if (!hasBuildPlans) return;
+    if (document.visibilityState !== 'visible' || !document.hasFocus()) return;
+    // flushSync may not run inside an effect, so the command goes in its own task, like a click would.
+    const timer = window.setTimeout(() => {
+      if (document.visibilityState !== 'visible' || !document.hasFocus()) return;
+      const at = Date.now();
+      const current = stateRef.current;
+      if (isApplicationCommandBlocked(current) || needsNpcCatchupBefore(current, at)) return;
+      // Auto-starts are ordinary build orders and say nothing: the queue and the planner show them.
+      enqueueApplicationStateUpdate(stateRef, setState, (latest) => {
+        const result = runBuildPlans(latest, { now: at, mode: RUNTIME_MODE, testTimeScale });
+        return { state: result.state, result };
+      }, flushSync, renderedStateRef, noteStateHeal);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [now, hasBuildPlans, testTimeScale]);
   // The map's timed-object schedules (pirates, unique worlds, anomalies) run
   // from the 2026-01-01 epoch; build them in idle time instead of inside the
   // frame of the first NPC decision or system view that needs them.
@@ -1200,6 +1225,9 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
    * publishes only the last consistent prefix: React and autosave see one
    * state per task instead of one per 64-event chunk.
    */
+  const buildNoticeBatch = useRef<BuildNoticeBatch | null>(null);
+  const buildNoticeTimer = useRef<number | null>(null);
+  useEffect(() => () => { if (buildNoticeTimer.current != null) window.clearTimeout(buildNoticeTimer.current); }, []);
   /** Turns the player's runtime events (completions, arrivals, Sun raids) into notices. */
   const announceRuntimeEvents = useCallback((events: readonly RuntimeReconcileEvent[], resultState: SaveState) => {
     const result = { state: resultState };
@@ -1212,11 +1240,18 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       } else if (event.kind === 'building') {
         const planet = result.state.planets[event.planetId] ?? result.state.planets[result.state.currentPlanetId];
         const name = getBuildingDefinition(event.assetRole, result.state.profile.factionId).name;
-        setNotice(`${planet.name}: постройка завершена — ${name}.`, 'success', {
-          key: `building:${event.planetId}`,
-          item: name,
-          summarize: (items) => `${planet.name}: завершено построек — ${items.length}: ${items.join(', ')}.`,
-        });
+        // Short builds finish quietly; the rest wait a moment and come out as one notice with one sound.
+        const at = Date.now();
+        buildNoticeBatch.current = addBuildCompletion(buildNoticeBatch.current, { planetId: event.planetId, planetName: planet.name, name, durationMs: event.durationMs, at });
+        if (buildNoticeBatch.current) {
+          if (buildNoticeTimer.current != null) window.clearTimeout(buildNoticeTimer.current);
+          buildNoticeTimer.current = window.setTimeout(() => {
+            buildNoticeTimer.current = null;
+            const text = buildNoticeText(buildNoticeBatch.current);
+            buildNoticeBatch.current = null;
+            if (text) setNotice(text, 'success');
+          }, Math.max(0, buildNoticeDueAt(buildNoticeBatch.current) - at));
+        }
       } else if (event.kind === 'recycling') {
         const planet = result.state.planets[event.planetId] ?? result.state.planets[result.state.currentPlanetId];
         setNotice(`${planet.name}: результат переработки автоматически зачислен`, 'success');
@@ -1794,6 +1829,30 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       result: true,
     }), flushSync, renderedStateRef, noteStateHeal);
     return true;
+  };
+
+  /** Build planner: a plan edit, as a command, so a clock tick cannot write over it. */
+  const saveBuildPlan = (planetId: string, plan: BuildPlan) => {
+    if (rejectNpcCatchupCommand()) return false;
+    enqueueApplicationStateUpdate(stateRef, setState, (current) => ({
+      state: { ...current, fleetUi: applyFleetUiUpdate(current.fleetUi, { kind: 'set-build-plan', planetId, plan }) },
+      result: true,
+    }), flushSync, renderedStateRef, noteStateHeal);
+    return true;
+  };
+
+  /** Build planner: «Запустить сейчас», one click on a button; works even with the auto-start off. */
+  const runBuildPlanNow = (planetId: string) => {
+    if (rejectNpcCatchupCommand()) return 0;
+    const at = Date.now();
+    const run = enqueueApplicationStateUpdate(stateRef, setState, (latest) => {
+      const result = runBuildPlans(latest, { now: at, mode: RUNTIME_MODE, testTimeScale }, planetId);
+      return { state: result.state, result };
+    }, flushSync, renderedStateRef, noteStateHeal);
+    setNotice(run.started.length
+      ? `${state.planets[planetId]?.name ?? ''}: ${run.started.map((item) => `${item.name} до ур. ${item.level}`).join(', ')} добавлено в очередь.`
+      : 'Сейчас ничего не запустить: проверьте, чего не хватает у строк.');
+    return run.started.length;
   };
 
   /** Planner: starts the missing ships of some lines (or all) in one update, through the ordinary shipyard command. */
@@ -2580,6 +2639,15 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const [commandFocus, setCommandFocus] = useState<{ tab: 'operations' | 'overview'; nonce: number } | null>(null);
   const [selectedSun, setSelectedSun] = useState<SunSelection>(() => ({ galaxy: homePlanet?.universeGalaxy ?? 1, system: homePlanet?.universeSystem ?? 1 }));
   const [gateDialogPlanetId, setGateDialogPlanetId] = useState<string | null>(null);
+  const [fleetPlannerPlanetId, setFleetPlannerPlanetId] = useState<string | null>(null);
+  useEffect(() => {
+    const onOpenPlanner = (event: Event) => {
+      const planetId = (event as CustomEvent<{ planetId?: string }>).detail?.planetId;
+      if (planetId) setFleetPlannerPlanetId(planetId);
+    };
+    window.addEventListener(FLEET_PLANNER_OPEN_EVENT, onOpenPlanner);
+    return () => window.removeEventListener(FLEET_PLANNER_OPEN_EVENT, onOpenPlanner);
+  }, []);
   const [pauseOpen, setPauseOpen] = useState(false);
   const openPauseMenu = useCallback(() => setPauseOpen(true), []);
   // The world summary stays in the save until the player closes it.
@@ -3179,6 +3247,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
                 onSend={sendQuickFlights}
                 onSavePlan={saveFleetPlan}
                 onStartPlan={startFleetPlan}
+                onSaveBuildPlan={saveBuildPlan}
+                onRunBuildPlan={runBuildPlanNow}
               />
             </>
           ) : activeRoute === 'planet' ? (
@@ -3283,6 +3353,20 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
           document.body,
         )}
 
+        {fleetPlannerPlanetId && state.planets[fleetPlannerPlanetId] ? (
+          <FleetPlannerDialog
+            state={state}
+            now={now}
+            mode={RUNTIME_MODE}
+            testTimeScale={testTimeScale}
+            planetId={fleetPlannerPlanetId}
+            planetArt={Object.fromEntries(ownedPlanets.map((planet) => [planet.id, planetSkins.find((skin) => skin.id === state.planets[planet.id].skin)?.art ?? planetSkins[0].art]))}
+            onPlanet={setFleetPlannerPlanetId}
+            onClose={() => setFleetPlannerPlanetId(null)}
+            onSavePlan={saveFleetPlan}
+            onStart={(id, shipIds) => startFleetPlan(id, shipIds)}
+          />
+        ) : null}
         {gateDialogPlanetId ? (
           <GateDialog
             state={state}

@@ -40,6 +40,7 @@ export function FleetUnitRow({
   lockReason,
   requirements,
   dossier,
+  factionName,
   onQuantity,
   onBuild,
 }: {
@@ -61,6 +62,8 @@ export function FleetUnitRow({
   requirements: readonly string[];
   /** The stats card shown on hover; the info dialog reads its figures too. */
   dossier: ReactNode;
+  /** Race shown on the info card (the ship and defence names differ by race). */
+  factionName?: string;
   onQuantity: (quantity: number) => void;
   onBuild: (quantity: number) => void;
 }) {
@@ -93,7 +96,7 @@ export function FleetUnitRow({
 
       <dl className="fc-unit__cost" aria-label="Цена за штуку">
         {COST_KINDS.map((kind) => (
-          <div key={kind} className={!locked && cost[kind] > walletOf[kind] ? 'is-short' : ''}>
+          <div key={kind} className={[!locked && cost[kind] > walletOf[kind] ? 'is-short' : '', cost[kind] === 0 ? 'is-zero' : ''].filter(Boolean).join(' ') || undefined}>
             <dt><ResourceIcon kind={kind} label={COST_LABELS[kind]} /></dt>
             <dd>{formatNumber(cost[kind])}</dd>
           </div>
@@ -125,17 +128,17 @@ export function FleetUnitRow({
               aria-label={`Количество: ${name}`}
               onChange={(event) => onQuantity(Number(event.target.value))}
             />
-            <button type="button" data-qa-unit-max onClick={() => onQuantity(max)} disabled={max <= 0}>МАКС.</button>
-            <button type="button" data-qa-unit-min onClick={() => onQuantity(0)} disabled={quantity <= 0}>МИН.</button>
+            <button type="button" data-qa-unit-max onClick={() => onQuantity(max)} disabled={max <= 0}>Макс</button>
+            <button type="button" data-qa-unit-min onClick={() => onQuantity(0)} disabled={quantity <= 0}>Мин</button>
             <small data-qa-unit-can-build>{max > 0 ? `можно до ${formatNumber(max)}` : resourceShort ? 'не хватает ресурсов' : cost.population > wallet.populationFree ? 'нет свободного населения' : 'больше построить нельзя'}</small>
           </div>
           <button className="fc-unit__build asterion-button asterion-button--primary" type="button" data-qa-unit-build disabled={quantity <= 0 || max <= 0} onClick={() => onBuild(quantity)}>
-            Построить
+            Строить
           </button>
         </>
       )}
 
-      <button className="fc-unit__info" type="button" data-role={role} aria-label={`Информация: ${name}`}>i</button>
+      <button className="fc-unit__info" type="button" data-role={role} data-faction={factionName} aria-label={`Информация: ${name}`} data-qa-unit-info={id}>i</button>
     </article>
   );
 }

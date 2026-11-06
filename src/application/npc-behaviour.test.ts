@@ -13,6 +13,7 @@ import { dispatchNpcDeployment, dispatchNpcMission, npcDeploymentFreeCapacity } 
 import { reconcileFlights } from './flights.ts';
 import { assessNpcPlanetThreat, npcStayThreshold } from './npc-threat.ts';
 import type { BattleReport } from '../domain/combat/report.ts';
+import { dispatchNpcLootWaves } from './npc-loot-wave.ts';
 import { createNpcUtilityContext, chooseNpcAttackForce, npcForcePower, estimateRaidEconomics, estimateRevengeEconomics, estimateAttackUtility, estimateEspionageUtility, npcAttackIntel, npcRecyclerDeficit } from './npc-utility.ts';
 import { getNpcMissionCandidates } from './npc-mission-policy.ts';
 import { seedNpcGrudgesFromReports } from './npc-grudges.ts';
@@ -420,4 +421,49 @@ test('recyclers are ordered for the debris around and split over the richest fie
   const sent = candidates.map((candidate) => JSON.parse(String(candidate.payload.selectedShips)).recycler as number);
   assert.ok(candidates.length >= 2, 'both fields get recyclers');
   assert.equal(sent.reduce((sum, count) => sum + count, 0), 10 + 4, 'just enough hulls for each field (40 000 each)');
+});
+
+test('owner 05.11.2026: a raid sends a decisive force, and the cargo follows the battle fleet', () => {
+  const campaign = makeCampaign('npc-behaviour-raid-force');
+  const [raider, victim] = npcTargets(campaign);
+  const rich = { metal: 4_000_000, minerals: 4_000_000, gas: 4_000_000, debris: 0, developmentEnergy: 0 };
+  const prepare = (traits: Record<string, number>) => {
+    let state = withShips(campaign, raider.id, { cruiser: 60, 'mega-transporter': 300 });
+    state = withTraits(state, raider.ownerId, traits);
+    state = withAttackEligiblePoints(state, [raider.ownerId, victim.ownerId], 20_000);
+    const home = getEspionageTargets(state.espionage)[raider.id]!;
+    state = { ...state, espionage: { ...state.espionage!, targets: { ...getEspionageTargets(state.espionage), [raider.id]: { ...home, resources: { ...home.resources, gas: 50_000_000 } } } } };
+    const report = { ...spyReport(raider, getEspionageTargets(state.espionage)[victim.id]!, { cruiser: 20 }, START), resources: rich };
+    state = { ...state, espionage: { ...state.espionage!, reports: [...state.espionage!.reports, report] } };
+    return { state, report, origin: getEspionageTargets(state.espionage)[raider.id]! };
+  };
+  const careful = prepare({ riskTolerance: 0.1, aggression: 0.1 });
+  const bold = prepare({ riskTolerance: 0.95, aggression: 0.95 });
+  const sizeOf = (setup: ReturnType<typeof prepare>, online = false) => {
+    const context = createNpcUtilityContext(setup.state, profileOf(setup.state, raider.ownerId), START + 1, 1);
+    return chooseNpcAttackForce(context, setup.origin, victim.id, { cruiser: 60 }, online);
+  };
+  const small = sizeOf(careful)?.cruiser ?? 0;
+  const large = sizeOf(bold)?.cruiser ?? 0;
+  assert.ok(small >= 30, `a careful owner still sends a decisive force, not the bare minimum (${small})`);
+  assert.ok(large >= 30 && large <= 60, `a bold owner sends a decisive force too, ${large} of 60`);
+  assert.ok((sizeOf(careful, true)?.cruiser ?? 0) >= small, 'a planet whose owner is online gets no less');
+
+  // The cargo follows the battle fleet: a second attack of holds only, landing after it.
+  const context = createNpcUtilityContext(bold.state, profileOf(bold.state, raider.ownerId), START + 1, 1);
+  const force = chooseNpcAttackForce(context, bold.origin, victim.id, { cruiser: 60 })!;
+  const command = { ownerId: raider.ownerId, originPlanetId: raider.id, requestId: 'npc-autonomy:behaviour:raid-force', missionId: 'attack' as const,
+    selectedShips: force, destination: { kind: 'planet' as const, planetId: victim.id, coordinate: victim.coordinate }, targetPlanetId: victim.id, targetRelation: 'neutral' as const };
+  const sent = dispatchNpcMission(bold.state, command, START + 1, 1);
+  assert.equal(sent.ok, true, sent.reason ?? '');
+  const waves = dispatchNpcLootWaves(sent.state, command, sent.flight!, bold.report, false, START + 1, 1);
+  const flights = waves.state.flights.records.filter((flight) => flight.missionId === 'attack');
+  assert.ok(waves.waves > 0, 'the cargo is sent behind the battle fleet');
+  {
+    const follow = flights.find((flight) => flight.id !== sent.flight!.id)!;
+    assert.equal(follow.selectedShips.cruiser, undefined, 'only holds follow');
+    assert.ok((follow.selectedShips['mega-transporter'] ?? 0) > 100, 'mostly mega-transports');
+    assert.ok(follow.arrivalAt >= sent.flight!.arrivalAt, 'they land behind the battle fleet');
+    assert.ok(follow.id > sent.flight!.id, 'and on the same moment the battle fleet is resolved first');
+  }
 });

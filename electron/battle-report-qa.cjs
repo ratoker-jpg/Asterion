@@ -657,6 +657,8 @@ async function exerciseSimulatorModalFlow(win) {
     button.click();
     return true;
   })()`);
+  // Variant A: the result shows on the page; the round-by-round report opens on «Подробно по раундам».
+  await win.webContents.executeJavaScript(`new Promise((resolve) => setTimeout(() => { document.querySelector('[data-qa-simulator-details]:not(:disabled)')?.click(); resolve(true); }, 400))`);
   if (!run) {
     const state = await win.webContents.executeJavaScript(`(() => ({
       disabled: Boolean(document.querySelector('.sim-run-v1')?.disabled),
@@ -727,6 +729,8 @@ async function exerciseSimulatorModalFlow(win) {
     return true;
   })()`);
   if (!rerun) throw new Error('Simulator rerun button not available after closing result');
+  // Variant A: the result shows on the page; the round-by-round report opens on «Подробно по раундам».
+  await win.webContents.executeJavaScript(`new Promise((resolve) => setTimeout(() => { document.querySelector('[data-qa-simulator-details]:not(:disabled)')?.click(); resolve(true); }, 400))`);
   await waitFor(win, `document.querySelector('[role="dialog"][data-qa-battle-report-source="simulation"]')`);
   await settle(win);
   await win.webContents.executeJavaScript(`document.querySelector('.battle-report-modal-close-v1')?.click()`);

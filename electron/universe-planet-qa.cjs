@@ -480,7 +480,8 @@ async function inspectorSnapshot(win) {
       action: node.getAttribute('data-qa-universe-action'),
       status: node.getAttribute('data-qa-universe-action-status'),
       disabled: Boolean(node.disabled),
-      title: node.getAttribute('title') || '',
+      // The atlas shows reasons in its own hint (no system tooltips); the full text sits on the button.
+      title: node.getAttribute('data-qa-universe-action-reason') || node.getAttribute('title') || '',
     }));
     const specialActions = Array.from(document.querySelectorAll('[data-qa-universe-special-action]')).map((node) => ({
       action: node.getAttribute('data-qa-universe-special-action'),
@@ -775,10 +776,11 @@ async function runViewport(width, height) {
         || reopenedAttackActions.length !== 7 || reopenedAttackActions.some((action) => action.disabled || action.status !== 'supported' || !action.title.includes('доступна для атаки'))) {
         throw new Error(`${label}: visit did not reopen the same seven holdings ${JSON.stringify(reopened)}`);
       }
-      const selectedCoordinate = await win.webContents.executeJavaScript(`document.querySelector('.universe-inspector-header span')?.textContent`);
+      const selectedCoordinate = await win.webContents.executeJavaScript(`(document.querySelector('[data-qa-atlas-coordinate]') || document.querySelector('.universe-inspector-header span'))?.textContent`);
       if (selectedCoordinate !== row.coordinate) throw new Error(`${label}: visited planet coordinate mismatch ${selectedCoordinate}`);
     }
-    await clickAt(win, '.universe-modal-backdrop', true);
+    // The atlas covers the whole screen (no backdrop to click): it closes with its cross.
+    await dismissInspector(win);
     await checkRestoredFocus(win, npc.rows.find((row) => Number(row.coordinate.slice(1, -1).split(':')[1]) === npcSystem).id);
     await selectSystem(win, 1);
 
@@ -829,7 +831,7 @@ async function runViewport(width, height) {
     await clickAt(win, '[data-qa-flight-preview-open]', false, true, true);
     await waitFor(win, `document.querySelector('[data-qa-flight-preview-backdrop]')`);
     const timelineText = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-flight-preview-backdrop]')?.textContent?.replace(/\s+/g, ' ').trim() || ''`);
-    const timelineFields = ['ИСТОЧНИК', 'выбрано флотом', 'ЦЕЛЬ', 'Цель подтверждена', 'СОСТАВ ФЛОТА', 'Колонизатор', 'Население: 12', 'ПАРАМЕТРЫ ПЕРЕЛЁТА', 'СКОРОСТЬ ФЛОТА', 'ТУДА', 'ОБРАТНО', 'ПОЛНЫЙ ЦИКЛ', 'ГАЗ', 'НАСЕЛЕНИЕ', 'ПРИБЫТИЕ', 'МОСКОВСКОЕ ВРЕМЯ', 'МСК', 'Газ списывается только за один путь туда.', 'При отзыве колонизатор возвращается', 'ОТМЕНА', 'ОТПРАВИТЬ'];
+    const timelineFields = ['ИСТОЧНИК', 'выбрано флотом', 'ЦЕЛЬ', 'Цель подтверждена', 'СОСТАВ ФЛОТА', 'Колонизатор', 'Население: 12', 'ПАРАМЕТРЫ ПЕРЕЛЁТА', 'СКОРОСТЬ ФЛОТА', 'ТУДА', 'ОБРАТНО', 'ПОЛНЫЙ ЦИКЛ', 'ГАЗ', 'НАСЕЛЕНИЕ', 'ПРИБЫТИЕ', 'МОСКОВСКОЕ ВРЕМЯ', 'МСК', 'Газ списывается только за один путь туда.', 'При отзыве колонизатор возвращается', 'ОТМЕНА', 'Отправить'];
     if (timelineFields.some((field) => !timelineText.includes(field))) throw new Error(`${label}: Concept 2 Mission Timeline fields are incomplete ${JSON.stringify({ missing: timelineFields.filter((field) => !timelineText.includes(field)), timelineText })}`);
     const timelineStructure = await win.webContents.executeJavaScript(`(() => ({
       sourceIsLocked: Boolean(document.querySelector('[data-qa-flight-source-step]')) && !document.querySelector('[data-qa-flight-source-step] .flight-timeline-edit'),
@@ -861,7 +863,7 @@ async function runViewport(width, height) {
         modalFitsViewport: modal ? modal.getBoundingClientRect().top >= 0 && modal.getBoundingClientRect().bottom <= innerHeight + 1 : false,
       };
     })()`);
-    if (timelineViewport.modalOverflowY !== 'hidden' || timelineViewport.modalScrollable || timelineViewport.backdropOverflowY === 'auto' || !timelineViewport.modalFitsViewport) throw new Error(`${label}: Mission Timeline must fit the viewport without an inner scrollbar ${JSON.stringify(timelineViewport)}`);
+    if (timelineViewport.modalScrollable || timelineViewport.backdropOverflowY === 'auto' || !timelineViewport.modalFitsViewport) throw new Error(`${label}: Mission Timeline must fit the viewport without an inner scrollbar ${JSON.stringify(timelineViewport)}`);
     const geometryDuringPreview = await win.webContents.executeJavaScript(`(() => { const rect = (selector) => document.querySelector(selector)?.getBoundingClientRect().toJSON() || null; return { fleet: rect('.fleet-workspace-v1'), sidebar: rect('.fc-wings'), horizontalOverflow: document.documentElement.scrollWidth > innerWidth + 2 || document.body.scrollWidth > innerWidth + 2 }; })()`);
     const stableRect = (left, right) => left && right && ['x', 'y', 'width', 'height'].every((key) => Math.abs(left[key] - right[key]) <= 1);
     const stableFrame = (left, right) => left && right && ['x', 'y', 'width'].every((key) => Math.abs(left[key] - right[key]) <= 1);

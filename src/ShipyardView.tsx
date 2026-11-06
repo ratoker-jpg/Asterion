@@ -16,6 +16,7 @@ import { ACTIVE_RUNTIME_MODE, resolveTestTimeScale } from './domain/runtime/mode
 import { FLEET_PRODUCTION_START_REQUEST_EVENT } from './application/fleet-production.ts';
 import { readFleetBuildBudget, type FleetBuildBudget } from './application/fleet.ts';
 import { FleetConstructionHeader } from './FleetConstructionHeader';
+import { FLEET_PLANNER_OPEN_EVENT } from './building-interior-navigation.ts';
 import { FleetUnitRow } from './ui/fleet/FleetUnitRow';
 import { evaluateProductionRequirements } from './domain/fleet/requirements.ts';
 
@@ -193,6 +194,7 @@ function ShipCard({
       lockReason={requirements.reason ? localizeBuildingNames(requirements.reason, budget.factionId) : null}
       requirements={ship.requirements.map((requirement) => localizeBuildingNames(requirement, budget.factionId))}
       dossier={<ShipStatsTooltip ship={ship} stats={stats} level={shipLevel} />}
+      factionName={getCombatFactionName(budget.factionId)}
       onQuantity={(next) => onQuantity(ship, next)}
       onBuild={(next) => onBuild(ship, next)}
     />
@@ -202,7 +204,6 @@ function ShipCard({
 export function ShipyardView({ planetName, coords, planetId, budget: providedBudget }: { planetName: string; coords: string; planetId?: string; budget?: FleetBuildBudget }) {
   const savedBudget = useMemo(readFleetBuildBudget, []);
   const budget = providedBudget ?? savedBudget;
-  const factionName = getCombatFactionName(budget.factionId);
   const shipyardPresentation = useMemo(
     () => getBuildingPresentation('shipyard', budget.factionId),
     [budget.factionId],
@@ -259,13 +260,19 @@ export function ShipyardView({ planetName, coords, planetId, budget: providedBud
       <FleetConstructionHeader
         viewId="ships"
         shipyardPresentation={shipyardPresentation}
-        title="Корабли"
-        detail={`${planetName} ${coords} · ${shipyardPresentation.name}, уровень ${budget.shipyardLevel} · ${factionName}`}
+        title={`${shipyardPresentation.name} планеты ${planetName}`}
+        detail={`${shipyardPresentation.name}, уровень ${budget.shipyardLevel} · ${getBuildingPresentation('hangar', budget.factionId).name} ${budget.hangarLevel}`}
         noShipyard={budget.shipyardLevel <= 0}
-        populationLabel="Население флота"
+        populationLabel="Население"
         population={fleetSummary.population}
         capacity={fleetSummary.capacity}
         free={fleetSummary.available}
+        action={planetId ? (
+          <button type="button" className="fc-head__plan" data-qa-fleet-planner-open onClick={() => window.dispatchEvent(new CustomEvent(FLEET_PLANNER_OPEN_EVENT, { detail: { planetId } }))}>
+            <img src={ships.find((ship) => ship.id === 'battleship')?.art ?? ships[0]?.art} alt="" draggable={false} />
+            Эталонный флот
+          </button>
+        ) : null}
       />
 
       <div className="fc-unit-list">
