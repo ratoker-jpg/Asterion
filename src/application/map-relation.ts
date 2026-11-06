@@ -1,6 +1,7 @@
 import type { AttackEligibility, AttackEligibilityPoints } from '../domain/rating/attack-eligibility.ts';
 import type { UniverseOwnerRelation } from '../domain/universe/runtime.ts';
 import type { UniversePlanetNode } from '../domain/universe/types.ts';
+import { formatShieldRemaining, shieldStatus, type ShieldRecord } from '../domain/shield/shield.ts';
 import { evaluateOwnerAttackEligibility } from './attack-eligibility.ts';
 
 /**
@@ -21,6 +22,8 @@ export type MapRelationStatus = {
   title: string;
   /** Why, when there is more to say than the headline. */
   detail: string | null;
+  /** Remaining shield time text («00:42») when the planet's owner is shielded; others see this mark too. */
+  shieldLeft?: string;
 };
 
 const SPECIAL: Partial<Record<UniversePlanetNode['kind'], MapRelationStatus>> = {
@@ -77,4 +80,25 @@ export function classifyMapPlanet(
 ): MapRelationStatus {
   const foreign = (node.kind === 'player' || node.kind === 'npc') && (relation === 'enemy' || relation === 'neutral');
   return classifyMapNode(node, relation, foreign ? evaluateOwnerAttackEligibility(attackerOwnerId, node.ownerId ?? '', scoreOf) : null);
+}
+
+/**
+ * Layers the planet shield over a map status: a shielded planet carries a mark
+ * (everyone sees it) and cannot be attacked; a shielded attacker cannot attack.
+ */
+export function applyMapShield(
+  status: MapRelationStatus,
+  node: Pick<UniversePlanetNode, 'kind' | 'ownerId'>,
+  attackerOwnerId: string,
+  shields: Readonly<Record<string, ShieldRecord>> | undefined,
+  at: number,
+): MapRelationStatus {
+  if (!shields || (node.kind !== 'player' && node.kind !== 'npc') || !node.ownerId) return status;
+  const theirs = shieldStatus(shields[node.ownerId], at);
+  const own = shieldStatus(shields[attackerOwnerId], at);
+  const shieldLeft = theirs.phase === 'active' ? formatShieldRemaining(theirs.remainingMs) : undefined;
+  if (status.attackable !== true) return shieldLeft ? { ...status, shieldLeft } : status;
+  if (shieldLeft) return { ...status, attackable: false, detail: `Планета под щитом, ещё ${shieldLeft}`, shieldLeft };
+  if (own.phase === 'active') return { ...status, attackable: false, detail: `Ваш щит активен, ещё ${formatShieldRemaining(own.remainingMs)}: нападать нельзя` };
+  return status;
 }

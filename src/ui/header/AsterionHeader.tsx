@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { HeaderAlertsIcon, HeaderGameIcon, HeaderNavigationIcon } from './HeaderAssetIcons';
 import type { HeaderAlert } from './header-alerts.ts';
 import { ResourceChip } from './ResourceChip';
@@ -43,6 +43,8 @@ export type AsterionHeaderProps = {
   onZoneChange: (zone: HeaderZoneId) => void;
   onPlanetChange: (planetId: string) => void;
   onPlanetMenuToggle: () => void;
+  /** The planet shield pill next to the planet name. */
+  shield?: ReactNode;
 };
 
 const STORAGE_KINDS = ['metal', 'mineral', 'gas'] as const;
@@ -80,6 +82,7 @@ export function AsterionHeader({
   onZoneChange,
   onPlanetChange,
   onPlanetMenuToggle,
+  shield,
 }: AsterionHeaderProps) {
   const planetSelectRef = useRef<HTMLButtonElement>(null);
   const wasPlanetMenuOpen = useRef(planetMenuOpen);
@@ -218,6 +221,7 @@ export function AsterionHeader({
           </span>
           <i className={planetMenuOpen ? 'is-open' : ''} aria-hidden="true" />
         </button>
+        {shield}
 
         <div
           className="hdr-planet-list"

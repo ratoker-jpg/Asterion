@@ -31,6 +31,7 @@ export type AttackEligibility =
     attacker: AttackEligibilityPoints;
     defender: AttackEligibilityPoints;
   }
+  | { allowed: false; reason: 'attacker-shielded' | 'defender-shielded'; message: string }
   | {
     allowed: false;
     reason: 'out-of-range';

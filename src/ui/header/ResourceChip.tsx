@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { protectedStoreAmount } from '../../domain/shield/shield.ts';
 import { HeaderGameIcon } from './HeaderAssetIcons';
 import { GameIcon } from './HeaderIcons';
 import type { HeaderResourceModel } from './types.ts';
@@ -104,6 +105,7 @@ export function ResourceChip({ kind, label, value, capacity, showCapacity = fals
         <strong>{label}</strong>
         {capacity ? <span>{formatNumber(value)} / {formatNumber(capacity)}</span> : <span>{formatNumber(value)}</span>}
         {hourlyGain != null ? <span>Добыча: +{formatNumber(hourlyGain)}/ч</span> : null}
+        {capacity && kind !== 'population' && kind !== 'energy' ? <span data-qa-protected-store={kind}>Под защитой от грабежа: {formatNumber(protectedStoreAmount(capacity))}</span> : null}
         {capacity && hourlyGain != null ? <span>Склад заполнится через: {formatStorageEta(value, capacity, hourlyGain)}</span> : null}
         {kind === 'population' && capacity ? <span>Заполнено: {fill.toFixed(1).replace('.', ',')}%</span> : null}
         {kind === 'population' && populationBreakdown ? (

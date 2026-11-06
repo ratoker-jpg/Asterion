@@ -1,0 +1,12 @@
+.shield-ctl { display: inline-flex; align-items: center; gap: 6px; border: 1px solid color-mix(in srgb, var(--shield-tone, #6fd3ff) 55%, transparent); background: color-mix(in srgb, var(--shield-tone, #6fd3ff) 12%, transparent); color: var(--shield-tone, #6fd3ff); border-radius: 999px; padding: 4px 12px; font: 600 12px/1 inherit; cursor: pointer; white-space: nowrap; }
+.shield-ctl i { width: 10px; height: 12px; background: currentColor; clip-path: polygon(50% 0, 100% 18%, 100% 55%, 50% 100%, 0 55%, 0 18%); }
+.shield-ctl small { opacity: .75; font-weight: 500; }
+.shield-ctl--active { --shield-tone: #5fe6a8; box-shadow: 0 0 10px color-mix(in srgb, #5fe6a8 35%, transparent); }
+.shield-ctl--cooldown { --shield-tone: #a8b0c0; }
+.shield-ctl:disabled { cursor: default; opacity: .85; }
+.shield-ctl:disabled.shield-ctl--ready { opacity: .6; }
+.shield-ctl--compact { position: absolute; right: 30px; top: 50%; transform: translateY(-50%); padding: 3px 7px; font-size: 10px; z-index: 5; font-variant-numeric: tabular-nums; }
+.shield-ctl--compact.shield-ctl--ready span { display: none; }
+.hdr-planet-control .hdr-planet-select__copy { padding-right: 62px; }
+.shield-ctl--compact small { display: none; }
+.shield-mark { display: inline-block; width: 9px; height: 11px; margin-left: 4px; vertical-align: -1px; background: #5fe6a8; clip-path: polygon(50% 0, 100% 18%, 100% 55%, 50% 100%, 0 55%, 0 18%); }
