@@ -76,9 +76,14 @@ export const MIN_RECON_ONE_WAY_DURATION_MS = 3_000;
  * mission, player or bot arrives sooner than this. Gas and speeds are untouched.
  */
 export const MIN_REAL_ONE_WAY_DURATION_MS = 60_000;
-/** Applies the real-time floor to an already world-speed-scaled one-way duration. */
-export function applyRealFlightFloor(scaledMs: number): number {
-  return Math.max(MIN_REAL_ONE_WAY_DURATION_MS, scaledMs);
+/** Real-time floor for recon (probe-only spy flights): the probes are extremely fast by design. */
+export const MIN_REAL_RECON_ONE_WAY_DURATION_MS = 3_000;
+/**
+ * Applies the real-time floor to an already world-speed-scaled one-way duration.
+ * `reconOnly` (spy probes only, no other hull) lowers it to 3 s; everything else keeps 60 s.
+ */
+export function applyRealFlightFloor(scaledMs: number, reconOnly = false): number {
+  return Math.max(reconOnly ? MIN_REAL_RECON_ONE_WAY_DURATION_MS : MIN_REAL_ONE_WAY_DURATION_MS, scaledMs);
 }
 
 /** True for a recon fleet: spy probes only, no commanders. */

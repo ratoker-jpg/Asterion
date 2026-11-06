@@ -730,8 +730,8 @@ function selectedColonizerOnly(selectedShips: Partial<Record<ShipId, number>>): 
 function scaledRecord(record: FlightRecord, options: FlightRuntimeOptions): FlightRecord {
   const mode = options.mode ?? 'production';
   const scaled = scaleRuntimeDuration(record.oneWayDurationMs, mode, options.testTimeScale);
-  // The 60 s real-time floor is a campaign rule; the test-mode accelerator stays free to go faster.
-  const duration = mode === 'test' ? scaled : applyRealFlightFloor(scaled);
+  // The 60 s real-time floor (3 s for probe-only recon) is a campaign rule; the test-mode accelerator stays free to go faster.
+  const duration = mode === 'test' ? scaled : applyRealFlightFloor(scaled, isReconOnlyFleet(record.selectedShips, record.selectedCommanders));
   return {
     ...record,
     oneWayDurationMs: duration,
@@ -2227,7 +2227,7 @@ export function estimateFlightRoute(
       mode,
       options.testTimeScale,
     );
-    const oneWayDurationMs = mode === 'test' ? scaled : applyRealFlightFloor(scaled);
+    const oneWayDurationMs = mode === 'test' ? scaled : applyRealFlightFloor(scaled, isReconOnlyFleet(ships, selectedCommanders));
     const gasCost = calculateFlightFuel(factionId, ships, routeDistance, science, selectedCommanders);
     return { routeDistance, effectiveSpeed, oneWayDurationMs, gasCost };
   } catch {
