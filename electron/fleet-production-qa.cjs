@@ -1559,7 +1559,8 @@ async function runViewport(width, height) {
       const queueRect = queue?.getBoundingClientRect();
       const listRect = list?.getBoundingClientRect();
       return {
-        besideList: Boolean(queueRect && listRect && queueRect.left >= listRect.right),
+        // Variant A: the yard queue is a bar under the cards.
+        besideList: Boolean(queueRect && listRect && queueRect.top >= listRect.bottom - 1),
         sameBuild: Boolean(queue?.closest('.fc-build') && queue?.closest('.fc-build') === list?.closest('.fc-build')),
         heading: queue?.querySelector('.fleet-production-queue-head-v1')?.textContent?.replace(/\\s+/g, ' ').trim() ?? '',
       };
@@ -1743,13 +1744,14 @@ async function runViewport(width, height) {
         horizontalOverflow: document.documentElement.scrollWidth > innerWidth + 2 || document.body.scrollWidth > innerWidth + 2,
         longPage: document.documentElement.classList.contains('asterion-long-page'),
         orderCount: document.querySelectorAll('[data-qa-fleet-production-queue="ships"] [data-qa-fleet-production-order]').length,
-        queueOverflowY: styles?.overflowY ?? '',
+        // Variant A: the queue is one bar under the cards; long queues scroll sideways inside it.
+        queueOverflowX: styles?.overflowX ?? '',
         queueMaxHeight: styles?.maxHeight ?? '',
-        queueScrollHeight: list?.scrollHeight ?? 0,
-        queueClientHeight: list?.clientHeight ?? 0,
+        queueScrollWidth: list?.scrollWidth ?? 0,
+        queueClientWidth: list?.clientWidth ?? 0,
       };
     })()`);
-    if (layout.horizontalOverflow || !layout.longPage || layout.orderCount !== 8 || layout.queueOverflowY !== 'visible' || layout.queueMaxHeight !== 'none' || layout.queueScrollHeight < layout.queueClientHeight) throw new Error(`${label}: fleet production layout overflow/long-page contract failed ${JSON.stringify(layout)}`);
+    if (layout.horizontalOverflow || !layout.longPage || layout.orderCount !== 8 || layout.queueOverflowX !== 'auto' || layout.queueMaxHeight !== 'none' || layout.queueScrollWidth < layout.queueClientWidth) throw new Error(`${label}: fleet production layout overflow/long-page contract failed ${JSON.stringify(layout)}`);
     await capture(win, directory, 'fleet-production');
     return { viewport: label, layout, missionSlots, transportCycle, flightCycle, recycleCycle, asteroidRecyclerLaunch, gasUiRegressions, gasFreshnessRegressions, planetSwitch, planetoLom, screenshotsSkipped: skipScreenshots };
   } finally {
