@@ -69,6 +69,19 @@ test('planets: foreign → spy, attack, transport; own → transport, rebase; al
   assert.deepEqual(ids({ node: node('player', { ownerId: 'friend' }), relation: 'ally', owner: { id: 'friend', displayName: 'Друг' } }), ['transport', 'recycle']);
 });
 
+test('a foreign planet the attack gate refuses: attack is off and says the gate\'s reason, the rest stays live', () => {
+  const node = { kind: 'npc', ownerId: 'npc-1', id: 'npc-planet', name: 'Цель', coordinate: { galaxy: 1, system: 2, position: 3 } } as UniversePlanetNode;
+  const owner = { id: 'npc-1', displayName: 'Сосед' };
+  const open = listQuickActions({ node, relation: 'neutral', owner }, 'player-current');
+  assert.equal(open.find((item) => item.id === 'attack')?.enabled, true);
+  const reason = 'У цели 299 общих очков: атаковать можно с 300.';
+  const blocked = listQuickActions({ node, relation: 'neutral', owner, attackBlockedReason: reason }, 'player-current');
+  const attack = blocked.find((item) => item.id === 'attack');
+  assert.deepEqual([attack?.enabled, attack?.reason], [false, reason]);
+  assert.equal(blocked.find((item) => item.id === 'spy')?.enabled, true);
+  assert.equal(blocked.find((item) => item.id === 'transport')?.enabled, true);
+});
+
 test('empty slot and debris: colonize, plus the recycler when debris lies there', () => {
   assert.deepEqual(ids({ node: node('empty') }), ['colonize', 'recycle']);
   assert.deepEqual(ids({ node: node('empty'), orbitalDebris: 1 }), ['colonize', 'recycle']);

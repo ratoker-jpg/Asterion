@@ -120,7 +120,7 @@ const RELATION_CAST = [
 ];
 
 async function seed(win, worlds) {
-  const crowdedCast = empties(worlds.crowded).slice(0, 20).map((position, index) => {
+  const crowdedCast = empties(worlds.crowded).map((position, index) => {
     const base = RELATION_CAST[index % RELATION_CAST.length];
     return { ...base, id: `crowd-${index}`, name: LONG.slice(0, 18 + (index % 7)), debris: index % 2 ? 90_000 + index : 0, position, system: worlds.crowded.system };
   });
@@ -242,6 +242,48 @@ async function checkTip(win, label, selector, expectedTitle) {
   if (!tip.visible || !tip.inside || !tip.text.includes(expectedTitle)) throw new Error(`${label}: hover reason ${JSON.stringify(tip)}, expected «${expectedTitle}»`);
 }
 
+/** Every planet of the open system: its reason is whole inside the map on all four sides and off the panels. */
+async function checkAllTips(win, label) {
+  const ids = await js(win, `[...document.querySelectorAll('.system-planet[data-qa-universe-object]')].map((node) => node.getAttribute('data-qa-universe-object'))`);
+  const covered = [];
+  for (const id of ids) {
+    const selector = `[data-qa-universe-object="${id}"]`;
+    await hover(win, selector);
+    if (!await js(win, `document.querySelector(${JSON.stringify(selector)}).matches(':hover')`)) continue; // under a neighbour here; its other tips still count
+    await waitFor(win, `Number(getComputedStyle(document.querySelector(${JSON.stringify(selector)} + ' [data-qa-map-status-tip]')).opacity) > 0.9`, 4_000);
+    await sleep(240); // the rise ends: the box is measured at rest
+    const tip = await js(win, `(() => {
+      const box = document.querySelector(${JSON.stringify(selector)} + ' [data-qa-map-status-tip]').getBoundingClientRect();
+      const scene = document.querySelector('[data-qa-universe-scene]').getBoundingClientRect();
+      const hit = (other) => box.left < other.right && other.left < box.right && box.top < other.bottom && other.top < box.bottom;
+      const panels = [...document.querySelectorAll('.universe-radar__crumb, .universe-radar__list, .universe-radar__nav, .universe-radar__rail, .universe-radar__dock')].filter((panel) => hit(panel.getBoundingClientRect())).map((panel) => panel.className);
+      return { position: document.querySelector(${JSON.stringify(selector)} + ' .planet-slot')?.textContent ?? '', left: box.left - scene.left, top: box.top - scene.top, right: scene.right - box.right, bottom: scene.bottom - box.bottom, panels };
+    })()`);
+    covered.push(tip.position);
+    if (Math.min(tip.left, tip.top, tip.right, tip.bottom) < 0 || tip.panels.length) throw new Error(`${label}: reason of ${id} leaves the map or hides under a panel ${JSON.stringify(tip)}`);
+  }
+  await clearHover(win);
+  if (covered.length < ids.length - 3) throw new Error(`${label}: only ${covered.length} of ${ids.length} planets could be hovered`);
+  return covered;
+}
+
+/** Right mouse button: the menu's attack line follows the same gate as the map. */
+async function quickAttack(win, id) {
+  await js(win, `(() => {
+    const element = document.querySelector('[data-qa-universe-object="${id}"]');
+    const rect = element.getBoundingClientRect();
+    element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, clientX: rect.left + rect.width / 2, clientY: rect.top + 40 }));
+  })()`);
+  await waitFor(win, `document.querySelector('[data-qa-quick-action="attack"]')`);
+  return js(win, `(() => { const item = document.querySelector('[data-qa-quick-action="attack"]'); return { enabled: item.getAttribute('data-qa-quick-enabled') === 'true', reason: item.querySelector('[data-qa-quick-reason]')?.textContent || '' }; })()`);
+}
+
+async function closeQuick(win) {
+  win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+  win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+  await waitFor(win, `!document.querySelector('[data-qa-quick-menu]')`);
+}
+
 /** Rendering pace on a crowded system: printed for the PR, CI renders on the CPU. */
 async function framePace(win) {
   return js(win, `new Promise((resolve) => { let frames = 0; const start = performance.now(); const step = () => { frames += 1; if (performance.now() - start < 2000) requestAnimationFrame(step); else resolve(Math.round(frames / ((performance.now() - start) / 1000))); }; requestAnimationFrame(step); })`);
@@ -295,6 +337,18 @@ async function runViewport(width, height) {
     await js(win, `document.querySelector('[data-qa-universe-inspector] [data-asterion-close]').click()`);
     await waitFor(win, `!document.querySelector('[data-qa-universe-inspector]')`);
 
+    await checkAllTips(win, `${label} relations`);
+    const far = await quickAttack(win, 'qa-target-far');
+    if (far.enabled || !far.reason.includes('вне диапазона')) throw new Error(`${label}: quick menu on an out-of-range target ${JSON.stringify(far)}`);
+    await capture(win, directory, 'quick-menu-out-of-range');
+    await closeQuick(win);
+    const newbie = await quickAttack(win, 'qa-target-newbie');
+    if (newbie.enabled || !newbie.reason.includes('атаковать можно с')) throw new Error(`${label}: quick menu on a protected target ${JSON.stringify(newbie)}`);
+    await closeQuick(win);
+    const near = await quickAttack(win, 'qa-target-range');
+    if (!near.enabled) throw new Error(`${label}: quick menu refuses an in-range target ${JSON.stringify(near)}`);
+    await closeQuick(win);
+
     await selectSystem(win, worlds.home.system);
     const own = await js(win, `document.querySelectorAll('.system-planet[data-qa-map-tone="self"]').length`);
     if (own < 7) throw new Error(`${label}: expected all 7 own planets in the system, got ${own}`);
@@ -303,6 +357,13 @@ async function runViewport(width, height) {
     await capture(win, directory, 'empty-system');
     await selectSystem(win, worlds.crowded.system);
     await capture(win, directory, 'crowded-long-names-debris');
+    const covered = await checkAllTips(win, `${label} crowded`);
+    console.log(`${label}: reasons checked at positions ${covered.join(' ')}`);
+    if (!covered.includes('22')) throw new Error(`${label}: the left edge position 22 was not checked`);
+    const edge = await js(win, `[...document.querySelectorAll('.system-planet')].find((node) => node.querySelector('.planet-slot')?.textContent === '22')?.getAttribute('data-qa-universe-object')`);
+    await hover(win, `[data-qa-universe-object="${edge}"]`);
+    await capture(win, directory, 'hover-position-22');
+    await clearHover(win);
     console.log(`${label}: frames per second on the crowded system: ${await framePace(win)}`);
   } finally {
     win.destroy();
