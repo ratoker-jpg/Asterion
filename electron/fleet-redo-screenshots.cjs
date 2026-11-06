@@ -319,6 +319,7 @@ async function catalogueScenes(win, directory, label) {
   await seed(win, { mutate: `planet.fleetProduction.shipQueue = ${queueOf('ships', [['battleship', 100], ['destroyer', 50], ['scout', 8], ['transporter', 100], ['recycler', 5], ['colonizer', 1]])};` });
   await openSection(win, 'ships', '[data-qa-construction-mode="ships"]');
   await shot('ships-02-busy-queue');
+  console.log('[geom]', label, JSON.stringify(await run(win, `['.fleet-main-v1', '.fc-build', '.fc-catalog', '.fc-unit-list', '.fleet-production-queue-v1'].map((q) => { const e = document.querySelector(q); if (!e) return q + ':none'; const r = e.getBoundingClientRect(); return q + ':' + Math.round(r.top) + '-' + Math.round(r.bottom) + ' ' + getComputedStyle(e).display; })`)));
   await run(win, INFLATE);
   await shot('ships-02b-huge-numbers');
   await hover(win, '[data-qa-fleet-production-item="transporter"] .fc-unit__art');
