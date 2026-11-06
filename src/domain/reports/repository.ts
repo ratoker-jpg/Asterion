@@ -39,9 +39,11 @@ export function createDefaultReportsState(): ReportsState {
 
 export function migrateReportsState(value: unknown, knownIds?: readonly string[]): ReportsState {
   if (!isRecord(value)) return createDefaultReportsState();
+  const readUpTo = typeof value.readUpTo === 'string' && Number.isFinite(Date.parse(value.readUpTo)) ? value.readUpTo : undefined;
   return {
     readIds: normalizeIds(value.readIds, knownIds),
     hiddenIds: normalizeIds(value.hiddenIds, knownIds),
+    ...(readUpTo ? { readUpTo } : {}),
   };
 }
 
@@ -52,14 +54,22 @@ export function markReportRead(state: ReportsState, reportId: string): ReportsSt
   return { ...normalized, readIds: appendNewestId(normalized.readIds, id) };
 }
 
-export function markAllReportsRead(state: ReportsState, reportIds: readonly string[]): ReportsState {
+/**
+ * Marks every given message read, in every section. The newest timestamp
+ * becomes the `readUpTo` watermark, so the whole archive stays read however
+ * long it is; ids are still added for messages without a time.
+ */
+export function markAllReportsRead(state: ReportsState, reports: readonly (string | Pick<ReportItem, 'id' | 'timestamp'>)[]): ReportsState {
   const normalized = migrateReportsState(state);
   let readIds = normalized.readIds;
-  reportIds.forEach((id) => {
-    const clean = id.trim();
-    if (clean) readIds = appendNewestId(readIds, clean);
+  let upTo = normalized.readUpTo ? Date.parse(normalized.readUpTo) : Number.NEGATIVE_INFINITY;
+  reports.forEach((report) => {
+    const id = (typeof report === 'string' ? report : report.id).trim();
+    const at = typeof report === 'string' || !report.timestamp ? Number.NaN : Date.parse(report.timestamp);
+    if (Number.isFinite(at)) upTo = Math.max(upTo, at);
+    else if (id) readIds = appendNewestId(readIds, id);
   });
-  return { ...normalized, readIds };
+  return { ...normalized, readIds, ...(Number.isFinite(upTo) ? { readUpTo: new Date(upTo).toISOString() } : {}) };
 }
 
 function appendIds(ids: readonly string[], additions: readonly string[]) {

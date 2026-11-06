@@ -103,6 +103,8 @@ export type ReportItem = {
 export type ReportsState = {
   readIds: string[];
   hiddenIds: string[];
+  /** «Отметить все прочитанными»: every message not newer than this ISO time is read. */
+  readUpTo?: string;
   /** Optional for backwards compatibility with existing save envelopes. */
   overpopulationReports?: OverpopulationEpisodeReport[];
   /** Optional for backwards compatibility with existing save envelopes. */
@@ -117,6 +119,8 @@ export type ReportQuery = {
   category: ReportsCategoryKey;
   filter: ReportFilter;
   search: string;
+  /** The message open in the reading pane stays in «Непрочитанные» while it is open. */
+  keepId?: string;
 };
 
 export type ReportCategoryCounts = Record<ReportsCategoryKey, number>;
