@@ -96,6 +96,8 @@ export type NpcUtilityContext = Readonly<{
   ownPlanets: readonly SpyTargetState[];
   /** Hostile battles this owner defended in the last two game days (0..1). */
   threat: number;
+  /** The owner's planet shield is up: nothing can hit it, so defence and fleet are rebuilt in peace. */
+  shielded?: boolean;
   latestReports: ReadonlyMap<string, SpyReportSnapshot>;
   /** Planets (by "galaxy:system:position") where this owner lost an attack, and when: what it spied there before is wrong. */
   attackLossAt?: ReadonlyMap<string, number>;
@@ -307,6 +309,7 @@ export function createNpcUtilityContext(state: SaveState, profile: NpcProfile, a
     dayValue: Math.max(2_000, income * 24),
     ownPlanets,
     threat: Math.min(1, defended / 3),
+    ...(state.shields?.[ownerId] && at >= state.shields[ownerId]!.activatedAt && at < state.shields[ownerId]!.activeUntil ? { shielded: true } : {}),
     latestReports,
     ...(attackLossAt.size ? { attackLossAt } : {}),
     knownDebris,
@@ -661,9 +664,9 @@ export function estimateProductionItemUtility(context: NpcUtilityContext, target
     ? itemId === NPC_FLAGSHIP_ID ? 2.5 * flagshipDrive(context) - efficiency : -0.4 * flagshipDrive(context)
     : 0;
   switch (purpose) {
-    case 'combat': return -0.5 + 1.5 * Math.max(drives.military, drives.war) + 0.5 * threat + efficiency - price + push + rush - NPC_FORTRESS_BALANCE.fleetDelay * fortifyLack(context, target);
+    case 'combat': return -0.5 + 1.5 * Math.max(drives.military, drives.war) + 0.5 * threat + (context.shielded ? 0.5 : 0) + efficiency - price + push + rush - NPC_FORTRESS_BALANCE.fleetDelay * fortifyLack(context, target);
     // A planet under the fortify plan orders only by its plan (its best batteries, not whatever comes up).
-    case 'defense': return context.fortify?.targets[target.id] ? -2.5 : -0.8 + 1.4 * threat + 0.5 * drives.military + efficiency - price + push * 0.75;
+    case 'defense': return context.fortify?.targets[target.id] ? -2.5 : -0.8 + 1.4 * threat + (context.shielded ? 0.7 : 0) + 0.5 * drives.military + efficiency - price + push * 0.75;
     case 'energy': return -0.6 + 1.5 * (situation?.energyNeed ?? 0) - price;
     case 'spy': return (fleet[itemId] ?? 0) >= 2 ? -2 : -0.3 + 0.9 * Math.max(drives.war, drives.operations, drives.military * 0.6) - price;
     case 'colony': return owned(itemId) > 0 || drives.expansion <= 0 || context.colonyOpen === false ? -2.5 : -0.4 + 1.6 * drives.expansion - price;

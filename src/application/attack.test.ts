@@ -408,7 +408,7 @@ test('attack arrival reads live target resources and resolves an empty neutral p
   if (!sent.ok) return;
   const liveResources = replaceTarget(sent.state, targetId, {
     ...sent.state.espionage!.targets![targetId],
-    resources: { ...sent.state.espionage!.targets![targetId].resources, metal: 1_000, minerals: 0, gas: 0 },
+    resources: { ...sent.state.espionage!.targets![targetId].resources, metal: 200_000, minerals: 0, gas: 0 },
   });
   const live = emptyTarget(liveResources, targetId);
   const arrival = reconcileFlights(live, sent.flight.arrivalAt, undefined, { mode: 'test', testTimeScale: 15 });
@@ -421,7 +421,7 @@ test('attack arrival reads live target resources and resolves an empty neutral p
   assert.ok((report.resources?.metal ?? 0) > 0);
   const arrivalMetal=arrival.state.espionage!.targets![targetId].resources.metal;
   const liveBeforeCombat=arrivalMetal+(report.resources?.metal??0);
-  assert.ok(liveBeforeCombat>=1_000,'NPC accumulates resources while the fleet is traveling');
+  assert.ok(liveBeforeCombat>=200_000,'NPC accumulates resources while the fleet is traveling');
   assert.ok((report.resources?.metal??0)<=Math.floor(liveBeforeCombat*0.75),
     'live arrival wallet cannot be looted beyond 75% after passive accrual');
   assert.ok(arrivalMetal<liveBeforeCombat,'metal loot must be deducted once');

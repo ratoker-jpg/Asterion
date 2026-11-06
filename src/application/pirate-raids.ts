@@ -1,4 +1,5 @@
 import type { PirateContactDefeatRecord } from '../domain/pirates/contact-schedule.ts';
+import { isOwnerShielded } from './shield.ts';
 import { applyRealFlightFloor } from '../domain/flights/speed.ts';
 import { publicPlayerPlanetsKey } from './npc-knowledge-index.ts';
 import { getFactionShipCatalog, getFactionDefenseCatalog } from '../domain/combat/faction-catalog.ts';
@@ -249,7 +250,7 @@ export function resolveDuePirateRoll(
     galaxy: event.galaxy, system: event.system, position: 1,
   }, event.at, mode);
   let flight: FlightRecord | undefined;
-  if (qualified && selected && contact?.contactCycleKey === event.contactCycleKey) {
+  if (qualified && selected && contact?.contactCycleKey === event.contactCycleKey && !isOwnerShielded(state, event.ownerId, event.at)) {
     const counter = pirateSeededDraw(`${seed}:counter`) < pirateCounterFleetChance(resourcePoints, battlePoints, chance);
     const profile = createPirateProfile({
       ownerId: event.ownerId,

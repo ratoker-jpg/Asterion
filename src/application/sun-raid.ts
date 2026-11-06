@@ -1,4 +1,5 @@
 import { selectOwnerMembership } from '../domain/command/selectors.ts';
+import { ownShieldMessage } from './shield.ts';
 import { applyRealFlightFloor } from '../domain/flights/speed.ts';
 import { recordNpcJointRaid } from './npc-relations.ts';
 import { TEST_ALLY_OWNER_ID, TEST_BOT_OWNER_ID } from '../domain/command/catalog.ts';
@@ -585,6 +586,7 @@ function launchRaidFor(state: SaveState, owner: SunOwner, input: RaidLaunchInput
   const sunRaid = currentSunRaidState(state);
   const existing = state.flights.records.find((flight) => flight.requestId === input.requestId);
   if (existing) return { ok: true, state, notice: 'Рейд уже объявлен.', raidId: existing.sunRaid?.raidId, flightId: existing.id };
+  { const shielded = ownShieldMessage(state, owner.ownerId, options.now); if (shielded) return { ok: false, state, error: shielded }; }
   const membership = allianceOf(state, owner.ownerId);
   const ships = normalizeSelection(input.ships);
   const commanders = normalizeCommanders(input.commanders);
@@ -639,6 +641,7 @@ export type RaidJoinInput = { raidId: string; originPlanetId: string; ships: Par
 function joinRaidFor(state: SaveState, owner: SunOwner, input: RaidJoinInput, options: SunRuntimeOptions): SunActionResult {
   const existing = state.flights.records.find((flight) => flight.requestId === input.requestId);
   if (existing) return { ok: true, state, notice: 'Флот уже в сборе.', raidId: existing.sunRaid?.raidId, flightId: existing.id };
+  { const shielded = ownShieldMessage(state, owner.ownerId, options.now); if (shielded) return { ok: false, state, error: shielded }; }
   const raid = currentSunRaidState(state).raids.find((item) => item.id === input.raidId);
   if (!raid || raid.status !== 'gathering' || (raid.gatherEndsAt ?? 0) <= options.now) return { ok: false, state, error: 'Сбор этого рейда уже закрыт.' };
   if (allianceOf(state, owner.ownerId)?.alliance.id !== raid.allianceId) return { ok: false, state, error: 'В рейд вступают только участники союза, который его объявил.' };
@@ -730,6 +733,7 @@ export function sendNpcSunSupport(state: SaveState, ownerId: string, input: Supp
 function sendSupportFor(state: SaveState, owner: SunOwner, input: SupportInput, options: SunRuntimeOptions, fixture: boolean): SunActionResult {
   const existing = state.flights.records.find((flight) => flight.requestId === input.requestId);
   if (existing) return { ok: true, state, notice: 'Флот поддержки уже отправлен.', flightId: existing.id };
+  { const shielded = ownShieldMessage(state, owner.ownerId, options.now); if (shielded) return { ok: false, state, error: shielded }; }
   const sunRaid = currentSunRaidState(state);
   const raid = sunRaid.raids.find((item) => item.id === input.raidId);
   const ships = normalizeSelection(input.ships);

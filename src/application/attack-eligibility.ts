@@ -1,6 +1,7 @@
 import type { SaveState } from './contracts.ts';
 import { evaluateAttackEligibility, type AttackEligibility, type AttackEligibilityPoints } from '../domain/rating/attack-eligibility.ts';
 import { selectOwnerScore } from '../domain/rating/scoring.ts';
+import { ownShieldMessage, SHIELD_TELEMETRY, targetShieldMessage } from './shield.ts';
 import { UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 
 const EXEMPT: AttackEligibility = { allowed: true, reason: null, message: null, byTotal: false, byResource: false };
@@ -33,7 +34,16 @@ export function evaluatePlanetAttackEligibility(
   attackerOwnerId: string,
   defenderOwnerId: string,
   scoreCache?: Map<string, AttackEligibilityPoints | undefined>,
+  /** Game time of the launch; when given, planet shields are checked too. */
+  at?: number,
 ): AttackEligibility {
+  if (at !== undefined && !isAttackEligibilityExempt(attackerOwnerId) && !isAttackEligibilityExempt(defenderOwnerId)) {
+    const own = ownShieldMessage(state, attackerOwnerId, at);
+    if (own) return { allowed: false, reason: 'attacker-shielded', message: own };
+    const theirs = targetShieldMessage(state, defenderOwnerId, at);
+    if (theirs) SHIELD_TELEMETRY.attacksBlocked += 1;
+    if (theirs) return { allowed: false, reason: 'defender-shielded', message: theirs };
+  }
   return evaluateOwnerAttackEligibility(attackerOwnerId, defenderOwnerId, (ownerId) => {
     if (scoreCache?.has(ownerId)) return scoreCache.get(ownerId);
     const value = selectOwnerScore(state, ownerId);

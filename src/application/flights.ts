@@ -117,6 +117,7 @@ import { collectOrbitalDebrisAtCoordinate, getOrbitalDebrisAtCoordinate } from '
 import { createUniverseSystem, MAX_PLANETS_PER_OWNER, nextColonyPointThreshold, UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 import { selectOwnerScore } from '../domain/rating/scoring.ts';
 import { evaluatePlanetAttackEligibility } from './attack-eligibility.ts';
+import { isShieldBounce, isOwnerShielded, ownShieldMessage, isHostileMission } from './shield.ts';
 import type { UniverseCoordinate, UniverseObjectKind, UniversePersistedPlayerPlanet, UniverseRegisteredPlanet } from '../domain/universe/types.ts';
 import { upsertGasExtractionArrivalReport, upsertRecyclerArrivalReport } from '../domain/reports/adapters.ts';
 import { initializePlanetResourceClock, reconcileTestEspionageTargetResources } from './resource-clock.ts';
@@ -212,6 +213,7 @@ export type FlightErrorCode =
   | 'planet-limit-reached'
   | 'colony-points-required'
   | 'attack-not-allowed'
+  | 'shield-active'
   | 'invalid-command';
 
 export type FlightError = {
@@ -1385,6 +1387,12 @@ export function dispatchFlight(
     if (existing) return { ok: true, state, flight: existing, created: false, notice: noticeForDispatch(existing) };
   }
   if (!requestId) return failure(state, 'invalid-command', 'Для отправки требуется requestId/commandId.');
+  if (isHostileMission(command.missionId) && command.missionId !== 'sun-support' && command.missionId !== 'sun-attack') {
+    // Under the shield the owner cannot attack anyone (Suns are guarded in dispatchSunMission).
+    const at = Number.isFinite(command.departedAt) ? command.departedAt! : (runtimeOptions.now ?? Date.now());
+    const own = ownShieldMessage(state, state.profile.playerId, at);
+    if (own) return failure(state, 'shield-active', own);
+  }
   if (!isFlightLimitExempt(command.missionId)) {
     const slots = getPlayerFlightSlotUsage(state);
     if (slots.free <= 0) {
@@ -1691,7 +1699,7 @@ export function dispatchFlight(
       return failure(state, 'spy-target-blocked', 'Атака разрешена только против вражеской или нейтральной планеты.');
     }
     // Owner points rule, checked only at launch: a flight already in the air arrives.
-    const eligibility = evaluatePlanetAttackEligibility(state, state.profile.playerId, attackTarget.target.ownerId);
+    const eligibility = evaluatePlanetAttackEligibility(state, state.profile.playerId, attackTarget.target.ownerId, undefined, departedAt);
     if (!eligibility.allowed) return failure(state, 'attack-not-allowed', eligibility.message);
     if (Object.keys(selectedShips).some((shipId) => !isAttackCombatShip(shipId as ShipId, state.profile.factionId as CombatFactionId))) {
       return failure(state, 'wrong-ship-composition', 'В атакующий флот можно отправить любой корабль, кроме солнечного спутника.');
@@ -2965,6 +2973,19 @@ export function reconcileFlights(
     const arrivalAt = current.arrivedAt ?? current.arrivalAt;
     const arrivalCheckAt = current.arrivedAt ?? current.arrivalAt;
     const arrivalReady = current.phase === 'arrived' || (current.phase === 'outbound' && now >= current.arrivalAt);
+    if (arrivalReady && current.phase === 'outbound' && isShieldBounce(next, current, arrivalAt)) {
+      // The target's owner raised the shield: the fleet turns back home without a battle.
+      const playerSide = current.ownerSide === undefined || current.ownerSide === 'player';
+      const returningState = playerSide ? beginDomainFlightReturn(next.flights, current.id, arrivalAt, 'target-unavailable') : null;
+      const returning: FlightRecord = {
+        ...(returningState?.records.find((flight) => flight.id === current.id) ?? current),
+        phase: 'returning', arrivedAt: arrivalAt, returnAt: arrivalAt + current.oneWayDurationMs, completionReason: 'target-unavailable',
+      };
+      next = { ...next, flights: updateFlight(returningState ?? currentFlightState(next), returning) };
+      changed = true;
+      events.push({ flight: returning, status: 'target-unavailable', notice: 'Планета под щитом: флот развернулся и возвращается без боя.' });
+      continue;
+    }
     if (arrivalReady) {
       if (current.missionId === 'exploration-recon') {
         const result = resolveExplorationProbeArrival(next, current, arrivalAt, targetMode);

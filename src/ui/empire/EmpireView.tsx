@@ -24,6 +24,7 @@ import { BuildPlannerDialog } from '../build-plan/BuildPlannerDialog.tsx';
 import type { BuildPlan } from '../../domain/buildings/build-plan.ts';
 import { compactAmount, countdown, formatNumber, plural, signedAmount, taskProgress } from './empire-format.ts';
 import { BUILD_ZONES, BuildPicker, ProductionPicker, type BuildPickerState, type ProductionPickerState } from './EmpirePickers.tsx';
+import { ShieldControl } from '../shield/ShieldControl.tsx';
 import './empire.css';
 
 const RESOURCE_LABELS: Record<EmpireResource, string> = { metal: 'Металл', minerals: 'Минералы', gas: 'Газ' };
@@ -35,6 +36,7 @@ const SHOWN_SHIPS = 6;
 const SHOWN_FLIGHTS = 3;
 
 export type EmpireViewProps = {
+  onActivateShield?: () => void;
   state: SaveState;
   now: number;
   mode: RuntimeMode;
@@ -90,7 +92,7 @@ function Bar({ value }: { value: number }) {
  * can be done without leaving the console. Every action goes through the same
  * command as its own screen.
  */
-export function EmpireView({ state, now, mode, testTimeScale, planetArt, onOpenPlanet, onBuild, onCancelBuilding, onProduce, onCancelProduction, onSend, onSavePlan, onStartPlan, onSaveBuildPlan, onRunBuildPlan }: EmpireViewProps) {
+export function EmpireView({ state, now, mode, testTimeScale, planetArt, onOpenPlanet, onBuild, onCancelBuilding, onProduce, onCancelProduction, onSend, onSavePlan, onStartPlan, onSaveBuildPlan, onRunBuildPlan, onActivateShield }: EmpireViewProps) {
   const overview = useMemo(() => buildEmpireOverview(state, { now, mode, testTimeScale }), [state, now, mode, testTimeScale]);
   const factionId = state.profile.factionId as CombatFactionId;
   const units = useMemo(() => new Map<string, Unit>([...getFactionShipCatalog(factionId), ...getFactionDefenseCatalog(factionId), ...COMMANDER_COMBAT_CATALOG].map((entity) => [entity.id, { name: entity.name, art: entity.art }])), [factionId]);
@@ -158,6 +160,7 @@ export function EmpireView({ state, now, mode, testTimeScale, planetArt, onOpenP
           ) : null}
           <button type="button" className="empire__btn" onClick={() => openPlanner(current.id)} data-qa-empire-planner>Эталонный флот</button>
           <button type="button" className="empire__btn" onClick={() => { setDrawer(null); setPicker(null); setYard(null); setBuildPlannerId(current.id); }} data-qa-empire-build-planner>Планировщик стройки</button>
+          {onActivateShield ? <ShieldControl state={state} now={now} variant="full" onActivate={onActivateShield} /> : null}
           {overview.rows.length > 1 ? <span className="empire__hint">Планету назначения выберете в панели. Каждая отправка занимает один рейс.</span> : null}
         </footer>
       ) : null}

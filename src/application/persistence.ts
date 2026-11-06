@@ -1,4 +1,5 @@
 import { stringifyCompactSave, stringifyCompactSaveInSlices, stringifySave, stringifySaveInSlices } from './save-json.ts';
+import { migrateShieldRecord, type ShieldRecord } from '../domain/shield/shield.ts';
 import { getBrowserSaveStorage } from './save-storage.ts';
 import {
   createDefaultBattleHistory,
@@ -265,7 +266,19 @@ type StoredSave = {
   sunRaid?: unknown;
   playTimeMs?: unknown;
   fleetUi?: unknown;
+  shields?: unknown;
 };
+
+/** Old saves have no shields: nothing active, no cooldown. */
+function migrateShields(value: unknown): Record<string, ShieldRecord> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const out: Record<string, ShieldRecord> = {};
+  for (const [ownerId, raw] of Object.entries(value as Record<string, unknown>)) {
+    const record = migrateShieldRecord(raw);
+    if (record) out[ownerId] = record;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
 
 export type PersistenceWriteResult =
   | { ok: true }
@@ -1838,6 +1851,7 @@ function migrateParsedSave(
     sunRaid: migrateSunRaidState(parsed.sunRaid),
     playTimeMs: Math.max(0, numberOr(parsed.playTimeMs, 0)),
     ...(migrateFleetUiState(parsed.fleetUi) ? { fleetUi: migrateFleetUiState(parsed.fleetUi) } : {}),
+    ...(migrateShields(parsed.shields) ? { shields: migrateShields(parsed.shields) } : {}),
   };
   // Memory of offenders, colony names/looks and alliance crests that older saves lack.
   const identified = migrateNpcSelfChosenIdentity(seedNpcGrudgesFromReports(projectNpcScienceLedger(migratedState)));

@@ -35,6 +35,7 @@ import type { UniverseAsteroidSimulationState } from '../domain/universe/types.t
 import type { UniverseOwnerAlliance } from '../domain/universe/types.ts';
 import type { OverpopulationState } from '../domain/fleet/overpopulation.ts';
 import type { PirateState } from '../domain/pirates/mission.ts';
+import type { ShieldRecord } from '../domain/shield/shield.ts';
 
 /** Planet ids are stable save keys; the legacy homeworld remains `helion-01`. */
 export type PlanetId = string;
@@ -166,6 +167,8 @@ export type SaveState = {
   playTimeMs?: number;
   /** Fleet-screen favourites and last own targets; UI data, no game rule reads it. */
   fleetUi?: import('../domain/flights/fleet-ui.ts').FleetUiState;
+  /** Planet shield per owner id (player and NPC); absent = never activated. */
+  shields?: Record<string, ShieldRecord>;
 };
 
 export function getPlanetState(state: SaveState, planetId: PlanetId): PlanetRuntime {

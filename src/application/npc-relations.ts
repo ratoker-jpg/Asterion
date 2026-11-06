@@ -6,6 +6,7 @@ import {
 } from '../domain/npc/relations.ts';
 import { createNpcStrategyState } from '../domain/npc/strategy.ts';
 import type { NpcProfile } from '../domain/npc/types.ts';
+import { selectOwnerMembership } from '../domain/command/selectors.ts';
 import type { SaveState } from './contracts.ts';
 
 /**
@@ -73,12 +74,33 @@ function hurtOf(loss: number): number {
   return Math.min(1, Math.max(0, Math.log10(1 + Math.max(0, loss) / 10_000) / 3));
 }
 
+/** How long a walk-out counts for a betrayal when the leaver later fights the alliance it left. */
+export const NPC_BETRAYAL_MEMORY_MS = 14 * 24 * 3_600_000;
+
+/**
+ * A battle between a former member and the alliance it left: every NPC member
+ * of that alliance remembers a betrayal (the relation event a broken agreement
+ * leaves, so it fades and passes between rounds like any other edge). The
+ * leaver may be the player: NPC keep their opinion of him too.
+ */
+export function recordNpcBetrayalByDefector(state: SaveState, attackerId: string, defenderId: string, at: number): SaveState {
+  const defending = selectOwnerMembership(state.command, defenderId)?.alliance;
+  if (!defending || defending.members.some((member) => member.ownerId === attackerId)) return state;
+  const recent = (state.command.departures ?? []).some((entry) => entry.ownerId === attackerId && entry.cause === 'left'
+    && entry.allianceId === defending.id && at - entry.at < NPC_BETRAYAL_MEMORY_MS);
+  if (!recent) return state;
+  let next = state;
+  for (const member of defending.members) next = recordNpcRelation(next, member.ownerId, attackerId, { kind: 'betrayed' }, at);
+  return next;
+}
+
 /** A battle between two owners: the attacked remembers the attacker; an attacker beaten off learns the price. */
 export function recordNpcBattleRelations(state: SaveState, report: BattleReport, at: number, defenderLoss: number): SaveState {
   const attacker = report.attacker.playerId;
   const defender = report.defender.playerId;
   if (!attacker || !defender) return state;
   let next = recordNpcRelation(state, defender, attacker, { kind: 'attacked-by', hurt: hurtOf(defenderLoss) }, at);
+  next = recordNpcBetrayalByDefector(next, attacker, defender, at);
   if (report.winner !== 'attacker') next = recordNpcRelation(next, attacker, defender, { kind: 'repelled-by' }, at);
   return next;
 }

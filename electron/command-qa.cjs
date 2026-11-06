@@ -216,7 +216,13 @@ async function testModeScenario(win, label) {
   await click(win, '[data-qa-command-tab="members"]');
   view = await snapshot(win);
   assert(view.members.length === 3, `${label}: accepted applicant joined`, view.members);
+  // The fresh joiner has neither the time in the alliance nor any aid delivered: the post is not for sale.
   await run(win, `Array.from(document.querySelectorAll('[data-qa-member-list] button'))[2].click()`);
+  await click(win, '[data-qa-set-deputy]');
+  await waitFor(win, `document.querySelector('[data-qa-command-feedback].is-error')`);
+  assert(!(await run(win, `Boolean(document.querySelector('[data-qa-clear-deputy]'))`)), `${label}: a fresh member cannot become deputy`);
+  // Ira Vel (long in the alliance, with delivered aid) has earned it.
+  await run(win, `Array.from(document.querySelectorAll('[data-qa-member-list] button'))[1].click()`);
   await click(win, '[data-qa-set-deputy]');
   await waitFor(win, `document.querySelector('[data-qa-clear-deputy]')`);
 
