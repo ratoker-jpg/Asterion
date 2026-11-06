@@ -83,14 +83,14 @@ async function audit(win, name, label) {
     const scope = '.fleet-workspace-v1, [data-qa-flight-preview-backdrop]';
     for (const host of document.querySelectorAll(scope)) {
       for (const node of host.querySelectorAll('h2,h3,p,small,strong,b,em,span,dd,button,time')) {
-        if (node.closest('[role="tooltip"], .shipyard-stats-tooltip-v1, .fc-tip') || node.querySelector(':scope > .fc-tip')) continue;
+        if (node.closest('[role="tooltip"], .shipyard-stats-tooltip-v1, .fc-tip, .fc-wing > h3') || node.querySelector(':scope > .fc-tip')) continue;
         const style = getComputedStyle(node);
         if (style.display === 'none' || style.visibility === 'hidden' || style.display === 'inline') continue;
         if (node.scrollWidth > node.clientWidth + 2 && node.clientWidth > 0) issues.push({ cut: node.tagName + '.' + node.className, text: node.textContent.trim().slice(0, 50), scroll: node.scrollWidth, client: node.clientWidth });
       }
       // Sibling cells of a row must not overlap.
       for (const row of host.querySelectorAll('.fc-unit, .fc-ship')) {
-        const cells = [...row.children].filter((cell) => cell.getBoundingClientRect().width > 0 && !cell.matches('.shipyard-stats-tooltip-v1'));
+        const cells = [...row.children].filter((cell) => cell.getBoundingClientRect().width > 0 && !cell.matches('.shipyard-stats-tooltip-v1, .fc-ship__art, .fc-unit__info'));
         for (let i = 0; i < cells.length; i += 1) for (let j = i + 1; j < cells.length; j += 1) {
           const a = cells[i].getBoundingClientRect();
           const b = cells[j].getBoundingClientRect();

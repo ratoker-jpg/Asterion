@@ -93,7 +93,7 @@ export function FleetUnitRow({
 
       <dl className="fc-unit__cost" aria-label="Цена за штуку">
         {COST_KINDS.map((kind) => (
-          <div key={kind} className={!locked && cost[kind] > walletOf[kind] ? 'is-short' : ''}>
+          <div key={kind} className={[!locked && cost[kind] > walletOf[kind] ? 'is-short' : '', cost[kind] === 0 ? 'is-zero' : ''].filter(Boolean).join(' ') || undefined}>
             <dt><ResourceIcon kind={kind} label={COST_LABELS[kind]} /></dt>
             <dd>{formatNumber(cost[kind])}</dd>
           </div>

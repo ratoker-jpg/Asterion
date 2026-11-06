@@ -1915,9 +1915,11 @@ function FleetWorkspace({
                 <div><small>Выбрано</small><b data-qa-fleet-selected>{flightNumberLabel(selectedShipCount)}</b></div>
                 <div><small>Население рейса</small><b>{flightNumberLabel(selectedPopulation)}</b></div>
                 <div data-qa-fleet-population={fleetSummary.population} data-qa-fleet-capacity={fleetSummary.capacity} data-qa-fleet-available-ships={availableShipCount} data-qa-fleet-satellite-count={fleetSnapshot.solarSatellites}><small>Население флота</small><b>{flightNumberLabel(fleetSummary.population)} / {flightNumberLabel(fleetSummary.capacity)}</b></div>
+              </footer>
+              <div className="fa-hero__go" data-toast-guard>
                 <span className="fc-dock__status" data-qa-fleet-status>{status}</span>
                 <button type="button" className="fc-dock__go" data-qa-flight-preview-open disabled={!hasLaunchableComposition} onClick={() => openFlightPreview()}>К плану перелёта</button>
-              </footer>
+              </div>
             </section>
 
             <div className="fc-missions" role="group" aria-label="Выбор миссии">
@@ -1937,7 +1939,7 @@ function FleetWorkspace({
                   onClick={() => chooseMission(mission.id)}
                 >
                   <img src={MISSION_BANNERS[mission.id] ?? mission.icon} alt="" draggable={false} />
-                  <span>{mission.label}</span>
+                  <span>{mission.label.replace('Транспортировка', 'Транспорти­ровка')}</span>
                 </button>
               ))}
             </div>
