@@ -103,6 +103,34 @@ test('Bot 01 raids the home Sun: the galaxy is warned, the player defends and ge
   assert.ok(resolvedA.flights.records.filter((flight) => flight.missionId === 'sun-support').every((flight) => flight.phase === 'returning' || flight.phase === 'completed'));
 });
 
+test('a regular alliance member can preview and declare a raid at 30 minutes of membership', () => {
+  const initial = armed(createInitialSaveState('test', T0));
+  const playerId = initial.profile.playerId;
+  const allianceId = selectOwnerMembership(initial.command, playerId)!.alliance.id;
+  const state = {
+    ...initial,
+    command: {
+      ...initial.command,
+      alliances: initial.command.alliances.map((alliance) => alliance.id === allianceId
+        ? {
+          ...alliance, leaderOwnerId: TEST_ALLY_OWNER_ID, deputyOwnerId: null,
+          members: alliance.members.map((member) => member.ownerId === playerId ? { ...member, joinedAt: T0 } : member),
+        }
+        : alliance),
+    },
+  };
+  const input = { galaxy: 1, system: 20, originPlanetId: 'helion-01', ships: { cruiser: 100 }, requestId: 'member-raid' };
+  const unlocksAt = T0 + 30 * 60_000;
+  const preview = { ...input, kind: 'attack' as const };
+  const refused = launchSunRaid(state, input, options(unlocksAt - 1));
+  assert.equal(refused.ok, false);
+  assert.equal(refused.state, state);
+  assert.match(previewSunLaunch(state, preview, options(unlocksAt - 1)).error ?? '', /30 минут/);
+  assert.equal(previewSunLaunch(state, preview, options(unlocksAt)).error, null);
+  const started = ok(launchSunRaid(state, input, options(unlocksAt)));
+  assert.equal(currentSunRaidState(started.state).raids[0]?.initiatorOwnerId, playerId);
+});
+
 test('the player alliance raids an undefended Sun: automatic victory, -5 brightness, deterministic crystal, one raid at a time', () => {
   let state = armed(createInitialSaveState('test', T0));
   const ships = { cruiser: 100 };

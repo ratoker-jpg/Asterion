@@ -476,8 +476,7 @@ function raidIdFor(requestId: string): string {
 export type RaidLaunchInput = { galaxy: number; system: number; originPlanetId: string; ships: Partial<Record<ShipId, number>>; commanders?: Partial<Record<CommanderId, number>>; requestId: string };
 
 /**
- * Starts a command raid: the alliance leadership sends the first fleet from
- * «Операции». The battle happens when this fleet arrives (3 h later).
+ * Starts a command raid from «Операции» for an eligible alliance member.
  */
 export function launchSunRaid(state: SaveState, input: RaidLaunchInput, options: SunRuntimeOptions): SunActionResult {
   const owner = playerOwner(state, input.originPlanetId);
@@ -595,6 +594,7 @@ function launchRaidFor(state: SaveState, owner: SunOwner, input: RaidLaunchInput
     state: sunRaid,
     allianceId: membership?.alliance.id ?? null,
     role: membership?.role ?? null,
+    joinedAt: membership?.member.joinedAt ?? null,
     galaxy: input.galaxy,
     system: input.system,
     population,
@@ -803,6 +803,7 @@ export function previewSunLaunch(
     const membership = allianceOf(state, owner.ownerId);
     const check = checkRaidLaunch({
       state: currentSunRaidState(state), allianceId: membership?.alliance.id ?? null, role: membership?.role ?? null,
+      joinedAt: membership?.member.joinedAt ?? null,
       galaxy: input.galaxy, system: input.system, population, now: options.now, participantCap: sunRaidCapsOf(state).participant,
     });
     error = check.ok ? null : check.message;
@@ -1647,7 +1648,7 @@ export function selectIncomingSunAlerts(state: SaveState, now: number): SunAlert
     .sort((left, right) => left.raid.arrivesAt - right.raid.arrivesAt);
 }
 
-export type PlayerRaidRole = { allianceId: string | null; allianceTag: string | null; role: 'leader' | 'deputy' | 'member' | null; holder: CrystalHolder };
+export type PlayerRaidRole = { allianceId: string | null; allianceTag: string | null; role: 'leader' | 'deputy' | 'member' | null; joinedAt: number | null; holder: CrystalHolder };
 
 export function selectPlayerRaidRole(state: SaveState): PlayerRaidRole {
   const membership = allianceOf(state, state.profile.playerId);
@@ -1655,6 +1656,7 @@ export function selectPlayerRaidRole(state: SaveState): PlayerRaidRole {
     allianceId: membership?.alliance.id ?? null,
     allianceTag: membership?.alliance.tag ?? null,
     role: membership?.role ?? null,
+    joinedAt: membership?.member.joinedAt ?? null,
     holder: membership ? { kind: 'alliance', id: membership.alliance.id } : { kind: 'owner', id: state.profile.playerId },
   };
 }

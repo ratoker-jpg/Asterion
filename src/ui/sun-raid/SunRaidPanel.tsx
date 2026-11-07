@@ -8,7 +8,7 @@ import type { ShipId } from '../../domain/combat/ids.ts';
 import { getBaseSunEfficiencyPercent } from '../../domain/energy/runtime.ts';
 import type { RuntimeMode } from '../../domain/runtime/mode.ts';
 import { SOLAR_CRYSTALS, SUN_RAID_CONFIG, sunRaidCapsOf } from '../../domain/sun-raid/config.ts';
-import { getHolderCrystals, incomingRaidsOnSun, projectSun, readSun } from '../../domain/sun-raid/rules.ts';
+import { getHolderCrystals, incomingRaidsOnSun, projectSun, raidLaunchTenureBlock, readSun } from '../../domain/sun-raid/rules.ts';
 import type { SunRaidEvent, SunRaidRecord } from '../../domain/sun-raid/types.ts';
 import { getActiveGalaxyCount } from '../../domain/universe/runtime.ts';
 import type { SaveState } from '../../application/contracts.ts';
@@ -94,9 +94,8 @@ export function SunRaidPanel({ state, now, mode, testTimeScale, selected, onSele
   const activeOwnRaid = ownRaids.find((raid) => raid.closedAt === undefined);
   const raidBlock = !role.allianceId
     ? 'Рейд на Солнце — командная операция. Создайте союз или вступите в него (вкладка «Союз»).'
-    : role.role !== 'leader' && role.role !== 'deputy'
-      ? 'Рейд объявляют лидер или заместитель союза.'
-      : sunRaid.campaignResult
+    : raidLaunchTenureBlock(role.role, role.joinedAt, now)
+      ?? (sunRaid.campaignResult
         ? 'Кампания завершена.'
         : activeOwnRaid?.status === 'gathering'
           ? `Союз собирает рейд на Солнце ${formatSun(activeOwnRaid.galaxy, activeOwnRaid.system)}: вступите в него в списке рейдов союза.`
@@ -106,7 +105,7 @@ export function SunRaidPanel({ state, now, mode, testTimeScale, selected, onSele
             ? `Солнце заморожено. Оттает через ${countdown((projection.unfreezesAt ?? now) - now)}.`
             : raidHere
               ? 'К этому Солнцу уже летит рейд.'
-              : null;
+              : null);
   const supportBlock = !raidHere
     ? 'Защищать можно только Солнце под атакой.'
     : ownIncoming

@@ -210,16 +210,21 @@ export function liveRaidsOnSun(state: SunRaidState, galaxy: number, system: numb
 
 export type RaidLaunchCheck =
   | { ok: true }
-  | { ok: false; code: 'no-alliance' | 'not-leadership' | 'sun-frozen' | 'raid-active' | 'sun-under-attack' | 'population-cap' | 'no-ships' | 'campaign-finished'; message: string };
+  | { ok: false; code: 'no-alliance' | 'membership-tenure' | 'sun-frozen' | 'raid-active' | 'sun-under-attack' | 'population-cap' | 'no-ships' | 'campaign-finished'; message: string };
 
-/**
- * Launch rules of a command raid. The raid is an alliance mission: only the
- * alliance leadership (leader or deputy) may start it from «Операции».
- */
+const RAID_MEMBER_TENURE_MS = 30 * 60_000;
+
+export function raidLaunchTenureBlock(role: 'leader' | 'deputy' | 'member' | null, joinedAt: number | null, now: number): string | null {
+  if (role === 'leader' || role === 'deputy') return null;
+  if (role === 'member' && joinedAt !== null && now - joinedAt >= RAID_MEMBER_TENURE_MS) return null;
+  return 'Объявить рейд можно через 30 минут после вступления в союз.';
+}
+
 export function checkRaidLaunch(input: {
   state: SunRaidState;
   allianceId: string | null;
   role: 'leader' | 'deputy' | 'member' | null;
+  joinedAt: number | null;
   galaxy: number;
   system: number;
   population: number;
@@ -231,7 +236,8 @@ export function checkRaidLaunch(input: {
   const participantCap = input.participantCap ?? sunRaidCaps(SUN_RAID_CONFIG.referenceNpcCount).participant;
   if (state.campaignResult) return { ok: false, code: 'campaign-finished', message: 'Кампания завершена: Врата уже построены.' };
   if (!allianceId) return { ok: false, code: 'no-alliance', message: 'Рейд на Солнце — командная операция: нужен союз (Командование → Союз).' };
-  if (role !== 'leader' && role !== 'deputy') return { ok: false, code: 'not-leadership', message: 'Рейд объявляет лидер или заместитель союза.' };
+  const tenureBlock = raidLaunchTenureBlock(role, input.joinedAt, now);
+  if (tenureBlock) return { ok: false, code: 'membership-tenure', message: tenureBlock };
   if (population <= 0) return { ok: false, code: 'no-ships', message: 'Выберите боевые корабли для рейда.' };
   if (population > participantCap) {
     return { ok: false, code: 'population-cap', message: `Один участник вносит не больше ${participantCap.toLocaleString('ru-RU')} населения: уберите ${(population - participantCap).toLocaleString('ru-RU')}.` };
