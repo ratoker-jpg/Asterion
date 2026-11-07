@@ -118,11 +118,15 @@ test('allies with different exclusive technologies merge into one branch, the st
   assert.equal(tie.criticalHit, 0);
 });
 
-test('raid launch rules: alliance leadership, population cap, frozen Sun, one raid per alliance', () => {
+test('raid launch rules: alliance tenure, population cap, frozen Sun, one raid per alliance', () => {
   const state = createDefaultSunRaidState();
-  const base = { state, galaxy: 1, system: 3, population: 1_000, now: 0 };
+  const base = { state, galaxy: 1, system: 3, population: 1_000, now: 0, joinedAt: 0 };
   assert.equal(checkRaidLaunch({ ...base, allianceId: null, role: null }).ok, false);
   assert.equal(checkRaidLaunch({ ...base, allianceId: 'a', role: 'member' }).ok, false);
+  const member = { ...base, allianceId: 'a', role: 'member' as const, joinedAt: HOUR };
+  const justBefore = checkRaidLaunch({ ...member, now: HOUR + 30 * 60_000 - 1 });
+  assert.equal(justBefore.ok ? null : justBefore.code, 'membership-tenure');
+  assert.equal(checkRaidLaunch({ ...member, now: HOUR + 30 * 60_000 }).ok, true);
   assert.equal(checkRaidLaunch({ ...base, allianceId: 'a', role: 'leader' }).ok, true);
   assert.equal(checkRaidLaunch({ ...base, allianceId: 'a', role: 'deputy' }).ok, true);
   const over = checkRaidLaunch({ ...base, allianceId: 'a', role: 'leader', population: 75_001 });

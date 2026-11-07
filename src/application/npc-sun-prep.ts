@@ -249,7 +249,7 @@ export function chooseNpcSunForRaid(state: SaveState, profile: NpcProfile, utili
   const caution = 1 - unit(profile.traits.riskTolerance);
   let best: { galaxy: number; system: number; score: number; win: number; knowledgeAt: number } | null = null;
   for (let system = 1; system <= WORLD_LIMITS.systemsPerGalaxy; system += 1) {
-    const open = checkRaidLaunch({ state: sunRaid, allianceId, role: membership.role, galaxy, system, population: 1, now: at, participantCap: caps.participant });
+    const open = checkRaidLaunch({ state: sunRaid, allianceId, role: membership.role, joinedAt: membership.member.joinedAt, galaxy, system, population: 1, now: at, participantCap: caps.participant });
     if (!open.ok) continue;
     const projection = projectSun(readSun(sunRaid, galaxy, system), at);
     const here = local.filter((planet) => planet.coordinate.system === system && !allies.has(planet.ownerId));
@@ -325,7 +325,7 @@ function advanceOwnPlan(state: SaveState, plan: NpcSunRaidPrepPlan, profile: Npc
   const { holder } = crystalHolderOf(state, plan.ownerId);
   if (!missingCrystals(getHolderCrystals(sunRaid, holder)).length) return closePlan(state, plan, 'cancelled', at, 'have-all-crystals');
   const caps = sunRaidCapsOf(state);
-  const open = checkRaidLaunch({ state: sunRaid, allianceId: plan.allianceId, role: membership.role, galaxy: plan.galaxy, system: plan.system, population: 1, now: at, participantCap: caps.participant });
+  const open = checkRaidLaunch({ state: sunRaid, allianceId: plan.allianceId, role: membership.role, joinedAt: membership.member.joinedAt, galaxy: plan.galaxy, system: plan.system, population: 1, now: at, participantCap: caps.participant });
   let current = plan;
   if (!open.ok) {
     if (open.code === 'raid-active') return closePlan(state, plan, 'cancelled', at, 'raid-active');
