@@ -1,58 +1,54 @@
 import { createSeededRandom } from './random.ts';
+import { NICKNAME_POOL } from './nickname-pool.ts';
 
 /**
- * One-word player nicknames (owner rule, 24.10.2026), the way people name
- * themselves in browser strategies: invented words in Cyrillic or Latin,
- * sometimes with digits. Drawn from their own seeded stream so world
- * placement draws stay where they were; unique within a campaign and not
- * tied to an owner's index, race or character.
+ * NPC nicknames in the style of Russian online games (owner request
+ * 09.11.2026). The nick is drawn from a hand-written pool, shuffled by the
+ * campaign seed so a world looks the same on server and client. Unique within
+ * a campaign (case-insensitive) and never longer than `NICKNAME_MAX`.
+ * Drawn from its own seeded stream so world placement draws stay where they were.
  */
 
-const CYRILLIC_HEADS = [
-  'Вар', 'Кал', 'Тор', 'Лир', 'Зар', 'Мор', 'Кир', 'Дар', 'Рен', 'Сол', 'Ност', 'Гран', 'Вель', 'Тар', 'Эрг', 'Фен',
-  'Крас', 'Ярк', 'Бор', 'Ска', 'Лум', 'Хор', 'Нир', 'Ост', 'Сайр', 'Дрей', 'Мак', 'Ворд', 'Гел', 'Кор', 'Рат', 'Зен',
-] as const;
-const CYRILLIC_TAILS = [
-  'ион', 'ар', 'ис', 'ен', 'ор', 'акс', 'ель', 'ус', 'ин', 'ан', 'ит', 'он', 'ерн', 'аш', 'ок', 'ия', 'ар', 'ус',
-  'ендор', 'омир', 'иан', 'ург', 'ектор', 'алис',
-] as const;
-const LATIN_HEADS = [
-  'Vor', 'Kael', 'Thar', 'Nyx', 'Zer', 'Mor', 'Dra', 'Rav', 'Sol', 'Grim', 'Vex', 'Tor', 'Lyr', 'Kor', 'Xan', 'Fen',
-  'Ash', 'Bran', 'Cyr', 'Drak', 'Eon', 'Hex', 'Jar', 'Quel', 'Ryn', 'Syl', 'Ulm', 'Wrex', 'Zyr', 'Oro', 'Vald', 'Tess',
-] as const;
-const LATIN_TAILS = [
-  'on', 'ax', 'is', 'en', 'or', 'ius', 'ar', 'yx', 'ith', 'ael', 'os', 'ek', 'an', 'ir', 'us', 'enn', 'ora', 'ix',
-  'andor', 'eris', 'oth', 'ium', 'ane', 'rok',
-] as const;
+export const NICKNAME_MAX = 24;
 
-function pick<T>(random: () => number, items: readonly T[]): T {
-  return items[Math.floor(random() * items.length) % items.length]!;
+function shuffled<T>(random: () => number, items: readonly T[]): T[] {
+  const list = [...items];
+  for (let index = list.length - 1; index > 0; index -= 1) {
+    const swap = Math.floor(random() * (index + 1));
+    [list[index], list[swap]] = [list[swap]!, list[index]!];
+  }
+  return list;
 }
 
-function nickname(random: () => number): string {
-  const latin = random() < 0.45;
-  let word = latin
-    ? pick(random, LATIN_HEADS) + pick(random, LATIN_TAILS)
-    : pick(random, CYRILLIC_HEADS) + pick(random, CYRILLIC_TAILS);
-  // Some players add a number, some lowercase the whole word.
-  const style = random();
-  if (style < 0.18) word += String(2 + Math.floor(random() * 98));
-  else if (style < 0.26) word = word.toLowerCase();
-  return word;
+/** Past the end of the pool: a pool nick with a gamer-style number, still inside the length limit. */
+function numbered(random: () => number, base: string): string {
+  const suffix = String(2 + Math.floor(random() * 998));
+  return `${base.slice(0, NICKNAME_MAX - suffix.length)}${suffix}`;
 }
 
-/** `count` distinct one-word nicknames for one campaign seed, never equal to any of `taken`. */
+/** `count` distinct nicknames for one campaign seed, never equal to any of `taken`. */
 export function generateNpcNicknames(seed: string, count: number, taken: readonly string[] = []): string[] {
-  const random = createSeededRandom(JSON.stringify(['npc-nicknames:v1', seed]));
+  const random = createSeededRandom(JSON.stringify(['npc-nicknames:v2', seed]));
   const used = new Set(taken.map((name) => name.trim().toLowerCase()));
   const names: string[] = [];
-  for (let attempt = 0; names.length < count && attempt < count * 200; attempt += 1) {
-    const name = nickname(random);
-    if (used.has(name.toLowerCase())) continue;
-    used.add(name.toLowerCase());
+  const add = (name: string): boolean => {
+    const key = name.toLowerCase();
+    if (!name || name.length > NICKNAME_MAX || used.has(key)) return false;
+    used.add(key);
     names.push(name);
+    return true;
+  };
+  for (const name of shuffled(random, NICKNAME_POOL)) {
+    if (names.length >= count) break;
+    add(name);
+  }
+  for (let attempt = 0; names.length < count && attempt < count * 200; attempt += 1) {
+    add(numbered(random, NICKNAME_POOL[Math.floor(random() * NICKNAME_POOL.length)]!));
   }
   // A guaranteed fallback keeps every owner named even in a pathological draw.
-  while (names.length < count) names.push(`Пилот${names.length + 1}`);
+  while (names.length < count) {
+    const name = `Пилот${names.length + 1}`;
+    if (!add(name)) names.push(`${name}_${names.length}`);
+  }
   return names;
 }
