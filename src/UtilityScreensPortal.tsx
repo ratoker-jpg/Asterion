@@ -23,6 +23,26 @@ function presetForDisplayState(state: DesktopDisplayState, fallback: UiPreferenc
   }) ?? fallback;
 }
 
+/**
+ * Test Mode QA only: a stored rating fixture (long names, 100 players, an
+ * oversized alliance...) replaces the world's standings so Electron QA can shoot
+ * worst cases inside the real shell. Production never reads it.
+ */
+const RATING_QA_FIXTURE_KEY = 'asterion.qa.rating-fixture.v1';
+type RatingQaFixture = Pick<RuntimeStateSnapshot, 'ownerScores' | 'owners' | 'currentPlayerId'> & {
+  alliances: RuntimeStateSnapshot['command']['alliances'];
+  allianceDetails: NonNullable<RuntimeStateSnapshot['alliances']>;
+};
+function readRatingQaFixture(state: RuntimeStateSnapshot): RatingQaFixture | null {
+  if (state.mode !== 'test') return null;
+  try {
+    const raw = window.localStorage.getItem(RATING_QA_FIXTURE_KEY);
+    return raw ? JSON.parse(raw) as RatingQaFixture : null;
+  } catch {
+    return null;
+  }
+}
+
 function playerFaction(state: RuntimeStateSnapshot | null): BuildingFaction {
   const factionId = state?.owners[state.currentPlayerId]?.factionId;
   return factionId === 'synod' || factionId === 'veyra' ? factionId : 'aegis';
@@ -95,6 +115,7 @@ export function UtilityScreensPortal() {
   };
 
   const active = isUtilityRoute(route) ? route : null;
+  const ratingFixture = active === 'rating' && runtimeState ? readRatingQaFixture(runtimeState) : null;
   if (!active || !target) return null;
 
   return createPortal(
@@ -102,7 +123,17 @@ export function UtilityScreensPortal() {
       {active === 'settings' ? (
         <SettingsView preferences={preferences} onPreferencesChange={updatePreferences} onReset={resetUiPreferences} />
       ) : active === 'rating' ? (
-        runtimeState ? (
+        runtimeState ? (ratingFixture ? (
+          <RatingView
+            mode="production"
+            command={{ ...runtimeState.command, alliances: ratingFixture.alliances }}
+            ownerScores={ratingFixture.ownerScores}
+            currentPlayerScore={ratingFixture.ownerScores[ratingFixture.currentPlayerId]}
+            currentPlayerId={ratingFixture.currentPlayerId}
+            owners={ratingFixture.owners}
+            allianceDetails={ratingFixture.allianceDetails}
+          />
+        ) : (
           <RatingView
             mode={runtimeState.mode}
             command={runtimeState.command}
@@ -112,7 +143,7 @@ export function UtilityScreensPortal() {
             owners={runtimeState.owners}
             allianceDetails={runtimeState.alliances}
           />
-        ) : null
+        )) : null
       ) : (
         <ScienceView factionId={playerFaction(runtimeState)} />
       )}

@@ -157,7 +157,7 @@ html body .rating-view-v2 .rating-row-v2 {
   text-align: left;
 }
 .rating-table-v2--players .rating-row-v2 {
-  grid-template-columns: 88px minmax(250px, 1.7fr) 104px minmax(130px, .8fr) repeat(4, minmax(118px, .85fr));
+  grid-template-columns: 88px minmax(250px, 1.7fr) 104px minmax(190px, 1fr) repeat(3, minmax(130px, .85fr));
 }
 .rating-table-v2--alliances .rating-row-v2 {
   grid-template-columns: 88px minmax(420px, 2.6fr) 130px 120px repeat(3, minmax(150px, 1fr));
@@ -275,7 +275,7 @@ html body .rating-view-v2 .identity-v2 strong { min-width: 0; overflow: hidden; 
   border-radius: var(--ut-r-card);
   background: var(--ut-surface-2);
 }
-.rating-card-v2--alliance { grid-template-columns: repeat(4, minmax(160px, 1fr)); }
+.rating-card-v2--alliance { grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: stretch; }
 .rating-card-v2__art { height: 96px; display: grid; place-items: center; overflow: hidden; }
 .rating-card-v2__art img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .rating-card-v2__who { display: grid; gap: 4px; min-width: 0; }
@@ -303,3 +303,88 @@ html body .rating-view-v2 .identity-v2 strong { min-width: 0; overflow: hidden; 
 .rating-card-v2__stat b { font-size: 16px; font-weight: 800; }
 .rating-card-v2__actions button { min-height: 38px; padding: 0 18px; border: 1px solid #8cefff; border-radius: var(--ut-r-btn); background: linear-gradient(180deg, #5fe2f8, #2bb6d6); color: #03222b; font-size: calc(var(--ut-font-control) * var(--text-scale-control, 1)); font-weight: 800; letter-spacing: .08em; cursor: pointer; }
 .rating-card-v2__actions button:disabled { opacity: .4; cursor: default; }
+
+/* ---------- alliance roles, crystals and roster (rating-alliance-ui) ---------- */
+.rating-meta-v2__hint { font-style: normal; color: var(--ut-label); }
+.rating-alliance-cell-v2 { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rating-solo-v2 { color: #6f8e98; font-size: var(--ut-font-data); font-weight: 700; letter-spacing: .02em; }
+
+/* Role badges: the leader in gold, deputies in cyan, members plain. */
+.rating-role-v2 {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid rgba(143, 182, 192, .3);
+  border-radius: 6px;
+  color: #a8c1c8;
+  font-size: var(--ut-font-secondary);
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.rating-role-v2.is-leader { border-color: rgba(230, 173, 80, .55); background: rgba(230, 173, 80, .14); color: #ffd58a; }
+.rating-role-v2.is-deputy { border-color: rgba(86, 217, 242, .5); background: rgba(86, 217, 242, .1); color: #9feaff; }
+.rating-role-v2.is-member { border-color: transparent; color: #7f9ea8; }
+.rating-role-v2.is-compact { height: 18px; padding: 0 6px; }
+
+.rating-card-v2__membership { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.rating-card-v2__membership .rating-card-v2__link { min-width: 0; overflow-wrap: anywhere; }
+.rating-card-v2__note { color: #8fb4bf; font-size: var(--ut-font-data); line-height: 1.4; }
+.rating-card-v2__note.is-key { color: #ffd58a; font-weight: 700; }
+.rating-card-v2__person { display: flex; align-items: center; gap: 8px; min-width: 0; }
+
+.rating-alliance-facts-v2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, .8fr) minmax(0, 1.4fr);
+  gap: 20px;
+  align-items: start;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--ut-border);
+}
+
+.rating-roster-v2 { display: grid; gap: 8px; min-width: 0; }
+.rating-roster-v2__head { display: flex; justify-content: space-between; gap: 16px; }
+.rating-roster-v2__head small { color: var(--ut-label); font-size: var(--ut-font-secondary); font-weight: 800; letter-spacing: .1em; }
+.rating-roster-v2__list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rating-roster-v2__list li {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+  padding: 0 8px;
+  border-radius: 6px;
+}
+.rating-roster-v2__list li.is-leader { background: rgba(230, 173, 80, .06); }
+.rating-roster-v2__list li.is-deputy { background: rgba(86, 217, 242, .05); }
+.rating-roster-v2__list li.is-current { box-shadow: inset 2px 0 0 var(--ut-accent); }
+.rating-roster-v2__list li .rating-role-v2 { justify-self: start; }
+.rating-roster-v2__list li b { color: #d8edf2; font-size: var(--ut-font-data); font-weight: 700; font-variant-numeric: tabular-nums; }
+.rating-roster-v2__name {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #eef9fb;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+button.rating-roster-v2__name { cursor: pointer; }
+button.rating-roster-v2__name:hover { color: var(--ut-accent); }
+button.rating-roster-v2__name:focus-visible { outline: var(--ut-focus); outline-offset: 2px; border-radius: 4px; }
+.rating-card-v2__person .rating-roster-v2__name { font-size: 14px; }

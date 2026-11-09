@@ -9,7 +9,7 @@ import {
   migrateRatingPrototypeState,
 } from './fixtures.ts';
 import { clampPage, filterAlliances, filterPlayers, pageForEntry, paginate, sortAlliances, sortPlayers } from './selectors.ts';
-import { createAllianceRatingEntries } from './alliances.ts';
+import { createAllianceRatingEntries, selectAllianceRoster } from './alliances.ts';
 import { createDefaultCommandState } from '../command/repository.ts';
 import { createAlliance } from '../command/membership.ts';
 
@@ -140,4 +140,20 @@ test('splitBattlePoints shares a side total by weight, exactly, with no one over
   assert.deepEqual(splitBattlePoints(10, { x: 1 }), { x: 10 });
   assert.deepEqual(splitBattlePoints(10, {}), {});
   assert.deepEqual(splitBattlePoints(7, { b: 1, a: 1 }), { a: 4, b: 3 }, 'ties go to the smaller owner id');
+});
+
+test('alliance roster lists the leader first, then deputies, then members by points', () => {
+  const base = createAlliance(createDefaultCommandState(), { ownerId: 'lead', displayName: 'Lead', settings: { name: 'Орден', tag: 'ORD', motto: '', description: '', emblem: { glyph: 'orbit', accent: 'violet' } } }, { now: 1, random: () => 0.5 });
+  assert.equal(base.ok, true);
+  const record = base.state.alliances[0]!;
+  const member = (ownerId: string) => ({ ...record.members[0]!, ownerId, displayName: ownerId });
+  const alliance = { ...record, leaderOwnerId: 'lead', deputyOwnerId: 'dep', members: [member('weak'), member('dep'), member('strong'), member('lead')] };
+  const scores = { lead: { totalPoints: 1 }, dep: { totalPoints: 2 }, strong: { totalPoints: 900 }, weak: { totalPoints: 10 } };
+  const roster = selectAllianceRoster(alliance, scores, 'weak', (id) => (id === 'strong' ? 'Сильный' : undefined));
+  assert.deepEqual(roster.map((entry) => [entry.ownerId, entry.role]), [['lead', 'leader'], ['dep', 'deputy'], ['strong', 'member'], ['weak', 'member']]);
+  assert.equal(roster[2]!.name, 'Сильный');
+  assert.equal(roster[3]!.isCurrentPlayer, true);
+  const noDeputy = selectAllianceRoster({ ...alliance, deputyOwnerId: null }, scores, 'weak');
+  assert.equal(noDeputy.filter((entry) => entry.role === 'deputy').length, 0);
+  assert.equal(noDeputy[0]!.role, 'leader');
 });
