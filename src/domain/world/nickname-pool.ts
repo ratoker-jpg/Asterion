@@ -48,7 +48,7 @@ export const NICKNAME_POOL: readonly string[] = [
   'PIPEC_', 'HRENOZAVR_', 'OHRENET_', 'MUDOZVON_', 'KOZLINA_', 'GOPNIK_', 'LESHII_', 'KOSCHEI_',
   'ВАЛЕРА', 'ЗЛОЙ', 'НАГИБ', 'ХАМЛО', 'БЫДЛО', 'БАТЯ_ЗЛОЙ', 'ТОРМОЗИЩЕ', 'ПИПЕЦЪ', 'КРАКЕНЫЧ', 'БАРСУК_ПРО',
   'Gosha1337', 'Vasya1337', 'Petya_1337', 'Kolyan228', 'Zhenya228', 'Dimon228', 'Sanya_228', 'Vovan_228',
-  'Slava_UA_228', 'Tolyan_2007', 'Lyokha_1995', 'Kostya_1999', 'Misha_2003', 'Andrey_Pro_2008', 'Egor_Ultra', 'Pasha_Tank',
+  'Slavik_228', 'Tolyan_2007', 'Lyokha_1995', 'Kostya_1999', 'Misha_2003', 'Andrey_Pro_2008', 'Egor_Ultra', 'Pasha_Tank',
   'Kirill_Nagib', 'Roma_Zloy', 'Vitya_AK', 'Gena_Krokodil', 'Fedya_Kosmos', 'Stepa_Gopnik', 'Zhora_Khmuryi', 'Tema_Kapitan',
   // xX_..._Xx and decorated
   'xX_Nagibator_Xx', 'xX_ZloyDed_Xx', 'xXx_Batya_xXx', 'xX_Kraken_Xx', 'xX_PIPEC_Xx', 'xX_Lyutyi_Xx', 'xX_Gopnik_Xx', 'xX_Dembel_Xx',
