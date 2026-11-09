@@ -32,6 +32,7 @@ import { recordNpcGrievance } from '../domain/npc/grudges.ts';
 import { battleLoot, defenderBattleLoss, isGrievanceBattle, sideBroughtValue, sideDestroyedValue } from './npc-grudges.ts';
 import { getNpcJournalSink } from './npc-journal.ts';
 import { resolveNpcPlanBattle } from './npc-plans.ts';
+import { recordNpcWarBattle } from './npc-war.ts';
 import { breakNpcPactByAttack } from './npc-pact-state.ts';
 import { recordNpcBattleRelations } from './npc-relations.ts';
 import type { AttackLaunchSnapshot, AttackLoot, AttackResolution } from '../domain/attack/types.ts';
@@ -451,6 +452,11 @@ function rememberNpcBattle(state: SaveState, report: BattleReport, at: number, f
   if (isGrievanceBattle(report)) {
     const defenderRace = Object.values(getEspionageTargets(state.espionage)).find((target) => target.ownerId === report.defender.playerId)?.raceId;
     next = breakNpcPactByAttack(recordNpcBattleRelations(next, report, at, defenderBattleLoss(report, defenderRace)), report, at);
+  }
+  // A member's attack on the offender of a revenge war counts for the war.
+  if (next.npcStrategy?.wars?.length && report.attacker.playerId) {
+    const attackerRaceOfWar = Object.values(getEspionageTargets(state.espionage)).find((target) => target.ownerId === report.attacker.playerId)?.raceId;
+    next = recordNpcWarBattle(next, report, at, sideDestroyedValue(report, 'attacker', attackerRaceOfWar), battleLoot(report));
   }
   // A strategic plan's attack: the plan closes with what the battle brought.
   const attackerId = report.attacker.playerId;

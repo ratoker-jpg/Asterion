@@ -11,6 +11,7 @@
 import { isNpcGiftRecord, isNpcProposal, isNpcRobberyReaction, type NpcGiftRecord, type NpcProposal, type NpcRobberyReaction } from './pacts.ts';
 import { isNpcRelationEdge, type NpcRelationEdge } from './relations.ts';
 import { isNpcSunRaidPrepPlan, type NpcSunRaidPrepPlan } from './sun-prep.ts';
+import { isNpcWar, type NpcWar } from './war.ts';
 
 export const NPC_STRATEGY_VERSION = 1 as const;
 
@@ -129,6 +130,8 @@ export type NpcStrategyState = Readonly<{
   gifts?: readonly NpcGiftRecord[];
   /** Per owner: what it decided after being robbed. */
   reactions?: Readonly<Record<string, NpcRobberyReaction>>;
+  /** Revenge wars on an offender (npc-war.ts): active ones and the last closed ones. */
+  wars?: readonly NpcWar[];
 }>;
 
 /** Closed plans kept per owner, for the owner's own judgement and the journal. */
@@ -206,7 +209,8 @@ export function isNpcStrategyState(value: unknown): value is NpcStrategyState {
     && (value.relations === undefined || (isRecord(value.relations) && Object.values(value.relations).every((edges) => Array.isArray(edges) && edges.every(isNpcRelationEdge))))
     && (value.proposals === undefined || (Array.isArray(value.proposals) && value.proposals.every(isNpcProposal)))
     && (value.gifts === undefined || (Array.isArray(value.gifts) && value.gifts.every(isNpcGiftRecord)))
-    && (value.reactions === undefined || (isRecord(value.reactions) && Object.values(value.reactions).every(isNpcRobberyReaction)));
+    && (value.reactions === undefined || (isRecord(value.reactions) && Object.values(value.reactions).every(isNpcRobberyReaction)))
+    && (value.wars === undefined || (Array.isArray(value.wars) && value.wars.every(isNpcWar)));
 }
 
 /**
