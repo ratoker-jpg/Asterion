@@ -3,6 +3,7 @@ import { COMMANDER_COMBAT_CATALOG } from '../domain/combat/catalog.ts';
 import type { CombatFactionId } from '../domain/combat/factions.ts';
 import type { ShipId } from '../domain/combat/ids.ts';
 import type { BuildingRole } from '../domain/buildings/resource-zone.ts';
+import { lootableAbove } from '../domain/shield/shield.ts';
 import { getStorageCapacities } from '../domain/buildings/balance-v1.ts';
 import type { SpyReportSnapshot, SpyTargetState } from '../domain/espionage/types.ts';
 import type { NpcProfile } from '../domain/npc/types.ts';
@@ -101,6 +102,11 @@ export type NpcUtilityContext = Readonly<{
   latestReports: ReadonlyMap<string, SpyReportSnapshot>;
   /** Planets (by "galaxy:system:position") where this owner lost an attack, and when: what it spied there before is wrong. */
   attackLossAt?: ReadonlyMap<string, number>;
+  /**
+   * Planets (by "galaxy:system:position") this owner has already hit, won or lost, or has a fleet flying at, and
+   * when: what it spied there before no longer shows the planet. One strong attack per look, never a trickle.
+   */
+  attackSpentAt?: ReadonlyMap<string, number>;
   /** Orbital debris the owner saw in its own spy reports (target planet id → amount). */
   knownDebris?: ReadonlyMap<string, number>;
   /** The owner's current strategic reading; derived from the rest when absent. */
@@ -237,9 +243,15 @@ export function createNpcUtilityContext(state: SaveState, profile: NpcProfile, a
   const income = ownPlanets.reduce((sum, target) => sum + getNpcPlanetIncomePerHour(target, timeScale), 0);
   let defended = 0;
   const attackLossAt = new Map<string, number>();
+  const attackSpentAt = new Map<string, number>();
   // Reports past the retention window are skipped, whether or not a prune has removed them yet.
   const cutoff = reportRetentionCutoff(at);
   for (const report of ownerBattleReports(state.combat.reports, ownerId)) {
+    if (report.attacker.playerId === ownerId && report.missionType === 'attack') {
+      const foughtWhen = battleReportTime(report);
+      const foughtKey = coordinateLabelKey(report.defender.coordinates);
+      if (foughtKey && Number.isFinite(foughtWhen) && foughtWhen <= at && foughtWhen >= cutoff && foughtWhen > (attackSpentAt.get(foughtKey) ?? 0)) attackSpentAt.set(foughtKey, foughtWhen);
+    }
     if (report.attacker.playerId === ownerId && report.winner === 'defender' && report.missionType === 'attack') {
       // A lost attack: what the owner knew of that planet was wrong (what it spied is out of date).
       const lostWhen = battleReportTime(report);
@@ -277,6 +289,11 @@ export function createNpcUtilityContext(state: SaveState, profile: NpcProfile, a
     }
   }
   for (const flight of ownerFlights(state.flights.records, ownerId)) {
+    // A fleet on its way (or just landed, its report not yet filed) spends what was spied there.
+    if (flight.missionId === 'attack' && (flight.phase === 'outbound' || flight.phase === 'arrived') && !flight.explorationAttack) {
+      const key = coordinateKeyOf(flight.destinationCoordinate);
+      if (flight.arrivalAt > (attackSpentAt.get(key) ?? 0)) attackSpentAt.set(key, flight.arrivalAt);
+    }
     if (flight.missionId === 'recycle' && (flight.phase === 'outbound' || flight.phase === 'returning')) recyclerCapacity += flight.recycleCapacity ?? 0;
   }
   const gates = npcGateHosts(state, ownerId);
@@ -312,6 +329,7 @@ export function createNpcUtilityContext(state: SaveState, profile: NpcProfile, a
     ...(state.shields?.[ownerId] && at >= state.shields[ownerId]!.activatedAt && at < state.shields[ownerId]!.activeUntil ? { shielded: true } : {}),
     latestReports,
     ...(attackLossAt.size ? { attackLossAt } : {}),
+    ...(attackSpentAt.size ? { attackSpentAt } : {}),
     knownDebris,
   };
   return { ...base, strategy: assessNpcStrategy(base) };
@@ -873,10 +891,12 @@ const coordinateKeyOf = (coordinate: Readonly<{ galaxy: number; system: number; 
  */
 export const NPC_ATTACK_INTEL_MAX_HOURS = 3;
 
-/** 'fresh' the report may carry an attack; 'stale' too old; 'refuted' a lost attack came after it. Spy again first. */
-export function npcAttackIntel(context: NpcUtilityContext, report: SpyReportSnapshot): 'fresh' | 'stale' | 'refuted' {
+/** 'fresh' the report may carry an attack; 'stale' too old; 'refuted' a lost attack came after it; 'spent' an own attack hit or is flying there since. Spy again first. */
+export function npcAttackIntel(context: NpcUtilityContext, report: SpyReportSnapshot): 'fresh' | 'stale' | 'refuted' | 'spent' {
   const lostAt = context.attackLossAt?.get(coordinateKeyOf(report.targetCoordinate));
   if (lostAt !== undefined && lostAt >= report.createdAt) return 'refuted';
+  const spentAt = context.attackSpentAt?.get(coordinateKeyOf(report.targetCoordinate));
+  if (spentAt !== undefined && spentAt >= report.createdAt) return 'spent';
   return context.at - report.createdAt > NPC_ATTACK_INTEL_MAX_HOURS * HOUR ? 'stale' : 'fresh';
 }
 
@@ -899,7 +919,7 @@ export function estimateRaidEconomics(context: NpcUtilityContext, origin: SpyTar
   const ownPower = estimateForcePower(stacks(ownCatalog, selectedShips));
   const risked = fleetCost(ownCatalog, selectedShips);
   const win = estimateWinProbability(ownPower, estimateReportedPower(context, report, ownPower));
-  const gain = win * 0.5 * costValue(report.resources);
+  const gain = win * 0.5 * costValue(npcLootableResources(report.resources));
   // A decisive force loses little when it wins: the square law, never worse than the flat tenth a bare win cost.
   const advantage = ownPower / Math.max(1, estimateReportedPower(context, report, ownPower));
   const winLossShare = Math.min(0.1, Math.max(0.02, 0.5 / (advantage * advantage)));
@@ -916,6 +936,15 @@ export function estimateRaidEconomics(context: NpcUtilityContext, origin: SpyTar
   const net = gain + gainWithSiege - fuel - expectedLoss - risk;
   // A fat store makes even a likely defeat pay on paper (a long shot at millions): the odds must be real too.
   return { net, worthFlight: win >= NPC_ATTACK_MIN_BELIEF && gain + gainWithSiege >= 2 * fuel && net >= MIN_RAID_DAY_SHARE * context.dayValue };
+}
+
+/**
+ * What a raid can carry off of the stores a report shows: the protected share of each store (planet shield rules) is
+ * never lootable. The report does not show the storage size, so a full store is assumed.
+ */
+export function npcLootableResources<T extends { metal: number; minerals: number; gas: number }>(resources: T): T {
+  return { ...resources, metal: lootableAbove(resources.metal, resources.metal), minerals: lootableAbove(resources.minerals, resources.minerals),
+    gas: lootableAbove(resources.gas, resources.gas) };
 }
 
 /** Rough price of one population unit of fleet, for judging a fleet nobody can see. */
