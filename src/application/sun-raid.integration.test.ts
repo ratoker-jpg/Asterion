@@ -22,6 +22,7 @@ import {
   reconcileSunRaids,
   selectGateContext,
   selectIncomingSunAlerts,
+  sunDefenceReturnedShips,
   sendSunSupport,
   startGateConstruction,
   testBot01DefendSun,
@@ -367,4 +368,58 @@ test('solo crystals are personal: joining an alliance makes them vanish (25.10.2
   // Alliance crystals are untouched.
   const allianceKey = `alliance:${selectOwnerMembership(state.command, state.profile.playerId)!.alliance.id}`;
   assert.deepEqual(currentSunRaidState(reconciled.state).crystals[allianceKey] ?? [], sunRaid.crystals[allianceKey] ?? []);
+});
+
+test('Sun defence rule (09.11): half of each lost type returns home, odd remainder is lost; attackers unchanged', () => {
+  assert.deepEqual(sunDefenceReturnedShips({ scout: 100, destroyer: 10 }, { scout: 0, destroyer: 0 }), { scout: 50, destroyer: 5 });
+  assert.deepEqual(sunDefenceReturnedShips({ scout: 7, destroyer: 1 }, { scout: 0, destroyer: 0 }), { scout: 3 }, 'floor of half: 7 -> 3, 1 -> 0');
+  assert.deepEqual(sunDefenceReturnedShips({ scout: 10 }, { scout: 10 }), {}, 'nothing lost, nothing returns');
+  assert.deepEqual(sunDefenceReturnedShips({ scout: 10 }, { scout: 4 }), { scout: 3 }, '6 lost -> 3');
+});
+
+test('Sun defence rule: a wiped-out defending fleet still flies home with half, the report says so, reload keeps it', () => {
+  let state = armed(createInitialSaveState('test', T0), { cruiser: 10 });
+  state = ok(testBot01RaidSun(state, 1, 1, options(T0))).state;
+  const raid = currentSunRaidState(state).raids[0]!;
+  state = ok(sendSunSupport(state, { raidId: raid.id, originPlanetId: 'helion-01', ships: { cruiser: 10 }, requestId: 'weak' }, options(T0 + HOUR))).state;
+  const own = state.flights.records.find((flight) => flight.requestId === 'weak' || (flight.missionId === 'sun-support' && flight.originPlanetId === 'helion-01'))!;
+  const before = own.selectedShips.cruiser ?? 0;
+  const resolved = tick(state, T0 + 3 * HOUR + 1);
+  const resultRaid = currentSunRaidState(resolved).raids[0]!;
+  const report = resolved.combat.reports.find((item) => item.id === resultRaid.result!.reportId)! as unknown as { sunRaid: { defenderReturns?: { ownerId: string; ships: { cruiser?: number }; text: string }[] } };
+  const mine = report.sunRaid.defenderReturns?.find((entry) => entry.ownerId === resolved.profile.playerId);
+  const flight = resolved.flights.records.find((item) => item.id === own.id)!;
+  const back = mine?.ships.cruiser ?? 0;
+  const left = (flight.selectedShips.cruiser ?? 0) - back;
+  assert.ok(back > 0 && left === 0, 'fixture: the 10 cruisers are wiped out and half return');
+  assert.equal(back, Math.floor((before - left) / 2), 'exactly half (rounded down) of the losses is returned');
+  if (left === 0 && back > 0) {
+    assert.equal(flight.phase, 'returning', 'a wiped-out fleet still gets a return flight');
+    assert.equal(flight.returnAt, T0 + 3 * HOUR + flight.oneWayDurationMs);
+  }
+  if (back > 0) assert.match(mine!.text, /^\d+ × /);
+  // Time slicing does not change the outcome.
+  const sliced = tick(tick(state, T0 + 2 * HOUR), T0 + 3 * HOUR + 1);
+  assert.deepEqual(sliced.flights.records.find((item) => item.id === own.id)!.selectedShips, flight.selectedShips);
+});
+
+test('Sun defence rule applies to NPC defenders too: Bot 01 gets half of its lost ships back on its planet', () => {
+  let state = armed(createInitialSaveState('test', T0));
+  state = ok(launchSunRaid(state, { galaxy: 1, system: 5, originPlanetId: 'helion-01', ships: { cruiser: 200 }, requestId: 'npc-def' }, options(T0))).state;
+  state = ok(testIraJoinRaid(state, currentSunRaidState(state).raids[0]!.id, options(T0 + 10))).state;
+  state = launchNow(state, T0 + 15);
+  const raid = currentSunRaidState(state).raids[0]!;
+  state = ok(testBot01DefendSun(state, raid.id, options(T0 + 20))).state;
+  const defender = state.flights.records.find((flight) => flight.sunRaid?.raidId === raid.id && flight.sunRaid.side === 'defender')!;
+  const sent = { ...defender.selectedShips };
+  state = tick(state, raid.arrivesAt);
+  const report = state.combat.reports.find((item) => item.id === currentSunRaidState(state).raids[0]!.result!.reportId)! as unknown as { sunRaid: { defenderReturns?: { ownerId: string; ships: Record<string, number> }[] } };
+  const entry = report.sunRaid.defenderReturns?.find((item) => item.ownerId === defender.sunRaid!.ownerId);
+  const flown = state.flights.records.find((flight) => flight.id === defender.id)!.selectedShips as Record<string, number>;
+  for (const [id, count] of Object.entries(sent) as [string, number][]) {
+    const back = entry?.ships[id] ?? 0;
+    const left = (flown[id] ?? 0) - back;
+    assert.ok(left >= 0 && left <= count);
+    assert.equal(back, Math.floor((count - left) / 2), `${id}: half of the losses returns`);
+  }
 });

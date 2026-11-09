@@ -23,6 +23,7 @@ export function SunReportStrip({ report }: { report: BattleReport }) {
         <small>РЕЙД НА СОЛНЦЕ [{sun.galaxy}:{String(sun.system).padStart(2, '0')}] · [{sun.allianceTag}] · флотов атаки {sun.attackers}, защиты {sun.defenders}</small>
         <b>Яркость {sun.brightnessBefore}% → {sun.brightnessAfter}%{sun.frozen ? ' · Солнце заморожено' : ''}</b>
         <span>{crystalText}</span>
+        {sun.defenderReturns?.map((entry) => <span key={entry.ownerId} data-qa-sun-return>Вернётся домой ({entry.ownerName}): {entry.text}</span>)}
       </div>
       {roll?.success && roll.crystal ? <CrystalGem id={roll.crystal} size={40} /> : null}
     </section>
