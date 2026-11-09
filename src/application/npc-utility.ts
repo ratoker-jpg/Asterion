@@ -831,6 +831,10 @@ export const NPC_REVENGE_BALANCE = {
   weight: 1.5,
   /** The win belief an attack needs drops by this times the grudge intensity. */
   marginDrop: 0.45,
+  /** At full grudge the even-odds floor of an attack is this much lower an attack on the offender needs is this much lower than the usual even odds (owner decision 09.11.2026: ~0.25). */
+  winBarDrop: 0.25,
+  /** From this grudge on a bot hit by the owner of a target may strike it at a forecast loss, as long as the revenge pays for it (owner decision 09.11.2026). */
+  strikeMinGrudge: 0.5,
   /** Below this win belief even revenge does not attack. */
   minWin: 0.1,
   /** Damage worth a revenge flight, as a share of the owner's daily income. */
@@ -840,6 +844,18 @@ export const NPC_REVENGE_BALANCE = {
   /** Extra wish to spy on an offender at full grudge. */
   spyBonus: 0.9,
 } as const;
+
+/**
+ * The win belief an attack on the owner of a target needs: `base` less the
+ * grudge's margin drop, and no lower than the even-odds `floor` (a stranger
+ * gets the whole floor, an offender at full grudge about a quarter, owner
+ * decision 09.11.2026). Zero grudge changes nothing; a plan's own margin has no floor.
+ */
+export function npcRevengeWinBar(base: number, grudge: number, floor = 0): number {
+  const g = Math.min(1, Math.max(0, Number.isFinite(grudge) ? grudge : 0));
+  const evenOdds = floor > 0 ? Math.max(0, floor - NPC_REVENGE_BALANCE.winBarDrop * g) : 0;
+  return Math.max(NPC_REVENGE_BALANCE.minWin, evenOdds, base - NPC_REVENGE_BALANCE.marginDrop * g);
+}
 
 /** 0..1 grudge against the owner of a target, from this owner's lasting memory. */
 export function npcRevengeIntensity(context: NpcUtilityContext, targetOwnerId: string | undefined): number {
@@ -872,7 +888,7 @@ export function estimateRevengeEconomics(context: NpcUtilityContext, origin: Spy
   const damage = enemyValue * destroyedShare;
   const net = estimateRaidEconomics(context, origin, report, selectedShips).net + NPC_REVENGE_BALANCE.weight * intensity * damage;
   return { intensity, damage, net,
-    worthFlight: win >= NPC_REVENGE_BALANCE.minWin && damage >= NPC_REVENGE_BALANCE.minDamageDayShare * context.dayValue && net >= 0 };
+    worthFlight: win >= npcRevengeWinBar(0, intensity, NPC_ATTACK_MIN_BELIEF) && damage >= NPC_REVENGE_BALANCE.minDamageDayShare * context.dayValue && net >= 0 };
 }
 
 /** "[1:17:6]" of a battle report as "1:17:6". */
@@ -935,7 +951,8 @@ export function estimateRaidEconomics(context: NpcUtilityContext, origin: SpyTar
   const gainWithSiege = sendsFlagship ? win * 0.05 * hiddenPopulation * HIDDEN_FLEET_VALUE_PER_POPULATION : 0;
   const net = gain + gainWithSiege - fuel - expectedLoss - risk;
   // A fat store makes even a likely defeat pay on paper (a long shot at millions): the odds must be real too.
-  return { net, worthFlight: win >= NPC_ATTACK_MIN_BELIEF && gain + gainWithSiege >= 2 * fuel && net >= MIN_RAID_DAY_SHARE * context.dayValue };
+  const bar = npcRevengeWinBar(0, npcRevengeIntensity(context, report.targetOwnerId), NPC_ATTACK_MIN_BELIEF);
+  return { net, worthFlight: win >= bar && gain + gainWithSiege >= 2 * fuel && net >= MIN_RAID_DAY_SHARE * context.dayValue };
 }
 
 /**
@@ -1008,8 +1025,8 @@ export function chooseNpcAttackForce(context: NpcUtilityContext, origin: SpyTarg
   const grudge = npcRevengeIntensity(context, report.targetOwnerId);
   // A lesson from an earlier round about this race moves the margin a little; the report still decides.
   const lesson = context.profile.inherited?.lessons.find((item) => item.family === 'attack' && item.enemyRace === report.targetRaceId)?.effect ?? 0;
-  const wanted = Math.max(NPC_REVENGE_BALANCE.minWin, NPC_ATTACK_MIN_BELIEF, 0.6 + 0.3 * (1 - unit(context.profile.traits.riskTolerance))
-    - NPC_REVENGE_BALANCE.marginDrop * grudge - 0.05 * lesson + 0.1 * (context.relations?.get(report.targetOwnerId)?.fear ?? 0));
+  const wanted = npcRevengeWinBar(0.6 + 0.3 * (1 - unit(context.profile.traits.riskTolerance))
+    - 0.05 * lesson + 0.1 * (context.relations?.get(report.targetOwnerId)?.fear ?? 0), grudge, NPC_ATTACK_MIN_BELIEF);
   const winWithAll = estimateWinProbability(estimateForcePower(stacks(catalog, all)), enemy);
   // A grudge never sends a force that does not break the known defence: revenge only orders the profitable options.
   if (winWithAll < wanted) return null;

@@ -28,8 +28,8 @@ import { activeNpcPlans, npcPlanReservedShips } from './npc-plan-reserve.ts';
 import { isNpcPactOpen, npcActivePartners, npcFleetFlightMs, npcPartnerPowerBelief, npcProposalsOf, recordNpcPactArrival, withdrawFromNpcPact } from './npc-pact-state.ts';
 import { withoutNpcSunPrepHold } from './npc-sun-prep-state.ts';
 import {
-  combatEfficiency, estimateReportedPower, npcDefenseValue, npcFleetValue, npcForcePower,
-  npcRevengeIntensity, NPC_REVENGE_BALANCE, type NpcUtilityContext,
+  combatEfficiency, estimateReportedPower, npcAttackIntel, npcDefenseValue, npcFleetValue, npcForcePower,
+  npcRevengeIntensity, npcRevengeWinBar, NPC_REVENGE_BALANCE, type NpcUtilityContext,
 } from './npc-utility.ts';
 
 /**
@@ -155,7 +155,7 @@ export function npcWantedWin(utility: NpcUtilityContext, targetOwnerId: string):
   const grudge = npcRevengeIntensity(utility, targetOwnerId);
   // Someone who has shown it bites asks for a bigger margin.
   const fear = utility.relations?.get(targetOwnerId)?.fear ?? 0;
-  return Math.max(NPC_REVENGE_BALANCE.minWin, 0.6 + 0.3 * (1 - unit(utility.profile.traits.riskTolerance)) - NPC_REVENGE_BALANCE.marginDrop * grudge + 0.1 * fear);
+  return npcRevengeWinBar(0.6 + 0.3 * (1 - unit(utility.profile.traits.riskTolerance)) + 0.1 * fear, grudge);
 }
 
 function unit(value: number): number {
@@ -267,9 +267,12 @@ export function estimateStrikeWorth(state: SaveState, utility: NpcUtilityContext
   const gate = utility.rivalGateHosts?.has(report.targetPlanetId) ?? false;
   // Owner rule 04.11.2026: no strike that loses by its own estimate, grudge or taste for risk notwithstanding;
   // what the target is worth beyond resources only orders strikes that already pay. A rival Gate is the one exception.
-  const allowed = econ >= 0 || gate;
+  // Owner decision 09.11.2026: the one relaxation is revenge on a real offender: a forecast loss is accepted when the damage done to
+  // the offender, valued by the grudge, covers it.
+  const avenging = econ < 0 && !gate && grudge >= NPC_REVENGE_BALANCE.strikeMinGrudge && econ + revenge >= 0;
+  const allowed = econ >= 0 || gate || avenging;
   return { haul, debris, loss, fuel, time, econ, strategic, allowed,
-    conscious: econ >= 0 || !gate ? null : 'gate' };
+    conscious: econ >= 0 ? null : gate ? 'gate' : avenging ? 'revenge' : null };
 }
 
 /** Free holds on a planet, biggest first, to carry the loot home with the force. */
@@ -405,8 +408,11 @@ export function draftNpcStrike(state: SaveState, profile: NpcProfile, utility: N
     // Rally where the force fits the hangar, preferring the planet that already holds most of it, then the one nearest the target.
     // The hangar takes the shares as the player's deployment checks it (free room now), with slack for the owner's other ships.
     const population = fleetPopulation(raceId, force);
+    // A revenge on an offender gathers at the own planet nearest to the target (owner decision 09.11.2026).
+    const revengeStaging = npcRevengeIntensity(utility, target.ownerId) >= NPC_REVENGE_BALANCE.strikeMinGrudge;
     const rally = planets.filter((planet) => npcDeploymentFreeCapacity(planet)
-      >= NPC_STRIKE_BALANCE.hangarSlack * (population - fleetPopulation(raceId, free.get(planet.id) ?? {}))).sort((left, right) => npcFleetValue(raceId, reserve.get(right.id) ?? {}) - npcFleetValue(raceId, reserve.get(left.id) ?? {})
+      >= NPC_STRIKE_BALANCE.hangarSlack * (population - fleetPopulation(raceId, free.get(planet.id) ?? {}))).sort((left, right) => (revengeStaging ? distance(left, target) - distance(right, target) : 0)
+      || npcFleetValue(raceId, reserve.get(right.id) ?? {}) - npcFleetValue(raceId, reserve.get(left.id) ?? {})
       || distance(left, target) - distance(right, target) || (left.id < right.id ? -1 : 1))[0];
     if (!rally) continue;
     // Holds still short: the rally planet builds them with what the plan may spend there.
@@ -441,7 +447,8 @@ export function draftNpcStrike(state: SaveState, profile: NpcProfile, utility: N
     const ready = Math.max(readyAt, at) + HOUR / scale;
     const worth = estimateStrikeWorth(state, utility, rally, report, force, win, enemyPower, (ready - at) * scale / HOUR, guessesFleet(report));
     if (!worth.allowed) continue;
-    const estimate = 0.3 + Math.min(1.5, (worth.econ + worth.strategic) / Math.max(1, utility.dayValue)) + (gate ? 1 : 0) + 0.4 * unit(profile.traits.planningHorizon) - 0.2;
+    const estimate = 0.3 + Math.min(1.5, (worth.econ + worth.strategic) / Math.max(1, utility.dayValue)) + (gate ? 1 : 0) + 0.4 * unit(profile.traits.planningHorizon) - 0.2
+      + (worth.conscious === 'revenge' ? NPC_REVENGE_BALANCE.priority * npcRevengeIntensity(utility, target.ownerId) : 0);
     if (best && best.estimate >= estimate) continue;
     const slack = Math.min(NPC_STRIKE_BALANCE.maxDeadlineHours * HOUR / scale,
       Math.max(NPC_STRIKE_BALANCE.minDeadlineHours * HOUR / scale, NPC_STRIKE_BALANCE.deadlineFactor * (ready - at)));
@@ -756,4 +763,65 @@ export function resolveNpcPlanBattle(state: SaveState, report: BattleReport, fli
   if (!plan) return state;
   const closed = closePlan(state, plan, 'done', at, undefined, { won: report.winner === 'attacker', gain, loss });
   return plan.partner ? recordNpcPactArrival(closed, plan.partner.proposalId, ownerId, { at, won: report.winner === 'attacker', gain, loss }) : closed;
+}
+
+/** Why a bot does not (yet) strike an offender, as the journal reads it; later in the list is nearer to a launch. */
+export const NPC_REVENGE_REFUSALS = ['ally', 'points', 'shield', 'gathering', 'no-report', 'stale', 'basic-report', 'no-ships', 'power', 'econ', 'ok'] as const;
+export type NpcRevengeRefusal = (typeof NPC_REVENGE_REFUSALS)[number];
+
+/**
+ * The funnel of a revenge (owner decision 09.11.2026, journal only): the first
+ * check this owner's revenge on `offenderId` fails, judged by the same reports,
+ * margin and strike worth the plan uses, over the best of the offender's planets.
+ * Reads the world, changes nothing.
+ */
+export function npcRevengeRefusal(state: SaveState, profile: NpcProfile, utility: NpcUtilityContext, offenderId: string, at: number): NpcRevengeRefusal {
+  const ownerId = profile.ownerId;
+  const relation = getOwnerRelation(state, ownerId, offenderId);
+  if ((relation !== 'enemy' && relation !== 'neutral') || utility.partners?.has(offenderId)) return 'ally';
+  const eligibility = evaluatePlanetAttackEligibility(state, ownerId, offenderId, undefined, at);
+  if (!eligibility.allowed) return eligibility.reason === 'attacker-shielded' || eligibility.reason === 'defender-shielded' ? 'shield' : 'points';
+  if (activeNpcPlans(state, ownerId).some((plan) => plan.targetOwnerId === offenderId)) return 'gathering';
+  const planets = utility.ownPlanets;
+  const targets = Object.values(state.espionage?.targets ?? {}).filter((target) => target.ownerId === offenderId);
+  const reports = targets.flatMap((target) => { const report = utility.latestReports.get(target.id); return report ? [{ target, report }] : []; });
+  if (!reports.length || !planets.length) return 'no-report';
+  const raceId = planets[0]!.raceId;
+  const catalog = getFactionShipCatalog(raceId);
+  const force: Record<string, number> = {};
+  for (const planet of planets) addCounts(force, freeCombatShips(state, ownerId, planet, catalog, at));
+  const wanted = npcWantedWin(utility, offenderId);
+  const own = strikePower(raceId, force);
+  let best = 0;
+  for (const { target, report } of reports) {
+    let stage: NpcRevengeRefusal;
+    if (npcAttackIntel(utility, report) !== 'fresh') stage = 'stale';
+    else if (report.fleet === undefined && report.defense === undefined) stage = 'basic-report';
+    else if (!Object.keys(force).length) stage = 'no-ships';
+    else {
+      const enemyPower = believedPower(utility, report, own);
+      const win = estimateWinProbability(own, enemyPower);
+      if (win < wanted) stage = 'power';
+      else {
+        const rally = [...planets].sort((left, right) => distance(left, target) - distance(right, target) || (left.id < right.id ? -1 : 1))[0]!;
+        stage = estimateStrikeWorth(state, utility, rally, report, force, win, enemyPower, 0, guessesFleet(report)).allowed ? 'ok' : 'econ';
+      }
+    }
+    best = Math.max(best, NPC_REVENGE_REFUSALS.indexOf(stage));
+  }
+  return NPC_REVENGE_REFUSALS[best]!;
+}
+
+/** Writes the revenge funnel of the owner's strongest grudges into the journal (nothing when none is attached). */
+export function journalNpcRevengeFunnel(state: SaveState, profile: NpcProfile, utility: NpcUtilityContext, at: number): void {
+  const sink = getNpcJournalSink();
+  if (!sink?.outcome) return;
+  const offenders = Object.keys(profile.grudges ?? {})
+    .map((id) => ({ id, grudge: npcRevengeIntensity(utility, id) }))
+    .filter((item) => item.grudge >= 0.3 && item.id !== profile.ownerId)
+    .sort((left, right) => right.grudge - left.grudge || (left.id < right.id ? -1 : 1))
+    .slice(0, 2);
+  for (const { id, grudge } of offenders) {
+    sink.outcome({ at, ownerId: profile.ownerId, kind: 'revenge', data: { vs: id, g: round3(grudge), r: npcRevengeRefusal(state, profile, utility, id, at) } });
+  }
 }
