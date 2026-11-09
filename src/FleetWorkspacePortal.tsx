@@ -2382,6 +2382,12 @@ function FleetWorkspace({
                     <footer className="flight-composition-v3__total" data-qa-flight-composition-total><span>ИТОГО</span><b>{flightNumberLabel(draftFleetStats.count)} {shipCountLabel(draftFleetStats.count)}</b><span>население {flightNumberLabel(selectedPopulation)}</span><span>{holdLabel.toLowerCase()} {flightNumberLabel(previewHoldCapacity)}</span></footer>
                     </div>
               </section>
+              {speedApplies ? (
+                <section className="fa-plan-speed" aria-label="Скорость полёта">
+                  <FlightSpeedControl value={speedPercent} onChange={setSpeedPercent} qa="fleet-plan"
+                    duration={planTiming ? `в пути ${flightDurationLabel(planTiming.oneWayMs)}` : null} />
+                </section>
+              ) : null}
               <section className="flight-timeline-summary" aria-live="polite">
                 <div className="flight-timeline-summary-head">
                   <small>ПАРАМЕТРЫ ПЕРЕЛЁТА</small>
@@ -2536,12 +2542,6 @@ function FleetWorkspace({
               </div>
             </div>
             <div className="resource-building-action-confirm-actions flight-timeline-actions">
-            {speedApplies ? (
-              <div className="fa-plan-speed">
-                <FlightSpeedControl value={speedPercent} onChange={setSpeedPercent} qa="fleet-plan"
-                  duration={planTiming ? `в пути ${flightDurationLabel(planTiming.oneWayMs)}` : null} />
-              </div>
-            ) : null}
             <dl className="fa-plan-foot" data-qa-plan-footer>
               {planTiming ? <>
                 <div><dt>Прибытие</dt><dd>{planTime(planTiming.arrivalAt)}</dd></div>

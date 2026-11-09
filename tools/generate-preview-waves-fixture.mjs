@@ -34,7 +34,7 @@ for (const [id, system, name, ships] of colonies) {
   const position = free(system);
   assert.ok(position, `no free slot in system ${system}`);
   const planet = createColonyPlanetRuntime(state, { galaxy: home.universeGalaxy ?? 1, system, position });
-  state.planets[id] = { ...planet, name, resources: huge, buildings: { ...planet.buildings, hangar: 30 }, fleet: { ...planet.fleet, ships: { ...planet.fleet.ships, ...ships } } };
+  state.planets[id] = { ...planet, name, resources: huge, buildings: { ...home.buildings, hangar: 30 }, fleet: { ...planet.fleet, ships: { ...planet.fleet.ships, ...ships } } };
 }
 state.science = { ...state.science, levels: { ...state.science.levels, [COMPUTER_SYSTEMS_SCIENCE_ID]: 15 } };
 await writeFile(output, serializeSaveForStorage(state, 'test'));

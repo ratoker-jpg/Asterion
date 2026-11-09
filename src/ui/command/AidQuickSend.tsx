@@ -258,7 +258,7 @@ export function AidQuickSend({ state, requestId, anchor, onClose, onSend, onDeta
                       <AmountSlider compact value={amount} max={amountMax} label={`${resourceLabel}: сколько отправить`} onChange={setAmount} />
                     </li>
                   </ul>
-                  {flight ? <FlightSpeedControl value={speedPercent} onChange={(value) => { setSendError(null); setSpeedPercent(value); }} qa="aid"
+                  {flight ? <FlightSpeedControl value={speedPercent} onChange={(value) => { setSendError(null); setSpeedPercent(value); }} qa="aid" label="Скорость"
                     duration={flightDurationLabel(flight.oneWayDurationMs)} /> : null}
                   <div className="quick-send__leg-tools">
                     <button type="button" className="quick-send__reset aid-quick__fit" onClick={fit} data-qa-aid-quick-fit>Под запрос</button>

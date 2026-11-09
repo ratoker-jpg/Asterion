@@ -320,7 +320,7 @@ export function QuickSendPanel({ state, actionId, target, onSend, onClose, onDet
                       </div>
                     ) : null}
                     {flight ? (
-                      <FlightSpeedControl value={draft.speedPercent} flown={wave?.speedPercent} qa={planetId}
+                      <FlightSpeedControl value={draft.speedPercent} flown={wave?.speedPercent} qa={planetId} label="Скорость"
                         duration={shownDuration !== undefined ? flightDurationLabel(shownDuration) : null}
                         onChange={(value) => update(planetId, (current) => ({ ...current, speedPercent: value }))} />
                     ) : null}
