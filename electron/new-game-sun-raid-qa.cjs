@@ -90,11 +90,11 @@ async function production(win, label) {
     const set = (qa, value) => { const input = document.querySelector('[data-qa-world="' + qa + '"]'); const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; setter.call(input, String(value)); input.dispatchEvent(new Event('input', { bubbles: true })); };
     set('galaxies', 3); set('npc', 80);
   })()`);
-  // «Супербыстрая» ×5 holds at most 50 NPC: the slider stops there and 80 drops to 50 with the reason shown.
+  // «Супербыстрая» ×5 holds at most 75 NPC: the slider stops there and 80 drops to 75 with the reason shown.
   await run(win, `[...document.querySelectorAll('[role="radio"]')].find((button) => /Супербыстрая ×5/.test(button.textContent)).click()`);
   await waitFor(win, `document.querySelector('[data-qa-world="superfast-npc-cap"]')`);
   const capped = await run(win, `({ max: document.querySelector('[data-qa-world="npc"]').max, value: document.querySelector('[data-qa-world="npc"]').value })`);
-  if (capped.max !== '50' || capped.value !== '50') throw new Error(`Superfast NPC cap: ${JSON.stringify(capped)}`);
+  if (capped.max !== '75' || capped.value !== '75') throw new Error(`Superfast NPC cap: ${JSON.stringify(capped)}`);
   // «Активность NPC»: three choices, «Обычная» by default, the hint follows the choice.
   const activityOf = () => run(win, `(() => { const box = document.querySelector('[data-qa-world="npc-activity"]'); return { checked: [...box.querySelectorAll('[role="radio"]')].filter((button) => button.getAttribute('aria-checked') === 'true').map((button) => button.textContent.trim()), hint: box.querySelector('[data-qa-world="npc-activity-hint"]').textContent }; })()`);
   const pickActivity = (name) => run(win, `[...document.querySelectorAll('[data-qa-world="npc-activity"] [role="radio"]')].find((button) => button.textContent.trim() === ${JSON.stringify(name)}).click()`);
