@@ -12,8 +12,8 @@ const entry = (name: string, tag: string): AllianceNameEntry => ({ name, tag });
 
 export const ALLIANCE_NAME_POOL: readonly AllianceNameEntry[] = [
   // One word
-  entry('Империя', 'ИМП'), entry('Легион', 'ЛЕГ'), entry('Авангард', 'АВАН'), entry('Эгида', 'ЭГИДА'),
-  entry('Гегемония', 'ГЕГЕМ'), entry('Доминион', 'ДОМ'), entry('Династия', 'ДИН'), entry('Армада', 'АРМ'),
+  entry('Империя', 'ИМП'), entry('Легион', 'ЛЕГ'), entry('Авангард', 'АВАН'), entry('Твердыня', 'ТВЕРД'),
+  entry('Гегемония', 'ГЕГЕМ'), entry('Доминион', 'ДОМ'), entry('Династия', 'ДИН'), entry('Ополчение', 'ОПОЛ'),
   entry('Когорта', 'КОГ'), entry('Фаланга', 'ФАЛ'), entry('Цитадель', 'ЦИТ'), entry('Бастион', 'БАСТ'),
   entry('Синдикат', 'СИНД'), entry('Консорциум', 'КОНС'), entry('Триумвират', 'ТРИ'), entry('Конфедерация', 'КОНФ'),
   entry('Иерархия', 'ИЕР'), entry('Трибунал', 'ТРБ'), entry('Форпост', 'ФОРП'), entry('Утопия', 'УТОП'),
@@ -24,7 +24,7 @@ export const ALLIANCE_NAME_POOL: readonly AllianceNameEntry[] = [
   entry('Ars Noctis', 'NOX'), entry('Ignis', 'IGN'), entry('Fortuna', 'FORT'), entry('Vindicta', 'VIND'),
   entry('Monarch', 'MNRH'), entry('Regnum', 'RGN'), entry('Apex', 'APEX'), entry('Vanitas', 'VAN'),
   entry('Veritas', 'VER'), entry('Primus', 'PRIM'), entry('Excelsior', 'EXC'), entry('Ultima Ratio', 'RATIO'),
-  entry('Astra Invicta', 'ASTRA'), entry('Magnum Opus', 'OPUS'), entry('Obscura', 'OBS'), entry('Lux Perpetua', 'LUX'),
+  entry('Invicta', 'INV'), entry('Magnum Opus', 'OPUS'), entry('Obscura', 'OBS'), entry('Lux Perpetua', 'LUX'),
   entry('Iron Accord', 'IRON'), entry('Grim Harvest', 'GRIM'), entry('Warborn', 'WARB'), entry('Black Sun', 'BSUN'),
   entry('Cold Front', 'COLD'), entry('Far Shore', 'SHORE'), entry('High Ground', 'HIGH'), entry('Infinitum', 'INF'),
   entry('Equilibrium', 'EQL'), entry('Gravitas', 'GRAV'), entry('Momentum', 'MMT'), entry('Fidelis', 'FID'),
@@ -33,10 +33,10 @@ export const ALLIANCE_NAME_POOL: readonly AllianceNameEntry[] = [
   // Order, union, brotherhood
   entry('Северный Альянс', 'СЕВЕР'), entry('Орден Саламандры', 'ОРДЕН'), entry('Братство Клинка', 'БРАТ'), entry('Гильдия Навигаторов', 'ГИЛЬД'),
   entry('Союз Свободных Миров', 'ССМ'), entry('Лига Маяков', 'ЛИГА'), entry('Коалиция Восьми', 'КОАЛ'), entry('Ковенант Пламени', 'КОВ'),
-  entry('Дом Серебряной Луны', 'ЛУНА'), entry('Часовые Предела', 'ЧАСЫ'), entry('Дозор Окраин', 'ДОЗОР'), entry('Гвардия Короны', 'ГВАРД'),
+  entry('Дом Серебряной Луны', 'ЛУНА'), entry('Часовые Предела', 'ЧАСЫ'), entry('Дозор Окраин', 'ДОЗОР'), entry('Гвардия Чести', 'ГВАРД'),
   entry('Капитул Феникса', 'ФНКС'), entry('Совет Девяти', 'СОВЕТ'), entry('Круг Избранных', 'КРУГ'), entry('Ложа Хранителей', 'ЛОЖА'),
   entry('Сенат Галактики', 'СЕНАТ'), entry('Коллегия Архитекторов', 'КОЛЛ'), entry('Картель Туманности', 'КАРТ'), entry('Директория Восхода', 'ДИР'),
-  entry('Дружина Полюса', 'ДРУЖ'), entry('Эскадра Возмездия', 'ЭСК'), entry('Рать Великого Пути', 'РАТЬ'), entry('Флотилия Южных Морей', 'ФЛОТ'),
+  entry('Дружина Князя', 'ДРУЖ'), entry('Эскадра Возмездия', 'ЭСК'), entry('Рать Великого Пути', 'РАТЬ'), entry('Флотилия Южных Морей', 'ФЛОТ'),
   entry('Корпус Вечной Мерзлоты', 'КОРП'), entry('Ассамблея Систем', 'СИСТ'), entry('Конгломерат Ядра', 'ЯДРО'), entry('Протекторат Сияния', 'ПРОТ'),
   // Adjective and noun
   entry('Пепельный Трон', 'ТРОН'), entry('Алая Заря', 'ЗАРЯ'), entry('Тёмная Материя', 'ТМ'), entry('Стальной Венец', 'ВЕНЕЦ'),
@@ -45,8 +45,8 @@ export const ALLIANCE_NAME_POOL: readonly AllianceNameEntry[] = [
   entry('Сизая Мгла', 'МГЛА'), entry('Шёпот Бездны', 'ШЁПОТ'), entry('Длань Судьбы', 'ДЛАНЬ'), entry('Сердце Хаоса', 'СЕРД'),
   entry('Узы Крови', 'УЗЫ'), entry('Клятва Верности', 'КЛЯТВ'), entry('Наследие Древних', 'НАСЛ'), entry('Голос Глубин', 'ГЛУБ'),
   entry('Острие Копья', 'КОПЬЕ'), entry('Алмазный Кулак', 'КУЛАК'), entry('Медный Всадник', 'МЕДЬ'), entry('Надежда', 'НАДЖ'),
-  entry('Хозяева Космоса', 'ХОЗ'), entry('Вольные Торговцы', 'ВТ'), entry('Безымянные', 'БЕЗИМ'), entry('Обитель Покоя', 'ПОКОЙ'),
-  entry('Звон Мечей', 'МЕЧИ'), entry('Око Шторма', 'ОКО'), entry('Серые Плащи', 'ПЛАЩ'), entry('Тайные Врата', 'ВРАТА'),
+  entry('Повелители Времени', 'ВРЕМЯ'), entry('Вольные Торговцы', 'ВТ'), entry('Безымянные', 'БЕЗИМ'), entry('Обитель Покоя', 'ПОКОЙ'),
+  entry('Звон Мечей', 'МЕЧИ'), entry('Око Шторма', 'ОКО'), entry('Серые Плащи', 'ПЛАЩ'), entry('Тайная Тропа', 'ТРОПА'),
 ] as const;
 
 
