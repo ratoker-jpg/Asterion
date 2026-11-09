@@ -1286,21 +1286,24 @@ function FleetWorkspace({
       const runtimeState = saveState;
       const destination = previewDestination ?? launchDestination;
       if (!destination || destination.kind !== 'coordinate') return;
-      const command = withChosenSpeed(createFlightCommand(requestId, {
+      const baseCommand = createFlightCommand(requestId, {
         originPlanetId: previewOriginPlanetId ?? runtimeState.currentPlanetId,
         destination,
         targetRelation: gasPreviewFlight.targetRelation ?? null,
         targetKind: 'asteroid',
         departedAt,
-      }, runtimeState));
-      if (!command) return;
+      }, runtimeState);
+      const command = withChosenSpeed(baseCommand);
+      if (!command || !baseCommand) return;
+      // The stored preview stays full-speed; the chosen speed is laid on top for display (see previewResult).
+      const fullSpeedPreview = () => previewFlight(runtimeState, baseCommand, { mode: ACTIVE_RUNTIME_MODE, testTimeScale: resolveTestTimeScale() });
 
       const currentCandidate = previewFlight(runtimeState, command, {
         mode: ACTIVE_RUNTIME_MODE,
         testTimeScale: resolveTestTimeScale(),
       });
       if (!currentCandidate.ok) {
-        setPreviewResult(currentCandidate);
+        setPreviewResult(fullSpeedPreview());
         setPreviewTargetError(targetErrorFromFlightResult(currentCandidate));
         setGasPreviewNeedsReconfirmation(false);
         return;
@@ -1319,7 +1322,7 @@ function FleetWorkspace({
         arrivalAsteroidPreview,
         currentAsteroidForecast,
       )) {
-        setPreviewResult(currentCandidate);
+        setPreviewResult(fullSpeedPreview());
         setPreviewTargetError(null);
         setPreviewSubmittedTargetKind('asteroid');
         setGasPreviewNeedsReconfirmation(true);
