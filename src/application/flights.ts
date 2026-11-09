@@ -1,5 +1,5 @@
 import { selectOwnerAlliance, selectOwnerMembership } from '../domain/command/selectors.ts';
-import { applyRealFlightFloor } from '../domain/flights/speed.ts';
+import { applyFlightSpeedPercent, applyRealFlightFloor } from '../domain/flights/speed.ts';
 import { dispatchSunMission, getSunDebris, parseSunOperationId, sunDebrisCoordinate } from './sun-raid.ts';
 import { COMPUTER_SYSTEMS_SCIENCE_ID, getFlightSlotUsage, isFlightLimitExempt, type FlightSlotUsage } from '../domain/flights/limit.ts';
 import {
@@ -244,6 +244,8 @@ export type DispatchFlightCommand = {
   maxRounds?: SimulatorMaxRounds;
   departedAt?: number;
   oneWayDurationMinutes?: number;
+  /** Chosen flight speed, 10–100 (default 100). Not used by Space Flight or Sun raids. */
+  speedPercent?: number;
 };
 
 export type FlightRuntimeOptions = {
@@ -731,7 +733,9 @@ function scaledRecord(record: FlightRecord, options: FlightRuntimeOptions): Flig
   const mode = options.mode ?? 'production';
   const scaled = scaleRuntimeDuration(record.oneWayDurationMs, mode, options.testTimeScale);
   // The 60 s real-time floor (3 s for probe-only recon) is a campaign rule; the test-mode accelerator stays free to go faster.
-  const duration = mode === 'test' ? scaled : applyRealFlightFloor(scaled, isReconOnlyFleet(record.selectedShips, record.selectedCommanders));
+  const floored = mode === 'test' ? scaled : applyRealFlightFloor(scaled, isReconOnlyFleet(record.selectedShips, record.selectedCommanders));
+  // The chosen speed comes last, so a slowed fleet is slower even on a floored route.
+  const duration = applyFlightSpeedPercent(floored, record.speedPercent);
   return {
     ...record,
     oneWayDurationMs: duration,
@@ -1862,6 +1866,7 @@ export function dispatchFlight(
     departedAt,
     factionId: state.profile.factionId as CombatFactionId,
     science,
+    speedPercent: command.speedPercent,
     operationId: command.missionId === 'expedition' || command.missionId === 'exploration-recon' || explorationAttackNode ? (command.contactCycleKey ?? command.operationId) : command.operationId,
     ...(explorationAttackNode ? {explorationAttack:true,explorationLaunchResourcePoints:explorationResourceScore(state)} : {}),
     ...(command.missionId === 'expedition' ? { targetPlanetName: getExplorationTarget(state, (command.contactCycleKey ?? command.operationId)!, departedAt, runtimeOptions.mode)?.name } : {}),
@@ -2208,7 +2213,7 @@ export function estimateFlightRoute(
   selectedShips: Partial<Record<ShipId, number>>,
   selectedCommanders: Partial<Record<CommanderId, number>>,
   destination: UniverseCoordinate,
-  options: FlightRuntimeOptions = {},
+  options: FlightRuntimeOptions & { speedPercent?: number } = {},
 ): { routeDistance: number; effectiveSpeed: number; oneWayDurationMs: number; gasCost: number } | null {
   const origin = state.planets[originPlanetId];
   if (!origin || !isFlightCoordinate(destination)) return null;
@@ -2227,7 +2232,7 @@ export function estimateFlightRoute(
       mode,
       options.testTimeScale,
     );
-    const oneWayDurationMs = mode === 'test' ? scaled : applyRealFlightFloor(scaled, isReconOnlyFleet(ships, selectedCommanders));
+    const oneWayDurationMs = applyFlightSpeedPercent(mode === 'test' ? scaled : applyRealFlightFloor(scaled, isReconOnlyFleet(ships, selectedCommanders)), options.speedPercent);
     const gasCost = calculateFlightFuel(factionId, ships, routeDistance, science, selectedCommanders);
     return { routeDistance, effectiveSpeed, oneWayDurationMs, gasCost };
   } catch {

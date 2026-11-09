@@ -146,6 +146,8 @@ import {
   pickNextSourcePlanet,
   type FlightRepeatPlan,
 } from './application/flight-repeat.ts';
+import { MAX_FLIGHT_SPEED_PERCENT, applyFlightSpeedPercent } from './domain/flights/speed.ts';
+import { FlightSpeedControl } from './ui/flight-speed/FlightSpeedControl.tsx';
 import { FLEET_UI_UPDATE_EVENT, isFavoriteTarget, type FleetFavoriteTarget, type FleetUiUpdate } from './domain/flights/fleet-ui.ts';
 
 function queueKindForConstructionView(view: ConstructionView): FleetProductionQueueKind | null {
@@ -419,7 +421,20 @@ function FleetWorkspace({
   const [constructionView, setConstructionView] = useState<ConstructionView>(null);
   const [status, setStatus] = useState(FLEET_ROOT_STATUS);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewResult, setPreviewResult] = useState<FlightCommandResult | null>(null);
+  const [previewResultRaw, setPreviewResult] = useState<FlightCommandResult | null>(null);
+  // «Скорость полёта»: 100% by default, down to 10%. Space Flight and Sun raids keep their own timing.
+  const [speedPercent, setSpeedPercent] = useState(MAX_FLIGHT_SPEED_PERCENT);
+  const speedApplies = missionId !== 'space-flight' && missionId !== 'sun-support' && missionId !== 'sun-attack';
+  const chosenSpeed = speedApplies ? speedPercent : MAX_FLIGHT_SPEED_PERCENT;
+  const withChosenSpeed = <T extends DispatchFlightCommand | null>(command: T): T => (
+    command && chosenSpeed < MAX_FLIGHT_SPEED_PERCENT ? { ...command, speedPercent: chosenSpeed } : command);
+  // Previews are made at full speed; the chosen speed is applied last, exactly as the runtime does on Send.
+  const previewResult = useMemo<FlightCommandResult | null>(() => {
+    if (!previewResultRaw?.ok || chosenSpeed >= MAX_FLIGHT_SPEED_PERCENT || previewResultRaw.flight.speedPercent !== undefined) return previewResultRaw;
+    const flight = previewResultRaw.flight;
+    const oneWayDurationMs = applyFlightSpeedPercent(flight.oneWayDurationMs, chosenSpeed);
+    return { ...previewResultRaw, flight: { ...flight, speedPercent: chosenSpeed, oneWayDurationMs, arrivalAt: flight.departedAt + oneWayDurationMs } };
+  }, [previewResultRaw, chosenSpeed]);
   const [previewOriginPlanetId, setPreviewOriginPlanetId] = useState<string | null>(null);
   const [previewDestination, setPreviewDestination] = useState<FlightDestination | null>(null);
   const [previewTargetRelation, setPreviewTargetRelation] = useState<TargetRelation | undefined>(undefined);
@@ -1271,13 +1286,13 @@ function FleetWorkspace({
       const runtimeState = saveState;
       const destination = previewDestination ?? launchDestination;
       if (!destination || destination.kind !== 'coordinate') return;
-      const command = createFlightCommand(requestId, {
+      const command = withChosenSpeed(createFlightCommand(requestId, {
         originPlanetId: previewOriginPlanetId ?? runtimeState.currentPlanetId,
         destination,
         targetRelation: gasPreviewFlight.targetRelation ?? null,
         targetKind: 'asteroid',
         departedAt,
-      }, runtimeState);
+      }, runtimeState));
       if (!command) return;
 
       const currentCandidate = previewFlight(runtimeState, command, {
@@ -1315,14 +1330,14 @@ function FleetWorkspace({
       window.dispatchEvent(new CustomEvent(FLIGHT_DISPATCH_REQUEST_EVENT, { detail: command }));
       return;
     }
-    const command = missionId === 'recycle' && previewResult?.ok
+    const command = withChosenSpeed(missionId === 'recycle' && previewResult?.ok
       ? createFlightCommand(requestId, {
         originPlanetId: previewResult.flight.originPlanetId,
         destination: previewResult.flight.destination,
         targetRelation: previewResult.flight.targetRelation ?? null,
         targetKind: previewSubmittedTargetKind,
       })
-      : createFlightCommand(requestId, previewDestination || missionId === 'deployment' ? undefined : { destination: { kind: 'coordinate', coordinate: coordinateFromDraft(previewTargetDraft) } });
+      : createFlightCommand(requestId, previewDestination || missionId === 'deployment' ? undefined : { destination: { kind: 'coordinate', coordinate: coordinateFromDraft(previewTargetDraft) } }));
     if (!command) {
       setPreviewTargetError(missionId === 'pirate-elimination' ? 'Пиратский контакт недоступен. Выберите актуальную базу.'
         : missionId === 'expedition' ? 'Выберите свободный объект экспедиции.' : 'Проверьте параметры рейса.');
@@ -1594,7 +1609,7 @@ function FleetWorkspace({
   const estimateCoordinate = previewTargetDestination?.coordinate
     ?? (coordinateDraftError(previewTargetDraft) === null ? coordinateFromDraft(previewTargetDraft) : null);
   const routeEstimate = !previewResult?.ok && missionId !== 'space-flight' && previewSourceId && estimateCoordinate
-    ? estimateFlightRoute(saveState, previewSourceId, selectedQuantities, selectedCommanders, estimateCoordinate, { mode: ACTIVE_RUNTIME_MODE, testTimeScale: resolveTestTimeScale() })
+    ? estimateFlightRoute(saveState, previewSourceId, selectedQuantities, selectedCommanders, estimateCoordinate, { mode: ACTIVE_RUNTIME_MODE, testTimeScale: resolveTestTimeScale(), speedPercent: chosenSpeed })
     : null;
   /** Missions with the cargo editor keep the summary to one line: the editor must stay on screen. */
   const compactSummary = missionId === 'transport' || missionId === 'aid' || missionId === 'space-flight';
@@ -1721,7 +1736,7 @@ function FleetWorkspace({
     ? transportTargetOptions.filter((target) => !(missionId === 'deployment' && target.blocked)).slice(0, 4).map((target) => ({
       target,
       art: planetSkinMapArt(planState.planets[target.id]?.skin) ?? planetSkins[0].art,
-      estimate: estimateFlightRoute(saveState, planSourceId, selectedQuantities, selectedCommanders, target.coordinate, { mode: ACTIVE_RUNTIME_MODE, testTimeScale: resolveTestTimeScale() }),
+      estimate: estimateFlightRoute(saveState, planSourceId, selectedQuantities, selectedCommanders, target.coordinate, { mode: ACTIVE_RUNTIME_MODE, testTimeScale: resolveTestTimeScale(), speedPercent: chosenSpeed }),
     }))
     : [];
 
@@ -2521,6 +2536,12 @@ function FleetWorkspace({
               </div>
             </div>
             <div className="resource-building-action-confirm-actions flight-timeline-actions">
+            {speedApplies ? (
+              <div className="fa-plan-speed">
+                <FlightSpeedControl value={speedPercent} onChange={setSpeedPercent} qa="fleet-plan"
+                  duration={planTiming ? `в пути ${flightDurationLabel(planTiming.oneWayMs)}` : null} />
+              </div>
+            ) : null}
             <dl className="fa-plan-foot" data-qa-plan-footer>
               {planTiming ? <>
                 <div><dt>Прибытие</dt><dd>{planTime(planTiming.arrivalAt)}</dd></div>

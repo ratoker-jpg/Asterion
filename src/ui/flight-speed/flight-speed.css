@@ -1,0 +1,16 @@
+/* «Скорость полёта» (FlightSpeedControl.tsx): one row, no frame of its own. */
+.flight-speed {
+  display: grid; grid-template-columns: auto minmax(90px, 1fr) 82px; grid-template-rows: auto auto; align-items: center; gap: 2px 10px;
+  min-width: 0; color: #e8f4f7; font-family: Montserrat, Arial, sans-serif;
+}
+.flight-speed > small { color: #8fb6c0; font-size: 10px !important; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; white-space: nowrap; }
+.flight-speed__value {
+  justify-self: end; font-size: 13px !important; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap;
+  animation: flight-speed-tick 220ms cubic-bezier(.23, 1, .32, 1) both;
+}
+.flight-speed__value s { color: #7f98a0; font-weight: 600; text-decoration-thickness: 1px; }
+.flight-speed.is-slow .flight-speed__value { color: #ffb36b; }
+.flight-speed__time { grid-column: 2 / -1; justify-self: end; color: #7f98a0; font-size: 11px !important; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.flight-speed--compact { grid-template-columns: auto minmax(80px, 1fr) 70px; }
+@keyframes flight-speed-tick { from { opacity: .4; translate: 0 -3px; } }
+@media (prefers-reduced-motion: reduce) { .flight-speed__value { animation: none; } }

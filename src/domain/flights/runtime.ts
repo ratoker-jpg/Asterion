@@ -2,7 +2,7 @@ import type { CombatFactionId } from '../combat/factions.ts';
 import type { ShipId } from '../combat/ids.ts';
 import { calculateRouteDistance, assertFlightCoordinate } from './distance.ts';
 import { calculateFlightFuel } from './fuel.ts';
-import { MIN_ONE_WAY_DURATION_MS, MIN_RECON_ONE_WAY_DURATION_MS, calculateEffectiveFleetSpeed, calculateOneWayDurationMs, isReconOnlyFleet } from './speed.ts';
+import { MAX_FLIGHT_SPEED_PERCENT, MIN_ONE_WAY_DURATION_MS, MIN_RECON_ONE_WAY_DURATION_MS, normalizeFlightSpeedPercent, calculateEffectiveFleetSpeed, calculateOneWayDurationMs, isReconOnlyFleet } from './speed.ts';
 import { normalizeTransportCargo } from './cargo.ts';
 import type { TransportCargo } from './cargo.ts';
 import type { AidFlightSnapshot, TargetRelation } from './types.ts';
@@ -47,6 +47,12 @@ export type DispatchFlightInput = {
   overflowWarning?: boolean;
   /** Explicit one-way duration for destinationless Space Flight. */
   durationMs?: number;
+  /**
+   * Chosen speed, 10–100. Only recorded here: the duration stays full-speed
+   * and the application applies the percent after the world speed and the
+   * real-time floor (`applyFlightSpeedPercent`).
+   */
+  speedPercent?: number;
 };
 
 export const MIN_SPACE_FLIGHT_DURATION_MS = 5 * 60_000;
@@ -148,6 +154,8 @@ export function createFlightRecord(input: DispatchFlightInput): FlightRecord {
     populationReserved: Math.max(0, Math.floor(input.populationReserved ?? 0)),
     routeDistance,
     effectiveSpeed,
+    ...(!isSpaceFlight && normalizeFlightSpeedPercent(input.speedPercent) < MAX_FLIGHT_SPEED_PERCENT
+      ? { speedPercent: normalizeFlightSpeedPercent(input.speedPercent) } : {}),
     oneWayDurationMs,
     departedAt: input.departedAt,
     arrivalAt: input.departedAt + oneWayDurationMs,
