@@ -153,21 +153,3 @@ test('owner rule 06.11.2026: a shielded planet is not attacked, and the protecte
   const poor = estimateRaidEconomics(context, raider, { ...report, resources: { ...report.resources, metal: 0, minerals: 0, gas: 0 } }, ships).net;
   assert.ok(full > poor, 'the lootable stores still pay');
 });
-
-test('owner rule 06.11.2026: planets that cannot send a decisive force alone strike together', () => {
-  const { state: base, raider, victim } = prepare('strong-pooled', { main: { cruiser: 45 } });
-  // The raider's home holds 60 cruisers (not enough for a decisive strike on 45), its colony next door adds 60 more.
-  let state = withShips(base, raider.id, { cruiser: 60 });
-  const taken = new Set(Object.values(getEspionageTargets(state.espionage)).filter((t) => t.coordinate.system === raider.coordinate.system && t.coordinate.galaxy === raider.coordinate.galaxy).map((t) => t.coordinate.position));
-  const position = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].find((value) => !taken.has(value))!;
-  const colony: SpyTargetState = { ...raider, id: `${raider.id}-colony`, name: `${raider.name} II`, coordinate: { ...raider.coordinate, position },
-    fleet: { ...raider.fleet, ships: { ...raider.fleet.ships, cruiser: 60 } } };
-  state = withTarget(state, colony);
-  const flights = lookRepeatedly(state, raider.ownerId, [victim.id], 3);
-  const combat = flights.filter((flight) => (flight.selectedShips.cruiser ?? 0) > 0).sort((left, right) => left.arrivalAt - right.arrivalAt);
-  assert.ok(combat.length >= 1, 'the bot attacks');
-  if (combat.length > 1) {
-    assert.ok(combat[combat.length - 1]!.arrivalAt - combat[0]!.arrivalAt <= 45_000, 'the fleets of one strike land within moments of each other');
-  }
-  assert.ok(combat.length <= 3, 'a strike is at most three fleets');
-});

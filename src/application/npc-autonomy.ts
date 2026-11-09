@@ -48,7 +48,6 @@ import { creditResources } from '../domain/resources/credit.ts';
 import type { ShipId } from '../domain/combat/ids.ts';
 import { estimationError, NPC_MAX_UTILITY, utilityToWeight } from '../domain/npc/utility.ts';
 import { getFactionShipCatalog, getFactionDefenseCatalog } from '../domain/combat/faction-catalog.ts';
-import { dispatchNpcStrikeCompanions } from './npc-strike-pool.ts';
 import {
   chooseNpcAttackForce, estimateRaidWin, npcRaidBoldness, chooseNpcStrategy, combatEfficiency, createNpcUtilityContext, describeNpcPlanet,
   estimateAttackUtility, estimateBuildingUtility, estimateRaidEconomics, estimateColonizeUtility, npcAttackIntel, estimateEspionageUtility,
@@ -681,12 +680,6 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
         let result = dispatchNpcMission(current, armed, at, timeScale);
         if (mission.kind === 'attack' && result.ok) {
           journalNpcAttackSizing(ownerId, current, mission, chosen, at);
-          // A strike the opening planet cannot make decisive alone is joined by the owner's other planets.
-          const strikeTarget = utility.latestReports.get(String(mission.payload.destinationPlanetId ?? ''));
-          if (result.flight && strikeTarget) {
-            const joined = dispatchNpcStrikeCompanions(result.state, utility, armed, result.flight, strikeTarget, targetIsOnline(String(mission.payload.destinationPlanetId ?? '')), at, timeScale);
-            if (joined.companions > 0) result = { ...result, state: joined.state };
-          }
           // The cargo behind the battle fleet, when the owner is sure of the fight: it carries the stores the warships cannot.
           const destination = String(mission.payload.destinationPlanetId ?? '');
           const report = utility.latestReports.get(destination);
