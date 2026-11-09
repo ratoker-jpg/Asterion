@@ -7,7 +7,12 @@ import {
   ALLIANCE_TAG_MAX,
   ALLIANCE_TAG_MIN,
   DEPUTY_MIN_DELIVERED_UNITS,
+  DEPUTY_MIN_MEMBERS,
   DEPUTY_MIN_TENURE_MS,
+  DEPUTY_REPICK_INTERVAL_MS,
+  DEPUTY_SWITCH_MARGIN,
+  DEPUTY_WEIGHT_CONTRIBUTION,
+  DEPUTY_WEIGHT_POINTS,
   LEADER_ABSENCE_MS,
   MAX_ALLIANCE_MEMBERS,
   MAX_DEPARTURES,
@@ -365,11 +370,17 @@ export function rejectApplication(
   return { ok: true, state: next };
 }
 
+/** The alliance without its deputy fields when `drop` is set (or there is none); otherwise unchanged. */
+function withoutDeputy(alliance: AllianceRecord, drop: boolean): AllianceRecord {
+  if (!drop && alliance.deputyOwnerId) return alliance;
+  const { deputySince: _since, ...rest } = alliance;
+  return { ...rest, deputyOwnerId: null };
+}
+
 function removeMemberFromAlliance(alliance: AllianceRecord, ownerId: string): AllianceRecord {
   return {
-    ...alliance,
+    ...withoutDeputy(alliance, alliance.deputyOwnerId === ownerId),
     members: alliance.members.filter((member) => member.ownerId !== ownerId),
-    deputyOwnerId: alliance.deputyOwnerId === ownerId ? null : alliance.deputyOwnerId,
   };
 }
 
@@ -383,10 +394,9 @@ function disband(state: CommandState, allianceId: string, now: number): CommandS
 
 function promote(alliance: AllianceRecord, successorOwnerId: string, now: number): AllianceRecord {
   return {
-    ...alliance,
+    ...withoutDeputy(alliance, alliance.deputyOwnerId === successorOwnerId),
     leaderOwnerId: successorOwnerId,
     leaderSince: now,
-    deputyOwnerId: alliance.deputyOwnerId === successorOwnerId ? null : alliance.deputyOwnerId,
   };
 }
 
@@ -441,38 +451,85 @@ export function kickMember(state: CommandState, actorOwnerId: string, targetOwne
   return { ok: true, state: leaveCooldown(recordDeparture(next, targetOwnerId, alliance.id, 'kicked', now), targetOwnerId, 'kicked', now) };
 }
 
-/** Whether a member has earned the deputy's post: time in the alliance and aid delivered (one rule for everyone). */
+/** Whether a member may hold the deputy's post: long enough in the alliance (one rule for everyone). */
 export function isDeputyEligible(member: AllianceMember, now: number): boolean {
   return now - member.joinedAt >= DEPUTY_MIN_TENURE_MS && member.deliveredUnits >= DEPUTY_MIN_DELIVERED_UNITS;
 }
 
+/** Points per owner, as the rating reports them; an owner missing from it counts as zero. */
+export type DeputyPoints = Readonly<Record<string, number>>;
+
 /**
- * The best member for the post among the eligible, by the order the alliance already uses for succession
- * (aid delivered, then activity, joint operations, the draw made at joining). Null when nobody has earned it.
+ * Rank for the post among the members of one alliance: aid delivered and points, each as a share of the best member's
+ * (so the two scales are comparable). 0..1; where nobody has either, everybody gets 0.
  */
-export function pickDeputyCandidate(alliance: AllianceRecord, now: number): AllianceMember | null {
-  const eligible = alliance.members.filter((member) => member.ownerId !== alliance.leaderOwnerId && isDeputyEligible(member, now));
-  return eligible.length ? pickLeaderSuccessor({ ...alliance, members: eligible, deputyOwnerId: null, leaderOwnerId: alliance.leaderOwnerId }) : null;
+export function deputyRank(alliance: AllianceRecord, member: AllianceMember, points: DeputyPoints = {}): number {
+  let bestUnits = 0;
+  let bestPoints = 0;
+  for (const other of alliance.members) {
+    if (other.ownerId === alliance.leaderOwnerId) continue;
+    bestUnits = Math.max(bestUnits, other.deliveredUnits);
+    bestPoints = Math.max(bestPoints, points[other.ownerId] ?? 0);
+  }
+  const unitsShare = bestUnits > 0 ? member.deliveredUnits / bestUnits : 0;
+  const pointsShare = bestPoints > 0 ? (points[member.ownerId] ?? 0) / bestPoints : 0;
+  return DEPUTY_WEIGHT_CONTRIBUTION * unitsShare + DEPUTY_WEIGHT_POINTS * pointsShare;
 }
 
-/** Only the leader names the single deputy. Pass `null` to dismiss the current one. `now` enables the earned-post check. */
-export function setDeputy(state: CommandState, actorOwnerId: string, targetOwnerId: string | null, now?: number): CommandResult {
+/**
+ * The best member for the post among the eligible: highest rank, then the order the alliance already uses for
+ * succession (aid delivered, activity, joint operations, the draw made at joining). Null when the alliance is too
+ * small or nobody is eligible.
+ */
+export function pickDeputyCandidate(alliance: AllianceRecord, now: number, points: DeputyPoints = {}): AllianceMember | null {
+  if (alliance.members.length < DEPUTY_MIN_MEMBERS) return null;
+  const eligible = alliance.members.filter((member) => member.ownerId !== alliance.leaderOwnerId && isDeputyEligible(member, now));
+  if (!eligible.length) return null;
+  return [...eligible].sort((left, right) => deputyRank(alliance, right, points) - deputyRank(alliance, left, points)
+    || right.deliveredUnits - left.deliveredUnits
+    || right.lastActiveAt - left.lastActiveAt
+    || right.jointOperationCount - left.jointOperationCount
+    || right.tieBreaker - left.tieBreaker
+    || (left.ownerId < right.ownerId ? -1 : 1))[0];
+}
+
+/**
+ * Who should hold the post now, or null to leave it as it is. Without a deputy: the best eligible member. With one:
+ * a challenger only after `DEPUTY_REPICK_INTERVAL_MS` in the post, and only when the rank beats the sitting
+ * deputy's by `DEPUTY_SWITCH_MARGIN` (so two close members do not trade the post back and forth).
+ */
+export function selectDeputyAppointment(alliance: AllianceRecord, now: number, points: DeputyPoints = {}): AllianceMember | null {
+  const best = pickDeputyCandidate(alliance, now, points);
+  if (!best) return null;
+  if (!alliance.deputyOwnerId) return best;
+  if (best.ownerId === alliance.deputyOwnerId) return null;
+  if (now - (alliance.deputySince ?? 0) < DEPUTY_REPICK_INTERVAL_MS) return null;
+  const sitting = alliance.members.find((member) => member.ownerId === alliance.deputyOwnerId);
+  if (!sitting) return best;
+  return deputyRank(alliance, best, points) > deputyRank(alliance, sitting, points) * DEPUTY_SWITCH_MARGIN ? best : null;
+}
+
+/**
+ * Only the leader names the single deputy. Pass `null` to dismiss the current one. `now` enables the tenure check.
+ * `replace` swaps a sitting deputy in one step (the periodic re-pick); by hand the leader dismisses first.
+ */
+export function setDeputy(state: CommandState, actorOwnerId: string, targetOwnerId: string | null, now?: number, options: { replace?: boolean } = {}): CommandResult {
   const membership = selectOwnerMembership(state, actorOwnerId);
   if (!membership) return fail(state, 'not_member', 'Вы не состоите в союзе.');
   if (membership.role !== 'leader') return fail(state, 'not_allowed', 'Назначать заместителя может только лидер.');
   const { alliance } = membership;
-  if (targetOwnerId === null) return { ok: true, state: replaceAlliance(state, { ...alliance, deputyOwnerId: null }) };
+  if (targetOwnerId === null) return { ok: true, state: replaceAlliance(state, withoutDeputy(alliance, true)) };
   if (targetOwnerId === actorOwnerId) return fail(state, 'self_target', 'Лидер не может быть заместителем.');
   if (!alliance.members.some((member) => member.ownerId === targetOwnerId)) {
     return fail(state, 'target_not_member', 'Этот игрок не состоит в вашем союзе.');
   }
   if (alliance.deputyOwnerId === targetOwnerId) return { ok: true, state };
-  if (alliance.deputyOwnerId) return fail(state, 'deputy_exists', 'В союзе уже есть заместитель. Сначала снимите его.');
+  if (alliance.deputyOwnerId && !options.replace) return fail(state, 'deputy_exists', 'В союзе уже есть заместитель. Сначала снимите его.');
   const target = alliance.members.find((member) => member.ownerId === targetOwnerId)!;
   if (now !== undefined && !isDeputyEligible(target, now)) {
-    return fail(state, 'deputy_not_ready', 'Заместителем можно стать после срока в союзе и вклада помощью: этот участник пока не заслужил должность.');
+    return fail(state, 'deputy_not_ready', 'Заместителем можно стать после короткого срока в союзе: этот участник пока не подходит.');
   }
-  return { ok: true, state: replaceAlliance(state, { ...alliance, deputyOwnerId: targetOwnerId }) };
+  return { ok: true, state: replaceAlliance(state, { ...alliance, deputyOwnerId: targetOwnerId, ...(now !== undefined ? { deputySince: now } : {}) }) };
 }
 
 /** The previous leader becomes an ordinary member. */

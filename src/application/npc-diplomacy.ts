@@ -1,15 +1,21 @@
 import type { NpcProfile } from '../domain/npc/types.ts';
 import {
   DEFAULT_ALLIANCE_EMBLEM,
+  DEPUTY_APPOINT_WEIGHT,
+  DEPUTY_MIN_MEMBERS,
+  DEPUTY_REPICK_INTERVAL_MS,
+  DEPUTY_REPICK_WEIGHT,
 } from '../domain/command/catalog.ts';
+import { selectOwnerScore } from '../domain/rating/scoring.ts';
 import { allianceNameKey, allianceTagKey, pickNpcAllianceName } from '../domain/command/alliance-names.ts';
 import {
   acceptApplication,
   applyToAlliance,
   createAlliance,
   leaveAlliance,
-  pickDeputyCandidate,
+  selectDeputyAppointment,
   setDeputy,
+  type DeputyPoints,
   rejectApplication,
 } from '../domain/command/membership.ts';
 import {
@@ -124,7 +130,9 @@ export function getNpcDiplomacyCandidates(
   const loner = cooperation + social < 0.6;
   const holdsSoloCrystals = (state.sunRaid?.crystals[`owner:${ownerId}`]?.length ?? 0) > 0;
   if (!ownMembership && !loner && !holdsSoloCrystals) {
-    if (!pendingOwnApplication && !selectReapplyBlock(command, ownerId, null, at)) {
+    // An owner that has just left an alliance (a bot disbanding its alliance of one, say) looks for another one
+    // and does not found a new alliance of one at once.
+    if (!pendingOwnApplication && !selectReapplyBlock(command, ownerId, null, at) && recentlyLeftAlliances(command, ownerId, at).size === 0) {
       const settings = uniqueAllianceSettings(command, ownerId, publicOwnerName(state, ownerId));
       candidates.push(makeCandidate('create-alliance', `create-alliance:${ownerId}`, 0.18 + cooperation * 0.35 + social * 0.12, {
         name: settings.name,
@@ -169,11 +177,13 @@ export function getNpcDiplomacyCandidates(
     }));
   }
 
-  // The leader names a deputy from the members who earned it (time and aid delivered; the same rule for the
-  // player and the bots, nobody is favoured). A cooperative leader does it sooner.
-  if (ownAlliance && ownRole === 'leader' && !ownAlliance.deputyOwnerId) {
-    const pick = pickDeputyCandidate(ownAlliance, at);
-    if (pick) candidates.push(makeCandidate('appoint-deputy', `appoint-deputy:${ownerId}:${ownAlliance.id}:${pick.ownerId}`, 0.1 + cooperation * 0.3, {
+  // The leader names a deputy as soon as the alliance is big enough and re-picks the post now and then by aid delivered
+  // and points (the same rule for the player and the bots, nobody is favoured; owner request 09.11.2026).
+  // Points are priced only when a decision is possible at all (big enough, and no deputy or the interval is over).
+  if (ownAlliance && ownRole === 'leader' && ownAlliance.members.length >= DEPUTY_MIN_MEMBERS
+    && (!ownAlliance.deputyOwnerId || at - (ownAlliance.deputySince ?? 0) >= DEPUTY_REPICK_INTERVAL_MS)) {
+    const pick = selectDeputyAppointment(ownAlliance, at, deputyPoints(state, ownAlliance));
+    if (pick) candidates.push(makeCandidate('appoint-deputy', `appoint-deputy:${ownerId}:${ownAlliance.id}:${pick.ownerId}`, ownAlliance.deputyOwnerId ? DEPUTY_REPICK_WEIGHT : DEPUTY_APPOINT_WEIGHT, {
       targetOwnerId: pick.ownerId,
     }));
   }
@@ -223,6 +233,13 @@ export function getNpcDiplomacyCandidates(
   return candidates.sort((left, right) => right.weight - left.weight || left.id.localeCompare(right.id));
 }
 
+/** Public total points of the alliance's members: the same numbers the rating shows. */
+function deputyPoints(state: SaveState, alliance: AllianceRecord): DeputyPoints {
+  const points: Record<string, number> = {};
+  for (const member of alliance.members) points[member.ownerId] = selectOwnerScore(state, member.ownerId)?.totalPoints ?? 0;
+  return points;
+}
+
 /** Applies one candidate through existing command laws; semantic guards make replayed ids no-op after first success. */
 export function applyNpcDiplomacyAction(
   state: SaveState,
@@ -265,7 +282,11 @@ export function applyNpcDiplomacyAction(
       break;
     }
     case 'appoint-deputy': {
-      result = setDeputy(command, ownerId, stringValue('targetOwnerId'), at);
+      // Re-checked at the moment of the act: the snapshot may be stale, the ranking may have moved.
+      const alliance = selectOwnerMembership(command, ownerId)?.alliance;
+      const target = stringValue('targetOwnerId');
+      if (!alliance || selectDeputyAppointment(alliance, at, deputyPoints(state, alliance))?.ownerId !== target) break;
+      result = setDeputy(command, ownerId, target, at, { replace: true });
       break;
     }
     case 'leave-alliance': {

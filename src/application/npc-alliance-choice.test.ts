@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { DEPUTY_MIN_DELIVERED_UNITS, DEPUTY_MIN_TENURE_MS, MAX_DEPARTURES } from '../domain/command/catalog.ts';
+import { DEPUTY_MIN_TENURE_MS, DEPUTY_REPICK_INTERVAL_MS, MAX_DEPARTURES } from '../domain/command/catalog.ts';
 import { acceptApplication, applyToAlliance, createAlliance, kickMember, leaveAlliance, setDeputy } from '../domain/command/membership.ts';
 import { declareWar, selectAllianceRelations } from '../domain/command/diplomacy.ts';
 import { migrateCommandState } from '../domain/command/repository.ts';
@@ -281,12 +281,12 @@ test('C: leaving in a war or truce changes no diplomacy of the alliance; a sole 
   assert.deepEqual(selectAllianceRelations(alone.state, strongId), [], 'the stale view of the dissolved alliance is not shown (and is pruned on load)');
 });
 
-test('deputy: one rule for the player and the bots, earned by time and aid; the leader picks the best of the eligible', () => {
+test('deputy: named as soon as the alliance is big enough, re-picked by aid and points; one rule for the player and the bots', () => {
   const { state: base, ids } = world('ALLIANCEDEP');
   const [leader, bot] = ids as [string, string];
   const playerId = base.profile.playerId;
   let state = withTraits(found(base, leader, 'Вожак', 'VZH'), leader, { cooperation: 0.9, socialStyle: 0.9 });
-  state = join(join(state, bot, leader, T0), playerId, leader, T0);
+  state = join(state, bot, leader, T0);
   const allianceId = selectOwnerMembership(state.command, leader)!.alliance.id;
   const deliver = (units: Record<string, number>) => {
     state = { ...state, command: { ...state.command, alliances: state.command.alliances.map((alliance) => alliance.id !== allianceId ? alliance
@@ -294,26 +294,40 @@ test('deputy: one rule for the player and the bots, earned by time and aid; the 
   };
   const ready = T0 + DEPUTY_MIN_TENURE_MS + HOUR;
   const profile = () => state.npc!.profiles[leader]!;
-  const appoints = (at: number) => getNpcDiplomacyCandidates(state, profile(), at).filter((item) => item.kind === 'appoint-deputy');
+  const appoints = (st: SaveState, at: number) => getNpcDiplomacyCandidates(st, st.npc!.profiles[leader]!, at).filter((item) => item.kind === 'appoint-deputy');
 
-  // Right after joining nobody is eligible, whoever it is; time alone is not enough either.
-  assert.equal(setDeputy(state.command, leader, playerId, T0 + HOUR).ok, false);
-  assert.equal(appoints(T0 + HOUR).length, 0);
-  assert.equal(appoints(ready).length, 0, 'time without aid is not enough');
-  // Aid alone is not enough either: the player delivered a lot at once but has just joined.
-  deliver({ [playerId]: DEPUTY_MIN_DELIVERED_UNITS * 4 });
-  assert.equal(setDeputy(state.command, leader, playerId, T0 + HOUR).ok, false, 'a fresh member cannot buy the post');
-  // Both met: the one with more aid is chosen, the player has no priority and no handicap.
-  deliver({ [bot]: DEPUTY_MIN_DELIVERED_UNITS * 2 });
-  const picked = appoints(ready);
+  // Two members are too few for a deputy; with three, a fresh member still has to wait out the short tenure.
+  assert.equal(appoints(state, ready).length, 0, 'leader and one member: no deputy yet');
+  state = join(state, playerId, leader, T0);
+  assert.equal(setDeputy(state.command, leader, playerId, T0 + DEPUTY_MIN_TENURE_MS - 1).ok, false, 'tenure is short but not zero');
+  assert.equal(appoints(state, T0 + DEPUTY_MIN_TENURE_MS - 1).length, 0);
+  // No aid delivered by anybody: the post is still filled at once (nobody is favoured, the order of succession breaks ties).
+  assert.equal(appoints(state, ready).length, 1, 'no need to wait for aid');
+  // The one who delivered more aid is chosen, the player has no priority and no handicap.
+  deliver({ [playerId]: 1_000_000, [bot]: 10 });
+  const picked = appoints(state, ready);
   assert.equal(picked.length, 1);
-  assert.equal(picked[0]!.payload.targetOwnerId, playerId, 'the stronger contributor is picked, the player here');
-  deliver({ [bot]: DEPUTY_MIN_DELIVERED_UNITS * 9 });
-  assert.equal(appoints(ready)[0]!.payload.targetOwnerId, bot);
-  const applied = applyNpcDiplomacyAction(state, leader, appoints(ready)[0]!, ready, 'dep');
-  assert.equal(applied.ok, true);
-  assert.equal(selectOwnerMembership(applied.state.command, leader)!.alliance.deputyOwnerId, bot);
-  assert.equal(getNpcDiplomacyCandidates(applied.state, applied.state.npc!.profiles[leader]!, ready).some((item) => item.kind === 'appoint-deputy'), false, 'one deputy only');
+  assert.equal(picked[0]!.payload.targetOwnerId, playerId);
+  const first = applyNpcDiplomacyAction(state, leader, picked[0]!, ready, 'dep');
+  assert.equal(first.ok, true);
+  assert.equal(selectOwnerMembership(first.state.command, leader)!.alliance.deputyOwnerId, playerId);
+  assert.equal(appoints(first.state, ready).length, 0, 'one deputy only');
+
+  // Re-pick: a bigger contributor does not displace the deputy before the interval is over, but does after it.
+  state = first.state;
+  deliver({ [bot]: 1_000_000_000 });
+  assert.equal(appoints(state, ready + DEPUTY_REPICK_INTERVAL_MS - 1).length, 0);
+  const later = ready + DEPUTY_REPICK_INTERVAL_MS;
+  const swap = appoints(state, later);
+  assert.equal(swap.length, 1);
+  assert.equal(swap[0]!.payload.targetOwnerId, bot);
+  const second = applyNpcDiplomacyAction(state, leader, swap[0]!, later, 'dep-swap');
+  assert.equal(second.ok, true, String((second as { reason?: string }).reason));
+  const record = selectOwnerMembership(second.state.command, leader)!.alliance;
+  assert.equal(record.deputyOwnerId, bot);
+  assert.equal(record.deputySince, later);
+  assert.equal(appoints(second.state, later + DEPUTY_REPICK_INTERVAL_MS * 4).length, 0, 'the new deputy stays while still the best');
+  assert.ok(profile());
 });
 
 /* ------------------------------------------------------------------ D: memory */
@@ -445,4 +459,34 @@ test('E: the delay scales with world speed; proud leaders and loners hold on; an
 
   const withPlayer = join(state, state.profile.playerId, selectOwnerMembership(state.command, mate)!.alliance.leaderOwnerId);
   assert.equal(selectNpcDefection(withPlayer, withPlayer.npc!.profiles[mate]!, T0 + 30 * DAY), null, 'the player decides for his own');
+});
+
+test('a bot alone in its alliance disbands it once the grace is over and another alliance has room, even at war; then it does not found a new one', () => {
+  const { state: base, ids } = world('ALLIANCELONE');
+  const [lone, leader, mate] = ids as [string, string, string];
+  let state = found(base, lone, 'Одиночка', 'ODN');
+  state = join(found(state, leader, 'Союз', 'SOY'), mate, leader);
+  // A war with the other alliance: the ordinary rule would call it "winning" and keep the bot where it is.
+  const loneAlliance = selectOwnerMembership(state.command, lone)!.alliance.id;
+  const otherAlliance = selectOwnerMembership(state.command, leader)!.alliance.id;
+  const war = declareWar(state.command, loneAlliance, otherAlliance, { now: T0 });
+  if (war.ok) state = { ...state, command: war.state };
+
+  const graceMs = 6 * HOUR; // standard speed
+  assert.equal(selectNpcDefection(state, state.npc!.profiles[lone]!, T0 + graceMs - 1), null, 'grace first');
+  const exit = selectNpcDefection(state, state.npc!.profiles[lone]!, T0 + graceMs);
+  assert.ok(exit, 'after the grace the bot leaves');
+  assert.equal(exit.successorOwnerId, null);
+
+  const candidate = getNpcDiplomacyCandidates(state, state.npc!.profiles[lone]!, T0 + graceMs).find((item) => item.kind === 'leave-alliance')!;
+  assert.ok(candidate);
+  const applied = applyNpcDiplomacyAction(state, lone, candidate, T0 + graceMs, 'lone-exit');
+  assert.equal(applied.ok, true);
+  assert.equal(applied.state.command.alliances.some((alliance) => alliance.id === loneAlliance), false, 'the alliance of one is gone');
+  const after = getNpcDiplomacyCandidates(applied.state, applied.state.npc!.profiles[lone]!, T0 + graceMs + 3 * HOUR);
+  assert.equal(after.some((item) => item.kind === 'create-alliance'), false, 'no new alliance of one right away');
+
+  // Nowhere to go: it stays. The player alone in an alliance is never touched.
+  const onlyOne = { ...base, command: found(base, lone, 'Одиночка', 'ODN').command };
+  assert.equal(selectNpcDefection(onlyOne, onlyOne.npc!.profiles[lone]!, T0 + 100 * HOUR), null);
 });
