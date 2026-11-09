@@ -249,8 +249,8 @@ export function AidQuickSend({ state, requestId, anchor, onClose, onSend, onDeta
                       <ResourceIcon kind={request.resource} />
                       <span>
                         <b>{resourceLabel}</b>
-                        <input className="aid-quick__amount" type="number" inputMode="numeric" min={0} max={amountMax} step={1000} value={amount}
-                          aria-label={`${resourceLabel}: сколько отправить`} onChange={(event) => setAmount(event.currentTarget.valueAsNumber)} data-qa-aid-quick-amount />
+                        <input className="aid-quick__amount" type="text" inputMode="numeric" value={number.format(amount)}
+                          aria-label={`${resourceLabel}: сколько отправить`} onChange={(event) => setAmount(Number(event.currentTarget.value.replace(/\D/g, '') || 0))} data-qa-aid-quick-amount />
                       </span>
                       <AmountSlider compact value={amount} max={amountMax} label={`${resourceLabel}: сколько отправить`} onChange={setAmount} />
                     </li>
