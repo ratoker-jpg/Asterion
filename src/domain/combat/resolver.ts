@@ -494,6 +494,8 @@ type SpecialBonusDetail = {
   amount: number;
   scope: 'fleet' | 'asterion';
   status: CombatSpecialBonus['status'];
+  /** False when another donor of the same kind on this side had the larger amount (one donor per side and kind). */
+  applied: boolean;
   source?: string;
   note?: string;
 };
@@ -520,11 +522,19 @@ function calculateRoundSideModifiers(stacks: readonly RuntimeStack[], commanderI
     snapshot.commanderRate = commanderRate;
   }
 
+  // One donor per side and bonus kind: a side made of many owners or level
+  // groups must not stack the same special-ship ability once per stack. The
+  // largest single donor amount (already capped by its own cap) applies; the
+  // other donors of that kind are listed in the report as not applied. Fleet
+  // bonuses and pirate fleet bonuses (bonus-life / armor-boost) are separate
+  // pools, so the pirate semantics stay unchanged (a pirate side has one donor).
+  type DonorEntry = { donor: RuntimeStack; amount: number; detail: SpecialBonusDetail };
+  const donorPools = new Map<string, DonorEntry[]>();
   for (const donor of stacks) {
     if (!donor.specialBonus || donor.count <= 0) continue;
     const amount = Math.min(donor.specialBonus.cap ?? Number.POSITIVE_INFINITY, donor.specialBonus.rate * donor.count);
     if (!Number.isFinite(amount) || amount <= 0) continue;
-    specialBonusDetails.push({
+    const detail: SpecialBonusDetail = {
       entityId: donor.entityId,
       actorSide: donor.side,
       livingCount: donor.count,
@@ -535,9 +545,23 @@ function calculateRoundSideModifiers(stacks: readonly RuntimeStack[], commanderI
       amount,
       scope: donor.specialBonus.scope ?? 'fleet',
       status: donor.specialBonus.status,
+      applied: false,
       ...(donor.specialBonus.source ? { source: donor.specialBonus.source } : {}),
       ...(donor.specialBonus.note ? { note: donor.specialBonus.note } : {}),
-    });
+    };
+    const pirate = donor.pirateAbility?.kind === 'bonus-life' || donor.pirateAbility?.kind === 'armor-boost';
+    const key = `${pirate ? 'pirate' : 'fleet'}:${donor.specialBonus.kind}`;
+    const pool = donorPools.get(key) ?? [];
+    pool.push({ donor, amount, detail });
+    donorPools.set(key, pool);
+  }
+
+  for (const pool of donorPools.values()) {
+    // Largest amount wins; ties keep the first stack in side order.
+    const chosen = pool.reduce((best, entry) => entry.amount > best.amount ? entry : best, pool[0]!);
+    chosen.detail.applied = true;
+    for (const entry of pool) specialBonusDetails.push(entry.detail);
+    const { donor, amount } = chosen;
     snapshot[`specialBonus:${donor.entityId}`] = amount;
     const pirateFleetBonus = donor.pirateAbility?.kind === 'bonus-life' || donor.pirateAbility?.kind === 'armor-boost';
     for (const recipient of stacks) {
@@ -548,9 +572,9 @@ function calculateRoundSideModifiers(stacks: readonly RuntimeStack[], commanderI
       if ((!pirateFleetBonus && recipient.entityId === donor.entityId) || recipient.count <= 0) continue;
       if (pirateFleetBonus && recipient.kind !== 'ship') continue;
       const current = specialBonuses.get(recipient.entityId) ?? { attack: 0, life: 0, armor: 0 };
-      if (donor.specialBonus.kind === 'attack') current.attack += amount;
-      if (donor.specialBonus.kind === 'life') current.life += amount;
-      if (donor.specialBonus.kind === 'armor') current.armor += amount * 100;
+      if (donor.specialBonus!.kind === 'attack') current.attack += amount;
+      if (donor.specialBonus!.kind === 'life') current.life += amount;
+      if (donor.specialBonus!.kind === 'armor') current.armor += amount * 100;
       specialBonuses.set(recipient.entityId, current);
     }
   }
@@ -882,7 +906,8 @@ function createSpecialBonusEvent(sequence: number, detail: SpecialBonusDetail): 
     ...(detail.cap !== undefined ? { specialBonusCap: detail.cap } : {}),
     specialBonusCapStatus: detail.capStatus,
     specialBonusLivingCount: detail.livingCount,
-    specialBonusAmount: detail.amount,
+    ...(detail.applied ? { specialBonusAmount: detail.amount } : {}),
+    specialBonusApplied: detail.applied,
     specialBonusScope: detail.scope,
     provenance: {
       status: detail.status,
@@ -890,7 +915,9 @@ function createSpecialBonusEvent(sequence: number, detail: SpecialBonusDetail): 
       confidence: detail.status === 'confirmed' ? 'high' : detail.status === 'inferred' ? 'medium' : 'low',
       note: detail.note,
     },
-    note: `Бонус начала раунда: ${detail.kind} = rate ${(detail.rate * 100).toFixed(3)}% × ${detail.livingCount} живых юнитов, cap ${cap}, итог ${amount}. Источник не получает собственный бонус; получатели — другие живые combat-eligible стеки (${detail.scope}).`,
+    note: detail.applied
+      ? `Бонус начала раунда (один донор вида «${detail.kind}» на сторону — самый многочисленный): ${detail.kind} = rate ${(detail.rate * 100).toFixed(3)}% × ${detail.livingCount} живых юнитов, cap ${cap}, итог ${amount}. Источник не получает собственный бонус; получатели — другие живые combat-eligible стеки (${detail.scope}).`
+      : `Бонус не применён: на сторону действует один донор вида «${detail.kind}», здесь у другого стека больше (этот дал бы ${amount}).`,
   };
 }
 

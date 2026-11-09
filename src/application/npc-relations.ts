@@ -101,7 +101,7 @@ export function recordNpcBattleRelations(state: SaveState, report: BattleReport,
   if (!attacker || !defender) return state;
   let next = recordNpcRelation(state, defender, attacker, { kind: 'attacked-by', hurt: hurtOf(defenderLoss) }, at);
   next = recordNpcBetrayalByDefector(next, attacker, defender, at);
-  if (report.winner !== 'attacker') next = recordNpcRelation(next, attacker, defender, { kind: 'repelled-by' }, at);
+  if (report.winner === 'defender') next = recordNpcRelation(next, attacker, defender, { kind: 'repelled-by' }, at);
   return next;
 }
 

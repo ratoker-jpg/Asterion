@@ -1121,6 +1121,9 @@ function resolveRaid(state: SaveState, raid: SunRaidRecord, at: number, options:
       ? { id: `${raid.id}:crystal`, at, kind: 'crystal-found', galaxy: raid.galaxy, system: raid.system, text: `[${raid.allianceTag}] получил ${SOLAR_CRYSTALS[roll.crystal].name}.` }
       : { id: `${raid.id}:crystal`, at, kind: 'crystal-missed', galaxy: raid.galaxy, system: raid.system, text: roll.skipped ? `[${raid.allianceTag}]: все четыре кристалла уже собраны.` : `[${raid.allianceTag}]: кристалл не выпал (шанс ${Math.round(roll.chance * 100)}%).` });
     if (frozen) events.push({ id: `${raid.id}:frozen`, at, kind: 'sun-frozen', galaxy: raid.galaxy, system: raid.system, text: `Солнце ${sunLabel} заморожено и восстанавливается.` });
+  } else if (winner === 'draw') {
+    // A draw is nobody's win: the Sun keeps its brightness, no crystal moves, no victory credit.
+    events.push({ id: `${raid.id}:draw`, at, kind: 'raid-draw', galaxy: raid.galaxy, system: raid.system, text: `Солнце ${sunLabel}: ничья с [${raid.allianceTag}], никто не победил.` });
   } else {
     events.push({ id: `${raid.id}:defended`, at, kind: 'raid-defended', galaxy: raid.galaxy, system: raid.system, text: `Солнце ${sunLabel} выстояло против [${raid.allianceTag}].` });
   }
@@ -1227,12 +1230,14 @@ function resolveRaid(state: SaveState, raid: SunRaidRecord, at: number, options:
     : null;
   const won = playerSide !== null && playerSide === winner;
   notices.push({
-    tone: playerSide === null ? 'info' : won ? 'success' : 'error',
+    tone: playerSide === null || winner === 'draw' ? 'info' : won ? 'success' : 'error',
     galaxy: raid.galaxy,
     system: raid.system,
     text: winner === 'attacker'
       ? `Солнце ${sunLabel}: рейд [${raid.allianceTag}] успешен, яркость ${before}% → ${after}%.${crystalRoll?.success && crystalRoll.crystal ? ` Получен ${SOLAR_CRYSTALS[crystalRoll.crystal].name}.` : ''}`
-      : `Солнце ${sunLabel}: защитники отразили рейд [${raid.allianceTag}].`,
+      : winner === 'draw'
+        ? `Солнце ${sunLabel}: ничья в бою с [${raid.allianceTag}], никто не победил, кристаллы остались на местах.`
+        : `Солнце ${sunLabel}: защитники отразили рейд [${raid.allianceTag}].`,
   });
   return next;
 }

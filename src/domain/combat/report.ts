@@ -182,6 +182,8 @@ export type CombatEvent = {
   specialBonusCapStatus?: 'known' | 'unknown';
   specialBonusLivingCount?: number;
   specialBonusAmount?: number;
+  /** False: another donor of this kind on the same side was larger (one donor per side and kind). Absent in older reports. */
+  specialBonusApplied?: boolean;
   specialBonusScope?: 'fleet' | 'asterion';
   provenance?: CombatProvenance;
   note?: string;

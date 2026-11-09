@@ -337,3 +337,36 @@ test('catalog coefficient and cap corrections change recipient stats in the comb
   // The recipient's base armor is 3: prior Ghost entry had no runtime cap and yields 39 total; confirmed cap limits it to 33.
   // The prior result is calculated from the prior catalog entry, not executed by an old resolver.
 });
+
+test('special bonus applies once per side and kind: the largest donor, never the sum of donor stacks', () => {
+  const run = (leadCount: number, allyCounts: readonly number[]) => {
+    const report = resolveCombat(input({
+      attacker: {
+        participant: attacker,
+        factionId: 'aegis',
+        ships: [{ entityId: 'defender', count: leadCount, level: 0 }, { entityId: 'scout', count: 1, level: 0 }],
+        allyGroups: allyCounts.map((count, index) => ({
+          tag: `g${index + 2}`,
+          factionId: 'aegis' as const,
+          technologies: createDefaultCombatTechnologies(),
+          ships: [{ entityId: 'defender' as const, count, level: 0 }],
+        })),
+        commanders: [],
+      },
+    }), { reportId: 'v3-one-donor' });
+    const scout = report.initialSnapshot?.attacker.stacks.find((stack) => stack.entityId === 'scout');
+    const donors = report.rounds[0]!.events.filter((event) => event.actionType === 'special-bonus' && event.actorSide === 'attacker');
+    return { life: scout?.lifePerUnit ?? 0, donors };
+  };
+  // Aegis Defender: +0.05% life per ship (cap 30%). Groups of 100, 200 and 100 ships.
+  const alone = run(100, []);
+  const largest = run(200, []);
+  const split = run(100, [200, 100]);
+
+  assert.equal(split.donors.length, 3);
+  assert.equal(split.donors.filter((event) => event.specialBonusApplied).length, 1);
+  assert.equal(split.donors.find((event) => event.specialBonusApplied)?.specialBonusAmount, 0.1);
+  assert.ok(split.donors.filter((event) => !event.specialBonusApplied).every((event) => event.specialBonusAmount === undefined));
+  assert.ok(split.life > alone.life, 'the larger donor beats the smaller one alone');
+  assert.equal(split.life, largest.life, 'three groups give the life bonus of the largest group only, not of all 400 ships');
+});
