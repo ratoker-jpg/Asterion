@@ -10,7 +10,10 @@ import {
   selectRequestById,
 } from '../domain/command/aid.ts';
 import { DEPUTY_MIN_DELIVERED_UNITS, TEST_ALLY_OWNER_ID } from '../domain/command/catalog.ts';
-import { kickMember, leaveAlliance } from '../domain/command/membership.ts';
+import { acceptApplication, applyToAlliance, createAlliance, kickMember, leaveAlliance } from '../domain/command/membership.ts';
+import { createResourceRequest, grantAidChargesForTest } from '../domain/command/aid.ts';
+import { DEFAULT_ALLIANCE_EMBLEM } from '../domain/command/catalog.ts';
+import { createDefaultNewGameConfig } from '../domain/world/config.ts';
 import { aidInFlightUnits } from '../domain/flights/aid-mission.ts';
 import {
   cancelAidRequest,
@@ -657,4 +660,44 @@ test('membership changes end aid at the moment of the change: a later sweep woul
   // so the result never depends on where calculation slices end.
   const source = (await import('node:fs')).readFileSync(new URL('./reconcile.ts', import.meta.url), 'latin1');
   assert.match(source, /relationStructureToken\(next\.command\) !== relationsBefore\) next = reconcileAidMembership\(next, checkpoint\)/);
+});
+
+test('aid to a bot ally is delivered, counted for the sender and never voided (owner campaign 06-08.11: 22.8 M sent, 0 credited)', () => {
+  const NOW = Date.UTC(2026, 9, 24);
+  const config = createDefaultNewGameConfig({ seed: 'AID-TO-BOT', factionId: 'aegis', playerName: 'Aid Sender' });
+  const initial = createInitialSaveState('production', NOW, { ...config, world: { ...config.world, npcCount: 1 } });
+  const ownerId = Object.keys(initial.npc!.profiles)[0]!;
+  const source = Object.values(initial.espionage!.targets!).find((target) => target.ownerId === ownerId)!;
+  let state: SaveState = initial;
+  const founded = createAlliance(state.command, {
+    ownerId, displayName: source.ownerName,
+    settings: { name: 'Bot Union', tag: 'BOTU', motto: '', description: '', emblem: DEFAULT_ALLIANCE_EMBLEM },
+  }, { now: NOW, random: () => 0.25 });
+  assert.ok(founded.ok);
+  const applied = applyToAlliance(founded.state, { ownerId: state.profile.playerId, displayName: state.profile.displayName, allianceId: founded.allianceId }, { now: NOW + 1, random: () => 0.25 });
+  assert.ok(applied.ok);
+  const accepted = acceptApplication(applied.state, ownerId, applied.applicationId, { now: NOW + 2, random: () => 0.25 });
+  assert.ok(accepted.ok);
+  const request = createResourceRequest(grantAidChargesForTest(accepted.state, ownerId, 1, NOW + 2), {
+    ownerId, authorName: source.ownerName,
+    planet: { id: source.id, name: source.name, coordinate: { ...source.coordinate } },
+    resource: 'minerals', amount: 50_000, resourcePoints: 1_000_000, hallLevel: 1,
+  }, NOW + 3);
+  assert.ok(request.ok, request.ok ? '' : request.message);
+  const home = state.planets['helion-01']!;
+  state = replacePlanetResources(replacePlanetState({ ...state, command: request.state }, 'helion-01', {
+    ...home, fleet: { ...home.fleet, ships: { ...home.fleet.ships, 'mega-transporter': 20 } },
+  }), 'helion-01', { metal: 500_000, minerals: 500_000, gas: 500_000 });
+
+  const sent = dispatchFlight(state, helpCommand('to-bot', request.requestId, { 'mega-transporter': 2 }, { minerals: 30_000 }, { departedAt: NOW + 10 }), { now: NOW + 10, mode: 'production' });
+  assert.ok(sent.ok, sent.ok ? '' : sent.error.message);
+  const before = sent.state.espionage!.targets![source.id]!.resources.minerals;
+  const arrived = reconcileFlights(sent.state, sent.flight.arrivalAt, undefined, { mode: 'production' });
+  const flight = arrived.state.flights.records.find((record) => record.id === sent.flight.id)!;
+  assert.equal(flight.cargoState, 'delivered');
+  assert.equal(flight.aid?.creditedUnits, 30_000);
+  assert.equal(selectRequestById(arrived.state.command, request.requestId)?.delivered, 30_000);
+  assert.equal(arrived.state.espionage!.targets![source.id]!.resources.minerals, Math.min(before + 30_000, getStorageCapacities(source.buildings as Parameters<typeof getStorageCapacities>[0]).minerals));
+  const member = arrived.state.command.alliances[0]!.members.find((item) => item.ownerId === state.profile.playerId)!;
+  assert.equal(member.deliveredUnits, 30_000, 'the sender contribution shows the aid');
 });

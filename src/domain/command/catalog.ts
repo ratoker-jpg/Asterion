@@ -10,12 +10,23 @@ export const LEADER_ABSENCE_MS = 24 * 60 * 60 * 1000;
 export const ACTIVITY_TOUCH_INTERVAL_MS = 10 * 60 * 1000;
 export const MAX_RESOLVED_APPLICATIONS = 100;
 /**
- * Deputy eligibility (owner request 05.11.2026; the numbers are PROPOSED, they need the owner's word): a member
- * becomes deputy only after this long in the alliance AND after delivering this many units of aid. One rule for
- * the player and the bots, leader's choice among the eligible.
+ * Deputy rules (owner request 09.11.2026; every number here is PROPOSED, balance is the owner's call).
+ * One deputy per alliance, as before. A deputy is named as soon as the alliance has `DEPUTY_MIN_MEMBERS` members
+ * and the candidate has been in it for `DEPUTY_MIN_TENURE_MS`; later the post is re-checked every
+ * `DEPUTY_REPICK_INTERVAL_MS`: a challenger whose rank beats the sitting deputy's by `DEPUTY_SWITCH_MARGIN` takes it.
+ * Rank = `DEPUTY_WEIGHT_CONTRIBUTION` * (aid delivered / best in the alliance) + `DEPUTY_WEIGHT_POINTS` * (points /
+ * best in the alliance). One rule for the player and the bots.
  */
-export const DEPUTY_MIN_TENURE_MS = 48 * 60 * 60 * 1000;
-export const DEPUTY_MIN_DELIVERED_UNITS = 5_000;
+export const DEPUTY_MIN_MEMBERS = 3;
+export const DEPUTY_MIN_TENURE_MS = 30 * 60 * 1000;
+export const DEPUTY_MIN_DELIVERED_UNITS = 0;
+export const DEPUTY_REPICK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+export const DEPUTY_SWITCH_MARGIN = 1.25;
+export const DEPUTY_WEIGHT_CONTRIBUTION = 0.6;
+export const DEPUTY_WEIGHT_POINTS = 0.4;
+/** How eagerly a bot leader acts on it: the first appointment is urgent, a re-pick is a routine matter. */
+export const DEPUTY_APPOINT_WEIGHT = 0.9;
+export const DEPUTY_REPICK_WEIGHT = 0.5;
 /** Leavers remembered in the save: a bounded list, the oldest drop first. */
 export const MAX_DEPARTURES = 40;
 

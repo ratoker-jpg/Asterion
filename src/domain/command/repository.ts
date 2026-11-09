@@ -243,6 +243,7 @@ function parseAlliance(value: unknown, mode: RuntimeMode): AllianceRecord | null
     leaderOwnerId: requestedLeader,
     deputyOwnerId: requestedDeputy,
     leaderSince: nonNegativeNumber(value.leaderSince, createdAt),
+    ...(requestedDeputy && typeof value.deputySince === 'number' && Number.isFinite(value.deputySince) ? { deputySince: Math.max(0, value.deputySince) } : {}),
     members,
     ...(fixtureId ? { fixtureId } : {}),
   };
@@ -270,7 +271,8 @@ function repairAlliance(alliance: AllianceRecord): AllianceRecord | null {
     const rest = members.filter((member) => !protectedIds.has(member.ownerId)).sort((left, right) => left.joinedAt - right.joinedAt);
     members = [...members.filter((member) => protectedIds.has(member.ownerId)), ...rest].slice(0, MAX_ALLIANCE_MEMBERS);
   }
-  return { ...alliance, members, leaderOwnerId: leaderId, deputyOwnerId: deputyId };
+  const { deputySince, ...rest } = alliance;
+  return { ...rest, ...(deputyId && deputySince !== undefined ? { deputySince } : {}), members, leaderOwnerId: leaderId, deputyOwnerId: deputyId };
 }
 
 function parseApplication(value: unknown): AllianceApplication | null {

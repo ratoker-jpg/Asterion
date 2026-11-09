@@ -125,6 +125,8 @@ export type AllianceRecord = {
   leaderOwnerId: string;
   /** At most one deputy; always a member who is not the leader. */
   deputyOwnerId: string | null;
+  /** When the sitting deputy took the post; absent on older saves (then a re-pick may happen at once). */
+  deputySince?: number;
   /** When the current leader took the role; absence is measured from the later of this and their last activity. */
   leaderSince: number;
   members: AllianceMember[];
