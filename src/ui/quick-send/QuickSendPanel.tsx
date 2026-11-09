@@ -148,8 +148,10 @@ export function QuickSendPanel({ state, actionId, target, onSend, onClose, onDet
   const rank = (planetId: string) => { const at = waveOrder.indexOf(planetId); return at < 0 ? Number.MAX_SAFE_INTEGER : at; };
   const checked = legs.filter((leg) => leg.draft.checked).sort((a, b) => rank(a.planetId) - rank(b.planetId));
   // Two or more legs fly as waves: the game slows the later ones so each lands a second after the one before.
-  const waves = multi && checked.length > 1 && checked.every((leg) => leg.flight && leg.plan.command)
-    ? planWaveSpeeds(state, checked.map((leg) => leg.plan.command!), quickRuntimeNow())
+  // Legs the runtime refuses take no wave (they block Send with their own reason).
+  const flying = checked.filter((leg) => leg.flight && leg.plan.command);
+  const waves = multi && flying.length > 1
+    ? planWaveSpeeds(state, flying.map((leg) => leg.plan.command!), quickRuntimeNow())
     : null;
   const waveOf = (planetId: string) => waves?.legs.find((leg) => leg.originPlanetId === planetId);
   // Each leg takes one flight slot (the «Компьютерные системы» limit).
@@ -185,7 +187,7 @@ export function QuickSendPanel({ state, actionId, target, onSend, onClose, onDet
   };
   // Moves a checked leg one wave earlier (-1) or later (+1) among the checked legs.
   const moveWave = (planetId: string, step: -1 | 1) => setWaveOrder((order) => {
-    const ids = checked.map((leg) => leg.planetId);
+    const ids = (waves?.legs ?? []).map((leg) => leg.originPlanetId);
     const from = ids.indexOf(planetId);
     const to = from + step;
     if (from < 0 || to < 0 || to >= ids.length) return order;
@@ -259,7 +261,8 @@ export function QuickSendPanel({ state, actionId, target, onSend, onClose, onDet
           <small>{multi ? 'Откуда · можно несколько планет' : 'Откуда'}</small>
           {legs.map(({ planetId, draft, plan, flight }, index) => {
             const wave = waveOf(planetId);
-            const waveIndex = checked.findIndex((leg) => leg.planetId === planetId);
+            const waveIndex = waves ? waves.legs.findIndex((leg) => leg.originPlanetId === planetId) : -1;
+            const waveCount = waves?.legs.length ?? 0;
             const shownDuration = wave?.oneWayDurationMs ?? flight?.oneWayDurationMs;
             const shownArrival = wave?.arrivalAt ?? flight?.arrivalAt;
             const free = getAvailableFleetForPlanet(state, planetId).ships;
@@ -311,9 +314,9 @@ export function QuickSendPanel({ state, actionId, target, onSend, onClose, onDet
                     </ul>
                     {waves && waveIndex >= 0 ? (
                       <div className="quick-send__wave" data-qa-quick-wave={waveIndex + 1}>
-                        <small>Волна {waveIndex + 1} из {checked.length}</small>
+                        <small>Волна {waveIndex + 1} из {waveCount}</small>
                         <button type="button" className="quick-send__reset" onClick={() => moveWave(planetId, -1)} disabled={waveIndex === 0} data-qa-quick-wave-earlier>‹ Раньше</button>
-                        <button type="button" className="quick-send__reset" onClick={() => moveWave(planetId, 1)} disabled={waveIndex === checked.length - 1} data-qa-quick-wave-later>Позже ›</button>
+                        <button type="button" className="quick-send__reset" onClick={() => moveWave(planetId, 1)} disabled={waveIndex === waveCount - 1} data-qa-quick-wave-later>Позже ›</button>
                       </div>
                     ) : null}
                     {flight ? (
@@ -341,7 +344,7 @@ export function QuickSendPanel({ state, actionId, target, onSend, onClose, onDet
       {legs.length === 0 && emptyAdvice ? null : <>
       <dl className="quick-send__route" data-qa-quick-route={ready ? 'ok' : 'off'}>
         <div><dt>{checked.length > 1 ? 'Прибытие' : 'В пути'}</dt><dd>{arrivals.length === 0 ? '—' : checked.length > 1 ? (spread > 0 ? `${clock.format(Math.min(...arrivals))}–${clock.format(Math.max(...arrivals))}` : clock.format(arrivals[0]!)) : checked[0]?.flight ? flightDurationLabel(checked[0].flight.oneWayDurationMs) : '—'}</dd></div>
-        <div><dt>{checked.length > 1 ? 'Волны' : 'Прибытие'}</dt><dd>{arrivals.length === 0 ? '—' : checked.length > 1 ? `${checked.length} · за ${flightDurationLabel(spread)}` : clock.format(arrivals[0]!)}</dd></div>
+        <div><dt>{checked.length > 1 ? 'Волны' : 'Прибытие'}</dt><dd>{arrivals.length === 0 ? '—' : checked.length > 1 ? (waves ? `${waves.legs.length} · за ${flightDurationLabel(spread)}` : spread > 0 ? flightDurationLabel(spread) : 'одновременно') : clock.format(arrivals[0]!)}</dd></div>
         <div><dt>Газ</dt><dd>{arrivals.length ? number.format(gas) : '—'}</dd></div>
       </dl>
 

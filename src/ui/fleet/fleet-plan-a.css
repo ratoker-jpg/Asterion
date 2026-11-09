@@ -356,9 +356,9 @@ html body .flight-briefing-v2 [data-qa-flight-source-step] .game-select__trigger
 
 /* ---------- «Скорость полёта» in the bottom bar ---------- */
 html body .flight-briefing-v2 .fa-plan-speed{flex:0 0 400px;min-width:0}
-html body .flight-briefing-v2 .fa-plan-speed .flight-speed{grid-template-columns:auto minmax(150px,1fr) 150px;gap:4px 18px}
+html body .flight-briefing-v2 .fa-plan-speed .flight-speed{gap:6px 18px}
 html body .flight-briefing-v2 .fa-plan-speed .flight-speed>small{color:var(--pm);font-size:17px !important;letter-spacing:0;text-transform:none;font-weight:600}
-html body .flight-briefing-v2 .fa-plan-speed .flight-speed__value{font-size:34px !important}
+html body .flight-briefing-v2 .fa-plan-speed .flight-speed__value{font-size:28px !important}
 html body .flight-briefing-v2 .fa-plan-speed .flight-speed__time{font-size:16px !important}
 html body .flight-briefing-v2 .fa-plan-speed .amount-slider--compact{grid-template-columns:40px minmax(0,1fr) 40px}
 html body .flight-briefing-v2 .fa-plan-speed .amount-slider--compact>button{height:40px;font-size:22px !important}

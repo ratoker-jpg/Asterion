@@ -572,7 +572,7 @@ export type WaveLeg = {
 
 export type WavePlan =
   | { ok: true; legs: WaveLeg[] }
-  /** `wave` cannot be slowed enough (even 10%) to land after the previous one. */
+  /** `wave` cannot be slowed enough (even 10%) to land after the previous one; every leg is still planned (that one at 10%). */
   | { ok: false; legs: WaveLeg[]; wave: number; originPlanetId: string; message: string };
 
 /**
@@ -581,11 +581,11 @@ export type WavePlan =
  * one second after the previous wave, otherwise it is slowed (1% steps) just
  * enough to do so. All legs leave at the same moment, so the arrival order is
  * fixed by the speeds alone and the runtime stores each speed in its flight.
- * `commands` must already be previewable; legs the runtime refuses are skipped
- * and keep no place in the order.
+ * Legs the runtime refuses are skipped and keep no place in the order.
  */
 export function planWaveSpeeds(state: SaveState, commands: readonly DispatchFlightCommand[], runtime: QuickRuntime): WavePlan {
   const legs: WaveLeg[] = [];
+  let failure: { wave: number; originPlanetId: string } | null = null;
   let previousArrival: number | null = null;
   for (const command of commands) {
     const chosenPercent = normalizeFlightSpeedPercent(command.speedPercent);
@@ -594,19 +594,16 @@ export function planWaveSpeeds(state: SaveState, commands: readonly DispatchFlig
     const departedAt = full.flight.departedAt;
     const fullDuration = full.flight.oneWayDurationMs;
     const needed = previousArrival === null ? 0 : previousArrival + WAVE_GAP_MS - departedAt;
-    const percent = slowestNeededSpeedPercent(fullDuration, needed, chosenPercent);
     const originPlanetId = command.originPlanetId ?? state.currentPlanetId;
-    if (percent === null) {
-      const duration = applyFlightSpeedPercent(fullDuration, MIN_FLIGHT_SPEED_PERCENT);
-      legs.push({ originPlanetId, wave: legs.length + 1, chosenPercent, speedPercent: MIN_FLIGHT_SPEED_PERCENT, oneWayDurationMs: duration,
-        arrivalAt: departedAt + duration, command: { ...command, speedPercent: MIN_FLIGHT_SPEED_PERCENT } });
-      return { ok: false, legs, wave: legs.length, originPlanetId,
-        message: `Волна ${legs.length} прилетит раньше волны ${legs.length - 1} даже на самой малой скорости. Поменяйте порядок волн.` };
-    }
+    const fitting = slowestNeededSpeedPercent(fullDuration, needed, chosenPercent);
+    if (fitting === null) failure ??= { wave: legs.length + 1, originPlanetId };
+    const percent = fitting ?? MIN_FLIGHT_SPEED_PERCENT;
     const duration = applyFlightSpeedPercent(fullDuration, percent);
     legs.push({ originPlanetId, wave: legs.length + 1, chosenPercent, speedPercent: percent, oneWayDurationMs: duration,
-      arrivalAt: departedAt + duration, command: { ...command, speedPercent: percent } });
-    previousArrival = departedAt + duration;
+      arrivalAt: departedAt + duration, command: percent < MAX_FLIGHT_SPEED_PERCENT ? { ...command, speedPercent: percent } : { ...command, speedPercent: undefined } });
+    previousArrival = Math.max(previousArrival ?? 0, departedAt + duration);
   }
-  return { ok: true, legs };
+  return failure
+    ? { ok: false, legs, ...failure, message: `Волна ${failure.wave} прилетит раньше волны ${failure.wave - 1} даже на самой малой скорости. Поменяйте порядок волн.` }
+    : { ok: true, legs };
 }
