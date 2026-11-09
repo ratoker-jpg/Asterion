@@ -236,6 +236,7 @@ import {
 import { getOwnerShipUpgradeLevels, getPlanetResources, type PlanetId, type SaveState } from './application/contracts.ts';
 import { selectOwnedPlanet } from './application/owned-planets.ts';
 import { sendQuickLegs, type QuickLegOutcome } from './application/quick-actions.ts';
+import { AidQuickSend } from './ui/command/AidQuickSend.tsx';
 import type { TargetRelation } from './domain/flights/types.ts';
 import { materializePirateProfiles, pirateContactOperation, pirateOperationId, selectOwnedPiratePresentations, selectOwnedPirateTargets, selectPirateContacts } from './application/pirate-presentation.ts';
 import { selectExplorationTargets, getExplorationTarget, explorationTargetStatus, selectExplorationOperations, planExplorationAttackLaunch } from './application/exploration.ts';
@@ -2463,6 +2464,16 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     else setNotice(`Отправлено флотов: ${sent.length}.`);
     return outcomes;
   };
+  /** Quick «Помочь» → «Полный план»: the fleet window for this request, from the planet chosen in the quick window. */
+  const openAidDetails = (requestId: string, originPlanetId: string | null) => {
+    if (originPlanetId && originPlanetId !== stateRef.current.currentPlanetId && stateRef.current.planets[originPlanetId]) {
+      const next = selectOwnedPlanet(stateRef.current, originPlanetId);
+      stateRef.current = next;
+      setState(next);
+    }
+    const result = openAidLaunch(requestId);
+    if (!result.ok) setNotice(result.message, 'error');
+  };
   /** Quick panel «Подробно»: select the source planet, then open the fleet screen prefilled. */
   const openQuickDetails = (context: FlightLaunchContext, originPlanetId: string | null) => {
     if (originPlanetId && originPlanetId !== stateRef.current.currentPlanetId && stateRef.current.planets[originPlanetId]) {
@@ -3162,6 +3173,10 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               aid={selectAidOverview(state, { now, mode: RUNTIME_MODE, testTimeScale })}
               now={now}
               actions={commandActions}
+              quickHelp={(requestId, anchor, onClose) => (
+                <AidQuickSend state={state} requestId={requestId} anchor={anchor} onClose={onClose} onSend={sendQuickFlights}
+                  onDetails={(originPlanetId) => openAidDetails(requestId, originPlanetId)} />
+              )}
               operationsAlertCount={sunAlerts.length}
               focusTab={commandFocus}
               operationsPanel={(
