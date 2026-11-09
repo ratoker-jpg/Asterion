@@ -327,10 +327,11 @@ test('revenge: fear of an offender with a deep grudge looks for a partner instea
   const world = sevenPlanetWorld('npc-revenge-fear');
   const profile = world.state.npc!.profiles[world.owner]!;
   const timid = { ...profile, traits: { ...profile.traits, aggression: 0.3, riskTolerance: 0.5, planningHorizon: 0.5, economyFocus: 0.3, cooperation: 0.5, socialStyle: 0.5 } };
-  const scared = chooseNpcRobberyReaction(timid, { grudge: 1, fearOfOffender: 1, bestFriend: 0 }, START);
-  assert.equal(scared, 'seek-partner', 'fear and grudge together make the owner look for allies');
-  const fearOnly = chooseNpcRobberyReaction(timid, { grudge: 0, fearOfOffender: 1, bestFriend: 0 }, START);
-  assert.notEqual(fearOnly, 'seek-partner', 'fear without a grudge changes nothing');
+  // The choice has a seeded doubt (a profile's private seed is random per campaign): judge it over many seeds, not one.
+  const seeds = Array.from({ length: 60 }, (_, index) => ({ ...timid, privateSeed: `revenge-fear-${index}` }));
+  const kinds = (grudge: number) => seeds.map((seeded, index) => chooseNpcRobberyReaction(seeded, { grudge, fearOfOffender: 1, bestFriend: 0 }, START + index * 7 * 3_600_000));
+  assert.ok(kinds(1).every((kind) => kind === 'seek-partner'), 'fear and grudge together always make the owner look for allies');
+  assert.ok(kinds(0).filter((kind) => kind === 'seek-partner').length < 60, 'fear without a grudge gets no such push');
 });
 
 test('revenge: the journal says why the bot does not strike its offender', () => {
