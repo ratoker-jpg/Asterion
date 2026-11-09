@@ -19,6 +19,7 @@ import {
   type AidShipId,
   type AidShips,
 } from '../../application/aid-quick-send.ts';
+import { FlightSpeedControl } from '../flight-speed/FlightSpeedControl.tsx';
 import { AmountSlider } from '../AmountSlider.tsx';
 import { ResourceIcon } from '../resources/ResourceIcon.tsx';
 import { flightDurationLabel, quickRuntimeNow } from '../quick-send/QuickSendPanel.tsx';
@@ -78,6 +79,7 @@ export function AidQuickSend({ state, requestId, anchor, onClose, onSend, onDeta
   });
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [speedPercent, setSpeedPercent] = useState(100);
   const [placement, setPlacement] = useState<ReturnType<typeof place> | null>(null);
 
   const reposition = () => {
@@ -158,7 +160,8 @@ export function AidQuickSend({ state, requestId, anchor, onClose, onSend, onDeta
   const amountMax = source ? Math.max(0, Math.min(remainder, source.stock, capacity)) : 0;
   const amount = Math.min(draft.amount, amountMax);
   const hullCount = Object.values(ships).reduce((total, count) => total + (count ?? 0), 0);
-  const command = source && hullCount > 0 && amount > 0 ? buildAidQuickCommand(request, source.planetId, ships, amount, runtime) : null;
+  const withSpeed = (built: DispatchFlightCommand): DispatchFlightCommand => (speedPercent < 100 ? { ...built, speedPercent } : built);
+  const command = source && hullCount > 0 && amount > 0 ? withSpeed(buildAidQuickCommand(request, source.planetId, ships, amount, runtime)) : null;
   const preview = command ? previewAidQuick(state, command, runtime) : null;
   const flight = preview?.ok ? preview.flight : null;
   const need = source ? Math.min(remainder, source.stock) : remainder;
@@ -200,7 +203,7 @@ export function AidQuickSend({ state, requestId, anchor, onClose, onSend, onDeta
   const send = () => {
     if (!command || blocker || sending) return;
     setSending(true);
-    const fresh = buildAidQuickCommand(request, command.originPlanetId!, ships, amount, quickRuntimeNow());
+    const fresh = withSpeed(buildAidQuickCommand(request, command.originPlanetId!, ships, amount, quickRuntimeNow()));
     const [outcome] = onSend([fresh]);
     setSending(false);
     if (outcome?.result.ok) { onClose(); return; }
@@ -255,6 +258,8 @@ export function AidQuickSend({ state, requestId, anchor, onClose, onSend, onDeta
                       <AmountSlider compact value={amount} max={amountMax} label={`${resourceLabel}: сколько отправить`} onChange={setAmount} />
                     </li>
                   </ul>
+                  {flight ? <FlightSpeedControl value={speedPercent} onChange={(value) => { setSendError(null); setSpeedPercent(value); }} qa="aid" label="Скорость"
+                    duration={flightDurationLabel(flight.oneWayDurationMs)} /> : null}
                   <div className="quick-send__leg-tools">
                     <button type="button" className="quick-send__reset aid-quick__fit" onClick={fit} data-qa-aid-quick-fit>Под запрос</button>
                     <span className="aid-quick__hold">Трюм {number.format(capacity)}</span>

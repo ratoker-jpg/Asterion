@@ -6,6 +6,7 @@
 import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
 import type { ShipId } from '../domain/combat/ids.ts';
 import { getFleetCargoCapacity } from '../domain/flights/cargo.ts';
+import { slowestNeededSpeedPercent } from '../domain/flights/speed.ts';
 import type { FlightRecord } from '../domain/flights/types.ts';
 import type { SpyReportSnapshot, SpyTargetState } from '../domain/espionage/types.ts';
 import type { SaveState } from './contracts.ts';
@@ -15,8 +16,13 @@ import { withoutNpcPlanReserve } from './npc-plan-reserve.ts';
 import { withoutNpcSunPrepHold } from './npc-sun-prep-state.ts';
 
 const SECOND = 1_000;
-/** The cargo wave lands no sooner than the combat wave. On the same millisecond the battle fleet is resolved first (its flight id sorts first), so a near target, where every flight takes the minimum time, still works. */
-export const LOOT_WAVE_MIN_GAP_MS = 0;
+/**
+ * The cargo wave lands at least one second after the combat wave (owner report 09.11.2026: holds that landed in the same
+ * second as the battle fleet, or before it, crashed into the defence). A wave that would come too early is slowed down
+ * (its flight speed is lowered in 1% steps) until it lands one second behind; a near target, where every flight takes
+ * the minimum time, therefore still gets its cargo.
+ */
+export const LOOT_WAVE_MIN_GAP_MS = SECOND;
 /** How long behind the combat wave the cargo may land: a planet whose owner is looking is emptied fast, so the gap is short then. */
 export const LOOT_WAVE_MAX_GAP_ONLINE_MS = 2 * 60 * SECOND;
 export const LOOT_WAVE_MAX_GAP_AWAY_MS = 8 * 60 * SECOND;
@@ -90,10 +96,18 @@ export function dispatchNpcLootWaves(state: SaveState, command: NpcMissionDispat
       const picked = holdsFor(planet.raceId, free, need);
       const cargo = holdCapacity(planet.raceId, picked);
       if (cargo <= 0) continue;
-      const cmd: NpcMissionDispatchCommand = { ...command, originPlanetId: planet.id, requestId: `${command.requestId}:wave:${planet.id}`,
+      let cmd: NpcMissionDispatchCommand = { ...command, originPlanetId: planet.id, requestId: `${command.requestId}:wave:${planet.id}`,
         selectedShips: picked as Partial<Record<ShipId, number>>, selectedCommanders: undefined, attackPriority: undefined };
-      const trial = dispatchNpcMission(current, cmd, at, timeScale);
+      let trial = dispatchNpcMission(current, cmd, at, timeScale);
       if (!trial.ok || !trial.flight) continue;
+      if (trial.flight.arrivalAt - combat.arrivalAt < LOOT_WAVE_MIN_GAP_MS) {
+        // Too fast: fly slower so the holds land just behind the guns.
+        const percent = slowestNeededSpeedPercent(trial.flight.oneWayDurationMs, combat.arrivalAt + LOOT_WAVE_MIN_GAP_MS - at);
+        if (percent === null) continue;
+        cmd = { ...cmd, speedPercent: percent };
+        trial = dispatchNpcMission(current, cmd, at, timeScale);
+        if (!trial.ok || !trial.flight) continue;
+      }
       const gap = trial.flight.arrivalAt - combat.arrivalAt;
       if (gap < LOOT_WAVE_MIN_GAP_MS || gap > maxGap) continue;
       // Lands soon after the opening, but the bigger hold wins a tie: the closest fit to half a minute behind.

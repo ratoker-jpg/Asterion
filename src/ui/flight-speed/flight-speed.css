@@ -1,0 +1,17 @@
+/* «Скорость полёта» (FlightSpeedControl.tsx): no frame of its own.
+   Row 1: label · chosen speed; row 2: slider · flight time. */
+.flight-speed {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "label value" "slider time";
+  align-items: center; gap: 4px 12px; min-width: 0; color: #e8f4f7; font-family: Montserrat, Arial, sans-serif;
+}
+.flight-speed > small { grid-area: label; overflow: hidden; color: #8fb6c0; font-size: 10px !important; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; white-space: nowrap; text-overflow: ellipsis; }
+.flight-speed > .amount-slider { grid-area: slider; min-width: 0; }
+.flight-speed__value {
+  grid-area: value; justify-self: end; font-size: 13px !important; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap;
+  animation: flight-speed-tick 220ms cubic-bezier(.23, 1, .32, 1) both;
+}
+.flight-speed__value s { margin-right: 4px; color: #7f98a0; font-weight: 600; text-decoration-thickness: 1px; }
+.flight-speed.is-slow .flight-speed__value { color: #ffb36b; }
+.flight-speed__time { grid-area: time; justify-self: end; color: #7f98a0; font-size: 11px !important; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+@keyframes flight-speed-tick { from { opacity: .4; translate: 0 -3px; } }
+@media (prefers-reduced-motion: reduce) { .flight-speed__value { animation: none; } }

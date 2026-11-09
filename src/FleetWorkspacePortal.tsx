@@ -55,6 +55,8 @@ import {
   resolveTransportTarget,
   resolveRecycleTargetKindAtCoordinate,
   previewFlight,
+  applyPreviewSpeed,
+  fullSpeedCommand,
   getShipsAwayForPlanet,
   type DispatchFlightCommand,
   type FlightCommandResult,
@@ -146,6 +148,8 @@ import {
   pickNextSourcePlanet,
   type FlightRepeatPlan,
 } from './application/flight-repeat.ts';
+import { MAX_FLIGHT_SPEED_PERCENT } from './domain/flights/speed.ts';
+import { FlightSpeedControl } from './ui/flight-speed/FlightSpeedControl.tsx';
 import { FLEET_UI_UPDATE_EVENT, isFavoriteTarget, type FleetFavoriteTarget, type FleetUiUpdate } from './domain/flights/fleet-ui.ts';
 
 function queueKindForConstructionView(view: ConstructionView): FleetProductionQueueKind | null {
@@ -419,7 +423,15 @@ function FleetWorkspace({
   const [constructionView, setConstructionView] = useState<ConstructionView>(null);
   const [status, setStatus] = useState(FLEET_ROOT_STATUS);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewResult, setPreviewResult] = useState<FlightCommandResult | null>(null);
+  const [previewResultRaw, setPreviewResult] = useState<FlightCommandResult | null>(null);
+  // «Скорость полёта»: 100% by default, down to 10%. Space Flight and Sun raids keep their own timing.
+  const [speedPercent, setSpeedPercent] = useState(MAX_FLIGHT_SPEED_PERCENT);
+  const speedApplies = missionId !== 'space-flight' && missionId !== 'sun-support' && missionId !== 'sun-attack';
+  const chosenSpeed = speedApplies ? speedPercent : MAX_FLIGHT_SPEED_PERCENT;
+  const withChosenSpeed = <T extends DispatchFlightCommand | null>(command: T): T => (
+    command && chosenSpeed < MAX_FLIGHT_SPEED_PERCENT ? { ...command, speedPercent: chosenSpeed } : command);
+  // Previews are made at full speed; the chosen speed is applied last, exactly as the runtime does on Send.
+  const previewResult = useMemo(() => applyPreviewSpeed(previewResultRaw, chosenSpeed), [previewResultRaw, chosenSpeed]);
   const [previewOriginPlanetId, setPreviewOriginPlanetId] = useState<string | null>(null);
   const [previewDestination, setPreviewDestination] = useState<FlightDestination | null>(null);
   const [previewTargetRelation, setPreviewTargetRelation] = useState<TargetRelation | undefined>(undefined);
@@ -1271,21 +1283,24 @@ function FleetWorkspace({
       const runtimeState = saveState;
       const destination = previewDestination ?? launchDestination;
       if (!destination || destination.kind !== 'coordinate') return;
-      const command = createFlightCommand(requestId, {
+      const baseCommand = createFlightCommand(requestId, {
         originPlanetId: previewOriginPlanetId ?? runtimeState.currentPlanetId,
         destination,
         targetRelation: gasPreviewFlight.targetRelation ?? null,
         targetKind: 'asteroid',
         departedAt,
       }, runtimeState);
-      if (!command) return;
+      const command = withChosenSpeed(baseCommand);
+      if (!command || !baseCommand) return;
+      // The stored preview stays full-speed; the chosen speed is laid on top for display (see previewResult).
+      const fullSpeedPreview = () => previewFlight(runtimeState, fullSpeedCommand(baseCommand), { mode: ACTIVE_RUNTIME_MODE, testTimeScale: resolveTestTimeScale() });
 
       const currentCandidate = previewFlight(runtimeState, command, {
         mode: ACTIVE_RUNTIME_MODE,
         testTimeScale: resolveTestTimeScale(),
       });
       if (!currentCandidate.ok) {
-        setPreviewResult(currentCandidate);
+        setPreviewResult(fullSpeedPreview());
         setPreviewTargetError(targetErrorFromFlightResult(currentCandidate));
         setGasPreviewNeedsReconfirmation(false);
         return;
@@ -1304,7 +1319,7 @@ function FleetWorkspace({
         arrivalAsteroidPreview,
         currentAsteroidForecast,
       )) {
-        setPreviewResult(currentCandidate);
+        setPreviewResult(fullSpeedPreview());
         setPreviewTargetError(null);
         setPreviewSubmittedTargetKind('asteroid');
         setGasPreviewNeedsReconfirmation(true);
@@ -1315,14 +1330,14 @@ function FleetWorkspace({
       window.dispatchEvent(new CustomEvent(FLIGHT_DISPATCH_REQUEST_EVENT, { detail: command }));
       return;
     }
-    const command = missionId === 'recycle' && previewResult?.ok
+    const command = withChosenSpeed(missionId === 'recycle' && previewResult?.ok
       ? createFlightCommand(requestId, {
         originPlanetId: previewResult.flight.originPlanetId,
         destination: previewResult.flight.destination,
         targetRelation: previewResult.flight.targetRelation ?? null,
         targetKind: previewSubmittedTargetKind,
       })
-      : createFlightCommand(requestId, previewDestination || missionId === 'deployment' ? undefined : { destination: { kind: 'coordinate', coordinate: coordinateFromDraft(previewTargetDraft) } });
+      : createFlightCommand(requestId, previewDestination || missionId === 'deployment' ? undefined : { destination: { kind: 'coordinate', coordinate: coordinateFromDraft(previewTargetDraft) } }));
     if (!command) {
       setPreviewTargetError(missionId === 'pirate-elimination' ? 'Пиратский контакт недоступен. Выберите актуальную базу.'
         : missionId === 'expedition' ? 'Выберите свободный объект экспедиции.' : 'Проверьте параметры рейса.');
@@ -1594,7 +1609,7 @@ function FleetWorkspace({
   const estimateCoordinate = previewTargetDestination?.coordinate
     ?? (coordinateDraftError(previewTargetDraft) === null ? coordinateFromDraft(previewTargetDraft) : null);
   const routeEstimate = !previewResult?.ok && missionId !== 'space-flight' && previewSourceId && estimateCoordinate
-    ? estimateFlightRoute(saveState, previewSourceId, selectedQuantities, selectedCommanders, estimateCoordinate, { mode: ACTIVE_RUNTIME_MODE, testTimeScale: resolveTestTimeScale() })
+    ? estimateFlightRoute(saveState, previewSourceId, selectedQuantities, selectedCommanders, estimateCoordinate, { mode: ACTIVE_RUNTIME_MODE, testTimeScale: resolveTestTimeScale(), speedPercent: chosenSpeed })
     : null;
   /** Missions with the cargo editor keep the summary to one line: the editor must stay on screen. */
   const compactSummary = missionId === 'transport' || missionId === 'aid' || missionId === 'space-flight';
@@ -1721,7 +1736,7 @@ function FleetWorkspace({
     ? transportTargetOptions.filter((target) => !(missionId === 'deployment' && target.blocked)).slice(0, 4).map((target) => ({
       target,
       art: planetSkinMapArt(planState.planets[target.id]?.skin) ?? planetSkins[0].art,
-      estimate: estimateFlightRoute(saveState, planSourceId, selectedQuantities, selectedCommanders, target.coordinate, { mode: ACTIVE_RUNTIME_MODE, testTimeScale: resolveTestTimeScale() }),
+      estimate: estimateFlightRoute(saveState, planSourceId, selectedQuantities, selectedCommanders, target.coordinate, { mode: ACTIVE_RUNTIME_MODE, testTimeScale: resolveTestTimeScale(), speedPercent: chosenSpeed }),
     }))
     : [];
 
@@ -2367,6 +2382,12 @@ function FleetWorkspace({
                     <footer className="flight-composition-v3__total" data-qa-flight-composition-total><span>ИТОГО</span><b>{flightNumberLabel(draftFleetStats.count)} {shipCountLabel(draftFleetStats.count)}</b><span>население {flightNumberLabel(selectedPopulation)}</span><span>{holdLabel.toLowerCase()} {flightNumberLabel(previewHoldCapacity)}</span></footer>
                     </div>
               </section>
+              {speedApplies ? (
+                <section className="fa-plan-speed" aria-label="Скорость полёта">
+                  <FlightSpeedControl value={speedPercent} onChange={setSpeedPercent} qa="fleet-plan"
+                    duration={planTiming ? `в пути ${flightDurationLabel(planTiming.oneWayMs)}` : null} />
+                </section>
+              ) : null}
               <section className="flight-timeline-summary" aria-live="polite">
                 <div className="flight-timeline-summary-head">
                   <small>ПАРАМЕТРЫ ПЕРЕЛЁТА</small>

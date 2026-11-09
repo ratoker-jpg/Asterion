@@ -353,3 +353,16 @@ html body .flight-briefing-v2 .fa-route__asteroid.is-miss b{color:#ffc14d}
 html body .flight-briefing-v2 .fa-route__asteroid.is-unknown b{color:var(--pm)}
 html body .flight-briefing-v2 .fa-route__asteroid span{font-size:16px !important;color:var(--pm)}
 html body .flight-briefing-v2 [data-qa-flight-source-step] .game-select__trigger i{position:static !important;inset:auto !important;flex:none;margin-left:2px}
+
+/* ---------- «Скорость полёта» under the fleet ---------- */
+html body .flight-briefing-v2 .fa-plan-speed{max-width:560px;margin:18px 0 26px}
+html body .flight-briefing-v2 .fa-plan-speed .flight-speed{gap:8px 18px}
+html body .flight-briefing-v2 .fa-plan-speed .flight-speed>small{color:var(--pm);font-size:17px !important;letter-spacing:0;text-transform:none;font-weight:600}
+html body .flight-briefing-v2 .fa-plan-speed .flight-speed__value{font-size:28px !important}
+html body .flight-briefing-v2 .fa-plan-speed .flight-speed__time{font-size:17px !important}
+html body .flight-briefing-v2 .fa-plan-speed .amount-slider--compact{grid-template-columns:40px minmax(0,1fr) 40px;gap:10px}
+html body .flight-briefing-v2 .fa-plan-speed .amount-slider--compact>button{
+  width:40px;min-width:0;height:40px !important;padding:0 !important;border:1px solid rgba(126,200,220,.3) !important;border-radius:10px !important;
+  background:rgba(86,217,242,.06) !important;color:#e8f4f7 !important;box-shadow:none !important;font-size:22px !important;
+}
+html body .flight-briefing-v2 .fa-plan-speed .flight-speed.is-slow .flight-speed__value{color:#ffc14d}

@@ -18,7 +18,10 @@ import { settleNpcFleetProduction } from './npc-fleet-production.ts';
 import { createNpcUtilityContext } from './npc-utility.ts';
 import { getNpcMissionCandidates } from './npc-mission-policy.ts';
 import { getNpcMissionAvailableFleet } from './npc-missions.ts';
-import { draftNpcStrike, getNpcPlanChoices, refreshNpcPlans } from './npc-plans.ts';
+import { draftNpcStrike, getNpcPlanChoices, journalNpcRevengeFunnel, npcRevengeRefusal, refreshNpcPlans } from './npc-plans.ts';
+import { recordNpcGrievance } from '../domain/npc/grudges.ts';
+import { chooseNpcRobberyReaction } from './npc-pacts.ts';
+import { NPC_REVENGE_BALANCE, npcRevengeWinBar } from './npc-utility.ts';
 import { npcPlanReservedShips, withoutNpcPlanReserve } from './npc-plan-reserve.ts';
 import { NpcJournalRecorder, setNpcJournalSink } from './npc-journal.ts';
 import type { SaveState } from './contracts.ts';
@@ -249,4 +252,115 @@ test('a force lost at the rally planet cancels the plan instead of sending what 
   assert.equal(plan.status, 'cancelled');
   assert.equal(plan.reason, 'force-lost');
   assert.equal(steps.filter((step) => step === 'plan:launch').length, 0, 'no attack with the remains');
+});
+
+/** The same world with the owner holding a deep grudge against the neighbour, and the neighbour's stores empty so a strike cannot pay. */
+function revengeWorld(seed: string, options: { empty?: boolean; defence?: number; grudge?: boolean } = {}): World {
+  const world = sevenPlanetWorld(seed, options.defence ?? 10);
+  let state = world.state;
+  const victim = getEspionageTargets(state.espionage)[world.target]!;
+  if (options.empty ?? true) {
+    const bare = { ...victim, resources: { ...victim.resources, metal: 0, minerals: 0, gas: 0 } } as SpyTargetState;
+    state = { ...state, espionage: { ...state.espionage!, targets: { ...getEspionageTargets(state.espionage), [victim.id]: bare },
+      reports: state.espionage!.reports.map((report) => report.targetPlanetId === victim.id ? { ...report, resources: { ...report.resources, metal: 0, minerals: 0, gas: 0 } } : report) } };
+  }
+  if (options.grudge ?? true) {
+    const profile = state.npc!.profiles[world.owner]!;
+    const day = createNpcUtilityContext(state, profile, START, 1).dayValue;
+    const angry = [1, 2, 3].reduce((acc, index) => recordNpcGrievance(acc, victim.ownerId, 5 * day, START - index * 60 * MINUTE, `revenge-test-${index}`), profile);
+    state = { ...state, npc: { ...state.npc!, profiles: { ...state.npc!.profiles, [world.owner]: angry } } };
+  }
+  return { ...world, state };
+}
+
+const draftOf = (world: World, at = START + MINUTE) => {
+  const profile = world.state.npc!.profiles[world.owner]!;
+  return draftNpcStrike(world.state, profile, createNpcUtilityContext(world.state, profile, at, 1), at, 1);
+};
+
+test('revenge: the win belief an attack needs falls with the grudge on the offender only', () => {
+  const base = 0.75;
+  assert.equal(npcRevengeWinBar(base, 0), base, 'no grudge, no change for a plan margin');
+  assert.equal(npcRevengeWinBar(0, 0, 0.5), 0.5, 'no grudge, even odds as ever');
+  const full = npcRevengeWinBar(base, 1, 0.5);
+  assert.ok(full >= 0.25 && full <= 0.3 + 1e-9, `a full grudge asks about 0.25 to 0.30, got ${full}`);
+  assert.ok(npcRevengeWinBar(base, 0.5, 0.5) > full, 'it scales with the grudge');
+  assert.ok(NPC_REVENGE_BALANCE.strikeMinGrudge > 0);
+});
+
+test('revenge: a strike that loses by its own estimate is allowed only against the offender', () => {
+  const calm = revengeWorld('npc-revenge-calm', { grudge: false });
+  assert.equal(draftOf(calm), null, 'against a stranger a losing strike is not planned (owner rule 04.11.2026)');
+  const angry = revengeWorld('npc-revenge-calm', { grudge: true });
+  const draft = draftOf(angry);
+  assert.ok(draft, 'against the offender the revenge pays for what the strike costs');
+  assert.ok(draft.plan.worth!.econ < 0, 'the strike loses resources by its own estimate');
+  assert.equal(draft.plan.conscious, 'revenge');
+  // A grudge against someone else does not open the door for this target.
+  const other = angry.state.npc!.profiles[angry.owner]!;
+  const elsewhere = { ...other, grudges: { 'someone-else': Object.values(other.grudges!)[0]! } };
+  const moved = { ...angry, state: { ...angry.state, npc: { ...angry.state.npc!, profiles: { ...angry.state.npc!.profiles, [angry.owner]: elsewhere } } } };
+  assert.equal(draftOf(moved), null);
+});
+
+test('revenge: the whole empire gathers at the own planet nearest the target and one fleet strikes', () => {
+  const world = revengeWorld('npc-revenge-gather');
+  const draft = draftOf(world);
+  assert.ok(draft);
+  const targets = getEspionageTargets(world.state.espionage);
+  const target = targets[world.target]!;
+  const spread = (planetId: string) => Math.abs(targets[planetId]!.coordinate.galaxy - target.coordinate.galaxy) * 1000 + Math.abs(targets[planetId]!.coordinate.system - target.coordinate.system) * 10
+    + Math.abs(targets[planetId]!.coordinate.position - target.coordinate.position);
+  const nearest = Math.min(...world.planets.map(spread));
+  assert.equal(spread(draft.plan.rallyPlanetId), nearest, 'the staging planet is the closest own planet');
+  const result = drive(world, 24 * 60);
+  const plan = plansOf(result.state, world.owner).find((item) => item.status !== 'active')!;
+  assert.equal(plan.status, 'done', `${plan.reason ?? ''}`);
+  assert.equal(result.steps.filter((step) => step === 'plan:launch').length, 1, 'one fleet is launched');
+  assert.equal(result.steps.filter((step) => step === 'plan:rally').length, 6, 'ships of all seven planets stand together first');
+  const attacks = result.state.flights.records.filter((flight) => flight.ownerId === world.owner && flight.missionId === 'attack');
+  assert.equal(attacks.length, 1);
+  assert.equal(attacks[0]!.originPlanetId, plan.rallyPlanetId);
+});
+
+test('revenge: fear of an offender with a deep grudge looks for a partner instead of doing nothing', () => {
+  const world = sevenPlanetWorld('npc-revenge-fear');
+  const profile = world.state.npc!.profiles[world.owner]!;
+  const timid = { ...profile, traits: { ...profile.traits, aggression: 0.3, riskTolerance: 0.5, planningHorizon: 0.5, economyFocus: 0.3, cooperation: 0.5, socialStyle: 0.5 } };
+  // The choice has a seeded doubt (a profile's private seed is random per campaign): judge it over many seeds, not one.
+  const seeds = Array.from({ length: 60 }, (_, index) => ({ ...timid, privateSeed: `revenge-fear-${index}` }));
+  const kinds = (grudge: number) => seeds.map((seeded, index) => chooseNpcRobberyReaction(seeded, { grudge, fearOfOffender: 1, bestFriend: 0 }, START + index * 7 * 3_600_000));
+  assert.ok(kinds(1).every((kind) => kind === 'seek-partner'), 'fear and grudge together always make the owner look for allies');
+  assert.ok(kinds(0).filter((kind) => kind === 'seek-partner').length < 60, 'fear without a grudge gets no such push');
+});
+
+test('revenge: the journal says why the bot does not strike its offender', () => {
+  const reason = (world: World, at = START + MINUTE) => {
+    const profile = world.state.npc!.profiles[world.owner]!;
+    return npcRevengeRefusal(world.state, profile, createNpcUtilityContext(world.state, profile, at, 1), getEspionageTargets(world.state.espionage)[world.target]!.ownerId, at);
+  };
+  assert.equal(reason(revengeWorld('npc-revenge-why')), 'ok', 'a strike is possible: nothing refuses it');
+  const noReport = revengeWorld('npc-revenge-why');
+  assert.equal(reason({ ...noReport, state: { ...noReport.state, espionage: { ...noReport.state.espionage!, reports: [] } } }), 'no-report');
+  assert.equal(reason(revengeWorld('npc-revenge-why'), START + 5 * 60 * MINUTE), 'stale', 'old news: spy again');
+  assert.equal(reason(revengeWorld('npc-revenge-why', { defence: 4000 })), 'power');
+  const poor = revengeWorld('npc-revenge-why');
+  const victimOwner = getEspionageTargets(poor.state.espionage)[poor.target]!.ownerId;
+  assert.equal(reason({ ...poor, state: withAttackEligiblePoints(poor.state, [victimOwner], 90_000_000) }), 'points');
+  const planned = drive(revengeWorld('npc-revenge-why'), 6);
+  assert.equal(reason({ ...revengeWorld('npc-revenge-why'), state: planned.state }, START + 7 * 60 * MINUTE), 'gathering');
+  // Written to the journal as `r`.
+  const world = revengeWorld('npc-revenge-why');
+  const recorder = new NpcJournalRecorder();
+  const previous = setNpcJournalSink(recorder);
+  try {
+    const profile = world.state.npc!.profiles[world.owner]!;
+    journalNpcRevengeFunnel(world.state, profile, createNpcUtilityContext(world.state, profile, START + MINUTE, 1), START + MINUTE);
+  } finally {
+    setNpcJournalSink(previous);
+  }
+  const line = recorder.take().find((entry) => entry.k === 'revenge');
+  assert.ok(line, 'a revenge line is written');
+  assert.equal(line.r, 'ok');
+  assert.equal(line.d!.vs, getEspionageTargets(world.state.espionage)[world.target]!.ownerId);
 });

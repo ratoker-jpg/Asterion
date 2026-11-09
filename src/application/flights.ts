@@ -1,5 +1,5 @@
 import { selectOwnerAlliance, selectOwnerMembership } from '../domain/command/selectors.ts';
-import { applyRealFlightFloor } from '../domain/flights/speed.ts';
+import { MAX_FLIGHT_SPEED_PERCENT, applyFlightSpeedPercent, applyRealFlightFloor, normalizeFlightSpeedPercent } from '../domain/flights/speed.ts';
 import { dispatchSunMission, getSunDebris, parseSunOperationId, sunDebrisCoordinate } from './sun-raid.ts';
 import { COMPUTER_SYSTEMS_SCIENCE_ID, getFlightSlotUsage, isFlightLimitExempt, type FlightSlotUsage } from '../domain/flights/limit.ts';
 import {
@@ -244,6 +244,8 @@ export type DispatchFlightCommand = {
   maxRounds?: SimulatorMaxRounds;
   departedAt?: number;
   oneWayDurationMinutes?: number;
+  /** Chosen flight speed, 10–100 (default 100). Not used by Space Flight or Sun raids. */
+  speedPercent?: number;
 };
 
 export type FlightRuntimeOptions = {
@@ -731,7 +733,9 @@ function scaledRecord(record: FlightRecord, options: FlightRuntimeOptions): Flig
   const mode = options.mode ?? 'production';
   const scaled = scaleRuntimeDuration(record.oneWayDurationMs, mode, options.testTimeScale);
   // The 60 s real-time floor (3 s for probe-only recon) is a campaign rule; the test-mode accelerator stays free to go faster.
-  const duration = mode === 'test' ? scaled : applyRealFlightFloor(scaled, isReconOnlyFleet(record.selectedShips, record.selectedCommanders));
+  const floored = mode === 'test' ? scaled : applyRealFlightFloor(scaled, isReconOnlyFleet(record.selectedShips, record.selectedCommanders));
+  // The chosen speed comes last, so a slowed fleet is slower even on a floored route.
+  const duration = applyFlightSpeedPercent(floored, record.speedPercent);
   return {
     ...record,
     oneWayDurationMs: duration,
@@ -1862,6 +1866,7 @@ export function dispatchFlight(
     departedAt,
     factionId: state.profile.factionId as CombatFactionId,
     science,
+    speedPercent: command.speedPercent,
     operationId: command.missionId === 'expedition' || command.missionId === 'exploration-recon' || explorationAttackNode ? (command.contactCycleKey ?? command.operationId) : command.operationId,
     ...(explorationAttackNode ? {explorationAttack:true,explorationLaunchResourcePoints:explorationResourceScore(state)} : {}),
     ...(command.missionId === 'expedition' ? { targetPlanetName: getExplorationTarget(state, (command.contactCycleKey ?? command.operationId)!, departedAt, runtimeOptions.mode)?.name } : {}),
@@ -2208,7 +2213,7 @@ export function estimateFlightRoute(
   selectedShips: Partial<Record<ShipId, number>>,
   selectedCommanders: Partial<Record<CommanderId, number>>,
   destination: UniverseCoordinate,
-  options: FlightRuntimeOptions = {},
+  options: FlightRuntimeOptions & { speedPercent?: number } = {},
 ): { routeDistance: number; effectiveSpeed: number; oneWayDurationMs: number; gasCost: number } | null {
   const origin = state.planets[originPlanetId];
   if (!origin || !isFlightCoordinate(destination)) return null;
@@ -2227,12 +2232,36 @@ export function estimateFlightRoute(
       mode,
       options.testTimeScale,
     );
-    const oneWayDurationMs = mode === 'test' ? scaled : applyRealFlightFloor(scaled, isReconOnlyFleet(ships, selectedCommanders));
+    const oneWayDurationMs = applyFlightSpeedPercent(mode === 'test' ? scaled : applyRealFlightFloor(scaled, isReconOnlyFleet(ships, selectedCommanders)), options.speedPercent);
     const gasCost = calculateFlightFuel(factionId, ships, routeDistance, science, selectedCommanders);
     return { routeDistance, effectiveSpeed, oneWayDurationMs, gasCost };
   } catch {
     return null;
   }
+}
+
+/**
+ * The same command at full speed: what a fleet-screen preview stores, so the
+ * «Скорость полёта» slider can be laid on top for any value (see applyPreviewSpeed).
+ */
+export function fullSpeedCommand<T extends DispatchFlightCommand | null>(command: T): T {
+  if (!command || command.speedPercent === undefined) return command;
+  const { speedPercent: _dropped, ...rest } = command;
+  return rest as T;
+}
+
+/**
+ * A full-speed preview shown at the chosen speed, exactly as dispatch will
+ * time it (the percent is applied last, after the world speed and the floor).
+ * A preview that already carries a speed is returned as is: callers keep the
+ * full-speed result (fullSpeedCommand) as their baseline.
+ */
+export function applyPreviewSpeed(result: FlightCommandResult | null, speedPercent: number): FlightCommandResult | null {
+  if (!result?.ok || result.flight.speedPercent !== undefined) return result;
+  const percent = normalizeFlightSpeedPercent(speedPercent);
+  if (percent >= MAX_FLIGHT_SPEED_PERCENT) return result;
+  const oneWayDurationMs = applyFlightSpeedPercent(result.flight.oneWayDurationMs, percent);
+  return { ...result, flight: { ...result.flight, speedPercent: percent, oneWayDurationMs, arrivalAt: result.flight.departedAt + oneWayDurationMs } };
 }
 
 export function previewFlight(

@@ -463,7 +463,16 @@ test('owner 05.11.2026: a raid sends a decisive force, and the cargo follows the
     const follow = flights.find((flight) => flight.id !== sent.flight!.id)!;
     assert.equal(follow.selectedShips.cruiser, undefined, 'only holds follow');
     assert.ok((follow.selectedShips['mega-transporter'] ?? 0) > 100, 'mostly mega-transports');
-    assert.ok(follow.arrivalAt >= sent.flight!.arrivalAt, 'they land behind the battle fleet');
-    assert.ok(follow.id > sent.flight!.id, 'and on the same moment the battle fleet is resolved first');
+    assert.ok(follow.arrivalAt >= sent.flight!.arrivalAt + 1_000, 'they land at least a second behind the battle fleet');
+  }
+  {
+    // Owner 09.11.2026: holds that would land before (or with) the battle fleet are slowed to land a second behind it.
+    const lateCombat = { ...sent.flight!, arrivalAt: sent.flight!.arrivalAt + 60_000 };
+    const slowed = dispatchNpcLootWaves(sent.state, command, lateCombat, bold.report, false, START + 1, 1);
+    assert.ok(slowed.waves > 0, 'the cargo still goes');
+    const follow = slowed.state.flights.records.find((flight) => flight.missionId === 'attack' && flight.id !== sent.flight!.id)!;
+    assert.ok((follow.speedPercent ?? 100) < 100, 'the holds fly slower');
+    assert.ok(follow.arrivalAt >= lateCombat.arrivalAt + 1_000, 'and land at least a second behind the battle fleet');
+    assert.ok(follow.arrivalAt <= lateCombat.arrivalAt + 10_000, 'but only just behind it (one percent of speed is a few seconds here)');
   }
 });

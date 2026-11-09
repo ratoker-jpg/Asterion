@@ -571,7 +571,9 @@ export function chooseNpcRobberyReaction(profile: NpcProfile, inputs: Readonly<{
     ['fortify', 0.25 + 0.6 * (1 - unit(t.riskTolerance)) + 0.4 * unit(t.planningHorizon) + doubt()],
     ['economy', 0.7 * unit(t.economyFocus) + 0.3 * (1 - unit(t.aggression)) + doubt()],
     ['counter', 0.7 * unit(t.aggression) + 0.5 * unit(t.riskTolerance) + 0.4 * unit(inputs.grudge) - 0.5 * unit(inputs.fearOfOffender) + doubt()],
-    ['seek-partner', 0.8 * unit(t.cooperation) + 0.3 * unit(t.socialStyle) + 0.5 * Math.max(0, inputs.bestFriend) + doubt()],
+    // Fear of an offender one also holds a deep grudge against is no reason to do nothing: it looks for company (owner decision 09.11.2026).
+    ['seek-partner', 0.8 * unit(t.cooperation) + 0.3 * unit(t.socialStyle) + 0.5 * Math.max(0, inputs.bestFriend)
+      + 1.1 * Math.min(unit(inputs.grudge), unit(inputs.fearOfOffender)) + doubt()],
   ];
   return options.reduce((best, item) => (item[1] > best[1] ? item : best))[0];
 }

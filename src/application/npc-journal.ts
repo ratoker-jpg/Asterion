@@ -61,7 +61,7 @@ export type NpcJournalDecision = Readonly<{
 }>;
 
 /** What came of something an owner did (journal only): a battle or a closed plan. */
-export type NpcJournalOutcome = Readonly<{ at: number; ownerId: string; kind: 'battle' | 'plan' | 'fortify' | 'pact' | 'reaction' | 'send'; data: Readonly<Record<string, unknown>> }>;
+export type NpcJournalOutcome = Readonly<{ at: number; ownerId: string; kind: 'battle' | 'plan' | 'fortify' | 'pact' | 'reaction' | 'send' | 'revenge'; data: Readonly<Record<string, unknown>> }>;
 
 /** A change of the owner's play style, with its reason (journal only). */
 export type NpcJournalStyle = Readonly<{ at: number; ownerId: string; style: string; previous: string | null; reason: string }>;
@@ -140,6 +140,12 @@ export class NpcJournalRecorder implements NpcJournalSink {
 
   /** Battles and closed plans of every owner. */
   outcome = (entry: NpcJournalOutcome): void => {
+    // The revenge funnel keeps its refusal reason in `r`, like a decision's.
+    if (entry.kind === 'revenge') {
+      const { r, ...rest } = entry.data;
+      this.pending.push({ t: entry.at, o: entry.ownerId, k: 'revenge', r: String(r ?? ''), d: rest });
+      return;
+    }
     this.pending.push({ t: entry.at, o: entry.ownerId, k: entry.kind, d: entry.data });
   };
 

@@ -30,7 +30,7 @@ import { dispatchNpcDeployment, dispatchNpcGas, dispatchNpcMission, dispatchNpcS
 import { beginFlightReturn } from '../domain/flights/runtime.ts';
 import { getNpcPirateCandidates, dispatchNpcPirateMission } from './npc-pirates.ts';
 import { getNpcEndgameChoices } from './npc-endgame.ts';
-import { getNpcPlanChoices, refreshNpcPlans, scheduleNpcPlanCheck } from './npc-plans.ts';
+import { getNpcPlanChoices, journalNpcRevengeFunnel, refreshNpcPlans, scheduleNpcPlanCheck } from './npc-plans.ts';
 import { getNpcSunPrepChoices, npcSunPrepSavesGas, refreshNpcSunPrep, scheduleNpcSunPrepCheck } from './npc-sun-prep.ts';
 import { getNpcPactChoices, npcPactForbidsAttack, refreshNpcPacts } from './npc-pacts.ts';
 import { npcReactionDrives } from './npc-pact-state.ts';
@@ -208,6 +208,8 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
   state = applyNpcShieldDecision(state, profile, utility, at, timeScale);
   // The owner's plans move on by what it sees now (ships built, shares arrived, fresh news).
   state = refreshNpcPlans(state, profile, utility, at, timeScale);
+  // Journal only: why this owner does not yet strike its offenders (the funnel of owner decision 09.11.2026).
+  journalNpcRevengeFunnel(state, profile, utility, at);
   // The owner reviews what each of its planets should hold, a few times a day.
   state = refreshNpcFortify(state, profile, utility, at, timeScale);
   // The Sun plan of the owner's alliance moves on by what it sees now.
