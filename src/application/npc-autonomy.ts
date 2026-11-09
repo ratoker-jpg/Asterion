@@ -244,6 +244,7 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
   // An attack sends the force the owner believes is enough, not everything.
   const attackForces = new Map<string, Record<string, number> | null>();
   const intelNeeded = new Set<string>();
+  const siblingIntel = new Set<string>();
   function attackShips(mission: { id: string; payload: Readonly<Record<string, string | number | boolean | null>> }): Record<string, number> {
     let ships: Record<string, number> = {};
     try { ships = JSON.parse(String(mission.payload.selectedShips ?? '{}')) as Record<string, number>; } catch { ships = {}; }
@@ -597,8 +598,35 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     if (mission.kind !== 'attack') continue;
     const destination = String(mission.payload.destinationPlanetId ?? '');
     const report = utility.latestReports.get(destination);
+    attackShips(mission);
     if (!report || npcAttackIntel(utility, report) === 'fresh' || !attackForces.get(mission.id)) continue;
     intelNeeded.add(destination);
+    // The same owner's other planets are worth a look too: the weakest one may be the better target.
+    const owner = ownerOfPlanet(destination);
+    if (owner) for (const planet of Object.values(state.espionage?.targets ?? {})) if (planet.ownerId === owner && planet.id !== destination) siblingIntel.add(planet.id);
+  }
+  for (const planetId of siblingIntel) {
+    const report = utility.latestReports.get(planetId);
+    if (!report || npcAttackIntel(utility, report) !== 'fresh') intelNeeded.add(planetId);
+  }
+  // One strong attack at a time on one owner: among the planets of a target owner (all of which it may have spied) the
+  // owner picks the one that pays best (lootable stores only, weakest defence counts through the odds), and no other
+  // attack on that owner is weighed beside it.
+  const bestAttackOnOwner = new Map<string, { id: string; net: number }>();
+  for (const mission of missions) {
+    if (mission.kind !== 'attack') continue;
+    const destination = String(mission.payload.destinationPlanetId ?? '');
+    if (utility.rivalGateHosts?.has(destination)) continue;
+    const targetOwner = ownerOfPlanet(destination);
+    const origin = state.espionage?.targets?.[String(mission.payload.originPlanetId)];
+    const report = utility.latestReports.get(destination);
+    const force = attackShips(mission);
+    if (!targetOwner || !origin || !report || !attackForces.get(mission.id) || npcAttackIntel(utility, report) !== 'fresh') continue;
+    if (npcPactForbidsAttack(profile, utility.partners, targetOwner)) continue;
+    const raid = estimateRaidEconomics(utility, origin, report, force);
+    if (!raid.worthFlight) continue;
+    const best = bestAttackOnOwner.get(targetOwner);
+    if (!best || raid.net > best.net || (raid.net === best.net && mission.id < best.id)) bestAttackOnOwner.set(targetOwner, { id: mission.id, net: raid.net });
   }
   for (const mission of missions) {
     // An attack the owner does not believe it wins with its own margin, even
@@ -619,12 +647,21 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
       if (!utility.rivalGateHosts?.has(destination)) {
         if (npcAttackIntel(utility, report) !== 'fresh') continue;
         if (!estimateRaidEconomics(utility, origin, report, force).worthFlight) continue;
+        const targetOwner = ownerOfPlanet(destination);
+        if (targetOwner && bestAttackOnOwner.get(targetOwner)?.id !== mission.id) continue;
       }
     }
     choices.push({
       candidate: { ...mission, weight: mission.weight * scored(mission.id, missionUtility(mission)),
         kind: mission.kind === 'espionage' || mission.kind === 'exploration-recon' ? 'recon' : mission.kind === 'expedition' || mission.kind === 'recycle' ? 'pve' : mission.kind },
       run: (current, key) => {
+        // Another attack of this owner has taken the same planet since this choice was weighed: one strike, not two.
+        if (mission.kind === 'attack') {
+          const target = current.espionage?.targets?.[String(mission.payload.destinationPlanetId ?? '')];
+          if (target && current.flights.records.some((flight) => flight.ownerSide === 'npc' && flight.ownerId === ownerId && flight.missionId === 'attack'
+            && (flight.phase === 'outbound' || flight.phase === 'arrived') && flight.arrivalAt > at
+            && sameCoordinate(flight.destinationCoordinate, target.coordinate))) return { state: current, started: false, reason: 'attack-already-flying' };
+        }
         const chosen = mission.kind === 'attack' ? attackForces.get(mission.id) : undefined;
         const sent = chosen ? { ...mission, payload: { ...mission.payload, selectedShips: JSON.stringify(Object.fromEntries(Object.entries(chosen).sort(([a], [b]) => a < b ? -1 : 1))) } } : mission;
         const command = candidateToNpcMissionCommand(sent, ownerId, key);
@@ -785,4 +822,8 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     if (!open.length) break;
   }
   return decisions;
+}
+
+function sameCoordinate(left: Readonly<{ galaxy: number; system: number; position: number }>, right: Readonly<{ galaxy: number; system: number; position: number }>): boolean {
+  return left.galaxy === right.galaxy && left.system === right.system && left.position === right.position;
 }

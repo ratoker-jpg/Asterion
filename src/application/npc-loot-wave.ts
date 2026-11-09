@@ -10,6 +10,7 @@ import type { FlightRecord } from '../domain/flights/types.ts';
 import type { SpyReportSnapshot, SpyTargetState } from '../domain/espionage/types.ts';
 import type { SaveState } from './contracts.ts';
 import { dispatchNpcMission, getNpcMissionAvailableFleet, type NpcMissionDispatchCommand } from './npc-missions.ts';
+import { npcLootableResources } from './npc-utility.ts';
 import { withoutNpcPlanReserve } from './npc-plan-reserve.ts';
 import { withoutNpcSunPrepHold } from './npc-sun-prep-state.ts';
 
@@ -66,7 +67,9 @@ export function dispatchNpcLootWaves(state: SaveState, command: NpcMissionDispat
   targetOnline: boolean, at: number, timeScale: number): NpcLootWaveResult {
   const origin = state.espionage?.targets?.[command.originPlanetId];
   if (!origin) return { state, waves: 0, carried: 0 };
-  const stores = report.resources.metal + report.resources.minerals + report.resources.gas;
+  // Only what a raid may take is worth a hold: the protected share of each store stays where it is.
+  const lootable = npcLootableResources(report.resources);
+  const stores = lootable.metal + lootable.minerals + lootable.gas;
   let need = Math.floor(LOOTABLE_SHARE * stores) - Math.floor(SURVIVING_HOLD_SHARE * holdCapacity(origin.raceId, combat.selectedShips));
   const smallestHold = Math.min(...holdIds(origin.raceId).map((id) => holdCapacity(origin.raceId, { [id]: 1 })).filter((cargo) => cargo > 0), Infinity);
   if (!(need >= smallestHold) || !Number.isFinite(smallestHold)) return { state, waves: 0, carried: 0 };
