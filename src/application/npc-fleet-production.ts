@@ -25,6 +25,7 @@ import {
   removeSolarSatellitesFromFleet,
 } from '../domain/fleet/runtime.ts';
 import { isNpcPlanetBlocked, NPC_APPLIED_ID_LIMIT, targetEnergyLedger } from './npc-economy.ts';
+import { syncSpyTargetCommanderCounts } from '../domain/espionage/runtime.ts';
 import type { SpyTargetState } from '../domain/espionage/types.ts';
 import { UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 
@@ -249,7 +250,26 @@ function applyTransition(target: FleetProductionTarget, transition: FleetProduct
     resources: { ...target.resources, ...transition.wallet },
     solarSatellites: currentSatellites,
   };
-  return updateEnergyAfterProduction(target, next, transition.completed);
+  return updateEnergyAfterProduction(target, withCommanderSnapshot(next), transition.completed);
+}
+
+/**
+ * A finished commander lands in the fleet, and the report-facing snapshot
+ * (`commanders`) must follow at once. Left to whatever action syncs it next,
+ * the snapshot would depend on how the replay was sliced (a settle at a chunk
+ * edge versus one at the very end), and two slicings of one world would differ.
+ */
+function withCommanderSnapshot<T extends SpyTargetState>(target: T): T {
+  const synced = syncSpyTargetCommanderCounts(target, target.fleet, target.ownerProfile);
+  const before = target.commanders ?? {};
+  const after = synced.commanders;
+  const ids = new Set([...Object.keys(before), ...Object.keys(after)]);
+  for (const id of ids) {
+    const left = before[id as keyof typeof before];
+    const right = after[id as keyof typeof after];
+    if (left?.count !== right?.count || left?.level !== right?.level) return { ...target, commanders: after };
+  }
+  return target;
 }
 
 /** Reconciles all three canonical queues; repeated settlements add each unit once. */

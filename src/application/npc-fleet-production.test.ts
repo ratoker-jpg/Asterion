@@ -122,3 +122,18 @@ test('campaign duration scale is explicit and independent of the global player r
   assert.ok(fast.durationMs < standard.durationMs);
   assert.ok(Math.abs(fast.durationMs * 2 - standard.durationMs) <= 1);
 });
+
+test('a finished commander reaches the report snapshot at once, not at whichever action syncs it next', () => {
+  const initial = target();
+  const candidate = getNpcFleetProductionCandidates(initial, OWNER_A, 0, TIME_SCALE)
+    .find((entry) => entry.queueKind === 'commanders' && entry.available);
+  assert.ok(candidate, 'a commander is available');
+  const started = startNpcFleetProduction(initial, OWNER_A, 'commanders', candidate.itemId, 100, TIME_SCALE, 'commander-1');
+  assert.equal(started.ok, true, started.reason ?? undefined);
+  const settled = settleNpcFleetProduction(started.target, OWNER_A, 100 + candidate.durationMs + 1).target;
+  const id = candidate.itemId as keyof typeof settled.fleet.commanders;
+  assert.equal(settled.fleet.commanders[id], 1, 'the commander is in the fleet');
+  assert.equal(settled.commanders[id]?.count, 1, 'and in the snapshot reports read');
+  // Settling again (a chunk edge) changes nothing: slicing cannot matter.
+  assert.equal(JSON.stringify(settleNpcFleetProduction(settled, OWNER_A, 100 + candidate.durationMs + 2).target), JSON.stringify(settled));
+});
