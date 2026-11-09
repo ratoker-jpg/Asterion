@@ -123,3 +123,17 @@
 .quick-send__keep input::-webkit-inner-spin-button { appearance: none; }
 .quick-send__keep label:focus-within { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--qa-k, #56d9f2) 60%, transparent); }
 .quick-send__notice { margin: 10px 14px 0; padding: 8px 10px; border-radius: 8px; background: rgba(242, 180, 90, .1); color: var(--qa-warn); font-size: 12px; font-weight: 600; line-height: 1.35; }
+
+/* Waves: the checked planets land in order, a second apart (planWaveSpeeds). */
+.quick-send__wave-no {
+  display: inline-grid; place-items: center; width: 18px; height: 18px; margin-right: 7px; border-radius: 50%;
+  background: color-mix(in srgb, var(--qa-k, #56d9f2) 22%, transparent); color: var(--qa-text);
+  font-size: 10px !important; font-weight: 800; vertical-align: 1px;
+  animation: quick-wave-pop 260ms cubic-bezier(.34, 1.56, .64, 1) both;
+}
+@keyframes quick-wave-pop { from { scale: .5; opacity: 0; } }
+.quick-send__wave { display: flex; align-items: center; gap: 4px 14px; flex-wrap: wrap; }
+.quick-send__wave small { margin-right: auto; color: var(--qa-k, #56d9f2) !important; }
+.quick-send__wave .quick-send__reset:disabled { opacity: .35; cursor: default; }
+.quick-send__leg-body .flight-speed { padding: 2px 0; }
+@media (prefers-reduced-motion: reduce) { .quick-send__wave-no { animation: none; } }

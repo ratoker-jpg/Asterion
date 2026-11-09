@@ -114,6 +114,11 @@ export type FlightRecord = {
   populationReserved: number;
   routeDistance: number;
   effectiveSpeed: number;
+  /**
+   * Chosen flight speed, 10–99 (absent = 100%). Already included in
+   * oneWayDurationMs/arrivalAt; the return leg flies at the same speed.
+   */
+  speedPercent?: number;
   oneWayDurationMs: number;
   departedAt: number;
   arrivalAt: number;

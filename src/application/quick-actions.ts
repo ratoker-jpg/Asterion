@@ -13,6 +13,7 @@ import type { CommanderId } from '../domain/combat/commanders.ts';
 import type { CombatFactionId } from '../domain/combat/factions.ts';
 import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
 import { calculateRouteDistance } from '../domain/flights/distance.ts';
+import { MAX_FLIGHT_SPEED_PERCENT, MIN_FLIGHT_SPEED_PERCENT, applyFlightSpeedPercent, normalizeFlightSpeedPercent, slowestNeededSpeedPercent } from '../domain/flights/speed.ts';
 import type { MissionId, TargetRelation } from '../domain/flights/types.ts';
 import type { TransportCargo } from '../domain/flights/cargo.ts';
 import type { RuntimeMode, TestTimeScale } from '../domain/runtime/mode.ts';
@@ -430,8 +431,10 @@ export type QuickSendPlan = {
   error?: string;
 };
 
-export function planFromOrigin(state: SaveState, actionId: QuickActionId, target: QuickTarget, originPlanetId: string, runtime: QuickRuntime, fleet = defaultQuickFleet(state, actionId, originPlanetId, target), cargo?: TransportCargo): QuickSendPlan {
-  const command = buildQuickCommand(state, actionId, target, originPlanetId, fleet, runtime, cargo);
+export function planFromOrigin(state: SaveState, actionId: QuickActionId, target: QuickTarget, originPlanetId: string, runtime: QuickRuntime, fleet = defaultQuickFleet(state, actionId, originPlanetId, target), cargo?: TransportCargo, speedPercent?: number): QuickSendPlan {
+  const built = buildQuickCommand(state, actionId, target, originPlanetId, fleet, runtime, cargo);
+  const command = built && speedPercent !== undefined && normalizeFlightSpeedPercent(speedPercent) < MAX_FLIGHT_SPEED_PERCENT
+    ? { ...built, speedPercent: normalizeFlightSpeedPercent(speedPercent) } : built;
   const preview = command ? previewQuickCommand(state, command, runtime) : null;
   return {
     actionId, originPlanetId, fleet, command, preview,
@@ -528,4 +531,84 @@ export function sendQuickLegs(
   }
   if (current.currentPlanetId !== selected && current.planets[selected]) current = selectOwnedPlanet(current, selected);
   return { state: current, outcomes };
+}
+
+/** Next wave lands at least this long after the previous one. */
+export const WAVE_GAP_MS = 1_000;
+
+/** True when the fleet carries at least one warship (not a probe, cargo hull, colonizer, recycler or satellite). */
+export function isCombatQuickFleet(state: SaveState, ships: Partial<Record<ShipId, number>>): boolean {
+  const factionId = state.profile.factionId as CombatFactionId;
+  return (Object.entries(ships) as [ShipId, number][])
+    .some(([id, count]) => Math.floor(count ?? 0) > 0 && !SERVICE_SHIPS.has(id) && !isRecyclerShip(id, factionId));
+}
+
+/**
+ * Default wave order for several legs at one target: warships first, then the
+ * rest (cargo, recyclers); inside each group the earlier arrival goes first.
+ * `arrivals` are the full-speed arrival times (missing = last).
+ */
+export function defaultWaveOrder(state: SaveState, legs: readonly { originPlanetId: string; ships: Partial<Record<ShipId, number>>; arrivalAt?: number }[]): string[] {
+  return legs
+    .map((leg, index) => ({ leg, index, combat: isCombatQuickFleet(state, leg.ships) }))
+    .sort((a, b) => Number(b.combat) - Number(a.combat)
+      || (a.leg.arrivalAt ?? Number.POSITIVE_INFINITY) - (b.leg.arrivalAt ?? Number.POSITIVE_INFINITY)
+      || a.index - b.index)
+    .map((item) => item.leg.originPlanetId);
+}
+
+export type WaveLeg = {
+  originPlanetId: string;
+  /** 1-based wave number, in the order given. */
+  wave: number;
+  /** Speed the player set on this leg (upper bound). */
+  chosenPercent: number;
+  /** Speed the leg will actually fly at, so it lands after the previous wave. */
+  speedPercent: number;
+  arrivalAt: number;
+  oneWayDurationMs: number;
+  command: DispatchFlightCommand;
+};
+
+export type WavePlan =
+  | { ok: true; legs: WaveLeg[] }
+  /** The first wave that cannot go as planned: even 10% lands too early, or at its slower speed the runtime refuses it (a target gone by then). Every leg is still listed. */
+  | { ok: false; legs: WaveLeg[]; wave: number; originPlanetId: string; message: string };
+
+/**
+ * Speeds for legs sent together in the given order: wave 1 keeps its chosen
+ * speed; every next wave keeps its chosen speed if it already lands at least
+ * one second after the previous wave, otherwise it is slowed (1% steps) just
+ * enough to do so. All legs leave at the same moment, so the arrival order is
+ * fixed by the speeds alone and the runtime stores each speed in its flight.
+ * Legs the runtime refuses are skipped and keep no place in the order.
+ */
+export function planWaveSpeeds(state: SaveState, commands: readonly DispatchFlightCommand[], runtime: QuickRuntime): WavePlan {
+  const legs: WaveLeg[] = [];
+  let failure: { wave: number; originPlanetId: string; message: string } | null = null;
+  let previousArrival: number | null = null;
+  for (const command of commands) {
+    const chosenPercent = normalizeFlightSpeedPercent(command.speedPercent);
+    const full = previewQuickCommand(state, { ...command, speedPercent: MAX_FLIGHT_SPEED_PERCENT }, runtime);
+    if (!full.ok) continue;
+    const departedAt = full.flight.departedAt;
+    const fullDuration = full.flight.oneWayDurationMs;
+    const needed = previousArrival === null ? 0 : previousArrival + WAVE_GAP_MS - departedAt;
+    const originPlanetId = command.originPlanetId ?? state.currentPlanetId;
+    const wave = legs.length + 1;
+    const fitting = slowestNeededSpeedPercent(fullDuration, needed, chosenPercent);
+    const percent = fitting ?? MIN_FLIGHT_SPEED_PERCENT;
+    const duration = applyFlightSpeedPercent(fullDuration, percent);
+    const planned = percent < MAX_FLIGHT_SPEED_PERCENT ? { ...command, speedPercent: percent } : { ...command, speedPercent: undefined };
+    if (fitting === null) {
+      failure ??= { wave, originPlanetId, message: `Волна ${wave} прилетит раньше волны ${wave - 1} даже на самой малой скорости. Поменяйте порядок волн.` };
+    } else if (percent < MAX_FLIGHT_SPEED_PERCENT) {
+      // A slower wave lands later: the target may be gone by then (a vanishing object), so check it at its real speed.
+      const final = previewQuickCommand(state, planned, runtime);
+      if (!final.ok) failure ??= { wave, originPlanetId, message: `Волна ${wave}: ${final.error.message}` };
+    }
+    legs.push({ originPlanetId, wave, chosenPercent, speedPercent: percent, oneWayDurationMs: duration, arrivalAt: departedAt + duration, command: planned });
+    previousArrival = Math.max(previousArrival ?? 0, departedAt + duration);
+  }
+  return failure ? { ok: false, legs, ...failure } : { ok: true, legs };
 }
