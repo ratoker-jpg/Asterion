@@ -355,7 +355,7 @@ html body .flight-briefing-v2 .fa-route__asteroid span{font-size:16px !important
 html body .flight-briefing-v2 [data-qa-flight-source-step] .game-select__trigger i{position:static !important;inset:auto !important;flex:none;margin-left:2px}
 
 /* ---------- «Скорость полёта» under the fleet ---------- */
-html body .flight-briefing-v2 .fa-plan-speed{max-width:560px;margin:18px 0 0}
+html body .flight-briefing-v2 .fa-plan-speed{max-width:560px;margin:18px 0 26px}
 html body .flight-briefing-v2 .fa-plan-speed .flight-speed{gap:8px 18px}
 html body .flight-briefing-v2 .fa-plan-speed .flight-speed>small{color:var(--pm);font-size:17px !important;letter-spacing:0;text-transform:none;font-weight:600}
 html body .flight-briefing-v2 .fa-plan-speed .flight-speed__value{font-size:28px !important}
