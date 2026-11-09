@@ -3,6 +3,7 @@ import test from 'node:test';
 import { ALLIANCE_NAME_MAX, ALLIANCE_TAG_MAX, ALLIANCE_TAG_MIN } from '../command/catalog.ts';
 import { ALLIANCE_NAME_POOL, pickNpcAllianceName } from '../command/alliance-names.ts';
 import { NICKNAME_POOL } from './nickname-pool.ts';
+import { nameStems, nameWords, sharedNameStems } from './name-stems.ts';
 import { generateNpcNicknames, NICKNAME_MAX } from './nicknames.ts';
 
 test('nickname pool is big, unique and fits the length limit', () => {
@@ -21,15 +22,15 @@ test('nicknames are deterministic from the seed and differ between seeds', () =>
 });
 
 test('nicknames are unique inside a world, even past the pool, and skip taken names', () => {
-  const names = generateNpcNicknames('big-world', 1_000, ['Нагибатор', 'xx_zloy_xx']);
+  const names = generateNpcNicknames('big-world', 1_000, ['Кракен', 'Morfeus']);
   assert.equal(names.length, 1_000);
   assert.equal(new Set(names.map((name) => name.toLowerCase())).size, 1_000);
-  assert.ok(!names.some((name) => name.toLowerCase() === 'нагибатор'));
+  assert.ok(!names.some((name) => name.toLowerCase() === 'morfeus'));
   for (const name of names) assert.ok(name.length <= NICKNAME_MAX, name);
 });
 
 test('alliance name pool is big, unique and fits catalog limits', () => {
-  assert.ok(ALLIANCE_NAME_POOL.length >= 150, `pool has ${ALLIANCE_NAME_POOL.length}`);
+  assert.ok(ALLIANCE_NAME_POOL.length >= 120, `pool has ${ALLIANCE_NAME_POOL.length}`);
   const names = ALLIANCE_NAME_POOL.map((item) => item.name.toLocaleLowerCase('ru-RU'));
   const tags = ALLIANCE_NAME_POOL.map((item) => item.tag.toLocaleUpperCase('ru-RU'));
   assert.equal(new Set(names).size, names.length, 'duplicate clan name');
@@ -60,6 +61,39 @@ test('bot alliance names are deterministic, unique and never use the leader nick
 });
 
 test('a founder whose nick is a clan word still gets another clan name', () => {
-  const picked = pickNpcAllianceName('owner-x', 'Кракен', () => false);
-  assert.ok(!picked.name.toLowerCase().includes('кракен'));
+  const picked = pickNpcAllianceName('owner-x', 'Легион', () => false);
+  assert.ok(!picked.name.toLowerCase().includes('легион'));
+});
+
+test('root check reads Latin, Cyrillic and leetspeak as one spelling', () => {
+  assert.deepEqual(nameWords('Kraken'), nameWords('Кракен'));
+  assert.deepEqual(nameWords('Kr4ken'), nameWords('Kraken'));
+  assert.deepEqual(nameWords('Тёмная_ТеньPro'), ['temnaia', 'ten', 'pro']);
+  assert.deepEqual(nameStems('Лорд Ворон'), ['lord', 'voro']);
+  assert.equal(sharedNameStems(['Нагибатор', 'Нагибатор Про']).length, 1);
+  assert.equal(sharedNameStems(['Ворон', 'Kr0w_Ворон']).length, 1);
+  assert.equal(sharedNameStems(['Kraken', 'Кракен']).length, 1);
+  assert.deepEqual(sharedNameStems(['Ворон', 'Гранит']), []);
+});
+
+test('no two nicks or clan names share a root (owner rule 10.11)', () => {
+  assert.deepEqual(sharedNameStems(NICKNAME_POOL), [], 'nicks repeat each other');
+  assert.deepEqual(sharedNameStems(ALLIANCE_NAME_POOL.map((item) => item.name)), [], 'clans repeat each other');
+  assert.deepEqual(sharedNameStems([...NICKNAME_POOL, ...ALLIANCE_NAME_POOL.map((item) => item.name)]), [], 'a clan repeats a nick');
+});
+
+test('nicks and clans are grown-up: no digit tails, xX, caps lock or kid words', () => {
+  const kid = /нагиб|nagib|батя|batya|мамк|mamk|пельм|pelm|дед|ded|xx_|_xx|про$|pro$|228|1337|666|007/iu;
+  for (const name of [...NICKNAME_POOL, ...ALLIANCE_NAME_POOL.map((item) => item.name)]) {
+    assert.doesNotMatch(name, /\d/u, `digits in ${name}`);
+    assert.doesNotMatch(name, kid, `kid style in ${name}`);
+    const letters = name.replace(/[^\p{L}]/gu, '');
+    assert.ok(letters.length < 4 || letters !== letters.toLocaleUpperCase('ru-RU'), `caps lock: ${name}`);
+    assert.ok((name.match(/_/g) ?? []).length <= 1, `too many underscores: ${name}`);
+  }
+});
+
+test('clan tags are never political', () => {
+  const banned = new Set(['СВО', 'Z', 'ZV', 'ZOV', 'ЗОВ', 'SS', 'СС', 'НКВД', 'КГБ', 'ФСБ', 'ВДВ', 'ВКС', 'НАТО', 'NATO', 'ОМОН', 'РФ', 'СССР', 'USSR', 'USA', 'UA', 'ВСУ', 'ИГИЛ', 'ISIS', 'КПСС', 'KKK', 'ДНР', 'ЛНР', 'АТО', 'ЧВК']);
+  for (const item of ALLIANCE_NAME_POOL) assert.ok(!banned.has(item.tag.toLocaleUpperCase('ru-RU')), item.tag);
 });

@@ -2,10 +2,10 @@ import { createSeededRandom } from './random.ts';
 import { NICKNAME_POOL } from './nickname-pool.ts';
 
 /**
- * NPC nicknames in the style of Russian online games (owner request
- * 09.11.2026). The nick is drawn from a hand-written pool, shuffled by the
- * campaign seed so a world looks the same on server and client. Unique within
- * a campaign (case-insensitive) and never longer than `NICKNAME_MAX`.
+ * NPC nicknames of grown-up players (owner rule 10.11.2026). The nick is
+ * drawn from a hand-written pool, shuffled by the campaign seed so a
+ * world looks the same on server and client. Unique within a campaign
+ * (case-insensitive) and never longer than `NICKNAME_MAX`.
  * Drawn from its own seeded stream so world placement draws stay where they were.
  */
 
