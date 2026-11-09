@@ -116,9 +116,20 @@ export function SunDefenceDialog({ state, now, galaxy, system, planetArt, onClos
     setDrafts((current) => ({ ...current, [planetId]: ships }));
   };
   const allOf = (row: (typeof rows)[number]) => (row.picked && Object.entries(row.source.free).every(([id, count]) => row.ships[id as ShipId] === count) ? {} : { ...row.source.free });
+  /** Nearest planets first, every warship, until the defence limit is full (the rest would be refused). */
   const takeEverything = () => {
     const next: Record<string, SunDefenceShips> = {};
-    for (const row of inTime) next[row.source.planetId] = { ...row.source.free };
+    let left = room.remaining;
+    for (const row of inTime) {
+      if (left <= 0) break;
+      const ships: SunDefenceShips = {};
+      for (const [id, count] of Object.entries(row.source.free) as [ShipId, number][]) {
+        const each = sunFleetPopulation({ [id]: 1 }, factionId);
+        const take = each > 0 ? Math.min(count, Math.floor(left / each)) : count;
+        if (take > 0) { ships[id] = take; left -= take * each; }
+      }
+      if (Object.keys(ships).length) next[row.source.planetId] = ships;
+    }
     setDrafts(next);
     setErrors({});
   };
@@ -186,7 +197,7 @@ export function SunDefenceDialog({ state, now, galaxy, system, planetArt, onClos
           <header className="sdef__head">
             <div>
               <h3>Флоты с ваших планет</h3>
-              <span>Летят только боевые корабли. Опоздавший флот не отправится.</span>
+              <span>Летят только боевые корабли. «Со всех» берёт ближние планеты до лимита защиты, опоздавший флот не отправится.</span>
             </div>
             <button type="button" className="sdef__all" disabled={!raid || inTime.every((row) => !Object.keys(row.source.free).length)} onClick={takeEverything} data-qa-sun-defence-all>
               <img src={ACTION_ART['sun-support']} alt="" draggable={false} />Всё боевое со всех

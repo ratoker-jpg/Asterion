@@ -2537,7 +2537,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       const left = Math.max(1, Math.ceil((beacon.completesAt - Date.now()) / 60_000));
       const span = left >= 60 ? `${Math.floor(left / 60)} ч ${left % 60} мин` : `${left} мин`;
       return {
-        text: `${notice.text} [${coordinate.galaxy}:${coordinate.system}:${coordinate.position}] · готовы через ${span}.`,
+        text: `${notice.text.replace(/\.$/, '')} · [${coordinate.galaxy}:${coordinate.system}:${coordinate.position}] · готовы через ${span}.`,
         action: { label: beacon.side === 'rival' ? 'К цели' : 'На карте', run: () => openGateOnMapRef.current(beacon.hostPlanetId, coordinate) },
       };
     }

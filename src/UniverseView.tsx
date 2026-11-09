@@ -542,9 +542,8 @@ function OwnerInspector({
                 <img src={planet.art} alt="" draggable={false} />
                 <span>
                   <strong>{planet.name}</strong>
-                  <small><span>{formatUniverseCoordinate(planet.coordinate)}</span></small>
+                  <small><span>{formatUniverseCoordinate(planet.coordinate)}</span>{gateAt(planet) ? <b className={`star-atlas__gate is-${gateAt(planet)!.side}`} data-qa-atlas-gate={gateAt(planet)!.gateId}> · Врата {gateClock(gateAt(planet)!.completesAt - nowMs)}</b> : null}</small>
                   {debris > 0 ? <em>обломки {numberFormat.format(debris)}</em> : null}
-                  {gateAt(planet) ? <em className={`star-atlas__gate is-${gateAt(planet)!.side}`} data-qa-atlas-gate={gateAt(planet)!.gateId}>Врата · готовы через {gateClock(gateAt(planet)!.completesAt - nowMs)}</em> : null}
                 </span>
               </button>
               {ATLAS_COLUMNS.map((column) => {

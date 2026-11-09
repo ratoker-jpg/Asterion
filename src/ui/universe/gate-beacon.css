@@ -59,7 +59,7 @@
 }
 
 /* Atlas planet row: the Gate badge. */
-.star-atlas .star-atlas__gate { color: #ffd890 !important; font-weight: 800; }
+.star-atlas .star-atlas__gate { color: #ffd890 !important; font-weight: 800; font-size: inherit; }
 .star-atlas .star-atlas__gate.is-rival { color: #ff8a9b !important; }
 
 /* Sun quick menu: the same column as planets, warm tone. */
