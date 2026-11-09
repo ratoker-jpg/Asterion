@@ -339,6 +339,57 @@ export function sunOwnerRace(state: SaveState, ownerId: string): CombatFactionId
   return allied && isCombatFactionId(allied.raceId) ? allied.raceId : null;
 }
 
+/** One alliance member as the raid order editor sees it: race, upgrade levels and free combat hulls. */
+export type SunOrderMember = {
+  ownerId: string;
+  name: string;
+  factionId: CombatFactionId;
+  isPlayer: boolean;
+  levels: Partial<Record<string, number>>;
+  ships: Partial<Record<string, number>>;
+};
+
+function addShips(into: Partial<Record<string, number>>, ships: Partial<Record<string, number>>): void {
+  for (const [id, count] of Object.entries(ships)) if (safeCount(count) > 0 && isSunCombatHull(id as ShipId)) into[id] = (into[id] ?? 0) + safeCount(count);
+}
+
+/**
+ * Members of an alliance with what they could put into a raid now: the free combat hulls of all their
+ * planets (allies share their hangars with the alliance) and their levels. Sorted: the player first,
+ * then by name.
+ */
+export function selectAllianceOrderMembers(state: SaveState, allianceId: string): SunOrderMember[] {
+  const alliance = state.command.alliances.find((item) => item.id === allianceId);
+  if (!alliance) return [];
+  const members: SunOrderMember[] = [];
+  for (const member of alliance.members) {
+    const factionId = sunOwnerRace(state, member.ownerId);
+    if (!factionId) continue;
+    const ships: Partial<Record<string, number>> = {};
+    let levels: Partial<Record<string, number>> = {};
+    if (member.ownerId === state.profile.playerId) {
+      for (const planetId of Object.keys(state.planets).sort()) addShips(ships, getAvailableFleetForPlanet(state, planetId).ships);
+      levels = { ...getOwnerShipUpgradeLevels(state) };
+    } else {
+      const targets = Object.values(getEspionageTargets(state.espionage)).filter((target) => target.ownerId === member.ownerId).sort((left, right) => left.id.localeCompare(right.id));
+      for (const target of targets) addShips(ships, target.fleet.ships);
+      levels = { ...(targets[0]?.ownerProfile?.shipLevels ?? {}) };
+      for (const planet of Object.values(state.alliedPlanets ?? {}).filter((item) => item.ownerId === member.ownerId)) addShips(ships, planet.fleet.ships);
+    }
+    members.push({ ownerId: member.ownerId, name: member.ownerId === state.profile.playerId ? state.profile.displayName : member.displayName, factionId, isPlayer: member.ownerId === state.profile.playerId, levels, ships });
+  }
+  return members.sort((left, right) => Number(right.isPlayer) - Number(left.isPlayer) || left.name.localeCompare(right.name, 'ru'));
+}
+
+/** The last logged defence at this Sun (else the last one anywhere): the «как у защиты в прошлый раз» preset. */
+export function selectLastSunDefence(state: SaveState, galaxy: number, system: number): { here: boolean; entry: SunBattleLogEntry } | null {
+  const log = currentSunRaidState(state).battleLog ?? [];
+  const here = [...log].reverse().find((entry) => entry.g === galaxy && entry.s === system && entry.defence.rows.length);
+  if (here) return { here: true, entry: here };
+  const any = [...log].reverse().find((entry) => entry.defence.rows.length);
+  return any ? { here: false, entry: any } : null;
+}
+
 /** Races present among an alliance's members: the only races its raid order may name. */
 export function allianceSunRaces(state: SaveState, allianceId: string): CombatFactionId[] {
   const alliance = state.command.alliances.find((item) => item.id === allianceId);
@@ -1916,8 +1967,22 @@ export function testIraJoinRaid(state: SaveState, raidId: string, options: SunRu
   if (allianceOf(state, TEST_ALLY_OWNER_ID)?.alliance.id !== raid.allianceId) return { ok: false, state, error: 'Ира Вель не состоит в союзе рейда.' };
   const seeded = ensureIraFleet(state);
   const owner = allyOwner(seeded)!;
-  const ships = pickFixtureShips(owner, Math.min(20_000, raidPledgeRoom(seeded, raid, owner.ownerId)));
-  if (!Object.keys(ships).length) return { ok: false, state, error: 'Лимит участника или рейда исчерпан.' };
+  let ships = pickFixtureShips(owner, Math.min(20_000, raidPledgeRoom(seeded, raid, owner.ownerId)));
+  // With an order Ira brings only what its open slots take (own slots first, then «любые»).
+  if (raid.order) {
+    const room = sunOrderRoomFor(raid.order, selectRaidOrderFill(seeded, raid), owner.factionId, { ...owner.shipLevels });
+    let anyLeft = room.anyPopulation;
+    const fitted: Partial<Record<ShipId, number>> = {};
+    for (const [id, count] of Object.entries(ships) as [ShipId, number][]) {
+      const own = Math.min(count, room.perEntity[id] ?? 0);
+      const unit = Math.max(1, getFactionCombatEntity(owner.factionId, id).population ?? 1);
+      const extra = (owner.shipLevels[id] ?? 0) >= room.anyMinLevel ? Math.min(count - own, Math.floor(anyLeft / unit)) : 0;
+      anyLeft -= extra * unit;
+      if (own + extra > 0) fitted[id] = own + extra;
+    }
+    ships = fitted;
+  }
+  if (!Object.keys(ships).length) return { ok: false, state, error: raid.order ? 'В заказе нет открытых позиций для флота Иры.' : 'Лимит участника или рейда исчерпан.' };
   const result = joinRaidFor(seeded, owner, { raidId, originPlanetId: owner.planetId, ships, requestId: `ira-sun-join-${raid.id}` }, options);
   return result.ok ? { ...result, notice: 'Тест: Ира Вель вступила в сбор рейда.' } : result;
 }

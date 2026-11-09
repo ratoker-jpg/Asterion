@@ -1,0 +1,79 @@
+/* Raid order editor and slot fill (owner rule 09.11.2026). Inside .opsA, same tokens as the launch dialog. */
+
+.opsA .sro, .opsA .sro-fill { --race: #8fa0b8; }
+.opsA [data-race="aegis"] { --race: #5f9bff; }
+.opsA [data-race="synod"] { --race: #3fdc86; }
+.opsA [data-race="veyra"] { --race: #ff5468; }
+
+.opsA .sro { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+.opsA .sro__head { display: grid; gap: 8px; }
+.opsA .sro__head small { color: var(--sun); font-weight: 700; letter-spacing: .14em; }
+.opsA .sro__head p { margin: 4px 0 0; color: #b6ccd4; font-size: 12px; line-height: 1.45; }
+.opsA .sro__presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.opsA .sro__presets .opsA-chip { height: 30px; padding: 0 12px; cursor: pointer; }
+.opsA .sro__presets .opsA-chip.is-on { color: #fff; border-color: color-mix(in srgb, var(--sun) 70%, transparent); background: rgba(255, 184, 74, .14); }
+.opsA .sro__presets .opsA-chip:disabled { opacity: .45; cursor: not-allowed; }
+
+.opsA .sro__slots { margin: 0; padding: 0 4px 0 0; list-style: none; display: grid; gap: 6px; align-content: start; min-height: 120px; max-height: 470px; overflow: auto; }
+.opsA .sro__slot {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1.2fr) 84px 64px 92px minmax(0, 1.3fr) 28px;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 4px 4px;
+  border-radius: var(--ut-r-card);
+  border: 1px solid var(--ut-border);
+  border-left: 3px solid var(--race);
+  background: var(--ut-surface-2);
+}
+.opsA .sro__slot--any { border-left-color: var(--sun); }
+.opsA .sro__slot.is-short { background: linear-gradient(90deg, rgba(240, 68, 94, .08), var(--ut-surface-2) 40%); }
+.opsA .sro__art { width: 40px; height: 40px; object-fit: contain; display: grid; place-items: center; border-radius: 8px; background: rgba(2, 8, 12, .5); }
+.opsA .sro__art--any { color: var(--sun); font-size: 22px; font-weight: 700; }
+.opsA .sro__name { min-width: 0; }
+.opsA .sro__name b { display: block; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.opsA .sro__name small { display: flex; align-items: center; gap: 5px; margin-top: 2px; color: var(--opsA-muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.opsA .sro__race { display: inline-block; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--race); }
+.opsA .sro__slot input, .opsA .sro__level select, .opsA .sro__add select {
+  height: 32px; min-width: 0; width: 100%; padding: 0 8px; border-radius: var(--ut-r-input); border: 1px solid var(--ut-border-strong);
+  background: rgba(2, 8, 12, .9); color: #fff; font: 600 12px Montserrat, sans-serif;
+}
+.opsA .sro__slot input { text-align: right; font-variant-numeric: tabular-nums; }
+.opsA .sro__pop { color: #cfe2e8; font-size: 12px; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.opsA .sro__who { min-width: 0; }
+.opsA .sro__who b { display: block; font-size: 11px; color: var(--ut-positive); }
+.opsA .sro__who.is-short b { color: var(--opsA-bad); }
+.opsA .sro__who small { display: block; margin-top: 2px; color: var(--opsA-muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.opsA .sro__remove { width: 28px; height: 28px; border: 1px solid var(--ut-border); border-radius: 8px; background: transparent; color: var(--opsA-muted); font-size: 16px; cursor: pointer; }
+.opsA .sro__remove:hover { color: #fff; border-color: var(--ut-border-strong); }
+.opsA .sro__remove:focus-visible, .opsA .sro__slot input:focus-visible, .opsA .sro__level select:focus-visible, .opsA .sro__add select:focus-visible { outline: var(--ut-focus); outline-offset: 1px; }
+.opsA .sro__empty { padding: 18px; border-radius: var(--ut-r-card); border: 1px dashed var(--ut-border); color: var(--opsA-muted); font-size: 12px; text-align: center; }
+
+.opsA .sro__add { display: grid; grid-template-columns: 150px minmax(0, 1fr) auto auto auto; gap: 8px; align-items: center; }
+.opsA .sro__cap { padding-top: 2px; }
+
+/* Slot fill of a raid: raid card and join dialog. */
+.opsA .sro-fill { margin: 0; padding: 0 0 6px 10px; list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 10px; }
+.opsA .sro-fill li { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 2px 6px; font-size: 11px; color: #b6ccd4; }
+.opsA .sro-fill li > span { display: flex; align-items: center; gap: 5px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.opsA .sro-fill li em { font-style: normal; color: var(--opsA-muted); }
+.opsA .sro-fill li > b { font-variant-numeric: tabular-nums; color: #e8f4f7; font-size: 11px; }
+.opsA .sro-fill li.is-full > b { color: var(--ut-positive); }
+.opsA .sro-fill li.is-mine > span { color: #fff; }
+.opsA .sro-fill__bar { grid-column: 1 / -1; display: block; height: 3px; border-radius: 999px; background: rgba(126, 200, 220, .12); overflow: hidden; }
+.opsA .sro-fill__bar span { display: block; height: 100%; background: var(--race, var(--sun)); }
+.opsA .sro-fill li:not([data-race]) .sro-fill__bar span { background: var(--sun); }
+.opsA .sro-fill__more { color: var(--opsA-muted); }
+
+/* The attack dialog with an order: editor left, own fleet right. */
+.opsA .srp-launch.srp-launch--order { width: 1560px; max-height: 1000px; }
+.opsA .srp-launch__cols { min-height: 0; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 18px; }
+.opsA .srp-launch__own { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+.opsA .srp-launch--order .srp-ships { grid-template-columns: minmax(0, 1fr); max-height: 380px; }
+.opsA .srp-launch__own > small { color: var(--ut-label); font-weight: 700; letter-spacing: .14em; }
+.opsA .srp-ships li.is-off { opacity: .4; }
+.opsA .srp-join-order { display: grid; gap: 6px; padding: 10px 12px; border-radius: var(--ut-r-card); border: 1px solid color-mix(in srgb, var(--sun) 35%, transparent); background: rgba(255, 184, 74, .05); }
+.opsA .srp-join-order > small { color: var(--sun); font-weight: 700; letter-spacing: .14em; }
+.opsA .srp-join-order .sro-fill { padding-left: 0; grid-template-columns: repeat(3, minmax(0, 1fr)); max-height: 150px; overflow: auto; }
+.opsA .srp-raid { flex-wrap: wrap; }
+.opsA .srp-raid__order { flex: 1 0 100%; min-width: 0; }
