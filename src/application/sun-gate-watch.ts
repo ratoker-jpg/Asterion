@@ -172,6 +172,17 @@ export function previewSunDefenceLeg(state: SaveState, raid: SunRaidRecord, plan
   };
 }
 
+/**
+ * The warships of a planet that land before the raid. A fleet flies at its
+ * slowest hull, so every type that is in time on its own is in time together:
+ * a planet whose whole fleet is late can still send its fast ships.
+ */
+export function sunDefenceInTimeShips(state: SaveState, raid: SunRaidRecord, planetId: string, runtime: QuickRuntime): SunDefenceShips {
+  const free = freeSunCombatShips(state, planetId);
+  return Object.fromEntries(Object.entries(free).filter(([id, count]) =>
+    !previewSunDefenceLeg(state, raid, planetId, { [id]: count }, runtime).late)) as SunDefenceShips;
+}
+
 /** Room left on the defending side (the per-side population cap). */
 export function sunDefenceRoom(state: SaveState, raid: SunRaidRecord): { cap: number; committed: number; remaining: number } {
   const cap = sunRaidCapsOf(state).perSide;

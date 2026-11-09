@@ -13,6 +13,7 @@ import {
   buildSunSupportCommand,
   previewSunDefenceLeg,
   selectDefendableRaids,
+  sunDefenceInTimeShips,
   sunDefenceRoom,
   sunDefenceSources,
   type SunDefenceShips,
@@ -98,7 +99,10 @@ export function SunDefenceDialog({ state, now, galaxy, system, planetArt, onClos
       .filter(([, count]) => (count as number) > 0)) as SunDefenceShips;
     const picked = Object.keys(ships).length > 0;
     const leg = Object.keys(source.free).length ? previewSunDefenceLeg(state, raid, source.planetId, ships, runtime) : null;
-    return { source, ships, picked, leg };
+    // «Всё боевое»: the whole fleet, or only the hulls that still make it when the slowest is late.
+    const wholeLate = Boolean(leg && !picked && leg.late) || Boolean(picked && previewSunDefenceLeg(state, raid, source.planetId, {}, runtime).late);
+    const candidate = wholeLate ? sunDefenceInTimeShips(state, raid, source.planetId, runtime) : source.free;
+    return { source, ships, picked, leg, candidate, wholeLate };
   }) : [];
   const room = raid ? sunDefenceRoom(state, raid) : { cap: 0, committed: 0, remaining: 0 };
   const chosen = rows.filter((row) => row.picked && row.leg && !row.leg.late);
@@ -109,13 +113,15 @@ export function SunDefenceDialog({ state, now, galaxy, system, planetArt, onClos
   const overSlots = chosen.length > slots.free;
   const blocked = chosen.some((row) => row.leg?.error);
   const ready = Boolean(raid) && chosen.length > 0 && !overRoom && !overSlots && !blocked;
-  const inTime = rows.filter((row) => row.leg && !row.leg.late);
+  const inTime = rows.filter((row) => Object.keys(row.candidate).length > 0);
 
   const setShips = (planetId: string, ships: SunDefenceShips) => {
     setErrors((current) => { const next = { ...current }; delete next[planetId]; return next; });
     setDrafts((current) => ({ ...current, [planetId]: ships }));
   };
-  const allOf = (row: (typeof rows)[number]) => (row.picked && Object.entries(row.source.free).every(([id, count]) => row.ships[id as ShipId] === count) ? {} : { ...row.source.free });
+  const isAll = (row: (typeof rows)[number]) => row.picked && Object.entries(row.candidate).every(([id, count]) => row.ships[id as ShipId] === count)
+    && Object.keys(row.ships).every((id) => id in row.candidate);
+  const allOf = (row: (typeof rows)[number]) => (isAll(row) ? {} : { ...row.candidate });
   /** Nearest planets first, every warship, until the defence limit is full (the rest would be refused). */
   const takeEverything = () => {
     const next: Record<string, SunDefenceShips> = {};
@@ -123,7 +129,7 @@ export function SunDefenceDialog({ state, now, galaxy, system, planetArt, onClos
     for (const row of inTime) {
       if (left <= 0) break;
       const ships: SunDefenceShips = {};
-      for (const [id, count] of Object.entries(row.source.free) as [ShipId, number][]) {
+      for (const [id, count] of Object.entries(row.candidate) as [ShipId, number][]) {
         const each = sunFleetPopulation({ [id]: 1 }, factionId);
         const take = each > 0 ? Math.min(count, Math.floor(left / each)) : count;
         if (take > 0) { ships[id] = take; left -= take * each; }
@@ -211,6 +217,7 @@ export function SunDefenceDialog({ state, now, galaxy, system, planetArt, onClos
               const open = row.picked || expanded[source.planetId];
               const error = errors[source.planetId] ?? (row.picked ? leg?.error ?? undefined : undefined);
               const tone = !hasShips ? 'is-empty' : leg?.late ? 'is-late' : row.picked ? 'is-on' : '';
+              const canPick = Object.keys(row.candidate).length > 0;
               return (
                 <li key={source.planetId} className={`sdef-row ${tone}`} style={{ '--i': index } as CSSProperties} data-qa-sun-defence-row={source.planetId} data-qa-sun-defence-late={leg?.late ? 'true' : 'false'}>
                   <div className="sdef-row__top">
@@ -228,18 +235,20 @@ export function SunDefenceDialog({ state, now, galaxy, system, planetArt, onClos
                     </div>
                     <div className="sdef-row__pick">
                       {hasShips ? <small>{row.picked ? `${number.format(sunFleetPopulation(row.ships, factionId))} насел.` : `${number.format(source.population)} насел.`}</small> : null}
-                      {hasShips && !leg?.late ? (
+                      {hasShips ? (
                         <>
-                          <button type="button" className={`sdef-row__all ${row.picked ? 'is-on' : ''}`} onClick={() => setShips(source.planetId, allOf(row))} data-qa-sun-defence-row-all={source.planetId}>
-                            {row.picked && Object.entries(source.free).every(([id, count]) => row.ships[id as ShipId] === count) ? 'Снять' : 'Всё боевое'}
-                          </button>
+                          {canPick || row.picked ? (
+                            <button type="button" className={`sdef-row__all ${row.picked ? 'is-on' : ''}`} onClick={() => setShips(source.planetId, row.picked && !canPick ? {} : allOf(row))} data-qa-sun-defence-row-all={source.planetId}>
+                              {isAll(row) || (row.picked && !canPick) ? 'Снять' : row.wholeLate ? 'Кто успеет' : 'Всё боевое'}
+                            </button>
+                          ) : null}
                           <button type="button" className="sdef-row__more" aria-expanded={Boolean(open)} aria-label={`Состав флота: ${source.name}`}
                             onClick={() => setExpanded((current) => ({ ...current, [source.planetId]: !open }))}>▾</button>
                         </>
                       ) : null}
                     </div>
                   </div>
-                  {open && hasShips && !leg?.late ? (
+                  {open && hasShips ? (
                     <ul className="sdef-row__ships">
                       {(Object.entries(source.free) as [ShipId, number][]).map(([shipId, max]) => {
                         const ship = catalog.get(shipId);

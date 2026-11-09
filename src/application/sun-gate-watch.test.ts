@@ -14,6 +14,7 @@ import {
   previewSunDefenceLeg,
   selectDefendableRaids,
   selectGateBeacons,
+  sunDefenceInTimeShips,
   sunDefenceRoom,
   sunDefenceSources,
 } from './sun-gate-watch.ts';
@@ -96,4 +97,23 @@ test('Sun defence: a fleet that would land after the raid is flagged late and re
   assert.equal(leg.late, true);
   assert.ok(leg.marginMs < 0);
   assert.match(leg.error ?? '', /не успеет/);
+});
+
+test('Sun defence: when the slowest hull is late, the fast ships that still make it can go', () => {
+  const state = (() => {
+    const result = testBot01RaidSun(armed(createInitialSaveState('test', T0), { scout: 50, 'death-star': 1, cruiser: 0, battleship: 0 }), 1, 1, runtime(T0));
+    assert.ok(result.ok);
+    return result.state;
+  })();
+  const [raid] = selectDefendableRaids(state, T0);
+  const fast = previewSunDefenceLeg(state, raid!, 'helion-01', { scout: 50 }, runtime(T0)).oneWayMs;
+  const slow = previewSunDefenceLeg(state, raid!, 'helion-01', { 'death-star': 1 }, runtime(T0)).oneWayMs;
+  assert.ok(slow > fast, 'the heavy hull is slower');
+  const at = raid!.arrivesAt - Math.round((fast + slow) / 2);
+  assert.equal(previewSunDefenceLeg(state, raid!, 'helion-01', {}, runtime(at)).late, true, 'the whole fleet is late');
+  const subset = sunDefenceInTimeShips(state, raid!, 'helion-01', runtime(at));
+  assert.deepEqual(subset, { scout: 50 });
+  const leg = previewSunDefenceLeg(state, raid!, 'helion-01', subset, runtime(at));
+  assert.equal(leg.late, false);
+  assert.equal(leg.error, null);
 });
