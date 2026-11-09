@@ -312,3 +312,43 @@ test('repair-pool removal discards selected units without payment or roster chan
   assert.strictEqual(result.wallet, initial.wallet);
   assert.equal(result.repair.tokens, initial.repair.tokens);
 });
+
+test('production arrival credits the defending player pool when a bot attacks them (owner report 09.11)', () => {
+  const botAttack = report({
+    id: 'repair-workshop-bot-attack-player',
+    missionType: 'attack',
+    attacker: { playerId: 'npc-gen-1', playerName: 'Bot', side: 'attacker' },
+    defender: { playerId: 'player-aster', playerName: 'Asterion', side: 'defender' },
+  });
+  const transition = claimDefensiveBattleRepair(createDefaultRepairWorkshopState(), botAttack, { allowAttackDefender: true });
+
+  assert.equal(transition.changed, true);
+  assert.equal(transition.state.ships.scout, 3);
+  assert.equal(transition.state.defenses['ballistic-turret'], 2);
+  // the same battle is never credited twice
+  assert.equal(claimDefensiveBattleRepair(transition.state, botAttack, { allowAttackDefender: true }).changed, false);
+});
+
+test('pirate raids credit the defender pool; the attacker side never does', () => {
+  const raid = report({
+    id: 'repair-workshop-pirate-raid-1',
+    missionType: 'pirate-raid',
+    attacker: { playerId: 'pirates', playerName: 'Pirates', side: 'attacker' },
+  });
+  const claimed = claimDefensiveBattleRepair(createDefaultRepairWorkshopState(), raid, { allowAttackDefender: true });
+  assert.equal(claimed.changed, true);
+  assert.equal(claimed.state.defenses['ballistic-turret'], 2);
+
+  const ownAttack = claimDefensiveBattleRepair(createDefaultRepairWorkshopState(), report({
+    id: 'repair-workshop-own-attack',
+    missionType: 'attack',
+    attacker: { playerId: 'player-aster', playerName: 'Asterion', side: 'attacker' },
+    defender: { playerId: 'raider', playerName: 'Raider', side: 'defender' },
+    attackerForce: {
+      populationBefore: 10, populationAfter: 0,
+      stacks: [{ entityId: 'scout', countBefore: 10, countAfter: 0, destroyed: 10 }],
+    },
+    defenderForce: { populationBefore: 0, populationAfter: 0, stacks: [], defenses: [] },
+  }), { allowAttackDefender: true });
+  assert.equal(ownAttack.state.ships.scout, 0, 'attacker losses never enter the pool');
+});
