@@ -1,0 +1,39 @@
+/* Quick «Помочь» window (src/ui/command/AidQuickSend.tsx): the map quick-send
+   panel's surface (.quick-pop / .quick-send), opened beside the request.
+   Font sizes carry !important because GlobalTypographyController pins text. */
+.quick-pop.aid-quick { z-index: 1200; width: 380px; }
+.aid-quick__pad { margin: 10px 14px 0 !important; }
+
+.aid-quick__ask {
+  display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; gap: 10px;
+  padding: 12px 14px 4px;
+  animation: quick-row-in 220ms cubic-bezier(.23, 1, .32, 1) both;
+}
+.aid-quick__ask > :first-child { width: 30px; height: 30px; }
+.aid-quick__ask span { display: grid; min-width: 0; }
+.aid-quick__ask b { font-size: 13px !important; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.aid-quick__ask em { color: var(--qa-muted); font-size: 11px !important; font-style: normal; font-weight: 600; }
+.aid-quick__ask strong {
+  min-width: 0; overflow: hidden; color: #ffb36b; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 18px !important; font-weight: 800; font-variant-numeric: tabular-nums;
+}
+
+.aid-quick__leg--off .quick-send__leg-toggle b { color: var(--qa-muted); }
+.aid-quick__leg--off .quick-send__leg-toggle span { color: var(--qa-warn); }
+.aid-quick__ship--none { opacity: .55; }
+
+.aid-quick__amount {
+  width: 100%; min-width: 0; padding: 1px 0; border: 0; border-bottom: 1px solid var(--qa-line);
+  background: transparent; color: var(--qa-text);
+  font: 800 12px/1.25 Montserrat, Arial, sans-serif; font-variant-numeric: tabular-nums; outline: none; appearance: textfield;
+  transition: border-color 140ms ease;
+}
+.aid-quick__amount::-webkit-inner-spin-button { appearance: none; }
+.aid-quick__amount:focus { border-bottom-color: var(--qa-k); }
+
+.aid-quick__fit { color: var(--qa-k) !important; }
+.aid-quick__fit:hover, .aid-quick__fit:focus-visible { color: var(--qa-text) !important; }
+.aid-quick__hold { margin-left: auto; color: var(--qa-muted); font-size: 10px !important; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; font-variant-numeric: tabular-nums; }
+
+.aid-quick .quick-send__notice { margin-top: 8px; }
+.aid-quick .quick-send__route div:first-child dd { color: #ffb36b; }

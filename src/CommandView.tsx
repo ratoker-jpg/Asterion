@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 
 import { MAX_ALLIANCE_MEMBERS, TEST_BOT_ALLIANCE_ID } from './domain/command/catalog.ts';
 import {
@@ -117,6 +117,11 @@ type CommandViewProps = {
   operationsAlertCount?: number;
   /** Jump request from the map, alerts or the Fleet tile; `nonce` makes repeats work. */
   focusTab?: { tab: 'operations' | 'overview'; nonce: number } | null;
+  /**
+   * Quick «Помочь» window beside the request (App renders it with the live save).
+   * Without it the button opens the full fleet window, as before.
+   */
+  quickHelp?: (requestId: string, anchor: HTMLElement, onClose: () => void) => ReactNode;
 };
 
 type CommandTab = 'overview' | 'members' | 'applications' | 'requests' | 'alliances' | 'diplomacy' | 'operations';
@@ -1080,8 +1085,9 @@ function chargeLineFor(aid: AidOverview, now: number) {
   return '';
 }
 
-function RequestsTab({ aid, now, actions, onFeedback, testControls, playerFactionId }: {
+function RequestsTab({ aid, now, actions, onFeedback, testControls, playerFactionId, quickHelp }: {
   playerFactionId?: string;
+  quickHelp?: CommandViewProps['quickHelp'];
   aid: AidOverview;
   now: number;
   actions: CommandActions;
@@ -1089,6 +1095,8 @@ function RequestsTab({ aid, now, actions, onFeedback, testControls, playerFactio
   testControls: boolean;
 }) {
   const [planetId, setPlanetId] = useState('');
+  const [helpOpen, setHelpOpen] = useState<{ requestId: string; anchor: HTMLElement } | null>(null);
+  const closeHelp = useCallback(() => setHelpOpen(null), []);
   const [resource, setResource] = useState<AidResource>('metal');
   const [amountText, setAmountText] = useState(String(aid.minAmount));
   const selectedPlanet = aid.planets.find((planet) => planet.id === planetId) ?? aid.planets[0] ?? null;
@@ -1127,7 +1135,9 @@ function RequestsTab({ aid, now, actions, onFeedback, testControls, playerFactio
           <ul className="command-request-list cmdA-items" data-qa-incoming-requests>
             {aid.incoming.map((row) => {
               const full = row.progress.remainder <= 0;
-              const reason = full ? 'Весь остаток уже в пути или доставлен' : !aid.hasFreeTransporters ? `На планете ${aid.sourcePlanetName || 'выбранной'} нет свободного транспорта — выберите другую планету в шапке` : '';
+              // The quick window picks the source planet itself; the full fleet window starts from the selected one.
+              const reason = full ? 'Весь остаток уже в пути или доставлен' : !quickHelp && !aid.hasFreeTransporters ? `На планете ${aid.sourcePlanetName || 'выбранной'} нет свободного транспорта — выберите другую планету в шапке` : '';
+              const open = helpOpen?.requestId === row.request.id;
               return (
                 <li key={row.request.id} className="cmdA-item cmdA-request" style={{ '--k': RESOURCE_TONES[row.request.resource] } as CSSProperties} data-qa-request-id={row.request.id}>
                   <div className="cmdA-request-head">
@@ -1137,14 +1147,20 @@ function RequestsTab({ aid, now, actions, onFeedback, testControls, playerFactio
                   <RequestProgressBar row={row} />
                   <RequestFigures row={row} />
                   <div className="command-request-actions">
-                    <small>{aid.hasFreeTransporters || full ? `Можно отправить: ${number.format(row.progress.remainder)}` : `Нет транспорта на ${aid.sourcePlanetName || 'планете'}`}</small>
-                    <button type="button" className="primary" disabled={Boolean(reason)} title={reason || undefined} onClick={() => onFeedback(actions.startHelp(row.request.id))} data-qa-request-help>ПОМОЧЬ</button>
+                    <small>{full ? reason : quickHelp || aid.hasFreeTransporters ? `Можно отправить: ${number.format(row.progress.remainder)}` : reason}</small>
+                    <button type="button" className={`primary ${open ? 'is-open' : ''}`} disabled={Boolean(reason)} aria-expanded={quickHelp ? open : undefined}
+                      onClick={(event) => {
+                        if (!quickHelp) { onFeedback(actions.startHelp(row.request.id)); return; }
+                        const anchor = event.currentTarget;
+                        setHelpOpen((current) => (current?.requestId === row.request.id ? null : { requestId: row.request.id, anchor }));
+                      }} data-qa-request-help>ПОМОЧЬ</button>
                   </div>
                 </li>
               );
             })}
           </ul>
         )}
+        {helpOpen && quickHelp ? quickHelp(helpOpen.requestId, helpOpen.anchor, closeHelp) : null}
         <h4 className="cmdA-subhead">МОИ ЗАПРОСЫ · {aid.mine.length} / {aid.maxOpen}</h4>
         {aid.mine.length === 0 ? <div className="cmdA-empty" data-qa-requests-empty>У вас нет открытых запросов.</div> : (
           <ul className="command-request-list cmdA-items" data-qa-my-requests>
@@ -1413,7 +1429,7 @@ function DiplomacyTab({ command, allianceId, role, ownerScores, now, timeScale, 
 
 // ---- root ----------------------------------------------------------------------
 
-export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFactions = {}, playerFactionId, testTimeScale = 1, returnToBuilding, aid, now, actions, operationsPanel, operationsAlertCount = 0, focusTab = null }: CommandViewProps) {
+export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFactions = {}, playerFactionId, testTimeScale = 1, returnToBuilding, aid, now, actions, operationsPanel, operationsAlertCount = 0, focusTab = null, quickHelp }: CommandViewProps) {
   const [tab, setTab] = useState<CommandTab>(focusTab?.tab ?? 'overview');
   useEffect(() => { if (focusTab) setTab(focusTab.tab); }, [focusTab?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
   const [feedback, setFeedback] = useState<CommandActionResult | null>(null);
@@ -1503,7 +1519,7 @@ export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFa
         ) : activeTab === 'alliances' ? (
           <AlliancesTab {...catalogProps} />
         ) : activeTab === 'requests' ? (
-          <RequestsTab aid={aid} now={now} actions={actions} onFeedback={onFeedback} testControls={testControls} playerFactionId={playerFactionId} />
+          <RequestsTab aid={aid} now={now} actions={actions} onFeedback={onFeedback} testControls={testControls} playerFactionId={playerFactionId} quickHelp={quickHelp} />
         ) : activeTab === 'diplomacy' ? (
           <DiplomacyTab command={command} allianceId={membership.alliance.id} role={membership.role} ownerScores={ownerScores} now={now} timeScale={testTimeScale} actions={actions} onFeedback={onFeedback} testControls={testControls} />
         ) : operationsPanel ? (
