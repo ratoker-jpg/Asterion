@@ -552,7 +552,11 @@ function addLoss(
 }
 
 export type RepairBattleLossOptions = {
-  /** Attack arrival may claim the remote defender's repair pool in Test Mode. */
+  /**
+   * Production arrivals (an attack or a pirate raid on a planet) credit the
+   * pool of the planet that DEFENDED, whoever owns it: the player or a bot.
+   * Only the defender's losses count; the attacker's never do.
+   */
   allowAttackDefender?: boolean;
 };
 
@@ -564,9 +568,8 @@ export function calculateRepairLosses(
     && isAsterionLocalPlayerId(report.defender.playerId)
     && report.defender.side === 'defender';
   const attackDefender = options.allowAttackDefender === true
-    && report.missionType === 'attack'
-    && report.defender.side === 'defender'
-    && !isAsterionLocalPlayerId(report.defender.playerId);
+    && (report.missionType === 'attack' || report.missionType === 'pirate-raid')
+    && report.defender.side === 'defender';
   const eligible = localDefense || attackDefender;
   if (!eligible) {
     return {
@@ -656,7 +659,7 @@ export function annotateBattleReportRepair(
     defenseUnits: claim.losses.defenses,
     note: claim.losses.reason ?? (total > 0
       ? '50% уничтоженных единиц добавлено в ремонтный пул.'
-      : report.missionType === 'attack'
+      : report.missionType === 'attack' || report.missionType === 'pirate-raid'
         ? 'В атаке не было подходящих уничтоженных кораблей или обороны защитника.'
         : 'В оборонительном бою не было подходящих уничтоженных кораблей или обороны.'),
   };
