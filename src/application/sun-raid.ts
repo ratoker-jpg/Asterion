@@ -951,6 +951,24 @@ function distributeLosses(participants: readonly SideParticipant[], force: Battl
   return survivors;
 }
 
+/**
+ * Rule of the Sun (owner, 09.11): half of every ship type lost while DEFENDING the Sun returns to its
+ * home planet. Deterministic: floor(lost / 2) per type, the odd remainder is lost for good.
+ * Attackers are not touched. Applied to player and NPC defenders alike.
+ */
+export function sunDefenceReturnedShips(
+  original: Partial<Record<ShipId, number>>,
+  survivors: Partial<Record<ShipId, number>>,
+): Partial<Record<ShipId, number>> {
+  const returned: Partial<Record<ShipId, number>> = {};
+  for (const [id, count] of Object.entries(original) as [ShipId, number][]) {
+    const lost = Math.max(0, safeCount(count) - safeCount(survivors[id]));
+    const back = Math.floor(lost / 2);
+    if (back > 0) returned[id] = back;
+  }
+  return returned;
+}
+
 function applyPlayerLosses(state: SaveState, flight: FlightRecord, survivors: Partial<Record<ShipId, number>>, survivingCommanders: Partial<Record<CommanderId, number>> = {}): SaveState {
   if (flight.ownerSide !== undefined && flight.ownerSide !== 'player') return state;
   const planet = state.planets[flight.originPlanetId];
@@ -1056,7 +1074,27 @@ function resolveRaid(state: SaveState, raid: SunRaidRecord, at: number, options:
   const reportId = `battle-sun-${raid.id}`;
   const report = resolveCombat(input, { reportId, missionType: 'attack', allowPopulationOverflow: true });
   const attackerSurvivors = distributeLosses(attackers, report.attackerForce, attack.groupTags);
-  const defenderSurvivors = distributeLosses(defenders, report.defenderForce, defense.groupTags);
+  const defenderSurvivorsRaw = distributeLosses(defenders, report.defenderForce, defense.groupTags);
+  // Half of the defenders' lost ships come home (they are added back to the survivors, so every
+  // later step - planet fleet, return flight, NPC fleet - sees one consistent list).
+  const defenderReturns = new Map<string, Partial<Record<ShipId, number>>>();
+  const defenderSurvivors = new Map<string, Partial<Record<ShipId, number>>>();
+  for (const item of defenders) {
+    const left = defenderSurvivorsRaw.get(item.flight.id) ?? {};
+    const back = sunDefenceReturnedShips(item.flight.selectedShips, left);
+    defenderReturns.set(item.flight.id, back);
+    const merged: Partial<Record<ShipId, number>> = { ...left };
+    for (const [id, count] of Object.entries(back) as [ShipId, number][]) merged[id] = safeCount(merged[id]) + count;
+    defenderSurvivors.set(item.flight.id, normalizeSelection(merged));
+  }
+  const returnedByOwner = new Map<string, { ownerName: string; factionId: string; ships: Partial<Record<ShipId, number>> }>();
+  for (const item of defenders) {
+    const back = defenderReturns.get(item.flight.id) ?? {};
+    if (!Object.keys(back).length) continue;
+    const entry = returnedByOwner.get(item.snapshot.ownerId) ?? { ownerName: item.snapshot.ownerName, factionId: item.snapshot.factionId, ships: {} };
+    for (const [id, count] of Object.entries(back) as [ShipId, number][]) entry.ships[id] = safeCount(entry.ships[id]) + count;
+    returnedByOwner.set(item.snapshot.ownerId, entry);
+  }
   const attackerCommanderSurvivors = commanderLosses(attackers, report.attackerForce, attack.commanderSources);
   const defenderCommanderSurvivors = commanderLosses(defenders, report.defenderForce, defense.commanderSources);
   const winner = report.winner;
@@ -1176,6 +1214,7 @@ function resolveRaid(state: SaveState, raid: SunRaidRecord, at: number, options:
         attackers: attackers.length,
         defenders: defenders.length,
         pointShares,
+        ...(returnedByOwner.size ? { defenderReturns: [...returnedByOwner.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([ownerId, entry]) => ({ ownerId, ownerName: entry.ownerName, ships: entry.ships, text: (Object.entries(entry.ships) as [ShipId, number][]).map(([id, count]) => `${count} × ${SHIP_IDS.includes(id) ? getFactionCombatEntity(entry.factionId as never, id).name : id}`).join(', ') })) } : {}),
       },
     };
     next = {
@@ -1209,6 +1248,8 @@ export type SunReportExtension = {
   crystalRoll?: NonNullable<SunRaidRecord['result']>['crystalRoll'];
   attackers: number;
   defenders: number;
+  /** Ships of defenders that were lost but come back home (half of each lost type). */
+  defenderReturns?: { ownerId: string; ownerName: string; ships: Partial<Record<ShipId, number>>; text: string }[];
   /** Combat points shared by contribution (absent in reports of older saves, which keep their recorded numbers). */
   pointShares?: {
     basis: 'fleet-value';
