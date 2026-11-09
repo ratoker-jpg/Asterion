@@ -73,6 +73,7 @@
     "test:fleet-planner-ui": "electron electron/fleet-planner-qa.cjs",
     "test:build-planner-ui": "electron electron/build-planner-qa.cjs",
     "test:whats-new-ui": "electron electron/whats-new-qa.cjs",
+    "test:rating-ui": "electron electron/rating-alliance-qa.cjs",
     "test:battles-mine-ui": "electron electron/battles-mine-qa.cjs",
     "test:pirate-operations-ui": "electron electron/pirate-operations-qa.cjs",
     "capture:operations-variant-a": "electron electron/operations-variant-a-screenshots.cjs",
