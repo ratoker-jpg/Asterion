@@ -55,6 +55,8 @@ import {
   resolveTransportTarget,
   resolveRecycleTargetKindAtCoordinate,
   previewFlight,
+  applyPreviewSpeed,
+  fullSpeedCommand,
   getShipsAwayForPlanet,
   type DispatchFlightCommand,
   type FlightCommandResult,
@@ -146,7 +148,7 @@ import {
   pickNextSourcePlanet,
   type FlightRepeatPlan,
 } from './application/flight-repeat.ts';
-import { MAX_FLIGHT_SPEED_PERCENT, applyFlightSpeedPercent } from './domain/flights/speed.ts';
+import { MAX_FLIGHT_SPEED_PERCENT } from './domain/flights/speed.ts';
 import { FlightSpeedControl } from './ui/flight-speed/FlightSpeedControl.tsx';
 import { FLEET_UI_UPDATE_EVENT, isFavoriteTarget, type FleetFavoriteTarget, type FleetUiUpdate } from './domain/flights/fleet-ui.ts';
 
@@ -429,12 +431,7 @@ function FleetWorkspace({
   const withChosenSpeed = <T extends DispatchFlightCommand | null>(command: T): T => (
     command && chosenSpeed < MAX_FLIGHT_SPEED_PERCENT ? { ...command, speedPercent: chosenSpeed } : command);
   // Previews are made at full speed; the chosen speed is applied last, exactly as the runtime does on Send.
-  const previewResult = useMemo<FlightCommandResult | null>(() => {
-    if (!previewResultRaw?.ok || chosenSpeed >= MAX_FLIGHT_SPEED_PERCENT || previewResultRaw.flight.speedPercent !== undefined) return previewResultRaw;
-    const flight = previewResultRaw.flight;
-    const oneWayDurationMs = applyFlightSpeedPercent(flight.oneWayDurationMs, chosenSpeed);
-    return { ...previewResultRaw, flight: { ...flight, speedPercent: chosenSpeed, oneWayDurationMs, arrivalAt: flight.departedAt + oneWayDurationMs } };
-  }, [previewResultRaw, chosenSpeed]);
+  const previewResult = useMemo(() => applyPreviewSpeed(previewResultRaw, chosenSpeed), [previewResultRaw, chosenSpeed]);
   const [previewOriginPlanetId, setPreviewOriginPlanetId] = useState<string | null>(null);
   const [previewDestination, setPreviewDestination] = useState<FlightDestination | null>(null);
   const [previewTargetRelation, setPreviewTargetRelation] = useState<TargetRelation | undefined>(undefined);
@@ -1296,7 +1293,7 @@ function FleetWorkspace({
       const command = withChosenSpeed(baseCommand);
       if (!command || !baseCommand) return;
       // The stored preview stays full-speed; the chosen speed is laid on top for display (see previewResult).
-      const fullSpeedPreview = () => previewFlight(runtimeState, baseCommand, { mode: ACTIVE_RUNTIME_MODE, testTimeScale: resolveTestTimeScale() });
+      const fullSpeedPreview = () => previewFlight(runtimeState, fullSpeedCommand(baseCommand), { mode: ACTIVE_RUNTIME_MODE, testTimeScale: resolveTestTimeScale() });
 
       const currentCandidate = previewFlight(runtimeState, command, {
         mode: ACTIVE_RUNTIME_MODE,

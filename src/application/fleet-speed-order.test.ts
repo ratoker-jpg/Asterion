@@ -8,7 +8,9 @@ import { applyFlightSpeedPercent, normalizeFlightSpeedPercent, slowestNeededSpee
 import { createFlightRecord } from '../domain/flights/runtime.ts';
 import { COMPUTER_SYSTEMS_SCIENCE_ID } from '../domain/flights/limit.ts';
 import type { SaveState } from './contracts.ts';
-import { dispatchFlight, estimateFlightRoute, reconcileFlights } from './flights.ts';
+import { applyPreviewSpeed, dispatchFlight, estimateFlightRoute, fullSpeedCommand, previewFlight, reconcileFlights } from './flights.ts';
+import { createColonyPlanetRuntime } from './owned-planets.ts';
+import { selectExplorationTargets } from './exploration.ts';
 import {
   WAVE_GAP_MS,
   buildQuickCommand,
@@ -16,6 +18,7 @@ import {
   defaultWaveOrder,
   planWaveSpeeds,
   prepareQuickState,
+  previewQuickCommand,
   sendQuickLegs,
   type QuickTarget,
 } from './quick-actions.ts';
@@ -161,5 +164,77 @@ test('waves: warships first by default; an order that cannot be kept is refused 
   if (!broken.ok) {
     assert.equal(broken.wave, 2);
     assert.match(broken.message, /Волна 2/);
+  }
+});
+
+test('fleet plan: the slider lays any speed on a full-speed preview; back to 100% gives the original time (gas reconfirmation case)', () => {
+  const home = campaign({});
+  const homeSystem = home.planets[home.currentPlanetId]!.universeSystem ?? 1;
+  const state = withColony(home, homeSystem + 4, { cruiser: 3 }, 'colony-a');
+  const target = homeTarget(state);
+  const slowed = { ...buildQuickCommand(state, 'deployment', target, 'colony-a', defaultQuickFleet(state, 'deployment', 'colony-a', target), RUNTIME)!, speedPercent: 40 };
+  const prepared = prepareQuickState(state, slowed, RUNTIME);
+  // The stored baseline is always previewed without the speed, even when the sent command had one.
+  const baseline = previewFlight(prepared, fullSpeedCommand(slowed), RUNTIME);
+  assert.ok(baseline.ok);
+  if (!baseline.ok) return;
+  assert.equal(baseline.flight.speedPercent, undefined);
+  const real = previewFlight(prepared, slowed, RUNTIME);
+  assert.ok(real.ok);
+  if (!real.ok) return;
+  const at40 = applyPreviewSpeed(baseline, 40);
+  assert.ok(at40?.ok);
+  if (!at40?.ok) return;
+  assert.equal(at40.flight.oneWayDurationMs, real.flight.oneWayDurationMs, 'same time as the runtime at 40%');
+  assert.equal(at40.flight.arrivalAt, real.flight.arrivalAt);
+  // Moving the slider again (to 70%, then back to 100%) follows it instead of keeping the old 40% figures.
+  const at70 = applyPreviewSpeed(baseline, 70);
+  const real70 = previewFlight(prepared, { ...slowed, speedPercent: 70 }, RUNTIME);
+  assert.ok(at70?.ok && real70.ok);
+  if (at70?.ok && real70.ok) assert.equal(at70.flight.arrivalAt, real70.flight.arrivalAt);
+  const at100 = applyPreviewSpeed(baseline, 100);
+  assert.equal(at100, baseline);
+  assert.equal(fullSpeedCommand(slowed).speedPercent, undefined);
+});
+
+test('waves: each wave is checked at its final slowed speed, so none leaves when a later one would miss a vanishing object', () => {
+  const MINUTE = 60_000;
+  const OPTIONS = { mode: 'test' as const, testTimeScale: 15 as const };
+  const base = 1_790_000_000_000;
+  let state = createInitialSaveState('test', base);
+  const home = state.planets['helion-01']!;
+  state = { ...state, science: { ...state.science, levels: { ...state.science.levels, [COMPUTER_SYSTEMS_SCIENCE_ID]: 10 } },
+    planets: { ...state.planets, 'helion-01': { ...home, resources: { metal: 1e7, minerals: 1e7, gas: 1e7 },
+      fleet: { ...home.fleet, ships: { ...home.fleet.ships, transporter: 10 } } } } };
+  const colonySystem = (home.universeSystem ?? 1) + 5;
+  const colony = createColonyPlanetRuntime(state, { galaxy: home.universeGalaxy ?? 1, system: colonySystem, position: 14 });
+  state = { ...state, planets: { ...state.planets, 'colony-x': { ...colony, resources: { metal: 1e7, minerals: 1e7, gas: 1e7 },
+    fleet: { ...colony.fleet, ships: { ...colony.fleet.ships, transporter: 10 } } } } };
+  let at = base; let node;
+  for (let offset = 0; offset < 480 && !node; offset++) {
+    at = base + offset * MINUTE;
+    node = selectExplorationTargets(state, at, 'test').find((item) => item.special && item.special.expiresAt - at > 8 * MINUTE);
+  }
+  assert.ok(node, 'a live exploration object');
+  const target: QuickTarget = { node: { ...node!, ownerId: undefined }, relation: 'neutral' };
+  const legOf = (origin: string, now: number) => buildQuickCommand(state, 'expedition', target, origin, { ships: { transporter: 5 } }, { now, ...OPTIONS })!;
+  const duration = (origin: string) => {
+    const preview = previewQuickCommand(state, legOf(origin, at), { now: at, ...OPTIONS });
+    assert.ok(preview.ok, preview.ok ? '' : preview.error.message);
+    return preview.ok ? preview.flight.oneWayDurationMs : 0;
+  };
+  const slow = duration('helion-01') >= duration('colony-x') ? 'helion-01' : 'colony-x';
+  const fast = slow === 'helion-01' ? 'colony-x' : 'helion-01';
+  // Leave so that the slower fleet lands half a second before the object vanishes: alone, both legs are fine.
+  const now = node!.special!.expiresAt - duration(slow) - 500;
+  const runtime = { now, ...OPTIONS };
+  for (const origin of [slow, fast]) assert.ok(previewQuickCommand(state, legOf(origin, now), runtime).ok, `${origin} alone is accepted`);
+  // As the second wave the fast leg must land a second after the slow one, i.e. after the object is gone.
+  const plan = planWaveSpeeds(state, [legOf(slow, now), legOf(fast, now)], runtime);
+  assert.equal(plan.ok, false, 'the wave plan is refused before anything leaves');
+  if (!plan.ok) {
+    assert.equal(plan.wave, 2);
+    assert.equal(plan.originPlanetId, fast);
+    assert.match(plan.message, /^Волна 2: /);
   }
 });
