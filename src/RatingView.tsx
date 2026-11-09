@@ -599,7 +599,7 @@ function AllianceCard({ entry, details, roster, listedPlayerIds, onOpenPlayer }:
         <ol className="rating-roster-v2__list">
           {roster.map((member) => (
             <li key={member.ownerId} className={`is-${member.role}${member.isCurrentPlayer ? ' is-current' : ''}`} data-qa-rating-roster-member={member.role}>
-              <RoleBadge role={member.role} compact />
+              {member.role === 'member' ? <span aria-hidden="true" /> : <RoleBadge role={member.role} compact />}
               <RosterName member={member} listed={listedPlayerIds.has(member.ownerId)} onOpenPlayer={onOpenPlayer} />
               <b className="utility-data-text">{new Intl.NumberFormat('ru-RU').format(member.totalPoints)}</b>
             </li>

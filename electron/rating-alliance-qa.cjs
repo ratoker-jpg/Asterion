@@ -95,6 +95,9 @@ async function settle(win, ms = 160) {
 
 async function capture(win, directory, name) {
   if (SKIP_SCREENSHOTS) return;
+  // The «Экран открыт» toast is the shell's, not the rating's: close it so it covers nothing.
+  await js(win, `document.querySelectorAll('[data-qa-runtime-toast] button').forEach((button) => button.click())`);
+  await settle(win, 400);
   await js(win, `document.getAnimations().forEach((animation) => {
     const timing = animation.effect?.getComputedTiming?.();
     if (timing && Number.isFinite(timing.endTime)) animation.currentTime = timing.endTime;
