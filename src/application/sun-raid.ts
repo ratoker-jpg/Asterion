@@ -55,6 +55,18 @@ import type {
   SunRaidState,
 } from '../domain/sun-raid/types.ts';
 import type { UniverseCoordinate } from '../domain/universe/types.ts';
+import {
+  placeSunPledge,
+  sunOrderFill,
+  sunOrderRoomFor,
+  validateSunRaidOrder,
+  type SunOrderFill,
+  type SunOrderPledge,
+  type SunRaidOrder,
+} from '../domain/sun-raid/order.ts';
+import { appendSunBattleLog, sunBattleBonuses, sunBattleRows, type SunBattleLogEntry, type SunBattleSide } from '../domain/sun-raid/battle-log.ts';
+import { getNpcJournalSink } from './npc-journal.ts';
+import { COMBAT_FACTION_IDS } from '../domain/combat/factions.ts';
 import { calculateAttackDebris, technologiesFromScience } from './attack.ts';
 import { battleDebrisRoll } from '../domain/combat/debris.ts';
 import { recordSharedBattleScoreAward } from '../domain/rating/scoring.ts';
@@ -318,6 +330,22 @@ function allianceOf(state: SaveState, ownerId: string) {
   return selectOwnerMembership(state.command, ownerId);
 }
 
+/** The race an owner fights with: the player's, an NPC's planets', the test ally's. */
+export function sunOwnerRace(state: SaveState, ownerId: string): CombatFactionId | null {
+  if (ownerId === state.profile.playerId) return state.profile.factionId;
+  const target = Object.values(getEspionageTargets(state.espionage)).find((item) => item.ownerId === ownerId);
+  if (target && isCombatFactionId(target.raceId)) return target.raceId;
+  const allied = Object.values(state.alliedPlanets ?? {}).find((planet) => planet.ownerId === ownerId);
+  return allied && isCombatFactionId(allied.raceId) ? allied.raceId : null;
+}
+
+/** Races present among an alliance's members: the only races its raid order may name. */
+export function allianceSunRaces(state: SaveState, allianceId: string): CombatFactionId[] {
+  const alliance = state.command.alliances.find((item) => item.id === allianceId);
+  const present = new Set((alliance?.members ?? []).map((member) => sunOwnerRace(state, member.ownerId)).filter((race): race is CombatFactionId => Boolean(race)));
+  return COMBAT_FACTION_IDS.filter((race) => present.has(race));
+}
+
 /* ----------------------------------------------------------------- flights */
 
 function flightsOfRaid(state: SaveState, raidId: string, side?: 'attacker' | 'defender'): FlightRecord[] {
@@ -339,6 +367,39 @@ export function selectRaidSides(state: SaveState, raidId: string): { attackers: 
   };
   return { attackers: summarize('attacker'), defenders: summarize('defender') };
 }
+
+function flightOrderPledge(flight: FlightRecord): SunOrderPledge {
+  const snapshot = flight.sunRaid!;
+  return {
+    factionId: snapshot.factionId,
+    ships: flight.selectedShips,
+    ...(flight.selectedCommanders ? { commanders: flight.selectedCommanders } : {}),
+    levels: { ...snapshot.shipLevels, ...(snapshot.commanderLevels ?? {}) },
+  };
+}
+
+/** How full each slot of a raid's order is: its pledged fleets placed in their stored order. */
+export function selectRaidOrderFill(state: SaveState, raid: SunRaidRecord): SunOrderFill {
+  if (!raid.order) return new Map();
+  const flights = flightsOfRaid(state, raid.id, 'attacker').filter((flight) => ACTIVE_PHASES.has(flight.phase) || (flight.phase === 'completed' && raid.status === 'resolved'));
+  return sunOrderFill(raid.order, flights.map(flightOrderPledge));
+}
+
+/** What the player may still add to a raid's order from its race and levels (ship id → hulls; «любые» population). */
+export function selectPlayerOrderRoom(state: SaveState, raid: SunRaidRecord) {
+  if (!raid.order) return null;
+  const levels: Partial<Record<string, number>> = { ...getOwnerShipUpgradeLevels(state) };
+  for (const id of COMMANDER_IDS) levels[id] = getOwnerShipUpgradeLevel(state, id);
+  return sunOrderRoomFor(raid.order, selectRaidOrderFill(state, raid), state.profile.factionId, levels);
+}
+
+function orderRefusal(order: SunRaidOrder, fill: SunOrderFill, owner: SunOwner, ships: Partial<Record<ShipId, number>>, commanders: Partial<Record<CommanderId, number>>): string | null {
+  const placed = placeSunPledge(order, fill, { factionId: owner.factionId, ships, commanders, levels: { ...owner.shipLevels, ...owner.commanderLevels } });
+  if (placed.refused <= 0) return null;
+  const names = placed.refusedIds.map((id) => getFactionCombatEntity(owner.factionId, id).name).join(', ');
+  return `Заказ рейда не принимает: ${names}. Отправьте корабли из открытых позиций заказа (раса, тип и уровень).`;
+}
+
 
 function createSunFlight(
   owner: SunOwner,
@@ -474,7 +535,11 @@ function raidIdFor(requestId: string): string {
   return `sun-raid-npc-${hash.toString(36)}-${requestId.length}`;
 }
 
-export type RaidLaunchInput = { galaxy: number; system: number; originPlanetId: string; ships: Partial<Record<ShipId, number>>; commanders?: Partial<Record<CommanderId, number>>; requestId: string };
+export type RaidLaunchInput = {
+  galaxy: number; system: number; originPlanetId: string; ships: Partial<Record<ShipId, number>>; commanders?: Partial<Record<CommanderId, number>>; requestId: string;
+  /** The fleet this raid needs (owner rule 09.11.2026). Absent: any combat hull (tests, old callers). */
+  order?: SunRaidOrder;
+};
 
 /**
  * Starts a command raid from «Операции» for an eligible alliance member.
@@ -513,6 +578,10 @@ function pledgeToRaid(state: SaveState, owner: SunOwner, raid: SunRaidRecord, sh
   }
   const shipError = validateShips(owner, ships, commanders);
   if (shipError) return { ok: false, error: shipError };
+  if (raid.order) {
+    const refusal = orderRefusal(raid.order, selectRaidOrderFill(state, raid), owner, ships, commanders);
+    if (refusal) return { ok: false, error: refusal };
+  }
   const created = createSunFlight(owner, {
     missionId: 'sun-attack', raidId: raid.id, galaxy: raid.galaxy, system: raid.system, ships, commanders,
     requestId, departedAt: options.now, allianceId: raid.allianceId,
@@ -604,6 +673,10 @@ function launchRaidFor(state: SaveState, owner: SunOwner, input: RaidLaunchInput
   });
   if (!check.ok) return { ok: false, state, error: check.message };
   const alliance = membership!.alliance;
+  if (input.order) {
+    const orderError = validateSunRaidOrder(input.order, { perSide: sunRaidCapsOf(state).perSide, races: allianceSunRaces(state, alliance.id) });
+    if (orderError) return { ok: false, state, error: orderError };
+  }
   const raidId = raidIdFor(input.requestId);
   const gatherEndsAt = options.now + scaleSunDuration(SUN_RAID_CONFIG.raidGatherMs, options);
   const raid: SunRaidRecord = {
@@ -619,6 +692,7 @@ function launchRaidFor(state: SaveState, owner: SunOwner, input: RaidLaunchInput
     arrivesAt: gatherEndsAt + scaleSunDuration(SUN_RAID_CONFIG.flightOneWayMs, options),
     status: 'gathering',
     gatherEndsAt,
+    ...(input.order ? { order: { version: 1 as const, preset: input.order.preset, slots: input.order.slots.map((slot) => ({ ...slot })) } } : {}),
   };
   const event: SunRaidEvent = {
     id: `${raidId}:declared`, at: options.now, kind: 'raid-launched', galaxy: input.galaxy, system: input.system,
@@ -778,7 +852,7 @@ export type SunLaunchPreview = {
 /** Live numbers of the launch dialog: population counter, travel time, fuel and the blocking reason. */
 export function previewSunLaunch(
   state: SaveState,
-  input: { kind: 'attack' | 'support' | 'join'; galaxy: number; system: number; raidId?: string; originPlanetId: string; ships: Partial<Record<ShipId, number>>; commanders?: Partial<Record<CommanderId, number>> },
+  input: { kind: 'attack' | 'support' | 'join'; galaxy: number; system: number; raidId?: string; originPlanetId: string; ships: Partial<Record<ShipId, number>>; commanders?: Partial<Record<CommanderId, number>>; order?: SunRaidOrder },
   options: SunRuntimeOptions,
 ): SunLaunchPreview {
   const owner = playerOwner(state, input.originPlanetId);
@@ -808,12 +882,20 @@ export function previewSunLaunch(
       galaxy: input.galaxy, system: input.system, population, now: options.now, participantCap: sunRaidCapsOf(state).participant,
     });
     error = check.ok ? null : check.message;
+    if (!error && input.order && membership) {
+      error = validateSunRaidOrder(input.order, { perSide: cap, races: allianceSunRaces(state, membership.alliance.id) });
+      if (!error) {
+        const refusal = orderRefusal(input.order, new Map(), owner, ships, commanders);
+        if (refusal) error = refusal;
+      }
+    }
   }
   if (!error && input.kind === 'support') error = supportCheck(state, owner, raid, ships, options, false, commanders);
   if (!error && input.kind === 'join') {
     if (!raid || raid.status !== 'gathering' || (raid.gatherEndsAt ?? 0) <= options.now) error = 'Сбор этого рейда уже закрыт.';
     else if (allianceOf(state, owner.ownerId)?.alliance.id !== raid.allianceId) error = 'В рейд вступают только участники союза, который его объявил.';
     else if (population > ownRoom) error = `Свободно ${ownRoom.toLocaleString('ru-RU')} населения: один участник вносит не больше ${sunRaidCapsOf(state).participant.toLocaleString('ru-RU')}.`;
+    else if (raid.order) error = orderRefusal(raid.order, selectRaidOrderFill(state, raid), owner, ships, commanders);
   }
   if (!error && flight && getPlanetResources(state, owner.planetId).gas < flight.gasCost) error = `Недостаточно газа: нужно ${flight.gasCost.toLocaleString('ru-RU')}.`;
   const oneWayMs = input.kind !== 'support'
@@ -1142,6 +1224,10 @@ function resolveRaid(state: SaveState, raid: SunRaidRecord, at: number, options:
     ...(playerInvolved ? { reportId } : {}),
   };
   sunRaid = appendSunEvents({ ...sunRaid, raids: sunRaid.raids.map((item) => item.id === raid.id ? { ...raid, status: 'resolved' as const, result } : item) }, events);
+  // The bots' battle log (owner rule 09.11.2026): both sides' fleets, bonuses, rounds, outcome incl. a draw, losses.
+  const logEntry = sunBattleLogEntry(raid, at, winner, report, attackers, defenders, attack.allyGroups.length + 1, defense.allyGroups.length + (defense.ships.length ? 1 : 0));
+  sunRaid = { ...sunRaid, battleLog: appendSunBattleLog(sunRaid.battleLog, logEntry) };
+  getNpcJournalSink()?.outcome?.({ at, ownerId: raid.initiatorOwnerId, kind: 'sun-battle', data: logEntry as unknown as Record<string, unknown> });
 
   let next = recordNpcJointRaid(withSunRaid(state, sunRaid), result.attackerOwnerIds ?? [], result.winner === 'attacker', at);
   for (const item of [...attackers, ...defenders]) {
@@ -1241,6 +1327,33 @@ function resolveRaid(state: SaveState, raid: SunRaidRecord, at: number, options:
         : `Солнце ${sunLabel}: защитники отразили рейд [${raid.allianceTag}].`,
   });
   return next;
+}
+
+function sunBattleSide(participants: readonly SideParticipant[], force: BattleForceSnapshot, groups: number): SunBattleSide {
+  const rows = sunBattleRows(participants.map(({ flight, snapshot }) => ({
+    factionId: snapshot.factionId,
+    ships: { ...flight.selectedShips, ...normalizeCommanders(flight.selectedCommanders) },
+    levels: { ...snapshot.shipLevels, ...(snapshot.commanderLevels ?? {}) },
+  })));
+  return {
+    rows,
+    owners: new Set(participants.map((item) => item.snapshot.ownerId)).size,
+    groups: participants.length ? groups : 0,
+    population: participants.reduce((sum, item) => sum + item.population, 0),
+    lost: Math.max(0, Math.floor((force.populationBefore ?? 0) - (force.populationAfter ?? 0))),
+    bonuses: sunBattleBonuses(rows),
+  };
+}
+
+/** One compact record of a Sun battle for the bots' learning data and the bot journal. */
+function sunBattleLogEntry(raid: SunRaidRecord, at: number, winner: 'attacker' | 'defender' | 'draw', report: BattleReport,
+  attackers: readonly SideParticipant[], defenders: readonly SideParticipant[], attackGroups: number, defenceGroups: number): SunBattleLogEntry {
+  return {
+    id: raid.id, at, g: raid.galaxy, s: raid.system, allianceId: raid.allianceId, tag: raid.allianceTag,
+    ordered: Boolean(raid.order), winner, rounds: report.rounds.length,
+    attack: sunBattleSide(attackers, report.attackerForce, attackGroups),
+    defence: sunBattleSide(defenders, report.defenderForce, defenceGroups),
+  };
 }
 
 export type SunReportExtension = {

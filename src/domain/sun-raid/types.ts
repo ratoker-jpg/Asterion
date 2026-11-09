@@ -2,6 +2,8 @@ import type { CombatFactionId } from '../combat/factions.ts';
 import type { CombatTechnologyLevels } from '../combat/technologies.ts';
 import type { ShipId } from '../combat/ids.ts';
 import type { SolarCrystalId } from './config.ts';
+import type { SunRaidOrder } from './order.ts';
+import type { SunBattleLogEntry } from './battle-log.ts';
 
 export type { SolarCrystalId } from './config.ts';
 
@@ -91,6 +93,8 @@ export type SunRaidRecord = {
   result?: SunRaidResult;
   /** When every attacker fleet of the raid is back home: the alliance may raid again. */
   closedAt?: number;
+  /** The launcher's order (owner rule 09.11.2026); absent in older saves: any combat hull is accepted. */
+  order?: SunRaidOrder;
 };
 
 export type GateProject = {
@@ -162,4 +166,6 @@ export type SunRaidState = {
   gateCooldowns: Record<string, number>;
   history: SunRaidEvent[];
   campaignResult?: CampaignResult;
+  /** Compact record of the last Sun battles: the bots learn from it (absent in older saves). */
+  battleLog?: SunBattleLogEntry[];
 };
