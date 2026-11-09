@@ -69,7 +69,9 @@ test('NPC founding uses its public name and persists one real owner membership',
   assert.equal(created.ok, true);
   const alliance = created.state.command.alliances.find((item) => item.members.some((member) => member.ownerId === ownerId));
   assert.ok(alliance);
-  assert.equal(alliance.name, `${publicName.slice(0, 30)} Союз`);
+  assert.equal(alliance.name, candidate.payload.name);
+  assert.ok(!alliance.name.toLowerCase().includes(publicName.toLowerCase()), 'clan name is not built from the founder nick');
+  assert.notEqual(alliance.tag.toLowerCase(), publicName.toLowerCase());
   assert.equal(alliance.members[0]?.displayName, publicName);
   assert.equal(alliance.fixtureId, undefined);
 

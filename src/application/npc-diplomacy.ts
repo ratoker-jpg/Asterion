@@ -7,6 +7,7 @@ import {
   DEPUTY_REPICK_WEIGHT,
 } from '../domain/command/catalog.ts';
 import { selectOwnerScore } from '../domain/rating/scoring.ts';
+import { allianceNameKey, allianceTagKey, pickNpcAllianceName } from '../domain/command/alliance-names.ts';
 import {
   acceptApplication,
   applyToAlliance,
@@ -81,22 +82,11 @@ function relationsById(command: CommandState, allianceId: string) {
   return new Map(selectAllianceRelations(command, allianceId).map((relation) => [relation.id, relation]));
 }
 
-function uniqueAllianceSettings(command: CommandState, displayName: string): AllianceSettingsInput {
-  const normalized = displayName.trim().replace(/\s+/g, ' ') || 'NPC';
-  const base = `${normalized.slice(0, 30).trim() || 'NPC'} Союз`;
-  const tagSeed = [...normalized.replace(/[^\p{L}\p{N}]/gu, '')].slice(0, 6).join('').toLocaleUpperCase('ru-RU') || 'NPC';
-  const baseTag = tagSeed.length < 2 ? `${tagSeed}1` : tagSeed;
-  for (let suffix = 1; suffix <= 999; suffix += 1) {
-    const ending = suffix === 1 ? '' : ` ${suffix}`;
-    const name = `${base.slice(0, 42 - ending.length)}${ending}`;
-    const tagEnding = suffix === 1 ? '' : String(suffix);
-    const tag = `${baseTag.slice(0, 8 - tagEnding.length)}${tagEnding}`;
-    if (!command.alliances.some((alliance) => alliance.name.toLocaleLowerCase('ru-RU') === name.toLocaleLowerCase('ru-RU')
-      || alliance.tag.toLocaleUpperCase('ru-RU') === tag)) {
-      return { name, tag, motto: '', description: '', emblem: DEFAULT_ALLIANCE_EMBLEM };
-    }
-  }
-  return { name: `${base.slice(0, 35)} 999`, tag: `${baseTag.slice(0, 5)}999`, motto: '', description: '', emblem: DEFAULT_ALLIANCE_EMBLEM };
+/** Clan name for a bot founder: from the clan-name pool, never built from the founder's nick. */
+function uniqueAllianceSettings(command: CommandState, ownerId: string, displayName: string): AllianceSettingsInput {
+  const picked = pickNpcAllianceName(ownerId, displayName, (name, tag) => command.alliances.some((alliance) =>
+    allianceNameKey(alliance.name) === allianceNameKey(name) || allianceTagKey(alliance.tag) === allianceTagKey(tag)));
+  return { name: picked.name, tag: picked.tag, motto: '', description: '', emblem: DEFAULT_ALLIANCE_EMBLEM };
 }
 
 function stableFraction(key: string): number {
@@ -143,7 +133,7 @@ export function getNpcDiplomacyCandidates(
     // An owner that has just left an alliance (a bot disbanding its alliance of one, say) looks for another one
     // and does not found a new alliance of one at once.
     if (!pendingOwnApplication && !selectReapplyBlock(command, ownerId, null, at) && recentlyLeftAlliances(command, ownerId, at).size === 0) {
-      const settings = uniqueAllianceSettings(command, publicOwnerName(state, ownerId));
+      const settings = uniqueAllianceSettings(command, ownerId, publicOwnerName(state, ownerId));
       candidates.push(makeCandidate('create-alliance', `create-alliance:${ownerId}`, 0.18 + cooperation * 0.35 + social * 0.12, {
         name: settings.name,
         tag: settings.tag,
@@ -271,7 +261,7 @@ export function applyNpcDiplomacyAction(
 
   switch (candidate.kind) {
     case 'create-alliance': {
-      const settings = uniqueAllianceSettings(command, name);
+      const settings = uniqueAllianceSettings(command, ownerId, name);
       // Candidate input is a snapshot; regenerate public identity if state changed meanwhile.
       result = createAlliance(command, { ownerId, displayName: name, settings }, { now: at, random: () => stableFraction(actionId) });
       break;
