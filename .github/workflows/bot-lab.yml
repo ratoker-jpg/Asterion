@@ -109,10 +109,15 @@ jobs:
         env:
           SCENARIO: ${{ inputs.scenario }}
         run: |
-          cp ../lab-tools/tools/bot-lab.mjs ../lab-tools/tools/bot-lab-batch.mjs tools/
+          cp ../lab-tools/tools/bot-lab.mjs ../lab-tools/tools/bot-lab-batch.mjs ../lab-tools/tools/sun-prep-lab.mjs tools/
           mkdir -p ../fixtures
           for seed in $(cat ../seeds.txt); do
-            node $LAB_NODE tools/bot-lab.mjs --seed=$seed --hours=0 ${SCENARIO:+--scenario=$SCENARIO} --write-fixture=../fixtures/seed-$seed.json > /dev/null
+            if [ "$SCENARIO" = sun ]; then
+              # Sun raids (tools/sun-prep-lab.mjs): three armed alliances of five, the raid funnel and raid fleets measured.
+              node $LAB_NODE tools/sun-prep-lab.mjs --write-fixture=../fixtures/seed-$seed.json --seed=$seed --scenario=sun > /dev/null
+            else
+              node $LAB_NODE tools/bot-lab.mjs --seed=$seed --hours=0 ${SCENARIO:+--scenario=$SCENARIO} --write-fixture=../fixtures/seed-$seed.json > /dev/null
+            fi
           done
       - uses: actions/upload-artifact@v4
         with:
@@ -153,8 +158,13 @@ jobs:
           DAYS: ${{ inputs.days }}
           SIDE: ${{ matrix.side }}
           LEAGUE: ${{ inputs.league }}
+          SCENARIO: ${{ inputs.scenario }}
         run: |
-          cp ../lab-tools/tools/bot-lab.mjs ../lab-tools/tools/bot-lab-batch.mjs tools/
+          cp ../lab-tools/tools/bot-lab.mjs ../lab-tools/tools/bot-lab-batch.mjs ../lab-tools/tools/sun-prep-lab.mjs tools/
+          if [ "$SCENARIO" = sun ]; then
+            node $LAB_NODE tools/sun-prep-lab.mjs --fixture=../fixtures/seed-$SEED.json --days=$DAYS --label=$SIDE --out=../out/sun/seed-$SEED-$SIDE.json > /dev/null
+            exit 0
+          fi
           POLICY_FLAG=""
           if [ -n "$LEAGUE" ]; then
             # The candidate's policy file, written from the manifest; "base" runs on the shipped file of the revision.
@@ -188,10 +198,19 @@ jobs:
         env:
           HAS_BASE: ${{ inputs.base_ref != '' }}
           LEAGUE: ${{ inputs.league }}
+          SCENARIO: ${{ inputs.scenario }}
         run: |
           mkdir -p lab-runs/after lab-runs/base
           for dir in raw/*/; do cp -r "$dir"* lab-runs/; done
-          if [ -n "$LEAGUE" ]; then
+          if [ "$SCENARIO" = sun ]; then
+            node tools/sun-prep-lab.mjs --compare=base,after --dir=lab-runs > comparison.json
+            node -e '
+              const fs = require("node:fs");
+              const { raids } = JSON.parse(fs.readFileSync("comparison.json", "utf8"));
+              const keys = Object.keys(raids.before);
+              fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, ["| Sun raids | Base | After |", "|---|---|---|", ...keys.map((key) => `| ${key} | ${raids.before[key]} | ${raids.after[key]} |`), ""].join(String.fromCharCode(10)));
+            '
+          elif [ -n "$LEAGUE" ]; then
             node tools/league.mjs score --dir=lab-runs --manifest=$LEAGUE > comparison.json
             node -e '
               const fs = require("node:fs");
