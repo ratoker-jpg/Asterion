@@ -202,7 +202,13 @@ async function testModeScenario(win, label) {
   await click(win, '[data-qa-test-ira-request]');
   await waitFor(win, `document.querySelectorAll('[data-qa-incoming-requests] > li').length === 1`);
   await capture(win, label, 'requests-incoming');
+  // «Помочь» opens the quick window beside the request; «Полный план» leads to the full fleet window.
   await click(win, '[data-qa-request-help]');
+  await waitFor(win, `document.querySelector('[data-qa-aid-quick] [data-qa-aid-quick-remainder]')`);
+  const quickRemainder = await run(win, `document.querySelector('[data-qa-aid-quick-remainder]').textContent.replace(/\\D/g, '')`);
+  assert(quickRemainder === '60000', `${label}: the quick window shows the request remainder`, quickRemainder);
+  await capture(win, label, 'aid-quick-window');
+  await click(win, '[data-qa-aid-quick-details]');
   await waitFor(win, `document.querySelector('.fleet-workspace-v1')`);
   await waitFor(win, `document.querySelector('[data-qa-mission-current]')?.getAttribute('data-qa-mission-current') === 'aid'`);
   await setField(win, '[data-qa-fleet-ship="mega-transporter"] input[type="number"]', '3');

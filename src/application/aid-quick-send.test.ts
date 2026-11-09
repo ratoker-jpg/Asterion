@@ -88,3 +88,14 @@ test('gas aid leaves the fuel of the trip on the planet', () => {
   const preview = previewAidQuick(state, buildAidQuickCommand(req, source.planetId, load.ships, load.amount, runtime), runtime);
   assert.ok(preview.ok, preview.ok ? '' : preview.error.message);
 });
+
+test('gas aid refit for a smaller load still leaves enough fuel (mixed hulls)', () => {
+  const base = world({ 'mega-transporter': 10, transporter: 10 });
+  const poor = replacePlanetResources(base, 'helion-01', { metal: 0, minerals: 0, gas: 20_000 });
+  const { state, request: req } = request(poor, 120_000, 'gas');
+  const source = aidQuickSources(state, req).find((item) => item.planetId === 'helion-01')!;
+  const load = suggestAidLoad(state, req, source, runtime);
+  assert.ok(load.amount > 0);
+  const preview = previewAidQuick(state, buildAidQuickCommand(req, source.planetId, load.ships, load.amount, runtime), runtime);
+  assert.ok(preview.ok, preview.ok ? '' : preview.error.message);
+});

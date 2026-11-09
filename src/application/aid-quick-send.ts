@@ -124,11 +124,20 @@ export function suggestAidLoad(state: SaveState, request: ResourceRequest, sourc
   const amount = Math.max(0, Math.min(aidRemainder(state, request), source.stock, source.capacity));
   const ships = aidShipsFor(state, source.free, amount);
   if (request.resource !== 'gas' || !runtime || amount <= 0) return { ships, amount };
-  // Gas aid pays its own fuel from the same stock: leave the fuel of this fleet on the planet.
-  const probe = previewAidQuick(state, buildAidQuickCommand(request, source.planetId, ships, 1, runtime), runtime);
-  const fuel = probe.ok ? probe.flight.gasCost : 0;
-  const fitted = Math.max(0, Math.min(amount, source.stock - fuel));
-  return fitted === amount ? { ships, amount } : { ships: aidShipsFor(state, source.free, fitted), amount: fitted };
+  // Gas aid pays its own fuel from the same stock: leave the fuel of the fleet on the planet.
+  // Refitting for a smaller load can change the hulls (and their fuel), so repeat until it settles.
+  const fuelOf = (fleet: AidShips) => {
+    const probe = previewAidQuick(state, buildAidQuickCommand(request, source.planetId, fleet, 1, runtime), runtime);
+    return probe.ok ? probe.flight.gasCost : 0;
+  };
+  let load: AidQuickLoad = { ships, amount };
+  for (let pass = 0; pass < 6; pass += 1) {
+    const fitted = Math.max(0, Math.min(amount, source.stock - fuelOf(load.ships)));
+    if (fitted >= load.amount) return load;
+    const refit = aidShipsFor(state, source.free, fitted);
+    load = { ships: refit, amount: Math.max(0, Math.min(fitted, source.stock - fuelOf(refit), aidCapacity(state, refit))) };
+  }
+  return load;
 }
 
 /** The exact dispatch command the fleet screen would build for this aid launch. */
