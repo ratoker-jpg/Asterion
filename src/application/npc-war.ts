@@ -62,6 +62,11 @@ export const NPC_WAR_BALANCE = Object.freeze({
   /** A wave is still sent this long after the agreed time, and no earlier than this before it. */
   windowHours: 2,
   earlyMinutes: 30,
+  /** Owner rule 09.11.2026: partners never arrive together. Each arrives about the agreed time shifted by a seeded offset of up to this many minutes either way, and any two are at least this many minutes apart. Only one bot's own waves are tight. */
+  scatterMinutes: 10,
+  partnerGapMinutes: 2,
+  /** A partner's wave leaves no earlier than this many minutes before its own scattered time. */
+  partnerEarlyMinutes: 1,
   /** Fleets are brought to the staging planets from this long before the round; the target is scouted from this long before. */
   prepHours: 2,
   reconHours: 1.5,
@@ -143,6 +148,25 @@ export function npcWarTargetOrder(state: SaveState, utility: NpcUtilityContext, 
       || left.near - right.near || (left.id < right.id ? -1 : 1)).map((item) => item.id);
 }
 
+/**
+ * Where each accepted member's arrival sits around the round time: a seeded
+ * offset per member, later ones pushed on so that no two are closer than the
+ * gap. Deterministic from the war, the round and the member list.
+ */
+export function npcWarArrivalOffsets(war: NpcWar): Map<string, number> {
+  const raw = acceptedMembers(war).map((item) => ({ id: item.ownerId,
+    offset: Math.round((createSeededRandom(JSON.stringify(['npc-war-scatter', war.warId, war.round, item.ownerId]))() * 2 - 1) * NPC_WAR_BALANCE.scatterMinutes * MINUTE) }))
+    .sort((left, right) => left.offset - right.offset || (left.id < right.id ? -1 : 1));
+  const out = new Map<string, number>();
+  let previous = -Infinity;
+  for (const item of raw) {
+    const offset = Math.max(item.offset, previous + NPC_WAR_BALANCE.partnerGapMinutes * MINUTE);
+    out.set(item.id, offset);
+    previous = offset;
+  }
+  return out;
+}
+
 /* ------------------------------------------------------------------ answers */
 
 /** What an invited bot makes of the call: fury, alliance with the leader, regard, character, fear of the offender. */
@@ -216,7 +240,7 @@ export function refreshNpcWars(state: SaveState, profile: NpcProfile, utility: N
           next = withNpcWar(next, withNpcWarMember(war, { ...own, answer: 'accepted', answeredAt: at }));
         } else next = leave(next, war, ownerId, 'declined', 'not-moved', at);
       }
-    } else if (!own && fury >= NPC_WAR_BALANCE.joinFury && acceptedMembers(war).length < NPC_WAR_BALANCE.maxMembers
+    } else if (!own && fury >= NPC_WAR_BALANCE.joinFury && war.members.filter((item) => item.answer === 'accepted' || item.answer === 'invited').length < NPC_WAR_BALANCE.maxMembers
       && !inOtherWar(next, ownerId, war.warId) && ['ok', 'shield'].includes(attackable(next, ownerId, war.offenderId, at))) {
       // Hurt by the same offender, it does not wait to be asked.
       journal(at, ownerId, 'answer', { id: war.warId, off: war.offenderId, a: 'volunteered', g: round3(fury) });
@@ -437,6 +461,13 @@ export function getNpcWarChoices(state: SaveState, profile: NpcProfile, utility:
   // No win chance is weighed: a furious bot spends ships to break through. Cargo follows only a wave it believes wins.
   const early = NPC_WAR_BALANCE.earlyMinutes * MINUTE;
   const late = war.roundAt + war.windowMs;
+  const offset = npcWarArrivalOffsets(war).get(ownerId) ?? 0;
+  const partners = acceptedMembers(war).length > 1;
+  const lead = (partners ? NPC_WAR_BALANCE.partnerEarlyMinutes * MINUTE : early);
+  // Arrivals of the other members' waves on this target: a wave that would land within the gap of one waits for a later look.
+  const theirs = acceptedMembers(war).filter((item) => item.ownerId !== ownerId).flatMap((item) => ownerFlights(state.flights.records, item.ownerId)
+    .filter((flight) => flight.ownerSide === 'npc' && flight.missionId === 'attack' && flight.destinationPlanetId === target.id && flight.arrivalAt > at - HOUR)
+    .map((flight) => flight.arrivalAt));
   // One wave from a planet per round: what comes home or is built meanwhile waits for the next one, never a trickle.
   const launched = new Set(ownerFlights(state.flights.records, ownerId).filter((flight) => flight.ownerSide === 'npc' && flight.missionId === 'attack'
     && flight.destinationPlanetId === target.id && flight.departedAt > war.roundAt - NPC_WAR_BALANCE.prepHours * HOUR).map((flight) => flight.originPlanetId));
@@ -447,7 +478,8 @@ export function getNpcWarChoices(state: SaveState, profile: NpcProfile, utility:
   for (const planet of wanted) {
     const ships = free.get(planet.id) ?? {};
     const arrives = at + flightMs(planet, ships);
-    if (arrives < war.roundAt - early || arrives > late) continue;
+    if (arrives < war.roundAt + offset - lead || arrives > late) continue;
+    if (theirs.some((other) => Math.abs(other - arrives) < NPC_WAR_BALANCE.partnerGapMinutes * MINUTE)) continue;
     // Pointless waves are skipped, once per round in the journal.
     let skip: string | null = null;
     if (relation !== 'enemy' && relation !== 'neutral') skip = 'ally';
@@ -488,7 +520,7 @@ export function getNpcWarChoices(state: SaveState, profile: NpcProfile, utility:
       let after = result.state;
       if (bearing && mineNow) after = withNpcWar(after, withNpcWarMember(bearing, { ...mineNow, lastRound: war.round, waves: mineNow.waves + 1 }));
       journal(at, ownerId, 'wave', { id: war.warId, round: war.round, rank: myRank, from: planet.id, to: goal.id, v: Math.round(npcFleetValue(raceId, sendable)),
-        arr: result.flight.arrivalAt, g: round3(fury) });
+        arr: result.flight.arrivalAt, off: offset, gap: theirs.length ? Math.round(Math.min(...theirs.map((other) => Math.abs(other - result.flight!.arrivalAt))) / 1000) : null, g: round3(fury) });
       if (hasNews(report) && estimateRaidWin(utility, origin, report, sendable as Partial<Record<ShipId, number>>) >= NPC_WAR_BALANCE.holdsWin) {
         const loot = dispatchNpcLootWaves(after, command, result.flight, report, false, at, timeScale);
         if (loot.waves > 0) after = loot.state;

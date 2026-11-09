@@ -16,7 +16,7 @@ import { reconcileFlights } from './flights.ts';
 import { settleNpcFleetProduction } from './npc-fleet-production.ts';
 import { createNpcUtilityContext } from './npc-utility.ts';
 import { getNpcMissionCandidates } from './npc-mission-policy.ts';
-import { draftNpcWar, getNpcWarChoices, NPC_WAR_BALANCE, npcWarFury, npcWarStagingPlanets, npcWarTargetOrder, recordNpcWarBattle, refreshNpcWars } from './npc-war.ts';
+import { draftNpcWar, getNpcWarChoices, NPC_WAR_BALANCE, npcWarArrivalOffsets, npcWarFury, npcWarStagingPlanets, npcWarTargetOrder, recordNpcWarBattle, refreshNpcWars } from './npc-war.ts';
 import { activeNpcWars, npcWarMember, withNpcWar } from './npc-war-state.ts';
 import { NpcJournalRecorder, setNpcJournalSink } from './npc-journal.ts';
 import type { SaveState } from './contracts.ts';
@@ -184,4 +184,21 @@ test('a battle of a member on the offender counts for the war', () => {
   assert.equal(activeNpcWars(counted)[0]!.wins, 1);
   const other = { attacker: { playerId: 'stranger' }, defender: { playerId: world.offender }, winner: 'attacker', missionType: 'attack' } as never;
   assert.equal(recordNpcWarBattle(running, other, at, 0, 0), running, 'a non-member battle is none of the war');
+});
+
+test('a coalition of five never has two partners arriving within two minutes of each other, and the scatter is deterministic', () => {
+  const world = warWorld('npc-war-scatter', { secondGrudge: true });
+  const at = START + MINUTE;
+  const base = draftNpcWar(world.state, world.state.npc!.profiles[world.owner]!, utilityOf(world.state, world.owner, at), at)!;
+  const members = ['m1', 'm2', 'm3', 'm4', 'm5'].map((ownerId, index) => ({ ownerId, role: index ? 'hurt' as const : 'leader' as const, answer: 'accepted' as const,
+    invitedAt: at, lastRound: 0, waves: 0, lastSkip: 0 }));
+  for (let round = 1; round <= 200; round += 1) {
+    const war = { ...base, warId: `war:scatter:${round}`, round, members };
+    const offsets = [...npcWarArrivalOffsets(war).values()].sort((left, right) => left - right);
+    assert.equal(offsets.length, 5);
+    for (let index = 1; index < offsets.length; index += 1) assert.ok(offsets[index]! - offsets[index - 1]! >= 2 * MINUTE, 'partners are at least two minutes apart');
+    assert.ok(offsets.every((offset) => Math.abs(offset) <= 20 * MINUTE), 'and stay near the agreed time');
+    assert.deepEqual([...npcWarArrivalOffsets(war)], [...npcWarArrivalOffsets(war)], 'deterministic');
+  }
+  assert.ok(draftNpcWar(world.state, world.state.npc!.profiles[world.owner]!, utilityOf(world.state, world.owner, at), at)!.members.length <= NPC_WAR_BALANCE.maxMembers);
 });
