@@ -102,6 +102,10 @@ import type { TargetRelation } from './domain/flights/types.ts';
 import type { SpyTargetState } from './domain/espionage/types.ts';
 import { planetSkinMapArt } from './planet-skin-art.ts';
 import { QuickActions } from './ui/universe/QuickActions.tsx';
+import { SunQuickMenu } from './ui/universe/SunQuickMenu.tsx';
+import type { GateBeacon } from './application/sun-gate-watch.ts';
+import { gateArt } from './ui/sun-raid/sun-raid-assets.ts';
+import './ui/universe/gate-beacon.css';
 import type { QuickActionId, QuickLegOutcome, QuickTarget } from './application/quick-actions.ts';
 import { ACTION_ART, ATLAS_BACKDROPS } from './ui/actions/action-art.ts';
 import { FACTION_EMBLEMS } from './ui/header/faction-emblems.ts';
@@ -155,7 +159,8 @@ type UniverseViewProps = {
   onPirateAttack?: (contact: PirateContactPresentation) => void;
   onPirateReport?: (reportId: string) => void;
   onPirateSystemChange?: (selection: PirateSystemSelection) => void;
-  focusTarget?: { coordinate: UniverseCoordinate; planetId?: string; ownerId?: string; mode?: 'inspect' | 'highlight' } | null;
+  /** 'quick' opens the planet's quick actions, 'sun' the Sun's (jumps from Gate and raid notices). */
+  focusTarget?: { coordinate: UniverseCoordinate; planetId?: string; ownerId?: string; mode?: 'inspect' | 'highlight' | 'quick' | 'sun' } | null;
   /** «Найти обломки» scans the systems around this planet (the one selected in the header). */
   debrisOrigin?: { planetName: string; coordinate: UniverseCoordinate } | null;
   /** «Отправить»: opens «Флоты → Переработка» aimed at the coordinate (position 0 = the Sun). */
@@ -163,7 +168,13 @@ type UniverseViewProps = {
   /** Click on the system's Sun: opens «Командование → Операции» for it. */
   onSunSelect?: (galaxy: number, system: number) => void;
   /** Suns of the player's galaxies with an incoming raid. */
-  sunAlerts?: readonly { galaxy: number; system: number }[];
+  sunAlerts?: readonly { galaxy: number; system: number; allianceTag?: string; arrivesAt?: number }[];
+  /** Gates under construction anywhere (public news): a beacon on the host planet. */
+  gateBeacons?: readonly GateBeacon[];
+  /** Sun quick menu «Защитить»: the defence window for every planet. */
+  onSunDefend?: (galaxy: number, system: number) => void;
+  /** Sun quick menu «Рейд на Солнце»: whether the alliance operation is open to the player. */
+  sunRaidAccess?: { enabled: boolean; reason?: string };
   /** The map opens on the home system (random starts are no longer [1:1]). */
   homeCoordinate?: { galaxy: number; system: number };
   /** Right mouse button: sends quick-panel legs through the fleet screen's dispatch. */
@@ -250,6 +261,19 @@ function countdownLabel(nowMs: number, targetMs?: number) {
   const minutes = Math.floor(seconds / 60);
   const remainder = seconds % 60;
   return minutes ? `${minutes} мин ${String(remainder).padStart(2, '0')} с` : `${remainder} с`;
+}
+
+/** «2 ч 14 мин» / «8 мин 05 с»: time left on a Gate. */
+function gateClock(ms: number) {
+  const seconds = Math.max(0, Math.ceil(ms / 1_000));
+  const hours = Math.floor(seconds / 3_600);
+  const minutes = Math.floor((seconds % 3_600) / 60);
+  if (hours) return `${hours} ч ${String(minutes).padStart(2, '0')} мин`;
+  return `${minutes} мин ${String(seconds % 60).padStart(2, '0')} с`;
+}
+
+function gateRace(raceId?: string): 'aegis' | 'synod' | 'veyra' {
+  return raceId === 'synod' || raceId === 'veyra' ? raceId : 'aegis';
 }
 
 function raceLabel(raceId?: string) {
@@ -411,7 +435,10 @@ function OwnerInspector({
   onVisit,
   presence,
   nowMs,
+  gateAt,
 }: {
+  /** A Gate being built on that planet (public news). */
+  gateAt: (planet: UniversePlanetNode) => GateBeacon | undefined;
   node: UniversePlanetNode;
   owner: UniverseOwnerProfile;
   planets: UniversePlanetNode[];
@@ -517,6 +544,7 @@ function OwnerInspector({
                   <strong>{planet.name}</strong>
                   <small><span>{formatUniverseCoordinate(planet.coordinate)}</span></small>
                   {debris > 0 ? <em>обломки {numberFormat.format(debris)}</em> : null}
+                  {gateAt(planet) ? <em className={`star-atlas__gate is-${gateAt(planet)!.side}`} data-qa-atlas-gate={gateAt(planet)!.gateId}>Врата · готовы через {gateClock(gateAt(planet)!.completesAt - nowMs)}</em> : null}
                 </span>
               </button>
               {ATLAS_COLUMNS.map((column) => {
@@ -739,7 +767,7 @@ function MovingAsteroid({ node, underlyingKind, nowMs, hasDebris, occupiedNodes,
   </button>;
 }
 
-export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPlanetName, profile, ownerScores, shields, command, playerPlanets: playerPlanetsProp, spyTargets: spyTargetsProp, orbitalDebrisByCoordinate, asteroidDebrisPresenceBySpawnIndex, asteroidStates, pirateContactState, pirateContacts = [], pirateFocusTarget, mode, onColonize, onAsteroidRecycler, onExpedition, onExplorationRecon, onExplorationAttack, explorationEligibility = {}, onTransport, onSpy, onAttack, onPirateRecon, onPirateAttack, onPirateReport, onPirateSystemChange, focusTarget, onFocusHandled, onSunSelect, sunAlerts = [], homeCoordinate, debrisOrigin, onQuickSend, onQuickDetails }: UniverseViewProps) {
+export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPlanetName, profile, ownerScores, shields, command, playerPlanets: playerPlanetsProp, spyTargets: spyTargetsProp, orbitalDebrisByCoordinate, asteroidDebrisPresenceBySpawnIndex, asteroidStates, pirateContactState, pirateContacts = [], pirateFocusTarget, mode, onColonize, onAsteroidRecycler, onExpedition, onExplorationRecon, onExplorationAttack, explorationEligibility = {}, onTransport, onSpy, onAttack, onPirateRecon, onPirateAttack, onPirateReport, onPirateSystemChange, focusTarget, onFocusHandled, onSunSelect, sunAlerts = [], gateBeacons = [], onSunDefend, sunRaidAccess, homeCoordinate, debrisOrigin, onQuickSend, onQuickDetails }: UniverseViewProps) {
   const galaxyCount = getActiveGalaxyCount();
   const [galaxy, setGalaxy] = useState(homeCoordinate?.galaxy ?? GALAXY);
   const [system, setSystem] = useState(homeCoordinate?.system ?? 1);
@@ -756,6 +784,11 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
   const [debrisQuick, setDebrisQuick] = useState<{ target: QuickTarget; anchor: HTMLElement } | null>(null);
   /** «Обломки» in the atlas: the recycle send panel over the atlas window. */
   const [atlasQuick, setAtlasQuick] = useState<{ target: QuickTarget; anchor: HTMLElement } | null>(null);
+  /** Right mouse button on the Sun: its quick menu beside the star. */
+  const [sunQuick, setSunQuick] = useState<HTMLElement | null>(null);
+  /** A jump from a notice opens quick actions once the target system is drawn. */
+  const [pendingQuick, setPendingQuick] = useState<{ kind: 'node'; planetId?: string; coordinate: UniverseCoordinate } | { kind: 'sun' } | null>(null);
+  const starRef = useRef<HTMLButtonElement>(null);
   const highlightTimerRef = useRef(0);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const onPirateSystemChangeRef = useRef(onPirateSystemChange);
@@ -883,6 +916,15 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
 
   useEffect(() => {
     if (!focusTarget) return;
+    if (focusTarget.mode === 'sun') {
+      setGalaxy(focusTarget.coordinate.galaxy);
+      setSystem(focusTarget.coordinate.system);
+      setSelectedNodeId(null);
+      setQuick(null);
+      setPendingQuick({ kind: 'sun' });
+      onFocusHandled?.();
+      return;
+    }
     const planetNodes = [...nodesById.values()].filter((node): node is UniversePlanetNode => node.kind === 'player' || node.kind === 'npc');
     const target = (focusTarget.planetId ? nodesById.get(focusTarget.planetId) : undefined)
       ?? planetNodes.find((node) => node.ownerId === focusTarget.ownerId)
@@ -897,6 +939,8 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
       setSystem(targetSystem);
       const atPosition = [...nodesById.values()].find((node) => node.coordinate.galaxy === targetGalaxy && node.coordinate.system === targetSystem && node.coordinate.position === position);
       setSelectedNodeId(null);
+      // A Gate in another galaxy: its node exists once that galaxy is drawn.
+      if (focusTarget.mode === 'quick') setPendingQuick({ kind: 'node', planetId: focusTarget.planetId, coordinate: focusTarget.coordinate });
       if (atPosition) {
         setHighlightedNodeId(atPosition.id);
         window.clearTimeout(highlightTimerRef.current);
@@ -907,6 +951,13 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
     }
     setGalaxy(target.coordinate.galaxy);
     setSystem(target.coordinate.system);
+    if (focusTarget.mode === 'quick') {
+      setSelectedNodeId(null);
+      setSunQuick(null);
+      setPendingQuick({ kind: 'node', planetId: target.id, coordinate: target.coordinate });
+      onFocusHandled?.();
+      return;
+    }
     if (focusTarget.mode === 'highlight') {
       // Coordinate links from spy reports only pinpoint the planet: pulse it
       // for ~3s instead of opening the owner inspector.
@@ -920,6 +971,23 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
     setSelectedNodeId(target.id);
     onFocusHandled?.();
   }, [focusTarget, nodesById, onFocusHandled]);
+
+  useEffect(() => {
+    if (!pendingQuick) return undefined;
+    const frame = requestAnimationFrame(() => {
+      if (pendingQuick.kind === 'sun') {
+        if (starRef.current) setSunQuick(starRef.current);
+      } else if (onQuickSend) {
+        const { galaxy: g, system: s, position } = pendingQuick.coordinate;
+        const element = (pendingQuick.planetId ? document.querySelector<HTMLElement>(`[data-node-id="${CSS.escape(pendingQuick.planetId)}"]`) : null)
+          ?? document.querySelector<HTMLElement>(`[data-node-pos="${g}:${s}:${position}"]`);
+        const nodeId = element?.dataset.nodeId;
+        if (element && nodeId) setQuick({ nodeId, anchor: element });
+      }
+      setPendingQuick(null);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [pendingQuick, systemData, onQuickSend]);
 
   const ownerPlanets = useMemo(() => {
     if (!selectedNode || (selectedNode.kind !== 'player' && selectedNode.kind !== 'npc')) return [];
@@ -973,6 +1041,7 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
     setSystem(bounded);
     setSelectedNodeId(null);
     setQuick(null);
+    setSunQuick(null);
     onNotice(`Галактика ${boundedGalaxy} · Солнечная система ${bounded}.`);
   };
   const openDebrisSearch = () => {
@@ -1015,6 +1084,23 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
   const listedNodes = systemData.positions.filter((node) => LISTED_KINDS.has(node.kind)).map((node) => ({ node, status: mapStatusOf(node) }));
   const homeWorld = playerPlanets.find((planet) => planet.isHomeworld)?.coordinate ?? playerPlanets[0]?.coordinate;
   const sunUnderAttack = sunAlerts.some((alert) => alert.galaxy === galaxy && alert.system === system);
+  const sunRaidsHere = sunAlerts.filter((alert) => alert.galaxy === galaxy && alert.system === system && alert.arrivesAt !== undefined)
+    .map((alert) => ({ allianceTag: alert.allianceTag ?? '', arrivesAt: alert.arrivesAt! }));
+  const gateAtPosition = new Map(gateBeacons.filter((beacon) => beacon.coordinate?.galaxy === galaxy && beacon.coordinate.system === system)
+    .map((beacon) => [beacon.coordinate!.position, beacon]));
+  const gateAt = (planet: UniversePlanetNode) => gateBeacons.find((beacon) => beacon.hostPlanetId === planet.id
+    || (beacon.coordinate && formatUniverseCoordinate(beacon.coordinate) === formatUniverseCoordinate(planet.coordinate)));
+  const gateSystems = new Set(gateBeacons.filter((beacon) => beacon.coordinate?.galaxy === galaxy).map((beacon) => beacon.coordinate!.system));
+  /** «Врата» chip: open the host's system and its quick actions (spy / attack). */
+  const jumpToGate = (beacon: GateBeacon) => {
+    if (!beacon.coordinate) return;
+    setGalaxy(beacon.coordinate.galaxy);
+    setSystem(beacon.coordinate.system);
+    setSelectedNodeId(null);
+    setSunQuick(null);
+    setQuick(null);
+    setPendingQuick({ kind: 'node', planetId: beacon.hostPlanetId, coordinate: beacon.coordinate });
+  };
   const pad2 = (value: number) => String(value).padStart(2, '0');
 
   const selectNode = (node: UniversePlanetNode) => setSelectedNodeId(node.id);
@@ -1082,11 +1168,19 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
         <div className="system-star-wrap">
           <button
             type="button"
+            ref={starRef}
             className={`system-star-button ${sunUnderAttack ? 'is-under-attack' : ''}`}
             aria-label={`Солнце системы ${system}. Эффективность: ${systemData.sunEfficiencyPercent}%. Открыть командный рейд`}
             aria-describedby="universe-star-efficiency"
+            aria-haspopup="menu"
             data-qa-universe-sun-efficiency={systemData.sunEfficiencyPercent}
             onClick={() => onSunSelect?.(galaxy, system)}
+            onContextMenu={(event) => {
+              if (!onSunDefend && !onSunSelect) return;
+              event.preventDefault();
+              setQuick(null);
+              setSunQuick(event.currentTarget);
+            }}
           >
             <img className="system-star" src={systemData.starArt} alt="" draggable={false} />
             <span className="system-star-tooltip" id="universe-star-efficiency" role="tooltip">
@@ -1094,6 +1188,7 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
               <small>Эффективность солнца: {systemData.sunEfficiencyPercent}%</small>
               {sunUnderAttack ? <small className="system-star-alert">Входящий рейд на Солнце</small> : null}
               {onSunSelect ? <small>Нажмите: рейд или защита Солнца</small> : null}
+              {onSunDefend ? <small>Правая кнопка: быстрые действия</small> : null}
             </span>
           </button>
         </div>
@@ -1139,6 +1234,8 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
               aria-label={`${ariaLabel} · ${mapStatus.title}${debrisDescription}`}
               aria-describedby={orbitalDebris > 0 ? `universe-debris-tooltip-${node.id}` : undefined}
               data-qa-universe-object={node.isHomeworld ? 'player-planet-helion-01' : node.id}
+              data-node-id={node.id}
+              data-node-pos={`${node.coordinate.galaxy}:${node.coordinate.system}:${node.coordinate.position}`}
               data-qa-universe-kind={node.kind}
               data-qa-universe-relation={relation ?? undefined}
               data-qa-map-tone={mapStatus.tone}
@@ -1151,6 +1248,16 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
               {claim ? <span className={`uv-claim-ring uv-claim-ring--${claim}`} aria-hidden="true" /> : null}
               {mapStatus.shieldLeft ? <span className="shield-aura" aria-hidden="true" data-qa-map-shield-aura /> : null}
               <img src={node.art} alt="" draggable={false} />
+              {gateAtPosition.get(node.coordinate.position) ? (() => {
+                const beacon = gateAtPosition.get(node.coordinate.position)!;
+                return (
+                  <span className={`gate-beacon gate-beacon--${beacon.side}`} data-qa-gate-beacon={beacon.gateId}>
+                    <i className="gate-beacon__pulse" aria-hidden="true" />
+                    <img src={gateArt(gateRace(owners.get(node.ownerId ?? '')?.raceId), 'construction')} alt="" draggable={false} />
+                    <b>Врата · {gateClock(beacon.completesAt - nowMs)}</b>
+                  </span>
+                );
+              })() : null}
               {claim
                 ? <span className={'universe-map-occupancy universe-map-occupancy--' + claim}
                     data-qa-universe-map-occupancy={explorationEligibility[node.id] ?? undefined}>
@@ -1177,6 +1284,23 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
         <strong>Солнечная система {pad2(system)}</strong>
         <span>Эффективность солнца {systemData.sunEfficiencyPercent}% · 24 позиции</span>
       </div>
+
+      {gateBeacons.some((beacon) => beacon.coordinate) ? (
+        <div className="universe-gates" aria-label="Строящиеся Врата" data-qa-universe-gates={gateBeacons.length}>
+          {gateBeacons.filter((beacon) => beacon.coordinate).map((beacon, index) => (
+            <button type="button" key={beacon.gateId} className={`universe-gates__item is-${beacon.side}`} style={{ '--i': index } as CSSProperties}
+              onClick={() => jumpToGate(beacon)} data-qa-gate-jump={beacon.gateId}
+              aria-label={`Врата ${beacon.holderName} на ${beacon.hostPlanetName} ${formatUniverseCoordinate(beacon.coordinate!)}, готовы через ${gateClock(beacon.completesAt - nowMs)}. Показать`}>
+              <img src={gateArt(gateRace(owners.get(beacon.hostOwnerId)?.raceId), 'construction')} alt="" draggable={false} />
+              <span>
+                <b>{beacon.side === 'rival' ? 'Строят Врата' : 'Ваши Врата'} · {beacon.holderName}</b>
+                <small>{beacon.hostPlanetName} <em>{formatUniverseCoordinate(beacon.coordinate!)}</em> · {gateClock(beacon.completesAt - nowMs)}</small>
+                <i className="universe-gates__bar" aria-hidden="true"><i style={{ width: `${beacon.progress}%` }} /></i>
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       <aside className={`universe-radar__list ${listPinned ? 'is-pinned' : ''}`} aria-label="Объекты системы">
         <button type="button" className="universe-radar__list-toggle" aria-expanded={listPinned} onClick={() => setListPinned((value) => !value)}
@@ -1228,8 +1352,8 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
             const value = system + delta;
             if (value < 1 || value > SYSTEM_COUNT) return <span key={delta} className="universe-radar__rail-gap" aria-hidden="true" />;
             return (
-              <button type="button" key={delta} className={`universe-radar__rail-item is-d${Math.abs(delta)}`} aria-current={delta === 0 ? 'true' : undefined}
-                aria-label={`Солнечная система ${value}`} onClick={() => { if (delta) goSystem(value); }}>{pad2(value)}</button>
+              <button type="button" key={delta} className={`universe-radar__rail-item is-d${Math.abs(delta)} ${gateSystems.has(value) ? 'has-gate' : ''}`} aria-current={delta === 0 ? 'true' : undefined}
+                aria-label={`Солнечная система ${value}${gateSystems.has(value) ? ', строятся Врата' : ''}`} onClick={() => { if (delta) goSystem(value); }}>{pad2(value)}</button>
             );
           })}
         </div>
@@ -1320,6 +1444,15 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
           onOpenCard={() => setSelectedNodeId(quickTarget.node.id)} onPirateReport={onPirateReport} />
       ) : null}
 
+      {sunQuick && !selectedNode ? (
+        <SunQuickMenu galaxy={galaxy} system={system} efficiency={systemData.sunEfficiencyPercent} raids={sunRaidsHere} now={nowMs} anchor={sunQuick}
+          raidAccess={sunRaidAccess ?? { enabled: Boolean(onSunSelect) }}
+          onClose={() => setSunQuick(null)}
+          onDefend={() => onSunDefend?.(galaxy, system)}
+          onRaid={() => onSunSelect?.(galaxy, system)}
+          onDetails={() => onSunSelect?.(galaxy, system)} />
+      ) : null}
+
       {selectedNode && selectedOwner ? createPortal(
         <div className="universe-modal-backdrop star-atlas-backdrop">
         <aside className={`universe-inspector universe-inspector--${selectedNode.kind} star-atlas`} role="dialog" aria-modal="true" aria-label={`Звёздный атлас: ${selectedNode.name}`} data-qa-universe-inspector data-qa-inspector-kind={selectedNode.kind}
@@ -1329,7 +1462,7 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
             <h2><span>{selectedNode.name}</span> <b data-qa-atlas-coordinate>{formatUniverseCoordinate(selectedNode.coordinate)}</b></h2>
           </header>
           <button ref={closeButtonRef} type="button" className="universe-inspector-close star-atlas__close" data-asterion-close aria-label="Закрыть атлас" onClick={() => setSelectedNodeId(null)}>✕</button>
-          <OwnerInspector node={selectedNode} owner={selectedOwner} presence={ownerPresence?.[selectedOwner.id]} nowMs={nowMs} planets={ownerPlanets} currentOwnerId={owner.id} currentAlliance={owner.alliance} diplomacy={allianceDiplomacy} debrisAt={(coordinate) => orbitalDebrisByKey.get(`${coordinate.galaxy}:${coordinate.system}:${coordinate.position}`) ?? 0} mapStatus={selectedMapStatus ?? mapStatusOf(selectedNode)} onAction={handleAction}
+          <OwnerInspector node={selectedNode} owner={selectedOwner} presence={ownerPresence?.[selectedOwner.id]} nowMs={nowMs} gateAt={gateAt} planets={ownerPlanets} currentOwnerId={owner.id} currentAlliance={owner.alliance} diplomacy={allianceDiplomacy} debrisAt={(coordinate) => orbitalDebrisByKey.get(`${coordinate.galaxy}:${coordinate.system}:${coordinate.position}`) ?? 0} mapStatus={selectedMapStatus ?? mapStatusOf(selectedNode)} onAction={handleAction}
             onRecycle={(target, anchor) => { if (onQuickSend) setAtlasQuick({ target, anchor }); }}
             onVisit={(planet) => { goSystem(planet.coordinate.system); requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-qa-universe-object="${planet.id}"]`)?.focus()); }} />
         </aside>

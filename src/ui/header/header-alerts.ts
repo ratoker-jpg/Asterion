@@ -2,13 +2,19 @@ import type { PlanetId, PlanetRuntime, SaveState } from '../../application/contr
 import { getPlanetResources } from '../../application/contracts.ts';
 import { isHostileFlightIncomingToPlayer } from '../../application/flight-visibility.ts';
 import type { SunAlert } from '../../application/sun-raid.ts';
+import { selectGateBeacons } from '../../application/sun-gate-watch.ts';
+import type { UniverseCoordinate } from '../../domain/universe/types.ts';
 import { getStorageCapacities } from '../../domain/buildings/balance-v1.ts';
 
 export type HeaderAlertTone = 'danger' | 'warn' | 'info';
 
 export type HeaderAlertTarget =
   | { kind: 'fleets' }
-  | { kind: 'planet'; planetId: PlanetId };
+  | { kind: 'planet'; planetId: PlanetId }
+  /** The Universe map centred on that Sun with its quick actions open. */
+  | { kind: 'sun'; galaxy: number; system: number }
+  /** The Universe map on the Gate's host planet with spy / attack open. */
+  | { kind: 'gate'; planetId: string; coordinate: UniverseCoordinate };
 
 export type HeaderAlert = {
   id: string;
@@ -57,10 +63,23 @@ export function selectHeaderAlerts(state: SaveState, sunAlerts: readonly SunAler
     alerts.push({
       id: `sun:${raid.id}`,
       tone: 'danger',
-      title: `Рейд на Солнце · [${raid.allianceTag}]`,
-      detail: `Галактика ${raid.galaxy}, система ${raid.system} · через ${formatAlertEta(arrivesInMs)}`,
-      target: { kind: 'fleets' },
-      action: 'Флоты',
+      title: `Рейд на Солнце [${raid.galaxy}:${raid.system}] · [${raid.allianceTag}]`,
+      detail: `${raid.allianceName} · удар через ${formatAlertEta(arrivesInMs)}`,
+      target: { kind: 'sun', galaxy: raid.galaxy, system: raid.system },
+      action: 'К Солнцу',
+    });
+  }
+
+  // Gates are public news (every owner hears the milestones): where, whose and how long.
+  for (const beacon of selectGateBeacons(state, now)) {
+    const where = beacon.coordinate ? ` [${beacon.coordinate.galaxy}:${beacon.coordinate.system}:${beacon.coordinate.position}]` : '';
+    alerts.push({
+      id: `gate:${beacon.gateId}`,
+      tone: beacon.side === 'rival' ? 'danger' : 'info',
+      title: beacon.side === 'rival' ? `Врата строит ${beacon.holderName}` : `Ваши Врата · ${beacon.holderName}`,
+      detail: `${beacon.hostPlanetName}${where} · ${beacon.hostOwnerName} · готовы через ${formatAlertEta(beacon.completesAt - now)}`,
+      target: beacon.coordinate ? { kind: 'gate', planetId: beacon.hostPlanetId, coordinate: beacon.coordinate } : { kind: 'fleets' },
+      action: beacon.coordinate ? (beacon.side === 'rival' ? 'К цели' : 'На карте') : 'Флоты',
     });
   }
 

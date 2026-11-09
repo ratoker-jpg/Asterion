@@ -252,6 +252,7 @@ import {
   selectIncomingSunAlerts,
   startGateConstruction,
   type SunActionResult,
+  type SunRaidNotice,
 } from './application/sun-raid.ts';
 import { refreshSlotMeta } from './application/slots.ts';
 import { slotStorageKey } from './domain/session/slots.ts';
@@ -260,6 +261,9 @@ import { getCampaignTimeScale, setCampaignTimeScale, CAMPAIGN_SPEED_SCALE } from
 import { setActiveGalaxyCount, warmUniverseTimedSchedules } from './domain/universe/runtime.ts';
 import { SunRaidPanel, type SunSelection } from './ui/sun-raid/SunRaidPanel.tsx';
 import { GateDialog } from './ui/sun-raid/GateDialog.tsx';
+import { SunDefenceDialog } from './ui/sun-raid/SunDefenceDialog.tsx';
+import { selectGateBeacons } from './application/sun-gate-watch.ts';
+import './ui/universe/gate-beacon.css';
 import { CampaignResultOverlay, PauseMenu } from './ui/menu/InGameOverlays.tsx';
 import { isSeriesCampaign, settleCampaign } from './application/npc-series.ts';
 import { createDefaultNewGameConfig } from './domain/world/config.ts';
@@ -277,8 +281,8 @@ type UniverseFocusTarget = {
   coordinate: UniverseCoordinate;
   planetId?: string;
   ownerId?: string;
-  /** 'inspect' opens the owner inspector; 'highlight' only pulses the planet. */
-  mode?: 'inspect' | 'highlight';
+  /** 'inspect' opens the owner inspector; 'highlight' only pulses the planet; 'quick' its quick actions; 'sun' the Sun's. */
+  mode?: 'inspect' | 'highlight' | 'quick' | 'sun';
 };
 
 /** Runtime toasts replace the legacy single status strip. */
@@ -289,7 +293,11 @@ type RuntimeToast = {
   /** Toasts of one group (e.g. builds finished on a planet) merge into one card. */
   group?: string;
   items?: readonly string[];
+  /** One click from the notice to where it happened (a Sun, a Gate). */
+  action?: ToastAction;
 };
+
+type ToastAction = { label: string; run: () => void };
 
 /** Notices of one kind that arrive together and read better as one summary. */
 type ToastGroup = {
@@ -504,7 +512,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
    * Keeps the QA notice layer in sync and emits a bottom-left toast. Silent
    * navigation noise still lands in the QA layer but never renders a toast.
    */
-  const setNotice = useCallback((text: string, tone: RuntimeToast['tone'] = 'info', group?: ToastGroup) => {
+  const setNotice = useCallback((text: string, tone: RuntimeToast['tone'] = 'info', group?: ToastGroup, action?: ToastAction) => {
     setLastNotice(text);
     if (SILENT_NOTICE_PATTERNS.some((pattern) => pattern.test(text))) return;
     noticeSeq.current += 1;
@@ -517,7 +525,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         return [...current.filter((toast) => toast !== grouped), { id, text: group.summarize(items), tone, group: group.key, items }];
       }
       if (current.some((toast) => toast.text === text)) return current;
-      return [...current, { id, text, tone, group: group?.key, items: group ? [group.item] : undefined }].slice(-TOAST_STACK_LIMIT);
+      return [...current, { id, text, tone, group: group?.key, items: group ? [group.item] : undefined, ...(action ? { action } : {}) }].slice(-TOAST_STACK_LIMIT);
     });
     window.setTimeout(() => {
       setToasts((current) => current.filter((toast) => toast.id !== id));
@@ -1271,7 +1279,10 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         const planet = result.state.planets[event.planetId] ?? result.state.planets[result.state.currentPlanetId];
         setNotice(`${planet.name}: верфь — производство завершено — ${names}.`, 'success');
       } else if (event.kind === 'sun-raid') {
-        event.notices.forEach((notice) => setNotice(notice.text, notice.tone));
+        event.notices.forEach((notice) => {
+          const toast = sunNoticeToastRef.current(notice);
+          setNotice(toast.text, notice.tone, undefined, toast.action);
+        });
       } else if (event.kind === 'flight') {
         event.events.filter((flightEvent) => isFlightEventForPlayer(flightEvent, result.state.profile.playerId)).forEach((flightEvent) => setNotice(
           flightEvent.status === 'spy-report' || flightEvent.status === 'spy-detected'
@@ -2495,6 +2506,49 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     setPlanetMenuOpen(false);
     setNotice(`Вселенная: открыта координата [${target.coordinate.galaxy}:${target.coordinate.system}:${target.coordinate.position}].`);
   };
+  /** Raid notices: the map centred on that Sun with its quick actions open. */
+  const openSunOnMap = (galaxy: number, system: number) => {
+    clearBuildingInterior();
+    closePlanetEditor();
+    setUniverseFocusTarget({ coordinate: { galaxy, system, position: 1 }, mode: 'sun' });
+    navigateTo('universe');
+    setPlanetViewMode('overview');
+    setPlanetMenuOpen(false);
+  };
+  /** Gate notices: the host planet with spy / attack ready. */
+  const openGateOnMap = (planetId: string, coordinate: UniverseCoordinate) => {
+    clearBuildingInterior();
+    closePlanetEditor();
+    setUniverseFocusTarget({ coordinate, planetId, mode: 'quick' });
+    navigateTo('universe');
+    setPlanetViewMode('overview');
+    setPlanetMenuOpen(false);
+  };
+  const openSunOnMapRef = useRef(openSunOnMap);
+  openSunOnMapRef.current = openSunOnMap;
+  const openGateOnMapRef = useRef(openGateOnMap);
+  openGateOnMapRef.current = openGateOnMap;
+  /** Sun and Gate notices name the place and jump there in one click. */
+  const sunNoticeToast = (notice: SunRaidNotice): { text: string; action?: ToastAction } => {
+    if (notice.gateId) {
+      const beacon = selectGateBeacons(stateRef.current, Date.now()).find((item) => item.gateId === notice.gateId);
+      if (!beacon?.coordinate) return { text: notice.text };
+      const coordinate = beacon.coordinate;
+      const left = Math.max(1, Math.ceil((beacon.completesAt - Date.now()) / 60_000));
+      const span = left >= 60 ? `${Math.floor(left / 60)} ч ${left % 60} мин` : `${left} мин`;
+      return {
+        text: `${notice.text} [${coordinate.galaxy}:${coordinate.system}:${coordinate.position}] · готовы через ${span}.`,
+        action: { label: beacon.side === 'rival' ? 'К цели' : 'На карте', run: () => openGateOnMapRef.current(beacon.hostPlanetId, coordinate) },
+      };
+    }
+    if (notice.galaxy !== undefined && notice.system !== undefined) {
+      const { galaxy, system } = notice;
+      return { text: notice.text, action: { label: 'К Солнцу', run: () => openSunOnMapRef.current(galaxy, system) } };
+    }
+    return { text: notice.text };
+  };
+  const sunNoticeToastRef = useRef(sunNoticeToast);
+  sunNoticeToastRef.current = sunNoticeToast;
   const openUniverseTargetRef = useRef(openUniverseTarget);
   openUniverseTargetRef.current = openUniverseTarget;
   useEffect(() => {
@@ -2631,6 +2685,14 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   };
 
   const openHeaderAlert = (alert: HeaderAlert) => {
+    if (alert.target.kind === 'sun') {
+      openSunOnMap(alert.target.galaxy, alert.target.system);
+      return;
+    }
+    if (alert.target.kind === 'gate') {
+      openGateOnMap(alert.target.planetId, alert.target.coordinate);
+      return;
+    }
     if (alert.target.kind === 'fleets') {
       chooseRoute('fleets');
       return;
@@ -2689,6 +2751,21 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const [resultDismissed, setResultDismissed] = useState(false);
   const sunRaidState = currentSunRaidState(state);
   const gateContext = useMemo(() => selectGateContext(state, now), [state, now]);
+  const gateBeacons = useMemo(() => selectGateBeacons(state, now), [state, now]);
+  /** «Защита Солнца» for every planet at once (Sun quick menu, Sun card). */
+  const [sunDefence, setSunDefence] = useState<{ galaxy: number; system: number } | null>(null);
+  const sunRaidAccess = selectOwnerMembership(state.command, state.profile.playerId) && selectCommandHallLevel(state.planets) > 0
+    ? { enabled: true }
+    : { enabled: false, reason: selectOwnerMembership(state.command, state.profile.playerId) ? 'Нужен Командный центр.' : 'Рейд объявляет союз: вступите в союз.' };
+  /** The defence window's «Полный план»: «Флоты → Поддержка солнца» from the first chosen planet. */
+  const openSunDefenceDetails = (galaxy: number, system: number, originPlanetId: string | null) => {
+    if (originPlanetId && originPlanetId !== stateRef.current.currentPlanetId && stateRef.current.planets[originPlanetId]) {
+      const next = selectOwnedPlanet(stateRef.current, originPlanetId);
+      stateRef.current = next;
+      setState(next);
+    }
+    openSunSupportInFleets({ galaxy, system });
+  };
 
   const commitSunAction = (result: SunActionResult) => {
     if (rejectNpcCatchupCommand()) return;
@@ -2764,7 +2841,9 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     for (const alert of sunAlerts) {
       if (announcedSunAlerts.current.has(alert.raid.id)) continue;
       announcedSunAlerts.current.add(alert.raid.id);
-      setNotice(`Входящая атака на Солнце ${formatSun(alert.raid.galaxy, alert.raid.system)}: [${alert.raid.allianceTag}], прибытие через ${Math.ceil(alert.arrivesInMs / 60_000)} мин. Командование → Операции.`, 'error');
+      const { galaxy, system } = alert.raid;
+      setNotice(`Рейд на Солнце ${formatSun(galaxy, system)}: [${alert.raid.allianceTag}] ${alert.raid.allianceName}, удар в ${new Date(alert.raid.arrivesAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} (через ${Math.ceil(alert.arrivesInMs / 60_000)} мин).`, 'error', undefined,
+        { label: 'К Солнцу', run: () => openSunOnMapRef.current(galaxy, system) });
     }
   }, [sunAlerts, setNotice]);
 
@@ -3095,7 +3174,10 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               onSpy={openSpyLaunch}
               onAttack={openAttackLaunch}
               onSunSelect={(galaxy, system) => openSunsPanel({ galaxy, system })}
-              sunAlerts={sunAlerts.map((alert) => ({ galaxy: alert.raid.galaxy, system: alert.raid.system }))}
+              sunAlerts={sunAlerts.map((alert) => ({ galaxy: alert.raid.galaxy, system: alert.raid.system, allianceTag: alert.raid.allianceTag, arrivesAt: alert.raid.arrivesAt }))}
+              gateBeacons={gateBeacons}
+              onSunDefend={(galaxy, system) => setSunDefence({ galaxy, system })}
+              sunRaidAccess={sunRaidAccess}
               homeCoordinate={{ galaxy: (state.planets[state.currentPlanetId] ?? homePlanet)?.universeGalaxy ?? 1, system: (state.planets[state.currentPlanetId] ?? homePlanet)?.universeSystem ?? 1 }}
               debrisOrigin={state.planets[state.currentPlanetId] ? {
                 planetName: state.planets[state.currentPlanetId]!.name,
@@ -3191,7 +3273,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
                   onOpenReport={openPirateReport}
                   onOpenCommand={() => setCommandFocus({ tab: 'overview', nonce: Date.now() })}
                   onOpenGate={() => { setGateDialogPlanetId(state.currentPlanetId); }}
-                  onSendSupport={openSunSupportInFleets}
+                  onSendSupport={(raid) => setSunDefence({ galaxy: raid.galaxy, system: raid.system })}
                   onRecycleDebris={openSunRecycleInFleets}
                   onTestGateAssault={testGateAssault}
                 />
@@ -3377,14 +3459,31 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
           <div ref={toastStackRef} className="runtime-toast-stack" data-qa-runtime-toast-stack aria-live="polite"
             style={toastSpot ? { left: toastSpot.left ?? 'auto', right: toastSpot.right ?? 'auto', top: toastSpot.top ?? 'auto', bottom: toastSpot.bottom ?? 'auto' } : undefined}>
             {(toastCompact ? toasts.slice(-1) : toasts).map((toast) => (
-              <div key={toast.id} className={`runtime-toast runtime-toast--${toast.tone}`} data-qa-runtime-toast>
+              <div key={toast.id} className={`runtime-toast runtime-toast--${toast.tone} ${toast.action ? 'has-action' : ''}`} data-qa-runtime-toast>
                 <span>{toast.text}</span>
+                {toast.action ? (
+                  <button type="button" className="runtime-toast__go" data-qa-runtime-toast-action
+                    onClick={() => { toast.action!.run(); dismissToast(toast.id); }}>{toast.action.label} ›</button>
+                ) : null}
                 <button type="button" aria-label="Закрыть уведомление" title="Закрыть" onClick={() => dismissToast(toast.id)}>×</button>
               </div>
             ))}
           </div>,
           document.body,
         )}
+
+        {sunDefence ? (
+          <SunDefenceDialog
+            state={state}
+            now={now}
+            galaxy={sunDefence.galaxy}
+            system={sunDefence.system}
+            planetArt={Object.fromEntries(ownedPlanets.map((planet) => [planet.id, planetSkins.find((skin) => skin.id === state.planets[planet.id]?.skin)?.art ?? planetSkins[0].art]))}
+            onClose={() => setSunDefence(null)}
+            onSend={sendQuickFlights}
+            onDetails={openSunDefenceDetails}
+          />
+        ) : null}
 
         {fleetPlannerPlanetId && state.planets[fleetPlannerPlanetId] ? (
           <FleetPlannerDialog
