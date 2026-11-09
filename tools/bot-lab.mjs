@@ -583,6 +583,18 @@ export function describeWorld(state, journal = [], tally = null, sunTally = null
     relationEdges: Object.values(state.npcStrategy?.relations ?? {}).reduce((total, edges) => total + edges.length, 0),
     strategyBytes: JSON.stringify(state.npcStrategy ?? null).length,
   };
+  // Revenge wars (npc-war.ts): the journal's `war` entries.
+  const warEntries = journal.filter((entry) => entry.k === 'war');
+  const warEvents = (name) => warEntries.filter((entry) => entry.d?.ev === name);
+  const warEnded = warEvents('ended');
+  const war = {
+    declared: warEvents('declared').length, joined: warEvents('answer').filter((entry) => entry.d?.a === 'accepted' || entry.d?.a === 'volunteered').length,
+    declinedCall: warEvents('answer').filter((entry) => entry.d?.a === 'declined' || entry.d?.a === 'expired').length,
+    waves: warEvents('wave').length, rounds: warEvents('round').length, stages: warEvents('stage').length, skips: warEvents('skip').length,
+    ended: warEnded.length, razed: sum(warEnded.map((entry) => entry.d?.razed ?? 0)),
+    endedBy: warEnded.reduce((counts, entry) => ({ ...counts, [entry.d?.why]: (counts[entry.d?.why] ?? 0) + 1 }), {}),
+    active: (state.npcStrategy?.wars ?? []).filter((item) => item.status === 'active').length,
+  };
   const activePlans = Object.values(state.npcStrategy?.plans ?? {}).flat().filter((plan) => plan.template === 'strike' && plan.status === 'active');
   return {
     worldAt: new Date(state.npcReplay?.processedThroughAt ?? 0).toISOString(), owners: owners.length,
@@ -630,6 +642,7 @@ export function describeWorld(state, journal = [], tally = null, sunTally = null
       raidGain: Math.round(sum(attacks.map((entry) => entry.d?.gain ?? 0))), raidLoss: Math.round(sum(attacks.map((entry) => entry.d?.loss ?? 0))),
       defences: defences.length, defenceLoss: Math.round(sum(defences.map((entry) => entry.d?.loss ?? 0))) },
     social,
+    war,
     bottomThirdPoints: Math.round(sum(ascending.slice(0, third)) / third),
     diversity: describeDiversity(journal, owners),
     styleChanges: styles.length, styles: Object.entries(styles.reduce((counts, entry) => ({ ...counts, [entry.s]: (counts[entry.s] ?? 0) + 1 }), {})),

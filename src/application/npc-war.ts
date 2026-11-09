@@ -44,8 +44,14 @@ export const NPC_WAR_BALANCE = Object.freeze({
   /** Real hours between a bot's looks for a new war. */
   checkHours: 1,
   /** Fury (grudge, faded by time) from which a bot declares a war, and from which a hurt bot volunteers for a running one. */
-  declareFury: 0.6,
-  joinFury: 0.45,
+  declareFury: 0.75,
+  joinFury: 0.6,
+  /** A real offender: at least this many attacks on the bot and this much damage (days of its income), or planets lost to him. Small grudges between bots start no war. */
+  offenderAttacks: 3,
+  offenderDamageDays: 4,
+  joinDamageDays: 2,
+  /** A war older than this ends whatever happens (real days), and so does one with this many rounds in a row without a launch. */
+  maxDays: 4,
   /** A member whose fury is below this leaves; the war ends when nobody is left. */
   keepFury: 0.2,
   /** Fury halves in this many real hours without a fresh blow. */
@@ -73,7 +79,7 @@ export const NPC_WAR_BALANCE = Object.freeze({
   /** A report older than this (game hours) is scouted again, when the bot has a probe to send. */
   reconFreshHours: 3,
   /** Rounds in a row without a single launch end the war. */
-  stallLimit: 8,
+  stallLimit: 4,
   /** A bot that ended or left a war does not declare a new one for this long (real hours). */
   restHours: 24,
   /** A wave needs at least this share of a day's income in ships; a stage move this much. */
@@ -109,6 +115,13 @@ export function npcWarFury(utility: NpcUtilityContext, offenderId: string, at: n
   if (!grudge || base <= 0) return base;
   const hours = Math.max(0, at - grudge.lastAt) / HOUR;
   return base * 0.5 ** (hours / NPC_WAR_BALANCE.furyHalfLifeHours);
+}
+
+/** Has this offender really hurt the bot: several attacks and heavy damage, not one small grudge? */
+export function npcWarRealOffender(utility: NpcUtilityContext, offenderId: string, damageDays: number = NPC_WAR_BALANCE.offenderDamageDays): boolean {
+  const grudge = utility.profile.grudges?.[offenderId];
+  if (!grudge) return (utility.profile.inherited?.relations[offenderId]?.resentment ?? 0) >= 0.9;
+  return grudge.attacks >= NPC_WAR_BALANCE.offenderAttacks && grudge.damage >= damageDays * Math.max(1, utility.dayValue);
 }
 
 const distance = (left: SpyTargetState, right: SpyTargetState) => Math.abs(left.coordinate.galaxy - right.coordinate.galaxy) * 1000
@@ -240,7 +253,7 @@ export function refreshNpcWars(state: SaveState, profile: NpcProfile, utility: N
           next = withNpcWar(next, withNpcWarMember(war, { ...own, answer: 'accepted', answeredAt: at }));
         } else next = leave(next, war, ownerId, 'declined', 'not-moved', at);
       }
-    } else if (!own && fury >= NPC_WAR_BALANCE.joinFury && war.members.filter((item) => item.answer === 'accepted' || item.answer === 'invited').length < NPC_WAR_BALANCE.maxMembers
+    } else if (!own && fury >= NPC_WAR_BALANCE.joinFury && npcWarRealOffender(utility, war.offenderId, NPC_WAR_BALANCE.joinDamageDays) && war.members.filter((item) => item.answer === 'accepted' || item.answer === 'invited').length < NPC_WAR_BALANCE.maxMembers
       && !inOtherWar(next, ownerId, war.warId) && ['ok', 'shield'].includes(attackable(next, ownerId, war.offenderId, at))) {
       // Hurt by the same offender, it does not wait to be asked.
       journal(at, ownerId, 'answer', { id: war.warId, off: war.offenderId, a: 'volunteered', g: round3(fury) });
@@ -266,6 +279,7 @@ function advanceWar(state: SaveState, war: NpcWar, utility: NpcUtilityContext, a
   let current: NpcWar = { ...war, members, razed: war.razed + lost, targets: lost ? war.targets.filter((id) => standing.includes(id)) : war.targets };
   if (!standing.length) return closeWar(state, current, at, 'razed', actor);
   if (current.stalls >= NPC_WAR_BALANCE.stallLimit) return closeWar(state, current, at, 'broken', actor);
+  if (at - current.createdAt > NPC_WAR_BALANCE.maxDays * 24 * HOUR) return closeWar(state, current, at, 'timeout', actor);
   if (at <= current.roundAt + current.windowMs) return members !== war.members || lost ? withNpcWar(state, current) : state;
   const launched = acceptedMembers(current).filter((item) => item.lastRound === current.round).length;
   const stalls = launched > 0 ? 0 : current.stalls + 1;
@@ -320,7 +334,7 @@ export function draftNpcWar(state: SaveState, profile: NpcProfile, utility: NpcU
   if (fleet < NPC_WAR_BALANCE.minWaveDayShare * utility.dayValue && own.every((planet) => planet.resources.metal + planet.resources.minerals < 0.3 * utility.dayValue)) return null;
   const offenders = Object.keys(profile.grudges ?? {}).filter((id) => id !== ownerId)
     .map((id) => ({ id, fury: npcWarFury(utility, id, at) }))
-    .filter((item) => item.fury >= NPC_WAR_BALANCE.declareFury)
+    .filter((item) => item.fury >= NPC_WAR_BALANCE.declareFury && npcWarRealOffender(utility, item.id))
     .sort((left, right) => right.fury - left.fury || (left.id < right.id ? -1 : 1));
   for (const { id: offenderId } of offenders) {
     if (activeNpcWars(state).some((war) => war.offenderId === offenderId)) continue; // the others' war is joined, not doubled
@@ -534,7 +548,7 @@ export function getNpcWarChoices(state: SaveState, profile: NpcProfile, utility:
     + ownerFlights(state.flights.records, ownerId).filter((flight) => flight.ownerSide === 'npc' && ['outbound', 'arrived', 'returning'].includes(flight.phase)
       && (flight.missionId === 'attack' || flight.missionId === 'deployment'))
       .reduce((sum, flight) => sum + npcFleetValue(raceId, flight.selectedShips as Record<string, number>), 0);
-  if (total < NPC_WAR_BALANCE.buildTargetDays * dayValue) {
+  if (total < NPC_WAR_BALANCE.buildTargetDays * dayValue && at >= war.roundAt - 6 * HOUR) {
     // On the staging planets only: the new ships stand where the round is fought from, nothing is carried around.
     for (const planet of staging) {
       const queue = (planet as SpyTargetState & { fleetProduction?: { shipQueue?: { finishAt: number }[] } }).fleetProduction?.shipQueue ?? [];

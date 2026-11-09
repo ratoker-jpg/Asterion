@@ -32,7 +32,6 @@ import { getNpcPirateCandidates, dispatchNpcPirateMission } from './npc-pirates.
 import { getNpcEndgameChoices } from './npc-endgame.ts';
 import { getNpcPlanChoices, journalNpcRevengeFunnel, refreshNpcPlans, scheduleNpcPlanCheck } from './npc-plans.ts';
 import { getNpcWarChoices, refreshNpcWars, scheduleNpcWarCheck } from './npc-war.ts';
-import { npcWarHolds } from './npc-war-state.ts';
 import { getNpcSunPrepChoices, npcSunPrepSavesGas, refreshNpcSunPrep, scheduleNpcSunPrepCheck } from './npc-sun-prep.ts';
 import { getNpcPactChoices, npcPactForbidsAttack, refreshNpcPacts } from './npc-pacts.ts';
 import { npcReactionDrives } from './npc-pact-state.ts';
@@ -599,8 +598,6 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
   for (const choice of getNpcPactChoices(state, profile, at, timeScale, utility, missions)) choices.push(choice);
   const warChoices = getNpcWarChoices(state, profile, utility, at, timeScale, missions, scored);
   for (const choice of warChoices) choices.push(choice);
-  // A bot at war keeps its fleet for the round: its other attacks and plans wait while the round is near.
-  const warHold = npcWarHolds(state, ownerId, at);
   for (const choice of getNpcFortifyChoices(state, profile, utility, at, timeScale, fortifyInputs, scored)) choices.push(choice);
   state = scheduleNpcPlanCheck(state, ownerId, at, timeScale);
   if (!warChoices.some((choice) => choice.candidate.id.startsWith('war:declare:'))) state = scheduleNpcWarCheck(state, ownerId, at);
@@ -645,7 +642,6 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
     // defended planet was); nor is one whose haul does not pay for the flight
     // (a raid for 63 resources every few minutes was).
     if (mission.kind === 'attack') {
-      if (warHold) continue;
       // One's partner is no target, unless this owner is the kind to betray.
       if (npcPactForbidsAttack(profile, utility.partners, ownerOfPlanet(String(mission.payload.destinationPlanetId ?? '')) ?? '')) continue;
       const force = attackShips(mission);

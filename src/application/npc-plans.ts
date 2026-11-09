@@ -27,7 +27,6 @@ import { npcCombatPriority, npcEnemyShape, npcMainCommander } from './npc-comman
 import { activeNpcPlans, npcPlanReservedShips } from './npc-plan-reserve.ts';
 import { isNpcPactOpen, npcActivePartners, npcFleetFlightMs, npcPartnerPowerBelief, npcProposalsOf, recordNpcPactArrival, withdrawFromNpcPact } from './npc-pact-state.ts';
 import { withoutNpcSunPrepHold } from './npc-sun-prep-state.ts';
-import { npcWarHolds } from './npc-war-state.ts';
 import {
   combatEfficiency, estimateReportedPower, npcAttackIntel, npcDefenseValue, npcFleetValue, npcForcePower,
   npcRevengeIntensity, npcRevengeWinBar, NPC_REVENGE_BALANCE, type NpcUtilityContext,
@@ -731,7 +730,7 @@ export function getNpcPlanChoices(state: SaveState, profile: NpcProfile, utility
     }
   }
   // A new plan: looked for every few game hours, never two strikes at once.
-  if (!active.length && !paused && !npcWarHolds(state, ownerId, at) && at >= (state.npcStrategy?.nextCheckAt[checkKey(ownerId)] ?? 0)
+  if (!active.length && !paused && at >= (state.npcStrategy?.nextCheckAt[checkKey(ownerId)] ?? 0)
     && !npcProposalsOf(state, ownerId).some((item) => item.kind === 'joint-strike' && isNpcPactOpen(item.status))) {
     const draft = draftNpcStrike(state, profile, utility, at, timeScale);
     if (draft) {
