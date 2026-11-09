@@ -460,3 +460,33 @@ test('E: the delay scales with world speed; proud leaders and loners hold on; an
   const withPlayer = join(state, state.profile.playerId, selectOwnerMembership(state.command, mate)!.alliance.leaderOwnerId);
   assert.equal(selectNpcDefection(withPlayer, withPlayer.npc!.profiles[mate]!, T0 + 30 * DAY), null, 'the player decides for his own');
 });
+
+test('a bot alone in its alliance disbands it once the grace is over and another alliance has room, even at war; then it does not found a new one', () => {
+  const { state: base, ids } = world('ALLIANCELONE');
+  const [lone, leader, mate] = ids as [string, string, string];
+  let state = found(base, lone, 'Одиночка', 'ODN');
+  state = join(found(state, leader, 'Союз', 'SOY'), mate, leader);
+  // A war with the other alliance: the ordinary rule would call it "winning" and keep the bot where it is.
+  const loneAlliance = selectOwnerMembership(state.command, lone)!.alliance.id;
+  const otherAlliance = selectOwnerMembership(state.command, leader)!.alliance.id;
+  const war = declareWar(state.command, loneAlliance, otherAlliance, { now: T0 });
+  if (war.ok) state = { ...state, command: war.state };
+
+  const graceMs = 6 * HOUR; // standard speed
+  assert.equal(selectNpcDefection(state, state.npc!.profiles[lone]!, T0 + graceMs - 1), null, 'grace first');
+  const exit = selectNpcDefection(state, state.npc!.profiles[lone]!, T0 + graceMs);
+  assert.ok(exit, 'after the grace the bot leaves');
+  assert.equal(exit.successorOwnerId, null);
+
+  const candidate = getNpcDiplomacyCandidates(state, state.npc!.profiles[lone]!, T0 + graceMs).find((item) => item.kind === 'leave-alliance')!;
+  assert.ok(candidate);
+  const applied = applyNpcDiplomacyAction(state, lone, candidate, T0 + graceMs, 'lone-exit');
+  assert.equal(applied.ok, true);
+  assert.equal(applied.state.command.alliances.some((alliance) => alliance.id === loneAlliance), false, 'the alliance of one is gone');
+  const after = getNpcDiplomacyCandidates(applied.state, applied.state.npc!.profiles[lone]!, T0 + graceMs + 3 * HOUR);
+  assert.equal(after.some((item) => item.kind === 'create-alliance'), false, 'no new alliance of one right away');
+
+  // Nowhere to go: it stays. The player alone in an alliance is never touched.
+  const onlyOne = { ...base, command: found(base, lone, 'Одиночка', 'ODN').command };
+  assert.equal(selectNpcDefection(onlyOne, onlyOne.npc!.profiles[lone]!, T0 + 100 * HOUR), null);
+});

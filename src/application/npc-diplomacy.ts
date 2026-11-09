@@ -140,7 +140,9 @@ export function getNpcDiplomacyCandidates(
   const loner = cooperation + social < 0.6;
   const holdsSoloCrystals = (state.sunRaid?.crystals[`owner:${ownerId}`]?.length ?? 0) > 0;
   if (!ownMembership && !loner && !holdsSoloCrystals) {
-    if (!pendingOwnApplication && !selectReapplyBlock(command, ownerId, null, at)) {
+    // An owner that has just left an alliance (a bot disbanding its alliance of one, say) looks for another one
+    // and does not found a new alliance of one at once.
+    if (!pendingOwnApplication && !selectReapplyBlock(command, ownerId, null, at) && recentlyLeftAlliances(command, ownerId, at).size === 0) {
       const settings = uniqueAllianceSettings(command, publicOwnerName(state, ownerId));
       candidates.push(makeCandidate('create-alliance', `create-alliance:${ownerId}`, 0.18 + cooperation * 0.35 + social * 0.12, {
         name: settings.name,
