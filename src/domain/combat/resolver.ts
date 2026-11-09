@@ -494,8 +494,8 @@ type SpecialBonusDetail = {
   amount: number;
   scope: 'fleet' | 'asterion';
   status: CombatSpecialBonus['status'];
-  /** False when another donor of the same kind on this side had the larger amount (one donor per side and kind). */
-  applied: boolean;
+  /** Catalog ids of all donor ship types of this kind on the side (summed across groups). */
+  donorTypes: readonly CombatStackEntityId[];
   source?: string;
   note?: string;
 };
@@ -522,59 +522,77 @@ function calculateRoundSideModifiers(stacks: readonly RuntimeStack[], commanderI
     snapshot.commanderRate = commanderRate;
   }
 
-  // One donor per side and bonus kind: a side made of many owners or level
-  // groups must not stack the same special-ship ability once per stack. The
-  // largest single donor amount (already capped by its own cap) applies; the
-  // other donors of that kind are listed in the report as not applied. Fleet
-  // bonuses and pirate fleet bonuses (bonus-life / armor-boost) are separate
-  // pools, so the pirate semantics stay unchanged (a pirate side has one donor).
-  type DonorEntry = { donor: RuntimeStack; amount: number; detail: SpecialBonusDetail };
-  const donorPools = new Map<string, DonorEntry[]>();
+  // Special-ship bonuses are counted per SIDE, not per stack: for every bonus
+  // kind all donor ships of the side (across every owner group) add up
+  // (rate × count per donor type) and the cap applies once, the highest cap
+  // among the contributing donor types. A side's bonus therefore does not
+  // depend on how its fleet is split into groups. A donor ship type does not
+  // amplify itself (same rule as before, now by catalog type across groups).
+  // Fleet bonuses and pirate fleet bonuses (bonus-life / armor-boost) are
+  // separate pools; pirate donors do amplify every ship, as before.
+  type DonorEntry = { donor: RuntimeStack; baseId: CombatStackEntityId; raw: number; cap: number };
+  const donorPools = new Map<string, { pirate: boolean; kind: CombatSpecialBonus['kind']; entries: DonorEntry[] }>();
   for (const donor of stacks) {
     if (!donor.specialBonus || donor.count <= 0) continue;
-    const amount = Math.min(donor.specialBonus.cap ?? Number.POSITIVE_INFINITY, donor.specialBonus.rate * donor.count);
-    if (!Number.isFinite(amount) || amount <= 0) continue;
-    const detail: SpecialBonusDetail = {
-      entityId: donor.entityId,
-      actorSide: donor.side,
-      livingCount: donor.count,
-      kind: donor.specialBonus.kind,
-      rate: donor.specialBonus.rate,
-      ...(donor.specialBonus.cap !== undefined ? { cap: donor.specialBonus.cap } : {}),
-      capStatus: donor.specialBonus.capStatus ?? (donor.specialBonus.cap === undefined ? 'unknown' : 'known'),
-      amount,
-      scope: donor.specialBonus.scope ?? 'fleet',
-      status: donor.specialBonus.status,
-      applied: false,
-      ...(donor.specialBonus.source ? { source: donor.specialBonus.source } : {}),
-      ...(donor.specialBonus.note ? { note: donor.specialBonus.note } : {}),
-    };
+    const raw = donor.specialBonus.rate * donor.count;
+    if (!Number.isFinite(raw) || raw <= 0) continue;
     const pirate = donor.pirateAbility?.kind === 'bonus-life' || donor.pirateAbility?.kind === 'armor-boost';
     const key = `${pirate ? 'pirate' : 'fleet'}:${donor.specialBonus.kind}`;
-    const pool = donorPools.get(key) ?? [];
-    pool.push({ donor, amount, detail });
+    const pool = donorPools.get(key) ?? { pirate, kind: donor.specialBonus.kind, entries: [] };
+    pool.entries.push({ donor, baseId: combatBaseEntityId(donor.entityId), raw, cap: donor.specialBonus.cap ?? Number.POSITIVE_INFINITY });
     donorPools.set(key, pool);
   }
+  const pooledAmount = (entries: readonly DonorEntry[], excludeBaseId?: CombatStackEntityId) => {
+    let total = 0;
+    let cap = 0;
+    for (const entry of entries) {
+      if (excludeBaseId !== undefined && entry.baseId === excludeBaseId) continue;
+      total += entry.raw;
+      cap = Math.max(cap, entry.cap);
+    }
+    return total > 0 ? Math.min(cap, total) : 0;
+  };
 
   for (const pool of donorPools.values()) {
-    // Largest amount wins; ties keep the first stack in side order.
-    const chosen = pool.reduce((best, entry) => entry.amount > best.amount ? entry : best, pool[0]!);
-    chosen.detail.applied = true;
-    for (const entry of pool) specialBonusDetails.push(entry.detail);
-    const { donor, amount } = chosen;
-    snapshot[`specialBonus:${donor.entityId}`] = amount;
-    const pirateFleetBonus = donor.pirateAbility?.kind === 'bonus-life' || donor.pirateAbility?.kind === 'armor-boost';
+    // One report event per kind: total donor ships of the side and the pooled amount.
+    const lead = pool.entries.reduce((best, entry) => entry.donor.count > best.donor.count ? entry : best, pool.entries[0]!);
+    const totalCount = pool.entries.reduce((sum, entry) => sum + entry.donor.count, 0);
+    const fullAmount = pooledAmount(pool.entries);
+    if (fullAmount <= 0) continue;
+    const spec = lead.donor.specialBonus!;
+    specialBonusDetails.push({
+      entityId: lead.donor.entityId,
+      actorSide: lead.donor.side,
+      livingCount: totalCount,
+      kind: pool.kind,
+      rate: spec.rate,
+      ...(Number.isFinite(Math.max(...pool.entries.map((entry) => entry.cap))) ? { cap: Math.max(...pool.entries.map((entry) => entry.cap)) } : {}),
+      capStatus: spec.capStatus ?? (spec.cap === undefined ? 'unknown' : 'known'),
+      amount: fullAmount,
+      scope: spec.scope ?? 'fleet',
+      status: spec.status,
+      donorTypes: [...new Set(pool.entries.map((entry) => entry.baseId))],
+      ...(spec.source ? { source: spec.source } : {}),
+      ...(spec.note ? { note: spec.note } : {}),
+    });
+    snapshot[`specialBonus:${pool.pirate ? 'pirate:' : ''}${pool.kind}`] = fullAmount;
+    const byRecipientType = new Map<CombatStackEntityId, number>();
     for (const recipient of stacks) {
-      // The source stack is a donor, not a recipient. This matters for the
-      // extracted special-unit rules: a Goliath/Defender/Star Armada does not
-      // amplify itself, while every other living allied stack receives the
-      // frozen round-start contribution.
-      if ((!pirateFleetBonus && recipient.entityId === donor.entityId) || recipient.count <= 0) continue;
-      if (pirateFleetBonus && recipient.kind !== 'ship') continue;
+      if (recipient.count <= 0) continue;
+      if (pool.pirate && recipient.kind !== 'ship') continue;
+      const baseId = combatBaseEntityId(recipient.entityId);
+      const excluded = pool.pirate ? undefined : baseId;
+      const key = excluded ?? ('*' as CombatStackEntityId);
+      let amount = byRecipientType.get(key);
+      if (amount === undefined) {
+        amount = pooledAmount(pool.entries, excluded);
+        byRecipientType.set(key, amount);
+      }
+      if (amount <= 0) continue;
       const current = specialBonuses.get(recipient.entityId) ?? { attack: 0, life: 0, armor: 0 };
-      if (donor.specialBonus!.kind === 'attack') current.attack += amount;
-      if (donor.specialBonus!.kind === 'life') current.life += amount;
-      if (donor.specialBonus!.kind === 'armor') current.armor += amount * 100;
+      if (pool.kind === 'attack') current.attack += amount;
+      if (pool.kind === 'life') current.life += amount;
+      if (pool.kind === 'armor') current.armor += amount * 100;
       specialBonuses.set(recipient.entityId, current);
     }
   }
@@ -906,8 +924,7 @@ function createSpecialBonusEvent(sequence: number, detail: SpecialBonusDetail): 
     ...(detail.cap !== undefined ? { specialBonusCap: detail.cap } : {}),
     specialBonusCapStatus: detail.capStatus,
     specialBonusLivingCount: detail.livingCount,
-    ...(detail.applied ? { specialBonusAmount: detail.amount } : {}),
-    specialBonusApplied: detail.applied,
+    specialBonusAmount: detail.amount,
     specialBonusScope: detail.scope,
     provenance: {
       status: detail.status,
@@ -915,9 +932,7 @@ function createSpecialBonusEvent(sequence: number, detail: SpecialBonusDetail): 
       confidence: detail.status === 'confirmed' ? 'high' : detail.status === 'inferred' ? 'medium' : 'low',
       note: detail.note,
     },
-    note: detail.applied
-      ? `Бонус начала раунда (один донор вида «${detail.kind}» на сторону — самый многочисленный): ${detail.kind} = rate ${(detail.rate * 100).toFixed(3)}% × ${detail.livingCount} живых юнитов, cap ${cap}, итог ${amount}. Источник не получает собственный бонус; получатели — другие живые combat-eligible стеки (${detail.scope}).`
-      : `Бонус не применён: на сторону действует один донор вида «${detail.kind}», здесь у другого стека больше (этот дал бы ${amount}).`,
+    note: `Бонус начала раунда на сторону (вид «${detail.kind}»): все корабли-доноры стороны (${detail.donorTypes.join(', ')}) = ${detail.livingCount} живых юнитов, rate × число по каждому типу складывается, предел ${cap} действует один раз на сторону, итог ${amount}. Тип-донор не получает собственный бонус; получатели — остальные живые combat-eligible стеки (${detail.scope}).`,
   };
 }
 

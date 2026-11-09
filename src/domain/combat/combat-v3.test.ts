@@ -338,14 +338,15 @@ test('catalog coefficient and cap corrections change recipient stats in the comb
   // The prior result is calculated from the prior catalog entry, not executed by an old resolver.
 });
 
-test('special bonus applies once per side and kind: the largest donor, never the sum of donor stacks', () => {
-  const run = (leadCount: number, allyCounts: readonly number[]) => {
+test('special bonus is counted per side: the same fleet split into 1, 3 and 8 groups gets the same bonus', () => {
+  const run = (defenders: number, groups: number) => {
+    const counts = Array.from({ length: groups }, (_, index) => Math.floor(defenders / groups) + (index < defenders % groups ? 1 : 0));
     const report = resolveCombat(input({
       attacker: {
         participant: attacker,
         factionId: 'aegis',
-        ships: [{ entityId: 'defender', count: leadCount, level: 0 }, { entityId: 'scout', count: 1, level: 0 }],
-        allyGroups: allyCounts.map((count, index) => ({
+        ships: [{ entityId: 'defender', count: counts[0]!, level: 0 }, { entityId: 'scout', count: 1, level: 0 }],
+        allyGroups: counts.slice(1).map((count, index) => ({
           tag: `g${index + 2}`,
           factionId: 'aegis' as const,
           technologies: createDefaultCombatTechnologies(),
@@ -353,20 +354,19 @@ test('special bonus applies once per side and kind: the largest donor, never the
         })),
         commanders: [],
       },
-    }), { reportId: 'v3-one-donor' });
+    }), { reportId: 'v3-per-side' });
     const scout = report.initialSnapshot?.attacker.stacks.find((stack) => stack.entityId === 'scout');
-    const donors = report.rounds[0]!.events.filter((event) => event.actionType === 'special-bonus' && event.actorSide === 'attacker');
-    return { life: scout?.lifePerUnit ?? 0, donors };
+    const events = report.rounds[0]!.events.filter((event) => event.actionType === 'special-bonus' && event.actorSide === 'attacker');
+    return { life: scout?.lifePerUnit ?? 0, events };
   };
-  // Aegis Defender: +0.05% life per ship (cap 30%). Groups of 100, 200 and 100 ships.
-  const alone = run(100, []);
-  const largest = run(200, []);
-  const split = run(100, [200, 100]);
-
-  assert.equal(split.donors.length, 3);
-  assert.equal(split.donors.filter((event) => event.specialBonusApplied).length, 1);
-  assert.equal(split.donors.find((event) => event.specialBonusApplied)?.specialBonusAmount, 0.1);
-  assert.ok(split.donors.filter((event) => !event.specialBonusApplied).every((event) => event.specialBonusAmount === undefined));
-  assert.ok(split.life > alone.life, 'the larger donor beats the smaller one alone');
-  assert.equal(split.life, largest.life, 'three groups give the life bonus of the largest group only, not of all 400 ships');
+  // Aegis Defender: +0.05% life per ship, cap 30% (reached at 600 ships).
+  for (const defenders of [400, 1_000]) {
+    const results = [1, 3, 8].map((groups) => run(defenders, groups));
+    for (const result of results) {
+      assert.equal(result.events.length, 1, 'one event per kind');
+      assert.equal(result.events[0]!.specialBonusLivingCount, defenders, 'total donor ships of the side');
+      assert.ok(Math.abs(result.events[0]!.specialBonusAmount! - Math.min(0.3, defenders * 0.0005)) < 1e-9);
+      assert.equal(result.life, results[0]!.life, 'life of the recipient does not depend on the group count');
+    }
+  }
 });
