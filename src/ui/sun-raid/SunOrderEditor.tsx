@@ -194,7 +194,7 @@ function LevelSelect({ value, max, onChange }: { value: number; max: number; onC
     <label className="sro__level" title="Минимальный уровень корабля у участника">
       <span className="srp-sr">Минимальный уровень</span>
       <select value={value} onChange={(event) => onChange(Number(event.target.value))} aria-label="Минимальный уровень">
-        {Array.from({ length: max + 1 }, (_, level) => <option key={level} value={level}>{level ? `от ур. ${level}` : 'любой ур.'}</option>)}
+        {Array.from({ length: max + 1 }, (_, level) => <option key={level} value={level}>{level ? `ур. ${level}+` : 'любой'}</option>)}
       </select>
     </label>
   );

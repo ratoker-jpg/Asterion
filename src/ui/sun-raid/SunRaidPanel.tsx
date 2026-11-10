@@ -12,7 +12,7 @@ import { getHolderCrystals, incomingRaidsOnSun, projectSun, raidLaunchTenureBloc
 import type { SunRaidEvent, SunRaidRecord } from '../../domain/sun-raid/types.ts';
 import { getActiveGalaxyCount } from '../../domain/universe/runtime.ts';
 import { getOwnerShipUpgradeLevels, type SaveState } from '../../application/contracts.ts';
-import { hullValuePerPopulation, sunOrderRoomFor, type SunOrderEntityId, type SunRaidOrder } from '../../domain/sun-raid/order.ts';
+import { hullValuePerPopulation, sunOrderRoomFor, validateSunRaidOrder, type SunOrderEntityId, type SunRaidOrder } from '../../domain/sun-raid/order.ts';
 import { presetOrder, SunOrderEditor, SunOrderFillList } from './SunOrderEditor.tsx';
 import { getAvailableFleetForPlanet, getShipsAwayForPlanet } from '../../application/flights.ts';
 import {
@@ -445,6 +445,21 @@ function SunLaunchDialog({ state, now, options, kind, raid, galaxy, system, onCl
     }
     setShips(next);
   };
+  // A changed order drops picks it no longer takes (outside its slots or over a slot's size).
+  useEffect(() => {
+    if (kind !== 'attack' || !orderRoom) return;
+    setShips((current) => {
+      let changed = false;
+      const next: Partial<Record<ShipId, number>> = {};
+      for (const [id, count] of Object.entries(current) as [ShipId, number][]) {
+        const fitted = Math.min(count ?? 0, orderLimit(id));
+        if (fitted !== count) changed = true;
+        if (fitted > 0) next[id] = fitted;
+      }
+      return changed ? next : current;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft]);
   // A joiner sees its matching ships preselected for the open slots; a new planet starts over.
   useEffect(() => {
     setCommanders({});
@@ -523,7 +538,10 @@ function SunLaunchDialog({ state, now, options, kind, raid, galaxy, system, onCl
 
   // Portaled to the stage root: above the header, still on the scaled 1920×1080 stage.
   const host = document.querySelector('.stage') ?? document.body;
-  const blocking = (error ?? preview.error) && (preview.population > 0 || (kind === 'attack' && order && order.slots.length > 0)) ? error ?? preview.error : null;
+  // The editor shows the order's own error next to its counter: the footer does not repeat it.
+  const orderError = kind === 'attack' && draft && draft.slots.length ? validateSunRaidOrder(draft, { perSide: caps.perSide, races }) : null;
+  const shown = error ?? preview.error;
+  const blocking = shown && shown !== orderError && (preview.population > 0 || (kind === 'attack' && order && order.slots.length > 0)) ? shown : null;
   return createPortal(
     <div className="opsA srp-portal"><div className="srp-modal" role="presentation" onMouseDown={onClose}>
       <section className={`srp-launch${kind === 'attack' ? ' srp-launch--order' : ''}`} role="dialog" aria-modal="true" aria-label={kind === 'attack' ? 'Объявить рейд' : kind === 'join' ? 'Вступить в рейд' : 'Отправить защиту'} onMouseDown={(event) => event.stopPropagation()} data-qa-sun-launch={kind}>
