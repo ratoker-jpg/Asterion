@@ -362,7 +362,8 @@ async function main() {
     // The game's own preload and desktop save store: late saves outgrow localStorage.
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, backgroundThrottling: false, offscreen: true },
   });
-  win.webContents.setFrameRate(60);
+  // 120, like the owner's display (a 60 cap hid every task between 8 and 16 ms; see docs/PERF_MEASUREMENT.md).
+  win.webContents.setFrameRate(Number(option('frame-rate', '120')));
   const save = prepareSave();
   await load(win, '?autostart=continue');
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);

@@ -137,6 +137,11 @@ function createWindow() {
 
 app.whenReady().then(() => {
   createWindow();
+  // Perf PR 1: one line in the log so a missing hardware acceleration or a 60 Hz monitor is visible.
+  try {
+    const { screen } = require('electron');
+    console.log('[asterion] gpu', JSON.stringify(app.getGPUFeatureStatus()), 'displays', JSON.stringify(screen.getAllDisplays().map((display) => ({ hz: display.displayFrequency, size: display.size }))));
+  } catch { /* diagnostics only */ }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

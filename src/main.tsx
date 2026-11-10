@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { GameRoot } from './ui/menu/GameRoot.tsx';
 import { installUiSounds } from './audio/ui-bindings.ts';
 import { installSelectionGuard } from './ui/selection-guard.ts';
+import { installFrameMeter } from './ui/frame-meter-overlay.ts';
 import './ui/race/race-tokens.css';
 import './styles.css';
 import './universe-nav.css';
@@ -109,6 +110,7 @@ if (!isElectron) {
 
 installUiSounds();
 installSelectionGuard();
+installFrameMeter();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

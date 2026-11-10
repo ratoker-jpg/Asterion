@@ -1,0 +1,40 @@
+/* Frame meter (perf PR 1): a small corner card above the stage that never takes input. */
+.frame-meter {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 10100;
+  min-width: 210px;
+  padding: 8px 12px;
+  border: 1px solid rgba(120, 220, 235, .35);
+  border-radius: 8px;
+  background: rgba(4, 10, 14, .82);
+  color: #e8f6fa;
+  font: 12px/1.5 Montserrat, Arial, sans-serif;
+  pointer-events: none;
+  user-select: none;
+}
+
+.frame-meter-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.frame-meter-row span {
+  color: rgba(232, 246, 250, .7);
+}
+
+.frame-meter-row strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.frame-meter-note {
+  display: block;
+  margin-top: 4px;
+  color: rgba(232, 246, 250, .6);
+}
+
+.frame-meter-note:empty {
+  display: none;
+}

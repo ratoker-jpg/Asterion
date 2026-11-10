@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { downloadJournal, getActiveJournalCampaign, readJournal } from './ui/player-journal-store.ts';
 import { botJournalAvailable, downloadBotJournal } from './ui/bot-journal-store.ts';
 import { getDesktopBridge } from './domain/settings/desktop.ts';
@@ -6,6 +6,7 @@ import { AUDIO_VOLUME_MAX, AUDIO_VOLUME_MIN, createDefaultAudioPreferences, type
 import { audio, playSound } from './audio/engine.ts';
 import { useAudioPreferences } from './audio/hooks.ts';
 import { SETTINGS_ICONS } from './ui/ui-art.ts';
+import { isFrameMeterEnabled, setFrameMeterEnabled, subscribeFrameMeter } from './ui/frame-meter-overlay.ts';
 import { CloudSettingsPanel } from './ui/menu/CloudSettingsPanel.tsx';
 import './ui/menu/cloud.css';
 import type { SoundId } from './audio/sounds.ts';
@@ -138,6 +139,7 @@ export function SettingsView({ preferences, onPreferencesChange, onReset }: Sett
                 </label>
                 <small className="utility-helper">{desktopAvailable ? (displayMessage || 'F11 и Escape продолжают работать как раньше.') : 'Доступно в приложении Asterion для Windows.'}</small>
               </div>
+              <FrameMeterCard />
             </div>
           </section>
         ) : section === 'controls' ? (
@@ -331,6 +333,20 @@ function BotJournalCard({ campaign }: { campaign: string | null }) {
         if (!campaign) return;
         downloadBotJournal(campaign).then((total) => setMessage(`Файл с ${total} записями сохранён.`)).catch(() => setMessage('Не удалось прочитать журнал ботов.'));
       }} data-qa-bot-journal-download>ВЫГРУЗИТЬ ЖУРНАЛ БОТОВ</button>
+    </div>
+  );
+}
+
+function FrameMeterCard() {
+  const on = useSyncExternalStore(subscribeFrameMeter, isFrameMeterEnabled);
+  return (
+    <div className="settings-card-v2" data-qa-frame-meter-card>
+      <h3 className="utility-section-title">СЧЁТЧИК КАДРОВ</h3>
+      <p className="utility-body-text">Маленькая панель в углу экрана: кадры в секунду, самый долгий кадр за 5 секунд и сколько кадров не уложились в 8,3 мс (120 Гц). Пока она выключена, игра её не считает.</p>
+      <div className="settings-segment-v2">
+        <button type="button" className={`utility-control ${on ? 'active' : ''}`} aria-pressed={on} onClick={() => setFrameMeterEnabled(true)}>ВКЛЮЧИТЬ</button>
+        <button type="button" className={`utility-control ${on ? '' : 'active'}`} aria-pressed={!on} onClick={() => setFrameMeterEnabled(false)}>ВЫКЛЮЧИТЬ</button>
+      </div>
     </div>
   );
 }

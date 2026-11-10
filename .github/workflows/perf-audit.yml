@@ -1,0 +1,99 @@
+name: Perf frames (120 Hz)
+
+# The frame gate of the 120 FPS program (audit PERF-AUDIT-2026-11-10, docs/PERF_MEASUREMENT.md).
+# A heavy synthetic world (day 3, 100 NPC, max activity: the bot-lab `activity_cpu` fixture) is loaded in the
+# built game and every screen is traced at a 120 Hz frame clock. REPORT-ONLY for now: the table goes to the run
+# summary and the thresholds live in tools/perf-audit-summary.mjs. Run it by hand for a PR that claims a gain:
+#   gh workflow run perf-audit.yml -R ratoker-jpg/Asterion --ref <branch> [-f fixtures_run=<id>]
+on:
+  workflow_dispatch:
+    inputs:
+      fixtures_run:
+        description: Run id whose artifact `activity-fixture-100-max` holds the day-3 world (empty = use the cached fixture, or generate it)
+        required: false
+        default: ''
+      seconds:
+        description: Seconds traced per screen
+        required: false
+        default: '5'
+      autosave_seconds:
+        description: Length of the quiet autosave window (0 = skip)
+        required: false
+        default: '90'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  LAB_NODE: --max-old-space-size=12288 --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs
+  # Bump to regenerate the cached world (needed when a save format change makes the old one unreadable).
+  FIXTURE_CACHE_VERSION: v1
+
+jobs:
+  fixture:
+    name: Day-3 world, 100 NPC, max activity
+    if: ${{ inputs.fixtures_run == '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: fixtures
+          key: perf-fixture-100-max-${{ env.FIXTURE_CACHE_VERSION }}
+      - uses: actions/setup-node@v4
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+        if: steps.cache.outputs.cache-hit != 'true'
+      - name: Generate the world
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: node $LAB_NODE tools/late-game-catchup.mjs generate --days=3 --npc=100 --activity=max --out=fixtures
+      - uses: actions/upload-artifact@v4
+        with:
+          name: activity-fixture-100-max
+          path: fixtures
+          retention-days: 7
+
+  frames:
+    name: Frames per screen, 100 NPC max, 120 Hz
+    needs: fixture
+    if: ${{ !cancelled() && (needs.fixture.result == 'success' || needs.fixture.result == 'skipped') }}
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: activity-fixture-100-max
+          path: fixtures
+          run-id: ${{ inputs.fixtures_run || github.run_id }}
+          github-token: ${{ github.token }}
+      - name: Build (as shipped)
+        run: npm run build
+      - name: Trace per screen
+        shell: bash
+        # --motion: Windows runners report prefers-reduced-motion, which switches the game's animations off.
+        # --no-raf: no rAF loop of our own (it would force a main frame every frame); frames come from the trace.
+        run: npx electron electron/perf-audit-trace.cjs --fixture=fixtures/late-game-day-3.json --speed=fast --mode=trace --seconds=${{ inputs.seconds || '5' }} --autosave-seconds=${{ inputs.autosave_seconds || '90' }} --motion --no-raf --frame-rate=120 --out=artifacts/perf-audit
+      - name: Table and gate
+        if: always()
+        shell: bash
+        run: |
+          file=artifacts/perf-audit/perf-audit-trace-motion.json
+          if [ -f "$file" ]; then node tools/perf-audit-summary.mjs "$file" | tee -a "$GITHUB_STEP_SUMMARY"; else echo "No result file" | tee -a "$GITHUB_STEP_SUMMARY"; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: perf-frames-100-max
+          path: artifacts/perf-audit
+          retention-days: 14
