@@ -44,7 +44,7 @@ on:
         type: boolean
         default: false
       activity_cpu:
-        description: Step of the day-3 world at each NPC activity level (100 NPC at x1, 50 NPC at x5); measures `ref` only
+        description: Step of the day-3 world at each NPC activity level (100 NPC at x1, 75 and 50 NPC at x5); measures `ref` only
         type: boolean
         default: false
       fixtures_run:
@@ -270,7 +270,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        npc: [100, 50]
+        npc: [100, 75, 50]
         activity: [normal, high, max]
     steps:
       - uses: actions/checkout@v4
@@ -299,6 +299,7 @@ jobs:
       matrix:
         include:
           - { npc: 100, scale: 1 }
+          - { npc: 75, scale: 5 }
           - { npc: 50, scale: 5 }
     steps:
       - uses: actions/checkout@v4
@@ -338,6 +339,6 @@ jobs:
           '
       - uses: actions/upload-artifact@v4
         with:
-          name: activity-cpu-${{ matrix.npc }}
+          name: activity-cpu-${{ matrix.npc }}-x${{ matrix.scale }}
           path: cpu
           retention-days: 14

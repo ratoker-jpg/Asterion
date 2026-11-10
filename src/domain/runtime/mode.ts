@@ -68,7 +68,7 @@ export const CAMPAIGN_SPEED_SCALE: Readonly<Record<CampaignSpeed, number>> = Obj
   slow: 0.5,
   standard: 1,
   fast: 2,
-  /** Owner decision 31.10.2026: at most WORLD_LIMITS.superfastNpcMax NPC (the load of a ×2 world of 100). */
+  /** Owner decision 31.10.2026: at most WORLD_LIMITS.superfastNpcMax NPC (raised from 50 on 09.11.2026: memory, not CPU, is the server's limit). */
   superfast: 5,
 });
 

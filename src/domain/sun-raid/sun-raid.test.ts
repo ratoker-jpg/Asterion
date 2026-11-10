@@ -198,6 +198,7 @@ test('Gate breach follows the owner rules of 25.10.2026 over many seeds', () => 
 test('Sun raid caps scale with the world NPC count (owner rule 31.10.2026)', () => {
   assert.deepEqual(sunRaidCaps(100), { perSide: 225_000, participant: 75_000 });
   assert.deepEqual(sunRaidCaps(50), { perSide: 112_500, participant: 43_000 });
+  assert.deepEqual(sunRaidCaps(75), { perSide: 168_750, participant: 59_000 });
   assert.deepEqual(sunRaidCaps(30), { perSide: 67_500, participant: 30_000 });
   assert.deepEqual(sunRaidCaps(22), { perSide: 50_000, participant: 25_000 });
   assert.deepEqual(sunRaidCaps(5), { perSide: 50_000, participant: 25_000 });
