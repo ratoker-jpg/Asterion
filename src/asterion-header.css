@@ -87,16 +87,16 @@
 .hdr-planet-control{position:absolute;z-index:8;left:608px;right:calc(50% + 155px);top:5px;min-width:184px}
 .hdr-planet-select{
   --hdr-radius:12px;
-  width:100%;height:48px;display:flex;align-items:center;gap:9px;padding:0 12px 0 10px;border:0;text-align:left;
+  width:100%;height:48px;display:flex;align-items:center;gap:6px;padding:0 8px 0 8px;border:0;text-align:left;
   background:rgba(0,0,0,.3);box-shadow:inset 0 1px 3px rgba(0,0,0,.6),inset 0 0 0 1px rgba(86,217,242,.28);
   transition:box-shadow .15s ease,background .15s ease;
 }
 .hdr-planet-select:hover,.hdr-planet-select:focus-visible,.hdr-planet-select[aria-expanded="true"]{
   outline:0;background:rgba(86,217,242,.08);box-shadow:inset 0 0 0 1px var(--header-accent)
 }
-.hdr-planet-select img{flex:0 0 32px;width:32px;height:32px;object-fit:contain}
+.hdr-planet-select img{flex:0 0 24px;width:24px;height:24px;object-fit:contain}
 .hdr-planet-select__copy{flex:1;min-width:0;display:grid;gap:2px}
-.asterion-header .hdr-planet-select__copy .hdr-planet-select__name{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;min-width:0;overflow:hidden;font-size:13px;font-weight:800;line-height:1.15;overflow-wrap:anywhere;text-overflow:ellipsis}
+.asterion-header .hdr-planet-select__copy .hdr-planet-select__name{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;min-width:0;overflow:hidden;font-size:12px;font-weight:800;line-height:1.15;overflow-wrap:anywhere;text-overflow:ellipsis}
 .hdr-planet-select{position:relative}
 .hdr-planet-select>.hdr-planet-select__tip{left:10px;transform:translateY(-3px)}
 .hdr-planet-select:hover>.hdr-planet-select__tip,.hdr-planet-select:focus-visible>.hdr-planet-select__tip{transform:translateY(0)}

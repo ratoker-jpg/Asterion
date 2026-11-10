@@ -492,7 +492,8 @@
 }
 
 /* Ships, defence, commanders, losses */
-.reports-view .spy-report-entity-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 6px; }
+/* Two tiles per row in the reading pane: «Бомбардировщик» and a 9-digit count fit side by side. */
+.reports-view .spy-report-entity-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 6px; }
 .reports-view .spy-report-entity {
   position: relative;
   display: grid;
