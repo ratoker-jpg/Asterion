@@ -145,7 +145,7 @@ function seedSource(now) {
   const recycler = Array.from({ length: 500 }, (_, index) => ({
     id: `recycler-arrival:qa-flight-${index}`, flightId: `qa-flight-${index}`,
     coordinate: { galaxy: 1 + (index % 3), system: 1 + (index % 99), position: 1 + (index % 15) },
-    arrivedAtMs: now - 30_000 - index * 50_000, collectedDebris: 1000 + index * 37, remainingOrbitalDebris: index % 4 ? 99999 : 0,
+    arrivedAtMs: now - 30_000 - index * 10_000, collectedDebris: 1000 + index * 37, remainingOrbitalDebris: index % 4 ? 99999 : 0,
   }));
   return `(save) => {
     const now = ${now};
@@ -256,6 +256,7 @@ async function runViewport(win, directory, label) {
     rows: document.querySelectorAll('[data-qa-message-list] .reports-list-item').length,
     unreadBadge: document.querySelector('[data-message-folder="flights"] .reports-v2-unread-count')?.textContent,
   })`);
+  if (Number(metrics.flights.unreadBadge) < 500) fail('The 500-message fixture is not all shown', metrics.flights);
   await check('500 flights');
   await capture(win, directory, '04-flights-500-unread');
   await click(win, '.reports-v2-filter-segments button:nth-child(2)');
@@ -314,7 +315,10 @@ async function runSaveCards(width, height, directory, label) {
   const win = new BrowserWindow({ width, height, show: false, backgroundColor: '#02050a',
     webPreferences: { offscreen: true, contextIsolation: true, nodeIntegration: false, sandbox: true, partition: `qa-save-cards-${width}` } });
   try {
+    // Attaching the debugger to a window that has never loaded a page crashes Electron on the CI runner.
+    await win.loadURL('about:blank');
     win.webContents.debugger.attach('1.3');
+    await win.webContents.debugger.sendCommand('Page.enable');
     await win.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false, screenWidth: width, screenHeight: height });
     const open = async (search) => {
       const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
