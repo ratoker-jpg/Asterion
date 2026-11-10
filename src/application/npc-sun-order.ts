@@ -28,8 +28,16 @@ import { allianceSunRaces, currentSunRaidState } from './sun-raid.ts';
  * not sink the gathering. Numbers are the bots' judgement, not game rules.
  */
 export const NPC_SUN_ORDER_BALANCE = Object.freeze({
-  /** Share of the side cap kept as the «любые» room. */
-  anyShare: 0.1,
+  /**
+   * Share of the side cap kept as the «любые» room at least: members bring less than they offered
+   * (gas, ships called away), and only this room lets another member cover it (bot lab 10.11.2026:
+   * with 10% four gatherings of ten fell apart).
+   */
+  anyShare: 0.35,
+  /** Exact slots take this share of what the called members offered, so they fill first; the rest goes to «любые». */
+  slotShare: 0.8,
+  /** Members are called (as the allotment does) until their promises cover this many sides. */
+  callMargin: 1.2,
   /** Offers worth less than this share of the population-weighted median value per population are filler. */
   fillerFloor: 0.45,
 });
@@ -79,25 +87,33 @@ export function composeNpcSunOrder(state: SaveState, plan: NpcSunRaidPrepPlan, c
   const log = currentSunRaidState(state).battleLog ?? [];
   const experience = sunExperience(log, expectedSunDefence(log, plan.galaxy, plan.system));
   const offers: Offer[] = [];
-  const members = Object.entries(plan.rsvps)
-    .filter(([ownerId, rsvp]) => ownerId === plan.ownerId || (rsvp.answer !== 'no' && rsvp.population > 0))
-    .map(([ownerId]) => ownerId);
-  if (!members.includes(plan.ownerId)) members.push(plan.ownerId);
-  for (const ownerId of members.sort()) {
-    const rsvp = plan.rsvps[ownerId];
-    const room = Math.min(caps.participant, rsvp?.answer === 'limit' ? rsvp.population : caps.participant);
-    offers.push(...memberOffers(state, ownerId, room, experience));
+  // The members the gathering will call, in the allotment's order: the leader, then the best force per population,
+  // each within its own promise and cap, until the promises cover the side with a margin. Only their hulls are ordered.
+  const leaderRsvp = plan.rsvps[plan.ownerId];
+  const called: [string, number][] = [[plan.ownerId, Math.min(caps.participant, leaderRsvp?.answer === 'limit' ? leaderRsvp.population : caps.participant)]];
+  let covered = called[0]![1];
+  const others = Object.entries(plan.rsvps)
+    .filter(([ownerId, rsvp]) => ownerId !== plan.ownerId && rsvp.answer !== 'no' && rsvp.population > 0)
+    .sort(([leftId, left], [rightId, right]) => (right.quality ?? 0) - (left.quality ?? 0) || (leftId < rightId ? -1 : 1));
+  for (const [ownerId, rsvp] of others) {
+    if (covered >= caps.perSide * NPC_SUN_ORDER_BALANCE.callMargin) break;
+    const room = Math.min(caps.participant, rsvp.population);
+    called.push([ownerId, room]);
+    covered += room;
   }
+  for (const [ownerId, room] of called) offers.push(...memberOffers(state, ownerId, room, experience));
   if (!offers.length) return null;
   const floor = NPC_SUN_ORDER_BALANCE.fillerFloor * weightedMedian(offers);
   const quality = offers.filter((offer) => offer.value >= floor);
   const filler = offers.filter((offer) => offer.value < floor).reduce((sum, offer) => sum + offer.population, 0);
   // One slot per race + hull: hulls of the members who offer it, the lowest of their levels.
   const slots = new Map<string, { slot: SunRaidOrderShipSlot; value: number; unit: number }>();
-  for (const offer of quality) {
+  for (let offer of quality) {
     const key = `${offer.factionId}:${offer.entityId}`;
     const known = slots.get(key);
     const unit = offer.population / offer.count;
+    offer = { ...offer, count: Math.floor(offer.count * NPC_SUN_ORDER_BALANCE.slotShare) };
+    if (offer.count <= 0) continue;
     if (known) {
       known.slot.count += offer.count;
       known.slot.minLevel = Math.min(known.slot.minLevel ?? 0, offer.level);
@@ -122,8 +138,9 @@ export function composeNpcSunOrder(state: SaveState, plan: NpcSunRaidPrepPlan, c
   // The «любые» room takes the rest; its level bar is the lowest level among the quality offers left over
   // (no quality offer left over: the members' filler may close the gap, any level).
   const anyPopulation = caps.perSide - used;
+  // A level bar on «любые» only when the called members' good hulls alone cover the side well over.
   const qualityTotal = quality.reduce((sum, offer) => sum + offer.population, 0);
-  const minLevel = Number.isFinite(anyMinLevel) && qualityTotal >= caps.perSide ? anyMinLevel : 0;
+  const minLevel = Number.isFinite(anyMinLevel) && qualityTotal >= caps.perSide * NPC_SUN_ORDER_BALANCE.callMargin ? anyMinLevel : 0;
   const order: SunRaidOrder = {
     version: 1, preset: 'npc',
     slots: [...chosen, ...(anyPopulation > SUN_RAID_CONFIG.raidLaunchTolerance || !chosen.length ? [{ kind: 'any' as const, population: Math.max(1, anyPopulation), ...(minLevel ? { minLevel } : {}) }] : [])],
