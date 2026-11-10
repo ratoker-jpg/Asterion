@@ -5,6 +5,8 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { patchSaveIdle } = require('./qa-save-edit.cjs');
+const { PARSE_SAVE } = require('./qa-save.cjs');
 
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
@@ -77,46 +79,44 @@ async function unhover(win) {
 }
 
 /** Writes the fixture and reloads in one renderer turn, so no autosave runs in between. */
+/**
+ * Rewrites the save while the game is NOT running (qa-save-edit.cjs), then boots it again.
+ * Writing localStorage under a live game and reloading raced its unload autosave: the
+ * previous fixture came back (a 1500 wallet read «Можно строить» with the rich wallet).
+ */
 async function seed(win, { buildings = RICH_BUILDINGS, wallet = 999999999, queue = [], bots = { metal: 5, minerals: 5, gas: 0 }, math = 4 } = {}) {
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-    const ok = await win.webContents.executeJavaScript(`(() => {
-      const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
-      const planet = save?.planets?.['helion-01'];
-      if (!planet?.buildings) return false;
-      const now = Date.now();
-      planet.buildings = { ...planet.buildings, ...${JSON.stringify(buildings)} };
-      planet.energy = 999999999;
-      planet.productionBots = ${JSON.stringify(bots)};
-      save.metal = ${wallet};
-      save.minerals = ${wallet};
-      save.gas = ${wallet};
-      if (planet.resources) planet.resources = { ...planet.resources, metal: ${wallet}, minerals: ${wallet}, gas: ${wallet} };
-      if (save.science?.levels) save.science.levels[3] = ${math};
-      save.queues = { 'helion-01': ${JSON.stringify(queue)}.map((item, index) => ({
-        id: 'qa-' + index, planetId: 'helion-01', assetRole: item.role, targetLevel: item.level,
-        cost: { metal: 0, minerals: 0, gas: 0, energy: 0 },
-        enqueuedAt: now + index, startedAt: now + (item.startOffset ?? 0), finishAt: now + item.finishOffset,
-      })) };
-      save.resourceClock = { lastReconciledAt: now, remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
-      save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 10);
-      localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
-      localStorage.setItem('asterion.test-time-scale.v1', '1');
-      setTimeout(() => window.location.reload(), 0);
-      return true;
-    })()`);
-    if (!ok) throw new Error('Could not seed the planet pass fixture');
-    await loaded;
-    await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
-    await win.webContents.executeJavaScript('document.fonts?.ready');
-    await settle(win, 300);
-    const held = await win.webContents.executeJavaScript(`(() => {
-      const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
-      return save?.planets?.['helion-01']?.buildings?.['metal-production-1'] === ${buildings['metal-production-1'] ?? 'undefined'};
-    })()`);
-    if (held) return;
-  }
-  throw new Error('Planet pass fixture was overwritten by the running game three times');
+  await patchSaveIdle(win, SAVE_KEY, `(save) => {
+    const planet = save?.planets?.['helion-01'];
+    if (!planet?.buildings) throw new Error('Could not seed the planet pass fixture');
+    const now = Date.now();
+    planet.buildings = { ...planet.buildings, ...${JSON.stringify(buildings)} };
+    planet.energy = 999999999;
+    planet.productionBots = ${JSON.stringify(bots)};
+    save.metal = ${wallet};
+    save.minerals = ${wallet};
+    save.gas = ${wallet};
+    if (planet.resources) planet.resources = { ...planet.resources, metal: ${wallet}, minerals: ${wallet}, gas: ${wallet} };
+    if (save.science?.levels) save.science.levels[3] = ${math};
+    save.queues = { 'helion-01': ${JSON.stringify(queue)}.map((item, index) => ({
+      id: 'qa-' + index, planetId: 'helion-01', assetRole: item.role, targetLevel: item.level,
+      cost: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+      enqueuedAt: now + index, startedAt: now + (item.startOffset ?? 0), finishAt: now + item.finishOffset,
+    })) };
+    save.resourceClock = { lastReconciledAt: now, remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
+    save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 10);
+    localStorage.setItem('asterion.test-time-scale.v1', '1');
+  }`, {
+    label: 'planet pass seed',
+    // The booted game must hold this fixture, not the previous one: a stale rich wallet shows up as too much metal (storage caps may lower it, never raise it).
+    held: `(() => {
+      const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+      const metal = Number(save?.planets?.['helion-01']?.resources?.metal ?? save?.metal);
+      return save?.planets?.['helion-01']?.buildings?.['metal-production-1'] === ${buildings['metal-production-1'] ?? 'undefined'}
+        && !(metal > ${wallet} + 50000);
+    })()`,
+  });
+  await win.webContents.executeJavaScript('document.fonts?.ready');
+  await settle(win, 300);
 }
 
 async function openZone(win, zone) {
