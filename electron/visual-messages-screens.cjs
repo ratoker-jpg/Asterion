@@ -1,6 +1,6 @@
 // «Сообщения» redo (10.11.2026): worst-case screenshots of the inbox at 1280×720 and
 // 2560×1080, plus the three small fixes batched with it.
-// Cases: 500+ unread messages (arrivals and spy reports), very long subjects (130 spy reports on planets with long
+// Cases: 500+ unread messages (arrivals and spy reports), very long subjects (300 spy reports on planets with long
 // names), a 42-character alliance name, empty tabs, a filter with no result, a huge
 // spy report (every ship, defence and commander with 12-digit numbers), the commander
 // tooltip, the header with a 24-character planet name (and its game tooltip), and the
@@ -141,7 +141,7 @@ function seedSource(now) {
     population: { total: 99999999999, fleet: 88888888888, defense: 11111111111 }, firstReport: index === 0,
   });
   const reports = [spy('qa-huge-spy', 0, LONG_TARGETS[0], true)];
-  for (let index = 1; index <= 130; index += 1) reports.push(spy(`qa-long-spy-${index}`, index, `${LONG_TARGETS[index % LONG_TARGETS.length]} ${index}`, false));
+  for (let index = 1; index <= 300; index += 1) reports.push(spy(`qa-long-spy-${index}`, index, `${LONG_TARGETS[index % LONG_TARGETS.length]} ${index}`, false));
   const recycler = Array.from({ length: 250 }, (_, index) => ({
     id: `recycler-arrival:qa-flight-${index}`, flightId: `qa-flight-${index}`,
     coordinate: { galaxy: 1 + (index % 3), system: 1 + (index % 99), position: 1 + (index % 15) },
@@ -388,7 +388,8 @@ async function runSaveCards(width, height, directory, label) {
         visibleButtons: buttons.filter(inside).length, buttons: buttons.length,
         cutLabels: buttons.filter((button) => button.scrollWidth > button.clientWidth + 1).map((button) => button.textContent),
         badge: Boolean(card.querySelector('.menu-tag')), victory: Boolean(card.querySelector('.menu-slot__crystals b')),
-        titles: card.querySelectorAll('[title]').length,
+        // The crystal gems are shared Sun-raid art with their own native titles (not this card's markup).
+        titles: Array.from(card.querySelectorAll('[title]')).filter((node) => !node.closest('.menu-slot__crystals')).length,
       };
     })`);
     for (const card of cards) {
