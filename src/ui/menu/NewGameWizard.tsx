@@ -94,7 +94,7 @@ export function NewGameWizard({ onBack, onThemeChange, onCreated, seriesRound = 
     // Keep a name the player typed; only the untouched default follows the race.
     campaignName: current.campaignName === DEFAULT_CAMPAIGN_NAME[current.factionId] ? DEFAULT_CAMPAIGN_NAME[factionId] : current.campaignName,
   }));
-  // «Супербыстрая» ×5 holds at most 50 NPC: a larger count drops to it (the wizard says why).
+  // «Супербыстрая» ×5 holds at most 75 NPC: a larger count drops to it (the wizard says why).
   const patchWorld = (patch: Partial<NewGameConfig['world']>) => setConfig((current) => {
     const world = { ...current.world, ...patch };
     return { ...current, world: { ...world, npcCount: Math.min(world.npcCount, maxNpcForSpeed(world.campaignSpeed)) } };
@@ -344,7 +344,7 @@ function WorldStep({ config, issues, onChange, onWorld, onNext, series }: WorldS
         <h2>Вселенная</h2>
         <RangeField label="ГАЛАКТИКИ" value={config.world.galaxyCount} min={WORLD_LIMITS.galaxyMin} max={WORLD_LIMITS.galaxyMax} onChange={(value) => onWorld({ galaxyCount: value })} suffix={`× ${WORLD_LIMITS.systemsPerGalaxy} систем`} qa="galaxies" />
         <RangeField label="NPC-ВЛАДЕЛЬЦЫ" value={config.world.npcCount} min={WORLD_LIMITS.npcMin} max={maxNpcForSpeed(config.world.campaignSpeed)} onChange={(value) => onWorld({ npcCount: value })} suffix={`из ${capacity} мест`} qa="npc" />
-        {config.world.campaignSpeed === 'superfast' ? <p className="menu-field__hint" data-qa-world="superfast-npc-cap">При скорости «Супербыстрая» ×5 — не больше {WORLD_LIMITS.superfastNpcMax} NPC: так нагрузка на сервер не выше, чем у мира ×2 со 100 NPC.</p> : null}
+        {config.world.campaignSpeed === 'superfast' ? <p className="menu-field__hint" data-qa-world="superfast-npc-cap">При скорости «Супербыстрая» ×5 — не больше {WORLD_LIMITS.superfastNpcMax} NPC: так мир ×5 укладывается в память и нагрузку сервера.</p> : null}
         {issueFor('npcCount') ? <p className="menu-inline-error" role="alert">{issueFor('npcCount')}</p> : null}
         <div className="menu-field-row">
           <div className="menu-field">

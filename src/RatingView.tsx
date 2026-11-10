@@ -7,9 +7,17 @@ import { EmblemGlyph } from './CommandView';
 import { RATING_BACKDROP, RATING_MEDALS } from './ui/ui-art.ts';
 import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
 import { CURRENT_PLAYER_ID, createOwnerRatingEntries, createPlayerRatingEntries, withTestOwnerScoreFixtures } from './domain/rating/fixtures.ts';
-import { createAllianceRatingEntries } from './domain/rating/alliances.ts';
-import { selectOwnerAlliance } from './domain/command/selectors.ts';
-import type { CommandState } from './domain/command/types.ts';
+import {
+  ALLIANCE_CRYSTALS_NOTE,
+  createAllianceRatingEntries,
+  GATE_RULE_ALLIANCE,
+  GATE_RULE_SOLO,
+  selectAllianceRoster,
+  type AllianceRosterEntry,
+} from './domain/rating/alliances.ts';
+import { selectOwnerAlliance, selectOwnerMembership } from './domain/command/selectors.ts';
+import { MAX_ALLIANCE_MEMBERS } from './domain/command/catalog.ts';
+import type { AllianceRole, CommandState } from './domain/command/types.ts';
 import type { RuntimeMode } from './domain/runtime/mode.ts';
 import {
   filterAlliances,
@@ -70,6 +78,15 @@ export function RatingView({
     const clean = sortAlliances(alliances, allianceSort, 'desc');
     setPage(pageForEntry(clean, PAGE_SIZE, (entry) => entry.id === allianceId));
   };
+  const openPlayer = (ownerId: string) => {
+    setMode('players');
+    setQuery('');
+    setDirection('desc');
+    setSelectedId(ownerId);
+    setExpandedId(ownerId);
+    const clean = sortPlayers(players, playerSort, 'desc');
+    setPage(pageForEntry(clean, PAGE_SIZE, (entry) => entry.id === ownerId));
+  };
 
   const currentAlliance = useMemo(() => selectOwnerAlliance(command, currentPlayerId), [command, currentPlayerId]);
   const players = useMemo(
@@ -86,6 +103,7 @@ export function RatingView({
     [command, scoresWithFixtures, currentPlayerId],
   );
   const currentPlayer = useMemo(() => players.find((entry) => entry.isCurrentPlayer) ?? null, [players]);
+  const listedPlayerIds = useMemo(() => new Set(players.map((entry) => entry.id)), [players]);
 
   const playerResults = useMemo(
     () => sortPlayers(filterPlayers(players, query), playerSort, direction),
@@ -159,8 +177,6 @@ export function RatingView({
         <div className="rating-mode-tabs-v2" role="tablist" aria-label="Режим рейтинга">
           <button type="button" className={`utility-control ${mode === 'players' ? 'active' : ''}`} onClick={() => changeMode('players')}>ИГРОКИ</button>
           <button type="button" className={`utility-control ${mode === 'alliances' ? 'active' : ''}`} onClick={() => changeMode('alliances')}>АЛЬЯНСЫ</button>
-          <button type="button" className="utility-control" disabled>ЧЕМПИОНАТЫ</button>
-          <button type="button" className="utility-control" disabled>ЗАЛ СЛАВЫ</button>
         </div>
       </header>
 
@@ -180,7 +196,10 @@ export function RatingView({
 
       <section className="rating-panel-v2">
         <div className="rating-meta-v2">
-          <span className="utility-secondary">Показано {results.items.length} из {results.total} результатов</span>
+          <span className="utility-secondary">
+            Показано {results.items.length} из {results.total} результатов
+            {mode === 'alliances' ? <em className="rating-meta-v2__hint" data-qa-rating-average-hint> · очки союза — среднее по его участникам</em> : null}
+          </span>
           <Pagination page={results.page} pageCount={results.pageCount} onPage={setPage} />
         </div>
 
@@ -198,6 +217,7 @@ export function RatingView({
             command={command}
             currentPlayerId={currentPlayerId}
             onOpenAlliance={openAlliance}
+            allianceDetails={allianceDetails}
           />
         ) : alliances.length === 0 ? (
           <div className="rating-empty-v2" data-qa-rating-empty role="status">
@@ -214,6 +234,12 @@ export function RatingView({
             onSort={sortAlliance}
             expandedId={expandedId}
             details={allianceDetails}
+            command={command}
+            ownerScores={scoresWithFixtures}
+            owners={owners}
+            currentPlayerId={currentPlayerId}
+            listedPlayerIds={listedPlayerIds}
+            onOpenPlayer={openPlayer}
           />
         )}
 
@@ -239,6 +265,7 @@ function PlayerTable({
   command,
   currentPlayerId,
   onOpenAlliance,
+  allianceDetails,
 }: {
   entries: readonly PlayerRatingEntry[];
   currentPlayer: PlayerRatingEntry | null;
@@ -252,13 +279,19 @@ function PlayerTable({
   command: CommandState;
   currentPlayerId: string;
   onOpenAlliance: (allianceId: string) => void;
+  allianceDetails?: Readonly<Record<string, RatedAllianceDetails>>;
 }) {
   const playerAlliance = selectOwnerAlliance(command, currentPlayerId);
-  const card = (entry: PlayerRatingEntry) => expandedId === entry.id
-    ? <PlayerCard entry={entry} owner={owners?.[entry.id]} alliance={selectOwnerAlliance(command, entry.id)}
-      exactPresence={entry.id === currentPlayerId || Boolean(playerAlliance && selectOwnerAlliance(command, entry.id)?.id === playerAlliance.id)}
-      onOpenAlliance={onOpenAlliance} />
-    : null;
+  const roleOf = (ownerId: string) => selectOwnerMembership(command, ownerId)?.role ?? null;
+  const card = (entry: PlayerRatingEntry) => {
+    if (expandedId !== entry.id) return null;
+    const membership = selectOwnerMembership(command, entry.id);
+    return <PlayerCard entry={entry} owner={owners?.[entry.id]} alliance={selectOwnerAlliance(command, entry.id)}
+      role={membership?.role ?? null}
+      allianceDetails={membership ? allianceDetails?.[membership.alliance.id] : undefined}
+      exactPresence={entry.id === currentPlayerId || Boolean(playerAlliance && membership?.alliance.id === playerAlliance.id)}
+      onOpenAlliance={onOpenAlliance} />;
+  };
   const currentPlayerAlreadyVisible = Boolean(currentPlayer && entries.some((entry) => entry.id === currentPlayer.id));
   const showPinnedCurrentPlayer = Boolean(currentPlayer && !currentPlayerAlreadyVisible);
 
@@ -269,18 +302,17 @@ function PlayerTable({
         <ScoreHead label="ОБЩИЕ" iconPath={asterionAssetIntegrationAssets.scoreIcons.totalPoints} scoreKey="totalPoints" selected={sortKey === 'totalPoints'} direction={direction} onSort={onSort} />
         <ScoreHead label="РЕСУРС." iconPath={asterionAssetIntegrationAssets.scoreIcons.resourcePoints} scoreKey="resourcePoints" selected={sortKey === 'resourcePoints'} direction={direction} onSort={onSort} />
         <ScoreHead label="БОЕВЫЕ" iconPath={asterionAssetIntegrationAssets.scoreIcons.battlePoints} scoreKey="battlePoints" selected={sortKey === 'battlePoints'} direction={direction} onSort={onSort} />
-        <ScoreHead label="ДОСТИЖ." iconPath={asterionAssetIntegrationAssets.scoreIcons.achievementPoints} scoreKey="achievementPoints" selected={sortKey === 'achievementPoints'} direction={direction} onSort={onSort} />
       </div>
       {entries.map((entry) => (
         <Fragment key={entry.id}>
-          <PlayerRow entry={entry} selectedId={selectedId} onSelect={onSelect} expanded={expandedId === entry.id} />
+          <PlayerRow entry={entry} role={roleOf(entry.id)} selectedId={selectedId} onSelect={onSelect} expanded={expandedId === entry.id} />
           {card(entry)}
         </Fragment>
       ))}
       {showPinnedCurrentPlayer && currentPlayer ? (
         <>
           <div className="rating-self-separator-v2" role="row" aria-hidden="true"><span>…</span></div>
-          <PlayerRow entry={currentPlayer} selectedId={selectedId} onSelect={onSelect} pinned expanded={expandedId === currentPlayer.id} />
+          <PlayerRow entry={currentPlayer} role={roleOf(currentPlayer.id)} selectedId={selectedId} onSelect={onSelect} pinned expanded={expandedId === currentPlayer.id} />
           {card(currentPlayer)}
         </>
       ) : null}
@@ -290,12 +322,14 @@ function PlayerTable({
 
 function PlayerRow({
   entry,
+  role,
   selectedId,
   onSelect,
   pinned = false,
   expanded = false,
 }: {
   entry: PlayerRatingEntry;
+  role: AllianceRole | null;
   selectedId: string | null;
   onSelect: (id: string) => void;
   pinned?: boolean;
@@ -320,11 +354,13 @@ function PlayerRow({
       <span className="rank-v2">{entry.rank <= 3 ? <img className="rating-medal-v2" src={RATING_MEDALS[entry.rank - 1]} alt="" draggable={false} /> : null}<b>{entry.rank}</b></span>
       <span className="identity-v2"><strong className="utility-data-text" title={entry.name}>{entry.name}</strong><i className="rating-expand-mark-v2" aria-hidden="true">{expanded ? '▴' : '▾'}</i></span>
       <span className={`race-label-v2 race-${entry.race}`}>{RACE_LABELS[entry.race]}</span>
-      <span className="alliance-tag-v2">{entry.allianceTag ? `[${entry.allianceTag}]` : '—'}</span>
+      <span className="rating-alliance-cell-v2">
+        {entry.allianceTag ? <span className="alliance-tag-v2">[{entry.allianceTag}]</span> : <span className="rating-solo-v2">одиночка</span>}
+        {role && role !== 'member' ? <RoleBadge role={role} compact /> : null}
+      </span>
       <Value value={entry.totalPoints} lead />
       <Value value={entry.resourcePoints} />
       <Value value={entry.battlePoints} />
-      <Value value={entry.achievementPoints} />
     </button>
   );
 }
@@ -338,6 +374,12 @@ function AllianceTable({
   onSort,
   expandedId,
   details,
+  command,
+  ownerScores,
+  owners,
+  currentPlayerId,
+  listedPlayerIds,
+  onOpenPlayer,
 }: {
   entries: readonly AllianceRatingEntry[];
   selectedId: string | null;
@@ -347,7 +389,17 @@ function AllianceTable({
   onSort: (key: AllianceScoreKey) => void;
   expandedId: string | null;
   details?: Readonly<Record<string, RatedAllianceDetails>>;
+  command: CommandState;
+  ownerScores: Readonly<Record<string, OwnerScore | undefined>>;
+  owners?: Readonly<Record<string, RatedOwnerIdentity>>;
+  currentPlayerId: string;
+  listedPlayerIds: ReadonlySet<string>;
+  onOpenPlayer: (ownerId: string) => void;
 }) {
+  const rosterOf = (allianceId: string) => {
+    const record = command.alliances.find((alliance) => alliance.id === allianceId);
+    return record ? selectAllianceRoster(record, ownerScores, currentPlayerId, (ownerId) => owners?.[ownerId]?.name) : [];
+  };
   return (
     <div className="rating-table-v2 rating-table-v2--alliances" role="table" aria-label="Рейтинг альянсов">
       <div className="rating-row-v2 rating-head-v2" role="row">
@@ -375,12 +427,12 @@ function AllianceTable({
           <span className="rank-v2">{entry.rank <= 3 ? <img className="rating-medal-v2" src={RATING_MEDALS[entry.rank - 1]} alt="" draggable={false} /> : null}<b>{entry.rank}</b></span>
           <span className="identity-v2"><span className="alliance-emblem-v2">{entry.emblem ? <EmblemGlyph compact emblem={entry.emblem} /> : entry.tag.slice(0, 1)}</span><strong className="utility-data-text" title={entry.name}>{entry.name}</strong><i className="rating-expand-mark-v2" aria-hidden="true">{expandedId === entry.id ? '▴' : '▾'}</i></span>
           <span className="alliance-tag-v2">[{entry.tag}]</span>
-          <span className="utility-data-text">{entry.memberCount}/15</span>
+          <span className="utility-data-text">{entry.memberCount}/{MAX_ALLIANCE_MEMBERS}</span>
           <Value value={entry.totalPoints} lead />
           <Value value={entry.resourcePoints} />
           <Value value={entry.battlePoints} />
         </button>
-        {expandedId === entry.id ? <AllianceCard entry={entry} details={details?.[entry.id]} /> : null}
+        {expandedId === entry.id ? <AllianceCard entry={entry} details={details?.[entry.id]} roster={rosterOf(entry.id)} listedPlayerIds={listedPlayerIds} onOpenPlayer={onOpenPlayer} /> : null}
         </Fragment>
       ))}
     </div>
@@ -421,10 +473,12 @@ function CrystalDots({ count }: { count: number }) {
 }
 
 /** The card under a player row: what anyone can see about this owner, and the way to their profile. */
-function PlayerCard({ entry, owner, alliance, exactPresence, onOpenAlliance }: {
+function PlayerCard({ entry, owner, alliance, role, allianceDetails, exactPresence, onOpenAlliance }: {
   entry: PlayerRatingEntry;
   owner?: RatedOwnerIdentity;
   alliance: ReturnType<typeof selectOwnerAlliance>;
+  role: AllianceRole | null;
+  allianceDetails?: RatedAllianceDetails;
   exactPresence: boolean;
   onOpenAlliance: (allianceId: string) => void;
 }) {
@@ -440,7 +494,12 @@ function PlayerCard({ entry, owner, alliance, exactPresence, onOpenAlliance }: {
         <strong className="ut-selectable">{entry.name}</strong>
         <span>{RACE_LABELS[entry.race]}</span>
         <em className={`rating-presence-v2 is-${presence.tone}`}><i aria-hidden="true" />{presence.text}</em>
-        {alliance ? <button type="button" className="rating-card-v2__link" onClick={() => onOpenAlliance(alliance.id)}>Союз [{alliance.tag}] {alliance.name} ↗</button> : <span>Без союза</span>}
+        {alliance ? (
+          <span className="rating-card-v2__membership">
+            {role ? <RoleBadge role={role} /> : null}
+            <button type="button" className="rating-card-v2__link" onClick={() => onOpenAlliance(alliance.id)} data-qa-rating-open-alliance>[{alliance.tag}] {alliance.name} ↗</button>
+          </span>
+        ) : <span>Без союза</span>}
       </div>
       <div className="rating-card-v2__block">
         <small>ПЛАНЕТЫ · {planets.length}</small>
@@ -453,11 +512,26 @@ function PlayerCard({ entry, owner, alliance, exactPresence, onOpenAlliance }: {
           ))}
         </div>
       </div>
-      <div className="rating-card-v2__block">
-        <small>КРИСТАЛЛЫ СОЛНЦ</small>
-        <CrystalDots count={owner?.crystals ?? 0} />
-        {owner?.gate ? <span className="rating-card-v2__gate">{owner.gate === 'completed' ? 'Врата построены' : 'Строит Врата'}</span> : null}
-      </div>
+      {alliance ? (
+        // Solo crystals burn when an owner joins an alliance: a member never holds
+        // personal ones, so the card shows the alliance's crystals and Gate instead of a 0.
+        <div className="rating-card-v2__block" data-qa-rating-player-crystals="alliance">
+          <small>КРИСТАЛЛЫ СОЮЗА [{alliance.tag}]</small>
+          <CrystalDots count={allianceDetails?.crystals ?? 0} />
+          <span className="rating-card-v2__note">{ALLIANCE_CRYSTALS_NOTE}</span>
+          <span className={`rating-card-v2__note${role === 'leader' ? ' is-key' : ''}`}>
+            {role === 'leader' ? 'Как глава, строит Галактические Врата союза.' : 'Галактические Врата строит глава союза.'}
+          </span>
+          {allianceDetails?.gate ? <span className="rating-card-v2__gate">{allianceDetails.gate === 'completed' ? 'Врата союза построены' : 'Союз строит Врата'}</span> : null}
+        </div>
+      ) : (
+        <div className="rating-card-v2__block" data-qa-rating-player-crystals="solo">
+          <small>КРИСТАЛЛЫ СОЛНЦ · ЛИЧНЫЕ</small>
+          <CrystalDots count={owner?.crystals ?? 0} />
+          <span className="rating-card-v2__note">{GATE_RULE_SOLO}</span>
+          {owner?.gate ? <span className="rating-card-v2__gate">{owner.gate === 'completed' ? 'Врата построены' : 'Строит Врата'}</span> : null}
+        </div>
+      )}
       <div className="rating-card-v2__actions">
         <button type="button" disabled={!home} onClick={() => home && openOwnerOnMap(home.coordinate, entry.id, home.id)} data-qa-rating-open-profile>ПРОФИЛЬ</button>
       </div>
@@ -465,25 +539,72 @@ function PlayerCard({ entry, owner, alliance, exactPresence, onOpenAlliance }: {
   );
 }
 
-/** The card under an alliance row: its wars, size, crystals and Gate. */
-function AllianceCard({ entry, details }: { entry: AllianceRatingEntry; details?: RatedAllianceDetails }) {
+const ROLE_LABELS: Readonly<Record<AllianceRole, { full: string; short: string }>> = {
+  leader: { full: 'Глава', short: 'Глава' },
+  deputy: { full: 'Заместитель', short: 'Зам.' },
+  member: { full: 'Участник', short: 'Участник' },
+};
+
+function RoleBadge({ role, compact = false }: { role: AllianceRole; compact?: boolean }) {
+  return <span className={`rating-role-v2 is-${role}${compact ? ' is-compact' : ''}`} data-qa-rating-role={role}>{compact ? ROLE_LABELS[role].short : ROLE_LABELS[role].full}</span>;
+}
+
+function RosterName({ member, listed, onOpenPlayer }: { member: AllianceRosterEntry; listed: boolean; onOpenPlayer: (ownerId: string) => void }) {
+  return listed
+    ? <button type="button" className="rating-roster-v2__name" onClick={() => onOpenPlayer(member.ownerId)}>{member.name}</button>
+    : <span className="rating-roster-v2__name">{member.name}</span>;
+}
+
+/** The card under an alliance row: who leads it, its crystals and Gate, and the whole roster. */
+function AllianceCard({ entry, details, roster, listedPlayerIds, onOpenPlayer }: {
+  entry: AllianceRatingEntry;
+  details?: RatedAllianceDetails;
+  roster: readonly AllianceRosterEntry[];
+  listedPlayerIds: ReadonlySet<string>;
+  onOpenPlayer: (ownerId: string) => void;
+}) {
+  const leader = roster.find((member) => member.role === 'leader');
+  const deputies = roster.filter((member) => member.role === 'deputy');
+  const wars = details?.wars ?? 0;
+  const memberCount = details?.members ?? entry.memberCount;
   return (
     <div className="rating-card-v2 rating-card-v2--alliance" role="row" data-qa-rating-alliance-card={entry.id}>
-      <div className="rating-card-v2__block">
-        <small>ПОЛИТИКА</small>
-        <span className="rating-card-v2__stat"><b>{details?.wars ?? 0}</b> {pluralWars(details?.wars ?? 0)}</span>
+      <div className="rating-alliance-facts-v2">
+        <div className="rating-card-v2__block" data-qa-rating-leader>
+          <small>ГЛАВА СОЮЗА</small>
+          {leader ? <span className="rating-card-v2__person"><RoleBadge role="leader" /><RosterName member={leader} listed={listedPlayerIds.has(leader.ownerId)} onOpenPlayer={onOpenPlayer} /></span> : <span className="rating-card-v2__note">не назначен</span>}
+        </div>
+        <div className="rating-card-v2__block" data-qa-rating-deputies>
+          <small>{deputies.length > 1 ? 'ЗАМЕСТИТЕЛИ' : 'ЗАМЕСТИТЕЛЬ'}</small>
+          {deputies.length
+            ? deputies.map((deputy) => <span key={deputy.ownerId} className="rating-card-v2__person"><RoleBadge role="deputy" /><RosterName member={deputy} listed={listedPlayerIds.has(deputy.ownerId)} onOpenPlayer={onOpenPlayer} /></span>)
+            : <span className="rating-card-v2__note">не назначен</span>}
+        </div>
+        <div className="rating-card-v2__block" data-qa-rating-alliance-crystals>
+          <small>КРИСТАЛЛЫ СОЮЗА</small>
+          <CrystalDots count={details?.crystals ?? 0} />
+          <span className="rating-card-v2__note">Общие на весь союз</span>
+        </div>
+        <div className="rating-card-v2__block" data-qa-rating-gate-rule>
+          <small>ГАЛАКТИЧЕСКИЕ ВРАТА</small>
+          <span className="rating-card-v2__stat">{details?.gate === 'completed' ? 'Построены' : details?.gate === 'building' ? 'Строятся' : 'Не начаты'}</span>
+          <span className="rating-card-v2__note">{GATE_RULE_ALLIANCE}</span>
+        </div>
       </div>
-      <div className="rating-card-v2__block">
-        <small>УЧАСТНИКИ</small>
-        <span className="rating-card-v2__stat"><b>{details?.members ?? entry.memberCount}</b> из 15</span>
-      </div>
-      <div className="rating-card-v2__block">
-        <small>КРИСТАЛЛЫ СОЛНЦ</small>
-        <CrystalDots count={details?.crystals ?? 0} />
-      </div>
-      <div className="rating-card-v2__block">
-        <small>ГАЛАКТИЧЕСКИЕ ВРАТА</small>
-        <span className="rating-card-v2__stat">{details?.gate === 'completed' ? 'Построены' : details?.gate === 'building' ? 'Строятся' : 'Нет'}</span>
+      <div className="rating-roster-v2" data-qa-rating-roster>
+        <div className="rating-roster-v2__head">
+          <small>СОСТАВ · {memberCount} из {MAX_ALLIANCE_MEMBERS}</small>
+          <small>{wars ? `${wars} ${pluralWars(wars)}` : 'войн нет'}</small>
+        </div>
+        <ol className="rating-roster-v2__list">
+          {roster.map((member) => (
+            <li key={member.ownerId} className={`is-${member.role}${member.isCurrentPlayer ? ' is-current' : ''}`} data-qa-rating-roster-member={member.role}>
+              {member.role === 'member' ? <span aria-hidden="true" /> : <RoleBadge role={member.role} compact />}
+              <RosterName member={member} listed={listedPlayerIds.has(member.ownerId)} onOpenPlayer={onOpenPlayer} />
+              <b className="utility-data-text">{new Intl.NumberFormat('ru-RU').format(member.totalPoints)}</b>
+            </li>
+          ))}
+        </ol>
       </div>
     </div>
   );

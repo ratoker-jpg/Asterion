@@ -46,7 +46,7 @@ export const WORLD_LIMITS = Object.freeze({
   npcMin: 0,
   npcMax: 100,
   /** «Супербыстрая» ×5 holds at most this many NPC (owner decision 31.10.2026). */
-  superfastNpcMax: 50,
+  superfastNpcMax: 75,
   playerNameMin: 3,
   playerNameMax: 24,
   campaignNameMax: 40,
@@ -69,7 +69,7 @@ export const CAMPAIGN_SPEED_LABELS: Readonly<Record<CampaignSpeed, { label: stri
   slow: { label: 'Медленная', hint: 'Все таймеры ×0.5 — вдвое дольше' },
   standard: { label: 'Стандартная', hint: 'Текущий темп игры' },
   fast: { label: 'Быстрая', hint: 'Все таймеры ×2 — вдвое быстрее' },
-  superfast: { label: 'Супербыстрая', hint: 'Все таймеры ×5 — впятеро быстрее; в мире не больше 50 NPC' },
+  superfast: { label: 'Супербыстрая', hint: 'Все таймеры ×5 — впятеро быстрее; в мире не больше 75 NPC' },
 });
 
 export const NPC_ACTIVITY_LABELS: Readonly<Record<NpcActivityLevel, { label: string; hint: string }>> = Object.freeze({

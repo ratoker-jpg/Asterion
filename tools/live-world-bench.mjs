@@ -35,6 +35,7 @@ for (let tick = 1; tick <= seconds; tick += 1) {
   world = next;
   rows.push({ tickMs: t1 - t0, diffMs: t2 - t1, cloneMs: t3 - t2, applyMs: t4 - t3, ...describePatch(patch) });
 }
+const mem = process.memoryUsage();
 const equal = JSON.stringify(mirror) === JSON.stringify(world);
 const pick = (key) => {
   const values = rows.map((row) => row[key]).sort((a, b) => a - b);
@@ -42,6 +43,7 @@ const pick = (key) => {
   return { median: +q(0.5).toFixed(2), p95: +q(0.95).toFixed(2), max: +values.at(-1).toFixed(2) };
 };
 console.log(JSON.stringify({ fixture: option('fixture'), seconds, stepMs, equal,
+  rssMb: Math.round(mem.rss / 1048576), heapMb: Math.round(mem.heapUsed / 1048576), fixtureMb: +(raw.length / 1048576).toFixed(1),
   worker: { tick: pick('tickMs'), diff: pick('diffMs') }, transfer: { clone: pick('cloneMs') }, ui: { apply: pick('applyMs') },
   patch: { ops: pick('ops'), values: pick('values') } }, null, 2));
 if (!equal) process.exitCode = 1;
