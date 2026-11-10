@@ -260,13 +260,15 @@ async function runViewport(win, directory) {
 
   // 6. Several builds finishing at once: toasts.
   await seed(win, { queue: [
-    { role: 'metal-production-1', level: 15, startOffset: -10 * 60_000, finishOffset: 1200 },
-    { role: 'construction', level: 11, startOffset: 1200, finishOffset: 1500 },
-    { role: 'research', level: 6, startOffset: 1500, finishOffset: 1800 },
+    // Offsets count from the save edit; the game boots after it, so they finish on screen.
+    { role: 'metal-production-1', level: 15, startOffset: -10 * 60_000, finishOffset: 15_000 },
+    { role: 'construction', level: 11, startOffset: 15_000, finishOffset: 15_300 },
+    { role: 'research', level: 6, startOffset: 15_300, finishOffset: 15_600 },
   ], buildings: { ...RICH_BUILDINGS, 'metal-production-1': 14 } });
   await openZone(win, 'resource');
   // Long builds are announced after a 3 s grouping window.
-  await sleep(5000);
+  await waitFor(win, `document.querySelector('[data-qa-runtime-toast]')`, 30_000).catch(() => {});
+  await sleep(600);
   await settle(win);
   metrics.toasts = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-qa-runtime-toast]')).map((toast) => toast.innerText.replace(/\\s+/g, ' ').trim())`);
   metrics.toastCoversIncome = await win.webContents.executeJavaScript(`(() => {
@@ -284,11 +286,14 @@ async function runViewport(win, directory) {
 
   // Same on the Messages screen (owner: a toast covered «Отметить все прочитанными»).
   await seed(win, { queue: [
-    { role: 'metal-production-1', level: 15, startOffset: -10 * 60_000, finishOffset: 2500 },
-    { role: 'construction', level: 11, startOffset: 2500, finishOffset: 2800 },
+    // Offsets count from the save edit; the game boots after it (a few seconds), so the
+    // builds finish once the Messages screen is open.
+    { role: 'metal-production-1', level: 15, startOffset: -10 * 60_000, finishOffset: 15_000 },
+    { role: 'construction', level: 11, startOffset: 15_000, finishOffset: 15_300 },
   ], buildings: { ...RICH_BUILDINGS, 'metal-production-1': 14 } });
   await click(win, '[data-qa-route="reports"]');
-  await sleep(6500);
+  await waitFor(win, `document.querySelector('[data-qa-runtime-toast]')`, 30_000).catch(() => {});
+  await sleep(600);
   await settle(win);
   metrics.messagesToasts = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-qa-runtime-toast]')).map((toast) => toast.innerText.replace(/\\s+/g, ' ').trim())`);
   if (!metrics.messagesToasts.length) fail('No toast on the Messages screen', metrics.messagesToasts);
