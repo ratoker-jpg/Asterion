@@ -744,7 +744,9 @@ export function ZoneView({
 
                 <div className={`resource-building-availability ${availability.status}`} data-qa-build-status={availability.status} role="status">
                   <strong>{availability.canBuild ? 'Можно строить' : 'Пока нельзя'}</strong>
-                  <span>{availability.reason ? localizeBuildingNames(availability.reason, factionId) : `Свободно слотов: ${BUILDING_QUEUE_CAPACITY - queue.length}.`}</span>
+                  <span>{availability.status === 'requirements-unmet' && missingRequirements.length > 0
+                    ? 'Сначала постройте то, что указано выше.'
+                    : availability.reason ? localizeBuildingNames(availability.reason, factionId) : `Свободно слотов: ${BUILDING_QUEUE_CAPACITY - queue.length}.`}</span>
                 </div>
               </>
             )}
