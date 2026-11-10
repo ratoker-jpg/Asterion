@@ -357,9 +357,9 @@ async function runSaveCards(width, height, directory, label) {
       const make = (suffix, name, edit) => {
         const copy = JSON.parse(JSON.stringify(payload));
         edit(copy);
-        const storageKey = 'asterion.slot.qa-' + suffix + '.v1';
+        const storageKey = 'asterion.slot.slot-qa-' + suffix + '.v1';
         localStorage.setItem(storageKey, JSON.stringify(copy));
-        return { ...base, id: 'qa-' + suffix, name, storageKey, updatedAt: base.updatedAt - 1000 };
+        return { ...base, id: 'slot-qa-' + suffix, name, storageKey, updatedAt: base.updatedAt - 1000 };
       };
       const crystals = (copy) => { copy.sunRaid = { ...(copy.sunRaid || {}), crystals: { ...((copy.sunRaid || {}).crystals || {}), ['owner:' + playerId]: ['c1', 'c2', 'c3', 'c4'] }, campaignResult: { playerWon: true } }; };
       base.name = ${JSON.stringify(LONG_SLOT)};
@@ -375,8 +375,8 @@ async function runSaveCards(width, height, directory, label) {
     await open();
     await waitFor(win, `document.querySelector('[data-qa-menu="main"]')`, 20000);
     await click(win, '[data-qa-menu-action="load"]');
-    // The wizard may leave more than one slot (e.g. an autosave copy): wait for the three clones by id.
-    await waitFor(win, `['qa-victory', 'qa-short', 'qa-victory-short'].every((id) => document.querySelector('[data-qa-load-screen] [data-qa-slot="' + id + '"]'))`, 20000)
+    // Slot ids must match /^slot-[a-z0-9-]+$/ or the index drops them: wait for the three clones by id.
+    await waitFor(win, `['slot-qa-victory', 'slot-qa-short', 'slot-qa-victory-short'].every((id) => document.querySelector('[data-qa-load-screen] [data-qa-slot="' + id + '"]'))`, 20000)
       .catch(async (error) => { throw new Error(`${error.message}; ${JSON.stringify(await win.webContents.executeJavaScript(`({ cloned: ${JSON.stringify(cloned)}, shown: Array.from(document.querySelectorAll('[data-qa-slot]')).map((n) => n.getAttribute('data-qa-slot')), screen: Boolean(document.querySelector('[data-qa-load-screen]')), index: localStorage.getItem('asterion.slots.index.v1')?.slice(0, 400) })`))}`); });
     await settle(win, 900);
     const cards = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-qa-slot]')).map((card) => {
@@ -398,7 +398,7 @@ async function runSaveCards(width, height, directory, label) {
     }
     if (!cards.some((card) => card.badge) || !cards.some((card) => card.victory)) fail('Worst-case cards are missing', cards);
     await capture(win, directory, '14-load-game-save-cards');
-    await click(win, '[data-qa-slot-delete="qa-short"]');
+    await click(win, '[data-qa-slot-delete="slot-qa-short"]');
     await waitFor(win, `document.querySelector('[data-qa-confirm-yes]')`);
     await settle(win, 300);
     await capture(win, directory, '15-load-game-delete-confirm');
