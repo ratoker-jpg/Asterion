@@ -437,7 +437,8 @@ function rememberNpcBattle(state: SaveState, report: BattleReport, at: number, f
         // Sizing of a raid (journal only): what the attacker brought, and what the target held before the loot was taken.
         ...(side === 'attacker' ? { sent: sideBroughtValue(report, 'attacker', raceOf(ownerId)), held: heldBeforeLoot(state, flightId, report) } : {}) } });
     }
-    let remembered = updateNpcAutonomyMemory(profile, report.id, at,
+    // A draw is nobody's win and nobody's loss: no battle memory for either side.
+    let remembered = report.winner === 'draw' ? profile : updateNpcAutonomyMemory(profile, report.id, at,
       won ? 'battle-win' : 'battle-loss', won, [report.id]);
     // The defender remembers who attacked it and what it cost, for the whole match.
     if (side === 'defender' && isGrievanceBattle(report)) {

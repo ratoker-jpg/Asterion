@@ -119,6 +119,7 @@ export type GateProject = {
 export type SunRaidEventKind =
   | 'raid-launched'
   | 'raid-defended'
+  | 'raid-draw'
   | 'raid-won'
   | 'sun-frozen'
   | 'crystal-found'

@@ -305,9 +305,9 @@ function RaidRow({ raid, now, gathered, cap, ownPledge, canJoin, onJoin, onSelec
     ? `Сбор · ${gathered.toLocaleString('ru-RU')} / ${cap.toLocaleString('ru-RU')} · осталось ${countdown((raid.gatherEndsAt ?? now) - now)}${ownPledge ? ` · ваш вклад ${ownPledge.toLocaleString('ru-RU')}` : ''}`
     : raid.status === 'disbanded' ? 'Сбор не набран · рейд распущен'
       : raid.status === 'incoming' ? `В пути · бой через ${countdown(raid.arrivesAt - now)}`
-        : result?.winner === 'attacker' ? `Победа · ${result.brightnessBefore}% → ${result.brightnessAfter}%` : 'Рейд отражён';
+        : result?.winner === 'attacker' ? `Победа · ${result.brightnessBefore}% → ${result.brightnessAfter}%` : result?.winner === 'draw' ? 'Ничья · никто не победил' : 'Рейд отражён';
   return (
-    <div className={`srp-raid ${raid.status === 'incoming' || raid.status === 'gathering' ? 'is-live' : result?.winner === 'attacker' ? 'is-won' : 'is-lost'}`} data-qa-own-raid={raid.id}>
+    <div className={`srp-raid ${raid.status === 'incoming' || raid.status === 'gathering' ? 'is-live' : result?.winner === 'attacker' ? 'is-won' : result?.winner === 'draw' ? 'is-draw' : 'is-lost'}`} data-qa-own-raid={raid.id}>
       <button type="button" onClick={onSelect}>
         <b>Солнце {formatSun(raid.galaxy, raid.system)}</b>
         <small>{status}{raid.closedAt === undefined && raid.status === 'resolved' ? ' · флот возвращается' : ''}</small>
@@ -322,8 +322,8 @@ function ResultLine({ raid, onReport }: { raid: SunRaidRecord; onReport: (id: st
   const result = raid.result!;
   const roll = result.crystalRoll;
   return (
-    <div className={`srp-result ${result.winner === 'attacker' ? 'is-won' : 'is-lost'}`} data-qa-sun-result={raid.id}>
-      <b>{result.winner === 'attacker' ? `Рейд [${raid.allianceTag}] успешен` : `Рейд [${raid.allianceTag}] отражён`}</b>
+    <div className={`srp-result ${result.winner === 'attacker' ? 'is-won' : result.winner === 'draw' ? 'is-draw' : 'is-lost'}`} data-qa-sun-result={raid.id}>
+      <b>{result.winner === 'attacker' ? `Рейд [${raid.allianceTag}] успешен` : result.winner === 'draw' ? `Ничья · рейд [${raid.allianceTag}]: никто не победил` : `Рейд [${raid.allianceTag}] отражён`}</b>
       <span>Яркость {result.brightnessBefore}% → {result.brightnessAfter}%{result.frozen ? ' · заморожено' : ''}</span>
       <span>Кристалл: {roll ? roll.skipped ? 'все собраны' : roll.success && roll.crystal ? `выпал — ${SOLAR_CRYSTALS[roll.crystal].name}` : `не выпал (шанс ${Math.round(roll.chance * 100)}%)` : '—'}</span>
       {result.reportId ? <button type="button" className="opsA-chip opsA-chip--link" onClick={() => onReport(result.reportId!)}>БОЕВОЙ ОТЧЁТ</button> : null}
