@@ -220,7 +220,7 @@ async function runViewport(win, directory, label) {
     return tip ? { text: tip.textContent, visible: Number(getComputedStyle(tip).opacity) > 0.5 } : null;
   })()`);
   if (metrics.header.cut && metrics.header.ellipsis !== 'ellipsis') fail('Header planet name is cut without an ellipsis', metrics.header);
-  if (metrics.headerTip?.text !== PLANET_24 || !metrics.headerTip?.visible) fail('Header tooltip does not show the full planet name', metrics.headerTip);
+  if (!metrics.headerTip?.text?.startsWith(`${PLANET_24} · `) || !metrics.headerTip?.visible) fail('Header tooltip does not show the full planet name', metrics.headerTip);
   await capture(win, directory, '01-header-planet-24-chars');
   await unhover(win);
 
