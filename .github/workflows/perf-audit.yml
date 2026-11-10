@@ -1,0 +1,94 @@
+name: Perf audit (measurement only)
+
+# Throwaway measurement for the performance audit of 10.11.2026. This branch is never merged.
+on:
+  push:
+    branches: [claude/perf-audit-bench]
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  FIXTURES_RUN: '42692981217'
+  LAB_NODE: --max-old-space-size=12288 --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs
+
+jobs:
+  live:
+    name: Live world at 1 s, ${{ matrix.npc }} NPC x${{ matrix.scale }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { npc: 100, activity: max, scale: 2 }
+          - { npc: 100, activity: max, scale: 5 }
+          - { npc: 50, activity: max, scale: 5 }
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: activity-fixture-${{ matrix.npc }}-${{ matrix.activity }}
+          path: fixtures
+          run-id: ${{ env.FIXTURES_RUN }}
+          github-token: ${{ github.token }}
+      - name: Measure
+        run: |
+          mkdir -p out
+          node $LAB_NODE tools/perf-audit-live.mjs --fixture=fixtures/late-game-day-3.json --time-scale=${{ matrix.scale }} --seconds=90 > out/live-${{ matrix.npc }}-x${{ matrix.scale }}.json
+          cat out/live-${{ matrix.npc }}-x${{ matrix.scale }}.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: perf-audit-live-${{ matrix.npc }}-x${{ matrix.scale }}
+          path: out
+          retention-days: 7
+
+  ui:
+    name: UI thread, ${{ matrix.npc }} NPC ${{ matrix.speed }}
+    runs-on: windows-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { npc: 100, activity: max, speed: fast }
+          - { npc: 50, activity: max, speed: superfast }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: activity-fixture-${{ matrix.npc }}-${{ matrix.activity }}
+          path: fixtures
+          run-id: ${{ env.FIXTURES_RUN }}
+          github-token: ${{ github.token }}
+      - name: Build (as shipped)
+        run: npm run build
+      - name: Trace per screen
+        shell: bash
+        run: npx electron electron/perf-audit-trace.cjs --fixture=fixtures/late-game-day-3.json --speed=${{ matrix.speed }} --mode=trace --seconds=5 --autosave-seconds=75 --out=artifacts/perf-audit
+      - name: Build (not minified, for names)
+        if: always()
+        run: npx vite build --minify false
+      - name: React commits and CPU profile per screen
+        if: always()
+        shell: bash
+        run: npx electron electron/perf-audit-trace.cjs --fixture=fixtures/late-game-day-3.json --speed=${{ matrix.speed }} --mode=profile --seconds=6 --out=artifacts/perf-audit
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: perf-audit-ui-${{ matrix.npc }}-${{ matrix.speed }}
+          path: artifacts/perf-audit
+          retention-days: 7
