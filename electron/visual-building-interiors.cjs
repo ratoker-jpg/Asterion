@@ -268,7 +268,7 @@ async function verifyMaxBuildingDialog(win, directory) {
       hasEnter: Boolean(root?.querySelector('[data-qa-enter-building="shipyard"]')),
     };
   })()`);
-  if (!snapshot.current.includes('15') || !snapshot.next.includes('—') || !snapshot.max.includes('15') || !snapshot.maxState.includes('ЗДАНИЕ УЛУЧШЕНО ДО МАКСИМАЛЬНОГО УРОВНЯ') || snapshot.hasEffect || snapshot.hasTime || snapshot.hasCost || snapshot.hasBuild || !snapshot.hasEnter) {
+  if (!snapshot.current.includes('15') || !snapshot.next.includes('—') || !snapshot.max.includes('15') || !snapshot.maxState.includes('Здание улучшено до максимального уровня') || snapshot.hasEffect || snapshot.hasTime || snapshot.hasCost || snapshot.hasBuild || !snapshot.hasEnter) {
     throw new Error(`Maximum building dialog contract failed: ${JSON.stringify(snapshot)}`);
   }
   await capture(win, directory, 'building-dialog-shipyard-max-level');

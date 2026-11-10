@@ -1,7 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
 
 import { ResourceIcon } from '../resources/ResourceIcon';
-import './planet-orbit.css';
 
 export type PlanetOrbitZone = 'resource' | 'industry' | 'military';
 
@@ -45,9 +44,10 @@ export function PlanetOrbitView({
       <div className="planet-orbit__ring" aria-hidden="true" />
       <img className="planet-image-v3 planet-orbit__planet" data-qa-planet-skin-art src={skinArt} alt={name} draggable={false} />
 
+      <div className="planet-orbit__side">
       <header className="planet-orbit__name scene-title">
         <small>{kicker}</small>
-        <h1>{name.toUpperCase()}</h1>
+        <h1>{name}</h1>
         <p>{subtitle}</p>
       </header>
 
@@ -57,16 +57,17 @@ export function PlanetOrbitView({
         ))}
       </dl>
       {banner ? <div className="planet-orbit__banner">{banner}</div> : null}
+      </div>
 
       <aside className="planet-orbit__worlds owned-planets-v4">
-        <small className="planet-orbit__kicker">ВАШИ МИРЫ · {worlds.length}</small>
+        <small className="planet-orbit__kicker">Ваши миры · {worlds.length}</small>
         {worlds.map((world) => (
           <div className={`owned-planet-row-v4 ${world.active ? 'active' : ''}`} key={world.id}>
             <button className="owned-planet-main-v4" type="button" onClick={() => onSelectWorld(world.id)}>
               <img src={world.art} alt="" />
               <span><strong>{world.name}</strong><small>{world.coords} · {world.status}</small></span>
             </button>
-            <button className="owned-planet-edit-v4" type="button" title={`Редактировать ${world.name}`} onClick={() => onEditWorld(world.id)}>✎</button>
+            <button className="owned-planet-edit-v4" type="button" aria-label={`Изменить название и вид: ${world.name}`} data-tip="Название и вид" onClick={() => onEditWorld(world.id)}>✎</button>
           </div>
         ))}
         <button type="button" className="planet-orbit__colonize" onClick={onColonize}><span>+</span>Колонизировать</button>
@@ -84,20 +85,21 @@ export function PlanetOrbitView({
           <img src={zone.art} alt="" />
           <span>
             <strong>{zone.title}</strong>
-            <small>{zone.built} / {zone.total} · {zone.building ? `строится ${zone.building}` : 'очередь пуста'}</small>
+            <small>{zone.built} из {zone.total} построено</small>
+            {zone.building ? <em>Строится: {zone.building}</em> : null}
           </span>
         </button>
       ))}
 
       <section className="planet-orbit__dock" aria-label="Очередь строительства и добыча">
         <div className="planet-orbit__queue">
-          <small className="planet-orbit__kicker">ОБЩАЯ ОЧЕРЕДЬ СТРОИТЕЛЬСТВА · {queue.length} / {queueCapacity}</small>
+          <small className="planet-orbit__kicker">Очередь строительства · {queue.length} / {queueCapacity}</small>
           <div className="planet-orbit__slots" style={{ '--slots': queueCapacity } as CSSProperties}>
             {queue.map((slot) => (
               <div className={`planet-orbit__slot ${slot.active ? 'is-active' : ''}`} key={slot.id}>
                 <img src={slot.art} alt="" />
                 <span>
-                  <small>{slot.zoneLabel} · {slot.active ? 'СТРОИТСЯ' : 'ОЖИДАЕТ'}</small>
+                  <small>{slot.active ? 'Строится' : 'Ждёт'} · {slot.zoneLabel} зона</small>
                   <strong>{slot.name}</strong>
                   <em>ур. {slot.fromLevel} → {slot.toLevel}{slot.remaining ? ` · осталось ${slot.remaining}` : ''}</em>
                   {slot.active ? <i className="queue-progress-v2"><i style={{ width: `${slot.progress}%` }} /></i> : null}
@@ -107,13 +109,13 @@ export function PlanetOrbitView({
             {Array.from({ length: freeSlots }, (_, index) => (
               <div className="planet-orbit__slot is-free" key={`free-${index}`}>
                 <b>{queue.length + index + 1}</b>
-                <span><strong>Свободный слот</strong><em>Выберите здание на территории</em></span>
+                <span><strong>Свободное место</strong>{index === 0 ? <em>Откройте зону и выберите здание</em> : null}</span>
               </div>
             ))}
           </div>
         </div>
         <div className="planet-orbit__income">
-          <small className="planet-orbit__kicker">ДОБЫЧА ЗА ЧАС</small>
+          <small className="planet-orbit__kicker">Добыча за час</small>
           <div>
             <span><ResourceIcon kind="metal" />Металл<b>{formatRate(income.metal)}</b></span>
             <span><ResourceIcon kind="minerals" />Минералы<b>{formatRate(income.minerals)}</b></span>

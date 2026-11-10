@@ -12,9 +12,7 @@ import {
   getBuildingDefinition,
   getBuildingEffect,
   getBuildingEffectWithScience,
-  getScienceIncomeBonusPercent,
   getBuildingsForZone,
-  getConstructionTimeFactor,
   type BuildingDefinition,
   type BuildingEconomyState,
   type BuildingLevels,
@@ -24,13 +22,9 @@ import {
   type ResourceWallet,
   type ScienceLevels,
 } from './domain/buildings/resource-zone.ts';
-import { getBuildingEnergyBaseContribution } from './domain/energy/balance-adapter.ts';
 import {
   calculateNuclearReactorContribution,
   calculateSolarStationContribution,
-  getPhysicsMultiplier,
-  getPositionMultiplier,
-  getSunMultiplier,
   type EnergyLedger,
 } from './domain/energy/runtime.ts';
 import type { PlanetEnergyCoordinates } from './application/energy.ts';
@@ -51,21 +45,21 @@ export const ZONE_VIEW_META: Readonly<Record<BuildingZone, {
   terrainFile: string;
 }>> = {
   resource: {
-    title: 'РЕСУРСНАЯ ЗОНА',
+    title: 'Ресурсная зона',
     subtitle: 'Добыча, энергия и инфраструктура планеты',
-    queueLabel: 'РЕСУРСНАЯ',
+    queueLabel: 'Ресурсная',
     terrainFile: 'resource-terrain.png',
   },
   industry: {
-    title: 'ПРОМЫШЛЕННАЯ ЗОНА',
+    title: 'Промышленная зона',
     subtitle: 'Производство и инфраструктура планеты',
-    queueLabel: 'ПРОМЫШЛЕННАЯ',
+    queueLabel: 'Промышленная',
     terrainFile: 'industry-terrain.png',
   },
   military: {
-    title: 'ВОЕННАЯ ЗОНА',
+    title: 'Военная зона',
     subtitle: 'Флот, исследования и управление планетой',
-    queueLabel: 'ВОЕННАЯ',
+    queueLabel: 'Военная',
     terrainFile: 'military-terrain.png',
   },
 };
@@ -97,6 +91,11 @@ function formatDurationLabel(ms: number | null) {
   return `${seconds} сек`;
 }
 
+/**
+ * What the player reads in «Что даст улучшение»: one plain line per level, no
+ * formula. Energy shows the total, the next level adds «(+N)»; mines show the
+ * hourly output with science and robots already included.
+ */
 function playerEffectForLevel(
   role: BuildingRole,
   level: number,
@@ -108,51 +107,27 @@ function playerEffectForLevel(
   const effect = getBuildingEffect(role, level);
   if ((role === 'basic-energy' || role === 'advanced-energy') && level > 0) {
     const physicsLevel = scienceLevels[1] ?? 0;
-    const base = getBuildingEnergyBaseContribution(role, level);
     const value = role === 'basic-energy'
       ? calculateSolarStationContribution(level, physicsLevel, energyCoordinates.system, energyCoordinates.position, energyCoordinates.galaxy)
       : calculateNuclearReactorContribution(level, physicsLevel);
-    const factors = [
-      `Основа ${formatNumber(base)}`,
-      `Физика ×${getPhysicsMultiplier(physicsLevel).toFixed(2)}`,
-      ...(role === 'basic-energy'
-        ? [`Солнце ×${getSunMultiplier(energyCoordinates.system, energyCoordinates.galaxy).toFixed(2)}`, `Позиция ×${getPositionMultiplier(energyCoordinates.position).toFixed(2)}`]
-        : []),
-    ];
     return {
       primary: energyComparisonValue == null
-        ? `Итого ${formatNumber(value)}`
-        : `Прибавка +${formatNumber(value - energyComparisonValue)}`,
-      secondary: factors.join(' · '),
+        ? `Энергия: ${formatNumber(value)}`
+        : `Энергия: ${formatNumber(value)} (+${formatNumber(value - energyComparisonValue)})`,
       value,
       energy: true,
     };
   }
   const scienceEffect = getBuildingEffectWithScience(role, level, scienceLevels);
-  if (scienceEffect.kind !== 'resource-income' && scienceEffect.kind !== 'energy-income') {
-    return { primary: formatBalanceEffect(effect), secondary: null, value: null, energy: false };
+  if (scienceEffect.kind !== 'resource-income') {
+    return { primary: formatBalanceEffect(scienceEffect.kind === 'energy-income' ? scienceEffect : effect), value: null, energy: false };
   }
-
-  const scienceBonusPercent = scienceEffect.kind === 'resource-income'
-    ? getScienceIncomeBonusPercent(scienceLevels, 3)
-    : getScienceIncomeBonusPercent(scienceLevels, 1);
-  const productionBotBonusPercent = scienceEffect.kind === 'resource-income'
-    ? getProductionBotBonusPercent(productionBots, scienceEffect.resource)
-    : 0;
-  const boostedEffect = {
-    ...scienceEffect,
-    amountPerHour: Math.round(scienceEffect.amountPerHour * (1 + productionBotBonusPercent / 100)),
-  };
-  const bonusParts = [
-    scienceBonusPercent > 0 ? `${scienceEffect.kind === 'resource-income' ? 'Математика' : 'Физика'} +${scienceBonusPercent}%` : null,
-    productionBotBonusPercent > 0 ? `Производственные боты +${productionBotBonusPercent}%` : null,
-  ].filter((part): part is string => Boolean(part));
+  const productionBotBonusPercent = getProductionBotBonusPercent(productionBots, scienceEffect.resource);
   return {
-    primary: formatBalanceEffect(boostedEffect),
-    // «Добыча металла: +94 600/ч» → «Основа +94 600/ч»: the effect name is already in the primary line.
-    secondary: bonusParts.length > 0
-      ? `Основа ${formatBalanceEffect(effect).replace(/^[^:]+:\s*/, '')} · ${bonusParts.join(' · ')}`
-      : null,
+    primary: formatBalanceEffect({
+      ...scienceEffect,
+      amountPerHour: Math.round(scienceEffect.amountPerHour * (1 + productionBotBonusPercent / 100)),
+    }),
     value: null,
     energy: false,
   };
@@ -165,11 +140,11 @@ function stateFor(
   const item = getBuildingDefinition(role);
   const level = economy.buildings[role];
   const queueIndex = economy.queue.findIndex((queueItem) => queueItem.assetRole === role);
-  if (queueIndex === 0) return { className: 'building', label: 'СТРОИТСЯ' };
-  if (queueIndex > 0) return { className: 'queued', label: 'В ОЧЕРЕДИ' };
-  if (level >= item.maxLevel) return { className: 'maxed', label: 'МАКСИМУМ' };
+  if (queueIndex === 0) return { className: 'building', label: 'Строится' };
+  if (queueIndex > 0) return { className: 'queued', label: 'В очереди' };
+  if (level >= item.maxLevel) return { className: 'maxed', label: 'Максимум' };
   const availability = evaluateBuildingBuild(economy, role);
-  if (availability.status === 'requirements-unmet') return { className: 'blocked', label: 'ТРЕБОВАНИЯ' };
+  if (availability.status === 'requirements-unmet') return { className: 'blocked', label: 'Нужны требования' };
   if (level > 0) return { className: 'active', label: null };
   return { className: 'unbuilt', label: null };
 }
@@ -272,7 +247,6 @@ export function ZoneView({
   const [pendingAction, setPendingAction] = useState<PendingBuildingAction | null>(null);
   const [quickQueuedRole, setQuickQueuedRole] = useState<BuildingRole | null>(null);
   const [tileTip, setTileTip] = useState<TileTip | null>(null);
-  const [detailsOpen, setDetailsOpen] = useState(false);
   const summaryRef = useRef<HTMLElement>(null);
   const confirmYesRef = useRef<HTMLButtonElement>(null);
   const confirmNoRef = useRef<HTMLButtonElement>(null);
@@ -281,8 +255,8 @@ export function ZoneView({
   const canEnterSelected = selectedRole
     ? canEnterBuildingInterior(selectedRole, buildings[selectedRole])
     : false;
-  const constructionFactor = getConstructionTimeFactor(buildings.construction);
-  const constructionBonusPercent = Math.round((1 - constructionFactor) * 100);
+  // Only the unmet requirements are shown: a met one is noise.
+  const missingRequirements = availability ? availability.requirements.filter((requirement) => !requirement.met) : [];
   const currentEffect = selectedRole && availability
     ? playerEffectForLevel(selectedRole, availability.currentLevel, productionBotAssignment, scienceLevels, energyCoordinates)
     : null;
@@ -295,9 +269,6 @@ export function ZoneView({
       energyCoordinates,
       currentEffect?.energy && currentEffect.value != null ? currentEffect.value : null,
     )
-    : null;
-  const energyUpgradeDelta = currentEffect?.energy && nextEffect?.energy && currentEffect.value != null && nextEffect.value != null
-    ? nextEffect.value - currentEffect.value
     : null;
   const levelProgress = availability && availability.maxLevel > 0
     ? Math.min(availability.maxLevel, Math.max(0, availability.currentLevel))
@@ -356,7 +327,6 @@ export function ZoneView({
     if (onBuild(selectedRole)) onSelectedRoleChange(null);
   };
 
-  useEffect(() => setDetailsOpen(false), [selectedRole]);
 
   const showTileTip = (role: BuildingRole, kind: TileTip['kind'], target: HTMLElement) => {
     const anchor = target.getBoundingClientRect();
@@ -394,12 +364,11 @@ export function ZoneView({
     >
       <aside className="resource-zone-summary" ref={summaryRef}>
         <header className="resource-zone-panel-title">
-          <div><small>{meta.title}</small><strong>{planetName}</strong></div>
-          <span>{activeCount} / {zoneBuildings.length}</span>
+          <div><strong>{meta.title}</strong><small>{planetName}</small></div>
+          <span aria-label={`Построено ${activeCount} из ${zoneBuildings.length}`}>{activeCount} / {zoneBuildings.length}</span>
         </header>
 
         <section className="resource-zone-building-selector" aria-label={`Выбор здания: ${meta.title.toLowerCase()}`}>
-          <div className="resource-zone-section-label">ЗДАНИЯ</div>
           <div className="resource-zone-selector-grid">
             {zoneBuildings.map((building) => {
               const status = stateFor(economy, building.assetRole);
@@ -468,7 +437,7 @@ export function ZoneView({
         {zone === 'resource' ? (
           <>
           <section className="resource-zone-economy" aria-label="Добыча за 1 час">
-            <div className="resource-zone-economy-title">ДОБЫЧА ЗА 1 ЧАС</div>
+            <div className="resource-zone-economy-title">Добыча за час</div>
             <div className="resource-zone-income-list">
               {(['metal', 'minerals', 'gas'] as const).map((key) => (
                 <div className="resource-zone-income-row" data-resource-income={key} key={key}>
@@ -480,7 +449,7 @@ export function ZoneView({
             </div>
           </section>
           <section className="resource-zone-energy-summary" aria-label="Баланс энергии" data-qa-energy-summary>
-            <div className="resource-zone-economy-title">ЭНЕРГИЯ · ЕДИНОВРЕМЕННЫЙ БАЛАНС</div>
+            <div className="resource-zone-economy-title">Энергия</div>
             <div className="resource-zone-energy-total-row"><span>Произведено</span><strong>{formatNumber(energyLedger.producedEnergy)}</strong></div>
             <div className="resource-zone-energy-total-row"><span>Потрачено</span><strong>{formatNumber(energyLedger.consumedEnergy)}</strong></div>
             <div className="resource-zone-energy-total-row available"><span>Доступно</span><strong>{formatNumber(energyLedger.availableEnergy)}</strong></div>
@@ -509,7 +478,7 @@ export function ZoneView({
         />
         <div className="resource-zone-scene-shade" aria-hidden="true" />
         <div className="resource-zone-scene-copy">
-          <small>{PLAYER_FACTION_LABELS[factionId].toUpperCase()} · {planetCoords}</small>
+          <small>{PLAYER_FACTION_LABELS[factionId]} · {planetCoords}</small>
           <h1>{meta.title}</h1>
           <p>{meta.subtitle}</p>
         </div>
@@ -570,7 +539,7 @@ export function ZoneView({
 
       <aside className="resource-zone-queue">
         <header className="resource-zone-panel-title">
-          <div><small>ОБЩАЯ ОЧЕРЕДЬ</small><strong>Строительство</strong></div>
+          <div><strong>Очередь стройки</strong><small>Общая для всех зон</small></div>
           <span>{queue.length} / {BUILDING_QUEUE_CAPACITY}</span>
         </header>
 
@@ -581,7 +550,10 @@ export function ZoneView({
               return (
                 <div className="resource-zone-queue-card empty" key={`empty-${index}`} data-qa-queue-slot={index + 1}>
                   <span>{index + 1}</span>
-                  <div><small>СВОБОДНЫЙ СЛОТ</small><strong>Нет проекта</strong><em>Выбери объект на территории</em></div>
+                  <div>
+                    <strong>Свободное место</strong>
+                    {index === queue.length ? <em>Выберите здание на карте или нажмите «+»</em> : null}
+                  </div>
                 </div>
               );
             }
@@ -609,7 +581,7 @@ export function ZoneView({
                   <span className="resource-zone-queue-card-copy">
                     <small>{isActive ? 'Строится' : 'В очереди'}</small>
                     <strong>{queueDefinition.name}</strong>
-                    <em>{ZONE_VIEW_META[queueDefinition.zone].queueLabel.toLowerCase()} зона</em>
+                    <em>{ZONE_VIEW_META[queueDefinition.zone].title}</em>
                   </span>
                   <span className="resource-zone-queue-card-meta">
                     <b>ур. {Math.max(0, item.targetLevel - 1)} → {item.targetLevel}</b>
@@ -661,159 +633,137 @@ export function ZoneView({
             onMouseDown={(event) => event.stopPropagation()}
           >
             <button className="resource-building-dialog-close" data-asterion-close type="button" aria-label="Закрыть сведения о здании" onClick={() => onSelectedRoleChange(null)}>×</button>
-            {availability.currentLevel > 0 ? (
-              <button
-                className="resource-building-destroy-button"
-                type="button"
-                aria-label="Разрушить один уровень здания"
-                title={selectedHasQueue ? 'Нельзя разрушить здание во время строительства.' : 'Разрушить один уровень'}
-                data-qa-destroy-building
-                disabled={selectedHasQueue}
-                onClick={() => setPendingAction({ kind: 'destroy', assetRole: selectedRole, currentLevel: availability.currentLevel })}
-              >
-                РАЗРУШИТЬ 1 УРОВЕНЬ
-              </button>
-            ) : null}
-            <div className="resource-building-dialog-art"><img src={selected.art} alt={selected.name} draggable={false} /></div>
-            <div className="resource-building-dialog-copy">
-              <small>{ZONE_VIEW_META[selected.zone].title} · {PLAYER_FACTION_LABELS[factionId].toUpperCase()}</small>
-              <h2 id="resource-building-dialog-title">{selected.name}</h2>
-              <p>{selected.purpose}</p>
-
-              <div
-                className={`resource-building-levels${availability.status === 'max-level' ? ' max-level' : ''}`}
-                data-qa-level-track
-                aria-label={`Уровень ${availability.currentLevel} из ${availability.maxLevel}. Следующий уровень: ${availability.nextLevel ?? 'максимальный уровень'}.`}
-                style={{ '--building-level-count': availability.maxLevel } as CSSProperties}
-              >
-                <div className="resource-building-level resource-building-level--current">
-                  <small>Текущий уровень</small>
-                  <strong>{availability.currentLevel}</strong>
-                </div>
-                <div className="resource-building-level resource-building-level--max">
-                  <small>Максимальный</small>
-                  <strong>{availability.maxLevel}</strong>
-                </div>
-                <div className="resource-building-level-queue" aria-hidden="true">
-                  <small>В очереди</small>
-                  <strong>{queue.filter((item) => item.assetRole === selectedRole).length}</strong>
-                </div>
-                <div className="resource-building-level resource-building-level--next">
-                  <small>Следующий уровень</small>
-                  <strong>{availability.nextLevel ?? '—'}</strong>
-                </div>
-                <div
-                  className="resource-building-level-track"
-                  data-qa-level-segments={availability.maxLevel}
-                  aria-hidden="true"
-                >
-                  {Array.from({ length: availability.maxLevel }, (_, index) => (
-                    <span
-                      className={index < levelProgress ? 'filled' : undefined}
-                      key={`${selectedRole}-level-segment-${index + 1}`}
-                    />
-                  ))}
-                </div>
+            <header className="resource-building-dialog-head">
+              <div className="resource-building-dialog-art"><img src={selected.art} alt={selected.name} draggable={false} /></div>
+              <div className="resource-building-dialog-copy">
+                <small>{ZONE_VIEW_META[selected.zone].title} · {PLAYER_FACTION_LABELS[factionId]}</small>
+                <h2 id="resource-building-dialog-title">{selected.name}</h2>
+                <p>{selected.purpose}</p>
               </div>
+            </header>
 
-              {availability.status === 'max-level' ? (
-                <div className="resource-building-max-state" data-qa-max-level-state role="status">
-                  <small>ФИНАЛЬНЫЙ СТАТУС</small>
-                  <strong>ЗДАНИЕ УЛУЧШЕНО ДО МАКСИМАЛЬНОГО УРОВНЯ</strong>
-                  <span>Дальнейшие улучшения недоступны.</span>
-                </div>
-              ) : (
-                <>
-                  {availability.requirements.length > 0 ? (
-                    <div className="resource-building-requirements" data-qa-requirements>
-                      <small>ТРЕБОВАНИЯ</small>
-                      {availability.requirements.map((requirement) => (
-                        <div key={`${requirement.kind}-${requirement.label}`} className={requirement.met ? 'met' : 'missing'}>
-                          <strong>{localizeBuildingNames(requirement.label, factionId)} — ур. {requirement.requiredLevel}</strong>
-                          <span>сейчас {requirement.currentLevel}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
+            <div
+              className={`resource-building-levels${availability.status === 'max-level' ? ' max-level' : ''}`}
+              data-qa-level-track
+              aria-label={`Уровень ${availability.currentLevel} из ${availability.maxLevel}. Следующий уровень: ${availability.nextLevel ?? 'максимальный уровень'}.`}
+              style={{ '--building-level-count': availability.maxLevel } as CSSProperties}
+            >
+              <div className="resource-building-level resource-building-level--current">
+                <small>Текущий уровень</small>
+                <strong>{availability.currentLevel}</strong>
+              </div>
+              <div className="resource-building-level resource-building-level--next">
+                <small>Следующий уровень</small>
+                <strong>{availability.nextLevel ?? '—'}</strong>
+              </div>
+              <div className="resource-building-level resource-building-level--max">
+                <small>Максимальный</small>
+                <strong>{availability.maxLevel}</strong>
+              </div>
+              <div className="resource-building-level-queue" aria-hidden="true">
+                <small>В очереди</small>
+                <strong>{queue.filter((item) => item.assetRole === selectedRole).length}</strong>
+              </div>
+              <div
+                className="resource-building-level-track"
+                data-qa-level-segments={availability.maxLevel}
+                aria-hidden="true"
+              >
+                {Array.from({ length: availability.maxLevel }, (_, index) => (
+                  <span
+                    className={index < levelProgress ? 'filled' : undefined}
+                    key={`${selectedRole}-level-segment-${index + 1}`}
+                  />
+                ))}
+              </div>
+            </div>
 
-                  <div className="resource-building-effect" data-qa-building-effect>
-                    <div className="resource-building-effect-heading">
-                      <small>ЭФФЕКТ УЛУЧШЕНИЯ</small>
-                      <button
-                        type="button"
-                        className="resource-building-details-toggle"
-                        data-qa-building-details-toggle
-                        aria-expanded={detailsOpen}
-                        onClick={() => setDetailsOpen((open) => !open)}
-                      >
-                        {detailsOpen ? 'Скрыть' : 'Подробнее'}
-                      </button>
-                    </div>
-                    <div className="resource-building-effect-grid">
-                      <div className="resource-building-effect-card current" data-qa-building-effect-current>
-                        <small>ТЕКУЩИЙ УРОВЕНЬ · {availability.currentLevel}</small>
-                        <strong>{currentEffect?.primary}</strong>
-                        {currentEffect?.secondary ? <span hidden={!detailsOpen}>{currentEffect.secondary}</span> : null}
+            {availability.status === 'max-level' ? (
+              <div className="resource-building-max-state" data-qa-max-level-state role="status">
+                <strong>Здание улучшено до максимального уровня</strong>
+                <span>Дальнейшие улучшения недоступны.</span>
+              </div>
+            ) : (
+              <>
+                {missingRequirements.length > 0 ? (
+                  <div className="resource-building-requirements" data-qa-requirements>
+                    <small>Сначала нужно</small>
+                    {missingRequirements.map((requirement) => (
+                      <div key={`${requirement.kind}-${requirement.label}`} className={requirement.met ? 'met' : 'missing'}>
+                        <strong>{localizeBuildingNames(requirement.label, factionId)} — ур. {requirement.requiredLevel}</strong>
+                        <span>сейчас {requirement.currentLevel}</span>
                       </div>
-                      {availability.nextLevel != null ? (
+                    ))}
+                  </div>
+                ) : null}
+
+                <section className="resource-building-effect" data-qa-building-effect aria-label="Что даст улучшение">
+                  <div className="resource-building-section-head">
+                    <small>Что даст улучшение</small>
+                  </div>
+                  <div className="resource-building-effect-grid">
+                    <div className="resource-building-effect-card current" data-qa-building-effect-current>
+                      <small>Сейчас · ур. {availability.currentLevel}</small>
+                      <strong>{currentEffect?.primary}</strong>
+                    </div>
+                    {availability.nextLevel != null ? (
+                      <>
+                        <i className="resource-building-effect-arrow" aria-hidden="true">→</i>
                         <div className="resource-building-effect-card next" data-qa-building-effect-next>
-                          <small>СЛЕДУЮЩИЙ УРОВЕНЬ · {availability.nextLevel}</small>
-                        <strong>{nextEffect?.primary}</strong>
-                        {nextEffect?.secondary ? <span hidden={!detailsOpen}>{nextEffect.secondary}</span> : null}
-                        {energyUpgradeDelta != null ? <em data-qa-energy-upgrade-delta>ПРИБАВКА +{formatNumber(energyUpgradeDelta)}</em> : null}
-                      </div>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <div className="resource-building-costs">
-                    <div className="resource-building-cost-title">
-                      <span>СТОИМОСТЬ ПЕРЕХОДА В УР. {availability.nextLevel ?? availability.maxLevel}</span>
-                      <div className="resource-building-time-panel" data-qa-building-time-effective>
-                        <small>ВРЕМЯ СТРОИТЕЛЬСТВА</small>
-                        <strong data-qa-building-time-value>{formatDurationLabel(availability.timeMs)}</strong>
-                      </div>
-                    </div>
-                    <p className="resource-building-time-breakdown" hidden={!detailsOpen}>
-                      Время без бонусов <b data-qa-building-time-raw>{formatDurationLabel(availability.rawTimeMs)}</b>
-                      {' · '}{getBuildingDefinition('construction', factionId).name}{' '}
-                      <b className={constructionBonusPercent > 0 ? 'bonus' : ''} data-qa-building-time-bonus>
-                        {constructionBonusPercent > 0 ? `−${constructionBonusPercent}%` : 'НЕТ'}
-                      </b>
-                    </p>
-                    <div className="resource-building-cost-grid">
-                      {(Object.keys(resourceLabels) as Array<keyof typeof resourceLabels>).map((key) => (
-                        <div key={key} className={availability.missing[key] ? 'missing' : ''} data-qa-building-cost={key}>
-                          <span className={`resource-building-cost-icon resource-building-cost-icon--${key}`} data-qa-building-cost-icon>
-                            <ResourceIcon kind={key} />
-                          </span>
-                          <span className="resource-building-cost-copy">
-                            <small>{resourceLabels[key]}</small>
-                            <strong>{availability.cost ? formatNumber(availability.cost[key]) : '—'}</strong>
-                            {availability.missing[key] ? <em>не хватает {formatNumber(availability.missing[key] ?? 0)}</em> : null}
-                          </span>
+                          <small>После · ур. {availability.nextLevel}</small>
+                          <strong>{nextEffect?.primary}</strong>
                         </div>
-                      ))}
+                      </>
+                    ) : null}
+                  </div>
+                </section>
+
+                <section className="resource-building-costs" aria-label="Стоимость">
+                  <div className="resource-building-section-head">
+                    <small>Стоимость уровня {availability.nextLevel ?? availability.maxLevel}</small>
+                    <div className="resource-building-time-panel" data-qa-building-time-effective>
+                      <small>Время</small>
+                      <strong data-qa-building-time-value>{formatDurationLabel(availability.timeMs)}</strong>
                     </div>
                   </div>
-
-                  <div className={`resource-building-availability ${availability.status}`} data-qa-build-status={availability.status}>
-                    <strong>{availability.canBuild ? 'МОЖНО ДОБАВИТЬ В ОЧЕРЕДЬ' : 'ДЕЙСТВИЕ НЕДОСТУПНО'}</strong>
-                    <span>{availability.reason ? localizeBuildingNames(availability.reason, factionId) : `Свободно слотов: ${BUILDING_QUEUE_CAPACITY - queue.length}.`}</span>
+                  <div className="resource-building-cost-grid">
+                    {(Object.keys(resourceLabels) as Array<keyof typeof resourceLabels>).map((key) => (
+                      <div key={key} className={availability.missing[key] ? 'missing' : ''} data-qa-building-cost={key}>
+                        <span className={`resource-building-cost-icon resource-building-cost-icon--${key}`} data-qa-building-cost-icon>
+                          <ResourceIcon kind={key} />
+                        </span>
+                        <span className="resource-building-cost-copy">
+                          <small>{resourceLabels[key]}</small>
+                          <strong>{availability.cost ? formatNumber(availability.cost[key]) : '—'}</strong>
+                          {availability.missing[key] ? <em>не хватает {formatNumber(availability.missing[key] ?? 0)}</em> : null}
+                        </span>
+                      </div>
+                    ))}
                   </div>
+                </section>
 
-                  <button
-                    className="resource-building-build-button"
-                    type="button"
-                    data-qa-build-button
-                    disabled={!availability.canBuild}
-                    onClick={submitBuild}
-                  >
-                    {availability.currentLevel > 0 || availability.projectedLevel > 0 ? 'УЛУЧШИТЬ' : 'ПОСТРОИТЬ'}
-                  </button>
-                </>
-              )}
+                <div className={`resource-building-availability ${availability.status}`} data-qa-build-status={availability.status} role="status">
+                  <strong>{availability.canBuild ? 'Можно строить' : 'Пока нельзя'}</strong>
+                  <span>{availability.status === 'requirements-unmet' && missingRequirements.length > 0
+                    ? 'Сначала постройте то, что указано выше.'
+                    : availability.reason ? localizeBuildingNames(availability.reason, factionId) : `Свободно слотов: ${BUILDING_QUEUE_CAPACITY - queue.length}.`}</span>
+                </div>
+              </>
+            )}
 
+            <div className="resource-building-actions">
+              {availability.status !== 'max-level' ? (
+                <button
+                  className="resource-building-build-button"
+                  type="button"
+                  data-qa-build-button
+                  disabled={!availability.canBuild}
+                  onClick={submitBuild}
+                >
+                  {availability.currentLevel > 0 || availability.projectedLevel > 0 ? 'Улучшить' : 'Построить'}
+                  {availability.nextLevel != null ? <small> до ур. {availability.nextLevel}</small> : null}
+                </button>
+              ) : null}
               {canEnterSelected ? (
                 <button
                   className="resource-building-enter-button"
@@ -822,10 +772,27 @@ export function ZoneView({
                   onClick={() => onEnterBuilding(selectedRole)}
                 >
                   <EnterIcon />
-                  <span>ВОЙТИ</span>
+                  <span>Войти</span>
                 </button>
               ) : null}
             </div>
+
+            {availability.currentLevel > 0 ? (
+              <footer className="resource-building-dialog-foot">
+                <button
+                  className="resource-building-destroy-button"
+                  type="button"
+                  aria-label="Разрушить один уровень здания"
+                  aria-describedby={selectedHasQueue ? 'resource-building-destroy-reason' : undefined}
+                  data-qa-destroy-building
+                  disabled={selectedHasQueue}
+                  onClick={() => setPendingAction({ kind: 'destroy', assetRole: selectedRole, currentLevel: availability.currentLevel })}
+                >
+                  Разрушить 1 уровень
+                </button>
+                {selectedHasQueue ? <span id="resource-building-destroy-reason">Нельзя, пока здание в очереди строительства</span> : null}
+              </footer>
+            ) : null}
           </section>
         </div>,
         document.body,
@@ -834,14 +801,13 @@ export function ZoneView({
       {pendingAction ? createPortal(
         <div className="resource-building-action-confirm-backdrop" onMouseDown={() => setPendingAction(null)}>
           <section
-            className="resource-building-action-confirm"
+            className={`resource-building-action-confirm resource-building-action-confirm--${pendingAction.kind}`}
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="resource-building-action-confirm-title"
             data-qa-action-confirm
             onMouseDown={(event) => event.stopPropagation()}
           >
-            <small>ПОДТВЕРЖДЕНИЕ ДЕЙСТВИЯ</small>
             <h3 id="resource-building-action-confirm-title">
               {pendingAction.kind === 'cancel' ? 'Отменить строительство?' : 'Разрушить один уровень?'}
             </h3>
@@ -851,8 +817,10 @@ export function ZoneView({
                 : `Вы уверены, что хотите разрушить 1 уровень здания «${getBuildingDefinition(pendingAction.assetRole, factionId).name}»? 50–80% из затраченных ресурсов будут возвращены, остальные ресурсы за этот уровень будут потеряны.`}
             </p>
             <div className="resource-building-action-confirm-actions">
-              <button ref={confirmYesRef} type="button" data-qa-action-confirm-yes onClick={confirmPendingAction}>ДА</button>
-              <button ref={confirmNoRef} type="button" data-qa-action-confirm-no onClick={() => setPendingAction(null)}>НЕТ</button>
+              <button ref={confirmYesRef} type="button" data-qa-action-confirm-yes onClick={confirmPendingAction}>
+                {pendingAction.kind === 'cancel' ? 'Да, отменить' : 'Да, разрушить'}
+              </button>
+              <button ref={confirmNoRef} type="button" data-qa-action-confirm-no onClick={() => setPendingAction(null)}>Нет</button>
             </div>
           </section>
         </div>,

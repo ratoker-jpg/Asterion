@@ -281,20 +281,6 @@ html body .flight-details-v3.has-banner > header > div {
 }
 html body .flight-details-v3.has-banner > header > [data-asterion-close] { align-self: flex-start; }
 
-/* ---- 3. Zone queue: slot numbers are round, as on the planet overview -------- */
-html body .resource-zone-queue-card.empty { gap: 12px; border-radius: var(--ut-r-card); }
-html body .resource-zone-queue-card.empty > span {
-  flex: 0 0 34px;
-  width: 34px;
-  height: 34px;
-  margin: 0 4px 0 6px;
-  border: 1px solid rgba(126, 200, 220, .3);
-  border-radius: 50%;
-  color: var(--ut-label);
-  font-size: 12px;
-  font-weight: 700;
-}
-
 /* ---- 3. Primary navigation: the active route is the lit icon and the
    underline, not a framed rectangle around the whole 248 px cell. ---------- */
 html body .asterion-header .hdr-route { border-radius: 14px; }
@@ -389,15 +375,6 @@ html body .fleet-satellite-dismantle-v1::after {
 html body .fleet-satellite-dismantle-v1::after { rotate: -45deg; }
 html body .fleet-satellite-dismantle-v1:disabled { border-color: var(--ut-border); background: transparent; color: var(--ut-label); opacity: .55; }
 
-/* ---- 8. Building dialog: rounded requirement chips and time cells ---------- */
-html body .resource-building-requirements { border-radius: var(--ut-r-card); }
-html body .resource-building-requirements span { border-radius: var(--ut-r-chip); font-weight: 700; }
-html body .resource-building-time-breakdown > div {
-  border: 1px solid var(--ut-border) !important;
-  border-radius: var(--ut-r-chip) !important;
-  background: rgba(0, 0, 0, .22) !important;
-}
-
 /* ---- 8. Profile: a 24-character nickname fits (it was cut to «…Севе…»). ---- */
 html body .reports-view.reports-v2 .reports-profile-avatar__caption h3 {
   font-size: 22px !important;
@@ -468,7 +445,3 @@ html body .npc-catchup-leaders { border-radius: var(--ut-r-card); }
 html body .npc-catchup-leaders li { padding: 3px 0; border-bottom: 1px solid rgba(126, 200, 220, .07); }
 html body .npc-catchup-leaders li:last-child { border-bottom: 0; }
 
-/* ---- 8. Zone map captions: no orphaned «I», no wrapped status line ----------- */
-html body .resource-building-caption { max-width: 210px; text-align: center; }
-html body .resource-building-caption strong { font-size: var(--ut-font-secondary) !important; text-wrap: balance; }
-html body .resource-building-caption small { font-size: var(--ut-font-secondary) !important; white-space: nowrap; }

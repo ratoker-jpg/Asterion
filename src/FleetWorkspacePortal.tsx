@@ -90,7 +90,6 @@ import { AmountSlider } from './ui/AmountSlider';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
 import { planetSkinMapArt, planetSkins } from './planet-skin-art.ts';
 import { EMPTY_ART, MISSION_BANNERS } from './ui/ui-art.ts';
-import './building-card.css';
 import './fleet-workspace.css';
 import './ui/fleet/fleet-root-v2.css';
 import { GameSelect } from './ui/GameSelect';

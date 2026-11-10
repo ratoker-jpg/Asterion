@@ -215,7 +215,7 @@ async function runViewport(win, directory) {
   await waitFor(win, `document.querySelector('[data-qa-building-dialog="metal-production-1"]')`);
   await settle(win, 300);
   metrics.dialogText = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-building-dialog]').innerText`);
-  if (/production bots|База Добыча|БАЗОВОЕ ВРЕМЯ/i.test(metrics.dialogText)) fail('Dialog still shows the technical breakdown', metrics.dialogText);
+  if (/production bots|База Добыча|БАЗОВОЕ ВРЕМЯ|Основа|Математика [+]|Физика ×|без бонусов/i.test(metrics.dialogText)) fail('Dialog still shows the technical breakdown', metrics.dialogText);
   await capture(win, directory, '04-building-dialog');
   if (await win.webContents.executeJavaScript(`Boolean(document.querySelector('[data-qa-building-details-toggle]'))`)) {
     await click(win, '[data-qa-building-details-toggle]');

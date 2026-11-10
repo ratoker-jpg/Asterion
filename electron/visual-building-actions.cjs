@@ -322,9 +322,10 @@ async function verifyDestroy(win, directory) {
   await openBuilding(win, 'construction');
   const blocked = await win.webContents.executeJavaScript(`(() => {
     const button = document.querySelector('[data-qa-destroy-building]');
-    return { exists: Boolean(button), disabled: Boolean(button?.disabled), title: button?.getAttribute('title') ?? '' };
+    const reasonId = button?.getAttribute('aria-describedby');
+    return { exists: Boolean(button), disabled: Boolean(button?.disabled), nativeTitle: button?.getAttribute('title') ?? '', reason: reasonId ? document.getElementById(reasonId)?.textContent ?? '' : '' };
   })()`);
-  if (!blocked.exists || !blocked.disabled || !blocked.title.includes('строительства')) {
+  if (!blocked.exists || !blocked.disabled || blocked.nativeTitle || !blocked.reason.includes('строительства')) {
     throw new Error(`Destroy should be disabled during construction: ${JSON.stringify(blocked)}`);
   }
   await capture(win, directory, 'destroy-level-disabled-during-queue');

@@ -368,9 +368,6 @@
    controller as --asterion-base-font-size) times the player's text scale. */
 html body :is(.empire, .planet-sections, .empire-pick, .empire-drawer__advice, .empire-drawer__head) [data-asterion-typography] { font-size: calc(var(--asterion-base-font-size) * var(--text-scale-body, 1)) !important; }
 
-/* «Текущая планета»: the switch takes the top-left corner, the title block moves under it. */
-.planet-sections ~ .planet-orbit .planet-orbit__name { top: 80px; }
-.planet-sections ~ .planet-orbit .planet-orbit__vitals { top: 206px; }
 
 /* «Эталонный флот» at a glance: a planet with a plan shows what it lacks. */
 .empire-fleet__plan { justify-self: start; max-width: 100%; padding: 0; overflow: hidden; border: 0; background: none; font-size: 13px !important; font-weight: 700; white-space: nowrap; text-overflow: ellipsis; text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); text-underline-offset: 3px; cursor: pointer; transition: color 140ms ease; }

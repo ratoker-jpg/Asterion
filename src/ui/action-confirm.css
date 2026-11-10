@@ -1,0 +1,16 @@
+/* Shared confirmation modal (Fleets flight plan, intel, planet confirmations). Moved verbatim from resource-zone.css; planet variants live in ui/planet/planet-screens.css. */
+.resource-building-action-confirm-backdrop{position:fixed;z-index:10001;inset:0;display:grid;place-items:center;padding:24px;background:rgba(0,5,9,.7);backdrop-filter:blur(5px)}
+.resource-building-action-confirm{width:min(570px,calc(100vw - 48px));padding:23px 24px 18px;border:1px solid rgba(68,215,246,.5);background:linear-gradient(180deg,rgba(5,39,55,.99),rgba(2,19,29,.995));box-shadow:0 22px 70px rgba(0,0,0,.68),inset 0 0 28px rgba(0,185,230,.06);text-align:center}
+.resource-building-action-confirm>small{font-size:8px;letter-spacing:1.8px;color:#68d7ed}
+.resource-building-action-confirm h3{margin:8px 0 9px;color:#f2fdff;font-size:20px;letter-spacing:.8px}
+.resource-building-action-confirm p{max-width:520px;margin:0 auto;color:#b9d7dd;font-size:11px;line-height:1.5}
+.resource-building-action-confirm-actions{display:flex;justify-content:center;gap:10px;margin-top:18px;padding-top:14px;border-top:1px solid rgba(79,184,207,.16)}
+.resource-building-action-confirm-actions button{min-width:76px;min-height:36px;padding:0 16px;border:1px solid #61ddf5;background:linear-gradient(180deg,#138ea6,#075366);color:#eaffff;font-size:11px;letter-spacing:1.2px;font-weight:800;cursor:pointer}
+.resource-building-action-confirm-actions button:last-child{border-color:rgba(92,180,199,.32);background:rgba(5,39,52,.76);color:#a6c7ce}
+.resource-building-action-confirm-actions button:hover,.resource-building-action-confirm-actions button:focus-visible{outline:none;border-color:#a3f3ff;color:#fff;box-shadow:0 0 14px rgba(60,218,246,.18)}
+@media (max-width:700px){
+  .resource-building-action-confirm-backdrop{padding:12px}
+  .resource-building-action-confirm{width:calc(100vw - 24px);padding:18px 16px 15px}
+  .resource-building-action-confirm h3{font-size:17px}
+  .resource-building-action-confirm p{font-size:10px}
+}

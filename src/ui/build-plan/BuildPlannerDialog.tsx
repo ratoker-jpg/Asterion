@@ -21,6 +21,7 @@ import { compactAmount, formatNumber, plural } from '../empire/empire-format.ts'
 import { ResourceIcon } from '../resources/ResourceIcon.tsx';
 import '../fleet-plan/fleet-planner.css';
 import './build-planner.css';
+import { toAccusative } from '../../domain/buildings/declension.ts';
 
 /** Presets: one click sets many targets. Levels come from how the owner really played (journal 05.11). */
 const PRESET_LEVELS = [10, 15, 20, 25] as const;
@@ -313,7 +314,7 @@ function Status({ view }: { view: BuildPlanView }) {
         <i aria-hidden="true">{Array.from({ length: view.queueCapacity }, (_, slot) => <em key={slot} className={slot < view.queueUsed ? 'is-used' : ''} />)}</i>
       </p>
       <p><span>Энергия</span> <b className="bplan-status__energy"><ResourceIcon kind="energy" />{short(view.energy)}</b></p>
-      {view.saving ? <p className="is-saving" data-qa-build-plan-saving><span>Копит:</span> <b>{view.saving.name} → ур. {view.saving.level}</b></p> : null}
+      {view.saving ? <p className="is-saving" data-qa-build-plan-saving><span>Копит на</span> <b>{toAccusative(view.saving.name)} → ур. {view.saving.level}</b></p> : null}
       {view.next ? <p className="is-next"><span>Дальше</span> <b>{view.next.name} → ур. {view.next.level}</b></p> : null}
     </div>
   );

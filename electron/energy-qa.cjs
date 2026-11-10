@@ -158,7 +158,7 @@ async function runViewport(width, height) {
       };
     })()`);
     const stationText = JSON.stringify(station);
-    if (!station.current.includes('Итого 17 962') || !station.next.includes('Прибавка +2 016') || station.next.includes('Итого 19 978') || station.delta !== 'ПРИБАВКА +2 016' || station.summary.includes('/ч') || station.energyTooltip.includes('/ч') || station.horizontalOverflow) {
+    if (!station.current.includes('Энергия: 17 962') || !station.next.includes('Энергия: 19 978 (+2 016)') || /Основа|Физика ×|Солнце ×|Позиция ×/.test(station.current + station.next) || station.summary.includes('/ч') || station.energyTooltip.includes('/ч') || station.horizontalOverflow) {
       throw new Error(`${label}: energy station UI contract failed: ${stationText}`);
     }
     await capture(win, directory, 'energy-station-levels', width, height);

@@ -18,6 +18,7 @@ import {
   type ResourceCost,
 } from '../domain/buildings/balance-v1.ts';
 import { buildPriority, emptyBuildPlan, isBuildPlanEmpty, type BuildPlan } from '../domain/buildings/build-plan.ts';
+import { toAccusative } from '../domain/buildings/declension.ts';
 import { BUILDING_QUEUE_CAPACITY, getBuildingDefinition } from '../domain/buildings/resource-zone.ts';
 import { getAvailableProductionBots, getProductionBotIncomePerHour, BOT_RESOURCES, MAX_PRODUCTION_BOTS_PER_RESOURCE, type BotAssignment } from '../domain/buildings/production-bots.ts';
 import { getTradeAmountLimit, getTradeRefillInfo } from '../domain/buildings/trade.ts';
@@ -51,7 +52,7 @@ export type BuildPlanLine = {
   /** Cost of the next level; null when nothing is left to build. */
   cost: ResourceCost | null;
   timeMs: number | null;
-  /** `title` replaces the usual two-word title («Копит: …»). */
+  /** `title` replaces the usual two-word title («Копит на …»). */
   wait: { kind: BuildWaitKind; text: string; title?: string } | null;
 };
 
@@ -259,11 +260,11 @@ function evaluate(state: SaveState, planetId: PlanetId, runtime: BuildRuntime): 
         continue;
       }
       const source = getBuildingDefinition((choice.affordable ?? choice.best).role, factionId).name;
-      if (queueFull) setWait(line, 'energy', `${sentence} Нужна ${source}, но очередь стройки занята.`);
+      if (queueFull) setWait(line, 'energy', `${sentence} Нужно построить ${toAccusative(source)}, но очередь стройки занята.`);
       else if (choice.affordable) {
-        setWait(line, 'energy', `${sentence} Сначала строим ${source}: у неё лучшая отдача.`);
+        setWait(line, 'energy', `${sentence} Сначала строим ${toAccusative(source)}: здесь лучшая отдача.`);
         decision = { role: choice.affordable.role, name: source, level: choice.affordable.level, startedFor: line.role };
-      } else setWait(line, 'energy', `${sentence} Копим: ${source}, у неё лучшая отдача.`);
+      } else setWait(line, 'energy', `${sentence} Копим на ${toAccusative(source)}: здесь лучшая отдача.`);
       behind(index, 'Ждёт, пока появится энергия.');
       break;
     }
@@ -285,12 +286,12 @@ function evaluate(state: SaveState, planetId: PlanetId, runtime: BuildRuntime): 
         holdForEnergy = false;
         continue;
       } else if (queueFull) {
-        setWait(line, 'saving', `${sentence} Нужен ${storageName}, но очередь стройки занята.`, title);
+        setWait(line, 'saving', `${sentence} Нужно построить ${toAccusative(storageName)}, но очередь стройки занята.`, title);
       } else if (RESOURCE_KEYS.every((key) => storage.cost![key] <= wallet[key]) && storage.cost.energy <= energy) {
-        setWait(line, 'saving', `${sentence} Сначала строим ${storageName}.`, title);
+        setWait(line, 'saving', `${sentence} Сначала строим ${toAccusative(storageName)}.`, title);
         decision = { role: storageRole, name: storageName, level: storage.nextLevel, startedFor: line.role };
       } else {
-        setWait(line, 'saving', `${sentence} Копим: ${storageName}.`, title);
+        setWait(line, 'saving', `${sentence} Копим на ${toAccusative(storageName)}.`, title);
       }
       behind(index, 'Ждёт, пока вырастет склад.');
       break;
@@ -314,7 +315,7 @@ function evaluate(state: SaveState, planetId: PlanetId, runtime: BuildRuntime): 
       continue;
     }
     if (saver && !paysBackFirst(line, saver.hours)) {
-      setWait(line, 'saving', `Копим: ${saver.line.name} ур. ${saver.line.current + saver.line.queued + 1}. Это улучшение не окупится раньше, чем накопится нужное.`, `Копит: ${saver.line.name}`);
+      setWait(line, 'saving', `Копим на ${toAccusative(saver.line.name)} ур. ${saver.line.current + saver.line.queued + 1}. Это улучшение не окупится раньше, чем накопится нужное.`, `Копит на ${toAccusative(saver.line.name)}`);
       continue;
     }
     decision = { role: line.role, name: line.name, level: line.current + line.queued + 1, startedFor: null };
@@ -352,7 +353,7 @@ export function buildBuildPlanView(state: SaveState, planetId: string, runtime: 
     : `Дальше: ${next.name} до ур. ${next.level}.`;
   else {
     const pick = (kind: BuildWaitKind) => open.find((line) => line.wait?.kind === kind)?.wait?.text;
-    headline = pick('saving') ?? (result.saving ? `Копим: ${result.saving.name} ур. ${result.saving.level}.` : undefined) ?? pick('energy') ?? pick('queue') ?? pick('resources') ?? open.find((line) => line.wait)?.wait?.text ?? '';
+    headline = pick('saving') ?? (result.saving ? `Копим на ${toAccusative(result.saving.name)} ур. ${result.saving.level}.` : undefined) ?? pick('energy') ?? pick('queue') ?? pick('resources') ?? open.find((line) => line.wait)?.wait?.text ?? '';
   }
   return { planetId, plan, empty: isBuildPlanEmpty(plan), paused, lines: result.lines, queueUsed: result.queueUsed, queueCapacity: BUILDING_QUEUE_CAPACITY, energy: result.energy, next, headline, saving: paused ? null : result.saving, helpers: { robots: plan.noRobots !== true, exchange: plan.noExchange !== true } };
 }

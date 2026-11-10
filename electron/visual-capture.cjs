@@ -337,7 +337,7 @@ async function verifyLargeResourceValues(win, directory, label) {
     const rect=dialog?.getBoundingClientRect();
     return {current:current?.textContent?.replace(/\\s+/g,' ').trim()??'',next:next?.textContent?.replace(/\\s+/g,' ').trim()??'',amount:amount?.textContent?.replace(/\\s+/g,' ').trim()??'',amountWidth:amount?.clientWidth??0,amountScrollWidth:amount?.scrollWidth??0,cards,dialog:rect?{left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom,width:rect.width,height:rect.height}:null,viewport:{width:innerWidth,height:innerHeight}};
   })()`);
-  if (!preview.current.includes('ТЕКУЩИЙ УРОВЕНЬ · 29') || !preview.next.includes('СЛЕДУЮЩИЙ УРОВЕНЬ · 30')
+  if (!preview.current.includes('Сейчас · ур. 29') || !preview.next.includes('После · ур. 30')
     || !preview.next.includes('Добыча металла: +1 796 640/ч') || digitsOnly(preview.amount) !== String(MAX_METAL_MINE_PREVIEW)
     || preview.amountScrollWidth > preview.amountWidth + 1 || !preview.dialog
     || preview.cards.some((card) => !card || card.left < preview.dialog.left - 1 || card.right > preview.dialog.right + 1 || card.top < preview.dialog.top - 1 || card.bottom > preview.dialog.bottom + 1)
@@ -659,7 +659,7 @@ async function verifyResourceZoneFlow(win, directory, label) {
     })()`);
     if(snapshot.title!==RESOURCE_NAMES[role] || snapshot.status!==INITIAL_STATUS[role]) throw new Error(`Unexpected initial dialog state for ${role}: ${JSON.stringify(snapshot)}`);
     if((snapshot.status==='available' && snapshot.disabled)||(snapshot.status!=='available' && !snapshot.disabled)) throw new Error(`Unexpected build button state for ${role}: ${JSON.stringify(snapshot)}`);
-    if(role==='metal-production-1' && (!snapshot.effectCurrent.includes('ТЕКУЩИЙ УРОВЕНЬ') || !snapshot.effectNext.includes('СЛЕДУЮЩИЙ УРОВЕНЬ') || !snapshot.timePanel.includes('ВРЕМЯ СТРОИТЕЛЬСТВА') || snapshot.timeValue!=='2 сек' || snapshot.timeRaw!=='2 сек' || snapshot.timeBonus!=='НЕТ' || snapshot.costIcons!==4)) throw new Error(`Building upgrade comparison UI contract failed: ${JSON.stringify(snapshot)}`);
+    if(role==='metal-production-1' && (!snapshot.effectCurrent.includes('Сейчас · ур.') || !snapshot.effectNext.includes('После · ур.') || !snapshot.timePanel.includes('Время') || snapshot.timeValue!=='2 сек' || snapshot.costIcons!==4)) throw new Error(`Building upgrade comparison UI contract failed: ${JSON.stringify(snapshot)}`);
     dialogSnapshots.push({role,...snapshot});
     if(role==='metal-production-1') await capture(win,directory,'resource-zone-selected');
     if(role==='metal-production-2'){
