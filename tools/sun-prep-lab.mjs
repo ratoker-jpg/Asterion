@@ -112,11 +112,31 @@ async function run(fixture, days, label, out) {
   setNpcJournalSink({ detailed: () => false, decision: () => { looks += 1; },
     sun: (entry) => steps.push({ h: +((entry.at - at0) / HOUR).toFixed(2), o: entry.ownerId, p: entry.planId, s: entry.step, ...(entry.detail ? { d: entry.detail } : {}) }) });
   const startedAt = performance.now();
+  // Raid fleets as they gather (first sight, before the battle thins them): population by ship level.
+  const { getFactionCombatEntity } = await import('../src/domain/combat/faction-catalog.ts');
+  const raidFleets = new Map();
+  const sampleRaidFleets = () => {
+    for (const flight of state.flights.records) {
+      if (flight.missionId !== 'sun-attack' || !flight.sunRaid || raidFleets.has(flight.id)) continue;
+      let population = 0; let levelSum = 0; let level0 = 0;
+      for (const [id, count] of Object.entries(flight.selectedShips ?? {})) {
+        if (!(count > 0)) continue;
+        const pop = count * (getFactionCombatEntity(flight.sunRaid.factionId, id)?.population ?? 0);
+        const level = flight.sunRaid.shipLevels?.[id] ?? 0;
+        population += pop; levelSum += pop * level; if (level === 0) level0 += pop;
+      }
+      raidFleets.set(flight.id, { population, levelSum, level0 });
+    }
+  };
   let groups;
+  const SUBSTEPS = 4;
   for (let hour = 1; hour <= days * 24; hour += 1) {
-    const step = advanceLiveWorld(state, at0 + hour * HOUR, { groups });
-    state = step.state;
-    groups = step.groups;
+    for (let part = 1; part <= SUBSTEPS; part += 1) {
+      const step = advanceLiveWorld(state, at0 + (hour - 1) * HOUR + part * HOUR / SUBSTEPS, { groups });
+      state = step.state;
+      groups = step.groups;
+      sampleRaidFleets();
+    }
     if (hour % 12 === 0) log(`${label} h${hour}: ${Math.round((performance.now() - startedAt) / 1000)} s, raids ${state.sunRaid?.raids?.length ?? 0}`);
   }
   setNpcJournalSink(null);
@@ -155,7 +175,17 @@ async function run(fixture, days, label, out) {
       won: count((raid) => raid.result?.winner === 'attacker'),
       disbanded: count((raid) => raid.status === 'disbanded'),
       crystals: Object.values(state.sunRaid?.crystals ?? {}).reduce((sum, list) => sum + list.length, 0),
+      draws: count((raid) => raid.result?.winner === 'draw'),
     },
+    raidShips: (() => {
+      const all = [...raidFleets.values()];
+      const population = all.reduce((sum, item) => sum + item.population, 0);
+      return { fleets: all.length, population, levelSum: all.reduce((sum, item) => sum + item.levelSum, 0), level0: all.reduce((sum, item) => sum + item.level0, 0),
+        avgLevel: population ? +(all.reduce((sum, item) => sum + item.levelSum, 0) / population).toFixed(2) : 0,
+        level0Share: population ? +(all.reduce((sum, item) => sum + item.level0, 0) / population).toFixed(3) : 0 };
+    })(),
+    ordered: count((raid) => Boolean(raid.order)),
+    battleLog: (state.sunRaid?.battleLog ?? []).length,
     plans: { created: plansCreated, postponed: stepCount('postponed'), maxMovesOfOnePlan: Math.max(0, ...planMoves.values()), retargeted: stepCount('retarget'),
       cancelled: stepCount('cancelled'), rallies: stepCount('rally'), visitShifts: stepCount('shift'), reasons, answers },
     offChance: raids.filter((raid) => !declaredOfPlans.has(raid.id)).length,
@@ -191,7 +221,22 @@ function compare(labels, dir) {
     const means = Array.from({ length: 2000 }, () => differences.reduce((sum) => sum + differences[Math.floor(next() * differences.length)], 0) / Math.max(1, differences.length)).sort((x, y) => x - y);
     interval[key] = { mean: +(differences.reduce((sum, value) => sum + value, 0) / Math.max(1, differences.length)).toFixed(2), low: +(means[100] ?? 0).toFixed(2), high: +(means[1899] ?? 0).toFixed(2) };
   }
-  const summary = { pairs: rows.length, totals, interval,
+  const pooled = (side) => {
+    const list = rows.map((row) => row[side]);
+    const won = list.reduce((sum, item) => sum + item.funnel.won, 0);
+    const arrived = list.reduce((sum, item) => sum + item.funnel.arrived, 0);
+    const population = list.reduce((sum, item) => sum + (item.raidShips?.population ?? 0), 0);
+    return {
+      attackWinRate: arrived ? +(won / arrived).toFixed(3) : null, won, arrived,
+      draws: list.reduce((sum, item) => sum + (item.funnel.draws ?? 0), 0),
+      disbanded: list.reduce((sum, item) => sum + item.funnel.disbanded, 0),
+      declared: list.reduce((sum, item) => sum + item.funnel.declared, 0),
+      raidShipAvgLevel: population ? +(list.reduce((sum, item) => sum + (item.raidShips?.levelSum ?? 0), 0) / population).toFixed(2) : null,
+      raidShipLevel0Share: population ? +(list.reduce((sum, item) => sum + (item.raidShips?.level0 ?? 0), 0) / population).toFixed(3) : null,
+      ordered: list.reduce((sum, item) => sum + (item.ordered ?? 0), 0),
+    };
+  };
+  const summary = { pairs: rows.length, raids: { before: pooled('a'), after: pooled('b') }, totals, interval,
     activity: { before: rows.reduce((sum, { a }) => sum + a.activityMinutes, 0), after: rows.reduce((sum, { b }) => sum + b.activityMinutes, 0),
       looksBefore: rows.reduce((sum, { a }) => sum + a.looks, 0), looksAfter: rows.reduce((sum, { b }) => sum + b.looks, 0) },
     maxMovesOfOnePlan: Math.max(0, ...rows.map(({ b }) => b.plans.maxMovesOfOnePlan)),

@@ -11,9 +11,12 @@ import { SOLAR_CRYSTALS, SUN_RAID_CONFIG, sunRaidCapsOf } from '../../domain/sun
 import { getHolderCrystals, incomingRaidsOnSun, projectSun, raidLaunchTenureBlock, readSun } from '../../domain/sun-raid/rules.ts';
 import type { SunRaidEvent, SunRaidRecord } from '../../domain/sun-raid/types.ts';
 import { getActiveGalaxyCount } from '../../domain/universe/runtime.ts';
-import type { SaveState } from '../../application/contracts.ts';
+import { getOwnerShipUpgradeLevels, type SaveState } from '../../application/contracts.ts';
+import { hullValuePerPopulation, sunOrderRoomFor, validateSunRaidOrder, type SunOrderEntityId, type SunRaidOrder } from '../../domain/sun-raid/order.ts';
+import { presetOrder, SunOrderEditor, SunOrderFillList } from './SunOrderEditor.tsx';
 import { getAvailableFleetForPlanet, getShipsAwayForPlanet } from '../../application/flights.ts';
 import {
+  allianceSunRaces,
   currentSunRaidState,
   formatSun,
   getSunDebris,
@@ -25,6 +28,10 @@ import {
   previewSunLaunch,
   selectIncomingSunAlerts,
   selectPlayerRaidRole,
+  selectAllianceOrderMembers,
+  selectLastSunDefence,
+  selectPlayerOrderRoom,
+  selectRaidOrderFill,
   selectRaidSides,
   sunFleetPopulation,
   testBot01DefendSun,
@@ -137,6 +144,8 @@ export function SunRaidPanel({ state, now, mode, testTimeScale, selected, onSele
               <button type="button" className="opsA-btn" onClick={onOpenCommand}>К ВКЛАДКЕ «СОЮЗ»</button>
             </div>
           ) : ownRaids.length ? ownRaids.map((raid) => <RaidRow key={raid.id} raid={raid} now={now}
+            fill={raid.order && raid.status === 'gathering' ? selectRaidOrderFill(state, raid) : null}
+            playerRace={state.profile.factionId}
             gathered={raid.status === 'gathering' ? selectRaidSides(state, raid.id).attackers.population : 0}
             cap={caps.perSide}
             ownPledge={raid.status === 'gathering' ? ownerRaidPledge(state, raid.id, state.profile.playerId) : 0}
@@ -280,10 +289,10 @@ export function SunRaidPanel({ state, now, mode, testTimeScale, selected, onSele
           galaxy={launch.kind === 'join' ? launch.raid.galaxy : selected.galaxy}
           system={launch.kind === 'join' ? launch.raid.system : selected.system}
           onClose={() => setLaunch(null)}
-          onSubmit={(originPlanetId, ships, commanders) => {
+          onSubmit={(originPlanetId, ships, commanders, order) => {
             const result = launch.kind === 'join'
               ? joinSunRaid(state, { raidId: launch.raid.id, originPlanetId, ships, commanders, requestId: `sun-raid-join-${launch.raid.id}-${Date.now()}` }, { ...options, now: Date.now() })
-              : launchSunRaid(state, { galaxy: selected.galaxy, system: selected.system, originPlanetId, ships, commanders, requestId: `sun-raid-${selected.galaxy}-${selected.system}-${Date.now()}` }, { ...options, now: Date.now() });
+              : launchSunRaid(state, { galaxy: selected.galaxy, system: selected.system, originPlanetId, ships, commanders, requestId: `sun-raid-${selected.galaxy}-${selected.system}-${Date.now()}`, ...(order ? { order } : {}) }, { ...options, now: Date.now() });
             onCommit(result);
             if (result.ok) setLaunch(null);
             return result.ok ? null : result.error;
@@ -296,10 +305,11 @@ export function SunRaidPanel({ state, now, mode, testTimeScale, selected, onSele
 
 type RaidRowProps = {
   raid: SunRaidRecord; now: number; gathered: number; cap: number; ownPledge: number; canJoin: boolean;
+  fill: ReadonlyMap<string, number> | null; playerRace: SaveState['profile']['factionId'];
   onJoin: () => void; onSelect: () => void; onReport: (id: string) => void;
 };
 
-function RaidRow({ raid, now, gathered, cap, ownPledge, canJoin, onJoin, onSelect, onReport }: RaidRowProps) {
+function RaidRow({ raid, now, gathered, cap, ownPledge, canJoin, fill, playerRace, onJoin, onSelect, onReport }: RaidRowProps) {
   const result = raid.result;
   const status = raid.status === 'gathering'
     ? `Сбор · ${gathered.toLocaleString('ru-RU')} / ${cap.toLocaleString('ru-RU')} · осталось ${countdown((raid.gatherEndsAt ?? now) - now)}${ownPledge ? ` · ваш вклад ${ownPledge.toLocaleString('ru-RU')}` : ''}`
@@ -314,6 +324,7 @@ function RaidRow({ raid, now, gathered, cap, ownPledge, canJoin, onJoin, onSelec
       </button>
       {canJoin ? <button type="button" className="opsA-chip opsA-chip--link" onClick={onJoin} data-qa-raid-join={raid.id}>ПРИСОЕДИНИТЬСЯ</button> : null}
       {result?.reportId ? <button type="button" className="opsA-chip opsA-chip--link" onClick={() => onReport(result.reportId!)}>ОТЧЁТ</button> : null}
+      {raid.order && fill ? <div className="srp-raid__order"><SunOrderFillList order={raid.order} fill={fill} limit={6} highlightRace={playerRace} /></div> : null}
     </div>
   );
 }
@@ -349,7 +360,7 @@ type LaunchProps = {
   galaxy: number;
   system: number;
   onClose: () => void;
-  onSubmit: (originPlanetId: string, ships: Partial<Record<ShipId, number>>, commanders: Partial<Record<CommanderId, number>>) => string | null;
+  onSubmit: (originPlanetId: string, ships: Partial<Record<ShipId, number>>, commanders: Partial<Record<CommanderId, number>>, order: SunRaidOrder | null) => string | null;
 };
 
 /** Fleet picker with the live population counter X / the world's cap and the blocking reason. */
@@ -361,13 +372,30 @@ function SunLaunchDialog({ state, now, options, kind, raid, galaxy, system, onCl
   const [error, setError] = useState<string | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const factionId = state.profile.factionId;
+  const caps = sunRaidCapsOf(state);
+  // The raid order (owner rule 09.11.2026): the launcher writes it, a joiner reads it.
+  const allianceId = selectPlayerRaidRole(state).allianceId;
+  const races = useMemo(() => (allianceId ? allianceSunRaces(state, allianceId) : []), [state, allianceId]);
+  const members = useMemo(() => (allianceId ? selectAllianceOrderMembers(state, allianceId) : []), [state, allianceId]);
+  const lastDefence = useMemo(() => selectLastSunDefence(state, galaxy, system), [state, galaxy, system]);
+  const [draft, setDraft] = useState<SunRaidOrder | null>(() => (kind === 'attack'
+    ? presetOrder('balanced', races, caps.perSide, members, lastDefence?.entry ?? null) ?? { version: 1, preset: 'custom', slots: [] }
+    : null));
+  const order = kind === 'attack' ? draft : kind === 'join' ? raid?.order ?? null : null;
+  const levels = useMemo(() => {
+    const own: Partial<Record<string, number>> = { ...getOwnerShipUpgradeLevels(state) };
+    return own;
+  }, [state]);
+  const orderRoom = order
+    ? kind === 'join' && raid ? selectPlayerOrderRoom(state, raid) : sunOrderRoomFor(order, new Map(), factionId, levels)
+    : null;
   // Only combat hulls fly to a Sun: probes, colonizers, cargo and recyclers stay home.
   const catalog = useMemo(() => getFactionShipCatalog(factionId).filter((entity) => isSunCombatHull(entity.id as ShipId)), [factionId]);
   const fleet = getAvailableFleetForPlanet(state, originPlanetId);
   const available = fleet.ships;
   const away = getShipsAwayForPlanet(state, originPlanetId);
   const commanderIds = COMMANDER_IDS.filter((id) => (fleet.commanders[id] ?? 0) > 0);
-  const preview = previewSunLaunch(state, { kind, galaxy, system, raidId: raid?.id, originPlanetId, ships, commanders }, options);
+  const preview = previewSunLaunch(state, { kind, galaxy, system, raidId: raid?.id, originPlanetId, ships, commanders, ...(kind === 'attack' && order ? { order } : {}) }, options);
   const used = preview.committed + preview.population;
   const percent = Math.min(100, (used / preview.cap) * 100);
 
@@ -377,103 +405,186 @@ function SunLaunchDialog({ state, now, options, kind, raid, galaxy, system, onCl
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [onClose]);
-  useEffect(() => { setShips({}); setCommanders({}); }, [originPlanetId]);
 
   const popOf = (id: ShipId) => Math.max(1, catalog.find((entity) => entity.id === id)?.population ?? 1);
-  /** Most of one hull that still fits under the side cap together with the rest of the selection. */
+  /** Hulls of a type the order still takes from the player: its own slot, plus the «любые» room. */
+  const orderLimit = (id: ShipId) => {
+    if (!orderRoom) return Number.POSITIVE_INFINITY;
+    const anyFits = (levels[id] ?? 0) >= orderRoom.anyMinLevel ? Math.floor(orderRoom.anyPopulation / popOf(id)) : 0;
+    return (orderRoom.perEntity[id as SunOrderEntityId] ?? 0) + anyFits;
+  };
+  /** Most of one hull that still fits under the side cap and the order together with the rest of the selection. */
   const maxFor = (id: ShipId) => {
     const others = sunFleetPopulation({ ...ships, [id]: 0 }, factionId, commanders);
     const room = Math.max(0, preview.remaining - others);
-    return Math.max(0, Math.min(available[id] ?? 0, Math.floor(room / popOf(id))));
+    return Math.max(0, Math.min(available[id] ?? 0, Math.floor(room / popOf(id)), orderLimit(id)));
   };
   const setCount = (id: ShipId, value: number) => setShips((current) => ({ ...current, [id]: Math.max(0, Math.min(maxFor(id), Math.floor(value || 0))) }));
-  const fillToCap = () => {
+  /** Without an order: biggest hulls first up to the room. With one: the order's own slots, then «любые» with the most valuable hulls. */
+  const fillToCap = (from = available) => {
     let left = preview.remaining - sunFleetPopulation({}, factionId, commanders);
     const next: Partial<Record<ShipId, number>> = {};
-    for (const entity of [...catalog].sort((a, b) => b.population - a.population)) {
-      const count = Math.min(available[entity.id as ShipId] ?? 0, Math.floor(left / Math.max(1, entity.population)));
-      if (count > 0) { next[entity.id as ShipId] = count; left -= count * entity.population; }
+    if (orderRoom) {
+      for (const entity of [...catalog].sort((a, b) => hullValuePerPopulation(factionId, b.id as ShipId, levels[b.id] ?? 0) - hullValuePerPopulation(factionId, a.id as ShipId, levels[a.id] ?? 0))) {
+        const id = entity.id as ShipId;
+        const count = Math.min(from[id] ?? 0, orderRoom.perEntity[id as SunOrderEntityId] ?? 0, Math.floor(left / Math.max(1, entity.population)));
+        if (count > 0) { next[id] = count; left -= count * entity.population; }
+      }
+      let anyLeft = Math.min(left, orderRoom.anyPopulation);
+      for (const entity of [...catalog].sort((a, b) => hullValuePerPopulation(factionId, b.id as ShipId, levels[b.id] ?? 0) - hullValuePerPopulation(factionId, a.id as ShipId, levels[a.id] ?? 0))) {
+        const id = entity.id as ShipId;
+        if ((levels[id] ?? 0) < orderRoom.anyMinLevel) continue;
+        const count = Math.min((from[id] ?? 0) - (next[id] ?? 0), Math.floor(anyLeft / Math.max(1, entity.population)));
+        if (count > 0) { next[id] = (next[id] ?? 0) + count; anyLeft -= count * entity.population; }
+      }
+    } else {
+      for (const entity of [...catalog].sort((a, b) => b.population - a.population)) {
+        const count = Math.min(from[entity.id as ShipId] ?? 0, Math.floor(left / Math.max(1, entity.population)));
+        if (count > 0) { next[entity.id as ShipId] = count; left -= count * entity.population; }
+      }
     }
     setShips(next);
   };
+  // A changed order drops picks it no longer takes (outside its slots or over a slot's size).
+  useEffect(() => {
+    if (kind !== 'attack' || !orderRoom) return;
+    setShips((current) => {
+      let changed = false;
+      const next: Partial<Record<ShipId, number>> = {};
+      for (const [id, count] of Object.entries(current) as [ShipId, number][]) {
+        const fitted = Math.min(count ?? 0, orderLimit(id));
+        if (fitted !== count) changed = true;
+        if (fitted > 0) next[id] = fitted;
+      }
+      return changed ? next : current;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft]);
+  // A joiner sees its matching ships preselected for the open slots; a new planet starts over.
+  useEffect(() => {
+    setCommanders({});
+    if (kind === 'join' && raid?.order) fillToCap(getAvailableFleetForPlanet(state, originPlanetId).ships);
+    else setShips({});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [originPlanetId]);
+
+  const shipList = (
+    <ul className="srp-ships">
+      {catalog.map((entity) => {
+        const id = entity.id as ShipId;
+        const have = available[id] ?? 0;
+        const count = ships[id] ?? 0;
+        const outside = Boolean(orderRoom) && orderLimit(id) <= 0;
+        return (
+          <li key={id} className={`${have ? '' : 'is-empty'}${outside ? ' is-off' : ''}`} title={outside ? 'Этого корабля нет в открытых позициях заказа' : undefined}>
+            <img src={entity.art} alt="" />
+            <span className="srp-ship-copy">
+              <b>{entity.name}</b><small>{away[id] ? `на планете ${have.toLocaleString('ru-RU')} · в рейсе ${away[id]!.toLocaleString('ru-RU')}` : `есть ${have.toLocaleString('ru-RU')}`} · {entity.population} нас.{levels[id] ? ` · ур. ${levels[id]}` : ''}{orderRoom && !outside ? ` · в заказе ${orderLimit(id).toLocaleString('ru-RU')}` : ''}</small>
+              <AmountSlider compact value={count} max={Math.max(count, maxFor(id))} onChange={(value) => setCount(id, value)} label={`${entity.name}: количество`} qa={`sun-ship-${id}`} />
+            </span>
+            <input type="number" min={0} max={have} value={count || ''} placeholder="0" disabled={!have || outside} onChange={(event) => setCount(id, Number(event.target.value))} aria-label={`${entity.name}: количество`} />
+            <button type="button" className="opsA-btn opsA-btn--small" disabled={!have || outside} onClick={() => setCount(id, have)} title="Максимум, который помещается в лимит стороны и заказ">МАКС</button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+
+  const commanderBlock = commanderIds.length ? (
+    <div className="srp-commanders" data-qa-sun-commanders>
+      <small>КОМАНДИРСКИЕ КОРАБЛИ · бой ведёт командир наивысшего уровня стороны{orderRoom ? ' · только если они есть в заказе' : ''}</small>
+      <div>
+        {commanderIds.map((id) => {
+          const entity = getFactionCombatEntity(factionId, id);
+          const on = Boolean(commanders[id]);
+          return (
+            <button key={id} type="button" className={`srp-commander${on ? ' is-on' : ''}`} aria-pressed={on}
+              onClick={() => setCommanders((current) => { const next = { ...current }; if (next[id]) delete next[id]; else next[id] = 1; return next; })}
+              data-qa-sun-commander={id}>
+              {entity.art ? <img src={entity.art} alt="" /> : null}
+              <span><b>{entity.name}</b><small>{entity.population} нас.</small></span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  ) : null;
+
+  const origin = (
+    <div className="srp-launch__origin">
+      <label>
+        <small>ПЛАНЕТА ОТПРАВЛЕНИЯ</small>
+        <select value={originPlanetId} onChange={(event) => setOriginPlanetId(event.target.value)}>
+          {planetIds.map((id) => {
+            const planet = state.planets[id]!;
+            return <option key={id} value={id}>{planet.name} [{planet.universeGalaxy ?? 1}:{planet.universeSystem ?? 1}:{planet.universePosition ?? 1}]</option>;
+          })}
+        </select>
+      </label>
+      <button type="button" className="opsA-btn opsA-btn--small" onClick={() => fillToCap()} data-qa-sun-fill>{orderRoom ? 'ЗАПОЛНИТЬ ПО ЗАКАЗУ' : 'ЗАПОЛНИТЬ ДО ЛИМИТА'}</button>
+      <button type="button" className="opsA-btn opsA-btn--small" onClick={() => setShips({})}>СБРОСИТЬ</button>
+    </div>
+  );
+
+  const capBar = (
+    <div className="srp-cap" data-qa-sun-population={`${used}/${preview.cap}`}>
+      <div className="srp-cap__head">
+        <small>{kind === 'support' ? 'НАСЕЛЕНИЕ СТОРОНЫ' : `${kind === 'attack' ? 'ВАШ ФЛОТ' : 'СБОР РЕЙДА'} · ВАШ ВКЛАД ДО ${caps.participant.toLocaleString('ru-RU')}`}{preview.committed ? ` · уже собрано ${preview.committed.toLocaleString('ru-RU')}` : ''}</small>
+        <b className={used > preview.cap ? 'is-over' : ''}>{used.toLocaleString('ru-RU')} / {preview.cap.toLocaleString('ru-RU')}</b>
+      </div>
+      <i><span style={{ width: `${percent}%` }} className={used > preview.cap ? 'is-over' : ''} /></i>
+    </div>
+  );
 
   // Portaled to the stage root: above the header, still on the scaled 1920×1080 stage.
   const host = document.querySelector('.stage') ?? document.body;
+  // The editor shows the order's own error next to its counter: the footer does not repeat it.
+  const orderError = kind === 'attack' && draft && draft.slots.length ? validateSunRaidOrder(draft, { perSide: caps.perSide, races }) : null;
+  const shown = error ?? preview.error;
+  const blocking = shown && shown !== orderError && (preview.population > 0 || (kind === 'attack' && order && order.slots.length > 0)) ? shown : null;
   return createPortal(
     <div className="opsA srp-portal"><div className="srp-modal" role="presentation" onMouseDown={onClose}>
-      <section className="srp-launch" role="dialog" aria-modal="true" aria-label={kind === 'attack' ? 'Объявить рейд' : kind === 'join' ? 'Вступить в рейд' : 'Отправить защиту'} onMouseDown={(event) => event.stopPropagation()} data-qa-sun-launch={kind}>
+      <section className={`srp-launch${kind === 'attack' ? ' srp-launch--order' : ''}`} role="dialog" aria-modal="true" aria-label={kind === 'attack' ? 'Объявить рейд' : kind === 'join' ? 'Вступить в рейд' : 'Отправить защиту'} onMouseDown={(event) => event.stopPropagation()} data-qa-sun-launch={kind}>
         <header>
           <img src={kind === 'support' ? sunSupportIcon : SUN_RAID_MISSION_ICON} alt="" />
-          <div><small>{kind === 'attack' ? 'КОМАНДНЫЙ РЕЙД · СБОР 30 МИН' : kind === 'join' ? 'СБОР РЕЙДА' : 'ПОДДЕРЖКА СОЛНЦА'}</small><h2>Солнце {formatSun(galaxy, system)}</h2></div>
+          <div><small>{kind === 'attack' ? 'КОМАНДНЫЙ РЕЙД · ЗАКАЗ СОСТАВА · СБОР 30 МИН' : kind === 'join' ? 'СБОР РЕЙДА' : 'ПОДДЕРЖКА СОЛНЦА'}</small><h2>Солнце {formatSun(galaxy, system)}</h2></div>
           <button ref={closeRef} type="button" className="srp-close" data-asterion-close aria-label="Закрыть" onClick={onClose}>×</button>
         </header>
-        <div className="srp-launch__origin">
-          <label>
-            <small>ПЛАНЕТА ОТПРАВЛЕНИЯ</small>
-            <select value={originPlanetId} onChange={(event) => setOriginPlanetId(event.target.value)}>
-              {planetIds.map((id) => {
-                const planet = state.planets[id]!;
-                return <option key={id} value={id}>{planet.name} [{planet.universeGalaxy ?? 1}:{planet.universeSystem ?? 1}:{planet.universePosition ?? 1}]</option>;
-              })}
-            </select>
-          </label>
-          <button type="button" className="opsA-btn opsA-btn--small" onClick={fillToCap}>ЗАПОЛНИТЬ ДО ЛИМИТА</button>
-          <button type="button" className="opsA-btn opsA-btn--small" onClick={() => setShips({})}>СБРОСИТЬ</button>
-        </div>
-        <ul className="srp-ships">
-          {catalog.map((entity) => {
-            const id = entity.id as ShipId;
-            const have = available[id] ?? 0;
-            const count = ships[id] ?? 0;
-            return (
-              <li key={id} className={have ? '' : 'is-empty'}>
-                <img src={entity.art} alt="" />
-                <span className="srp-ship-copy">
-                  <b>{entity.name}</b><small>{away[id] ? `на планете ${have.toLocaleString('ru-RU')} · в рейсе ${away[id]!.toLocaleString('ru-RU')}` : `есть ${have.toLocaleString('ru-RU')}`} · {entity.population} нас.</small>
-                  <AmountSlider compact value={count} max={Math.max(count, maxFor(id))} onChange={(value) => setCount(id, value)} label={`${entity.name}: количество`} qa={`sun-ship-${id}`} />
-                </span>
-                <input type="number" min={0} max={have} value={count || ''} placeholder="0" disabled={!have} onChange={(event) => setCount(id, Number(event.target.value))} aria-label={`${entity.name}: количество`} />
-                <button type="button" className="opsA-btn opsA-btn--small" disabled={!have} onClick={() => setCount(id, have)} title="Максимум, который помещается в лимит стороны">МАКС</button>
-              </li>
-            );
-          })}
-        </ul>
-        {commanderIds.length ? (
-          <div className="srp-commanders" data-qa-sun-commanders>
-            <small>КОМАНДИРСКИЕ КОРАБЛИ · бой ведёт командир наивысшего уровня стороны</small>
-            <div>
-              {commanderIds.map((id) => {
-                const entity = getFactionCombatEntity(factionId, id);
-                const on = Boolean(commanders[id]);
-                return (
-                  <button key={id} type="button" className={`srp-commander${on ? ' is-on' : ''}`} aria-pressed={on}
-                    onClick={() => setCommanders((current) => { const next = { ...current }; if (next[id]) delete next[id]; else next[id] = 1; return next; })}
-                    data-qa-sun-commander={id}>
-                    {entity.art ? <img src={entity.art} alt="" /> : null}
-                    <span><b>{entity.name}</b><small>{entity.population} нас.</small></span>
-                  </button>
-                );
-              })}
+        {kind === 'attack' && draft ? (
+          <div className="srp-launch__cols">
+            <SunOrderEditor order={draft} onChange={setDraft} races={races} members={members} perSide={caps.perSide} participantCap={caps.participant} lastDefence={lastDefence} />
+            <div className="srp-launch__own">
+              <small>ВАШ ВКЛАД В ЗАКАЗ</small>
+              {origin}
+              {shipList}
+              {commanderBlock}
+              {capBar}
             </div>
           </div>
-        ) : null}
-        <div className="srp-cap" data-qa-sun-population={`${used}/${preview.cap}`}>
-          <div className="srp-cap__head">
-            <small>{kind === 'support' ? 'НАСЕЛЕНИЕ СТОРОНЫ' : `СБОР РЕЙДА · ВАШ ВКЛАД ДО ${sunRaidCapsOf(state).participant.toLocaleString('ru-RU')}`}{preview.committed ? ` · уже собрано ${preview.committed.toLocaleString('ru-RU')}` : ''}</small>
-            <b className={used > preview.cap ? 'is-over' : ''}>{used.toLocaleString('ru-RU')} / {preview.cap.toLocaleString('ru-RU')}</b>
-          </div>
-          <i><span style={{ width: `${percent}%` }} className={used > preview.cap ? 'is-over' : ''} /></i>
-        </div>
+        ) : (
+          <>
+            {kind === 'join' && raid?.order ? (
+              <div className="srp-join-order" data-qa-sun-join-order>
+                <small>ЗАКАЗ РЕЙДА · {raid.initiatorName} · открытые позиции подсвечены</small>
+                <SunOrderFillList order={raid.order} fill={selectRaidOrderFill(state, raid)} highlightRace={factionId} />
+              </div>
+            ) : null}
+            {origin}
+            {shipList}
+            {commanderBlock}
+            {capBar}
+          </>
+        )}
         <dl className="srp-launch__facts">
           <div><dt>В пути</dt><dd>{preview.oneWayMs ? countdown(preview.oneWayMs) : '—'}</dd></div>
           <div><dt>Прибытие</dt><dd>{preview.oneWayMs ? new Date(preview.arrivesAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '—'}</dd></div>
           <div><dt>Газ</dt><dd>{preview.gasCost.toLocaleString('ru-RU')}</dd></div>
-          <div><dt>{kind === 'support' ? 'Атака прибудет' : 'Вылет'}</dt><dd>{kind === 'support' ? (raid ? countdown(raid.arrivesAt - now) : '—') : kind === 'join' && raid ? `сбор ещё ${countdown((raid.gatherEndsAt ?? now) - now)}` : `при ${sunRaidCapsOf(state).perSide.toLocaleString('ru-RU')} за 30 мин`}</dd></div>
+          <div><dt>{kind === 'support' ? 'Атака прибудет' : 'Вылет'}</dt><dd>{kind === 'support' ? (raid ? countdown(raid.arrivesAt - now) : '—') : kind === 'join' && raid ? `сбор ещё ${countdown((raid.gatherEndsAt ?? now) - now)}` : `при ${caps.perSide.toLocaleString('ru-RU')} за 30 мин`}</dd></div>
         </dl>
-        {(error ?? preview.error) && preview.population > 0 ? <p className="srp-block-reason" role="alert">{error ?? preview.error}</p> : null}
+        {blocking ? <p className="srp-block-reason" role="alert">{blocking}</p> : null}
         <footer>
           <button type="button" className="opsA-btn" onClick={onClose}>ОТМЕНА</button>
-          <button type="button" className="opsA-btn opsA-btn--primary" disabled={Boolean(preview.error) || preview.population <= 0} onClick={() => setError(onSubmit(originPlanetId, ships, commanders))} data-qa-sun-launch-confirm>
+          <button type="button" className="opsA-btn opsA-btn--primary" disabled={Boolean(preview.error) || preview.population <= 0} onClick={() => setError(onSubmit(originPlanetId, ships, commanders, kind === 'attack' ? draft : null))} data-qa-sun-launch-confirm>
             {kind === 'attack' ? 'ОБЪЯВИТЬ СБОР' : kind === 'join' ? 'ВСТУПИТЬ В СБОР' : 'ОТПРАВИТЬ ЗАЩИТУ'} · {sunFleetPopulation(ships, factionId, commanders).toLocaleString('ru-RU')}
           </button>
         </footer>

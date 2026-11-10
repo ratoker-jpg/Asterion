@@ -24,7 +24,8 @@ import { dispatchNpcDeployment, npcDeploymentFreeCapacity } from './npc-missions
 import { combatEfficiency, strategyOf, type NpcUtilityContext } from './npc-utility.ts';
 import { npcSunAffordableForce, npcSunForce, npcSunForceQuality, npcSunPledgeFromPlanets } from './npc-endgame.ts';
 import { activeNpcSunPrep, NPC_SUN_PREP_BALANCE, npcSunPrepOfOwner } from './npc-sun-prep-state.ts';
-import { crystalHolderOf, currentSunRaidState, launchNpcSunRaid, npcSunFlightGas, sunFleetPopulation, type SunRuntimeOptions } from './sun-raid.ts';
+import { composeNpcSunOrder, describeSunExperience, describeSunOrder, npcOrderForceForPlanet } from './npc-sun-order.ts';
+import { crystalHolderOf, currentSunRaidState, launchNpcSunRaid, npcSunFlightGas, settleNpcRaidOrder, sunFleetPopulation, type SunRuntimeOptions } from './sun-raid.ts';
 
 /**
  * Plan «sun-raid-prep» (ADR stage F, scenario 7.в). The leader picks a Sun and
@@ -499,19 +500,31 @@ function declareChoice(profile: NpcProfile, plan: NpcSunRaidPrepPlan, at: number
     const own = current.npcStrategy!.plans[ownerId]!.find((item): item is NpcSunRaidPrepPlan => item.template === 'sun-raid-prep' && item.planId === plan.planId)!;
     const limit = own.rsvps[ownerId]?.answer === 'limit' ? own.rsvps[ownerId]!.population : caps.participant;
     const options = sunOptions(at, timeScale);
-    const forces = planets.map((planet) => ({ planet, ships: npcSunAffordableForce(current, ownerId, planet.id, npcSunForce(current, ownerId, planet.id, planet.raceId, 1, Math.min(limit, caps.participant)), own.galaxy, own.system, options) }))
+    // The launcher's order (owner rule 09.11.2026): from the members' offers and the Sun battle experience.
+    const ordered = composeNpcSunOrder(current, own, caps);
+    const room = Math.min(limit, caps.participant);
+    // The leader fills its exact slots first, then «любые» like every member: with exact slots only for battleship
+    // class and bigger, a leader kept out of «любые» brought almost nothing (bot lab 10.11.2026).
+    const leaderForces = (exactOnly: boolean) => planets.map((planet) => ({ planet, ships: npcSunAffordableForce(current, ownerId, planet.id,
+      ordered ? npcOrderForceForPlanet(current, ownerId, planet, room, ordered.order, exactOnly) : npcSunForce(current, ownerId, planet.id, planet.raceId, 1, room), own.galaxy, own.system, options) }))
       .map((item) => ({ ...item, population: sunFleetPopulation(item.ships, item.planet.raceId) }))
       .sort((left, right) => right.population - left.population || (left.planet.id < right.planet.id ? -1 : 1));
+    const exactOnly = false;
+    const forces = leaderForces(exactOnly);
     const origin = forces[0];
     if (!origin || origin.population <= 0) return { state: postpone(current, own, profile, at, timeScale, 'leader-no-fleet'), started: false, reason: 'no-ships' };
-    const launched = launchNpcSunRaid(current, ownerId, { galaxy: own.galaxy, system: own.system, originPlanetId: origin.planet.id, ships: origin.ships, requestId: key }, options);
+    const launched = launchNpcSunRaid(current, ownerId, { galaxy: own.galaxy, system: own.system, originPlanetId: origin.planet.id, ships: origin.ships, requestId: key,
+      ...(ordered ? { order: ordered.order } : {}) }, options);
     if (!launched.ok || !launched.raidId) return { state: current, started: false, reason: launched.ok ? 'no-raid' : launched.error, planetId: origin.planet.id };
-    const topped = npcSunPledgeFromPlanets(launched.state, ownerId, launched.raidId, 1, key, options, limit - origin.population);
+    const topped = npcSunPledgeFromPlanets(launched.state, ownerId, launched.raidId, 1, key, options, limit - origin.population, exactOnly);
     const pledged = origin.population + topped.pledged;
-    journal({ at, ownerId, planId: own.planId, step: 'declared', detail: { raidId: launched.raidId, system: own.system, pledged: Math.round(pledged), promised: Math.round(npcSunPromised(own)) } });
+    // Exact slots the leader could not fill go to «любые» at once: nothing waits for hulls that stay home.
+    const settled = ordered ? settleNpcRaidOrder(topped.state, launched.raidId) : topped.state;
+    journal({ at, ownerId, planId: own.planId, step: 'declared', detail: { raidId: launched.raidId, system: own.system, pledged: Math.round(pledged), promised: Math.round(npcSunPromised(own)),
+      ...(ordered ? { order: describeSunOrder(ordered.order), offered: ordered.offered, filler: ordered.filler, exp: describeSunExperience(ordered.experience), expN: ordered.experience.battles } : { order: 'none' }) } });
     const rsvp: NpcSunRsvp = { ...(own.rsvps[ownerId] ?? { answer: 'yes', population: pledged, at }), pledged };
     const rsvps = allotRoles(own.rsvps, ownerId, pledged, caps.perSide, caps.participant);
-    return { state: replacePlan(topped.state, { ...own, phase: 'gathering', raidId: launched.raidId, rsvps: { ...rsvps, [ownerId]: rsvp } }),
+    return { state: replacePlan(settled, { ...own, phase: 'gathering', raidId: launched.raidId, rsvps: { ...rsvps, [ownerId]: rsvp } }),
       started: true, reason: null, planetId: origin.planet.id };
   } };
 }

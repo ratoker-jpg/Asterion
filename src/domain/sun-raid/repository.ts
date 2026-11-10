@@ -1,5 +1,7 @@
 import { SOLAR_CRYSTAL_IDS, SUN_RAID_CONFIG, type SolarCrystalId } from './config.ts';
 import { createDefaultSunRaidState, parseHolderKey, sunKey } from './rules.ts';
+import { migrateSunRaidOrder } from './order.ts';
+import { migrateSunBattleLog } from './battle-log.ts';
 import type { CampaignResult, CrystalHolder, GateProject, SunRaidEvent, SunRaidRecord, SunRaidState, SunState } from './types.ts';
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -103,6 +105,7 @@ function migrateRaid(value: unknown): SunRaidRecord | null {
     ...(finite(source.gatherEndsAt) ? { gatherEndsAt: source.gatherEndsAt } : {}),
     ...(migratedResult ? { result: migratedResult } : {}),
     ...(finite(source.closedAt) ? { closedAt: source.closedAt } : {}),
+    ...(migrateSunRaidOrder(source.order) ? { order: migrateSunRaidOrder(source.order)! } : {}),
   };
 }
 
@@ -208,5 +211,6 @@ export function migrateSunRaidState(value: unknown): SunRaidState {
     .filter((event): event is SunRaidEvent => Boolean(event))
     .slice(-SUN_RAID_CONFIG.historyLimit);
   const campaignResult = migrateCampaignResult(source.campaignResult);
-  return { version: 1, suns, crystals, raids, gates, gateCooldowns, history, ...(campaignResult ? { campaignResult } : {}) };
+  const battleLog = migrateSunBattleLog(source.battleLog);
+  return { version: 1, suns, crystals, raids, gates, gateCooldowns, history, ...(campaignResult ? { campaignResult } : {}), ...(battleLog.length ? { battleLog } : {}) };
 }

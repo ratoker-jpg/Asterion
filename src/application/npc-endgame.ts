@@ -13,6 +13,8 @@ import { utilityToWeight } from '../domain/npc/utility.ts';
 import { selectAllianceRelations } from '../domain/command/diplomacy.ts';
 import { strategyOf, type NpcUtilityContext } from './npc-utility.ts';
 import { activeNpcSunPrep } from './npc-sun-prep-state.ts';
+import { hullLevelMultiplier, hullRoleMultiplier, sunOrderRoomFor, type SunRaidOrder } from '../domain/sun-raid/order.ts';
+import type { SunRaidRecord } from '../domain/sun-raid/types.ts';
 import {
   crystalHolderOf,
   currentSunRaidState,
@@ -20,6 +22,7 @@ import {
   npcSunFlightGas,
   raidPledgeRoom,
   selectOwnerGateContext,
+  selectRaidOrderFill,
   selectRaidSides,
   sendNpcSunSupport,
   startNpcGateConstruction,
@@ -48,17 +51,79 @@ function sunOptions(at: number, timeScale: number): SunRuntimeOptions {
   return { now: at, mode: ACTIVE_RUNTIME_MODE, timeScale };
 }
 
-/** The combat hulls an owner has free on one planet (a share of them), as raid hulls. */
-function planetRaidHulls(state: SaveState, ownerId: string, planetId: string, raceId: string, share: number): RaidHull[] {
+/** The owner's ship upgrade levels (owner-wide, kept on each of its planets' profile). */
+export function npcShipLevels(state: SaveState, ownerId: string): Partial<Record<string, number>> {
+  const target = Object.values(state.espionage?.targets ?? {}).find((item) => item.kind === 'npc' && item.ownerId === ownerId);
+  return { ...(target?.ownerProfile?.shipLevels ?? {}) };
+}
+
+/**
+ * The combat hulls an owner has free on one planet (a share of them), as raid hulls. Attack and
+ * life carry the hull's upgrade level (the battle engine's own coefficient), so a level-10 hull
+ * outranks a level-0 one per population (owner 09.11.2026: no level-0 filler); `value` may scale
+ * a hull type further (the Sun battle experience).
+ */
+function planetRaidHulls(state: SaveState, ownerId: string, planetId: string, raceId: string, share: number, value?: Readonly<Record<string, number>>): RaidHull[] {
   const free = getNpcMissionAvailableFleet(state, ownerId, planetId) ?? {};
+  const levels = npcShipLevels(state, ownerId);
   const hulls: RaidHull[] = [];
   for (const entity of getFactionShipCatalog(raceId as never)) {
     const id = entity.id as ShipId;
     if (entity.category !== 'Боевой корабль' || CIVIL_SHIPS.has(id) || !entity.combat) continue;
     const count = Math.floor((free[id] ?? 0) * share);
-    if (count > 0) hulls.push({ key: `${planetId}|${id}`, population: entity.population, attack: entity.combat.attack, life: entity.combat.life, count });
+    // Level, role (special-bonus donors) and the Sun battle experience.
+    const multiplier = hullLevelMultiplier(id, levels[id] ?? 0) * hullRoleMultiplier(raceId as never, id) * (value?.[id] ?? 1);
+    if (count > 0) hulls.push({ key: `${planetId}|${id}`, population: entity.population, attack: entity.combat.attack * multiplier, life: entity.combat.life * multiplier, count });
   }
   return hulls;
+}
+
+type OrderRoom = ReturnType<typeof sunOrderRoomFor>;
+
+/**
+ * The strongest force for `room` that a raid's order still accepts from this owner: hulls of its own
+ * open slots first (each slot's open count over all its planets), then the «любые» room with what
+ * is left (level permitting). Keys are `planet|ship`, like the free pool's.
+ */
+export function npcOrderedCounts(hulls: readonly RaidHull[], room: number, order: SunRaidOrder, open: OrderRoom, levels: Partial<Record<string, number>>, exactOnly = false): Map<string, number> {
+  const shipOf = (key: string) => key.slice(key.indexOf('|') + 1);
+  const byShip = new Map<string, RaidHull[]>();
+  for (const hull of [...hulls].sort((left, right) => (left.key < right.key ? -1 : left.key > right.key ? 1 : 0))) {
+    byShip.set(shipOf(hull.key), [...(byShip.get(shipOf(hull.key)) ?? []), hull]);
+  }
+  const aggregated: RaidHull[] = [];
+  for (const [id, list] of byShip) {
+    const limit = open.perEntity[id as ShipId] ?? 0;
+    const have = list.reduce((sum, hull) => sum + hull.count, 0);
+    if (limit > 0 && have > 0) aggregated.push({ key: id, population: list[0]!.population, attack: list[0]!.attack, life: list[0]!.life, count: Math.min(limit, have) });
+  }
+  const chosen = new Map<string, number>();
+  let used = 0;
+  for (const [id, count] of composeRaidForce(aggregated, room)) {
+    let left = count;
+    for (const hull of byShip.get(id) ?? []) {
+      const take = Math.min(left, hull.count);
+      if (take > 0) { chosen.set(hull.key, take); left -= take; used += take * hull.population; }
+    }
+  }
+  const anyRoom = Math.min(room - used, open.anyPopulation);
+  // `exactOnly`: the launcher keeps the «любые» room for the members (bot lab 10.11.2026: a leader that took it left them short).
+  if (!exactOnly && anyRoom > 0 && order.slots.some((slot) => slot.kind === 'any')) {
+    const leftovers = hulls.filter((hull) => (levels[shipOf(hull.key)] ?? 0) >= open.anyMinLevel)
+      .map((hull) => ({ ...hull, count: hull.count - (chosen.get(hull.key) ?? 0) })).filter((hull) => hull.count > 0);
+    for (const [key, count] of composeRaidForce(leftovers, anyRoom)) chosen.set(key, (chosen.get(key) ?? 0) + count);
+  }
+  return chosen;
+}
+
+/** Population a raid's order still accepts from this owner (0: nothing it has fits an open slot). */
+export function npcOrderOpenFor(state: SaveState, raid: SunRaidRecord, ownerId: string): number {
+  if (!raid.order) return Number.POSITIVE_INFINITY;
+  const planets = Object.values(state.espionage?.targets ?? {}).filter((target) => target.kind === 'npc' && target.ownerId === ownerId)
+    .sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
+  if (!planets.length) return 0;
+  const { hulls, counts } = npcSunComposePool(state, ownerId, planets, raidPledgeRoom(state, raid, ownerId), raid);
+  return hulls.reduce((sum, hull) => sum + (counts.get(hull.key) ?? 0) * hull.population, 0);
 }
 
 function shipsOfHulls(hulls: readonly RaidHull[], counts: ReadonlyMap<string, number>, planetId: string): Partial<Record<ShipId, number>> {
@@ -83,8 +148,15 @@ export function npcSunForce(state: SaveState, ownerId: string, planetId: string,
  * One owner's strongest force of `room` population over all its planets at once (the best hulls first,
  * wherever they stand), planet by planet.
  */
-export function npcSunComposePool(state: SaveState, ownerId: string, planets: readonly { id: string; raceId: string }[], room: number): { hulls: RaidHull[]; counts: Map<string, number> } {
-  const hulls = planets.flatMap((planet) => planetRaidHulls(state, ownerId, planet.id, planet.raceId, 1));
+export function npcSunComposePool(state: SaveState, ownerId: string, planets: readonly { id: string; raceId: string }[], room: number,
+  raid?: SunRaidRecord, value?: Readonly<Record<string, number>>, exactOnly = false): { hulls: RaidHull[]; counts: Map<string, number> } {
+  const hulls = planets.flatMap((planet) => planetRaidHulls(state, ownerId, planet.id, planet.raceId, 1, value));
+  // A raid with an order: only what its open slots still accept from this owner.
+  if (raid?.order && planets.length) {
+    const levels = npcShipLevels(state, ownerId);
+    const open = sunOrderRoomFor(raid.order, selectRaidOrderFill(state, raid), planets[0]!.raceId as never, levels);
+    return { hulls, counts: npcOrderedCounts(hulls, room, raid.order, open, levels, exactOnly) };
+  }
   return { hulls, counts: composeRaidForce(hulls, room) };
 }
 
@@ -118,7 +190,7 @@ function pledgeablePopulation(state: SaveState, ownerId: string, share: number):
  * the best hulls of all its planets first, then each planet sends its part (a second pass spends room
  * a planet's gas could not fly; ships that left are already off the planet's stock).
  */
-export function npcSunPledgeFromPlanets(state: SaveState, ownerId: string, raidId: string, share: number, key: string, options: SunRuntimeOptions, limit = Number.POSITIVE_INFINITY): { state: SaveState; pledged: number } {
+export function npcSunPledgeFromPlanets(state: SaveState, ownerId: string, raidId: string, share: number, key: string, options: SunRuntimeOptions, limit = Number.POSITIVE_INFINITY, exactOnly = false): { state: SaveState; pledged: number } {
   let next = state;
   let pledged = 0;
   const planets = Object.values(next.espionage?.targets ?? {}).filter((target) => target.kind === 'npc' && target.ownerId === ownerId)
@@ -128,7 +200,7 @@ export function npcSunPledgeFromPlanets(state: SaveState, ownerId: string, raidI
     if (!first || first.status !== 'gathering') break;
     const room = Math.min(raidPledgeRoom(next, first, ownerId), limit - pledged);
     if (room <= 0) break;
-    const pool = npcSunComposePool(next, ownerId, planets, room);
+    const pool = npcSunComposePool(next, ownerId, planets, room, first, undefined, exactOnly);
     let sentAny = false;
     for (const planet of planets) {
       const raid = currentSunRaidState(next).raids.find((item) => item.id === raidId);
@@ -197,7 +269,7 @@ export function getNpcEndgameChoices(state: SaveState, profile: NpcProfile, util
     // A plan's own gathering: a member who answered keeps to its answer (npc-sun-prep.ts); only the others may still come.
     const planned = activeNpcSunPrep(state, raid.allianceId);
     if (planned?.raidId === raid.id && planned.rsvps[ownerId]) continue;
-    if (raidPledgeRoom(state, raid, ownerId) <= 0 || pledgeablePopulation(state, ownerId, share) <= 0) continue;
+    if (raidPledgeRoom(state, raid, ownerId) <= 0 || pledgeablePopulation(state, ownerId, share) <= 0 || npcOrderOpenFor(state, raid, ownerId) <= 0) continue;
     const id = `sun-raid-join:${ownerId}:${raid.id}`;
     // The alliance's call comes first (owner 31.10.2026: allies never came and all 12 gatherings disbanded).
     const estimate = 1.2 + 0.8 * unit(traits.cooperation) + 0.4 * drives.operations + 0.3 * (4 - missing) / 4;
