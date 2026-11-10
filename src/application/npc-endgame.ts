@@ -84,7 +84,7 @@ type OrderRoom = ReturnType<typeof sunOrderRoomFor>;
  * open slots first (each slot's open count over all its planets), then the «любые» room with what
  * is left (level permitting). Keys are `planet|ship`, like the free pool's.
  */
-export function npcOrderedCounts(hulls: readonly RaidHull[], room: number, order: SunRaidOrder, open: OrderRoom, levels: Partial<Record<string, number>>): Map<string, number> {
+export function npcOrderedCounts(hulls: readonly RaidHull[], room: number, order: SunRaidOrder, open: OrderRoom, levels: Partial<Record<string, number>>, exactOnly = false): Map<string, number> {
   const shipOf = (key: string) => key.slice(key.indexOf('|') + 1);
   const byShip = new Map<string, RaidHull[]>();
   for (const hull of [...hulls].sort((left, right) => (left.key < right.key ? -1 : left.key > right.key ? 1 : 0))) {
@@ -106,7 +106,8 @@ export function npcOrderedCounts(hulls: readonly RaidHull[], room: number, order
     }
   }
   const anyRoom = Math.min(room - used, open.anyPopulation);
-  if (anyRoom > 0 && order.slots.some((slot) => slot.kind === 'any')) {
+  // `exactOnly`: the launcher keeps the «любые» room for the members (bot lab 10.11.2026: a leader that took it left them short).
+  if (!exactOnly && anyRoom > 0 && order.slots.some((slot) => slot.kind === 'any')) {
     const leftovers = hulls.filter((hull) => (levels[shipOf(hull.key)] ?? 0) >= open.anyMinLevel)
       .map((hull) => ({ ...hull, count: hull.count - (chosen.get(hull.key) ?? 0) })).filter((hull) => hull.count > 0);
     for (const [key, count] of composeRaidForce(leftovers, anyRoom)) chosen.set(key, (chosen.get(key) ?? 0) + count);
@@ -147,13 +148,13 @@ export function npcSunForce(state: SaveState, ownerId: string, planetId: string,
  * wherever they stand), planet by planet.
  */
 export function npcSunComposePool(state: SaveState, ownerId: string, planets: readonly { id: string; raceId: string }[], room: number,
-  raid?: SunRaidRecord, value?: Readonly<Record<string, number>>): { hulls: RaidHull[]; counts: Map<string, number> } {
+  raid?: SunRaidRecord, value?: Readonly<Record<string, number>>, exactOnly = false): { hulls: RaidHull[]; counts: Map<string, number> } {
   const hulls = planets.flatMap((planet) => planetRaidHulls(state, ownerId, planet.id, planet.raceId, 1, value));
   // A raid with an order: only what its open slots still accept from this owner.
   if (raid?.order && planets.length) {
     const levels = npcShipLevels(state, ownerId);
     const open = sunOrderRoomFor(raid.order, selectRaidOrderFill(state, raid), planets[0]!.raceId as never, levels);
-    return { hulls, counts: npcOrderedCounts(hulls, room, raid.order, open, levels) };
+    return { hulls, counts: npcOrderedCounts(hulls, room, raid.order, open, levels, exactOnly) };
   }
   return { hulls, counts: composeRaidForce(hulls, room) };
 }
@@ -188,7 +189,7 @@ function pledgeablePopulation(state: SaveState, ownerId: string, share: number):
  * the best hulls of all its planets first, then each planet sends its part (a second pass spends room
  * a planet's gas could not fly; ships that left are already off the planet's stock).
  */
-export function npcSunPledgeFromPlanets(state: SaveState, ownerId: string, raidId: string, share: number, key: string, options: SunRuntimeOptions, limit = Number.POSITIVE_INFINITY): { state: SaveState; pledged: number } {
+export function npcSunPledgeFromPlanets(state: SaveState, ownerId: string, raidId: string, share: number, key: string, options: SunRuntimeOptions, limit = Number.POSITIVE_INFINITY, exactOnly = false): { state: SaveState; pledged: number } {
   let next = state;
   let pledged = 0;
   const planets = Object.values(next.espionage?.targets ?? {}).filter((target) => target.kind === 'npc' && target.ownerId === ownerId)
@@ -198,7 +199,7 @@ export function npcSunPledgeFromPlanets(state: SaveState, ownerId: string, raidI
     if (!first || first.status !== 'gathering') break;
     const room = Math.min(raidPledgeRoom(next, first, ownerId), limit - pledged);
     if (room <= 0) break;
-    const pool = npcSunComposePool(next, ownerId, planets, room, first);
+    const pool = npcSunComposePool(next, ownerId, planets, room, first, undefined, exactOnly);
     let sentAny = false;
     for (const planet of planets) {
       const raid = currentSunRaidState(next).raids.find((item) => item.id === raidId);

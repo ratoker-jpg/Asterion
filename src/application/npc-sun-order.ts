@@ -149,11 +149,11 @@ export function composeNpcSunOrder(state: SaveState, plan: NpcSunRaidPrepPlan, c
   return error ? null : { order, experience, offered: Math.round(offers.reduce((sum, offer) => sum + offer.population, 0)), filler: Math.round(filler) };
 }
 
-/** What one planet of the leader sends with the call: the strongest part of it the order accepts. */
+/** What one planet of the leader sends with the call: the strongest part of it its exact slots accept («любые» stays for the members). */
 export function npcOrderForceForPlanet(state: SaveState, ownerId: string, planet: SpyTargetState, room: number, order: SunRaidOrder): Partial<Record<ShipId, number>> {
   const levels = npcShipLevels(state, ownerId);
   const { hulls } = npcSunComposePool(state, ownerId, [planet], room);
-  const counts = npcOrderedCounts(hulls, room, order, sunOrderRoomFor(order, new Map(), planet.raceId as CombatFactionId, levels), levels);
+  const counts = npcOrderedCounts(hulls, room, order, sunOrderRoomFor(order, new Map(), planet.raceId as CombatFactionId, levels), levels, true);
   const ships: Partial<Record<ShipId, number>> = {};
   for (const hull of hulls) {
     const count = counts.get(hull.key) ?? 0;

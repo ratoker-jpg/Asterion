@@ -512,7 +512,7 @@ function declareChoice(profile: NpcProfile, plan: NpcSunRaidPrepPlan, at: number
     const launched = launchNpcSunRaid(current, ownerId, { galaxy: own.galaxy, system: own.system, originPlanetId: origin.planet.id, ships: origin.ships, requestId: key,
       ...(ordered ? { order: ordered.order } : {}) }, options);
     if (!launched.ok || !launched.raidId) return { state: current, started: false, reason: launched.ok ? 'no-raid' : launched.error, planetId: origin.planet.id };
-    const topped = npcSunPledgeFromPlanets(launched.state, ownerId, launched.raidId, 1, key, options, limit - origin.population);
+    const topped = npcSunPledgeFromPlanets(launched.state, ownerId, launched.raidId, 1, key, options, limit - origin.population, Boolean(ordered));
     const pledged = origin.population + topped.pledged;
     journal({ at, ownerId, planId: own.planId, step: 'declared', detail: { raidId: launched.raidId, system: own.system, pledged: Math.round(pledged), promised: Math.round(npcSunPromised(own)),
       ...(ordered ? { order: describeSunOrder(ordered.order), offered: ordered.offered, filler: ordered.filler, exp: describeSunExperience(ordered.experience), expN: ordered.experience.battles } : { order: 'none' }) } });
