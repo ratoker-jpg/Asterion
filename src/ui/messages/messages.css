@@ -114,11 +114,10 @@
 .reports-view .reports-nav-art .reports-glyph-image { display: block; width: 30px; height: 30px; object-fit: contain; }
 .reports-view :is(.reports-profile-nav, .reports-message-nav > button) strong {
   min-width: 0;
-  overflow: hidden;
   font-size: calc(14px * var(--text-scale-control, 1)) !important;
   font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 .reports-view .reports-message-nav .reports-v2-unread-count {
   min-width: 26px;
@@ -493,7 +492,7 @@
 }
 
 /* Ships, defence, commanders, losses */
-.reports-view .spy-report-entity-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 6px; }
+.reports-view .spy-report-entity-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 6px; }
 .reports-view .spy-report-entity {
   position: relative;
   display: grid;
@@ -505,7 +504,7 @@
 .reports-view .reports-v2-entity-art { width: 44px; height: 44px; display: grid; place-items: center; }
 .reports-view .reports-v2-entity-art img { width: 44px; height: 44px; object-fit: contain; }
 .reports-view .spy-report-entity > div { min-width: 0; display: grid; gap: 2px; }
-.reports-view .spy-report-entity > div strong { color: #f4fcff; font-size: calc(13px * var(--text-scale-body, 1)) !important; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
+.reports-view .spy-report-entity > div strong { color: #f4fcff; font-size: calc(13px * var(--text-scale-body, 1)) !important; font-weight: 700; line-height: 1.25; overflow-wrap: break-word; hyphens: auto; }
 .reports-view .spy-report-entity > div span { color: var(--rm-muted); font-size: calc(12px * var(--text-scale-secondary, 1)) !important; line-height: 1.25; }
 .reports-view .spy-report-entity > b { color: #fff; font-size: calc(15px * var(--text-scale-table, 1)) !important; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .reports-view .spy-report-empty { margin: 0; color: var(--rm-muted); font-size: calc(13px * var(--text-scale-body, 1)) !important; }
@@ -538,7 +537,7 @@
 .reports-view .spy-entity-tooltip small { color: var(--rm-muted); font-size: calc(12px * var(--text-scale-helper, 1)) !important; }
 
 /* Resources */
-.reports-view :is(.spy-report-resource-grid, .reports-v3-resources, .reports-battle-reward-grid) { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px; }
+.reports-view :is(.spy-report-resource-grid, .reports-v3-resources, .reports-battle-reward-grid) { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 6px; }
 .reports-view :is(.spy-report-resource, .reports-battle-reward) {
   display: grid;
   grid-template-columns: 36px minmax(0, 1fr);
@@ -550,12 +549,12 @@
 .reports-view :is(.spy-report-resource, .reports-battle-reward) > .reports-v2-art { grid-row: 1 / span 2; width: 36px; height: 36px; display: grid; place-items: center; }
 .reports-view :is(.spy-report-resource, .reports-battle-reward) img { width: 32px; height: 32px; object-fit: contain; }
 .reports-view :is(.spy-report-resource, .reports-battle-reward) > span:not(.reports-v2-art) { color: var(--rm-label); font-size: calc(12px * var(--text-scale-secondary, 1)) !important; }
-.reports-view :is(.spy-report-resource, .reports-battle-reward) > strong { color: #fff; font-size: calc(16px * var(--text-scale-table, 1)) !important; font-weight: 800; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.reports-view :is(.spy-report-resource, .reports-battle-reward) > strong { color: #fff; font-size: calc(16px * var(--text-scale-table, 1)) !important; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .reports-view .reports-v3-res { display: grid; grid-template-columns: 32px minmax(0, 1fr); align-items: center; gap: 10px; padding: 10px 12px 10px 10px; }
 .reports-view .reports-v3-res > img { width: 32px; height: 32px; object-fit: contain; }
 .reports-view .reports-v3-res > span { min-width: 0; display: grid; gap: 2px; }
 .reports-view .reports-v3-res small { color: var(--rm-label); font-size: calc(12px * var(--text-scale-secondary, 1)) !important; }
-.reports-view .reports-v3-res b { color: #fff; font-size: calc(16px * var(--text-scale-table, 1)) !important; font-weight: 800; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.reports-view .reports-v3-res b { color: #fff; font-size: calc(16px * var(--text-scale-table, 1)) !important; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .reports-view .reports-v3-section--loss .reports-v3-res b { color: #ffadb5; }
 
 /* Route, facts, risk, summary */
@@ -645,7 +644,7 @@
 }
 .reports-view .reports-battle-side--winner { box-shadow: inset 0 0 0 1px rgba(53, 229, 138, .35); }
 .reports-view .reports-battle-general-art { grid-row: 1 / span 2; width: 56px; height: 56px; overflow: hidden; border-radius: 12px; }
-.reports-view .reports-battle-general-art img { width: 100%; height: 100%; object-fit: cover; }
+.reports-view .reports-battle-general-art .faction-general-portrait { width: 100%; height: 100%; }
 .reports-view .reports-battle-side-copy { min-width: 0; display: grid; gap: 2px; }
 .reports-view .reports-battle-side-copy small { color: var(--rm-label); font-size: calc(12px * var(--text-scale-secondary, 1)) !important; font-weight: 700; }
 .reports-view .reports-battle-side-copy strong { color: #fff; font-size: calc(15px * var(--text-scale-body, 1)) !important; font-weight: 800; overflow-wrap: anywhere; }
@@ -666,7 +665,7 @@
 .reports-view .reports-v3-verdict.reports-v2-tone-danger strong { color: #ffadb5; }
 .reports-view .reports-v3-verdict span { color: var(--rm-muted); font-size: calc(13px * var(--text-scale-body, 1)) !important; }
 .reports-view .reports-v3-losses { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
-.reports-view .reports-battle-losses .spy-report-entity-grid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+.reports-view .reports-battle-losses .spy-report-entity-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
 
 /* -------------------------------------------------------- empty states */
 .reports-view :is(.reports-empty-dossier, .reports-empty-folder) {
@@ -702,9 +701,10 @@
 }
 .reports-view .reports-profile-identity { min-width: 0; }
 .reports-view .reports-profile-avatar { display: grid; gap: 14px; }
-.reports-view .reports-profile-avatar__art { overflow: hidden; border-radius: var(--ut-r-card, 13px); background: var(--rm-tint); }
-.reports-view .reports-profile-avatar__art .faction-general-portrait { display: block; width: 100%; }
-.reports-view .reports-profile-avatar__art img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; }
+/* The general stands at full height on the panel itself: the portrait keeps a transparent backdrop (reports-profile-qa). */
+.reports-view .reports-profile-avatar__art { min-width: 0; }
+.reports-view .reports-profile-avatar__art .faction-general-portrait { width: 100%; aspect-ratio: 4 / 5; }
+.reports-view .reports-profile-avatar__art .faction-general-portrait img { inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: 50% 100%; transform: none; }
 .reports-view .reports-profile-avatar__caption { display: grid; gap: 4px; min-width: 0; }
 .reports-view .reports-profile-avatar__caption small { color: var(--rm-label); font-size: calc(12px * var(--text-scale-secondary, 1)) !important; }
 .reports-view .reports-profile-avatar__caption h3 {

@@ -216,11 +216,11 @@ export function AsterionHeader({
         >
           <img src={currentPlanet.art} alt="" draggable={false} />
           <span className="hdr-planet-select__copy">
-            <strong><span className="hdr-planet-select__name">{currentPlanet.name}</span><b aria-hidden="true">✓</b></strong>
+            <strong className="hdr-planet-select__name">{currentPlanet.name}</strong>
             <small>{currentPlanet.coords} · {planetIndex + 1} из {planets.length}</small>
           </span>
           <i className={planetMenuOpen ? 'is-open' : ''} aria-hidden="true" />
-          {planetMenuOpen ? null : <span className="hdr-tip hdr-planet-select__tip" aria-hidden="true">{currentPlanet.name}</span>}
+          {planetMenuOpen ? null : <span className="hdr-tip hdr-planet-select__tip" aria-hidden="true">{currentPlanet.name} · {currentPlanet.coords}</span>}
         </button>
 
         <div
