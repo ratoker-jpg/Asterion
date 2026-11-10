@@ -25,7 +25,7 @@ import { combatEfficiency, strategyOf, type NpcUtilityContext } from './npc-util
 import { npcSunAffordableForce, npcSunForce, npcSunForceQuality, npcSunPledgeFromPlanets } from './npc-endgame.ts';
 import { activeNpcSunPrep, NPC_SUN_PREP_BALANCE, npcSunPrepOfOwner } from './npc-sun-prep-state.ts';
 import { composeNpcSunOrder, describeSunExperience, describeSunOrder, npcOrderForceForPlanet } from './npc-sun-order.ts';
-import { crystalHolderOf, currentSunRaidState, launchNpcSunRaid, npcSunFlightGas, sunFleetPopulation, type SunRuntimeOptions } from './sun-raid.ts';
+import { crystalHolderOf, currentSunRaidState, launchNpcSunRaid, npcSunFlightGas, settleNpcRaidOrder, sunFleetPopulation, type SunRuntimeOptions } from './sun-raid.ts';
 
 /**
  * Plan «sun-raid-prep» (ADR stage F, scenario 7.в). The leader picks a Sun and
@@ -518,11 +518,13 @@ function declareChoice(profile: NpcProfile, plan: NpcSunRaidPrepPlan, at: number
     if (!launched.ok || !launched.raidId) return { state: current, started: false, reason: launched.ok ? 'no-raid' : launched.error, planetId: origin.planet.id };
     const topped = npcSunPledgeFromPlanets(launched.state, ownerId, launched.raidId, 1, key, options, limit - origin.population, exactOnly);
     const pledged = origin.population + topped.pledged;
+    // Exact slots the leader could not fill go to «любые» at once: nothing waits for hulls that stay home.
+    const settled = ordered ? settleNpcRaidOrder(topped.state, launched.raidId) : topped.state;
     journal({ at, ownerId, planId: own.planId, step: 'declared', detail: { raidId: launched.raidId, system: own.system, pledged: Math.round(pledged), promised: Math.round(npcSunPromised(own)),
       ...(ordered ? { order: describeSunOrder(ordered.order), offered: ordered.offered, filler: ordered.filler, exp: describeSunExperience(ordered.experience), expN: ordered.experience.battles } : { order: 'none' }) } });
     const rsvp: NpcSunRsvp = { ...(own.rsvps[ownerId] ?? { answer: 'yes', population: pledged, at }), pledged };
     const rsvps = allotRoles(own.rsvps, ownerId, pledged, caps.perSide, caps.participant);
-    return { state: replacePlan(topped.state, { ...own, phase: 'gathering', raidId: launched.raidId, rsvps: { ...rsvps, [ownerId]: rsvp } }),
+    return { state: replacePlan(settled, { ...own, phase: 'gathering', raidId: launched.raidId, rsvps: { ...rsvps, [ownerId]: rsvp } }),
       started: true, reason: null, planetId: origin.planet.id };
   } };
 }

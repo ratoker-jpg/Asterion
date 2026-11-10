@@ -4,7 +4,7 @@ import test from 'node:test';
 import { selectOwnerMembership } from '../domain/command/selectors.ts';
 import type { ShipId } from '../domain/combat/ids.ts';
 import { sunRaidCapsOf } from '../domain/sun-raid/config.ts';
-import { padSunOrder, type SunRaidOrder } from '../domain/sun-raid/order.ts';
+import { orderPopulation, padSunOrder, type SunRaidOrder } from '../domain/sun-raid/order.ts';
 import { replacePlanetState, type SaveState } from './contracts.ts';
 import { createInitialSaveState, createPersistenceFacade } from './persistence.ts';
 import { reconcileRuntime } from './reconcile.ts';
@@ -17,6 +17,7 @@ import {
   selectPlayerOrderRoom,
   selectRaidOrderFill,
   sendSunSupport,
+  settleNpcRaidOrder,
   testBot01RaidSun,
   testLaunchRaidNow,
 } from './sun-raid.ts';
@@ -117,4 +118,23 @@ test('a raid of an old save (no order) still accepts any combat hull', () => {
   assert.equal(selectPlayerOrderRoom(state, raid), null);
   state = ok(joinSunRaid(state, { raidId: raid.id, originPlanetId: 'helion-01', ships: { destroyer: 10 }, requestId: 'legacy-join' }, options(T0 + 1000))).state;
   assert.equal(ok(testLaunchRaidNow(state, raid.id, options(T0 + 2000))).state.flights.records.filter((flight) => flight.missionId === 'sun-attack').length, 2);
+});
+
+test('the exact slots of a bot launcher shrink to what it brought; the freed room joins «любые», the total stays', () => {
+  let state = armed(createInitialSaveState('test', T0), { battleship: 300, cruiser: 2000 });
+  const race = state.profile.factionId;
+  const { perSide } = sunRaidCapsOf(state);
+  const order: SunRaidOrder = { version: 1, preset: 'npc', slots: [
+    { kind: 'ship', factionId: race, entityId: 'battleship', count: 500 },
+    { kind: 'any', population: perSide - 500 * 15 },
+  ] };
+  state = ok(launchSunRaid(state, { galaxy: 1, system: 20, originPlanetId: 'helion-01', ships: { battleship: 200 }, requestId: 'settle-1', order }, options(T0))).state;
+  const settled = settleNpcRaidOrder(state, currentSunRaidState(state).raids[0]!.id);
+  const raid = currentSunRaidState(settled).raids[0]!;
+  assert.deepEqual(raid.order!.slots, [
+    { kind: 'ship', factionId: race, entityId: 'battleship', count: 200 },
+    { kind: 'any', population: perSide - 200 * 15 },
+  ]);
+  assert.equal(orderPopulation(raid.order), orderPopulation(order));
+  assert.equal(settleNpcRaidOrder(settled, raid.id), settled, 'nothing left to settle');
 });

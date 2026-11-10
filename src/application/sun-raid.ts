@@ -436,6 +436,32 @@ export function selectRaidOrderFill(state: SaveState, raid: SunRaidRecord): SunO
   return sunOrderFill(raid.order, flights.map(flightOrderPledge));
 }
 
+/**
+ * A bot launcher re-states its order right after its own pledge (same moment): exact slots shrink to what it
+ * actually brought and the freed population joins «любые», so no slot waits for hulls that will not come
+ * (gas or ships away). The total stays the same. A raid without an order or with no «любые» is left as it is.
+ */
+export function settleNpcRaidOrder(state: SaveState, raidId: string): SaveState {
+  const sunRaid = currentSunRaidState(state);
+  const raid = sunRaid.raids.find((item) => item.id === raidId);
+  if (!raid?.order || raid.status !== 'gathering') return state;
+  const fill = selectRaidOrderFill(state, raid);
+  let freed = 0;
+  const slots = raid.order.slots.flatMap((slot): SunRaidOrder['slots'] => {
+    if (slot.kind === 'any') return [slot];
+    const used = Math.min(slot.count, fill.get(`${slot.factionId}:${slot.entityId}`) ?? 0);
+    freed += (slot.count - used) * Math.max(1, Math.floor(getFactionCombatEntity(slot.factionId, slot.entityId).population ?? 1));
+    return used > 0 ? [{ ...slot, count: used }] : [];
+  });
+  if (freed <= 0) return state;
+  const any = slots.find((slot) => slot.kind === 'any');
+  const next = any
+    ? slots.map((slot) => (slot.kind === 'any' ? { ...slot, population: slot.population + freed } : slot))
+    : [...slots, { kind: 'any' as const, population: freed }];
+  const order = { ...raid.order, slots: next };
+  return withSunRaid(state, { ...sunRaid, raids: sunRaid.raids.map((item) => (item.id === raid.id ? { ...raid, order } : item)) });
+}
+
 /** What the player may still add to a raid's order from its race and levels (ship id → hulls; «любые» population). */
 export function selectPlayerOrderRoom(state: SaveState, raid: SunRaidRecord) {
   if (!raid.order) return null;
