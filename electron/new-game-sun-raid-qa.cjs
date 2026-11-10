@@ -164,8 +164,12 @@ async function testMode(win, label) {
   await click(win, '[data-qa-test="bot01-raid"]');
   await waitFor(win, `document.querySelector('[data-qa-sun-alert]')`);
   await capture(win, label, '10-test-incoming-sun-raid');
-  // «Поддержка солнца» is a Fleets mission: the panel opens «Флоты» with the Sun preselected.
+  // «Отправить защиту» opens the quick defence window for every planet; «Полный план» leads to
+  // «Флоты → Поддержка солнца» with the Sun preselected.
   await click(win, '[data-qa-sun-support]');
+  await waitFor(win, `document.querySelector('[data-qa-sun-defence] [data-qa-sun-defence-row]')`);
+  await capture(win, label, '10b-test-sun-defence-window');
+  await click(win, '[data-qa-sun-defence-details]');
   await waitFor(win, `document.querySelector('[data-qa-mission-id="sun-support"].is-on')`);
   const civil = await run(win, `[...document.querySelectorAll('[data-qa-fleet-roster] [data-qa-fleet-ship]')].map((row) => row.getAttribute('data-qa-fleet-ship')).filter((id) => ['spy-probe','colonizer','recycler','transporter','mega-transporter','solar-satellite'].includes(id))`);
   if (civil.length) throw new Error('Civil hulls offered for Sun support: ' + civil.join(', '));

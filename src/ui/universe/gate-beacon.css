@@ -1,0 +1,85 @@
+/* Gates under construction on the Universe map: a beacon on the host planet,
+   chips that jump to it from any system, a mark on the system rail. */
+
+.universe-radar .gate-beacon {
+  position: absolute; left: 50%; top: -30px; z-index: 4;
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  transform: translateX(-50%); pointer-events: none;
+}
+.universe-radar .gate-beacon img {
+  position: static !important; width: 34px !important; height: 34px !important; transform: none !important;
+  object-fit: contain; filter: drop-shadow(0 0 8px rgba(255, 196, 90, .7)) !important;
+  animation: gate-beacon-bob 2.4s ease-in-out infinite;
+}
+.universe-radar .gate-beacon b {
+  padding: 2px 7px; border-radius: 99px; white-space: nowrap;
+  background: rgba(40, 22, 6, .92); border: 1px solid rgba(255, 196, 90, .6);
+  color: #ffd890; font-size: 10px !important; font-weight: 800; font-variant-numeric: tabular-nums;
+}
+.universe-radar .gate-beacon--rival b { background: rgba(48, 8, 16, .92); border-color: rgba(255, 70, 96, .7); color: #ffc0c9; }
+/* The ring sits around the planet picture, under the chip. */
+.universe-radar .gate-beacon__pulse {
+  position: absolute; left: 50%; top: 30px; width: 96px; height: 96px; margin-left: -48px;
+  border-radius: 50%; border: 2px solid #ffc45a; box-shadow: 0 0 26px rgba(255, 196, 90, .55);
+  animation: gate-beacon-pulse 1.8s ease-out infinite;
+}
+.universe-radar .gate-beacon--rival .gate-beacon__pulse { border-color: #ff4660; box-shadow: 0 0 26px rgba(255, 70, 96, .6); }
+
+.universe-radar .universe-gates {
+  position: absolute; z-index: 21; left: 18px; bottom: 76px;
+  display: grid; gap: 6px; width: min(340px, calc(100% - 36px));
+}
+.universe-radar .universe-gates__item {
+  display: grid; grid-template-columns: 44px minmax(0, 1fr); align-items: center; gap: 10px;
+  padding: 6px 12px 6px 6px; border-radius: 14px; text-align: left; cursor: pointer;
+  border: 1px solid rgba(255, 196, 90, .45); background: rgba(24, 14, 4, .92); color: #f6e7cf;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .45);
+  animation: gate-chip-in 360ms var(--ut-ease-expo, ease-out) both; animation-delay: calc(var(--i, 0) * 60ms);
+  transition: border-color .15s ease, background .15s ease, transform 120ms ease;
+}
+.universe-radar .universe-gates__item.is-rival { border-color: rgba(255, 70, 96, .6); background: rgba(34, 6, 12, .92); }
+.universe-radar .universe-gates__item:hover { background: rgba(48, 26, 8, .95); }
+.universe-radar .universe-gates__item.is-rival:hover { background: rgba(58, 10, 20, .95); }
+.universe-radar .universe-gates__item:active { transform: scale(.98); }
+.universe-radar .universe-gates__item:focus-visible { outline: var(--ut-focus); outline-offset: 2px; }
+.universe-radar .universe-gates__item img { width: 44px; height: 44px; object-fit: contain; filter: drop-shadow(0 0 8px rgba(255, 196, 90, .5)); }
+.universe-radar .universe-gates__item span { display: grid; gap: 2px; min-width: 0; }
+.universe-radar .universe-gates__item b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px !important; font-weight: 800; }
+.universe-radar .universe-gates__item small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #d9c3a0; font-size: 11px !important; letter-spacing: 0; text-transform: none; font-weight: 600; font-variant-numeric: tabular-nums; }
+.universe-radar .universe-gates__item.is-rival small { color: #f3b8c1; }
+.universe-radar .universe-gates__item small em { font-style: normal; color: #fff; }
+.universe-radar .universe-gates__bar { display: block; height: 4px; border-radius: 99px; background: rgba(255, 255, 255, .1); overflow: hidden; }
+.universe-radar .universe-gates__bar i { display: block; height: 100%; background: linear-gradient(90deg, #ffc45a, #ff8a3a); transition: width .6s ease; }
+.universe-radar .universe-gates__item.is-rival .universe-gates__bar i { background: linear-gradient(90deg, #ff8a3a, #ff4660); }
+
+.workspace--universe .universe-radar .universe-radar__rail-item.has-gate { position: relative; color: #ffd890; }
+.workspace--universe .universe-radar .universe-radar__rail-item.has-gate::after {
+  content: ''; position: absolute; right: 6px; top: 50%; width: 7px; height: 7px; margin-top: -3.5px; border-radius: 50%;
+  background: #ffc45a; box-shadow: 0 0 8px #ffc45a; animation: gate-beacon-dot 1.6s ease-in-out infinite;
+}
+
+/* Atlas planet row: the Gate badge. */
+.star-atlas .star-atlas__gate { color: #ffd890 !important; font-weight: 800; font-size: inherit; }
+.star-atlas .star-atlas__gate.is-rival { color: #ff8a9b !important; }
+
+/* Sun quick menu: the same column as planets, warm tone. */
+.quick-pop.quick-pop--sun { z-index: 1200; }
+
+@keyframes gate-beacon-pulse { 0% { transform: scale(.85); opacity: .9; } 100% { transform: scale(1.35); opacity: 0; } }
+@keyframes gate-beacon-bob { 50% { transform: translateY(-3px); } }
+@keyframes gate-beacon-dot { 50% { opacity: .35; } }
+@keyframes gate-chip-in { from { opacity: 0; transform: translateX(-12px); } }
+@media (prefers-reduced-motion: reduce) {
+  .universe-radar .gate-beacon img, .universe-radar .gate-beacon__pulse, .universe-radar .universe-gates__item,
+  .workspace--universe .universe-radar .universe-radar__rail-item.has-gate::after { animation: none; }
+}
+
+/* Toast «К Солнцу ›» / «К цели ›»: one click to where it happened. */
+.runtime-toast .runtime-toast__go {
+  width: auto; height: 24px; padding: 0 10px; align-self: center;
+  border-color: rgba(255, 196, 90, .6); background: rgba(60, 34, 8, .85); color: #ffd890;
+  font-size: 11px; font-weight: 800; letter-spacing: .03em; white-space: nowrap;
+  transition: background .15s ease, transform 120ms ease;
+}
+.runtime-toast .runtime-toast__go:hover, .runtime-toast .runtime-toast__go:focus-visible { background: rgba(90, 52, 12, .95); color: #fff; }
+.runtime-toast .runtime-toast__go:active { transform: scale(.96); }

@@ -110,7 +110,8 @@ export type SunActionResult =
   | { ok: true; state: SaveState; notice: string; raidId?: string; flightId?: string }
   | { ok: false; state: SaveState; error: string; code?: SunFailureCode };
 
-export type SunRaidNotice = { tone: 'info' | 'success' | 'error'; text: string; galaxy?: number; system?: number };
+/** `gateId`: the notice is about that Gate (the toast offers a jump to its planet). */
+export type SunRaidNotice = { tone: 'info' | 'success' | 'error'; text: string; galaxy?: number; system?: number; gateId?: string };
 
 const SUN_RAID_RECORD_LIMIT = 200;
 const ACTIVE_PHASES = new Set<FlightRecord['phase']>(['outbound', 'arrived', 'returning']);
@@ -1427,7 +1428,7 @@ function reconcileGates(state: SaveState, now: number, notices: SunRaidNotice[])
         if (host) {
           next = { ...next, hostOwnerId: host.ownerId, hostOwnerName: host.ownerName, hostPlanetId: host.planetId, hostPlanetName: host.planetName };
           events.push({ id: `${gate.id}:transfer:${host.ownerId}:${now}`, at: now, kind: 'gate-transferred', text: `Стройка Врат перенесена на ${host.planetName} (${host.ownerName}).` });
-          notices.push({ tone: 'info', text: `Врата ${gate.holderName}: стройка перенесена новому главе ${host.ownerName}.` });
+          notices.push({ tone: 'info', gateId: gate.id, text: `Врата ${gate.holderName}: стройка перенесена новому главе ${host.ownerName}.` });
           changed = true;
         }
       }
@@ -1442,7 +1443,7 @@ function reconcileGates(state: SaveState, now: number, notices: SunRaidNotice[])
         events.push({ id: `${gate.id}:m${milestone}`, at: Math.round(gate.startedAt + (gate.completesAt - gate.startedAt) * milestone / 100), kind: 'gate-progress', text: `Врата ${gate.holderName}: построено ${milestone}%.` });
       }
       const last = reached.at(-1)!;
-      notices.push({ tone: 'info', text: last === 0 ? `${gate.holderName} начал строить Врата на ${where}.` : `Врата ${gate.holderName} на ${where}: ${last}%.` });
+      notices.push({ tone: 'info', gateId: gate.id, text: last === 0 ? `${gate.holderName} начал строить Врата на ${where}.` : `Врата ${gate.holderName} на ${where}: ${last}%.` });
       next = { ...next, announcedMilestones: [...next.announcedMilestones, ...reached] };
       changed = true;
     }
