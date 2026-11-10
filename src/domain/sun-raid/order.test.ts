@@ -76,6 +76,8 @@ test('presets: balanced over two races, exactly the cap; stored orders survive m
 test('hull value per population counts the level: a level-10 hull outweighs the same hull at level 0', () => {
   assert.ok(hullValuePerPopulation('aegis', 'destroyer', 10) > 2 * hullValuePerPopulation('aegis', 'destroyer', 0));
   assert.ok(hullValuePerPopulation('veyra', 'scout', 0) < hullValuePerPopulation('aegis', 'battleship', 0));
+  // A special-bonus donor (Aegis Защитник) is worth more than its own guns and life.
+  assert.ok(hullValuePerPopulation('aegis', 'defender', 0) > 1.1 * hullValuePerPopulation('aegis', 'cruiser', 0));
 });
 
 function side(rows: SunBattleSide['rows']): SunBattleSide {

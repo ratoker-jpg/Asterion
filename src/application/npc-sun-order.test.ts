@@ -86,6 +86,8 @@ test('a bot launcher orders its members\' best upgraded hulls, leaves level-0 fi
   assert.ok(ships.length > 0);
   assert.ok(ships.every((slot) => slot.kind === 'ship' && slot.entityId !== 'scout'), `no scouts ordered: ${JSON.stringify(ships)}`);
   assert.ok(ships.every((slot) => slot.kind === 'ship' && (slot.minLevel ?? 0) >= 8), 'only the upgraded hulls get exact slots');
+  assert.ok(ships.every((slot) => slot.kind === 'ship' && ['battleship', 'destroyer', 'bomber', 'death-star'].includes(slot.entityId)), 'exact slots: battleship class and bigger');
+  assert.ok(chosen.order.slots.some((slot) => slot.kind === 'any'), 'smaller hulls go to «любые»');
   assert.deepEqual(composeNpcSunOrder(state, plan(state, team), caps), chosen, 'deterministic');
 
   // Experience: a logged win of destroyers against the expected defence makes them weigh more.

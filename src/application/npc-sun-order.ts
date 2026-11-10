@@ -6,6 +6,7 @@ import { SUN_RAID_CONFIG } from '../domain/sun-raid/config.ts';
 import { expectedSunDefence, sunExperience, type SunExperience } from '../domain/sun-raid/battle-log.ts';
 import {
   hullValuePerPopulation,
+  SUN_EXACT_SLOT_HULLS,
   SUN_ORDER_MAX_SLOTS,
   sunOrderRoomFor,
   validateSunRaidOrder,
@@ -106,9 +107,10 @@ export function composeNpcSunOrder(state: SaveState, plan: NpcSunRaidPrepPlan, c
   const floor = NPC_SUN_ORDER_BALANCE.fillerFloor * weightedMedian(offers);
   const quality = offers.filter((offer) => offer.value >= floor);
   const filler = offers.filter((offer) => offer.value < floor).reduce((sum, offer) => sum + offer.population, 0);
-  // One slot per race + hull: hulls of the members who offer it, the lowest of their levels.
+  // One slot per race + hull, battleship class and bigger only: hulls of the members who offer it, the lowest
+  // of their levels. Smaller hulls (and filler) are left to «любые», where members bring their best.
   const slots = new Map<string, { slot: SunRaidOrderShipSlot; value: number; unit: number }>();
-  for (let offer of quality) {
+  for (let offer of quality.filter((item) => SUN_EXACT_SLOT_HULLS.has(item.entityId))) {
     const key = `${offer.factionId}:${offer.entityId}`;
     const known = slots.get(key);
     const unit = offer.population / offer.count;
@@ -150,10 +152,10 @@ export function composeNpcSunOrder(state: SaveState, plan: NpcSunRaidPrepPlan, c
 }
 
 /** What one planet of the leader sends with the call: the strongest part of it its exact slots accept («любые» stays for the members). */
-export function npcOrderForceForPlanet(state: SaveState, ownerId: string, planet: SpyTargetState, room: number, order: SunRaidOrder): Partial<Record<ShipId, number>> {
+export function npcOrderForceForPlanet(state: SaveState, ownerId: string, planet: SpyTargetState, room: number, order: SunRaidOrder, exactOnly = true): Partial<Record<ShipId, number>> {
   const levels = npcShipLevels(state, ownerId);
   const { hulls } = npcSunComposePool(state, ownerId, [planet], room);
-  const counts = npcOrderedCounts(hulls, room, order, sunOrderRoomFor(order, new Map(), planet.raceId as CombatFactionId, levels), levels, true);
+  const counts = npcOrderedCounts(hulls, room, order, sunOrderRoomFor(order, new Map(), planet.raceId as CombatFactionId, levels), levels, exactOnly);
   const ships: Partial<Record<ShipId, number>> = {};
   for (const hull of hulls) {
     const count = counts.get(hull.key) ?? 0;

@@ -234,12 +234,28 @@ export function hullLevelMultiplier(entityId: string, level: number): number {
   return 1 + coefficient * Math.max(0, Math.floor(level));
 }
 
-/** Square-law strength per population of one hull at a level: what a slot of it is worth. */
+/**
+ * Hulls a bot launcher gives exact slots: battleship class and bigger (coordinator decision 10.11.2026,
+ * bot lab: orders of upgraded scouts and cruisers lost more often). Smaller hulls go into «любые».
+ */
+export const SUN_EXACT_SLOT_HULLS: ReadonlySet<string> = new Set(['battleship', 'destroyer', 'bomber', 'death-star']);
+
+/** A special-bonus donor (Защитник, Линкор, Разрушитель / Голиаф...) lifts its whole side: worth this much more per population. */
+export const SUN_DONOR_ROLE_WEIGHT = 1.15;
+
+/** Role weight of a hull in a Sun battle: special-bonus donors count more than their own guns and life. */
+export function hullRoleMultiplier(factionId: CombatFactionId, entityId: string): number {
+  if (isCommanderEntity(entityId)) return 1;
+  const entity = getFactionCombatEntity(factionId, entityId as SunOrderEntityId) as { specialBonus?: unknown };
+  return entity.specialBonus ? SUN_DONOR_ROLE_WEIGHT : 1;
+}
+
+/** Square-law strength per population of one hull at a level, weighted by its role: what a slot of it is worth. */
 export function hullValuePerPopulation(factionId: CombatFactionId, entityId: SunOrderEntityId, level: number): number {
   const entity = getFactionCombatEntity(factionId, entityId);
   const combat = (entity as { combat?: { attack: number; life: number } }).combat;
   if (!combat) return 0;
-  const multiplier = hullLevelMultiplier(entityId, level);
+  const multiplier = hullLevelMultiplier(entityId, level) * hullRoleMultiplier(factionId, entityId);
   return Math.sqrt(Math.max(0, combat.attack) * Math.max(0, combat.life)) * multiplier / entityPopulation(factionId, entityId);
 }
 

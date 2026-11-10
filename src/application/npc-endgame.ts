@@ -13,7 +13,7 @@ import { utilityToWeight } from '../domain/npc/utility.ts';
 import { selectAllianceRelations } from '../domain/command/diplomacy.ts';
 import { strategyOf, type NpcUtilityContext } from './npc-utility.ts';
 import { activeNpcSunPrep } from './npc-sun-prep-state.ts';
-import { hullLevelMultiplier, sunOrderRoomFor, type SunRaidOrder } from '../domain/sun-raid/order.ts';
+import { hullLevelMultiplier, hullRoleMultiplier, sunOrderRoomFor, type SunRaidOrder } from '../domain/sun-raid/order.ts';
 import type { SunRaidRecord } from '../domain/sun-raid/types.ts';
 import {
   crystalHolderOf,
@@ -71,7 +71,8 @@ function planetRaidHulls(state: SaveState, ownerId: string, planetId: string, ra
     const id = entity.id as ShipId;
     if (entity.category !== 'Боевой корабль' || CIVIL_SHIPS.has(id) || !entity.combat) continue;
     const count = Math.floor((free[id] ?? 0) * share);
-    const multiplier = hullLevelMultiplier(id, levels[id] ?? 0) * (value?.[id] ?? 1);
+    // Level, role (special-bonus donors) and the Sun battle experience.
+    const multiplier = hullLevelMultiplier(id, levels[id] ?? 0) * hullRoleMultiplier(raceId as never, id) * (value?.[id] ?? 1);
     if (count > 0) hulls.push({ key: `${planetId}|${id}`, population: entity.population, attack: entity.combat.attack * multiplier, life: entity.combat.life * multiplier, count });
   }
   return hulls;
