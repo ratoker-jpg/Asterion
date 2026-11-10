@@ -136,8 +136,8 @@
 .resource-zone-view .resource-zone-selector-tile.blocked > img { opacity: .34; filter: grayscale(.8); }
 .resource-zone-view .resource-zone-selector-level {
   position: absolute;
-  left: 6px;
-  bottom: 6px;
+  right: 5px;
+  top: 5px;
   padding: 1px 5px;
   border-radius: 6px;
   background: rgba(3, 8, 11, .72);
@@ -767,10 +767,11 @@
   gap: 6px;
   padding: 12px 14px;
   border-radius: var(--ut-r-card, 13px);
-  background: rgba(240, 68, 94, .09);
+  background: var(--pz-tint);
 }
+.resource-building-dialog .resource-building-requirements:has(.missing) { background: rgba(240, 68, 94, .09); }
 .resource-building-dialog .resource-building-requirements > small {
-  color: #ffb3a8;
+  color: var(--pz-label);
   font-size: calc(12px * var(--text-scale-secondary, 1)) !important;
   font-weight: 700;
 }
@@ -1117,6 +1118,8 @@
 .planet-orbit .planet-orbit__name small,
 .planet-orbit .planet-orbit__kicker {
   display: block;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--pz-label);
   font-size: calc(12px * var(--text-scale-secondary, 1)) !important;
   font-weight: 700;
@@ -1126,16 +1129,19 @@
   margin: 4px 0 0;
   overflow: hidden;
   color: #fff;
-  font-size: calc(32px * var(--text-scale-page-title, 1)) !important;
+  font-size: calc(26px * var(--text-scale-page-title, 1)) !important;
   font-weight: 800;
-  line-height: 1.1;
+  line-height: 1.15;
   letter-spacing: 0;
+  text-transform: none;
   overflow-wrap: anywhere;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
 }
 .planet-orbit .planet-orbit__name p {
   margin: 6px 0 0;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--pz-label);
   font-size: calc(13px * var(--text-scale-body, 1)) !important;
 }
@@ -1438,3 +1444,4 @@
 .planet-editor-skins-title-v5{display:flex;align-items:end;justify-content:space-between;margin:8px 18px 0;padding:0 2px 8px;border-bottom:1px solid rgba(71,185,213,.14)}
 .planet-editor-skins-title-v5 strong{color:#cceff6;font-size:10px;letter-spacing:1.4px}.planet-editor-skins-title-v5 small{color:#5d8490;font-size:8px}
 .planet-editor-modal-v5 .skin-picker-grid{overflow:auto;padding-top:12px}
+.resource-building-dialog .resource-building-requirements:has(.missing) > small { color: #ffb3a8; }

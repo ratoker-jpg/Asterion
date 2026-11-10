@@ -569,7 +569,7 @@ export function ZoneView({
 
       <aside className="resource-zone-queue">
         <header className="resource-zone-panel-title">
-          <div><strong>Очередь строительства</strong><small>Общая для всех зон</small></div>
+          <div><strong>Очередь стройки</strong><small>Общая для всех зон</small></div>
           <span>{queue.length} / {BUILDING_QUEUE_CAPACITY}</span>
         </header>
 
