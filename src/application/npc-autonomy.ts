@@ -31,6 +31,7 @@ import { beginFlightReturn } from '../domain/flights/runtime.ts';
 import { getNpcPirateCandidates, dispatchNpcPirateMission } from './npc-pirates.ts';
 import { getNpcEndgameChoices } from './npc-endgame.ts';
 import { getNpcPlanChoices, journalNpcRevengeFunnel, refreshNpcPlans, scheduleNpcPlanCheck } from './npc-plans.ts';
+import { getNpcWarChoices, refreshNpcWars, scheduleNpcWarCheck } from './npc-war.ts';
 import { getNpcSunPrepChoices, npcSunPrepSavesGas, refreshNpcSunPrep, scheduleNpcSunPrepCheck } from './npc-sun-prep.ts';
 import { getNpcPactChoices, npcPactForbidsAttack, refreshNpcPacts } from './npc-pacts.ts';
 import { npcReactionDrives } from './npc-pact-state.ts';
@@ -216,6 +217,8 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
   state = refreshNpcSunPrep(state, profile, utility, at, timeScale);
   // Agreements with other owners: answers, what was agreed, a new ask.
   state = refreshNpcPacts(state, profile, utility, at, timeScale);
+  // Revenge wars (owner decision 09.11.2026): answers to a call, the war's rounds and its end.
+  state = refreshNpcWars(state, profile, utility, at);
   // Concept U: estimated benefit − cost − risk + goal, plus this owner's seeded misjudgement.
   const scored = (candidateId: string, estimate: number) => utilityToWeight(estimate + estimationError(profile, eventId, candidateId));
   const missionUtility = (mission: { id: string; kind: string; payload: Readonly<Record<string, string | number | boolean | null>> }): number => {
@@ -593,8 +596,11 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
   // Strategic plans: their next steps, and a new plan when one is worth committing to.
   for (const choice of getNpcPlanChoices(state, profile, utility, at, timeScale, missions, scored)) choices.push(choice);
   for (const choice of getNpcPactChoices(state, profile, at, timeScale, utility, missions)) choices.push(choice);
+  const warChoices = getNpcWarChoices(state, profile, utility, at, timeScale, missions, scored);
+  for (const choice of warChoices) choices.push(choice);
   for (const choice of getNpcFortifyChoices(state, profile, utility, at, timeScale, fortifyInputs, scored)) choices.push(choice);
   state = scheduleNpcPlanCheck(state, ownerId, at, timeScale);
+  if (!warChoices.some((choice) => choice.candidate.id.startsWith('war:declare:'))) state = scheduleNpcWarCheck(state, ownerId, at);
   // Attacks held back for want of fresh intel: their targets are worth another look before anything else.
   for (const mission of missions) {
     if (mission.kind !== 'attack') continue;

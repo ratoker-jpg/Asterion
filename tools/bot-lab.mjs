@@ -9,7 +9,7 @@
 //   node --max-old-space-size=8192 --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs \
 //     tools/bot-lab.mjs [--days=2] [--bots=15] [--fixture=F | --write-fixture=F] [--out=DIR]
 //   ... tools/bot-lab.mjs --save=SAVE.json --hours=6 --owners=npc-gen-32[,..] [--out=DIR]
-//   ... tools/bot-lab.mjs --seed=3 [--scenario=seven-planets|familiar-solos|conflict|sun-raids] ...   (another lab galaxy; see bot-lab-batch.mjs)
+//   ... tools/bot-lab.mjs --seed=3 [--scenario=seven-planets|familiar-solos|conflict|aggressor|sun-raids] ...   (another lab galaxy; see bot-lab-batch.mjs)
 //   ... tools/bot-lab.mjs --policy=FILE.json ...   (stage H: the whole run under another strategy policy; see tools/league.mjs)
 //
 // A fresh campaign draws ids from crypto entropy: before/after comparisons run
@@ -194,6 +194,26 @@ export function applySunRaidsScenario(initial) {
  * `conflict`: three pairs. One regards the other well but is not regarded back;
  * one's partner counts the target as a friend; the third is a control pair.
  */
+/**
+ * `aggressor`: the first owner has razed and robbed six others (a real grudge on each: several attacks, damage worth many days of
+ * income, fresh), all in one points band. It asks for revenge wars: what do the hurt ones do together?
+ */
+export function applyAggressorScenario(state) {
+  const owners = Object.keys(state.npc.profiles).sort();
+  const at = state.npcReplay.processedThroughAt;
+  const [offender, ...rest] = owners;
+  const hurt = rest.slice(0, 6);
+  const profiles = { ...state.npc.profiles };
+  const unrecovered = { ...state.rating.unrecoveredCostsByOwnerId };
+  hurt.forEach((ownerId, index) => {
+    profiles[ownerId] = { ...profiles[ownerId], grudges: { ...(profiles[ownerId].grudges ?? {}),
+      [offender]: { attacks: 6, damage: 5_000_000_000, firstAt: at - 6 * HOUR, lastAt: at - index * HOUR, lastReportId: `lab-aggressor-${index}` } } };
+  });
+  for (const ownerId of [offender, ...hurt]) unrecovered[ownerId] = { metal: 400_000_000, minerals: 0, gas: 0 };
+  log(`scenario aggressor: ${offender} against ${hurt.length} hurt owners`);
+  return { ...state, npc: { ...state.npc, profiles }, rating: { ...state.rating, unrecoveredCostsByOwnerId: unrecovered } };
+}
+
 export function applySocialScenario(state, scenario) {
   const targets = { ...state.espionage.targets };
   const owners = Object.keys(state.npc.profiles).sort();
@@ -583,6 +603,19 @@ export function describeWorld(state, journal = [], tally = null, sunTally = null
     relationEdges: Object.values(state.npcStrategy?.relations ?? {}).reduce((total, edges) => total + edges.length, 0),
     strategyBytes: JSON.stringify(state.npcStrategy ?? null).length,
   };
+  // Revenge wars (npc-war.ts): the journal's `war` entries.
+  const warEntries = journal.filter((entry) => entry.k === 'war');
+  const warEvents = (name) => warEntries.filter((entry) => entry.d?.ev === name);
+  const warEnded = warEvents('ended');
+  const war = {
+    declared: warEvents('declared').length, joined: warEvents('answer').filter((entry) => entry.d?.a === 'accepted' || entry.d?.a === 'volunteered').length,
+    declinedCall: warEvents('answer').filter((entry) => entry.d?.a === 'declined' || entry.d?.a === 'expired').length,
+    waves: warEvents('wave').length, rounds: warEvents('round').length, stages: warEvents('stage').length, skips: warEvents('skip').length,
+    ended: warEnded.length, razed: sum(warEnded.map((entry) => entry.d?.razed ?? 0)),
+    endedBy: warEnded.reduce((counts, entry) => ({ ...counts, [entry.d?.why]: (counts[entry.d?.why] ?? 0) + 1 }), {}),
+    refused: warEvents('refused').reduce((counts, entry) => ({ ...counts, [entry.d?.why]: (counts[entry.d?.why] ?? 0) + 1 }), {}),
+    active: (state.npcStrategy?.wars ?? []).filter((item) => item.status === 'active').length,
+  };
   const activePlans = Object.values(state.npcStrategy?.plans ?? {}).flat().filter((plan) => plan.template === 'strike' && plan.status === 'active');
   return {
     worldAt: new Date(state.npcReplay?.processedThroughAt ?? 0).toISOString(), owners: owners.length,
@@ -630,6 +663,7 @@ export function describeWorld(state, journal = [], tally = null, sunTally = null
       raidGain: Math.round(sum(attacks.map((entry) => entry.d?.gain ?? 0))), raidLoss: Math.round(sum(attacks.map((entry) => entry.d?.loss ?? 0))),
       defences: defences.length, defenceLoss: Math.round(sum(defences.map((entry) => entry.d?.loss ?? 0))) },
     social,
+    war,
     bottomThirdPoints: Math.round(sum(ascending.slice(0, third)) / third),
     diversity: describeDiversity(journal, owners),
     styleChanges: styles.length, styles: Object.entries(styles.reduce((counts, entry) => ({ ...counts, [entry.s]: (counts[entry.s] ?? 0) + 1 }), {})),
@@ -689,6 +723,7 @@ function main() {
     : createLabWorld(Number(option('bots', '15')), option('seed') ? `BOTLAB-${option('seed')}` : 'BOTLAB2026');
   if (option('scenario') === 'seven-planets' && !save && !option('fixture')) state = applySevenPlanetsScenario(state);
   if (['familiar-solos', 'conflict'].includes(option('scenario')) && !save && !option('fixture')) state = applySocialScenario(state, option('scenario'));
+  if (option('scenario') === 'aggressor' && !save && !option('fixture')) state = applyAggressorScenario(state);
   if (option('scenario') === 'sun-raids' && !save && !option('fixture')) state = applySunRaidsScenario(state);
   if (option('write-fixture')) fs.writeFileSync(option('write-fixture'), serializeSaveForStorage(state, 'production'));
   const at0 = state.npcReplay.processedThroughAt;
