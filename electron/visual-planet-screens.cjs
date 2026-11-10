@@ -234,13 +234,21 @@ async function runViewport(win, directory, max, race) {
   metrics.dialogClipped = await clippedText(win, '.resource-building-dialog');
   if (metrics.dialogClipped.length) fail('Dialog text is cut off', metrics.dialogClipped);
   await capture(win, directory, `${prefix}-04-dialog-cannot-afford`);
-  await click(win, '[data-qa-building-details-toggle]');
-  await capture(win, directory, `${prefix}-05-dialog-details`);
+  if (await win.webContents.executeJavaScript(`Boolean(document.querySelector('[data-qa-building-details-toggle]'))`)) {
+    await click(win, '[data-qa-building-details-toggle]');
+    await capture(win, directory, `${prefix}-05-dialog-details`);
+  }
   await click(win, '[data-qa-destroy-building]');
   await waitFor(win, `document.querySelector('[data-qa-action-confirm]')`);
   await settle(win, 300);
   await capture(win, directory, `${prefix}-06-demolish-confirm`);
   await click(win, '[data-qa-action-confirm-no]');
+  await closeDialog(win);
+
+  // A requirement that is already met is not listed.
+  await openDialog(win, 'metal-production-2');
+  metrics.metRequirementShown = await win.webContents.executeJavaScript(`Boolean(document.querySelector('[data-qa-requirements] .met'))`);
+  if (metrics.metRequirementShown) fail('A met requirement is still listed', true);
   await closeDialog(win);
 
   // 3. An empty new colony (its second gas well shows the requirements block).

@@ -12,9 +12,7 @@ import {
   getBuildingDefinition,
   getBuildingEffect,
   getBuildingEffectWithScience,
-  getScienceIncomeBonusPercent,
   getBuildingsForZone,
-  getConstructionTimeFactor,
   type BuildingDefinition,
   type BuildingEconomyState,
   type BuildingLevels,
@@ -24,13 +22,9 @@ import {
   type ResourceWallet,
   type ScienceLevels,
 } from './domain/buildings/resource-zone.ts';
-import { getBuildingEnergyBaseContribution } from './domain/energy/balance-adapter.ts';
 import {
   calculateNuclearReactorContribution,
   calculateSolarStationContribution,
-  getPhysicsMultiplier,
-  getPositionMultiplier,
-  getSunMultiplier,
   type EnergyLedger,
 } from './domain/energy/runtime.ts';
 import type { PlanetEnergyCoordinates } from './application/energy.ts';
@@ -97,6 +91,11 @@ function formatDurationLabel(ms: number | null) {
   return `${seconds} сек`;
 }
 
+/**
+ * What the player reads in «Что даст улучшение»: one plain line per level, no
+ * formula. Energy shows the total, the next level adds «(+N)»; mines show the
+ * hourly output with science and robots already included.
+ */
 function playerEffectForLevel(
   role: BuildingRole,
   level: number,
@@ -108,51 +107,27 @@ function playerEffectForLevel(
   const effect = getBuildingEffect(role, level);
   if ((role === 'basic-energy' || role === 'advanced-energy') && level > 0) {
     const physicsLevel = scienceLevels[1] ?? 0;
-    const base = getBuildingEnergyBaseContribution(role, level);
     const value = role === 'basic-energy'
       ? calculateSolarStationContribution(level, physicsLevel, energyCoordinates.system, energyCoordinates.position, energyCoordinates.galaxy)
       : calculateNuclearReactorContribution(level, physicsLevel);
-    const factors = [
-      `Основа ${formatNumber(base)}`,
-      `Физика ×${getPhysicsMultiplier(physicsLevel).toFixed(2)}`,
-      ...(role === 'basic-energy'
-        ? [`Солнце ×${getSunMultiplier(energyCoordinates.system, energyCoordinates.galaxy).toFixed(2)}`, `Позиция ×${getPositionMultiplier(energyCoordinates.position).toFixed(2)}`]
-        : []),
-    ];
     return {
       primary: energyComparisonValue == null
-        ? `Итого ${formatNumber(value)}`
-        : `Прибавка +${formatNumber(value - energyComparisonValue)}`,
-      secondary: factors.join(' · '),
+        ? `Энергия: ${formatNumber(value)}`
+        : `Энергия: ${formatNumber(value)} (+${formatNumber(value - energyComparisonValue)})`,
       value,
       energy: true,
     };
   }
   const scienceEffect = getBuildingEffectWithScience(role, level, scienceLevels);
-  if (scienceEffect.kind !== 'resource-income' && scienceEffect.kind !== 'energy-income') {
-    return { primary: formatBalanceEffect(effect), secondary: null, value: null, energy: false };
+  if (scienceEffect.kind !== 'resource-income') {
+    return { primary: formatBalanceEffect(scienceEffect.kind === 'energy-income' ? scienceEffect : effect), value: null, energy: false };
   }
-
-  const scienceBonusPercent = scienceEffect.kind === 'resource-income'
-    ? getScienceIncomeBonusPercent(scienceLevels, 3)
-    : getScienceIncomeBonusPercent(scienceLevels, 1);
-  const productionBotBonusPercent = scienceEffect.kind === 'resource-income'
-    ? getProductionBotBonusPercent(productionBots, scienceEffect.resource)
-    : 0;
-  const boostedEffect = {
-    ...scienceEffect,
-    amountPerHour: Math.round(scienceEffect.amountPerHour * (1 + productionBotBonusPercent / 100)),
-  };
-  const bonusParts = [
-    scienceBonusPercent > 0 ? `${scienceEffect.kind === 'resource-income' ? 'Математика' : 'Физика'} +${scienceBonusPercent}%` : null,
-    productionBotBonusPercent > 0 ? `Производственные боты +${productionBotBonusPercent}%` : null,
-  ].filter((part): part is string => Boolean(part));
+  const productionBotBonusPercent = getProductionBotBonusPercent(productionBots, scienceEffect.resource);
   return {
-    primary: formatBalanceEffect(boostedEffect),
-    // «Добыча металла: +94 600/ч» → «Основа +94 600/ч»: the effect name is already in the primary line.
-    secondary: bonusParts.length > 0
-      ? `Основа ${formatBalanceEffect(effect).replace(/^[^:]+:\s*/, '')} · ${bonusParts.join(' · ')}`
-      : null,
+    primary: formatBalanceEffect({
+      ...scienceEffect,
+      amountPerHour: Math.round(scienceEffect.amountPerHour * (1 + productionBotBonusPercent / 100)),
+    }),
     value: null,
     energy: false,
   };
@@ -272,7 +247,6 @@ export function ZoneView({
   const [pendingAction, setPendingAction] = useState<PendingBuildingAction | null>(null);
   const [quickQueuedRole, setQuickQueuedRole] = useState<BuildingRole | null>(null);
   const [tileTip, setTileTip] = useState<TileTip | null>(null);
-  const [detailsOpen, setDetailsOpen] = useState(false);
   const summaryRef = useRef<HTMLElement>(null);
   const confirmYesRef = useRef<HTMLButtonElement>(null);
   const confirmNoRef = useRef<HTMLButtonElement>(null);
@@ -281,8 +255,8 @@ export function ZoneView({
   const canEnterSelected = selectedRole
     ? canEnterBuildingInterior(selectedRole, buildings[selectedRole])
     : false;
-  const constructionFactor = getConstructionTimeFactor(buildings.construction);
-  const constructionBonusPercent = Math.round((1 - constructionFactor) * 100);
+  // Only the unmet requirements are shown: a met one is noise.
+  const missingRequirements = availability ? availability.requirements.filter((requirement) => !requirement.met) : [];
   const currentEffect = selectedRole && availability
     ? playerEffectForLevel(selectedRole, availability.currentLevel, productionBotAssignment, scienceLevels, energyCoordinates)
     : null;
@@ -295,9 +269,6 @@ export function ZoneView({
       energyCoordinates,
       currentEffect?.energy && currentEffect.value != null ? currentEffect.value : null,
     )
-    : null;
-  const energyUpgradeDelta = currentEffect?.energy && nextEffect?.energy && currentEffect.value != null && nextEffect.value != null
-    ? nextEffect.value - currentEffect.value
     : null;
   const levelProgress = availability && availability.maxLevel > 0
     ? Math.min(availability.maxLevel, Math.max(0, availability.currentLevel))
@@ -356,7 +327,6 @@ export function ZoneView({
     if (onBuild(selectedRole)) onSelectedRoleChange(null);
   };
 
-  useEffect(() => setDetailsOpen(false), [selectedRole]);
 
   const showTileTip = (role: BuildingRole, kind: TileTip['kind'], target: HTMLElement) => {
     const anchor = target.getBoundingClientRect();
@@ -715,10 +685,10 @@ export function ZoneView({
               </div>
             ) : (
               <>
-                {availability.requirements.length > 0 ? (
+                {missingRequirements.length > 0 ? (
                   <div className="resource-building-requirements" data-qa-requirements>
                     <small>Сначала нужно</small>
-                    {availability.requirements.map((requirement) => (
+                    {missingRequirements.map((requirement) => (
                       <div key={`${requirement.kind}-${requirement.label}`} className={requirement.met ? 'met' : 'missing'}>
                         <strong>{localizeBuildingNames(requirement.label, factionId)} — ур. {requirement.requiredLevel}</strong>
                         <span>сейчас {requirement.currentLevel}</span>
@@ -730,21 +700,11 @@ export function ZoneView({
                 <section className="resource-building-effect" data-qa-building-effect aria-label="Что даст улучшение">
                   <div className="resource-building-section-head">
                     <small>Что даст улучшение</small>
-                    <button
-                      type="button"
-                      className="resource-building-details-toggle"
-                      data-qa-building-details-toggle
-                      aria-expanded={detailsOpen}
-                      onClick={() => setDetailsOpen((open) => !open)}
-                    >
-                      {detailsOpen ? 'Скрыть расчёт' : 'Показать расчёт'}
-                    </button>
                   </div>
                   <div className="resource-building-effect-grid">
                     <div className="resource-building-effect-card current" data-qa-building-effect-current>
                       <small>Сейчас · ур. {availability.currentLevel}</small>
                       <strong>{currentEffect?.primary}</strong>
-                      {currentEffect?.secondary ? <span hidden={!detailsOpen}>{currentEffect.secondary}</span> : null}
                     </div>
                     {availability.nextLevel != null ? (
                       <>
@@ -752,8 +712,6 @@ export function ZoneView({
                         <div className="resource-building-effect-card next" data-qa-building-effect-next>
                           <small>После · ур. {availability.nextLevel}</small>
                           <strong>{nextEffect?.primary}</strong>
-                          {nextEffect?.secondary ? <span hidden={!detailsOpen}>{nextEffect.secondary}</span> : null}
-                          {energyUpgradeDelta != null ? <em data-qa-energy-upgrade-delta>ПРИБАВКА +{formatNumber(energyUpgradeDelta)}</em> : null}
                         </div>
                       </>
                     ) : null}
@@ -782,13 +740,6 @@ export function ZoneView({
                       </div>
                     ))}
                   </div>
-                  <p className="resource-building-time-breakdown" hidden={!detailsOpen}>
-                    Время без бонусов <b data-qa-building-time-raw>{formatDurationLabel(availability.rawTimeMs)}</b>
-                    {' · '}{getBuildingDefinition('construction', factionId).name}{' '}
-                    <b className={constructionBonusPercent > 0 ? 'bonus' : ''} data-qa-building-time-bonus>
-                      {constructionBonusPercent > 0 ? `−${constructionBonusPercent}%` : 'нет'}
-                    </b>
-                  </p>
                 </section>
 
                 <div className={`resource-building-availability ${availability.status}`} data-qa-build-status={availability.status} role="status">

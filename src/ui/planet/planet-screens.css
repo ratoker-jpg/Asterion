@@ -810,18 +810,6 @@
   font-size: calc(12px * var(--text-scale-section-title, 1)) !important;
   font-weight: 700;
 }
-.resource-building-dialog .resource-building-details-toggle {
-  padding: 2px 0;
-  border: 0;
-  background: none;
-  color: var(--pz-accent);
-  font-family: inherit;
-  font-size: calc(12px * var(--text-scale-control, 1)) !important;
-  font-weight: 700;
-  cursor: pointer;
-}
-.resource-building-dialog .resource-building-details-toggle:hover,
-.resource-building-dialog .resource-building-details-toggle:focus-visible { outline: none; text-decoration: underline; }
 .resource-building-dialog [hidden] { display: none !important; }
 
 /* Effect: «Сейчас → После», no cards. */
@@ -845,17 +833,6 @@
 }
 .resource-building-dialog .resource-building-effect-card.next strong { color: #fff; }
 .resource-building-dialog .resource-building-effect-card.next small { color: var(--pz-accent); }
-.resource-building-dialog .resource-building-effect-card > span {
-  color: var(--pz-muted);
-  font-size: calc(12px * var(--text-scale-helper, 1)) !important;
-  line-height: 1.4;
-}
-.resource-building-dialog .resource-building-effect-card > em {
-  color: var(--pz-amber);
-  font-size: calc(12px * var(--text-scale-secondary, 1)) !important;
-  font-style: normal;
-  font-weight: 800;
-}
 .resource-building-dialog .resource-building-effect-arrow {
   align-self: center;
   color: var(--pz-accent);
@@ -913,13 +890,6 @@
   font-weight: 700;
   overflow-wrap: anywhere;
 }
-.resource-building-dialog .resource-building-time-breakdown {
-  margin: 10px 0 0;
-  color: var(--pz-muted);
-  font-size: calc(12px * var(--text-scale-helper, 1)) !important;
-}
-.resource-building-dialog .resource-building-time-breakdown b { color: #c6d9de; font-weight: 700; }
-.resource-building-dialog .resource-building-time-breakdown b.bonus { color: var(--pz-accent); }
 
 /* Status line right above the action. */
 .resource-building-dialog .resource-building-availability {
