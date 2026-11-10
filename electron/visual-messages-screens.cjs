@@ -4,7 +4,8 @@
 // names), a 42-character alliance name, empty tabs, a filter with no result, a huge
 // spy report (every ship, defence and commander with 12-digit numbers), the commander
 // tooltip, the header with a 24-character planet name (and its game tooltip), and the
-// building dialog short of three resources.
+// building dialog short of three resources. Also «Загрузить игру»: save cards with a
+// 40-character name, the «ПОСЛЕДНЯЯ» badge, 4 crystals + «ПОБЕДА» (every action reachable).
 // Layout contracts (ASTERION_QA_CHECKS=0 records them without failing, used for the
 // «before» run on main): no text cut off without an ellipsis, no native title tooltips,
 // the screen fits the window, the header shows the full planet name in its tooltip and
@@ -13,6 +14,7 @@ const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { patchSaveIdle } = require('./qa-save-edit.cjs');
+const { PARSE_SAVE } = require('./qa-save.cjs');
 
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
@@ -300,6 +302,102 @@ async function runViewport(win, directory, label) {
   return metrics;
 }
 
+const LONG_SLOT = 'Северная Экспедиция к Ядру Галактики Ш40';
+
+/** «Загрузить игру»: a real campaign from the wizard, cloned into worst-case cards. */
+async function runSaveCards(width, height, directory, label) {
+  const failures = [];
+  const fail = (message, detail) => {
+    failures.push(`${message}: ${JSON.stringify(detail)}`);
+    if (CHECKS) throw new Error(`${label} ${message}: ${JSON.stringify(detail)}`);
+  };
+  const win = new BrowserWindow({ width, height, show: false, backgroundColor: '#02050a',
+    webPreferences: { offscreen: true, contextIsolation: true, nodeIntegration: false, sandbox: true, partition: `qa-save-cards-${width}` } });
+  try {
+    win.webContents.debugger.attach('1.3');
+    await win.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false, screenWidth: width, screenHeight: height });
+    const open = async (search) => {
+      const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
+      await win.loadFile(path.join(ROOT, 'dist', 'index.html'), search ? { search } : undefined);
+      await loaded;
+    };
+    await open();
+    await win.webContents.executeJavaScript('localStorage.clear(); sessionStorage.clear();');
+    await open();
+    await waitFor(win, `document.querySelector('[data-qa-menu="main"]')`, 20000);
+    await click(win, '[data-qa-menu-action="new"]');
+    await waitFor(win, `document.querySelector('[data-qa-wizard-step="race"]')`);
+    await click(win, '[data-qa-race="aegis"]');
+    await click(win, '[data-qa-wizard-next]');
+    await waitFor(win, `document.querySelector('[data-qa-wizard-step="world"]')`);
+    await click(win, '[data-qa-wizard-next]');
+    await waitFor(win, `document.querySelector('[data-qa-wizard-step="confirm"]')`);
+    await click(win, '[data-qa-wizard-start]');
+    await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`, 60000);
+    await sleep(1500);
+    await open();
+    await waitFor(win, `document.querySelector('[data-qa-menu="main"]')`, 20000);
+    const cloned = await win.webContents.executeJavaScript(`(() => {
+      const PARSE_SAVE = ${PARSE_SAVE};
+      const key = 'asterion.slots.index.v1';
+      const index = PARSE_SAVE(localStorage.getItem(key));
+      const base = index.slots[0];
+      const payload = PARSE_SAVE(localStorage.getItem(base.storageKey));
+      const playerId = payload.profile.playerId;
+      const make = (suffix, name, edit) => {
+        const copy = JSON.parse(JSON.stringify(payload));
+        edit(copy);
+        const storageKey = 'asterion.slot.qa-' + suffix + '.v1';
+        localStorage.setItem(storageKey, JSON.stringify(copy));
+        return { ...base, id: 'qa-' + suffix, name, storageKey, updatedAt: base.updatedAt - 1000 };
+      };
+      const crystals = (copy) => { copy.sunRaid = { ...(copy.sunRaid || {}), crystals: { ...((copy.sunRaid || {}).crystals || {}), ['owner:' + playerId]: ['c1', 'c2', 'c3', 'c4'] }, campaignResult: { playerWon: true } }; };
+      base.name = ${JSON.stringify(LONG_SLOT)};
+      index.slots.push(
+        make('victory', ${JSON.stringify(LONG_SLOT)}, (copy) => { crystals(copy); copy.profile.displayName = 'Адмирал Северного Рубежа'; }),
+        make('short', 'Тавр', () => {}),
+        make('victory-short', 'Победа за четыре кристалла', crystals),
+      );
+      localStorage.setItem(key, JSON.stringify(index));
+      return index.slots.length;
+    })()`);
+    if (cloned !== 4) fail('Could not clone save slots', cloned);
+    await open();
+    await waitFor(win, `document.querySelector('[data-qa-menu="main"]')`, 20000);
+    await click(win, '[data-qa-menu-action="load"]');
+    await waitFor(win, `document.querySelectorAll('[data-qa-load-screen] [data-qa-slot]').length === 4`);
+    await settle(win, 900);
+    const cards = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-qa-slot]')).map((card) => {
+      const box = card.getBoundingClientRect();
+      const inside = (node) => { const r = node.getBoundingClientRect(); return r.width > 0 && r.left >= box.left - 1 && r.right <= box.right + 1 && r.top >= box.top - 1 && r.bottom <= box.bottom + 1; };
+      const buttons = Array.from(card.querySelectorAll('.menu-slot__actions button'));
+      return {
+        id: card.getAttribute('data-qa-slot'), height: Math.round(box.height),
+        visibleButtons: buttons.filter(inside).length, buttons: buttons.length,
+        cutLabels: buttons.filter((button) => button.scrollWidth > button.clientWidth + 1).map((button) => button.textContent),
+        badge: Boolean(card.querySelector('.menu-tag')), victory: Boolean(card.querySelector('.menu-slot__crystals b')),
+        titles: card.querySelectorAll('[title]').length,
+      };
+    })`);
+    for (const card of cards) {
+      if (card.visibleButtons !== 5 || card.buttons !== 5) fail('Not every save action is visible inside the card', card);
+      if (card.cutLabels.length) fail('Save action label is cut', card);
+      if (card.titles) fail('Native title tooltip on a save card', card);
+    }
+    if (!cards.some((card) => card.badge) || !cards.some((card) => card.victory)) fail('Worst-case cards are missing', cards);
+    await capture(win, directory, '14-load-game-save-cards');
+    await click(win, '[data-qa-slot-delete="qa-short"]');
+    await waitFor(win, `document.querySelector('[data-qa-confirm-yes]')`);
+    await settle(win, 300);
+    await capture(win, directory, '15-load-game-delete-confirm');
+    await click(win, '[data-qa-confirm-no]');
+    return { cards, failures };
+  } finally {
+    try { if (win.webContents.debugger.isAttached()) win.webContents.debugger.detach(); } catch {}
+    win.destroy();
+  }
+}
+
 app.whenReady().then(async () => {
   let win;
   try {
@@ -322,6 +420,7 @@ app.whenReady().then(async () => {
       await win.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false, screenWidth: width, screenHeight: height });
       await settle(win);
       all[label] = await runViewport(win, directory, label);
+      all[`${label}:save-cards`] = await runSaveCards(width, height, directory, label);
     }
     fs.writeFileSync(path.join(OUTPUT, 'messages-screens-metrics.json'), JSON.stringify(all, null, 2));
     console.log(JSON.stringify(all, null, 2));

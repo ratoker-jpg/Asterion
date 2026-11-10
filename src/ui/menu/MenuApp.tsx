@@ -422,7 +422,7 @@ function SlotCard({ slot, active, health, renaming, onRenameStart, onRenameChang
               <input autoFocus value={renaming} maxLength={40} onChange={(event) => onRenameChange(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); onRenameCancel(); } }} aria-label="Новое название" />
               <button type="submit" className="menu-btn menu-btn--small">OK</button>
             </form>
-          ) : <h3 title={slot.name}>{slot.name}</h3>}
+          ) : <h3>{slot.name}</h3>}
           {active ? <span className="menu-tag">ПОСЛЕДНЯЯ</span> : null}
         </div>
         <p className="menu-race-chip"><img src={card.emblem} alt="" />{card.name} · {slot.playerName}</p>
@@ -437,12 +437,15 @@ function SlotCard({ slot, active, health, renaming, onRenameStart, onRenameChang
         </dl>
         <div className="menu-slot__crystals"><CrystalSet owned={CRYSTALS.slice(0, slot.summary.crystals)} size={18} />{slot.summary.victory ? <b>ПОБЕДА</b> : null}</div>
         {problem ? <p className="menu-slot__problem" role="status">{problem}</p> : null}
+        {/* «Загрузить» leads; the four other actions share one compact row, so all five fit every card width. */}
         <div className="menu-slot__actions">
           <button type="button" className="menu-btn menu-btn--primary" disabled={!loadable} onClick={onLoad} data-qa-slot-load={slot.id}>ЗАГРУЗИТЬ</button>
-          <button type="button" className="menu-btn" onClick={onRenameStart} disabled={renaming !== null}>ПЕРЕИМЕНОВАТЬ</button>
-          <button type="button" className="menu-btn" onClick={onDuplicate} disabled={!loadable}>КОПИЯ</button>
-          <button type="button" className="menu-btn" onClick={onExport} disabled={health.status === 'missing'}>ЭКСПОРТ</button>
-          <button type="button" className="menu-btn menu-btn--danger" onClick={onDelete} data-qa-slot-delete={slot.id}>УДАЛИТЬ</button>
+          <div className="menu-slot__more" role="group" aria-label={`Другие действия с кампанией «${slot.name}»`}>
+            <button type="button" className="menu-btn menu-btn--compact" onClick={onRenameStart} disabled={renaming !== null} data-qa-slot-rename={slot.id}>Переименовать</button>
+            <button type="button" className="menu-btn menu-btn--compact" onClick={onDuplicate} disabled={!loadable} data-qa-slot-copy={slot.id}>Копия</button>
+            <button type="button" className="menu-btn menu-btn--compact" onClick={onExport} disabled={health.status === 'missing'} data-qa-slot-export={slot.id}>Экспорт</button>
+            <button type="button" className="menu-btn menu-btn--compact menu-btn--danger" onClick={onDelete} data-qa-slot-delete={slot.id}>Удалить</button>
+          </div>
         </div>
       </div>
     </li>
