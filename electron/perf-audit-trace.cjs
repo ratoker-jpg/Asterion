@@ -36,6 +36,10 @@ const SECONDS = Number(option('seconds', '5'));
 const MODE = option('mode', 'trace');
 const AUTOSAVE_SECONDS = Number(option('autosave-seconds', '0'));
 const FRAME_RATE = Number(option('frame-rate', '120'));
+// --motion: animations on (CI Windows reports prefers-reduced-motion: reduce, which turns the game's motion off).
+const MOTION = args.includes('--motion');
+// --no-raf: no requestAnimationFrame loop of our own (it forces a main frame every frame); frames are read from the trace.
+const NO_RAF = args.includes('--no-raf');
 const OUTPUT = option('out', path.join(ROOT, 'artifacts', 'perf-audit'));
 const LEGACY_KEY = 'asterion.vertical-slice.v1';
 const SLOT_INDEX_KEY = 'asterion.slots.index.v1';
@@ -53,6 +57,7 @@ const SCREENS = [
   ['rating', 'rating', '[data-qa-utility-screen="rating"]', null],
   ['command', 'command', '.command-view', null],
   ['operations', 'operations', '.operations-shell-v2', null],
+  ['planet-late', 'planet', '.planet-page-v3', null],
 ];
 
 function prepareSave() {
@@ -124,12 +129,12 @@ async function load(win, search) {
 async function openScreen(win, [, route, selector, extra]) {
   const clicked = await run(win, `(() => { const element = document.querySelector('[data-qa-route="${route}"]'); if (!element || element.disabled) return false; element.click(); return true; })()`);
   if (!clicked) throw new Error(`Route button not found: ${route}`);
-  await waitFor(win, `document.querySelector(${JSON.stringify(selector)})`, 20_000);
-  if (extra) {
-    await sleep(400);
-    await run(win, `document.querySelector(${JSON.stringify(extra)})?.click()`);
-  } else if (route === 'planet') {
-    await run(win, `document.querySelector('[data-qa-planet-section="current"]')?.click()`);
+  if (route === 'planet') {
+    await waitFor(win, `document.querySelector('[data-qa-planet-sections]')`, 20_000);
+    await run(win, `document.querySelector(${JSON.stringify(extra || '[data-qa-planet-section="current"]')})?.click()`);
+    if (!extra) await waitFor(win, `document.querySelector(${JSON.stringify(selector)})`, 20_000);
+  } else {
+    await waitFor(win, `document.querySelector(${JSON.stringify(selector)})`, 20_000);
   }
   await sleep(2_500);
 }
@@ -140,7 +145,7 @@ const PROBE = `(() => {
   const probe = window.__perfProbe = { on: false, frames: [], last: 0, long: [] };
   try { new PerformanceObserver((list) => { if (probe.on) for (const entry of list.getEntries()) probe.long.push(Math.round(entry.duration)); }).observe({ type: 'longtask', buffered: false }); } catch {}
   const tick = (time) => { if (probe.on && probe.last) probe.frames.push(time - probe.last); probe.last = time; requestAnimationFrame(tick); };
-  requestAnimationFrame(tick);
+  if (!window.__perfNoRaf) requestAnimationFrame(tick);
   probe.start = () => { probe.frames = []; probe.long = []; probe.last = 0; probe.on = true; };
   probe.stop = () => { probe.on = false; const sorted = [...probe.frames].sort((a, b) => a - b);
     const at = (q) => sorted.length ? Math.round(sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * q) - 1)] * 100) / 100 : null;
@@ -362,14 +367,18 @@ async function main() {
     rendering: SOFTWARE ? 'software (disable-gpu)' : 'gpu', frameRate: FRAME_RATE, secondsPerScreen: SECONDS,
     cpu: `${os.cpus()[0]?.model} x${os.cpus().length}`, loadMs: Date.now() - loadStarted, screens: {},
   };
-  const write = () => fs.writeFileSync(path.join(OUTPUT, `perf-audit-${MODE}.json`), JSON.stringify(result, null, 1));
+  const write = () => fs.writeFileSync(path.join(OUTPUT, `perf-audit-${MODE}${MOTION ? '-motion' : ''}.json`), JSON.stringify(result, null, 1));
+  await run(win, `window.__perfNoRaf = ${NO_RAF}`);
   await run(win, PROBE);
   // Let the world settle (a catch-up of the load time itself, first ticks, first save).
   await waitFor(win, `!document.querySelector('[data-qa-npc-catchup] [role="progressbar"]')`, 600_000).catch(() => undefined);
   await run(win, `document.querySelector('[data-qa-npc-catchup-close]')?.click()`).catch(() => undefined);
-  await sleep(8_000);
+  await sleep(25_000);
   const dbg = win.webContents.debugger;
   if (!dbg.isAttached()) dbg.attach('1.3');
+  if (MOTION) await dbg.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
+  result.motion = MOTION; result.ownRafLoop = !NO_RAF;
+  result.reducedMotion = await run(win, `matchMedia('(prefers-reduced-motion: reduce)').matches`);
   for (const screen of SCREENS) {
     const label = screen[0];
     try {
