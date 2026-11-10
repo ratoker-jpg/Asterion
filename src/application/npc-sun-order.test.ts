@@ -117,7 +117,10 @@ test('members fill only the open slots of an ordered raid: no ship outside the o
   const raid = currentSunRaidState(next).raids.find((item) => item.id === raidId)!;
   const flights = next.flights.records.filter((flight) => flight.sunRaid?.raidId === raidId);
   assert.ok(flights.length >= 3, 'every member pledged');
-  for (const flight of flights) assert.equal(flight.selectedShips.scout ?? 0, 0, 'no level-0 scouts in the raid');
+  // Level-0 small craft only fill the last crumbs of room (a hull or two), never a share of the raid.
+  const smallLevel0 = flights.reduce((sum, flight) => sum + (flight.selectedShips.scout ?? 0) * 2 + (flight.selectedShips.cruiser ?? 0) * 7, 0);
+  const total = flights.reduce((sum, flight) => sum + (flight.sunRaid?.population ?? 0), 0);
+  assert.ok(smallLevel0 < 0.01 * total, `level-0 small craft ${smallLevel0} of ${total}`);
   const fill = selectRaidOrderFill(next, raid);
   for (const slot of raid.order!.slots) {
     const used = fill.get(slot.kind === 'any' ? 'any' : `${slot.factionId}:${slot.entityId}`) ?? 0;

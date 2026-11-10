@@ -43,7 +43,7 @@ export const NPC_SUN_ORDER_BALANCE = Object.freeze({
   fillerFloor: 0.45,
 });
 
-type Offer = { factionId: CombatFactionId; entityId: SunOrderEntityId; level: number; count: number; population: number; value: number };
+type Offer = { ownerId: string; factionId: CombatFactionId; entityId: SunOrderEntityId; level: number; count: number; population: number; value: number };
 
 function ownPlanets(state: SaveState, ownerId: string): SpyTargetState[] {
   return Object.values(state.espionage?.targets ?? {}).filter((target) => target.kind === 'npc' && target.ownerId === ownerId)
@@ -51,7 +51,7 @@ function ownPlanets(state: SaveState, ownerId: string): SpyTargetState[] {
 }
 
 /** One member's best offer of `room` population, hull type by type. */
-function memberOffers(state: SaveState, ownerId: string, room: number, experience: SunExperience): Offer[] {
+function memberOffers(state: SaveState, ownerId: string, room: number, experience: SunExperience): Omit<Offer, 'ownerId'>[] {
   const planets = ownPlanets(state, ownerId);
   const race = planets[0]?.raceId as CombatFactionId | undefined;
   if (!race || room <= 0) return [];
@@ -102,7 +102,7 @@ export function composeNpcSunOrder(state: SaveState, plan: NpcSunRaidPrepPlan, c
     called.push([ownerId, room]);
     covered += room;
   }
-  for (const [ownerId, room] of called) offers.push(...memberOffers(state, ownerId, room, experience));
+  for (const [ownerId, room] of called) offers.push(...memberOffers(state, ownerId, room, experience).map((offer) => ({ ...offer, ownerId })));
   if (!offers.length) return null;
   const floor = NPC_SUN_ORDER_BALANCE.fillerFloor * weightedMedian(offers);
   const quality = offers.filter((offer) => offer.value >= floor);
@@ -110,7 +110,9 @@ export function composeNpcSunOrder(state: SaveState, plan: NpcSunRaidPrepPlan, c
   // One slot per race + hull, battleship class and bigger only: hulls of the members who offer it, the lowest
   // of their levels. Smaller hulls (and filler) are left to «любые», where members bring their best.
   const slots = new Map<string, { slot: SunRaidOrderShipSlot; value: number; unit: number }>();
-  for (let offer of quality.filter((item) => SUN_EXACT_SLOT_HULLS.has(item.entityId))) {
+  // Exact slots hold only the leader's own big hulls: it pledges them at the call, so they never stay empty
+  // (bot lab 10.11.2026: slots kept for members' hulls that did not come left gatherings a few hundred short).
+  for (let offer of quality.filter((item) => item.ownerId === plan.ownerId && SUN_EXACT_SLOT_HULLS.has(item.entityId))) {
     const key = `${offer.factionId}:${offer.entityId}`;
     const known = slots.get(key);
     const unit = offer.population / offer.count;
