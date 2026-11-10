@@ -19,7 +19,6 @@ import type { CombatFactionId } from './domain/combat/factions.ts';
 import { SCIENCE_CATALOG } from './domain/science/catalog.ts';
 import { ACTIVE_RUNTIME_MODE, type TestTimeScale } from './domain/runtime/mode.ts';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
-import './building-card.css';
 import './spaceport-upgrades.css';
 
 type SpaceportUpgradeViewProps = {

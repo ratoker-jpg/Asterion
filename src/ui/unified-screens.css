@@ -88,9 +88,7 @@ html body :is(
   .trade-workspace, .trade-workspace-header, .trade-info-panel, .trade-ratio-panel, .trade-resource-panel, .trade-amount-panel,
   .recycling-info-panel, .recycling-section,
   .production-bots-building-panel, .production-bots-targets, .production-bots-pool,
-  .building-interior-header,
-  .resource-zone-summary, .resource-zone-economy, .resource-zone-queue,
-  .resource-building-dialog
+  .building-interior-header
 ) {
   border: 1px solid var(--ut-border) !important;
   border-radius: var(--ut-r-panel) !important;
@@ -105,9 +103,7 @@ html body :is(
   .spaceport-queue-task, .spaceport-queue-empty, .spaceport-row-time-v2, .spaceport-row-art-v2, .spaceport-level-line-v2, .spaceport-requirement-line-v2,
   .trade-resource-card:not(.selected), .trade-refill, .trade-summary-grid > *,
   .recycling-job-row, .recycling-target-row, .recycling-debris-field, .recycling-target-preview, .recycling-section-header, .recycling-job-table__header,
-  .production-bots-targets-header, .production-bots-targets-footer,
-  .resource-building-effect-card, .resource-building-time-panel, .resource-building-levels, .resource-zone-income-row,
-  .resource-zone-selector-tile:not(.active):not(.selected), .resource-building-availability
+  .production-bots-targets-header, .production-bots-targets-footer
 ) {
   border: 1px solid var(--ut-border) !important;
   border-radius: var(--ut-r-card) !important;
@@ -115,7 +111,7 @@ html body :is(
   box-shadow: none !important;
   clip-path: none !important;
 }
-html body :is(.spaceport-cost-chip-v2, .resource-building-cost-grid > *) {
+html body :is(.spaceport-cost-chip-v2) {
   border: 1px solid var(--ut-border) !important;
   border-radius: var(--ut-r-chip) !important;
   background: var(--ut-surface-2) !important;
@@ -130,7 +126,7 @@ html body :is(.spaceport-back-v2, .trade-back, .recycling-back, .production-bots
   color: #dcecf0 !important;
 }
 html body :is(.spaceport-back-v2, .trade-back, .recycling-back, .production-bots-back, .building-interior-back, .building-interior-return-overlay, .recycling-job-action):hover:not(:disabled) { border-color: var(--ut-accent) !important; color: #fff !important; }
-html body :is(.trade-submit, .recycling-start, .production-bots-distribute, .resource-building-build-button, .resource-building-enter-button):not(:disabled) {
+html body :is(.trade-submit, .recycling-start, .production-bots-distribute):not(:disabled) {
   border: 1px solid #8cefff !important;
   border-radius: var(--ut-r-btn) !important;
   background: linear-gradient(180deg, #5fe2f8, #2bb6d6) !important;

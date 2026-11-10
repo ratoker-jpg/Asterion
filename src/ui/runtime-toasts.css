@@ -1,0 +1,14 @@
+/* --- Toasts: top-left just under the header. Measured on every main screen
+   (planet, zones, universe, fleets, operations, command, messages) at
+   1280×720 and 1920×1080: the only band with no controls in it. The bottom-left
+   corner covered «Добыча за 1 час» and «Отметить все прочитанными». --- */
+html body .runtime-toast-stack {
+  left: 24px;
+  right: auto;
+  top: 92px;
+  bottom: auto;
+  gap: 6px;
+  width: min(380px, calc(100vw - 48px));
+}
+@media (min-height: 1000px) { html body .runtime-toast-stack { top: 138px; } }
+html body .runtime-toast-stack .runtime-toast { padding: 8px 10px 8px 12px; }

@@ -7,7 +7,6 @@ import { selectOwnerPresence } from './application/owner-presence.ts';
 import { dispatchBot01Exploration } from './application/exploration-bot01.ts';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { flushSync, createPortal } from 'react-dom';
-import './planet-skins.css';
 import './universe.css';
 import { UniverseView } from './UniverseView';
 import { applyFleetUiUpdate, FLEET_UI_UPDATE_EVENT, type FleetUiUpdate } from './domain/flights/fleet-ui.ts';
@@ -27,6 +26,7 @@ import { ReportsView } from './ReportsView';
 import { buildReportsFeed, dropExpiredReportItems, getReportUnreadCounts } from './domain/reports/adapters.ts';
 import { reportRetentionCutoff } from './application/history-retention.ts';
 import { ZONE_VIEW_META, ZoneView } from './ZoneView';
+import { toAccusative } from './domain/buildings/declension.ts';
 import { PlanetOrbitView } from './ui/planet/PlanetOrbitView';
 import { EmpireView, PlanetSections } from './ui/empire/EmpireView';
 import { pickToastSpot, type ToastSpot } from './ui/toast-placement.ts';
@@ -308,7 +308,7 @@ type ToastGroup = {
 
 const TOAST_AUTO_CLOSE_MS = 3_000;
 const SAVE_FAILURE_NOTICE_INTERVAL_MS = 10 * 60_000;
-/** Two cards fit the control-free band under the header (see src/ui/planet-pass.css). */
+/** Two cards fit the control-free band under the header (see src/ui/runtime-toasts.css). */
 const TOAST_STACK_LIMIT = 2;
 /** Replay compute per catch-up task before React gets the frame back. */
 const NPC_CATCHUP_TASK_BUDGET_MS = 40;
@@ -2628,7 +2628,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     setSelectedBuildingRole(context.buildingRole);
     setPlanetMenuOpen(false);
     closePlanetEditor();
-    setNotice(`${definition.name}: возвращение в ${zoneMeta[context.zone].title.toLowerCase()}.`);
+    setNotice(`${definition.name}: возвращение в ${toAccusative(zoneMeta[context.zone].title.toLowerCase())}.`);
   };
 
   const enterBuilding = (assetRole: BuildingRole) => {
@@ -3371,7 +3371,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
             <PlanetSections section="current" planetCount={ownedPlanets.length} idleCount={ownedPlanets.filter((planet) => (state.queues[planet.id] ?? []).length === 0).length} onChange={setPlanetSection} />
             <PlanetOrbitView
               name={currentPlanetName}
-              kicker={`ОБЗОР ПЛАНЕТЫ · ${PLAYER_FACTION_LABELS[state.profile.factionId].toUpperCase()}`}
+              kicker={`Обзор планеты · ${PLAYER_FACTION_LABELS[state.profile.factionId]}`}
               subtitle={`${currentPlanet.coords} · ${currentPlanet.status}`}
               skinArt={currentSkin.art}
               vitals={[
@@ -3396,7 +3396,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
                 const building = currentQueue.find((item) => getBuildingDefinition(item.assetRole, state.profile.factionId).zone === zone);
                 return {
                   zone,
-                  title: zoneMeta[zone].title.replace(' ЗОНА', ''),
+                  title: ZONE_VIEW_META[zone].queueLabel,
                   accent: zoneMeta[zone].accent,
                   art: getBuildingDefinition(PLANET_ZONE_EMBLEM_ROLE[zone], state.profile.factionId).art,
                   built: roles.filter((item) => (currentPlanetState.buildings[item.assetRole] ?? 0) > 0).length,

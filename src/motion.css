@@ -187,8 +187,8 @@
 .planet-page-v3.planet-orbit > .planet-orbit__planet {
   animation: ut-planet-in-centred 1100ms var(--ut-ease-expo) backwards;
 }
-.planet-orbit > .planet-orbit__name { animation: ut-slide-in-left 640ms var(--ut-spring) 120ms backwards; }
-.planet-orbit > .planet-orbit__vitals > div { animation: ut-slide-in-left 560ms var(--ut-spring) backwards; animation-delay: calc(160ms + sibling-index() * 60ms); }
+.planet-orbit__side > .planet-orbit__name { animation: ut-slide-in-left 640ms var(--ut-spring) 120ms backwards; }
+.planet-orbit__side > .planet-orbit__vitals > div { animation: ut-slide-in-left 560ms var(--ut-spring) backwards; animation-delay: calc(160ms + sibling-index() * 60ms); }
 .planet-orbit > .planet-orbit__worlds { animation: ut-slide-in-right 640ms var(--ut-spring) 180ms backwards; }
 .planet-orbit > .planet-orbit__dock { animation: ut-slide-in-up 640ms var(--ut-spring) 260ms backwards; }
 .planet-page-v3.planet-orbit > .zone-hotspot { animation: ut-pop-in 620ms var(--ut-spring-pop) backwards; }
@@ -441,7 +441,7 @@ body :is(.system-planet, .resource-building-node, .zone-hotspot, .universe-radar
   .shipyard-card-v1, .repair-card-v1, .science-row-v2, .spaceport-row-v2, .srp-card, .cmdA-tile, .opsA-tile, .report-card, .rating-row-v2,
   .universe-debris-finder__list > li, .universe-radar__row, .resource-zone-queue-card, .owned-planet-row-v4,
   .fleet-ship-tile-v2, .fleet-mission-icons-v1 > button,
-  .planet-orbit > *, .planet-orbit__vitals > div, .universe-radar > *,
+  .planet-orbit > *, .planet-orbit__side > *, .planet-orbit__vitals > div, .universe-radar > *,
   .resource-zone-building-layer > .resource-building-node, .asterion-header .hdr-cell, .asterion-header .hdr-route,
   .asterion-header .hdr-core__planet img,
   .resource-building-action-confirm, .resource-building-dialog, .universe-debris-finder, .universe-inspector, .gate-dialog, .srp-launch,

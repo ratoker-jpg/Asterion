@@ -44,7 +44,6 @@
 :root[data-faction] .rating-head-v2 .score-head-v2.selected b { color: var(--race-accent); }
 
 /* ---------- 3. Vertical navigation and selected list rows (recipe: fill from the left, race bar) ---------- */
-:root[data-faction] .owned-planet-row-v4.active,
 :root[data-faction] .fleet-menu-group-v1 button.active,
 :root[data-faction] .science-sections-v2 button.active,
 :root[data-faction] .settings-nav-v2 nav button.active,
@@ -82,7 +81,6 @@
 :root[data-faction] .rating-row-v2.selected { background: var(--race-fill-soft); border-bottom-color: var(--race-border-soft); }
 
 /* ---------- 4. Selected tiles and cards ---------- */
-:root[data-faction] .resource-zone-selector-tile.selected,
 :root[data-faction] .fleet-mission-icons-v1 button.active,
 :root[data-faction] .command-dialog.command-dialog--crest .crest-tile.is-selected {
   color: #fff;
@@ -90,15 +88,9 @@
   background: linear-gradient(180deg, var(--race-fill), rgba(3, 24, 35, .9));
   box-shadow: inset 0 0 0 1px var(--race-outline), 0 0 16px var(--race-glow);
 }
-:root[data-faction] .resource-building-node.selected .resource-building-caption { border-color: var(--race-accent); box-shadow: 0 0 14px var(--race-glow); }
 
 /* ---------- 5. Owned progress: own buildings, queues, alliance ---------- */
-:root[data-faction] .resource-building-level-track span.filled {
-  background: var(--race-accent-strong);
-  box-shadow: 0 0 7px var(--race-glow), inset 0 0 0 1px color-mix(in srgb, var(--race-accent) 30%, transparent);
-}
 :root[data-faction] .queue-progress-v2 i,
-:root[data-faction] .resource-zone-queue-card-main > i > span,
 :root[data-faction] .science-queue-card-v2 > i > b,
 :root[data-faction] .fleet-production-order-v1:not(.waiting) .fleet-production-order-progress-v1 i,
 :root[data-faction] .recycling-job-row.processing .recycling-job-progress i,
