@@ -375,15 +375,6 @@ html body .fleet-satellite-dismantle-v1::after {
 html body .fleet-satellite-dismantle-v1::after { rotate: -45deg; }
 html body .fleet-satellite-dismantle-v1:disabled { border-color: var(--ut-border); background: transparent; color: var(--ut-label); opacity: .55; }
 
-/* ---- 8. Profile: a 24-character nickname fits (it was cut to «…Севе…»). ---- */
-html body .reports-view.reports-v2 .reports-profile-avatar__caption h3 {
-  font-size: 22px !important;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  text-wrap: balance;
-  line-height: 1.15;
-}
-
 /* ---- 7. Incoming attack row: composition and «СОСТАВ СКРЫТ» as readable
    tags under the mission, not three loose lines of small caps. ------------- */
 html body .fleet-flight-mission-cell > span { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }

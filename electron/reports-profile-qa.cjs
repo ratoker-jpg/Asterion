@@ -496,7 +496,7 @@ async function runViewport(win, width, height) {
     throw new Error(`Reports folder icon sizing/overlap contract failed at ${label}: ${JSON.stringify(profile.folderGeometry)}`);
   }
   if (profile.metricGeometry.length !== 4
-    || profile.metricGeometry.some((metric) => Number.parseFloat(metric.cardBorderWidth) <= 0 || Number.parseFloat(metric.wrapperBorderWidth) !== 0 || metric.wrapperTransform !== 'none' || metric.imageTransform !== 'none' || metric.imageCssWidth !== '96px' || metric.imageCssHeight !== '96px' || metric.labelFontSize !== '11px' || metric.valueFontSize !== '30px' || !contains(metric.wrapper, metric.image))) {
+    || profile.metricGeometry.some((metric) => Number.parseFloat(metric.cardBorderWidth) !== 0 || Number.parseFloat(metric.wrapperBorderWidth) !== 0 || metric.wrapperTransform !== 'none' || metric.imageTransform !== 'none' || metric.imageCssWidth !== '96px' || metric.imageCssHeight !== '96px' || metric.labelFontSize !== '12px' || metric.valueFontSize !== '30px' || !contains(metric.wrapper, metric.image))) {
     throw new Error(`Profile score icon frame/transform contract failed at ${label}: ${JSON.stringify(profile.metricGeometry)}`);
   }
   await win.webContents.executeJavaScript(`document.querySelector('[data-qa-profile-metric="resourcePoints"]')?.focus()`);

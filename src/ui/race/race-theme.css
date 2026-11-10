@@ -17,7 +17,6 @@
 :root[data-faction] .battle-tabs-v1:not(.ops6 *) button.active,
 :root[data-faction] .sim-rounds-v1 button.active,
 :root[data-faction] .workspace--universe .universe-view-v3 .universe-tools button.active,
-:root[data-faction] .reports-view.reports-v2 .reports-v2-filter-segments button[aria-pressed='true'],
 :root[data-faction] .command-dialog.command-dialog--crest .crest-tabs button.is-active {
   color: #fff;
   border-color: var(--race-outline);
@@ -48,11 +47,6 @@
 :root[data-faction] .science-sections-v2 button.active,
 :root[data-faction] .settings-nav-v2 nav button.active,
 :root[data-faction] .spaceport-sections-v2 button.active,
-:root[data-faction] .reports-profile-nav.active,
-:root[data-faction] .reports-view.reports-v2 .reports-profile-nav.active,
-:root[data-faction] .reports-view.reports-v2 .reports-message-nav > button.active,
-:root[data-faction] .reports-categories nav button.active,
-:root[data-faction] .reports-view.reports-v2 .reports-list-item.active,
 :root[data-faction] .summary-zone-list button.active,
 :root[data-faction] .trade-resource-card.selected,
 :root[data-faction] .rating-row-v2.current {
@@ -69,15 +63,6 @@
 }
 :root[data-faction] .science-sections-v2 button.active b,
 :root[data-faction] .spaceport-sections-v2 button.active b { border-color: var(--race-outline); color: var(--race-accent); }
-:root[data-faction] .reports-profile-nav.active > span,
-:root[data-faction] .reports-profile-nav.active > b { color: var(--race-accent); }
-:root[data-faction] .reports-message-nav button.active .reports-folder-action-label { color: var(--race-accent) !important; }
-:root[data-faction] .reports-view.reports-v2 .reports-profile-nav.active .reports-v2-nav-art,
-:root[data-faction] .reports-view.reports-v2 .reports-message-nav > button.active .reports-v2-nav-art {
-  border-color: var(--race-accent);
-  box-shadow: inset 0 0 0 1px var(--race-accent), 0 0 14px var(--race-glow);
-}
-:root[data-faction] .reports-view.reports-v2 .reports-list-item.active::before { background: var(--race-accent-strong); box-shadow: 0 0 10px var(--race-glow); }
 :root[data-faction] .rating-row-v2.selected { background: var(--race-fill-soft); border-bottom-color: var(--race-border-soft); }
 
 /* ---------- 4. Selected tiles and cards ---------- */
@@ -125,8 +110,6 @@
 /* ---------- 9. Bulk selection: checked boxes and the rows they mark ---------- */
 :root[data-faction] input[type='checkbox'],
 :root[data-faction] input[type='radio'] { accent-color: var(--race-accent-strong); }
-:root[data-faction] .reports-view.reports-v2 .reports-list-item.selected { outline-color: var(--race-outline); }
-:root[data-faction] .reports-list-item.selected { border-color: var(--race-border); }
 :root[data-faction] .combat-priority-list-v1 > li.dragging { border-color: var(--race-accent-strong); box-shadow: 0 0 14px var(--race-glow); }
 
 /* ---------- 10. Fleet «Битвы» (comic battle skin): the chosen tab keeps the solid plate, in the race colour ---------- */

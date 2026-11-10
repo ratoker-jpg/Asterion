@@ -284,34 +284,6 @@
 }
 .command-diplomacy-mark--large{ border-radius:var(--ut-r-card); }
 
-/* === 8. MESSAGES / REPORTS ================================== */
-.reports-categories{
-  border-radius:var(--ut-r-panel);
-  background:var(--ut-surface);
-  border:1px solid var(--ut-border);
-  overflow:hidden;
-}
-.reports-categories button{
-  border-radius:var(--ut-r-chip);
-  font-size:12px;
-}
-.reports-mark-all{ border-radius:var(--ut-r-chip); font-size:11.5px; }
-.reports-ai-note{
-  border-radius:var(--ut-r-card);
-  font-size:11.5px;
-}
-.reports-profile-card{
-  border-radius:var(--ut-r-panel) !important;
-}
-.reports-profile-title-plate,
-.reports-profile-name-plate{ border-radius:var(--ut-r-card); }
-.reports-profile-metric{ border-radius:var(--ut-r-chip); }
-.reports-profile-metric__glyph{ border-radius:8px; }
-.reports-profile-identity,
-.reports-profile-alliance{ border-radius:var(--ut-r-chip); }
-.reports-profile-nav button{ border-radius:var(--ut-r-chip); }
-.reports-fixture-note{ border-radius:var(--ut-r-chip); font-size:11px; }
-
 /* === 9. FOOTER / STATUS STRIPS ============================== */
 .footer-status{
   border-radius:var(--ut-r-chip);
@@ -364,26 +336,7 @@
 .universe-view .system-scene .system-asteroid span{ font-size:10.5px !important; }
 .universe-view .system-scene .step{ font-size:10.5px !important; }
 
-/* --- reports / messages nav --- */
-.reports-view .reports-profile-nav strong,
-.reports-categories .reports-profile-nav strong{ font-size:12.5px !important; }
-.reports-view .reports-profile-nav b{ font-size:10.5px !important; letter-spacing:.1em; }
-.reports-view .reports-message-nav button strong{ font-size:12px !important; }
-.reports-view .reports-message-nav small,
-.reports-view .reports-message-nav b{ font-size:10.5px !important; }
-.reports-view .reports-profile-title-plate__side{ font-size:10px !important; }
-.reports-view .reports-ai-note,
-.reports-view .reports-ai-note small,
-.reports-view .reports-ai-note strong,
-.reports-view .reports-ai-note span{ font-size:11px !important; }
-.reports-view .reports-profile-name-plate small,
-.reports-view .reports-profile-name-plate span{ font-size:10.5px !important; }
-.reports-view .reports-profile-metric small{ font-size:18px !important; }
-.reports-view .reports-profile-metric strong{ font-size:16px !important; }
-.reports-view .reports-profile-alliance small{ font-size:10px !important; }
 .shell-notice{ font-size:11px !important; }
-.reports-categories .reports-count,
-.reports-view .reports-profile-nav span{ font-size:10.5px !important; }
 
 /* ============================================================
    PHASE 2 — TOTAL ROUNDED SWEEP
@@ -474,9 +427,6 @@ html.asterion-repair-page .repair-page-head-v1::after{
 /* command / operations / messages / universe */
 .command-view__status,
 .command-panel,
-.reports-profile-title-plate,
-.reports-profile-name-plate,
-.reports-profile-avatar > strong,
 .universe-view,
 .universe-nav,
 .nav-coordinate > .step,
@@ -510,15 +460,6 @@ html.asterion-repair-page .repair-page-head-v1::after{
 .combat-priority-column-v1::before,
 .repair-card-v1::before,
 .shipyard-card-v1::before,
-.reports-profile-title-plate::before,
-.reports-profile-title-plate::after,
-.reports-profile-avatar__art::after,
-.reports-profile-view::before,
-.reports-profile-view::after,
-.reports-profile-name-plate::before,
-.reports-profile-name-plate::after,
-.reports-profile-card::before,
-.reports-profile-card::after,
 .aegis-button::before,
 .ship-info-art-v1::before,
 .ship-info-art-v1::after,
@@ -718,15 +659,6 @@ html.asterion-repair-page .repair-page-head-v1::after{
 
 /* --- operations leftovers --- */
 .operations-scope-v2{ border-radius:var(--ut-r-card) !important; }
-
-/* --- messages profile --- */
-.reports-profile-view{
-  border-radius:var(--ut-r-panel);
-  background:var(--ut-surface);
-  border:1px solid var(--ut-border);
-}
-.reports-profile-metrics{ border-radius:var(--ut-r-card); }
-.reports-profile-avatar > strong{ border-radius:var(--ut-r-chip); }
 
 /* --- universe leftovers --- */
 .universe-nav .step{ border-radius:var(--ut-r-chip) !important; }
@@ -958,25 +890,12 @@ html.asterion-repair-page .repair-page-head-v1::after{
 .universe-inspector-header,
 .planet-skin-menu,
 .asterion-header__planet-list,
-.reports-battle-hero,
-.reports-generic-hero,
 .command-tactical-grid,
 .galaxy-readout{
   border-radius:var(--ut-r-card);
 }
 
 /* === P4.2 cards, rows, plates =============================== */
-.reports-list-item,
-.reports-versus,
-.reports-rewards,
-.reports-loss-block,
-.reports-population-metrics article,
-.reports-battle-details,
-.reports-generic-details,
-.reports-generic-body,
-.reports-folder-actions,
-.reports-profile-alliance-link,
-.reports-profile-protection,
 .operations-unknown-brief-v2,
 .command-request-row,
 .command-detail-note,
@@ -1059,10 +978,6 @@ html.asterion-repair-page .repair-page-head-v1::after{
 .settings-segment-v2 button,
 .settings-reset-card-v2 .danger,
 .settings-disabled-card-v2 button,
-.reports-pagination button,
-.reports-preview-actions button,
-.reports-preview-footer button,
-.reports-delete-actions button,
 .fleet-selection-line-v1 button,
 .fleet-mission-icons-v1 button,
 .flight-timeline-close,
@@ -1095,7 +1010,6 @@ html.asterion-repair-page .repair-page-head-v1::after{
 .fleet-mission-icons-v1 button span{ border-radius:inherit; }
 
 /* === P4.4 inputs & selects ================================== */
-.reports-search,
 .command-form-grid input,
 .command-form-grid textarea,
 .trade-amount-input,
@@ -1126,8 +1040,6 @@ html.asterion-repair-page .repair-page-head-v1::after{
 }
 .command-operation-glyph,
 .command-resource-glyph,
-.reports-list-icon,
-.reports-dossier-heading__icon,
 .shipyard-cost-icon-v1{
   border-radius:7px;
 }
@@ -1153,12 +1065,7 @@ html.asterion-repair-page .repair-page-head-v1::after{
    inside it. Keep real content borders; remove only these visual layers. */
 .aegis-button::before,
 .ship-info-art-v1::before,
-.ship-info-art-v1::after,
-.reports-profile-view::after,
-.reports-profile-name-plate::before,
-.reports-profile-name-plate::after,
-.reports-profile-card::before,
-.reports-profile-card::after{
+.ship-info-art-v1::after{
   display:none !important;
 }
 
@@ -1174,40 +1081,6 @@ html.asterion-repair-page .repair-page-head-v1::after{
    boundary. The rounded page panels already provide the visual grouping. */
 .workspace::before{
   display:none !important;
-}
-
-/* The profile view is a layout surface; its old square outer border and glow
-   duplicate the rounded card inside it and remain visible along the bottom. */
-.reports-profile-view{
-  border-color:transparent !important;
-  box-shadow:none !important;
-}
-
-/* Profile identity is one name plate, not a label stack or a pill. */
-.reports-profile-name-plate{
-  flex-basis:56px;
-  min-height:56px;
-  width:100% !important;
-  max-width:none !important;
-  align-self:stretch;
-  margin:0 !important;
-  border-radius:var(--ut-r-card) !important;
-  clip-path:none !important;
-}
-.reports-profile-name-plate h3{
-  font-size:22px;
-  line-height:1;
-  letter-spacing:.06em;
-}
-.reports-profile-name-plate small,
-.reports-profile-name-plate span{ display:none !important; }
-.reports-profile-avatar > strong{
-  width:min(228px, calc(100% + 16px));
-  min-width:0;
-  box-sizing:border-box;
-  padding:7px 18px 6px;
-  border-radius:var(--ut-r-chip) !important;
-  clip-path:none !important;
 }
 
 /* Fleet section labels are headings, while the queue is one section with

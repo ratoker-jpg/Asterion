@@ -297,7 +297,7 @@ async function runViewport(win, directory) {
   await capture(win, directory, '11-toasts-messages');
 
   // A report is interface, not a document: a mouse sweep selects nothing and text shows the arrow.
-  await win.webContents.executeJavaScript(`document.querySelector('.reports-category-unread')?.closest('button')?.click()`);
+  await win.webContents.executeJavaScript(`document.querySelector('.reports-v2-unread-count.is-new')?.closest('button')?.click()`);
   await settle(win, 500);
   await win.webContents.executeJavaScript(`document.querySelector('.reports-list-open')?.click()`);
   await settle(win, 600);

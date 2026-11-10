@@ -50,8 +50,7 @@ import { getPiratePlanetArt } from './pirate-planet-art.ts';
 import { EXPLORATION_ARTS } from './exploration-art.ts';
 import type { ExplorationState } from './domain/exploration/ledger.ts';
 import { ResourceIcon } from './ui/resources/ResourceIcon.tsx';
-import './reports.css';
-import './reports-v2.css';
+import './ui/messages/messages.css';
 
 const PAGE_SIZE = 7;
 const numberFormat = new Intl.NumberFormat('ru-RU');
@@ -74,19 +73,18 @@ type MessageFolder = {
   label: string;
   glyph: ReportCategory;
   category?: ReportCategory;
-  count: boolean;
   emptyTitle?: string;
   emptyBody?: string;
 };
 
 const MESSAGE_FOLDERS: readonly MessageFolder[] = [
-  { id: 'system', label: 'Система', glyph: 'system', category: 'system', count: true },
-  { id: 'battle', label: 'Доклады', glyph: 'battle', category: 'battle', count: true },
-  { id: 'command', label: 'Командные доклады', glyph: 'command', category: 'command', count: true },
-  { id: 'arena', label: 'Арена', glyph: 'arena', category: 'arena', count: true },
-  { id: 'flights', label: 'Полёты', glyph: 'flights', category: 'flights', count: true },
-  { id: 'alliances', label: 'Союзы', glyph: 'alliances', category: 'alliances', count: true },
-  { id: 'achievements', label: 'Достижения', glyph: 'achievements', category: 'achievements', count: true },
+  { id: 'system', label: 'Система', glyph: 'system', category: 'system' },
+  { id: 'battle', label: 'Доклады', glyph: 'battle', category: 'battle' },
+  { id: 'command', label: 'Командные доклады', glyph: 'command', category: 'command' },
+  { id: 'arena', label: 'Арена', glyph: 'arena', category: 'arena' },
+  { id: 'flights', label: 'Полёты', glyph: 'flights', category: 'flights' },
+  { id: 'alliances', label: 'Союзы', glyph: 'alliances', category: 'alliances' },
+  { id: 'achievements', label: 'Достижения', glyph: 'achievements', category: 'achievements' },
 ];
 
 const EMPTY_COPY: Record<ReportCategory, { title: string; body: string }> = {
@@ -100,19 +98,27 @@ const EMPTY_COPY: Record<ReportCategory, { title: string; body: string }> = {
 };
 
 const FILTER_LABELS: Record<ReportFilter, string> = {
-  all: 'ВСЕ',
-  unread: 'НЕПРОЧИТАННЫЕ',
-  saved: 'СОХРАНЁННЫЕ БОИ',
+  all: 'Все',
+  unread: 'Непрочитанные',
+  saved: 'Сохранённые бои',
 };
 
 function formatDate(timestamp?: string) {
-  if (!timestamp) return 'ТЕКУЩЕЕ';
+  if (!timestamp) return 'Сейчас';
   return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(timestamp));
 }
 
 function formatTime(timestamp?: string) {
-  if (!timestamp) return 'СЕЙЧАС';
+  if (!timestamp) return 'Сейчас';
   return new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' }).format(new Date(timestamp));
+}
+
+/** «1 сообщение», «3 сообщения», «500 сообщений». */
+function messagesLabel(count: number) {
+  const tens = count % 100;
+  const ones = count % 10;
+  const word = tens >= 11 && tens <= 14 ? 'сообщений' : ones === 1 ? 'сообщение' : ones >= 2 && ones <= 4 ? 'сообщения' : 'сообщений';
+  return `${numberFormat.format(count)} ${word}`;
 }
 
 function withOverpopulationReports(next: ReportsState, previous: ReportsState): ReportsState {
@@ -135,9 +141,8 @@ function SearchGlyph() {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.6" /><path d="m15.5 15.5 5 5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>;
 }
 
-function ActionGlyph({ kind }: { kind: 'save' | 'prev' | 'next' }) {
+function ActionGlyph({ kind }: { kind: 'prev' | 'next' }) {
   const common = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.65, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
-  if (kind === 'save') return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z" /></svg>;
   if (kind === 'prev') return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="m15 5-7 7 7 7" /></svg>;
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="m9 5 7 7-7 7" /></svg>;
 }
@@ -159,7 +164,7 @@ function DossierHeading({ item, art }: { item: ReportItem; art?: ReactNode }) {
   return <div className="reports-dossier-heading">
     <div className="reports-dossier-heading__icon reports-v2-art">{art ?? <ReportArtwork item={item} />}</div>
     <div className="reports-dossier-heading__copy"><div className="reports-dossier-badges"><small>{item.typeLabel}</small><StatusBadge item={item} /></div><h2>{item.title}</h2><p>{item.preview}</p></div>
-    <div className="reports-dossier-heading__status"><small>ПОЛУЧЕНО</small><time>{formatDate(item.timestamp)}</time></div>
+    <div className="reports-dossier-heading__status"><small>Получено</small><time>{formatDate(item.timestamp)}</time></div>
   </div>;
 }
 
@@ -240,7 +245,7 @@ function CoordinateLink({ value, onOpen }: { value: string; onOpen?: (coordinate
   const name = value.replace(COORDINATE_PATTERN, '').trim();
   return <>
     {name ? <span className="reports-v3-route-name">{name}</span> : null}
-    <button type="button" className="reports-v3-coord" disabled={!onOpen} title="Открыть во Вселенной" onClick={() => onOpen?.(coordinate)}>{text} ↗</button>
+    <button type="button" className="reports-v3-coord" disabled={!onOpen} aria-label={`${text}: открыть во Вселенной`} onClick={() => onOpen?.(coordinate)}>{text}{onOpen ? <span aria-hidden="true"> ↗</span> : null}</button>
   </>;
 }
 
@@ -360,7 +365,7 @@ function OverpopulationDossier({ item }: { item: ReportItem }) {
         {report.removedShips.length ? <div className="spy-report-entity-grid">
           {report.removedShips.map(({ shipId, count }) => {
             const entity = getFactionCombatEntity(report.factionId, shipId as CombatEntityId);
-            return <article className="spy-report-entity" key={shipId} data-qa-overpopulation-loss={shipId}><span className="reports-v2-art reports-v2-entity-art"><img src={entity.art} alt="" /></span><div><strong>{entity.name}</strong><span>{shipId}</span></div><b>{numberFormat.format(count)}</b></article>;
+            return <article className="spy-report-entity" key={shipId} data-qa-overpopulation-loss={shipId}><span className="reports-v2-art reports-v2-entity-art"><img src={entity.art} alt="" /></span><div><strong>{entity.name}</strong><span>{entity.role}</span></div><b>{numberFormat.format(count)}</b></article>;
           })}
         </div> : <p className="spy-report-empty">Потери кораблей не зафиксированы.</p>}
       </section>
@@ -381,7 +386,7 @@ function PirateReconDossier({ item, onOpenPirateUniverse }: {
   return (
     <div className={`reports-dossier reports-dossier--pirate-recon reports-dossier--pirate-recon-${report.outcome} reports-v2-tone-${item.statusTone}`} data-qa-pirate-recon-report={report.id}>
       <DossierHeading item={item} />
-      <p className="reports-contact-meta"><button type="button" className="spy-report-link" onClick={() => onOpenPirateUniverse(report.coordinate, report.contactCycleKey)}>{coordinate} ↗</button><span>Контакт {report.contactCycleKey}</span></p>
+      <p className="reports-contact-meta"><button type="button" className="spy-report-link" onClick={() => onOpenPirateUniverse(report.coordinate, report.contactCycleKey)}>{coordinate} ↗</button><span>Открыть контакт во Вселенной</span></p>
       <section className="reports-kpi-grid pirate-recon-report-card" aria-label="Сводка разведки">
         {report.outcome === 'success' && report.intel ? <><div><small>УРОВЕНЬ КОРАБЛЕЙ</small><strong>{report.intel.shipLevel}</strong></div><div><small>ТИПОВ КОРАБЛЕЙ</small><strong>{report.intel.ships.length}</strong></div></> : null}
         <div><small>ОТПРАВЛЕНИЕ</small><strong className="reports-kpi-time">{formatTimestamp(report.dispatchedAt)}</strong></div>
@@ -493,7 +498,7 @@ function BattleLosses({ side }: { side: BattleSideViewModel }) {
   </section>;
 }
 
-function BattleDossier({ item, report, saved, rating, playerOwnerId, onToggleSaved, onOpen }: { item: ReportItem; report: BattleReport; saved: boolean; rating: RatingPrototypeState; playerOwnerId: string; onToggleSaved: () => void; onOpen: () => void }) {
+function BattleDossier({ item, report, rating, playerOwnerId, onOpen }: { item: ReportItem; report: BattleReport; rating: RatingPrototypeState; playerOwnerId: string; onOpen: () => void }) {
   const viewModel = createBattleReportViewModel(report, {
     awardedBattlePoints: selectRecordedBattlePointAwards(rating, report, playerOwnerId),
   });
@@ -512,10 +517,7 @@ function BattleDossier({ item, report, saved, rating, playerOwnerId, onToggleSav
       </section>
       <section className={`reports-v3-verdict reports-v2-tone-${item.statusTone}`} aria-label="Итог боя">
         <div><small>ИТОГ БОЯ</small><strong>{item.statusLabel}</strong><span>{viewModel.roundCount ? `${viewModel.roundCount} ${viewModel.roundCount === 1 ? 'раунд' : viewModel.roundCount < 5 ? 'раунда' : 'раундов'}` : noCombatVerdict(viewModel.roundCount, viewModel.winner, viewModel.missionType, viewModel.resources)!.summary}</span></div>
-        <div className="reports-v3-verdict-actions">
-          <button type="button" className={`reports-v3-star ${saved ? 'active' : ''}`} aria-pressed={saved} aria-label={saved ? 'Убрать бой из сохранённых' : 'Сохранить бой'} onClick={onToggleSaved}><ActionGlyph kind="save" /></button>
-          <button type="button" className="reports-primary-action" onClick={onOpen}>ПОЛНЫЙ БОЕВОЙ ОТЧЁТ</button>
-        </div>
+        <button type="button" className="reports-primary-action" onClick={onOpen}>Полный отчёт о бое</button>
       </section>
       <div className="reports-v3-losses">
         <BattleLosses side={viewModel.attacker} />
@@ -534,20 +536,20 @@ function BattleDossier({ item, report, saved, rating, playerOwnerId, onToggleSav
 
 function EmptyDossier({ category, savedOnly }: { category: ReportCategory; savedOnly: boolean }) {
   const copy = EMPTY_COPY[category];
-  return <div className="reports-empty-dossier"><img className="ui-empty-art" src={savedOnly ? EMPTY_ART.battles : EMPTY_ART.reports} alt="" draggable={false} /><strong>{savedOnly ? 'СОХРАНЁННЫХ БОЁВ НЕТ' : copy.title.toUpperCase()}</strong><span>{savedOnly ? 'Сохрани нужный бой звездой в «Докладах» или во вкладке Флоты → Битвы.' : copy.body}</span></div>;
+  return <div className="reports-empty-dossier"><img className="ui-empty-art" src={savedOnly ? EMPTY_ART.battles : EMPTY_ART.reports} alt="" draggable={false} /><strong>{savedOnly ? 'Сохранённых боёв нет' : copy.title}</strong><span>{savedOnly ? 'Сохрани нужный бой звездой в «Докладах» или во вкладке Флоты → Битвы.' : copy.body}</span></div>;
 }
 
 function EmptyFolder({ folder }: { folder: MessageFolder }) {
   const title = folder.category ? EMPTY_COPY[folder.category].title : folder.emptyTitle ?? 'Раздел пока пуст';
   const body = folder.category ? EMPTY_COPY[folder.category].body : folder.emptyBody ?? 'Для этого раздела пока нет подключённого источника данных.';
-  return <div className="reports-empty-dossier reports-empty-folder" data-qa-empty-folder><img className="ui-empty-art" src={EMPTY_ART.reports} alt="" draggable={false} /><strong>{title.toUpperCase()}</strong><span>{body}</span></div>;
+  return <div className="reports-empty-dossier reports-empty-folder" data-qa-empty-folder><img className="ui-empty-art" src={EMPTY_ART.reports} alt="" draggable={false} /><strong>{title}</strong><span>{body}</span></div>;
 }
 
 function ProfileAvatar({ displayName, factionId }: { displayName: string; factionId: string }) {
   return (
     <div className="reports-profile-avatar">
       <div className="reports-profile-avatar__art"><FactionGeneralPortrait factionId={factionId} className="reports-profile-avatar__portrait faction-general-portrait--large" /></div>
-      <div className="reports-profile-avatar__caption"><small>{getCombatFactionName(factionId)} · ГЕНЕРАЛ</small><h3 className="ut-selectable" title={displayName}>{displayName}</h3></div>
+      <div className="reports-profile-avatar__caption"><small>{getCombatFactionName(factionId)} · генерал</small><h3 className="ut-selectable">{displayName}</h3></div>
     </div>
   );
 }
@@ -559,7 +561,7 @@ function MetricGlyph({ metric }: { metric: PlayerProfileMetricKey }) {
 function ProfileRecentEvents({ items }: { items: readonly ReportItem[] }) {
   return (
     <section className="reports-profile-events" aria-label="Последние события">
-      <header>ПОСЛЕДНИЕ СОБЫТИЯ</header>
+      <header>Последние события</header>
       {items.length ? <ul>{items.map((item) => <li key={item.id}><span className="reports-v2-art reports-profile-event-art"><ReportGlyph kind={item.category} /></span><span>{item.title}</span><time>{formatTime(item.timestamp)}</time></li>)}</ul> : <p>Недавних сообщений пока нет.</p>}
     </section>
   );
@@ -571,19 +573,19 @@ function PlayerProfile({ profile, score, command, mode, recentItems, onOpenComma
   const alliance = membership ? toAllianceIdentity(membership.alliance) : null;
   return (
     <section className="reports-profile-view" data-qa-profile aria-labelledby="reports-profile-title">
-      <header className="reports-profile-title-plate"><span className="reports-profile-title-plate__side">ЦЕНТР СООБЩЕНИЙ</span><h2 id="reports-profile-title">ПРОФИЛЬ ИГРОКА</h2><span className="reports-profile-title-plate__side reports-profile-title-plate__side--right">ЛИЧНОСТЬ // РЕЙТИНГ</span></header>
+      <header className="reports-profile-title-plate"><h2 id="reports-profile-title">Профиль игрока</h2></header>
       <div className="reports-profile-card">
         <section className="reports-profile-identity" aria-label="Аватар игрока"><ProfileAvatar displayName={profile.displayName} factionId={profile.factionId} /></section>
         <section className="reports-profile-metrics" aria-label="Рейтинг игрока">
-          {metrics.map((metric) => <div key={metric.key} className="reports-profile-metric" data-qa-profile-metric={metric.key} tabIndex={0} role="img" title={metric.description} aria-label={`${metric.label}: ${metric.value == null ? 'нет данных' : numberFormat.format(metric.value)}. ${metric.description}`}><span className="reports-profile-metric__glyph"><MetricGlyph metric={metric.key} /></span><span><small>{metric.label}</small><strong>{metric.value == null ? '—' : numberFormat.format(metric.value)}</strong><em>{metric.description}</em></span></div>)}
+          {metrics.map((metric) => <div key={metric.key} className="reports-profile-metric" data-qa-profile-metric={metric.key} tabIndex={0} role="img" aria-label={`${metric.label}: ${metric.value == null ? 'нет данных' : numberFormat.format(metric.value)}. ${metric.description}`}><span className="reports-profile-metric__glyph"><MetricGlyph metric={metric.key} /></span><span><small>{metric.label}</small><strong>{metric.value == null ? '—' : numberFormat.format(metric.value)}</strong><em>{metric.description}</em></span></div>)}
         </section>
         <section className="reports-profile-alliance" aria-label="Состояние союза">
-          <small>СОЮЗ</small>
-          {alliance ? <button type="button" className="reports-profile-alliance-link" onClick={onOpenCommand} aria-label={`Открыть Командование союза ${alliance.name}`}><span className="reports-v2-art reports-profile-alliance-art reports-profile-alliance-crest">{membership ? <EmblemGlyph emblem={membership.alliance.emblem} /> : <ReportGlyph kind="alliances" />}</span><span><strong>{alliance.name}</strong><small>[{alliance.tag}] · {numberFormat.format(membership?.alliance.members.length ?? 0)} участников</small></span><b>КОМАНДОВАНИЕ <i>→</i></b></button> : <div className="reports-profile-no-alliance"><span className="reports-profile-diamond" aria-hidden="true">?</span><span><strong>Без Союза</strong><small>Членство не задано в профиле</small></span></div>}
+          <small>Союз</small>
+          {alliance ? <button type="button" className="reports-profile-alliance-link" onClick={onOpenCommand} aria-label={`Открыть Командование союза ${alliance.name}`}><span className="reports-v2-art reports-profile-alliance-art reports-profile-alliance-crest">{membership ? <EmblemGlyph emblem={membership.alliance.emblem} /> : <ReportGlyph kind="alliances" />}</span><span><strong>{alliance.name}</strong><small>[{alliance.tag}] · {numberFormat.format(membership?.alliance.members.length ?? 0)} участников</small></span><b>Командование <i aria-hidden="true">→</i></b></button> : <div className="reports-profile-no-alliance"><span className="reports-profile-diamond" aria-hidden="true">?</span><span><strong>Без Союза</strong><small>Членство не задано в профиле</small></span></div>}
           <ProfileRecentEvents items={recentItems} />
         </section>
       </div>
-      {profile.protectionMode ? <div className="reports-profile-protection"><i /> ЗАЩИТНЫЙ РЕЖИМ АКТИВЕН</div> : null}
+      {profile.protectionMode ? <div className="reports-profile-protection"><i aria-hidden="true" /> Защитный режим включён</div> : null}
       {mode === 'test' ? <p className="reports-fixture-note">Профильная идентичность тестовая; очки рассчитаны по текущим активам владельца, достижения не начисляются.</p> : null}
     </section>
   );
@@ -593,8 +595,8 @@ function FolderActions({ folder, items, selectedIds, onSelectAll, onDeleteAll, o
   const allSelected = items.length > 0 && items.every((item) => selectedIds.has(item.id));
   return (
     <div className="reports-folder-actions" data-qa-folder-actions>
-      <label className="reports-select-all"><input type="checkbox" checked={allSelected} disabled={!items.length} onChange={(event) => onSelectAll(event.target.checked)} aria-label={`Выбрать все сообщения в разделе ${folder.label}`} /><span>ВЫБРАТЬ ВСЕ</span><b>{selectedIds.size}/{items.length}</b></label>
-      <div className="reports-delete-actions"><button type="button" data-qa-delete-all disabled={!items.length} onClick={onDeleteAll}>УДАЛИТЬ ВСЕ</button><button type="button" data-qa-delete-selected disabled={!selectedIds.size} onClick={onDeleteSelected}>УДАЛИТЬ ВЫБРАННОЕ</button></div>
+      <label className="reports-select-all"><input type="checkbox" checked={allSelected} disabled={!items.length} onChange={(event) => onSelectAll(event.target.checked)} aria-label={`Выбрать все сообщения в разделе ${folder.label}`} /><span>Выбрать все</span><b>{selectedIds.size} из {items.length}</b></label>
+      <div className="reports-delete-actions"><button type="button" data-qa-delete-all disabled={!items.length} onClick={onDeleteAll}>Удалить все</button><button type="button" data-qa-delete-selected disabled={!selectedIds.size} onClick={onDeleteSelected}>Удалить выбранные</button></div>
     </div>
   );
 }
@@ -778,39 +780,56 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
   const markableItems = getVisibleReportItems(items, state);
   const markAll = () => onStateChange(withOverpopulationReports(markAllReportsRead(state, markableItems), state));
 
+  const previewBody = !activeCategory
+    ? <EmptyFolder folder={activeFolderMeta} />
+    : !selectedItem
+      ? <EmptyDossier category={activeCategory} savedOnly={filter === 'saved'} />
+      : selectedBattle
+        ? <><SunReportStrip report={selectedBattle} /><BattleDossier item={selectedItem} report={selectedBattle} rating={rating} playerOwnerId={profile.playerId} onOpen={() => setOpenBattleReportId(selectedBattle.id)} /></>
+        : selectedItem.overpopulationReport
+          ? <OverpopulationDossier item={selectedItem} />
+          : selectedItem.pirateReconReport
+            ? <PirateReconDossier item={selectedItem} onOpenPirateUniverse={onOpenPirateUniverse} />
+            : selectedItem.spyReport
+              ? <SpyDossier item={selectedItem} report={selectedItem.spyReport} onOpenUniverseTarget={onOpenUniverseTarget} />
+              : <GenericDossier item={selectedItem} exploration={exploration} onOpenUniverseTarget={onOpenUniverseTarget} />;
+
   return (
-    <main className={`reports-view reports-v2 ${activeFolder === 'profile' ? 'reports-view--profile' : 'reports-view--folder'}`} aria-label="Центр сообщений Asterion">
-      <aside className="reports-categories reports-v2-panel">
-        <header><span>ЦЕНТР СООБЩЕНИЙ</span><h1>СООБЩЕНИЯ</h1></header>
-        <button type="button" className={`reports-profile-nav ${activeFolder === 'profile' ? 'active' : ''}`} onClick={() => openFolder('profile')} data-message-profile aria-label="Открыть профиль"><span className="reports-v2-art reports-v2-nav-art"><ProfileGlyph /></span><strong>Профиль</strong><b>ОБЗОР</b></button>
+    <main className={`reports-view ${activeFolder === 'profile' ? 'reports-view--profile' : 'reports-view--folder'}`} aria-label="Сообщения">
+      <aside className="reports-categories">
+        <header><h1>Сообщения</h1></header>
+        <button type="button" className={`reports-profile-nav ${activeFolder === 'profile' ? 'active' : ''}`} onClick={() => openFolder('profile')} data-message-profile aria-label="Открыть профиль" aria-current={activeFolder === 'profile' ? 'page' : undefined}><span className="reports-nav-art"><ProfileGlyph /></span><strong>Профиль</strong></button>
         <nav className="reports-message-nav" aria-label="Папки сообщений">
           {MESSAGE_FOLDERS.map((folder) => {
             const unread = folder.category ? unreadCounts[folder.category] : 0;
             const total = folder.category ? counts[folder.category] : 0;
-            return <button key={folder.id} type="button" data-message-folder={folder.id} className={activeFolder === folder.id ? 'active' : ''} onClick={() => openFolder(folder.id)} aria-current={activeFolder === folder.id ? 'page' : undefined} aria-label={`${folder.label}: ${unread} непрочитанных из ${total}`}><span className="reports-v2-art reports-v2-nav-art"><ReportGlyph kind={folder.glyph} /></span><strong>{folder.label}</strong>{folder.count ? <b className={`reports-v2-unread-count ${unread > 0 ? 'is-new' : ''}`} aria-label={`${unread} непрочитанных`}>{unread}</b> : <b className="reports-folder-action-label">+</b>}{unread > 0 ? <i className="reports-category-unread" title={`${unread} непрочитанных`} /> : null}</button>;
+            return <button key={folder.id} type="button" data-message-folder={folder.id} className={activeFolder === folder.id ? 'active' : ''} onClick={() => openFolder(folder.id)} aria-current={activeFolder === folder.id ? 'page' : undefined} aria-label={`${folder.label}: ${unread} непрочитанных из ${total}`}><span className="reports-nav-art"><ReportGlyph kind={folder.glyph} /></span><strong>{folder.label}</strong><b className={`reports-v2-unread-count ${unread > 0 ? 'is-new' : ''}`} aria-hidden="true">{unread}</b></button>;
           })}
         </nav>
-        <button className="reports-mark-all" type="button" data-qa-mark-all-read disabled={!markableItems.some((item) => !isRead(item))} onClick={markAll}><span>✓</span> ОТМЕТИТЬ ВСЕ ПРОЧИТАННЫМИ</button>
+        <button className="reports-mark-all" type="button" data-qa-mark-all-read disabled={!markableItems.some((item) => !isRead(item))} onClick={markAll}>Отметить все прочитанными</button>
       </aside>
 
       {activeFolder === 'profile' ? <PlayerProfile profile={profile} score={score} command={command} mode={mode} recentItems={recentProfileItems} onOpenCommand={onOpenCommand} /> : <section className="reports-folder-workspace" data-qa-folder-view={activeFolder}>
-        <section className="reports-feed reports-v2-panel" data-qa-message-folder-view={activeFolder}>
-          <header className="reports-feed-head"><div><small>РАЗДЕЛ СООБЩЕНИЙ</small><h2>{activeFolderMeta.label.toUpperCase()}</h2></div>{activeCategory ? <div className="reports-feed-head-tools"><span className="reports-folder-count">{counts[activeCategory]} СООБЩ.</span><div className="reports-v2-filter-segments" role="group" aria-label="Фильтр сообщений">{availableFilters.map((key) => <button key={key} type="button" aria-pressed={filter === key} onClick={() => setFilter(key)}>{FILTER_LABELS[key]}</button>)}</div></div> : null}</header>
+        <section className="reports-feed" data-qa-message-folder-view={activeFolder}>
+          <header className="reports-feed-head"><h2>{activeFolderMeta.label}</h2>{activeCategory ? <span className="reports-folder-count">{messagesLabel(counts[activeCategory])}</span> : null}</header>
+          {activeCategory ? <div className="reports-feed-tools">
+            <div className="reports-v2-filter-segments" role="group" aria-label="Фильтр сообщений">{availableFilters.map((key) => <button key={key} type="button" aria-pressed={filter === key} onClick={() => setFilter(key)}>{FILTER_LABELS[key]}</button>)}</div>
+            <label className="reports-search"><span aria-hidden="true"><SearchGlyph /></span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск в разделе" aria-label="Поиск в разделе сообщений" /></label>
+          </div> : null}
           {activeCategory ? <FolderActions folder={activeFolderMeta} items={folderItems} selectedIds={selectedIds} onSelectAll={selectAll} onDeleteAll={deleteAll} onDeleteSelected={deleteSelected} /> : null}
-          {activeCategory ? <label className="reports-search"><span aria-hidden="true"><SearchGlyph /></span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск в разделе..." aria-label="Поиск в разделе сообщений" /></label> : null}
           <div className="reports-list" data-qa-message-list>
-            {activeCategory ? pagedItems.length ? pagedItems.map((item) => <ReportListItem key={item.id} item={item} active={item.id === selectedId} read={isRead(item)} selected={selectedIds.has(item.id)} saved={Boolean(item.battleReportId && savedBattleReportIds.includes(item.battleReportId))} onOpen={() => openItem(item)} onSelect={(checked) => toggleSelected(item.id, checked)} />) : <p className="reports-list-empty-status" role="status">Сообщений в этом разделе пока нет.</p> : <EmptyFolder folder={activeFolderMeta} />}
+            {activeCategory ? pagedItems.length ? pagedItems.map((item) => <ReportListItem key={item.id} item={item} active={item.id === selectedId} read={isRead(item)} selected={selectedIds.has(item.id)} saved={Boolean(item.battleReportId && savedBattleReportIds.includes(item.battleReportId))} onOpen={() => openItem(item)} onSelect={(checked) => toggleSelected(item.id, checked)} />) : <p className="reports-list-empty-status" role="status">{search || filter !== 'all' ? 'Ничего не найдено.' : 'Сообщений в этом разделе пока нет.'}</p> : <EmptyFolder folder={activeFolderMeta} />}
           </div>
-          {activeCategory ? <footer className="reports-pagination"><button type="button" aria-label="Предыдущая страница" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}><ActionGlyph kind="prev" /></button><span><b>{page}</b> / {pageCount}<small>{visibleItems.length} сообщений</small></span><button type="button" aria-label="Следующая страница" disabled={page >= pageCount} onClick={() => setPage((current) => Math.min(pageCount, current + 1))}><ActionGlyph kind="next" /></button></footer> : null}
+          {activeCategory && pageCount > 1 ? <footer className="reports-pagination"><button type="button" aria-label="Предыдущая страница" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}><ActionGlyph kind="prev" /></button><span>Страница <b>{page}</b> из {pageCount}</span><button type="button" aria-label="Следующая страница" disabled={page >= pageCount} onClick={() => setPage((current) => Math.min(pageCount, current + 1))}><ActionGlyph kind="next" /></button></footer> : null}
         </section>
 
-        <section className="reports-preview reports-v2-panel">
-          <header className="reports-preview-head"><div><small>ДОСЬЕ СООБЩЕНИЯ</small><h2>ПРОСМОТР СООБЩЕНИЯ</h2></div>{activeCategory ? <div className="reports-preview-actions"><button type="button" aria-label={selectedBattleSaved ? 'Убрать бой из сохранённых' : 'Сохранить бой'} aria-pressed={selectedBattleSaved} disabled={!selectedItem?.battleReportId} className={selectedBattleSaved ? 'active' : ''} onClick={() => selectedItem?.battleReportId && onToggleBattleSaved(selectedItem.battleReportId, !selectedBattleSaved)}><ActionGlyph kind="save" /></button><span /><button type="button" aria-label="Предыдущее сообщение" disabled={selectedIndex <= 0} onClick={() => navigateSelected(-1)}><ActionGlyph kind="prev" /></button><button type="button" aria-label="Следующее сообщение" disabled={selectedIndex < 0 || selectedIndex >= visibleItems.length - 1} onClick={() => navigateSelected(1)}><ActionGlyph kind="next" /></button></div> : null}</header>
-          <div className="reports-preview-scroll">{activeCategory ? selectedItem ? (selectedBattle ? <><SunReportStrip report={selectedBattle} /><BattleDossier item={selectedItem} report={selectedBattle} saved={selectedBattleSaved} rating={rating} playerOwnerId={profile.playerId} onToggleSaved={() => selectedItem.battleReportId && onToggleBattleSaved(selectedItem.battleReportId, !selectedBattleSaved)} onOpen={() => selectedBattle && setOpenBattleReportId(selectedBattle.id)} /></> : selectedItem.overpopulationReport ? <OverpopulationDossier item={selectedItem} /> : selectedItem.pirateReconReport ? <PirateReconDossier item={selectedItem} onOpenPirateUniverse={onOpenPirateUniverse} /> : selectedItem.spyReport ? <SpyDossier item={selectedItem} report={selectedItem.spyReport} onOpenUniverseTarget={onOpenUniverseTarget} /> : <GenericDossier item={selectedItem} exploration={exploration} onOpenUniverseTarget={onOpenUniverseTarget} />) : <EmptyDossier category={activeCategory} savedOnly={filter === 'saved'} /> : <EmptyFolder folder={activeFolderMeta} />}</div>
+        <section className="reports-preview" aria-label="Открытое сообщение">
+          {activeCategory && selectedItem ? <header className="reports-preview-head"><span>{selectedIndex + 1} из {visibleItems.length}</span><div className="reports-preview-actions"><button type="button" aria-label="Предыдущее сообщение" disabled={selectedIndex <= 0} onClick={() => navigateSelected(-1)}><ActionGlyph kind="prev" /></button><button type="button" aria-label="Следующее сообщение" disabled={selectedIndex < 0 || selectedIndex >= visibleItems.length - 1} onClick={() => navigateSelected(1)}><ActionGlyph kind="next" /></button></div></header> : null}
+          <div className="reports-preview-scroll">{previewBody}</div>
           {activeCategory && selectedItem ? <footer className="reports-preview-footer">
             <div className="reports-preview-footer-actions">
-              {selectedItem.battleReportId ? <button type="button" className={selectedBattleSaved ? 'restore' : ''} onClick={() => onToggleBattleSaved(selectedItem.battleReportId!, !selectedBattleSaved)}>{selectedBattleSaved ? 'УБРАТЬ ИЗ СОХРАНЁННЫХ' : 'СОХРАНИТЬ БОЙ'}</button> : null}
-              <button type="button" className="reports-delete-current" onClick={deleteCurrent}>УДАЛИТЬ</button>
+              {selectedItem.battleReportId ? <button type="button" className={selectedBattleSaved ? 'restore' : ''} aria-pressed={selectedBattleSaved} onClick={() => onToggleBattleSaved(selectedItem.battleReportId!, !selectedBattleSaved)}>{selectedBattleSaved ? 'УБРАТЬ ИЗ СОХРАНЁННЫХ' : 'СОХРАНИТЬ БОЙ'}</button> : null}
+              <button type="button" className="reports-delete-current" onClick={deleteCurrent}>Удалить</button>
             </div>
             <div className="reports-preview-footer-actions">
               {selectedItem.secondaryAction?.kind === 'recall_spy' && selectedItem.secondaryAction.missionId ? <button type="button" className="restore" onClick={() => onRecallSpy(selectedItem.secondaryAction!.missionId!)}>{selectedItem.secondaryAction.label}</button> : null}
