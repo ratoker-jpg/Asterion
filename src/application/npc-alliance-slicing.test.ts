@@ -25,7 +25,7 @@ function fixture(): { state: SaveState; leavers: string[] } {
   const initial = createInitialSaveState('production', T0, { ...config, world: { ...config.world, npcCount: 6 } });
   const ids = [...new Set(Object.values(initial.espionage!.targets!).filter((target) => target.kind === 'npc').map((target) => target.ownerId))].sort();
   let state: SaveState = { ...initial, npc: createNpcState(ids, 'alliance-slicing', T0) };
-  const [weakLeader, a, b, strongLeader] = ids as [string, string, string, string];
+  const [weakLeader, a, b, strongLeader, strongMate] = ids as [string, string, string, string, string];
   const found = (ownerId: string, name: string, tag: string) => {
     const made = createAlliance(state.command, { ownerId, displayName: ownerId, settings: SETTINGS(name, tag) }, { now: T0 - 48 * HOUR, random: () => 0.3 });
     assert.equal(made.ok, true);
@@ -43,6 +43,7 @@ function fixture(): { state: SaveState; leavers: string[] } {
   found(strongLeader, 'Сильные', 'STR');
   join(a, weakLeader);
   join(b, weakLeader);
+  join(strongMate, strongLeader); // not an alliance of one: those are disbanded by their bot
   const profiles = { ...state.npc!.profiles };
   for (const id of [a, b]) {
     profiles[id] = { ...profiles[id]!, traits: { ...profiles[id]!.traits, militaryFocus: 1, aggression: 1, economyFocus: 0, cooperation: 0.1, persistence: 0, adaptability: 1 } };

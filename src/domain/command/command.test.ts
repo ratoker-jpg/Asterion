@@ -3,6 +3,8 @@ import test from 'node:test';
 
 import {
   ACTIVITY_TOUCH_INTERVAL_MS,
+  DEPUTY_MIN_TENURE_MS,
+  DEPUTY_REPICK_INTERVAL_MS,
   LEADER_ABSENCE_MS,
   MAX_ALLIANCE_MEMBERS,
   REAPPLY_COOLDOWN_MS,
@@ -19,6 +21,7 @@ import {
   pickLeaderSuccessor,
   refreshPresence,
   rejectApplication,
+  selectDeputyAppointment,
   setDeputy,
   settleLeadership,
   touchMember,
@@ -655,4 +658,42 @@ test('test-mode migration seeds the bot alliance deterministically without a clo
   const second = migrateCommandState(JSON.parse(JSON.stringify(withoutBot)), 'test');
   assert.ok(first.alliances.some((alliance) => alliance.members.some((member) => member.ownerId === TEST_BOT_OWNER_ID)));
   assert.deepEqual(first, second, 'no wall-clock time leaks into migrated data');
+});
+
+test('deputy post: needs three members and a short tenure, goes to the best by aid and points, a challenger needs a clear margin after the interval', () => {
+  const created = found(createDefaultCommandState('production'));
+  let state = fill(created.state, created.allianceId, 2);
+  const alliance = () => state.alliances[0]!;
+  // Leader + 2 members: big enough; members joined at T0 and the tenure is short, not zero.
+  assert.equal(selectDeputyAppointment(alliance(), T0 + DEPUTY_MIN_TENURE_MS - 1), null);
+  const early = selectDeputyAppointment(alliance(), T0 + DEPUTY_MIN_TENURE_MS);
+  assert.ok(early, 'no aid needed: the post is filled once the tenure is over');
+  // Only two members (leader + one): too few.
+  const small = { ...alliance(), members: alliance().members.slice(0, 2) };
+  assert.equal(selectDeputyAppointment(small, T0 + HOUR), null);
+
+  const [first, second] = alliance().members.filter((member) => member.ownerId !== 'leader').map((member) => member.ownerId) as [string, string];
+  state = creditDeliveredUnits(creditDeliveredUnits(state, first, 1_000), second, 900);
+  const points = { [first]: 100, [second]: 5_000 };
+  // Contribution 60 %, points 40 %: first = 0.6 + 0.4*0.02, second = 0.6*0.9 + 0.4.
+  assert.equal(selectDeputyAppointment(alliance(), T0 + HOUR, points)?.ownerId, second, 'points can outweigh a slightly smaller aid total');
+  const seated = ok(setDeputy(state, 'leader', second, T0 + HOUR)).state;
+  assert.equal(seated.alliances[0]!.deputySince, T0 + HOUR);
+  // The better member by contribution: not within the interval, and not without a clear margin after it.
+  const closer = creditDeliveredUnits(seated, first, 100);
+  assert.equal(selectDeputyAppointment(closer.alliances[0]!, T0 + HOUR + DEPUTY_REPICK_INTERVAL_MS - 1, { [first]: 5_000, [second]: 5_000 }), null);
+  assert.equal(selectDeputyAppointment(closer.alliances[0]!, T0 + HOUR + DEPUTY_REPICK_INTERVAL_MS, { [first]: 5_000, [second]: 5_000 }), null, 'a small lead does not displace the sitting deputy');
+  const crushing = creditDeliveredUnits(seated, first, 1_000_000);
+  assert.equal(selectDeputyAppointment(crushing.alliances[0]!, T0 + HOUR + DEPUTY_REPICK_INTERVAL_MS, { [first]: 5_000, [second]: 5_000 })?.ownerId, first);
+  // A replacement in one step is only for the automatic re-pick; by hand the leader dismisses first.
+  failure(setDeputy(seated, 'leader', first, T0 + HOUR), 'deputy_exists');
+  const swapped = ok(setDeputy(seated, 'leader', first, T0 + 2 * HOUR, { replace: true })).state;
+  assert.equal(swapped.alliances[0]!.deputyOwnerId, first);
+  assert.equal(swapped.alliances[0]!.deputySince, T0 + 2 * HOUR);
+  // The stamp survives a save and a load, and goes when the post is vacated.
+  const reloaded = migrateCommandState(JSON.parse(JSON.stringify(seated)), 'production');
+  assert.equal(reloaded.alliances[0]!.deputySince, T0 + HOUR);
+  const vacated = ok(setDeputy(seated, 'leader', null)).state;
+  assert.equal(vacated.alliances[0]!.deputyOwnerId, null);
+  assert.equal('deputySince' in vacated.alliances[0]!, false);
 });

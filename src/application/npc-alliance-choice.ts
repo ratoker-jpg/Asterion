@@ -30,6 +30,10 @@ export const NPC_ALLIANCE_CHOICE = Object.freeze({
   losingWarRatio: 1.5,
   /** An alliance of one or two that has not grown for this long (at the standard world speed) has no point. */
   stagnantAfterMs: 72 * 3_600_000,
+  /** An alliance of one older than this (at the standard world speed) is disbanded by its bot when another alliance has room. */
+  loneAllianceGraceMs: 6 * 3_600_000,
+  /** How eagerly the bot acts on it: well above the ordinary leaving score. */
+  loneAllianceScore: 0.9,
   /** Largest alliance that consolidates. */
   smallSize: 2,
   /** Below this the owner stays. */
@@ -154,7 +158,16 @@ export function npcMembersRefuse(state: SaveState, alliance: AllianceRecord, app
   return known > 0 && sum / known <= NPC_ALLIANCE_CHOICE.vetoRegard;
 }
 
-export type NpcDefection = Readonly<{ score: number; successorOwnerId: string | null }>;
+/** Another alliance that could take this owner in: room, no recent leaving, no refusal, no veto of its members. */
+function hasOpenAllianceFor(state: SaveState, profile: NpcProfile, ownAllianceId: string, at: number): boolean {
+  const command = state.command;
+  const left = recentlyLeftAlliances(command, profile.ownerId, at);
+  return command.alliances.some((other) => other.id !== ownAllianceId && !isAllianceFull(other) && !left.has(other.id)
+    && !selectReapplyBlock(command, profile.ownerId, other.id, at)
+    && npcGroupRegard(state, profile, other.members.map((entry) => entry.ownerId), at) > NPC_ALLIANCE_CHOICE.vetoRegard);
+}
+
+export type NpcDefection =Readonly<{ score: number; successorOwnerId: string | null }>;
 
 /** True while the alliance has something at stake that a defector would forfeit or break. */
 function allianceHoldsStakes(state: SaveState, allianceId: string): boolean {
@@ -180,6 +193,15 @@ export function selectNpcDefection(state: SaveState, profile: NpcProfile, at: nu
   if (!membership) return null;
   const { alliance, member, role } = membership;
   const rules = NPC_ALLIANCE_CHOICE;
+  // An alliance of one has no point (owner order 09.11.2026): the bot disbands it and looks for another one.
+  // It does not depend on mood, war or the leaving pause: only on a grace period and a place to go.
+  if (alliance.members.length === 1 && role === 'leader' && ownerId !== state.profile.playerId) {
+    const scale = CAMPAIGN_SPEED_SCALE[state.worldConfig?.world.campaignSpeed ?? 'standard'] ?? 1;
+    const lone = at - Math.max(alliance.createdAt, member.joinedAt) >= rules.loneAllianceGraceMs / Math.max(0.1, scale)
+      && !allianceHoldsStakes(state, alliance.id)
+      && hasOpenAllianceFor(state, profile, alliance.id, at);
+    return lone ? { score: rules.loneAllianceScore, successorOwnerId: null } : null;
+  }
   if (at - member.joinedAt < rules.minTenureMs) return null;
   const left = lastDepartureAt(command, ownerId);
   if (left !== null && at - left < rules.pauseAfterLeavingMs) return null;

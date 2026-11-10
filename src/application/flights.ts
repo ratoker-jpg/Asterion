@@ -5,6 +5,7 @@ import { COMPUTER_SYSTEMS_SCIENCE_ID, getFlightSlotUsage, isFlightLimitExempt, t
 import {
   appendAidEvent,
   creditAidDelivery,
+  creditDeliveredUnits,
   isAidPairValid,
   isRequestOpen,
   markRequestHelpStarted,
@@ -2440,6 +2441,16 @@ function aidArrivalTarget(state: SaveState, flight: FlightRecord): ResolvedTrans
   if (!aid || !planetId) return emptyTransportTarget(flight.destination);
   const toPlayer = aid.recipientOwnerId === state.profile.playerId;
   const planet = toPlayer ? state.planets[planetId] : state.alliedPlanets?.[planetId];
+  if (!planet && !toPlayer) {
+    // A bot's planet is not in `alliedPlanets` (that is Test Mode only): it is a foreign target of the espionage
+    // state, found at the same coordinate the request froze. Without this every aid sent to a bot was voided on arrival
+    // and never counted (found in the owner's 06-08.11 campaign: 22.8 M sent, 0 credited).
+    const foreign = resolveTransportTarget(state, { kind: 'planet', planetId, coordinate: flight.destinationCoordinate });
+    if (foreign.acceptsTransport && foreign.runtime && foreign.storage === 'foreign' && foreign.ownerId === aid.recipientOwnerId
+      && coordinatesEqual(foreign.coordinate, flight.destinationCoordinate)) {
+      return { ...foreign, relation: 'ally' };
+    }
+  }
   if (!planet) return emptyTransportTarget(flight.destination);
   if (!toPlayer && (planet as AlliedPlanetState).ownerId !== aid.recipientOwnerId) return emptyTransportTarget(flight.destination);
   if (!coordinatesEqual(coordinateOfPlanet(planet), flight.destinationCoordinate)) return emptyTransportTarget(flight.destination);
@@ -3362,6 +3373,11 @@ export function reconcileFlights(
           if (target.storage === 'foreign' && target.ownerId && next.npc?.profiles[target.ownerId]) {
             const taken = delivery.accepted.metal + delivery.accepted.minerals + delivery.accepted.gas;
             next = recordNpcHelp(next, next.profile.playerId, target.ownerId, taken, npcHelpWeight(target.runtime.buildings ?? {}, taken), arrivalAt);
+          }
+          // Goods taken to an ally by a plain transport count for the sender's contribution like aid does: what the
+          // target's stores took (a request-less shipment has no ledger entry, so the units are credited here).
+          if (target.relation === 'ally' && current.ownerSide !== 'npc') {
+            next = { ...next, command: creditDeliveredUnits(next.command, next.profile.playerId, delivery.accepted.metal + delivery.accepted.minerals + delivery.accepted.gas) };
           }
           const delivered: FlightRecord = {
             ...current,

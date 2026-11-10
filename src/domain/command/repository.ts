@@ -14,7 +14,6 @@ import {
   TEST_BOT_FIXTURE_ID,
   TEST_BOT_OWNER_ID,
   MAX_DEPARTURES,
-  DEPUTY_MIN_DELIVERED_UNITS,
   DEPUTY_MIN_TENURE_MS,
 } from './catalog.ts';
 import { normalizeEmblem } from './emblem.ts';
@@ -134,7 +133,7 @@ function createTestFixtureAlliance(context: Required<CommandOwnerContext>): Alli
     members: [
       seedMember(context.playerId, context.playerDisplayName, context.now, 0.5),
       // The managed ally is a long-standing, helpful member, so Test Mode can show the deputy appointment.
-      { ...seedMember(TEST_ALLY_OWNER_ID, TEST_ALLY_DISPLAY_NAME, Math.max(0, context.now - DEPUTY_MIN_TENURE_MS - 3_600_000), 0.25), deliveredUnits: DEPUTY_MIN_DELIVERED_UNITS },
+      { ...seedMember(TEST_ALLY_OWNER_ID, TEST_ALLY_DISPLAY_NAME, Math.max(0, context.now - DEPUTY_MIN_TENURE_MS - 3_600_000), 0.25), deliveredUnits: 5_000 },
     ],
     fixtureId: TEST_COMMAND_DEFAULT_FIXTURE_ID,
   };
@@ -243,6 +242,7 @@ function parseAlliance(value: unknown, mode: RuntimeMode): AllianceRecord | null
     leaderOwnerId: requestedLeader,
     deputyOwnerId: requestedDeputy,
     leaderSince: nonNegativeNumber(value.leaderSince, createdAt),
+    ...(requestedDeputy && typeof value.deputySince === 'number' && Number.isFinite(value.deputySince) ? { deputySince: Math.max(0, value.deputySince) } : {}),
     members,
     ...(fixtureId ? { fixtureId } : {}),
   };
@@ -270,7 +270,8 @@ function repairAlliance(alliance: AllianceRecord): AllianceRecord | null {
     const rest = members.filter((member) => !protectedIds.has(member.ownerId)).sort((left, right) => left.joinedAt - right.joinedAt);
     members = [...members.filter((member) => protectedIds.has(member.ownerId)), ...rest].slice(0, MAX_ALLIANCE_MEMBERS);
   }
-  return { ...alliance, members, leaderOwnerId: leaderId, deputyOwnerId: deputyId };
+  const { deputySince, ...rest } = alliance;
+  return { ...rest, ...(deputyId && deputySince !== undefined ? { deputySince } : {}), members, leaderOwnerId: leaderId, deputyOwnerId: deputyId };
 }
 
 function parseApplication(value: unknown): AllianceApplication | null {
