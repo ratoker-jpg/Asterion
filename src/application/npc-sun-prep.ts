@@ -503,14 +503,14 @@ function declareChoice(profile: NpcProfile, plan: NpcSunRaidPrepPlan, at: number
     // The launcher's order (owner rule 09.11.2026): from the members' offers and the Sun battle experience.
     const ordered = composeNpcSunOrder(current, own, caps);
     const room = Math.min(limit, caps.participant);
-    // The leader keeps «любые» for the members while it has hulls for the exact slots; without any it fills «любые» too.
+    // The leader fills its exact slots first, then «любые» like every member: with exact slots only for battleship
+    // class and bigger, a leader kept out of «любые» brought almost nothing (bot lab 10.11.2026).
     const leaderForces = (exactOnly: boolean) => planets.map((planet) => ({ planet, ships: npcSunAffordableForce(current, ownerId, planet.id,
       ordered ? npcOrderForceForPlanet(current, ownerId, planet, room, ordered.order, exactOnly) : npcSunForce(current, ownerId, planet.id, planet.raceId, 1, room), own.galaxy, own.system, options) }))
       .map((item) => ({ ...item, population: sunFleetPopulation(item.ships, item.planet.raceId) }))
       .sort((left, right) => right.population - left.population || (left.planet.id < right.planet.id ? -1 : 1));
-    let exactOnly = Boolean(ordered);
-    let forces = leaderForces(exactOnly);
-    if (exactOnly && !(forces[0]?.population ?? 0)) { exactOnly = false; forces = leaderForces(false); }
+    const exactOnly = false;
+    const forces = leaderForces(exactOnly);
     const origin = forces[0];
     if (!origin || origin.population <= 0) return { state: postpone(current, own, profile, at, timeScale, 'leader-no-fleet'), started: false, reason: 'no-ships' };
     const launched = launchNpcSunRaid(current, ownerId, { galaxy: own.galaxy, system: own.system, originPlanetId: origin.planet.id, ships: origin.ships, requestId: key,
