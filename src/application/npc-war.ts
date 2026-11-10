@@ -48,8 +48,8 @@ export const NPC_WAR_BALANCE = Object.freeze({
   joinFury: 0.6,
   /** A real offender: at least this many attacks on the bot and this much damage (days of its income), or planets lost to him. Small grudges between bots start no war. */
   offenderAttacks: 3,
-  offenderDamageDays: 4,
-  joinDamageDays: 2,
+  offenderDamageDays: 1.5,
+  joinDamageDays: 1,
   /** A war older than this ends whatever happens (real days), and so does one with this many rounds in a row without a launch. */
   maxDays: 4,
   /** A member whose fury is below this leaves; the war ends when nobody is left. */
@@ -334,12 +334,16 @@ export function draftNpcWar(state: SaveState, profile: NpcProfile, utility: NpcU
   if (fleet < NPC_WAR_BALANCE.minWaveDayShare * utility.dayValue && own.every((planet) => planet.resources.metal + planet.resources.minerals < 0.3 * utility.dayValue)) return null;
   const offenders = Object.keys(profile.grudges ?? {}).filter((id) => id !== ownerId)
     .map((id) => ({ id, fury: npcWarFury(utility, id, at) }))
-    .filter((item) => item.fury >= NPC_WAR_BALANCE.declareFury && npcWarRealOffender(utility, item.id))
+    .filter((item) => item.fury >= NPC_WAR_BALANCE.declareFury)
     .sort((left, right) => right.fury - left.fury || (left.id < right.id ? -1 : 1));
+  // Why a furious bot does not (yet) declare, for the journal: once per look of the check (hourly).
+  const refuse = (offenderId: string, why: string) => journal(at, ownerId, 'refused', { off: offenderId, why, g: round3(npcWarFury(utility, offenderId, at)) });
   for (const { id: offenderId } of offenders) {
-    if (activeNpcWars(state).some((war) => war.offenderId === offenderId)) continue; // the others' war is joined, not doubled
-    if (attackable(state, ownerId, offenderId, at) !== 'ok') continue;
-    if (points(state, offenderId) < NPC_WAR_BALANCE.pointsShare * points(state, ownerId)) continue;
+    if (!npcWarRealOffender(utility, offenderId)) { if (!ignoreCheck) refuse(offenderId, 'small-grudge'); continue; }
+    if (activeNpcWars(state).some((war) => war.offenderId === offenderId)) { if (!ignoreCheck) refuse(offenderId, 'joined-other-war'); continue; } // the others' war is joined, not doubled
+    const gate = attackable(state, ownerId, offenderId, at);
+    if (gate !== 'ok' && gate !== 'shield') { if (!ignoreCheck) refuse(offenderId, gate); continue; }
+    if (points(state, offenderId) < NPC_WAR_BALANCE.pointsShare * points(state, ownerId)) { if (!ignoreCheck) refuse(offenderId, 'too-small'); continue; }
     const targets = npcWarTargetOrder(state, utility, offenderId);
     if (!targets.length) continue;
     const invited = inviteesFor(state, utility, offenderId, at).slice(0, NPC_WAR_BALANCE.maxMembers - 1);

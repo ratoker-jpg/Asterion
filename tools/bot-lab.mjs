@@ -593,6 +593,7 @@ export function describeWorld(state, journal = [], tally = null, sunTally = null
     waves: warEvents('wave').length, rounds: warEvents('round').length, stages: warEvents('stage').length, skips: warEvents('skip').length,
     ended: warEnded.length, razed: sum(warEnded.map((entry) => entry.d?.razed ?? 0)),
     endedBy: warEnded.reduce((counts, entry) => ({ ...counts, [entry.d?.why]: (counts[entry.d?.why] ?? 0) + 1 }), {}),
+    refused: warEvents('refused').reduce((counts, entry) => ({ ...counts, [entry.d?.why]: (counts[entry.d?.why] ?? 0) + 1 }), {}),
     active: (state.npcStrategy?.wars ?? []).filter((item) => item.status === 'active').length,
   };
   const activePlans = Object.values(state.npcStrategy?.plans ?? {}).flat().filter((plan) => plan.template === 'strike' && plan.status === 'active');
