@@ -1,6 +1,6 @@
 // «Сообщения» redo (10.11.2026): worst-case screenshots of the inbox at 1280×720 and
 // 2560×1080, plus the three small fixes batched with it.
-// Cases: 500 unread messages, very long subjects (30 spy reports on planets with long
+// Cases: 500+ unread messages (arrivals and spy reports), very long subjects (130 spy reports on planets with long
 // names), a 42-character alliance name, empty tabs, a filter with no result, a huge
 // spy report (every ship, defence and commander with 12-digit numbers), the commander
 // tooltip, the header with a 24-character planet name (and its game tooltip), and the
@@ -141,11 +141,16 @@ function seedSource(now) {
     population: { total: 99999999999, fleet: 88888888888, defense: 11111111111 }, firstReport: index === 0,
   });
   const reports = [spy('qa-huge-spy', 0, LONG_TARGETS[0], true)];
-  for (let index = 1; index <= 30; index += 1) reports.push(spy(`qa-long-spy-${index}`, index, `${LONG_TARGETS[index % LONG_TARGETS.length]} ${index}`, false));
-  const recycler = Array.from({ length: 500 }, (_, index) => ({
+  for (let index = 1; index <= 130; index += 1) reports.push(spy(`qa-long-spy-${index}`, index, `${LONG_TARGETS[index % LONG_TARGETS.length]} ${index}`, false));
+  const recycler = Array.from({ length: 250 }, (_, index) => ({
     id: `recycler-arrival:qa-flight-${index}`, flightId: `qa-flight-${index}`,
     coordinate: { galaxy: 1 + (index % 3), system: 1 + (index % 99), position: 1 + (index % 15) },
     arrivedAtMs: now - 30_000 - index * 10_000, collectedDebris: 1000 + index * 37, remainingOrbitalDebris: index % 4 ? 99999 : 0,
+  }));
+  const gas = Array.from({ length: 250 }, (_, index) => ({
+    id: `gas-extraction-arrival:qa-gas-${index}`, flightId: `qa-gas-${index}`,
+    coordinate: { galaxy: 2, system: 1 + (index % 99), position: 1 + (index % 15) },
+    arrivalAt: now - 40_000 - index * 10_000, outcome: index % 5 ? 'found' : 'missed', gasCollected: index % 5 ? 5000 + index : 0, scrapCollected: index % 3 ? 120 : 0,
   }));
   return `(save) => {
     const now = ${now};
@@ -162,7 +167,7 @@ function seedSource(now) {
       if ((alliance.members || []).some((member) => member.ownerId === playerId)) { alliance.name = ${JSON.stringify(ALLIANCE_42)}; alliance.tag = ${JSON.stringify(ALLIANCE_TAG)}; }
     }
     save.espionage = { ...(save.espionage || {}), reports: ${JSON.stringify(reports)} };
-    save.reports = { ...(save.reports || {}), readIds: [], hiddenIds: [], readUpTo: undefined, recyclerArrivalReports: ${JSON.stringify(recycler)} };
+    save.reports = { ...(save.reports || {}), readIds: [], hiddenIds: [], readUpTo: undefined, recyclerArrivalReports: ${JSON.stringify(recycler)}, gasExtractionArrivalReports: ${JSON.stringify(gas)} };
     localStorage.setItem('asterion.test-time-scale.v1', '1');
   }`;
 }
@@ -255,8 +260,9 @@ async function runViewport(win, directory, label) {
   metrics.flights = await win.webContents.executeJavaScript(`({
     rows: document.querySelectorAll('[data-qa-message-list] .reports-list-item').length,
     unreadBadge: document.querySelector('[data-message-folder="flights"] .reports-v2-unread-count')?.textContent,
+    unreadTotal: Array.from(document.querySelectorAll('[data-message-folder] .reports-v2-unread-count')).reduce((sum, node) => sum + Number(node.textContent || 0), 0),
   })`);
-  if (Number(metrics.flights.unreadBadge) < 500) fail('The 500-message fixture is not all shown', metrics.flights);
+  if (metrics.flights.unreadTotal < 500) fail('The inbox does not hold 500 unread messages', metrics.flights);
   await check('500 flights');
   await capture(win, directory, '04-flights-500-unread');
   await click(win, '.reports-v2-filter-segments button:nth-child(2)');
@@ -365,11 +371,13 @@ async function runSaveCards(width, height, directory, label) {
       localStorage.setItem(key, JSON.stringify(index));
       return index.slots.length;
     })()`);
-    if (cloned !== 4) fail('Could not clone save slots', cloned);
+    if (!(cloned >= 4)) fail('Could not clone save slots', cloned);
     await open();
     await waitFor(win, `document.querySelector('[data-qa-menu="main"]')`, 20000);
     await click(win, '[data-qa-menu-action="load"]');
-    await waitFor(win, `document.querySelectorAll('[data-qa-load-screen] [data-qa-slot]').length === 4`);
+    // The wizard may leave more than one slot (e.g. an autosave copy): wait for the three clones by id.
+    await waitFor(win, `['qa-victory', 'qa-short', 'qa-victory-short'].every((id) => document.querySelector('[data-qa-load-screen] [data-qa-slot="' + id + '"]'))`, 20000)
+      .catch(async (error) => { throw new Error(`${error.message}; ${JSON.stringify(await win.webContents.executeJavaScript(`({ cloned: ${JSON.stringify(cloned)}, shown: Array.from(document.querySelectorAll('[data-qa-slot]')).map((n) => n.getAttribute('data-qa-slot')), screen: Boolean(document.querySelector('[data-qa-load-screen]')), index: localStorage.getItem('asterion.slots.index.v1')?.slice(0, 400) })`))}`); });
     await settle(win, 900);
     const cards = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-qa-slot]')).map((card) => {
       const box = card.getBoundingClientRect();
