@@ -181,7 +181,9 @@ function seedSource(now, letters) {
     const appearedAt = now - 600_000;
     const contactId = 'unique:1:23:0:' + appearedAt;
     save.exploration = save.exploration || { version: 1, contacts: {}, highestScoresByOwner: {}, completed: [], acceptedContactIds: [], reconReports: [] };
-    save.exploration.contacts = { ...(save.exploration.contacts || {}), [contactId]: {
+    // One QA contact only: a re-seed must not leave a second contact with the same expedition flight.
+    const contacts = Object.fromEntries(Object.entries(save.exploration.contacts || {}).filter(([, contact]) => !(contact.events || []).some((event) => event.flightId === 'qa-find-flight')));
+    save.exploration.contacts = { ...contacts, [contactId]: {
       id: contactId, kind: 'unique', coordinate: { galaxy: 1, system: 23, position: 16 }, variant: 2, appearedAt, expiresAt: now + 540_000,
       worldScoreAtAppearance: 1000, initialReserve: { metal: 900000, minerals: 600000, gas: 200000, debris: 50000 },
       resourceReserve: { metal: 500000, minerals: 300000, gas: 100000, debris: 20000 }, extractedByType: { metal: 400000, minerals: 300000, gas: 100000, debris: 30000 },

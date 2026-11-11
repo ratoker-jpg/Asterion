@@ -531,8 +531,9 @@
 .reports-view .reports-sheet-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 4px 16px; margin: 0; }
 .reports-view .reports-sheet-facts > div { min-width: 0; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--rm-line); }
 .reports-view .reports-sheet-facts dt { min-width: 0; color: var(--rm-label); font-size: calc(12px * var(--text-scale-secondary, 1)) !important; overflow-wrap: anywhere; }
-.reports-view .reports-sheet-facts dd { margin: 0; color: #fff; font-size: calc(13px * var(--text-scale-table, 1)) !important; font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: anywhere; }
-.reports-view .reports-sheet-facts--side { grid-column: 1 / -1; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.reports-view .reports-sheet-facts dd { margin: 0; color: #fff; font-size: calc(13px * var(--text-scale-table, 1)) !important; font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: break-word; }
+.reports-view .reports-sheet-facts--side { grid-column: 1 / -1; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+.reports-view .reports-sheet-facts--side dt { overflow-wrap: normal; }
 
 /* «Корабли», «Оборона»: groups side by side, unit tiles inside */
 .reports-view .reports-sheet-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px 20px; }

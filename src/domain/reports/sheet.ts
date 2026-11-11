@@ -112,7 +112,8 @@ function battleSide(side: BattleSideViewModel, outcome: ReportSide['outcome']): 
       label: technology.name,
       value: technology.bonusPercent > 0 ? `+${number.format(technology.bonusPercent)}%` : `Уровень ${technology.level}`,
     })),
-    ...side.modifiers.map((modifier) => ({ label: modifier.label, value: modifier.value })),
+    // Engine-only modifiers (snapshot ids, English keys) are not player words.
+    ...side.modifiers.filter((modifier) => !/[A-Za-z]/.test(`${modifier.label}${modifier.value}`)).map((modifier) => ({ label: modifier.label, value: modifier.value })),
   ];
   return {
     key: side.participant.side,
@@ -166,7 +167,7 @@ function battleSheet(item: ReportItem, viewModel: BattleReportViewModel): Report
     .filter((side) => side.defenses.length)
     .map((side): ReportUnitGroup => ({
       key: `defense-${side.participant.side}`,
-      title: side.participant.side === 'attacker' ? 'Оборона атакующего' : 'Оборона',
+      title: side.participant.side === 'attacker' ? 'Атакующий' : 'Защитник',
       units: side.defenses.map(battleUnit),
       total: side.losses.defenses != null ? `потеряно ${number.format(side.losses.defenses)}` : undefined,
     }));
@@ -363,10 +364,10 @@ function pirateReconSheet(item: ReportItem): ReportSheet {
 function letterSheet(item: ReportItem, letter: PersonalLetter): ReportSheet {
   const sender = letter.sender;
   const side: ReportSide = sender.kind === 'alliance'
-    ? { key: 'sender', role: 'Отправитель', name: sender.name, meta: sender.tag ? `Союз [${sender.tag}]` : 'Союз', portrait: sender.allianceId ? { kind: 'crest', allianceId: sender.allianceId } : { kind: 'initial', text: sender.name.slice(0, 1) } }
+    ? { key: 'sender', role: 'Союз', name: sender.name, meta: sender.tag ? `Союз [${sender.tag}]` : 'Союз', portrait: sender.allianceId ? { kind: 'crest', allianceId: sender.allianceId } : { kind: 'initial', text: sender.name.slice(0, 1) } }
     : {
       key: 'sender',
-      role: 'Отправитель',
+      role: 'Игрок',
       name: sender.name,
       meta: sender.alliance ? `[${sender.alliance.tag}] ${sender.alliance.name}` : 'Без союза',
       portrait: sender.factionId ? { kind: 'faction', factionId: sender.factionId } : { kind: 'initial', text: sender.name.slice(0, 1) },
