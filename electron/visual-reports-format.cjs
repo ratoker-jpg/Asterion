@@ -127,7 +127,7 @@ function seedSource(now, letters) {
     { id: 'recycler-arrival:qa-recycle-empty', flightId: 'qa-recycle-empty', coordinate: { galaxy: 1, system: 17, position: 9 }, arrivedAtMs: now - 60_000, collectedDebris: 0, remainingOrbitalDebris: 0 },
     ...Array.from({ length: 200 }, (_, index) => ({
       id: `recycler-arrival:qa-recycle-${index}`, flightId: `qa-recycle-${index}`,
-      coordinate: { galaxy: 1 + (index % 3), system: 1 + (index % 99), position: 1 + (index % 15) },
+      coordinate: { galaxy: 1 + (index % 3), system: 1 + (index % 40), position: 1 + (index % 15) },
       arrivedAtMs: now - 4 * 60_000 - index * 3_000, collectedDebris: 1000 + index * 37, remainingOrbitalDebris: index % 4 ? 99999 : 0,
     })),
   ];
