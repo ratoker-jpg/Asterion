@@ -330,6 +330,17 @@ const NPC_CATCHUP_PERSIST_INTERVAL_MS = 2_000;
  * 20 s. Time a tick advanced is replayed identically on load, so nothing is
  * lost in between; commands are written at once.
  */
+/** Per message type, how long the UI thread spent in the worker's answers (read by the perf trace: window.__liveWorldMsgStats). */
+function noteLiveWorldMessage(type: string, handle: () => void): void {
+  const startedAt = performance.now();
+  handle();
+  const took = performance.now() - startedAt;
+  const stats = ((window as unknown as { __liveWorldMsgStats?: Record<string, { count: number; totalMs: number; maxMs: number }> }).__liveWorldMsgStats ??= {});
+  const entry = (stats[type] ??= { count: 0, totalMs: 0, maxMs: 0 });
+  entry.count += 1;
+  entry.totalMs += took;
+  if (took > entry.maxMs) entry.maxMs = took;
+}
 const LIVE_TICK_PERSIST_COST_FACTOR = 50;
 const LIVE_TICK_PERSIST_MAX_INTERVAL_MS = 60_000;
 /** A deferred clock-tick write is serialized in steps this long, so a late-game save does not freeze a frame. */
@@ -1329,6 +1340,9 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     worker.onmessage = (event: MessageEvent<LiveWorldResponse>) => {
       if (liveWorld.current !== link) return;
       const message = event.data;
+      noteLiveWorldMessage(message.type, () => handleLiveWorldMessage(message));
+    };
+    const handleLiveWorldMessage = (message: LiveWorldResponse) => {
       if (message.type === 'ticked') {
         link.tickInFlight = false;
         // Made on a world App has left (a command meanwhile): the worker drops it too.
