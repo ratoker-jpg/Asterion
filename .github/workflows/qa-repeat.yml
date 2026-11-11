@@ -102,7 +102,9 @@ jobs:
         if: always()
         with:
           name: repeat-${{ matrix.shard }}-${{ matrix.replica }}
-          path: qa-repeat/*.tsv
+          path: |
+            qa-repeat/*
+            visual-qa/screens-universe-card/**/*
           retention-days: 14
 
   summary:

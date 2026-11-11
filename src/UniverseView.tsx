@@ -12,6 +12,7 @@ import { asterionAssetIntegrationAssets } from './assets/generated/asterionAsset
 import { ResourceIcon } from './ui/resources/ResourceIcon.tsx';
 import pirateWarlordArt from '../assets/source/characters/pirates/pirate_warlord.png';
 import debrisIcon from './assets/ui/header-icons/debris.png';
+import { createUniverseCardQaFixture, getUniverseCardQaScenario } from './ui/universe/object-card-qa-fixture.ts';
 import './ui/universe/universe-radar.css';
 import './ui/universe/map-relations.css';
 import './ui/shield/shield.css';
@@ -797,6 +798,17 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const onPirateSystemChangeRef = useRef(onPirateSystemChange);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  // «Before» screenshots of the card redo: the same seeded objects in the old card.
+  const qaScenario = useMemo(() => getUniverseCardQaScenario(mode), [mode]);
+  const qaFixture = useMemo(() => (qaScenario ? createUniverseCardQaFixture(qaScenario, Date.now(), {
+    planet: planetArts[3], asteroid: asteroidArts[2], pirate: pirateArts[1] ?? pirateArts[0], unique: assets.uniqueArts?.[0] ?? '', anomaly: anomalyArts[0] ?? '',
+  }) : null), [qaScenario]);
+  const qaCard = qaFixture?.card ?? null;
+  useEffect(() => {
+    if (!qaFixture?.debris) return;
+    const { origin, results } = qaFixture.debris;
+    setDebrisSearch({ origin, results, ...nearbySystemWindow(origin.coordinate.system, SYSTEM_COUNT) });
+  }, [qaFixture]);
 
   useEffect(() => {
     onPirateSystemChangeRef.current = onPirateSystemChange;
@@ -1492,6 +1504,23 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
           </header>
           <div className="universe-inspector-body uw-body">
           {<SpecialInspector node={selectedNode} underlyingNode={selectedUnderlyingNode} nowMs={nowMs} asteroidHasDebris={Boolean(selectedNode.kind === 'asteroid' && selectedNode.asteroid && asteroidDebrisPresenceBySpawnIndex?.[String(selectedNode.asteroid.spawnIndex)])} pirateContact={selectedNode.kind === 'pirate' ? pirateContacts.find((contact) => contact.contactCycleKey === selectedNode.pirate?.contactCycleKey) : undefined} onColonize={onColonize} onAsteroidRecycler={onAsteroidRecycler} onExpedition={onExpedition} onExplorationRecon={onExplorationRecon} onExplorationAttack={onExplorationAttack} explorationStatus={explorationEligibility[selectedNode.id]} onPirateRecon={onPirateRecon} onPirateAttack={onPirateAttack} onPirateReport={onPirateReport} />}
+          </div>
+        </aside>
+        </div>, document.body) : null}
+      {qaCard ? createPortal(
+        <div className="universe-modal-backdrop">
+        <aside className={`universe-inspector universe-inspector--${qaCard.node.kind} uw`} role="dialog" aria-modal="true" aria-label={`Инспектор: ${qaCard.node.name}`} data-qa-universe-inspector data-qa-inspector-kind={qaCard.node.kind}
+          style={{ '--uw-k': SPECIAL_TONE[qaCard.node.kind] ?? '#8fb6c0' } as CSSProperties}>
+          <header className="universe-inspector-header uw-head">
+            <div className="uw-title"><small>ЗВЁЗДНЫЙ АТЛАС · {getUniverseObjectKindLabel(qaCard.node.kind)}</small><h2>{qaCard.node.name}</h2></div>
+            <div className="uw-tags">
+              <span className="uw-coord">{formatUniverseCoordinate(qaCard.node.coordinate)}</span>
+              {qaCard.node.kind === 'asteroid' ? <em className="uw-chip">кольцо {Math.ceil(qaCard.node.coordinate.position / 6)}</em> : null}
+            </div>
+            <button type="button" className="universe-inspector-close uw-close" data-asterion-close aria-label="Закрыть инспектор" title="Закрыть инспектор">✕</button>
+          </header>
+          <div className="universe-inspector-body uw-body">
+          <SpecialInspector node={qaCard.node} underlyingNode={qaCard.underlyingNode} nowMs={qaFixture!.nowMs} asteroidHasDebris={qaCard.asteroidHasDebris} pirateContact={qaCard.pirateContact} onColonize={onColonize} onAsteroidRecycler={onAsteroidRecycler} onExpedition={onExpedition} onExplorationRecon={onExplorationRecon} onExplorationAttack={onExplorationAttack} explorationStatus={qaCard.explorationStatus} onPirateRecon={onPirateRecon} onPirateAttack={onPirateAttack} onPirateReport={onPirateReport} />
           </div>
         </aside>
         </div>, document.body) : null}
