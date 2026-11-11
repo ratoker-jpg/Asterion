@@ -55,7 +55,35 @@ function pruneBotJournal(file) {
   return fs.statSync(file).size;
 }
 
+// Files of a campaign no slot lists any more (a deleted slot, a crash between
+// the file and the index): its saves and bot journal. Only slot keys, only
+// files untouched for an hour, so a campaign being created right now is safe.
+const ORPHAN_MIN_AGE_MS = 60 * 60 * 1000;
+const SLOT_FILE = /^(asterion\.(?:slot\.slot-[a-z0-9-]{1,40}\.v1|vertical-slice\.v1))\.(?:[a-z0-9-]{1,40}\.save\.json|bots\.jsonl)$/;
+
+function pruneOrphanFiles(keep, now = Date.now()) {
+  const kept = new Set(keep);
+  const removed = [];
+  for (const name of fs.readdirSync(savesDir())) {
+    const match = SLOT_FILE.exec(name);
+    if (!match || kept.has(match[1])) continue;
+    const file = path.join(savesDir(), name);
+    if (now - fs.statSync(file).mtimeMs < ORPHAN_MIN_AGE_MS) continue;
+    fs.rmSync(file, { force: true });
+    removed.push(name);
+  }
+  return removed;
+}
+
 function registerSaveStore() {
+  ipcMain.on('asterion:save-store:prune', (event, keep) => {
+    try {
+      if (!Array.isArray(keep) || !keep.length || !keep.every((key) => typeof key === 'string' && KEY.test(key))) throw new Error('Invalid prune request.');
+      event.returnValue = { ok: true, removed: pruneOrphanFiles(keep).length };
+    } catch (error) {
+      event.returnValue = { ok: false, error: String(error && error.message || error) };
+    }
+  });
   // The series registry: read and written only at the boundaries of a campaign.
   ipcMain.on('asterion:personas:read', (event) => {
     try {
@@ -160,4 +188,4 @@ function registerSaveStore() {
   });
 }
 
-module.exports = { registerSaveStore };
+module.exports = { registerSaveStore, pruneOrphanFiles };

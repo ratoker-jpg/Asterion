@@ -527,3 +527,8 @@
 }
 .menu-viewport .menu-race-mix__row input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; border: 2px solid #fff; background: var(--mix-color); }
 .menu-viewport .menu-race-mix__row input[type="range"]:focus-visible { outline: var(--ut-focus); outline-offset: 4px; }
+
+/* Finished rounds replaced by a later one: out of the way, still loadable. */
+.menu-past-rounds { margin-top: 18px; flex: 0 0 auto; }
+.menu-past-rounds > summary { cursor: pointer; color: var(--menu-muted, #9aa7bd); letter-spacing: 0.08em; text-transform: uppercase; font-size: 13px; padding: 8px 0; }
+.menu-past-rounds > .menu-slots { margin-top: 10px; opacity: 0.85; }

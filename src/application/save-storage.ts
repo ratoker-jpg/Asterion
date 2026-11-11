@@ -25,6 +25,8 @@ export type DesktopSaveStore = {
   /** The same write, finished by the main process while the renderer goes on. */
   writeAsync?(key: string, writeId: string, text: string): Promise<void>;
   remove(key: string): void;
+  /** Deletes files of campaigns no slot lists any more (`keep`: every listed slot key). */
+  pruneOrphans?(keep: readonly string[]): void;
 };
 
 /** A storage that may still be finishing writes: `flush` completes them synchronously. */
@@ -171,10 +173,10 @@ export function createExternalizingStorage(local: SaveStorage, store: DesktopSav
     },
     removeItem(key) {
       touch(key);
-      const previous = readSavePointer(local.getItem(key));
       local.removeItem(key);
       memory.delete(key);
-      if (previous) store.remove(key);
+      // Always: a small save leaves no pointer, yet its bot journal stays on disk.
+      store.remove(key);
     },
     flush() {
       for (const key of [...pending.keys()]) flushKey(key);

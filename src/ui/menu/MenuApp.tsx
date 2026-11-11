@@ -17,6 +17,7 @@ import {
   exportSaveSlot,
   importSaveSlot,
   inspectSlot,
+  pruneOrphanSaveFiles,
   updateSlotSummary,
   readSlotIndex,
   renameSaveSlot,
@@ -82,6 +83,7 @@ export function MenuApp({ initialScreen, onEnterSlot, entryProblem = null, onDis
   const [screen, setScreen] = useState<MenuScreen>(initialScreen);
   const [seriesRound] = useState(() => consumeSeriesRound());
   const [index, setIndex] = useState<SaveSlotIndex>(() => readSlotIndex());
+  useEffect(() => { pruneOrphanSaveFiles(readSlotIndex()); }, []);
   const continueSlot = selectContinueSlot(index);
   const [themeFaction, setThemeFaction] = useState(continueSlot?.factionId ?? 'aegis');
 
@@ -114,7 +116,7 @@ export function MenuApp({ initialScreen, onEnterSlot, entryProblem = null, onDis
         <div className="menu-bg" aria-hidden="true" style={{ backgroundImage: `url(${menuBackground(themeFaction)})` }} data-qa-menu-bg={themeFaction} />
         <div className="menu-stars" aria-hidden="true" />
         {screen === 'main' ? (
-          <MainMenuScreen continueSlot={continueSlot} slotCount={index.slots.length} onNavigate={setScreen} onContinue={() => continueSlot && onEnterSlot(continueSlot)} />
+          <MainMenuScreen continueSlot={continueSlot} slotCount={index.slots.filter((slot) => slot.retiredAt === undefined).length} onNavigate={setScreen} onContinue={() => continueSlot && onEnterSlot(continueSlot)} />
         ) : screen === 'load' ? (
           <LoadGameScreen index={index} onBack={() => setScreen('main')} onLoad={onEnterSlot} onChanged={refresh} />
         ) : screen === 'new' ? (
@@ -312,6 +314,8 @@ function downloadText(fileName: string, text: string) {
 
 function LoadGameScreen({ index, onBack, onLoad, onChanged }: LoadGameScreenProps) {
   const slots = useMemo(() => sortSlotsByRecent(index.slots), [index.slots]);
+  const liveSlots = useMemo(() => slots.filter((slot) => slot.retiredAt === undefined), [slots]);
+  const pastSlots = useMemo(() => slots.filter((slot) => slot.retiredAt !== undefined), [slots]);
   const health = useMemo(() => new Map(slots.map((slot) => [slot.id, inspectSlot(slot, SAVE_SCHEMA_VERSION)])), [slots]);
   // The health check reads every payload anyway: a card summary cached by an older build is corrected here.
   useEffect(() => {
@@ -341,6 +345,28 @@ function LoadGameScreen({ index, onBack, onLoad, onChanged }: LoadGameScreenProp
     if (fileRef.current) fileRef.current.value = '';
   };
 
+  const renderCard = (slot: SaveSlotMeta) => (
+    <SlotCard
+      key={slot.id}
+      slot={slot}
+      active={slot.id === index.activeSlotId}
+      health={health.get(slot.id) ?? { status: 'missing' }}
+      renaming={renaming?.id === slot.id ? renaming.name : null}
+      onRenameStart={() => setRenaming({ id: slot.id, name: slot.name })}
+      onRenameChange={(name) => setRenaming({ id: slot.id, name })}
+      onRenameCommit={() => { if (renaming) result(renameSaveSlot(slot.id, renaming.name), 'Слот переименован.'); setRenaming(null); }}
+      onRenameCancel={() => setRenaming(null)}
+      onLoad={() => onLoad(slot)}
+      onDuplicate={() => result(duplicateSaveSlot(slot.id), 'Создана копия слота.')}
+      onExport={() => {
+        const exported = exportSaveSlot(slot.id);
+        if (exported.ok) downloadText(exported.fileName, exported.text);
+        setMessage(exported.ok ? { tone: 'ok', text: `Файл ${exported.fileName} сохранён.` } : { tone: 'error', text: exported.error });
+      }}
+      onDelete={() => setConfirmDelete(slot)}
+    />
+  );
+
   return (
     <main className="menu-screen menu-load" data-qa-load-screen>
       <ScreenHeader eyebrow="СОХРАНЕНИЯ" title="ЗАГРУЗИТЬ ИГРУ" onBack={onBack}>
@@ -348,33 +374,21 @@ function LoadGameScreen({ index, onBack, onLoad, onChanged }: LoadGameScreenProp
         <button type="button" className="menu-btn" onClick={() => fileRef.current?.click()} data-qa-import>ИМПОРТ ИЗ ФАЙЛА</button>
       </ScreenHeader>
       {message ? <p className={`menu-message menu-message--${message.tone}`} role="status">{message.text}</p> : null}
-      {slots.length ? (
+      {liveSlots.length ? (
         <ul className="menu-slots" aria-label="Слоты сохранения">
-          {slots.map((slot) => (
-            <SlotCard
-              key={slot.id}
-              slot={slot}
-              active={slot.id === index.activeSlotId}
-              health={health.get(slot.id) ?? { status: 'missing' }}
-              renaming={renaming?.id === slot.id ? renaming.name : null}
-              onRenameStart={() => setRenaming({ id: slot.id, name: slot.name })}
-              onRenameChange={(name) => setRenaming({ id: slot.id, name })}
-              onRenameCommit={() => { if (renaming) result(renameSaveSlot(slot.id, renaming.name), 'Слот переименован.'); setRenaming(null); }}
-              onRenameCancel={() => setRenaming(null)}
-              onLoad={() => onLoad(slot)}
-              onDuplicate={() => result(duplicateSaveSlot(slot.id), 'Создана копия слота.')}
-              onExport={() => {
-                const exported = exportSaveSlot(slot.id);
-                if (exported.ok) downloadText(exported.fileName, exported.text);
-                setMessage(exported.ok ? { tone: 'ok', text: `Файл ${exported.fileName} сохранён.` } : { tone: 'error', text: exported.error });
-              }}
-              onDelete={() => setConfirmDelete(slot)}
-            />
-          ))}
+          {liveSlots.map(renderCard)}
         </ul>
-      ) : (
+      ) : slots.length ? null : (
         <div className="menu-empty"><h2>Сохранений пока нет</h2><p>Начните новую игру или импортируйте файл сохранения.</p></div>
       )}
+      {pastSlots.length ? (
+        <details className="menu-past-rounds" data-qa-past-rounds>
+          <summary>Прошлые раунды · {pastSlots.length}</summary>
+          <ul className="menu-slots" aria-label="Прошлые раунды">
+            {pastSlots.map(renderCard)}
+          </ul>
+        </details>
+      ) : null}
       <ServerCampaigns slots={slots} onLoad={onLoad} onOpened={(slot) => { onChanged(); onLoad(slot); }} />
       {confirmDelete ? (
         <ConfirmDialog

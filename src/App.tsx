@@ -3009,7 +3009,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const startNextRound = (kind: 'gate' | 'left') => {
     const config = stateRef.current.worldConfig;
     const seriesId = settleIntoSeries(kind);
-    requestSeriesRound({ seriesId, config: config && !config.legacy ? config : createDefaultNewGameConfig({ factionId: stateRef.current.profile.factionId, playerName: stateRef.current.profile.displayName }) });
+    requestSeriesRound({ seriesId, fromSlotId: session?.slotId ?? null, config: config && !config.legacy ? config : createDefaultNewGameConfig({ factionId: stateRef.current.profile.factionId, playerName: stateRef.current.profile.displayName }) });
     leaveTo('new');
   };
   const leaveTo = (screen: 'main' | 'load' | 'new') => {
