@@ -197,6 +197,13 @@ async function findPirateSystem(win) {
       return Object.entries(save.planets || {}).map(([id, planet]) => id + '@' + planet.universeGalaxy + ':' + planet.universeSystem + ':' + planet.universePosition);
     })()`);
     console.log(`[operations-screens] system ${system}: planets after the edit ${JSON.stringify(held)}`);
+    const shown = await win.webContents.executeJavaScript(`(() => ({
+      url: location.href.slice(-60),
+      cards: [...document.querySelectorAll('.operation-feed-card-v2')].map((card) => card.getAttribute('data-contact-kind') + ':' + (card.textContent || '').slice(0, 40)),
+      tabs: [...document.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent.trim() + (tab.getAttribute('aria-selected') === 'true' ? '*' : '')),
+      text: (document.querySelector('.operations-shell-v2')?.innerText || '').replace(/\\s+/g, ' ').slice(0, 300),
+    }))()`);
+    console.log(`[operations-screens] system ${system}: operations shows ${JSON.stringify(shown)}`);
     // Fallback: move the home planet itself into the system.
     await patchSaveIdle(win, SAVE_KEY, `(save) => {
       delete save.planets['qa-operations-colony'];
