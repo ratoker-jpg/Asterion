@@ -177,10 +177,12 @@ function seedSource(now, letters) {
     save.reports = { ...(save.reports || {}), readIds: [], hiddenIds: [], readUpTo: undefined,
       recyclerArrivalReports: ${JSON.stringify(recycler)}, gasExtractionArrivalReports: ${JSON.stringify(gas)}, overpopulationReports: ${JSON.stringify(overpopulation)} };
     // An exploration find: a unique object, the expedition came back with cargo.
-    const contactId = 'unique:qa-find';
+    // A valid identity (kind:galaxy:system:cycle:appearedAt), alive under 20 minutes, or the loader drops it.
+    const appearedAt = now - 600_000;
+    const contactId = 'unique:1:23:0:' + appearedAt;
     save.exploration = save.exploration || { version: 1, contacts: {}, highestScoresByOwner: {}, completed: [], acceptedContactIds: [], reconReports: [] };
     save.exploration.contacts = { ...(save.exploration.contacts || {}), [contactId]: {
-      id: contactId, kind: 'unique', coordinate: { galaxy: 1, system: 23, position: 16 }, variant: 2, appearedAt: now - 7_200_000, expiresAt: now + 7_200_000,
+      id: contactId, kind: 'unique', coordinate: { galaxy: 1, system: 23, position: 16 }, variant: 2, appearedAt, expiresAt: now + 540_000,
       worldScoreAtAppearance: 1000, initialReserve: { metal: 900000, minerals: 600000, gas: 200000, debris: 50000 },
       resourceReserve: { metal: 500000, minerals: 300000, gas: 100000, debris: 20000 }, extractedByType: { metal: 400000, minerals: 300000, gas: 100000, debris: 30000 },
       rareUsedByOwner: [], events: [{ id: 'qa-find-returned', at: now - 200_000, kind: 'returned', ownerId: me, flightId: 'qa-find-flight', originPlanetId: 'helion-01',
