@@ -20,8 +20,7 @@ app.on('window-all-closed', () => {});
 
 const ROOT = path.join(__dirname, '..');
 const OUTPUT = process.env.ASTERION_QA_OUTPUT || path.join(ROOT, 'visual-qa', 'reports-format', 'run');
-// «Before» run on main: contracts are recorded, not enforced (the new format does not exist yet).
-const CHECKS = process.env.ASTERION_QA_CHECKS === '1';
+const CHECKS = process.env.ASTERION_QA_CHECKS !== '0';
 const SHOTS = process.env.ASTERION_SKIP_SCREENSHOTS !== '1';
 const SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const VIEWPORTS = [[1280, 720], [2560, 1080]];

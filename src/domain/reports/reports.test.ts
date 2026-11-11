@@ -25,6 +25,7 @@ import {
   preservePersistentReportCollections,
   recyclerArrivalReportToReportItem,
   reportReadCheck,
+  spyReportToReportItem,
   upsertGasExtractionArrivalReport,
   upsertRecyclerArrivalReport,
   upsertOverpopulationEpisodeReport,
@@ -41,6 +42,11 @@ import {
   readReportsState,
 } from './repository.ts';
 import type { GasExtractionArrivalReport, ReportItem } from './types.ts';
+import { personalLetters } from './letters.ts';
+import { buildReportSheet } from './sheet.ts';
+import { createBattleReportViewModel } from '../combat/battle-report-view-model.ts';
+import type { AllianceApplication, AllianceRecord } from '../command/types.ts';
+import type { SpyReportSnapshot } from '../espionage/types.ts';
 
 class MemoryStorage {
   private values = new Map<string, string>();
@@ -716,4 +722,120 @@ test('the message open in the reading pane stays listed under «Непрочит
   assert.deepEqual(filterReportItems(items, read, query).map((item) => item.id), ['b']);
   assert.deepEqual(filterReportItems(items, read, { ...query, keepId: 'a' }).map((item) => item.id), ['a', 'b']);
   assert.equal(reportReadCheck(read)(items[0]!), true);
+});
+
+// ---------------------------------------------------------------- one report format (11.11.2026)
+
+function allianceRecord(id: string, name: string, tag: string, leaderOwnerId: string): AllianceRecord {
+  return {
+    id, name, tag, motto: '', description: '', emblem: createDefaultCommandState('test').alliances[0]!.emblem,
+    createdAt: 0, leaderOwnerId, deputyOwnerId: null, leaderSince: 0,
+    members: [{ ownerId: leaderOwnerId, displayName: leaderOwnerId, joinedAt: 0, lastActiveAt: 0, deliveredUnits: 0, jointOperationCount: 0, tieBreaker: 0.5 }],
+  };
+}
+
+function application(fields: Partial<AllianceApplication> & Pick<AllianceApplication, 'id' | 'allianceId' | 'ownerId' | 'status'>): AllianceApplication {
+  return { allianceName: 'Союз', displayName: fields.ownerId, reason: null, createdAt: 1_000, resolvedAt: null, resolvedByOwnerId: null, ...fields };
+}
+
+test('«Личные» gets the answers to the player applications and applications to the alliance the player runs', () => {
+  const command = {
+    ...createDefaultCommandState('production'),
+    alliances: [allianceRecord('alliance-mine-1', 'Северный Рубеж', 'NORTH', 'player-me'), allianceRecord('alliance-other-2', 'Южный Флот', 'SOUTH', 'npc-boss')],
+    applications: [
+      application({ id: 'application-1', allianceId: 'alliance-other-2', allianceName: 'Южный Флот', ownerId: 'player-me', status: 'rejected', reason: 'declined', resolvedAt: 5_000 }),
+      application({ id: 'application-2', allianceId: 'alliance-mine-1', ownerId: 'npc-wanderer', displayName: 'Странник', status: 'pending', createdAt: 6_000 }),
+      application({ id: 'application-3', allianceId: 'alliance-other-2', ownerId: 'player-me', status: 'withdrawn', resolvedAt: 7_000 }),
+      application({ id: 'application-4', allianceId: 'alliance-other-2', ownerId: 'npc-someone', status: 'pending' }),
+    ],
+  };
+  const letters = personalLetters(command, 'player-me');
+  assert.deepEqual(letters.map((letter) => letter.id), ['letter:application-answer:application-1', 'letter:application-incoming:application-2']);
+  assert.deepEqual(letters[0]!.result, { label: 'Отклонена', tone: 'danger' });
+  assert.equal(letters[0]!.sender.kind, 'alliance');
+  assert.ok(letters.every((letter) => letter.answers.length >= 1 && letter.answers.length <= 2));
+  // An outsider sees no incoming applications of somebody else's alliance.
+  assert.deepEqual(personalLetters(command, 'npc-outsider'), []);
+  const feed = buildReportsFeed([], createDefaultOperationsState(), command, undefined, [], [], [], [], [], undefined, 'player-me');
+  assert.equal(getReportCategoryCounts(feed).personal, 2);
+  assert.ok(feed.filter((item) => item.category === 'personal').every((item) => item.letter && item.timestamp));
+  const sheet = buildReportSheet(feed.find((item) => item.id === 'letter:application-incoming:application-2')!);
+  assert.equal(sheet.kind, 'letter');
+  assert.equal(sheet.sides[0]!.name, 'Странник');
+  assert.deepEqual(sheet.actions.map((action) => [action.kind, action.primary]), [['open_command', true]]);
+  // Without the player's id the feed has no letters (old callers stay unchanged).
+  assert.equal(buildReportsFeed([], createDefaultOperationsState(), command).some((item) => item.category === 'personal'), false);
+});
+
+test('every report kind becomes the same sheet: header with title, time and one result word, at most one primary action', () => {
+  const spy = (quality: SpyReportSnapshot['quality']): SpyReportSnapshot => ({
+    id: `spy-${quality}`, missionId: 'mission-1', createdAt: 10_000, sourcePlanetId: 'helion-01', targetPlanetId: 'target-1', targetPlanetName: 'Тавр',
+    targetOwnerId: 'npc-bot-01', targetOwnerName: 'Адмирал', targetRaceId: 'synod', targetRelation: 'enemy', targetCoordinate: { galaxy: 1, system: 4, position: 7 },
+    spyLevel: 5, targetEspionageLevel: 1, delta: 4, roll: 0, quality,
+    resources: { metal: 100, minerals: 50, gas: 25, debris: 0, developmentEnergy: 10 },
+    ...(quality === 'full' ? { fleet: { cruiser: 4, 'spy-probe': 1 }, defense: { 'laser-turret': 3 }, commanders: { hunter: { level: 2, count: 1 } } } : {}),
+    firstReport: false,
+  });
+  const battle = DEMO_BATTLE_REPORTS[0]!;
+  const items: Array<[ReportItem, ReturnType<typeof createBattleReportViewModel> | null]> = [
+    [battleReportToReportItem(battle), createBattleReportViewModel(battle)],
+    [spyReportToReportItem(spy('full')), null],
+    [spyReportToReportItem(spy('basic')), null],
+    [recyclerArrivalReportToReportItem({ id: createRecyclerArrivalReportId('r-0'), flightId: 'r-0', coordinate: { galaxy: 1, system: 2, position: 3 }, arrivedAtMs: 1_000, collectedDebris: 0, remainingOrbitalDebris: 0 }), null],
+    [gasExtractionArrivalReportToReportItem({ id: createGasExtractionArrivalReportId('g-1'), flightId: 'g-1', coordinate: { galaxy: 2, system: 3, position: 16 }, arrivalAt: 2_000, outcome: 'found', gasCollected: 900, scrapCollected: 10 }), null],
+    [overpopulationEpisodeReportToReportItem({ id: 'overpopulation:c:1', planetId: 'c', planetName: 'Колония', factionId: 'aegis', populationBefore: 35_000, populationAfter: 25_000, capacity: 25_000, episodeStartedAt: 1, episodeEndedAt: 3_000, removedShips: [{ shipId: 'cruiser', count: 9 }] }), null],
+    [summaryDetails(finishedFlight({})).item, null],
+  ];
+  for (const [item, viewModel] of items) {
+    const sheet = buildReportSheet(item, viewModel);
+    assert.ok(sheet.title, item.id);
+    assert.ok(sheet.time, item.id);
+    assert.match(sheet.result.label, /^[А-ЯЁ][а-яё]+( [а-яё]+)?$/, `${item.id}: ${sheet.result.label}`);
+    assert.ok(sheet.actions.filter((action) => action.primary).length <= 1, item.id);
+  }
+  const [battleSheet, fullSpy, basicSpy, recycler, gas, overpopulation, flight] = items.map(([item, viewModel]) => buildReportSheet(item, viewModel));
+  // War report: sides, units per side, rounds, result; the full log is the primary action.
+  assert.deepEqual(battleSheet!.sides.map((side) => side.role), ['Атакующий', 'Защитник']);
+  assert.deepEqual(battleSheet!.ships.map((group) => group.title), ['Атакующий', 'Защитник']);
+  assert.equal(battleSheet!.rounds.length, battle.rounds.length);
+  assert.deepEqual(battleSheet!.actions.map((action) => [action.kind, action.primary]), [['open_battle', true]]);
+  // Spy: everything revealed vs almost empty.
+  assert.deepEqual(fullSpy!.ships[0]!.units.map((unit) => unit.key), ['cruiser']);
+  assert.ok(fullSpy!.ships.some((group) => group.key === 'commanders' && group.units[0]!.ability));
+  assert.equal(fullSpy!.assets[0]!.units.length, 1);
+  assert.equal(fullSpy!.actions.find((action) => action.primary)?.kind, 'simulate_battle');
+  assert.equal(basicSpy!.ships[0]!.hidden, true);
+  assert.equal(basicSpy!.assets[0]!.hidden, true);
+  assert.deepEqual(basicSpy!.place?.coordinate, { galaxy: 1, system: 4, position: 7 });
+  // Recycling with nothing: «Пусто», debris only.
+  assert.deepEqual(recycler!.result, { label: 'Пусто', tone: 'warning' });
+  assert.deepEqual(recycler!.resources.flatMap((group) => group.items.map((resource) => resource.kind)), ['debris', 'debris']);
+  assert.deepEqual(gas!.result, { label: 'Найден', tone: 'success' });
+  assert.deepEqual(gas!.resources[0]!.items.map((resource) => [resource.kind, resource.value]), [['gas', 900], ['debris', 10]]);
+  assert.deepEqual(overpopulation!.sides[0]!.population, { before: 35_000, after: 25_000 });
+  assert.equal(overpopulation!.ships[0]!.total, '9 ед.');
+  assert.deepEqual(overpopulation!.result, { label: 'Потери', tone: 'danger' });
+  assert.deepEqual(flight!.result, { label: 'Доставлено', tone: 'success' });
+  assert.deepEqual(flight!.sides.map((side) => side.role), ['Отправление', 'Цель']);
+});
+
+test('old saves still load: reports metadata has no new field and «Личные» read marks survive a reload', async () => {
+  // The stored ReportsState shape did not change; an old envelope migrates as before.
+  const old = migrateReportsState({ readIds: ['battle:1', 'espionage:2'], hiddenIds: ['battle:3'], readUpTo: '2026-11-01T00:00:00.000Z' });
+  assert.deepEqual(old, { readIds: ['battle:1', 'espionage:2'], hiddenIds: ['battle:3'], readUpTo: '2026-11-01T00:00:00.000Z' });
+
+  const { createInitialSaveState, createPersistenceFacade } = await loadPersistence();
+  const storage = new MemoryStorage();
+  const initial = createInitialSaveState('production', 50_000);
+  const me = initial.profile.playerId;
+  const command = {
+    ...initial.command,
+    applications: [application({ id: 'application-7', allianceId: 'alliance-gone-9', allianceName: 'Ушедшие', ownerId: me, status: 'rejected', reason: 'disbanded', resolvedAt: 40_000 })],
+  };
+  const letterId = 'letter:application-answer:application-7';
+  const persistence = createPersistenceFacade({ mode: 'production', storage, now: () => 60_000 });
+  assert.deepEqual(persistence.write({ ...initial, command, reports: { ...initial.reports, readIds: [letterId] } }), { ok: true });
+  const hydrated = persistence.read();
+  assert.deepEqual(hydrated.reports.readIds, [letterId]);
+  assert.equal(personalLetters(hydrated.command, me)[0]?.id, letterId);
 });

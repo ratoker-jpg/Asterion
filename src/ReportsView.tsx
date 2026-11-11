@@ -1,15 +1,14 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { SunReportStrip } from './ui/sun-raid/SunReportStrip.tsx';
 import { BattleReportModal } from './BattleReportsView';
 import { FactionGeneralPortrait } from './ui/FactionGeneralPortrait.tsx';
 import { EMPTY_ART } from './ui/ui-art.ts';
 import { EmblemGlyph } from './ui/command/EmblemGlyph.tsx';
-import pirateWarlordArt from '../assets/source/characters/pirates/pirate_warlord.png';
+import { ReportArtwork, ReportGlyph, ReportSheetView } from './ui/messages/ReportSheetView.tsx';
 import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
 import { isAsterionLocalPlayerId, type BattleReport } from './domain/combat/report.ts';
-import { createBattleReportViewModel, noCombatVerdict } from './domain/combat/battle-report-view-model.ts';
-import type { BattleSideViewModel } from './domain/combat/battle-report-view-model.ts';
+import { createBattleReportViewModel } from './domain/combat/battle-report-view-model.ts';
 import type { CommandState } from './domain/command/types.ts';
 import { selectOwnerMembership, toAllianceIdentity } from './domain/command/selectors.ts';
 import type { OperationsState } from './domain/operations/types.ts';
@@ -30,6 +29,7 @@ import {
   markAllReportsRead,
   markReportRead,
 } from './domain/reports/repository.ts';
+import { buildReportSheet, type ReportSheetAction } from './domain/reports/sheet.ts';
 import type { ReportCategory, ReportFilter, ReportItem, ReportsState } from './domain/reports/types.ts';
 import type { PlayerProfileState } from './domain/profile/types.ts';
 import { selectPlayerProfileMetrics } from './domain/profile/selectors.ts';
@@ -39,27 +39,17 @@ import type { RatingPrototypeState } from './domain/rating/fixtures.ts';
 import { selectRecordedBattlePointAwards } from './domain/rating/scoring.ts';
 import { RUNTIME_RESET_EVENT, type RuntimeMode } from './domain/runtime/mode.ts';
 import type { SpyReportSnapshot } from './domain/espionage/types.ts';
-import { COMMANDER_ABILITIES, getCommanderPresentedAbility, formatCommanderPresentedEffect, type CommanderId } from './domain/combat/commanders.ts';
-import { getFactionCombatEntity } from './domain/combat/faction-catalog.ts';
 import { getCombatFactionName } from './domain/combat/factions.ts';
-import type { CombatEntityId, ShipId } from './domain/combat/ids.ts';
 import type { UniverseCoordinate } from './domain/universe/types.ts';
 import type { PirateReconReport } from './domain/pirates/recon-report.ts';
-import { PIRATE_BASE_SHIPS } from './domain/pirates/catalog.ts';
-import { getPiratePlanetArt } from './pirate-planet-art.ts';
-import { EXPLORATION_ARTS } from './exploration-art.ts';
-import type { ExplorationState } from './domain/exploration/ledger.ts';
-import { ResourceIcon } from './ui/resources/ResourceIcon.tsx';
 import './ui/messages/messages.css';
 
 const PAGE_SIZE = 7;
 const numberFormat = new Intl.NumberFormat('ru-RU');
-// Historical recon reports store canonical pirate ship names, not asset paths.
-// Resolve presentation art from the same catalog used by pirate combat and the ship UI.
-const pirateReconArtByName = new Map(PIRATE_BASE_SHIPS.map(({ name, art }) => [name, art] as const));
 
 type MessageFolderId =
   | 'profile'
+  | 'personal'
   | 'system'
   | 'battle'
   | 'command'
@@ -78,6 +68,7 @@ type MessageFolder = {
 };
 
 const MESSAGE_FOLDERS: readonly MessageFolder[] = [
+  { id: 'personal', label: 'Личные', glyph: 'personal', category: 'personal' },
   { id: 'system', label: 'Система', glyph: 'system', category: 'system' },
   { id: 'battle', label: 'Доклады', glyph: 'battle', category: 'battle' },
   { id: 'command', label: 'Командные доклады', glyph: 'command', category: 'command' },
@@ -88,6 +79,7 @@ const MESSAGE_FOLDERS: readonly MessageFolder[] = [
 ];
 
 const EMPTY_COPY: Record<ReportCategory, { title: string; body: string }> = {
+  personal: { title: 'Личных писем пока нет', body: 'Сюда приходят письма лично вам: ответы союзов на ваши заявки и заявки в союз, которым вы управляете.' },
   system: { title: 'Системных данных пока нет', body: 'Сюда попадут шпионские отчёты, уведомления контрразведки и результаты операций, которые дают новую информацию.' },
   battle: { title: 'Боевых докладов пока нет', body: 'Здесь хранятся реальные боевые отчёты и бои из операций. Симуляции и Арена в этот канал не попадают.' },
   command: { title: 'Командных докладов пока нет', body: 'Здесь будут отчёты об атаках на союзников и результаты атак на Солнце, когда эти события появятся в боевом контуре.' },
@@ -125,14 +117,6 @@ function withOverpopulationReports(next: ReportsState, previous: ReportsState): 
   return preservePersistentReportCollections(next, previous);
 }
 
-function ReportGlyph({ kind }: { kind: ReportCategory }) {
-  const iconKey: Record<ReportCategory, keyof typeof asterionAssetIntegrationAssets.reportIcons> = {
-    system: 'system', battle: 'battle', command: 'command', arena: 'arena',
-    flights: 'flights', alliances: 'alliances', achievements: 'achievements',
-  };
-  return <img className="reports-glyph-image" src={asterionAssetIntegrationAssets.reportIcons[iconKey[kind]]} alt="" aria-hidden="true" draggable={false} />;
-}
-
 function ProfileGlyph() {
   return <img className="reports-glyph-image" src={asterionAssetIntegrationAssets.reportIcons.profile} alt="" aria-hidden="true" draggable={false} />;
 }
@@ -145,27 +129,6 @@ function ActionGlyph({ kind }: { kind: 'prev' | 'next' }) {
   const common = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.65, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
   if (kind === 'prev') return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="m15 5-7 7 7 7" /></svg>;
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="m9 5 7 7-7 7" /></svg>;
-}
-
-function StatusBadge({ item }: { item: ReportItem }) {
-  return <span className={`reports-status reports-status--${item.statusTone}`}>{item.statusLabel}</span>;
-}
-
-function ReportArtwork({ item }: { item: ReportItem }) {
-  if (item.spyReport) return <img src={getFactionCombatEntity(item.spyReport.targetRaceId, 'spy-probe').art} alt="" aria-hidden="true" draggable={false} />;
-  if (item.pirateReconReport) {
-    const cycle = item.pirateReconReport.contactCycleKey.split(':');
-    return <img src={getPiratePlanetArt(Number(cycle[2]), Number(cycle[3]))} alt="" aria-hidden="true" draggable={false} />;
-  }
-  return <ReportGlyph kind={item.category} />;
-}
-
-function DossierHeading({ item, art }: { item: ReportItem; art?: ReactNode }) {
-  return <div className="reports-dossier-heading">
-    <div className="reports-dossier-heading__icon reports-v2-art">{art ?? <ReportArtwork item={item} />}</div>
-    <div className="reports-dossier-heading__copy"><div className="reports-dossier-badges"><small>{item.typeLabel}</small><StatusBadge item={item} /></div><h2>{item.title}</h2><p>{item.preview}</p></div>
-    <div className="reports-dossier-heading__status"><small>Получено</small><time>{formatDate(item.timestamp)}</time></div>
-  </div>;
 }
 
 function ReportListItem({ item, active, read, saved, selected, onOpen, onSelect }: {
@@ -189,348 +152,6 @@ function ReportListItem({ item, active, read, saved, selected, onOpen, onSelect 
         <span className="reports-list-meta"><time>{formatTime(item.timestamp)}</time>{saved ? <i className="reports-favorite-dot" aria-label="Бой сохранён" /> : null}{!read ? <b className="reports-unread-dot" aria-label="Непрочитано" /> : null}</span>
       </button>
     </article>
-  );
-}
-
-type ResourceKind = 'metal' | 'minerals' | 'gas' | 'debris' | 'energy';
-const RESOURCE_WORDS: readonly [RegExp, ResourceKind][] = [
-  [/металл/i, 'metal'], [/минерал/i, 'minerals'], [/газ/i, 'gas'], [/облом/i, 'debris'], [/энерг/i, 'energy'],
-];
-const COORDINATE_PATTERN = /\[(\d+):(\d+):(\d+)\]|planet-(\d+)-(\d+)-(\d+)/i;
-// Internal identifiers (flight ids, contact keys, epoch stamps) are never player-facing.
-const TECHNICAL_VALUE = /flight-|recon:|unique:|anomaly:|contact-|\d{9,}/i;
-const TECHNICAL_LABEL = /вылет зонда|идентификатор|^id\b|остатки зависят/i;
-
-function parseCoordinate(value: string): UniverseCoordinate | null {
-  const match = COORDINATE_PATTERN.exec(value);
-  if (!match) return null;
-  const [galaxy, system, position] = (match[1] ? match.slice(1, 4) : match.slice(4, 7)).map(Number);
-  return { galaxy: galaxy!, system: system!, position: position! };
-}
-
-function resourceKindOf(label: string): ResourceKind | null {
-  return RESOURCE_WORDS.find(([pattern]) => pattern.test(label))?.[1] ?? null;
-}
-
-function numericValue(value: string): number | null {
-  const digits = value.replace(/[\s ]/g, '').match(/^[+−-]?\d+([.,]\d+)?$/);
-  return digits ? Number(digits[0].replace('−', '-').replace(',', '.')) : null;
-}
-
-function romanRisk(value: string): number | null {
-  const roman = ['I', 'II', 'III', 'IV', 'V'].indexOf(value.trim().split(/\s|\//)[0]!.toUpperCase());
-  if (roman >= 0) return roman + 1;
-  const n = Number.parseInt(value, 10);
-  return n >= 1 && n <= 5 ? n : null;
-}
-
-/** Same deterministic variant→art mapping as the Universe and Operations screens. */
-function explorationArtFor(item: ReportItem, exploration?: ExplorationState): string | null {
-  if (!exploration || (item.source !== 'exploration' && !/исследован|экспедиц|аномал/i.test(item.typeLabel))) return null;
-  const coordinate = item.coordinates.map(parseCoordinate).find(Boolean)
-    ?? item.details.map((detail) => parseCoordinate(detail.value)).find(Boolean);
-  if (!coordinate) return null;
-  const contact = Object.values(exploration.contacts)
-    .filter((entry) => entry.coordinate.galaxy === coordinate.galaxy && entry.coordinate.system === coordinate.system && entry.coordinate.position === coordinate.position)
-    .sort((a, b) => b.appearedAt - a.appearedAt)[0];
-  if (!contact) return null;
-  const arts = EXPLORATION_ARTS[contact.kind];
-  return arts[contact.kind === 'anomaly' ? contact.variant - 1 : contact.variant + 2] ?? arts[0] ?? null;
-}
-
-function CoordinateLink({ value, onOpen }: { value: string; onOpen?: (coordinate: UniverseCoordinate) => void }) {
-  const coordinate = parseCoordinate(value);
-  if (!coordinate) return <>{value}</>;
-  const text = `[${coordinate.galaxy}:${coordinate.system}:${coordinate.position}]`;
-  const name = value.replace(COORDINATE_PATTERN, '').trim();
-  return <>
-    {name ? <span className="reports-v3-route-name">{name}</span> : null}
-    <button type="button" className="reports-v3-coord" disabled={!onOpen} aria-label={`${text}: открыть во Вселенной`} onClick={() => onOpen?.(coordinate)}>{text}{onOpen ? <span aria-hidden="true"> ↗</span> : null}</button>
-  </>;
-}
-
-function GenericDossier({ item, exploration, onOpenUniverseTarget }: {
-  item: ReportItem;
-  exploration?: ExplorationState;
-  onOpenUniverseTarget?: (target: { coordinate: UniverseCoordinate; planetId?: string; ownerId?: string }) => void;
-}) {
-  const openCoordinate = onOpenUniverseTarget ? (coordinate: UniverseCoordinate) => onOpenUniverseTarget({ coordinate }) : undefined;
-  const route: { label: string; value: string }[] = [];
-  // Rows «Добыча · Металл», «Зачислено · Металл» … become one section per prefix.
-  const resources: { group: string; kind: ResourceKind; label: string; value: string }[] = [];
-  const losses: { kind: ResourceKind; label: string; value: string }[] = [];
-  const facts: { label: string; value: string }[] = [];
-  const notes: string[] = [];
-  let risk: number | null = null;
-  let tokens: string | null = null;
-
-  for (const detail of item.details) {
-    const { label, value } = detail;
-    if (!value || TECHNICAL_LABEL.test(label) || TECHNICAL_VALUE.test(value)) continue;
-    if (/риск/i.test(label)) { risk = romanRisk(value); if (risk) continue; }
-    if (/жетон/i.test(label)) { tokens = value; continue; }
-    if (parseCoordinate(value) || /^(цель|координаты|локация|планета|источник)/i.test(label)) { route.push(detail); continue; }
-    const kind = resourceKindOf(label);
-    const amount = numericValue(value);
-    if (kind && amount !== null) {
-      const caption = label.replace(/^[^·]*·\s*/, '').trim();
-      if (/сгорел|потерян|сожжен/i.test(label)) { if (amount !== 0) losses.push({ kind, label: caption, value }); continue; }
-      const group = caption === label ? 'Ресурсы' : label.slice(0, label.indexOf('·')).trim();
-      resources.push({ group, kind, label: caption === label ? label : caption, value });
-      continue;
-    }
-    if (value.length > 34) { notes.push(`${label}: ${value}`); continue; }
-    facts.push(detail);
-  }
-
-  const art = explorationArtFor(item, exploration);
-  return (
-    <div className={`reports-dossier reports-dossier--generic reports-v3 reports-v2-tone-${item.statusTone}`}>
-      <DossierHeading item={item} art={art ? <img src={art} alt="" aria-hidden="true" draggable={false} /> : undefined} />
-      {route.length ? <section className="reports-v3-route" aria-label="Маршрут">
-        {route.map((entry, index) => <div className="reports-v3-route-step" key={`${entry.label}-${index}`}>
-          <small>{entry.label}</small><strong><CoordinateLink value={entry.value} onOpen={openCoordinate} /></strong>
-        </div>)}
-      </section> : null}
-      {[...new Set(resources.map((entry) => entry.group))].map((group) => <section className="reports-v3-section" key={group}>
-        <header><strong>{group.toLocaleUpperCase('ru-RU')}</strong></header>
-        <div className="reports-v3-resources">
-          {resources.filter((entry) => entry.group === group).map((entry) => <div className={`reports-v3-res reports-v3-res--${entry.kind}`} key={`${entry.kind}-${entry.label}`}>
-            <ResourceIcon kind={entry.kind} /><span><small>{entry.label}</small><b>{entry.value}</b></span>
-          </div>)}
-        </div>
-      </section>)}
-      {losses.length ? <section className="reports-v3-section reports-v3-section--loss">
-        <header><strong>СГОРЕЛО ПРИ ПЕРЕПОЛНЕНИИ СКЛАДА</strong></header>
-        <div className="reports-v3-resources">
-          {losses.map((entry) => <div className={`reports-v3-res reports-v3-res--${entry.kind}`} key={`loss-${entry.kind}`}>
-            <ResourceIcon kind={entry.kind} /><span><small>{entry.label}</small><b>−{entry.value.replace(/^[+−-]/, '')}</b></span>
-          </div>)}
-        </div>
-      </section> : null}
-      {risk || tokens || facts.length ? <section className="reports-v3-facts">
-        {risk ? <div className="reports-v3-fact"><small>КАТЕГОРИЯ РИСКА</small>
-          <span className="reports-v3-risk" aria-label={`Риск ${risk} из 5`}>{[1, 2, 3, 4, 5].map((level) => <i key={level} className={level <= risk! ? `on lvl-${risk}` : ''}>{['I', 'II', 'III', 'IV', 'V'][level - 1]}</i>)}</span>
-        </div> : null}
-        {tokens ? <div className="reports-v3-fact reports-v3-fact--token"><small>ЖЕТОНЫ РЕМОНТА</small><b>{tokens === '0' ? 'Не найдены' : `+${tokens.replace(/^\+/, '')}`}</b></div> : null}
-        {facts.map((entry) => <div className="reports-v3-fact" key={`${entry.label}-${entry.value}`}><small>{entry.label}</small><b>{entry.value}</b></div>)}
-      </section> : null}
-      {item.occupantRecon ? <OccupantBlock occupant={item.occupantRecon} coordinate={parseCoordinate(item.coordinates[0] ?? '')} onOpenUniverseTarget={onOpenUniverseTarget} /> : null}
-      <section className="reports-v3-summary"><p>{item.body}</p>{notes.map((note) => <p className="reports-v3-note" key={note}>{note}</p>)}</section>
-    </div>
-  );
-}
-
-function OccupantBlock({ occupant, coordinate, onOpenUniverseTarget }: {
-  occupant: NonNullable<ReportItem['occupantRecon']>;
-  coordinate: UniverseCoordinate | null;
-  onOpenUniverseTarget?: (target: { coordinate: UniverseCoordinate; planetId?: string; ownerId?: string }) => void;
-}) {
-  const fleet = Object.entries(occupant.fleet ?? {}).filter(([, count]) => Number(count) > 0);
-  return <section className="spy-report-card reports-occupant" data-qa-occupant-report={occupant.ownerId} data-quality={occupant.quality}>
-    <header><strong>КТО ЗАНИМАЕТ</strong><span>{occupant.quality === 'full' ? 'Полный отчёт' : occupant.quality === 'detailed' ? 'Детальный отчёт' : 'Базовый отчёт'}</span></header>
-    <dl className="spy-report-summary-grid">
-      <div><dt>Владелец</dt><dd>{coordinate && onOpenUniverseTarget
-        ? <button type="button" className="spy-report-link" onClick={() => onOpenUniverseTarget({ coordinate, ownerId: occupant.ownerId })}>{occupant.ownerName}</button>
-        : <strong>{occupant.ownerName}</strong>}</dd></div>
-      <div><dt>Раса</dt><dd>{getCombatFactionName(occupant.raceId)}</dd></div>
-      <div><dt>Альянс</dt><dd>{occupant.alliance ? `[${occupant.alliance.tag}] ${occupant.alliance.name}` : 'Без альянса'}</dd></div>
-    </dl>
-    {occupant.quality === 'full'
-      ? fleet.length
-        ? <div className="spy-report-entity-grid">{fleet.map(([id, count]) => {
-          const entity = getFactionCombatEntity(occupant.raceId, id as CombatEntityId);
-          const level = occupant.fleetLevels?.[id];
-          return <article className="spy-report-entity" key={id} data-level={level}><span className="reports-v2-art reports-v2-entity-art"><img src={entity.art} alt="" /></span><div><strong>{entity.name}</strong><span>{level !== undefined ? `Уровень ${level}` : entity.role}</span></div><b>{numberFormat.format(Number(count))}</b></article>;
-        })}</div>
-        : <p className="spy-report-empty">Корабли не найдены.</p>
-      : <p className="spy-report-empty" data-qa-occupant-fleet-hidden>Состав флота не раскрыт: уровень шпионажа зонда ниже, чем нужно для полного отчёта.</p>}
-  </section>;
-}
-
-function OverpopulationDossier({ item }: { item: ReportItem }) {
-  const report = item.overpopulationReport;
-  if (!report) return <GenericDossier item={item} />;
-  return (
-    <div className={`reports-dossier reports-dossier--overpopulation reports-v2-tone-${item.statusTone}`} data-qa-overpopulation-report={report.id}>
-      <DossierHeading item={item} />
-      <section className="reports-kpi-grid overpopulation-report-summary" aria-label="Итог перенаселения">
-        <div><small>НАСЕЛЕНИЕ ДО</small><strong>{numberFormat.format(report.populationBefore)}</strong></div>
-        <div><small>НАСЕЛЕНИЕ ПОСЛЕ</small><strong>{numberFormat.format(report.populationAfter)}</strong></div>
-        <div><small>ВМЕСТИМОСТЬ</small><strong>{numberFormat.format(report.capacity)}</strong></div>
-        <div className="is-danger"><small>УНИЧТОЖЕНО</small><strong>{numberFormat.format(report.removedShips.reduce((sum, loss) => sum + loss.count, 0))}</strong></div>
-      </section>
-      <section className="spy-report-card overpopulation-report-losses">
-        <header><strong>УНИЧТОЖЕННЫЕ КОРАБЛИ И СПУТНИКИ</strong><span>{numberFormat.format(report.removedShips.reduce((sum, loss) => sum + loss.count, 0))} ед.</span></header>
-        {report.removedShips.length ? <div className="spy-report-entity-grid">
-          {report.removedShips.map(({ shipId, count }) => {
-            const entity = getFactionCombatEntity(report.factionId, shipId as CombatEntityId);
-            return <article className="spy-report-entity" key={shipId} data-qa-overpopulation-loss={shipId}><span className="reports-v2-art reports-v2-entity-art"><img src={entity.art} alt="" /></span><div><strong>{entity.name}</strong><span>{entity.role}</span></div><b>{numberFormat.format(count)}</b></article>;
-          })}
-        </div> : <p className="spy-report-empty">Потери кораблей не зафиксированы.</p>}
-      </section>
-      <section className="reports-generic-body reports-episode-meta"><small>{report.planetName} · {getCombatFactionName(report.factionId)}</small><p>Начало эпизода: {formatDate(new Date(report.episodeStartedAt).toISOString())} · Разблокировка: {formatDate(new Date(report.episodeEndedAt).toISOString())}</p></section>
-    </div>
-  );
-}
-
-function PirateReconDossier({ item, onOpenPirateUniverse }: {
-  item: ReportItem;
-  onOpenPirateUniverse: (coordinate: UniverseCoordinate, contactCycleKey: string) => void;
-}) {
-  const report = item.pirateReconReport;
-  if (!report) return <GenericDossier item={item} />;
-  const coordinate = item.coordinates[0] ?? '';
-  const formatTimestamp = (timestamp: number) => formatDate(new Date(timestamp).toISOString());
-
-  return (
-    <div className={`reports-dossier reports-dossier--pirate-recon reports-dossier--pirate-recon-${report.outcome} reports-v2-tone-${item.statusTone}`} data-qa-pirate-recon-report={report.id}>
-      <DossierHeading item={item} />
-      <p className="reports-contact-meta"><button type="button" className="spy-report-link" onClick={() => onOpenPirateUniverse(report.coordinate, report.contactCycleKey)}>{coordinate} ↗</button><span>Открыть контакт во Вселенной</span></p>
-      <section className="reports-kpi-grid pirate-recon-report-card" aria-label="Сводка разведки">
-        {report.outcome === 'success' && report.intel ? <><div><small>УРОВЕНЬ КОРАБЛЕЙ</small><strong>{report.intel.shipLevel}</strong></div><div><small>ТИПОВ КОРАБЛЕЙ</small><strong>{report.intel.ships.length}</strong></div></> : null}
-        <div><small>ОТПРАВЛЕНИЕ</small><strong className="reports-kpi-time">{formatTimestamp(report.dispatchedAt)}</strong></div>
-        <div><small>ПРИБЫТИЕ</small><strong className="reports-kpi-time">{formatTimestamp(report.arrivedAt)}</strong></div>
-      </section>
-      {report.outcome === 'success' && report.intel ? <>
-        <section className="spy-report-card pirate-recon-report-card">
-          <header><strong>СОСТАВ ПО НАСЕЛЕНИЮ</strong><span>Проценты состава</span></header>
-          <div className="pirate-recon-report-list">
-            {report.intel.ships.map((ship) => {
-              const art = pirateReconArtByName.get(ship.name);
-              return (
-                <div key={ship.name} className="pirate-recon-ship" data-qa-pirate-recon-ship={ship.name}>
-                  <span className="pirate-recon-ship-identity">
-                    {art ? <span className="reports-v2-art reports-v2-pirate-art"><img className="pirate-recon-ship-art" src={art} alt={`Пиратский корабль «${ship.name}»`} loading="lazy" /></span> : null}
-                    <span>{ship.name}</span>
-                  </span>
-                  <strong>{ship.populationPercent}%</strong>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      </> : <section className="spy-report-card pirate-recon-report-card">
-        <header><strong>{report.outcome === 'failure' ? 'СВЕДЕНИЯ НЕ ПОЛУЧЕНЫ' : report.outcome === 'no-target' ? 'ЦЕЛЬ ОТСУТСТВОВАЛА' : 'ДАННЫЕ ОТЧЁТА ОТСУТСТВУЮТ'}</strong></header>
-        <p className="spy-report-empty">{report.outcome === 'success' ? 'В сохранённом успешном отчёте отсутствуют данные разведки.' : item.body}</p>
-      </section>}
-    </div>
-  );
-}
-
-function reportCoordinate(coordinate: UniverseCoordinate) {
-  return `[${coordinate.galaxy}:${coordinate.system}:${coordinate.position}]`;
-}
-
-function sourcePlanetLabel(id: string) {
-  return id === 'helion-01' ? 'Helion 01' : 'Планета-источник';
-}
-
-function SpyDossier({ item, report, onOpenUniverseTarget }: {
-  item: ReportItem;
-  report: SpyReportSnapshot;
-  onOpenUniverseTarget: (target: { coordinate: UniverseCoordinate; planetId?: string; ownerId?: string }) => void;
-}) {
-  const fleet = Object.entries(report.fleet ?? {}).filter(([id, count]) => id !== 'spy-probe' && Number(count) > 0);
-  const defense = Object.entries(report.defense ?? {}).filter(([, count]) => Number(count) > 0);
-  const commanders = Object.entries(report.commanders ?? {}).filter(([, value]) => Boolean(value));
-  const factionName = getCombatFactionName(report.targetRaceId);
-  const resources = [
-    { kind: 'metal' as const, label: 'Металл', value: report.resources.metal },
-    { kind: 'minerals' as const, label: 'Минералы', value: report.resources.minerals },
-    { kind: 'gas' as const, label: 'Газ', value: report.resources.gas },
-    { kind: 'energy' as const, label: 'Энергия', value: report.resources.developmentEnergy },
-  ];
-  return (
-    <div className={`reports-dossier reports-dossier--spy reports-v2-tone-${item.statusTone}`} data-qa-spy-report={report.id}>
-      <DossierHeading item={item} />
-      <section className="spy-report-card"><header><strong>РЕСУРСЫ</strong><span>Снимок на момент передачи</span></header><div className="spy-report-resource-grid">
-        {resources.map((resource) => <div className={`spy-report-resource spy-report-resource--${resource.kind}`} key={resource.kind}><span className="reports-v2-art reports-v2-resource-art"><ResourceIcon kind={resource.kind} className="spy-report-resource__icon" /></span><span>{resource.label}</span><strong>{numberFormat.format(resource.value)}</strong></div>)}
-      </div></section>
-      {report.quality === 'full' ? <>
-        <section className="spy-report-card spy-report-card--fleet"><header><strong>КОРАБЛИ</strong><span>Боевой и транспортный состав</span></header>{fleet.length ? <div className="spy-report-entity-grid">{fleet.map(([id, count]) => { const entity = getFactionCombatEntity(report.targetRaceId, id as CombatEntityId); const level = report.fleetLevels?.[id as ShipId]; return <article className="spy-report-entity" key={id} data-level={level !== undefined ? level : undefined}><span className="reports-v2-art reports-v2-entity-art"><img src={entity.art} alt="" /></span><div><strong>{entity.name}</strong><span>{level !== undefined ? `Уровень ${level}` : entity.role}</span></div><b>{numberFormat.format(Number(count))}</b></article>; })}</div> : <p className="spy-report-empty">Корабли не найдены.</p>}</section>
-
-      </> : null}
-
-      <div className="reports-dossier-split">
-        {report.quality !== 'basic' ? <section className="spy-report-card spy-report-card--defense"><header><strong>ОБОРОНА</strong><span>{factionName}</span></header>{defense.length ? <div className="spy-report-entity-grid">{defense.map(([id, count]) => { const entity = getFactionCombatEntity(report.targetRaceId, id as CombatEntityId); return <article className="spy-report-entity" key={id}><span className="reports-v2-art reports-v2-entity-art"><img src={entity.art} alt="" /></span><div><strong>{entity.name}</strong><span>{entity.role}</span></div><b>{numberFormat.format(Number(count))}</b></article>; })}</div> : <p className="spy-report-empty">Оборона не найдена.</p>}</section> : null}
-        {report.quality === 'full' ? <section className="spy-report-card spy-report-card--commanders"><header><strong>КОМАНДИРЫ</strong><span>Выявленные командирские корабли</span></header>{commanders.length ? <div className="spy-report-entity-grid">{commanders.map(([id, value]) => { const entity = getFactionCombatEntity(report.targetRaceId, id as CombatEntityId); const commanderLevel = value?.level ?? 0; const commanderName = COMMANDER_ABILITIES[id as CommanderId]?.commanderName ?? entity.name; const ability = COMMANDER_ABILITIES[id as CommanderId] ? getCommanderPresentedAbility(id as CommanderId) : undefined; return <article className="spy-report-entity spy-report-entity--inspected" key={id} data-level={commanderLevel} tabIndex={0}><span className="reports-v2-art reports-v2-entity-art"><img src={entity.art} alt="" /></span><div><strong>{commanderName}</strong><span>Уровень {commanderLevel}</span></div><b>{numberFormat.format(value?.count ?? 0)}</b>{ability ? <span className="spy-entity-tooltip" role="tooltip"><strong>{ability.ability}</strong><span>{ability.description}</span><b>Эффект: {formatCommanderPresentedEffect(id as CommanderId, commanderLevel)}</b>{ability.note ? <small>{ability.note}</small> : null}</span> : null}</article>; })}</div> : <p className="spy-report-empty">Командиры не найдены.</p>}</section> : null}
-      </div>
-      <section className="spy-report-card spy-report-card--summary"><header><strong>СВОДКА ЦЕЛИ</strong><span>{factionName}</span></header><dl className="spy-report-summary-grid">
-        <div><dt>Планета</dt><dd><strong>{report.targetPlanetName}</strong><button type="button" className="spy-report-link" onClick={() => onOpenUniverseTarget({ coordinate: report.targetCoordinate, planetId: report.targetPlanetId })}>{reportCoordinate(report.targetCoordinate)}</button></dd></div>
-        <div><dt>Источник</dt><dd>{sourcePlanetLabel(report.sourcePlanetId)}</dd></div>
-        {report.resources.debris > 0 ? <div><dt>Обломки на момент передачи</dt><dd>{numberFormat.format(report.resources.debris)}</dd></div> : null}
-        <div><dt>Владелец</dt><dd><button type="button" className="spy-report-link" onClick={() => onOpenUniverseTarget({ coordinate: report.targetCoordinate, planetId: report.targetPlanetId, ownerId: report.targetOwnerId })}>{report.targetOwnerName}</button></dd></div>
-        <div><dt>Отношение</dt><dd>{report.targetRelation === 'enemy' ? 'Враг' : 'Нейтральный'}</dd></div>
-      </dl></section>
-      {report.population ? <section className="spy-report-card spy-report-card--population"><header><strong>НАСЕЛЕНИЕ И СОСТАВ</strong><span>Население планеты: экипажи кораблей и гарнизоны обороны</span></header><div className="spy-report-population"><div><span>Население планеты</span><strong>{numberFormat.format(report.population.total)}</strong></div><div><span>Корабли</span><strong>{numberFormat.format(report.population.fleet)}</strong></div><div><span>Оборона</span><strong>{numberFormat.format(report.population.defense)}</strong></div></div></section> : null}
-      <section className="reports-generic-body"><small>СВОДКА</small><p>{item.body}</p></section>
-    </div>
-  );
-}
-
-// The combat view model has no pirate faction id and falls back to Aegis;
-// detect pirates from the participant record instead.
-function isPirateSide(side: BattleSideViewModel) {
-  const p = side.participant as { race?: string; playerName?: string; playerId?: string };
-  return /pirat|пират/i.test([p.race, p.playerId, p.playerName, String(side.factionId)].join(' '));
-}
-
-function BattleSideOverview({ side, outcome }: { side: BattleSideViewModel; outcome: 'winner' | 'loser' | 'draw' }) {
-  const sideLabel = side.participant.side === 'attacker' ? 'АТАКУЮЩИЙ' : 'ЗАЩИТНИК';
-  const participantMeta = [isPirateSide(side) ? 'Пираты' : side.participant.race, side.participant.coordinates].filter(Boolean).join(' · ');
-  return (
-    <article className={`reports-battle-side reports-battle-side--${side.participant.side} reports-battle-side--${outcome}`}>
-      <div className="reports-v2-art reports-battle-general-art">{isPirateSide(side) ? <span className="faction-general-portrait" data-faction="pirates"><img src={pirateWarlordArt} alt="" /></span> : <FactionGeneralPortrait factionId={side.factionId} />}</div>
-      <div className="reports-battle-side-copy"><small>{sideLabel}</small><strong>{side.participant.playerName || side.participant.planetName || '—'}</strong><span>{participantMeta || side.participant.planetName || 'Данные участника не зафиксированы'}</span></div>
-      <div className="reports-battle-population"><small>НАСЕЛЕНИЕ</small><span><b>{side.populationBefore == null ? '—' : numberFormat.format(side.populationBefore)}</b><i aria-hidden="true">→</i><b>{side.populationAfter == null ? '—' : numberFormat.format(side.populationAfter)}</b></span></div>
-      {side.populationBefore != null && side.populationBefore > 0 && side.populationAfter != null ? <div className="reports-battle-population-bar" role="meter" aria-label="Оставшееся население" aria-valuemin={0} aria-valuemax={side.populationBefore} aria-valuenow={Math.max(0, Math.min(side.populationBefore, side.populationAfter))}><i style={{ width: `${Math.max(0, Math.min(100, side.populationAfter / side.populationBefore * 100))}%` }} /></div> : null}
-
-    </article>
-  );
-}
-
-function BattleLosses({ side }: { side: BattleSideViewModel }) {
-  const losses = side.ships.filter((ship) => ship.destroyed != null && ship.destroyed > 0);
-  return <section className="spy-report-card reports-battle-losses">
-    <header><strong>ПОТЕРИ {side.participant.side === 'attacker' ? 'АТАКУЮЩЕГО' : 'ЗАЩИТНИКА'}</strong>{side.losses.ships != null ? <span>{numberFormat.format(side.losses.ships)} кораблей</span> : null}</header>
-    {losses.length ? <div className="spy-report-entity-grid">{losses.map((ship) => <article className="spy-report-entity" key={ship.key}><span className="reports-v2-art reports-v2-entity-art"><img src={ship.art} alt="" /></span><div><strong>{ship.name}</strong><span>Уничтожено</span></div><b>{numberFormat.format(ship.destroyed!)}</b></article>)}</div> : <p className="spy-report-empty">{side.losses.ships === 0 ? 'Потери кораблей не зафиксированы.' : 'Состав потерь не зафиксирован.'}</p>}
-  </section>;
-}
-
-function BattleDossier({ item, report, rating, playerOwnerId, onOpen }: { item: ReportItem; report: BattleReport; rating: RatingPrototypeState; playerOwnerId: string; onOpen: () => void }) {
-  const viewModel = createBattleReportViewModel(report, {
-    awardedBattlePoints: selectRecordedBattlePointAwards(rating, report, playerOwnerId),
-  });
-  const result = viewModel.winner === 'draw'
-    ? { label: 'НИЧЬЯ', tone: 'draw' }
-    : viewModel.winner === 'attacker'
-      ? { label: 'ПОБЕДА АТАКУЮЩЕГО', tone: 'attacker' }
-      : { label: 'ПОБЕДА ЗАЩИТНИКА', tone: 'defender' };
-  return (
-    <div className={`reports-dossier reports-dossier--battle reports-v2-tone-${item.statusTone}`}>
-      <DossierHeading item={item} />
-      <section className={`reports-battle-overview reports-battle-overview--${result.tone}`} aria-label="Сводка боевого отчёта">
-        <BattleSideOverview side={viewModel.attacker} outcome={viewModel.winner === 'draw' ? 'draw' : viewModel.winner === 'attacker' ? 'winner' : 'loser'} />
-        <div className="reports-battle-versus" aria-label={result.label}><span>VS</span></div>
-        <BattleSideOverview side={viewModel.defender} outcome={viewModel.winner === 'draw' ? 'draw' : viewModel.winner === 'defender' ? 'winner' : 'loser'} />
-      </section>
-      <section className={`reports-v3-verdict reports-v2-tone-${item.statusTone}`} aria-label="Итог боя">
-        <div><small>ИТОГ БОЯ</small><strong>{item.statusLabel}</strong><span>{viewModel.roundCount ? `${viewModel.roundCount} ${viewModel.roundCount === 1 ? 'раунд' : viewModel.roundCount < 5 ? 'раунда' : 'раундов'}` : noCombatVerdict(viewModel.roundCount, viewModel.winner, viewModel.missionType, viewModel.resources)!.summary}</span></div>
-        <button type="button" className="reports-primary-action" onClick={onOpen}>Полный отчёт о бое</button>
-      </section>
-      <div className="reports-v3-losses">
-        <BattleLosses side={viewModel.attacker} />
-        <BattleLosses side={viewModel.defender} />
-      </div>
-      {viewModel.debrisOnOrbit != null || viewModel.resources.length ? <section className="reports-battle-rewards" aria-label="Обломки и ресурсы после боя">
-        <header><strong>РЕСУРСЫ И ОБЛОМКИ</strong><span>Зафиксировано в отчёте</span></header>
-        <div className="reports-battle-reward-grid">
-          {viewModel.resources.map((resource) => <div className="reports-battle-reward" key={resource.kind}><span className="reports-v2-art reports-battle-resource-art"><ResourceIcon kind={resource.kind} /></span><span>{resource.label}</span><strong>{numberFormat.format(resource.value)}</strong></div>)}
-          {viewModel.debrisOnOrbit != null ? <div className="reports-battle-reward reports-battle-reward--debris"><span className="reports-v2-art reports-battle-resource-art"><ResourceIcon kind="debris" /></span><span>Обломки на орбите</span><strong>{numberFormat.format(viewModel.debrisOnOrbit)}</strong></div> : null}
-        </div>
-      </section> : null}
-    </div>
   );
 }
 
@@ -780,19 +401,36 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
   const markableItems = getVisibleReportItems(items, state);
   const markAll = () => onStateChange(withOverpopulationReports(markAllReportsRead(state, markableItems), state));
 
+  // One format for every report: the sheet (header, shared blocks, actions).
+  const selectedBattleViewModel = useMemo(() => selectedBattle ? createBattleReportViewModel(selectedBattle, {
+    awardedBattlePoints: selectRecordedBattlePointAwards(rating, selectedBattle, profile.playerId),
+  }) : null, [selectedBattle, rating, profile.playerId]);
+  const selectedSheet = useMemo(() => selectedItem ? buildReportSheet(selectedItem, selectedBattleViewModel) : null, [selectedItem, selectedBattleViewModel]);
+  const runAction = (action: ReportSheetAction) => {
+    if (!selectedItem) return;
+    if (action.kind === 'open_battle' && selectedBattle) setOpenBattleReportId(selectedBattle.id);
+    else if (action.kind === 'simulate_battle' && selectedItem.spyReport) onSimulateBattle(selectedItem.spyReport);
+    else if (action.kind === 'recall_spy' && action.missionId) onRecallSpy(action.missionId);
+    else if (action.kind === 'open_fleets') onOpenFleets();
+    else if (action.kind === 'open_command') onOpenCommand();
+  };
+  // Answers that have no game action yet («Принять» / «Отказаться» of bot letters) are not drawn.
+  const sheetActions = (selectedSheet?.actions ?? []).filter((action) => action.kind !== 'accept' && action.kind !== 'decline');
+
   const previewBody = !activeCategory
     ? <EmptyFolder folder={activeFolderMeta} />
-    : !selectedItem
+    : !selectedItem || !selectedSheet
       ? <EmptyDossier category={activeCategory} savedOnly={filter === 'saved'} />
-      : selectedBattle
-        ? <><SunReportStrip report={selectedBattle} /><BattleDossier item={selectedItem} report={selectedBattle} rating={rating} playerOwnerId={profile.playerId} onOpen={() => setOpenBattleReportId(selectedBattle.id)} /></>
-        : selectedItem.overpopulationReport
-          ? <OverpopulationDossier item={selectedItem} />
-          : selectedItem.pirateReconReport
-            ? <PirateReconDossier item={selectedItem} onOpenPirateUniverse={onOpenPirateUniverse} />
-            : selectedItem.spyReport
-              ? <SpyDossier item={selectedItem} report={selectedItem.spyReport} onOpenUniverseTarget={onOpenUniverseTarget} />
-              : <GenericDossier item={selectedItem} exploration={exploration} onOpenUniverseTarget={onOpenUniverseTarget} />;
+      : <ReportSheetView
+        key={selectedItem.id}
+        item={selectedItem}
+        sheet={selectedSheet}
+        exploration={exploration}
+        command={command}
+        onOpenUniverseTarget={onOpenUniverseTarget}
+        onOpenPirateUniverse={onOpenPirateUniverse}
+        lead={selectedBattle ? <SunReportStrip report={selectedBattle} /> : undefined}
+      />;
 
   return (
     <main className={`reports-view ${activeFolder === 'profile' ? 'reports-view--profile' : 'reports-view--folder'}`} aria-label="Сообщения">
@@ -803,7 +441,7 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
           {MESSAGE_FOLDERS.map((folder) => {
             const unread = folder.category ? unreadCounts[folder.category] : 0;
             const total = folder.category ? counts[folder.category] : 0;
-            return <button key={folder.id} type="button" data-message-folder={folder.id} className={activeFolder === folder.id ? 'active' : ''} onClick={() => openFolder(folder.id)} aria-current={activeFolder === folder.id ? 'page' : undefined} aria-label={`${folder.label}: ${unread} непрочитанных из ${total}`}><span className="reports-nav-art"><ReportGlyph kind={folder.glyph} /></span><strong>{folder.label}</strong><b className={`reports-v2-unread-count ${unread > 0 ? 'is-new' : ''}`} aria-hidden="true">{unread}</b></button>;
+            return <button key={folder.id} type="button" data-message-folder={folder.id} className={activeFolder === folder.id ? 'active' : ''} onClick={() => openFolder(folder.id)} aria-current={activeFolder === folder.id ? 'page' : undefined} aria-label={`${folder.label}: ${unread} непрочитанных из ${total}`}><span className="reports-nav-art"><ReportGlyph kind={folder.glyph} /></span><strong>{folder.label}</strong><span className="reports-folder-counter" aria-hidden="true"><b className={`reports-v2-unread-count ${unread > 0 ? 'is-new' : ''}`}>{unread}</b><i>/{numberFormat.format(total)}</i></span></button>;
           })}
         </nav>
         <button className="reports-mark-all" type="button" data-qa-mark-all-read disabled={!markableItems.some((item) => !isRead(item))} onClick={markAll}>Отметить все прочитанными</button>
@@ -832,9 +470,13 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
               <button type="button" className="reports-delete-current" onClick={deleteCurrent}>Удалить</button>
             </div>
             <div className="reports-preview-footer-actions">
-              {selectedItem.secondaryAction?.kind === 'recall_spy' && selectedItem.secondaryAction.missionId ? <button type="button" className="restore" onClick={() => onRecallSpy(selectedItem.secondaryAction!.missionId!)}>{selectedItem.secondaryAction.label}</button> : null}
-              {selectedItem.action?.kind === 'simulate_battle' && selectedItem.spyReport ? <button type="button" className="reports-primary-action" onClick={() => onSimulateBattle(selectedItem.spyReport!)}>{selectedItem.action.label}</button> : null}
-              {selectedItem.action?.kind === 'open_fleets' ? <button type="button" className="reports-primary-action" onClick={onOpenFleets}>{selectedItem.action.label}</button> : null}
+              {[...sheetActions.filter((action) => !action.primary), ...sheetActions.filter((action) => action.primary)].map((action) => <button
+                key={action.kind}
+                type="button"
+                className={action.primary ? 'reports-primary-action' : action.kind === 'recall_spy' ? 'restore' : ''}
+                data-report-action={action.kind}
+                onClick={() => runAction(action)}
+              >{action.label}</button>)}
             </div>
           </footer> : null}
         </section>

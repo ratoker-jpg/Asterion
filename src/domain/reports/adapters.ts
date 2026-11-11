@@ -25,9 +25,11 @@ import type { EspionageState, SpyHunterNotice, SpyReportSnapshot } from '../espi
 import { getCombatFactionName } from '../combat/factions.ts';
 import { noCombatVerdict } from '../combat/battle-report-view-model.ts';
 import { pirateReconReportToReportItem } from '../pirates/recon-report.ts';
+import { personalLetterItems } from './letters.ts';
 import type { PirateReconReport } from '../pirates/recon-report.ts';
 
 const CATEGORY_TYPE_LABEL: Record<ReportItem['category'], string> = {
+  personal: 'Личное письмо',
   system: 'Система',
   battle: 'Боевой доклад',
   command: 'Командный доклад',
@@ -38,6 +40,7 @@ const CATEGORY_TYPE_LABEL: Record<ReportItem['category'], string> = {
 };
 
 const EMPTY_COUNTS = (): ReportCategoryCounts => ({
+  personal: 0,
   system: 0,
   battle: 0,
   command: 0,
@@ -344,6 +347,15 @@ export function recyclerArrivalReportToReportItem(report: RecyclerArrivalReport)
       { label: 'Собрано обломков', value: collected },
       { label: 'Осталось свободных обломков на орбите', value: remaining },
     ],
+    blocks: {
+      place: { coordinate: { ...report.coordinate } },
+      result: report.collectedDebris > 0 ? { label: 'Собрано', tone: 'success' } : { label: 'Пусто', tone: 'warning' },
+      resources: [
+        { key: 'collected', title: 'Собрано', items: [{ kind: 'debris', label: 'Обломки', value: report.collectedDebris }], tone: 'gain' },
+        { key: 'remaining', title: 'Осталось на орбите', items: [{ kind: 'debris', label: 'Обломки', value: report.remainingOrbitalDebris }] },
+      ],
+      details: [],
+    },
   };
 }
 
@@ -392,6 +404,17 @@ export function gasExtractionArrivalReportToReportItem(report: GasExtractionArri
       { label: 'Собрано газа', value: gas },
       { label: 'Собрано обломков', value: scrap },
     ],
+    blocks: {
+      place: { coordinate: { ...report.coordinate } },
+      result: report.outcome === 'found' ? { label: 'Найден', tone: 'success' } : { label: 'Пусто', tone: 'warning' },
+      resources: [{
+        key: 'collected',
+        title: 'Собрано',
+        items: [{ kind: 'gas', label: 'Газ', value: report.gasCollected }, { kind: 'debris', label: 'Обломки', value: report.scrapCollected }],
+        tone: 'gain',
+      }],
+      details: [],
+    },
   };
 }
 
@@ -443,7 +466,9 @@ export function buildReportsFeed(
     typeLabel: 'Прибытие добывающего флота',
   })) : [];
 
-  return [...battleItems, ...espionageItems, ...overpopulationItems, ...extractionSystemItems, ...pirateReconItems, ...pirateFlightAbsenceReports(pirateFlights.filter((flight) => flight.ownerSide !== 'npc')), ...explorationMailboxReports(exploration, pirateFlights, playerOwnerId, { ...flightContext, battleReports }), ...arrivalFlightItems].sort((a, b) => {
+  const letterItems = personalLetterItems(command, playerOwnerId);
+
+  return [...letterItems, ...battleItems, ...espionageItems, ...overpopulationItems, ...extractionSystemItems, ...pirateReconItems, ...pirateFlightAbsenceReports(pirateFlights.filter((flight) => flight.ownerSide !== 'npc')), ...explorationMailboxReports(exploration, pirateFlights, playerOwnerId, { ...flightContext, battleReports }), ...arrivalFlightItems].sort((a, b) => {
     if (a.timestamp && b.timestamp) return Date.parse(b.timestamp) - Date.parse(a.timestamp);
     if (!a.timestamp && b.timestamp) return -1;
     if (a.timestamp && !b.timestamp) return 1;

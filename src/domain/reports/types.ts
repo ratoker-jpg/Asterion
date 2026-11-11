@@ -49,6 +49,7 @@ export type GasExtractionArrivalReport = {
 };
 
 export type ReportCategory =
+  | 'personal'
   | 'system'
   | 'battle'
   | 'command'
@@ -59,7 +60,7 @@ export type ReportCategory =
 
 export type ReportFilter = 'all' | 'unread' | 'saved';
 export type ReportStatusTone = 'success' | 'danger' | 'warning' | 'info' | 'neutral';
-export type ReportSource = 'combat' | 'operations' | 'command' | 'espionage' | 'overpopulation' | 'recycling' | 'gas-extraction' | 'pirate-recon' | 'pirate-mission' | 'exploration' | 'flights';
+export type ReportSource = 'combat' | 'operations' | 'command' | 'espionage' | 'overpopulation' | 'recycling' | 'gas-extraction' | 'pirate-recon' | 'pirate-mission' | 'exploration' | 'flights' | 'letter';
 
 export type ReportDetail = {
   label: string;
@@ -70,6 +71,123 @@ export type ReportAction = {
   kind: 'open_fleets' | 'simulate_battle' | 'recall_spy';
   label: string;
   missionId?: string;
+};
+
+export type ReportCoordinate = { galaxy: number; system: number; position: number };
+
+/** Where a report happened: planet name and coordinates (the coordinates open the map). */
+export type ReportPlace = {
+  name?: string;
+  coordinate?: ReportCoordinate;
+  planetId?: string;
+  ownerId?: string;
+  /** Pirate contact cycle: the map opens the pirate contact instead of a plain coordinate. */
+  pirateContactKey?: string;
+};
+
+/** The outcome in one word with its tone: «Победа», «Пусто», «Доставлено»… */
+export type ReportResultWord = { label: string; tone: ReportStatusTone };
+
+export type ReportPortrait =
+  | { kind: 'faction'; factionId: string }
+  | { kind: 'pirate' }
+  | { kind: 'art'; src: string }
+  | { kind: 'crest'; allianceId: string }
+  | { kind: 'initial'; text: string };
+
+/** One side of a report (block «Участники»): attacker, defender, target, sender… */
+export type ReportSide = {
+  key: string;
+  role: string;
+  name: string;
+  meta?: string;
+  place?: ReportPlace;
+  portrait?: ReportPortrait;
+  outcome?: 'winner' | 'loser' | 'draw';
+  population?: { before: number | null; after: number | null };
+  /** Short facts under the side: bonuses it fought with (sciences, commander), level, capacity… */
+  facts?: ReportFact[];
+};
+
+/** One unit line of «Корабли» or «Постройки / Оборона / Науки». */
+export type ReportUnit = {
+  key: string;
+  name: string;
+  art?: string;
+  /** Under the name: level or role. */
+  note?: string;
+  count?: number | null;
+  lost?: number | null;
+  /** Share of the population (pirate recon gives no counts). */
+  percent?: number;
+  /** Commander ability shown on hover. */
+  ability?: { title: string; body: string; effect: string; note?: string };
+};
+
+export type ReportUnitGroup = {
+  key: string;
+  title: string;
+  units: ReportUnit[];
+  total?: string;
+  /** Shown instead of units when there are none, or when they were not revealed. */
+  empty?: string;
+  hidden?: boolean;
+  tone?: 'loss';
+};
+
+export type ReportResourceKind = 'metal' | 'minerals' | 'gas' | 'debris' | 'energy';
+export type ReportResource = { kind: ReportResourceKind; label: string; value: number };
+export type ReportResourceGroup = {
+  key: string;
+  title: string;
+  items: ReportResource[];
+  tone?: 'gain' | 'loss' | 'neutral';
+  empty?: string;
+};
+
+export type ReportFact = { label: string; value: string };
+
+/** One battle round in «Подробности». */
+export type ReportRound = { index: number; facts: ReportFact[] };
+
+/** Block data a source adapter fills; the sheet builder adds header and actions. */
+export type ReportBlocks = {
+  place?: ReportPlace;
+  result?: ReportResultWord;
+  sides?: ReportSide[];
+  ships?: ReportUnitGroup[];
+  resources?: ReportResourceGroup[];
+  assets?: ReportUnitGroup[];
+  details?: ReportFact[];
+};
+
+/** «Личные»: who wrote the letter. */
+export type LetterSender =
+  | { kind: 'alliance'; name: string; tag?: string; allianceId?: string }
+  | { kind: 'player'; ownerId: string; name: string; factionId?: string; alliance?: { name: string; tag: string; allianceId: string } };
+
+/**
+ * An answer button of a letter. `open_command` exists today; `accept` and
+ * `decline` are kept for bot letters (joint attack invitations…) of the next PR.
+ */
+export type LetterAnswerKind = 'open_command' | 'accept' | 'decline';
+export type LetterAnswer = { kind: LetterAnswerKind; label: string; primary?: boolean };
+
+export type PersonalLetterKind = 'application-answer' | 'application-incoming' | (string & {});
+
+export type PersonalLetter = {
+  id: string;
+  kind: PersonalLetterKind;
+  sender: LetterSender;
+  subject: string;
+  text: string;
+  at: number;
+  /** The letter's state in one word: «Принята», «Отклонена», «Новая»… */
+  result: ReportResultWord;
+  /** At most two. */
+  answers: LetterAnswer[];
+  /** What the answers act on (an application id today, an invitation id later). */
+  subjectRef?: string;
 };
 
 export type ReportItem = {
@@ -98,6 +216,10 @@ export type ReportItem = {
   pirateReconReport?: PirateReconReport;
   action?: ReportAction;
   secondaryAction?: ReportAction;
+  /** Structured blocks of the one report format (header place, sides, ships, resources…). */
+  blocks?: ReportBlocks;
+  /** «Личные» letter. */
+  letter?: PersonalLetter;
 };
 
 export type ReportsState = {

@@ -17,6 +17,11 @@ export function pirateFlightAbsenceReports(flights: readonly FlightRecord[]): Re
       participantNames: [], planetNames: ['Пираты'], coordinates: [label],
       details: [{ label: 'Координаты', value: label },
         { label: 'Результат', value: 'Бой не состоялся. Флот направлен обратно.' }],
+      blocks: {
+        place: { name: 'Пиратская база', coordinate: { ...coordinate } },
+        result: { label: 'Пусто', tone: 'neutral' },
+        details: [{ label: 'Результат', value: 'Бой не состоялся. Флот направлен обратно.' }],
+      },
     };
   });
 }
