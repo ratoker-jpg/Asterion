@@ -325,7 +325,7 @@ async function runViewport(width, height) {
       return { systems, artLoaded: Boolean(art?.complete && art.naturalWidth > 0),
         radius, layoutHeight: layout?.getBoundingClientRect().height || 0, feedHeight,
         scrollOverflowY,
-        bounded: Boolean(scroll && layout && feed && feedHeight < 780 && scrollOverflowY === 'auto') };
+        bounded: Boolean(scroll && layout && feed && feed.getBoundingClientRect().bottom <= innerHeight + 1 && feedHeight <= (layout?.getBoundingClientRect().height || 0) + 1 && scrollOverflowY === 'auto') };
     })()`);
     if (!operationCheck.systems.length || operationCheck.systems.some((system) => !Number.isInteger(system) || (system !== 1 && system !== contact.system))
       || !operationCheck.artLoaded || operationCheck.radius < 9 || !operationCheck.bounded) {
