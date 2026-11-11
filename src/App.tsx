@@ -607,7 +607,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   }, [activeRoute, state, now, pirateSystem]);
   const operationsVariantAFixtureStatus = getOperationsVariantAQaStatus(RUNTIME_MODE);
   const fixturePirateContact = pirateContacts[0];
-  const operationsVariantAFixture = useMemo(() => operationsVariantAFixtureStatus && fixturePirateContact
+  const operationsVariantAFixture = useMemo(() => operationsVariantAFixtureStatus
     ? createOperationsVariantAQaFixture(fixturePirateContact, state.profile.playerId, operationsVariantAFixtureStatus)
     : null,
   [operationsVariantAFixtureStatus, fixturePirateContact?.contactCycleKey, state.profile.playerId]);

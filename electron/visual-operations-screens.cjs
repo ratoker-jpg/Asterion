@@ -1,7 +1,8 @@
 // «Операции» redo (11.11.2026): worst-case screenshots of the operations screen at
 // 1280×720 and 2560×1080.
 // Data comes from the Test Mode fixture route `#operations-variant-a-<scenario>`
-// (src/operations-variant-a-qa-fixture.ts): every tab and kind (pirate base, unique
+// (src/operations-variant-a-qa-fixture.ts; it builds on a live pirate base of an
+// owned system when one is up, otherwise on a stand-in base at [1:1:19]): every tab and kind (pirate base, unique
 // object, anomaly), a long list (14 pirate bases and 6 objects) with long names and
 // seconds-left timers, an active pirate base without probes, an expedition that mines
 // hundreds of millions, completed operations with 12-digit numbers and a world
@@ -12,8 +13,7 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
-const { patchSaveIdle, waitForCommands } = require('./qa-save-edit.cjs');
-const { PARSE_SAVE } = require('./qa-save.cjs');
+const { waitForCommands } = require('./qa-save-edit.cjs');
 
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
@@ -131,99 +131,6 @@ async function layout(win) {
   })()`);
 }
 
-// The fixture builds its pirate bases from one real contact. Test Mode does not
-// promise one in the home system at the wall-clock time of the run, so (as the
-// pirate operations QA does) find a base on the Universe map and give the player
-// an empty colony in that system; Operations lists the bases of own systems.
-async function findPirateSystem(win) {
-  await openOperations(win);
-  if (await cardCount(win, 'pirate') > 0) return 'home';
-  await win.webContents.executeJavaScript(`document.querySelector('[data-qa-navigation="primary"] [data-qa-route="universe"]')?.click()`);
-  await waitFor(win, `document.querySelector('[data-qa-universe]')`);
-  await settle(win, 300);
-  for (let system = 1; system <= 40; system += 1) {
-    const changed = await win.webContents.executeJavaScript(`(() => {
-      const select = document.querySelector('.universe-jump select');
-      if (!select) return false;
-      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, ${JSON.stringify(String(system))});
-      select.dispatchEvent(new Event('change', { bubbles: true }));
-      return true;
-    })()`);
-    if (!changed) throw new Error('Universe system selector not found');
-    await waitFor(win, `document.querySelector('[data-qa-universe]')?.getAttribute('data-qa-universe-system') === ${JSON.stringify(String(system))}`);
-    await settle(win, 200);
-    const clicked = await win.webContents.executeJavaScript(`(() => {
-      const node = document.querySelector('[data-qa-universe-kind="pirate"]');
-      if (!node) return false;
-      node.click();
-      return true;
-    })()`);
-    if (!clicked) continue;
-    await settle(win, 240);
-    // Only a base that is live now (not in its pause between cycles) with time to spare.
-    const position = await win.webContents.executeJavaScript(`(() => {
-      const status = document.querySelector('[data-qa-universe-special-status]')?.textContent || '';
-      // «исчезнет через 1 ч 05 мин» or «исчезнет через 12 мин 04 с»
-      const countdown = /исчезнет через (?:([0-9]+) ч\\s*)?([0-9]+) мин/.exec(status);
-      if (!countdown || (!countdown[1] && Number(countdown[2]) < 4)) {
-        return { position: 0, status: status.slice(0, 80) };
-      }
-      const place = document.querySelector('[data-qa-universe-inspector]')?.textContent?.match(/\\[[0-9]+:[0-9]+:([0-9]+)\\]/);
-      return { position: Number(place?.[1] || 1), status };
-    })()`).then((found) => {
-      if (!found.position) console.log(`[operations-screens] system ${system}: base not usable («${found.status}»)`);
-      return found.position;
-    });
-    if (!position) continue;
-    // The running game writes its own save back, so edit storage while it is unloaded.
-    await patchSaveIdle(win, SAVE_KEY, `(save) => {
-      const origin = save.planets?.[save.currentPlanetId];
-      if (!origin) throw new Error('Test Mode homeworld was not persisted');
-      const colony = structuredClone(origin);
-      colony.name = 'QA operations colony';
-      colony.universeGalaxy = 1;
-      colony.universeSystem = ${system};
-      colony.universePosition = ${position} === 1 ? 2 : 1;
-      for (const id of Object.keys(colony.fleet?.ships ?? {})) colony.fleet.ships[id] = 0;
-      for (const id of Object.keys(colony.fleet?.commanders ?? {})) colony.fleet.commanders[id] = 0;
-      save.planets['qa-operations-colony'] = colony;
-      if (save.queues) save.queues['qa-operations-colony'] = [];
-    }`, { label: `colony in system ${system}` });
-    await openOperations(win);
-    let seen = await waitFor(win, `document.querySelector('.operation-feed-card-v2[data-contact-kind="pirate"]')`, 5000).then(() => true, () => false);
-    if (seen) return system;
-    const held = await win.webContents.executeJavaScript(`(() => {
-      const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
-      return Object.entries(save.planets || {}).map(([id, planet]) => id + '@' + planet.universeGalaxy + ':' + planet.universeSystem + ':' + planet.universePosition);
-    })()`);
-    console.log(`[operations-screens] system ${system}: planets after the edit ${JSON.stringify(held)}`);
-    const shown = await win.webContents.executeJavaScript(`(() => ({
-      url: location.href.slice(-60),
-      cards: [...document.querySelectorAll('.operation-feed-card-v2')].map((card) => card.getAttribute('data-contact-kind') + ':' + (card.textContent || '').slice(0, 40)),
-      tabs: [...document.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent.trim() + (tab.getAttribute('aria-selected') === 'true' ? '*' : '')),
-      text: (document.querySelector('.operations-shell-v2')?.innerText || '').replace(/\\s+/g, ' ').slice(0, 300),
-    }))()`);
-    console.log(`[operations-screens] system ${system}: operations shows ${JSON.stringify(shown)}`);
-    // Fallback: move the home planet itself into the system.
-    await patchSaveIdle(win, SAVE_KEY, `(save) => {
-      delete save.planets['qa-operations-colony'];
-      if (save.queues) delete save.queues['qa-operations-colony'];
-      const home = save.planets[save.currentPlanetId];
-      home.universeGalaxy = 1;
-      home.universeSystem = ${system};
-      home.universePosition = ${position} === 1 ? 2 : 1;
-    }`, { label: `home planet to system ${system}` });
-    await openOperations(win);
-    seen = await waitFor(win, `document.querySelector('.operation-feed-card-v2[data-contact-kind="pirate"]')`, 5000).then(() => true, () => false);
-    if (seen) return `${system} (home moved)`;
-    console.warn(`[operations-screens] colony in system ${system} lists no pirate base, trying the next system`);
-    await win.webContents.executeJavaScript(`document.querySelector('[data-qa-navigation="primary"] [data-qa-route="universe"]')?.click()`);
-    await waitFor(win, `document.querySelector('[data-qa-universe]')`);
-    await settle(win, 300);
-  }
-  throw new Error('No pirate base on the map in systems 1–40 of the Test Mode galaxy.');
-}
-
 async function scenario(win, name) {
   await win.webContents.executeJavaScript(`history.replaceState(null, '', '#operations-variant-a-${name}')`);
   await reload(win);
@@ -245,8 +152,6 @@ async function runViewport(win, directory, label) {
     if (box.nativeTitles.length) fail(`${name}: native title tooltips remain`, box.nativeTitles);
     await capture(win, directory, name);
   };
-
-  metrics.pirateSystem = await findPirateSystem(win);
 
   // 1. Available: a pirate base, an unscouted unique object, an anomaly.
   await scenario(win, 'available');
