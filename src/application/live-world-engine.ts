@@ -25,7 +25,7 @@ export type LiveWorldEngineHost = {
   later: (task: () => void, delayMs: number) => void;
   clock?: () => number;
   /**
-   * Hands a large save to the main process as bytes (a transferred buffer, no
+   * Hands a large save to the main process as bytes (cloned on the worker thread, no
    * copy). Absent or false: the text goes to the UI thread as before.
    */
   /** Saves at least this long go through sendSave (default: the size the desktop store takes). */

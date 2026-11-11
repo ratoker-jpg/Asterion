@@ -46,15 +46,15 @@ async function main() {
     });
     store.openWritePort();
     const port = await got;
-    const reply = (message) => new Promise((resolve) => { port.onmessage = (event) => resolve(event.data); port.postMessage(message, message.bytes ? [message.bytes] : []); });
+    const reply = (message) => new Promise((resolve) => { port.onmessage = (event) => resolve(event.data); port.postMessage(message); });
     const text = 'Привет, порт! ' + 'q'.repeat(3000000) + String.fromCodePoint(0x1F680);
-    const ok = await reply({ key: ${JSON.stringify(KEY)}, writeId: 'p1', version: 7, chars: text.length, bytes: new TextEncoder().encode(text).buffer });
-    const bad = await reply({ key: '../escape', writeId: 'p2', version: 8, chars: 1, bytes: new ArrayBuffer(1) });
+    const ok = await reply({ key: ${JSON.stringify(KEY)}, writeId: 'p1', version: 7, chars: text.length, bytes: new TextEncoder().encode(text) });
+    const bad = await reply({ key: '../escape', writeId: 'p2', version: 8, chars: 1, bytes: new Uint8Array(1) });
     // Byte identity with the text write: the same text through write() reads back identical.
     store.write(${JSON.stringify(KEY)}, 'p6', text);
     const identical = store.read(${JSON.stringify(KEY)}, 'p1') === text && store.read(${JSON.stringify(KEY)}, 'p6') === text;
     for (const id of ['p3', 'p4', 'p5']) {
-      await reply({ key: ${JSON.stringify(KEY)}, writeId: id, version: 9, chars: 200, bytes: new TextEncoder().encode(id.repeat(100)).buffer });
+      await reply({ key: ${JSON.stringify(KEY)}, writeId: id, version: 9, chars: 200, bytes: new TextEncoder().encode(id.repeat(100)) });
     }
     const out = { ok, bad, identical, p5: store.read(${JSON.stringify(KEY)}, 'p5')?.length };
     store.remove(${JSON.stringify(KEY)});

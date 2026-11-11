@@ -20,7 +20,7 @@ const engine = new LiveWorldEngine(host);
 
 /**
  * Large saves go to the main process through this port as UTF-8 bytes (the
- * buffer is transferred, nothing is copied); the UI thread only hears
+ * bytes are cloned on this thread, nothing is copied on the UI thread); the UI thread only hears
  * "saved". The main process answers on the same port once the file is in place.
  */
 function attachSavePort(saveKey: string, port: MessagePort): void {
@@ -40,7 +40,9 @@ function attachSavePort(saveKey: string, port: MessagePort): void {
   host.sendSave = (version, bytes, chars, computeMs) => {
     const writeId = nextWriteId();
     computeMsOf.set(writeId, computeMs);
-    port.postMessage({ key: saveKey, writeId, version, chars, bytes }, [bytes]);
+    // Not transferred: Electron's main-process port does not take a transferred ArrayBuffer (it arrives as null).
+    // The copy is made here, on the worker thread; the UI thread touches nothing.
+    port.postMessage({ key: saveKey, writeId, version, chars, bytes: new Uint8Array(bytes) });
     return true;
   };
 }
