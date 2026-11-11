@@ -202,39 +202,6 @@
 .system-star-tooltip *{ font-size:11.5px; line-height:1.45; }
 
 /* === 6. OPERATIONS ========================================== */
-.operations-topbar-v2{
-  border-radius:var(--ut-r-panel) !important;
-  background:var(--ut-surface);
-  border:1px solid var(--ut-border);
-}
-.operations-feed-v2{ gap:10px; }
-.operation-feed-card-v2{
-  border-radius:var(--ut-r-card) !important;
-  transition:transform .16s ease, border-color .16s ease;
-}
-.operation-feed-card-v2:hover{
-  transform:translateY(-1px);
-  border-color:var(--ut-border-strong);
-}
-.operation-feed-threat-v2{ border-radius:var(--ut-r-chip); font-size:10.5px; }
-.operation-feed-meta-v2{ font-size:11px; }
-.operations-dossier-v2,
-.operations-command-v2{
-  border-radius:var(--ut-r-panel) !important;
-  background:var(--ut-surface-2);
-  border:1px solid var(--ut-border);
-}
-.operations-dossier-glyph-v2{ border-radius:var(--ut-r-card); }
-.operations-scope-v2{
-  border-radius:var(--ut-r-chip);
-  font-size:10.5px;
-}
-.operations-intel-line-v2{ border-radius:var(--ut-r-chip); }
-.operations-primary-v2{
-  border-radius:var(--ut-r-btn) !important;
-  min-height:36px;
-  font-size:12.5px;
-}
 
 /* === 7. COMMAND: src/command.css ============================ */
 .command-diplomacy-mark--large{ border-radius:var(--ut-r-card); }
@@ -404,8 +371,6 @@ html.asterion-repair-page .repair-page-head-v1::after{
 }
 
 /* === P2.3 ARTIFACT KILL — square accent lines =============== */
-.operations-dossier-v2::before,
-.operation-feed-card-v2::after,
 .battle-summary-v1::before,
 .battle-section-v1::before,
 .battle-card-v1::before,
@@ -417,7 +382,7 @@ html.asterion-repair-page .repair-page-head-v1::after{
 .ship-info-art-v1::before,
 .ship-info-art-v1::after,
 .passport-panel-v2::after,
-.queue-panel-v2::after{
+.queue-panel-v2::after {
   display:none !important;
 }
 
@@ -610,8 +575,6 @@ html.asterion-repair-page .repair-page-head-v1::after{
   box-shadow:0 14px 34px rgba(0,0,0,.55);
 }
 
-/* --- operations leftovers --- */
-.operations-scope-v2{ border-radius:var(--ut-r-card) !important; }
 
 /* --- universe leftovers --- */
 .universe-nav .step{ border-radius:var(--ut-r-chip) !important; }
@@ -848,7 +811,6 @@ html.asterion-repair-page .repair-page-head-v1::after{
 }
 
 /* === P4.2 cards, rows, plates =============================== */
-.operations-unknown-brief-v2,
 .flight-timeline-eta-card,
 .flight-timeline-cargo,
 .flight-timeline-ship,
@@ -893,7 +855,7 @@ html.asterion-repair-page .repair-page-head-v1::after{
 .planet-slot,
 .universe-tools,
 .workspace--universe .universe-view-v3 .system-planet .planet-name,
-.system-planet.owned .planet-name{
+.system-planet.owned .planet-name {
   border-radius:var(--ut-r-chip);
 }
 
@@ -905,7 +867,6 @@ html.asterion-repair-page .repair-page-head-v1::after{
 .zone-list button,
 .planet-selector,
 .summary-zone-list button,
-.operations-tabs-v2 button,
 .science-sections-v2 button,
 .science-ready-action-v2,
 .spaceport-sections-v2 button,
@@ -940,7 +901,7 @@ html.asterion-repair-page .repair-page-head-v1::after{
 .universe-tools button,
 .system-index button,
 .building-interior-back,
-.building-interior-return-overlay{
+.building-interior-return-overlay {
   border-radius:var(--ut-r-btn);
 }
 .science-sections-v2 button b,
@@ -1327,41 +1288,6 @@ body [data-asterion-typography="helper"]{ font-size:calc(var(--ut-font-helper) *
 /* Operation cards are content, not HUD microcopy. The legacy typography
    controller applies the category floor to their text nodes; these rules
    cover the utility-specific screen that intentionally bypasses it. */
-.operations-tabs-v2 button,
-.operations-tabs-v2 button b,
-.operations-primary-v2,
-.operations-secondary-v2{ font-size:var(--ut-font-control) !important; }
-.operations-heading-v2 small,
-.operations-feed-v2 > header small,
-.operations-dossier-title-v2 small,
-.operations-dossier-threat-v2 small,
-.operations-briefing-v2 > small,
-.operations-objective-v2 > small,
-.operations-conditions-v2 > small,
-.operations-rewards-panel-v2 > small,
-.operations-command-v2 small,
-.operation-feed-threat-v2 small,
-.operation-feed-copy-v2 > small,
-.operation-feed-copy-v2 > em,
-.operation-feed-meta-v2 > i,
-.operation-feed-meta-v2 > b,
-.operations-conditions-v2 p,
-.operations-rewards-panel-v2 p,
-.operations-unknown-brief-v2 p,
-.operations-command-v2 > div:first-child span{ font-size:var(--ut-font-secondary) !important; }
-.operations-reward-v2 > span small,
-.operations-reward-compact-v2 span,
-.operations-unknown-brief-v2 small{ font-size:var(--ut-font-helper) !important; }
-.operations-primary-v2:hover,
-.operations-primary-v2:focus-visible,
-.operations-secondary-v2:hover,
-.operations-secondary-v2:focus-visible{
-  border-color:var(--op-accent, var(--ut-accent));
-  color:#fff;
-  outline-offset:2px;
-}
-.operations-primary-v2:active,
-.operations-secondary-v2:active{ transform:translateY(1px); }
 
 /* The approved flight-plan modal is the reference control language. Keep
    send/close/cancel states explicit even when a viewport override is active. */

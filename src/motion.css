@@ -78,12 +78,12 @@
 .fleet-workspace-v1 > .fleet-sidebar-v1 { animation: ut-slide-in-left var(--ut-motion-screen) var(--ut-spring) backwards; }
 
 /* Panels inside a screen follow one another (first eight staggered). */
-:is(.cmdA, .opsA, .reports-view, .science-view-v2, .spaceport-upgrades-v2, .settings-view-v2, .rating-view-v2, .fleet-main-v1 > *) > *,
-:is(.cmdA-content, .opsA-grid, .reports-profile-view) > * {
+:is(.cmdA, .opsA, .op-view, .reports-view, .science-view-v2, .spaceport-upgrades-v2, .settings-view-v2, .rating-view-v2, .fleet-main-v1 > *) > *,
+:is(.cmdA-content, .op-grid, .reports-profile-view) > * {
   animation: ut-rise-in var(--ut-motion-item) var(--ut-spring) backwards;
   animation-delay: calc(min(sibling-index(), 8) * var(--ut-stagger) + 60ms);
 }
-.cmdA-content > *, .opsA-grid > *, .reports-profile-view > * { animation-delay: calc(min(sibling-index(), 8) * var(--ut-stagger) + 160ms); }
+.cmdA-content > *, .op-grid > *, .reports-profile-view > * { animation-delay: calc(min(sibling-index(), 8) * var(--ut-stagger) + 160ms); }
 
 /* ---------------------------------------------------------------- 2. Holographic sweep
    A scan line passes over each newly opened screen (App renders a keyed
@@ -129,7 +129,7 @@
 .spaceport-row-v2,
 .srp-card,
 .cmdA-tile,
-.opsA-tile,
+.op-tile,
 .report-card,
 .rating-row-v2,
 .universe-debris-finder__list > li,
@@ -147,7 +147,7 @@
 }
 
 /* Hover (mouse only): the card lifts on a spring, gains depth and a rim glow. */
-:is(.shipyard-card-v1, .repair-card-v1, .srp-card, .cmdA-tile, .opsA-tile, .report-card, .fleet-ship-tile-v2,
+:is(.shipyard-card-v1, .repair-card-v1, .srp-card, .cmdA-tile, .op-tile, .report-card, .fleet-ship-tile-v2,
   .resource-zone-queue-card, .science-row-v2, .spaceport-row-v2, .owned-planet-row-v4, .universe-radar__row, .planet-orbit__vitals > div) {
   transition:
     translate var(--ut-motion-base) var(--ut-spring),
@@ -157,7 +157,7 @@
     box-shadow var(--ut-motion-base) var(--ut-ease-out);
 }
 @media (hover: hover) and (pointer: fine) {
-  :is(.shipyard-card-v1, .repair-card-v1, .srp-card, .cmdA-tile, .opsA-tile, .report-card, .fleet-ship-tile-v2, .resource-zone-queue-card):hover {
+  :is(.shipyard-card-v1, .repair-card-v1, .srp-card, .cmdA-tile, .op-tile, .report-card, .fleet-ship-tile-v2, .resource-zone-queue-card):hover {
     translate: 0 var(--ut-lift);
     filter: brightness(1.08) drop-shadow(0 12px 22px rgba(0, 0, 0, .45)) drop-shadow(0 0 14px color-mix(in srgb, var(--race-accent, #56d9f2) 22%, transparent));
   }
@@ -436,9 +436,9 @@ body :is(.system-planet, .resource-building-node, .zone-hotspot, .universe-radar
 @media (prefers-reduced-motion: reduce) {
   .workspace > *, .fleet-main-v1 > *, .utility-screen-host > *, .building-interior-host > *,
   .fleet-workspace-v1 > .fleet-sidebar-v1,
-  :is(.cmdA, .opsA, .reports-view, .science-view-v2, .spaceport-upgrades-v2, .settings-view-v2, .rating-view-v2) > *,
-  :is(.cmdA-content, .opsA-grid, .reports-profile-view) > *,
-  .shipyard-card-v1, .repair-card-v1, .science-row-v2, .spaceport-row-v2, .srp-card, .cmdA-tile, .opsA-tile, .report-card, .rating-row-v2,
+  :is(.cmdA, .opsA, .op-view, .reports-view, .science-view-v2, .spaceport-upgrades-v2, .settings-view-v2, .rating-view-v2) > *,
+  :is(.cmdA-content, .op-grid, .reports-profile-view) > *,
+  .shipyard-card-v1, .repair-card-v1, .science-row-v2, .spaceport-row-v2, .srp-card, .cmdA-tile, .op-tile, .report-card, .rating-row-v2,
   .universe-debris-finder__list > li, .universe-radar__row, .resource-zone-queue-card, .owned-planet-row-v4,
   .fleet-ship-tile-v2, .fleet-mission-icons-v1 > button,
   .planet-orbit > *, .planet-orbit__side > *, .planet-orbit__vitals > div, .universe-radar > *,
@@ -458,7 +458,7 @@ body :is(.system-planet, .resource-building-node, .zone-hotspot, .universe-radar
   body button:not([disabled]):active { scale: 1; }
   .stage-ambient i, .ut-attention, .asterion-header .hdr-route.active .hdr-route__icon,
   :is(.resource-zone-queue-card.busy .resource-zone-queue-card-main > i > span, .queue-progress-v2 > i, .recycling-job-progress > i, .gate-node__bar > i, .fleet-production-order-progress-v1 > *)::after { animation: none !important; display: none; }
-  :is(.shipyard-card-v1, .repair-card-v1, .srp-card, .cmdA-tile, .opsA-tile, .report-card, .fleet-ship-tile-v2, .resource-zone-queue-card,
+  :is(.shipyard-card-v1, .repair-card-v1, .srp-card, .cmdA-tile, .op-tile, .report-card, .fleet-ship-tile-v2, .resource-zone-queue-card,
     .science-row-v2, .spaceport-row-v2, .owned-planet-row-v4, .universe-radar__row, .planet-orbit__vitals > div):hover,
   :is(.shipyard-card-v1, .repair-card-v1, .cmdA-tile, .srp-card):hover img,
   .universe-radar .system-planet:hover > img, .asterion-header .hdr-route:hover .hdr-route__icon, .asterion-header .hdr-zone:hover img,
