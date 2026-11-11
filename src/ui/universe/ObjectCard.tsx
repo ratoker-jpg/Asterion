@@ -284,6 +284,7 @@ export function ObjectCard(props: ObjectCardProps) {
         aria-label={`${OBJECT_KIND_LABEL[kind]}: ${node.name}`}
         data-qa-universe-inspector
         data-qa-inspector-kind={kind}
+        data-qa-universe-remaining-seconds={expiresAt ? Math.max(0, Math.ceil((expiresAt - nowMs) / 1_000)) : undefined}
         style={{ '--oc-k': KIND_TONE[kind] ?? '#8fd3e0' } as CSSProperties}
       >
         <div className="oc-scroll" data-qa-universe-special={kind} data-qa-universe-underlying-kind={underlyingNode?.kind ?? (kind === 'empty' ? 'empty' : '')}>
