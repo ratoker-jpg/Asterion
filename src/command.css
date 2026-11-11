@@ -72,7 +72,7 @@
 }
 
 /* ---------- buttons: one skin, one primary per view ---------- */
-.cmdA button:where(:not(.srp-host *, .srp-portal *, .game-select__trigger)) {
+.cmdA button:where(:not(.srp-host *, .srp-portal *, .game-select__trigger, [data-asterion-close])) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -608,7 +608,6 @@
 .command-dialog--wide { width: min(880px, calc(100vw - 48px)); }
 .command-dialog > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
 .cmdA .command-dialog > header h3 { color: #f4fcff; font-size: calc(20px * var(--text-scale-section-title, 1)) !important; font-weight: 800; line-height: 1.25; }
-.cmdA .command-dialog .command-close { padding: 0 !important; font-size: 16px !important; }
 .command-dialog .command-dialog-body { display: flex; flex-direction: column; gap: 14px; margin: 0 0 18px; color: #b9cdd3; line-height: 1.5; }
 .command-dialog .command-actions { flex: none; margin-top: 4px; }
 .command-error { padding: 9px 12px; border-radius: 10px; background: rgba(240, 68, 94, .11); color: #ff9dab; }
