@@ -96,6 +96,12 @@ function ownerCanUseFlightSlot(state: SaveState, ownerId: string, profile: SpyOw
   return npcFreeFlightSlots(ownerFlightIndex(state.flights.records, ownerId), profile.scienceLevels[6]) > 0;
 }
 
+/** The hangar capacity that prices the wreckage bonus: the owner's best hangar level, today or ever. */
+export function npcPirateHangarCapacity(state: SaveState, ownerId: string): number {
+  const current = ownerTargets(state, ownerId).reduce((max, target) => Math.max(max, Math.max(0, Math.floor(target.buildings.hangar ?? 0))), 0);
+  return getHangarCapacity(Math.max(state.pirate?.ownerMaxHangarLevel?.[ownerId] ?? 0, current));
+}
+
 function sameCoordinate(left: { galaxy: number; system: number; position: number }, right: { galaxy: number; system: number; position: number }): boolean {
   return left.galaxy === right.galaxy && left.system === right.system && left.position === right.position;
 }
@@ -158,6 +164,7 @@ export function getNpcPirateCandidates(state: SaveState, profile: NpcProfile, at
         raceId: origin.raceId, free: freeCombat, shipLevels: snapshot.attackerShipLevels,
         technologies: snapshot.attackerTechnologies, report: ownReconReport,
         resourcePoints: selectOwnerScore(state, ownerId)?.resourcePoints ?? 0,
+        hangarCapacity: npcPirateHangarCapacity(state, ownerId),
       });
       if (odds?.ready) combatShips = { ...odds.ships };
     }

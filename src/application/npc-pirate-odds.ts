@@ -83,6 +83,12 @@ export function estimateNpcPirateOdds(input: Readonly<{
   report: PirateReconReport;
   /** The owner's own resource points: pirate technology follows them. */
   resourcePoints: number;
+  /**
+   * The owner's historical hangar capacity. The wreckage bonus follows the share of it that is sent
+   * (exactly the capacity pays x1.5, 95% x1.3, 85% x1.0, 50% x0.9, less x0.7, more than the capacity x1.0),
+   * so a raid is trimmed to the capacity when the free fleet is larger, like the owner does by hand.
+   */
+  hangarCapacity?: number;
 }>): NpcPirateOdds | null {
   const perPopulation = npcPirateGarrisonPowerPerPopulation(input.report, input.resourcePoints);
   if (perPopulation === null || perPopulation <= 0) return null;
@@ -129,11 +135,75 @@ export function estimateNpcPirateOdds(input: Readonly<{
     if (result.ratio >= NPC_PIRATE_MIN_POWER_RATIO) { best = { chosen, ...result }; break; }
   }
   if (!best) return null;
+  let chosen = best.chosen;
+  let ratio = best.ratio;
+  let population = best.population;
+  const capacity = Math.floor(input.hangarCapacity ?? 0);
+  if (best.ratio >= NPC_PIRATE_MIN_POWER_RATIO && capacity > 0 && best.population > capacity) {
+    const fitted = fitToHangar(best.chosen, capacity);
+    if (fitted) {
+      const result = evaluate(fitted);
+      // The power ratio does not depend on the size, only on the mix; a trimmed raid must still pass.
+      if (result.ratio >= NPC_PIRATE_MIN_POWER_RATIO) { chosen = fitted; ratio = result.ratio; population = result.population; }
+    }
+  }
   return {
-    ratio: best.ratio,
+    ratio,
     fullRatio,
-    ready: best.ratio >= NPC_PIRATE_MIN_POWER_RATIO,
-    ships: Object.fromEntries(best.chosen.map((type) => [type.id, type.count])) as Partial<Record<ShipId, number>>,
-    sentPopulation: best.population,
+    ready: ratio >= NPC_PIRATE_MIN_POWER_RATIO,
+    ships: Object.fromEntries(chosen.map((type) => [type.id, type.count])) as Partial<Record<ShipId, number>>,
+    sentPopulation: population,
   };
+}
+
+type FleetType = Readonly<{ id: ShipId; count: number; population: number }>;
+
+/**
+ * Trims a fleet to exactly `capacity` population units, keeping its mix: every type is scaled down in
+ * proportion, then the gap is closed with whole ships (bounded subset sum over what is left at home).
+ * When no combination hits the capacity exactly, a few ships are given back to widen the gap; if it
+ * still misses, the closest sum below the capacity wins. Null: nothing fits.
+ */
+export function fitToHangar(types: readonly FleetType[], capacity: number): FleetType[] | null {
+  const total = types.reduce((sum, type) => sum + type.count * type.population, 0);
+  if (capacity <= 0 || total < capacity || types.some((type) => type.population <= 0)) return null;
+  const scale = capacity / total;
+  const base = types.map((type) => Math.floor(type.count * scale));
+  let best: number[] | null = null;
+  let bestSum = 0;
+  for (let giveBack = 0; giveBack <= 12 && bestSum < capacity; giveBack += 1) {
+    const counts = [...base];
+    for (let step = 0; step < giveBack; step += 1) {
+      const index = (step + giveBack) % types.length;
+      if (counts[index] > 0) counts[index] -= 1;
+    }
+    const used = counts.reduce((sum, count, index) => sum + count * types[index].population, 0);
+    const gap = capacity - used;
+    // reach[g]: ships added per type to fill exactly g units of the gap from what is still at home.
+    let reach: (number[] | null)[] = Array.from({ length: gap + 1 }, () => null);
+    reach[0] = types.map(() => 0);
+    for (let index = 0; index < types.length; index += 1) {
+      const spare = Math.min(types[index].count - counts[index], Math.floor(gap / types[index].population));
+      const next = reach.map((item) => (item ? [...item] : null));
+      for (let size = 0; size <= gap; size += 1) {
+        const from = reach[size];
+        if (!from) continue;
+        for (let take = 1; take <= spare; take += 1) {
+          const target = size + take * types[index].population;
+          if (target > gap) break;
+          if (!next[target]) { const copy = [...from]; copy[index] += take; next[target] = copy; }
+        }
+      }
+      reach = next;
+    }
+    for (let size = gap; size >= 0; size -= 1) {
+      const add = reach[size];
+      if (!add) continue;
+      if (used + size > bestSum) { bestSum = used + size; best = counts.map((count, index) => count + add[index]); }
+      break;
+    }
+  }
+  if (!best || bestSum <= 0) return null;
+  const finalCounts = best;
+  return types.flatMap((type, index) => finalCounts[index] > 0 ? [{ ...type, count: finalCounts[index] }] : []);
 }

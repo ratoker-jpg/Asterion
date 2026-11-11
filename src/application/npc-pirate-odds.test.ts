@@ -49,3 +49,32 @@ test('stronger pirates (higher ship level, more points) lower the odds', () => {
   const hard = estimateNpcPirateOdds({ ...base, free: { battleship: 10 }, report: report(8), resourcePoints: 3_000_000 })!;
   assert.ok(hard.ratio < easy.ratio);
 });
+
+import { fitToHangar } from './npc-pirate-odds.ts';
+import { pirateDebrisRewardMultiplier } from '../domain/pirates/threat.ts';
+
+test('a big free fleet is trimmed to exactly the hangar capacity and keeps its odds', () => {
+  const free = { battleship: 3000, cruiser: 900, defender: 500 };
+  const odds = estimateNpcPirateOdds({ ...base, shipLevels: { battleship: 10, cruiser: 10, defender: 10 }, free, hangarCapacity: 25_112 })!;
+  assert.equal(odds.ready, true);
+  assert.equal(odds.sentPopulation, 25_112);
+  assert.equal(pirateDebrisRewardMultiplier(odds.sentPopulation, 25_112), 1.5);
+  const untrimmed = estimateNpcPirateOdds({ ...base, shipLevels: { battleship: 10, cruiser: 10, defender: 10 }, free })!;
+  assert.ok(untrimmed.sentPopulation > 25_112);
+  assert.ok(Math.abs(odds.ratio - untrimmed.ratio) / untrimmed.ratio < 0.02);
+});
+
+test('a fleet smaller than the capacity goes whole', () => {
+  const odds = estimateNpcPirateOdds({ ...base, free: { battleship: 100 }, hangarCapacity: 25_112 })!;
+  assert.equal(odds.ships.battleship, 100);
+  assert.equal(odds.sentPopulation, 1500);
+});
+
+test('fitToHangar closes an odd gap with small hulls, or lands as close below as it can', () => {
+  const exact = fitToHangar([{ id: 'battleship', count: 100, population: 15 }, { id: 'scout', count: 50, population: 2 }], 1001);
+  assert.equal(exact!.reduce((sum, type) => sum + type.count * type.population, 0), 1001);
+  const odd = fitToHangar([{ id: 'battleship', count: 100, population: 15 }, { id: 'cruiser', count: 100, population: 7 }], 1001)!;
+  assert.equal(odd.reduce((sum, type) => sum + type.count * type.population, 0), 1001);
+  const near = fitToHangar([{ id: 'battleship', count: 100, population: 15 }], 1001)!;
+  assert.equal(near[0].count * 15, 990);
+});
