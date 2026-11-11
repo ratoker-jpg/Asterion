@@ -64,11 +64,30 @@ function cargo(metal: number, minerals: number, gas: number, debris: number) {
   return { metal, minerals, gas, debris };
 }
 
+/** A live-looking base for runs where no real pirate cycle is up in an owned system. */
+function standInPirateContact(): PirateContactPresentation {
+  const startAt = FIXTURE_NOW - 180_000;
+  return {
+    contactCycleKey: `pirate-cycle-v1:1:1:7:${startAt}`,
+    coordinate: { galaxy: 1, system: 1, position: 19 },
+    cycleIndex: 7,
+    expiresAt: FIXTURE_NOW + 3_900_000,
+    remainingMs: 3_900_000,
+    statusLabel: 'Доступен',
+    statusTone: 'active',
+    recon: { enabled: true, disabledReason: null },
+    elimination: { enabled: true, disabledReason: null },
+    latestReportId: null,
+    latestReportOutcome: null,
+  };
+}
+
 export function createOperationsVariantAQaFixture(
-  pirateContact: PirateContactPresentation,
+  livePirateContact: PirateContactPresentation | undefined,
   ownerId: string,
   status: OperationsVariantAStatus,
 ) {
+  const pirateContact = livePirateContact ?? standInPirateContact();
   const unique = findCanonicalNode('unique', FIXTURE_NOW);
   const anomaly = findCanonicalNode('anomaly', FIXTURE_NOW);
   if (!unique || !anomaly) return null;

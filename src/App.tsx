@@ -607,7 +607,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   }, [activeRoute, state, now, pirateSystem]);
   const operationsVariantAFixtureStatus = getOperationsVariantAQaStatus(RUNTIME_MODE);
   const fixturePirateContact = pirateContacts[0];
-  const operationsVariantAFixture = useMemo(() => operationsVariantAFixtureStatus && fixturePirateContact
+  // Test Mode screenshot route only; without a live base the fixture brings its own stand-in.
+  const operationsVariantAFixture = useMemo(() => operationsVariantAFixtureStatus
     ? createOperationsVariantAQaFixture(fixturePirateContact, state.profile.playerId, operationsVariantAFixtureStatus)
     : null,
   [operationsVariantAFixtureStatus, fixturePirateContact?.contactCycleKey, state.profile.playerId]);
