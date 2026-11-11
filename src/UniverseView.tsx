@@ -730,7 +730,12 @@ const CLAIM_COPY: Record<'free' | 'self' | 'occupied' | 'out', string> = {
 };
 
 /** Stable reference for a value whose identity changes on every parent render. */
-function useStableValue<T>(value: T, key: string): T {
+function useStableValue<T>(value: T, keyOf: (value: T) => string): T {
+  // The key is built only when the array itself is a new object: App hands the
+  // same one over for renders that did not change it.
+  const keyed = useRef<{ value: T; key: string } | null>(null);
+  if (!keyed.current || keyed.current.value !== value) keyed.current = { value, key: keyOf(value) };
+  const key = keyed.current.key;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   return useMemo(() => value, [key]);
 }
@@ -799,8 +804,8 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
 
   // The app re-renders every second and hands over fresh arrays; keep the
   // map inputs stable so the galaxy is not rebuilt on every tick.
-  const spyTargets = useStableValue(spyTargetsProp, JSON.stringify(spyTargetsProp.map((target) => [target.id, target.ownerId, target.ownerName, target.raceId, target.kind, target.name, target.coordinate])));
-  const playerPlanets = useStableValue(playerPlanetsProp, JSON.stringify(playerPlanetsProp));
+  const spyTargets = useStableValue(spyTargetsProp, (targets) => JSON.stringify(targets.map((target) => [target.id, target.ownerId, target.ownerName, target.raceId, target.kind, target.name, target.coordinate])));
+  const playerPlanets = useStableValue(playerPlanetsProp, (planets) => JSON.stringify(planets));
 
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 1_000);
