@@ -200,6 +200,7 @@ import { freezeNpcCatchupTarget, isNpcCatchupPending, needsNpcCatchupBefore } fr
 import { NpcCatchupBanner } from './NpcCatchupBanner.tsx';
 import LiveWorldWorker from './live-world.worker.ts?worker';
 import type { LiveWorldRequest, LiveWorldResponse, LiveWorldVersion } from './application/live-world-protocol.ts';
+import { requestSavePort } from './application/save-port.ts';
 import { applyWorldPatch, diffWorld } from './application/world-diff.ts';
 import { setNpcCatchupProgress } from './ui/npc-catchup-progress-store.ts';
 import {
@@ -1351,6 +1352,14 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         const step = link.steps.get(message.version);
         if (step !== undefined) link.savedStep = Math.max(link.savedStep, step);
         reportWriteResult(persistence.writeSerialized(message.text));
+      } else if (message.type === 'saved') {
+        // The main process wrote the file; the window only moves the pointer.
+        const step = link.steps.get(message.version);
+        if (step !== undefined) link.savedStep = Math.max(link.savedStep, step);
+        lastWriteCostMs.current = message.computeMs;
+        reportWriteResult(persistence.adoptSavedFile(message.writeId, message.chars));
+      } else if (message.type === 'save-port-failed') {
+        console.error('Live world save port failed; the worker sends save text.', message.error);
       } else if (message.type === 'bot-journal') {
         appendBotJournal(persistence.saveKey, message.lines);
       } else {
@@ -1365,6 +1374,13 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       catchupIntervalMs: NPC_CATCHUP_WORKER_PERSIST_INTERVAL_MS,
     } };
     worker.postMessage(request);
+    // Desktop: large saves skip this thread (src/application/save-port.ts).
+    void requestSavePort().then((port) => {
+      if (!port) return;
+      if (liveWorld.current !== link) { port.close(); return; }
+      const portRequest: LiveWorldRequest = { type: 'save-port', saveKey: persistence.saveKey, port };
+      worker.postMessage(portRequest, [port]);
+    });
     return true;
   }, [announceRuntimeEvents, persistence, reportWriteResult, stopLiveWorld]);
   restartLiveWorld.current = (next) => { startLiveWorld(next); };

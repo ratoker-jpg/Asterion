@@ -13,6 +13,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
+const { readSaveFile, readSaveFileSync } = require('./save-store.cjs');
 const { promisify } = require('util');
 
 const gzip = promisify(zlib.gzip);
@@ -240,7 +241,41 @@ function publicSettings() {
   };
 }
 
+/** Replay cursor and schema of a save text, as src/application/cloud/cloud-sync.ts reads them (saveWorldAt, saveSchemaVersion). */
+function metaOfSave(text, options) {
+  const schema = /"schemaVersion":(\d+)/.exec(text.slice(0, 4096)) || /"schemaVersion":(\d+)/.exec(text);
+  const replay = /"npcReplay":\{"version":1,"processedThroughAt":(\d+)/.exec(text);
+  const clock = replay ? null : /"lastReconciledAt":(\d+(?:\.\d+)?)/.exec(text);
+  return {
+    left: Boolean(options && options.left),
+    ...(options && options.takeBack ? { takeBack: true } : {}),
+    schemaVersion: schema ? Number(schema[1]) : 0,
+    worldAt: replay ? Number(replay[1]) : (clock ? Math.floor(Number(clock[1])) : 0),
+    clockOffsetMs: Number(options && options.clockOffsetMs) || 0,
+  };
+}
+
 function registerCloud() {
+  // The same upload, read from the save file in the main process (the window never holds the text).
+  ipcMain.handle('asterion:cloud:upload-saved', async (_event, id, name, key, writeId, options) => {
+    if (!CAMPAIGN_ID.test(id)) return { ok: false, error: 'Неверная выгрузка' };
+    let text;
+    try { text = await readSaveFile(key, writeId); } catch (error) { return { ok: false, error: String(error && error.message || error) }; }
+    return upload(id, name, text, metaOfSave(text, { ...options, left: false }));
+  });
+  ipcMain.on('asterion:cloud:upload-saved-exit', (event, id, name, key, writeId, options) => {
+    event.returnValue = { queued: false };
+    if (!CAMPAIGN_ID.test(id)) return;
+    let text;
+    try { text = readSaveFileSync(key, writeId); } catch { return; }
+    let compressed;
+    const compressedPromise = new Promise((resolve) => { compressed = resolve; });
+    const running = upload(id, name, text, { ...metaOfSave(text, options), left: true }, { compressed });
+    const entry = { running, compressedPromise };
+    exitUploads.add(entry);
+    running.finally(() => exitUploads.delete(entry));
+    event.returnValue = { queued: true };
+  });
   ipcMain.handle('asterion:cloud:get', () => publicSettings());
   ipcMain.handle('asterion:cloud:set', (_event, next) => {
     const current = readJson('cloud.json', {});

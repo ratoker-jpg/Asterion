@@ -195,7 +195,11 @@ export const TEST_MODE_RESOURCE_AMOUNT = 999_999_999;
 
 const KNOWN_PLANET_SKINS: ReadonlySet<string> = new Set(PLANET_SKIN_IDS);
 
-export type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+export type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> & {
+  /** See SaveStorage.token (the desktop store's pointer text). */
+  token?(key: string): string | null;
+  adoptExternalWrite?(key: string, writeId: string, chars: number): boolean;
+};
 
 type StoredPlanetRuntime = {
   name?: unknown;
@@ -1923,23 +1927,35 @@ export function createPersistenceFacade(options: PersistenceOptions = {}) {
   // The last bytes this facade wrote: an unchanged key needs no re-check, so
   // the per-tick autosave parses the stored save only after a foreign write.
   let lastWritten: string | null = null;
+  // The pointer of the last save kept in a file: the window need not hold 50 MB of text to recognise it.
+  let lastToken: string | null = null;
+  /** Never overwrite a corrupt, malformed or newer-schema save: its bytes are the player's only copy until they export or delete it. */
+  const unreadableExisting = (): PersistenceWriteResult | null => {
+    const token = storage!.token?.(saveKey) ?? null;
+    if (token !== null && token === lastToken) return null;
+    const existing = storage!.getItem(saveKey);
+    if (existing !== null && existing !== lastWritten) {
+      const health = inspectSavePayload(existing, SAVE_SCHEMA_VERSION);
+      if (isSaveProblem(health)) {
+        return { ok: false, error: 'Сохранение не читается этой версией игры и не перезаписано.', unreadableSave: health };
+      }
+    }
+    return null;
+  };
+  const rememberWritten = (text: string | null) => {
+    lastToken = storage!.token?.(saveKey) ?? null;
+    lastWritten = lastToken === null ? text : null;
+  };
   const writeText = (serialize: () => string, writeOptions: PersistenceWriteOptions): PersistenceWriteResult => {
     if (!storage) return { ok: false, error: 'Storage is unavailable.' };
     try {
       if (!writeOptions.replaceUnreadable) {
-        // Never overwrite a corrupt, malformed or newer-schema save: its bytes
-        // are the player's only copy until they export or delete it.
-        const existing = storage.getItem(saveKey);
-        if (existing !== null && existing !== lastWritten) {
-          const health = inspectSavePayload(existing, SAVE_SCHEMA_VERSION);
-          if (isSaveProblem(health)) {
-            return { ok: false, error: 'Сохранение не читается этой версией игры и не перезаписано.', unreadableSave: health };
-          }
-        }
+        const refused = unreadableExisting();
+        if (refused) return refused;
       }
       const text = serialize();
       storage.setItem(saveKey, text);
-      lastWritten = text;
+      rememberWritten(text);
       return { ok: true };
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
@@ -1954,11 +1970,28 @@ export function createPersistenceFacade(options: PersistenceOptions = {}) {
       writeText(() => serializeSaveForStorage(state, mode), writeOptions),
     /** Stores text made by serializeSaveForStorage (a catch-up worker's progress). */
     writeSerialized: (text: string): PersistenceWriteResult => writeText(() => text, {}),
+    /**
+     * A save file the main process wrote for this key (the live world worker's
+     * port) becomes the save, with the same guard as a write. No text passes here.
+     */
+    adoptSavedFile: (writeId: string, chars: number): PersistenceWriteResult => {
+      const adopt = storage?.adoptExternalWrite;
+      if (!storage || !adopt) return { ok: false, error: 'Storage cannot adopt a save file.' };
+      try {
+        const refused = unreadableExisting();
+        if (refused) return refused;
+        if (adopt.call(storage, saveKey, writeId, chars)) rememberWritten(null);
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    },
     clear: (): PersistenceWriteResult => {
       if (!storage) return { ok: false, error: 'Storage is unavailable.' };
       try {
         storage.removeItem(saveKey);
         lastWritten = null;
+        lastToken = null;
         return { ok: true };
       } catch (error) {
         return { ok: false, error: error instanceof Error ? error.message : String(error) };
