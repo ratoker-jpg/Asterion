@@ -4,6 +4,7 @@ import { previewFlight } from './flights.ts';
 import { canDispatchPirateRecon, pirateReconCooldownKey } from '../domain/pirates/recon.ts';
 import type { PirateContactPresentation, PirateSystemSelection } from '../pirate-ui.ts';
 import type { OperationInstance } from '../domain/operations/types.ts';
+import { sameRefs, slowBucket } from './ref-memo.ts';
 
 /** Accepted raid lives in the existing Operations save; the cycle key prevents reuse on respawn. */
 export const pirateOperationId = (cycleKey: string): string => `pirate:${cycleKey}`;
@@ -71,6 +72,45 @@ export function selectOwnedPiratePresentations(state: SaveState, now: number): P
   return selectOwnedPirateSystems(state).flatMap((selection) => selectPirateContacts(state, now, selection));
 }
 
+/**
+ * Why a recon probe cannot leave now, or null. The full dry-run dispatch costs
+ * several milliseconds per contact, so it is reused while the sections it
+ * reads are the same objects, and re-checked at least every 5 s. The world
+ * replaces most other sections (bot economies, the Sun, asteroids) every
+ * second without changing the answer.
+ */
+type ReconBlockEntry = { inputs: readonly unknown[]; reason: string | null };
+const reconBlockCache = new Map<string, ReconBlockEntry>();
+
+export function reconBlockInputs(state: SaveState, now: number): readonly unknown[] {
+  return [
+    slowBucket(now), state.flights, state.pirate, state.profile, state.currentPlanetId, state.science,
+    state.shipUpgradeLevels, state.shields, state.sunRaid, state.alliedPlanets, state.command,
+    ...Object.values(state.planets).map((planet) => planet.fleet),
+  ];
+}
+
+function reconLaunchBlock(state: SaveState, contact: CurrentPirateContact, now: number): string | null {
+  const cacheKey = `${contact.contactCycleKey}|${contact.coordinate.galaxy}:${contact.coordinate.system}:${contact.coordinate.position}`;
+  const inputs = reconBlockInputs(state, now);
+  const cached = reconBlockCache.get(cacheKey);
+  if (cached && sameRefs(cached.inputs, inputs)) return cached.reason;
+  const preview = reconLaunchPreview(state, contact, now);
+  const reason = !preview.ok ? preview.error.message : null;
+  if (reconBlockCache.size > 64) reconBlockCache.clear();
+  reconBlockCache.set(cacheKey, { inputs, reason });
+  return reason;
+}
+
+/** The uncached check; tests compare the cache against it. */
+export function reconLaunchPreview(state: SaveState, contact: Pick<CurrentPirateContact, 'contactCycleKey' | 'coordinate'>, now: number) {
+  return previewFlight(state, {
+    requestId: `pirate-preview-${contact.contactCycleKey}`, missionId: 'pirate-recon',
+    contactCycleKey: contact.contactCycleKey, selectedShips: { 'spy-probe': 1 },
+    destination: { kind: 'coordinate', coordinate: contact.coordinate }, targetKind: 'pirate', targetRelation: 'neutral',
+  }, { now });
+}
+
 /** The Operations atlas and Universe inspector project the same world schedule. */
 export function selectPirateContacts(
   state: SaveState,
@@ -95,12 +135,7 @@ export function selectPirateContacts(
       .sort((left, right) => right.arrivedAt - left.arrivedAt)[0];
     const reconReason = availability.reason === 'in-flight' ? 'Зонд в пути. Дождитесь завершения миссии.'
       : availability.reason === 'cooldown' ? `Повторная разведка через ${Math.max(0, Math.ceil(((availability.availableAt ?? now) - now) / 1_000))} с.` : null;
-    const launchPreview = availability.allowed ? previewFlight(state, {
-      requestId: `pirate-preview-${contact.contactCycleKey}`, missionId: 'pirate-recon',
-      contactCycleKey: contact.contactCycleKey, selectedShips: { 'spy-probe': 1 },
-      destination: { kind: 'coordinate', coordinate: contact.coordinate }, targetKind: 'pirate', targetRelation: 'neutral',
-    }, { now }) : null;
-    const launchReason = launchPreview && !launchPreview.ok ? launchPreview.error.message : null;
+    const launchReason = availability.allowed ? reconLaunchBlock(state, contact, now) : null;
     contacts.push({ ...contact, remainingMs: Math.max(0, contact.expiresAt - now),
       statusLabel: flights.some((flight) => flight.missionId === 'pirate-elimination') ? 'Флот в пути'
         : availability.reason === 'in-flight' ? 'Зонд в пути' : availability.reason === 'cooldown' ? 'Ожидание повторной разведки'
