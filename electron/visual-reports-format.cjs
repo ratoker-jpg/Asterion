@@ -311,6 +311,19 @@ async function runViewport(win, directory, label) {
       await capture(win, directory, '09-personal-alliance-letter');
     }
   }
+  return metrics;
+}
+
+/** «Профиль игрока», a new player: no alliance, no messages. Runs after every viewport (it leaves the alliance). */
+async function runNewPlayer(win, directory, label) {
+  const metrics = { failures: [] };
+  const check = async (name) => {
+    const clipped = await clippedText(win, '.reports-view');
+    const box = await layout(win);
+    if (clipped.length) metrics.failures.push(`${name}: text is cut off: ${JSON.stringify(clipped)}`);
+    if (!box.fits || box.horizontalOverflow || box.nativeTitles.length) metrics.failures.push(`${name}: layout: ${JSON.stringify(box)}`);
+    if (CHECKS && metrics.failures.length) throw new Error(`${label} ${metrics.failures.join('; ')}`);
+  };
   // «Профиль игрока», a new player: no alliance, no messages.
   await patchSaveIdle(win, SAVE_KEY, `(save) => {
     const me = save.profile?.playerId;
@@ -320,16 +333,17 @@ async function runViewport(win, directory, label) {
       for (const alliance of save.command.alliances) if (alliance.leaderOwnerId === me) alliance.leaderOwnerId = alliance.members[0].ownerId;
       save.command.applications = [];
     }
-    save.combat.reports = [];
+    // Test Mode puts its demo battles back on load: hide them instead.
+    const hidden = (save.combat?.reports || []).map((report) => 'battle:' + report.id);
     save.espionage = { ...(save.espionage || {}), reports: [], hunterNotices: [] };
-    save.reports = { readIds: [], hiddenIds: [], recyclerArrivalReports: [], gasExtractionArrivalReports: [], overpopulationReports: [] };
+    save.reports = { readIds: [], hiddenIds: hidden, recyclerArrivalReports: [], gasExtractionArrivalReports: [], overpopulationReports: [] };
     if (save.exploration) { save.exploration.contacts = {}; save.exploration.reconReports = []; }
     if (save.pirate) save.pirate.reconReports = [];
     if (save.flights) save.flights.records = (save.flights.records || []).filter((flight) => flight.phase !== 'completed' && flight.phase !== 'failed');
   }`, { label: 'reports format new player' });
   await settle(win, 400);
   await openReports(win);
-  await check('13-profile-new-player', false);
+  await check('13-profile-new-player');
   metrics.profileNew = await profileFacts(win);
   await capture(win, directory, '13-profile-new-player');
   return metrics;
@@ -371,6 +385,12 @@ app.whenReady().then(async () => {
       await win.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false, screenWidth: width, screenHeight: height });
       await settle(win);
       all[label] = await runViewport(win, directory, label);
+    }
+    for (const [width, height] of VIEWPORTS) {
+      const label = `${width}x${height}`;
+      await win.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false, screenWidth: width, screenHeight: height });
+      await settle(win);
+      all[`${label}:new-player`] = await runNewPlayer(win, path.join(OUTPUT, label), label);
     }
     fs.writeFileSync(path.join(OUTPUT, 'reports-format-metrics.json'), JSON.stringify(all, null, 2));
     console.log(JSON.stringify(Object.fromEntries(Object.entries(all).map(([key, value]) => [key, value.failures])), null, 2));
