@@ -402,6 +402,12 @@ const resourceLabel: Record<ResourceKey, string> = {
   energy: 'энергии',
 };
 
+/** «металла», «металла и газа», «металла, минералов и газа». */
+export function joinRussianList(words: readonly string[]): string {
+  if (words.length <= 1) return words[0] ?? '';
+  return `${words.slice(0, -1).join(', ')} и ${words[words.length - 1]}`;
+}
+
 export function evaluateBuildingRequirements(
   state: Pick<BuildingEconomyState, 'buildings' | 'scienceLevels'>,
   assetRole: BuildingRole,
@@ -490,13 +496,13 @@ export function evaluateBuildingBuild(state: BuildingEconomyState, assetRole: Bu
     if (deficit > 0) missing[key] = deficit;
   }
 
-  const firstMissing = (Object.keys(missing) as ResourceKey[])[0];
-  if (firstMissing) {
+  const missingKeys = Object.keys(missing) as ResourceKey[];
+  if (missingKeys.length) {
     return {
       ...base,
       status: 'insufficient-resource',
       canBuild: false,
-      reason: `Недостаточно ${resourceLabel[firstMissing]}.`,
+      reason: `Недостаточно ${joinRussianList(missingKeys.map((key) => resourceLabel[key]))}.`,
       missing,
     };
   }

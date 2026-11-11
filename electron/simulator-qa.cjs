@@ -276,6 +276,10 @@ async function runViewport(win, width, height) {
   }
   await capture(win, directory, 'simulator-result');
 
+  // The scenario reaches storage through the simulator's debounced write (140 ms) and the
+  // game's own autosave of its copy; right after the run the stored copy can still be one
+  // step behind. Wait for it to settle instead of reading once.
+  await waitFor(win, `(() => { try { const scenario = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}')?.combatSimulator?.lastScenario; return scenario?.technologyMode === 'shared' && scenario?.attacker?.activeCommanderId === 'hunter'; } catch { return false; } })()`, 10000).catch(() => {});
   const saved = await readSave(win);
   const lastScenario = saved.combatSimulator?.lastScenario;
   if (lastScenario?.executionMode !== 'production' || lastScenario?.technologyMode !== 'shared' || lastScenario?.attacker?.activeCommanderId !== 'hunter' || lastScenario?.attacker?.commanders?.length !== 2 || saved.combatSimulator?.presets?.length !== 1 || saved.combat?.reports?.some((report) => report.missionType === 'simulation') || saved.combat?.savedReportIds?.some((id) => saved.combat?.reports?.some((report) => report.id === id && report.missionType === 'simulation'))) {

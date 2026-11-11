@@ -444,6 +444,18 @@ test('new-zone projects use the same catalog values in availability and charging
   assert.equal(availability.missing.metal, 1);
 });
 
+test('the shortage reason names every resource that is short', () => {
+  const item = getBuildingDefinition('trade-center');
+  const cost = item.prototypeCost;
+  const one = evaluateBuildingBuild(createState({ resources: { ...createState().resources, metal: cost.metal - 1 } }), 'trade-center');
+  assert.equal(one.reason, 'Недостаточно металла.');
+  const three = evaluateBuildingBuild(createState({ resources: { metal: 0, minerals: 0, gas: 0, energy: 10_000_000 } }), 'trade-center');
+  const short = (['metal', 'minerals', 'gas'] as const).filter((key) => cost[key] > 0);
+  const words = { metal: 'металла', minerals: 'минералов', gas: 'газа' };
+  const expected = short.length === 3 ? 'металла, минералов и газа' : short.length === 2 ? `${words[short[0]!]} и ${words[short[1]!]}` : words[short[0]!];
+  assert.equal(three.reason, `Недостаточно ${expected}.`);
+});
+
 test('legacy resource save normalizes to all 21 roles and initializes new zones to zero', () => {
   const migrated = migrateBuildingLevels({
     'metal-production-1': 4,

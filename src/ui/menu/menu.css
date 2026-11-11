@@ -475,9 +475,10 @@
 .menu-slot__bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .6; }
 .menu-slot__art::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 50%, rgba(6, 13, 18, .95)); }
 .menu-slot__general { position: absolute; left: 50%; top: 10px; height: 330%; transform: translateX(-50%); filter: drop-shadow(0 0 16px var(--race-glow)); }
-.menu-slot__body { padding: 20px 22px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.menu-slot__body { padding: 20px 22px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .menu-slot__head { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.menu-slot__head h3 { margin: 0; font-size: 20px !important; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* A 40-character name wraps to a second line instead of hiding behind «…». */
+.menu-slot__head h3 { min-width: 0; margin: 0; font-size: 20px !important; font-weight: 800; line-height: 1.2; overflow-wrap: anywhere; }
 .menu-slot__rename { display: flex; gap: 8px; flex: 1; }
 .menu-slot__rename input { flex: 1; min-width: 0; }
 .menu-tag { flex: 0 0 auto; padding: 4px 10px; border-radius: 999px; background: var(--race-fill); color: var(--race-accent); font-size: 11px; font-weight: 800; letter-spacing: .14em; }
@@ -487,7 +488,11 @@
 .menu-slot__crystals { display: flex; align-items: center; gap: 14px; }
 .menu-slot__crystals b { color: var(--ut-amber); font-size: 12px; letter-spacing: .2em; }
 .menu-slot__problem { margin: 0; color: #ff9fae; font-size: 12px; }
-.menu-slot__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+/* Pinned to the card bottom: every card in a row ends with the same two rows of actions. */
+.menu-slot__actions { display: grid; gap: 8px; margin-top: auto; padding-top: 4px; }
+.menu-slot__actions > .menu-btn--primary { width: 100%; min-height: 44px; }
+.menu-slot__more { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.menu-viewport .menu-btn--compact { min-width: 0; min-height: 36px; padding: 0 8px; overflow: hidden; font-size: 12px; letter-spacing: .02em; text-overflow: ellipsis; white-space: nowrap; }
 .menu-empty { display: grid; place-content: center; text-align: center; gap: 10px; color: #a7c6d0; }
 .menu-empty h2 { margin: 0; color: #fff; font-size: 24px !important; }
 

@@ -5,6 +5,8 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { patchSaveIdle } = require('./qa-save-edit.cjs');
+const { PARSE_SAVE } = require('./qa-save.cjs');
 
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
@@ -77,46 +79,44 @@ async function unhover(win) {
 }
 
 /** Writes the fixture and reloads in one renderer turn, so no autosave runs in between. */
+/**
+ * Rewrites the save while the game is NOT running (qa-save-edit.cjs), then boots it again.
+ * Writing localStorage under a live game and reloading raced its unload autosave: the
+ * previous fixture came back (a 1500 wallet read «Можно строить» with the rich wallet).
+ */
 async function seed(win, { buildings = RICH_BUILDINGS, wallet = 999999999, queue = [], bots = { metal: 5, minerals: 5, gas: 0 }, math = 4 } = {}) {
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-    const ok = await win.webContents.executeJavaScript(`(() => {
-      const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
-      const planet = save?.planets?.['helion-01'];
-      if (!planet?.buildings) return false;
-      const now = Date.now();
-      planet.buildings = { ...planet.buildings, ...${JSON.stringify(buildings)} };
-      planet.energy = 999999999;
-      planet.productionBots = ${JSON.stringify(bots)};
-      save.metal = ${wallet};
-      save.minerals = ${wallet};
-      save.gas = ${wallet};
-      if (planet.resources) planet.resources = { ...planet.resources, metal: ${wallet}, minerals: ${wallet}, gas: ${wallet} };
-      if (save.science?.levels) save.science.levels[3] = ${math};
-      save.queues = { 'helion-01': ${JSON.stringify(queue)}.map((item, index) => ({
-        id: 'qa-' + index, planetId: 'helion-01', assetRole: item.role, targetLevel: item.level,
-        cost: { metal: 0, minerals: 0, gas: 0, energy: 0 },
-        enqueuedAt: now + index, startedAt: now + (item.startOffset ?? 0), finishAt: now + item.finishOffset,
-      })) };
-      save.resourceClock = { lastReconciledAt: now, remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
-      save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 10);
-      localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
-      localStorage.setItem('asterion.test-time-scale.v1', '1');
-      setTimeout(() => window.location.reload(), 0);
-      return true;
-    })()`);
-    if (!ok) throw new Error('Could not seed the planet pass fixture');
-    await loaded;
-    await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
-    await win.webContents.executeJavaScript('document.fonts?.ready');
-    await settle(win, 300);
-    const held = await win.webContents.executeJavaScript(`(() => {
-      const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
-      return save?.planets?.['helion-01']?.buildings?.['metal-production-1'] === ${buildings['metal-production-1'] ?? 'undefined'};
-    })()`);
-    if (held) return;
-  }
-  throw new Error('Planet pass fixture was overwritten by the running game three times');
+  await patchSaveIdle(win, SAVE_KEY, `(save) => {
+    const planet = save?.planets?.['helion-01'];
+    if (!planet?.buildings) throw new Error('Could not seed the planet pass fixture');
+    const now = Date.now();
+    planet.buildings = { ...planet.buildings, ...${JSON.stringify(buildings)} };
+    planet.energy = 999999999;
+    planet.productionBots = ${JSON.stringify(bots)};
+    save.metal = ${wallet};
+    save.minerals = ${wallet};
+    save.gas = ${wallet};
+    if (planet.resources) planet.resources = { ...planet.resources, metal: ${wallet}, minerals: ${wallet}, gas: ${wallet} };
+    if (save.science?.levels) save.science.levels[3] = ${math};
+    save.queues = { 'helion-01': ${JSON.stringify(queue)}.map((item, index) => ({
+      id: 'qa-' + index, planetId: 'helion-01', assetRole: item.role, targetLevel: item.level,
+      cost: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+      enqueuedAt: now + index, startedAt: now + (item.startOffset ?? 0), finishAt: now + item.finishOffset,
+    })) };
+    save.resourceClock = { lastReconciledAt: now, remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
+    save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 10);
+    localStorage.setItem('asterion.test-time-scale.v1', '1');
+  }`, {
+    label: 'planet pass seed',
+    // The booted game must hold this fixture, not the previous one: a stale rich wallet shows up as too much metal (storage caps may lower it, never raise it).
+    held: `(() => {
+      const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+      const metal = Number(save?.planets?.['helion-01']?.resources?.metal ?? save?.metal);
+      return save?.planets?.['helion-01']?.buildings?.['metal-production-1'] === ${buildings['metal-production-1'] ?? 'undefined'}
+        && !(metal > ${wallet} + 50000);
+    })()`,
+  });
+  await win.webContents.executeJavaScript('document.fonts?.ready');
+  await settle(win, 300);
 }
 
 async function openZone(win, zone) {
@@ -260,13 +260,15 @@ async function runViewport(win, directory) {
 
   // 6. Several builds finishing at once: toasts.
   await seed(win, { queue: [
-    { role: 'metal-production-1', level: 15, startOffset: -10 * 60_000, finishOffset: 1200 },
-    { role: 'construction', level: 11, startOffset: 1200, finishOffset: 1500 },
-    { role: 'research', level: 6, startOffset: 1500, finishOffset: 1800 },
+    // Offsets count from the save edit; the game boots after it, so they finish on screen.
+    { role: 'metal-production-1', level: 15, startOffset: -10 * 60_000, finishOffset: 15_000 },
+    { role: 'construction', level: 11, startOffset: 15_000, finishOffset: 15_300 },
+    { role: 'research', level: 6, startOffset: 15_300, finishOffset: 15_600 },
   ], buildings: { ...RICH_BUILDINGS, 'metal-production-1': 14 } });
   await openZone(win, 'resource');
   // Long builds are announced after a 3 s grouping window.
-  await sleep(5000);
+  await waitFor(win, `document.querySelector('[data-qa-runtime-toast]')`, 30_000).catch(() => {});
+  await sleep(600);
   await settle(win);
   metrics.toasts = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-qa-runtime-toast]')).map((toast) => toast.innerText.replace(/\\s+/g, ' ').trim())`);
   metrics.toastCoversIncome = await win.webContents.executeJavaScript(`(() => {
@@ -284,11 +286,14 @@ async function runViewport(win, directory) {
 
   // Same on the Messages screen (owner: a toast covered «Отметить все прочитанными»).
   await seed(win, { queue: [
-    { role: 'metal-production-1', level: 15, startOffset: -10 * 60_000, finishOffset: 2500 },
-    { role: 'construction', level: 11, startOffset: 2500, finishOffset: 2800 },
+    // Offsets count from the save edit; the game boots after it (a few seconds), so the
+    // builds finish once the Messages screen is open.
+    { role: 'metal-production-1', level: 15, startOffset: -10 * 60_000, finishOffset: 15_000 },
+    { role: 'construction', level: 11, startOffset: 15_000, finishOffset: 15_300 },
   ], buildings: { ...RICH_BUILDINGS, 'metal-production-1': 14 } });
   await click(win, '[data-qa-route="reports"]');
-  await sleep(6500);
+  await waitFor(win, `document.querySelector('[data-qa-runtime-toast]')`, 30_000).catch(() => {});
+  await sleep(600);
   await settle(win);
   metrics.messagesToasts = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-qa-runtime-toast]')).map((toast) => toast.innerText.replace(/\\s+/g, ' ').trim())`);
   if (!metrics.messagesToasts.length) fail('No toast on the Messages screen', metrics.messagesToasts);
@@ -297,7 +302,7 @@ async function runViewport(win, directory) {
   await capture(win, directory, '11-toasts-messages');
 
   // A report is interface, not a document: a mouse sweep selects nothing and text shows the arrow.
-  await win.webContents.executeJavaScript(`document.querySelector('.reports-category-unread')?.closest('button')?.click()`);
+  await win.webContents.executeJavaScript(`document.querySelector('.reports-v2-unread-count.is-new')?.closest('button')?.click()`);
   await settle(win, 500);
   await win.webContents.executeJavaScript(`document.querySelector('.reports-list-open')?.click()`);
   await settle(win, 600);

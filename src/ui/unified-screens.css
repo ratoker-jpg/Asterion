@@ -13,14 +13,12 @@
 html body .utility-view.rating-view-v2,
 html body .utility-view.science-view-v2,
 html body .utility-view.settings-view-v2 { padding: 0 !important; }
-html body .reports-view.reports-v2 { padding-top: 0 !important; padding-left: 0 !important; padding-right: 0 !important; }
 
 /* ---------- panels ---------- */
 html body :is(
   .settings-nav-v2, .settings-content-v2, .typography-preview-v2,
   .science-sidebar-v2, .science-lab-card-v2, .science-main-heading-v2,
-  .spaceport-sidebar-v2,
-  .reports-profile-identity
+  .spaceport-sidebar-v2
 ) {
   border: 1px solid var(--ut-border) !important;
   border-radius: var(--ut-r-panel) !important;
@@ -170,7 +168,7 @@ html body .ui-empty-art {
   animation: ui-empty-float 9s ease-in-out infinite;
 }
 @keyframes ui-empty-float { 50% { translate: 0 -6px; } }
-html body :is(.repair-empty-v1, .battle-empty-v1, .fleet-flight-empty-v1, .reports-empty-dossier) {
+html body :is(.repair-empty-v1, .battle-empty-v1, .fleet-flight-empty-v1) {
   display: grid !important;
   justify-items: center;
   align-content: center;

@@ -5,7 +5,8 @@
 .shield-ctl--cooldown { --shield-tone: #a8b0c0; }
 .shield-ctl:disabled { cursor: default; opacity: .85; }
 .shield-ctl:disabled.shield-ctl--ready { opacity: .6; }
-.hdr-shield-slot { position: absolute; z-index: 8; left: 798px; top: 12px; width: 62px; height: 34px; }
+/* Right next to the planet dial, so the planet selector before it has room for a long name. */
+.hdr-shield-slot { position: absolute; z-index: 8; left: calc(50% - 149px); top: 12px; width: 62px; height: 34px; }
 .shield-ctl--compact { width: 100%; height: 34px; justify-content: center; gap: 4px; padding: 0 3px; border-radius: 10px; font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; background: rgba(0, 0, 0, .3); }
 .shield-ctl--compact i { width: 11px; height: 14px; flex: none; }
 .shield-ctl--compact.shield-ctl--active i, .shield-ctl--compact.shield-ctl--cooldown i { display: none; }
