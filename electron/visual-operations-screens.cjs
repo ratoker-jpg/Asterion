@@ -162,11 +162,17 @@ async function findPirateSystem(win) {
     // Only a base that is live now (not in its pause between cycles) with time to spare.
     const position = await win.webContents.executeJavaScript(`(() => {
       const status = document.querySelector('[data-qa-universe-special-status]')?.textContent || '';
-      const countdown = /исчезнет через ([0-9]+) мин/.exec(status);
-      if (!countdown || Number(countdown[1]) < 4) return 0;
+      // «исчезнет через 1 ч 05 мин» or «исчезнет через 12 мин 04 с»
+      const countdown = /исчезнет через (?:([0-9]+) ч\\s*)?([0-9]+) мин/.exec(status);
+      if (!countdown || (!countdown[1] && Number(countdown[2]) < 4)) {
+        return { position: 0, status: status.slice(0, 80) };
+      }
       const place = document.querySelector('[data-qa-universe-inspector]')?.textContent?.match(/\\[[0-9]+:[0-9]+:([0-9]+)\\]/);
-      return Number(place?.[1] || 1);
-    })()`);
+      return { position: Number(place?.[1] || 1), status };
+    })()`).then((found) => {
+      if (!found.position) console.log(`[operations-screens] system ${system}: base not usable («${found.status}»)`);
+      return found.position;
+    });
     if (!position) continue;
     // The running game writes its own save back, so edit storage while it is unloaded.
     await patchSaveIdle(win, SAVE_KEY, `(save) => {
