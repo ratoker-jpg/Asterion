@@ -22,13 +22,3 @@
 }
 .universe-map-occupancy--self { border-color:#63c0e6; background:rgba(10,51,79,.95); color:#a5e8ff; }
 .universe-map-occupancy--occupied { border-color:#f16e7a; background:rgba(87,20,36,.95); color:#ffb5bb; }
-.universe-exploration-occupancy {
-  padding:8px 10px; border-radius:7px; border:1px solid rgba(77,209,149,.5);
-  color:#a3ffca; background:rgba(25,95,69,.21);
-  font-size:11px; font-weight:800; letter-spacing:.04em;
-}
-.universe-exploration-occupancy--self {color:#a5e8ff; border-color:#56b5df; background:rgba(13,81,113,.21);}
-.universe-exploration-occupancy--occupied {color:#ffb6bd; border-color:#ef7284; background:rgba(127,38,58,.22);}
-.universe-exploration-occupancy--out {color:#9badb4; border-color:rgba(160,184,194,.4); background:rgba(94,111,124,.15);}
-.universe-inspector-special--unique .universe-special-actions,
-.universe-inspector-special--anomaly .universe-special-actions {display:flex; flex-direction:column; gap:9px;}

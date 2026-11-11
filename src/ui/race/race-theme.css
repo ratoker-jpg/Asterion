@@ -98,7 +98,6 @@
   background: linear-gradient(180deg, var(--race-accent), var(--race-accent-strong));
   box-shadow: 0 0 5px var(--race-glow);
 }
-:root[data-faction] .uw .uw-alliance-crest .command-emblem--crest { width: 64px; height: 64px; }
 
 /* ---------- 13. Planet editor: the planet's current look ---------- */
 :root[data-faction] .skin-picker-grid button.active {

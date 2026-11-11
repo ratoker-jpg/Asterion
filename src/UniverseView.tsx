@@ -9,8 +9,11 @@ import { FactionGeneralPortrait } from './ui/FactionGeneralPortrait.tsx';
 import { EXPLORATION_ARTS } from './exploration-art.ts';
 import { PIRATE_PLANET_ARTS } from './pirate-planet-art.ts';
 import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
-import { ResourceIcon } from './ui/resources/ResourceIcon.tsx';
-import pirateWarlordArt from '../assets/source/characters/pirates/pirate_warlord.png';
+import { GameSelect } from './ui/GameSelect.tsx';
+import { ObjectCard } from './ui/universe/ObjectCard.tsx';
+import { DebrisFinder, type DebrisSearch } from './ui/universe/DebrisFinder.tsx';
+import type { DebrisEntry, ExplorationIntel } from './ui/universe/object-card-model.ts';
+import { createUniverseCardQaFixture, getUniverseCardQaScenario } from './ui/universe/object-card-qa-fixture.ts';
 import debrisIcon from './assets/ui/header-icons/debris.png';
 import './ui/universe/universe-radar.css';
 import './ui/universe/map-relations.css';
@@ -152,6 +155,8 @@ type UniverseViewProps = {
   onExplorationRecon?: (node: UniversePlanetNode) => void;
   onExplorationAttack?: (node: UniversePlanetNode) => void;
   explorationEligibility?: Readonly<Record<string, 'free' | 'self' | 'occupied'>>;
+  /** What the player's own probes learned about unique objects and anomalies, by node id. */
+  explorationIntel?: Readonly<Record<string, ExplorationIntel>>;
   onTransport: (target: { planetId: string; coordinate: UniverseCoordinate; relation: TargetRelation }) => void;
   onSpy: (target: { planetId: string; planetName: string; coordinate: UniverseCoordinate; relation: Extract<TargetRelation, 'enemy' | 'neutral'>; owner: UniverseOwnerProfile; targetKind: 'player' | 'npc' }) => void;
   onAttack: (target: { planetId: string; planetName: string; coordinate: UniverseCoordinate; relation: Extract<TargetRelation, 'enemy' | 'neutral'>; owner: UniverseOwnerProfile; targetKind: 'player' | 'npc' }) => void;
@@ -255,14 +260,6 @@ function toStyle(point: { x: number; y: number; offsetX?: number; offsetY?: numb
   } as CSSProperties;
 }
 
-function countdownLabel(nowMs: number, targetMs?: number) {
-  if (!Number.isFinite(targetMs)) return '—';
-  const seconds = Math.max(0, Math.ceil((Number(targetMs) - nowMs) / 1_000));
-  const minutes = Math.floor(seconds / 60);
-  const remainder = seconds % 60;
-  return minutes ? `${minutes} мин ${String(remainder).padStart(2, '0')} с` : `${remainder} с`;
-}
-
 /** «2 ч 14 мин» / «8 мин 05 с»: time left on a Gate. */
 function gateClock(ms: number) {
   const seconds = Math.max(0, Math.ceil(ms / 1_000));
@@ -311,9 +308,6 @@ function relationCopy(status: MapRelationStatus): string {
   if (status.tone === 'ally') return 'Союзник · принимает транспорт';
   return status.attackable ? `${status.title} · доступны шпионаж и атака` : `${status.title} · доступен шпионаж`;
 }
-export const SPECIAL_TONE: Partial<Record<UniversePlanetNode['kind'], string>> = {
-  empty: '#8fb6c0', uninhabited: '#8fb6c0', asteroid: '#c9b48a', pirate: MAP_TONE_COLOR.pirate, unique: MAP_TONE_COLOR.unique, anomaly: MAP_TONE_COLOR.anomaly,
-};
 
 /** Score medals stay exact below a billion; beyond that «987,7 млрд» keeps four medals in one row. */
 function scoreLabel(value: number) {
@@ -326,33 +320,6 @@ function compactAmount(value: number) {
   if (value >= 1e6) return `${(value / 1e6).toLocaleString('ru-RU', { maximumFractionDigits: 1 })} млн`;
   if (value >= 1e4) return `${Math.round(value / 1e3).toLocaleString('ru-RU')} тыс`;
   return numberFormat.format(value);
-}
-
-function InspectorHero({ art, children }: { art?: string; children?: ReactNode }) {
-  return (
-    <div className="uw-hero">
-      <span className="uw-hero-ring" aria-hidden="true" />
-      {art ? <img src={art} alt="" draggable={false} /> : <span className="uw-hero-empty" aria-hidden="true">＋</span>}
-      {children}
-    </div>
-  );
-}
-
-type InspectorTile = { label: string; value: ReactNode; note?: ReactNode; tone?: 'good' | 'bad' | 'time' | 'off'; progress?: number; attrs?: Record<string, string> };
-
-function InspectorTiles({ items }: { items: readonly InspectorTile[] }) {
-  return (
-    <div className="uw-tiles">
-      {items.map((item) => (
-        <div key={item.label} className={`uw-tile ${item.tone ? `is-${item.tone}` : ''}`} {...item.attrs}>
-          <small>{item.label}</small>
-          <b>{item.value}</b>
-          {item.note ? <span>{item.note}</span> : null}
-          {item.progress !== undefined ? <i className="uw-tile-bar"><i style={{ width: `${Math.max(0, Math.min(100, item.progress))}%` }} /></i> : null}
-        </div>
-      ))}
-    </div>
-  );
 }
 
 type AtlasColumn = {
@@ -572,150 +539,6 @@ function OwnerInspector({
   );
 }
 
-type ActionInfo = { label: string; description: string; enabled: boolean };
-
-function SpecialInspector({ node, underlyingNode, nowMs, asteroidHasDebris, pirateContact, onColonize, onAsteroidRecycler, onExpedition, onExplorationRecon, onExplorationAttack, explorationStatus, onPirateRecon, onPirateAttack, onPirateReport }: { node: UniversePlanetNode; underlyingNode?: UniversePlanetNode; nowMs: number; asteroidHasDebris: boolean; pirateContact?: PirateContactPresentation; onColonize: (coordinate: UniverseCoordinate) => void; onAsteroidRecycler: (target: { spawnIndex: number; coordinate: UniverseCoordinate }) => void; onExpedition?: (node: UniversePlanetNode) => void; onExplorationRecon?: (node: UniversePlanetNode) => void; onExplorationAttack?: (node: UniversePlanetNode) => void; explorationStatus?: 'free' | 'self' | 'occupied'; onPirateRecon?: (contact: PirateContactPresentation) => void; onPirateAttack?: (contact: PirateContactPresentation) => void; onPirateReport?: (reportId: string) => void }) {
-  const isEmpty = node.kind === 'empty';
-  const isPirate = node.kind === 'pirate';
-  const isAnomaly = node.kind === 'anomaly';
-  const isUnique = node.kind === 'unique';
-  const isAsteroid = node.kind === 'asteroid';
-  const isExploration = isAnomaly || isUnique;
-  const canColonize = isEmpty || (isAsteroid && underlyingNode?.kind === 'empty');
-  const timedState = node.pirate ?? node.special;
-  const reconEnabled = Boolean(pirateContact?.recon.enabled && onPirateRecon);
-  const eliminationEnabled = Boolean(pirateContact?.elimination.enabled && onPirateAttack);
-  const reportEnabled = Boolean(pirateContact?.latestReportId && onPirateReport);
-  const reconReason = pirateContact?.recon.disabledReason || (!onPirateRecon ? 'Действие временно недоступно.' : 'Разведка сейчас недоступна.');
-  const eliminationReason = pirateContact?.elimination.disabledReason || (!onPirateAttack ? 'Подготовка флота временно недоступна.' : 'Атака сейчас недоступна.');
-  const reportReason = !pirateContact?.latestReportId ? 'Разведотчёт ещё не сформирован.' : !onPirateReport ? 'Открытие отчёта временно недоступно.' : '';
-  const status = isPirate && pirateContact
-    ? `${pirateContact.statusLabel} · исчезнет через ${countdownLabel(nowMs, pirateContact.expiresAt)}`
-    : isAsteroid
-    ? `Следующее перемещение через ${countdownLabel(nowMs, node.asteroid?.nextMoveAt)}`
-    : timedState
-      ? `Активен · исчезнет через ${countdownLabel(nowMs, timedState.expiresAt)}`
-      : node.statusLabel;
-  const explorationLabel = explorationStatus === 'occupied' ? 'ЗАНЯТО · необходима атака' : explorationStatus === 'self' ? 'ЗАНЯТО · ваш флот' : explorationStatus === 'free' ? 'СВОБОДНО · доступно исследование' : 'Вне зоны видимости колоний';
-  const subtitle = node.known === false ? 'Неизученный сигнал' : isAsteroid ? 'Траектория наблюдается · содержание неизвестно' : node.kind === 'uninhabited' ? 'Владелец отсутствует' : isExploration ? explorationStatus === 'occupied' ? 'Объект занят чужим флотом' : explorationStatus === 'self' ? 'Ваш флот добывает ресурсы' : 'Объект свободен' : 'Галактика ' + String(node.coordinate.galaxy).padStart(2, '0') + ' · Система ' + String(node.coordinate.system).padStart(2, '0');
-  const timedTotal = timedState?.expiresAt && timedState?.startAt ? timedState.expiresAt - timedState.startAt : 0;
-  const timedProgress = timedTotal > 0 && timedState?.expiresAt ? ((timedState.expiresAt - nowMs) / timedTotal) * 100 : undefined;
-  const reconOutcome = pirateContact?.latestReportOutcome;
-
-  const tiles: InspectorTile[] = isAsteroid ? [
-    { label: 'ПЕРЕМЕЩЕНИЕ', value: countdownLabel(nowMs, node.asteroid?.nextMoveAt), note: 'до следующей позиции', tone: 'time' },
-    { label: 'ЗАПАС ГАЗА', value: <><ResourceIcon kind="gas" />Скрыт</>, note: 'до переработки', tone: 'bad' },
-    { label: 'ОБЛОМКИ', value: <><ResourceIcon kind="debris" />{asteroidHasDebris ? 'Есть' : 'Нет'}</>, note: 'на астероиде', tone: asteroidHasDebris ? 'good' : 'off' },
-    { label: 'ОРБИТА', value: `${node.coordinate.position} / 24`, note: `кольцо ${Math.ceil(node.coordinate.position / 6)}` },
-  ] : isPirate ? [
-    { label: 'ИСЧЕЗНЕТ', value: pirateContact ? countdownLabel(nowMs, pirateContact.expiresAt) : countdownLabel(nowMs, timedState?.expiresAt), note: 'затем пауза 15 мин', tone: 'time', progress: timedProgress },
-    { label: 'РАЗВЕДКА', value: reconOutcome === 'success' ? 'Успешна' : reconOutcome === 'failure' ? 'Не удалась' : pirateContact?.statusLabel === 'Зонд в пути' ? 'Зонд в пути' : 'Нет данных', note: reportEnabled ? 'отчёт в «Системе»' : 'разведотчёт не сформирован', tone: reconOutcome === 'success' ? 'good' : 'bad' },
-    { label: 'ОБЛОМКИ', value: <><ResourceIcon kind="debris" />125–175%</>, note: 'жизни пиратских кораблей', tone: 'good' },
-    { label: 'ЦИКЛ', value: pirateContact ? String(pirateContact.cycleIndex) : '—', note: <span data-qa-universe-pirate-cycle={pirateContact?.contactCycleKey ?? node.pirate?.contactCycleKey ?? ''}>{pirateContact ? formatUniverseCoordinate(pirateContact.coordinate) : 'СИНХРОНИЗАЦИЯ КОНТАКТА'}</span> },
-  ] : isExploration ? [
-    { label: 'ИСЧЕЗНЕТ', value: countdownLabel(nowMs, timedState?.expiresAt), note: 'активен', tone: 'time', progress: timedProgress },
-    { label: 'ЗАНЯТОСТЬ', value: explorationStatus === 'free' ? 'Свободно' : explorationStatus === 'self' ? 'Ваш флот' : explorationStatus === 'occupied' ? 'Занято' : 'Свободно', note: explorationStatus === 'occupied' ? 'нужна атака' : explorationStatus === 'self' ? 'добывает ресурсы' : 'никем не занят', tone: explorationStatus === 'occupied' ? 'bad' : 'good' },
-    { label: 'ЭКСПЕДИЦИЯ', value: explorationStatus ? 'В радиусе' : 'Вне радиуса', note: 'до 5 систем от колоний', tone: explorationStatus ? 'good' : 'bad', attrs: { 'data-qa-universe-exploration-status': explorationStatus ?? 'out' } },
-    { label: 'СИСТЕМА', value: String(node.coordinate.system).padStart(2, '0'), note: `Галактика ${String(node.coordinate.galaxy).padStart(2, '0')}` },
-  ] : node.kind === 'uninhabited' ? [
-    { label: 'ВЛАДЕЛЕЦ', value: 'Нет', note: 'владелец отсутствует', tone: 'off' },
-    { label: 'СИСТЕМА', value: String(node.coordinate.system).padStart(2, '0'), note: `Галактика ${String(node.coordinate.galaxy).padStart(2, '0')}` },
-    { label: 'ПОЗИЦИЯ', value: `${node.coordinate.position} / 24`, note: `кольцо ${Math.ceil(node.coordinate.position / 6)}` },
-    { label: 'КОЛОНИЗАЦИЯ', value: 'Скоро', note: 'механика в разработке', tone: 'time' },
-  ] : [
-    { label: 'СТАТУС', value: 'Свободно', note: 'орбита пуста', tone: 'good' },
-    { label: 'СИСТЕМА', value: String(node.coordinate.system).padStart(2, '0'), note: `Галактика ${String(node.coordinate.galaxy).padStart(2, '0')}` },
-    { label: 'ПОЗИЦИЯ', value: `${node.coordinate.position} / 24`, note: `кольцо ${Math.ceil(node.coordinate.position / 6)}` },
-    { label: 'ВЛАДЕЛЕЦ', value: 'Нет', note: 'можно основать колонию', tone: 'off' },
-  ];
-
-  const actionInfo: ActionInfo[] = [
-    ...(canColonize ? [{ label: 'КОЛОНИЗИРОВАТЬ', description: 'Открыть подготовку колонизации', enabled: true }] : []),
-    ...(isAsteroid && node.asteroid ? [{ label: 'ОТПРАВИТЬ ПЕРЕРАБОТЧИКА', description: 'Сначала собрать газ, затем обломки', enabled: true }] : []),
-    ...(isPirate ? [
-      { label: 'РАЗВЕДАТЬ', description: reconEnabled ? 'Отправить разведывательный зонд к этому циклу контакта' : reconReason, enabled: reconEnabled },
-      { label: 'ПИРАТСКИЙ РЕЙД', description: eliminationEnabled ? 'Подготовить пиратский рейд' : eliminationReason, enabled: eliminationEnabled },
-      { label: 'ОТКРЫТЬ РАЗВЕДОТЧЁТ', description: reportEnabled ? 'Открыть разведотчёт этого цикла' : reportReason, enabled: reportEnabled },
-    ] : []),
-    ...(isExploration ? [
-      { label: 'ИССЛЕДОВАТЬ ЗОНДОМ', description: 'Принять исследовательскую операцию и отправить один шпионский зонд', enabled: Boolean(onExplorationRecon && explorationStatus) },
-      ...(explorationStatus === 'occupied' ? [{ label: 'АТАКОВАТЬ', description: 'Боевой захват объекта: выбрать флот и подтвердить миссию «Атака»', enabled: Boolean(onExplorationAttack) }] : []),
-      { label: 'ЭКСПЕДИЦИЯ', description: explorationStatus === 'occupied' ? 'Объект занят. Для захвата нужна миссия «Атака».' : explorationStatus === 'self' ? 'Ваш флот уже добывает здесь.' : explorationStatus !== 'free' ? 'Экспедиция доступна в пределах пяти систем от ваших колоний.' : 'Подготовить экспедицию', enabled: Boolean(onExpedition && explorationStatus === 'free') },
-    ] : []),
-    ...(!canColonize && !isAsteroid && !isPirate && !isExploration ? [{ label: node.kind === 'uninhabited' ? 'КОЛОНИЗАЦИЯ' : 'ИССЛЕДОВАНИЕ', description: 'Механика появится позже', enabled: false }] : []),
-  ];
-
-  return (
-    <div className={`uw-main uw-main--special uw-main--${node.kind}`} data-qa-universe-special={node.kind} data-qa-universe-underlying-kind={underlyingNode?.kind ?? (isEmpty ? 'empty' : '')}
-      style={{ '--uw-k': SPECIAL_TONE[node.kind] ?? '#8fb6c0' } as CSSProperties}>
-      <div className="uw-side">
-        <InspectorHero art={node.art}>
-          <div className="uw-hero-caption"><b>{getUniverseObjectKindLabel(node.kind)}</b><span>{subtitle}</span></div>
-        </InspectorHero>
-        {isPirate ? <section className="uw-card uw-owner">
-          <div className="uw-owner-avatar"><img src={pirateWarlordArt} alt="" draggable={false} /></div>
-          <div className="uw-owner-copy"><small>КОМАНДИР БАЗЫ</small><h3>Пираты</h3><span>Отступник</span><strong>{reconOutcome === 'success' ? 'ГАРНИЗОН РАЗВЕДАН' : 'СОСТАВ ГАРНИЗОНА НЕИЗВЕСТЕН'}</strong></div>
-        </section> : null}
-        <dl className="uw-card uw-facts">
-          <div><dt>ТИП ПОЗИЦИИ</dt><dd>{getUniverseObjectKindLabel(node.kind)}</dd></div>
-          <div><dt>{isAsteroid ? 'ОРБИТА' : 'КООРДИНАТЫ'}</dt><dd>{isAsteroid ? `Кольцо ${Math.ceil(node.coordinate.position / 6)} · позиция ${node.coordinate.position} / 24` : formatUniverseCoordinate(node.coordinate)}</dd></div>
-          <div><dt>СТАТУС</dt><dd data-qa-universe-special-status>{isExploration ? `${explorationLabel} · ` : ''}{status}</dd></div>
-          {isAsteroid ? <div><dt>ЗАПАС ГАЗА</dt><dd data-qa-universe-asteroid-gas="hidden">СКРЫТ ДО ПЕРЕРАБОТКИ</dd></div> : null}
-          {isAsteroid ? <div data-qa-universe-asteroid-debris={asteroidHasDebris ? 'present' : 'absent'}><dt>Обломки на астероиде</dt><dd>{asteroidHasDebris ? 'есть' : 'нет'}</dd></div> : null}
-        </dl>
-      </div>
-      <div className="uw-content">
-        <InspectorTiles items={tiles} />
-        <section className="uw-block">
-          <header><b>СВЕДЕНИЯ</b><span>{getUniverseObjectKindLabel(node.kind)}</span></header>
-          <p className="uw-desc">{node.description}</p>
-          {isExploration ? <div className={'uw-occupancy uw-occupancy--' + (explorationStatus ?? 'out')}>
-            {explorationStatus === 'free' ? '● СВОБОДНО' : explorationStatus === 'self' ? '● ВАШ ФЛОТ ДОБЫВАЕТ' : explorationStatus === 'occupied' ? '● ЗАНЯТО ЧУЖИМ ФЛОТОМ' : '● ВНЕ РАДИУСА ЭКСПЕДИЦИИ'}
-          </div> : null}
-          <header className="uw-subhead"><b>ДОСТУПНЫЕ ДЕЙСТВИЯ</b><span>{actionInfo.filter((item) => item.enabled).length} из {actionInfo.length}</span></header>
-          <ul className="uw-howto">
-            {actionInfo.map((item) => (
-              <li key={item.label} className={item.enabled ? '' : 'is-off'}>
-                <i aria-hidden="true" /><div><b>{item.label}</b><span>{item.description}</span></div><em>{item.enabled ? 'ДОСТУПНО' : 'НЕДОСТУПНО'}</em>
-              </li>
-            ))}
-          </ul>
-        </section>
-      </div>
-      <footer className="uw-foot">
-        <div className="uw-foot-status"><small>СТАТУС</small><b>{isExploration ? explorationLabel : status}</b></div>
-        <div className="uw-foot-actions">
-          {canColonize ? (
-            <button type="button" className={`uw-btn ${isAsteroid ? '' : 'uw-btn--primary'}`} title="Открыть подготовку колонизации" data-qa-universe-special-action="colonize" data-qa-universe-target-coordinate={formatUniverseCoordinate(node.coordinate)} onClick={() => onColonize(node.coordinate)}>КОЛОНИЗИРОВАТЬ</button>
-          ) : null}
-          {isAsteroid && node.asteroid ? <button type="button" className="uw-btn uw-btn--primary" title="Отправить переработчика: сначала собрать газ, затем обломки" data-qa-universe-special-action="asteroid-recycler" data-qa-universe-target-coordinate={formatUniverseCoordinate(node.coordinate)} data-qa-universe-asteroid-spawn-index={node.asteroid.spawnIndex} onClick={() => onAsteroidRecycler({ spawnIndex: node.asteroid!.spawnIndex, coordinate: node.coordinate })}>ОТПРАВИТЬ ПЕРЕРАБОТЧИКА</button> : null}
-          {isPirate ? <>
-            <button type="button" className="uw-btn" disabled={!reportEnabled} title={reportEnabled ? 'Открыть разведотчёт этого цикла' : reportReason} data-qa-universe-special-action="pirate-report" data-qa-universe-contact-cycle={pirateContact?.contactCycleKey ?? ''} onClick={() => pirateContact?.latestReportId && onPirateReport?.(pirateContact.latestReportId)}>ОТКРЫТЬ РАЗВЕДОТЧЁТ</button>
-            <button type="button" className="uw-btn" disabled={!reconEnabled} title={reconEnabled ? 'Отправить разведывательный зонд к этому циклу контакта' : reconReason} data-qa-universe-special-action="pirate-recon" data-qa-universe-contact-cycle={pirateContact?.contactCycleKey ?? ''} onClick={() => pirateContact && onPirateRecon?.(pirateContact)}>{reconOutcome === 'success' ? 'РАЗВЕДАТЬ СНОВА' : 'РАЗВЕДАТЬ'}</button>
-            <button type="button" className="uw-btn uw-btn--pirate" disabled={!eliminationEnabled} title={eliminationEnabled ? 'Подготовить пиратский рейд' : eliminationReason} data-qa-universe-special-action="pirate-elimination" data-qa-universe-contact-cycle={pirateContact?.contactCycleKey ?? ''} onClick={() => pirateContact && onPirateAttack?.(pirateContact)}>ПИРАТСКИЙ РЕЙД</button>
-          </> : null}
-          {isExploration ? <>
-            <button type="button" className="uw-btn" disabled={!onExplorationRecon || !explorationStatus} data-qa-universe-special-action="exploration-recon"
-              title="Принять исследовательскую операцию и отправить один шпионский зонд" onClick={() => onExplorationRecon?.(node)}>ИССЛЕДОВАТЬ ЗОНДОМ</button>
-            {explorationStatus === 'occupied' ? <button type="button" className="uw-btn uw-btn--pirate" disabled={!onExplorationAttack} title="Боевой захват объекта: выбрать флот и подтвердить миссию «Атака»" data-qa-universe-special-action="exploration-attack" onClick={() => onExplorationAttack?.(node)}>АТАКОВАТЬ</button> : null}
-            <button type="button" className="uw-btn uw-btn--primary" disabled={!onExpedition || explorationStatus !== 'free'}
-              title={explorationStatus === 'occupied' ? 'Объект занят. Для захвата нужна миссия «Атака».'
-                : explorationStatus === 'self' ? 'Ваш флот уже добывает здесь.'
-                : explorationStatus !== 'free' ? 'Экспедиция доступна в пределах пяти систем от ваших колоний.' : 'Подготовить экспедицию'}
-              data-qa-universe-special-action="expedition" onClick={() => onExpedition?.(node)}
-            >{explorationStatus === 'free' ? 'ПОДГОТОВИТЬ ЭКСПЕДИЦИЮ'
-              : explorationStatus === 'occupied' ? 'ЗАНЯТО · НУЖНА АТАКА'
-              : explorationStatus === 'self' ? 'ВАШ ФЛОТ ДОБЫВАЕТ' : 'ВНЕ РАДИУСА ЭКСПЕДИЦИИ'}</button>
-          </> : null}
-          {!canColonize && !isAsteroid && !isPirate && !isExploration ? (
-            <button type="button" className="uw-btn" disabled data-qa-universe-special-action="disabled">{node.kind === 'uninhabited' ? 'КОЛОНИЗАЦИЯ' : 'ИССЛЕДОВАНИЕ'} · СКОРО</button>
-          ) : null}
-        </div>
-      </footer>
-    </div>
-  );
-}
-
 /** Debris reads as a chip with the debris icon and amount, never as a second object. */
 function DebrisChip({ label, ariaLabel }: { label: string; ariaLabel?: string }) {
   return (
@@ -757,7 +580,7 @@ function MovingAsteroid({ node, underlyingKind, nowMs, hasDebris, occupiedNodes,
   const attached = Boolean(point.offsetX || point.offsetY);
   const nextCoordinate = node.asteroid?.nextCoordinate ? formatUniverseCoordinate(node.asteroid.nextCoordinate) : 'маршрут завершён';
   return <button ref={ref} type="button" className={`system-asteroid ${attached ? 'is-attached' : ''} ${hasDebris ? 'has-debris' : ''}`} style={{ ...toStyle(point), ...(attached ? { zIndex: mapStackOrder(point.y) + 1 } : {}) }}
-    title={`${node.name} · ${formatUniverseCoordinate(node.coordinate)} · далее ${nextCoordinate}`} aria-label={`${node.name} · ${formatUniverseCoordinate(node.coordinate)}`}
+    data-tip={`${node.name} ${formatUniverseCoordinate(node.coordinate)}, дальше ${nextCoordinate}`} aria-label={`${node.name} · ${formatUniverseCoordinate(node.coordinate)}`}
     aria-describedby={hasDebris ? `universe-asteroid-debris-tooltip-${node.asteroid?.spawnIndex}` : undefined}
     data-qa-universe-asteroid-position={node.coordinate.position}
     data-qa-universe-asteroid-spawn-index={node.asteroid?.spawnIndex ?? ''}
@@ -771,7 +594,7 @@ function MovingAsteroid({ node, underlyingKind, nowMs, hasDebris, occupiedNodes,
   </button>;
 }
 
-export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPlanetName, profile, ownerScores, shields, command, playerPlanets: playerPlanetsProp, spyTargets: spyTargetsProp, orbitalDebrisByCoordinate, asteroidDebrisPresenceBySpawnIndex, asteroidStates, pirateContactState, pirateContacts = [], pirateFocusTarget, mode, onColonize, onAsteroidRecycler, onExpedition, onExplorationRecon, onExplorationAttack, explorationEligibility = {}, onTransport, onSpy, onAttack, onPirateRecon, onPirateAttack, onPirateReport, onPirateSystemChange, focusTarget, onFocusHandled, onSunSelect, sunAlerts = [], gateBeacons = [], onSunDefend, sunRaidAccess, homeCoordinate, debrisOrigin, onQuickSend, onQuickDetails }: UniverseViewProps) {
+export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPlanetName, profile, ownerScores, shields, command, playerPlanets: playerPlanetsProp, spyTargets: spyTargetsProp, orbitalDebrisByCoordinate, asteroidDebrisPresenceBySpawnIndex, asteroidStates, pirateContactState, pirateContacts = [], pirateFocusTarget, mode, onColonize, onAsteroidRecycler, onExpedition, onExplorationRecon, onExplorationAttack, explorationEligibility = {}, explorationIntel = {}, onTransport, onSpy, onAttack, onPirateRecon, onPirateAttack, onPirateReport, onPirateSystemChange, focusTarget, onFocusHandled, onSunSelect, sunAlerts = [], gateBeacons = [], onSunDefend, sunRaidAccess, homeCoordinate, debrisOrigin, onQuickSend, onQuickDetails }: UniverseViewProps) {
   const galaxyCount = getActiveGalaxyCount();
   const [galaxy, setGalaxy] = useState(homeCoordinate?.galaxy ?? GALAXY);
   const [system, setSystem] = useState(homeCoordinate?.system ?? 1);
@@ -782,7 +605,7 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
   const [showDebris, setShowDebris] = useState(true);
   const [hiddenLegend, setHiddenLegend] = useState<ReadonlySet<MapTone>>(() => new Set());
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [debrisSearch, setDebrisSearch] = useState<null | { origin: { planetName: string; coordinate: UniverseCoordinate }; from: number; to: number; results: Array<{ coordinate: UniverseCoordinate; debris: number }> }>(null);
+  const [debrisSearch, setDebrisSearch] = useState<DebrisSearch | null>(null);
   const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(null);
   const [quick, setQuick] = useState<{ nodeId: string; anchor: HTMLElement } | null>(null);
   const [debrisQuick, setDebrisQuick] = useState<{ target: QuickTarget; anchor: HTMLElement } | null>(null);
@@ -797,6 +620,12 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const onPirateSystemChangeRef = useRef(onPirateSystemChange);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  // Test Mode screenshot route `#universe-card-<scenario>`: a seeded object card or debris list, frozen clock.
+  const qaScenario = useMemo(() => getUniverseCardQaScenario(mode), [mode]);
+  const qaFixture = useMemo(() => (qaScenario ? createUniverseCardQaFixture(qaScenario, Date.now(), {
+    planet: planetArts[3], asteroid: asteroidArts[2], pirate: pirateArts[1] ?? pirateArts[0], unique: assets.uniqueArts?.[0] ?? '', anomaly: anomalyArts[0] ?? '',
+  }) : null), [qaScenario]);
+  const [qaCardOpen, setQaCardOpen] = useState(true);
 
   useEffect(() => {
     onPirateSystemChangeRef.current = onPirateSystemChange;
@@ -1003,8 +832,18 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
     return listed.length ? listed.slice(0, MAX_PLANETS_PER_OWNER) : [selectedNode];
   }, [nodesById, owners, selectedNode]);
 
+  const qaCard = qaFixture?.card && qaCardOpen ? qaFixture.card : null;
+  /** The open card: a clicked object, or the seeded one of the screenshot route. */
+  const cardKey = selectedNodeId ?? (qaCard ? qaCard.node.id : null);
+  const closeCard = () => { setSelectedNodeId(null); setQaCardOpen(false); };
   useEffect(() => {
-    if (!selectedNodeId) return undefined;
+    if (!qaFixture?.debris) return;
+    const { origin, results } = qaFixture.debris;
+    setDebrisSearch({ origin, results, ...nearbySystemWindow(origin.coordinate.system, SYSTEM_COUNT) });
+  }, [qaFixture]);
+
+  useEffect(() => {
+    if (!cardKey) return undefined;
     const previousFocus = document.activeElement as HTMLElement | null;
     const stage = document.querySelector<HTMLElement>('.stage');
     const wasInert = stage?.inert ?? false;
@@ -1024,6 +863,7 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
       event.preventDefault();
       event.stopPropagation();
       setSelectedNodeId(null);
+      setQaCardOpen(false);
     };
     window.addEventListener('keydown', onKeyDown, true);
     return () => {
@@ -1031,12 +871,12 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
       if (stage) stage.inert = wasInert;
       if (previousFocus?.isConnected) previousFocus.focus();
     };
-  }, [selectedNodeId]);
+  }, [cardKey]);
 
   useEffect(() => {
-    if (selectedNodeId) closeButtonRef.current?.focus();
-  }, [selectedNodeId]);
-  useEffect(() => { if (!selectedNodeId) setAtlasQuick(null); }, [selectedNodeId]);
+    if (cardKey) closeButtonRef.current?.focus();
+  }, [cardKey]);
+  useEffect(() => { if (!cardKey) setAtlasQuick(null); }, [cardKey]);
 
   const goSystem = (next: number, nextGalaxy = galaxy) => {
     const boundedGalaxy = Math.min(galaxyCount, Math.max(1, nextGalaxy));
@@ -1053,8 +893,8 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
     const range = nearbySystemWindow(debrisOrigin.coordinate.system, SYSTEM_COUNT);
     setDebrisSearch({ origin: debrisOrigin, ...range, results: findDebrisNearSystem(orbitalDebrisByCoordinate, debrisOrigin.coordinate, SYSTEM_COUNT) });
   };
-  /** «Отправить» in the list: the same send panel as «Собрать обломки» on the map; position 0 is the Sun. */
-  const openDebrisQuick = (entry: { coordinate: UniverseCoordinate; debris: number }, anchor: HTMLElement) => {
+  /** The quick-send target of a debris entry; position 0 is the Sun. */
+  const debrisTargetOf = (entry: DebrisEntry): QuickTarget => {
     const { coordinate, debris } = entry;
     const isSun = coordinate.position === 0;
     const atPosition = isSun ? undefined : [...nodesById.values()].find((node) => node.kind !== 'asteroid' && node.coordinate.galaxy === coordinate.galaxy && node.coordinate.system === coordinate.system && node.coordinate.position === coordinate.position);
@@ -1063,8 +903,10 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
       id: `debris:${formatUniverseCoordinate(coordinate)}`, kind: 'empty', art: isSun ? SUN_DEBRIS_ART : '', statusLabel: '', description: '',
       name: isSun ? `Обломки Солнца ${coordinate.galaxy}:${coordinate.system}` : 'Свободная позиция', coordinate: isSun ? { ...coordinate, position: 1 } : coordinate,
     };
-    setDebrisQuick({ anchor, target: { node, orbitalDebris: debris, ...(isSun ? { sun: { galaxy: coordinate.galaxy, system: coordinate.system } } : {}) } });
+    return { node, orbitalDebris: debris, ...(isSun ? { sun: { galaxy: coordinate.galaxy, system: coordinate.system } } : {}) };
   };
+  /** «Собрать» in the list: the same send panel as «Собрать обломки» on the map. */
+  const openDebrisQuick = (entry: DebrisEntry, anchor: HTMLElement) => setDebrisQuick({ anchor, target: debrisTargetOf(entry) });
   /** Opens the coordinate's system and pulses whatever sits there (position 0 is the Sun itself). */
   const pinpointCoordinate = (coordinate: UniverseCoordinate) => {
     setDebrisQuick(null);
@@ -1157,6 +999,15 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
     : null;
   const selectedMapStatus = selectedNode && selectedOwner ? mapStatusOf(selectedNode) : null;
   const inspectorRelationTone = selectedMapStatus ? MAP_TONE_COLOR[selectedMapStatus.tone] : undefined;
+  const cardModel = qaCard ?? (selectedNode && !selectedOwner ? {
+    node: selectedNode,
+    underlyingNode: selectedUnderlyingNode,
+    orbitalDebris: selectedNode.kind === 'asteroid' ? 0 : orbitalDebrisByKey.get(`${selectedNode.coordinate.galaxy}:${selectedNode.coordinate.system}:${selectedNode.coordinate.position}`) ?? 0,
+    asteroidHasDebris: Boolean(selectedNode.kind === 'asteroid' && selectedNode.asteroid && asteroidDebrisPresenceBySpawnIndex?.[String(selectedNode.asteroid.spawnIndex)]),
+    pirateContact: selectedNode.kind === 'pirate' ? pirateContacts.find((contact) => contact.contactCycleKey === selectedNode.pirate?.contactCycleKey) : undefined,
+    explorationStatus: explorationEligibility[selectedNode.id],
+    intel: explorationIntel[selectedNode.id],
+  } : null);
 
   return (
     <main
@@ -1216,7 +1067,7 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
                 type="button"
                 className={`empty-slot ${focusEmpty ? 'emphasized' : ''} ${orbitalDebris > 0 ? 'empty-slot--with-debris' : ''}`}
                 style={toStyle(point)}
-                title={`${node.statusLabel} ${coordinate}`}
+                data-tip={orbitalDebris > 0 ? undefined : `Свободная позиция ${coordinate}`}
                 aria-label={`${ariaLabel}${debrisDescription}`}
                 aria-describedby={orbitalDebris > 0 ? `universe-debris-tooltip-${node.id}` : undefined}
                 data-qa-universe-object={node.id}
@@ -1308,7 +1159,7 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
 
       <aside className={`universe-radar__list ${listPinned ? 'is-pinned' : ''}`} aria-label="Объекты системы">
         <button type="button" className="universe-radar__list-toggle" aria-expanded={listPinned} onClick={() => setListPinned((value) => !value)}
-          title={listPinned ? 'Открепить список' : 'Закрепить список открытым'}>
+          data-tip={listPinned ? 'Открепить список' : 'Закрепить список открытым'}>
           <small>В СИСТЕМЕ</small>
           <span className="universe-radar__list-dots" aria-hidden="true">
             {listedNodes.map(({ node, status }) => <i key={node.id} className={`legend-${status.tone}`}><MapMark tone={status.tone} /></i>)}
@@ -1330,20 +1181,19 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
       </aside>
 
       <div className="universe-radar__nav">
-        <label className="universe-radar__galaxy">
-          <small>ГАЛАКТИКА</small>
-          <select value={galaxy} onChange={(event) => goSystem(1, Number(event.target.value))} aria-label="Галактика">
-            {Array.from({ length: galaxyCount }, (_, index) => <option key={index + 1} value={index + 1}>{pad2(index + 1)}</option>)}
-          </select>
-        </label>
+        <div className="universe-radar__galaxy">
+          <small aria-hidden="true">ГАЛАКТИКА</small>
+          <GameSelect className="universe-radar__pick" label="Галактика" value={String(galaxy)} onChange={(value) => goSystem(1, Number(value))}
+            options={Array.from({ length: galaxyCount }, (_, index) => ({ value: String(index + 1), label: pad2(index + 1), ariaLabel: `Галактика ${index + 1}` }))} />
+        </div>
         {homeWorld ? (
           <button type="button" className="universe-radar__home" disabled={homeWorld.galaxy === galaxy && homeWorld.system === system}
-            title={`К родной системе ${formatUniverseCoordinate(homeWorld)}`}
+            data-tip={`К родной системе ${formatUniverseCoordinate(homeWorld)}`}
             onClick={() => goSystem(homeWorld.system, homeWorld.galaxy)}>⌂ Домой</button>
         ) : null}
         {debrisOrigin ? (
           <button type="button" className="universe-radar__home universe-radar__debris" data-qa-universe-find-debris
-            title={`Свободные обломки в ${NEARBY_DEBRIS_SYSTEM_SPAN} солнечных системах вокруг ${debrisOrigin.planetName} ${formatUniverseCoordinate(debrisOrigin.coordinate)}`}
+            data-tip={`Свободные обломки в ${NEARBY_DEBRIS_SYSTEM_SPAN} системах вокруг ${debrisOrigin.planetName} ${formatUniverseCoordinate(debrisOrigin.coordinate)}`}
             onClick={openDebrisSearch}><img className="universe-radar__debris-icon" src={DEBRIS_FINDER_ICON} alt="" draggable={false} />Найти обломки</button>
         ) : null}
       </div>
@@ -1362,10 +1212,9 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
           })}
         </div>
         <button type="button" className="step" onClick={() => goSystem(system + 1)} disabled={system === SYSTEM_COUNT} aria-label="Следующая система"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 5.5 8 10l4.5-4.5" /></svg></button>
+        <GameSelect className="universe-radar__pick universe-radar__rail-pick" label="Солнечная система" value={String(system)} onChange={(value) => goSystem(Number(value))}
+          options={galaxyData.systems.map((item) => ({ value: String(item.system), label: pad2(item.system), ariaLabel: `Солнечная система ${item.system}` }))} />
         <small className="universe-radar__rail-total">/ {SYSTEM_COUNT}</small>
-        <select className="universe-radar__rail-select" value={system} onChange={(event) => goSystem(Number(event.target.value))} aria-label="Солнечная система">
-          {galaxyData.systems.map((item) => <option key={item.system} value={item.system}>{pad2(item.system)}</option>)}
-        </select>
       </nav>
 
       <div className="universe-radar__dock" aria-label="Фильтры и слои карты">
@@ -1387,53 +1236,17 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
         <i className="universe-radar__sep" aria-hidden="true" />
         <small>СЛОИ</small>
         <div className="universe-radar__seg">
-          <button type="button" className={showSlotLabels ? 'is-on' : ''} aria-pressed={showSlotLabels} title="Показывать номера позиций" onClick={() => setShowSlotLabels((value) => !value)}>⌖ Метки</button>
-          <button type="button" className={showAsteroids ? 'is-on' : ''} aria-pressed={showAsteroids} data-qa-universe-asteroids-toggle title="Показать или скрыть астероиды" onClick={() => setShowAsteroids((value) => !value)}>◌ Астероиды</button>
-          <button type="button" className={showDebris ? 'is-on' : ''} aria-pressed={showDebris} title="Показать или скрыть обломки" onClick={() => setShowDebris((value) => !value)}>✦ Обломки</button>
-          <button type="button" className={focusEmpty ? 'is-on' : ''} aria-pressed={focusEmpty} title="Подсветить свободные позиции" onClick={() => setFocusEmpty((value) => !value)}>▽ Свободные</button>
+          <button type="button" className={showSlotLabels ? 'is-on' : ''} aria-pressed={showSlotLabels} data-tip="Номера позиций на орбитах" onClick={() => setShowSlotLabels((value) => !value)}>⌖ Метки</button>
+          <button type="button" className={showAsteroids ? 'is-on' : ''} aria-pressed={showAsteroids} data-qa-universe-asteroids-toggle data-tip="Показать или скрыть астероиды" onClick={() => setShowAsteroids((value) => !value)}>◌ Астероиды</button>
+          <button type="button" className={showDebris ? 'is-on' : ''} aria-pressed={showDebris} data-tip="Показать или скрыть обломки" onClick={() => setShowDebris((value) => !value)}>✦ Обломки</button>
+          <button type="button" className={focusEmpty ? 'is-on' : ''} aria-pressed={focusEmpty} data-tip="Подсветить свободные позиции" onClick={() => setFocusEmpty((value) => !value)}>▽ Свободные</button>
         </div>
       </div>
 
       {debrisSearch ? createPortal(
-        <div className="universe-modal-backdrop" onClick={(event) => { if (event.target === event.currentTarget) setDebrisSearch(null); }}>
-          <section className="universe-debris-finder uw" role="dialog" aria-modal="true" aria-label="Обломки в ближайших системах" data-qa-debris-finder={debrisSearch.results.length}>
-            <header className="universe-debris-finder__head">
-              <img className="universe-debris-finder__icon" src={DEBRIS_FINDER_ICON} alt="" draggable={false} />
-              <div>
-                <small>ОБЛОМКИ · СИСТЕМЫ {pad2(debrisSearch.from)}–{pad2(debrisSearch.to)} · ГАЛАКТИКА {pad2(debrisSearch.origin.coordinate.galaxy)}</small>
-                <h2>Рядом с {debrisSearch.origin.planetName} {formatUniverseCoordinate(debrisSearch.origin.coordinate)}</h2>
-              </div>
-              <button type="button" className="uw-close" data-asterion-close aria-label="Закрыть" onClick={() => setDebrisSearch(null)}>✕</button>
-            </header>
-            {debrisSearch.results.length === 0 ? (
-              <div className="universe-debris-finder__empty" data-qa-debris-finder-empty>
-                <p>В ближайших {NEARBY_DEBRIS_SYSTEM_SPAN} солнечных системах нет планет с обломками.</p>
-                <button type="button" className="uw-btn uw-btn--primary" autoFocus onClick={() => setDebrisSearch(null)}>ОК</button>
-              </div>
-            ) : (
-              <>
-                <ul className="universe-debris-finder__list">
-                  {debrisSearch.results.map((entry) => {
-                    const key = formatUniverseCoordinate(entry.coordinate);
-                    const isSun = entry.coordinate.position === 0;
-                    return (
-                      <li key={key} data-qa-debris-row={key}>
-                        {isSun ? <img className="universe-debris-finder__thumb" src={SUN_DEBRIS_ART} alt="" draggable={false} /> : <span className="universe-debris-finder__thumb is-orbit" aria-hidden="true" />}
-                        <button type="button" className="universe-debris-finder__coord" title="Показать на карте" onClick={() => pinpointCoordinate(entry.coordinate)}>
-                          <b>{key}</b><small>{isSun ? 'Солнце системы' : `Система ${pad2(entry.coordinate.system)} · позиция ${entry.coordinate.position}`}</small>
-                        </button>
-                        <span className="universe-debris-finder__amount"><small>ОБЛОМКИ</small><b>{entry.debris.toLocaleString('ru-RU')}</b></span>
-                        <button type="button" className="uw-btn uw-btn--primary" disabled={!onQuickSend} data-qa-debris-send={key}
-                          onClick={(event) => openDebrisQuick(entry, event.currentTarget)}>ОТПРАВИТЬ</button>
-                      </li>
-                    );
-                  })}
-                </ul>
-                <p className="universe-debris-finder__note">Только свободные обломки у планет и Солнц. Обломки на астероидах здесь не показываются — ищите астероиды на карте.</p>
-              </>
-            )}
-          </section>
-        </div>,
+        <DebrisFinder search={debrisSearch} span={NEARBY_DEBRIS_SYSTEM_SPAN} targetOf={debrisTargetOf} sendEnabled={Boolean(onQuickSend)}
+          onClose={() => { setDebrisQuick(null); setDebrisSearch(null); }} onShow={pinpointCoordinate} onSend={openDebrisQuick}
+          plansOverride={qaFixture?.debris?.plansOverride} />,
         document.body,
       ) : null}
 
@@ -1472,29 +1285,17 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
         </aside>
         </div>, document.body) : null}
 
-      {atlasQuick && selectedNode && selectedOwner && onQuickSend ? (
+      {atlasQuick && cardKey && onQuickSend ? (
         <QuickActions key={atlasQuick.target.node.id} initialAction="recycle" target={atlasQuick.target} anchor={atlasQuick.anchor} onClose={() => setAtlasQuick(null)} onSend={onQuickSend}
-          onDetails={(context, originPlanetId) => { setAtlasQuick(null); setSelectedNodeId(null); onQuickDetails?.(context, originPlanetId); }} onOpenCard={() => undefined} />
+          onDetails={(context, originPlanetId) => { setAtlasQuick(null); closeCard(); onQuickDetails?.(context, originPlanetId); }} onOpenCard={() => undefined} />
       ) : null}
 
-      {selectedNode && !selectedOwner ? createPortal(
-        <div className="universe-modal-backdrop" onClick={(event) => { if (event.target === event.currentTarget) setSelectedNodeId(null); }}>
-        <aside className={`universe-inspector universe-inspector--${selectedNode.kind} uw`} role="dialog" aria-modal="true" aria-label={`Инспектор: ${selectedNode.name}`} data-qa-universe-inspector data-qa-inspector-kind={selectedNode.kind}
-          style={{ '--uw-k': selectedOwner ? inspectorRelationTone : SPECIAL_TONE[selectedNode.kind] ?? '#8fb6c0' } as CSSProperties}>
-          <header className="universe-inspector-header uw-head">
-            <div className="uw-title"><small>ЗВЁЗДНЫЙ АТЛАС · {getUniverseObjectKindLabel(selectedNode.kind)}</small><h2>{selectedNode.name}</h2></div>
-            <div className="uw-tags">
-              <span className="uw-coord">{formatUniverseCoordinate(selectedNode.coordinate)}</span>
-              {selectedNode.kind === 'asteroid' ? <em className="uw-chip">кольцо {Math.ceil(selectedNode.coordinate.position / 6)}</em> : null}
-              {selectedOwner ? <em className="uw-chip">{selectedNode.isHomeworld ? 'ДОМАШНЯЯ ПЛАНЕТА' : 'ПЛАНЕТА ВЛАДЕЛЬЦА'}</em> : null}
-            </div>
-            <button ref={closeButtonRef} type="button" className="universe-inspector-close uw-close" data-asterion-close aria-label="Закрыть инспектор" title="Закрыть инспектор" onClick={() => setSelectedNodeId(null)}>✕</button>
-          </header>
-          <div className="universe-inspector-body uw-body">
-          {<SpecialInspector node={selectedNode} underlyingNode={selectedUnderlyingNode} nowMs={nowMs} asteroidHasDebris={Boolean(selectedNode.kind === 'asteroid' && selectedNode.asteroid && asteroidDebrisPresenceBySpawnIndex?.[String(selectedNode.asteroid.spawnIndex)])} pirateContact={selectedNode.kind === 'pirate' ? pirateContacts.find((contact) => contact.contactCycleKey === selectedNode.pirate?.contactCycleKey) : undefined} onColonize={onColonize} onAsteroidRecycler={onAsteroidRecycler} onExpedition={onExpedition} onExplorationRecon={onExplorationRecon} onExplorationAttack={onExplorationAttack} explorationStatus={explorationEligibility[selectedNode.id]} onPirateRecon={onPirateRecon} onPirateAttack={onPirateAttack} onPirateReport={onPirateReport} />}
-          </div>
-        </aside>
-        </div>, document.body) : null}
+      {cardModel ? createPortal(
+        <ObjectCard {...cardModel} nowMs={qaCard ? qaFixture!.nowMs : nowMs} intel={cardModel.intel} closeRef={closeButtonRef} onClose={closeCard}
+          onColonize={onColonize} onAsteroidRecycler={onAsteroidRecycler} onExpedition={onExpedition} onExplorationRecon={onExplorationRecon} onExplorationAttack={onExplorationAttack}
+          onPirateRecon={onPirateRecon} onPirateAttack={onPirateAttack} onPirateReport={onPirateReport}
+          onRecycle={onQuickSend ? (target, anchor) => setAtlasQuick({ target, anchor }) : undefined} />,
+        document.body) : null}
     </main>
   );
 }

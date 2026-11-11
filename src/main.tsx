@@ -29,7 +29,6 @@ import './rating.css';
 import './science.css';
 import './utility-source-rebuild-polish.css';
 import './universe-interaction.css';
-import './universe-window.css';
 import './asterion-unified-theme.css';
 import './ui/race/race-theme.css';
 import './motion.css';

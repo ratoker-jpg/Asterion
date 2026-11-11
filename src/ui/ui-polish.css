@@ -303,23 +303,6 @@ html body .universe-modal-backdrop {
   grid-template-columns: minmax(0, 1fr);
   place-items: center;
 }
-html body .universe-debris-finder {
-  max-height: min(720px, 100%);
-  min-height: 0;
-  padding: 20px 22px 18px;
-  border: 1px solid var(--ut-border-strong);
-  border-radius: var(--ut-r-panel);
-  background: linear-gradient(180deg, rgba(15, 25, 30, .985), rgba(8, 14, 18, .985));
-  box-shadow: 0 30px 90px rgba(0, 0, 0, .7);
-}
-html body .universe-debris-finder__head { padding-bottom: 14px; border-bottom: 1px solid var(--ut-border); }
-html body .universe-debris-finder__head small { color: var(--ut-accent); font-weight: 800; letter-spacing: .14em; }
-html body .universe-debris-finder__head h2 { font-size: var(--ut-font-section-title); font-weight: 800; letter-spacing: .02em; }
-html body .universe-debris-finder__list { min-height: 0; padding-right: 4px; }
-html body .universe-debris-finder__list li { border: 1px solid var(--ut-border); border-radius: var(--ut-r-card); background: var(--ut-surface-2); }
-html body .universe-debris-finder__coord b { font-size: 14px; }
-html body .universe-debris-finder__amount b { font-size: 14px; }
-html body .universe-debris-finder__note { padding-top: 2px; font-size: var(--ut-font-secondary); }
 
 /* ---- 6. Map captions: the owner's nickname is shown in full ------------------
    The caption used the planet button's 104 px box and cut a 24-character

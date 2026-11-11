@@ -88,7 +88,7 @@ async function main() {
   }))()`);
   console.log(JSON.stringify(dialog));
   const attack = dialog.actions.find((a) => a.action === 'exploration-attack');
-  if (!attack || attack.disabled || attack.text !== 'АТАКОВАТЬ') throw new Error('АТАКОВАТЬ missing/disabled: ' + JSON.stringify(dialog));
+  if (!attack || attack.disabled || attack.text.toUpperCase() !== 'АТАКОВАТЬ') throw new Error('АТАКОВАТЬ missing/disabled: ' + JSON.stringify(dialog));
   if (dialog.actions.find((a) => a.action === 'expedition' && !a.disabled)) throw new Error('expedition must stay disabled on an occupied object');
   await shot(win, '2-unique-object-dialog-attack-button');
 
