@@ -31,6 +31,7 @@ import {
   createGasExtractionArrivalReportId,
   createOverpopulationEpisodeReportId,
 } from '../domain/reports/adapters.ts';
+import { personalLetterItems } from '../domain/reports/letters.ts';
 import type { GasExtractionArrivalReport, OverpopulationEpisodeReport, RecyclerArrivalReport } from '../domain/reports/types.ts';
 import { normalizeCombatFactionId } from '../domain/combat/factions.ts';
 import { SHIP_IDS, type ShipId } from '../domain/combat/ids.ts';
@@ -1509,7 +1510,10 @@ function migrateParsedSave(
     gasExtractionArrivalReports,
     pirate.reconReports,
     migratedFlights.records,
-  ).map((item) => item.id);
+  ).map((item) => item.id).concat(
+    // «Личные» letters need the player's id; their read marks must survive a reload too.
+    personalLetterItems(command, profile.playerId).map((item) => item.id),
+  );
   const migratedSavedFleet = removeSolarSatellitesFromFleet(
     resolveSavedFleetState(savedHomeworld?.fleet, profile.factionId),
   );

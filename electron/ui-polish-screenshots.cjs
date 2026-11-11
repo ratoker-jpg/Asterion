@@ -323,7 +323,7 @@ async function longAllianceScene(win) {
   await click(win, '[data-qa-alliance-submit]');
   await settle(win, 800);
   await capture(win, '07-command-alliance-long', 'Командование after creating the long-named alliance');
-  await clickText(win, '.cmdA-tabs button', 'СОЮЗЫ');
+  await clickText(win, '.cmdA-tabs button', 'Союзы');
   await settle(win, 600);
   await capture(win, '07-command-alliances-crests', 'Командование → Союзы: NPC alliance crests in the catalog');
   await clickUtility(win, 'rating');

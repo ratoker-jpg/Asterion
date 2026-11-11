@@ -384,7 +384,7 @@ test('accepted operation and real spy-probe research survive save/replay and rev
   assert.equal(typeof report?.success,'boolean');
   const reconLetter = explorationMailboxReports(arrived.state.exploration,arrived.state.flights.records)
     .find(item => item.id === 'exploration-recon:' + sent.flight.id);
-  assert.equal(reconLetter?.category,'system');
+  assert.equal(reconLetter?.category,'battle'); // Probe reports live in «Доклады» (owner, 11.11.2026).
   assert.equal(reconLetter?.statusLabel,report?.success ? 'УСПЕШНО' : 'НЕУДАЧА');
   assert.equal(arrived.state.flights.records.find(f=>f.id===sent.flight.id)?.phase,'returning');
   assert.equal(selectExplorationOperations(arrived.state,sent.flight.arrivalAt,'test').find(r=>r.node.id===target.id)?.recon?.success,report?.success);

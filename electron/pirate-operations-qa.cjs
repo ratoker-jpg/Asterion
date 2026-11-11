@@ -489,7 +489,7 @@ async function runViewport(width, height) {
     console.log(`[pirate-operations-qa] viewport ${label} recon return complete`);
 
     await clickPrimary(win, 'reports', `document.querySelector('.reports-view')`);
-    await clickFolder(win, 'system');
+    await clickFolder(win, 'battle');
     const reportSelector = `[data-report-item-id="${reconReport.id}"] .reports-list-open`;
     await waitFor(win, `document.querySelector(${JSON.stringify(reportSelector)})`);
     await click(win, reportSelector);

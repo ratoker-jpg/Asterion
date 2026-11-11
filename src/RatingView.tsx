@@ -4,6 +4,7 @@ import { UNIVERSE_COORDINATE_OPEN_EVENT } from './application/flights.ts';
 import { getFactionGeneralAsset } from './domain/profile/faction-assets.ts';
 import type { RatedAllianceDetails, RatedOwnerIdentity } from './domain/runtime/state-store.ts';
 import { EmblemGlyph } from './CommandView';
+import { CrystalDots, RoleBadge } from './ui/command/AllianceBadges';
 import { RATING_BACKDROP, RATING_MEDALS } from './ui/ui-art.ts';
 import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
 import { CURRENT_PLAYER_ID, createOwnerRatingEntries, createPlayerRatingEntries, withTestOwnerScoreFixtures } from './domain/rating/fixtures.ts';
@@ -462,14 +463,8 @@ function Value({ value, lead = false }: { value: number; lead?: boolean }) {
 }
 
 const RACE_LABELS: Record<PlayerRatingEntry['race'], string> = { aster: 'Астеры', cyber: 'Илары', xeno: 'Рой' };
-const CRYSTAL_COUNT = 4;
-
 function openOwnerOnMap(coordinate: { galaxy: number; system: number; position: number }, ownerId?: string, planetId?: string) {
   window.dispatchEvent(new CustomEvent(UNIVERSE_COORDINATE_OPEN_EVENT, { detail: { coordinate, ...(ownerId ? { ownerId } : {}), ...(planetId ? { planetId } : {}) } }));
-}
-
-function CrystalDots({ count }: { count: number }) {
-  return <span className="rating-crystals-v2" aria-label={`Кристаллы: ${count} из ${CRYSTAL_COUNT}`}>{Array.from({ length: CRYSTAL_COUNT }, (_, index) => <i key={index} className={index < count ? 'is-owned' : ''} />)}<b>{count}/{CRYSTAL_COUNT}</b></span>;
 }
 
 /** The card under a player row: what anyone can see about this owner, and the way to their profile. */
@@ -537,16 +532,6 @@ function PlayerCard({ entry, owner, alliance, role, allianceDetails, exactPresen
       </div>
     </div>
   );
-}
-
-const ROLE_LABELS: Readonly<Record<AllianceRole, { full: string; short: string }>> = {
-  leader: { full: 'Глава', short: 'Глава' },
-  deputy: { full: 'Заместитель', short: 'Зам.' },
-  member: { full: 'Участник', short: 'Участник' },
-};
-
-function RoleBadge({ role, compact = false }: { role: AllianceRole; compact?: boolean }) {
-  return <span className={`rating-role-v2 is-${role}${compact ? ' is-compact' : ''}`} data-qa-rating-role={role}>{compact ? ROLE_LABELS[role].short : ROLE_LABELS[role].full}</span>;
 }
 
 function RosterName({ member, listed, onOpenPlayer }: { member: AllianceRosterEntry; listed: boolean; onOpenPlayer: (ownerId: string) => void }) {

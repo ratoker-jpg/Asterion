@@ -304,9 +304,9 @@ export function createResourceRequest(
     return fail(state, 'request_limit', `Одновременно можно держать не более ${MAX_OPEN_REQUESTS} открытых запросов.`);
   }
   const ledger = selectAidLedger(state, input.ownerId, membership.alliance.id);
-  if (!ledger) return fail(state, 'no_charges', 'Заряды запросов ещё не начали восстанавливаться.');
+  if (!ledger) return fail(state, 'no_charges', 'Запросы станут доступны немного позже.');
   const settled = settleAidLedger(ledger, now);
-  if (settled.charges < 1) return fail(state, 'no_charges', 'Нет свободных зарядов запроса.');
+  if (settled.charges < 1) return fail(state, 'no_charges', 'Сейчас запрос создать нельзя: дождитесь, пока станет доступен новый.');
 
   const requestId = `request-${state.nextSerial}`;
   const request: ResourceRequest = {
