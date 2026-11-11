@@ -390,6 +390,21 @@ function flightCommanderCounts(state: SaveState, ownerId: string) {
   return counts;
 }
 
+let lastScores: { state: SaveState; scores: Record<string, OwnerScore> } | null = null;
+
+/**
+ * selectOwnerScores for the world App is rendering: the same world is asked
+ * several times per render (every rating readout, the pirate threat) and on
+ * every clock tick, so the last answer is kept for as long as the world object
+ * is the same. Callers must not change the result.
+ */
+export function selectOwnerScoresCached(state: SaveState): Record<string, OwnerScore> {
+  if (lastScores?.state === state) return lastScores.scores;
+  const scores = selectOwnerScores(state);
+  lastScores = { state, scores };
+  return scores;
+}
+
 /** Calculates one authoritative score per owner represented in the save. */
 export function selectOwnerScores(state: SaveState): Record<string, OwnerScore> {
   // Owners in registration order (player, planet owners in save order, then

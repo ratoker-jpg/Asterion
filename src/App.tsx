@@ -133,7 +133,7 @@ import {
   PLAYER_FACTION_LABELS,
 } from './domain/profile/repository.ts';
 import type { PlayerFactionId } from './domain/profile/types.ts';
-import { selectOwnerScores } from './domain/rating/scoring.ts';
+import { selectOwnerScoresCached } from './domain/rating/scoring.ts';
 import { advancePirateThreat, isOwnerProtectedFromPirates, pirateRaidChance } from './domain/pirates/threat.ts';
 import {defaultPirateOwnerAdaptation} from './domain/pirates/adaptive.ts';
 import { buildPirateBattleAnalysisExport } from './application/pirate-battle-export.ts';
@@ -1451,28 +1451,33 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     () => getPlanetEnergyCoordinates(currentPlanetState),
     [currentPlanetState.universeGalaxy, currentPlanetState.universePosition, currentPlanetState.universeSystem, state.sunRaid],
   );
+  // The fleet readouts read only these sections; the bot economies that change
+  // every second are not among them.
   const fleetSummary = useMemo(
     () => getFleetSummaryForState(state),
-    [state],
+    [state.currentPlanetId, state.planets, state.profile, state.flights, state.shipUpgradeLevels],
   );
   const outgoingFleetSummary = useMemo(
     () => getOutgoingFleetSummaryForState(state),
-    [state],
+    [state.currentPlanetId, state.planets, state.profile, state.flights, state.shipUpgradeLevels],
   );
   const defenseSummary = useMemo(
     () => getFleetBuildBudget(state).defenseSummary,
-    [state],
+    [state.currentPlanetId, state.planets, state.profile, state.flights, state.shipUpgradeLevels, state.science],
   );
   const isDefenseFleetView = activeRoute === 'fleets' && activeFleetSection === 'defense';
   const planetPopulation = useMemo(
     () => getPlanetPopulationForState(state),
-    [state],
+    [state.currentPlanetId, state.planets, state.profile, state.flights, state.shipUpgradeLevels],
   );
   const headerPopulationSummary = isDefenseFleetView ? defenseSummary : fleetSummary;
-  const pendingInboundPopulation = isDefenseFleetView ? 0 : getPendingInboundPopulation(state, currentPlanet.id);
+  const pendingInboundPopulation = useMemo(
+    () => (isDefenseFleetView ? 0 : getPendingInboundPopulation(state, currentPlanet.id)),
+    [isDefenseFleetView, state.flights, currentPlanet.id],
+  );
   const currentOverpopulation = useMemo(
     () => getPlanetOverpopulationSummary(state, currentPlanet.id),
-    [state, currentPlanet.id],
+    [state.planets, state.profile, currentPlanet.id],
   );
   const currentSkin = useMemo(
     () => planetSkins.find((skin) => skin.id === currentPlanetState.skin) ?? planetSkins[0],
@@ -1484,6 +1489,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const universeExplorationEligibility = useMemo(() => (activeRoute === 'universe'
     ? Object.fromEntries(selectExplorationTargets(state, explorationClock, RUNTIME_MODE).map(node => [node.id, explorationTargetStatus(state, node)]))
     : {}), [activeRoute, explorationClock, state]);
+  // One array per espionage section, not one per render: the map compares it by reference first.
+  const universeSpyTargets = useMemo(() => Object.values(getEspionageTargets(state.espionage)), [state.espionage]);
   const universePlayerPlanets = useMemo(() => ownedPlanets.map((planet) => {
     const runtimePlanet = state.planets[planet.id];
     const skin = planetSkins.find((candidate) => candidate.id === runtimePlanet.skin) ?? planetSkins[0];
@@ -1561,13 +1568,13 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     const items = dropExpiredReportItems(buildReportsFeed(state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.pirate?.reconReports, state.flights.records, state.exploration, state.profile.playerId, undefined, { strategy: state.npcStrategy, now: letterClock, targets: state.espionage?.targets }),
       reportRetentionAt, state.combat.savedReportIds);
     return Object.values(getReportUnreadCounts(items, state.reports)).reduce((total, count) => total + count, 0);
-  }, [state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.reports, state.pirate, state.flights, state.exploration, reportRetentionAt, state.npcStrategy, letterClock]);
+  }, [state.combat.reports, state.operations, state.command, state.espionage?.reports, state.espionage?.hunterNotices, state.espionage?.missions, state.espionage?.targets, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.reports, state.pirate?.reconReports, state.flights.records, state.exploration, reportRetentionAt, state.npcStrategy, letterClock]);
   // «Профиль игрока» in «Сообщения»: the same standings as «Рейтинг», planets and crystals; nothing invented.
   const reportProfileFacts = useMemo(() => {
     // Only while «Сообщения» is open: the rest of the game does not pay for it each tick.
     if (activeRoute !== 'reports') return {};
     const playerId = state.profile.playerId;
-    const scores = selectOwnerScores(state);
+    const scores = selectOwnerScoresCached(state);
     const standings = RUNTIME_MODE === 'production'
       ? createOwnerRatingEntries(scores, selectRatedOwners(state), playerId)
       : createPlayerRatingEntries(scores[playerId], RUNTIME_MODE, playerId);
@@ -1585,7 +1592,10 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const commandHallDefinition = getBuildingDefinition('planetary-government', state.profile.factionId);
   // The race theme lives on <html> so portals and dialogs outside the stage get it too.
   // Same rule as the Fleet screen alert: hostile fleets still on their way in.
-  const incomingAttackCount = state.flights.records.filter((flight) => isHostileFlightIncomingToPlayer(flight, state.profile.playerId)).length;
+  const incomingAttackCount = useMemo(
+    () => state.flights.records.filter((flight) => isHostileFlightIncomingToPlayer(flight, state.profile.playerId)).length,
+    [state.flights.records, state.profile.playerId],
+  );
   const sunAlerts = useMemo(() => selectIncomingSunAlerts(state, now), [state, now]);
   const headerAlerts = useMemo(() => selectHeaderAlerts(state, sunAlerts, now), [state, sunAlerts, now]);
   // Audible cues for news that may arrive on any screen: a new hostile fleet, a new report.
@@ -1779,7 +1789,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         now: tradedAt,
         mode: RUNTIME_MODE,
         testTimeScale,
-      }, selectOwnerScores(current)[current.profile.playerId]?.resourcePoints ?? 0, request);
+      }, selectOwnerScoresCached(current)[current.profile.playerId]?.resourcePoints ?? 0, request);
       return { state: transition.state, result: transition.execution };
     }, flushSync, renderedStateRef, noteStateHeal);
     if (!result.ok) {
@@ -3025,7 +3035,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const startNextRound = (kind: 'gate' | 'left') => {
     const config = stateRef.current.worldConfig;
     const seriesId = settleIntoSeries(kind);
-    requestSeriesRound({ seriesId, config: config && !config.legacy ? config : createDefaultNewGameConfig({ factionId: stateRef.current.profile.factionId, playerName: stateRef.current.profile.displayName }) });
+    requestSeriesRound({ seriesId, fromSlotId: session?.slotId ?? null, config: config && !config.legacy ? config : createDefaultNewGameConfig({ factionId: stateRef.current.profile.factionId, playerName: stateRef.current.profile.displayName }) });
     leaveTo('new');
   };
   const leaveTo = (screen: 'main' | 'load' | 'new') => {
@@ -3202,7 +3212,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               tradeWallet={tradeWallet}
               spaceportUpgrades={{ ...currentPlanetState.spaceportUpgrades, shipLevels: getOwnerShipUpgradeLevels(state) }}
               spaceportWallet={spaceportWallet}
-              resourceRatingPoints={selectOwnerScores(state)[state.profile.playerId]?.resourcePoints ?? 0}
+              resourceRatingPoints={selectOwnerScoresCached(state)[state.profile.playerId]?.resourcePoints ?? 0}
               now={now}
               testTimeScale={testTimeScale}
               onProductionBotsApply={applyProductionBots}
@@ -3229,10 +3239,10 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               ownedPlanetArt={'mapArt' in currentSkin ? currentSkin.mapArt : currentSkin.art}
               ownedPlanetName={currentPlanetName}
               profile={state.profile}
-              ownerScores={selectOwnerScores(state)}
+              ownerScores={selectOwnerScoresCached(state)}
               command={state.command}
               playerPlanets={universePlayerPlanets}
-              spyTargets={Object.values(getEspionageTargets(state.espionage))}
+              spyTargets={universeSpyTargets}
               orbitalDebrisByCoordinate={getOrbitalDebrisByCoordinate(getEspionageState(state))}
               asteroidDebrisPresenceBySpawnIndex={Object.fromEntries(Object.entries(state.asteroidDebrisBySpawnIndex ?? {}).map(([spawnIndex, amount]) => [spawnIndex, amount > 0]))}
               asteroidStates={state.asteroidSimulation?.asteroids}
@@ -3283,11 +3293,11 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               onPirateBattleExport={RUNTIME_MODE==='test'?exportPirateBattleAnalysis:undefined}
               pirateCheckDelayMs={scaleRuntimeDuration(15*60_000,RUNTIME_MODE,testTimeScale)}
               pirateThreatPercent={isOwnerProtectedFromPirates(
-                selectOwnerScores(state)[state.profile.playerId]?.resourcePoints??0,
-                selectOwnerScores(state)[state.profile.playerId]?.battlePoints??0,
+                selectOwnerScoresCached(state)[state.profile.playerId]?.resourcePoints??0,
+                selectOwnerScoresCached(state)[state.profile.playerId]?.battlePoints??0,
               ) ? 0 : 100*pirateRaidChance(
-                selectOwnerScores(state)[state.profile.playerId]?.resourcePoints??0,
-                selectOwnerScores(state)[state.profile.playerId]?.battlePoints??0,
+                selectOwnerScoresCached(state)[state.profile.playerId]?.resourcePoints??0,
+                selectOwnerScoresCached(state)[state.profile.playerId]?.battlePoints??0,
                 advancePirateThreat(
                   state.pirate?.ownerThreats?.[state.profile.playerId] ??
                     {version:1,ageHours:0,integratedAt:state.pirate?.raidProcessedAt??now},
@@ -3318,7 +3328,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
                 name: commandHallDefinition.name,
                 art: commandHallDefinition.art,
               }}
-              ownerScores={withTestOwnerScoreFixtures(selectOwnerScores(state), RUNTIME_MODE)}
+              ownerScores={withTestOwnerScoreFixtures(selectOwnerScoresCached(state), RUNTIME_MODE)}
               ownerFactions={commandOwnerFactions}
               allianceDetails={commandAllianceDetails}
               playerFactionId={state.profile.factionId}
@@ -3367,7 +3377,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               command={state.command}
               espionage={state.espionage}
               profile={state.profile}
-              score={selectOwnerScores(state)[state.profile.playerId] ?? null}
+              score={selectOwnerScoresCached(state)[state.profile.playerId] ?? null}
               rating={state.rating}
               mode={RUNTIME_MODE}
               state={state.reports}

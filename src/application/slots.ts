@@ -13,6 +13,7 @@ import {
   parseSlotImport,
   removeSlot,
   renameSlot,
+  retireSlot,
   slotStorageKey,
   upsertSlot,
   type SaveSlotIndex,
@@ -310,6 +311,14 @@ export function setActiveSlot(slotId: string | null, storage?: SlotStorage | nul
   return writeSlotIndex(activateSlot(readSlotIndex(target), slotId), target);
 }
 
+/** «Новый раунд» replaced this campaign: one live campaign remains, the old one waits under «Прошлые раунды». */
+export function retireSaveSlot(slotId: string, storage?: SlotStorage | null, now = Date.now()): SlotWriteResult {
+  const target = resolveStorage(storage);
+  const index = readSlotIndex(target, now);
+  const next = retireSlot(index, slotId, now);
+  return next === index ? { ok: true, index } : writeSlotIndex(next, target);
+}
+
 export function renameSaveSlot(slotId: string, name: string, storage?: SlotStorage | null, now = Date.now()): SlotWriteResult {
   const target = resolveStorage(storage);
   return writeSlotIndex(renameSlot(readSlotIndex(target, now), slotId, name, now), target);
@@ -420,6 +429,17 @@ export function importRawSaveSlot(slotId: string, name: string, text: string, op
   }
   const written = writeSlotIndex(upsertSlot(index, slot), target);
   return written.ok ? { ...written, slot } : written;
+}
+
+/**
+ * Disk files of campaigns the index no longer lists (a deleted slot's bot
+ * journal, a crash between file and index). Runs when the menu opens; with an
+ * empty index it does nothing, so a damaged index can never wipe saves.
+ */
+export function pruneOrphanSaveFiles(index: SaveSlotIndex): void {
+  if (!index.slots.length || typeof window === 'undefined') return;
+  const store = (window as unknown as { asterionDesktop?: { saveStore?: { pruneOrphans?: (keep: readonly string[]) => void } } }).asterionDesktop?.saveStore;
+  try { store?.pruneOrphans?.(index.slots.map((slot) => slot.storageKey)); } catch (error) { console.warn('Asterion: pruning orphan save files failed.', error); }
 }
 
 export { LEGACY_SLOT_ID };

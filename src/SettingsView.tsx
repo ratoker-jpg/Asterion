@@ -343,6 +343,7 @@ function FrameMeterCard() {
     <div className="settings-card-v2" data-qa-frame-meter-card>
       <h3 className="utility-section-title">СЧЁТЧИК КАДРОВ</h3>
       <p className="utility-body-text">Маленькая панель в углу экрана: кадры в секунду, самый долгий кадр за 5 секунд и сколько кадров не уложились в 8,3 мс (120 Гц). Пока она выключена, игра её не считает.</p>
+      <p className="utility-body-text" data-qa-frame-meter-hint>Для 120 кадров держите окно игры на мониторе 120 Гц.</p>
       <div className="settings-segment-v2">
         <button type="button" className={`utility-control ${on ? 'active' : ''}`} aria-pressed={on} onClick={() => setFrameMeterEnabled(true)}>ВКЛЮЧИТЬ</button>
         <button type="button" className={`utility-control ${on ? '' : 'active'}`} aria-pressed={!on} onClick={() => setFrameMeterEnabled(false)}>ВЫКЛЮЧИТЬ</button>

@@ -35,6 +35,8 @@ export type SaveSlotMeta = {
   storageKey: string;
   summary: SaveSlotSummary;
   mode: RuntimeMode;
+  /** Set when a later round replaced this campaign: it moves to «Прошлые раунды» and is never what «Продолжить» opens. */
+  retiredAt?: number;
 };
 
 export type SaveSlotIndex = {
@@ -94,6 +96,7 @@ export function normalizeSlotMeta(value: unknown): SaveSlotMeta | null {
     storageKey: slotStorageKey(source.id),
     summary: normalizeSummary(source.summary),
     mode: source.mode === 'test' ? 'test' : 'production',
+    ...(typeof source.retiredAt === 'number' && Number.isFinite(source.retiredAt) ? { retiredAt: source.retiredAt } : {}),
   };
 }
 
@@ -140,15 +143,35 @@ export function removeSlot(index: SaveSlotIndex, slotId: string): SaveSlotIndex 
   };
 }
 
+/** Entering a slot makes it the one active campaign again, even a retired one. */
 export function activateSlot(index: SaveSlotIndex, slotId: string | null): SaveSlotIndex {
   if (slotId !== null && !index.slots.some((slot) => slot.id === slotId)) return index;
-  return { ...index, activeSlotId: slotId };
+  return {
+    ...index,
+    activeSlotId: slotId,
+    slots: index.slots.map((slot) => {
+      if (slot.id !== slotId || slot.retiredAt === undefined) return slot;
+      const { retiredAt: _retired, ...rest } = slot;
+      return rest;
+    }),
+  };
+}
+
+/** A new round replaced this campaign: kept (nothing is deleted), but out of the way. */
+export function retireSlot(index: SaveSlotIndex, slotId: string, now: number): SaveSlotIndex {
+  if (!index.slots.some((slot) => slot.id === slotId && slot.retiredAt === undefined)) return index;
+  return {
+    ...index,
+    activeSlotId: index.activeSlotId === slotId ? null : index.activeSlotId,
+    slots: index.slots.map((slot) => (slot.id === slotId ? { ...slot, retiredAt: now } : slot)),
+  };
 }
 
 /** Most recently played slot: what «Продолжить» opens. */
 export function selectContinueSlot(index: SaveSlotIndex): SaveSlotMeta | null {
-  const active = index.slots.find((slot) => slot.id === index.activeSlotId);
-  return active ?? sortSlotsByRecent(index.slots)[0] ?? null;
+  const live = index.slots.filter((slot) => slot.retiredAt === undefined);
+  const active = live.find((slot) => slot.id === index.activeSlotId);
+  return active ?? sortSlotsByRecent(live)[0] ?? null;
 }
 
 /**

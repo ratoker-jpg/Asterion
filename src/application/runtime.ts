@@ -12,7 +12,7 @@ import { publishRuntimeStateSnapshot } from '../domain/runtime/state-store.ts';
 import { SCIENCE_RUNTIME_CHANGED_EVENT } from '../domain/science/runtime.ts';
 import { createScienceSnapshot } from './science.ts';
 import type { PlanetId, SaveState } from './contracts.ts';
-import { selectOwnerScores } from '../domain/rating/scoring.ts';
+import { selectOwnerScoresCached } from '../domain/rating/scoring.ts';
 
 export type RuntimeApplicationContext = {
   planetId: PlanetId;
@@ -84,6 +84,19 @@ export function getLiveSaveState(): SaveState | null {
   return liveSaveState;
 }
 
+let lastOwners: { state: SaveState; value: Record<string, RatedOwnerIdentity> } | null = null;
+let lastAlliances: { state: SaveState; value: Record<string, RatedAllianceDetails> } | null = null;
+
+function cachedRatedOwners(state: SaveState): Record<string, RatedOwnerIdentity> {
+  if (lastOwners?.state !== state) lastOwners = { state, value: selectRatedOwners(state) };
+  return lastOwners.value;
+}
+
+function cachedRatedAlliances(state: SaveState): Record<string, RatedAllianceDetails> {
+  if (lastAlliances?.state !== state) lastAlliances = { state, value: selectRatedAlliances(state) };
+  return lastAlliances.value;
+}
+
 export function publishApplicationRuntimeSnapshot(
   state: SaveState,
   context: RuntimeApplicationContext,
@@ -91,13 +104,16 @@ export function publishApplicationRuntimeSnapshot(
 ): void {
   const scienceSnapshot = createScienceSnapshot(state, context);
   target.dispatchEvent(new CustomEvent(SCIENCE_RUNTIME_CHANGED_EVENT, { detail: scienceSnapshot }));
+  // Scores, owner identities and alliance facts cost 10-20 ms with 100 bots and
+  // only the Rating screen reads them, so they are computed on first read.
+  // Same numbers, same moment: a reader sees the world published here.
   publishRuntimeStateSnapshot({
     mode: context.mode,
     command: state.command,
     rating: state.rating,
-    ownerScores: selectOwnerScores(state),
-    owners: selectRatedOwners(state),
-    alliances: selectRatedAlliances(state),
+    get ownerScores() { return selectOwnerScoresCached(state); },
+    get owners() { return cachedRatedOwners(state); },
+    get alliances() { return cachedRatedAlliances(state); },
     currentPlayerId: state.profile.playerId,
   });
   target.dispatchEvent(new CustomEvent(RUNTIME_STATE_CHANGED_EVENT, { detail: state }));
