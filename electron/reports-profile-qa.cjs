@@ -449,15 +449,16 @@ async function runViewport(win, width, height) {
   const gasWasUnread = await win.webContents.executeJavaScript(`Boolean(document.querySelector('[data-report-item-id="${gasExtractionArrivalReport.id}"]')?.classList.contains('unread'))`);
   const gasUnreadBefore = await unreadBadge(win);
   await win.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(gasReportSelector)})?.click()`);
-  await waitFor(win, `document.querySelector(${JSON.stringify(gasReportSelector)})?.getAttribute('aria-current') === 'true' && document.querySelector('.reports-dossier--generic')?.textContent?.includes('Астероид не найден по координатам [2:19:5]')`);
+  await waitFor(win, `document.querySelector(${JSON.stringify(gasReportSelector)})?.getAttribute('aria-current') === 'true' && document.querySelector('.reports-dossier--generic')?.textContent?.includes('Астероид не найден') && document.querySelector('.reports-dossier--generic')?.textContent?.includes('[2:19:5]')`);
   const gasDossier = await win.webContents.executeJavaScript(`(() => {
     const node = document.querySelector('.reports-dossier--generic');
     const text = node?.textContent?.replace(/\\s+/g, ' ') ?? '';
     return {
       visible: Boolean(node),
-      title: text.includes('Астероид не найден по координатам [2:19:5]'),
-      zeroGas: /Собрано газа:?\\s*0/.test(text),
-      zeroScrap: /Собрано обломков:?\\s*0/.test(text),
+      // One report format: the title says what happened, the place line under it the coordinates.
+      title: text.includes('Астероид не найден') && text.includes('[2:19:5]'),
+      zeroGas: /Газ\\s*0/.test(text),
+      zeroScrap: /Обломки\\s*0/.test(text),
       leaksHiddenState: /скорость пополнения|текущий запас|резерв газа|25\\s?000|10\\s?000|2\\s?500/i.test(text),
     };
   })()`);
