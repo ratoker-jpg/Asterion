@@ -20,7 +20,7 @@ import { CAMPAIGN_SPEED_SCALE, type CampaignSpeed } from '../../domain/runtime/m
 import type { PlayerFactionId } from '../../domain/profile/types.ts';
 import type { SaveSlotMeta } from '../../domain/session/slots.ts';
 import { createInitialSaveState } from '../../application/persistence.ts';
-import { createSlot } from '../../application/slots.ts';
+import { createSlot, retireSaveSlot } from '../../application/slots.ts';
 import { NPC_ACTIVITY_LEVELS, type NpcActivityLevel } from '../../domain/npc/calendar.ts';
 import { bindNewCampaignToSeries } from '../../application/npc-series.ts';
 import { readPersonaRegistry, writePersonaRegistry } from '../../application/persona-store.ts';
@@ -137,6 +137,8 @@ export function NewGameWizard({ onBack, onThemeChange, onCreated, seriesRound = 
       setStarting(false);
       return;
     }
+    // One live campaign: the round just finished moves to «Прошлые раунды».
+    if (seriesRound?.fromSlotId && seriesRound.fromSlotId !== created.slot.id) retireSaveSlot(seriesRound.fromSlotId);
     onCreated(created.slot);
   };
 

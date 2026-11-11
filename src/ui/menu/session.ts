@@ -46,6 +46,8 @@ export function consumeNextScreen(): MenuScreen | null {
 /** What the wizard starts from after «Новый раунд». `seriesId` is absent where there is no registry (the browser). */
 export type SeriesRoundRequest = {
   seriesId: string | null;
+  /** The campaign this round follows: retired once the new one exists. */
+  fromSlotId?: string | null;
   config: NewGameConfig;
 };
 

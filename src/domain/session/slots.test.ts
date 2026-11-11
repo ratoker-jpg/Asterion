@@ -12,6 +12,7 @@ import {
   parseSlotImport,
   removeSlot,
   renameSlot,
+  retireSlot,
   selectContinueSlot,
   type SaveSlotMeta,
 } from './slots.ts';
@@ -24,6 +25,7 @@ import {
   inspectSlot,
   readSlotIndex,
   renameSaveSlot,
+  retireSaveSlot,
   type SlotStorage,
 } from '../../application/slots.ts';
 import { createInitialSaveState, createPersistenceFacade, SAVE_SCHEMA_VERSION } from '../../application/persistence.ts';
@@ -132,4 +134,30 @@ test('a broken slot is reported, not thrown', () => {
   const storage = memoryStorage({ 'asterion.slot.slot-x.v1': '{not json' });
   assert.equal(inspectSlot(meta('slot-x', 1), 24, storage).status, 'broken');
   assert.equal(inspectSlot(meta('slot-y', 1), 24, storage).status, 'missing');
+});
+
+test('a new round retires the old campaign: Continue never opens it, entering it brings it back, the flag survives a reload', () => {
+  let index = { ...createEmptySlotIndex(), slots: [meta('slot-a', 10), meta('slot-b', 20)] };
+  index = activateSlot(index, 'slot-b');
+  index = retireSlot(index, 'slot-b', 99);
+  assert.equal(index.activeSlotId, null, 'a retired campaign is no longer the active one');
+  assert.equal(selectContinueSlot(index)?.id, 'slot-a');
+  assert.equal(retireSlot(index, 'slot-b', 100), index, 'retiring twice changes nothing');
+  assert.equal(normalizeSlotIndex(JSON.parse(JSON.stringify(index))).slots.find((slot) => slot.id === 'slot-b')?.retiredAt, 99);
+  assert.equal(selectContinueSlot({ ...index, slots: [index.slots[1]!] }), null, 'only past rounds left: nothing to continue');
+  const back = activateSlot(index, 'slot-b');
+  assert.equal(back.slots.find((slot) => slot.id === 'slot-b')?.retiredAt, undefined);
+  assert.equal(selectContinueSlot(back)?.id, 'slot-b');
+});
+
+test('retiring through storage keeps the payload and leaves one live campaign', () => {
+  const storage = memoryStorage();
+  const first = createSlot(createInitialSaveState('production', 1_000), 'Раунд 1', { storage, now: 1_000 });
+  const second = createSlot(createInitialSaveState('production', 2_000), 'Раунд 2', { storage, now: 2_000 });
+  assert.ok(first.ok && second.ok && first.slot && second.slot);
+  assert.ok(retireSaveSlot(first.slot.id, storage, 3_000).ok);
+  const index = readSlotIndex(storage, 3_000);
+  assert.equal(index.slots.filter((slot) => slot.retiredAt === undefined).length, 1);
+  assert.equal(selectContinueSlot(index)?.id, second.slot.id);
+  assert.notEqual(storage.getItem(first.slot.storageKey), null, 'nothing is deleted');
 });

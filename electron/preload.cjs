@@ -21,6 +21,11 @@ contextBridge.exposeInMainWorld('asterionDesktop', {
       const result = await ipcRenderer.invoke('asterion:save-store:write-async', key, writeId, text);
       if (!result || !result.ok) throw new Error(result && result.error || 'Save store write failed.');
     },
+    // Files of campaigns no slot lists (renderer passes the listed keys).
+    pruneOrphans: (keep) => {
+      const result = ipcRenderer.sendSync('asterion:save-store:prune', keep);
+      if (!result || !result.ok) throw new Error(result && result.error || 'Save store prune failed.');
+    },
     remove: (key) => {
       const result = ipcRenderer.sendSync('asterion:save-store:remove', key);
       if (!result || !result.ok) throw new Error(result && result.error || 'Save store remove failed.');
