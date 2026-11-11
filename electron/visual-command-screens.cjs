@@ -132,7 +132,8 @@ async function layout(win) {
       fits: Boolean(view) && inside(view) && inside(dialog),
       horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 2,
       nativeTitles: Array.from(document.querySelectorAll('.command-view [title], .command-dialog [title]')).filter((node) => !node.closest('.srp-host')).map((node) => node.getAttribute('title')),
-      selects: document.querySelectorAll('.command-view select:not(.game-select__native), .command-dialog select:not(.game-select__native)').length,
+      // The Sun raid panel inside «Операции» is its own screen in the redo queue.
+      selects: Array.from(document.querySelectorAll('.command-view select:not(.game-select__native)')).filter((node) => !node.closest('.srp-host')).length,
     };
   })()`);
 }

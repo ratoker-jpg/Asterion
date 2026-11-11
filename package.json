@@ -81,6 +81,7 @@
     "test:planet-pass-ui": "electron electron/visual-planet-pass.cjs",
     "test:planet-screens-ui": "electron electron/visual-planet-screens.cjs",
     "test:messages-screens-ui": "electron electron/visual-messages-screens.cjs",
+    "test:command-screens-ui": "electron electron/visual-command-screens.cjs",
     "qa:visual:trade": "electron electron/visual-trade-center.cjs",
     "qa:visual": "electron electron/visual-capture.cjs && electron electron/visual-industry-requirements.cjs && electron electron/visual-building-interiors.cjs && electron electron/visual-production-bots.cjs && electron electron/visual-recycling-center.cjs && electron electron/command-tick-race-qa.cjs && electron electron/visual-trade-center.cjs && npm run test:spaceport-ui && electron electron/visual-spaceport-upgrades.cjs",
     "desktop": "npm run build && electron .",

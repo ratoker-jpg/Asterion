@@ -844,7 +844,7 @@ function MembersTab({ command, allianceId, ownerId, role, ownerScores, ownerFact
       {selected && selectedScore ? (
         <Dossier
           key={selected.ownerId}
-          footer={<>
+          footer={selected.ownerId === ownerId ? undefined : <>
             {canKick ? <button type="button" className="danger" onClick={() => setConfirm({ kind: 'kick', ownerId: selected.ownerId, name: selected.displayName })} data-qa-kick>Исключить</button> : <span />}
             <div className="command-actions">
               {isLeader && selected.role === 'member' ? (
@@ -1220,7 +1220,7 @@ function RequestsTab({ aid, now, actions, onFeedback, testControls, playerFactio
       <Dossier
         className="cmdA-request-dossier"
         footer={<>
-          <FootStatus label={blocker ? 'Нельзя создать запрос' : 'Готово к отправке'} value={blocker || `${AID_RESOURCE_LABELS[resource]} · ${number.format(amount)} → ${selectedPlanet?.name ?? '—'}`} />
+          <FootStatus label={blocker ? 'Нельзя создать запрос' : 'Готово к отправке'} value={blocker ? <span role="status" data-qa-request-blocker>{blocker}</span> : `${AID_RESOURCE_LABELS[resource]} · ${number.format(amount)} → ${selectedPlanet?.name ?? '—'}`} />
           <button type="button" className="primary cmdA-lg" disabled={Boolean(blocker)} onClick={submit} data-qa-request-create>Создать запрос</button>
         </>}
       >
@@ -1257,7 +1257,6 @@ function RequestsTab({ aid, now, actions, onFeedback, testControls, playerFactio
                 <div className="cmdA-amount-scale"><span>{number.format(aid.minAmount)}</span><b>{amountValid ? number.format(amount) : '—'}</b><span>{number.format(aid.maxAmount)}</span></div>
               </div>
             </div>
-            {blocker ? <p className="cmdA-note is-warning" role="status" data-qa-request-blocker>{blocker}</p> : null}
             {overflow && overflow.lost > 0 ? (
               <p className="cmdA-note is-warning" role="alert" data-qa-request-overflow>
                 Склад планеты вмещает ещё {number.format(overflow.free)}. Если доставить {number.format(amount)}, {number.format(overflow.lost)} сгорит и не будет засчитано — запрос останется открытым на недостающее.

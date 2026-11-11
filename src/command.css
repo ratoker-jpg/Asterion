@@ -242,6 +242,8 @@
   min-height: 0;
 }
 .cmdA .cmdA-grid--aside-right { grid-template-columns: minmax(0, 1fr) clamp(320px, 24%, 400px); }
+.cmdA .command-no-alliance { grid-template-columns: clamp(440px, 38%, 620px) minmax(0, 1fr); }
+.cmdA [data-qa-command-empty] { display: flex; flex-direction: column; gap: 12px; }
 
 /* ---------- lists: rows without frames ---------- */
 .cmdA .cmdA-list { display: flex; flex-direction: column; gap: 10px; padding: 16px 12px 12px; overflow: hidden; }
@@ -303,6 +305,7 @@
 .cmdA .cmdA-item-main strong em { font-style: normal; color: var(--cm-accent); }
 .cmdA .cmdA-item-main > span { color: var(--cm-muted); font-size: calc(13px * var(--text-scale-secondary, 1)) !important; line-height: 1.35; overflow-wrap: anywhere; }
 .cmdA .cmdA-item-main > .cmdA-item-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.cmdA .rating-role-v2.is-member { padding-left: 0; }
 .cmdA .cmdA-item time { flex: none; color: var(--cm-muted); font-size: calc(13px * var(--text-scale-secondary, 1)) !important; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .cmdA .cmdA-item-score { display: flex; align-items: center; gap: 6px; flex: none; font-size: calc(14px * var(--text-scale-table, 1)) !important; font-variant-numeric: tabular-nums; }
 .cmdA .cmdA-item-score .cmdA-medal { width: 22px; }
@@ -605,8 +608,7 @@
 .command-dialog--wide { width: min(880px, calc(100vw - 48px)); }
 .command-dialog > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
 .cmdA .command-dialog > header h3 { color: #f4fcff; font-size: calc(20px * var(--text-scale-section-title, 1)) !important; font-weight: 800; line-height: 1.25; }
-.cmdA .command-dialog .command-close { min-width: 40px; padding: 4px; font-size: 16px !important; }
-.cmdA .command-dialog .command-close:hover:not(:disabled) { background: rgba(240, 68, 94, .16); color: #ffb3bf; }
+.cmdA .command-dialog .command-close { padding: 0 !important; font-size: 16px !important; }
 .command-dialog .command-dialog-body { display: flex; flex-direction: column; gap: 14px; margin: 0 0 18px; color: #b9cdd3; line-height: 1.5; }
 .command-dialog .command-actions { flex: none; margin-top: 4px; }
 .command-error { padding: 9px 12px; border-radius: 10px; background: rgba(240, 68, 94, .11); color: #ff9dab; }
@@ -708,6 +710,7 @@
   gap: 12px;
   min-height: 0;
   padding: 14px;
+  overflow-x: hidden;
   overflow-y: auto;
   border-radius: var(--ut-r-card, 13px);
   background: radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--crest-color) 18%, transparent), rgba(255, 255, 255, .03) 62%);
@@ -731,8 +734,8 @@
 .cmdA .crest-sizes figcaption { color: var(--cm-muted); font-size: calc(12px * var(--text-scale-secondary, 1)) !important; font-weight: 600; }
 
 .crest-presets > small { display: block; margin-bottom: 7px; color: var(--cm-label); font-weight: 600; }
-.crest-presets > div { display: flex; justify-content: space-between; gap: 6px; }
-.cmdA .crest-presets button { min-width: 0; width: 56px; aspect-ratio: 1; padding: 2px; border-radius: var(--ut-r-card, 13px); background: var(--cm-tint); }
+.crest-presets > div { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.cmdA .crest-presets button { min-width: 0; min-height: 0; width: 100%; aspect-ratio: 1; padding: 2px; border-radius: var(--ut-r-card, 13px); background: var(--cm-tint); }
 .crest-presets .orbital-crest { width: auto; height: auto; }
 
 .crest-workbench { display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0; }
