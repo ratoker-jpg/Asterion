@@ -128,7 +128,7 @@ function seedSource(now, letters) {
     ...Array.from({ length: 200 }, (_, index) => ({
       id: `recycler-arrival:qa-recycle-${index}`, flightId: `qa-recycle-${index}`,
       coordinate: { galaxy: 1 + (index % 3), system: 1 + (index % 99), position: 1 + (index % 15) },
-      arrivedAtMs: now - 5 * 60_000 - index * 20_000, collectedDebris: 1000 + index * 37, remainingOrbitalDebris: index % 4 ? 99999 : 0,
+      arrivedAtMs: now - 4 * 60_000 - index * 3_000, collectedDebris: 1000 + index * 37, remainingOrbitalDebris: index % 4 ? 99999 : 0,
     })),
   ];
   const gas = [{ id: 'gas-extraction-arrival:qa-gas', flightId: 'qa-gas', coordinate: { galaxy: 2, system: 31, position: 16 }, arrivalAt: now - 90_000, outcome: 'found', gasCollected: 48250, scrapCollected: 1200 }];
