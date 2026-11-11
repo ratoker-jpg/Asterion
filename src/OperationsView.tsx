@@ -125,6 +125,10 @@ function lifetimePercent(startAt: number | undefined, expiresAt: number | undefi
   return Math.max(0, Math.min(100, ((expiresAt - nowMs) / (expiresAt - startAt)) * 100));
 }
 
+function lowerFirst(text: string) {
+  return text ? text[0]!.toLowerCase() + text.slice(1) : text;
+}
+
 function formatPercent(value: number) {
   return `${value.toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 }
@@ -145,8 +149,10 @@ function pirateArtOf(parts: readonly string[]) {
   return getPiratePlanetOperationDetailArt(Number(parts[2] ?? 1), Number(parts[3] ?? 0));
 }
 
-function raidCheckText(contact: PirateContactPresentation, roll: RaidRoll | undefined, nowMs: number, delayMs: number | undefined) {
+function raidCheckText(contact: PirateContactPresentation, roll: RaidRoll | undefined, nowMs: number, delayMs: number | undefined, threatPercent: number) {
   if (roll) return roll.flightId ? { text: 'Пираты выслали рейд', tone: 'bad' as const } : { text: 'Рейда не было', tone: 'ok' as const };
+  // A zero threat means the player is protected: the check cannot send a raid.
+  if (threatPercent <= 0) return { text: 'Пока не нападут', tone: 'ok' as const };
   const check = getPirateRaidCheckProgress(Number(contact.contactCycleKey.split(':')[4]), nowMs, delayMs);
   return check.remainingMs > 0
     ? { text: `Решение о нападении через ${remainingLabel(check.nextAt, nowMs)}`, tone: '' as const, percent: check.percent }
@@ -293,8 +299,9 @@ function PlaceLink({ label, onOpen }: { label: string; onOpen?: () => void }) {
 
 // ---- list ----------------------------------------------------------------------
 
-function OperationCard({ row, selected, onSelect, nowMs, pirateRaidRoll, pirateCheckDelayMs }: {
+function OperationCard({ row, selected, onSelect, nowMs, threatPercent, pirateRaidRoll, pirateCheckDelayMs }: {
   row: OperationRow;
+  threatPercent: number;
   selected: boolean;
   onSelect: () => void;
   nowMs: number;
@@ -322,7 +329,7 @@ function OperationCard({ row, selected, onSelect, nowMs, pirateRaidRoll, pirateC
         ? { text: `Доставлено ${number.format(sumCargo(lastEvent?.creditedCargo ?? lastEvent?.cargo))}`, tone: 'ok', qa: 'completed' }
         : completedResult === 'failure' ? { text: 'Флот потерян', tone: 'bad', qa: 'completed' } : { text: 'Завершено', tone: '', qa: 'completed' };
   } else if (contact) {
-    status = raidCheckText(contact, pirateRaidRoll, nowMs, pirateCheckDelayMs);
+    status = raidCheckText(contact, pirateRaidRoll, nowMs, pirateCheckDelayMs, threatPercent);
   } else if (exploration) {
     status = exploration.reconInFlight
       ? { text: exploration.reconInFlight.phase === 'outbound' ? 'Зонд летит к объекту' : 'Зонд возвращается', tone: 'cy', qa: exploration.occupancy }
@@ -635,10 +642,10 @@ function PirateDossier(props: DossierProps) {
   const recon = contact?.latestReportOutcome === 'success' ? { value: 'Гарнизон известен', tone: 'ok' as Tone }
     : contact?.latestReportOutcome === 'failure' ? { value: 'Неудача', tone: 'bad' as Tone }
       : contact?.statusLabel === 'Зонд в пути' ? { value: 'Зонд в пути', tone: 'cy' as Tone } : { value: 'Нет данных', tone: '' as Tone };
-  const raid = contact ? raidCheckText(contact, pirateRaidRoll, nowMs, pirateCheckDelayMs) : null;
+  const raid = contact ? raidCheckText(contact, pirateRaidRoll, nowMs, pirateCheckDelayMs, threatPercent) : null;
   const tiles: TileSpec[] = [
     { label: 'Разведка', value: recon.value, sub: contact?.latestReportId ? 'доклад в «Сообщениях»' : 'отправьте зонд', tone: recon.tone },
-    ...(raid ? [{ label: 'Нападение на вас', value: raid.text, sub: `шанс ${formatPercent(threatPercent)}`, tone: raid.tone }] : []),
+    ...(raid ? [{ label: 'Нападение на вас', value: raid.text, sub: threatPercent > 0 ? `шанс ${formatPercent(threatPercent)}` : 'у вас защита от пиратов', tone: raid.tone }] : []),
     { label: 'Награда', value: '125–175%', sub: 'прочности пиратов в обломках', tone: 'ok', icon: <ResourceIcon kind="debris" /> },
   ];
   const next = !contact ? 'База исчезла, рейд на прежние координаты не отправить.'
@@ -658,7 +665,7 @@ function PirateDossier(props: DossierProps) {
       title="Пиратская база"
       place={<PlaceLink label={formatLocation(operation.location)} onOpen={contact && onPirateUniverse ? () => onPirateUniverse(contact) : undefined} />}
       description={contact ? 'База в системе вашей колонии. Через 15 минут после появления пираты решают, напасть ли на ваши планеты в этой системе.' : 'Цикл закончился или база исчезла.'}
-      status={<FootStatus label="Статус" value={!contact ? 'Завершена' : active ? 'В работе' : 'Можно принять'} note={active ? (reconBlocked ? `Зонд: ${reconBlocked}` : attackBlocked ? `Рейд: ${attackBlocked}` : undefined) : undefined} />}
+      status={<FootStatus label="Статус" value={!contact ? 'Завершена' : active ? 'В работе' : 'Можно принять'} note={active ? (reconBlocked ? `Зонд: ${lowerFirst(reconBlocked)}` : attackBlocked ? `Рейд: ${lowerFirst(attackBlocked)}` : undefined) : undefined} />}
       actions={<>
         {done && row.battleReportId && onPirateBattleReport ? <button type="button" className="primary op-lg" onClick={() => onPirateBattleReport(row.battleReportId!)}>Доклад о бое</button> : null}
         {contact && operation.state === 'available' ? <button type="button" className="primary op-lg" onClick={() => onAccept(operation.id)}>Принять операцию</button> : null}
@@ -879,6 +886,7 @@ export function OperationsView({ state, onAccept, onCancel, onOpenFleets, explor
                     key={row.operation.id}
                     row={row}
                     nowMs={nowMs}
+                    threatPercent={threat}
                     pirateCheckDelayMs={pirateCheckDelayMs}
                     pirateRaidRoll={rollOf(row)}
                     selected={row.operation.id === selectedRow?.operation.id}
