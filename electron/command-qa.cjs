@@ -239,7 +239,7 @@ async function testModeScenario(win, label) {
   await openCommand(win);
   await click(win, '[data-qa-command-tab="members"]');
   view = await snapshot(win);
-  assert(view.members.length === 3 && view.members.some((row) => row.includes('ЗАМЕСТИТЕЛЬ')), `${label}: roles persist across reload`, view.members);
+  assert(view.members.length === 3 && view.members.some((row) => /заместитель/i.test(row)), `${label}: roles persist across reload`, view.members);
 
   // Leader exit hands leadership to the chosen successor and starts the global delay.
   await click(win, '[data-qa-command-tab="overview"]');

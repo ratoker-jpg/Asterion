@@ -23,6 +23,8 @@ import { getCombatEntity } from './domain/combat/catalog.ts';
 import { getFactionShipCatalog } from './domain/combat/faction-catalog.ts';
 import { selectAllianceRelations, selectTruceAvailability } from './domain/command/diplomacy.ts';
 import { getFactionGeneralAsset } from './domain/profile/faction-assets.ts';
+import { ALLIANCE_CRYSTALS_NOTE, GATE_RULE_ALLIANCE } from './domain/rating/alliances.ts';
+import type { RatedAllianceDetails } from './domain/runtime/state-store.ts';
 import type { AidOverview, AidRequestRow } from './application/alliance-aid.ts';
 import type {
   AidResource,
@@ -37,8 +39,10 @@ import { asterionAssetIntegrationAssets } from './assets/generated/asterionAsset
 import { ResourceIcon } from './ui/resources/ResourceIcon';
 import { ACCENT_COLORS, EmblemGlyph } from './ui/command/EmblemGlyph';
 import { AllianceEditor } from './ui/command/AllianceEditor';
+import { CrystalDots, ROLE_NAMES, RoleBadge } from './ui/command/AllianceBadges';
 import { Dialog } from './ui/command/Dialog';
 import { renderRichText } from './ui/command/rich-text';
+import { GameSelect } from './ui/GameSelect';
 import commandHeaderIcon from './assets/ui/header-icons/command.png';
 import aidMissionIcon from '../assets/source/mission-icons-v1/33_trade_convoy.png';
 import sunMissionIcon from '../assets/source/mission-icons-v1/08_sun_support.png';
@@ -101,6 +105,8 @@ type CommandViewProps = {
   ownerScores: Readonly<Record<string, MemberScore | undefined>>;
   /** Known factions by owner id. Only real data: an unknown owner gets initials, never an invented race. */
   ownerFactions?: Readonly<Record<string, string | undefined>>;
+  /** Public alliance facts as the Rating shows them: crystals, the Gate. */
+  allianceDetails?: Readonly<Record<string, RatedAllianceDetails>>;
   /** The player's race: ship art (transporters, the Sun raid fleet) follows it. */
   playerFactionId?: string;
   /** Test Mode clock acceleration for the 3-hour diplomacy timers; 1 in production. */
@@ -127,19 +133,13 @@ type CommandViewProps = {
 type CommandTab = 'overview' | 'members' | 'applications' | 'requests' | 'alliances' | 'diplomacy' | 'operations';
 
 const TAB_LABELS: Record<CommandTab, string> = {
-  overview: 'ШТАБ',
-  members: 'СОСТАВ',
-  applications: 'ЗАЯВКИ',
-  requests: 'ПОМОЩЬ',
-  alliances: 'СОЮЗЫ',
-  diplomacy: 'ДИПЛОМАТИЯ',
-  operations: 'ОПЕРАЦИИ',
-};
-
-const ROLE_LABELS: Record<AllianceRole, string> = {
-  leader: 'ЛИДЕР',
-  deputy: 'ЗАМЕСТИТЕЛЬ',
-  member: 'УЧАСТНИК',
+  overview: 'Штаб',
+  members: 'Состав',
+  applications: 'Заявки',
+  requests: 'Помощь',
+  alliances: 'Союзы',
+  diplomacy: 'Дипломатия',
+  operations: 'Операции',
 };
 
 const ROLE_COLORS: Record<AllianceRole, string> = {
@@ -154,6 +154,15 @@ const SCORE_ICONS = asterionAssetIntegrationAssets.scoreIcons;
 const REPORT_ICONS = asterionAssetIntegrationAssets.reportIcons;
 const FACTION_FACES: Readonly<Record<string, string>> = asterionAssetIntegrationAssets.battleFactionIcons;
 const SUN_RAID_SHIP_IDS = ['death-star', 'battleship', 'destroyer', 'cruiser'] as const;
+const TAB_ICONS: Record<CommandTab, string> = {
+  overview: commandHeaderIcon,
+  members: REPORT_ICONS.profile,
+  applications: REPORT_ICONS.command,
+  requests: aidMissionIcon,
+  alliances: REPORT_ICONS.alliances,
+  diplomacy: REPORT_ICONS.arena,
+  operations: sunMissionIcon,
+};
 
 /** Ship art of the player's race (Астеры / Илары / Рой); falls back to the base catalog. */
 function shipArtOf(factionId: string | undefined, shipId: Parameters<typeof getCombatEntity>[0]): string {
@@ -232,8 +241,7 @@ function PersonArt({ name, factionId }: { name: string; factionId?: string }) {
   );
 }
 
-function ListPanel({ kicker, title, count, tools, children, footer, className = '' }: {
-  kicker: string;
+function ListPanel({ title, count, tools, children, footer, className = '' }: {
   title: string;
   count?: ReactNode;
   tools?: ReactNode;
@@ -244,7 +252,7 @@ function ListPanel({ kicker, title, count, tools, children, footer, className = 
   return (
     <section className={`cmdA-panel cmdA-list ${className}`}>
       <header className="cmdA-list-head">
-        <div><small>{kicker}</small><h3>{title}</h3></div>
+        <h3>{title}</h3>
         {count !== undefined ? <span className="cmdA-count">{count}</span> : null}
       </header>
       {tools ? <div className="cmdA-list-tools">{tools}</div> : null}
@@ -286,9 +294,11 @@ function Tiles({ items }: { items: TileSpec[] }) {
   );
 }
 
-function Hero({ art, children, className = '' }: { art: ReactNode; children: ReactNode; className?: string }) {
+/** `backdrop`: art that sits behind the text at the right edge and fades out towards it. */
+function Hero({ art, backdrop, children, className = '' }: { art: ReactNode; backdrop?: string; children: ReactNode; className?: string }) {
   return (
     <div className={`cmdA-hero ${className}`}>
+      {backdrop ? <Img src={backdrop} className="cmdA-hero-backdrop" /> : null}
       {art}
       <div className="cmdA-hero-copy">{children}</div>
     </div>
@@ -299,9 +309,30 @@ function HeroTitle({ chips, title, children }: { chips?: ReactNode; title: strin
   return (
     <>
       {chips ? <div className="cmdA-chips">{chips}</div> : null}
-      <h2 className="cmdA-hero-title" title={title}>{title}</h2>
+      <h2 className="cmdA-hero-title">{title}</h2>
       {children}
     </>
+  );
+}
+
+/** A person of the alliance on a dossier: the race face or initials, the role, the name. */
+function Person({ role, name, factionId }: { role: AllianceRole; name: string; factionId?: string }) {
+  return (
+    <div className="cmdA-person">
+      <Avatar name={name} role={role} factionId={factionId} />
+      <div><RoleBadge role={role} /><strong>{name}</strong></div>
+    </div>
+  );
+}
+
+/** The alliance's crystals and Gate, worded and drawn as in the Rating. */
+function AllianceCrystals({ details }: { details?: RatedAllianceDetails }) {
+  return (
+    <div className="cmdA-crystals" data-qa-command-crystals>
+      <div><small>Кристаллы союза</small><CrystalDots count={details?.crystals ?? 0} /></div>
+      <div><small>Галактические Врата</small><strong>{details?.gate === 'completed' ? 'Построены' : details?.gate === 'building' ? 'Строятся' : 'Не начаты'}</strong></div>
+      <p className="cmdA-note">{ALLIANCE_CRYSTALS_NOTE} {GATE_RULE_ALLIANCE}</p>
+    </div>
   );
 }
 
@@ -321,7 +352,7 @@ function Stub({ title, children, qa, icon }: { title: string; children: string; 
     <div className={`command-stub cmdA-stub cmdA-stub--${qa}`} data-qa-command-stub data-qa-sun-raid="" role="status">
       {icon}
       <div>
-        <small>СОВМЕСТНАЯ ОПЕРАЦИЯ</small>
+        <small>Совместная операция</small>
         <h2>{title}</h2>
         <p>{children}</p>
       </div>
@@ -384,7 +415,7 @@ function JournalPanel({ view, now }: { view: JournalView; now: number }) {
   // The panel only ever receives the already filtered view; a locked journal carries no event data.
   if (view.state === 'no_membership') return null;
   return (
-    <ListPanel kicker="ИСТОРИЯ СОБЫТИЙ" title="Журнал союза" count={view.state === 'open' ? view.entries.length : undefined} className="command-journal">
+    <ListPanel title="Журнал союза" count={view.state === 'open' ? view.entries.length : undefined} className="command-journal">
       {view.state === 'locked' ? (
         <div className="command-journal__locked" data-qa-journal-state="locked">
           <div className="command-journal__skeleton" aria-hidden="true"><i /><i /><i /><i /><i /></div>
@@ -417,7 +448,7 @@ function ConfirmDialog({ title, body, confirmLabel, onConfirm, onClose }: { titl
     <Dialog title={title} onClose={onClose}>
       <p className="command-dialog-body">{body}</p>
       <div className="command-actions">
-        <button type="button" onClick={onClose}>ОТМЕНА</button>
+        <button type="button" onClick={onClose}>Отмена</button>
         <button type="button" className="danger" onClick={() => { onConfirm(); onClose(); }} data-qa-confirm>{confirmLabel}</button>
       </div>
     </Dialog>
@@ -441,17 +472,15 @@ function LeaveDialog({ isLeader, defaultSuccessorId, others, onLeave, onClose }:
           ? 'Вы единственный участник: союз будет расформирован и удалён.'
           : 'После выхода 2 часа нельзя подавать заявки в любые союзы.'}</p>
         {needsSuccessor ? (
-          <label className="command-select">
-            <span>НОВЫЙ ЛИДЕР</span>
-            <select value={successor} onChange={(event) => setSuccessor(event.target.value)} data-qa-successor>
-              {others.map((member) => <option key={member.ownerId} value={member.ownerId}>{member.name}</option>)}
-            </select>
-          </label>
+          <div className="command-select">
+            <span>Новый глава союза</span>
+            <GameSelect value={successor} label="Новый глава союза" options={others.map((member) => ({ value: member.ownerId, label: member.name }))} onChange={setSuccessor} selectProps={{ 'data-qa-successor': true }} />
+          </div>
         ) : null}
       </div>
       <div className="command-actions">
-        <button type="button" onClick={onClose}>ОТМЕНА</button>
-        <button type="button" className="danger" onClick={() => { onLeave(needsSuccessor ? successor : undefined); onClose(); }} data-qa-confirm>{soleMember ? 'РАСФОРМИРОВАТЬ' : 'ПОКИНУТЬ'}</button>
+        <button type="button" onClick={onClose}>Отмена</button>
+        <button type="button" className="danger" onClick={() => { onLeave(needsSuccessor ? successor : undefined); onClose(); }} data-qa-confirm>{soleMember ? 'Расформировать' : 'Покинуть'}</button>
       </div>
     </Dialog>
   );
@@ -464,16 +493,16 @@ function LockedHall({ hall, onBuild }: { hall: CommandHallInfo; onBuild: () => v
     <div className="command-locked cmdA-panel cmdA-locked" data-qa-command-locked role="status">
       <div className="command-locked-art cmdA-locked-art"><img src={hall.art} alt="" draggable={false} /></div>
       <div className="command-locked-copy cmdA-locked-copy">
-        <Chip tone="bad">ДОСТУП ЗАКРЫТ</Chip>
+        <Chip tone="bad">Доступ закрыт</Chip>
         <h2>Нужно здание «{hall.name}»</h2>
         <p>«Командование» открывается, когда на любой вашей планете построено здание «{hall.name}» (уровень 1 и выше). Достаточно одной планеты, а уровни разных планет не суммируются.</p>
         <Tiles items={[
           { icon: <Img src={REPORT_ICONS.alliances} />, label: 'Союз', value: `до ${MAX_ALLIANCE_MEMBERS}`, sub: 'командиров' },
           { icon: <MissionTile src={aidMissionIcon} />, label: 'Помощь', value: 'Запросы', sub: 'ресурсов союзникам' },
-          { icon: <MissionTile src={sunMissionIcon} />, label: 'Операции', value: 'Скоро', sub: 'рейд на Солнце' },
+          { icon: <MissionTile src={sunMissionIcon} />, label: 'Операции', value: 'Рейды', sub: 'на Солнца вместе с союзом' },
         ]} />
         <p className="cmdA-note">Ваш союз, заявки и состав не потеряны: после постройки доступ вернётся автоматически.</p>
-        <button type="button" className="primary cmdA-lg" onClick={onBuild} data-qa-command-build>ПЕРЕЙТИ К СТРОИТЕЛЬСТВУ</button>
+        <button type="button" className="primary cmdA-lg" onClick={onBuild} data-qa-command-build>Перейти к строительству</button>
       </div>
     </div>
   );
@@ -490,6 +519,7 @@ type CatalogProps = {
   onFeedback: (result: CommandActionResult) => void;
   testControls: boolean;
   ownerFactions?: Readonly<Record<string, string | undefined>>;
+  allianceDetails?: Readonly<Record<string, RatedAllianceDetails>>;
 };
 
 function useCatalog(command: CommandState, ownerScores: CatalogProps['ownerScores'], query: string) {
@@ -507,21 +537,20 @@ function CatalogList({ command, ownerId, now, actions, onFeedback, entries, quer
   const pending = selectPendingApplication(command, ownerId);
 
   const actionFor = (entry: AllianceCatalogEntry) => {
-    if (membership?.alliance.id === entry.alliance.id) return <Chip tone="own">ВАШ СОЮЗ</Chip>;
-    if (membership) return entry.isFull ? <Chip tone="bad">ПОЛОН</Chip> : null;
+    if (membership?.alliance.id === entry.alliance.id) return <Chip tone="own">Ваш союз</Chip>;
+    if (membership) return entry.isFull ? <Chip tone="bad">Полон</Chip> : null;
     if (pending?.allianceId === entry.alliance.id) {
-      return <button type="button" className="danger" onClick={() => onFeedback(actions.withdraw())} data-qa-withdraw>ОТОЗВАТЬ</button>;
+      return <button type="button" className="danger" onClick={() => onFeedback(actions.withdraw())} data-qa-withdraw>Отозвать</button>;
     }
-    if (pending) return <button type="button" disabled title="Сначала отзовите текущую заявку">ЗАЯВКА ПОДАНА</button>;
+    if (pending) return <button type="button" disabled>Заявка подана</button>;
     const block = selectReapplyBlock(command, ownerId, entry.alliance.id, now);
     if (block) return <button type="button" disabled>{formatCountdown(block.until - now)}</button>;
-    if (entry.isFull) return <button type="button" disabled>НЕТ МЕСТ</button>;
-    return <button type="button" className="primary" onClick={() => onFeedback(actions.apply(entry.alliance.id))} data-qa-apply={entry.alliance.id}>ЗАЯВКА</button>;
+    if (entry.isFull) return <button type="button" disabled>Нет мест</button>;
+    return <button type="button" onClick={() => onFeedback(actions.apply(entry.alliance.id))} data-qa-apply={entry.alliance.id}>Подать заявку</button>;
   };
 
   return (
     <ListPanel
-      kicker="ВСЕ СУЩЕСТВУЮЩИЕ СОЮЗЫ"
       title="Каталог союзов"
       count={entries.length}
       className="command-catalog"
@@ -542,7 +571,7 @@ function CatalogList({ command, ownerId, now, actions, onFeedback, entries, quer
                 <b className="cmdA-rank">#{entry.rank}</b>
                 <EmblemGlyph compact emblem={entry.alliance.emblem} />
                 <div className="cmdA-item-main">
-                  <strong title={entry.alliance.name}>{entry.alliance.name} <em>[{entry.alliance.tag}]</em></strong>
+                  <strong>{entry.alliance.name} <em>[{entry.alliance.tag}]</em></strong>
                   <span>{entry.rating.memberCount}/{MAX_ALLIANCE_MEMBERS} · {number.format(entry.rating.averageTotalPoints)} · {entry.leaderName}</span>
                 </div>
                 <div className="cmdA-item-action" onClick={(event) => event.stopPropagation()}>{actionFor(entry)}</div>
@@ -559,22 +588,22 @@ function CatalogList({ command, ownerId, now, actions, onFeedback, entries, quer
   );
 }
 
-function CatalogDossier({ entry, ownerFactions = {} }: { entry: AllianceCatalogEntry | null; ownerFactions?: Readonly<Record<string, string | undefined>> }) {
+function CatalogDossier({ entry, ownerFactions = {}, details }: { entry: AllianceCatalogEntry | null; ownerFactions?: Readonly<Record<string, string | undefined>>; details?: RatedAllianceDetails }) {
   if (!entry) {
     return <Dossier className="cmdA-dossier--empty"><div className="cmdA-placeholder"><Img src={REPORT_ICONS.alliances} /><p>Выберите союз в каталоге.</p></div></Dossier>;
   }
   const { alliance, rating } = entry;
   const free = MAX_ALLIANCE_MEMBERS - rating.memberCount;
   return (
-    <Dossier footer={<FootStatus label="Вы состоите в союзе" value="Подать заявку можно только без союза" />}>
+    <Dossier key={alliance.id} footer={<FootStatus label="Вы состоите в союзе" value="Подать заявку можно только без союза" />}>
       <Hero art={<div className="cmdA-art cmdA-art--emblem"><EmblemGlyph emblem={alliance.emblem} /></div>}>
         <HeroTitle
           title={alliance.name}
-          chips={<><Chip tone="am">МЕСТО #{entry.rank}</Chip><Chip tone="cy">[{alliance.tag}]</Chip>{free > 0 ? <Chip tone="ok">СВОБОДНО МЕСТ: {free}</Chip> : <Chip tone="bad">СОЮЗ ПОЛОН</Chip>}</>}
+          chips={<><Chip tone="am">Место #{entry.rank}</Chip><Chip tone="cy">[{alliance.tag}]</Chip>{free > 0 ? <Chip tone="ok">Свободно мест: {free}</Chip> : <Chip tone="bad">Союз полон</Chip>}</>}
         >
           {alliance.motto ? <p className="cmdA-motto">«{alliance.motto}»</p> : null}
           {alliance.description ? <p className="cmdA-desc">{renderRichText(alliance.description)}</p> : null}
-          <div className="cmdA-people"><div className="cmdA-person"><Avatar name={entry.leaderName} role="leader" factionId={ownerFactions[alliance.leaderOwnerId]} /><div><small>ЛИДЕР</small><strong>{entry.leaderName}</strong></div></div></div>
+          <div className="cmdA-people"><Person role="leader" name={entry.leaderName} factionId={ownerFactions[alliance.leaderOwnerId]} /></div>
           <MembersBar count={rating.memberCount} />
         </HeroTitle>
       </Hero>
@@ -584,6 +613,7 @@ function CatalogDossier({ entry, ownerFactions = {} }: { entry: AllianceCatalogE
         { icon: <Medal kind="battle" />, label: 'Боевые', value: number.format(rating.averageBattlePoints), sub: 'среднее' },
         { icon: <Img src={REPORT_ICONS.alliances} />, label: 'Участники', value: `${rating.memberCount} / ${MAX_ALLIANCE_MEMBERS}`, sub: `основан ${formatDate(alliance.createdAt)}` },
       ]} />
+      <AllianceCrystals details={details} />
     </Dossier>
   );
 }
@@ -591,7 +621,7 @@ function CatalogDossier({ entry, ownerFactions = {} }: { entry: AllianceCatalogE
 function MembersBar({ count }: { count: number }) {
   return (
     <div className="cmdA-members-bar">
-      <div><small>СОСТАВ</small><b>{count} / {MAX_ALLIANCE_MEMBERS}</b></div>
+      <div><small>Состав</small><b>{count} / {MAX_ALLIANCE_MEMBERS}</b></div>
       <i><span style={{ width: `${Math.min(100, (count / MAX_ALLIANCE_MEMBERS) * 100)}%` }} /></i>
     </div>
   );
@@ -606,7 +636,7 @@ function AlliancesTab(props: CatalogProps) {
   return (
     <div className="cmdA-grid">
       <CatalogList {...props} entries={entries} query={query} setQuery={setQuery} selectedId={selected?.alliance.id ?? null} onSelect={setSelectedId} />
-      <CatalogDossier entry={selected} ownerFactions={props.ownerFactions} />
+      <CatalogDossier entry={selected} ownerFactions={props.ownerFactions} details={selected ? props.allianceDetails?.[selected.alliance.id] : undefined} />
     </div>
   );
 }
@@ -614,10 +644,10 @@ function AlliancesTab(props: CatalogProps) {
 // ---- applications --------------------------------------------------------------
 
 const APPLICATION_OUTCOME: Record<string, string> = {
-  accepted: 'ПРИНЯТА',
-  rejected: 'ОТКЛОНЕНА',
-  withdrawn: 'ОТОЗВАНА',
-  auto_rejected: 'ОТКЛОНЕНА АВТОМАТИЧЕСКИ',
+  accepted: 'Принята',
+  rejected: 'Отклонена',
+  withdrawn: 'Отозвана',
+  auto_rejected: 'Отклонена автоматически',
 };
 const APPLICATION_REASON: Record<string, string> = {
   full: 'Нет мест',
@@ -651,14 +681,13 @@ function ApplicationsTab({ command, allianceId, role, ownerScores, ownerFactions
   return (
     <div className="cmdA-grid">
       <ListPanel
-        kicker="ОЖИДАЮТ РЕШЕНИЯ"
         title="Входящие заявки"
         count={pending.length}
         footer={testControls && canDecide && actions.testBotApply ? (
-          <div className="command-test-box"><small>TEST MODE</small><button type="button" onClick={() => onFeedback(actions.testBotApply!())} data-qa-test-bot-apply>ТЕСТ: ЗАЯВКА ОТ БОТА 01</button></div>
+          <div className="command-test-box"><small>Тест</small><button type="button" onClick={() => onFeedback(actions.testBotApply!())} data-qa-test-bot-apply>Заявка от бота 01</button></div>
         ) : undefined}
       >
-        {!canDecide ? <p className="cmdA-note">Заявки рассматривают лидер и заместитель.</p> : null}
+        {!canDecide ? <p className="cmdA-note">Заявки рассматривают глава и заместитель.</p> : null}
         {pending.length ? (
           <ul className="command-application-list cmdA-items" data-qa-application-list>
             {pending.map((application) => {
@@ -673,7 +702,7 @@ function ApplicationsTab({ command, allianceId, role, ownerScores, ownerFactions
             })}
           </ul>
         ) : <div className="cmdA-empty" role="status">Новых заявок нет.</div>}
-        <h4 className="cmdA-subhead">РЕШЕНИЯ ПО ЗАЯВКАМ</h4>
+        <h4 className="cmdA-subhead">Решения по заявкам</h4>
         {history.length ? (
           <ul className="command-history cmdA-history">
             {history.map((application) => (
@@ -689,6 +718,7 @@ function ApplicationsTab({ command, allianceId, role, ownerScores, ownerFactions
       </ListPanel>
       {selected ? (
         <ApplicationDossier
+          key={selected.id}
           application={selected}
           score={memberScore(ownerScores, selected.ownerId)}
           factionId={ownerFactions[selected.ownerId]}
@@ -730,18 +760,18 @@ function ApplicationDossier({ application, score, factionId, allianceName, ratin
         <FootStatus label="После принятия" value={`Состав станет ${Math.min(MAX_ALLIANCE_MEMBERS, memberCount + 1)} / ${MAX_ALLIANCE_MEMBERS}`} />
         {canDecide ? (
           <div className="command-actions">
-            <button type="button" className="danger" onClick={() => onFeedback(actions.reject(application.id))} data-qa-reject>ОТКЛОНИТЬ</button>
-            <button type="button" className="primary" onClick={() => onFeedback(actions.accept(application.id))} data-qa-accept>ПРИНЯТЬ В СОЮЗ</button>
+            <button type="button" className="danger" onClick={() => onFeedback(actions.reject(application.id))} data-qa-reject>Отклонить</button>
+            <button type="button" className="primary" onClick={() => onFeedback(actions.accept(application.id))} data-qa-accept>Принять в союз</button>
           </div>
         ) : null}
       </>}
     >
       <Hero art={<PersonArt name={application.displayName} factionId={factionId} />}>
-        <HeroTitle title={application.displayName} chips={<><Chip tone="am">ЗАЯВКА НА ВСТУПЛЕНИЕ</Chip>{factionId && FACTION_LABELS[factionId] ? <Chip tone="cy">РАСА · {FACTION_LABELS[factionId].toUpperCase()}</Chip> : null}</>}>
+        <HeroTitle title={application.displayName} chips={<><Chip tone="am">Заявка на вступление</Chip>{factionId && FACTION_LABELS[factionId] ? <Chip tone="cy">{FACTION_LABELS[factionId]}</Chip> : null}</>}>
           <p className="cmdA-sub">Подана {formatDate(application.createdAt)} · хочет вступить в «{allianceName}»</p>
           {rows.length ? (
             <>
-              <h4 className="cmdA-subhead">СРАВНЕНИЕ СО СРЕДНИМ ПО СОЮЗУ</h4>
+              <h4 className="cmdA-subhead">Сравнение со средним по союзу</h4>
               <div className="cmdA-compare">
                 {rows.map(([label, kind, value, average]) => {
                   const max = Math.max(value, average, 1) * 1.15;
@@ -791,16 +821,17 @@ function MembersTab({ command, allianceId, ownerId, role, ownerScores, ownerFact
   const canKick = Boolean(selected && selected.ownerId !== ownerId && selected.role !== 'leader' && (isLeader || (role === 'deputy' && selected.role === 'member')));
   const byTotal = [...members].sort((left, right) => memberScore(ownerScores, right.ownerId).totalPoints - memberScore(ownerScores, left.ownerId).totalPoints);
   const record = selected ? alliance.members.find((member) => member.ownerId === selected.ownerId) : undefined;
+  const canSendFleet = selected ? actions.canSendFleetToMember(selected.ownerId) : false;
 
   return (
     <div className="cmdA-grid">
-      <ListPanel kicker="УЧАСТНИКИ" title="Состав союза" count={`${members.length} / ${MAX_ALLIANCE_MEMBERS}`}>
+      <ListPanel title="Состав союза" count={`${members.length} / ${MAX_ALLIANCE_MEMBERS}`}>
         <ul className="command-member-list cmdA-items" data-qa-member-list>
           {members.map((member) => (
             <li key={member.ownerId}>
               <button type="button" className={`cmdA-item ${selected?.ownerId === member.ownerId ? 'is-selected' : ''}`} style={{ '--k': ROLE_COLORS[member.role] } as CSSProperties} onClick={() => setSelectedId(member.ownerId)}>
                 <Avatar name={member.displayName} role={member.role} factionId={ownerFactions[member.ownerId]} />
-                <span className="cmdA-item-main"><strong>{member.displayName}{member.ownerId === ownerId ? <Chip tone="own">ВЫ</Chip> : null}</strong><small className="cmdA-role" style={{ color: ROLE_COLORS[member.role] }}>{ROLE_LABELS[member.role]}</small></span>
+                <span className="cmdA-item-main"><strong>{member.displayName}</strong><span className="cmdA-item-tags"><RoleBadge role={member.role} />{member.ownerId === ownerId ? <Chip tone="own">Вы</Chip> : null}</span></span>
                 <span className="cmdA-item-score"><Medal kind="total" /><b>{number.format(memberScore(ownerScores, member.ownerId).totalPoints)}</b></span>
               </button>
             </li>
@@ -812,29 +843,21 @@ function MembersTab({ command, allianceId, ownerId, role, ownerScores, ownerFact
       </ListPanel>
       {selected && selectedScore ? (
         <Dossier
+          key={selected.ownerId}
           footer={<>
-            <FootStatus label="Выбран участник" value={`${selected.displayName} · ${ROLE_LABELS[selected.role].toLowerCase()}`} />
+            {canKick ? <button type="button" className="danger" onClick={() => setConfirm({ kind: 'kick', ownerId: selected.ownerId, name: selected.displayName })} data-qa-kick>Исключить</button> : <span />}
             <div className="command-actions">
-              {canKick ? (
-                <button type="button" className="danger" onClick={() => setConfirm({ kind: 'kick', ownerId: selected.ownerId, name: selected.displayName })} data-qa-kick>ИСКЛЮЧИТЬ</button>
-              ) : null}
               {isLeader && selected.role === 'member' ? (
-                <button type="button" onClick={() => onFeedback(actions.setDeputy(selected.ownerId))} data-qa-set-deputy>НАЗНАЧИТЬ ЗАМЕСТИТЕЛЕМ</button>
+                <button type="button" onClick={() => onFeedback(actions.setDeputy(selected.ownerId))} data-qa-set-deputy>Назначить заместителем</button>
               ) : null}
               {isLeader && selected.role === 'deputy' ? (
-                <button type="button" onClick={() => onFeedback(actions.setDeputy(null))} data-qa-clear-deputy>СНЯТЬ С ДОЛЖНОСТИ</button>
-              ) : null}
-              {selected.ownerId !== ownerId ? (
-                <button
-                  type="button"
-                  disabled={!actions.canSendFleetToMember(selected.ownerId)}
-                  title={actions.canSendFleetToMember(selected.ownerId) ? 'Откроется окно «Флоты» с транспортом к планете участника' : 'Планета участника неизвестна — найдите её во «Вселенной»'}
-                  onClick={() => onFeedback(actions.sendFleetToMember(selected.ownerId))}
-                  data-qa-member-send-fleet
-                >ОТПРАВИТЬ ФЛОТ</button>
+                <button type="button" onClick={() => onFeedback(actions.setDeputy(null))} data-qa-clear-deputy>Снять с должности</button>
               ) : null}
               {isLeader && selected.ownerId !== ownerId ? (
-                <button type="button" className="amber" onClick={() => setConfirm({ kind: 'transfer', ownerId: selected.ownerId, name: selected.displayName })} data-qa-transfer>ПЕРЕДАТЬ ЛИДЕРСТВО</button>
+                <button type="button" onClick={() => setConfirm({ kind: 'transfer', ownerId: selected.ownerId, name: selected.displayName })} data-qa-transfer>Передать главенство</button>
+              ) : null}
+              {selected.ownerId !== ownerId ? (
+                <button type="button" className="primary" disabled={!canSendFleet} onClick={() => onFeedback(actions.sendFleetToMember(selected.ownerId))} data-qa-member-send-fleet>Отправить флот</button>
               ) : null}
             </div>
           </>}
@@ -842,10 +865,11 @@ function MembersTab({ command, allianceId, ownerId, role, ownerScores, ownerFact
           <Hero art={<PersonArt name={selected.displayName} factionId={ownerFactions[selected.ownerId]} />}>
             <HeroTitle
               title={selected.displayName}
-              chips={<><Chip tone={selected.role === 'leader' ? 'am' : selected.role === 'deputy' ? 'cy' : ''}>{ROLE_LABELS[selected.role]}</Chip>{selected.ownerId === ownerId ? <Chip tone="own">ЭТО ВЫ</Chip> : null}{ownerFactions[selected.ownerId] && FACTION_LABELS[ownerFactions[selected.ownerId]!] ? <Chip>РАСА · {FACTION_LABELS[ownerFactions[selected.ownerId]!].toUpperCase()}</Chip> : null}</>}
+              chips={<><RoleBadge role={selected.role} />{selected.ownerId === ownerId ? <Chip tone="own">Это вы</Chip> : null}{ownerFactions[selected.ownerId] && FACTION_LABELS[ownerFactions[selected.ownerId]!] ? <Chip>{FACTION_LABELS[ownerFactions[selected.ownerId]!]}</Chip> : null}</>}
             >
               <p className="cmdA-sub">В союзе с {formatDate(selected.joinedAt)}</p>
               <ScoreGrid score={selectedScore} />
+              {selected.ownerId !== ownerId && !canSendFleet ? <p className="cmdA-note">Планета участника неизвестна. Найдите её во «Вселенной», чтобы отправить флот.</p> : null}
               <p className="cmdA-note">Планеты, флоты и активность участников скрыты от всех участников союза.</p>
             </HeroTitle>
           </Hero>
@@ -854,11 +878,11 @@ function MembersTab({ command, allianceId, ownerId, role, ownerScores, ownerFact
       ) : <Dossier className="cmdA-dossier--empty"><div className="cmdA-placeholder"><p>Выберите участника.</p></div></Dossier>}
       {confirm ? (
         <ConfirmDialog
-          title={confirm.kind === 'kick' ? 'Исключить участника?' : 'Передать лидерство?'}
+          title={confirm.kind === 'kick' ? 'Исключить участника?' : 'Передать главенство?'}
           body={confirm.kind === 'kick'
             ? `${confirm.name} будет исключён. Ему на 2 часа закроется подача заявок в любые союзы.`
-            : `${confirm.name} станет лидером союза, а вы — обычным участником.`}
-          confirmLabel={confirm.kind === 'kick' ? 'ИСКЛЮЧИТЬ' : 'ПЕРЕДАТЬ'}
+            : `${confirm.name} станет главой союза, а вы — обычным участником.`}
+          confirmLabel={confirm.kind === 'kick' ? 'Исключить' : 'Передать'}
           onConfirm={() => onFeedback(confirm.kind === 'kick' ? actions.kick(confirm.ownerId) : actions.transferLeadership(confirm.ownerId))}
           onClose={() => setConfirm(null)}
         />
@@ -877,13 +901,14 @@ function memberTiles(record: AllianceMember | undefined, place: number, total: n
 
 // ---- overview («Штаб») ---------------------------------------------------------
 
-function Overview({ command, allianceId, ownerId, role, ownerScores, ownerFactions, hall, aid, now, actions, onFeedback, setTab }: {
+function Overview({ command, allianceId, ownerId, role, ownerScores, ownerFactions, details, hall, aid, now, actions, onFeedback, setTab }: {
   command: CommandState;
   allianceId: string;
   ownerId: string;
   role: AllianceRole;
   ownerScores: Readonly<Record<string, MemberScore | undefined>>;
   ownerFactions: Readonly<Record<string, string | undefined>>;
+  details?: RatedAllianceDetails;
   hall: CommandHallInfo;
   aid: AidOverview;
   now: number;
@@ -910,24 +935,23 @@ function Overview({ command, allianceId, ownerId, role, ownerScores, ownerFactio
     <div className="cmdA-grid cmdA-grid--aside-right command-overview">
       <Dossier
         footer={<>
-          <FootStatus label="Ваша роль" value={`${ROLE_LABELS[role].charAt(0)}${ROLE_LABELS[role].slice(1).toLowerCase()}${manage ? ' · можно управлять союзом' : ''}`} />
+          <button type="button" className="danger" onClick={() => setLeaving(true)} data-qa-leave>Покинуть союз</button>
           <div className="command-actions">
-            <button type="button" className="danger" onClick={() => setLeaving(true)} data-qa-leave>ПОКИНУТЬ СОЮЗ</button>
-            {manage ? <button type="button" aria-label="Редактировать союз" title="Редактировать союз" onClick={() => setEditing(true)} data-qa-edit-alliance>РЕДАКТИРОВАТЬ</button> : null}
-            <button type="button" className="primary" onClick={() => setTab('members')}>ОТКРЫТЬ СОСТАВ</button>
+            {manage ? <button type="button" aria-label="Редактировать союз" onClick={() => setEditing(true)} data-qa-edit-alliance>Редактировать</button> : null}
+            <button type="button" className="primary" onClick={() => setTab('members')}>Открыть состав</button>
           </div>
         </>}
       >
-        <Hero art={<div className="cmdA-art cmdA-art--hall"><Img src={hall.art} /><span className="cmdA-art-emblem"><EmblemGlyph emblem={alliance.emblem} /></span></div>} className="command-summary">
+        <Hero art={<div className="cmdA-art cmdA-art--emblem"><EmblemGlyph emblem={alliance.emblem} /></div>} backdrop={hall.art} className="command-summary">
           <HeroTitle
             title={alliance.name}
-            chips={<>{rank ? <Chip tone="am">МЕСТО #{rank}</Chip> : null}<Chip tone="cy">[{alliance.tag}]</Chip><Chip>ОСНОВАН {formatDate(alliance.createdAt)}</Chip>{isAllianceFull(alliance) ? <Chip tone="bad">СОЮЗ ПОЛОН</Chip> : null}</>}
+            chips={<>{rank ? <Chip tone="am">Место #{rank}</Chip> : null}<Chip tone="cy">[{alliance.tag}]</Chip><Chip>Основан {formatDate(alliance.createdAt)}</Chip>{isAllianceFull(alliance) ? <Chip tone="bad">Союз полон</Chip> : null}</>}
           >
             {alliance.motto ? <p className="cmdA-motto command-motto">«{alliance.motto}»</p> : null}
             {alliance.description ? <p className="cmdA-desc">{renderRichText(alliance.description)}</p> : null}
             <div className="cmdA-people">
-              <div className="cmdA-person"><Avatar name={leader?.displayName ?? '—'} role="leader" factionId={leader ? ownerFactions[leader.ownerId] : undefined} /><div><small>ЛИДЕР</small><strong>{leader?.displayName ?? '—'}</strong></div></div>
-              <div className="cmdA-person"><Avatar name={deputy?.displayName ?? '—'} role="deputy" factionId={deputy ? ownerFactions[deputy.ownerId] : undefined} /><div><small>ЗАМЕСТИТЕЛЬ</small><strong>{deputy?.displayName ?? 'не назначен'}</strong></div></div>
+              <Person role="leader" name={leader?.displayName ?? '—'} factionId={leader ? ownerFactions[leader.ownerId] : undefined} />
+              {deputy ? <Person role="deputy" name={deputy.displayName} factionId={ownerFactions[deputy.ownerId]} /> : <div className="cmdA-person"><div><RoleBadge role="deputy" /><strong className="is-muted">не назначен</strong></div></div>}
             </div>
             <MembersBar count={alliance.members.length} />
           </HeroTitle>
@@ -936,14 +960,15 @@ function Overview({ command, allianceId, ownerId, role, ownerScores, ownerFactio
           { icon: <Medal kind="total" />, label: 'Средние общие', value: number.format(rating.averageTotalPoints), sub: 'рейтинг союза' },
           { icon: <Medal kind="resource" />, label: 'Ресурсные', value: number.format(rating.averageResourcePoints), sub: 'среднее' },
           { icon: <Medal kind="battle" />, label: 'Боевые', value: number.format(rating.averageBattlePoints), sub: 'среднее' },
-          { icon: <MissionTile src={aidMissionIcon} />, label: 'Заряды помощи', value: charges ? `${charges.charges} / ${aid.maxCharges}` : '—', sub: charges ? chargeLineFor(aid, now) : 'нет данных', tone: 'ok' },
+          { icon: <MissionTile src={aidMissionIcon} />, label: 'Можно запросить', value: charges ? `${charges.charges} / ${aid.maxCharges}` : '—', sub: charges ? chargeLineFor(aid, now) : 'нет данных', tone: 'ok' },
         ]} />
+        <AllianceCrystals details={details} />
         {awaiting.length ? (
           <div className="cmdA-goal">
-            <div><small>ЖДУТ РЕШЕНИЯ</small><strong>{awaiting.join(' · ')}</strong></div>
+            <div><small>Ждут решения</small><strong>{awaiting.join(' · ')}</strong></div>
             <div className="command-actions">
-              {manage && pendingCount ? <button type="button" onClick={() => setTab('applications')}>ЗАЯВКИ · {pendingCount}</button> : null}
-              {aid.incoming.length ? <button type="button" onClick={() => setTab('requests')}>ПОМОЩЬ · {aid.incoming.length}</button> : null}
+              {manage && pendingCount ? <button type="button" onClick={() => setTab('applications')}>Заявки · {pendingCount}</button> : null}
+              {aid.incoming.length ? <button type="button" onClick={() => setTab('requests')}>Помощь · {aid.incoming.length}</button> : null}
             </div>
           </div>
         ) : null}
@@ -953,7 +978,7 @@ function Overview({ command, allianceId, ownerId, role, ownerScores, ownerFactio
       {editing ? (
         <AllianceEditor
           title="Настройки союза"
-          submitLabel="СОХРАНИТЬ"
+          submitLabel="Сохранить"
           initial={{ name: alliance.name, tag: alliance.tag, motto: alliance.motto, description: alliance.description, emblem: alliance.emblem }}
           onSubmit={actions.updateSettings}
           onClose={() => setEditing(false)}
@@ -993,14 +1018,14 @@ function NoAlliance(props: CatalogProps & { hall: CommandHallInfo }) {
       <Dossier
         footer={<>
           <FootStatus label={hall.name} value={`Уровень ${hall.level}`} />
-          <button type="button" className="primary cmdA-lg" disabled={Boolean(globalBlock)} title={globalBlock ? 'После выхода из союза создавать и вступать в союзы пока нельзя' : undefined} onClick={() => setCreating(true)} data-qa-create-alliance>
-            {globalBlock ? `СОЗДАТЬ СОЮЗ · ЧЕРЕЗ ${formatCountdown(globalBlock.until - now)}` : 'СОЗДАТЬ СОЮЗ'}
+          <button type="button" className="primary cmdA-lg" disabled={Boolean(globalBlock)} onClick={() => setCreating(true)} data-qa-create-alliance>
+            {globalBlock ? `Создать союз · через ${formatCountdown(globalBlock.until - now)}` : 'Создать союз'}
           </button>
         </>}
       >
         <Hero art={<div className="cmdA-art cmdA-art--hall"><Img src={hall.art} /></div>} className="command-cta">
           <div data-qa-command-empty>
-            <HeroTitle title="Вы пока не в союзе" chips={<Chip>БЕЗ СОЮЗА</Chip>}>
+            <HeroTitle title="Вы пока не в союзе" chips={<Chip>Без союза</Chip>}>
               <p className="cmdA-desc">Создайте свой союз бесплатно или подайте заявку в существующий. Вступление происходит только после решения руководства союза.</p>
             </HeroTitle>
           </div>
@@ -1008,7 +1033,7 @@ function NoAlliance(props: CatalogProps & { hall: CommandHallInfo }) {
             <div className="command-banner cmdA-banner is-pending" role="status" data-qa-pending>
               <Img src={REPORT_ICONS.alliances} />
               <span>Заявка в «{pendingAlliance?.name ?? 'союз'}» ожидает решения.</span>
-              <button type="button" className="danger" onClick={() => onFeedback(actions.withdraw())}>ОТОЗВАТЬ</button>
+              <button type="button" className="danger" onClick={() => onFeedback(actions.withdraw())}>Отозвать</button>
             </div>
           ) : null}
           {showLastResult ? (
@@ -1025,8 +1050,7 @@ function NoAlliance(props: CatalogProps & { hall: CommandHallInfo }) {
           ) : null}
         </Hero>
         <Tiles items={[
-          { icon: <Medal kind="total" />, label: 'Ваши общие очки', value: number.format(score.totalPoints) },
-          { icon: <Medal kind="resource" />, label: 'Ресурсные', value: number.format(score.resourcePoints), sub: 'определяют лимит запросов' },
+          { icon: <Medal kind="resource" />, label: 'Лимит запросов', value: number.format(score.resourcePoints), sub: 'зависит от ресурсных очков' },
           { icon: <Img src={REPORT_ICONS.alliances} />, label: 'Союзов в каталоге', value: String(command.alliances.length) },
           { icon: <MissionTile src={aidMissionIcon} />, label: 'Помощь союза', value: 'После вступления' },
         ]} />
@@ -1034,7 +1058,7 @@ function NoAlliance(props: CatalogProps & { hall: CommandHallInfo }) {
       {creating ? (
         <AllianceEditor
           title="Создание союза"
-          submitLabel="СОЗДАТЬ"
+          submitLabel="Создать"
           initial={{ name: '', tag: '', motto: '', description: '', emblem: { glyph: 'starforge', accent: 'cyan' } }}
           onSubmit={actions.createAlliance}
           onClose={() => setCreating(false)}
@@ -1076,12 +1100,13 @@ const CLOSE_REASON_LABELS: Record<string, string> = {
   planet_destroyed: 'Закрыт: планета назначения уничтожена',
 };
 
+/** «Заряды» of the rules, in the player's words: how many requests can be filed and when the next one appears. */
 function chargeLineFor(aid: AidOverview, now: number) {
   const charges = aid.charges;
-  if (!charges) return 'Заряды появятся после вступления в союз.';
-  if (charges.charges >= aid.maxCharges) return 'Запас полон.';
-  if (charges.paused) return 'Восстановление приостановлено: прогресс сохранён.';
-  if (charges.nextChargeAt !== null) return `${charges.intro ? 'Первый заряд союза' : 'Следующий заряд'} через ${formatCountdown(charges.nextChargeAt - now)}`;
+  if (!charges) return 'Запросы появятся после вступления в союз.';
+  if (charges.charges >= aid.maxCharges) return 'Все запросы доступны.';
+  if (charges.paused) return 'Новые запросы не накапливаются: нет здания Палаты. Прогресс сохранён.';
+  if (charges.nextChargeAt !== null) return `${charges.intro ? 'Первый запрос' : 'Следующий запрос'} станет доступен через ${formatCountdown(charges.nextChargeAt - now)}`;
   return '';
 }
 
@@ -1117,7 +1142,7 @@ function RequestsTab({ aid, now, actions, onFeedback, testControls, playerFactio
   const blocker = atLimit
     ? `Открыто ${aid.openCount} из ${aid.maxOpen} запросов — закройте один, чтобы создать новый.`
     : noCharge
-      ? charges?.paused ? 'Восстановление зарядов остановлено: нет здания Палаты.' : 'Нет свободных зарядов — дождитесь восстановления.'
+      ? charges?.paused ? 'Новые запросы не накапливаются: нет здания Палаты.' : 'Сейчас запрос создать нельзя: дождитесь, пока станет доступен новый.'
       : !selectedPlanet ? 'Выберите планету назначения.'
         : !amountValid ? `Допустимое количество — от ${number.format(aid.minAmount)} до ${number.format(aid.maxAmount)}.` : '';
   const chargeLine = chargeLineFor(aid, now);
@@ -1129,8 +1154,8 @@ function RequestsTab({ aid, now, actions, onFeedback, testControls, playerFactio
 
   return (
     <div className="cmdA-grid command-requests" data-qa-requests>
-      <ListPanel kicker="РЕСУРСЫ СОЮЗНИКОВ" title="Запросы помощи" count={aid.incoming.length + aid.mine.length}>
-        <h4 className="cmdA-subhead">ЗАПРОСЫ СОЮЗНИКОВ · {aid.incoming.length}</h4>
+      <ListPanel title="Запросы помощи" count={aid.incoming.length + aid.mine.length}>
+        <h4 className="cmdA-subhead">Запросы союзников · {aid.incoming.length}</h4>
         {aid.incoming.length === 0 ? <div className="cmdA-empty" data-qa-incoming-empty>Союзники пока ничего не просили.</div> : (
           <ul className="command-request-list cmdA-items" data-qa-incoming-requests>
             {aid.incoming.map((row) => {
@@ -1148,12 +1173,12 @@ function RequestsTab({ aid, now, actions, onFeedback, testControls, playerFactio
                   <RequestFigures row={row} />
                   <div className="command-request-actions">
                     <small>{full ? reason : quickHelp || aid.hasFreeTransporters ? `Можно отправить: ${number.format(row.progress.remainder)}` : reason}</small>
-                    <button type="button" className={`primary ${open ? 'is-open' : ''}`} disabled={Boolean(reason)} aria-expanded={quickHelp ? open : undefined}
+                    <button type="button" className={open ? 'is-open' : ''} disabled={Boolean(reason)} aria-expanded={quickHelp ? open : undefined}
                       onClick={(event) => {
                         if (!quickHelp) { onFeedback(actions.startHelp(row.request.id)); return; }
                         const anchor = event.currentTarget;
                         setHelpOpen((current) => (current?.requestId === row.request.id ? null : { requestId: row.request.id, anchor }));
-                      }} data-qa-request-help>ПОМОЧЬ</button>
+                      }} data-qa-request-help>Помочь</button>
                   </div>
                 </li>
               );
@@ -1161,7 +1186,7 @@ function RequestsTab({ aid, now, actions, onFeedback, testControls, playerFactio
           </ul>
         )}
         {helpOpen && quickHelp ? quickHelp(helpOpen.requestId, helpOpen.anchor, closeHelp) : null}
-        <h4 className="cmdA-subhead">МОИ ЗАПРОСЫ · {aid.mine.length} / {aid.maxOpen}</h4>
+        <h4 className="cmdA-subhead">Мои запросы · {aid.mine.length} / {aid.maxOpen}</h4>
         {aid.mine.length === 0 ? <div className="cmdA-empty" data-qa-requests-empty>У вас нет открытых запросов.</div> : (
           <ul className="command-request-list cmdA-items" data-qa-my-requests>
             {aid.mine.map((row) => (
@@ -1173,8 +1198,8 @@ function RequestsTab({ aid, now, actions, onFeedback, testControls, playerFactio
                 <RequestProgressBar row={row} />
                 <RequestFigures row={row} />
                 <div className="command-request-actions">
-                  <small>{row.canCancel ? 'Отмена вернёт заряд' : 'Помощь уже отправлена'}</small>
-                  <button type="button" className="danger" disabled={!row.canCancel} title={row.canCancel ? 'Вернёт заряд' : 'Помощь уже отправлена — отменить нельзя'} onClick={() => onFeedback(actions.cancelRequest(row.request.id))} data-qa-request-cancel>ОТМЕНИТЬ</button>
+                  <small>{row.canCancel ? 'После отмены можно будет запросить снова' : 'Помощь уже отправлена, отменить нельзя'}</small>
+                  <button type="button" className="danger" disabled={!row.canCancel} onClick={() => onFeedback(actions.cancelRequest(row.request.id))} data-qa-request-cancel>Отменить</button>
                 </div>
               </li>
             ))}
@@ -1182,7 +1207,7 @@ function RequestsTab({ aid, now, actions, onFeedback, testControls, playerFactio
         )}
         {aid.closed.length ? (
           <>
-            <h4 className="cmdA-subhead">НЕДАВНО ЗАКРЫТЫЕ</h4>
+            <h4 className="cmdA-subhead">Недавно закрытые</h4>
             <ul className="command-history cmdA-history" aria-label="Недавно закрытые запросы" data-qa-closed-requests>
               {aid.closed.map((request) => (
                 <li key={request.id}><strong>{AID_RESOURCE_LABELS[request.resource]} → {request.planetName}</strong><small>{CLOSE_REASON_LABELS[request.closeReason ?? 'cancelled'] ?? 'Закрыт'} · {number.format(request.delivered)} из {number.format(request.requested)}</small></li>
@@ -1196,28 +1221,24 @@ function RequestsTab({ aid, now, actions, onFeedback, testControls, playerFactio
         className="cmdA-request-dossier"
         footer={<>
           <FootStatus label={blocker ? 'Нельзя создать запрос' : 'Готово к отправке'} value={blocker || `${AID_RESOURCE_LABELS[resource]} · ${number.format(amount)} → ${selectedPlanet?.name ?? '—'}`} />
-          <button type="button" className="primary cmdA-lg" disabled={Boolean(blocker)} onClick={submit} data-qa-request-create>СОЗДАТЬ ЗАПРОС</button>
+          <button type="button" className="primary cmdA-lg" disabled={Boolean(blocker)} onClick={submit} data-qa-request-create>Создать запрос</button>
         </>}
       >
         <Hero art={<div className="cmdA-art cmdA-art--resource"><ResourceIcon kind={resource} className="cmdA-art-resource" /><Img src={megaTransporterArt} className="cmdA-art-ship" /></div>}>
-          <HeroTitle title="Новый запрос ресурсов" chips={<><Chip tone="ok"><span data-qa-request-charges>{charges ? `${charges.charges}/${aid.maxCharges}` : '—'} ЗАРЯДА</span></Chip><Chip>ОТКРЫТО {aid.openCount} / {aid.maxOpen}</Chip></>}>
+          <HeroTitle title="Новый запрос ресурсов" chips={<><Chip tone="ok"><span data-qa-request-charges>{charges ? `${charges.charges}/${aid.maxCharges}` : '—'} можно запросить</span></Chip><Chip>Открыто {aid.openCount} / {aid.maxOpen}</Chip></>}>
             <p className="cmdA-sub" data-qa-charge-line>{chargeLine}</p>
             <div className="command-request-form cmdA-form" data-qa-request-form>
-              <label className="command-select wide"><span>ПЛАНЕТА НАЗНАЧЕНИЯ</span>
-                <select value={selectedPlanet?.id ?? ''} onChange={(event) => setPlanetId(event.target.value)} data-qa-request-planet>
-                  {aid.planets.map((planet) => <option key={planet.id} value={planet.id}>{planet.name} [{formatCoordinate(planet.coordinate)}]</option>)}
-                </select>
-              </label>
-              <label className="command-select"><span>РЕСУРС</span>
-                <select value={resource} onChange={(event) => setResource(event.target.value as AidResource)} data-qa-request-resource>
-                  {AID_RESOURCES.map((key) => <option key={key} value={key}>{AID_RESOURCE_LABELS[key]}</option>)}
-                </select>
-              </label>
-              <label className="command-select"><span>КОЛИЧЕСТВО</span>
+              <div className="command-select wide"><span>Планета назначения</span>
+                <GameSelect value={selectedPlanet?.id ?? ''} label="Планета назначения" options={aid.planets.map((planet) => ({ value: planet.id, label: `${planet.name} [${formatCoordinate(planet.coordinate)}]` }))} onChange={setPlanetId} selectProps={{ 'data-qa-request-planet': true }} />
+              </div>
+              <div className="command-select"><span>Ресурс</span>
+                <GameSelect value={resource} label="Ресурс" options={AID_RESOURCES.map((key) => ({ value: key, label: AID_RESOURCE_LABELS[key] }))} onChange={(value) => setResource(value as AidResource)} selectProps={{ 'data-qa-request-resource': true }} />
+              </div>
+              <label className="command-select"><span>Количество</span>
                 <input type="number" inputMode="numeric" min={aid.minAmount} max={aid.maxAmount} step={1} value={amountText} onChange={(event) => setAmountText(event.target.value)} data-qa-request-amount />
               </label>
               <div className="cmdA-amount wide">
-                <button type="button" aria-label="Минимум" onClick={() => setAmountText(String(aid.minAmount))}>МИН.</button>
+                <button type="button" aria-label="Минимум" onClick={() => setAmountText(String(aid.minAmount))}>Мин.</button>
                 <button type="button" aria-label="Уменьшить" onClick={() => setAmountText(String(Math.max(aid.minAmount, sliderValue - Math.max(sliderStep, 10_000))))}>−</button>
                 <input
                   type="range"
@@ -1232,7 +1253,7 @@ function RequestsTab({ aid, now, actions, onFeedback, testControls, playerFactio
                   data-qa-request-slider
                 />
                 <button type="button" aria-label="Увеличить" onClick={() => setAmountText(String(Math.min(aid.maxAmount, sliderValue + Math.max(sliderStep, 10_000))))}>+</button>
-                <button type="button" aria-label="Максимум" onClick={() => setAmountText(String(aid.maxAmount))}>МАКС.</button>
+                <button type="button" aria-label="Максимум" onClick={() => setAmountText(String(aid.maxAmount))}>Макс.</button>
                 <div className="cmdA-amount-scale"><span>{number.format(aid.minAmount)}</span><b>{amountValid ? number.format(amount) : '—'}</b><span>{number.format(aid.maxAmount)}</span></div>
               </div>
             </div>
@@ -1246,18 +1267,18 @@ function RequestsTab({ aid, now, actions, onFeedback, testControls, playerFactio
           </HeroTitle>
         </Hero>
         <Tiles items={[
-          { icon: <MissionTile src={aidMissionIcon} />, label: 'Заряды', value: charges ? `${charges.charges} / ${aid.maxCharges}` : '—', tone: 'ok' },
+          { icon: <MissionTile src={aidMissionIcon} />, label: 'Можно запросить', value: charges ? `${charges.charges} / ${aid.maxCharges}` : '—', tone: 'ok' },
           { icon: <Img src={REPORT_ICONS.flights} />, label: 'Открыто запросов', value: `${aid.openCount} / ${aid.maxOpen}` },
           { icon: <Medal kind="resource" />, label: 'Лимит запроса', value: number.format(aid.maxAmount), sub: `от ${number.format(aid.minAmount)}` },
           { icon: <Img src={transporterArt} className="cmdA-tile-ship" />, label: `Транспорт · ${aid.sourcePlanetName || 'планета'}`, value: aid.hasFreeTransporters ? `${number.format(transporterCount)} + ${number.format(megaCount)}` : 'Нет транспорта', sub: aid.hasFreeTransporters ? `${shipNameOf(playerFactionId, 'transporter')} / ${shipNameOf(playerFactionId, 'mega-transporter')}` : 'на выбранной планете', tone: aid.hasFreeTransporters ? 'cy' : 'am' },
         ]} />
         {testControls && actions.testIraPrepare ? (
           <div className="command-test-box command-test-box--wide" data-qa-aid-test-box>
-            <small>ТЕСТ · ИРА ВЕЛЬ</small>
+            <small>Тест · Ира Вель</small>
             <span>Ручной сценарий проверки помощи в обе стороны тем же полётным движком. Ира сама ничего не решает.</span>
-            <button type="button" onClick={() => onFeedback(actions.testIraPrepare!())} data-qa-test-ira-prepare>ПОДГОТОВИТЬ ФЛОТ ИРЫ</button>
-            <button type="button" onClick={() => onFeedback(actions.testIraRequest!('metal', 60_000))} data-qa-test-ira-request>ЗАПРОС ИРЫ: 60 000 МЕТАЛЛА</button>
-            <button type="button" onClick={() => onFeedback(actions.testIraHelp!())} data-qa-test-ira-help>ИРА ПОМОГАЕТ ИГРОКУ</button>
+            <button type="button" onClick={() => onFeedback(actions.testIraPrepare!())} data-qa-test-ira-prepare>Подготовить флот Иры</button>
+            <button type="button" onClick={() => onFeedback(actions.testIraRequest!('metal', 60_000))} data-qa-test-ira-request>Запрос Иры: 60 000 металла</button>
+            <button type="button" onClick={() => onFeedback(actions.testIraHelp!())} data-qa-test-ira-help>Ира помогает игроку</button>
           </div>
         ) : null}
       </Dossier>
@@ -1273,12 +1294,12 @@ const RESOURCE_TONES: Record<AidResource, string> = { metal: '#c9d6de', minerals
 function OperationsTab({ playerFactionId }: { playerFactionId?: string }) {
   return (
     <div className="cmdA-grid command-operations" data-qa-operations>
-      <ListPanel kicker="СОВМЕСТНЫЕ ДЕЙСТВИЯ" title="Операции союза" count={1}>
+      <ListPanel title="Операции союза" count={1}>
         <ul className="cmdA-items">
           <li className="cmdA-item is-selected" style={{ '--k': '#e6ad50' } as CSSProperties}>
             <MissionTile src={sunMissionIcon} className="cmdA-item-icon" />
             <div className="cmdA-item-main"><strong>Рейд на Солнце</strong><span>Совместная операция</span></div>
-            <Chip tone="am">СКОРО</Chip>
+            <Chip tone="am">Скоро</Chip>
           </li>
         </ul>
         <p className="cmdA-note">Журнал союза — во вкладке «Штаб», война и перемирие — в «Дипломатии».</p>
@@ -1287,7 +1308,7 @@ function OperationsTab({ playerFactionId }: { playerFactionId?: string }) {
         <Hero art={<div className="cmdA-art cmdA-art--sun"><Img src={sunArt} /></div>}>
           <Stub qa="sun" title="Рейд на Солнце" icon={<MissionTile src={sunMissionIcon} className="cmdA-stub-icon" />}>Появится в будущей версии. Сейчас союз не может собрать совместный флот — механика не меняется.</Stub>
           <div className="cmdA-ghost-fleet" aria-hidden="true">
-            {SUN_RAID_SHIP_IDS.map((shipId) => <span key={shipId} title={shipNameOf(playerFactionId, shipId)}><Img src={shipArtOf(playerFactionId, shipId)} /></span>)}
+            {SUN_RAID_SHIP_IDS.map((shipId) => <span key={shipId}><Img src={shipArtOf(playerFactionId, shipId)} /></span>)}
           </div>
         </Hero>
       </Dossier>
@@ -1297,11 +1318,12 @@ function OperationsTab({ playerFactionId }: { playerFactionId?: string }) {
 
 // ---- diplomacy -----------------------------------------------------------------
 
-function DiplomacyTab({ command, allianceId, role, ownerScores, now, timeScale, actions, onFeedback, testControls }: {
+function DiplomacyTab({ command, allianceId, role, ownerScores, allianceDetails, now, timeScale, actions, onFeedback, testControls }: {
   command: CommandState;
   allianceId: string;
   role: AllianceRole;
   ownerScores: Readonly<Record<string, MemberScore | undefined>>;
+  allianceDetails?: Readonly<Record<string, RatedAllianceDetails>>;
   now: number;
   timeScale: number;
   actions: CommandActions;
@@ -1333,15 +1355,15 @@ function DiplomacyTab({ command, allianceId, role, ownerScores, now, timeScale, 
       />
       {manage ? (
         <div className="command-actions">
-          {!atWar ? <button type="button" className="danger" onClick={() => setConfirmWar(true)} data-qa-declare-war>ОБЪЯВИТЬ ВОЙНУ</button> : null}
+          {!atWar ? <button type="button" className="danger" onClick={() => setConfirmWar(true)} data-qa-declare-war>Объявить войну</button> : null}
           {atWar && truce.state === 'received' ? (
             <>
-              <button type="button" className="danger" onClick={() => onFeedback(actions.respondTruce(selected.alliance.id, false))} data-qa-truce-reject>ОТКЛОНИТЬ</button>
-              <button type="button" className="primary" onClick={() => onFeedback(actions.respondTruce(selected.alliance.id, true))} data-qa-truce-accept>ПРИНЯТЬ ПЕРЕМИРИЕ</button>
+              <button type="button" className="danger" onClick={() => onFeedback(actions.respondTruce(selected.alliance.id, false))} data-qa-truce-reject>Отклонить</button>
+              <button type="button" className="primary" onClick={() => onFeedback(actions.respondTruce(selected.alliance.id, true))} data-qa-truce-accept>Принять перемирие</button>
             </>
           ) : null}
           {atWar && truce.state !== 'received' ? (
-            <button type="button" className="primary" disabled={truce.state !== 'ready'} onClick={() => onFeedback(actions.proposeTruce(selected.alliance.id))} data-qa-truce-propose>ПРЕДЛОЖИТЬ ПЕРЕМИРИЕ</button>
+            <button type="button" className="primary" disabled={truce.state !== 'ready'} onClick={() => onFeedback(actions.proposeTruce(selected.alliance.id))} data-qa-truce-propose>Предложить перемирие</button>
           ) : null}
         </div>
       ) : null}
@@ -1350,7 +1372,7 @@ function DiplomacyTab({ command, allianceId, role, ownerScores, now, timeScale, 
 
   return (
     <div className="cmdA-grid command-diplomacy" data-qa-diplomacy>
-      <ListPanel kicker="ОТНОШЕНИЯ СОЮЗОВ" title="Дипломатия" count={wars ? `${wars} · ВОЙНА` : others.length}>
+      <ListPanel title="Дипломатия" count={wars ? `Войн: ${wars}` : others.length}>
         {others.length ? (
           <ul className="cmdA-items" data-qa-diplomacy-list>
             {others.map((entry) => {
@@ -1366,8 +1388,8 @@ function DiplomacyTab({ command, allianceId, role, ownerScores, now, timeScale, 
                   data-qa-relation-status={war ? 'war' : 'neutral'}
                 >
                   <EmblemGlyph compact emblem={entry.alliance.emblem} />
-                  <div className="cmdA-item-main"><strong>{entry.alliance.name} <em>[{entry.alliance.tag}]</em></strong><span>Лидер: {entry.leaderName} · {entry.rating.memberCount}/{MAX_ALLIANCE_MEMBERS}</span></div>
-                  {war ? <Chip tone="bad">ВОЙНА</Chip> : <Chip>НЕЙТРАЛИТЕТ</Chip>}
+                  <div className="cmdA-item-main"><strong>{entry.alliance.name} <em>[{entry.alliance.tag}]</em></strong><span>Глава: {entry.leaderName} · {entry.rating.memberCount}/{MAX_ALLIANCE_MEMBERS}</span></div>
+                  {war ? <Chip tone="bad">Война</Chip> : <Chip>Нейтралитет</Chip>}
                 </li>
               );
             })}
@@ -1377,14 +1399,14 @@ function DiplomacyTab({ command, allianceId, role, ownerScores, now, timeScale, 
       </ListPanel>
 
       {selected ? (
-        <Dossier className={atWar ? 'cmdA-dossier--war' : ''} footer={footer}>
+        <Dossier key={selected.alliance.id} className={atWar ? 'cmdA-dossier--war' : ''} footer={footer}>
           <Hero art={<div className="cmdA-art cmdA-art--emblem cmdA-art--versus"><EmblemGlyph emblem={selected.alliance.emblem} />{atWar ? <span className="cmdA-war-mark" aria-hidden="true">⚔</span> : null}</div>}>
             <HeroTitle
               title={selected.alliance.name}
-              chips={<>{atWar ? <Chip tone="bad">ВОЙНА</Chip> : <Chip>НЕЙТРАЛИТЕТ</Chip>}<Chip tone="cy">[{selected.alliance.tag}]</Chip><Chip tone="am">МЕСТО #{selected.rank}</Chip>{isBot && testControls ? <Chip tone="vi">ТЕСТ · БОТ 01</Chip> : null}</>}
+              chips={<>{atWar ? <Chip tone="bad">Война</Chip> : <Chip>Нейтралитет</Chip>}<Chip tone="cy">[{selected.alliance.tag}]</Chip><Chip tone="am">Место #{selected.rank}</Chip>{isBot && testControls ? <Chip tone="vi">Тест · бот 01</Chip> : null}</>}
             >
               {selected.alliance.description ? <p className="cmdA-desc">{renderRichText(selected.alliance.description)}</p> : null}
-              <div className="cmdA-people"><div className="cmdA-person"><Avatar name={selected.leaderName} role="leader" /><div><small>ЛИДЕР</small><strong>{selected.leaderName}</strong></div></div></div>
+              <div className="cmdA-people"><Person role="leader" name={selected.leaderName} /></div>
               {atWar && relation ? (
                 <div className="cmdA-war-line" data-qa-war-since>
                   <Img src={REPORT_ICONS.arena} />
@@ -1399,15 +1421,16 @@ function DiplomacyTab({ command, allianceId, role, ownerScores, now, timeScale, 
             { icon: <Img src={REPORT_ICONS.alliances} />, label: 'Участники', value: `${selected.rating.memberCount} / ${MAX_ALLIANCE_MEMBERS}` },
             { icon: <Img src={REPORT_ICONS.arena} />, label: 'Статус', value: atWar ? 'Война' : 'Нейтралитет', tone: atWar ? 'am' : undefined },
           ]} />
-          {!manage ? <p className="cmdA-note">Объявлять войну и заключать перемирие могут лидер и заместитель.</p> : null}
+          <AllianceCrystals details={allianceDetails?.[selected.alliance.id]} />
+          {!manage ? <p className="cmdA-note">Объявлять войну и заключать перемирие могут глава и заместитель.</p> : null}
           {testControls && isBot && actions.testBotRespondTruce ? (
             <div className="command-test-box command-test-box--wide" data-qa-diplomacy-test-box>
-              <small>ТЕСТ · БОТ 01</small>
+              <small>Тест · бот 01</small>
               <span>Бот 01 сам не принимает решений — эти кнопки отвечают за него по тем же правилам.</span>
-              <button type="button" onClick={() => onFeedback(actions.testBotDeclareWar!())} data-qa-test-bot-war>БОТ 01 ОБЪЯВЛЯЕТ ВОЙНУ</button>
-              <button type="button" onClick={() => onFeedback(actions.testBotProposeTruce!())} data-qa-test-bot-truce>БОТ 01 ПРЕДЛАГАЕТ ПЕРЕМИРИЕ</button>
-              <button type="button" onClick={() => onFeedback(actions.testBotRespondTruce!(true))} data-qa-test-bot-accept>БОТ 01 ПРИНИМАЕТ</button>
-              <button type="button" onClick={() => onFeedback(actions.testBotRespondTruce!(false))} data-qa-test-bot-reject>БОТ 01 ОТКЛОНЯЕТ</button>
+              <button type="button" onClick={() => onFeedback(actions.testBotDeclareWar!())} data-qa-test-bot-war>Бот 01 объявляет войну</button>
+              <button type="button" onClick={() => onFeedback(actions.testBotProposeTruce!())} data-qa-test-bot-truce>Бот 01 предлагает перемирие</button>
+              <button type="button" onClick={() => onFeedback(actions.testBotRespondTruce!(true))} data-qa-test-bot-accept>Бот 01 принимает</button>
+              <button type="button" onClick={() => onFeedback(actions.testBotRespondTruce!(false))} data-qa-test-bot-reject>Бот 01 отклоняет</button>
             </div>
           ) : null}
         </Dossier>
@@ -1418,7 +1441,7 @@ function DiplomacyTab({ command, allianceId, role, ownerScores, now, timeScale, 
         <ConfirmDialog
           title="Объявить войну?"
           body={`«${selected.alliance.name}» станет противником сразу, согласие не требуется. Перемирие можно будет предложить через 3 часа.`}
-          confirmLabel="ОБЪЯВИТЬ ВОЙНУ"
+          confirmLabel="Объявить войну"
           onConfirm={() => onFeedback(actions.declareWar(selected.alliance.id))}
           onClose={() => setConfirmWar(false)}
         />
@@ -1429,7 +1452,7 @@ function DiplomacyTab({ command, allianceId, role, ownerScores, now, timeScale, 
 
 // ---- root ----------------------------------------------------------------------
 
-export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFactions = {}, playerFactionId, testTimeScale = 1, returnToBuilding, aid, now, actions, operationsPanel, operationsAlertCount = 0, focusTab = null, quickHelp }: CommandViewProps) {
+export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFactions = {}, allianceDetails, playerFactionId, testTimeScale = 1, returnToBuilding, aid, now, actions, operationsPanel, operationsAlertCount = 0, focusTab = null, quickHelp }: CommandViewProps) {
   const [tab, setTab] = useState<CommandTab>(focusTab?.tab ?? 'overview');
   useEffect(() => { if (focusTab) setTab(focusTab.tab); }, [focusTab?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
   const [feedback, setFeedback] = useState<CommandActionResult | null>(null);
@@ -1441,12 +1464,12 @@ export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFa
   const onFeedback = (result: CommandActionResult) => setFeedback(result.ok ? null : result);
 
   const status = locked
-    ? { key: 'locked', label: 'НЕТ ЗДАНИЯ' }
+    ? { key: 'locked', label: 'Нет здания' }
     : membership
-      ? { key: membership.role, label: isAllianceFull(membership.alliance) ? `${ROLE_LABELS[membership.role]} · СОЮЗ ПОЛОН` : ROLE_LABELS[membership.role] }
+      ? { key: membership.role, label: ROLE_NAMES[membership.role].full }
       : pending
-        ? { key: 'pending', label: 'ЗАЯВКА ОЖИДАЕТ' }
-        : { key: 'none', label: 'БЕЗ СОЮЗА' };
+        ? { key: 'pending', label: 'Заявка ожидает' }
+        : { key: 'none', label: 'Без союза' };
 
   // «Операции» (Sun raids) belong to an alliance with a built Hall. Sun support and Sun
   // debris live in «Флоты» and need neither.
@@ -1455,48 +1478,56 @@ export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFa
     : (['overview'] as CommandTab[]);
   const activeTab = visibleTabs.includes(tab) ? tab : 'overview';
   const pendingCount = membership ? selectPendingApplicationsFor(command, membership.alliance.id).length : 0;
-  const badges: Partial<Record<CommandTab, { value: string; hot?: boolean }>> = membership ? {
-    members: { value: `${membership.alliance.members.length}/${MAX_ALLIANCE_MEMBERS}` },
-    applications: pendingCount ? { value: String(pendingCount), hot: canManageAlliance(membership.role) } : undefined,
-    requests: aid.incoming.length ? { value: String(aid.incoming.length) } : undefined,
-    alliances: { value: String(command.alliances.length) },
-    diplomacy: (() => {
-      const wars = selectAllianceRelations(command, membership.alliance.id).filter((relation) => relation.status === 'war').length;
-      return wars ? { value: `⚔ ${wars}`, hot: true } : undefined;
-    })(),
+  // Only what is waiting for the player gets a number on the rail.
+  const wars = membership ? selectAllianceRelations(command, membership.alliance.id).filter((relation) => relation.status === 'war').length : 0;
+  const badges: Partial<Record<CommandTab, { value: string; hot?: boolean }>> = {
+    ...(pendingCount ? { applications: { value: String(pendingCount), hot: Boolean(membership && canManageAlliance(membership.role)) } } : {}),
+    ...(aid.incoming.length ? { requests: { value: String(aid.incoming.length) } } : {}),
+    ...(wars ? { diplomacy: { value: String(wars), hot: true } } : {}),
     ...(operationsAlertCount ? { operations: { value: String(operationsAlertCount), hot: true } } : {}),
-  } : operationsAlertCount ? { operations: { value: String(operationsAlertCount), hot: true } } : {};
-  const catalogProps: CatalogProps = { command, ownerId, ownerScores, now, actions, onFeedback, testControls, ownerFactions };
+  };
+  const ownScore = memberScore(ownerScores, ownerId);
+  const catalogProps: CatalogProps = { command, ownerId, ownerScores, now, actions, onFeedback, testControls, ownerFactions, allianceDetails };
 
   return (
     <main className="command-view cmdA" aria-label="Командование союза" data-qa-command-state={status.key}>
-      <header className="cmdA-panel cmdA-top">
-        <div className="cmdA-top-title">
-          {membership ? <EmblemGlyph emblem={membership.alliance.emblem} /> : <Img src={commandHeaderIcon} className="cmdA-top-icon" />}
-          <div><small>КОМАНДОВАНИЕ СОЮЗА</small><h1>КОМАНДОВАНИЕ</h1></div>
-        </div>
-        <div className="command-view__status cmdA-top-status">
-          <small>{membership ? 'ВАШ СОЮЗ' : 'СТАТУС'}</small>
+      <aside className="cmdA-panel cmdA-rail">
+        <h1>Командование</h1>
+        <div className="command-view__status cmdA-rail-status">
+          {membership ? <EmblemGlyph emblem={membership.alliance.emblem} /> : <Img src={commandHeaderIcon} className="cmdA-rail-icon" />}
           <div>
-            <strong>{membership ? <>{membership.alliance.name} <em>[{membership.alliance.tag}]</em></> : locked ? hall.name : 'СОЮЗ НЕ ВЫБРАН'}</strong>
-            <span className={`command-status-chip cmdA-chip is-status-${status.key}`} data-qa-command-status>{status.label}</span>
+            <strong>{membership ? <>{membership.alliance.name} <em>[{membership.alliance.tag}]</em></> : locked ? hall.name : 'Союз не выбран'}</strong>
+            <span className={`command-status-chip is-status-${status.key}`} data-qa-command-status>
+              {membership ? <RoleBadge role={membership.role} /> : <Chip tone={locked ? 'bad' : pending ? 'am' : ''}>{status.label}</Chip>}
+              {membership && isAllianceFull(membership.alliance) ? <Chip tone="bad">Союз полон</Chip> : null}
+            </span>
           </div>
         </div>
+        {!locked && membership ? (
+          <nav className="command-tabs cmdA-tabs" aria-label="Разделы Командования">
+            {visibleTabs.map((key) => (
+              <button key={key} type="button" className={activeTab === key ? 'active' : ''} aria-current={activeTab === key ? 'page' : undefined} onClick={() => setTab(key)} data-qa-command-tab={key}>
+                <Img src={TAB_ICONS[key]} />
+                <span>{TAB_LABELS[key]}</span>
+                {badges[key] ? <b className={`command-badge ${badges[key]!.hot ? 'is-hot' : ''}`}>{badges[key]!.value}</b> : null}
+              </button>
+            ))}
+          </nav>
+        ) : (
+          <dl className="cmdA-rail-profile" aria-label="Ваши очки">
+            <small>Ваши очки</small>
+            <div><Medal kind="total" /><dt>Общие</dt><dd>{number.format(ownScore.totalPoints)}</dd></div>
+            <div><Medal kind="resource" /><dt>Ресурсные</dt><dd>{number.format(ownScore.resourcePoints)}</dd></div>
+            <div><Medal kind="battle" /><dt>Боевые</dt><dd>{number.format(ownScore.battlePoints)}</dd></div>
+            <div><Medal kind="achievement" /><dt>Достижения</dt><dd>{number.format(ownScore.achievementPoints)}</dd></div>
+          </dl>
+        )}
         {returnToBuilding ? (
           <button type="button" className="cmdA-back" onClick={returnToBuilding.onBack} data-qa-building-interior-back>
             <span aria-hidden="true">←</span>{returnToBuilding.label}
           </button>
         ) : null}
-        {!locked && membership ? (
-          <nav className="command-tabs cmdA-tabs" aria-label="Разделы Командования">
-            {visibleTabs.map((key) => (
-              <button key={key} type="button" className={activeTab === key ? 'active' : ''} aria-current={activeTab === key ? 'page' : undefined} onClick={() => setTab(key)} data-qa-command-tab={key}>
-                {TAB_LABELS[key]}{badges[key] ? <b className={`command-badge ${badges[key]!.hot ? 'is-hot' : ''}`}>{badges[key]!.value}</b> : null}
-              </button>
-            ))}
-          </nav>
-        ) : null}
-      </header>
+      </aside>
 
       {feedback ? (
         <div className={`command-feedback ${feedback.ok ? 'is-ok' : 'is-error'}`} role={feedback.ok ? 'status' : 'alert'} data-qa-command-feedback>
@@ -1511,7 +1542,7 @@ export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFa
         ) : !membership ? (
           <NoAlliance {...catalogProps} hall={hall} />
         ) : activeTab === 'overview' ? (
-          <Overview command={command} allianceId={membership.alliance.id} ownerId={ownerId} role={membership.role} ownerScores={ownerScores} ownerFactions={ownerFactions} hall={hall} aid={aid} now={now} actions={actions} onFeedback={onFeedback} setTab={setTab} />
+          <Overview command={command} allianceId={membership.alliance.id} ownerId={ownerId} role={membership.role} ownerScores={ownerScores} ownerFactions={ownerFactions} details={allianceDetails?.[membership.alliance.id]} hall={hall} aid={aid} now={now} actions={actions} onFeedback={onFeedback} setTab={setTab} />
         ) : activeTab === 'members' ? (
           <MembersTab command={command} allianceId={membership.alliance.id} ownerId={ownerId} role={membership.role} ownerScores={ownerScores} ownerFactions={ownerFactions} actions={actions} onFeedback={onFeedback} />
         ) : activeTab === 'applications' ? (
@@ -1521,7 +1552,7 @@ export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFa
         ) : activeTab === 'requests' ? (
           <RequestsTab aid={aid} now={now} actions={actions} onFeedback={onFeedback} testControls={testControls} playerFactionId={playerFactionId} quickHelp={quickHelp} />
         ) : activeTab === 'diplomacy' ? (
-          <DiplomacyTab command={command} allianceId={membership.alliance.id} role={membership.role} ownerScores={ownerScores} now={now} timeScale={testTimeScale} actions={actions} onFeedback={onFeedback} testControls={testControls} />
+          <DiplomacyTab command={command} allianceId={membership.alliance.id} role={membership.role} ownerScores={ownerScores} allianceDetails={allianceDetails} now={now} timeScale={testTimeScale} actions={actions} onFeedback={onFeedback} testControls={testControls} />
         ) : operationsPanel ? (
           <div className="opsA srp-host" data-qa-command-operations>{operationsPanel}</div>
         ) : (

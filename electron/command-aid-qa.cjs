@@ -281,7 +281,7 @@ async function productionScenario(win, label) {
   await waitFor(win, `document.querySelector('[data-qa-requests]')`);
   const state = await view(win);
   assert(!state.testBox, `${label}: production has no Ira Vel scenario`, state);
-  assert(state.charges.startsWith('0/3') && state.createDisabled && /заряд/i.test(state.blocker), `${label}: production starts with 0/3 and a blocked form`, state);
+  assert(state.charges.startsWith('0/3') && state.createDisabled && /запрос/i.test(state.blocker), `${label}: production starts with 0/3 and a blocked form`, state);
   assert(state.incoming.length === 0 && state.mine.length === 0, `${label}: production has no fabricated requests`, state);
   const save = await readSave(win, PRODUCTION_KEY);
   assert(save.command.requests.length === 0 && save.flights.records.length === 0 && Object.keys(save.alliedPlanets || {}).length === 0, `${label}: production stays free of fixtures and gifts`, save.command);

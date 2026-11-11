@@ -30,7 +30,7 @@ const OTHER_MEMBERS = 14; // with the player: a full alliance
 const ALLIANCE_42 = 'Объединённый Северный Союз Звёздных Флотов';
 const ALLIANCE_TAG = 'NORTHSTR';
 const MOTTO_72 = 'Пока горят наши звёзды, ни один флот не пройдёт через Северный Рубеж!!';
-const DESCRIPTION_220 = 'Мы держим **Северный Рубеж** с первого дня кампании. Принимаем командиров с флотом от 500 кораблей, помогаем ресурсами и вместе ходим в рейды на Солнце. Тихих не держим: _участие_ в операциях обязательно для всех.';
+const DESCRIPTION_220 = 'Мы держим **Северный Рубеж** с первого дня кампании. Принимаем командиров с флотом от 500 кораблей, помогаем ресурсами и вместе ходим в рейды на Солнце. Тихих не держим: *участие* в операциях обязательно для всех.';
 const FIRST = ['Адмирал', 'Командор', 'Капитан', 'Маршал', 'Навигатор', 'Комиссар'];
 const SECOND = ['Северного Рубежа', 'Восточной Кассиопеи', 'Ледяного Перевала', 'Глубинной Шахты', 'Седьмого Сектора', 'Звёздной Гавани'];
 const longName = (index) => `${FIRST[index % FIRST.length]} ${SECOND[Math.floor(index / FIRST.length) % SECOND.length]} ${index + 1}`;
@@ -306,6 +306,8 @@ async function runViewport(win, directory, label) {
   await shot('08-alliances-catalog');
   await openTab(win, 'requests');
   await shot('09-requests-form');
+  await openTab(win, 'operations');
+  await shot('09b-operations-sun');
 
   // 6. Editor with names at their limits, the crest constructor.
   await openTab(win, 'overview');
