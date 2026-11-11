@@ -16,8 +16,8 @@ const ROOT = path.join(__dirname, '..');
 const OUTPUT = process.env.ASTERION_QA_OUTPUT || path.join(ROOT, 'artifacts-pass1', 'reports-profile-qa');
 const SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
-const EXPECTED_FOLDER_IDS = ['system', 'battle', 'command', 'arena', 'flights', 'alliances', 'achievements'];
-const EXPECTED_FOLDER_LABELS = ['Система', 'Доклады', 'Командные доклады', 'Арена', 'Полёты', 'Союзы', 'Достижения'];
+const EXPECTED_FOLDER_IDS = ['personal', 'system', 'battle', 'command', 'arena', 'flights', 'alliances', 'achievements'];
+const EXPECTED_FOLDER_LABELS = ['Личные', 'Система', 'Доклады', 'Командные доклады', 'Арена', 'Полёты', 'Союзы', 'Достижения'];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function waitFor(win, expression, timeoutMs = 8000) {
@@ -476,7 +476,7 @@ async function runViewport(win, width, height) {
   const profilePortraits = await inspectRenderedFactionGeneralPortraits(win, '[data-qa-profile] [data-qa-faction-general]');
   assertRenderedFactionGeneralPortraits(profilePortraits, ['aegis'], `${label} profile`);
   if (JSON.stringify(profile.folderIds) !== JSON.stringify(EXPECTED_FOLDER_IDS) || JSON.stringify(profile.folderLabels) !== JSON.stringify(EXPECTED_FOLDER_LABELS)) throw new Error(`Reports folder contract failed at ${label}: ${JSON.stringify(profile)}`);
-  const expectedReportIconSuffixes = ['/system.webp', '/reports.webp', '/command-reports.webp', '/arena.webp', '/flights.webp', '/alliances.webp', '/achievements.webp'];
+  const expectedReportIconSuffixes = ['/profile.webp', '/system.webp', '/reports.webp', '/command-reports.webp', '/arena.webp', '/flights.webp', '/alliances.webp', '/achievements.webp'];
   const expectedScoreIconSuffixes = ['/resource-crystal.webp', '/battle.webp', '/overall-star.webp', '/achievement-trophy.webp'];
   if (profile.folderIcons.length !== expectedReportIconSuffixes.length
     || profile.folderIcons.some((icon, index) => !icon.loaded || !icon.decorative || !icon.src.endsWith(expectedReportIconSuffixes[index]))
