@@ -43,7 +43,7 @@ import {
 } from './repository.ts';
 import type { GasExtractionArrivalReport, ReportItem } from './types.ts';
 import { personalLetters } from './letters.ts';
-import { buildReportSheet, titleWithoutPlace } from './sheet.ts';
+import { buildReportSheet, letterSenderPortrait, titleWithoutPlace } from './sheet.ts';
 import { createBattleReportViewModel } from '../combat/battle-report-view-model.ts';
 import type { AllianceApplication, AllianceRecord } from '../command/types.ts';
 import type { SpyReportSnapshot } from '../espionage/types.ts';
@@ -892,4 +892,11 @@ test('the title does not repeat the place shown under it', () => {
   assert.equal(titleWithoutPlace('Полный шпионский отчёт: Тавр', { name: 'Тавр' }), 'Полный шпионский отчёт');
   assert.equal(titleWithoutPlace('Астероид не найден по координатам [2:3:4]', { coordinate: { galaxy: 2, system: 3, position: 4 } }), 'Астероид не найден');
   assert.equal(titleWithoutPlace('Экспедиция вернулась', { name: 'Рудные пустоши' }), 'Экспедиция вернулась');
+});
+
+test('the list and the open letter show the same sender portrait', () => {
+  assert.deepEqual(letterSenderPortrait({ kind: 'alliance', name: 'Северный Союз', allianceId: 'al-1' }), { kind: 'crest', allianceId: 'al-1' });
+  assert.deepEqual(letterSenderPortrait({ kind: 'alliance', name: 'Северный Союз' }), { kind: 'initial', text: 'С' });
+  assert.deepEqual(letterSenderPortrait({ kind: 'player', ownerId: 'bot-1', name: 'Ира', factionId: 'veyra' }), { kind: 'faction', factionId: 'veyra' });
+  assert.deepEqual(letterSenderPortrait({ kind: 'player', ownerId: 'bot-2', name: 'Вель' }), { kind: 'initial', text: 'В' });
 });

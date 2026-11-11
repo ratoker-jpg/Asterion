@@ -262,6 +262,10 @@ async function runViewport(win, directory, label) {
     unreadBadge: document.querySelector('[data-message-folder="flights"] .reports-v2-unread-count')?.textContent,
     unreadTotal: Array.from(document.querySelectorAll('[data-message-folder] .reports-v2-unread-count')).reduce((sum, node) => sum + Number(node.textContent || 0), 0),
   })`);
+  metrics.counters = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-message-folder] .reports-folder-counter')).map((node) => node.textContent)`);
+  const badCounter = metrics.counters.filter((text) => !/^(\d{1,2}|99\+)\/[\d   ]+$/.test(text) || /\s\//.test(text) || /\/\s/.test(text));
+  if (badCounter.length) fail('Folder counter is not «unread/total» without spaces', { counters: metrics.counters, badCounter });
+  if (!metrics.counters.some((text) => text.startsWith('99+/'))) fail('A folder with more than 99 unread does not show 99+', metrics.counters);
   if (metrics.flights.unreadTotal < 500) fail('The inbox does not hold 500 unread messages', metrics.flights);
   await check('500 flights');
   await capture(win, directory, '04-flights-500-unread');

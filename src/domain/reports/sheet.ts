@@ -12,6 +12,7 @@ import type {
   ReportFact,
   ReportItem,
   ReportPlace,
+  ReportPortrait,
   ReportResourceGroup,
   ReportResultWord,
   ReportRound,
@@ -395,16 +396,22 @@ function pirateReconSheet(item: ReportItem): ReportSheet {
 
 // ---------------------------------------------------------------- letters
 
+/** The sender's portrait: alliance crest, the bot's general / race portrait, or an initial. Shared by the list and the open letter. */
+export function letterSenderPortrait(sender: PersonalLetter['sender']): ReportPortrait {
+  if (sender.kind === 'alliance') return sender.allianceId ? { kind: 'crest', allianceId: sender.allianceId } : { kind: 'initial', text: sender.name.slice(0, 1) };
+  return sender.factionId ? { kind: 'faction', factionId: sender.factionId } : { kind: 'initial', text: sender.name.slice(0, 1) };
+}
+
 function letterSheet(item: ReportItem, letter: PersonalLetter): ReportSheet {
   const sender = letter.sender;
   const side: ReportSide = sender.kind === 'alliance'
-    ? { key: 'sender', role: 'Союз', name: sender.name, meta: sender.tag ? `Союз [${sender.tag}]` : 'Союз', portrait: sender.allianceId ? { kind: 'crest', allianceId: sender.allianceId } : { kind: 'initial', text: sender.name.slice(0, 1) } }
+    ? { key: 'sender', role: 'Союз', name: sender.name, meta: sender.tag ? `Союз [${sender.tag}]` : 'Союз', portrait: letterSenderPortrait(sender) }
     : {
       key: 'sender',
       role: 'Игрок',
       name: sender.name,
       meta: sender.alliance ? `[${sender.alliance.tag}] ${sender.alliance.name}` : 'Без союза',
-      portrait: sender.factionId ? { kind: 'faction', factionId: sender.factionId } : { kind: 'initial', text: sender.name.slice(0, 1) },
+      portrait: letterSenderPortrait(sender),
     };
   const answers = letter.answers.slice(0, 2);
   const primaryIndex = Math.max(0, answers.findIndex((answer) => answer.primary));

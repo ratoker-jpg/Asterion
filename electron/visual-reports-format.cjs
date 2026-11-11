@@ -341,6 +341,11 @@ async function runBotLetters(win, directory, metrics, fail, check) {
   };
   const total = await win.webContents.executeJavaScript(`Number(document.querySelector('[data-message-folder="personal"] .reports-folder-counter i')?.textContent.replace('/', '') || 0)`);
   metrics.botLetters = total;
+  const portraits = await win.webContents.executeJavaScript(`(() => {
+    const rows = Array.from(document.querySelectorAll('[data-qa-message-list] [data-report-item-id^="letter:"] .reports-list-icon'));
+    return { rows: rows.length, withPortrait: rows.filter((node) => node.querySelector('.reports-sheet-portrait')).length };
+  })()`);
+  if (!portraits.rows || portraits.withPortrait !== portraits.rows) fail('«Личные» rows do not all show the sender portrait', portraits);
   if (total < 28) fail('«Личные» does not hold the 28+ bot letters', total);
   await check('14-personal-many-letters', false);
   await capture(win, directory, '14-personal-many-letters');

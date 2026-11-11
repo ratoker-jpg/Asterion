@@ -3318,6 +3318,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               onAccept={acceptOperationsOperation}
               onCancel={cancelOperationsOperation}
               onOpenFleets={openFleetRootFromOperations}
+              onPirateCollectDebris={collectDebrisFromReport}
             />
           ) : activeRoute === 'command' ? (
             <CommandView
