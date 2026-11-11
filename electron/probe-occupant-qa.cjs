@@ -87,7 +87,7 @@ async function main() {
   await waitFor(win, `document.querySelector('[data-qa-navigation] [data-qa-route="reports"] .asterion-header__nav-badge')`, 240_000, 'new report badge').catch(() => {});
   await click(win, '[data-qa-navigation] [data-qa-route="reports"]');
   await sleep(500);
-  await ev(win, `document.querySelector('[data-message-folder="system"]')?.click()`);
+  await ev(win, `document.querySelector('[data-message-folder="battle"]')?.click()`);
   await sleep(500);
   await waitFor(win, `document.querySelector('[data-report-item-id^="exploration-recon:"]')`, 240_000, 'recon report').catch(async (error) => {
     const dump = await ev(win, `({ items: Array.from(document.querySelectorAll('[data-report-item-id]')).map((e) => e.getAttribute('data-report-item-id')), text: document.body.innerText.slice(0, 600) })`);

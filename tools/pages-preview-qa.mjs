@@ -118,15 +118,17 @@ try {
   });
   assert.equal(nav.result?.value, true, 'Reports navigation button missing');
   let reportState;
-  const reportProbe = "(() => { const imgs=[...document.querySelectorAll('.reports-v2-art img, .reports-score-glyph')]; return {profile:!!document.querySelector('[data-qa-profile]'),metrics:document.querySelectorAll('[data-qa-profile-metric]').length,imageCount:imgs.length,pending:imgs.filter(i=>!i.complete).length,broken:imgs.filter(i=>i.complete && i.naturalWidth===0).map(i=>i.currentSrc || i.src),testNoteVisible:(()=>{const el=document.querySelector('.reports-fixture-note');return !!el && getComputedStyle(el).display!=='none';})()}; })()";
+  // Every image of «Профиль игрока» (11.11.2026 layout): 4 score medals, the general's
+  // portrait and one glyph per listed message («Последние события», up to five).
+  const reportProbe = "(() => { const profile=document.querySelector('[data-qa-profile]'); const imgs=[...(profile?.querySelectorAll('img') || [])]; const events=profile?.querySelectorAll('[data-qa-profile-event]').length || 0; return {profile:!!profile,metrics:document.querySelectorAll('[data-qa-profile-metric]').length,scoreGlyphs:profile?.querySelectorAll('.reports-score-glyph').length || 0,portrait:!!profile?.querySelector('.reports-profile-avatar img'),events,expectedImages:4+1+events,imageCount:imgs.length,pending:imgs.filter(i=>!i.complete).length,broken:imgs.filter(i=>i.complete && i.naturalWidth===0).map(i=>i.currentSrc || i.src),testNoteVisible:(()=>{const el=document.querySelector('.reports-fixture-note');return !!el && getComputedStyle(el).display!=='none';})()}; })()";
   for (let retries = 0; retries < 40; retries += 1) {
     await wait(350);
     const r = await send('Runtime.evaluate', { expression: reportProbe, returnByValue: true });
     reportState = r.result?.value;
-    if (reportState?.profile && reportState.metrics === 4 && reportState.imageCount >= 12 && reportState.pending === 0) break;
+    if (reportState?.profile && reportState.metrics === 4 && reportState.imageCount >= reportState.expectedImages && reportState.pending === 0) break;
   }
   assert.ok(reportState?.profile && reportState.metrics === 4, 'Profile did not open: ' + JSON.stringify(reportState));
-  assert.ok(reportState.imageCount >= 12, 'Profile is missing image elements: ' + JSON.stringify(reportState));
+  assert.ok(reportState.scoreGlyphs === 4 && reportState.portrait && reportState.imageCount >= reportState.expectedImages, 'Profile is missing image elements: ' + JSON.stringify(reportState));
   assert.equal(reportState.pending, 0, 'Profile images still loading: ' + JSON.stringify(reportState));
   assert.deepEqual(reportState.broken, [], 'Broken visual assets in Reports profile');
   assert.equal(reportState.testNoteVisible, true, 'Test Mode profile note must be visible');

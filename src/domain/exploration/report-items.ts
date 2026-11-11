@@ -4,7 +4,7 @@ import type { CombatFactionId } from '../combat/factions.ts';
 import type { CombatEntityId } from '../combat/ids.ts';
 import { getCombatEntity } from '../combat/catalog.ts';
 import { getFactionCombatEntity } from '../combat/faction-catalog.ts';
-import type { ReportItem } from '../reports/types.ts';
+import type { ReportFact, ReportItem, ReportResourceGroup, ReportResource, ReportUnitGroup } from '../reports/types.ts';
 import { explorationProfile } from './model.ts';
 import type { ExplorationState } from './ledger.ts';
 
@@ -34,7 +34,7 @@ export function explorationMailboxReports(ledger?: ExplorationState, flights: re
     return {
       id: 'exploration-recon:' + record.flightId,
       source: 'exploration',
-      category: 'system',
+      category: 'battle',
       typeLabel: 'Исследование объекта',
       title: record.success ? 'Исследование завершено' : 'Разведка не удалась',
       preview: (profile?.name ?? 'Космический объект') + ' · ' + location,
@@ -56,6 +56,19 @@ export function explorationMailboxReports(ledger?: ExplorationState, flights: re
               { label: 'Остатки зависят от уже выполненной добычи', value: 'Да' }]
           : []),
       ],
+      blocks: {
+        place: { name: profile?.name, ...(contact ? { coordinate: { ...contact.coordinate } } : {}) },
+        result: record.success ? { label: 'Разведано', tone: 'success' } : { label: 'Провал', tone: 'warning' },
+        sides: record.occupant && contact ? [{
+          key: 'occupant', role: 'Хозяин объекта', name: record.occupant.ownerName,
+          meta: record.occupant.alliance ? '[' + record.occupant.alliance.tag + '] ' + record.occupant.alliance.name : 'Без союза',
+          place: { coordinate: { ...contact.coordinate }, ownerId: record.occupant.ownerId },
+          portrait: { kind: 'faction', factionId: record.occupant.raceId },
+        }] : [],
+        ships: record.occupant ? [occupantFleet(record.occupant)] : [],
+        resources: record.success && contact ? [cargoGroup('reserve', 'Исходный запас', contact.initialReserve)] : [],
+        details: record.success && profile ? [{ label: 'Категория риска', value: ['I','II','III','IV','V'][profile.risk-1]! + ' из V' }] : [],
+      },
     };
   });
 
@@ -93,6 +106,20 @@ export function explorationMailboxReports(ledger?: ExplorationState, flights: re
           { label: 'Обломки хранятся', value: 'На исходной планете → Переработка (не склад металла)' },
           { label: 'Жетоны ремонта', value: String(event.repairTokens ?? 0) },
         ],
+        blocks: {
+          summary: returned ? (total > 0 ? '' : 'Флот вернулся без добычи: для обломков нужны переработчики, транспортёры их не добывают.') : 'Планета отправления уничтожена, груз не доставлен.',
+          place: { name: profile.name, coordinate: { ...contact.coordinate } },
+          result: returned ? (total ? { label: 'Доставлено', tone: 'success' } : { label: 'Пусто', tone: 'warning' }) : { label: 'Потеряно', tone: 'danger' },
+          resources: returned ? [
+            cargoGroup('credited', 'Доставлено', credited, 'gain'),
+            ...(burned && cargoTotal(burned) ? [cargoGroup('burned', 'Сгорело при переполнении склада', burned, 'loss')] : []),
+          ] : [],
+          details: [
+            { label: 'Планета отправления', value: (event.originPlanetId && context.planetNames?.[event.originPlanetId]) || (returned ? UNAVAILABLE : 'Утрачена') },
+            ...(returned && credited.debris > 0 ? [{ label: 'Обломки', value: 'В запасе переработки исходной планеты' }] : []),
+            { label: 'Жетоны ремонта', value: event.repairTokens ? '+' + number.format(event.repairTokens) : 'Не найдены' },
+          ],
+        },
       };
     }));
 
@@ -236,6 +263,7 @@ function flightSummaryReport(flight: FlightRecord, context: FlightReportContext)
   return {
     id: 'flight-landing:' + flight.id,
     source: 'flights', category: 'flights',
+    flightId: flight.id,
     typeLabel: 'Итог полёта',
     title: outcome.title,
     preview: mission + ' · ' + location,
@@ -255,8 +283,105 @@ function flightSummaryReport(flight: FlightRecord, context: FlightReportContext)
       { label: 'Вернувшийся флот', value: returnedFleet(flight, context, battle) ?? UNAVAILABLE },
       ...resourceRows(flight),
     ],
+    blocks: flightBlocks(flight, context, outcome, battle, originName, target),
   };
 }
+
+/** Block data of a flight summary: the same facts as the rows above, structured. */
+function flightBlocks(flight: FlightRecord, context: FlightReportContext, outcome: Outcome, battle: BattleReport | undefined, originName: string | undefined, target: string): NonNullable<ReportItem['blocks']> {
+  const groups: ReportResourceGroup[] = [];
+  const facts: ReportFact[] = [{ label: 'Миссия', value: FLIGHT_NAMES[flight.missionId] ?? 'Полёт' }, { label: 'Исход', value: outcome.label }];
+  for (const row of resourceRows(flight)) {
+    const split = row.label.indexOf(' · ');
+    const kind = split < 0 ? undefined : KINDS.find((key) => LABELS[key] === row.label.slice(split + 3));
+    const amount = Number(row.value.replace(/[\s  ]/g, ''));
+    if (kind && Number.isFinite(amount)) {
+      const title = row.label.slice(0, split);
+      let group = groups.find((entry) => entry.title === title);
+      if (!group) {
+        group = { key: 'cargo-' + groups.length, title, items: [], tone: /Сгорело|Потеряно/.test(title) ? 'loss' : 'gain' };
+        groups.push(group);
+      }
+      group.items.push({ kind, label: LABELS[kind], value: amount });
+    } else {
+      facts.push(row);
+    }
+  }
+  const units = returnedUnits(flight, context, battle);
+  return {
+    summary: '',
+    place: { ...(flight.targetPlanetName ? { name: flight.targetPlanetName } : {}), coordinate: { ...flight.destinationCoordinate } },
+    result: { label: flightResultWord(flight, outcome), tone: outcome.tone },
+    sides: [
+      { key: 'origin', role: 'Отправление', name: originName ?? 'Планета', ...(flight.originCoordinate ? { place: { coordinate: { ...flight.originCoordinate } } } : {}) },
+      { key: 'target', role: 'Цель', name: flight.targetPlanetName ?? target, place: { coordinate: { ...flight.destinationCoordinate } } },
+    ],
+    ships: [units
+      ? { key: 'returned', title: 'Вернувшийся флот', units }
+      : { key: 'returned', title: 'Вернувшийся флот', units: [], empty: returnedFleet(flight, context, battle) ?? UNAVAILABLE }],
+    resources: groups,
+    details: [...facts, ...(battle ? [{ label: 'Бой', value: battle.winner === 'attacker' ? 'Победа' : battle.winner === 'defender' ? 'Поражение' : 'Ничья' }] : [])],
+  };
+}
+
+function flightResultWord(flight: FlightRecord, outcome: Outcome): string {
+  switch (outcome.status) {
+    case 'ОТОЗВАН': return 'Отозван';
+    case 'ЦЕЛЬ НЕДОСТУПНА': return 'Недоступна';
+    case 'КООРДИНАТА ЗАНЯТА': return 'Занято';
+    case 'КОЛОНИЗИРОВАНО': return 'Колония';
+    case 'ДИСЛОЦИРОВАНО': return 'Дислоцирован';
+    case 'ЗОНД УНИЧТОЖЕН': case 'ФЛОТ ПОТЕРЯН': return 'Потерян';
+    case 'ПРОВАЛ': return 'Провал';
+    case 'ПОРАЖЕНИЕ': return 'Поражение';
+    case 'НИЧЬЯ': return 'Ничья';
+    default: return flight.missionId === 'transport' || flight.missionId === 'aid' ? 'Доставлено' : 'Вернулся';
+  }
+}
+
+/** Ship lines of the fleet that came home; undefined when it is a sentence (lost, stayed, unknown). */
+function returnedUnits(flight: FlightRecord, context: FlightReportContext, battle?: BattleReport) {
+  const reason = flight.completionReason;
+  if (reason === 'origin-destroyed' || reason === 'spy-destroyed' || reason === 'colonized' || reason === 'deployed' || (flight.phase === 'failed' && reason !== 'recalled')) return undefined;
+  let fleet: Record<string, number | undefined>;
+  if (flight.attackResolution) {
+    if (!battle) return undefined;
+    fleet = {};
+    for (const stack of battle.attackerForce.stacks ?? []) if (stack.countAfter > 0) fleet[stack.entityId] = stack.countAfter;
+  } else {
+    fleet = { ...flight.selectedShips, ...(flight.selectedCommanders ?? {}) };
+  }
+  const units = Object.entries(fleet).filter(([, count]) => Number.isSafeInteger(count) && count! > 0).map(([id, count]) => {
+    const art = unitArt(context, id);
+    return { key: id, name: unitName(context, id), ...(art ? { art } : {}), count: count! };
+  });
+  return units.length ? units : undefined;
+}
+
+function unitArt(context: FlightReportContext, id: string): string | undefined {
+  try {
+    return context.factionId ? getFactionCombatEntity(context.factionId, id as CombatEntityId).art : getCombatEntity(id as CombatEntityId).art;
+  } catch {
+    return undefined;
+  }
+}
+
+function cargoGroup(key: string, title: string, cargo: Record<typeof KINDS[number], number>, tone?: ReportResourceGroup['tone']): ReportResourceGroup {
+  const items: ReportResource[] = KINDS.filter((kind) => (cargo[kind] ?? 0) > 0).map((kind) => ({ kind, label: LABELS[kind], value: cargo[kind] }));
+  return { key, title, items, ...(tone ? { tone } : {}), empty: 'Ничего.' };
+}
+
+function occupantFleet(occupant: NonNullable<ReportItem['occupantRecon']>): ReportUnitGroup {
+  if (occupant.quality !== 'full') return { key: 'occupant-fleet', title: 'Флот хозяина', units: [], hidden: true, empty: 'Состав флота не раскрыт: уровень шпионажа зонда ниже, чем нужно для полного отчёта.' };
+  const units = Object.entries(occupant.fleet ?? {}).filter(([, count]) => Number(count) > 0).map(([id, count]) => {
+    let unit: { name: string; art: string; role: string } | null = null;
+    try { unit = getFactionCombatEntity(occupant.raceId, id as CombatEntityId); } catch { unit = null; }
+    const level = occupant.fleetLevels?.[id];
+    return { key: id, name: unit?.name ?? 'Неизвестный корабль', ...(unit ? { art: unit.art } : {}), ...(level !== undefined ? { note: 'Уровень ' + level } : unit ? { note: unit.role } : {}), count: Number(count) };
+  });
+  return { key: 'occupant-fleet', title: 'Флот хозяина', units, empty: 'Корабли не найдены.' };
+}
+
 function KINDsDetails(cargo: Record<typeof KINDS[number],number>, prefix = '') {
   return KINDS.map(key => ({ label: prefix + LABELS[key], value: number.format(cargo[key] ?? 0) }));
 }

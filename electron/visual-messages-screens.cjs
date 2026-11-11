@@ -280,7 +280,7 @@ async function runViewport(win, directory, label) {
   await capture(win, directory, '06-search-no-result');
 
   // 6. Long subjects and the huge spy report.
-  await openFolder(win, 'system');
+  await openFolder(win, 'battle');
   await openReport(win, 'espionage:qa-huge-spy');
   await check('huge spy report');
   await capture(win, directory, '07-system-long-subjects-huge-spy');

@@ -91,7 +91,7 @@ import { declareWar, proposeTruce, respondTruce } from './domain/command/diploma
 import { releaseTestBotFromOwnAlliance } from './domain/command/repository.ts';
 import type { AllianceSettingsInput, CommandResult, CommandState } from './domain/command/types.ts';
 import { syncPlayerProfileWithCommand } from './domain/profile/repository.ts';
-import { withTestOwnerScoreFixtures } from './domain/rating/fixtures.ts';
+import { createOwnerRatingEntries, createPlayerRatingEntries, withTestOwnerScoreFixtures } from './domain/rating/fixtures.ts';
 import { SCIENCE_CATALOG } from './domain/science/catalog.ts';
 import {
   ACTIVE_RUNTIME_MODE,
@@ -174,6 +174,7 @@ import { bindCombatResolutionEventBridge } from './application/combat.ts';
 import { getFleetProductionEntity } from './domain/fleet/production.ts';
 import { getFleetBuildBudget, getFleetSummaryForState, getOutgoingFleetSummaryForState, getPlanetPopulationForState } from './application/fleet.ts';
 import { getPendingInboundPopulation } from './application/flights.ts';
+import { buildFlightRepeatPlan, canRepeatFlight, FLIGHT_REPEAT_PLAN_EVENT, type FlightRepeatPlan } from './application/flight-repeat.ts';
 import {
   cancelAidRequest,
   createAidRequest,
@@ -191,7 +192,7 @@ import type { AidResource } from './domain/command/types.ts';
 import { getPlanetOverpopulationSummary } from './application/overpopulation.ts';
 import { energySummaryForPlanet, getPlanetEnergyCoordinates } from './application/energy.ts';
 import { getEffectiveResourceIncomePerHour } from './application/resource-clock.ts';
-import { publishApplicationRuntimeSnapshot, selectRatedAlliances, setLiveSaveState } from './application/runtime.ts';
+import { publishApplicationRuntimeSnapshot, selectRatedAlliances, selectRatedOwners, setLiveSaveState } from './application/runtime.ts';
 import { reconcileRuntime, type RuntimeReconcileEvent } from './application/reconcile.ts';
 import { freezeNpcCatchupTarget, isNpcCatchupPending, needsNpcCatchupBefore } from './application/npc-catchup.ts';
 import { NpcCatchupBanner } from './NpcCatchupBanner.tsx';
@@ -256,7 +257,7 @@ import {
 } from './application/sun-raid.ts';
 import { refreshSlotMeta } from './application/slots.ts';
 import { slotStorageKey } from './domain/session/slots.ts';
-import { gateProgressPercent } from './domain/sun-raid/rules.ts';
+import { gateProgressPercent, getHolderCrystals } from './domain/sun-raid/rules.ts';
 import { getCampaignTimeScale, setCampaignTimeScale, CAMPAIGN_SPEED_SCALE } from './domain/runtime/mode.ts';
 import { setActiveGalaxyCount, warmUniverseTimedSchedules } from './domain/universe/runtime.ts';
 import { SunRaidPanel, type SunSelection } from './ui/sun-raid/SunRaidPanel.tsx';
@@ -1557,6 +1558,25 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       reportRetentionAt, state.combat.savedReportIds);
     return Object.values(getReportUnreadCounts(items, state.reports)).reduce((total, count) => total + count, 0);
   }, [state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.reports, state.pirate, state.flights, state.exploration, reportRetentionAt]);
+  // «Профиль игрока» in «Сообщения»: the same standings as «Рейтинг», planets and crystals; nothing invented.
+  const reportProfileFacts = useMemo(() => {
+    // Only while «Сообщения» is open: the rest of the game does not pay for it each tick.
+    if (activeRoute !== 'reports') return {};
+    const playerId = state.profile.playerId;
+    const scores = selectOwnerScores(state);
+    const standings = RUNTIME_MODE === 'production'
+      ? createOwnerRatingEntries(scores, selectRatedOwners(state), playerId)
+      : createPlayerRatingEntries(scores[playerId], RUNTIME_MODE, playerId);
+    const sun = currentSunRaidState(state);
+    const allianceId = selectOwnerMembership(state.command, playerId)?.alliance.id;
+    return {
+      ratingPlace: standings.find((entry) => entry.isCurrentPlayer || entry.id === playerId)?.rank,
+      ratedPlayers: standings.length,
+      planets: Object.keys(state.planets).length,
+      crystals: getHolderCrystals(sun, { kind: 'owner', id: playerId }).length,
+      allianceCrystals: allianceId ? getHolderCrystals(sun, { kind: 'alliance', id: allianceId }).length : 0,
+    };
+  }, [state, activeRoute]);
   const commandHallLevel = useMemo(() => selectCommandHallLevel(state.planets), [state.planets]);
   const commandHallDefinition = getBuildingDefinition('planetary-government', state.profile.factionId);
   // The race theme lives on <html> so portals and dialogs outside the stage get it too.
@@ -2804,6 +2824,42 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const sunLaunchDestination = (galaxy: number, system: number) => ({
     kind: 'operation' as const, operationId: `sun:${galaxy}:${system}`, coordinate: { galaxy, system, position: 1 },
   });
+  // Reports → the Fleets screen prefilled through the existing launch and repeat flows (no new game rule).
+  const canRepeatReportFlight = (flightId: string) => {
+    const flight = stateRef.current.flights.records.find((record) => record.id === flightId);
+    return Boolean(flight && canRepeatFlight(stateRef.current, flight));
+  };
+  const repeatFlightFromReport = (flightId: string) => {
+    const flight = stateRef.current.flights.records.find((record) => record.id === flightId);
+    const plan = flight ? buildFlightRepeatPlan(stateRef.current, flight) : null;
+    if (!plan) {
+      setNotice('Этот рейс нельзя повторить.', 'error');
+      return;
+    }
+    if (plan.originPlanetId !== stateRef.current.currentPlanetId && stateRef.current.planets[plan.originPlanetId]) {
+      const next = selectOwnedPlanet(stateRef.current, plan.originPlanetId);
+      stateRef.current = next;
+      setState(next);
+    }
+    clearBuildingInterior();
+    navigateTo('fleets');
+    setPlanetViewMode('overview');
+    setPlanetMenuOpen(false);
+    window.setTimeout(() => window.dispatchEvent(new CustomEvent<FlightRepeatPlan>(FLIGHT_REPEAT_PLAN_EVENT, { detail: plan })), 40);
+  };
+  const collectDebrisFromReport = (coordinate: UniverseCoordinate) => openSunFleetLaunch({
+    missionId: 'recycle', destination: { kind: 'coordinate', coordinate: { ...coordinate } },
+  });
+  const attackFromSpyReport = (report: SpyReportSnapshot) => openSunFleetLaunch({
+    missionId: 'attack',
+    targetRelation: report.targetRelation === 'enemy' ? 'enemy' : 'neutral',
+    targetKind: 'npc',
+    targetPlanetName: report.targetPlanetName,
+    targetOwnerId: report.targetOwnerId,
+    targetOwnerName: report.targetOwnerName,
+    targetRaceId: report.targetRaceId === 'synod' || report.targetRaceId === 'veyra' ? report.targetRaceId : 'aegis',
+    destination: { kind: 'planet', planetId: report.targetPlanetId, coordinate: { ...report.targetCoordinate } },
+  });
   const openSunSupportInFleets = (raid: { galaxy: number; system: number }) => openSunFleetLaunch({
     missionId: 'sun-support', operationId: `sun:${raid.galaxy}:${raid.system}`,
     destination: sunLaunchDestination(raid.galaxy, raid.system), targetRelation: 'neutral', targetPlanetName: `Солнце ${raid.galaxy}:${raid.system}`,
@@ -3311,6 +3367,11 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               onRecallSpy={recallSpyFromReport}
               onOpenUniverseTarget={openUniverseTarget}
               onOpenPirateUniverse={openPirateReconCoordinate}
+              canRepeatFlight={canRepeatReportFlight}
+              onRepeatFlight={repeatFlightFromReport}
+              onCollectDebris={collectDebrisFromReport}
+              onAttackSpyTarget={attackFromSpyReport}
+              profileFacts={reportProfileFacts}
             />
           ) : activeRoute === 'planet' && planetViewMode !== 'overview' ? (
             <ZoneView

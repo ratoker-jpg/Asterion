@@ -10,6 +10,8 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { patchSaveIdle } = require('./qa-save-edit.cjs');
+const { PARSE_SAVE } = require('./qa-save.cjs');
 
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
@@ -81,16 +83,20 @@ async function readMaxLevels(win) {
   return levels;
 }
 
-/** Rewrites the save and reloads in one renderer turn, so no autosave runs in between. */
+/**
+ * Seeds the fixture with the game out of the way (qa-save-edit.cjs): the window
+ * first goes to an idle page, so the game's unload autosave lands BEFORE the
+ * edit and nothing can write after it. The old in-page edit + reload raced
+ * that autosave: it could restore the previous seed («Unaffordable dialog is
+ * incomplete» with the 999 999 999 999 wallet of the step before). `held` then
+ * waits until the reloaded game really shows the seeded state.
+ */
 async function seed(win, options) {
-  const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-  const ok = await win.webContents.executeJavaScript(`(() => {
+  const edit = `(save) => {
     const options = ${JSON.stringify(options)};
-    const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
     const home = save?.planets?.['helion-01'];
-    if (!home?.buildings) return false;
+    if (!home?.buildings) throw new Error('planet screens seed: no home planet in the save');
     const now = Date.now();
-    if (!window.__qaPristineHome) window.__qaPristineHome = JSON.stringify(home);
     const roles = Object.keys(home.buildings);
     const levels = (value) => Object.fromEntries(roles.map((role) => [role, typeof value === 'number' ? value : Math.min(value[role] ?? 0, options.max?.[role] ?? 99)]));
     home.name = ${JSON.stringify(LONG_HOME)};
@@ -118,14 +124,24 @@ async function seed(win, options) {
     }
     save.currentPlanetId = options.current || 'helion-01';
     save.resourceClock = { ...(save.resourceClock || {}), lastReconciledAt: now, remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
-    localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     localStorage.setItem('asterion.test-time-scale.v1', '1');
-    setTimeout(() => window.location.reload(), 0);
-    return true;
-  })()`);
-  if (!ok) throw new Error('Could not seed the planet screens fixture');
-  await loaded;
-  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`, 20000);
+    localStorage.setItem('asterion.qa.planet-screens-seed', JSON.stringify({ race: options.race, current: save.currentPlanetId, levels: home.buildings, rich: options.wallet > 1e9 }));
+  }`;
+  // The game holds the seed: same race, current planet and building levels, and
+  // a wallet on the right side of 100 000 (production cannot cross it in a few
+  // seconds; the previous seed's 999 999 999 999, clamped to storage, would).
+  const held = `(() => {
+    const expected = JSON.parse(localStorage.getItem('asterion.qa.planet-screens-seed') || 'null');
+    const save = (${PARSE_SAVE})(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+    const home = save.planets?.['helion-01'];
+    if (!expected || !home) return false;
+    const metal = Number(home.resources?.metal ?? save.metal);
+    const levelsHeld = Object.entries(expected.levels).every(([role, level]) => (home.buildings?.[role] ?? 0) >= level);
+    return save.profile?.factionId === expected.race && save.currentPlanetId === expected.current && levelsHeld
+      && (expected.rich ? metal >= 1e5 : metal < 1e5)
+      && Boolean(document.querySelector('[data-qa-navigation="utility"]'));
+  })()`;
+  await patchSaveIdle(win, SAVE_KEY, edit, { label: `planet screens seed (${options.race})`, held, timeoutMs: 60_000 });
   await win.webContents.executeJavaScript('document.fonts?.ready');
   await settle(win, 400);
 }
