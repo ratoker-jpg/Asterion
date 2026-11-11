@@ -1570,7 +1570,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     // Only while «Сообщения» is open: the rest of the game does not pay for it each tick.
     if (activeRoute !== 'reports') return {};
     const playerId = state.profile.playerId;
-    const scores = selectOwnerScores(state);
+    const scores = selectOwnerScoresCached(state);
     const standings = RUNTIME_MODE === 'production'
       ? createOwnerRatingEntries(scores, selectRatedOwners(state), playerId)
       : createPlayerRatingEntries(scores[playerId], RUNTIME_MODE, playerId);
