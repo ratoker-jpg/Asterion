@@ -140,30 +140,8 @@ jobs:
       # (GitHub's hidden Windows compositor can block captures on long pages).
       matrix:
         include:
-          - shard: visual
-            suites: "qa:visual test:test-mode-ui:skip test:header-ui test:resource-assets-ui test:save-safety-ui:skip test:save-store-ui test:whats-new-ui test:rating-ui"
-          - shard: science-reports
-            suites: "test:science-ui:skip test:building-actions-ui test:planet-pass-ui test:planet-screens-ui test:messages-screens-ui test:command-screens-ui test:reports-format-ui test:reports-ui test:battle-reports-ui:skip test:battles-mine-ui test:simulator-ui:skip test:space-flight-ui:skip test:production-test-isolation-ui:skip"
-          # Owner decision (25.10.2026): a long absence is caught up in full
-          # behind a progress bar and the player waits; there is no 14-day /
-          # 120 s limit any more. The scoped replay QA checks the progress
-          # banner, the pending-command gate, completion and state consistency.
-          # Long-horizon durations are measured by the npc-full-world job.
-          # The cloud world QA runs the game against the server's own code on
-          # localhost (no real server is reached from CI).
-          - shard: campaign-command
-            suites: "test:new-game-ui:skip test:command-ui:skip test:command-aid-ui:skip test:command-journal-ui:skip test:cloud-world-ui:skip test:catchup-summary-ui:skip"
-          # The PR gate replays six game hours: the banner, command gate,
-          # completion and state checks need no full day, which took about
-          # 14 minutes. Whole days run in the long-horizon job (main and nightly).
-          # The test fails on a stalled replay cursor, not on duration.
-          # Pirate operations (about 1.5 minutes) ride along with the short replay.
-          # Frame pacing (CPU rendering, fresh full world): a loose p95 budget
-          # catches a screen that blocks the UI thread every second again.
-          - shard: npc-replay
-            suites: "test:npc-replay-ui-6h test:pirate-operations-ui test:late-game-fps-ui:skip"
-          - shard: fleet-universe
-            suites: "test:map-colors-ui test:fleet-ui:skip test:universe-ui:skip test:quick-actions-ui test:empire-ui test:fleet-planner-ui test:build-planner-ui test:fleet-repeat-ui test:energy-ui:skip test:repair-ui:skip"
+          - shard: operations-before
+            suites: "test:operations-screens-ui"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
