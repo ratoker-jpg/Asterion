@@ -151,10 +151,21 @@ async function findPirateSystem(win) {
     if (!changed) throw new Error('Universe system selector not found');
     await waitFor(win, `document.querySelector('[data-qa-universe]')?.getAttribute('data-qa-universe-system') === ${JSON.stringify(String(system))}`);
     await settle(win, 200);
+    const clicked = await win.webContents.executeJavaScript(`(() => {
+      const node = document.querySelector('[data-qa-universe-kind="pirate"]');
+      if (!node) return false;
+      node.click();
+      return true;
+    })()`);
+    if (!clicked) continue;
+    await settle(win, 240);
+    // Only a base that is live now (not in its pause between cycles) with time to spare.
     const position = await win.webContents.executeJavaScript(`(() => {
-      const id = document.querySelector('[data-qa-universe-kind="pirate"]')?.getAttribute('data-qa-universe-object') || '';
-      const match = /([0-9]+)$/.exec(id);
-      return id ? Number(match?.[1] || 1) : 0;
+      const status = document.querySelector('[data-qa-universe-special-status]')?.textContent || '';
+      const countdown = /исчезнет через ([0-9]+) мин/.exec(status);
+      if (!countdown || Number(countdown[1]) < 4) return 0;
+      const place = document.querySelector('[data-qa-universe-inspector]')?.textContent?.match(/\\[[0-9]+:[0-9]+:([0-9]+)\\]/);
+      return Number(place?.[1] || 1);
     })()`);
     if (!position) continue;
     // The running game writes its own save back, so edit storage while it is unloaded.
@@ -174,7 +185,10 @@ async function findPirateSystem(win) {
     await openOperations(win);
     const seen = await waitFor(win, `document.querySelector('.operation-feed-card-v2[data-contact-kind="pirate"]')`, 5000).then(() => true, () => false);
     if (seen) return system;
-    throw new Error(`A colony in system ${system} does not list its pirate base in Operations.`);
+    console.warn(`[operations-screens] colony in system ${system} lists no pirate base, trying the next system`);
+    await win.webContents.executeJavaScript(`document.querySelector('[data-qa-navigation="primary"] [data-qa-route="universe"]')?.click()`);
+    await waitFor(win, `document.querySelector('[data-qa-universe]')`);
+    await settle(win, 300);
   }
   throw new Error('No pirate base on the map in systems 1–40 of the Test Mode galaxy.');
 }
