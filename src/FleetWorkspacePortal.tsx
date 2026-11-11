@@ -138,6 +138,7 @@ import { AID_MISSION_DESCRIPTION, AID_MISSION_ENABLED, AID_TRANSPORT_SHIP_IDS } 
 import { AID_RESOURCE_LABELS, selectFulfillableRequests, selectRequestById } from './domain/command/aid.ts';
 import { selectRequestProgress } from './application/alliance-aid.ts';
 import {
+  FLIGHT_REPEAT_PLAN_EVENT,
   FOLLOW_UP_MISSIONS,
   buildFlightRepeatPlan,
   canRepeatFlight,
@@ -401,6 +402,7 @@ function FleetWorkspace({
   onConstructionOpened,
   saveState,
   launchContext,
+  repeatPlan,
 }: {
   planetId: string;
   planetName: string;
@@ -409,6 +411,8 @@ function FleetWorkspace({
   onConstructionOpened: () => void;
   saveState: SaveState;
   launchContext: FleetLaunchContext | null;
+  /** «Повторить полёт» sent from a report: applied when its launch context arrives. */
+  repeatPlan?: FlightRepeatPlan | null;
 }) {
   const { fleetSection: selectedSection, setFleetSection } = useNavigation();
   const [selectedQuantities, setSelectedQuantities] = useState<Partial<Record<ShipId, number>>>({});
@@ -747,7 +751,7 @@ function FleetWorkspace({
       ? `Цель: ${launchContext.targetPlanetName ?? 'Солнце'} [${launchContext.destination.coordinate.galaxy}:${launchContext.destination.coordinate.system}:0].`
       : launchContext.destination ? `Цель: ${flightCoordinateLabel(launchContext.destination.coordinate)}.` : 'Выберите корабли и координаты цели.');
     setSentFlight(null);
-    const repeat = pendingRepeatRef.current;
+    const repeat = pendingRepeatRef.current ?? (repeatPlan && repeatPlan.context === launchContext ? repeatPlan : null);
     pendingRepeatRef.current = null;
     if (repeat && repeat.context === launchContext && runtimeState.planets[repeat.originPlanetId]) {
       // «Повторить»: the same source, target and composition, capped by what is on the planet now.
@@ -2693,6 +2697,7 @@ export function FleetWorkspacePortal() {
   const [saveState, setSaveState] = useState<SaveState>(() => getLiveSaveState() ?? persistence.read());
   const [constructionRequested, setConstructionRequested] = useState(false);
   const [launchContext, setLaunchContext] = useState<FleetLaunchContext | null>(null);
+  const [repeatPlan, setRepeatPlan] = useState<FlightRepeatPlan | null>(null);
   const fallbackPlanetId = Object.keys(saveState.planets)[0] ?? 'helion-01';
   const planetId = (saveState.planets[saveState.currentPlanetId]
     ? saveState.currentPlanetId
@@ -2709,6 +2714,12 @@ export function FleetWorkspacePortal() {
       }
     };
     const onLaunchContext = (event: Event) => setLaunchContext((event as CustomEvent<FleetLaunchContext>).detail);
+    const onRepeatPlan = (event: Event) => {
+      const plan = (event as CustomEvent<FlightRepeatPlan>).detail;
+      setRepeatPlan(plan);
+      setLaunchContext(plan.context);
+    };
+    window.addEventListener(FLIGHT_REPEAT_PLAN_EVENT, onRepeatPlan);
     const onLaunchContextClear = () => setLaunchContext(null);
     const onRuntimeReset = () => {
       setLaunchContext(null);
@@ -2728,6 +2739,7 @@ export function FleetWorkspacePortal() {
     window.addEventListener(RUNTIME_RESET_EVENT, onRuntimeReset);
     return () => {
       window.removeEventListener(FLIGHT_LAUNCH_CONTEXT_EVENT, onLaunchContext);
+      window.removeEventListener(FLIGHT_REPEAT_PLAN_EVENT, onRepeatPlan);
       window.removeEventListener(FLIGHT_LAUNCH_CONTEXT_CLEAR_EVENT, onLaunchContextClear);
       window.removeEventListener(FLIGHT_COMMAND_RESULT_EVENT, onCommandResult);
       window.removeEventListener(RUNTIME_STATE_CHANGED_EVENT, onRuntimeStateChanged);
@@ -2754,6 +2766,7 @@ export function FleetWorkspacePortal() {
       planetName={planetName}
       coords={coords}
       openConstruction={constructionRequested}
+      repeatPlan={repeatPlan}
         onConstructionOpened={() => setConstructionRequested(false)}
         saveState={saveState}
         launchContext={launchContext}

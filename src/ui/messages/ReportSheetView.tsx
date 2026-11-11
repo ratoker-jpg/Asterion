@@ -179,7 +179,7 @@ export function ReportSheetView({ item, sheet, exploration, command, onOpenUnive
   if (item.pirateReconReport) qa['data-qa-pirate-recon-report'] = item.pirateReconReport.id;
   if (item.letter) qa['data-qa-letter'] = item.letter.kind;
   const art = explorationArt(sheet, exploration);
-  const details = sheet.details.length || sheet.rounds.length;
+  const details = sheet.details.length || sheet.rounds.length || sheet.sections?.length;
   const assetsTitle = sheet.assets.length && sheet.assets.every((group) => group.key.startsWith('defense')) ? 'Оборона' : 'Постройки, оборона, науки';
   return (
     <article className={`reports-dossier reports-sheet reports-dossier--${legacy} reports-v2-tone-${sheet.result.tone}`} data-report-sheet={sheet.kind} {...qa}>
@@ -202,13 +202,17 @@ export function ReportSheetView({ item, sheet, exploration, command, onOpenUnive
           {sheet.sides.map((side, index) => <SideCard key={side.key + index} side={side} command={command} onOpen={openPlace} />)}
         </div>
       </Block> : null}
-      {sheet.ships.length ? <Block id="ships" title="Корабли"><UnitGroups groups={sheet.ships} item={item} /></Block> : null}
       {sheet.resources.length ? <Block id="resources" title="Ресурсы"><ResourceGroups groups={sheet.resources} /></Block> : null}
+      {sheet.ships.length ? <Block id="ships" title="Корабли"><UnitGroups groups={sheet.ships} item={item} /></Block> : null}
       {sheet.assets.length ? <Block id="assets" title={assetsTitle}><UnitGroups groups={sheet.assets} item={item} /></Block> : null}
       {details ? <details className="reports-sheet-details" data-report-block="details">
         <summary><span>Подробности</span>{sheet.rounds.length ? <small>{roundsLabel(sheet.rounds.length)}</small> : null}</summary>
         <div className="reports-sheet-details__body">
           {sheet.details.length ? <FactList facts={sheet.details} /> : null}
+          {sheet.sections?.length ? <div className="reports-sheet-sections">{sheet.sections.map((section) => <section key={section.title} className="reports-sheet-section">
+            <strong>{section.title}</strong>
+            <FactList facts={section.facts} className="reports-sheet-facts--round" />
+          </section>)}</div> : null}
           {sheet.rounds.length ? <ol className="reports-sheet-rounds">{sheet.rounds.map((round) => <li key={round.index}>
             <strong>Раунд {round.index}</strong>
             <FactList facts={round.facts} className="reports-sheet-facts--round" />

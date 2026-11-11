@@ -30,6 +30,9 @@ export type FlightRepeatPlan = {
   cargo?: TransportCargo;
 };
 
+/** «Повторить полёт» from a report: App sends the plan, the Fleets screen opens it like its own «Повторить». */
+export const FLIGHT_REPEAT_PLAN_EVENT = 'asterion:flight-repeat-plan';
+
 export function canRepeatFlight(state: SaveState, flight: FlightRecord): boolean {
   if (flight.ownerSide && flight.ownerSide !== 'player') return false;
   if (!REPEATABLE_MISSIONS.has(flight.missionId)) return false;

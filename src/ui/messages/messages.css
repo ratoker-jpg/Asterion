@@ -131,7 +131,9 @@
 }
 .reports-view .reports-message-nav .reports-v2-unread-count.is-new { background: var(--rm-accent-strong); color: #061016; }
 /* «new/total», as in Nemexia: the unread badge, then the folder size. */
-.reports-view .reports-folder-counter { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
+.reports-view .reports-folder-counter { display: inline-flex; align-items: center; gap: 0; white-space: nowrap; }
+.reports-view .reports-message-nav .reports-folder-counter .reports-v2-unread-count { min-width: 0; padding: 0; }
+.reports-view .reports-message-nav .reports-folder-counter .reports-v2-unread-count.is-new { min-width: 20px; padding: 1px 6px; margin-right: 2px; }
 .reports-view .reports-folder-counter > i { color: rgba(143, 182, 192, .55); font-size: calc(12px * var(--text-scale-table, 1)) !important; font-style: normal; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 .reports-view .reports-categories .reports-mark-all {
@@ -656,6 +658,13 @@
 .reports-view .reports-sheet-rounds > li { min-width: 0; display: grid; gap: 4px; }
 .reports-view .reports-sheet-rounds > li > strong { color: #e8f6fa; font-size: calc(13px * var(--text-scale-body, 1)) !important; font-weight: 800; }
 .reports-view .reports-sheet-facts--round { grid-template-columns: 1fr; }
+.reports-view .reports-sheet-sections { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px 20px; }
+.reports-view .reports-sheet-section { min-width: 0; display: grid; gap: 4px; }
+.reports-view .reports-sheet-section > strong { color: #e8f6fa; font-size: calc(13px * var(--text-scale-body, 1)) !important; font-weight: 800; }
+/* An empty collection is one short row, not a full message. */
+.reports-view .reports-list-item--brief .reports-list-open { min-height: 0; padding-top: 6px; padding-bottom: 6px; }
+.reports-view .reports-list-item--brief .reports-list-icon { opacity: .55; }
+.reports-view .reports-list-item--brief .reports-list-copy strong { color: var(--rm-label); font-weight: 600; }
 
 /* -------------------------------------------------------- empty states */
 .reports-view :is(.reports-empty-dossier, .reports-empty-folder) {

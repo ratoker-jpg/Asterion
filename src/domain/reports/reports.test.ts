@@ -43,7 +43,7 @@ import {
 } from './repository.ts';
 import type { GasExtractionArrivalReport, ReportItem } from './types.ts';
 import { personalLetters } from './letters.ts';
-import { buildReportSheet } from './sheet.ts';
+import { buildReportSheet, titleWithoutPlace } from './sheet.ts';
 import { createBattleReportViewModel } from '../combat/battle-report-view-model.ts';
 import type { AllianceApplication, AllianceRecord } from '../command/types.ts';
 import type { SpyReportSnapshot } from '../espionage/types.ts';
@@ -143,7 +143,8 @@ test('recycler arrival report projects coordinates and debris totals into System
   assert.equal(stored.id, 'recycler-arrival:flight:qa-recycler-1');
   assert.equal(item.id, stored.id);
   assert.equal(item.source, 'recycling');
-  assert.equal(item.category, 'system');
+  // Owner 11.11.2026: every fleet arrival lives in «Полёты».
+  assert.equal(item.category, 'flights');
   assert.equal(item.timestamp, new Date(report.arrivedAtMs).toISOString());
   assert.deepEqual(item.coordinates, ['[2:14:7]']);
   assert.deepEqual(item.details, [
@@ -183,7 +184,8 @@ test('zero-debris recycler arrival still produces a System report with explicit 
   const item = recyclerArrivalReportToReportItem(report);
   const feed = buildReportsFeed([], createDefaultOperationsState(), commandWithoutJointOperations(), undefined, [], [report]);
 
-  assert.equal(item.category, 'system');
+  assert.equal(item.category, 'flights');
+  assert.equal(item.brief, true);
   assert.match(item.body, /На орбите обломков не найдено/);
   assert.equal(feed.filter((entry) => entry.id === report.id).length, 1);
 });
@@ -218,7 +220,7 @@ test('gas extraction arrivals have a distinct stable report schema and show comp
   assert.equal(repeated.gasExtractionArrivalReports?.length, 1);
   assert.equal(foundStored.id, 'gas-extraction-arrival:flight:qa-gas-found');
   assert.equal(foundItem.source, 'gas-extraction');
-  assert.equal(foundItem.category, 'system');
+  assert.equal(foundItem.category, 'flights');
   assert.equal(foundItem.timestamp, new Date(found.arrivalAt).toISOString());
   assert.equal(foundItem.title, 'Астероид найден');
   assert.deepEqual(foundItem.coordinates, ['[3:22:6]']);
@@ -248,7 +250,7 @@ test('gas extraction reports flow through unread counts and keep persistent reco
   const item = gasExtractionArrivalReportToReportItem(report);
   const feed = buildReportsFeed([], createDefaultOperationsState(), commandWithoutJointOperations(), undefined, [], [], [report]);
   const read = preservePersistentReportCollections(markReportRead(previous, report.id), previous);
-  const hidden = preservePersistentReportCollections(deleteSelectedReports(previous, [item], 'system', [report.id]), previous);
+  const hidden = preservePersistentReportCollections(deleteSelectedReports(previous, [item], 'flights', [report.id]), previous);
   const countUnread = (state: ReturnType<typeof createDefaultReportsState>) =>
     Object.values(getReportUnreadCounts(feed, state)).reduce((total, count) => total + count, 0);
 
@@ -271,7 +273,7 @@ test('report metadata read/hide transitions preserve recycler arrival records', 
   const previous = { ...createDefaultReportsState(), recyclerArrivalReports: [report] };
   const item = recyclerArrivalReportToReportItem(report);
   const read = preservePersistentReportCollections(markReportRead(previous, report.id), previous);
-  const hidden = preservePersistentReportCollections(deleteSelectedReports(previous, [item], 'system', [report.id]), previous);
+  const hidden = preservePersistentReportCollections(deleteSelectedReports(previous, [item], 'flights', [report.id]), previous);
 
   assert.deepEqual(read.recyclerArrivalReports, [report]);
   assert.deepEqual(hidden.recyclerArrivalReports, [report]);
@@ -635,7 +637,8 @@ test('flight summary names every completion reason in Russian and never calls a 
       assert.notEqual(item.title, 'Рейс завершён', reason);
       assert.notEqual(item.statusTone, 'success', reason);
     }
-    assert.doesNotMatch(JSON.stringify({ ...item, id: '' }), new RegExp(`${reason}|helion-01|summary-flight`));
+    // Ids are references (repeat the flight), never shown.
+    assert.doesNotMatch(JSON.stringify({ ...item, id: '', flightId: '' }), new RegExp(`${reason}|helion-01|summary-flight`));
   }
 });
 
@@ -798,12 +801,17 @@ test('every report kind becomes the same sheet: header with title, time and one 
   assert.deepEqual(battleSheet!.sides.map((side) => side.role), ['Атакующий', 'Защитник']);
   assert.deepEqual(battleSheet!.ships.map((group) => group.title), ['Атакующий', 'Защитник']);
   assert.equal(battleSheet!.rounds.length, battle.rounds.length);
-  assert.deepEqual(battleSheet!.actions.map((action) => [action.kind, action.primary]), [['open_battle', true]]);
+  // Debris on orbit: recyclers first (owner journal), the full log next to it.
+  assert.deepEqual(battleSheet!.actions.map((action) => [action.kind, action.primary]), DEMO_BATTLE_REPORTS[0]!.debris ? [['collect_debris', true], ['open_battle', false]] : [['open_battle', true]]);
+  assert.ok(!battleSheet!.sides.some((side) => side.facts?.some((fact) => /наука|броня/i.test(fact.label))), 'bonuses live in «Подробности»');
+  assert.doesNotMatch(battleSheet!.title, new RegExp(`${battleSheet!.place?.name ?? '-'}$`));
   // Spy: everything revealed vs almost empty.
   assert.deepEqual(fullSpy!.ships[0]!.units.map((unit) => unit.key), ['cruiser']);
   assert.ok(fullSpy!.ships.some((group) => group.key === 'commanders' && group.units[0]!.ability));
   assert.equal(fullSpy!.assets[0]!.units.length, 1);
-  assert.equal(fullSpy!.actions.find((action) => action.primary)?.kind, 'simulate_battle');
+  assert.equal(fullSpy!.actions.find((action) => action.primary)?.kind, 'attack_target');
+  assert.ok(fullSpy!.actions.some((action) => action.kind === 'simulate_battle' && !action.primary));
+  assert.equal(fullSpy!.summary, '');
   assert.equal(basicSpy!.ships[0]!.hidden, true);
   assert.equal(basicSpy!.assets[0]!.hidden, true);
   assert.deepEqual(basicSpy!.place?.coordinate, { galaxy: 1, system: 4, position: 7 });
@@ -838,4 +846,50 @@ test('old saves still load: reports metadata has no new field and «Личные
   const hydrated = persistence.read();
   assert.deepEqual(hydrated.reports.readIds, [letterId]);
   assert.equal(personalLetters(hydrated.command, me)[0]?.id, letterId);
+});
+
+test('one mission is one report: a recycler arrival takes the return of the same flight, and an empty one is a short row', () => {
+  const flight = finishedFlight({ id: 'mission-7', missionId: 'recycle', selectedShips: { recycler: 4 } });
+  const arrival = { id: createRecyclerArrivalReportId('mission-7'), flightId: 'mission-7', coordinate: { galaxy: 1, system: 11, position: 4 }, arrivedAtMs: 2_000, collectedDebris: 0, remainingOrbitalDebris: 0 } as const;
+  const feed = buildReportsFeed([], createDefaultOperationsState(), commandWithoutJointOperations(), undefined, [], [arrival], [], [], [flight], undefined, 'player-me');
+  const flights = feed.filter((item) => item.category === 'flights');
+  assert.deepEqual(flights.map((item) => item.id), [arrival.id]);
+  const item = flights[0]!;
+  assert.equal(item.brief, true);
+  assert.equal(item.flightId, 'mission-7');
+  // The return's fleet came along; the arrival's time and id stay.
+  assert.equal(item.blocks?.ships?.[0]?.title, 'Вернувшийся флот');
+  assert.equal(item.timestamp, new Date(2_000).toISOString());
+  const sheet = buildReportSheet(item, null, { canRepeatFlight: (id) => id === 'mission-7' });
+  assert.deepEqual(sheet.actions.map((action) => [action.kind, action.primary, action.flightId]), [['repeat_flight', true, 'mission-7']]);
+  assert.equal(sheet.title, 'Переработчик прибыл');
+  assert.match(sheet.summary, /На орбите обломков не найдено/);
+  // Without the possibility the button is not offered.
+  assert.deepEqual(buildReportSheet(item).actions, []);
+});
+
+test('an application decided in Command turns its «Личные» letter from «Новая» into the outcome', () => {
+  const alliance = allianceRecord('alliance-mine-1', 'Северный Рубеж', 'NORTH', 'player-me');
+  const letter = (status: AllianceApplication['status']) => personalLetters({
+    alliances: [alliance],
+    applications: [application({ id: 'application-5', allianceId: alliance.id, ownerId: 'npc-wanderer', displayName: 'Странник', status, resolvedAt: status === 'pending' ? null : 9_000 })],
+  }, 'player-me')[0]!;
+  const pending = letter('pending');
+  assert.deepEqual(pending.result, { label: 'Новая', tone: 'info' });
+  assert.equal(pending.answers.length, 1);
+  assert.doesNotMatch(pending.text, /Командовани/);
+  for (const [status, label] of [['accepted', 'Принята'], ['rejected', 'Отклонена'], ['withdrawn', 'Отозвана']] as const) {
+    const decided = letter(status);
+    assert.equal(decided.id, pending.id, 'the same letter, read marks stay');
+    assert.equal(decided.result.label, label);
+    assert.deepEqual(decided.answers, []);
+  }
+});
+
+test('the title does not repeat the place shown under it', () => {
+  assert.equal(titleWithoutPlace('Победа при атаке Кассиопея', { name: 'Кассиопея' }), 'Победа при атаке');
+  assert.equal(titleWithoutPlace('Ничья: бой за Тавр', { name: 'Тавр' }), 'Ничья: бой');
+  assert.equal(titleWithoutPlace('Полный шпионский отчёт: Тавр', { name: 'Тавр' }), 'Полный шпионский отчёт');
+  assert.equal(titleWithoutPlace('Астероид не найден по координатам [2:3:4]', { coordinate: { galaxy: 2, system: 3, position: 4 } }), 'Астероид не найден');
+  assert.equal(titleWithoutPlace('Экспедиция вернулась', { name: 'Рудные пустоши' }), 'Экспедиция вернулась');
 });

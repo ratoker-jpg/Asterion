@@ -141,14 +141,14 @@ function ReportListItem({ item, active, read, saved, selected, onOpen, onSelect 
   onSelect: (checked: boolean) => void;
 }) {
   return (
-    <article className={`reports-list-item reports-v2-tone-${item.statusTone} ${active ? 'active' : ''} ${read ? 'read' : 'unread'} ${selected ? 'selected' : ''}`} data-report-item-id={item.id} data-report-kind={item.spyReport ? "spy" : item.pirateReconReport ? "pirate-recon" : item.overpopulationReport ? "overpopulation" : item.source} data-pirate-recon-outcome={item.pirateReconReport?.outcome}>
+    <article className={`reports-list-item reports-v2-tone-${item.statusTone} ${item.brief ? 'reports-list-item--brief' : ''} ${active ? 'active' : ''} ${read ? 'read' : 'unread'} ${selected ? 'selected' : ''}`} data-report-item-id={item.id} data-report-kind={item.spyReport ? "spy" : item.pirateReconReport ? "pirate-recon" : item.overpopulationReport ? "overpopulation" : item.source} data-pirate-recon-outcome={item.pirateReconReport?.outcome}>
       <label className="reports-list-check">
         <input type="checkbox" checked={selected} onChange={(event) => onSelect(event.target.checked)} aria-label={`Выбрать сообщение: ${item.title}`} />
         <span aria-hidden="true" />
       </label>
       <button type="button" className="reports-list-open" onClick={onOpen} aria-current={active ? 'true' : undefined} aria-label={`Открыть сообщение: ${item.title}`}>
         <span className={`reports-list-icon reports-list-icon--${item.category} reports-v2-art`}><ReportArtwork item={item} /></span>
-        <span className="reports-list-copy"><small>{item.typeLabel}</small><strong>{item.title}</strong><em>{item.preview}</em></span>
+        <span className="reports-list-copy">{item.brief ? null : <small>{item.typeLabel}</small>}<strong>{item.title}</strong><em>{item.preview}</em></span>
         <span className="reports-list-meta"><time>{formatTime(item.timestamp)}</time>{saved ? <i className="reports-favorite-dot" aria-label="Бой сохранён" /> : null}{!read ? <b className="reports-unread-dot" aria-label="Непрочитано" /> : null}</span>
       </button>
     </article>
@@ -222,7 +222,7 @@ function FolderActions({ folder, items, selectedIds, onSelectAll, onDeleteAll, o
   );
 }
 
-export function ReportsView({ retentionCutoff, battleReports, planetNames, savedBattleReportIds, operations, command, espionage, pirateReconReports, pirateFlights, exploration, initialSelectedReportId, profile, score, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy, onOpenUniverseTarget, onOpenPirateUniverse }: {
+export function ReportsView({ retentionCutoff, battleReports, planetNames, savedBattleReportIds, operations, command, espionage, pirateReconReports, pirateFlights, exploration, initialSelectedReportId, profile, score, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy, onOpenUniverseTarget, onOpenPirateUniverse, canRepeatFlight, onRepeatFlight, onCollectDebris, onAttackSpyTarget }: {
   /** Letters older than this world time are gone (24-hour rule); absent in Test Mode. */
   retentionCutoff?: number;
   battleReports: readonly BattleReport[];
@@ -249,6 +249,11 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
   onRecallSpy: (missionId: string) => void;
   onOpenUniverseTarget: (target: { coordinate: UniverseCoordinate; planetId?: string; ownerId?: string }) => void;
   onOpenPirateUniverse: (coordinate: UniverseCoordinate, contactCycleKey: string) => void;
+  /** The Fleets screen prefilled from a report (existing launch and repeat flows). */
+  canRepeatFlight?: (flightId: string) => boolean;
+  onRepeatFlight?: (flightId: string) => void;
+  onCollectDebris?: (coordinate: UniverseCoordinate) => void;
+  onAttackSpyTarget?: (report: SpyReportSnapshot) => void;
 }) {
   const [activeFolder, setActiveFolder] = useState<MessageFolderId>('profile');
   const [filter, setFilter] = useState<ReportFilter>('all');
@@ -405,7 +410,7 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
   const selectedBattleViewModel = useMemo(() => selectedBattle ? createBattleReportViewModel(selectedBattle, {
     awardedBattlePoints: selectRecordedBattlePointAwards(rating, selectedBattle, profile.playerId),
   }) : null, [selectedBattle, rating, profile.playerId]);
-  const selectedSheet = useMemo(() => selectedItem ? buildReportSheet(selectedItem, selectedBattleViewModel) : null, [selectedItem, selectedBattleViewModel]);
+  const selectedSheet = useMemo(() => selectedItem ? buildReportSheet(selectedItem, selectedBattleViewModel, { canRepeatFlight: onRepeatFlight ? canRepeatFlight : undefined }) : null, [selectedItem, selectedBattleViewModel, canRepeatFlight, onRepeatFlight]);
   const runAction = (action: ReportSheetAction) => {
     if (!selectedItem) return;
     if (action.kind === 'open_battle' && selectedBattle) setOpenBattleReportId(selectedBattle.id);
@@ -413,9 +418,19 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
     else if (action.kind === 'recall_spy' && action.missionId) onRecallSpy(action.missionId);
     else if (action.kind === 'open_fleets') onOpenFleets();
     else if (action.kind === 'open_command') onOpenCommand();
+    else if (action.kind === 'collect_debris' && action.coordinate) onCollectDebris?.(action.coordinate);
+    else if (action.kind === 'attack_target' && selectedItem.spyReport) onAttackSpyTarget?.(selectedItem.spyReport);
+    else if (action.kind === 'repeat_flight' && action.flightId) onRepeatFlight?.(action.flightId);
   };
-  // Answers that have no game action yet («Принять» / «Отказаться» of bot letters) are not drawn.
-  const sheetActions = (selectedSheet?.actions ?? []).filter((action) => action.kind !== 'accept' && action.kind !== 'decline');
+  const wired: Partial<Record<ReportSheetAction['kind'], boolean>> = {
+    collect_debris: Boolean(onCollectDebris), attack_target: Boolean(onAttackSpyTarget), repeat_flight: Boolean(onRepeatFlight),
+    // Answers with no game action yet («Принять» / «Отказаться» of bot letters) are not drawn.
+    accept: false, decline: false,
+  };
+  const offered = (selectedSheet?.actions ?? []).filter((action) => wired[action.kind] !== false);
+  // One primary: the first offered primary keeps it.
+  const firstPrimary = offered.findIndex((action) => action.primary);
+  const sheetActions = offered.map((action, index) => ({ ...action, primary: index === firstPrimary }));
 
   const previewBody = !activeCategory
     ? <EmptyFolder folder={activeFolderMeta} />

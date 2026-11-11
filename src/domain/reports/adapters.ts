@@ -70,6 +70,22 @@ function battleNoCombat(report: BattleReport) {
   return noCombatVerdict(report.roundCount, report.winner, report.missionType, loot);
 }
 
+function lostUnits(force: BattleReport['attackerForce']) {
+  return [...(force.stacks ?? []), ...(force.defenses ?? [])].reduce((total, stack) => total + Math.max(0, Number(stack.destroyed ?? 0)), 0);
+}
+
+/** The list row of a battle: loot and losses of both sides. */
+function battleNumbers(report: BattleReport) {
+  const loot = (['metal', 'minerals', 'gas'] as const).reduce((total, kind) => total + Number(report.resources?.[kind] ?? 0), 0);
+  const parts = [
+    ...(loot > 0 ? [`Добыча ${new Intl.NumberFormat('ru-RU').format(loot)}`] : []),
+    `потери ${new Intl.NumberFormat('ru-RU').format(lostUnits(report.attackerForce))} / ${new Intl.NumberFormat('ru-RU').format(lostUnits(report.defenderForce))}`,
+    ...(Number(report.debris ?? 0) > 0 ? [`обломки ${new Intl.NumberFormat('ru-RU').format(Number(report.debris))}`] : []),
+  ];
+  const text = parts.join(' · ');
+  return text[0]!.toLocaleUpperCase('ru-RU') + text.slice(1);
+}
+
 function battleStatus(report: BattleReport) {
   const noCombat = battleNoCombat(report);
   const status = battleStatusByResult(report);
@@ -132,8 +148,8 @@ export function battleReportToReportItem(report: BattleReport, operation?: Opera
     typeLabel: operation ? 'Доклад операции' : CATEGORY_TYPE_LABEL.battle,
     title: battleTitle(report, operation),
     preview: operation
-      ? `${operation.objective.label}. ${noCombat?.summary ?? `Бой завершён за ${report.roundCount} раундов.`}`
-      : noCombat?.summary ?? `Бой завершён за ${report.roundCount} раундов. Откройте полный журнал боя.`,
+      ? `${operation.objective.label}. ${noCombat?.summary ?? battleNumbers(report)}`
+      : noCombat?.summary ?? battleNumbers(report),
     body: operation
       ? `Боевой результат операции «${operation.title}» сохранён в журнале боя.`
       : `Боевой журнал ${report.attacker.playerName} против ${report.defender.playerName}.`,
@@ -162,6 +178,18 @@ function spyReportTitleLabel(report: SpyReportSnapshot) {
   return report.quality === 'full' ? 'Полный' : report.quality === 'detailed' ? 'Подробный' : 'Базовый';
 }
 
+const feedNumber = new Intl.NumberFormat('ru-RU');
+
+/** The list row says what the probe saw, not what kind of report it is. */
+function spyPreview(report: SpyReportSnapshot) {
+  const parts = [`Металл ${feedNumber.format(report.resources.metal)}`, `минералы ${feedNumber.format(report.resources.minerals)}`, `газ ${feedNumber.format(report.resources.gas)}`];
+  const ships = Object.entries(report.fleet ?? {}).filter(([id]) => id !== 'spy-probe').reduce((total, [, count]) => total + Number(count ?? 0), 0);
+  const defense = Object.values(report.defense ?? {}).reduce((total, count) => total + Number(count ?? 0), 0);
+  if (report.quality === 'full') parts.push(`флот ${feedNumber.format(ships)}`);
+  if (report.quality !== 'basic') parts.push(`оборона ${feedNumber.format(defense)}`);
+  return parts.join(' · ');
+}
+
 function spyReportHasCombatIntel(report: SpyReportSnapshot) {
   const hasFleet = Object.entries(report.fleet ?? {}).some(([id, count]) => id !== 'spy-probe' && Number(count) > 0);
   const hasDefense = Object.values(report.defense ?? {}).some((count) => Number(count) > 0);
@@ -175,10 +203,10 @@ export function spyReportToReportItem(report: SpyReportSnapshot, espionage?: Esp
   return {
     id: `espionage:${report.id}`,
     source: 'espionage',
-    category: 'system',
+    category: 'battle',
     typeLabel: `${spyReportTitleLabel(report)} шпионский отчёт`,
     title: `${spyReportTitleLabel(report)} шпионский отчёт: ${report.targetPlanetName}`,
-    preview: `${spyQualityLabel(report)} · ${coordinates} · цель ${report.targetOwnerName}.`,
+    preview: spyPreview(report),
     body: report.quality === 'full'
       ? `Зонд передал полный снимок ${report.targetPlanetName}: ресурсы, население, корабли и оборона цели.`
       : report.quality === 'detailed'
@@ -207,7 +235,7 @@ export function spyHunterNoticeToReportItem(notice: SpyHunterNotice): ReportItem
   return {
     id: `espionage:hunter:${notice.id}`,
     source: 'espionage',
-    category: 'system',
+    category: 'battle',
     typeLabel: 'Контрразведка',
     title: `Зонд уничтожен: ${notice.targetPlanetName}`,
     preview: `Охотник ${notice.targetOwnerName} обнаружил шпионский зонд над целью.`,
@@ -329,10 +357,10 @@ export function recyclerArrivalReportToReportItem(report: RecyclerArrivalReport)
   return {
     id: createRecyclerArrivalReportId(report.flightId),
     source: 'recycling',
-    category: 'system',
+    category: 'flights',
     typeLabel: 'Отчёт переработчика',
     title: `Переработчик прибыл к координатам ${coordinate}`,
-    preview: `${coordinate} · собрано ${collected} · осталось на орбите ${remaining}.`,
+    preview: report.collectedDebris === 0 ? `Пусто · осталось на орбите ${remaining}` : `Собрано ${collected} · осталось на орбите ${remaining}`,
     body: report.collectedDebris === 0 && report.remainingOrbitalDebris === 0
       ? `${summary} К моменту прибытия флота здесь ничего не было, корабли возвращаются пустыми.`
       : `${summary} На орбите осталось свободных обломков: ${remaining}.`,
@@ -347,7 +375,10 @@ export function recyclerArrivalReportToReportItem(report: RecyclerArrivalReport)
       { label: 'Собрано обломков', value: collected },
       { label: 'Осталось свободных обломков на орбите', value: remaining },
     ],
+    flightId: report.flightId,
+    ...(report.collectedDebris === 0 ? { brief: true } : {}),
     blocks: {
+      summary: report.collectedDebris === 0 ? summary : '',
       place: { coordinate: { ...report.coordinate } },
       result: report.collectedDebris > 0 ? { label: 'Собрано', tone: 'success' } : { label: 'Пусто', tone: 'warning' },
       resources: [
@@ -388,10 +419,10 @@ export function gasExtractionArrivalReportToReportItem(report: GasExtractionArri
   return {
     id: createGasExtractionArrivalReportId(report.flightId),
     source: 'gas-extraction',
-    category: 'system',
+    category: 'flights',
     typeLabel: 'Отчёт добычи газа',
     title,
-    preview: `${coordinate} · собрано газа ${gas} · собрано обломков ${scrap}.`,
+    preview: report.outcome === 'found' ? `Газ ${gas} · обломки ${scrap}` : 'Пусто: астероида на месте не было',
     body: `${title}. Координаты: ${coordinate}. Собрано газа: ${gas}. Собрано обломков: ${scrap}.`,
     timestamp: new Date(report.arrivalAt).toISOString(),
     statusLabel: report.outcome === 'found' ? 'АСТЕРОИД НАЙДЕН' : 'АСТЕРОИД НЕ НАЙДЕН',
@@ -404,7 +435,10 @@ export function gasExtractionArrivalReportToReportItem(report: GasExtractionArri
       { label: 'Собрано газа', value: gas },
       { label: 'Собрано обломков', value: scrap },
     ],
+    flightId: report.flightId,
+    ...(report.outcome === 'found' ? {} : { brief: true }),
     blocks: {
+      summary: report.outcome === 'found' ? '' : 'Астероида на месте не было, флот возвращается пустым.',
       place: { coordinate: { ...report.coordinate } },
       result: report.outcome === 'found' ? { label: 'Найден', tone: 'success' } : { label: 'Пусто', tone: 'warning' },
       resources: [{
@@ -414,6 +448,23 @@ export function gasExtractionArrivalReportToReportItem(report: GasExtractionArri
         tone: 'gain',
       }],
       details: [],
+    },
+  };
+}
+
+/** Arrival + return of one mission as one report: the arrival's id, time and result, the return's fleet and cargo. */
+function mergeMissionReports(arrival: ReportItem, landing: ReportItem): ReportItem {
+  const a = arrival.blocks ?? {};
+  const l = landing.blocks ?? {};
+  return {
+    ...arrival,
+    details: [...arrival.details, ...landing.details],
+    blocks: {
+      ...a,
+      sides: l.sides ?? a.sides,
+      ships: l.ships ?? a.ships,
+      resources: [...(a.resources ?? []), ...(l.resources ?? []).filter((group) => group.title !== 'Доставлено' && group.title !== 'Зачислено')],
+      details: [...(a.details ?? []), ...(l.details ?? []).filter((fact) => fact.label !== 'Миссия')],
     },
   };
 }
@@ -454,21 +505,27 @@ export function buildReportsFeed(
   const recyclerItems = recyclerArrivalReports.map(recyclerArrivalReportToReportItem);
   const gasExtractionItems = gasExtractionArrivalReports.map(gasExtractionArrivalReportToReportItem);
   // Pirate recon by an NPC is that owner's intelligence, not the player's mail.
-  const pirateReconItems = pirateReconReports.filter((report) => !playerOwnerId || mine(report.ownerId)).map(pirateReconReportToReportItem);
+  const pirateReconItems: ReportItem[] = pirateReconReports.filter((report) => !playerOwnerId || mine(report.ownerId)).map((report) => ({ ...pirateReconReportToReportItem(report), category: 'battle' as const }));
   // Existing legacy consumers keep the historical System projection.
   // In the live player mailbox MOVE these canonical single-event notifications to
   // Flights instead of cloning them: no double unread count or duplicate messages.
   // Preserve exact report ids so users' read/hidden metadata survives the move.
-  const extractionSystemItems = playerOwnerId ? [] : [...recyclerItems, ...gasExtractionItems];
-  const arrivalFlightItems: ReportItem[] = playerOwnerId ? [...recyclerItems, ...gasExtractionItems].map(item => ({
-    ...item,
-    category: 'flights',
-    typeLabel: 'Прибытие добывающего флота',
-  })) : [];
+  // Owner (11.11.2026): every fleet arrival and return lives in «Полёты», one
+  // mission = one report. The arrival report keeps its id (read marks stay) and
+  // takes the return of the same flight (fleet home, cargo credited) into it.
+  const flightItems = explorationMailboxReports(exploration, pirateFlights, playerOwnerId, { ...flightContext, battleReports });
+  const landingByFlight = new Map(flightItems.filter((item) => item.id.startsWith('flight-landing:') && item.flightId).map((item) => [item.flightId!, item]));
+  const merged = new Set<string>();
+  const arrivalFlightItems: ReportItem[] = [...recyclerItems, ...gasExtractionItems].map((item) => {
+    const landing = item.flightId ? landingByFlight.get(item.flightId) : undefined;
+    if (!landing) return item;
+    merged.add(landing.id);
+    return mergeMissionReports(item, landing);
+  });
 
   const letterItems = personalLetterItems(command, playerOwnerId);
 
-  return [...letterItems, ...battleItems, ...espionageItems, ...overpopulationItems, ...extractionSystemItems, ...pirateReconItems, ...pirateFlightAbsenceReports(pirateFlights.filter((flight) => flight.ownerSide !== 'npc')), ...explorationMailboxReports(exploration, pirateFlights, playerOwnerId, { ...flightContext, battleReports }), ...arrivalFlightItems].sort((a, b) => {
+  return [...letterItems, ...battleItems, ...espionageItems, ...overpopulationItems, ...pirateReconItems, ...pirateFlightAbsenceReports(pirateFlights.filter((flight) => flight.ownerSide !== 'npc')), ...flightItems.filter((item) => !merged.has(item.id)), ...arrivalFlightItems].sort((a, b) => {
     if (a.timestamp && b.timestamp) return Date.parse(b.timestamp) - Date.parse(a.timestamp);
     if (!a.timestamp && b.timestamp) return -1;
     if (a.timestamp && !b.timestamp) return 1;

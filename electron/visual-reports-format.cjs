@@ -282,8 +282,8 @@ async function runViewport(win, directory, label) {
     await check('01b-battle-rounds-open');
     await capture(win, directory, '01b-battle-rounds-open');
   }
-  await shoot('02-spy-everything', 'system', 'espionage:qa-spy-full');
-  await shoot('03-spy-almost-empty', 'system', 'espionage:qa-spy-basic');
+  await shoot('02-spy-everything', 'battle', 'espionage:qa-spy-full');
+  await shoot('03-spy-almost-empty', 'battle', 'espionage:qa-spy-basic');
   await shoot('04-recycling-nothing', 'flights', 'recycler-arrival:qa-recycle-empty');
   await shoot('05-gas-extraction', 'flights', 'gas-extraction-arrival:qa-gas');
   await shoot('06-pirate-raid', 'battle', 'battle:qa-pirate-raid');

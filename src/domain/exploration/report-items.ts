@@ -34,7 +34,7 @@ export function explorationMailboxReports(ledger?: ExplorationState, flights: re
     return {
       id: 'exploration-recon:' + record.flightId,
       source: 'exploration',
-      category: 'system',
+      category: 'battle',
       typeLabel: 'Исследование объекта',
       title: record.success ? 'Исследование завершено' : 'Разведка не удалась',
       preview: (profile?.name ?? 'Космический объект') + ' · ' + location,
@@ -107,6 +107,7 @@ export function explorationMailboxReports(ledger?: ExplorationState, flights: re
           { label: 'Жетоны ремонта', value: String(event.repairTokens ?? 0) },
         ],
         blocks: {
+          summary: returned ? (total > 0 ? '' : 'Флот вернулся без добычи: для обломков нужны переработчики, транспортёры их не добывают.') : 'Планета отправления уничтожена, груз не доставлен.',
           place: { name: profile.name, coordinate: { ...contact.coordinate } },
           result: returned ? (total ? { label: 'Доставлено', tone: 'success' } : { label: 'Пусто', tone: 'warning' }) : { label: 'Потеряно', tone: 'danger' },
           resources: returned ? [
@@ -262,6 +263,7 @@ function flightSummaryReport(flight: FlightRecord, context: FlightReportContext)
   return {
     id: 'flight-landing:' + flight.id,
     source: 'flights', category: 'flights',
+    flightId: flight.id,
     typeLabel: 'Итог полёта',
     title: outcome.title,
     preview: mission + ' · ' + location,
@@ -307,6 +309,7 @@ function flightBlocks(flight: FlightRecord, context: FlightReportContext, outcom
   }
   const units = returnedUnits(flight, context, battle);
   return {
+    summary: '',
     place: { ...(flight.targetPlanetName ? { name: flight.targetPlanetName } : {}), coordinate: { ...flight.destinationCoordinate } },
     result: { label: flightResultWord(flight, outcome), tone: outcome.tone },
     sides: [

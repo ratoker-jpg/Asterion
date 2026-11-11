@@ -30,8 +30,15 @@ export type ReportSheetKind =
   | 'battle' | 'spy' | 'spy-lost' | 'overpopulation' | 'pirate-recon' | 'pirate-absence'
   | 'recycling' | 'gas' | 'exploration-recon' | 'expedition' | 'flight' | 'letter' | 'other';
 
-export type ReportSheetActionKind = 'open_battle' | 'simulate_battle' | 'recall_spy' | 'open_fleets' | 'open_command' | 'accept' | 'decline';
-export type ReportSheetAction = { kind: ReportSheetActionKind; label: string; primary: boolean; missionId?: string };
+export type ReportSheetActionKind =
+  | 'open_battle' | 'simulate_battle' | 'recall_spy' | 'open_fleets' | 'open_command'
+  /** The Fleets screen prefilled: recyclers to the battle's debris, an attack on the spied planet, the same flight again. */
+  | 'collect_debris' | 'attack_target' | 'repeat_flight'
+  | 'accept' | 'decline';
+export type ReportSheetAction = { kind: ReportSheetActionKind; label: string; primary: boolean; missionId?: string; flightId?: string; coordinate?: ReportCoordinate };
+
+/** A titled list of facts inside «Подробности» (the bonuses of one battle side…). */
+export type ReportFactSection = { title: string; facts: ReportFact[] };
 
 export type ReportSheet = {
   kind: ReportSheetKind;
@@ -47,9 +54,17 @@ export type ReportSheet = {
   resources: ReportResourceGroup[];
   assets: ReportUnitGroup[];
   details: ReportFact[];
+  /** More facts in «Подробности», each under its own title. */
+  sections?: ReportFactSection[];
   rounds: ReportRound[];
   actions: ReportSheetAction[];
   letter?: PersonalLetter;
+};
+
+/** What the report screen can do beyond reading (the sheet only offers what is possible). */
+export type ReportSheetContext = {
+  /** Flights the player can send again right now. */
+  canRepeatFlight?: (flightId: string) => boolean;
 };
 
 const number = new Intl.NumberFormat('ru-RU');
@@ -103,10 +118,9 @@ function battleUnit(stack: BattleStackViewModel): ReportUnit {
   };
 }
 
-function battleSide(side: BattleSideViewModel, outcome: ReportSide['outcome']): ReportSide {
-  const role = side.participant.side === 'attacker' ? 'Атакующий' : 'Защитник';
-  const pirate = isPirate(side);
-  const facts: ReportFact[] = [
+/** Bonuses one side fought with: «Подробности», not the first screen. */
+function battleBonuses(side: BattleSideViewModel): ReportFact[] {
+  return [
     ...(side.activeCommander ? [{ label: 'Командир', value: side.activeCommander.name }] : []),
     ...side.technologies.filter((technology) => technology.level > 0).map((technology) => ({
       label: technology.name,
@@ -115,6 +129,13 @@ function battleSide(side: BattleSideViewModel, outcome: ReportSide['outcome']): 
     // Engine-only modifiers (snapshot ids, English keys) are not player words.
     ...side.modifiers.filter((modifier) => !/[A-Za-z]/.test(`${modifier.label}${modifier.value}`)).map((modifier) => ({ label: modifier.label, value: modifier.value })),
   ];
+}
+
+function battleSide(side: BattleSideViewModel, outcome: ReportSide['outcome']): ReportSide {
+  const role = side.participant.side === 'attacker' ? 'Атакующий' : 'Защитник';
+  const pirate = isPirate(side);
+  const lost = (side.losses.ships ?? 0) + (side.losses.defenses ?? 0);
+  const facts: ReportFact[] = side.losses.ships != null || side.losses.defenses != null ? [{ label: 'Потеряно единиц', value: number.format(lost) }] : [];
   return {
     key: side.participant.side,
     role,
@@ -181,11 +202,14 @@ function battleSheet(item: ReportItem, viewModel: BattleReportViewModel): Report
     ...item.details.filter((detail) => detail.label === 'Операция' || detail.label === 'Локация'),
   ];
   const target = viewModel.defender.participant;
+  const debrisCoordinate = parseReportCoordinate(target.coordinates);
+  const noCombat = !viewModel.roundCount;
   return {
     kind: 'battle',
     typeLabel: item.typeLabel,
     title: item.title,
-    summary: item.preview,
+    // The blocks carry the numbers; only a battle without a fight needs a sentence.
+    summary: noCombat ? item.preview : '',
     time: item.timestamp,
     place: { name: target.planetName ?? target.playerName, coordinate: parseReportCoordinate(target.coordinates), ownerId: target.playerId ?? undefined },
     result: battleResult(item, viewModel),
@@ -194,8 +218,17 @@ function battleSheet(item: ReportItem, viewModel: BattleReportViewModel): Report
     resources,
     assets: defences,
     details,
+    sections: [
+      { title: 'Бонусы атакующего', facts: battleBonuses(viewModel.attacker) },
+      { title: 'Бонусы защитника', facts: battleBonuses(viewModel.defender) },
+    ].filter((section) => section.facts.length),
     rounds: roundFacts(viewModel),
-    actions: [{ kind: 'open_battle', label: 'Полный отчёт о бое', primary: true }],
+    actions: [
+      // Owner journal: most attacks are followed by recyclers to the same point.
+      ...(viewModel.debrisOnOrbit && viewModel.debrisOnOrbit > 0 && debrisCoordinate
+        ? [{ kind: 'collect_debris' as const, label: 'Собрать обломки', primary: true, coordinate: debrisCoordinate }] : []),
+      { kind: 'open_battle', label: 'Полный отчёт о бое', primary: true },
+    ],
   };
 }
 
@@ -256,7 +289,7 @@ function spySheet(item: ReportItem, report: SpyReportSnapshot): ReportSheet {
     kind: 'spy',
     typeLabel: item.typeLabel,
     title: item.title,
-    summary: item.body,
+    summary: '',
     time: item.timestamp,
     place: { name: report.targetPlanetName, coordinate: report.targetCoordinate, planetId: report.targetPlanetId, ownerId: report.targetOwnerId },
     result: { label: qualityWord, tone: item.statusTone },
@@ -282,7 +315,8 @@ function spySheet(item: ReportItem, report: SpyReportSnapshot): ReportSheet {
       { label: 'Передан', value: at(report.createdAt) },
     ],
     rounds: [],
-    actions: [],
+    // Owner journal: he attacks after spying.
+    actions: [{ kind: 'attack_target', label: 'Атаковать', primary: true }],
   };
 }
 
@@ -340,7 +374,7 @@ function pirateReconSheet(item: ReportItem): ReportSheet {
     kind: 'pirate-recon',
     typeLabel: item.typeLabel,
     title: item.title,
-    summary: success ? 'Зонд передал состав пиратской базы по долям населения.' : item.body,
+    summary: success ? '' : item.body,
     time: item.timestamp,
     place: { name: 'Пиратская база', coordinate: report.coordinate, pirateContactKey: report.contactCycleKey },
     result: report.outcome === 'success' ? { label: 'Разведано', tone: 'success' } : report.outcome === 'failure' ? { label: 'Провал', tone: 'danger' } : { label: 'Пусто', tone: 'warning' },
@@ -423,7 +457,7 @@ function blockSheet(item: ReportItem): ReportSheet {
     kind: sheetKind(item),
     typeLabel: item.typeLabel,
     title: item.title,
-    summary: item.body,
+    summary: blocks.summary ?? item.body,
     time: item.timestamp,
     place: notice ? { name: notice.targetPlanetName, coordinate: notice.targetCoordinate, planetId: notice.targetPlanetId } : place,
     result: blocks.result ?? (notice ? { label: 'Потерян', tone: 'danger' } : { label: firstWord(item.statusLabel), tone: item.statusTone }),
@@ -437,16 +471,17 @@ function blockSheet(item: ReportItem): ReportSheet {
   };
 }
 
-function itemActions(item: ReportItem): ReportSheetAction[] {
+function itemActions(item: ReportItem, context: ReportSheetContext): ReportSheetAction[] {
   const actions: ReportSheetAction[] = [];
-  if (item.action?.kind === 'simulate_battle' && item.spyReport) actions.push({ kind: 'simulate_battle', label: 'Моделировать сражение', primary: true });
+  if (item.flightId && context.canRepeatFlight?.(item.flightId)) actions.push({ kind: 'repeat_flight', label: 'Повторить полёт', primary: true, flightId: item.flightId });
+  if (item.action?.kind === 'simulate_battle' && item.spyReport) actions.push({ kind: 'simulate_battle', label: 'Моделировать сражение', primary: false });
   if (item.action?.kind === 'open_fleets') actions.push({ kind: 'open_fleets', label: 'Открыть флоты', primary: true });
   if (item.secondaryAction?.kind === 'recall_spy' && item.secondaryAction.missionId) actions.push({ kind: 'recall_spy', label: 'Вернуть шпиона', primary: false, missionId: item.secondaryAction.missionId });
   return actions;
 }
 
 /** One sheet for any report: header, shared blocks, footer actions (at most one primary). */
-export function buildReportSheet(item: ReportItem, battle?: BattleReportViewModel | null): ReportSheet {
+export function buildReportSheet(item: ReportItem, battle?: BattleReportViewModel | null, context: ReportSheetContext = {}): ReportSheet {
   const sheet = item.letter
     ? letterSheet(item, item.letter)
     : battle && item.battleReportId
@@ -458,16 +493,32 @@ export function buildReportSheet(item: ReportItem, battle?: BattleReportViewMode
           : item.pirateReconReport
             ? pirateReconSheet(item)
             : blockSheet(item);
-  const actions = [...sheet.actions, ...itemActions(item)];
+  const actions = [...sheet.actions, ...itemActions(item, context)];
   let primarySeen = false;
   return {
     ...sheet,
+    title: titleWithoutPlace(sheet.title, sheet.place),
     actions: actions.map((action) => {
       const primary = action.primary && !primarySeen;
       if (primary) primarySeen = true;
       return { ...action, primary };
     }),
   };
+}
+
+/**
+ * The place is the line under the title: «Победа при атаке Кассиопея» over
+ * «Кассиопея [1:40:24]» says it twice. The title keeps what happened.
+ */
+export function titleWithoutPlace(title: string, place: ReportPlace | null): string {
+  let next = title.trim();
+  const cut = (tail: string) => {
+    if (tail && next.length > tail.length && next.toLocaleLowerCase('ru-RU').endsWith(tail.toLocaleLowerCase('ru-RU'))) next = next.slice(0, -tail.length).trim();
+  };
+  if (place?.coordinate) cut(formatReportCoordinate(place.coordinate));
+  if (place?.name) cut(place.name);
+  next = next.replace(/\s+(к|по|у)\s+координатам$/u, '').replace(/[:\s]+$/u, '').replace(/\s+(за|при)$/u, (match) => match.trim() === 'за' ? '' : match).trim();
+  return next || title;
 }
 
 /** «3 раунда», «1 раунд», «6 раундов». */

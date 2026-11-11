@@ -174,6 +174,7 @@ import { bindCombatResolutionEventBridge } from './application/combat.ts';
 import { getFleetProductionEntity } from './domain/fleet/production.ts';
 import { getFleetBuildBudget, getFleetSummaryForState, getOutgoingFleetSummaryForState, getPlanetPopulationForState } from './application/fleet.ts';
 import { getPendingInboundPopulation } from './application/flights.ts';
+import { buildFlightRepeatPlan, canRepeatFlight, FLIGHT_REPEAT_PLAN_EVENT, type FlightRepeatPlan } from './application/flight-repeat.ts';
 import {
   cancelAidRequest,
   createAidRequest,
@@ -2804,6 +2805,42 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const sunLaunchDestination = (galaxy: number, system: number) => ({
     kind: 'operation' as const, operationId: `sun:${galaxy}:${system}`, coordinate: { galaxy, system, position: 1 },
   });
+  // Reports → the Fleets screen prefilled through the existing launch and repeat flows (no new game rule).
+  const canRepeatReportFlight = (flightId: string) => {
+    const flight = stateRef.current.flights.records.find((record) => record.id === flightId);
+    return Boolean(flight && canRepeatFlight(stateRef.current, flight));
+  };
+  const repeatFlightFromReport = (flightId: string) => {
+    const flight = stateRef.current.flights.records.find((record) => record.id === flightId);
+    const plan = flight ? buildFlightRepeatPlan(stateRef.current, flight) : null;
+    if (!plan) {
+      setNotice('Этот рейс нельзя повторить.', 'error');
+      return;
+    }
+    if (plan.originPlanetId !== stateRef.current.currentPlanetId && stateRef.current.planets[plan.originPlanetId]) {
+      const next = selectOwnedPlanet(stateRef.current, plan.originPlanetId);
+      stateRef.current = next;
+      setState(next);
+    }
+    clearBuildingInterior();
+    navigateTo('fleets');
+    setPlanetViewMode('overview');
+    setPlanetMenuOpen(false);
+    window.setTimeout(() => window.dispatchEvent(new CustomEvent<FlightRepeatPlan>(FLIGHT_REPEAT_PLAN_EVENT, { detail: plan })), 40);
+  };
+  const collectDebrisFromReport = (coordinate: UniverseCoordinate) => openSunFleetLaunch({
+    missionId: 'recycle', destination: { kind: 'coordinate', coordinate: { ...coordinate } },
+  });
+  const attackFromSpyReport = (report: SpyReportSnapshot) => openSunFleetLaunch({
+    missionId: 'attack',
+    targetRelation: report.targetRelation === 'enemy' ? 'enemy' : 'neutral',
+    targetKind: 'npc',
+    targetPlanetName: report.targetPlanetName,
+    targetOwnerId: report.targetOwnerId,
+    targetOwnerName: report.targetOwnerName,
+    targetRaceId: report.targetRaceId === 'synod' || report.targetRaceId === 'veyra' ? report.targetRaceId : 'aegis',
+    destination: { kind: 'planet', planetId: report.targetPlanetId, coordinate: { ...report.targetCoordinate } },
+  });
   const openSunSupportInFleets = (raid: { galaxy: number; system: number }) => openSunFleetLaunch({
     missionId: 'sun-support', operationId: `sun:${raid.galaxy}:${raid.system}`,
     destination: sunLaunchDestination(raid.galaxy, raid.system), targetRelation: 'neutral', targetPlanetName: `Солнце ${raid.galaxy}:${raid.system}`,
@@ -3311,6 +3348,10 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               onRecallSpy={recallSpyFromReport}
               onOpenUniverseTarget={openUniverseTarget}
               onOpenPirateUniverse={openPirateReconCoordinate}
+              canRepeatFlight={canRepeatReportFlight}
+              onRepeatFlight={repeatFlightFromReport}
+              onCollectDebris={collectDebrisFromReport}
+              onAttackSpyTarget={attackFromSpyReport}
             />
           ) : activeRoute === 'planet' && planetViewMode !== 'overview' ? (
             <ZoneView

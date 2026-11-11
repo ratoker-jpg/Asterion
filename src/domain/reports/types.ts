@@ -152,6 +152,8 @@ export type ReportRound = { index: number; facts: ReportFact[] };
 
 /** Block data a source adapter fills; the sheet builder adds header and actions. */
 export type ReportBlocks = {
+  /** One line under the title; empty when the blocks already say everything. */
+  summary?: string;
   place?: ReportPlace;
   result?: ReportResultWord;
   sides?: ReportSide[];
@@ -218,6 +220,10 @@ export type ReportItem = {
   secondaryAction?: ReportAction;
   /** Structured blocks of the one report format (header place, sides, ships, resources…). */
   blocks?: ReportBlocks;
+  /** The player's flight behind this report (repeat it from the report). */
+  flightId?: string;
+  /** Nothing happened (empty collection): a short row in the list. */
+  brief?: boolean;
   /** «Личные» letter. */
   letter?: PersonalLetter;
 };

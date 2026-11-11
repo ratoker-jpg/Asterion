@@ -43,16 +43,32 @@ function answerLetter(application: AllianceApplication, alliance: AllianceRecord
   };
 }
 
+/** An application to the alliance the player runs; once decided in Command it shows the outcome. */
 function incomingLetter(application: AllianceApplication, alliance: AllianceRecord): PersonalLetter {
+  const pending = application.status === 'pending';
+  const result: PersonalLetter['result'] = pending
+    ? { label: 'Новая', tone: 'info' }
+    : application.status === 'accepted'
+      ? { label: 'Принята', tone: 'success' }
+      : application.status === 'withdrawn'
+        ? { label: 'Отозвана', tone: 'neutral' }
+        : { label: 'Отклонена', tone: 'danger' };
+  const text = pending
+    ? `${application.displayName} просит принять в союз.`
+    : application.status === 'accepted'
+      ? `Заявка ${application.displayName} принята, новый участник в составе союза.`
+      : application.status === 'withdrawn'
+        ? `Заявка ${application.displayName} отозвана.`
+        : `Заявка ${application.displayName} отклонена.`;
   return {
     id: `letter:application-incoming:${application.id}`,
     kind: 'application-incoming',
     sender: { kind: 'player', ownerId: application.ownerId, name: application.displayName },
     subject: `Заявка в союз «${alliance.name}»`,
-    text: `${application.displayName} просит принять в союз. Ответить можно в Командовании, во вкладке заявок.`,
+    text,
     at: application.createdAt,
-    result: { label: 'Новая', tone: 'info' },
-    answers: [{ kind: 'open_command', label: 'Рассмотреть заявку', primary: true }],
+    result,
+    answers: pending ? [{ kind: 'open_command', label: 'Рассмотреть заявку', primary: true }] : [],
     subjectRef: application.id,
   };
 }
@@ -68,7 +84,8 @@ export function personalLetters(command: Pick<CommandState, 'alliances' | 'appli
       if (letter) letters.push(letter);
       continue;
     }
-    if (application.status === 'pending' && alliance && canManageAlliance(selectRole(alliance, playerOwnerId))) {
+    // Applications to the alliance the player runs stay as letters; a decided one shows the outcome.
+    if (alliance && canManageAlliance(selectRole(alliance, playerOwnerId))) {
       letters.push(incomingLetter(application, alliance));
     }
   }
