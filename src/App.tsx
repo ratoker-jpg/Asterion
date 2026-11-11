@@ -191,7 +191,7 @@ import type { AidResource } from './domain/command/types.ts';
 import { getPlanetOverpopulationSummary } from './application/overpopulation.ts';
 import { energySummaryForPlanet, getPlanetEnergyCoordinates } from './application/energy.ts';
 import { getEffectiveResourceIncomePerHour } from './application/resource-clock.ts';
-import { publishApplicationRuntimeSnapshot, setLiveSaveState } from './application/runtime.ts';
+import { publishApplicationRuntimeSnapshot, selectRatedAlliances, setLiveSaveState } from './application/runtime.ts';
 import { reconcileRuntime, type RuntimeReconcileEvent } from './application/reconcile.ts';
 import { freezeNpcCatchupTarget, isNpcCatchupPending, needsNpcCatchupBefore } from './application/npc-catchup.ts';
 import { NpcCatchupBanner } from './NpcCatchupBanner.tsx';
@@ -1578,6 +1578,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     ...(RUNTIME_MODE === 'test' ? { [TEST_MODE_ALLY_PLANET_FIXTURE.owner.id]: TEST_MODE_ALLY_PLANET_FIXTURE.owner.raceId } : {}),
     [state.profile.playerId]: state.profile.factionId,
   }), [state.profile.playerId, state.profile.factionId]);
+  const commandAllianceDetails = useMemo(() => selectRatedAlliances(state), [state.command, state.sunRaid]); // eslint-disable-line react-hooks/exhaustive-deps
   const buildingInteriorTarget = buildingInterior
     ? getBuildingInteriorTarget(buildingInterior.buildingRole)
     : null;
@@ -3247,6 +3248,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               }}
               ownerScores={withTestOwnerScoreFixtures(selectOwnerScores(state), RUNTIME_MODE)}
               ownerFactions={commandOwnerFactions}
+              allianceDetails={commandAllianceDetails}
               playerFactionId={state.profile.factionId}
               returnToBuilding={buildingInterior && buildingInteriorTarget?.kind === 'command' && buildingInteriorDefinition
                 ? { label: `Назад: ${buildingInteriorDefinition.name}`, onBack: returnToBuilding }

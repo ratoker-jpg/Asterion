@@ -236,52 +236,7 @@
   font-size:12.5px;
 }
 
-/* === 7. COMMAND (союз) ====================================== */
-.command-view__status{
-  border-radius:var(--ut-r-chip);
-}
-.command-tabs{
-  border-radius:var(--ut-r-chip) var(--ut-r-chip) 0 0;
-  overflow:hidden;
-}
-.command-tabs button{
-  border-radius:var(--ut-r-chip);
-  font-size:12px !important;
-  letter-spacing:.06em;
-}
-.command-panel{
-  border-radius:var(--ut-r-card) !important;
-}
-.command-operation-card{
-  border-radius:var(--ut-r-card) !important;
-  background:var(--ut-surface-2);
-  border:1px solid var(--ut-border);
-}
-.command-state{ font-size:11px !important; }
-.command-view button.primary,
-.command-view button{
-  border-radius:var(--ut-r-btn);
-  font-size:12px;
-}
-.command-relation-badge{
-  border-radius:999px !important;
-  font-size:10px !important;
-  letter-spacing:.08em;
-}
-.command-alliance-summary,
-.command-detail-panel,
-.command-diplomacy-summary,
-.command-empty-state,
-.command-emblem-shield{
-  border-radius:var(--ut-r-card) !important;
-}
-.command-activity{
-  border-radius:999px;
-  font-size:10.5px;
-}
-.command-diplomacy-mark{
-  border-radius:var(--ut-r-chip);
-}
+/* === 7. COMMAND: src/command.css ============================ */
 .command-diplomacy-mark--large{ border-radius:var(--ut-r-card); }
 
 /* === 9. FOOTER / STATUS STRIPS ============================== */
@@ -425,8 +380,6 @@ html.asterion-repair-page .repair-page-head-v1::after{
 }
 
 /* command / operations / messages / universe */
-.command-view__status,
-.command-panel,
 .universe-view,
 .universe-nav,
 .nav-coordinate > .step,
@@ -890,19 +843,12 @@ html.asterion-repair-page .repair-page-head-v1::after{
 .universe-inspector-header,
 .planet-skin-menu,
 .asterion-header__planet-list,
-.command-tactical-grid,
 .galaxy-readout{
   border-radius:var(--ut-r-card);
 }
 
 /* === P4.2 cards, rows, plates =============================== */
 .operations-unknown-brief-v2,
-.command-request-row,
-.command-detail-note,
-.command-request-meter,
-.command-operation-readiness,
-.command-relation-history > div,
-.command-sun-scope,
 .flight-timeline-eta-card,
 .flight-timeline-cargo,
 .flight-timeline-ship,
@@ -937,14 +883,6 @@ html.asterion-repair-page .repair-page-head-v1::after{
 .science-additional-hint-v2,
 .spaceport-heading-meta-v2 span,
 .spaceport-level-line-v2 span,
-.command-member-avatar,
-.command-emblem-options > button,
-.command-accent-options > button,
-.command-member-list > button,
-.command-member-requests > button,
-.command-diplomacy-list > button,
-.command-operation-catalog-grid > button,
-.command-form-error,
 .sim-population-v1,
 .sim-commander-select-v1,
 .sim-target-priority-v1,

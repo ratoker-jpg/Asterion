@@ -229,7 +229,7 @@ export function cancelAidRequest(state: SaveState, requestId: string, context: A
   const synced = syncAidState(state, context);
   const result = cancelResourceRequest(synced.command, synced.profile.playerId, requestId, context.now);
   if (!result.ok) return { ok: false, state: withCommand(synced, result.state), code: result.code, message: result.message };
-  return { ok: true, state: withCommand(synced, result.state), message: 'Запрос отменён, заряд возвращён.' };
+  return { ok: true, state: withCommand(synced, result.state), message: 'Запрос отменён, можно создать новый.' };
 }
 
 /** Units of the request that are in the air right now, derived from the live flight records. */

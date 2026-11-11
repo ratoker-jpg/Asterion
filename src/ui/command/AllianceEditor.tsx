@@ -72,7 +72,7 @@ export function AllianceEditor({ title, submitLabel, initial, onSubmit, onClose 
     <Dialog title={title} onClose={onClose} size="studio">
       <div className="command-editor cmdA-studio">
         <aside className="command-editor-preview cmdA-studio-preview" style={{ '--command-emblem': accent } as CSSProperties}>
-          <small>ПРЕДПРОСМОТР</small>
+          <small>Предпросмотр</small>
           <EmblemGlyph emblem={draft.emblem} />
           <strong>{draft.name.trim() || 'Название союза'}</strong>
           <span>[{tagText}]</span>
@@ -88,24 +88,24 @@ export function AllianceEditor({ title, submitLabel, initial, onSubmit, onClose 
           <section className="cmdA-studio-section">
             <h4>Основное</h4>
             <div className="cmdA-studio-grid">
-              <label><span>НАЗВАНИЕ · 3–{ALLIANCE_NAME_MAX}</span><input value={draft.name} maxLength={ALLIANCE_NAME_MAX} onChange={(event) => setName(event.target.value)} data-qa-alliance-name /></label>
+              <label><span>Название · от 3 до {ALLIANCE_NAME_MAX} знаков</span><input value={draft.name} maxLength={ALLIANCE_NAME_MAX} onChange={(event) => setName(event.target.value)} data-qa-alliance-name /></label>
               <label className="cmdA-tag-field">
-                <span>ТЕГ · 2–{ALLIANCE_TAG_MAX}{tagAuto ? ' · ИЗ НАЗВАНИЯ' : ''}</span>
+                <span>Тег · от 2 до {ALLIANCE_TAG_MAX}{tagAuto ? ' · из названия' : ''}</span>
                 <div>
                   <input value={draft.tag} maxLength={ALLIANCE_TAG_MAX} onChange={(event) => { setTagAuto(false); set({ tag: event.target.value }); }} data-qa-alliance-tag />
-                  <button type="button" className={tagAuto ? 'is-on' : ''} title="Сформировать тег из названия" onClick={() => { setTagAuto(true); set({ tag: suggestAllianceTag(draft.name).slice(0, ALLIANCE_TAG_MAX) }); }} data-qa-tag-auto>АВТО</button>
+                  <button type="button" className={tagAuto ? 'is-on' : ''} aria-label="Сформировать тег из названия" onClick={() => { setTagAuto(true); set({ tag: suggestAllianceTag(draft.name).slice(0, ALLIANCE_TAG_MAX) }); }} data-qa-tag-auto>Авто</button>
                 </div>
               </label>
-              <label className="wide"><span>ДЕВИЗ · ДО {ALLIANCE_MOTTO_MAX}</span><input value={draft.motto} maxLength={ALLIANCE_MOTTO_MAX} onChange={(event) => set({ motto: event.target.value })} /></label>
+              <label className="wide"><span>Девиз · до {ALLIANCE_MOTTO_MAX} знаков</span><input value={draft.motto} maxLength={ALLIANCE_MOTTO_MAX} onChange={(event) => set({ motto: event.target.value })} /></label>
             </div>
           </section>
 
           <section className="cmdA-studio-section">
             <h4>Описание <small>{draft.description.length} / {ALLIANCE_DESCRIPTION_MAX}</small></h4>
             <div className="cmdA-format-bar" role="toolbar" aria-label="Форматирование описания">
-              <button type="button" title="Жирный" onClick={() => mark('bold')} data-qa-format="bold"><b>Ж</b></button>
-              <button type="button" title="Курсив" onClick={() => mark('italic')} data-qa-format="italic"><i>К</i></button>
-              <button type="button" title="Подчёркнутый" onClick={() => mark('underline')} data-qa-format="underline"><u>Ч</u></button>
+              <button type="button" aria-label="Жирный" data-tip="Жирный" onClick={() => mark('bold')} data-qa-format="bold"><b>Ж</b></button>
+              <button type="button" aria-label="Курсив" data-tip="Курсив" onClick={() => mark('italic')} data-qa-format="italic"><i>К</i></button>
+              <button type="button" aria-label="Подчёркнутый" data-tip="Подчёркнутый" onClick={() => mark('underline')} data-qa-format="underline"><u>Ч</u></button>
               <span>Выделите текст и нажмите кнопку</span>
             </div>
             <textarea ref={descriptionRef} value={draft.description} maxLength={ALLIANCE_DESCRIPTION_MAX} rows={3} onChange={(event) => set({ description: event.target.value })} data-qa-alliance-description />
@@ -128,18 +128,18 @@ export function AllianceEditor({ title, submitLabel, initial, onSubmit, onClose 
                   </>
                 ) : (
                   <>
-                    <b>Прежний герб</b>
-                    <p>Он остаётся без изменений, пока вы не соберёте новый герб «Орбитальных домов» в конструкторе.</p>
+                    <b>Простой герб</b>
+                    <p>Он останется таким, пока вы не соберёте новый в конструкторе.</p>
                   </>
                 )}
               </div>
-              <button type="button" className="primary cmdA-crest-card-open" onClick={() => setCrestOpen(true)} data-qa-crest-open>КОНСТРУКТОР ГЕРБА</button>
+              <button type="button" className="cmdA-crest-card-open" onClick={() => setCrestOpen(true)} data-qa-crest-open>Конструктор герба</button>
             </div>
           </section>
 
           {error ? <div className="command-error" role="alert" data-qa-command-error>{error}</div> : null}
           <div className="command-actions">
-            <button type="button" className="danger" onClick={onClose}>ОТМЕНА</button>
+            <button type="button" onClick={onClose}>Отмена</button>
             <button type="button" className="primary" onClick={submit} data-qa-alliance-submit>{submitLabel}</button>
           </div>
         </div>

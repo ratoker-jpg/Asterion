@@ -19,7 +19,6 @@ import { ORBITAL_CREST_CATALOG } from '../../../domain/command/orbital-crest-cat
 import type { AllianceCrest } from '../../../domain/command/types.ts';
 import { OrbitalCrest } from './OrbitalCrest';
 import { crestSafeCircle, warmCrestModules } from './renderer';
-import './crest-constructor.css';
 
 type Tab = 'glyph' | 'frame' | 'field' | 'pattern' | 'layout';
 
@@ -51,7 +50,7 @@ function pickRandom<T>(list: readonly T[]): T {
 
 function Tile({ selected, label, onSelect, children, qa, className = '' }: { selected: boolean; label: string; onSelect: () => void; children: ReactNode; qa?: string; className?: string }) {
   return (
-    <button type="button" className={`crest-tile ${selected ? 'is-selected' : ''} ${className}`} aria-pressed={selected} title={label} onClick={onSelect} data-qa-crest-option={qa}>
+    <button type="button" className={`crest-tile ${selected ? 'is-selected' : ''} ${className}`} aria-pressed={selected} onClick={onSelect} data-qa-crest-option={qa}>
       {children}
       <span>{label}</span>
     </button>
@@ -182,18 +181,18 @@ export function CrestConstructor({ initial, onApply, onBack }: { initial: Allian
           <button type="button" onClick={randomize} data-qa-crest-random>Случайный</button>
           <button type="button" onClick={() => setCrest(initial)} data-qa-crest-reset>Сбросить</button>
         </div>
-        <div className="crest-sizes" aria-label="Фактические размеры">
-          {[64, 48, 32].map((size) => (
-            <figure key={size}><OrbitalCrest crest={crest} size={size} /><figcaption>{size} px</figcaption></figure>
+        <div className="crest-sizes" aria-label="Как герб выглядит в игре">
+          {([[64, 'На карточке'], [48, 'В списке'], [32, 'На карте']] as const).map(([size, caption]) => (
+            <figure key={size}><OrbitalCrest crest={crest} size={size} /><figcaption>{caption}</figcaption></figure>
           ))}
         </div>
         <div className="crest-presets">
-          <small>ГОТОВЫЕ ОБРАЗЫ</small>
+          <small>Готовые образы</small>
           <div>
             {PRESETS.map((preset) => {
               const presetCrest = { ...DEFAULT_ALLIANCE_CREST, ...preset.crest };
               return (
-                <button key={preset.name} type="button" title={preset.name} aria-label={`Образ: ${preset.name}`} onClick={() => setCrest(presetCrest)} data-qa-crest-preset>
+                <button key={preset.name} type="button" data-tip={preset.name} aria-label={`Образ: ${preset.name}`} onClick={() => setCrest(presetCrest)} data-qa-crest-preset>
                   <OrbitalCrest crest={presetCrest} size={46} />
                 </button>
               );
@@ -316,8 +315,8 @@ export function CrestConstructor({ initial, onApply, onBack }: { initial: Allian
 
         <div className="crest-footer">
           <p>{crestLabel('glyphs', crest.glyph)} · {crestLabel('colors', crest.color)} · {crestLabel('frames', crest.frame)} · {crestLabel('fields', crest.field)} · {crestLabel('patterns', crest.pattern)}</p>
-          <button type="button" onClick={onBack} data-qa-crest-back>НАЗАД</button>
-          <button type="button" className="primary" onClick={() => onApply(crest)} data-qa-crest-apply>ПРИМЕНИТЬ ГЕРБ</button>
+          <button type="button" onClick={onBack} data-qa-crest-back>Назад</button>
+          <button type="button" className="primary" onClick={() => onApply(crest)} data-qa-crest-apply>Применить герб</button>
         </div>
       </section>
     </div>

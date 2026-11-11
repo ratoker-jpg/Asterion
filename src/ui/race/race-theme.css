@@ -8,7 +8,6 @@
    ========================================================================== */
 
 /* ---------- 1. Horizontal tabs and segments (recipe: fill from the top, thin light outline) ---------- */
-:root[data-faction] .command-view.cmdA .cmdA-tabs button.active,
 :root[data-faction] .workspace .opsA .opsA-tabs button.active,
 :root[data-faction] .operations-tabs-v2 button.active,
 :root[data-faction] .rating-mode-tabs-v2 button.active,
@@ -16,24 +15,19 @@
 :root[data-faction] .settings-segment-v2 button.active,
 :root[data-faction] .battle-tabs-v1:not(.ops6 *) button.active,
 :root[data-faction] .sim-rounds-v1 button.active,
-:root[data-faction] .workspace--universe .universe-view-v3 .universe-tools button.active,
-:root[data-faction] .command-dialog.command-dialog--crest .crest-tabs button.is-active {
+:root[data-faction] .workspace--universe .universe-view-v3 .universe-tools button.active {
   color: #fff;
   border-color: var(--race-outline);
   background: linear-gradient(180deg, var(--race-fill), transparent);
   box-shadow: inset 0 0 0 1px var(--race-outline), inset 0 -2px 0 var(--race-accent-strong);
 }
 :root[data-faction] .main-tabs button.active::before { background: var(--race-underline); box-shadow: 0 0 9px var(--race-glow); }
-:root[data-faction] .command-view.cmdA .cmdA-tabs button.active .command-badge,
 :root[data-faction] .workspace .opsA .opsA-tabs button.active b,
 :root[data-faction] .operations-tabs-v2 button.active b { background: var(--race-accent-strong); color: #061016; }
-:root[data-faction] .command-dialog.command-dialog--crest .crest-tabs button.is-active small { color: var(--race-accent); }
 
 /* ---------- 2. Filter chips and pagination ---------- */
 :root[data-faction] .workspace .opsA .opsA-filters .opsA-chip.active,
-:root[data-faction] .rating-pagination-v2 button.active,
-:root[data-faction] .command-dialog.command-dialog--crest .crest-chips button.is-on,
-:root[data-faction] .command-dialog.command-dialog--crest .crest-stage-tools button.is-on {
+:root[data-faction] .rating-pagination-v2 button.active {
   color: #fff;
   border-color: var(--race-outline);
   background: var(--race-fill);
@@ -66,8 +60,7 @@
 :root[data-faction] .rating-row-v2.selected { background: var(--race-fill-soft); border-bottom-color: var(--race-border-soft); }
 
 /* ---------- 4. Selected tiles and cards ---------- */
-:root[data-faction] .fleet-mission-icons-v1 button.active,
-:root[data-faction] .command-dialog.command-dialog--crest .crest-tile.is-selected {
+:root[data-faction] .fleet-mission-icons-v1 button.active {
   color: #fff;
   border-color: var(--race-accent);
   background: linear-gradient(180deg, var(--race-fill), rgba(3, 24, 35, .9));
@@ -78,8 +71,7 @@
 :root[data-faction] .queue-progress-v2 i,
 :root[data-faction] .science-queue-card-v2 > i > b,
 :root[data-faction] .fleet-production-order-v1:not(.waiting) .fleet-production-order-progress-v1 i,
-:root[data-faction] .recycling-job-row.processing .recycling-job-progress i,
-:root[data-faction] .command-view.cmdA .cmdA-members-bar > i span {
+:root[data-faction] .recycling-job-row.processing .recycling-job-progress i {
   background: linear-gradient(90deg, var(--race-accent-strong), var(--race-accent));
   box-shadow: 0 0 8px var(--race-glow);
 }
@@ -90,22 +82,10 @@
   box-shadow: inset 3px 0 var(--race-accent-strong);
 }
 
-/* ---------- 6. Crest constructor sliders follow the race, the crest keeps its own colour ---------- */
-:root[data-faction] .command-dialog.command-dialog--crest .crest-toggle.is-on { border-color: var(--race-outline); background: var(--race-fill); }
-
 /* ---------- 7. Own objects: the player's planet on the system map (ring uses the race bezel pattern) ---------- */
 :root[data-faction] .workspace--universe .universe-view-v3 .system-planet--self img { filter: drop-shadow(0 0 12px var(--race-glow)) drop-shadow(0 0 22px color-mix(in srgb, var(--race-glow) 40%, transparent)); }
 :root[data-faction] .workspace--universe .universe-view-v3 .system-planet--self::after { border: 1px dashed var(--race-accent-strong); box-shadow: 0 0 18px var(--race-glow); }
 :root[data-faction] .workspace--universe .universe-view-v3 .system-planet--self .planet-name { color: var(--race-accent); border-color: var(--race-border); background: color-mix(in srgb, var(--race-accent-strong) 16%, #06141bcc); }
-
-/* ---------- 8. Command lists: the selection is the race, the left marker keeps the row's own kind colour ---------- */
-:root[data-faction] .cmdA .cmdA-item.is-selected,
-:root[data-faction] .command-view.cmdA button.cmdA-item.is-selected {
-  background: linear-gradient(90deg, var(--race-fill), rgba(16, 26, 31, .82) 70%);
-  border-color: var(--race-outline);
-  border-left-color: var(--k);
-  box-shadow: 0 0 18px color-mix(in srgb, var(--race-glow) 45%, transparent);
-}
 
 /* ---------- 9. Bulk selection: checked boxes and the rows they mark ---------- */
 :root[data-faction] input[type='checkbox'],
@@ -124,10 +104,6 @@
   box-shadow: 0 0 5px var(--race-glow);
 }
 :root[data-faction] .uw .uw-alliance-crest .command-emblem--crest { width: 64px; height: 64px; }
-
-/* ---------- 12. «Yours» markers: you, your alliance ---------- */
-:root[data-faction] .cmdA .cmdA-chip.is-own { color: var(--race-accent); border-color: var(--race-border); background: var(--race-fill-soft); }
-:root[data-faction] .cmdA .cmdA-item.is-own { border-left-color: var(--race-accent-strong); }
 
 /* ---------- 13. Planet editor: the planet's current look ---------- */
 :root[data-faction] .skin-picker-grid button.active {
