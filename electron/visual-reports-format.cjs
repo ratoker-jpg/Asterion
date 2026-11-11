@@ -259,6 +259,11 @@ async function runViewport(win, directory, label) {
   await win.webContents.executeJavaScript('document.fonts?.ready');
   await settle(win, 400);
   await openReports(win);
+  // «Профиль игрока», late game: alliance, hundreds of messages.
+  await check('12-profile-late-game', false);
+  metrics.profileLate = await profileFacts(win);
+  if (metrics.profileLate.events < 5) fail('The profile does not list the last five messages', metrics.profileLate);
+  await capture(win, directory, '12-profile-late-game');
   const hasPersonal = await exists(win, '[data-message-folder="personal"]');
   if (!hasPersonal) fail('«Личные» folder is missing', null);
   if (hasPersonal) {
@@ -306,7 +311,42 @@ async function runViewport(win, directory, label) {
       await capture(win, directory, '09-personal-alliance-letter');
     }
   }
+  // «Профиль игрока», a new player: no alliance, no messages.
+  await patchSaveIdle(win, SAVE_KEY, `(save) => {
+    const me = save.profile?.playerId;
+    for (const alliance of save.command?.alliances || []) alliance.members = (alliance.members || []).filter((member) => member.ownerId !== me);
+    if (save.command) {
+      save.command.alliances = save.command.alliances.filter((alliance) => alliance.members.length);
+      for (const alliance of save.command.alliances) if (alliance.leaderOwnerId === me) alliance.leaderOwnerId = alliance.members[0].ownerId;
+      save.command.applications = [];
+    }
+    save.combat.reports = [];
+    save.espionage = { ...(save.espionage || {}), reports: [], hunterNotices: [] };
+    save.reports = { readIds: [], hiddenIds: [], recyclerArrivalReports: [], gasExtractionArrivalReports: [], overpopulationReports: [] };
+    if (save.exploration) { save.exploration.contacts = {}; save.exploration.reconReports = []; }
+    if (save.pirate) save.pirate.reconReports = [];
+    if (save.flights) save.flights.records = (save.flights.records || []).filter((flight) => flight.phase !== 'completed' && flight.phase !== 'failed');
+  }`, { label: 'reports format new player' });
+  await settle(win, 400);
+  await openReports(win);
+  await check('13-profile-new-player', false);
+  metrics.profileNew = await profileFacts(win);
+  await capture(win, directory, '13-profile-new-player');
   return metrics;
+}
+
+/** What «Профиль игрока» shows: facts, events, whether it fills the panel. */
+function profileFacts(win) {
+  return win.webContents.executeJavaScript(`(() => {
+    const profile = document.querySelector('[data-qa-profile]');
+    const card = profile?.querySelector('.reports-profile-card')?.getBoundingClientRect();
+    const panel = profile?.getBoundingClientRect();
+    return {
+      facts: Array.from(profile?.querySelectorAll('[data-qa-profile-facts] > div') || []).map((row) => row.textContent.replace(/\\s+/g, ' ').trim()),
+      events: profile?.querySelectorAll('[data-qa-profile-event]').length || 0,
+      fill: card && panel ? Math.round((card.height / panel.height) * 100) : 0,
+    };
+  })()`);
 }
 
 app.whenReady().then(async () => {

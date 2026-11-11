@@ -9,8 +9,8 @@ import { ReportArtwork, ReportGlyph, ReportSheetView } from './ui/messages/Repor
 import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
 import { isAsterionLocalPlayerId, type BattleReport } from './domain/combat/report.ts';
 import { createBattleReportViewModel } from './domain/combat/battle-report-view-model.ts';
-import type { CommandState } from './domain/command/types.ts';
-import { selectOwnerMembership, toAllianceIdentity } from './domain/command/selectors.ts';
+import type { AllianceRole, CommandState } from './domain/command/types.ts';
+import { selectOwnerMembership, selectRole, toAllianceIdentity } from './domain/command/selectors.ts';
 import type { OperationsState } from './domain/operations/types.ts';
 import {
   buildReportsFeed,
@@ -179,31 +179,61 @@ function MetricGlyph({ metric }: { metric: PlayerProfileMetricKey }) {
   return <img className="reports-score-glyph" src={asterionAssetIntegrationAssets.scoreIcons[metric]} alt="" aria-hidden="true" draggable={false} />;
 }
 
-function ProfileRecentEvents({ items }: { items: readonly ReportItem[] }) {
+/** The player's last messages from every folder; a click opens the message. */
+function ProfileRecentEvents({ items, onOpen }: { items: readonly ReportItem[]; onOpen: (item: ReportItem) => void }) {
   return (
     <section className="reports-profile-events" aria-label="Последние события">
       <header>Последние события</header>
-      {items.length ? <ul>{items.map((item) => <li key={item.id}><span className="reports-v2-art reports-profile-event-art"><ReportGlyph kind={item.category} /></span><span>{item.title}</span><time>{formatTime(item.timestamp)}</time></li>)}</ul> : <p>Недавних сообщений пока нет.</p>}
+      {items.length ? <ul>{items.map((item) => <li key={item.id}><button type="button" onClick={() => onOpen(item)} data-qa-profile-event={item.id} aria-label={`Открыть: ${item.title}`}>
+        <span className="reports-v2-art reports-profile-event-art"><ReportGlyph kind={item.category} /></span>
+        <span className="reports-profile-event-copy"><small>{item.typeLabel}</small><strong>{item.title}</strong></span>
+        <time>{formatTime(item.timestamp)}</time>
+      </button></li>)}</ul> : <p>Сообщений пока нет. Здесь появятся последние отчёты и письма.</p>}
     </section>
   );
 }
 
-function PlayerProfile({ profile, score, command, mode, recentItems, onOpenCommand }: { profile: PlayerProfileState; score: OwnerScore | null; command: CommandState; mode: RuntimeMode; recentItems: readonly ReportItem[]; onOpenCommand: () => void }) {
+const ROLE_LABELS: Record<AllianceRole, string> = { leader: 'Глава', deputy: 'Заместитель', member: 'Участник' };
+
+/** Facts the profile can show from data the game already has; the screen never invents numbers. */
+export type ProfileFacts = {
+  ratingPlace?: number;
+  ratedPlayers?: number;
+  planets?: number;
+  crystals?: number;
+  allianceCrystals?: number;
+};
+
+function PlayerProfile({ profile, score, command, mode, recentItems, facts, onOpenCommand, onOpenItem }: { profile: PlayerProfileState; score: OwnerScore | null; command: CommandState; mode: RuntimeMode; recentItems: readonly ReportItem[]; facts: ProfileFacts; onOpenCommand: () => void; onOpenItem: (item: ReportItem) => void }) {
   const metrics = selectPlayerProfileMetrics(profile, score, mode);
   const membership = selectOwnerMembership(command, profile.playerId);
   const alliance = membership ? toAllianceIdentity(membership.alliance) : null;
+  const role = membership ? selectRole(membership.alliance, profile.playerId) : null;
+  const factRows: { label: string; value: string }[] = [
+    { label: 'Раса', value: getCombatFactionName(profile.factionId) },
+    ...(facts.ratingPlace ? [{ label: 'Место в рейтинге', value: facts.ratedPlayers ? `${numberFormat.format(facts.ratingPlace)} из ${numberFormat.format(facts.ratedPlayers)}` : numberFormat.format(facts.ratingPlace) }] : []),
+    { label: 'Союз', value: alliance ? `${role ? ROLE_LABELS[role] : 'Участник'} · [${alliance.tag}]` : 'Не в союзе' },
+    ...(facts.planets ? [{ label: 'Планеты', value: numberFormat.format(facts.planets) }] : []),
+    ...(facts.crystals ? [{ label: 'Кристаллы', value: numberFormat.format(facts.crystals) }] : []),
+    ...(facts.allianceCrystals ? [{ label: 'Кристаллы союза', value: numberFormat.format(facts.allianceCrystals) }] : []),
+  ];
   return (
     <section className="reports-profile-view" data-qa-profile aria-labelledby="reports-profile-title">
       <header className="reports-profile-title-plate"><h2 id="reports-profile-title">Профиль игрока</h2></header>
       <div className="reports-profile-card">
-        <section className="reports-profile-identity" aria-label="Аватар игрока"><ProfileAvatar displayName={profile.displayName} factionId={profile.factionId} /></section>
-        <section className="reports-profile-metrics" aria-label="Рейтинг игрока">
-          {metrics.map((metric) => <div key={metric.key} className="reports-profile-metric" data-qa-profile-metric={metric.key} tabIndex={0} role="img" aria-label={`${metric.label}: ${metric.value == null ? 'нет данных' : numberFormat.format(metric.value)}. ${metric.description}`}><span className="reports-profile-metric__glyph"><MetricGlyph metric={metric.key} /></span><span><small>{metric.label}</small><strong>{metric.value == null ? '—' : numberFormat.format(metric.value)}</strong><em>{metric.description}</em></span></div>)}
+        <section className="reports-profile-identity" aria-label="Аватар игрока">
+          <ProfileAvatar displayName={profile.displayName} factionId={profile.factionId} />
+          <dl className="reports-profile-facts" data-qa-profile-facts>{factRows.map((row) => <div key={row.label}><dt>{row.label}</dt><dd>{row.value}</dd></div>)}</dl>
         </section>
-        <section className="reports-profile-alliance" aria-label="Состояние союза">
+        <div className="reports-profile-main">
+          <section className="reports-profile-metrics" aria-label="Рейтинг игрока">
+            {metrics.map((metric) => <div key={metric.key} className="reports-profile-metric" data-qa-profile-metric={metric.key} tabIndex={0} role="img" aria-label={`${metric.label}: ${metric.value == null ? 'нет данных' : numberFormat.format(metric.value)}`}><span className="reports-profile-metric__glyph"><MetricGlyph metric={metric.key} /></span><span><small>{metric.label}</small><strong>{metric.value == null ? '—' : numberFormat.format(metric.value)}</strong></span></div>)}
+          </section>
+        </div>
+        <section className="reports-profile-alliance" aria-label="Союз и последние события">
           <small>Союз</small>
-          {alliance ? <button type="button" className="reports-profile-alliance-link" onClick={onOpenCommand} aria-label={`Открыть Командование союза ${alliance.name}`}><span className="reports-v2-art reports-profile-alliance-art reports-profile-alliance-crest">{membership ? <EmblemGlyph emblem={membership.alliance.emblem} /> : <ReportGlyph kind="alliances" />}</span><span><strong>{alliance.name}</strong><small>[{alliance.tag}] · {numberFormat.format(membership?.alliance.members.length ?? 0)} участников</small></span><b>Командование <i aria-hidden="true">→</i></b></button> : <div className="reports-profile-no-alliance"><span className="reports-profile-diamond" aria-hidden="true">?</span><span><strong>Без Союза</strong><small>Членство не задано в профиле</small></span></div>}
-          <ProfileRecentEvents items={recentItems} />
+          {alliance ? <button type="button" className="reports-profile-alliance-link" onClick={onOpenCommand} aria-label={`Открыть Командование союза ${alliance.name}`}><span className="reports-v2-art reports-profile-alliance-art reports-profile-alliance-crest">{membership ? <EmblemGlyph emblem={membership.alliance.emblem} /> : <ReportGlyph kind="alliances" />}</span><span><strong>{alliance.name}</strong><small>[{alliance.tag}] · {numberFormat.format(membership?.alliance.members.length ?? 0)} участников{role ? ` · вы: ${ROLE_LABELS[role].toLocaleLowerCase('ru-RU')}` : ''}</small></span><b>Командование <i aria-hidden="true">→</i></b></button> : <button type="button" className="reports-profile-no-alliance" onClick={onOpenCommand} aria-label="Открыть Командование: найти союз"><span className="reports-profile-diamond" aria-hidden="true">?</span><span><strong>Не в союзе</strong><small>Найти союз или создать свой</small></span><b>Командование <i aria-hidden="true">→</i></b></button>}
+          <ProfileRecentEvents items={recentItems} onOpen={onOpenItem} />
         </section>
       </div>
       {profile.protectionMode ? <div className="reports-profile-protection"><i aria-hidden="true" /> Защитный режим включён</div> : null}
@@ -222,7 +252,7 @@ function FolderActions({ folder, items, selectedIds, onSelectAll, onDeleteAll, o
   );
 }
 
-export function ReportsView({ retentionCutoff, battleReports, planetNames, savedBattleReportIds, operations, command, espionage, pirateReconReports, pirateFlights, exploration, initialSelectedReportId, profile, score, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy, onOpenUniverseTarget, onOpenPirateUniverse, canRepeatFlight, onRepeatFlight, onCollectDebris, onAttackSpyTarget }: {
+export function ReportsView({ retentionCutoff, battleReports, planetNames, savedBattleReportIds, operations, command, espionage, pirateReconReports, pirateFlights, exploration, initialSelectedReportId, profile, score, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy, onOpenUniverseTarget, onOpenPirateUniverse, canRepeatFlight, onRepeatFlight, onCollectDebris, onAttackSpyTarget, profileFacts }: {
   /** Letters older than this world time are gone (24-hour rule); absent in Test Mode. */
   retentionCutoff?: number;
   battleReports: readonly BattleReport[];
@@ -254,6 +284,8 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
   onRepeatFlight?: (flightId: string) => void;
   onCollectDebris?: (coordinate: UniverseCoordinate) => void;
   onAttackSpyTarget?: (report: SpyReportSnapshot) => void;
+  /** Rating place, planets, crystals for «Профиль игрока». */
+  profileFacts?: ProfileFacts;
 }) {
   const [activeFolder, setActiveFolder] = useState<MessageFolderId>('profile');
   const [filter, setFilter] = useState<ReportFilter>('all');
@@ -281,7 +313,8 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
   const folderItems = useMemo(() => activeCategory ? getVisibleReportItems(items, state).filter((item) => item.category === activeCategory) : [], [activeCategory, items, state]);
   const isRead = useMemo(() => reportReadCheck(state), [state]);
   const visibleItems = useMemo(() => activeCategory ? filterReportItems(items, state, { category: activeCategory, filter, search, keepId: selectedId || undefined }, savedBattleReportIds) : [], [activeCategory, items, state, filter, search, selectedId, savedBattleReportIds]);
-  const recentProfileItems = getVisibleReportItems(items, state).slice(0, 3);
+  // The last five messages of every folder (owner, 11.11.2026).
+  const recentProfileItems = getVisibleReportItems(items, state).slice(0, 5);
   const pageCount = Math.max(1, Math.ceil(visibleItems.length / PAGE_SIZE));
   const pagedItems = visibleItems.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const selectedItem = visibleItems.find((item) => item.id === selectedId) ?? null;
@@ -356,6 +389,16 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
 
   const openFolder = (folder: MessageFolderId) => {
     setActiveFolder(folder);
+    setFilter('all');
+    setSearch('');
+  };
+
+  /** «Последние события» of the profile: the folder of that message, the message open. */
+  const openFromProfile = (item: ReportItem) => {
+    const folder = MESSAGE_FOLDERS.find((candidate) => candidate.category === item.category);
+    if (!folder) return;
+    pendingInitialReportId.current = item.id;
+    setActiveFolder(folder.id);
     setFilter('all');
     setSearch('');
   };
@@ -462,7 +505,7 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
         <button className="reports-mark-all" type="button" data-qa-mark-all-read disabled={!markableItems.some((item) => !isRead(item))} onClick={markAll}>Отметить все прочитанными</button>
       </aside>
 
-      {activeFolder === 'profile' ? <PlayerProfile profile={profile} score={score} command={command} mode={mode} recentItems={recentProfileItems} onOpenCommand={onOpenCommand} /> : <section className="reports-folder-workspace" data-qa-folder-view={activeFolder}>
+      {activeFolder === 'profile' ? <PlayerProfile profile={profile} score={score} command={command} mode={mode} recentItems={recentProfileItems} facts={profileFacts ?? {}} onOpenCommand={onOpenCommand} onOpenItem={openFromProfile} /> : <section className="reports-folder-workspace" data-qa-folder-view={activeFolder}>
         <section className="reports-feed" data-qa-message-folder-view={activeFolder}>
           <header className="reports-feed-head"><h2>{activeFolderMeta.label}</h2>{activeCategory ? <span className="reports-folder-count">{messagesLabel(counts[activeCategory])}</span> : null}</header>
           {activeCategory ? <div className="reports-feed-tools">
