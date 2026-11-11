@@ -34,6 +34,7 @@ import { getNpcJournalSink } from './npc-journal.ts';
 import { resolveNpcPlanBattle } from './npc-plans.ts';
 import { recordNpcWarBattle } from './npc-war.ts';
 import { breakNpcPactByAttack } from './npc-pact-state.ts';
+import { recordPlayerPactArrival } from './npc-letters.ts';
 import { recordNpcBattleRelations } from './npc-relations.ts';
 import type { AttackLaunchSnapshot, AttackLoot, AttackResolution } from '../domain/attack/types.ts';
 import { recordBattleScoreAward } from '../domain/rating/scoring.ts';
@@ -453,6 +454,8 @@ function rememberNpcBattle(state: SaveState, report: BattleReport, at: number, f
   if (isGrievanceBattle(report)) {
     const defenderRace = Object.values(getEspionageTargets(state.espionage)).find((target) => target.ownerId === report.defender.playerId)?.raceId;
     next = breakNpcPactByAttack(recordNpcBattleRelations(next, report, at, defenderBattleLoss(report, defenderRace)), report, at);
+    // The player's own wave of an accepted invitation from a bot.
+    next = recordPlayerPactArrival(next, report, at);
   }
   // A member's attack on the offender of a revenge war counts for the war.
   if (next.npcStrategy?.wars?.length && report.attacker.playerId) {

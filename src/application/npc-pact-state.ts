@@ -12,6 +12,7 @@ import { createNpcStrategyState } from '../domain/npc/strategy.ts';
 import { selectOwnerScore } from '../domain/rating/scoring.ts';
 import type { SaveState } from './contracts.ts';
 import { getNpcJournalSink } from './npc-journal.ts';
+import { queueNpcReply } from './npc-letter-state.ts';
 import { npcHelpWeight, npcRelationView, recordNpcHelp, recordNpcRelation } from './npc-relations.ts';
 import type { NpcPlayStyle } from './npc-style.ts';
 import type { NpcStrategyDrives } from './npc-utility.ts';
@@ -90,6 +91,8 @@ export function settleNpcPact(state: SaveState, proposal: NpcProposal, status: N
       }
     } else if (status === 'broken' && by) {
       hit(otherSide(closed, by), by, reason === 'betrayed' ? { kind: 'betrayed' } : { kind: 'promise-broken' });
+      // The player broke the word (did not come, or struck the partner): the bot says so in a letter.
+      if (by === state.profile.playerId) next = queueNpcReply(next, otherSide(closed, by), reason === 'betrayed' ? 'betrayed' : 'no-show', at);
     } else if (status === 'withdrawn' && by && !EXCUSED_REASONS.has(reason ?? '')) {
       hit(otherSide(closed, by), by, { kind: 'withdrew' });
     }

@@ -32,6 +32,8 @@ import { ownerBattleReports } from './npc-knowledge-index.ts';
 import { npcRelationView } from './npc-relations.ts';
 import { getOwnerRelation } from './owner-relations.ts';
 import { npcResponsiveness } from './npc-sun-prep.ts';
+import { mayWritePlayer } from './npc-letter-state.ts';
+import { NPC_LETTER_BALANCE } from '../domain/npc/letters.ts';
 import { combatEfficiency, npcFleetValue, npcForcePower, npcRevengeIntensity, type NpcUtilityContext } from './npc-utility.ts';
 
 /**
@@ -361,13 +363,14 @@ function partnerCandidates(state: SaveState, profile: NpcProfile, utility: NpcUt
   for (const [other, view] of views ?? []) if (view.regard > NPC_PACT_BALANCE.distrustRegard + 0.2) partners.set(other, view.regard);
   if (unit(profile.traits.cooperation) >= NPC_PACT_BALANCE.strangerCooperation) {
     for (const planet of Object.values(state.espionage?.targets ?? {})) {
-      if (planet.kind !== 'npc' || planet.ownerId === ownerId || views?.has(planet.ownerId)) continue;
+      if ((planet.kind !== 'npc' && planet.ownerId !== state.profile.playerId) || planet.ownerId === ownerId || views?.has(planet.ownerId)) continue;
       if (utility.ownPlanets.some((own) => own.coordinate.galaxy === planet.coordinate.galaxy
         && Math.abs(own.coordinate.system - planet.coordinate.system) <= NPC_PACT_BALANCE.neighbourSystems)) partners.set(planet.ownerId, 0);
     }
   }
   return [...partners].map(([other, regard]) => ({ ownerId: other, regard }))
-    .filter((partner) => partner.ownerId !== state.profile.playerId && state.npc?.profiles[partner.ownerId]
+    // The player is asked by letter (domain/npc/letters.ts) and only within the letter budget.
+    .filter((partner) => (partner.ownerId === state.profile.playerId ? mayWritePlayer(state, ownerId, at) : Boolean(state.npc?.profiles[partner.ownerId]))
       && !sameAlliance(state, ownerId, partner.ownerId) && getOwnerRelation(state, ownerId, partner.ownerId) !== 'enemy'
       && !pairResting(state, ownerId, partner.ownerId, at))
     .sort((left, right) => right.regard - left.regard || (left.ownerId < right.ownerId ? -1 : 1)).slice(0, 8);
@@ -429,15 +432,19 @@ function considerJointStrike(state: SaveState, profile: NpcProfile, utility: Npc
   // The time it is online itself, a little after a visit opens: the partner sees only the time.
   const target = state.espionage!.targets![best.report.targetPlanetId]!;
   const flight = npcFleetFlightMs(planets[0]!, target, sampleShips(force), timeScale);
-  const earliest = at + NPC_PACT_BALANCE.minLeadHours * HOUR;
+  const toPlayer = best.partner.ownerId === state.profile.playerId;
+  // A person needs time to read, answer and fly: a player is asked earlier and given longer.
+  const earliest = at + (toPlayer ? NPC_LETTER_BALANCE.inviteMinLeadHours : NPC_PACT_BALANCE.minLeadHours) * HOUR;
   const visit = listNpcVisits(profile, earliest, at + NPC_PACT_BALANCE.maxLeadHours * HOUR).find((item) => item.startAt >= earliest && item.endAt - item.startAt >= 10 * MINUTE);
   if (!visit) return scheduled;
   const strikeAt = visit.startAt + flight + Math.min(15 * MINUTE, Math.round((visit.endAt - visit.startAt) / 2));
   const proposal: NpcJointStrikeProposal = {
     proposalId: `pact:${ownerId}:${at}`, kind: 'joint-strike', from: ownerId, to: best.partner.ownerId, createdAt: at,
-    expiresAt: Math.min(at + NPC_PACT_BALANCE.answerHours * HOUR, strikeAt - HOUR), status: 'proposed',
+    expiresAt: toPlayer ? Math.min(at + NPC_LETTER_BALANCE.inviteAnswerHours * HOUR, strikeAt - 3 * HOUR)
+      : Math.min(at + NPC_PACT_BALANCE.answerHours * HOUR, strikeAt - HOUR), status: 'proposed',
     terms: { targetPlanetId: target.id, targetOwnerId: target.ownerId, strikeAt, toleranceMs: NPC_PACT_BALANCE.toleranceMinutes * MINUTE,
-      fromRole: { wave: 1, hull: myHull }, toRole: { wave: 2, hull: myHull === ROLE_HULLS[0] ? ROLE_HULLS[1] : ROLE_HULLS[0] } },
+      fromRole: { wave: 1, hull: myHull }, toRole: { wave: 2, hull: myHull === ROLE_HULLS[0] ? ROLE_HULLS[1] : ROLE_HULLS[0] },
+      ...(toPlayer ? { fromShips: Object.values(force.reserve).reduce((sum, counts) => sum + Object.values(counts).reduce((inner, count) => inner + count, 0), 0) } : {}) },
   };
   journalNpcPact(at, ownerId, 'proposed', proposal, { regard: Math.round(best.partner.regard * 100) / 100 });
   return withNpcPact(scheduled, proposal);

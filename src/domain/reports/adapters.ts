@@ -25,7 +25,7 @@ import type { EspionageState, SpyHunterNotice, SpyReportSnapshot } from '../espi
 import { getCombatFactionName } from '../combat/factions.ts';
 import { noCombatVerdict } from '../combat/battle-report-view-model.ts';
 import { pirateReconReportToReportItem } from '../pirates/recon-report.ts';
-import { personalLetterItems } from './letters.ts';
+import { personalLetterItems, type NpcLetterContext } from './letters.ts';
 import type { PirateReconReport } from '../pirates/recon-report.ts';
 
 const CATEGORY_TYPE_LABEL: Record<ReportItem['category'], string> = {
@@ -482,6 +482,7 @@ export function buildReportsFeed(
   exploration?: ExplorationState,
   playerOwnerId?: string,
   flightContext: Omit<FlightReportContext, 'battleReports'> = {},
+  npcLetters?: NpcLetterContext,
 ): ReportItem[] {
   const operationByBattleId = new Map(
     operations.items
@@ -523,7 +524,7 @@ export function buildReportsFeed(
     return mergeMissionReports(item, landing);
   });
 
-  const letterItems = personalLetterItems(command, playerOwnerId);
+  const letterItems = personalLetterItems(command, playerOwnerId, npcLetters);
 
   return [...letterItems, ...battleItems, ...espionageItems, ...overpopulationItems, ...pirateReconItems, ...pirateFlightAbsenceReports(pirateFlights.filter((flight) => flight.ownerSide !== 'npc')), ...flightItems.filter((item) => !merged.has(item.id)), ...arrivalFlightItems].sort((a, b) => {
     if (a.timestamp && b.timestamp) return Date.parse(b.timestamp) - Date.parse(a.timestamp);

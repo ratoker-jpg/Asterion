@@ -391,6 +391,19 @@
   padding: 12px 16px;
   border-top: 1px solid var(--rm-line);
 }
+.reports-view .reports-preview-footer { flex-wrap: wrap; }
+.reports-view .reports-answer-error {
+  flex: 1 0 100%;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 107, 122, .45);
+  border-radius: 6px;
+  background: rgba(255, 107, 122, .1);
+  color: #ffb4bc;
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
 .reports-view .reports-preview-footer-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
 .reports-view .reports-preview-footer button:not(.reports-delete-current, .reports-primary-action) {
   min-height: 38px;
@@ -818,3 +831,6 @@
   .reports-view .reports-profile-metrics { grid-template-columns: minmax(0, 1fr); }
   .reports-view .reports-profile-metric { padding-top: 8px; padding-bottom: 8px; }
 }
+
+/* Bot letters write the facts one per line. */
+.reports-view .reports-sheet-summary { white-space: pre-line; }
