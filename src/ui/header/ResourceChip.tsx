@@ -4,17 +4,9 @@ import { HeaderGameIcon } from './HeaderAssetIcons';
 import { GameIcon } from './HeaderIcons';
 import type { HeaderResourceModel } from './types.ts';
 
-function formatNumber(value: number) {
-  return new Intl.NumberFormat('ru-RU').format(value);
-}
+import { formatHeaderNumber, formatNumber } from './format-number.ts';
 
-/** Header cells are sized for «999 999 999»; larger values switch to «1,25 млрд». The tooltip keeps the exact number. */
-export function formatHeaderNumber(value: number) {
-  const short = (divider: number, unit: string) => `${(value / divider).toLocaleString('ru-RU', { maximumFractionDigits: value / divider >= 100 ? 0 : 2 })} ${unit}`;
-  if (Math.abs(value) >= 1e12) return short(1e12, 'трлн');
-  if (Math.abs(value) >= 1e9) return short(1e9, 'млрд');
-  return formatNumber(value);
-}
+export { formatHeaderNumber };
 
 function formatStorageEta(current: number, capacity: number, hourlyGain: number) {
   if (current >= capacity) return 'склад заполнен';

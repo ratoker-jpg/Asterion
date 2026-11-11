@@ -38,6 +38,11 @@ function positive(record: Readonly<Record<string, number | undefined>> | undefin
 /** The player's actions that appear between two states (pure; same inputs, same entries). */
 export function diffPlayerActions(before: SaveState, after: SaveState, at: number): PlayerJournalEntry[] {
   const entries: PlayerJournalEntry[] = [];
+  // Sections this diff reads (queues, science queue, planets, flights, alliances) are the same
+  // objects: nothing can differ. The world replaces the rest every second.
+  if (before.queues === after.queues && before.science.queue === after.science.queue && before.planets === after.planets
+    && before.flights.records === after.flights.records && before.command.alliances === after.command.alliances
+    && before.profile.playerId === after.profile.playerId) return entries;
   for (const [planetId, queue] of Object.entries(after.queues)) {
     const known = new Set((before.queues[planetId] ?? []).map((item) => item.id));
     for (const item of queue) {

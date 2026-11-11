@@ -38,9 +38,28 @@ export function flightOwnerId(state: SaveState, flight: FlightRecord): string | 
 }
 
 /** Hostile flights of the owner still heading out; they must be recalled before the shield goes up. */
+const hostileCandidates = new WeakMap<readonly FlightRecord[], Map<string, FlightRecord[]>>();
+
+/** The owner's flights on a hostile mission: all that survive the (time-independent) owner and mission test. */
+function ownerHostileCandidates(state: SaveState, ownerId: string): FlightRecord[] {
+  const records = state.flights?.records ?? [];
+  let byOwner = hostileCandidates.get(records);
+  if (!byOwner) {
+    byOwner = new Map();
+    hostileCandidates.set(records, byOwner);
+  }
+  // A player flight carries no owner id, so the answer also depends on who the player is.
+  const key = `${ownerId}|${state.profile.playerId}`;
+  let candidates = byOwner.get(key);
+  if (!candidates) {
+    candidates = records.filter((flight) => isHostileMission(flight.missionId) && flightOwnerId(state, flight) === ownerId);
+    byOwner.set(key, candidates);
+  }
+  return candidates;
+}
+
 export function ownerOutboundHostileFlights(state: SaveState, ownerId: string, at: number): FlightRecord[] {
-  return (state.flights?.records ?? []).filter((flight) => {
-    if (!isHostileMission(flight.missionId) || flightOwnerId(state, flight) !== ownerId) return false;
+  return ownerHostileCandidates(state, ownerId).filter((flight) => {
     // A Sun fleet (support or raid) stays committed to the battle after it arrives early, until it turns home.
     if (flight.missionId === 'sun-support' || flight.missionId === 'sun-attack') return flight.phase === 'outbound' || flight.phase === 'arrived';
     // Other fleets: a flight whose arrival time has passed is no longer en route, reconciled or not (chunk-size independent).
