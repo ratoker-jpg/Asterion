@@ -413,8 +413,10 @@ async function main() {
     // A long quiet window on the planet screen: autosaves (the worker posts the save text) land here.
     try {
       await openScreen(win, SCREENS[0]);
+      await run(win, 'window.__liveWorldMsgStats = {}');
       result.autosaveWindow = await traceWindow(win, 'autosave', AUTOSAVE_SECONDS, ['devtools.timeline', 'disabled-by-default-devtools.timeline']);
       result.autosaveWindow.seconds = AUTOSAVE_SECONDS;
+      result.autosaveWindow.messages = await run(win, 'window.__liveWorldMsgStats || null');
       result.autosaveWindow.storedSave = await run(win, `(() => { const raw = localStorage.getItem(${JSON.stringify(saveKey)}) || '';
         try { const pointer = JSON.parse(raw).asterionExternalSave; if (pointer) return { external: true, writeId: pointer.writeId, chars: pointer.chars }; } catch {}
         return { external: false, chars: raw.length }; })()`);

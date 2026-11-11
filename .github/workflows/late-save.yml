@@ -1,0 +1,80 @@
+name: Late save QA
+
+# test:late-save-ui (electron/late-save-qa.cjs): late-game saves across real restarts of the built game
+# (migration to the desktop store, close during a catch-up, close during an asynchronous write).
+# Its worlds are too large for the repository, so they are generated once and cached. Run it for a PR that
+# touches the save path (electron/save-store.cjs, src/application/save-storage.ts, the live world worker):
+#   gh workflow run late-save.yml -R ratoker-jpg/Asterion --ref <branch>
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - electron/save-store.cjs
+      - electron/late-save-qa.cjs
+      - electron/preload.cjs
+      - electron/cloud.cjs
+      - src/application/save-storage.ts
+      - src/application/save-port.ts
+      - src/application/live-world-engine.ts
+      - src/live-world.worker.ts
+      - .github/workflows/late-save.yml
+  schedule:
+    - cron: '17 3 * * 1'
+
+permissions:
+  contents: read
+
+env:
+  LAB_NODE: --max-old-space-size=12288 --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs
+  # Bump to regenerate the cached worlds (needed when a save format change makes the old ones unreadable).
+  FIXTURE_CACHE_VERSION: v1
+
+jobs:
+  fixture:
+    name: Day-2 and day-3 worlds
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: fixtures
+          key: late-save-fixture-50-normal-${{ env.FIXTURE_CACHE_VERSION }}
+      - uses: actions/setup-node@v4
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+        if: steps.cache.outputs.cache-hit != 'true'
+      - name: Generate the worlds
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: node $LAB_NODE tools/late-game-catchup.mjs generate --days=2,3 --npc=50 --activity=normal --out=fixtures
+      - uses: actions/upload-artifact@v4
+        with:
+          name: late-save-fixtures
+          path: fixtures
+          retention-days: 3
+
+  qa:
+    name: Late save QA (Electron)
+    needs: fixture
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: late-save-fixtures
+          path: fixtures
+      - name: Build renderer
+        run: npm run build
+      - name: Late save QA
+        shell: bash
+        run: npm run test:late-save-ui -- --plain=fixtures/late-game-day-2.json --large=fixtures/late-game-day-3.json

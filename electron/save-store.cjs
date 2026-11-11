@@ -28,11 +28,11 @@ function filesOf(key) {
 
 // Older versions stay until the renderer points at the new one; the one
 // before the previous is no longer referenced by anything.
-function dropStaleVersions(key, target) {
+function dropStaleVersions(key, target, keep = 1) {
   const others = filesOf(key).filter((name) => name !== path.basename(target))
     .map((name) => ({ name, at: fs.statSync(path.join(savesDir(), name)).mtimeMs }))
     .sort((left, right) => right.at - left.at);
-  for (const stale of others.slice(1)) fs.rmSync(path.join(savesDir(), stale.name), { force: true });
+  for (const stale of others.slice(keep)) fs.rmSync(path.join(savesDir(), stale.name), { force: true });
 }
 
 // Bot journal (src/application/npc-journal.ts): JSON lines next to the save,
@@ -75,7 +75,47 @@ function pruneOrphanFiles(keep, now = Date.now()) {
   return removed;
 }
 
+// Reads the save file a pointer names (the cloud upload, from the main process).
+function readSaveFile(key, writeId) {
+  if (!KEY.test(key) || !WRITE_ID.test(writeId)) throw new Error('Invalid save key.');
+  return fs.promises.readFile(fileFor(key, writeId), 'utf8');
+}
+function readSaveFileSync(key, writeId) {
+  if (!KEY.test(key) || !WRITE_ID.test(writeId)) throw new Error('Invalid save key.');
+  return fs.readFileSync(fileFor(key, writeId), 'utf8');
+}
+
+// The live world worker's saves: UTF-8 bytes through a MessagePort, written exactly as they arrive
+// (the same bytes the text write would make). Processed in order; answered on the same port.
+// Three versions are kept, not two: the window moves its pointer a moment after the file lands.
+async function writeFromPort(port, message) {
+  const reply = { ok: false, version: message && message.version, writeId: message && message.writeId, chars: message && message.chars };
+  try {
+    const { key, writeId, bytes } = message || {};
+    if (!KEY.test(key) || !WRITE_ID.test(writeId)) throw new Error('Invalid save write.');
+    const data = ArrayBuffer.isView(bytes) ? Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+      : (bytes instanceof ArrayBuffer ? Buffer.from(bytes) : null);
+    if (!data) throw new Error('Invalid save bytes.');
+    const target = fileFor(key, writeId);
+    const temporary = `${target}.tmp`;
+    await fs.promises.writeFile(temporary, data);
+    await fs.promises.rename(temporary, target);
+    dropStaleVersions(key, target, 2);
+    reply.ok = true;
+  } catch (error) {
+    reply.error = String(error && error.message || error);
+  }
+  try { port.postMessage(reply); } catch { /* the worker is gone */ }
+}
+
 function registerSaveStore() {
+  ipcMain.on('asterion:save-store:port', (event) => {
+    const port = event.ports && event.ports[0];
+    if (!port) return;
+    let chain = Promise.resolve();
+    port.on('message', (portEvent) => { chain = chain.then(() => writeFromPort(port, portEvent.data)); });
+    port.start();
+  });
   ipcMain.on('asterion:save-store:prune', (event, keep) => {
     try {
       if (!Array.isArray(keep) || !keep.length || !keep.every((key) => typeof key === 'string' && KEY.test(key))) throw new Error('Invalid prune request.');
@@ -188,4 +228,4 @@ function registerSaveStore() {
   });
 }
 
-module.exports = { registerSaveStore, pruneOrphanFiles };
+module.exports = { registerSaveStore, pruneOrphanFiles, readSaveFile, readSaveFileSync };

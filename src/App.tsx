@@ -200,6 +200,7 @@ import { freezeNpcCatchupTarget, isNpcCatchupPending, needsNpcCatchupBefore } fr
 import { NpcCatchupBanner } from './NpcCatchupBanner.tsx';
 import LiveWorldWorker from './live-world.worker.ts?worker';
 import type { LiveWorldRequest, LiveWorldResponse, LiveWorldVersion } from './application/live-world-protocol.ts';
+import { requestSavePort } from './application/save-port.ts';
 import { applyWorldPatch, diffWorld } from './application/world-diff.ts';
 import { setNpcCatchupProgress } from './ui/npc-catchup-progress-store.ts';
 import {
@@ -329,6 +330,17 @@ const NPC_CATCHUP_PERSIST_INTERVAL_MS = 2_000;
  * 20 s. Time a tick advanced is replayed identically on load, so nothing is
  * lost in between; commands are written at once.
  */
+/** Per message type, how long the UI thread spent in the worker's answers (read by the perf trace: window.__liveWorldMsgStats). */
+function noteLiveWorldMessage(type: string, handle: () => void): void {
+  const startedAt = performance.now();
+  handle();
+  const took = performance.now() - startedAt;
+  const stats = ((window as unknown as { __liveWorldMsgStats?: Record<string, { count: number; totalMs: number; maxMs: number }> }).__liveWorldMsgStats ??= {});
+  const entry = (stats[type] ??= { count: 0, totalMs: 0, maxMs: 0 });
+  entry.count += 1;
+  entry.totalMs += took;
+  if (took > entry.maxMs) entry.maxMs = took;
+}
 const LIVE_TICK_PERSIST_COST_FACTOR = 50;
 const LIVE_TICK_PERSIST_MAX_INTERVAL_MS = 60_000;
 /** A deferred clock-tick write is serialized in steps this long, so a late-game save does not freeze a frame. */
@@ -1328,6 +1340,9 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     worker.onmessage = (event: MessageEvent<LiveWorldResponse>) => {
       if (liveWorld.current !== link) return;
       const message = event.data;
+      noteLiveWorldMessage(message.type, () => handleLiveWorldMessage(message));
+    };
+    const handleLiveWorldMessage = (message: LiveWorldResponse) => {
       if (message.type === 'ticked') {
         link.tickInFlight = false;
         // Made on a world App has left (a command meanwhile): the worker drops it too.
@@ -1351,6 +1366,14 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         const step = link.steps.get(message.version);
         if (step !== undefined) link.savedStep = Math.max(link.savedStep, step);
         reportWriteResult(persistence.writeSerialized(message.text));
+      } else if (message.type === 'saved') {
+        // The main process wrote the file; the window only moves the pointer.
+        const step = link.steps.get(message.version);
+        if (step !== undefined) link.savedStep = Math.max(link.savedStep, step);
+        lastWriteCostMs.current = message.computeMs;
+        reportWriteResult(persistence.adoptSavedFile(message.writeId, message.chars));
+      } else if (message.type === 'save-port-failed') {
+        console.error('Live world save port failed; the worker sends save text.', message.error);
       } else if (message.type === 'bot-journal') {
         appendBotJournal(persistence.saveKey, message.lines);
       } else {
@@ -1365,6 +1388,13 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       catchupIntervalMs: NPC_CATCHUP_WORKER_PERSIST_INTERVAL_MS,
     } };
     worker.postMessage(request);
+    // Desktop: large saves skip this thread (src/application/save-port.ts).
+    void requestSavePort().then((port) => {
+      if (!port) return;
+      if (liveWorld.current !== link) { port.close(); return; }
+      const portRequest: LiveWorldRequest = { type: 'save-port', saveKey: persistence.saveKey, port };
+      worker.postMessage(portRequest, [port]);
+    });
     return true;
   }, [announceRuntimeEvents, persistence, reportWriteResult, stopLiveWorld]);
   restartLiveWorld.current = (next) => { startLiveWorld(next); };

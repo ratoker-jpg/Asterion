@@ -15,6 +15,12 @@ export type SaveStorage = {
   removeItem(key: string): void;
   /** Key enumeration (slot recovery), passed through to localStorage. */
   key?(index: number): string | null;
+  /**
+   * Cheap identity of a value kept in a file: the pointer text (null for a value
+   * stored inline or still being written). Equal tokens mean the same bytes
+   * without reading them.
+   */
+  token?(key: string): string | null;
   readonly length?: number;
 };
 
@@ -25,6 +31,12 @@ export type DesktopSaveStore = {
   /** The same write, finished by the main process while the renderer goes on. */
   writeAsync?(key: string, writeId: string, text: string): Promise<void>;
   remove(key: string): void;
+  /**
+   * Opens a MessagePort to the main process for save files: the live world
+   * worker sends UTF-8 bytes through it, the window never sees the text. The
+   * other end arrives as a window `message` event (see save-port.ts).
+   */
+  openWritePort?(): void;
   /** Deletes files of campaigns no slot lists any more (`keep`: every listed slot key). */
   pruneOrphans?(keep: readonly string[]): void;
 };
@@ -34,6 +46,12 @@ export type FlushableSaveStorage = SaveStorage & {
   flush(): void;
   /** Flushes and writes synchronously from now on (the window is closing). */
   beginUnload(): void;
+  /**
+   * A file the main process wrote for `key` (a port write of the live world
+   * worker) becomes the save: the pointer moves, no text passes here. False
+   * when a newer write already owns the key.
+   */
+  adoptExternalWrite(key: string, writeId: string, chars: number): boolean;
 };
 
 /** Values this long go to the desktop store (the smallest late-game saves stay in localStorage). */
@@ -63,9 +81,21 @@ export function readSavePointer(raw: string | null): Pointer | null {
 }
 
 let writeSequence = 0;
-function nextWriteId(): string {
+export function nextWriteId(): string {
   writeSequence = (writeSequence + 1) % 1_000_000;
   return `${Date.now().toString(36)}-${writeSequence.toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`;
+}
+
+/** The time a write id was made at (ids start with it, base 36). */
+function writeIdTime(writeId: string): number {
+  return parseInt(writeId.split('-')[0] ?? '', 36);
+}
+
+/** Whether `writeId` was made no earlier than `other` (so it may replace it). */
+export function isWriteIdNewer(writeId: string, other: string): boolean {
+  const left = writeIdTime(writeId);
+  const right = writeIdTime(other);
+  return !Number.isFinite(left) || !Number.isFinite(right) || left >= right;
 }
 
 /**
@@ -130,6 +160,20 @@ export function createExternalizingStorage(local: SaveStorage, store: DesktopSav
   };
   return {
     key: (index: number) => local.key?.(index) ?? null,
+    token(key) {
+      if (pending.has(key)) return null;
+      const raw = local.getItem(key);
+      return readSavePointer(raw) ? raw : null;
+    },
+    adoptExternalWrite(key, writeId, chars) {
+      const current = readSavePointer(local.getItem(key));
+      // A synchronous write (closing the window) or a later one got there first.
+      if (current && !isWriteIdNewer(writeId, current.writeId)) return false;
+      touch(key);
+      local.setItem(key, pointerText({ version: 1, writeId, chars }));
+      memory.delete(key);
+      return true;
+    },
     get length() { return local.length ?? 0; },
     getItem(key) {
       const waiting = pending.get(key);

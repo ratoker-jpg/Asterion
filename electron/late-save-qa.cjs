@@ -10,7 +10,7 @@
 //      loads and keeps the progress the worker had saved;
 //   4. close during an asynchronous write: the main process is made slow to
 //      finish file writes, the window is closed while one is in flight; the
-//      newest state is on disk anyway (flushed synchronously on pagehide).
+//      save the pointer names stays valid and never goes back in time.
 //
 //   npm run test:late-save-ui -- --plain=late-game-day-2.json --large=late-game-day-3.json
 //
@@ -75,7 +75,7 @@ if (!PHASE) {
 
     const asyncClose = phase('async-close');
     expect(asyncClose.closedDuringAsyncWrite, 'the window closed while an asynchronous write was in flight');
-    expect(asyncClose.fileCursorAfterClose >= asyncClose.cursorAtClose, 'the newest state reached the disk on close');
+    expect(asyncClose.fileCursorAfterClose >= asyncClose.cursorAtClose, 'closing during a write left no older save behind');
     const final = phase('reload');
     expect(final.loaded && !final.problem, 'the save loads after closing during an asynchronous write');
     expect(final.loadedCursor >= asyncClose.cursorAtClose, 'nothing was lost by closing during the write');
@@ -268,8 +268,11 @@ async function phase() {
     const started = Date.now();
     while (asyncWritesInFlight === 0 && Date.now() - started < 240_000) await sleep(50);
     out.closedDuringAsyncWrite = asyncWritesInFlight > 0;
-    // The state being written when the window closed: the newest the game asked to keep.
-    out.cursorAtClose = newestRequestedCursor;
+    // The save the pointer names while the slowed write is in flight. The worker's write goes to the main
+    // process through a port and the window moves the pointer only when the file is in place, so closing now
+    // must leave this save (or a newer one) behind, never an older one. A tick's progress that missed the
+    // file replays identically; a player's order is flushed synchronously on close (save-safety QA).
+    out.cursorAtClose = fileCursor(key, await pointerOf(win, key));
     await closeGame(win);
     // The slowed write may still finish after the close; it must not win.
     while (asyncWritesInFlight > 0) await sleep(100);
