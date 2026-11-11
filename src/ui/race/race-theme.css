@@ -8,8 +8,6 @@
    ========================================================================== */
 
 /* ---------- 1. Horizontal tabs and segments (recipe: fill from the top, thin light outline) ---------- */
-:root[data-faction] .workspace .opsA .opsA-tabs button.active,
-:root[data-faction] .operations-tabs-v2 button.active,
 :root[data-faction] .rating-mode-tabs-v2 button.active,
 :root[data-faction] .main-tabs button.active,
 :root[data-faction] .settings-segment-v2 button.active,
@@ -22,11 +20,8 @@
   box-shadow: inset 0 0 0 1px var(--race-outline), inset 0 -2px 0 var(--race-accent-strong);
 }
 :root[data-faction] .main-tabs button.active::before { background: var(--race-underline); box-shadow: 0 0 9px var(--race-glow); }
-:root[data-faction] .workspace .opsA .opsA-tabs button.active b,
-:root[data-faction] .operations-tabs-v2 button.active b { background: var(--race-accent-strong); color: #061016; }
 
 /* ---------- 2. Filter chips and pagination ---------- */
-:root[data-faction] .workspace .opsA .opsA-filters .opsA-chip.active,
 :root[data-faction] .rating-pagination-v2 button.active {
   color: #fff;
   border-color: var(--race-outline);
