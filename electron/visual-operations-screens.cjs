@@ -12,6 +12,7 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { patchSaveIdle, waitForCommands } = require('./qa-save-edit.cjs');
 
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
@@ -58,6 +59,7 @@ async function reload(win) {
   win.webContents.reload();
   await loaded;
   await waitFor(win, `document.querySelector('[data-qa-navigation="primary"]')`);
+  await waitForCommands(win);
   await win.webContents.executeJavaScript('document.fonts?.ready');
   await settle(win);
 }
@@ -133,18 +135,20 @@ async function layout(win) {
 // home planet through the systems until a base is in sight (the same approach as the
 // earlier Variant A capture tool).
 async function findPirateSystem(win) {
+  await openOperations(win);
+  if (await cardCount(win, 'pirate') > 0) return 'home';
   for (let system = 1; system <= 40; system += 1) {
-    await win.webContents.executeJavaScript(`(() => {
-      const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
-      const planet = save.planets?.['helion-01'];
+    // The running game writes its own save back, so edit storage while it is unloaded.
+    await patchSaveIdle(win, SAVE_KEY, `(save) => {
+      const planet = save.planets?.[save.currentPlanetId] || Object.values(save.planets || {})[0];
       if (!planet) throw new Error('Test Mode homeworld was not persisted');
       planet.universeGalaxy = 1;
       planet.universeSystem = ${system};
-      localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
-    })()`);
-    await reload(win);
+    }`, { label: `home planet to system ${system}` });
+    await win.webContents.executeJavaScript('document.fonts?.ready');
     await openOperations(win);
-    if (await cardCount(win, 'pirate') > 0) return system;
+    const seen = await waitFor(win, `document.querySelector('.operation-feed-card-v2[data-contact-kind="pirate"]')`, 3000).then(() => true, () => false);
+    if (seen) return system;
   }
   throw new Error('No pirate base in sight in systems 1–40 of the Test Mode galaxy.');
 }
