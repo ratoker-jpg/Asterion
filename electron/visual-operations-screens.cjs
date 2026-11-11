@@ -13,6 +13,7 @@ const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { patchSaveIdle, waitForCommands } = require('./qa-save-edit.cjs');
+const { PARSE_SAVE } = require('./qa-save.cjs');
 
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
@@ -189,8 +190,25 @@ async function findPirateSystem(win) {
       if (save.queues) save.queues['qa-operations-colony'] = [];
     }`, { label: `colony in system ${system}` });
     await openOperations(win);
-    const seen = await waitFor(win, `document.querySelector('.operation-feed-card-v2[data-contact-kind="pirate"]')`, 5000).then(() => true, () => false);
+    let seen = await waitFor(win, `document.querySelector('.operation-feed-card-v2[data-contact-kind="pirate"]')`, 5000).then(() => true, () => false);
     if (seen) return system;
+    const held = await win.webContents.executeJavaScript(`(() => {
+      const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+      return Object.entries(save.planets || {}).map(([id, planet]) => id + '@' + planet.universeGalaxy + ':' + planet.universeSystem + ':' + planet.universePosition);
+    })()`);
+    console.log(`[operations-screens] system ${system}: planets after the edit ${JSON.stringify(held)}`);
+    // Fallback: move the home planet itself into the system.
+    await patchSaveIdle(win, SAVE_KEY, `(save) => {
+      delete save.planets['qa-operations-colony'];
+      if (save.queues) delete save.queues['qa-operations-colony'];
+      const home = save.planets[save.currentPlanetId];
+      home.universeGalaxy = 1;
+      home.universeSystem = ${system};
+      home.universePosition = ${position} === 1 ? 2 : 1;
+    }`, { label: `home planet to system ${system}` });
+    await openOperations(win);
+    seen = await waitFor(win, `document.querySelector('.operation-feed-card-v2[data-contact-kind="pirate"]')`, 5000).then(() => true, () => false);
+    if (seen) return `${system} (home moved)`;
     console.warn(`[operations-screens] colony in system ${system} lists no pirate base, trying the next system`);
     await win.webContents.executeJavaScript(`document.querySelector('[data-qa-navigation="primary"] [data-qa-route="universe"]')?.click()`);
     await waitFor(win, `document.querySelector('[data-qa-universe]')`);
