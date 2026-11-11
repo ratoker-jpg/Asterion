@@ -1,11 +1,12 @@
 // «Командование» redo (11.11.2026): worst-case screenshots of the alliance screen at
 // 1280×720 and 2560×1080.
-// Cases: a 30-member alliance with long names (42-character alliance name, long member
-// names, the roster scrolled to its end), 20 pending applications, an alliance at war
+// Cases: a full alliance (15 members is the game's own limit, the loader trims anything
+// above it) with long names (42-character alliance name, long member names, the roster
+// scrolled to its end), 20 pending applications, an alliance at war
 // with 5 alliances, a profile with every score (points, contribution, joint operations,
 // alliance crystals) and an empty profile, the aid requests form, the alliance editor
-// with names at their limits and the crest constructor, the leave dialog with 29
-// successors, and the screen without an alliance.
+// with names at their limits and the crest constructor, the leave dialog with every
+// successor, and the screen without an alliance.
 // Layout contracts (ASTERION_QA_CHECKS=0 records them without failing, used for the
 // «before» run on main): no text cut off without an ellipsis, no native title tooltips,
 // no <select>, the screen and its dialogs fit the window.
@@ -25,6 +26,7 @@ const CHECKS = process.env.ASTERION_QA_CHECKS !== '0';
 const SHOTS = process.env.ASTERION_SKIP_SCREENSHOTS !== '1';
 const SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const VIEWPORTS = [[1280, 720], [2560, 1080]];
+const OTHER_MEMBERS = 14; // with the player: a full alliance
 const ALLIANCE_42 = 'Объединённый Северный Союз Звёздных Флотов';
 const ALLIANCE_TAG = 'NORTHSTR';
 const MOTTO_72 = 'Пока горят наши звёзды, ни один флот не пройдёт через Северный Рубеж!!';
@@ -63,8 +65,8 @@ async function capture(win, directory, name) {
     if (timing && Number.isFinite(timing.endTime)) animation.currentTime = timing.endTime;
   })`);
   await settle(win, 120);
-  const result = await win.webContents.debugger.sendCommand('Page.captureScreenshot', { format: 'png', fromSurface: true, captureBeyondViewport: false });
-  fs.writeFileSync(path.join(directory, `${name}.png`), Buffer.from(result.data, 'base64'));
+  const result = await win.webContents.debugger.sendCommand('Page.captureScreenshot', { format: 'jpeg', quality: 80, fromSurface: true, captureBeyondViewport: false });
+  fs.writeFileSync(path.join(directory, `${name}.jpg`), Buffer.from(result.data, 'base64'));
 }
 
 async function click(win, selector) {
@@ -130,22 +132,23 @@ async function layout(win) {
       fits: Boolean(view) && inside(view) && inside(dialog),
       horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 2,
       nativeTitles: Array.from(document.querySelectorAll('.command-view [title], .command-dialog [title]')).filter((node) => !node.closest('.srp-host')).map((node) => node.getAttribute('title')),
-      selects: document.querySelectorAll('.command-view select, .command-dialog select').length,
+      selects: document.querySelectorAll('.command-view select:not(.game-select__native), .command-dialog select:not(.game-select__native)').length,
     };
   })()`);
 }
 
 function worldSeed(now) {
-  const members = Array.from({ length: 29 }, (_, index) => ({
+  const last = OTHER_MEMBERS - 1;
+  const members = Array.from({ length: OTHER_MEMBERS }, (_, index) => ({
     ownerId: `qa-member-${index + 1}`,
     displayName: longName(index),
     joinedAt: now - (40 + index) * 3_600_000,
     lastActiveAt: now - index * 60_000,
-    deliveredUnits: index === 28 ? 0 : 1_250_000 * (29 - index),
-    jointOperationCount: index === 28 ? 0 : index % 7,
+    deliveredUnits: index === last ? 0 : 1_250_000 * (OTHER_MEMBERS - index),
+    jointOperationCount: index === last ? 0 : index % 7,
     tieBreaker: (index + 1) / 31,
   }));
-  const battlePoints = Object.fromEntries(members.filter((_, index) => index !== 28).map((member, index) => [member.ownerId, 90_000_000 - index * 2_750_000]));
+  const battlePoints = Object.fromEntries(members.filter((_, index) => index !== last).map((member, index) => [member.ownerId, 90_000_000 - index * 2_750_000]));
   const applicants = Array.from({ length: 20 }, (_, index) => ({
     id: `application-qa-${index + 1}`,
     ownerId: `qa-applicant-${index + 1}`,
@@ -265,20 +268,20 @@ async function runViewport(win, directory, label) {
 
   await patchSaveIdle(win, SAVE_KEY, worldSeed(Date.now()), {
     label: 'command QA seed',
-    held: `(() => { const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}'); return save.command?.alliances?.some((alliance) => alliance.name === ${JSON.stringify(ALLIANCE_42)} && alliance.members.length === 30); })()`,
+    held: `(() => { const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}'); return save.command?.alliances?.some((alliance) => alliance.name === ${JSON.stringify(ALLIANCE_42)} && alliance.members.length === ${OTHER_MEMBERS + 1}); })()`,
   });
   await win.webContents.executeJavaScript('document.fonts?.ready');
   await openCommand(win);
 
-  // 1. Overview of a full 30-member alliance with long names, 20 applications waiting.
-  await shot('01-overview-30-members');
+  // 1. Overview of a full alliance with long names, 20 applications waiting.
+  await shot('01-overview-full-alliance');
 
   // 2. Roster: the top, the end (scrolled), the profile with every score, an empty profile.
   await openTab(win, 'members');
   metrics.members = await win.webContents.executeJavaScript(`document.querySelectorAll('[data-qa-member-list] li').length`);
-  if (metrics.members !== 30) fail('Roster does not hold 30 members', metrics.members);
+  if (metrics.members !== OTHER_MEMBERS + 1) fail('Roster is not full', metrics.members);
   await shot('02-members-profile-all-scores');
-  await selectMember(win, 29);
+  await selectMember(win, OTHER_MEMBERS);
   await scrollToEnd(win, '[data-qa-member-list]');
   await shot('03-members-end-empty-profile');
   await selectMember(win, 1);
@@ -318,10 +321,10 @@ async function runViewport(win, directory, label) {
   await click(win, '[data-qa-crest-back]');
   await click(win, '.command-dialog [data-asterion-close]');
 
-  // 7. Leave dialog: the leader picks one of 29 successors.
+  // 7. Leave dialog: the leader picks a successor.
   await click(win, '[data-qa-leave]');
   await waitFor(win, `document.querySelector('[data-qa-successor]')`);
-  await shot('13-leave-29-successors');
+  await shot('13-leave-successors');
   await click(win, '.command-dialog [data-asterion-close]');
 
   // 8. No alliance: a pending application, the catalog of six alliances.
