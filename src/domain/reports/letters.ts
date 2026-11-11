@@ -1,6 +1,9 @@
 import { canManageAlliance, selectRole } from '../command/selectors.ts';
 import type { AllianceApplication, AllianceRecord, ApplicationReason, CommandState } from '../command/types.ts';
+import { npcLetterList, type NpcLetterContext } from './npc-letters.ts';
 import type { LetterAnswer, PersonalLetter, ReportItem } from './types.ts';
+
+export type { NpcLetterContext } from './npc-letters.ts';
 
 // «Личные»: letters addressed to the player. Today they are projected from what
 // the Command domain already records about the player personally (answers to
@@ -73,7 +76,7 @@ function incomingLetter(application: AllianceApplication, alliance: AllianceReco
   };
 }
 
-export function personalLetters(command: Pick<CommandState, 'alliances' | 'applications'> | undefined, playerOwnerId: string | undefined): PersonalLetter[] {
+export function personalLetters(command: Pick<CommandState, 'alliances' | 'applications'> | undefined, playerOwnerId: string | undefined, npc?: NpcLetterContext): PersonalLetter[] {
   if (!command || !playerOwnerId) return [];
   const byId = new Map(command.alliances.map((alliance) => [alliance.id, alliance]));
   const letters: PersonalLetter[] = [];
@@ -89,6 +92,7 @@ export function personalLetters(command: Pick<CommandState, 'alliances' | 'appli
       letters.push(incomingLetter(application, alliance));
     }
   }
+  if (npc) letters.push(...npcLetterList(command, playerOwnerId, npc));
   return letters;
 }
 
@@ -98,7 +102,7 @@ export function personalLetterToReportItem(letter: PersonalLetter): ReportItem {
     id: letter.id,
     source: 'letter',
     category: 'personal',
-    typeLabel: letter.sender.kind === 'alliance' ? 'Письмо союза' : 'Письмо игрока',
+    typeLabel: letter.sender.kind === 'alliance' ? 'Письмо союза' : letter.kind.startsWith('bot-') ? 'Письмо командующего' : 'Письмо игрока',
     title: letter.subject,
     preview: `${senderName} · ${letter.text}`,
     body: letter.text,
@@ -114,6 +118,6 @@ export function personalLetterToReportItem(letter: PersonalLetter): ReportItem {
 }
 
 /** Every «Личные» item of the player, newest first is up to the feed. */
-export function personalLetterItems(command: Pick<CommandState, 'alliances' | 'applications'> | undefined, playerOwnerId: string | undefined): ReportItem[] {
-  return personalLetters(command, playerOwnerId).map(personalLetterToReportItem);
+export function personalLetterItems(command: Pick<CommandState, 'alliances' | 'applications'> | undefined, playerOwnerId: string | undefined, npc?: NpcLetterContext): ReportItem[] {
+  return personalLetters(command, playerOwnerId, npc).map(personalLetterToReportItem);
 }

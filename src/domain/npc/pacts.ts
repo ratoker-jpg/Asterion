@@ -32,6 +32,8 @@ export type NpcJointStrikeTerms = Readonly<{
   toleranceMs: number;
   fromRole: NpcPactRole;
   toRole: NpcPactRole;
+  /** Ships the proposer expects to bring (only in an invitation to the player: it is on the letter). */
+  fromShips?: number;
 }>;
 
 export type NpcGiftTerms = Readonly<{
@@ -111,7 +113,7 @@ export function isNpcProposal(value: unknown): value is NpcProposal {
   const terms = value.terms;
   if (value.kind === 'joint-strike') {
     return isId(terms.targetPlanetId) && isId(terms.targetOwnerId) && isTime(terms.strikeAt) && isTime(terms.toleranceMs)
-      && isRole(terms.fromRole) && isRole(terms.toRole);
+      && isRole(terms.fromRole) && isRole(terms.toRole) && (terms.fromShips === undefined || isTime(terms.fromShips));
   }
   return value.kind === 'resource-gift' && ['metal', 'minerals', 'gas'].includes(String(terms.resource))
     && isTime(terms.amount) && isId(terms.planetId) && (terms.forProposalId === undefined || isId(terms.forProposalId));

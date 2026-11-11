@@ -11,6 +11,7 @@
 import { isNpcGiftRecord, isNpcProposal, isNpcRobberyReaction, type NpcGiftRecord, type NpcProposal, type NpcRobberyReaction } from './pacts.ts';
 import { isNpcRelationEdge, type NpcRelationEdge } from './relations.ts';
 import { isNpcSunRaidPrepPlan, type NpcSunRaidPrepPlan } from './sun-prep.ts';
+import { isNpcLetterRecord, type NpcLetterRecord } from './letters.ts';
 import { isNpcWar, type NpcWar } from './war.ts';
 
 export const NPC_STRATEGY_VERSION = 1 as const;
@@ -132,6 +133,8 @@ export type NpcStrategyState = Readonly<{
   reactions?: Readonly<Record<string, NpcRobberyReaction>>;
   /** Revenge wars on an offender (npc-war.ts): active ones and the last closed ones. */
   wars?: readonly NpcWar[];
+  /** Letters bots wrote to the player (help requests, ally offers, replies); joint-strike invitations are in `proposals`. */
+  letters?: readonly NpcLetterRecord[];
 }>;
 
 /** Closed plans kept per owner, for the owner's own judgement and the journal. */
@@ -210,7 +213,8 @@ export function isNpcStrategyState(value: unknown): value is NpcStrategyState {
     && (value.proposals === undefined || (Array.isArray(value.proposals) && value.proposals.every(isNpcProposal)))
     && (value.gifts === undefined || (Array.isArray(value.gifts) && value.gifts.every(isNpcGiftRecord)))
     && (value.reactions === undefined || (isRecord(value.reactions) && Object.values(value.reactions).every(isNpcRobberyReaction)))
-    && (value.wars === undefined || (Array.isArray(value.wars) && value.wars.every(isNpcWar)));
+    && (value.wars === undefined || (Array.isArray(value.wars) && value.wars.every(isNpcWar)))
+    && (value.letters === undefined || (Array.isArray(value.letters) && value.letters.every(isNpcLetterRecord)));
 }
 
 /**

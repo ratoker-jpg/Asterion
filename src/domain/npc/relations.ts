@@ -56,7 +56,9 @@ export type NpcRelationEvent =
   | Readonly<{ kind: 'withdrew' }>
   | Readonly<{ kind: 'promise-broken' }>
   /** It attacked this owner while their agreement stood. */
-  | Readonly<{ kind: 'betrayed' }>;
+  | Readonly<{ kind: 'betrayed' }>
+  /** It asked this owner for something and was told no (a letter's «Отказаться»): a small chill, not a grudge. */
+  | Readonly<{ kind: 'refused' }>;
 
 /** All an owner's decisions read of an edge, faded to the moment. */
 export type NpcRelationView = Readonly<{
@@ -181,6 +183,10 @@ export function applyNpcRelationEvent(previous: NpcRelationEdge | undefined, to:
       affinity = towards(affinity, -1, 0.1);
       resentment = towards(resentment, 1, 0.2);
       next.promisesBroken = edge.promisesBroken + 1;
+      break;
+    case 'refused':
+      trust = towards(trust, -1, 0.05);
+      affinity = towards(affinity, -1, 0.04);
       break;
     case 'betrayed':
       trust = towards(trust, -1, 0.6);

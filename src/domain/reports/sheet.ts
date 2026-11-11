@@ -414,7 +414,7 @@ function letterSheet(item: ReportItem, letter: PersonalLetter): ReportSheet {
     title: letter.subject,
     summary: letter.text,
     time: item.timestamp,
-    place: null,
+    place: letter.place ?? null,
     result: letter.result,
     sides: [side],
     ships: [],

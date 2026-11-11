@@ -30,7 +30,8 @@ import {
   markReportRead,
 } from './domain/reports/repository.ts';
 import { buildReportSheet, type ReportSheetAction } from './domain/reports/sheet.ts';
-import type { ReportCategory, ReportFilter, ReportItem, ReportsState } from './domain/reports/types.ts';
+import type { LetterRef, ReportCategory, ReportFilter, ReportItem, ReportsState } from './domain/reports/types.ts';
+import type { NpcStrategyState } from './domain/npc/strategy.ts';
 import type { PlayerProfileState } from './domain/profile/types.ts';
 import { selectPlayerProfileMetrics } from './domain/profile/selectors.ts';
 import type { PlayerProfileMetricKey } from './domain/profile/selectors.ts';
@@ -252,7 +253,7 @@ function FolderActions({ folder, items, selectedIds, onSelectAll, onDeleteAll, o
   );
 }
 
-export function ReportsView({ retentionCutoff, battleReports, planetNames, savedBattleReportIds, operations, command, espionage, pirateReconReports, pirateFlights, exploration, initialSelectedReportId, profile, score, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy, onOpenUniverseTarget, onOpenPirateUniverse, canRepeatFlight, onRepeatFlight, onCollectDebris, onAttackSpyTarget, profileFacts }: {
+export function ReportsView({ retentionCutoff, battleReports, planetNames, savedBattleReportIds, operations, command, espionage, pirateReconReports, pirateFlights, exploration, initialSelectedReportId, profile, score, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy, onOpenUniverseTarget, onOpenPirateUniverse, canRepeatFlight, onRepeatFlight, onCollectDebris, onAttackSpyTarget, profileFacts, npcStrategy, worldNow, onAnswerLetter }: {
   /** Letters older than this world time are gone (24-hour rule); absent in Test Mode. */
   retentionCutoff?: number;
   battleReports: readonly BattleReport[];
@@ -286,6 +287,11 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
   onAttackSpyTarget?: (report: SpyReportSnapshot) => void;
   /** Rating place, planets, crystals for «Профиль игрока». */
   profileFacts?: ProfileFacts;
+  /** The bots' letters (invitations, requests, replies) and the world's time they are read at. */
+  npcStrategy?: Pick<NpcStrategyState, 'proposals' | 'letters'>;
+  worldNow?: number;
+  /** «Принять» / «Отказаться» of a bot letter; returns why it could not be done, or null. */
+  onAnswerLetter?: (ref: LetterRef, answer: 'accept' | 'decline') => string | null;
 }) {
   const [activeFolder, setActiveFolder] = useState<MessageFolderId>('profile');
   const [filter, setFilter] = useState<ReportFilter>('all');
@@ -294,10 +300,13 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
   const [selectedId, setSelectedId] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [openBattleReportId, setOpenBattleReportId] = useState<string | null>(null);
+  const [answerError, setAnswerError] = useState('');
+  useEffect(() => { setAnswerError(''); }, [selectedId]);
   const pendingInitialReportId = useRef<string | null>(null);
   const handledInitialReportId = useRef<string | null>(null);
 
-  const items = useMemo(() => dropExpiredReportItems(buildReportsFeed(battleReports, operations, command, espionage, state.overpopulationReports, state.recyclerArrivalReports, state.gasExtractionArrivalReports, pirateReconReports, pirateFlights, exploration, profile.playerId, { planetNames, factionId: profile.factionId }), retentionCutoff, savedBattleReportIds)
+  const npcLetterContext = useMemo(() => (npcStrategy && worldNow !== undefined ? { strategy: npcStrategy, now: worldNow, targets: espionage?.targets } : undefined), [npcStrategy, worldNow, espionage?.targets]);
+  const items = useMemo(() => dropExpiredReportItems(buildReportsFeed(battleReports, operations, command, espionage, state.overpopulationReports, state.recyclerArrivalReports, state.gasExtractionArrivalReports, pirateReconReports, pirateFlights, exploration, profile.playerId, { planetNames, factionId: profile.factionId }, npcLetterContext), retentionCutoff, savedBattleReportIds)
     // Battles between third parties (e.g. pirates raiding Bot 01) are not the player's mail.
     .filter((item) => {
       if (!item.battleReportId) return true;
@@ -305,7 +314,7 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
       if (!report) return true;
       const mine = (id?: string) => isAsterionLocalPlayerId(profile.playerId) ? isAsterionLocalPlayerId(id) : id === profile.playerId;
       return mine(report.attacker.playerId) || mine(report.defender.playerId);
-    }), [battleReports, operations, command, espionage, state.overpopulationReports, state.recyclerArrivalReports, state.gasExtractionArrivalReports, pirateReconReports, pirateFlights, exploration, profile.playerId, planetNames, profile.factionId, retentionCutoff, savedBattleReportIds]);
+    }), [battleReports, operations, command, espionage, state.overpopulationReports, state.recyclerArrivalReports, state.gasExtractionArrivalReports, pirateReconReports, pirateFlights, exploration, profile.playerId, planetNames, profile.factionId, retentionCutoff, savedBattleReportIds, npcLetterContext]);
   const counts = useMemo(() => getReportCategoryCounts(items, state), [items, state]);
   const unreadCounts = useMemo(() => getReportUnreadCounts(items, state), [items, state]);
   const activeFolderMeta = MESSAGE_FOLDERS.find((folder) => folder.id === activeFolder) ?? MESSAGE_FOLDERS[0];
@@ -461,14 +470,15 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
     else if (action.kind === 'recall_spy' && action.missionId) onRecallSpy(action.missionId);
     else if (action.kind === 'open_fleets') onOpenFleets();
     else if (action.kind === 'open_command') onOpenCommand();
+    else if ((action.kind === 'accept' || action.kind === 'decline') && selectedItem.letter?.ref && onAnswerLetter) setAnswerError(onAnswerLetter(selectedItem.letter.ref, action.kind) ?? '');
     else if (action.kind === 'collect_debris' && action.coordinate) onCollectDebris?.(action.coordinate);
     else if (action.kind === 'attack_target' && selectedItem.spyReport) onAttackSpyTarget?.(selectedItem.spyReport);
     else if (action.kind === 'repeat_flight' && action.flightId) onRepeatFlight?.(action.flightId);
   };
   const wired: Partial<Record<ReportSheetAction['kind'], boolean>> = {
     collect_debris: Boolean(onCollectDebris), attack_target: Boolean(onAttackSpyTarget), repeat_flight: Boolean(onRepeatFlight),
-    // Answers with no game action yet («Принять» / «Отказаться» of bot letters) are not drawn.
-    accept: false, decline: false,
+    // «Принять» / «Отказаться» are drawn only on a bot letter that has something to act on.
+    accept: Boolean(onAnswerLetter && selectedItem?.letter?.ref), decline: Boolean(onAnswerLetter && selectedItem?.letter?.ref),
   };
   const offered = (selectedSheet?.actions ?? []).filter((action) => wired[action.kind] !== false);
   // One primary: the first offered primary keeps it.
@@ -523,6 +533,7 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
           {activeCategory && selectedItem ? <header className="reports-preview-head"><span>{selectedIndex + 1} из {visibleItems.length}</span><div className="reports-preview-actions"><button type="button" aria-label="Предыдущее сообщение" disabled={selectedIndex <= 0} onClick={() => navigateSelected(-1)}><ActionGlyph kind="prev" /></button><button type="button" aria-label="Следующее сообщение" disabled={selectedIndex < 0 || selectedIndex >= visibleItems.length - 1} onClick={() => navigateSelected(1)}><ActionGlyph kind="next" /></button></div></header> : null}
           <div className="reports-preview-scroll">{previewBody}</div>
           {activeCategory && selectedItem ? <footer className="reports-preview-footer">
+            {answerError ? <p className="reports-answer-error" role="alert" data-qa-letter-error>{answerError}</p> : null}
             <div className="reports-preview-footer-actions">
               {selectedItem.battleReportId ? <button type="button" className={selectedBattleSaved ? 'restore' : ''} aria-pressed={selectedBattleSaved} onClick={() => onToggleBattleSaved(selectedItem.battleReportId!, !selectedBattleSaved)}>{selectedBattleSaved ? 'УБРАТЬ ИЗ СОХРАНЁННЫХ' : 'СОХРАНИТЬ БОЙ'}</button> : null}
               <button type="button" className="reports-delete-current" onClick={deleteCurrent}>Удалить</button>

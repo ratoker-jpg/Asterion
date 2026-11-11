@@ -1512,7 +1512,8 @@ function migrateParsedSave(
     migratedFlights.records,
   ).map((item) => item.id).concat(
     // «Личные» letters need the player's id; their read marks must survive a reload too.
-    personalLetterItems(command, profile.playerId).map((item) => item.id),
+    // The bots' letters live in the NPC strategy section; their ids do not depend on time.
+    personalLetterItems(command, profile.playerId, { strategy: migrateNpcStrategyState(parsed.npcStrategy), now: 0 }).map((item) => item.id),
   );
   const migratedSavedFleet = removeSolarSatellitesFromFleet(
     resolveSavedFleetState(savedHomeworld?.fleet, profile.factionId),

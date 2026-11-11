@@ -1,5 +1,7 @@
 import { isFlightEventForPlayer, isHostileFlightIncomingToPlayer } from './application/flight-visibility.ts';
 import { SAVE_FLUSH_EVENT } from './application/save-storage.ts';
+import { answerNpcLetter } from './application/npc-letters.ts';
+import type { LetterRef } from './domain/reports/types.ts';
 import { diffPlayerActions, PLAYER_JOURNAL_SNAPSHOT_INTERVAL_MS, snapshotPlayer } from './application/player-journal.ts';
 import { appendJournalEntries, setActiveJournalCampaign } from './ui/player-journal-store.ts';
 import { appendBotJournal } from './ui/bot-journal-store.ts';
@@ -1553,11 +1555,13 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const reportPlanetNames = useMemo(() => Object.fromEntries(Object.entries(state.planets).map(([id, planet]) => [id, planet.name])), [state.planets]);
   // The mailbox follows the world's clock (the replay cursor); Test Mode keeps its fixtures.
   const reportRetentionAt = state.npcReplay ? reportRetentionCutoff(state.npcReplay.processedThroughAt) : undefined;
+  // Bot letters expire by the minute, not by the second.
+  const letterClock = Math.floor(now / 60_000) * 60_000;
   const reportsUnreadCount = useMemo(() => {
-    const items = dropExpiredReportItems(buildReportsFeed(state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.pirate?.reconReports, state.flights.records, state.exploration, state.profile.playerId),
+    const items = dropExpiredReportItems(buildReportsFeed(state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.pirate?.reconReports, state.flights.records, state.exploration, state.profile.playerId, undefined, { strategy: state.npcStrategy, now: letterClock, targets: state.espionage?.targets }),
       reportRetentionAt, state.combat.savedReportIds);
     return Object.values(getReportUnreadCounts(items, state.reports)).reduce((total, count) => total + count, 0);
-  }, [state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.reports, state.pirate, state.flights, state.exploration, reportRetentionAt]);
+  }, [state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.reports, state.pirate, state.flights, state.exploration, reportRetentionAt, state.npcStrategy, letterClock]);
   // «Профиль игрока» in «Сообщения»: the same standings as «Рейтинг», planets and crystals; nothing invented.
   const reportProfileFacts = useMemo(() => {
     // Only while «Сообщения» is open: the rest of the game does not pay for it each tick.
@@ -2624,6 +2628,18 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     setNotice('Командование: профиль союза открыт из центра сообщений.');
   };
 
+  /** «Принять» / «Отказаться» on a bot's letter: acts on the save at once, tells why when it cannot. */
+  const answerLetterFromReports = (ref: LetterRef, answer: 'accept' | 'decline'): string | null => {
+    const current = stateRef.current;
+    const outcome = answerNpcLetter(current, ref, answer, Date.now());
+    if (!outcome.ok) return outcome.reason;
+    const nextState: SaveState = { ...outcome.state, schemaVersion: SAVE_SCHEMA_VERSION };
+    stateRef.current = nextState;
+    setState(nextState);
+    setNotice(answer === 'accept' ? 'Вы приняли письмо.' : 'Вы отказались.');
+    return null;
+  };
+
   const toggleBattleSavedFromReports = (reportId: string, saved: boolean) => {
     const current = stateRef.current;
     const nextState: SaveState = {
@@ -3372,6 +3388,9 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               onCollectDebris={collectDebrisFromReport}
               onAttackSpyTarget={attackFromSpyReport}
               profileFacts={reportProfileFacts}
+              npcStrategy={state.npcStrategy}
+              worldNow={letterClock}
+              onAnswerLetter={answerLetterFromReports}
             />
           ) : activeRoute === 'planet' && planetViewMode !== 'overview' ? (
             <ZoneView

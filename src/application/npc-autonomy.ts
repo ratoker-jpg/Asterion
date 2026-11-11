@@ -34,6 +34,7 @@ import { getNpcPlanChoices, journalNpcRevengeFunnel, refreshNpcPlans, scheduleNp
 import { getNpcWarChoices, refreshNpcWars, scheduleNpcWarCheck } from './npc-war.ts';
 import { getNpcSunPrepChoices, npcSunPrepSavesGas, refreshNpcSunPrep, scheduleNpcSunPrepCheck } from './npc-sun-prep.ts';
 import { getNpcPactChoices, npcPactForbidsAttack, refreshNpcPacts } from './npc-pacts.ts';
+import { refreshNpcLetters } from './npc-letters.ts';
 import { npcReactionDrives } from './npc-pact-state.ts';
 import { activeNpcPlans, withoutNpcPlanReserve } from './npc-plan-reserve.ts';
 import { getNpcFortifyChoices, npcFortifyShortfalls, refreshNpcFortify, type NpcFortifyPlanetInput } from './npc-plan-fortify.ts';
@@ -217,6 +218,7 @@ export function applyNpcAutonomyAttention(state: SaveState, profile: NpcProfile,
   state = refreshNpcSunPrep(state, profile, utility, at, timeScale);
   // Agreements with other owners: answers, what was agreed, a new ask.
   state = refreshNpcPacts(state, profile, utility, at, timeScale);
+  state = refreshNpcLetters(state, profile, utility, at);
   // Revenge wars (owner decision 09.11.2026): answers to a call, the war's rounds and its end.
   state = refreshNpcWars(state, profile, utility, at);
   // Concept U: estimated benefit − cost − risk + goal, plus this owner's seeded misjudgement.

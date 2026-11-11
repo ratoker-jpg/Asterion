@@ -219,7 +219,8 @@ async function openFolder(win, folder) {
 
 async function openReport(win, id) {
   const selector = `[data-report-item-id="${id}"] .reports-list-open`;
-  // Long folders page by seven: turn pages until the wanted report shows.
+  // Long folders page by seven: go back to the first page, then turn pages until the wanted report shows.
+  for (let turn = 0; turn < 60 && !await exists(win, selector) && await exists(win, '.reports-pagination button:first-child:not(:disabled)'); turn += 1) await click(win, '.reports-pagination button:first-child');
   for (let turn = 0; turn < 60 && !await exists(win, selector); turn += 1) {
     if (!await exists(win, '.reports-pagination button:last-child:not(:disabled)')) break;
     await click(win, '.reports-pagination button:last-child');
@@ -311,7 +312,61 @@ async function runViewport(win, directory, label) {
       await capture(win, directory, '09-personal-alliance-letter');
     }
   }
+  // The bots' letters in every state, then the answers acting on the screen.
+  if (hasPersonal) await runBotLetters(win, directory, metrics, fail, check);
   return metrics;
+}
+
+async function runBotLetters(win, directory, metrics, fail, check) {
+  await patchSaveIdle(win, SAVE_KEY, botLettersSource(Date.now()), { label: 'reports format bot letters' });
+  await settle(win, 400);
+  await openReports(win);
+  await openFolder(win, 'personal');
+  const state = () => win.webContents.executeJavaScript(`(() => {
+    const sheet = document.querySelector('[data-report-sheet="letter"]');
+    return {
+      result: sheet?.querySelector('[data-report-result]')?.textContent.trim() || '',
+      actions: Array.from(document.querySelectorAll('.reports-preview-footer [data-report-action]')).map((button) => button.getAttribute('data-report-action')),
+      error: document.querySelector('[data-qa-letter-error]')?.textContent.trim() || '',
+    };
+  })()`);
+  const shot = async (name, id, expectResult, expectActions) => {
+    if (!await openReport(win, id)) return fail(`${name}: letter ${id} is not in «Личные»`, await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-report-item-id]')).map((node) => node.getAttribute('data-report-item-id'))`));
+    await check(name);
+    const now = await state();
+    metrics.cases[name] = { ...metrics.cases[name], letter: now };
+    if (expectResult && now.result !== expectResult) fail(`${name}: result word`, { expected: expectResult, got: now });
+    if (expectActions && now.actions.join() !== expectActions.join()) fail(`${name}: buttons`, { expected: expectActions, got: now });
+    await capture(win, directory, name);
+  };
+  const total = await win.webContents.executeJavaScript(`Number(document.querySelector('[data-message-folder="personal"] .reports-folder-counter i')?.textContent.replace('/', '') || 0)`);
+  metrics.botLetters = total;
+  if (total < 28) fail('«Личные» does not hold the 28+ bot letters', total);
+  await check('14-personal-many-letters', false);
+  await capture(win, directory, '14-personal-many-letters');
+  await shot('15-letter-strike-new', 'letter:npc-pact:qa-pact-new', 'Новое', ['decline', 'accept']);
+  await shot('16-letter-strike-accepted', 'letter:npc-pact:qa-pact-accepted', 'Принято', ['open_fleets']);
+  await shot('17-letter-strike-declined', 'letter:npc-pact:qa-pact-declined', 'Вы отказались', []);
+  await shot('18-letter-strike-expired', 'letter:npc-pact:qa-pact-expired', 'Истекло', []);
+  await shot('19-letter-help-new', 'letter:npc:qa-help-new', 'Новое', ['decline', 'accept']);
+  await shot('20-letter-help-kept', 'letter:npc:qa-help-kept', 'Помощь пришла', []);
+  await shot('21-letter-ally-new', 'letter:npc:qa-ally-new', 'Новое', ['decline', 'accept']);
+  await shot('22-letter-reply-angry', 'letter:npc:qa-reply-angry', 'Гнев', []);
+  // «Принять» on a help request: the promise is made and the way to the fleets opens.
+  if (await openReport(win, 'letter:npc:qa-help-new')) {
+    await click(win, '[data-report-action="accept"]');
+    await check('23-letter-help-accepted');
+    const accepted = await state();
+    if (accepted.result !== 'Обещано' || accepted.actions.join() !== 'open_fleets') fail('Accepting a help request does not promise help', accepted);
+    await capture(win, directory, '23-letter-help-accepted');
+  }
+  // «Отказаться» on a strike invitation and on a help request: they close and lose their buttons.
+  for (const id of ['letter:npc-pact:qa-pact-decline', 'letter:npc:qa-help-decline']) {
+    if (!await openReport(win, id)) { fail('Declinable letter missing', id); continue; }
+    await click(win, '[data-report-action="decline"]');
+    const declined = await state();
+    if (declined.result !== 'Вы отказались' || declined.actions.length) fail('Declining does not close the letter', { id, declined });
+  }
 }
 
 /** «Профиль игрока», a new player: no alliance, no messages. Runs after every viewport (it leaves the alliance). */
@@ -347,6 +402,49 @@ async function runNewPlayer(win, directory, label) {
   metrics.profileNew = await profileFacts(win);
   await capture(win, directory, '13-profile-new-player');
   return metrics;
+}
+
+/**
+ * Page-side save edit: letters of the bots in «Личные», one of each kind in every state
+ * (new, accepted, declined, expired) and 22 more with long names, so the list is the worst case.
+ */
+function botLettersSource(now) {
+  return `(save) => {
+    const now = ${JSON.stringify(now)};
+    const me = save.profile?.playerId;
+    const HOUR = 3_600_000;
+    const MIN = 60_000;
+    const template = Object.values(save.espionage?.targets || {})[0] || {};
+    const NAMES = ['Верховный Адмирал Объединённого Флота Южных Рубежей', 'Командор Тёмной Звезды', 'Ли', 'Архонт Девятого Сектора Кассиопеи Восточной', 'Капитан Вега', 'Лорд-протектор Орбитальных Верфей Северного Пояса', 'Ор', 'Стратег Альянса Туманности Андромеды Малой'];
+    const targets = { ...(save.espionage?.targets || {}) };
+    const addPlanet = (id, name, ownerId, ownerName, raceId, system) => {
+      targets[id] = { ...template, id, name, ownerId, ownerName, raceId, kind: 'npc', alliance: null, coordinate: { galaxy: 1, system, position: 3 } };
+    };
+    const bots = Array.from({ length: 32 }, (_, index) => ({ id: 'qa-letter-bot-' + index, name: NAMES[index % NAMES.length] + (index >= NAMES.length ? ' ' + (index + 1) : ''), race: index % 2 ? 'synod' : 'aegis' }));
+    bots.forEach((bot, index) => addPlanet('qa-letter-home-' + index, 'Дом ' + index, bot.id, bot.name, bot.race, 20 + index));
+    addPlanet('qa-letter-target', 'Кассиопея Восточный Рубеж Обороны Седьмого Сектора', 'qa-letter-victim', 'Командор Тёмной Звезды Девятого Сектора', 'synod', 77);
+    save.espionage = { ...(save.espionage || {}), targets };
+    const terms = (strikeAt, ships) => ({ targetPlanetId: 'qa-letter-target', targetOwnerId: 'qa-letter-victim', strikeAt, toleranceMs: HOUR, fromRole: { wave: 1, hull: 'bomber' }, toRole: { wave: 2, hull: 'destroyer' }, ...(ships ? { fromShips: ships } : {}) });
+    const pact = (id, from, createdAgo, expiresIn, status, strikeIn, extra) => ({ proposalId: id, kind: 'joint-strike', from, to: me, createdAt: now - createdAgo, expiresAt: now + expiresIn, status, terms: terms(now + strikeIn, 1234567), ...(extra || {}) });
+    const proposals = [
+      pact('qa-pact-new', bots[0].id, 20 * MIN, 4 * HOUR, 'proposed', 9 * HOUR),
+      pact('qa-pact-decline', bots[1].id, 25 * MIN, 5 * HOUR, 'proposed', 10 * HOUR),
+      pact('qa-pact-accepted', bots[2].id, 2 * HOUR, -MIN, 'accepted', 3 * HOUR, { decidedAt: now - HOUR }),
+      pact('qa-pact-declined', bots[3].id, 3 * HOUR, -HOUR, 'declined', 8 * HOUR, { decidedAt: now - 2 * HOUR, closedAt: now - 2 * HOUR, reason: 'player-declined', by: me }),
+      pact('qa-pact-expired', bots[4].id, 14 * HOUR, -2 * HOUR, 'proposed', -HOUR),
+    ];
+    const letter = (id, kind, from, createdAgo, status, extra) => ({ letterId: id, kind, from, createdAt: now - createdAgo, expiresAt: now - createdAgo, status, ...(extra || {}) });
+    const letters = [
+      letter('qa-help-new', 'help-request', bots[5].id, 10 * MIN, 'new', { expiresAt: now + 50 * MIN, planetId: 'qa-letter-home-5', attackerId: 'qa-letter-victim', arrivalAt: now + 50 * MIN }),
+      letter('qa-help-decline', 'help-request', bots[6].id, 12 * MIN, 'new', { expiresAt: now + 70 * MIN, planetId: 'qa-letter-home-6', arrivalAt: now + 70 * MIN }),
+      letter('qa-help-kept', 'help-request', bots[7].id, 6 * HOUR, 'kept', { expiresAt: now - 5 * HOUR, decidedAt: now - 5 * HOUR - 30 * MIN, closedAt: now - 5 * HOUR, planetId: 'qa-letter-home-7', attackerId: 'qa-letter-victim', arrivalAt: now - 5 * HOUR }),
+      letter('qa-ally-new', 'ally-offer', bots[8].id, 30 * MIN, 'new', { expiresAt: now + 20 * HOUR, allianceId: (save.command?.alliances || [])[0]?.id || 'alliance-gone' }),
+      letter('qa-reply-angry', 'reply', bots[9].id, 2 * HOUR, 'info', { cause: 'no-show', tone: 'angry' }),
+      ...Array.from({ length: 22 }, (_, index) => letter('qa-reply-' + index, 'reply', bots[10 + index].id, (3 + index) * HOUR, 'info', { cause: ['declined', 'no-show', 'betrayed'][index % 3], tone: ['warm', 'cold', 'angry'][index % 3] })),
+    ];
+    save.npcStrategy = { ...(save.npcStrategy || { version: 1, plans: {}, outcomes: {}, nextCheckAt: {} }), proposals, letters };
+    localStorage.setItem('asterion.test-time-scale.v1', '1');
+  }`;
 }
 
 /** What «Профиль игрока» shows: facts, events, whether it fills the panel. */

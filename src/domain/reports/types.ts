@@ -168,14 +168,18 @@ export type LetterSender =
   | { kind: 'alliance'; name: string; tag?: string; allianceId?: string }
   | { kind: 'player'; ownerId: string; name: string; factionId?: string; alliance?: { name: string; tag: string; allianceId: string } };
 
-/**
- * An answer button of a letter. `open_command` exists today; `accept` and
- * `decline` are kept for bot letters (joint attack invitations…) of the next PR.
- */
-export type LetterAnswerKind = 'open_command' | 'accept' | 'decline';
+/** An answer button of a letter: a link into a screen, or «Принять» / «Отказаться» of a bot letter. */
+export type LetterAnswerKind = 'open_command' | 'open_fleets' | 'accept' | 'decline';
 export type LetterAnswer = { kind: LetterAnswerKind; label: string; primary?: boolean };
 
-export type PersonalLetterKind = 'application-answer' | 'application-incoming' | (string & {});
+/**
+ * `bot-*`: letters the bots write (domain/npc/letters.ts, application/npc-letters.ts).
+ * Their answers act on the game: see `LetterRef`.
+ */
+export type PersonalLetterKind = 'application-answer' | 'application-incoming' | 'bot-joint-strike' | 'bot-help-request' | 'bot-ally-offer' | 'bot-reply' | (string & {});
+
+/** What «Принять» / «Отказаться» of a bot letter act on. */
+export type LetterRef = { kind: 'joint-strike' | 'help-request' | 'ally-offer'; id: string };
 
 export type PersonalLetter = {
   id: string;
@@ -188,8 +192,12 @@ export type PersonalLetter = {
   result: ReportResultWord;
   /** At most two. */
   answers: LetterAnswer[];
-  /** What the answers act on (an application id today, an invitation id later). */
+  /** What the answers act on (an application id, an invitation id). */
   subjectRef?: string;
+  /** Bot letters: the object «Принять» / «Отказаться» are applied to. */
+  ref?: LetterRef;
+  /** Where the letter points on the map (the target of a strike, the planet under attack). */
+  place?: ReportPlace;
 };
 
 export type ReportItem = {
