@@ -7,6 +7,17 @@ name: Late save QA
 #   gh workflow run late-save.yml -R ratoker-jpg/Asterion --ref <branch>
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - electron/save-store.cjs
+      - electron/late-save-qa.cjs
+      - electron/preload.cjs
+      - electron/cloud.cjs
+      - src/application/save-storage.ts
+      - src/application/save-port.ts
+      - src/application/live-world-engine.ts
+      - src/live-world.worker.ts
+      - .github/workflows/late-save.yml
   schedule:
     - cron: '17 3 * * 1'
 
