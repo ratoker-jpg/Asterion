@@ -14,7 +14,7 @@
 .btn { font: inherit; font-size: 15px; font-weight: 700; color: #dfe7f2; background: #172232; border: 0; border-radius: 10px; padding: 10px 16px; white-space: nowrap; }
 .btn.pri { color: #04121b; background: linear-gradient(#7ee8fb, #3fc0e6); box-shadow: 0 0 20px rgba(86,217,242,.35); }
 .btn.red { color: #fff; background: linear-gradient(#ff6a78, #d93446); }
-.list { position: absolute; left: 52px; right: 52px; top: 74px; bottom: 214px; overflow: hidden; }
+.list { position: absolute; left: 52px; right: 52px; top: 74px; bottom: 234px; overflow: hidden; }
 .sec { font-size: 13px; letter-spacing: 2px; text-transform: uppercase; font-weight: 800; color: var(--dim); margin: 14px 0 8px; }
 .sec.red { color: #ff7a86; }
 .row { display: grid; grid-template-columns: 260px 270px 28px 270px 190px 175px 200px 1fr auto; align-items: center; min-height: 64px; padding: 6px 14px; margin-bottom: 6px; border-radius: 12px; background: var(--card); }
@@ -32,17 +32,23 @@
 .st i { display: block; width: 160px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.08); position: relative; overflow: hidden; }
 .st i::after { content: ''; position: absolute; inset: 0 auto 0 0; width: var(--p); background: var(--c); }
 .tm small { display: block; font-size: 13px; color: var(--dim); } .tm b { font-size: 22px; font-weight: 800; } .hot .tm b { color: var(--red); font-size: 28px; }
-.sh { display: flex; align-items: center; gap: 6px; } .sh img { width: 46px; height: 32px; object-fit: contain; } .sh b { font-size: 16px; font-weight: 800; margin-right: 6px; } .sh small { font-size: 13px; color: var(--dim); margin-right: 14px; }
+.sh { justify-self: start; display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 10px; background: #172232; font-size: 15px; font-weight: 800; color: #fff; white-space: nowrap; }
+.sh small { font-size: 13px; color: var(--dim); font-weight: 700; } .sh i { font-style: normal; color: var(--cyan); }
+.hot .sh { background: rgba(255,77,94,.18); } .sel .sh { box-shadow: inset 0 0 0 1px var(--cyan); }
+.comp { display: flex; gap: 10px; align-self: end; }
+.comp div { width: 150px; padding: 10px 12px; border-radius: 12px; background: rgba(8,13,21,.85); box-shadow: inset 0 0 0 1px rgba(255,77,94,.35); }
+.comp img { width: 100%; height: 50px; object-fit: contain; } .comp small { display: block; font-size: 13px; color: #c2ccda; margin-top: 4px; white-space: nowrap; } .comp b { font-size: 19px; font-weight: 800; white-space: nowrap; }
+.comp .more { display: grid; place-items: center; width: 70px; font-size: 18px; font-weight: 800; color: var(--dim); }
 .cg { display: flex; flex-wrap: wrap; gap: 4px 14px; } .cg span { display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 700; } .cg img { width: 24px; height: 24px; } .cg .none { color: #4a5465; }
 .ac { display: flex; gap: 8px; }
 .more { position: absolute; left: 0; right: 0; bottom: 0; height: 60px; background: linear-gradient(transparent, rgba(3,6,12,.95)); display: flex; align-items: flex-end; justify-content: center; padding-bottom: 6px; font-size: 14px; color: var(--cyan); font-weight: 700; }
 /* the same big mission card the current Fleets screen already has, now for the picked flight */
-.ban { position: absolute; left: 52px; right: 52px; bottom: 22px; height: 176px; border-radius: 16px; overflow: hidden; background-size: cover; background-position: right center; }
+.ban { position: absolute; left: 52px; right: 52px; bottom: 22px; height: 196px; border-radius: 16px; overflow: hidden; background-size: cover; background-position: right center; }
 .ban::before { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(6,10,17,1) 0, rgba(6,10,17,.95) 45%, rgba(6,10,17,.7) 62%, rgba(6,10,17,.15) 85%); }
 .ban h2, .ban p, .ban .k, .ban .stats { text-shadow: 0 2px 10px rgba(0,0,0,.9); }
 .ban > div { position: relative; padding: 22px 34px; display: grid; grid-template-columns: auto 1fr auto; gap: 40px; align-items: end; height: 100%; }
 .ban .k { font-size: 14px; letter-spacing: 2px; text-transform: uppercase; font-weight: 800; color: #ff7a86; }
-.ban h2 { font-size: 42px; font-weight: 800; line-height: 1.05; margin: 4px 0 8px; } .ban h2 em { font-style: normal; color: var(--red); }
+.ban h2 { font-size: 38px; font-weight: 800; line-height: 1.05; margin: 4px 0 8px; } .ban h2 em { font-style: normal; color: var(--red); }
 .ban p { font-size: 16px; color: #c2ccda; }
 .ban .stats { display: flex; gap: 34px; align-self: end; padding-bottom: 6px; } .ban .stats span { font-size: 15px; color: var(--dim); } .ban .stats b { font-size: 22px; color: #fff; margin-left: 8px; }
 .ban .bt { display: flex; gap: 10px; } .ban .bt .btn { font-size: 18px; padding: 16px 26px; border-radius: 12px; }
@@ -54,6 +60,7 @@
 FLIGHTS.forEach((f) => { f.sent = f.phase === 'back' ? f.T * 2 - f.t : f.phase === 'work' ? f.T + 600 : f.T - f.t; });
 const now = 23 * 3600 + 41 * 60;
 const clock = (sec) => { const s = ((now + sec) % 86400 + 86400) % 86400; return `${String(Math.floor(s / 3600)).padStart(2, '0')}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}`; };
+const SHIPNAME = (k) => ({ titan: 'Титан', goliath: 'Голиаф', bomber: 'Бомбардировщик', fighter: 'Истребитель', interceptor: 'Перехватчик', frigate: 'Фрегат', large_cargo: 'Большой транспорт', cargo: 'Транспорт', recycler: 'Переработчик', scout: 'Зонд', shield_bot: 'Щитобот', colony: 'Колонизатор' })[k.split('_').slice(1).join('_')] || k;
 const STATE = { out: 'Летит туда', work: 'На месте', back: 'Возвращается' };
 const place = (o, ico) => `<div class="pl">${o.p ? `<img src="${PLANET(o.p)}">` : `<img class="ico" src="${ICON(ico)}">`}<div><b>${o.name}</b><small>${o.c === '—' ? '' : `[${o.c}]`}</small></div></div>`;
 function row(f, sel) {
@@ -66,7 +73,7 @@ function row(f, sel) {
     ${place(a, 'profile')}<div class="arr">${f.phase === 'back' ? '←' : '→'}</div>${place(b, M.icon)}
     <div class="st"><span>${f.hostile ? 'Летит на вас' : STATE[f.phase]}</span><i style="--p:${Math.round(frac(f) * 100)}%"></i></div>
     <div class="tm"><b>${tf(f.t)}</b><small>${when}</small></div>
-    <div class="sh"><b>${nshort(shipCount(f))}</b>${f.ships.slice(0, 2).map(([k]) => `<img src="${SHIP(k)}">`).join('')}${f.ships.length > 2 ? `<small>+${f.ships.length - 2}</small>` : ''}</div>
+    <div class="sh">${nshort(shipCount(f))} <small>· ${f.ships.length} ${f.ships.length === 1 ? 'тип' : f.ships.length < 5 ? 'типа' : 'типов'}</small><i>›</i></div>
     <div class="cg">${f.cargo ? f.cargo.map(([r, n]) => `<span><img src="${HICON(r)}">${nshort(n)}</span>`).join('') : '<span class="none">без груза</span>'}</div>
     <div class="ac">${acts}</div></div>`;
 }
@@ -82,9 +89,9 @@ else {
     <div class="sec">Ваши миссии · по времени отправки</div>${mine.map((f) => row(f, f === sel)).join('')}<div class="more">ещё ${Math.max(0, mine.length - 7)} ниже</div></div>`;
   const M = MISSION[sel.m];
   html += `<div class="ban" style="background-image:url('${BANNER(M.banner)}')"><div>
-    <div><div class="k">${sel.hostile ? 'Атака на вашу планету' : 'Миссия'}</div><h2>${sel.hostile ? `${HOME[sel.home].name} · <em>${tf(sel.t)}</em>` : M.label}</h2>
+    <div><div class="k">${sel.hostile ? 'Атака на вашу планету · удар в ' + clock(sel.t) : 'Миссия'}</div><h2>${sel.hostile ? `${HOME[sel.home].name} · <em>${tf(sel.t)}</em>` : M.label}</h2>
       <p>${sel.hostile ? `Летит ${sel.from.name} [${sel.from.c}]` : ''}</p></div>
-    <div class="stats"><span>Кораблей<b>${nshort(shipCount(sel))}</b></span><span>Типов<b>${sel.ships.length}</b></span><span>Удар в<b>${clock(sel.t)}</b></span></div>
+    <div class="comp">${sel.ships.slice(0, 5).map(([k, n]) => `<div><img src="${SHIP(k)}"><small>${SHIPNAME(k)}</small><b>${nf(n)}</b></div>`).join('')}${sel.ships.length > 5 ? `<div class="more">+${sel.ships.length - 5}</div>` : ''}</div>
     <div class="bt"><button class="btn">Позвать союз</button><button class="btn red">Увести флот</button></div></div></div>`;
 }
 document.getElementById('a').innerHTML = html;
