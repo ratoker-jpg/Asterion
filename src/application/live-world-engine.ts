@@ -5,6 +5,8 @@ import { applyCampaignRuntimeForCatchup, playerFacingEvents, runNpcCatchup } fro
 import { serializeSaveForStorage } from './persistence.ts';
 import { applyWorldPatch, diffWorld, type PatchOp, type WorldPatch } from './world-diff.ts';
 import type { LiveWorldPersistPolicy, LiveWorldRequest, LiveWorldResponse, LiveWorldVersion } from './live-world-protocol.ts';
+import { EXTERNAL_SAVE_MIN_CHARS } from './save-storage.ts';
+import { QuietRegistry } from './quiet-fields.ts';
 import { formatNpcJournalLines, NpcJournalRecorder, setNpcJournalSink, type NpcJournalEntry } from './npc-journal.ts';
 
 /**
@@ -23,6 +25,13 @@ export type LiveWorldEngineHost = {
   /** Runs `task` later on the worker (save scheduling). */
   later: (task: () => void, delayMs: number) => void;
   clock?: () => number;
+  /**
+   * Hands a large save to the main process as bytes (cloned on the worker thread,
+   * no copy on the UI thread). Absent or false: the text goes to the UI thread as before.
+   */
+  /** Saves at least this long go through sendSave (default: the size the desktop store takes). */
+  portMinChars?: number;
+  sendSave?: (version: LiveWorldVersion, bytes: ArrayBuffer, chars: number, computeMs: number) => boolean;
   /** false: no bot journal (tests that run several engines in one thread). */
   journal?: boolean;
 };
@@ -32,6 +41,9 @@ type Posted = { from: LiveWorldVersion; to: LiveWorldVersion; state: SaveState; 
 
 /** Commits wait this long for company before the world is saved. */
 const COMMIT_SAVE_DELAY_MS = 50;
+
+/** The quiet fields (quiet-fields.ts) reach the window at least this often. */
+export const QUIET_BATCH_EVERY_MS = 10_000;
 
 export class LiveWorldEngine {
   private ui: SaveState | null = null;
@@ -52,10 +64,15 @@ export class LiveWorldEngine {
   private savedVersion: LiveWorldVersion = -1;
   private catchup: { rebase: WorldPatch[]; droppedFreeze: boolean } | null = null;
   private failed = false;
+  /** The port could not write: saves go to the UI thread as text. */
+  private portFailed = false;
   /** The bot journal of this world (it only watches; see npc-journal.ts). */
   private readonly journal = new NpcJournalRecorder();
   /** Entries of worlds the UI took, not yet posted. */
   private journalOut: NpcJournalEntry[] = [];
+  /** The quiet values the window has, and when it was last told new ones. */
+  private readonly quiet = new QuietRegistry();
+  private lastQuietAt = Number.NEGATIVE_INFINITY;
 
   private readonly host: LiveWorldEngineHost;
 
@@ -74,6 +91,8 @@ export class LiveWorldEngine {
       if (message.type === 'init') this.init(message);
       else if (message.type === 'commit') this.commit(message.from, message.to, message.patch);
       else if (message.type === 'save-now') this.save();
+      else if (message.type === 'quiet-now') this.sendQuiet();
+      else if (message.type === 'save-port') return;
       // A tick during a catch-up, or before a world on its way reached the UI, only says where the UI is.
       else if (this.resolve(message.from, false) && !this.catchup) await this.tick(message.now, message.testTimeScale);
     } catch (error) {
@@ -92,6 +111,8 @@ export class LiveWorldEngine {
     this.ui = message.state;
     this.uiVersion = message.version;
     this.posted = [];
+    this.quiet.reset();
+    this.lastQuietAt = this.host.now();
     this.persist = message.persist;
     applyCampaignRuntimeForCatchup(message.state, this.host.now());
   }
@@ -140,7 +161,18 @@ export class LiveWorldEngine {
     }
     const to = this.version();
     this.posted.push({ from, to, state: next, journal: this.journal.take() });
-    this.host.post({ type: 'ticked', from, to, patch: diffWorld(before, next), events, computeMs });
+    // The window gets the world with its quiet values as it has them; the rest of the difference is the patch.
+    const beforeShadow = this.quiet.shadowOf(before);
+    const patch = diffWorld(beforeShadow, this.quiet.shadowOf(next, before));
+    this.host.post({ type: 'ticked', from, to, patch, events, computeMs });
+  }
+
+  /** Tells the window the quiet values that changed since it was last told (a no-op when none did). */
+  private sendQuiet(): void {
+    if (!this.ui) return;
+    this.lastQuietAt = this.host.now();
+    const batch = this.quiet.collect(this.posted.at(-1)?.state ?? this.ui);
+    if (batch) this.host.post({ type: 'quiet', batch });
   }
 
   private async tick(now: number, testTimeScale: Parameters<typeof reconcileRuntime>[1]['testTimeScale']): Promise<void> {
@@ -154,6 +186,7 @@ export class LiveWorldEngine {
     const result = reconcileRuntime(world, { planetId: world.currentPlanetId, now, mode: 'production', testTimeScale });
     const computeMs = this.clock() - startedAt;
     this.post(result.state, playerFacingEvents(result.events, world.profile.playerId), computeMs);
+    if (this.host.now() - this.lastQuietAt >= QUIET_BATCH_EVERY_MS) this.sendQuiet();
     // Clock ticks only advance time, which a reload replays identically: a
     // late world is saved after a pause that grows with what a save costs.
     const interval = Math.min(this.persist.tickMaxIntervalMs, this.lastSaveCostMs * this.persist.tickCostFactor);
@@ -194,6 +227,8 @@ export class LiveWorldEngine {
         return;
       }
       this.post(result.state, result.events, this.clock() - startedAt);
+      // A caught-up world changed every bot planet's economy: the window gets it with the world.
+      this.sendQuiet();
       // The caught-up world is saved at once, as posted (the UI takes it unless it changed meanwhile).
       this.saveText(result.state, this.posted.at(-1)?.to ?? this.uiVersion);
     } finally {
@@ -224,14 +259,32 @@ export class LiveWorldEngine {
     this.saveText(this.ui, this.uiVersion);
   }
 
+  /** The port failed: the next save goes as text, and the world is saved again at once. */
+  savePortFailed(): void {
+    this.portFailed = true;
+    this.savedVersion = -1;
+    this.scheduleSave(0);
+  }
+
   private saveText(state: SaveState, version: LiveWorldVersion): void {
     const startedAt = this.clock();
     const text = serializeSaveForStorage(state, 'production');
-    const computeMs = this.clock() - startedAt;
+    let sent = false;
+    // A large save goes to the main process as UTF-8 bytes; the UI thread copies nothing.
+    // (Smaller ones stay in localStorage, which only the UI thread reaches.)
+    if (this.host.sendSave && !this.portFailed && text.length >= (this.host.portMinChars ?? EXTERNAL_SAVE_MIN_CHARS)) {
+      const bytes = new TextEncoder().encode(text);
+      const computeMs = this.clock() - startedAt;
+      sent = this.host.sendSave(version, bytes.buffer as ArrayBuffer, text.length, computeMs);
+      this.lastSaveCostMs = computeMs;
+    }
+    if (!sent) {
+      const computeMs = this.clock() - startedAt;
+      this.lastSaveCostMs = computeMs;
+      this.host.post({ type: 'save', version, text, computeMs });
+    }
     this.lastSaveAt = this.host.now();
-    this.lastSaveCostMs = computeMs;
     this.savedVersion = version;
-    this.host.post({ type: 'save', version, text, computeMs });
     if (this.journalOut.length) {
       this.host.post({ type: 'bot-journal', lines: formatNpcJournalLines(this.journalOut) });
       this.journalOut = [];

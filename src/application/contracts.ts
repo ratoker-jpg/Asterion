@@ -30,7 +30,7 @@ import type { TradeState } from '../domain/buildings/trade.ts';
 import type { RepairWorkshopState } from '../domain/repair/workshop.ts';
 import type { EnergyLedger, EnergySourceSnapshot } from '../domain/energy/runtime.ts';
 import type { FlightState } from '../domain/flights/types.ts';
-import type { EspionageState } from '../domain/espionage/types.ts';
+import type { EspionageState, SpyTargetState } from '../domain/espionage/types.ts';
 import type { UniverseAsteroidSimulationState } from '../domain/universe/types.ts';
 import type { UniverseOwnerAlliance } from '../domain/universe/types.ts';
 import type { OverpopulationState } from '../domain/fleet/overpopulation.ts';
@@ -248,3 +248,23 @@ export function replaceAlliedPlanetState(
     },
   };
 }
+
+/**
+ * The world as screens may read it. The live world worker keeps a few fields out of
+ * its per-tick patches and sends them in batches every few seconds
+ * (quiet-fields.ts): a bot planet's metal, minerals and gas, its accrual clock, its
+ * overpopulation clock, and an asteroid's gas reserve. UiWorld has none of them, so
+ * UI code that reads one from a `UiWorld` does not compile. Any `SaveState` is a
+ * `UiWorld`; commands still compute on the full `SaveState` (they never write these
+ * fields: they are changed only by the clock tick, arrivals and the bots' own moves,
+ * all of which run in the worker).
+ */
+export type UiSpyTarget = Omit<SpyTargetState, 'resources' | 'resourceClock' | 'overpopulation'> & {
+  resources: Omit<SpyTargetState['resources'], 'metal' | 'minerals' | 'gas'>;
+  overpopulation?: Omit<OverpopulationState, 'lastReconciledAt'>;
+};
+export type UiAsteroid = Omit<UniverseAsteroidSimulationState['asteroids'][number], 'gasYield' | 'gasRatePerHour' | 'gasUpdatedAt' | 'gasRemainder'>;
+export type UiWorld = Omit<SaveState, 'espionage' | 'asteroidSimulation'> & {
+  espionage?: Omit<EspionageState, 'targets' | 'bot01Planets'> & { targets?: Record<string, UiSpyTarget>; bot01Planets?: Record<string, UiSpyTarget> };
+  asteroidSimulation?: Omit<UniverseAsteroidSimulationState, 'asteroids'> & { asteroids: UiAsteroid[] };
+};

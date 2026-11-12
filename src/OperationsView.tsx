@@ -42,6 +42,7 @@ type OperationsViewProps = {
   onAccept: (operationId: OperationId) => void;
   onCancel: (operationId: OperationId) => void;
   onOpenFleets: () => void;
+  onPirateCollectDebris?: (coordinate: CompletedPirateOperation['coordinate']) => void;
   pirateContacts?: readonly PirateContactPresentation[];
   pirateThreatPercent?: number;
   /** Diagnostic only; NEVER pass in production runtime. */
@@ -425,6 +426,7 @@ type DossierProps = {
   onAccept: (id: OperationId) => void;
   onCancel: (id: OperationId) => void;
   onOpenFleets: () => void;
+  onPirateCollectDebris?: (coordinate: CompletedPirateOperation['coordinate']) => void;
 };
 
 function ExplorationDossier({ row, nowMs, onExpedition, onExplorationAttack, onBot01Occupy, onExplorationRecon, onExplorationUniverse, onExplorationReport, onAccept, onCancel, onOpenFleets }: DossierProps) {
@@ -526,7 +528,7 @@ function ExplorationDossier({ row, nowMs, onExpedition, onExplorationAttack, onB
           {exploration.occupancy === 'free'
             ? <button type="button" className="primary op-lg" disabled={!onExpedition} data-qa-operation-expedition={node.id} onClick={() => onExpedition?.(node)}>Отправить экспедицию</button>
             : exploration.occupancy === 'self'
-              ? <button type="button" className="primary op-lg" onClick={onOpenFleets}>Флоты: отозвать</button>
+              ? <button type="button" className="primary op-lg" onClick={onOpenFleets}>Отозвать флот</button>
               : <button type="button" className="primary op-lg" data-qa-exploration-attack={node.id} disabled={!onExplorationAttack} onClick={() => onExplorationAttack?.(node)}>Атаковать объект</button>}
         </> : null}
         {completed && reportId && onExplorationReport ? (
@@ -597,7 +599,7 @@ function ExplorationDossier({ row, nowMs, onExpedition, onExplorationAttack, onB
   );
 }
 
-function PirateCompletedDossier({ row, onPirateBattleReport }: DossierProps) {
+function PirateCompletedDossier({ row, onPirateBattleReport, onPirateCollectDebris }: DossierProps) {
   const completed = row.completed!;
   const reward = completed.reward;
   const tiles: TileSpec[] = [
@@ -615,10 +617,13 @@ function PirateCompletedDossier({ row, onPirateBattleReport }: DossierProps) {
       place={<span className="op-place">{formatLocation(row.operation.location)}</span>}
       description={`Гарнизон уничтожен ${formatDateTime(completed.defeatedAt)}.`}
       status={<FootStatus label="Статус" value="Завершена победой" />}
-      actions={onPirateBattleReport ? <button type="button" className="primary op-lg" onClick={() => onPirateBattleReport(completed.reportId)}>Доклад о бое</button> : null}
+      actions={onPirateBattleReport || onPirateCollectDebris ? <>
+        {onPirateCollectDebris && completed.debris > 0 ? <button type="button" className="primary op-lg" data-qa-pirate-collect-debris onClick={() => onPirateCollectDebris(completed.coordinate)}>Собрать обломки</button> : null}
+        {onPirateBattleReport ? <button type="button" className={onPirateCollectDebris && completed.debris > 0 ? 'op-lg' : 'primary op-lg'} onClick={() => onPirateBattleReport(completed.reportId)}>Доклад о бое</button> : null}
+      </> : null}
     >
       <Tiles items={tiles} />
-      <NextStep>Чтобы забрать обломки, отправьте переработчики к координатам базы во «Флотах».</NextStep>
+      <NextStep>Чтобы забрать обломки, отправьте переработчики к координатам базы: кнопка «Собрать обломки» откроет «Флоты» с этой целью.</NextStep>
       {reward ? (
         <Section title="Как посчитаны обломки">
           <ul className="op-facts">
@@ -746,7 +751,7 @@ function PirateDiagnostics({ diagnostics, onExport }: { diagnostics: PirateOwner
 
 // ---- screen --------------------------------------------------------------------
 
-export function OperationsView({ state, onAccept, onCancel, onOpenFleets, explorationContacts = [], onExpedition, onExplorationAttack, onBot01Occupy, onExplorationAccept, onExplorationCancel, onExplorationRecon, onExplorationUniverse, onExplorationReport, pirateContacts = [], pirateThreatPercent = 2, pirateAdaptiveDiagnostics, onPirateBattleExport, pirateRaidRolls = {}, pirateOwnerId = '', pirateCheckDelayMs, completedPirateOperations = [], nowMs = Date.now(), onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: OperationsViewProps) {
+export function OperationsView({ state, onAccept, onCancel, onOpenFleets, explorationContacts = [], onExpedition, onExplorationAttack, onBot01Occupy, onExplorationAccept, onExplorationCancel, onExplorationRecon, onExplorationUniverse, onExplorationReport, pirateContacts = [], pirateThreatPercent = 2, pirateAdaptiveDiagnostics, onPirateBattleExport, pirateRaidRolls = {}, pirateOwnerId = '', pirateCheckDelayMs, completedPirateOperations = [], nowMs = Date.now(), onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse, onPirateCollectDebris }: OperationsViewProps) {
   const [tab, setTab] = useState<OperationsTab>('available');
   const [selectedId, setSelectedId] = useState<OperationId | null>(null);
   const [contactFilter, setContactFilter] = useState<ContactFilter>('all');
@@ -912,6 +917,7 @@ export function OperationsView({ state, onAccept, onCancel, onOpenFleets, explor
             onExplorationUniverse={onExplorationUniverse}
             onExplorationReport={onExplorationReport}
             onPirateBattleReport={onPirateBattleReport}
+            onPirateCollectDebris={onPirateCollectDebris}
             onPirateRecon={onPirateRecon}
             onPirateAttack={onPirateAttack}
             onPirateReport={onPirateReport}

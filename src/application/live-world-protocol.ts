@@ -1,6 +1,7 @@
 import type { SaveState } from './contracts.ts';
 import type { RuntimeReconcileEvent } from './reconcile.ts';
 import type { WorldPatch } from './world-diff.ts';
+import type { QuietBatch } from './quiet-fields.ts';
 import type { TestTimeScale } from '../domain/runtime/mode.ts';
 
 /**
@@ -36,7 +37,15 @@ export type LiveWorldRequest =
   /** Reconcile the world (at `from`) to `now`. */
   | { type: 'tick'; from: LiveWorldVersion; now: number; testTimeScale: TestTimeScale }
   /** Post the save text of the world the UI has, now (an explicit save). */
-  | { type: 'save-now' };
+  | { type: 'save-now' }
+  /** Send the quiet fields now (a screen that needs them opened; see quiet-fields.ts). */
+  | { type: 'quiet-now' }
+  /**
+   * A port to the main process: from now on a large save goes through it as
+   * UTF-8 bytes and never reaches the UI thread (see electron/save-store.cjs).
+   * Handled by the worker script, not the engine.
+   */
+  | { type: 'save-port'; saveKey: string; port: MessagePort };
 
 export type LiveWorldPersistPolicy = {
   /** Clock ticks are saved at most this often... */
@@ -50,10 +59,22 @@ export type LiveWorldPersistPolicy = {
 export type LiveWorldResponse =
   /** The world at `from` became `to` (a tick; `to === from` when nothing changed). */
   | { type: 'ticked'; from: LiveWorldVersion; to: LiveWorldVersion; patch: WorldPatch; events: RuntimeReconcileEvent[]; computeMs: number }
+  /**
+   * The quiet fields (bot planets' resources and accrual clocks, asteroid gas) that changed since
+   * the last batch, left out of the per-tick patches; the window writes them into its world in place.
+   */
+  | { type: 'quiet'; batch: QuietBatch }
   /** A long catch-up advances (the world itself arrives with the final `ticked`). */
   | { type: 'progress'; processedThroughAt: number; targetAt: number }
   /** Save text (serializeSaveForStorage) of the world at `version`. */
   | { type: 'save'; version: LiveWorldVersion; text: string; computeMs: number }
+  /**
+   * The main process wrote the save of the world at `version` to the file
+   * `writeId` (via the port): the UI makes it the save. No text travels.
+   */
+  | { type: 'saved'; version: LiveWorldVersion; writeId: string; chars: number; computeMs: number }
+  /** The port could not write (the worker sends text from now on); `error` is for the log. */
+  | { type: 'save-port-failed'; error: string }
   /** Bot journal lines (npc-journal.ts) of worlds the UI took, for the file next to the save. */
   | { type: 'bot-journal'; lines: string }
   /** The worker cannot go on (a bug, a desync): App takes the world back on its own thread. */

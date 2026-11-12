@@ -177,7 +177,7 @@
 .fleet-workspace-v1 .fleet-root-v2 .fc-ship__have>b{color:#fff;font-size:calc(17px * var(--text-scale-table,1)) !important;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .fleet-workspace-v1 .fleet-root-v2 .fc-ship__pop{margin-left:auto;flex:none}
 .fleet-workspace-v1 .fleet-root-v2 .fc-ship__art{
-  position:absolute;z-index:0;right:-6px;top:28px;bottom:56px;width:72%;height:auto;padding:0;
+  position:absolute;z-index:0;left:12px;right:12px;top:34px;bottom:64px;width:auto;height:auto;max-width:none;max-height:none;padding:0;
   display:grid;place-items:center;border:0;border-radius:0;background:none;box-shadow:none;cursor:pointer;
 }
 .fleet-workspace-v1 .fleet-root-v2 .fc-ship__art:disabled{cursor:default}
@@ -431,7 +431,6 @@
 .fleet-workspace-v1 .fleet-root-v2 .fc-ship__have{font-size:calc(17px * var(--text-scale-secondary,1)) !important}
 .fleet-workspace-v1 .fleet-root-v2 .fc-ship__have>b{font-size:calc(17px * var(--text-scale-table,1)) !important}
 .fleet-workspace-v1 .fleet-root-v2 .fc-ship__pop{display:none}
-.fleet-workspace-v1 .fleet-root-v2 .fc-ship__art{right:-6px;top:34px;bottom:auto;width:176px;height:146px;max-width:62%}
 .fleet-workspace-v1 .fleet-root-v2 .fc-ship__amount{position:absolute;left:12px;right:12px;bottom:12px;margin:0;grid-template-columns:36px minmax(0,1fr) 36px 58px;gap:5px}
 .fleet-workspace-v1 .fleet-root-v2 .fc-ship__amount>*{height:44px;border-radius:12px !important;margin:0}
 .fleet-workspace-v1 .fleet-root-v2 .fc-ship__amount>button,
@@ -542,7 +541,6 @@
 /* the ship level stays readable: a quiet mark in the top-left corner of the card */
 .fleet-workspace-v1 .fc-catalog .fc-unit:not(.fc-unit--repair) .fc-unit__level{display:block;position:absolute;top:14px;left:18px;margin:0;color:var(--fa-mu);font-size:calc(15px * var(--text-scale-secondary,1)) !important}
 /* coordinator fixes 06.11: picture above the controls row, commanders label clear, ribbon fits at 1280 */
-.fleet-workspace-v1 .fleet-root-v2 .fc-ship__art{top:34px;bottom:64px;height:auto;max-height:none}
 .fleet-workspace-v1 .fleet-root-v2 .fc-ship__art img{scale:1 !important}
 .fleet-workspace-v1 .fleet-root-v2 .fc-ship:hover .fc-ship__art img{scale:1.04 !important}
 .fleet-workspace-v1 .fa-hero .fc-prep__commanders>h3{flex:none;margin:0 6px 0 0;white-space:nowrap}

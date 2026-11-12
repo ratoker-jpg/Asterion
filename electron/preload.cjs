@@ -21,6 +21,13 @@ contextBridge.exposeInMainWorld('asterionDesktop', {
       const result = await ipcRenderer.invoke('asterion:save-store:write-async', key, writeId, text);
       if (!result || !result.ok) throw new Error(result && result.error || 'Save store write failed.');
     },
+    // A port to the main process's save files: the live world worker sends its save there as bytes, so the
+    // window never copies 50 MB of text. One end goes to the main process, the other to the page (a window message).
+    openWritePort: () => {
+      const { port1, port2 } = new MessageChannel();
+      ipcRenderer.postMessage('asterion:save-store:port', null, [port1]);
+      window.postMessage({ asterionSavePort: true }, '*', [port2]);
+    },
     // Files of campaigns no slot lists (renderer passes the listed keys).
     pruneOrphans: (keep) => {
       const result = ipcRenderer.sendSync('asterion:save-store:prune', keep);
@@ -69,6 +76,9 @@ contextBridge.exposeInMainWorld('asterionDesktop', {
     campaign: (id) => ipcRenderer.invoke('asterion:cloud:campaign', id),
     record: (id) => ipcRenderer.invoke('asterion:cloud:record', id),
     upload: (id, name, text, meta) => ipcRenderer.invoke('asterion:cloud:upload', id, name, text, meta),
+    // The same upload from the save file the main process holds: no text passes through the window.
+    uploadSaved: (id, name, key, writeId, options) => ipcRenderer.invoke('asterion:cloud:upload-saved', id, name, key, writeId, options),
+    uploadSavedOnExit: (id, name, key, writeId, options) => ipcRenderer.sendSync('asterion:cloud:upload-saved-exit', id, name, key, writeId, options),
     // Synchronous on purpose (pagehide): the main process queues it and returns at once.
     uploadOnExit: (id, name, text, meta) => ipcRenderer.sendSync('asterion:cloud:upload-exit', id, name, text, meta),
     wait: (id) => ipcRenderer.invoke('asterion:cloud:wait', id),

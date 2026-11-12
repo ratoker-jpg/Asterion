@@ -166,3 +166,52 @@ test('a failed asynchronous write switches to synchronous writes, whose failures
   assert.equal(writes.length, 1);
   assert.equal(createExternalizingStorage(local, store, 10).getItem('asterion.k'), 'b'.repeat(20));
 });
+
+test('a file the main process wrote is adopted without text; an older write never replaces a newer one', () => {
+  const local = memoryLocal();
+  const { files, store, reads } = memoryStore();
+  const storage = createExternalizingStorage(local, store, 1_000);
+  const key = 'asterion.slot.slot-a.v1';
+  const first = `${(Date.now() - 5_000).toString(36)}-a-b`;
+  const second = `${Date.now().toString(36)}-c-d`;
+  files.set(`${key}.${second}`, 'n'.repeat(2_000));
+  assert.equal(storage.adoptExternalWrite(key, second, 2_000), true);
+  assert.equal(readSavePointer(local.data.get(key)!)?.writeId, second);
+  assert.equal(storage.token!(key), local.data.get(key));
+  // A late ack of an older file must not move the pointer back.
+  files.set(`${key}.${first}`, 'o'.repeat(2_000));
+  assert.equal(storage.adoptExternalWrite(key, first, 2_000), false);
+  assert.equal(readSavePointer(local.data.get(key)!)?.writeId, second);
+  assert.equal(reads(), 0, 'adopting reads nothing');
+  assert.equal(storage.getItem(key), 'n'.repeat(2_000));
+});
+
+test('the persistence facade adopts a saved file and then writes again without reading the 50 MB', () => {
+  const local = memoryLocal();
+  const { files, store, reads } = memoryStore();
+  const storage = createExternalizingStorage(local, store, 1_000);
+  const facade = createPersistenceFacade({ storage, saveKey: 'asterion.slot.slot-b.v1', mode: 'production' });
+  const state = createInitialSaveState();
+  assert.equal(facade.write(state).ok, true);
+  const afterWrite = reads();
+  const writeId = `${(Date.now() + 1).toString(36)}-x-y`;
+  files.set(`asterion.slot.slot-b.v1.${writeId}`, 'z'.repeat(2_000));
+  assert.equal(facade.adoptSavedFile(writeId, 2_000).ok, true);
+  assert.equal(readSavePointer(local.data.get('asterion.slot.slot-b.v1')!)?.writeId, writeId);
+  assert.equal(facade.adoptSavedFile(`${(Date.now() + 2).toString(36)}-x-z`, 2_000).ok, true);
+  assert.equal(reads(), afterWrite, 'the guard recognised its own pointer and read no file');
+});
+
+test('the facade refuses to adopt over an unreadable save it did not write', () => {
+  const local = memoryLocal();
+  const { files, store } = memoryStore();
+  const storage = createExternalizingStorage(local, store, 1_000);
+  const key = 'asterion.slot.slot-c.v1';
+  local.data.set(key, '{"schemaVersion":99999,"broken":');
+  const facade = createPersistenceFacade({ storage, saveKey: key, mode: 'production' });
+  const writeId = `${Date.now().toString(36)}-q-r`;
+  files.set(`${key}.${writeId}`, 'z'.repeat(2_000));
+  const result = facade.adoptSavedFile(writeId, 2_000);
+  assert.equal(result.ok, false);
+  assert.equal(local.data.get(key), '{"schemaVersion":99999,"broken":', 'the foreign bytes stay');
+});

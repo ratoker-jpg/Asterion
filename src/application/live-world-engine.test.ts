@@ -8,6 +8,7 @@ import { applyCampaignRuntimeForCatchup, runNpcCatchup } from './npc-catchup-run
 import { freezeNpcCatchupTarget, isNpcCatchupPending } from './npc-catchup.ts';
 import { serializeSaveForStorage } from './persistence.ts';
 import { campaign } from './npc-runtime.test-support.ts';
+import { applyQuietBatch } from './quiet-fields.ts';
 
 const PERSIST = { tickMaxIntervalMs: 60_000, tickCostFactor: 50, catchupIntervalMs: 15_000 };
 
@@ -46,6 +47,8 @@ class Ui {
     for (const message of this.received.splice(0)) {
       if (message.type === 'save') this.saves.push(message);
       if (message.type === 'error') throw new Error(message.message);
+      // As App does: the quiet fields are written into the world in place.
+      if (message.type === 'quiet') applyQuietBatch([this.state], message.batch);
       if (message.type !== 'ticked') continue;
       this.tickInFlight = false;
       if (message.from !== this.version) continue;
@@ -94,6 +97,9 @@ test('ticks and commands racing them leave the mirror equal to the world in the 
   await ui.tick(clock);
   ui.receive();
   await ui.commit({ ...ui.state, currentPlanetId: ui.state.currentPlanetId });
+  // The quiet fields (bot economies) come in batches: once more, now.
+  await engine.handle({ type: 'quiet-now' });
+  ui.receive();
   assert.equal(text(worker()), text(ui.state));
   assert.equal(ui.state.planets[ui.state.currentPlanetId]!.name, 'P238');
   assert.ok(ui.saves.length > 0, 'the worker wrote saves');
@@ -145,6 +151,8 @@ test('a command made on the world before the freeze reached App cancels the catc
   // The worker learns App took the caught-up world from App's next message.
   await ui.tick(now);
   ui.receive();
+  await engine.handle({ type: 'quiet-now' });
+  ui.receive();
   assert.equal(text(worker()), text(ui.state));
 });
 
@@ -193,4 +201,41 @@ test('a command is saved soon after, not after the pause a clock tick asked for'
   fire();
   ui.receive();
   assert.equal(ui.saves.length, count);
+});
+
+test('a large save goes to the port as UTF-8 bytes and never reaches the UI thread as text', async () => {
+  const world = campaign(12);
+  const start = world.npcReplay!.processedThroughAt;
+  applyCampaignRuntimeForCatchup(world, start);
+  const sent: { version: number; bytes: ArrayBuffer; chars: number }[] = [];
+  const timers: (() => void)[] = [];
+  const posted: LiveWorldResponse[] = [];
+  const engine = new LiveWorldEngine({
+    post: (message) => posted.push(structuredClone(message)),
+    now: () => start,
+    yieldToMessages: () => new Promise((resolve) => setImmediate(resolve)),
+    later: (task) => { timers.push(task); },
+    clock: () => 0,
+    portMinChars: 0,
+    sendSave: (version, bytes, chars) => { sent.push({ version, bytes, chars }); return true; },
+  });
+  await engine.handle(structuredClone({ type: 'init', version: 0, state: world, clockOffsetMs: 0, persist: PERSIST }));
+  const planet = world.planets[world.currentPlanetId]!;
+  const renamed = { ...world, planets: { ...world.planets, [world.currentPlanetId]: { ...planet, name: 'Порт Ω' } } };
+  await engine.handle(structuredClone({ type: 'commit', from: 0, to: 2, patch: diffWorld(world, renamed), at: 0 }));
+  for (const task of timers.splice(0)) task();
+  assert.equal(posted.filter((message) => message.type === 'save').length, 0, 'no save text was posted');
+  assert.equal(sent.length, 1);
+  const expected = text(renamed);
+  assert.equal(sent[0]!.version, 2);
+  assert.equal(sent[0]!.chars, expected.length);
+  assert.ok(Buffer.from(sent[0]!.bytes).equals(Buffer.from(expected, 'utf8')), 'the bytes are the UTF-8 of the save text');
+
+  // The port failed: the same world goes to the UI thread as text.
+  engine.savePortFailed();
+  for (const task of timers.splice(0)) task();
+  const fallback = posted.filter((message): message is Extract<LiveWorldResponse, { type: 'save' }> => message.type === 'save');
+  assert.equal(fallback.length, 1);
+  assert.equal(fallback[0]!.text, expected);
+  assert.equal(sent.length, 1);
 });

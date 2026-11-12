@@ -36,6 +36,34 @@ async function main() {
     let rejected = false; try { store.write('../escape', 'w3', 'x'); } catch { rejected = true; }
     return { same: back === text, writeMs: Math.round(writeMs), readMs: Math.round(readMs), replaced, previousKept: previous?.length, removed, rejected };
   })()`);
+  // The worker's path: bytes through a MessagePort from the page to the main process (no text in the window).
+  const port = await win.webContents.executeJavaScript(`(async () => {
+    const store = window.asterionDesktop?.saveStore;
+    if (!store?.openWritePort) return { error: 'no openWritePort' };
+    const got = new Promise((resolve) => {
+      const on = (event) => { if (event.source === window && event.data?.asterionSavePort && event.ports[0]) { window.removeEventListener('message', on); resolve(event.ports[0]); } };
+      window.addEventListener('message', on);
+    });
+    store.openWritePort();
+    const port = await got;
+    const reply = (message) => new Promise((resolve) => { port.onmessage = (event) => resolve(event.data); port.postMessage(message); });
+    const text = 'Привет, порт! ' + 'q'.repeat(3000000) + String.fromCodePoint(0x1F680);
+    const ok = await reply({ key: ${JSON.stringify(KEY)}, writeId: 'p1', version: 7, chars: text.length, bytes: new TextEncoder().encode(text) });
+    const bad = await reply({ key: '../escape', writeId: 'p2', version: 8, chars: 1, bytes: new Uint8Array(1) });
+    // Byte identity with the text write: the same text through write() reads back identical.
+    store.write(${JSON.stringify(KEY)}, 'p6', text);
+    const identical = store.read(${JSON.stringify(KEY)}, 'p1') === text && store.read(${JSON.stringify(KEY)}, 'p6') === text;
+    for (const id of ['p3', 'p4', 'p5']) {
+      await reply({ key: ${JSON.stringify(KEY)}, writeId: id, version: 9, chars: 200, bytes: new TextEncoder().encode(id.repeat(100)) });
+    }
+    const out = { ok, bad, identical, p5: store.read(${JSON.stringify(KEY)}, 'p5')?.length };
+    store.remove(${JSON.stringify(KEY)});
+    return out;
+  })()`);
+  console.log(JSON.stringify({ port }, null, 2));
+  if (port.error || !port.ok.ok || port.ok.version !== 7 || port.bad.ok || port.p5 !== 200 || !port.identical) {
+    throw new Error('Save port QA failed.');
+  }
   const files = fs.existsSync(path.join(PROFILE, 'saves')) ? fs.readdirSync(path.join(PROFILE, 'saves')) : [];
   console.log(JSON.stringify({ ...result, filesLeft: files.length }, null, 2));
   if (result.error || !result.same || result.replaced !== 'bbbbbbbbbb' || result.previousKept !== CHARS || result.removed !== null

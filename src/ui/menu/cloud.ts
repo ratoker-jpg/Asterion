@@ -4,7 +4,7 @@ import {
   CLOUD_HEARTBEAT_EVERY_MS, CLOUD_UPLOAD_EVERY_MS, decideCloudEntry, describeConflict, describeLocalReason, describeServerStall, pageClockOffsetMs, saveSchemaVersion, saveWorldAt, sha256Text,
   type CloudCampaignView, type CloudConflictReason, type CloudSyncRecord, type CloudWaitReason,
 } from '../../application/cloud/cloud-sync.ts';
-import { getBrowserSaveStorage, MISSING_EXTERNAL_SAVE } from '../../application/save-storage.ts';
+import { getBrowserSaveStorage, MISSING_EXTERNAL_SAVE, readSavePointer } from '../../application/save-storage.ts';
 import { duplicateSaveSlot, importRawSaveSlot } from '../../application/slots.ts';
 import { SAVE_SCHEMA_VERSION } from '../../application/persistence.ts';
 import type { SaveSlotMeta } from '../../domain/session/slots.ts';
@@ -70,6 +70,8 @@ export type CloudServerStatus = {
   live: { campaignId: string; worldAt: number | null; lagMs: number | null; tickMs: number | null; cpuShare: number | null; rss: number | null } | null;
 };
 
+export type SavedUploadOptions = { takeBack?: boolean; clockOffsetMs: number };
+
 export type CloudBridge = {
   get(): Promise<CloudSettings>;
   set(next: { url?: string; enabled?: boolean; key?: string }): Promise<CloudSettings>;
@@ -78,6 +80,9 @@ export type CloudBridge = {
   record(id: string): Promise<CloudSyncRecord | null>;
   upload(id: string, name: string, text: string, meta: UploadMeta): Promise<CloudUploadResult>;
   uploadOnExit(id: string, name: string, text: string, meta: UploadMeta): { queued: boolean } | undefined;
+  /** The same uploads from the save file `writeId` of `key` (the main process reads it; absent in older shells). */
+  uploadSaved?(id: string, name: string, key: string, writeId: string, options: SavedUploadOptions): Promise<CloudUploadResult>;
+  uploadSavedOnExit?(id: string, name: string, key: string, writeId: string, options: SavedUploadOptions): { queued: boolean } | undefined;
   wait(id: string): Promise<CloudUploadResult | null>;
   claim(id: string, baseRevision: number): Promise<({ ok: true; none?: true; world?: CloudWorld }) | Failure>;
   download(id: string, snapshotId: number): Promise<({ ok: true; world: CloudWorld }) | Failure>;
@@ -376,8 +381,23 @@ export function useCampaignCloudUploads(session: ActiveSession | null, saveKey: 
       } catch { return null; }
     };
     void activeCloudSettings().then((settings) => { if (alive) enabled.current = Boolean(settings); });
+    /** The file the newest save is in, when it is one and nothing newer waits in the window: the main process reads it. */
+    const savedFile = () => {
+      try {
+        const token = getBrowserSaveStorage()?.token?.(saveKey) ?? null;
+        return readSavePointer(token)?.writeId ?? null;
+      } catch { return null; }
+    };
     const uploadNow = (takeBack = false) => {
       if (!enabled.current || inFlight) return;
+      const writeId = bridge.uploadSaved ? savedFile() : null;
+      if (writeId) {
+        inFlight = true;
+        bridge.uploadSaved!(session.slotId, session.slotName, saveKey, writeId, { clockOffsetMs: pageClockOffsetMs(), ...(takeBack ? { takeBack: true } : {}) })
+          .catch(() => undefined)
+          .finally(() => { inFlight = false; });
+        return;
+      }
       const text = stored();
       if (!text) return;
       inFlight = true;
@@ -401,6 +421,11 @@ export function useCampaignCloudUploads(session: ActiveSession | null, saveKey: 
     const handOver = () => {
       if (!enabled.current) return;
       enabled.current = false;
+      const writeId = bridge.uploadSavedOnExit ? savedFile() : null;
+      if (writeId) {
+        try { bridge.uploadSavedOnExit!(session.slotId, session.slotName, saveKey, writeId, { clockOffsetMs: pageClockOffsetMs() }); } catch (error) { console.warn('Asterion cloud hand-over failed.', error); }
+        return;
+      }
       const text = stored();
       if (!text) return;
       try { bridge.uploadOnExit(session.slotId, session.slotName, text, uploadMeta(text, true)); } catch (error) { console.warn('Asterion cloud hand-over failed.', error); }
