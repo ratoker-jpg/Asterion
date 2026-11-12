@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { useClockNow } from './application/shared-clock';
 import { describeOwnerPresence, type OwnerPresence } from './application/owner-presence.ts';
 import { DEBRIS_FINDER_ICON, SUN_DEBRIS_ART } from './ui/sun-raid/sun-raid-assets.ts';
 import { NEARBY_DEBRIS_SYSTEM_SPAN, findDebrisNearSystem, nearbySystemWindow } from './domain/espionage/orbital-debris.ts';
@@ -619,7 +620,7 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
   const highlightTimerRef = useRef(0);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const onPirateSystemChangeRef = useRef(onPirateSystemChange);
-  const [nowMs, setNowMs] = useState(() => Date.now());
+  const nowMs = useClockNow();
   // Test Mode screenshot route `#universe-card-<scenario>`: a seeded object card or debris list, frozen clock.
   const qaScenario = useMemo(() => getUniverseCardQaScenario(mode), [mode]);
   const qaFixture = useMemo(() => (qaScenario ? createUniverseCardQaFixture(qaScenario, Date.now(), {
@@ -635,11 +636,6 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
   // map inputs stable so the galaxy is not rebuilt on every tick.
   const spyTargets = useStableValue(spyTargetsProp, (targets) => JSON.stringify(targets.map((target) => [target.id, target.ownerId, target.ownerName, target.raceId, target.kind, target.name, target.coordinate])));
   const playerPlanets = useStableValue(playerPlanetsProp, (planets) => JSON.stringify(planets));
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNowMs(Date.now()), 1_000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   const alliance = useMemo(() => selectOwnerAlliance(command, profile.playerId), [command, profile.playerId]);
   // Only the player's own alliance's wars mark other owners as enemies.

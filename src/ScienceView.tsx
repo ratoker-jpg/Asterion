@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useClockNow } from './application/shared-clock';
 import { createPortal } from 'react-dom';
 import astronomyArt from '../assets/source/New assets/technologies/technology.shared.astronomy.png';
 import chemistryArt from '../assets/source/New assets/technologies/technology.shared.chemistry.png';
@@ -78,7 +79,7 @@ export function ScienceView({ factionId = 'aegis' }: { factionId?: BuildingFacti
   const laboratory = getBuildingDefinition('research', factionId);
   const [section, setSection] = useState<ScienceSectionId>('basic');
   const [runtime, setRuntime] = useState<ScienceRuntimeSnapshot>(() => readScienceSnapshot());
-  const [now, setNow] = useState(() => Date.now());
+  const now = useClockNow();
   const [pendingCancellation, setPendingCancellation] = useState<ScienceState['queue'][number] | null>(null);
   const confirmYesRef = useRef<HTMLButtonElement>(null);
   const confirmNoRef = useRef<HTMLButtonElement>(null);
@@ -106,11 +107,9 @@ export function ScienceView({ factionId = 'aegis' }: { factionId?: BuildingFacti
     const onStorage = () => setRuntime(readScienceSnapshot());
     window.addEventListener(SCIENCE_RUNTIME_CHANGED_EVENT, onRuntimeChanged);
     window.addEventListener('storage', onStorage);
-    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
     return () => {
       window.removeEventListener(SCIENCE_RUNTIME_CHANGED_EVENT, onRuntimeChanged);
       window.removeEventListener('storage', onStorage);
-      window.clearInterval(timer);
     };
   }, []);
 

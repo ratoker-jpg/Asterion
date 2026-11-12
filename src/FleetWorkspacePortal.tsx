@@ -1,4 +1,5 @@
 import { sunRaidCapsOf } from './domain/sun-raid/config.ts';
+import { useClockNow } from './application/shared-clock';
 import { isFlightVisibleToPlayer, isHostileFlightIncomingToPlayer } from './application/flight-visibility.ts';
 import type { CSSProperties } from 'react';
 import { SUN_RAID_MISSION_ICON } from './ui/sun-raid/sun-raid-assets.ts';
@@ -463,7 +464,7 @@ function FleetWorkspace({
   const [planOpenRequest, setPlanOpenRequest] = useState<{ originPlanetId: string; nonce: number } | null>(null);
   const dispatchRequestIdRef = useRef<string | null>(null);
   const pendingRepeatRef = useRef<FlightRepeatPlan | null>(null);
-  const [clockNow, setClockNow] = useState(() => Date.now());
+  const clockNow = useClockNow();
   const fleetSnapshot = useMemo(() => getFleetSnapshot(saveState, planetId as SaveState['currentPlanetId']), [planetId, saveState]);
   const fleetBudget = useMemo(() => getFleetBuildBudget(saveState, planetId as SaveState['currentPlanetId']), [planetId, saveState]);
   /** The plan may launch from another own planet; the root screen always shows the current one. */
@@ -703,11 +704,6 @@ function FleetWorkspace({
     setPreviewTargetError(null);
     setGasPreviewNeedsReconfirmation(false);
   };
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setClockNow(Date.now()), 1_000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     const onSimulatorHandoff = () => {

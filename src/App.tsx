@@ -1,4 +1,5 @@
 import { isFlightEventForPlayer, isHostileFlightIncomingToPlayer } from './application/flight-visibility.ts';
+import { getClockNow, publishClock } from './application/shared-clock';
 import { SAVE_FLUSH_EVENT } from './application/save-storage.ts';
 import { answerNpcLetter } from './application/npc-letters.ts';
 import type { LetterRef } from './domain/reports/types.ts';
@@ -7,7 +8,7 @@ import { appendJournalEntries, setActiveJournalCampaign } from './ui/player-jour
 import { appendBotJournal } from './ui/bot-journal-store.ts';
 import { selectOwnerPresence } from './application/owner-presence.ts';
 import { dispatchBot01Exploration } from './application/exploration-bot01.ts';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { flushSync, createPortal } from 'react-dom';
 import './universe.css';
 import { UniverseView } from './UniverseView';
@@ -504,7 +505,11 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   renderedStateRef.current = state;
   setLiveSaveState(state);
   useEffect(() => () => setLiveSaveState(null), []);
-  const [now, setNow] = useState(Date.now());
+  // The second is not state: the clock is published in the same batch as the world tick's reply (one commit),
+  // and only countdown components subscribe to it (shared-clock.ts).
+  const [, bumpClock] = useReducer((count: number) => count + 1, 0);
+  const now = getClockNow();
+  const commitClock = useCallback(() => { publishClock(Date.now()); bumpClock(); }, []);
   const [testTimeScale, setTestTimeScale] = useState<TestTimeScale>(() => resolveTestTimeScale());
   const [toasts, setToasts] = useState<RuntimeToast[]>([]);
   // Toasts take the first spot that covers no control or screen title (toast-placement.ts).
@@ -983,10 +988,6 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     window.addEventListener(SIMULATOR_STATE_CHANGED_EVENT, onSimulatorStateChanged);
     return () => window.removeEventListener(SIMULATOR_STATE_CHANGED_EVENT, onSimulatorStateChanged);
   }, []);
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
   // Build planner: starts the next planned upgrade, but only while the player is in the game
   // (window visible and focused, no catch-up running). Never from a background, offline or server tick.
   const hasBuildPlans = Boolean(state.fleetUi?.buildPlans);
@@ -1332,8 +1333,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     liveWorldUnavailable.current = true;
     setNpcCatchupProgress(null);
     if (!isNpcCatchupPending(stateRef.current)) writeSave(stateRef.current);
-    setNow(Date.now());
-  }, [writeSave]);
+    commitClock();
+  }, [commitClock, writeSave]);
   /** Starts the live world worker on `initial` (a load, another window's world). */
   const startLiveWorld = useCallback((initial: SaveState): boolean => {
     liveWorld.current?.worker.terminate();
@@ -1362,7 +1363,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       if (message.type === 'ticked') {
         link.tickInFlight = false;
         // Made on a world App has left (a command meanwhile): the worker drops it too.
-        if (message.from !== link.synced.version || stateRef.current !== link.synced.state) return;
+        if (message.from !== link.synced.version || stateRef.current !== link.synced.state) { commitClock(); return; }
         const base = link.synced.state;
         const next = message.to === message.from ? base : applyWorldPatch(base, message.patch);
         if (next !== base) {
@@ -1376,6 +1377,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         const replay = next.npcReplay;
         setNpcCatchupProgress(replay && isNpcCatchupPending(next) ? { processedThroughAt: replay.processedThroughAt, targetAt: replay.targetAt } : null);
         announceRuntimeEvents(message.events, next);
+        // Same batch as the setState above: one commit for the second.
+        commitClock();
       } else if (message.type === 'quiet') {
         link.quiet.push(message.batch);
       } else if (message.type === 'progress') {
@@ -1414,7 +1417,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       worker.postMessage(portRequest, [port]);
     });
     return true;
-  }, [announceRuntimeEvents, persistence, reportWriteResult, stopLiveWorld]);
+  }, [announceRuntimeEvents, commitClock, persistence, reportWriteResult, stopLiveWorld]);
   restartLiveWorld.current = (next) => { startLiveWorld(next); };
   // The Universe lists every bot planet and asteroid: the worker sends the quiet fields it holds back as the screen opens.
   useEffect(() => {
@@ -1433,7 +1436,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     if (link) {
       // The worker ticks the world App has; one tick at a time (a late world's tick may outlast a second).
       commitToLiveWorld();
-      if (link.tickInFlight) return;
+      if (link.tickInFlight) { commitClock(); return; }
       link.tickInFlight = true;
       const request: LiveWorldRequest = { type: 'tick', from: link.synced.version, now: at, testTimeScale };
       link.worker.postMessage(request);
@@ -1454,17 +1457,25 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       current = result.state;
       for (const event of result.events) events.push(event);
     } while (isNpcCatchupPending(current) && performance.now() - startedAt < budgetMs);
-    if (current === initial) return;
+    if (current === initial) { commitClock(); return; }
     const result = { state: current };
     stateRef.current = result.state;
     clockTickState.current = result.state;
     setState(result.state);
     announceRuntimeEvents(events, result.state);
-  }, [announceRuntimeEvents, commitToLiveWorld, startLiveWorld, testTimeScale]);
+    commitClock();
+  }, [announceRuntimeEvents, commitClock, commitToLiveWorld, startLiveWorld, testTimeScale]);
 
+  // The once-a-second tick asks the worker for the world; its reply (not this timer) makes the commit.
+  const reconcileTickRef = useRef<() => void>(() => undefined);
+  reconcileTickRef.current = () => runOutsideApplicationCommand(() => runRuntimeReconcile(Date.now()));
   useEffect(() => {
-    runOutsideApplicationCommand(() => runRuntimeReconcile(now));
-  }, [now, runRuntimeReconcile]);
+    reconcileTickRef.current();
+  }, [runRuntimeReconcile]);
+  useEffect(() => {
+    const timer = window.setInterval(() => reconcileTickRef.current(), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // Long offline gaps are reconciled in bounded groups. Continue each persisted
   // prefix in its own task so catch-up does not wait for the next clock tick or
@@ -3131,7 +3142,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   };
 
   // Re-picked when a toast appears or the screen changes, after the new screen has painted.
-  // While toasts are visible the spot is re-checked twice a second, so a panel
+  // While toasts are visible the spot is re-checked on size and DOM changes, so a panel
   // or dialog opening under a toast moves it (a clear spot is kept).
   const toastCount = toasts.length;
   const toastSpotRef = useRef<ToastSpot | null>(null);
@@ -3152,8 +3163,26 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       }
     };
     place();
-    const timer = window.setInterval(place, 500);
-    return () => window.clearInterval(timer);
+    // No polling: re-check when the toast, the page or the window changes size, when a panel or dialog
+    // is added or removed, or when the stack moves. Bursts collapse into one check per frame.
+    let frame = 0;
+    const schedule = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => { frame = 0; place(); });
+    };
+    const resizes = typeof ResizeObserver === 'function' ? new ResizeObserver(schedule) : null;
+    const stack = toastStackRef.current;
+    if (stack) resizes?.observe(stack);
+    resizes?.observe(document.body);
+    const mutations = typeof MutationObserver === 'function' ? new MutationObserver(schedule) : null;
+    mutations?.observe(document.body, { childList: true, subtree: true });
+    window.addEventListener('resize', schedule);
+    return () => {
+      resizes?.disconnect();
+      mutations?.disconnect();
+      window.removeEventListener('resize', schedule);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
   }, [toastCount, activeRoute, planetSection, planetViewMode, buildingInterior]);
 
   const remaining = currentActiveQueueItem ? currentActiveQueueItem.finishAt - now : 0;
