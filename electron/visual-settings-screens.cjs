@@ -160,7 +160,7 @@ async function layout(win) {
       present: Boolean(view),
       horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 2,
       nativeTitles: Array.from(document.querySelectorAll('${ROOT_SELECTOR} [title]')).map((node) => node.getAttribute('title').slice(0, 60)),
-      visibleSelects: Array.from(document.querySelectorAll('${ROOT_SELECTOR} select')).filter((node) => node.getBoundingClientRect().width > 2).length,
+      visibleSelects: Array.from(document.querySelectorAll('${ROOT_SELECTOR} select')).filter((node) => !node.closest('.game-select')).length,
       keyShown: /[A-Za-z0-9]{24,}/.test(document.querySelector('[data-qa-cloud-key]')?.value || ''),
       pageHeight: document.documentElement.scrollHeight,
     };
