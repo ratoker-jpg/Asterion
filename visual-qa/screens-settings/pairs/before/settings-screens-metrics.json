@@ -1,0 +1,326 @@
+{
+  "1280x720": {
+    "failures": [
+      "04-screen-no-app: native select remains: 1",
+      "07-screen-app-meter-on: native select remains: 1",
+      "16-screen-text-180: native select remains: 1"
+    ],
+    "shots": {
+      "01-sound-default": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 0,
+        "keyShown": false,
+        "pageHeight": 720
+      },
+      "02-sound-muted": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 0,
+        "keyShown": false,
+        "pageHeight": 720
+      },
+      "03-text-default": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 0,
+        "keyShown": false,
+        "pageHeight": 720
+      },
+      "04-screen-no-app": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 1,
+        "keyShown": false,
+        "pageHeight": 720
+      },
+      "05-cloud-no-app": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 0,
+        "keyShown": false,
+        "pageHeight": 720
+      },
+      "06-journals-no-app": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 0,
+        "keyShown": false,
+        "pageHeight": 720
+      },
+      "07-screen-app-meter-on": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 1,
+        "keyShown": false,
+        "pageHeight": 720
+      },
+      "09-cloud-live-long-values": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 0,
+        "keyShown": false,
+        "pageHeight": 840
+      },
+      "10-cloud-live-long-values-bottom": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 0,
+        "keyShown": false,
+        "pageHeight": 840
+      },
+      "11-journals-app": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 0,
+        "keyShown": false,
+        "pageHeight": 720
+      },
+      "12-cloud-off": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 0,
+        "keyShown": false,
+        "pageHeight": 720
+      },
+      "13-text-180-top": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 0,
+        "keyShown": false,
+        "pageHeight": 1036
+      },
+      "14-text-180-bottom": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 0,
+        "keyShown": false,
+        "pageHeight": 1036
+      },
+      "15-sound-muted-text-180": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 0,
+        "keyShown": false,
+        "pageHeight": 766
+      },
+      "16-screen-text-180": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 1,
+        "keyShown": false,
+        "pageHeight": 766
+      },
+      "17-cloud-text-180": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 0,
+        "keyShown": false,
+        "pageHeight": 766
+      },
+      "18-text-80": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 0,
+        "keyShown": false,
+        "pageHeight": 720
+      }
+    }
+  },
+  "2560x1080": {
+    "failures": [
+      "04-screen-no-app: native select remains: 1",
+      "07-screen-app-meter-on: native select remains: 1",
+      "16-screen-text-180: native select remains: 1"
+    ],
+    "shots": {
+      "01-sound-default": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 0,
+        "keyShown": false,
+        "pageHeight": 1080
+      },
+      "02-sound-muted": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 0,
+        "keyShown": false,
+        "pageHeight": 1080
+      },
+      "03-text-default": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 0,
+        "keyShown": false,
+        "pageHeight": 1080
+      },
+      "04-screen-no-app": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 1,
+        "keyShown": false,
+        "pageHeight": 1080
+      },
+      "05-cloud-no-app": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 0,
+        "keyShown": false,
+        "pageHeight": 1080
+      },
+      "06-journals-no-app": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 0,
+        "keyShown": false,
+        "pageHeight": 1080
+      },
+      "07-screen-app-meter-on": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 1,
+        "keyShown": false,
+        "pageHeight": 1080
+      },
+      "09-cloud-live-long-values": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 0,
+        "keyShown": false,
+        "pageHeight": 1260
+      },
+      "10-cloud-live-long-values-bottom": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 0,
+        "keyShown": false,
+        "pageHeight": 1260
+      },
+      "11-journals-app": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 0,
+        "keyShown": false,
+        "pageHeight": 1080
+      },
+      "12-cloud-off": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 0,
+        "keyShown": false,
+        "pageHeight": 1080
+      },
+      "13-text-180-top": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 0,
+        "keyShown": false,
+        "pageHeight": 1521
+      },
+      "14-text-180-bottom": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 0,
+        "keyShown": false,
+        "pageHeight": 1521
+      },
+      "15-sound-muted-text-180": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 0,
+        "keyShown": false,
+        "pageHeight": 1149
+      },
+      "16-screen-text-180": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 1,
+        "keyShown": false,
+        "pageHeight": 1149
+      },
+      "17-cloud-text-180": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 0,
+        "keyShown": false,
+        "pageHeight": 1149
+      },
+      "18-text-80": {
+        "clipped": [],
+        "present": true,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "visibleSelects": 0,
+        "keyShown": false,
+        "pageHeight": 1080
+      }
+    }
+  }
+}
