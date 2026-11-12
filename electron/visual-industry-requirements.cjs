@@ -56,7 +56,7 @@ async function activateIndustryZone(win) {
   await waitFor(win, `document.querySelector('[data-qa-zone-view][data-zone="industry"]')`);
   await waitFor(win, `(() => {
     const terrain = document.querySelector('[data-qa-zone-terrain][data-zone="industry"]');
-    const images = Array.from(document.querySelectorAll('[data-zone-building-role] img'));
+    const images = Array.from(document.querySelectorAll('[data-zone-building-role] img:not(.resource-building-art__glow)'));
     return terrain?.complete && terrain.naturalWidth > 0 && images.length === 7 && images.every((image) => image.complete && image.naturalWidth > 0);
   })()`);
   await settle(win);

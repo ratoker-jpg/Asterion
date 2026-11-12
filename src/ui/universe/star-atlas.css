@@ -125,9 +125,10 @@
 .star-atlas__presence { display: flex; align-items: center; gap: 7px; color: var(--atlas-muted); font-size: clamp(12px, 1.45vh, 15px) !important; font-style: normal; font-weight: 600; }
 .star-atlas__presence i { width: 8px; height: 8px; flex: none; border-radius: 50%; background: #5d6f82; }
 .star-atlas__presence.is-online { color: #35e58a; }
-.star-atlas__presence.is-online i { background: #35e58a; box-shadow: 0 0 8px rgba(53, 229, 138, .8); animation: atlas-online 2s ease-in-out infinite; }
+.star-atlas__presence.is-online i { position: relative; background: #35e58a; box-shadow: 0 0 2px rgba(53, 229, 138, .4); }
+/* Perf PR 6: 8px .8 -> 2px .4 -> 8px .8 as a fixed 8px glow (.67 over the 2px .4 base) that fades out and back. */
+.star-atlas__presence.is-online i::after { content: ''; position: absolute; inset: 0; border-radius: 50%; pointer-events: none; box-shadow: 0 0 8px rgba(53, 229, 138, .67); animation: ut-glow-dip 2s ease-in-out infinite; }
 .star-atlas__presence.is-recent i { background: #f2b84b; }
-@keyframes atlas-online { 50% { box-shadow: 0 0 2px rgba(53, 229, 138, .4); } }
 
 /* ---- alliance ---- */
 .star-atlas__alliance { display: flex; align-items: center; gap: 18px; min-width: 0; margin-top: clamp(10px, 2.2vh, 26px); animation: atlas-rise 420ms cubic-bezier(.23, 1, .32, 1) 220ms both; }

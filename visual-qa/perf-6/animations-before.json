@@ -1,0 +1,295 @@
+{
+  "reducedMotion": false,
+  "1280x720": {
+    "planet-orbit": {
+      "ut-twinkle @ i": "gpu",
+      "ut-drift @ i": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
+      "hdr-route-alert @ hdr-route__icon": "boxShadow",
+      "ut-ring-spin @ planet-orbit__ring": "gpu",
+      "ut-sheen @ i::after": "gpu"
+    },
+    "header-storage-pulse": {
+      "ut-twinkle @ i": "gpu",
+      "ut-drift @ i": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
+      "hdr-route-alert @ hdr-route__icon": "boxShadow",
+      "ut-ring-spin @ planet-orbit__ring": "gpu",
+      "ut-sheen @ i::after": "gpu"
+    },
+    "header-fleets-alarm": {
+      "ut-twinkle @ i": "gpu",
+      "ut-drift @ i": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
+      "hdr-route-alert @ hdr-route__icon": "boxShadow",
+      "ut-ring-spin @ planet-orbit__ring": "gpu",
+      "ut-sheen @ i::after": "gpu"
+    },
+    "zone-building-under-construction": {
+      "ut-twinkle @ i": "gpu",
+      "ut-drift @ i": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
+      "hdr-route-alert @ hdr-route__icon": "boxShadow",
+      "pz-building-pulse @ resource-building-art": "filter",
+      "ut-sheen @ span::after": "gpu"
+    },
+    "gateMarkup": "single picture (main ZoneView)",
+    "zone-gate-under-construction": {
+      "ut-twinkle @ i": "gpu",
+      "ut-drift @ i": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
+      "hdr-route-alert @ hdr-route__icon": "boxShadow",
+      "gate-node-charge @ img": "filter",
+      "ut-sheen @ i::after": "gpu",
+      "ut-sheen @ span::after": "gpu"
+    },
+    "shieldMarkup": "dome with ::before rim (main UniverseView)",
+    "universe-map": {
+      "ut-twinkle @ i": "gpu",
+      "ut-drift @ i": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
+      "hdr-route-alert @ hdr-route__icon": "boxShadow",
+      "shield-aura-breath @ shield-aura": "gpu",
+      "shield-aura-spin @ shield-aura::before": "gpu",
+      "universe-pirate-signal @ system-planet::before": "gpu"
+    },
+    "universe-shield-dome": {
+      "ut-twinkle @ i": "gpu",
+      "ut-drift @ i": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
+      "hdr-route-alert @ hdr-route__icon": "boxShadow",
+      "shield-aura-breath @ shield-aura": "gpu",
+      "shield-aura-spin @ shield-aura::before": "gpu",
+      "universe-pirate-signal @ system-planet::before": "gpu"
+    },
+    "fleets-incoming-attack": {
+      "ut-twinkle @ i": "gpu",
+      "ut-drift @ i": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
+      "hdr-route-alert @ hdr-route__icon": "boxShadow",
+      "shield-aura-breath @ shield-aura": "gpu",
+      "shield-aura-spin @ shield-aura::before": "gpu",
+      "universe-pirate-signal @ system-planet::before": "gpu",
+      "fleet-incoming-glow @ fleet-root-v2::before": "boxShadow",
+      "fleet-incoming-pulse @ b": "boxShadow"
+    },
+    "recycling-ready": {
+      "ut-twinkle @ i": "gpu",
+      "ut-drift @ i": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
+      "hdr-route-alert @ hdr-route__icon": "boxShadow",
+      "shield-aura-breath @ shield-aura": "gpu",
+      "shield-aura-spin @ shield-aura::before": "gpu",
+      "universe-pirate-signal @ system-planet::before": "gpu",
+      "rc-ready @ rc-start": "boxShadow",
+      "rc-ready-glow @ rc-ring": "boxShadow"
+    },
+    "bots-distribute": {
+      "ut-twinkle @ i": "gpu",
+      "ut-drift @ i": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
+      "hdr-route-alert @ hdr-route__icon": "boxShadow",
+      "shield-aura-breath @ shield-aura": "gpu",
+      "shield-aura-spin @ shield-aura::before": "gpu",
+      "universe-pirate-signal @ system-planet::before": "gpu",
+      "pbots-ready @ production-bots-distribute": "boxShadow"
+    },
+    "queued-stripes": {
+      "ut-twinkle @ i": "gpu",
+      "ut-drift @ i": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
+      "hdr-route-alert @ hdr-route__icon": "boxShadow",
+      "shield-aura-breath @ shield-aura": "gpu",
+      "shield-aura-spin @ shield-aura::before": "gpu",
+      "universe-pirate-signal @ system-planet::before": "gpu",
+      "sp-queued-crawl @ is-queued": "backgroundPositionX,backgroundPositionY",
+      "bplan-stripes @ is-queued": "backgroundPositionX,backgroundPositionY"
+    },
+    "flight-plan-pick": {
+      "ut-twinkle @ i": "gpu",
+      "ut-drift @ i": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
+      "hdr-route-alert @ hdr-route__icon": "boxShadow",
+      "shield-aura-breath @ shield-aura": "gpu",
+      "shield-aura-spin @ shield-aura::before": "gpu",
+      "universe-pirate-signal @ system-planet::before": "gpu",
+      "pa-pulse @ fa-route__pick": "borderRightColor,borderTopColor,borderBottomColor,borderLeftColor"
+    },
+    "sun-raid-alarm": {
+      "ut-twinkle @ i": "gpu",
+      "ut-drift @ i": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
+      "hdr-route-alert @ hdr-route__icon": "boxShadow",
+      "shield-aura-breath @ shield-aura": "gpu",
+      "shield-aura-spin @ shield-aura::before": "gpu",
+      "universe-pirate-signal @ system-planet::before": "gpu",
+      "srp-alarm @ srp-alert": "boxShadow"
+    },
+    "whats-new-mark": {
+      "ut-twinkle @ i": "gpu",
+      "ut-drift @ i": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
+      "hdr-route-alert @ hdr-route__icon": "boxShadow",
+      "shield-aura-breath @ shield-aura": "gpu",
+      "shield-aura-spin @ shield-aura::before": "gpu",
+      "universe-pirate-signal @ system-planet::before": "gpu",
+      "whats-new-mark @ whats-new-mark": "boxShadow"
+    },
+    "atlas-online": {
+      "ut-twinkle @ i": "gpu",
+      "ut-drift @ i": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
+      "hdr-route-alert @ hdr-route__icon": "boxShadow",
+      "shield-aura-breath @ shield-aura": "gpu",
+      "shield-aura-spin @ shield-aura::before": "gpu",
+      "universe-pirate-signal @ system-planet::before": "gpu",
+      "atlas-online @ i": "boxShadow"
+    }
+  },
+  "2560x1080": {
+    "planet-orbit": {
+      "ut-twinkle @ i": "gpu",
+      "ut-drift @ i": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
+      "hdr-route-alert @ hdr-route__icon": "boxShadow",
+      "ut-ring-spin @ planet-orbit__ring": "gpu",
+      "ut-sheen @ i::after": "gpu"
+    },
+    "header-storage-pulse": {
+      "ut-twinkle @ i": "gpu",
+      "ut-drift @ i": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
+      "hdr-route-alert @ hdr-route__icon": "boxShadow",
+      "ut-ring-spin @ planet-orbit__ring": "gpu",
+      "ut-sheen @ i::after": "gpu"
+    },
+    "header-fleets-alarm": {
+      "ut-twinkle @ i": "gpu",
+      "ut-drift @ i": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
+      "hdr-route-alert @ hdr-route__icon": "boxShadow",
+      "ut-ring-spin @ planet-orbit__ring": "gpu",
+      "ut-sheen @ i::after": "gpu"
+    },
+    "zone-building-under-construction": {
+      "ut-twinkle @ i": "gpu",
+      "ut-drift @ i": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
+      "hdr-route-alert @ hdr-route__icon": "boxShadow",
+      "pz-building-pulse @ resource-building-art": "filter",
+      "ut-sheen @ span::after": "gpu"
+    },
+    "gateMarkup": "single picture (main ZoneView)",
+    "zone-gate-under-construction": {
+      "ut-twinkle @ i": "gpu",
+      "ut-drift @ i": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
+      "hdr-route-alert @ hdr-route__icon": "boxShadow",
+      "gate-node-charge @ img": "filter",
+      "ut-sheen @ i::after": "gpu",
+      "ut-sheen @ span::after": "gpu"
+    },
+    "shieldMarkup": "dome with ::before rim (main UniverseView)",
+    "universe-map": {
+      "ut-twinkle @ i": "gpu",
+      "ut-drift @ i": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
+      "hdr-route-alert @ hdr-route__icon": "boxShadow",
+      "shield-aura-breath @ shield-aura": "gpu",
+      "shield-aura-spin @ shield-aura::before": "gpu",
+      "universe-pirate-signal @ system-planet::before": "gpu"
+    },
+    "universe-shield-dome": {
+      "ut-twinkle @ i": "gpu",
+      "ut-drift @ i": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
+      "hdr-route-alert @ hdr-route__icon": "boxShadow",
+      "shield-aura-breath @ shield-aura": "gpu",
+      "shield-aura-spin @ shield-aura::before": "gpu",
+      "universe-pirate-signal @ system-planet::before": "gpu"
+    },
+    "fleets-incoming-attack": {
+      "ut-twinkle @ i": "gpu",
+      "ut-drift @ i": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
+      "hdr-route-alert @ hdr-route__icon": "boxShadow",
+      "shield-aura-breath @ shield-aura": "gpu",
+      "shield-aura-spin @ shield-aura::before": "gpu",
+      "universe-pirate-signal @ system-planet::before": "gpu",
+      "fleet-incoming-glow @ fleet-root-v2::before": "boxShadow",
+      "fleet-incoming-pulse @ b": "boxShadow"
+    },
+    "recycling-ready": {
+      "ut-twinkle @ i": "gpu",
+      "ut-drift @ i": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
+      "hdr-route-alert @ hdr-route__icon": "boxShadow",
+      "shield-aura-breath @ shield-aura": "gpu",
+      "shield-aura-spin @ shield-aura::before": "gpu",
+      "universe-pirate-signal @ system-planet::before": "gpu",
+      "rc-ready @ rc-start": "boxShadow",
+      "rc-ready-glow @ rc-ring": "boxShadow"
+    },
+    "bots-distribute": {
+      "ut-twinkle @ i": "gpu",
+      "ut-drift @ i": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
+      "hdr-route-alert @ hdr-route__icon": "boxShadow",
+      "shield-aura-breath @ shield-aura": "gpu",
+      "shield-aura-spin @ shield-aura::before": "gpu",
+      "universe-pirate-signal @ system-planet::before": "gpu",
+      "pbots-ready @ production-bots-distribute": "boxShadow"
+    },
+    "queued-stripes": {
+      "ut-twinkle @ i": "gpu",
+      "ut-drift @ i": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
+      "hdr-route-alert @ hdr-route__icon": "boxShadow",
+      "shield-aura-breath @ shield-aura": "gpu",
+      "shield-aura-spin @ shield-aura::before": "gpu",
+      "universe-pirate-signal @ system-planet::before": "gpu",
+      "sp-queued-crawl @ is-queued": "backgroundPositionX,backgroundPositionY",
+      "bplan-stripes @ is-queued": "backgroundPositionX,backgroundPositionY"
+    },
+    "flight-plan-pick": {
+      "ut-twinkle @ i": "gpu",
+      "ut-drift @ i": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
+      "hdr-route-alert @ hdr-route__icon": "boxShadow",
+      "shield-aura-breath @ shield-aura": "gpu",
+      "shield-aura-spin @ shield-aura::before": "gpu",
+      "universe-pirate-signal @ system-planet::before": "gpu",
+      "pa-pulse @ fa-route__pick": "borderRightColor,borderTopColor,borderBottomColor,borderLeftColor"
+    },
+    "sun-raid-alarm": {
+      "ut-twinkle @ i": "gpu",
+      "ut-drift @ i": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
+      "hdr-route-alert @ hdr-route__icon": "boxShadow",
+      "shield-aura-breath @ shield-aura": "gpu",
+      "shield-aura-spin @ shield-aura::before": "gpu",
+      "universe-pirate-signal @ system-planet::before": "gpu",
+      "srp-alarm @ srp-alert": "boxShadow"
+    },
+    "whats-new-mark": {
+      "ut-twinkle @ i": "gpu",
+      "ut-drift @ i": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
+      "hdr-route-alert @ hdr-route__icon": "boxShadow",
+      "shield-aura-breath @ shield-aura": "gpu",
+      "shield-aura-spin @ shield-aura::before": "gpu",
+      "universe-pirate-signal @ system-planet::before": "gpu",
+      "whats-new-mark @ whats-new-mark": "boxShadow"
+    },
+    "atlas-online": {
+      "ut-twinkle @ i": "gpu",
+      "ut-drift @ i": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
+      "hdr-route-alert @ hdr-route__icon": "boxShadow",
+      "shield-aura-breath @ shield-aura": "gpu",
+      "shield-aura-spin @ shield-aura::before": "gpu",
+      "universe-pirate-signal @ system-planet::before": "gpu",
+      "atlas-online @ i": "boxShadow"
+    }
+  }
+}

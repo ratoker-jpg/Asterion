@@ -80,9 +80,10 @@ html body .flight-briefing-v2 .fa-route.is-hostile .fa-route__to{filter:drop-sha
 html body .flight-briefing-v2 .fa-route__pick{
   position:absolute;left:1570px;top:130px;width:230px;height:230px;border-radius:50%;border:3px dashed rgba(95,212,255,.55);
   display:grid;place-items:center;text-align:center;color:var(--pa);font-size:20px !important;font-weight:700;line-height:1.3;
-  animation:pa-pulse 2.4s ease-in-out infinite;
+  border-color:rgba(95,212,255,.35);
 }
-@keyframes pa-pulse{0%,100%{border-color:rgba(95,212,255,.35)}50%{border-color:rgba(95,212,255,.8)}}
+/* Perf PR 6: the border pulse (.35 -> .8) is the same dashed ring at .69 on top, fading in (opacity only, on the GPU). */
+html body .flight-briefing-v2 .fa-route__pick::after{content:'';position:absolute;inset:-3px;border-radius:50%;border:3px dashed rgba(95,212,255,.69);pointer-events:none;opacity:0;animation:ut-glow-peak 2.4s ease-in-out infinite}
 html body .flight-briefing-v2 .fa-route__line{
   position:absolute;left:370px;top:243px;width:1170px;height:4px;border-radius:2px;
   background:repeating-linear-gradient(90deg,rgba(95,212,255,.8) 0 4px,transparent 4px 16px);
@@ -286,6 +287,8 @@ html body .flight-briefing-v2 [data-qa-flight-dispatch-confirm]:disabled::after{
 
 @media (prefers-reduced-motion:reduce){
   html body .flight-briefing-v2 *,html body .resource-building-action-confirm.flight-timeline-modal.flight-briefing-v2{animation:none !important}
+  html body .flight-briefing-v2 .fa-route__pick{border-color:rgba(95,212,255,.55)}
+  html body .flight-briefing-v2 .fa-route__pick::after{display:none}
 }
 
 /* round 2 after the first screenshots */

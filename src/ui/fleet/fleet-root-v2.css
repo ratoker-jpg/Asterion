@@ -11,9 +11,19 @@
   border-radius: 20px;
   pointer-events: none;
   box-shadow: inset 0 0 0 2px rgba(240, 68, 94, .55), inset 0 0 60px rgba(240, 68, 94, .16);
-  animation: fleet-incoming-glow 1.6s ease-in-out infinite;
 }
-@keyframes fleet-incoming-glow { 50% { box-shadow: inset 0 0 0 2px rgba(240, 68, 94, .85), inset 0 0 90px rgba(240, 68, 94, .26); } }
+/* Perf PR 6: the swell (ring .55 -> .85, 60px .16 -> 90px .26) is a fixed overlay (ring .67, 90px .12) fading in. */
+.fleet-root-v2.has-incoming::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: 20px;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 2px rgba(240, 68, 94, .67), inset 0 0 90px rgba(240, 68, 94, .12);
+  opacity: 0;
+  animation: ut-glow-peak 1.6s ease-in-out infinite;
+}
 .fleet-incoming-alert-v2 {
   position: relative;
   z-index: 2;
@@ -27,7 +37,14 @@
   box-shadow: 0 0 30px rgba(240, 68, 94, .25);
 }
 .fleet-incoming-alert-v2 > b { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: #f0445e; color: #fff; font-size: 18px; animation: fleet-incoming-pulse 1s ease-in-out infinite; }
-@keyframes fleet-incoming-pulse { 50% { transform: scale(1.12); box-shadow: 0 0 18px rgba(240, 68, 94, .9); } }
+/* Perf PR 6: the badge's glow is a fixed 18px shadow on a layer of the alert placed exactly over the badge
+   (padding-left 14px, centred), scaling with it and fading in: transform/opacity only. It is the alert's
+   pseudo-element, not the badge's, because two nested loops cost a UI-thread frame each frame. z-index -1 inside
+   the alert keeps it under the badge and the text, where the badge's own shadow was. */
+.fleet-incoming-alert-v2::before { content: ""; position: absolute; z-index: -1; left: 14px; top: calc(50% - 19px); width: 38px; height: 38px; border-radius: 50%; pointer-events: none;
+  box-shadow: 0 0 18px rgba(240, 68, 94, .9); opacity: 0; animation: fleet-incoming-badge-glow 1s ease-in-out infinite; }
+@keyframes fleet-incoming-pulse { 50% { transform: scale(1.12); } }
+@keyframes fleet-incoming-badge-glow { 50% { transform: scale(1.12); opacity: 1; } }
 .fleet-incoming-alert-v2 strong { display: block; color: #fff; font-size: 13px !important; font-weight: 800; letter-spacing: .14em; }
 .fleet-incoming-alert-v2 span { color: #ffc2cb; font-size: 12px !important; }
 .fleet-incoming-alert-v2 button { margin-left: auto; height: 34px; padding: 0 14px; border-radius: 9px; border: 1px solid rgba(255, 194, 203, .6); background: rgba(240, 68, 94, .2); color: #fff; font-size: 11px !important; font-weight: 800; letter-spacing: .1em; cursor: pointer; }
@@ -64,7 +81,7 @@
 .fleet-root-v2 .fleet-ship-filter-v2 button { height: 28px; padding: 0 10px; font-size: 10.5px !important; letter-spacing: .08em; }
 
 @media (prefers-reduced-motion: reduce) {
-  .fleet-root-v2.has-incoming::before, .fleet-incoming-alert-v2 > b { animation: none; }
+  .fleet-root-v2.has-incoming::before, .fleet-incoming-alert-v2 > b, .fleet-root-v2.has-incoming::after, .fleet-incoming-alert-v2::before { animation: none; }
 }
 
 /* ---------- Flight plan «Брифинг»: wide three-zone layout, no inner scrolling ---------- */

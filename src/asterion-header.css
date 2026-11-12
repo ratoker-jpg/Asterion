@@ -63,6 +63,8 @@
 .asterion-header__resource-fill--warning i{background:#FFE15A;box-shadow:0 0 6px rgba(255,225,90,.5)}
 .asterion-header__resource-fill--danger i{background:#FFB347;box-shadow:0 0 6px rgba(255,179,71,.5)}
 .asterion-header__resource-fill--critical i{background:#F0445E;box-shadow:0 0 7px rgba(240,68,94,.6)}
+/* Perf PR 6: kept as is on purpose. brightness() + opacity already run on the GPU (Chromium only refuses filters
+   that move pixels: blur, drop-shadow); a copy layer would nest two loops, which costs a UI-thread frame each frame. */
 .asterion-header__resource.is-pulsing .asterion-header__resource-fill i{animation:asterion-header-resource-critical-pulse 1.1s ease-in-out infinite;will-change:opacity,filter}
 
 .asterion-header__resource-tooltip{
@@ -229,11 +231,14 @@
 }
 
 /* «Флоты» while hostile fleets are on their way: red counter + red ring on the icon */
-.asterion-header .hdr-route.hdr-route--alert .hdr-route__icon { box-shadow: 0 0 0 2px rgba(240, 68, 94, .85), 0 0 18px rgba(240, 68, 94, .55); animation: hdr-route-alert 1.4s ease-in-out infinite; }
+.asterion-header .hdr-route.hdr-route--alert .hdr-route__icon { box-shadow: 0 0 0 2px rgba(240, 68, 94, .85), 0 0 18px rgba(240, 68, 94, .55); animation: none; }
+/* Perf PR 6: the swell to «2px ring 1, 26px glow .8» is a fixed overlay shadow fading in over the base one
+   (ring alpha 1 covers .85 exactly; glow .56 over .55 gives .8 at the peak). Opacity only, on the GPU. */
+.asterion-header .hdr-route.hdr-route--alert .hdr-route__icon::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  box-shadow: 0 0 0 2px rgb(240, 68, 94), 0 0 26px rgba(240, 68, 94, .56); opacity: 0; animation: ut-glow-peak 1.4s ease-in-out infinite; }
 .asterion-header .hdr-route.hdr-route--alert .hdr-route__label { color: #ffb3bd; }
 .asterion-header__nav-badge--alert { background: #f0445e !important; color: #fff !important; }
-@keyframes hdr-route-alert { 50% { box-shadow: 0 0 0 2px rgba(240, 68, 94, 1), 0 0 26px rgba(240, 68, 94, .8); } }
-@media (prefers-reduced-motion: reduce) { .asterion-header .hdr-route.hdr-route--alert .hdr-route__icon { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .asterion-header .hdr-route.hdr-route--alert .hdr-route__icon, .asterion-header .hdr-route.hdr-route--alert .hdr-route__icon::after { animation: none; } }
 
 /* ---------- game tooltips (no native title) ---------- */
 .hdr-tip{

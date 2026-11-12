@@ -2,6 +2,9 @@
    One frame only: the map fills the whole window, every panel floats over it.
    The system list is a collapsed drawer (hover / focus / pin opens it), the
    galaxy + system navigator sits top right, filters and layers dock at the bottom. */
+/* Perf PR 6: the map already clips (overflow hidden, universe.css) and its dialogs, atlas and quick menus are
+   portaled to body, so containment changes nothing on screen and keeps layout and paint work inside the map. */
+.workspace--universe .universe-view-v3.universe-radar { contain: layout paint; }
 .workspace--universe .universe-view-v3.universe-radar .system-scene { inset: 0 108px 58px 108px; background: radial-gradient(ellipse 60% 55% at 50% 52%, rgba(16, 70, 90, .16), transparent 70%); }
 /* The vignette drew a second frame at the scene edge — the main frame already carries the edge shadow. */
 .workspace--universe .universe-view-v3.universe-radar .system-scene::after { display: none; }

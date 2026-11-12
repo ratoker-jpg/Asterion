@@ -181,8 +181,11 @@
   background:linear-gradient(180deg,color-mix(in srgb,var(--rc-accent) 92%,#fff),color-mix(in srgb,var(--rc-accent) 70%,#02202c));
   color:#03202a;
   cursor:pointer;
-  animation:rc-ready 2.4s ease-in-out infinite;
+  position:relative;
+  box-shadow:0 0 18px color-mix(in srgb,var(--rc-accent) 26%,transparent);
 }
+/* Perf PR 6: the breathing glow (18px 26% -> 34px 50%) is a fixed 34px shadow fading in over the base one. */
+.rc-start.is-ready::after{content:"";position:absolute;inset:-1px;border-radius:inherit;pointer-events:none;box-shadow:0 0 34px color-mix(in srgb,var(--rc-accent) 32%,transparent);opacity:0;animation:ut-glow-peak 2.4s ease-in-out infinite}
 .rc-start.is-ready:active{scale:.97}
 
 .rc-bays{min-width:0;min-height:0;display:grid;grid-template-rows:repeat(3,minmax(0,1fr));gap:12px}
@@ -326,7 +329,9 @@ button.rc-slot:not(:disabled):hover{translate:0 -3px}
   animation:rc-spin 2.8s linear infinite;
 }
 .rc-slot.is-ready{--rc-ring:var(--rc-ready)}
-.rc-slot.is-ready .rc-ring{animation:rc-ready-glow 1.8s ease-in-out infinite}
+.rc-slot.is-ready .rc-ring{box-shadow:0 0 12px color-mix(in srgb,var(--rc-ready) 35%,transparent)}
+/* Perf PR 6: 12px 35% -> 26px 65% as a fixed 26px shadow fading in over the base one. */
+.rc-slot.is-ready .rc-ring::before{content:'';position:absolute;inset:0;border-radius:50%;pointer-events:none;box-shadow:0 0 26px color-mix(in srgb,var(--rc-ready) 46%,transparent);opacity:0;animation:ut-glow-peak 1.8s ease-in-out infinite}
 .recycling-center-view .rc-slot.is-ready>b{color:var(--rc-ready)}
 
 .rc-slot.is-locked{opacity:.62}
@@ -359,12 +364,10 @@ button.rc-slot:not(:disabled):hover{translate:0 -3px}
 /* ---------- motion ---------- */
 @keyframes rc-drift{0%,100%{translate:0 0;rotate:0deg}50%{translate:0 -6px;rotate:1.4deg}}
 @keyframes rc-breathe{0%,100%{opacity:.7;scale:1}50%{opacity:1;scale:1.07}}
-@keyframes rc-ready{0%,100%{box-shadow:0 0 18px color-mix(in srgb,var(--rc-accent) 26%,transparent)}50%{box-shadow:0 0 34px color-mix(in srgb,var(--rc-accent) 50%,transparent)}}
 @keyframes rc-figure-in{from{opacity:0;filter:blur(4px);transform:translateY(4px)}to{opacity:1;filter:none;transform:none}}
 @keyframes rc-pop{from{opacity:0;transform:scale(.6)}to{opacity:1;transform:none}}
 @keyframes rc-arm{from{transform:scale(.9)}to{transform:none}}
 @keyframes rc-spin{to{rotate:360deg}}
-@keyframes rc-ready-glow{0%,100%{box-shadow:0 0 12px color-mix(in srgb,var(--rc-ready) 35%,transparent)}50%{box-shadow:0 0 26px color-mix(in srgb,var(--rc-ready) 65%,transparent)}}
 
 @media (prefers-reduced-motion:reduce){
   .rc-close svg{transition:none}
@@ -377,6 +380,8 @@ button.rc-slot:not(:disabled):hover{translate:0 -3px}
   .rc-slot.is-running .rc-ring,
   .rc-slot.is-running .rc-ring::before,
   .rc-slot.is-ready .rc-ring{animation:none}
+  .rc-start.is-ready{box-shadow:none}
+  .rc-start.is-ready::after,.rc-slot.is-ready .rc-ring::before{animation:none;display:none}
   .rc-slot.is-ready .rc-ring{box-shadow:0 0 18px color-mix(in srgb,var(--rc-ready) 50%,transparent)}
   .rc-slot,
   .rc-slot__tip,

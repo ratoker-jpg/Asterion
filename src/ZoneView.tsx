@@ -505,7 +505,11 @@ export function ZoneView({
                 onClick={() => onSelectedRoleChange(building.assetRole)}
               >
                 <span className="resource-building-ground-shadow" aria-hidden="true" />
-                <span className="resource-building-art"><img src={building.art} alt="" draggable={false} /></span>
+                <span className="resource-building-art">
+                  <img src={building.art} alt="" draggable={false} />
+                  {/* Perf PR 6: the construction glow is this pre-glowed copy fading in (opacity on the GPU). */}
+                  {status.className === 'building' ? <img className="resource-building-art__glow" src={building.art} alt="" aria-hidden="true" draggable={false} /> : null}
+                </span>
                 <span className="resource-building-caption">
                   <strong>{building.name}</strong>
                   <small>{status.label ? `${status.label} · ` : ''}ур. {level}/{building.maxLevel}</small>
@@ -523,7 +527,11 @@ export function ZoneView({
               data-qa-gate-slot={gate.status}
             >
               <span className="resource-building-ground-shadow" aria-hidden="true" />
-              <span className="resource-building-art"><img src={gateArt(factionId, gate.status === 'building' ? 'construction' : gate.status === 'destroyed' ? 'ruined' : 'built')} alt="" draggable={false} /></span>
+              <span className="resource-building-art">
+                <img src={gateArt(factionId, gate.status === 'building' ? 'construction' : gate.status === 'destroyed' ? 'ruined' : 'built')} alt="" draggable={false} />
+                {/* Perf PR 6: the charge glow is this pre-filtered copy fading in (opacity on the GPU). */}
+                {gate.status === 'building' ? <img className="resource-building-art__glow" src={gateArt(factionId, 'construction')} alt="" aria-hidden="true" draggable={false} /> : null}
+              </span>
               <span className="gate-node__crystals" aria-hidden="true">
                 {SOLAR_CRYSTAL_IDS.map((id) => <i key={id} className={gate.crystals.includes(id) ? 'is-on' : ''} style={{ '--gem': SOLAR_CRYSTALS[id].color } as CSSProperties} />)}
               </span>

@@ -112,7 +112,9 @@
 .bplan-tile__bar i{position:absolute;inset:0;transform:translateX(calc(var(--from) * 100%)) scaleX(var(--share));transform-origin:left center;transition:transform 720ms var(--ut-ease-expo)}
 .bplan-tile__bar .is-here{background:linear-gradient(180deg,color-mix(in srgb,var(--fp-here) 92%,#fff),color-mix(in srgb,var(--fp-here) 62%,#04202a))}
 .bplan-tile.is-done .bplan-tile__bar .is-here{background:linear-gradient(180deg,#67f0a7,#1f9d62)}
-.bplan-tile__bar .is-queued{background:repeating-linear-gradient(115deg,#f0be6b 0 6px,#a87a2f 6px 12px);background-size:24px 100%;animation:bplan-stripes 1.2s linear infinite}
+.bplan-tile__bar .is-queued{overflow:hidden}
+/* Perf PR 6: the stripes are a layer one tile (24px) wider on the left that slides right by one tile with translate. */
+.bplan-tile__bar .is-queued::before{content:'';position:absolute;top:0;bottom:0;left:-24px;right:0;pointer-events:none;background:repeating-linear-gradient(115deg,#f0be6b 0 6px,#a87a2f 6px 12px);background-size:24px 100%;animation:bplan-stripes 1.2s linear infinite}
 
 .bplan-tile__target{display:grid;grid-template-columns:28px minmax(0,1fr) 28px auto;gap:3px;align-items:center}
 .bplan-tile__target>button{
@@ -287,9 +289,9 @@
 @keyframes bplan-bump{0%{transform:scale(1.35)}100%{transform:none}}
 @keyframes bplan-next-glow{0%,100%{opacity:.55}50%{opacity:1}}
 @keyframes bplan-build-bob{0%,100%{translate:0 0}50%{translate:0 -3px}}
-@keyframes bplan-stripes{to{background-position:24px 0}}
+@keyframes bplan-stripes{to{transform:translateX(24px)}}
 @media (prefers-reduced-motion:reduce){
-  .bplan-tile,.bplan-add,.bplan-tile.is-next::after,.bplan-tile__art img,.bplan-tile__bar .is-queued,.fplan .bplan-tile__levels strong{animation:none !important}
+  .bplan-tile,.bplan-add,.bplan-tile.is-next::after,.bplan-tile__art img,.bplan-tile__bar .is-queued,.bplan-tile__bar .is-queued::before,.fplan .bplan-tile__levels strong{animation:none !important}
   .bplan-tile__bar i,.bplan-toggle i::after,.bplan-hint{transition:none}
   .bplan-add:hover,.bplan-tile:hover .bplan-tile__art img{translate:none;scale:none}
 }

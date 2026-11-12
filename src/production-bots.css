@@ -301,7 +301,8 @@
   transition:scale var(--ut-motion-press) var(--ut-ease-out),box-shadow var(--ut-motion-base) ease;
 }
 .production-bots-view .production-bots-distribute{font-size:calc(18px * var(--text-scale-control,1)) !important}
-.production-bots-distribute:not(:disabled){animation:pbots-ready 2.4s ease-in-out infinite}
+/* Perf PR 6: the old «pbots-ready» box-shadow loop is gone. It never showed: the shared button style
+   (unified-screens.css) pins box-shadow with !important, which beats an animation, so it only cost frames. */
 .production-bots-distribute:active:not(:disabled){scale:.96}
 .production-bots-distribute:focus-visible{outline:var(--ut-focus);outline-offset:3px}
 /* Nothing to apply: a calm status, not a dead button. */
@@ -314,10 +315,6 @@
 }
 .production-bots-distribute:disabled span{margin-right:8px}
 .production-bots-distribute.is-waiting:disabled{border-color:var(--ut-border-strong);background:rgba(86,217,242,.06);color:#cfe6ec}
-@keyframes pbots-ready{
-  0%,100%{box-shadow:0 0 18px rgba(86,217,242,.26)}
-  50%{box-shadow:0 0 34px rgba(86,217,242,.5)}
-}
 
 .production-bots-toast{
   position:absolute;
@@ -359,7 +356,6 @@
   .pbots-dock__figures .pbots-robot,
   .pbots-dock__changes p,
   .production-bots-view .pbots-bay__yield strong,
-  .production-bots-distribute:not(:disabled){animation:none}
   .pbots-slot.is-open:hover{translate:none}
 }
 

@@ -25,16 +25,22 @@
     radial-gradient(circle, rgba(150, 245, 255, .12) 0 50%, rgba(150, 245, 255, .22) 68%, rgba(190, 252, 255, .85) 80%, rgba(150, 245, 255, .32) 84%, rgba(150, 245, 255, .1) 90%, transparent 95%);
   box-shadow: 0 0 26px 4px rgba(120, 236, 255, .5), 0 0 60px 10px rgba(120, 236, 255, .18), inset 0 0 22px rgba(170, 250, 255, .35);
   animation: shield-aura-breath 3.8s ease-in-out infinite; }
-.shield-aura::before { content: ''; position: absolute; inset: 0; border-radius: 50%;
+/* The shimmer running round the rim (perf PR 6): a sibling of the dome with the same box. It breathes with the
+   dome (same timing, `scale`/`opacity`) and spins (`rotate`); rotation and a uniform scale about the same centre
+   give the same picture as the old ::before inside the breathing dome, and nothing is nested, so both loops stay
+   on the GPU. */
+.shield-aura__rim { position: absolute; left: 50%; top: -18px; width: 124px; height: 124px; margin-left: -62px; border-radius: 50%;
+  pointer-events: none; z-index: 2;
   background: conic-gradient(from 0deg, transparent 0 58%, rgba(255, 255, 255, .95) 70%, transparent 82% 100%);
   -webkit-mask: radial-gradient(circle, transparent 0 74%, #000 79%, #000 82%, transparent 90%); mask: radial-gradient(circle, transparent 0 74%, #000 79%, #000 82%, transparent 90%);
-  animation: shield-aura-spin 6s linear infinite; }
+  animation: shield-aura-rim-breath 3.8s ease-in-out infinite, shield-aura-spin 6s linear infinite; }
 .shield-aura::after { content: ''; position: absolute; inset: 9%; border-radius: 50%; opacity: .5;
   background: repeating-conic-gradient(from 15deg, rgba(190, 252, 255, .14) 0 2deg, transparent 2deg 30deg);
   -webkit-mask: radial-gradient(circle, transparent 0 40%, #000 85%); mask: radial-gradient(circle, transparent 0 40%, #000 85%); }
 @keyframes shield-aura-breath { 0%, 100% { opacity: .78; transform: scale(.985); } 50% { opacity: 1; transform: scale(1.025); } }
-@keyframes shield-aura-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .shield-aura, .shield-aura::before { animation: none; } }
+@keyframes shield-aura-rim-breath { 0%, 100% { opacity: .78; scale: .985; } 50% { opacity: 1; scale: 1.025; } }
+@keyframes shield-aura-spin { to { rotate: 360deg; } }
+@media (prefers-reduced-motion: reduce) { .shield-aura, .shield-aura__rim { animation: none; } }
 .shield-mark { background: #9ff6ff; }
 .system-planet:has(> .shield-aura) > :is(.planet-name, .planet-slot, .universe-map-occupancy, .universe-debris-marker) { z-index: 3; }
 .shield-mark { filter: drop-shadow(0 0 3px rgba(120, 236, 255, .95)); }
