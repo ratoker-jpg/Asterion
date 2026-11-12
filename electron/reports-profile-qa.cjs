@@ -485,7 +485,9 @@ async function runViewport(win, width, height) {
   const expectedReportIconSuffixes = ['/profile.webp', '/system.webp', '/reports.webp', '/command-reports.webp', '/arena.webp', '/flights.webp', '/alliances.webp', '/achievements.webp'];
   const expectedScoreIconSuffixes = ['/resource-crystal.webp', '/battle.webp', '/overall-star.webp', '/achievement-trophy.webp'];
   if (profile.folderIcons.length !== expectedReportIconSuffixes.length
-    || profile.folderIcons.some((icon, index) => !icon.loaded || !icon.decorative || !icon.src.endsWith(expectedReportIconSuffixes[index]))
+    // v3 orders sections by mail (filled first, empty under «ПУСТО»): every icon is there, in any order.
+    || profile.folderIcons.some((icon) => !icon.loaded || !icon.decorative)
+    || !sameSet(profile.folderIcons.map((icon) => icon.src.slice(icon.src.lastIndexOf('/'))), expectedReportIconSuffixes)
     || !profile.profileIcon.loaded || !profile.profileIcon.decorative || !profile.profileIcon.src.endsWith('/profile.webp')
     || profile.profileIcon.cssWidth !== '30px' || profile.profileIcon.cssHeight !== '30px'
     || profile.profileIcon.label !== 'Профиль' || profile.profileIcon.accessibleLabel !== 'Открыть профиль'

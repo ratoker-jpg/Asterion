@@ -5,7 +5,7 @@ import { DEMO_BATTLE_REPORTS } from '../combat/battle-fixtures.ts';
 import { getFactionCombatEntity, getFactionShipCatalog } from '../combat/faction-catalog.ts';
 import type { BattleReport } from '../combat/report.ts';
 import type { SpyReportSnapshot } from '../espionage/types.ts';
-import { battleBalance, formatShortAmount, formatSignedAmount, gasYield, reportRowValue, spyRaid, timesLabel } from './headline.ts';
+import { battleBalance, formatShortAmount, formatSignedAmount, extractionYield, reportRowValue, spyRaid, timesLabel } from './headline.ts';
 import { gasExtractionArrivalReportToReportItem } from './adapters.ts';
 import type { ReportItem } from './types.ts';
 
@@ -96,7 +96,7 @@ test('spy risk: their fleet and defence against the player’s attack', () => {
 
 test('gas extraction: gas is the number, the scrap rides along', () => {
   const item = gasExtractionArrivalReportToReportItem({ id: 'gas-extraction-arrival:f', flightId: 'f', coordinate: { galaxy: 1, system: 2, position: 3 }, arrivalAt: 0, outcome: 'found', gasCollected: 48_250, scrapCollected: 1_200 });
-  assert.deepEqual(gasYield(item), { gas: 48_250, scrap: 1_200 });
+  assert.deepEqual(extractionYield(item), { gas: 48_250, scrap: 1_200 });
   assert.equal(reportRowValue(item, null)?.amount, 48_250);
 });
 

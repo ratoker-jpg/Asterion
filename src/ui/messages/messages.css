@@ -861,9 +861,9 @@
 .reports-view--mail .reports-categories { padding: 16px 10px 12px; }
 .reports-view--mail .reports-categories > header { padding: 0 8px 10px; }
 .reports-view--mail .reports-message-nav { margin-top: 4px; padding-top: 8px; }
-.reports-view--mail :is(.reports-profile-nav, .reports-message-nav > button) { grid-template-columns: 30px minmax(0, 1fr) auto; gap: 9px; min-height: 40px; padding: 4px 8px 4px 6px; }
-.reports-view--mail .reports-nav-art { width: 30px; height: 30px; }
-.reports-view--mail .reports-nav-art .reports-glyph-image { width: 26px; height: 26px; }
+.reports-view--mail :is(.reports-profile-nav, .reports-message-nav > button) { grid-template-columns: 32px minmax(0, 1fr) auto; gap: 9px; min-height: 40px; padding: 4px 8px 4px 6px; }
+.reports-view--mail .reports-nav-art { width: 32px; height: 32px; }
+.reports-view--mail .reports-nav-art .reports-glyph-image { width: 30px; height: 30px; }
 .reports-view--mail :is(.reports-profile-nav, .reports-message-nav > button) strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; }
 .reports-view--mail .reports-message-nav .reports-folder-counter .reports-v2-unread-count {
   min-width: 24px;

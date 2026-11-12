@@ -197,7 +197,7 @@ export function timesLabel(ratio: number) {
 // ---------------------------------------------------------------- the row value
 
 /** Gas extraction: the gas is the number, the scrap rides along («и ещё 1 200 обломков»). */
-export function gasYield(item: ReportItem): { gas: number; scrap: number } | null {
+export function extractionYield(item: ReportItem): { gas: number; scrap: number } | null {
   const items = item.blocks?.resources?.filter((group) => group.tone === 'gain').flatMap((group) => group.items) ?? [];
   if (!items.length) return null;
   const sum = (kind: string) => items.filter((resource) => resource.kind === kind).reduce((total, resource) => total + resource.value, 0);
@@ -228,7 +228,7 @@ export function reportRowValue(item: ReportItem, battle: BattleReport | null | u
   }
   if (item.spyHunterNotice) return { text: '—', tone: 'danger' };
   if (item.source === 'gas-extraction') {
-    const gas = gasYield(item);
+    const gas = extractionYield(item);
     if (gas) return { amount: gas.gas, text: gas.gas > 0 ? formatSignedAmount(gas.gas) : '0', tone: gas.gas > 0 ? 'success' : 'neutral' };
   }
   const gain = gainOf(item);
