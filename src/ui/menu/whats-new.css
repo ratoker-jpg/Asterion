@@ -39,14 +39,12 @@ html body .whats-new [data-asterion-typography] { font-size: calc(var(--asterion
 .whats-new-entry__chevron { flex: none; width: 9px; height: 9px; border-top: 2px solid #7fa4b0; border-right: 2px solid #7fa4b0; transform: rotate(45deg); }
 .whats-new-entry.is-new { border-color: var(--race-border); box-shadow: inset 3px 0 0 var(--race-accent); background: linear-gradient(90deg, color-mix(in srgb, var(--race-accent-strong) 22%, rgba(6, 14, 20, .8)), rgba(6, 14, 20, .62) 70%); }
 .whats-new-entry .whats-new-mark { font-size: 15px; }
-.whats-new-entry.is-new .whats-new-mark { animation: whats-new-mark 2.4s ease-in-out infinite; }
+.whats-new-entry.is-new .whats-new-mark { position: relative; }
+/* Perf PR 6: the glow is a fixed shadow on a layer that fades in (opacity only, on the GPU). */
+.whats-new-entry.is-new .whats-new-mark::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; box-shadow: 0 0 12px 1px var(--race-glow); opacity: 0; animation: ut-glow-peak 2.4s ease-in-out infinite; }
 
 .igo-btn .whats-new-mark { vertical-align: 1px; }
 
-@keyframes whats-new-mark {
-  0%, 100% { box-shadow: 0 0 0 0 transparent; }
-  50% { box-shadow: 0 0 12px 1px var(--race-glow); }
-}
 
 /* Dialog */
 .whats-new {
@@ -178,7 +176,7 @@ html body .whats-new [data-asterion-typography] { font-size: calc(var(--asterion
 @keyframes whats-new-item { from { opacity: 0; transform: translateY(8px); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .whats-new, .whats-new__panel, .whats-new__item, .whats-new-entry.is-new .whats-new-mark { animation: none; }
+  .whats-new, .whats-new__panel, .whats-new__item, .whats-new-entry.is-new .whats-new-mark, .whats-new-entry.is-new .whats-new-mark::after { animation: none; }
   .whats-new-entry, .whats-new-entry:hover { transition: none; transform: none; }
   .whats-new__switch::before { transition: none; }
 }

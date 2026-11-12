@@ -173,7 +173,11 @@ html body .spaceport-upgrades-v2 .spaceport-row-v2 { overflow: visible !importan
 .spaceport-level-segments-v2 { height: 8px; display: flex; gap: 3px; }
 .spaceport-level-segments-v2 i { flex: 1 1 0; min-width: 2px; height: 100%; background: rgba(255, 255, 255, .08); transition: background-color var(--ut-motion-base) ease; }
 .spaceport-level-segments-v2 i.is-complete { background: linear-gradient(180deg, #4ee4f9, #1984a0); }
-.spaceport-level-segments-v2 i.is-queued { background: repeating-linear-gradient(135deg, rgba(231, 187, 78, .9) 0 3px, rgba(129, 98, 33, .8) 3px 6px); background-size: 200% 100%; animation: sp-queued-in var(--ut-motion-item) var(--ut-spring-pop) backwards, sp-queued-crawl 1.6s linear infinite; }
+.spaceport-level-segments-v2 i.is-queued { position: relative; overflow: hidden; background: none; animation: sp-queued-in var(--ut-motion-item) var(--ut-spring-pop) backwards; }
+/* Perf PR 6: the stripes are a layer twice as wide (the old background tile, 200% x 100%) that slides by one
+   stripe period (6px across 135deg = 8.485px) with translate, on the GPU. */
+.spaceport-level-segments-v2 i.is-queued::before { content: ''; position: absolute; top: 0; left: 0; width: 200%; height: 100%; pointer-events: none;
+  background: repeating-linear-gradient(135deg, rgba(231, 187, 78, .9) 0 3px, rgba(129, 98, 33, .8) 3px 6px); animation: sp-queued-crawl 1.6s linear infinite; }
 .sp-level.is-max .spaceport-level-segments-v2 i.is-complete { filter: brightness(1.1); }
 
 .sp-card__price { min-width: 0; display: grid; gap: 8px; }
@@ -250,10 +254,10 @@ html body .spaceport-upgrades-v2 .spaceport-upgrade-cta-v2:disabled { border: 1p
 .sp-why__line.is-muted { color: var(--ut-label); }
 
 @keyframes sp-queued-in { from { opacity: 0; scale: 1 .4; } }
-@keyframes sp-queued-crawl { to { background-position: -8.485px 0; } }
+@keyframes sp-queued-crawl { to { transform: translateX(-8.485px); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .sp-task, .spaceport-level-segments-v2 i.is-queued { animation: none; }
+  .sp-task, .spaceport-level-segments-v2 i.is-queued, .spaceport-level-segments-v2 i.is-queued::before { animation: none; }
   .sp-task__bar b, .spaceport-level-segments-v2 i { transition: none; }
   html body .spaceport-upgrades-v2 .spaceport-upgrade-cta-v2 { transition: none; }
 }

@@ -1099,6 +1099,11 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
               {claim ? <span className={`uv-claim-ring uv-claim-ring--${claim}`} aria-hidden="true" /> : null}
               {mapStatus.shieldLeft ? <span className="shield-aura" aria-hidden="true" data-qa-map-shield-aura /> : null}
               <img src={node.art} alt="" draggable={false} />
+              {/* Perf PR 6: the spinning rim is a sibling of the dome, not its child: Chromium only keeps the two
+                  loops on the GPU when they are not nested (nested, the UI thread ran every frame on «Вселенная»).
+                  After the picture so the picture's sibling-index() entrance delay stays as it was; both layers
+                  sit at z-index 2 above it, as the dome and its old ::before did. */}
+              {mapStatus.shieldLeft ? <span className="shield-aura__rim" aria-hidden="true" /> : null}
               {gateAtPosition.get(node.coordinate.position) ? (() => {
                 const beacon = gateAtPosition.get(node.coordinate.position)!;
                 return (

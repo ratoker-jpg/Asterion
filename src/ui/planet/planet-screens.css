@@ -380,14 +380,13 @@
   transform-origin: 50% 88%;
   filter: drop-shadow(0 5px 7px rgba(0, 0, 0, .34));
 }
-.resource-zone-view .resource-building-art img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.resource-zone-view .resource-building-art img { grid-area: 1 / 1; max-width: 100%; max-height: 100%; object-fit: contain; }
+/* Perf PR 6: a building under construction pulses a warm glow (5px .15 -> 15px .45). The base glow stays on the
+   art, the peak glow is baked into a copy of the picture on top whose opacity moves (GPU, no filter animation). */
 .resource-zone-view .resource-building-node.unbuilt .resource-building-art { opacity: .78; filter: grayscale(.15) drop-shadow(0 5px 7px rgba(0, 0, 0, .34)); }
 .resource-zone-view .resource-building-node.blocked .resource-building-art { opacity: .4; filter: grayscale(.6); }
-.resource-zone-view .resource-building-node.building .resource-building-art { animation: pz-building-pulse 1.8s ease-in-out infinite; }
-@keyframes pz-building-pulse {
-  0%, 100% { filter: drop-shadow(0 0 5px rgba(240, 182, 78, .15)); }
-  50% { filter: drop-shadow(0 0 15px rgba(240, 182, 78, .45)); }
-}
+.resource-zone-view .resource-building-node.building .resource-building-art { filter: drop-shadow(0 0 5px rgba(240, 182, 78, .15)); }
+.resource-zone-view .resource-building-node.building .resource-building-art > .resource-building-art__glow { filter: drop-shadow(0 0 15px rgba(240, 182, 78, .35)); opacity: 0; pointer-events: none; animation: ut-glow-peak 1.8s ease-in-out infinite; }
 .resource-zone-view .resource-building-caption {
   position: relative;
   z-index: 2;
@@ -1045,6 +1044,9 @@
   inset: 0;
   display: block;
   overflow: hidden;
+  /* Perf PR 6: it already clips (overflow hidden) and has no fixed-position children (dialogs live in App), so
+     containment changes nothing on screen and keeps its layout and paint work from spreading. */
+  contain: layout paint;
   color: var(--pz-text);
 }
 .planet-orbit .planet-orbit__ring {
@@ -1053,12 +1055,15 @@
   top: var(--orbit-cy);
   width: calc(var(--orbit-size) * 1.18);
   aspect-ratio: 1;
-  border: 1px solid rgba(126, 200, 220, .12);
+  border: 1px solid transparent;
   border-radius: 50%;
   translate: -50% -50%;
   pointer-events: none;
 }
-.planet-orbit .planet-orbit__ring--outer { width: calc(var(--orbit-size) * 1.42); border-style: dashed; border-color: rgba(126, 200, 220, .08); }
+/* The visible ring (perf PR 6): a layer of its own so its spin runs on the GPU (motion.css). */
+.planet-orbit .planet-orbit__ring::before { content: ''; position: absolute; inset: -1px; border: 1px solid rgba(126, 200, 220, .12); border-radius: 50%; }
+.planet-orbit .planet-orbit__ring--outer { width: calc(var(--orbit-size) * 1.42); }
+.planet-orbit .planet-orbit__ring--outer::before { border-style: dashed; border-color: rgba(126, 200, 220, .08); }
 .planet-page-v3.planet-orbit .planet-image-v3.planet-orbit__planet {
   position: absolute;
   left: 50%;
@@ -1397,6 +1402,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .resource-zone-view .resource-building-node.building .resource-building-art,
+  .resource-zone-view .resource-building-node.building .resource-building-art > .resource-building-art__glow,
   .resource-zone-view .resource-zone-selector-quick.is-queued,
   .zone-tile-tip { animation: none; }
 }

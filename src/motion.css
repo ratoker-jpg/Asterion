@@ -59,7 +59,13 @@
 @keyframes ut-float { 50% { translate: 0 -8px; } }
 @keyframes ut-attention { 0%, 100% { scale: 1; } 50% { scale: 1.06; } }
 @keyframes ut-ring-in-centred { from { opacity: 0; transform: translate(-50%, -50%) scale(.82) rotate(-25deg); } }
-@keyframes ut-ring-spin { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
+/* Perf PR 6: glow pulses run on the GPU. The peak shadow (or filter) sits on a layer of its own
+   (a pseudo-element or a copy of the picture) and only its opacity moves: base 0 -> 1 at the middle,
+   or base 1 -> 0 at the middle for a glow that dims. */
+@keyframes ut-glow-peak { 50% { opacity: 1; } }
+@keyframes ut-glow-dip { 50% { opacity: 0; } }
+@keyframes ut-ring-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes ut-ring-hold { from, to { transform: translate(-50%, -50%); } }
 @keyframes ut-planet-in-centred {
   from { opacity: 0; transform: translate(-50%, -50%) scale(.86); filter: blur(14px) brightness(1.9); }
   65% { filter: blur(0) brightness(1.08); }
@@ -174,16 +180,23 @@
 /* ---------------------------------------------------------------- 4. Planet overview
    The world assembles: orbits sweep in, the planet comes out of a bright
    blur, the zone plates ignite one by one, the side panels slide in. */
+/* Perf PR 6: the endless spin used to share `transform` with the entrance on the same element, which
+   Chromium cannot composite («incompatible animations»), so the UI thread ran every frame on «Планета».
+   The ring now draws its border on ::before and only that layer spins (GPU). The ring itself keeps the
+   entrance and, from the moment the spin starts, the same translate(-50%, -50%) the spin keyframes carried
+   (a 1 ms hold with fill forwards: no ticking afterwards), so the picture is unchanged. */
 .planet-orbit > .planet-orbit__ring {
   animation:
     ut-ring-in-centred 1100ms var(--ut-ease-expo) backwards,
-    ut-ring-spin 360s linear 1100ms infinite;
+    ut-ring-hold 1ms linear 1100ms forwards;
 }
 .planet-orbit > .planet-orbit__ring--outer {
   animation:
     ut-ring-in-centred 1300ms var(--ut-ease-expo) 80ms backwards,
-    ut-ring-spin 240s linear 1380ms infinite reverse;
+    ut-ring-hold 1ms linear 1380ms forwards;
 }
+.planet-orbit > .planet-orbit__ring::before { animation: ut-ring-spin 360s linear 1100ms infinite; }
+.planet-orbit > .planet-orbit__ring--outer::before { animation: ut-ring-spin 240s linear 1380ms infinite reverse; }
 .planet-page-v3.planet-orbit > .planet-orbit__planet {
   animation: ut-planet-in-centred 1100ms var(--ut-ease-expo) backwards;
 }
@@ -258,7 +271,7 @@
 .asterion-header .hdr-core__planet img { animation: ut-materialize 900ms var(--ut-ease-expo) backwards; }
 .asterion-header .hdr-route__icon { transition: translate 420ms var(--ut-spring-pop), scale 420ms var(--ut-spring-pop), filter var(--ut-motion-base) ease, box-shadow var(--ut-motion-base) ease; }
 .asterion-header .hdr-route.active .hdr-route__icon { animation: ut-icon-pop 520ms var(--ut-spring-pop); }
-.asterion-header .hdr-route.hdr-route--alert .hdr-route__icon { animation: hdr-route-alert 1.4s ease-in-out infinite; }
+.asterion-header .hdr-route.hdr-route--alert .hdr-route__icon { animation: none; }
 .asterion-header .hdr-zone img { transition: scale 420ms var(--ut-spring-pop), filter var(--ut-motion-base) ease; }
 @media (hover: hover) and (pointer: fine) {
   .asterion-header .hdr-route:hover .hdr-route__icon { translate: 0 -3px; scale: 1.1; filter: brightness(1.25) drop-shadow(0 0 10px color-mix(in srgb, var(--race-accent, #56d9f2) 70%, transparent)); }
@@ -453,6 +466,7 @@ body :is(.system-planet, .resource-building-node, .zone-hotspot, .universe-radar
     animation: ut-fade-in var(--ut-motion-fast) ease backwards !important;
   }
   .planet-orbit > .planet-orbit__ring, .planet-page-v3.planet-orbit > .planet-orbit__planet { animation: ut-fade-in var(--ut-motion-fast) ease backwards !important; }
+  .planet-orbit > .planet-orbit__ring::before { animation: none !important; }
   .workspace > .route-sweep, .runtime-toast-stack .runtime-toast::after { display: none; }
   /* Map objects carry no animation at all under reduced motion (universe-planet-qa contract). */
   .universe-radar .system-scene .system-planet > img { animation: none !important; }
@@ -470,7 +484,7 @@ body :is(.system-planet, .resource-building-node, .zone-hotspot, .universe-radar
 }
 
 /* NPC catch-up running (NpcCatchupBanner): decorative loops hold still. */
-.npc-catchup-active :is(.stage-ambient i, .planet-orbit__ring, .ui-empty-art, .resource-building-art, .asterion-header__resource-fill i),
+.npc-catchup-active :is(.stage-ambient i, .planet-orbit__ring, .planet-orbit__ring::before, .ui-empty-art, .resource-building-art, .asterion-header__resource-fill i),
 .npc-catchup-active :is(.resource-zone-queue-card.busy .resource-zone-queue-card-main > i > span, .queue-progress-v2 > i, .recycling-job-progress > i, .gate-node__bar > i, .fleet-production-order-progress-v1 > *)::after {
   animation-play-state: paused !important;
 }

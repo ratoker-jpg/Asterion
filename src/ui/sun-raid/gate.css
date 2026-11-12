@@ -80,7 +80,9 @@ body .gate-dialog .gate-dialog__copy h2 { margin: 0; font-size: 32px !important;
 /* Military-zone slot (free bottom-right spot of the scene): the race's Gate building. */
 .resource-building-node.gate-node .resource-building-art img { transition: filter .4s ease; }
 .resource-building-node.gate-node.is-idle .resource-building-art img { filter: grayscale(.85) brightness(.55) contrast(1.05); }
-.resource-building-node.gate-node.is-building .resource-building-art img { animation: gate-node-charge 2.8s ease-in-out infinite; }
+/* Perf PR 6: the charge pulse (glow 18px + brightness 1.08 at the middle) is a copy of the picture with that
+   filter baked in, fading in on top (opacity only, GPU). */
+.resource-building-node.gate-node.is-building .resource-building-art > .resource-building-art__glow { filter: drop-shadow(0 0 18px var(--race-glow)) brightness(1.08); opacity: 0; pointer-events: none; transition: none; animation: ut-glow-peak 2.8s ease-in-out infinite; }
 .resource-building-node.gate-node.is-completed .resource-building-art img { filter: drop-shadow(0 0 26px var(--race-glow)) brightness(1.12); }
 .resource-building-node.gate-node.is-destroyed .resource-building-art img { filter: brightness(.85); }
 .gate-node__crystals { position: absolute; left: 50%; top: -10px; display: flex; gap: 6px; transform: translateX(-50%); z-index: 3; }
@@ -88,8 +90,7 @@ body .gate-dialog .gate-dialog__copy h2 { margin: 0; font-size: 32px !important;
 .gate-node__crystals i.is-on { background: var(--gem); box-shadow: 0 0 10px var(--gem); }
 .gate-node__bar { position: absolute; left: 50%; bottom: 52px; width: 120px; height: 6px; transform: translateX(-50%); border-radius: 999px; background: rgba(3, 8, 12, .85); border: 1px solid var(--race-border); overflow: hidden; z-index: 3; }
 .gate-node__bar i { display: block; height: 100%; background: var(--race-underline); box-shadow: 0 0 8px var(--race-glow); }
-@keyframes gate-node-charge { 50% { filter: drop-shadow(0 0 18px var(--race-glow)) brightness(1.08); } }
-@media (prefers-reduced-motion: reduce) { .resource-building-node.gate-node.is-building .resource-building-art img { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .resource-building-node.gate-node.is-building .resource-building-art > .resource-building-art__glow { animation: none; } }
 
 /* Dialog hero: the Gate building inside the progress ring. */
 .gate-hero { position: relative; display: grid; place-items: center; }

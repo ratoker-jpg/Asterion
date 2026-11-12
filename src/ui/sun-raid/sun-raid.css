@@ -30,13 +30,14 @@
   color: var(--opsA-text);
   text-align: left;
   cursor: pointer;
-  animation: srp-alarm 2.4s ease-in-out infinite;
+  position: relative;
 }
+/* Perf PR 6: the alarm glow is a fixed shadow on a layer that fades in (opacity only, on the GPU). */
+.opsA .srp-alert::after { content: ''; position: absolute; inset: -1px; border-radius: inherit; pointer-events: none; box-shadow: 0 0 18px rgba(240, 68, 94, .35); opacity: 0; animation: ut-glow-peak 2.4s ease-in-out infinite; }
 .opsA .srp-alert img { width: 42px; height: 42px; border-radius: 8px; }
 .opsA .srp-alert b { display: block; font-size: 13px; color: #ffd0d7; }
 .opsA .srp-alert small { display: block; margin-top: 3px; color: #f5a3b0; }
 .opsA .srp-alert:focus-visible { outline: var(--ut-focus); outline-offset: 2px; }
-@keyframes srp-alarm { 50% { box-shadow: 0 0 18px rgba(240, 68, 94, .35); } }
 
 .opsA .srp-solo { display: grid; gap: 10px; justify-items: start; }
 .opsA .srp-solo p { margin: 0; color: #c2d7de; font-size: 12px; line-height: 1.5; }
@@ -194,7 +195,7 @@ body .opsA .srp-cap .srp-cap__head b { font-size: 18px !important; font-variant-
 .opsA .opsA-modes button:focus-visible { outline: var(--ut-focus); outline-offset: 1px; }
 
 @media (prefers-reduced-motion: reduce) {
-  .opsA .srp-alert, .opsA .srp-sun-tile.is-attacked::after { animation: none; }
+  .opsA .srp-alert, .opsA .srp-alert::after, .opsA .srp-sun-tile.is-attacked::after { animation: none; }
 }
 
 /* Embedded in «Командование → Операции». */
