@@ -271,6 +271,15 @@ function summariseTrace(file, seconds) {
     }
   }
   for (const key of Object.keys(frameEvents)) frameEvents[key] = round(frameEvents[key] / seconds);
+  // DIAG perf-6: animation events with their compositor verdict.
+  const animDiag = {};
+  for (const event of events) {
+    if (event.pid !== mainPid || event.name !== 'Animation') continue;
+    const data = event.args?.data ?? {};
+    const key = `${event.ph} ${data.name ?? ''} id=${event.id2?.local ?? event.id ?? ''} failed=${data.compositeFailed ?? ''} props=${JSON.stringify(data.unsupportedProperties ?? '')} state=${data.state ?? ''} node=${data.nodeName ?? data.nodeId ?? ''}`;
+    animDiag[key] = (animDiag[key] ?? 0) + 1;
+  }
+
   // Every thread's busy time (top-level tasks), per second of the window.
   const threads = {};
   for (const event of events) {
@@ -286,7 +295,7 @@ function summariseTrace(file, seconds) {
       over4ms: durations.filter((value) => value > 4).length, over8ms: durations.filter((value) => value > 8.33).length,
       over16ms: durations.filter((value) => value > 16.7).length, over50ms: durations.filter((value) => value > 50).length },
     busyMsBySecond: perSecond.map((value) => Math.round(value ?? 0)),
-    framesPerSecond: frameEvents, byEvent: byName, longestTasks: longest, threadMsPerSecond,
+    framesPerSecond: frameEvents, animDiag, byEvent: byName, longestTasks: longest, threadMsPerSecond,
   };
 }
 
