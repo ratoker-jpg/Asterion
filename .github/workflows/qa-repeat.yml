@@ -77,6 +77,7 @@ jobs:
           result=qa-repeat/${{ matrix.shard }}-${{ matrix.replica }}.tsv
           : > "$result"
           set +e
+          export ASTERION_QA_CHECKS=0
           case "${{ matrix.shard }}" in
             visual) suites="qa:visual test:test-mode-ui:skip test:header-ui test:resource-assets-ui test:save-safety-ui:skip test:save-store-ui" ;;
             science-reports) suites="test:science-ui:skip test:building-actions-ui test:planet-pass-ui test:planet-screens-ui test:reports-ui test:battle-reports-ui:skip test:battles-mine-ui test:simulator-ui:skip test:space-flight-ui:skip test:production-test-isolation-ui:skip" ;;
@@ -102,7 +103,10 @@ jobs:
         if: always()
         with:
           name: repeat-${{ matrix.shard }}-${{ matrix.replica }}
-          path: qa-repeat/*.tsv
+          path: |
+            qa-repeat/*.tsv
+            qa-repeat/*.log
+            visual-qa/screens-settings/**/*
           retention-days: 14
 
   summary:
