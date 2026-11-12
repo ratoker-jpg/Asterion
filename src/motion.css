@@ -284,6 +284,7 @@
 .resource-building-dialog,
 .universe-debris-finder,
 .universe-inspector,
+.universe-object-card,
 .gate-dialog,
 .srp-launch,
 .ship-info-modal-v1,
@@ -348,7 +349,7 @@ body :is(.system-planet, .resource-building-node, .zone-hotspot, .universe-radar
 
 @media (hover: hover) and (pointer: fine) {
   :is(
-    .igo-btn--primary, .uw-btn--primary, .opsA-btn--primary,
+    .igo-btn--primary, .universe-object-card .oc-btn.primary, .opsA-btn--primary,
     .resource-building-build-button, .resource-building-enter-button,
     .spaceport-upgrade-cta-v2, [data-qa-science-action], [data-qa-flight-preview-open],
     [data-qa-flight-dispatch-confirm], [data-qa-sun-launch-confirm], [data-qa-gate-start],
@@ -444,7 +445,7 @@ body :is(.system-planet, .resource-building-node, .zone-hotspot, .universe-radar
   .planet-orbit > *, .planet-orbit__side > *, .planet-orbit__vitals > div, .universe-radar > *,
   .resource-zone-building-layer > .resource-building-node, .asterion-header .hdr-cell, .asterion-header .hdr-route,
   .asterion-header .hdr-core__planet img,
-  .resource-building-action-confirm, .resource-building-dialog, .universe-debris-finder, .universe-inspector, .gate-dialog, .srp-launch,
+  .resource-building-action-confirm, .resource-building-dialog, .universe-debris-finder, .universe-inspector, .universe-object-card, .gate-dialog, .srp-launch,
   .ship-info-modal-v1, .battle-report-modal-v1, .skin-picker-modal, .igo-pause, .igo-confirm,
   .command-dialog-backdrop > *, .menu-modal > *,
   :is(.resource-building-dialog, .gate-dialog, .srp-launch, .skin-picker-modal, .igo-pause) > *,

@@ -143,7 +143,7 @@ jobs:
           - shard: visual
             suites: "qa:visual test:test-mode-ui:skip test:header-ui test:resource-assets-ui test:save-safety-ui:skip test:save-store-ui test:whats-new-ui test:rating-ui test:settings-screens-ui"
           - shard: science-reports
-            suites: "test:science-ui:skip test:building-actions-ui test:planet-pass-ui test:planet-screens-ui test:messages-screens-ui test:command-screens-ui test:operations-screens-ui test:reports-format-ui test:reports-ui test:battle-reports-ui:skip test:battles-mine-ui test:simulator-ui:skip test:space-flight-ui:skip test:production-test-isolation-ui:skip"
+            suites: "test:science-ui:skip test:building-actions-ui test:planet-pass-ui test:planet-screens-ui test:messages-screens-ui test:command-screens-ui test:operations-screens-ui test:universe-card-ui test:reports-format-ui test:reports-ui test:battle-reports-ui:skip test:battles-mine-ui test:simulator-ui:skip test:space-flight-ui:skip test:production-test-isolation-ui:skip"
           # Owner decision (25.10.2026): a long absence is caught up in full
           # behind a progress bar and the player waits; there is no 14-day /
           # 120 s limit any more. The scoped replay QA checks the progress

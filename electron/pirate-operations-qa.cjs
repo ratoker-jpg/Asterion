@@ -163,10 +163,10 @@ async function findActiveContact(win) {
     const contact = await win.webContents.executeJavaScript(`(() => {
       const recon = document.querySelector('[data-qa-universe-special-action="pirate-recon"]');
       const attack = document.querySelector('[data-qa-universe-special-action="pirate-elimination"]');
-      return { id: ${JSON.stringify(pirateId)}, system: ${system}, cycleKey: recon?.getAttribute('data-qa-universe-contact-cycle') || '', reconEnabled: Boolean(recon && !recon.disabled), attackEnabled: Boolean(attack && !attack.disabled), status: document.querySelector('[data-qa-universe-special-status]')?.textContent || '', coordinate: document.querySelector('[data-qa-universe-inspector]')?.textContent?.match(/\\[\\d+:\\d+:\\d+\\]/)?.[0] || '' };
+      return { id: ${JSON.stringify(pirateId)}, system: ${system}, cycleKey: recon?.getAttribute('data-qa-universe-contact-cycle') || '', reconEnabled: Boolean(recon && !recon.disabled), attackEnabled: Boolean(attack && !attack.disabled), status: document.querySelector('[data-qa-universe-special-status]')?.textContent || '', remaining: Number(document.querySelector('[data-qa-universe-inspector]')?.getAttribute('data-qa-universe-remaining-seconds') || 0), coordinate: document.querySelector('[data-qa-universe-inspector]')?.textContent?.match(/\\[\\d+:\\d+:\\d+\\]/)?.[0] || '' };
     })()`);
-    const countdown = /исчезнет через (\d+) мин (\d+) с/.exec(contact.status);
-    const remainingSeconds = countdown ? Number(countdown[1]) * 60 + Number(countdown[2]) : 0;
+    // The card carries the seconds left (its text says «1 ч 05 мин» or «42 мин 10 с»).
+    const remainingSeconds = contact.remaining;
     if (contact.cycleKey && contact.reconEnabled && remainingSeconds > 180) {
       return { ...contact, remainingSeconds };
     }

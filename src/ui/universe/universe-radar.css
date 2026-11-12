@@ -80,9 +80,50 @@
 /* ---- galaxy chip (top right) + vertical system rail (right edge) ---- */
 .workspace--universe .universe-view-v3.universe-radar .universe-radar__nav { left: auto; right: 18px; top: 16px; display: flex; align-items: center; gap: 8px; padding: 8px; }
 .workspace--universe .universe-radar .universe-radar__galaxy { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 4px 0 10px; border-radius: 9px; background: rgba(0, 0, 0, .35); }
-.workspace--universe .universe-radar .universe-radar__galaxy select { height: 26px; padding: 0 4px; border: 0; border-radius: 6px; background: transparent; color: #fff; font-size: 14px !important; font-weight: 800; cursor: pointer; }
-.workspace--universe .universe-radar .universe-radar__galaxy select option,
-.workspace--universe .universe-radar .universe-radar__rail-select option { background: #0b1820; }
+/* Galaxy and system pickers: the game's own dropdown (GameSelect), compact on the map. */
+.workspace--universe .universe-radar .universe-radar__pick { width: auto; }
+.workspace--universe .universe-radar .universe-radar__pick .game-select__trigger {
+  min-height: 26px; height: 26px; padding: 0 24px 0 6px; border: 0; border-radius: 6px; background: transparent;
+  color: #fff; font-size: 14px !important; font-weight: 800; font-variant-numeric: tabular-nums;
+}
+.workspace--universe .universe-radar .universe-radar__pick .game-select__trigger > i { right: 8px; width: 7px; height: 7px; margin-top: -5px; }
+.workspace--universe .universe-radar .universe-radar__pick .game-select__trigger:hover:not(:disabled),
+.workspace--universe .universe-radar .universe-radar__pick.is-open .game-select__trigger { background: rgba(86, 217, 242, .1); }
+.workspace--universe .universe-radar .universe-radar__rail-pick .game-select__trigger { min-width: 66px; justify-content: center; font-size: 12px !important; color: #8fb6c0; }
+
+/* A game tooltip instead of the browser's white one (map controls, free positions, asteroids). */
+.universe-radar :is(.universe-radar__nav, .universe-radar__dock, .universe-radar__list) [data-tip] { position: relative; }
+.universe-radar [data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  z-index: 40;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  width: max-content;
+  max-width: 280px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #06121d;
+  box-shadow: inset 0 0 0 1px rgba(86, 217, 242, .35), 0 8px 20px rgba(0, 0, 0, .5);
+  color: #e8f6fa;
+  font-size: calc(12.5px * var(--text-scale-helper, 1)) !important;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.35;
+  text-align: left;
+  text-transform: none;
+  white-space: normal;
+  opacity: 0;
+  transform: translate(-50%, 4px);
+  pointer-events: none;
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+.universe-radar [data-tip]:is(:hover, :focus-visible)::after { opacity: 1; transform: translate(-50%, 0); }
+/* The nav sits at the top right: its hints open below and keep to the right edge. */
+.universe-radar .universe-radar__nav [data-tip]::after { left: auto; right: 0; bottom: auto; top: calc(100% + 8px); transform: translateY(-4px); }
+.universe-radar .universe-radar__nav [data-tip]:is(:hover, :focus-visible)::after { transform: none; }
+.universe-radar .universe-radar__list [data-tip]::after { left: 0; bottom: auto; top: calc(100% + 8px); transform: translateY(-4px); }
+.universe-radar .universe-radar__list [data-tip]:is(:hover, :focus-visible)::after { transform: none; }
 .workspace--universe .universe-radar .universe-radar__home { height: 32px; padding: 0 12px; border: 1px solid rgba(126, 200, 220, .22); border-radius: 9px; background: transparent; color: #cfe6ec; font-size: 11.5px !important; font-weight: 800; letter-spacing: .04em; cursor: pointer; white-space: nowrap; }
 .workspace--universe .universe-radar .universe-radar__home:hover:not(:disabled) { border-color: var(--race-accent, #b4ceff); color: #fff; }
 .workspace--universe .universe-radar .universe-radar__home:disabled { opacity: .4; cursor: default; }
@@ -130,8 +171,6 @@
 .workspace--universe .universe-radar .universe-radar__rail-item.is-d1 { opacity: .7; }
 .workspace--universe .universe-radar .universe-radar__rail-item.is-d0 { height: 42px; color: #fff; font-size: 24px !important; cursor: default; text-shadow: 0 0 14px var(--race-glow, rgba(95, 155, 255, .6)); background: none; }
 .universe-radar .universe-radar__rail-total { font-size: 10.5px !important; letter-spacing: .08em; }
-/* Hidden native select keeps keyboard jump-to-system and the QA hooks. */
-.universe-radar .universe-radar__rail-select { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); border: 0; }
 
 /* ---- filters + layers dock (bottom) ---- */
 .universe-radar .universe-radar__dock { left: 50%; bottom: 10px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 6px 10px; white-space: nowrap; max-width: calc(100% - 24px); }

@@ -142,7 +142,7 @@ async function verifyExplorationReachability(win, directory, label, kind, select
   const outsideExpedition = outside.specialActions.find(action => action.action === 'expedition');
   checkCopy(outside);
   await checkModal(win);
-  if (outside.kind !== kind || !outside.text.includes('ВНЕ РАДИУСА ЭКСПЕДИЦИИ')
+  if (outside.kind !== kind || !outside.text.includes('Далеко от ваших колоний')
     || !outsideRecon?.disabled || !outsideExpedition?.disabled
     || !outsideExpedition.title.includes('пяти систем')
     || !outside.specialArt.loaded || !hasBundledImageAsset(outside.specialArt.src, artPrefixes)) {
@@ -163,7 +163,7 @@ async function verifyExplorationReachability(win, directory, label, kind, select
   const insideExpedition = inside.specialActions.find(action => action.action === 'expedition');
   checkCopy(inside);
   await checkModal(win);
-  if (inside.kind !== kind || !inside.text.includes('Объект свободен')
+  if (inside.kind !== kind || !inside.text.includes('Свободен')
     || insideRecon?.disabled || insideExpedition?.disabled
     || !inside.specialArt.loaded || inside.specialArt.src !== outside.specialArt.src
     || !hasBundledImageAsset(inside.specialArt.src, artPrefixes)) {
@@ -486,7 +486,8 @@ async function inspectorSnapshot(win) {
     const specialActions = Array.from(document.querySelectorAll('[data-qa-universe-special-action]')).map((node) => ({
       action: node.getAttribute('data-qa-universe-special-action'),
       disabled: Boolean(node.disabled),
-      title: node.getAttribute('title') || '',
+      // The card shows the reason next to the buttons (no system tooltips); the text sits on the button.
+      title: node.getAttribute('data-qa-universe-special-reason') || node.getAttribute('title') || '',
     }));
     const specialImage = document.querySelector('[data-qa-universe-special] img');
     return {
@@ -813,7 +814,7 @@ async function runViewport(width, height) {
     const freeAsteroid = await inspectorSnapshot(win);
     checkCopy(freeAsteroid);
     await checkModal(win);
-    if (freeAsteroid.kind !== 'asteroid' || freeAsteroid.underlyingKind !== 'empty' || !freeAsteroid.text.includes('СКРЫТ ДО ПЕРЕРАБОТКИ') || !freeAsteroid.text.includes('Следующее перемещение через')
+    if (freeAsteroid.kind !== 'asteroid' || freeAsteroid.underlyingKind !== 'empty' || !freeAsteroid.text.includes('станет виден после переработки') || !freeAsteroid.text.includes('Сменит позицию через')
       || !freeAsteroid.specialActions.some((action) => action.action === 'colonize' && !action.disabled)
       || freeAsteroid.specialActions.filter((action) => action.action === 'asteroid-recycler' && !action.disabled).length !== 1
       || freeAsteroid.specialActions.some((action) => action.action === 'gas-extraction')) {
@@ -997,7 +998,7 @@ async function runViewport(width, height) {
     await checkModal(win);
     const pirateReconEnabled = pirate.specialActions.some((action) => action.action === 'pirate-recon' && !action.disabled);
     const pirateEliminationEnabled = pirate.specialActions.some((action) => action.action === 'pirate-elimination' && !action.disabled);
-    if (pirate.kind !== 'pirate' || !pirate.text.includes('Пиратский объект') || !pirate.text.includes('исчезнет через') || !pirateReconEnabled || !pirateEliminationEnabled
+    if (pirate.kind !== 'pirate' || !pirate.text.includes('Пиратская база') || !pirate.text.includes('Исчезнет через') || !pirateReconEnabled || !pirateEliminationEnabled
       || !pirate.specialArt.loaded || !hasBundledImageAsset(pirate.specialArt.src, ['pirate-planet-', 'planet-020-', 'orbital-forge-'])) throw new Error(`${label}: pirate inspector contract failed ${JSON.stringify(pirate)}`);
     await capture(win, directory, 'pirate-inspector');
     await dismissInspector(win);

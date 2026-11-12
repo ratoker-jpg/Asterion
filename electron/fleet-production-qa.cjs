@@ -788,14 +788,14 @@ async function runAsteroidRecyclerLaunch(win, label, directory) {
   const asteroidActions = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-qa-universe-special-action]')).map((node) => ({
     action: node.getAttribute('data-qa-universe-special-action') || '',
     label: node.textContent?.replace(/\\s+/g, ' ').trim() || '',
-    title: node.getAttribute('title') || '',
+    title: node.getAttribute('data-qa-universe-special-reason') || node.getAttribute('title') || '',
     coordinate: node.getAttribute('data-qa-universe-target-coordinate') || '',
     spawnIndex: Number(node.getAttribute('data-qa-universe-asteroid-spawn-index')),
   }))`);
   const recyclerActions = asteroidActions.filter((action) => action.action === 'asteroid-recycler');
   if (recyclerActions.length !== 1 || asteroidActions.some((action) => action.action === 'gas-extraction')
-    || recyclerActions[0].label !== 'ОТПРАВИТЬ ПЕРЕРАБОТЧИКА'
-    || !recyclerActions[0].title.includes('сначала собрать газ, затем обломки')
+    || recyclerActions[0].label.toUpperCase() !== 'ОТПРАВИТЬ ПЕРЕРАБОТЧИКА'
+    || !recyclerActions[0].title.includes('сначала соберёт газ, затем обломки')
     || recyclerActions[0].coordinate !== `[${asteroid.coordinate.join(':')}]`
     || recyclerActions[0].spawnIndex !== asteroid.spawnIndex) {
     throw new Error(`${label}: asteroid inspector must expose one combined recycler action ${JSON.stringify({ asteroidActions, asteroid })}`);

@@ -244,6 +244,7 @@ import { sendQuickLegs, type QuickLegOutcome } from './application/quick-actions
 import { AidQuickSend } from './ui/command/AidQuickSend.tsx';
 import type { TargetRelation } from './domain/flights/types.ts';
 import { materializePirateProfiles, pirateContactOperation, pirateOperationId, selectOwnedPiratePresentations, selectOwnedPirateTargets, selectPirateContacts } from './application/pirate-presentation.ts';
+import type { ExplorationIntel } from './ui/universe/object-card-model.ts';
 import { selectExplorationTargets, getExplorationTarget, explorationTargetStatus, selectExplorationOperations, planExplorationAttackLaunch } from './application/exploration.ts';
 import { acceptLiveExploration, cancelLiveExploration } from './application/exploration-operations.ts';
 import type { PirateContactPresentation, PirateSystemSelection } from './pirate-ui.ts';
@@ -1543,6 +1544,19 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const universeExplorationEligibility = useMemo(() => (activeRoute === 'universe'
     ? Object.fromEntries(selectExplorationTargets(state, explorationClock, RUNTIME_MODE).map(node => [node.id, explorationTargetStatus(state, node)]))
     : {}), [activeRoute, explorationClock, state]);
+  // The player's own probe reports on unique objects and anomalies: the latest per object, for the Universe card.
+  const universeExplorationIntel = useMemo(() => {
+    const intel: Record<string, ExplorationIntel> = {};
+    if (activeRoute !== 'universe') return intel;
+    for (const record of state.exploration?.reconReports ?? []) {
+      if (record.ownerId !== state.profile.playerId || (intel[record.contactId]?.at ?? -Infinity) > record.resolvedAt) continue;
+      intel[record.contactId] = {
+        at: record.resolvedAt, success: record.success, fleetKnown: record.occupant?.quality === 'full',
+        ...(record.occupant ? { occupantName: record.occupant.ownerName, ...(record.occupant.alliance ? { allianceTag: record.occupant.alliance.tag } : {}) } : {}),
+      };
+    }
+    return intel;
+  }, [activeRoute, state.exploration?.reconReports, state.profile.playerId]);
   // One array per espionage section, not one per render: the map compares it by reference first.
   const universeSpyTargets = useMemo(() => Object.values(getEspionageTargets(state.espionage)), [state.espionage]);
   const universePlayerPlanets = useMemo(() => ownedPlanets.map((planet) => {
@@ -3307,6 +3321,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               onExplorationRecon={launchExplorationRecon}
               onExplorationAttack={openExplorationAttackLaunch}
               explorationEligibility={universeExplorationEligibility}
+              explorationIntel={universeExplorationIntel}
               onTransport={openTransportLaunch}
               onSpy={openSpyLaunch}
               onAttack={openAttackLaunch}

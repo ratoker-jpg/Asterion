@@ -1,0 +1,530 @@
+{
+  "1280x720": {
+    "failures": [],
+    "shots": {
+      "01-empty": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          920,
+          437
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": [
+          "recycle",
+          "colonize"
+        ]
+      },
+      "02-empty-huge-debris": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          920,
+          465
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": [
+          "recycle",
+          "colonize"
+        ]
+      },
+      "03-uninhabited": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          920,
+          439
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": [
+          "recycle"
+        ]
+      },
+      "04-asteroid-debris": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          920,
+          484
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": [
+          "colonize",
+          "asteroid-recycler"
+        ]
+      },
+      "05-asteroid-no-debris": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          920,
+          496
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": [
+          "asteroid-recycler"
+        ]
+      },
+      "06-pirate-new": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          920,
+          508
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": [
+          "pirate-recon",
+          "recycle",
+          "pirate-elimination:off"
+        ]
+      },
+      "07-pirate-scouted-seconds-left": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          920,
+          491
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": [
+          "pirate-report",
+          "pirate-recon",
+          "recycle",
+          "pirate-elimination"
+        ]
+      },
+      "08-pirate-no-probes": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          920,
+          547
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": [
+          "pirate-report",
+          "pirate-recon:off",
+          "recycle",
+          "pirate-elimination:off"
+        ]
+      },
+      "09-unique-free-long-name": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          920,
+          490
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": [
+          "exploration-recon",
+          "recycle",
+          "expedition"
+        ]
+      },
+      "10-unique-occupied": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          920,
+          492
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": [
+          "exploration-recon",
+          "recycle",
+          "exploration-attack"
+        ]
+      },
+      "11-unique-occupied-scouted": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          920,
+          480
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": [
+          "exploration-recon",
+          "recycle",
+          "exploration-attack"
+        ]
+      },
+      "12-anomaly-own-fleet": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          920,
+          492
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": [
+          "exploration-recon",
+          "recycle",
+          "expedition:off"
+        ]
+      },
+      "13-anomaly-out-of-range": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          920,
+          513
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": [
+          "exploration-recon:off",
+          "recycle",
+          "expedition:off"
+        ]
+      },
+      "14-debris-few": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          780,
+          348
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": []
+      },
+      "15-debris-many-top": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          780,
+          684
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": []
+      },
+      "16-debris-many-end": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          780,
+          684
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": []
+      },
+      "17-debris-empty": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          780,
+          302
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": []
+      },
+      "18-map-system-picker": {
+        "fits": true,
+        "size": null,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": []
+      }
+    }
+  },
+  "2560x1080": {
+    "failures": [],
+    "shots": {
+      "01-empty": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          920,
+          499
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": [
+          "recycle",
+          "colonize"
+        ]
+      },
+      "02-empty-huge-debris": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          920,
+          527
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": [
+          "recycle",
+          "colonize"
+        ]
+      },
+      "03-uninhabited": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          920,
+          501
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": [
+          "recycle"
+        ]
+      },
+      "04-asteroid-debris": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          920,
+          538
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": [
+          "colonize",
+          "asteroid-recycler"
+        ]
+      },
+      "05-asteroid-no-debris": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          920,
+          550
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": [
+          "asteroid-recycler"
+        ]
+      },
+      "06-pirate-new": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          920,
+          565
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": [
+          "pirate-recon",
+          "recycle",
+          "pirate-elimination:off"
+        ]
+      },
+      "07-pirate-scouted-seconds-left": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          920,
+          549
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": [
+          "pirate-report",
+          "pirate-recon",
+          "recycle",
+          "pirate-elimination"
+        ]
+      },
+      "08-pirate-no-probes": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          920,
+          605
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": [
+          "pirate-report",
+          "pirate-recon:off",
+          "recycle",
+          "pirate-elimination:off"
+        ]
+      },
+      "09-unique-free-long-name": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          920,
+          529
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": [
+          "exploration-recon",
+          "recycle",
+          "expedition"
+        ]
+      },
+      "10-unique-occupied": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          920,
+          549
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": [
+          "exploration-recon",
+          "recycle",
+          "exploration-attack"
+        ]
+      },
+      "11-unique-occupied-scouted": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          920,
+          553
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": [
+          "exploration-recon",
+          "recycle",
+          "exploration-attack"
+        ]
+      },
+      "12-anomaly-own-fleet": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          920,
+          549
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": [
+          "exploration-recon",
+          "recycle",
+          "expedition:off"
+        ]
+      },
+      "13-anomaly-out-of-range": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          920,
+          570
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": [
+          "exploration-recon:off",
+          "recycle",
+          "expedition:off"
+        ]
+      },
+      "14-debris-few": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          780,
+          356
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": []
+      },
+      "15-debris-many-top": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          780,
+          1032
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": []
+      },
+      "16-debris-many-end": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          780,
+          1032
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": []
+      },
+      "17-debris-empty": {
+        "clipped": [],
+        "fits": true,
+        "size": [
+          780,
+          310
+        ],
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": []
+      },
+      "18-map-system-picker": {
+        "fits": true,
+        "size": null,
+        "horizontalOverflow": false,
+        "nativeTitles": [],
+        "nativeSelects": 0,
+        "actions": []
+      }
+    }
+  }
+}

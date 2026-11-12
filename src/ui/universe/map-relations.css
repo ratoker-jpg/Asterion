@@ -172,8 +172,6 @@
 .universe-radar .universe-radar__row strong { color: color-mix(in srgb, var(--legend-k, #fff) 45%, #fff); }
 
 /* ---- the planet card says why ---- */
-.uw .uw-foot-status b .map-mark { margin-right: 5px; color: var(--uw-k, inherit); }
-.uw .uw-foot-why { margin: 3px 0 0; font-size: 11px; line-height: 1.3; color: #a9bbc4; }
 
 @media (prefers-reduced-motion: reduce) {
   :root .workspace--universe .universe-view-v3.universe-radar .system-planet.map-tone--enemy.is-attackable::after { animation: none; }
