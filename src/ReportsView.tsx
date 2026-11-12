@@ -5,7 +5,9 @@ import { BattleReportModal } from './BattleReportsView';
 import { FactionGeneralPortrait } from './ui/FactionGeneralPortrait.tsx';
 import { EMPTY_ART } from './ui/ui-art.ts';
 import { EmblemGlyph } from './ui/command/EmblemGlyph.tsx';
-import { ReportArtwork, ReportGlyph, ReportSheetView } from './ui/messages/ReportSheetView.tsx';
+import { ReportArtwork, ReportGlyph, ReportHero, ReportSheetView } from './ui/messages/ReportSheetView.tsx';
+import { MISSION_BANNERS } from './ui/ui-art.ts';
+import { formatShortAmount, reportRowValue, type HeadlineContext, type ReportValue } from './domain/reports/headline.ts';
 import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
 import { isAsterionLocalPlayerId, type BattleReport } from './domain/combat/report.ts';
 import { createBattleReportViewModel } from './domain/combat/battle-report-view-model.ts';
@@ -45,7 +47,6 @@ import type { UniverseCoordinate } from './domain/universe/types.ts';
 import type { PirateReconReport } from './domain/pirates/recon-report.ts';
 import './ui/messages/messages.css';
 
-const PAGE_SIZE = 7;
 const numberFormat = new Intl.NumberFormat('ru-RU');
 
 type MessageFolderId =
@@ -71,8 +72,8 @@ type MessageFolder = {
 const MESSAGE_FOLDERS: readonly MessageFolder[] = [
   { id: 'personal', label: 'Личные', glyph: 'personal', category: 'personal' },
   { id: 'system', label: 'Система', glyph: 'system', category: 'system' },
-  { id: 'battle', label: 'Доклады', glyph: 'battle', category: 'battle' },
-  { id: 'command', label: 'Командные доклады', glyph: 'command', category: 'command' },
+  { id: 'battle', label: 'Бои', glyph: 'battle', category: 'battle' },
+  { id: 'command', label: 'Командные', glyph: 'command', category: 'command' },
   { id: 'arena', label: 'Арена', glyph: 'arena', category: 'arena' },
   { id: 'flights', label: 'Полёты', glyph: 'flights', category: 'flights' },
   { id: 'alliances', label: 'Союзы', glyph: 'alliances', category: 'alliances' },
@@ -92,14 +93,9 @@ const EMPTY_COPY: Record<ReportCategory, { title: string; body: string }> = {
 
 const FILTER_LABELS: Record<ReportFilter, string> = {
   all: 'Все',
-  unread: 'Непрочитанные',
-  saved: 'Сохранённые бои',
+  unread: 'Новые',
+  saved: 'Сохранённые',
 };
-
-function formatDate(timestamp?: string) {
-  if (!timestamp) return 'Сейчас';
-  return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(timestamp));
-}
 
 function formatTime(timestamp?: string) {
   if (!timestamp) return 'Сейчас';
@@ -126,37 +122,54 @@ function SearchGlyph() {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.6" /><path d="m15.5 15.5 5 5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>;
 }
 
-function ActionGlyph({ kind }: { kind: 'prev' | 'next' }) {
-  const common = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.65, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
-  if (kind === 'prev') return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="m15 5-7 7 7 7" /></svg>;
-  return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="m9 5 7 7-7 7" /></svg>;
-}
-
 /** Folder counter: unread / total, the unread part capped so the pill never outgrows the nav. */
 function formatUnread(unread: number) {
   return unread > 99 ? '99+' : String(unread);
 }
 
-function ReportListItem({ item, command, active, read, saved, selected, onOpen, onSelect }: {
+/** «Сегодня», «Вчера», «10.11.2026»: the list is grouped by day. */
+function dayLabel(timestamp: string | undefined, now: number) {
+  if (!timestamp) return 'Сегодня';
+  const at = new Date(timestamp);
+  const day = new Date(at.getFullYear(), at.getMonth(), at.getDate()).getTime();
+  const today = new Date(new Date(now).getFullYear(), new Date(now).getMonth(), new Date(now).getDate()).getTime();
+  if (day >= today) return 'Сегодня';
+  if (day >= today - 86_400_000) return 'Вчера';
+  return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(at);
+}
+
+/** One line under the title of a row: who and where. */
+function whoWhere(item: ReportItem, battle: BattleReport | null | undefined, isMine: (id?: string | null) => boolean) {
+  if (item.letter) return item.letter.sender.name;
+  if (item.spyReport) return `${item.spyReport.targetOwnerName} · [${item.spyReport.targetCoordinate.galaxy}:${item.spyReport.targetCoordinate.system}:${item.spyReport.targetCoordinate.position}]`;
+  if (battle) {
+    const enemy = isMine(battle.attacker.playerId) ? battle.defender : battle.attacker;
+    return [enemy.playerName || enemy.planetName, enemy.coordinates].filter(Boolean).join(' · ') || item.preview;
+  }
+  return item.preview;
+}
+
+function ReportListItem({ item, battle, value, who, command, active, read, saved, onOpen }: {
   item: ReportItem;
+  battle?: BattleReport | null;
+  value: ReportValue | null;
+  who: string;
   command?: CommandState;
   active: boolean;
   read: boolean;
   saved: boolean;
-  selected: boolean;
   onOpen: () => void;
-  onSelect: (checked: boolean) => void;
 }) {
+  const title = item.letter?.subject ?? item.title;
   return (
-    <article className={`reports-list-item reports-v2-tone-${item.statusTone} ${item.brief ? 'reports-list-item--brief' : ''} ${active ? 'active' : ''} ${read ? 'read' : 'unread'} ${selected ? 'selected' : ''}`} data-report-item-id={item.id} data-report-kind={item.spyReport ? "spy" : item.pirateReconReport ? "pirate-recon" : item.overpopulationReport ? "overpopulation" : item.source} data-pirate-recon-outcome={item.pirateReconReport?.outcome}>
-      <label className="reports-list-check">
-        <input type="checkbox" checked={selected} onChange={(event) => onSelect(event.target.checked)} aria-label={`Выбрать сообщение: ${item.title}`} />
-        <span aria-hidden="true" />
-      </label>
-      <button type="button" className="reports-list-open" onClick={onOpen} aria-current={active ? 'true' : undefined} aria-label={`Открыть сообщение: ${item.title}`}>
+    <article className={`reports-list-item reports-v2-tone-${item.statusTone} ${item.brief ? 'reports-list-item--brief' : ''} ${active ? 'active' : ''} ${read ? 'read' : 'unread'}`} data-report-item-id={item.id} data-report-kind={item.spyReport ? "spy" : item.pirateReconReport ? "pirate-recon" : item.overpopulationReport ? "overpopulation" : battle ? "battle" : item.source} data-pirate-recon-outcome={item.pirateReconReport?.outcome}>
+      <button type="button" className="reports-list-open" onClick={onOpen} aria-current={active ? 'true' : undefined} aria-label={`Открыть сообщение: ${title}${read ? '' : ', новое'}`}>
         <span className={`reports-list-icon reports-list-icon--${item.category} reports-v2-art`}><ReportArtwork item={item} command={command} /></span>
-        <span className="reports-list-copy">{item.brief ? null : <small>{item.typeLabel}</small>}<strong>{item.title}</strong><em>{item.preview}</em></span>
-        <span className="reports-list-meta"><time>{formatTime(item.timestamp)}</time>{saved ? <i className="reports-favorite-dot" aria-label="Бой сохранён" /> : null}{!read ? <b className="reports-unread-dot" aria-label="Непрочитано" /> : null}</span>
+        <span className="reports-list-copy"><strong>{title}</strong><em>{who}</em></span>
+        <span className="reports-list-meta">
+          {value ? <b className={`reports-list-value reports-tone--${value.tone}`} data-report-row-value={value.amount ?? ''}>{value.text}</b> : null}
+          <time>{saved ? <i className="reports-favorite-dot" aria-label="Бой сохранён" /> : null}{formatTime(item.timestamp)}</time>
+        </span>
       </button>
     </article>
   );
@@ -216,6 +229,7 @@ function PlayerProfile({ profile, score, command, mode, recentItems, facts, onOp
   const membership = selectOwnerMembership(command, profile.playerId);
   const alliance = membership ? toAllianceIdentity(membership.alliance) : null;
   const role = membership ? selectRole(membership.alliance, profile.playerId) : null;
+  const totalPoints = metrics.find((metric) => metric.key === 'totalPoints')?.value ?? null;
   const factRows: { label: string; value: string }[] = [
     { label: 'Раса', value: getCombatFactionName(profile.factionId) },
     ...(facts.ratingPlace ? [{ label: 'Место в рейтинге', value: facts.ratedPlayers ? `${numberFormat.format(facts.ratingPlace)} из ${numberFormat.format(facts.ratedPlayers)}` : numberFormat.format(facts.ratingPlace) }] : []),
@@ -226,7 +240,18 @@ function PlayerProfile({ profile, score, command, mode, recentItems, facts, onOp
   ];
   return (
     <section className="reports-profile-view" data-qa-profile aria-labelledby="reports-profile-title">
-      <header className="reports-profile-title-plate"><h2 id="reports-profile-title">Профиль игрока</h2></header>
+      <span id="reports-profile-title" hidden>Профиль игрока</span>
+      <ReportHero
+        banner={MISSION_BANNERS['sun-support']!}
+        kicker="Профиль игрока"
+        tone="info"
+        title={<span className="ut-selectable">{profile.displayName}</span>}
+        subline={`${getCombatFactionName(profile.factionId)} · ${alliance ? `[${alliance.tag}] ${alliance.name}` : 'без союза'}`}
+        value={totalPoints == null ? '—' : formatShortAmount(totalPoints)}
+        valueTone="info"
+        caption={facts.ratingPlace ? `общие очки · ${numberFormat.format(facts.ratingPlace)} место${facts.ratedPlayers ? ` из ${numberFormat.format(facts.ratedPlayers)}` : ''}` : 'общие очки'}
+        qa={{ 'data-qa-profile-hero': '' }}
+      />
       <div className="reports-profile-card">
         <section className="reports-profile-identity" aria-label="Аватар игрока">
           <ProfileAvatar displayName={profile.displayName} factionId={profile.factionId} />
@@ -249,17 +274,7 @@ function PlayerProfile({ profile, score, command, mode, recentItems, facts, onOp
   );
 }
 
-function FolderActions({ folder, items, selectedIds, onSelectAll, onDeleteAll, onDeleteSelected }: { folder: MessageFolder; items: readonly ReportItem[]; selectedIds: ReadonlySet<string>; onSelectAll: (checked: boolean) => void; onDeleteAll: () => void; onDeleteSelected: () => void }) {
-  const allSelected = items.length > 0 && items.every((item) => selectedIds.has(item.id));
-  return (
-    <div className="reports-folder-actions" data-qa-folder-actions>
-      <label className="reports-select-all"><input type="checkbox" checked={allSelected} disabled={!items.length} onChange={(event) => onSelectAll(event.target.checked)} aria-label={`Выбрать все сообщения в разделе ${folder.label}`} /><span>Выбрать все</span><b>{selectedIds.size} из {items.length}</b></label>
-      <div className="reports-delete-actions"><button type="button" data-qa-delete-all disabled={!items.length} onClick={onDeleteAll}>Удалить все</button><button type="button" data-qa-delete-selected disabled={!selectedIds.size} onClick={onDeleteSelected}>Удалить выбранные</button></div>
-    </div>
-  );
-}
-
-export function ReportsView({ retentionCutoff, battleReports, planetNames, savedBattleReportIds, operations, command, espionage, pirateReconReports, pirateFlights, exploration, initialSelectedReportId, profile, score, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy, onOpenUniverseTarget, onOpenPirateUniverse, canRepeatFlight, onRepeatFlight, onCollectDebris, onAttackSpyTarget, profileFacts, npcStrategy, worldNow, onAnswerLetter }: {
+export function ReportsView({ ownFleetAttack, retentionCutoff, battleReports, planetNames, savedBattleReportIds, operations, command, espionage, pirateReconReports, pirateFlights, exploration, initialSelectedReportId, profile, score, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy, onOpenUniverseTarget, onOpenPirateUniverse, canRepeatFlight, onRepeatFlight, onCollectDebris, onAttackSpyTarget, profileFacts, npcStrategy, worldNow, onAnswerLetter }: {
   /** Letters older than this world time are gone (24-hour rule); absent in Test Mode. */
   retentionCutoff?: number;
   battleReports: readonly BattleReport[];
@@ -298,13 +313,14 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
   worldNow?: number;
   /** «Принять» / «Отказаться» of a bot letter; returns why it could not be done, or null. */
   onAnswerLetter?: (ref: LetterRef, answer: 'accept' | 'decline') => string | null;
+  /** Attack of all the player's ships: the risk plaque of a spy report. */
+  ownFleetAttack?: number;
 }) {
   const [activeFolder, setActiveFolder] = useState<MessageFolderId>('profile');
   const [filter, setFilter] = useState<ReportFilter>('all');
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [selectedId, setSelectedId] = useState('');
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [openBattleReportId, setOpenBattleReportId] = useState<string | null>(null);
   const [answerError, setAnswerError] = useState('');
   useEffect(() => { setAnswerError(''); }, [selectedId]);
@@ -330,8 +346,20 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
   const visibleItems = useMemo(() => activeCategory ? filterReportItems(items, state, { category: activeCategory, filter, search, keepId: selectedId || undefined }, savedBattleReportIds) : [], [activeCategory, items, state, filter, search, selectedId, savedBattleReportIds]);
   // The last five messages of every folder (owner, 11.11.2026).
   const recentProfileItems = getVisibleReportItems(items, state).slice(0, 5);
-  const pageCount = Math.max(1, Math.ceil(visibleItems.length / PAGE_SIZE));
-  const pagedItems = visibleItems.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const battleById = useMemo(() => new Map(battleReports.map((report) => [report.id, report] as const)), [battleReports]);
+  const isMine = useMemo(() => (id?: string | null) => (isAsterionLocalPlayerId(profile.playerId) ? isAsterionLocalPlayerId(id) : id === profile.playerId), [profile.playerId]);
+  const headlineContext = useMemo<HeadlineContext>(() => ({
+    isMine,
+    playerFactionId: profile.factionId,
+    targetBuildings: (planetId) => espionage?.targets?.[planetId]?.buildings,
+    ownFleetAttack,
+    now: worldNow,
+  }), [isMine, profile.factionId, espionage?.targets, ownFleetAttack, worldNow]);
+  // One value and one «who / where» per row; the list scrolls, so all rows are built.
+  const rows = useMemo(() => visibleItems.map((item) => {
+    const battle = item.battleReportId ? battleById.get(item.battleReportId) ?? null : null;
+    return { item, battle, value: reportRowValue(item, battle, headlineContext), who: whoWhere(item, battle, isMine) };
+  }), [visibleItems, battleById, headlineContext, isMine]);
   const selectedItem = visibleItems.find((item) => item.id === selectedId) ?? null;
   const selectedBattle = findBattleReport(battleReports, selectedItem);
   const selectedBattleSaved = selectedItem?.battleReportId ? savedBattleReportIds.includes(selectedItem.battleReportId) : false;
@@ -341,9 +369,7 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
   }) : null;
 
   useEffect(() => {
-    setPage(1);
     if (pendingInitialReportId.current === null) setSelectedId('');
-    setSelectedIds(new Set());
     if (activeFolderMeta.category) setFilter('all');
   }, [activeFolder, activeFolderMeta.category]);
   useEffect(() => {
@@ -368,12 +394,10 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
     if (targetIndex < 0) return;
     const target = visibleItems[targetIndex]!;
     if (activeCategory !== target.category) return;
-    setPage(Math.floor(targetIndex / PAGE_SIZE) + 1);
     setSelectedId(target.id);
     pendingInitialReportId.current = null;
   }, [activeCategory, initialSelectedReportId, visibleItems]);
   useEffect(() => { if (activeCategory !== 'battle' && filter === 'saved') setFilter('all'); }, [activeCategory, filter]);
-  useEffect(() => { setPage((current) => Math.min(current, pageCount)); }, [pageCount]);
   useEffect(() => {
     if (activeFolder === 'profile' || !activeCategory || !visibleItems.length) {
       if (selectedId) setSelectedId('');
@@ -382,20 +406,12 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
     if (!visibleItems.some((item) => item.id === selectedId)) setSelectedId(visibleItems[0].id);
   }, [activeCategory, activeFolder, selectedId, visibleItems]);
   useEffect(() => {
-    const allowed = new Set(folderItems.map((item) => item.id));
-    setSelectedIds((current) => {
-      const next = new Set([...current].filter((id) => allowed.has(id)));
-      return next.size === current.size ? current : next;
-    });
-  }, [folderItems]);
-  useEffect(() => {
     const onRuntimeReset = () => {
       setActiveFolder('profile');
       setFilter('all');
       setSearch('');
-      setPage(1);
+      setSearchOpen(false);
       setSelectedId('');
-      setSelectedIds(new Set());
       setOpenBattleReportId(null);
     };
     window.addEventListener(RUNTIME_RESET_EVENT, onRuntimeReset);
@@ -420,8 +436,6 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
 
   const openItem = (item: ReportItem) => {
     setSelectedId(item.id);
-    const index = visibleItems.findIndex((candidate) => candidate.id === item.id);
-    if (index >= 0) setPage(Math.floor(index / PAGE_SIZE) + 1);
     if (!isRead(item)) onStateChange(withOverpopulationReports(markReportRead(state, item.id), state));
   };
   // Owner rule (06.11.2026): what is open in the reading pane is read, the first
@@ -430,36 +444,17 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
     if (selectedItem && !isRead(selectedItem)) onStateChange(withOverpopulationReports(markReportRead(state, selectedItem.id), state));
   }, [selectedItem, isRead, state, onStateChange]);
 
-  const navigateSelected = (direction: -1 | 1) => {
-    if (!visibleItems.length) return;
-    const currentIndex = Math.max(0, visibleItems.findIndex((item) => item.id === selectedId));
-    const nextIndex = Math.min(visibleItems.length - 1, Math.max(0, currentIndex + direction));
-    openItem(visibleItems[nextIndex]);
-  };
-
-  const selectAll = (checked: boolean) => setSelectedIds(checked ? new Set(folderItems.map((item) => item.id)) : new Set());
-  const toggleSelected = (id: string, checked: boolean) => setSelectedIds((current) => { const next = new Set(current); if (checked) next.add(id); else next.delete(id); return next; });
   const deleteAll = () => {
     if (!activeCategory || !window.confirm('Вы уверены, что хотите удалить все сообщения в этом разделе?')) return;
     onStateChange(withOverpopulationReports(deleteAllReports(state, items, activeCategory), state));
-    setSelectedIds(new Set());
     setSelectedId('');
   };
-  const deleteSelected = () => {
-    if (!activeCategory || !window.confirm('Вы уверены, что хотите удалить выбранные сообщения в этом разделе?')) return;
-    onStateChange(withOverpopulationReports(deleteSelectedReports(state, items, activeCategory, [...selectedIds]), state));
-    setSelectedIds(new Set());
-    setSelectedId('');
-  };
-
   const deleteCurrent = () => {
     if (!activeCategory || !selectedItem || !window.confirm('Удалить это сообщение?')) return;
     onStateChange(withOverpopulationReports(deleteSelectedReports(state, items, activeCategory, [selectedItem.id]), state));
-    setSelectedIds((current) => new Set([...current].filter((id) => id !== selectedItem.id)));
     setSelectedId('');
   };
 
-  const selectedIndex = selectedItem ? visibleItems.findIndex((item) => item.id === selectedItem.id) : -1;
   const availableFilters: ReportFilter[] = activeCategory === 'battle' ? ['all', 'unread', 'saved'] : ['all', 'unread'];
   const markableItems = getVisibleReportItems(items, state);
   const markAll = () => onStateChange(withOverpopulationReports(markAllReportsRead(state, markableItems), state));
@@ -480,6 +475,11 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
     else if (action.kind === 'collect_debris' && action.coordinate) onCollectDebris?.(action.coordinate);
     else if (action.kind === 'attack_target' && selectedItem.spyReport) onAttackSpyTarget?.(selectedItem.spyReport);
     else if (action.kind === 'repeat_flight' && action.flightId) onRepeatFlight?.(action.flightId);
+    else if (action.kind === 'show_on_map' && action.coordinate) {
+      const place = selectedItem.pirateReconReport;
+      if (place) onOpenPirateUniverse(action.coordinate, place.contactCycleKey);
+      else onOpenUniverseTarget({ coordinate: action.coordinate });
+    }
   };
   const wired: Partial<Record<ReportSheetAction['kind'], boolean>> = {
     collect_debris: Boolean(onCollectDebris), attack_target: Boolean(onAttackSpyTarget), repeat_flight: Boolean(onRepeatFlight),
@@ -499,6 +499,8 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
         key={selectedItem.id}
         item={selectedItem}
         sheet={selectedSheet}
+        battle={selectedBattle}
+        context={headlineContext}
         exploration={exploration}
         command={command}
         onOpenUniverseTarget={onOpenUniverseTarget}
@@ -506,45 +508,75 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
         lead={selectedBattle ? <SunReportStrip report={selectedBattle} /> : undefined}
       />;
 
+  // Sections with mail on top with counters; empty ones below, grey, under «ПУСТО» (owner, 12.11.2026).
+  const filledFolders = MESSAGE_FOLDERS.filter((folder) => folder.category && counts[folder.category] > 0);
+  const emptyFolders = MESSAGE_FOLDERS.filter((folder) => !folder.category || counts[folder.category] === 0);
+  const folderButton = (folder: MessageFolder, empty: boolean) => {
+    const unread = folder.category ? unreadCounts[folder.category] : 0;
+    const total = folder.category ? counts[folder.category] : 0;
+    return <button key={folder.id} type="button" data-message-folder={folder.id} data-folder-empty={empty ? '' : undefined} className={`${activeFolder === folder.id ? 'active' : ''} ${empty ? 'is-empty' : ''}`} onClick={() => openFolder(folder.id)} aria-current={activeFolder === folder.id ? 'page' : undefined} aria-label={`${folder.label}: ${unread} непрочитанных из ${total}`}>
+      <span className="reports-nav-art"><ReportGlyph kind={folder.glyph} /></span>
+      <strong>{folder.label}</strong>
+      {empty ? null : <span className="reports-folder-counter" aria-hidden="true"><b className={`reports-v2-unread-count ${unread > 0 ? 'is-new' : ''}`}>{unread > 0 ? formatUnread(unread) : formatUnread(total)}</b></span>}
+    </button>;
+  };
+  const savedBattle = (item: ReportItem) => Boolean(item.battleReportId && savedBattleReportIds.includes(item.battleReportId));
+  const clockNow = worldNow ?? Date.now();
+  const groupedRows: { day: string; rows: typeof rows }[] = [];
+  for (const row of rows) {
+    const day = dayLabel(row.item.timestamp, clockNow);
+    const last = groupedRows[groupedRows.length - 1];
+    if (last?.day === day) last.rows.push(row);
+    else groupedRows.push({ day, rows: [row] });
+  }
+  const hasMail = Boolean(activeCategory && counts[activeCategory]);
+
   return (
-    <main className={`reports-view ${activeFolder === 'profile' ? 'reports-view--profile' : 'reports-view--folder'}`} aria-label="Сообщения">
+    <main className={`reports-view reports-view--mail ${activeFolder === 'profile' ? 'reports-view--profile' : 'reports-view--folder'}`} aria-label="Сообщения">
       <aside className="reports-categories">
         <header><h1>Сообщения</h1></header>
         <button type="button" className={`reports-profile-nav ${activeFolder === 'profile' ? 'active' : ''}`} onClick={() => openFolder('profile')} data-message-profile aria-label="Открыть профиль" aria-current={activeFolder === 'profile' ? 'page' : undefined}><span className="reports-nav-art"><ProfileGlyph /></span><strong>Профиль</strong></button>
         <nav className="reports-message-nav" aria-label="Папки сообщений">
-          {MESSAGE_FOLDERS.map((folder) => {
-            const unread = folder.category ? unreadCounts[folder.category] : 0;
-            const total = folder.category ? counts[folder.category] : 0;
-            return <button key={folder.id} type="button" data-message-folder={folder.id} className={activeFolder === folder.id ? 'active' : ''} onClick={() => openFolder(folder.id)} aria-current={activeFolder === folder.id ? 'page' : undefined} aria-label={`${folder.label}: ${unread} непрочитанных из ${total}`}><span className="reports-nav-art"><ReportGlyph kind={folder.glyph} /></span><strong>{folder.label}</strong><span className="reports-folder-counter" aria-hidden="true"><b className={`reports-v2-unread-count ${unread > 0 ? 'is-new' : ''}`}>{formatUnread(unread)}</b><i>/{numberFormat.format(total)}</i></span></button>;
-          })}
+          {filledFolders.map((folder) => folderButton(folder, false))}
+          {emptyFolders.length ? <span className="reports-nav-empty-label" data-qa-empty-label>Пусто</span> : null}
+          {emptyFolders.map((folder) => folderButton(folder, true))}
         </nav>
-        <button className="reports-mark-all" type="button" data-qa-mark-all-read disabled={!markableItems.some((item) => !isRead(item))} onClick={markAll}>Отметить все прочитанными</button>
       </aside>
 
       {activeFolder === 'profile' ? <PlayerProfile profile={profile} score={score} command={command} mode={mode} recentItems={recentProfileItems} facts={profileFacts ?? {}} onOpenCommand={onOpenCommand} onOpenItem={openFromProfile} /> : <section className="reports-folder-workspace" data-qa-folder-view={activeFolder}>
         <section className="reports-feed" data-qa-message-folder-view={activeFolder}>
-          <header className="reports-feed-head"><h2>{activeFolderMeta.label}</h2>{activeCategory ? <span className="reports-folder-count">{messagesLabel(counts[activeCategory])}</span> : null}</header>
-          {activeCategory ? <div className="reports-feed-tools">
+          <header className="reports-feed-head">
+            <h2>{activeFolderMeta.label}</h2>
+            {hasMail ? <button className="reports-mark-all" type="button" data-qa-mark-all-read disabled={!markableItems.some((item) => !isRead(item))} onClick={markAll}>Прочитать все</button> : null}
+          </header>
+          {hasMail ? <div className="reports-feed-tools">
             <div className="reports-v2-filter-segments" role="group" aria-label="Фильтр сообщений">{availableFilters.map((key) => <button key={key} type="button" aria-pressed={filter === key} onClick={() => setFilter(key)}>{FILTER_LABELS[key]}</button>)}</div>
-            <label className="reports-search"><span aria-hidden="true"><SearchGlyph /></span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск в разделе" aria-label="Поиск в разделе сообщений" /></label>
+            <button type="button" className={`reports-search-toggle ${searchOpen || search ? 'is-on' : ''}`} aria-pressed={searchOpen || Boolean(search)} aria-label="Поиск в разделе" data-qa-search-toggle onClick={() => { if (searchOpen) setSearch(''); setSearchOpen(!searchOpen); }}><SearchGlyph /></button>
           </div> : null}
-          {activeCategory ? <FolderActions folder={activeFolderMeta} items={folderItems} selectedIds={selectedIds} onSelectAll={selectAll} onDeleteAll={deleteAll} onDeleteSelected={deleteSelected} /> : null}
+          {hasMail && (searchOpen || search) ? <label className="reports-search"><span aria-hidden="true"><SearchGlyph /></span><input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск в разделе" aria-label="Поиск в разделе сообщений" /></label> : null}
           <div className="reports-list" data-qa-message-list>
-            {activeCategory ? pagedItems.length ? pagedItems.map((item) => <ReportListItem key={item.id} item={item} command={command} active={item.id === selectedId} read={isRead(item)} selected={selectedIds.has(item.id)} saved={Boolean(item.battleReportId && savedBattleReportIds.includes(item.battleReportId))} onOpen={() => openItem(item)} onSelect={(checked) => toggleSelected(item.id, checked)} />) : <p className="reports-list-empty-status" role="status">{search || filter !== 'all' ? 'Ничего не найдено.' : 'Сообщений в этом разделе пока нет.'}</p> : <EmptyFolder folder={activeFolderMeta} />}
+            {!hasMail
+              ? <p className="reports-list-empty-status reports-list-empty-status--folder" role="status">Здесь пусто</p>
+              : rows.length
+                ? groupedRows.map((day, index) => <section className="reports-list-day" key={`${day.day}-${index}`} aria-label={day.day}>
+                  <h3 className="reports-list-day__label">{day.day}</h3>
+                  {day.rows.map(({ item, battle, value, who }) => <ReportListItem key={item.id} item={item} battle={battle} value={value} who={who} command={command} active={item.id === selectedId} read={isRead(item)} saved={savedBattle(item)} onOpen={() => openItem(item)} />)}
+                </section>)
+                : <p className="reports-list-empty-status" role="status">{search || filter !== 'all' ? 'Ничего не найдено.' : 'Сообщений в этом разделе пока нет.'}</p>}
           </div>
-          {activeCategory && pageCount > 1 ? <footer className="reports-pagination"><button type="button" aria-label="Предыдущая страница" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}><ActionGlyph kind="prev" /></button><span>Страница <b>{page}</b> из {pageCount}</span><button type="button" aria-label="Следующая страница" disabled={page >= pageCount} onClick={() => setPage((current) => Math.min(pageCount, current + 1))}><ActionGlyph kind="next" /></button></footer> : null}
+          {hasMail ? <footer className="reports-feed-foot">
+            <span className="reports-folder-count">{messagesLabel(visibleItems.length)}</span>
+            <button type="button" className="reports-delete-all" data-qa-delete-all disabled={!folderItems.length} onClick={deleteAll}>Удалить все</button>
+          </footer> : null}
         </section>
 
         <section className="reports-preview" aria-label="Открытое сообщение">
-          {activeCategory && selectedItem ? <header className="reports-preview-head"><span>{selectedIndex + 1} из {visibleItems.length}</span><div className="reports-preview-actions"><button type="button" aria-label="Предыдущее сообщение" disabled={selectedIndex <= 0} onClick={() => navigateSelected(-1)}><ActionGlyph kind="prev" /></button><button type="button" aria-label="Следующее сообщение" disabled={selectedIndex < 0 || selectedIndex >= visibleItems.length - 1} onClick={() => navigateSelected(1)}><ActionGlyph kind="next" /></button></div></header> : null}
           <div className="reports-preview-scroll">{previewBody}</div>
           {activeCategory && selectedItem ? <footer className="reports-preview-footer">
             {answerError ? <p className="reports-answer-error" role="alert" data-qa-letter-error>{answerError}</p> : null}
+            <button type="button" className="reports-delete-current" onClick={deleteCurrent}>Удалить</button>
             <div className="reports-preview-footer-actions">
-              {selectedItem.battleReportId ? <button type="button" className={selectedBattleSaved ? 'restore' : ''} aria-pressed={selectedBattleSaved} onClick={() => onToggleBattleSaved(selectedItem.battleReportId!, !selectedBattleSaved)}>{selectedBattleSaved ? 'УБРАТЬ ИЗ СОХРАНЁННЫХ' : 'СОХРАНИТЬ БОЙ'}</button> : null}
-              <button type="button" className="reports-delete-current" onClick={deleteCurrent}>Удалить</button>
-            </div>
-            <div className="reports-preview-footer-actions">
+              {selectedItem.battleReportId ? <button type="button" className={selectedBattleSaved ? 'restore' : ''} aria-pressed={selectedBattleSaved} data-report-action="save_battle" onClick={() => onToggleBattleSaved(selectedItem.battleReportId!, !selectedBattleSaved)}>{selectedBattleSaved ? 'Убрать из сохранённых' : 'Сохранить бой'}</button> : null}
               {[...sheetActions.filter((action) => !action.primary), ...sheetActions.filter((action) => action.primary)].map((action) => <button
                 key={action.kind}
                 type="button"

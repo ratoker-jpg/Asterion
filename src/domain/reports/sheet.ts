@@ -35,7 +35,9 @@ export type ReportSheetActionKind =
   | 'open_battle' | 'simulate_battle' | 'recall_spy' | 'open_fleets' | 'open_command'
   /** The Fleets screen prefilled: recyclers to the battle's debris, an attack on the spied planet, the same flight again. */
   | 'collect_debris' | 'attack_target' | 'repeat_flight'
-  | 'accept' | 'decline';
+  | 'accept' | 'decline'
+  /** The report's place on the map (the same link as its coordinates). */
+  | 'show_on_map';
 export type ReportSheetAction = { kind: ReportSheetActionKind; label: string; primary: boolean; missionId?: string; flightId?: string; coordinate?: ReportCoordinate };
 
 /** A titled list of facts inside «Подробности» (the bonuses of one battle side…). */
@@ -228,7 +230,7 @@ function battleSheet(item: ReportItem, viewModel: BattleReportViewModel): Report
       // Owner journal: most attacks are followed by recyclers to the same point.
       ...(viewModel.debrisOnOrbit && viewModel.debrisOnOrbit > 0 && debrisCoordinate
         ? [{ kind: 'collect_debris' as const, label: 'Собрать обломки', primary: true, coordinate: debrisCoordinate }] : []),
-      { kind: 'open_battle', label: 'Полный отчёт о бое', primary: true },
+      { kind: 'open_battle', label: 'Ход боя', primary: true },
     ],
   };
 }
@@ -316,8 +318,11 @@ function spySheet(item: ReportItem, report: SpyReportSnapshot): ReportSheet {
       { label: 'Передан', value: at(report.createdAt) },
     ],
     rounds: [],
-    // Owner journal: he attacks after spying.
-    actions: [{ kind: 'attack_target', label: 'Атаковать', primary: true }],
+    // Owner journal: he attacks after spying; the simulator takes the same snapshot.
+    actions: [
+      ...(report.quality === 'basic' ? [] : [{ kind: 'simulate_battle' as const, label: 'Моделировать бой', primary: false }]),
+      { kind: 'attack_target', label: 'Атаковать', primary: true },
+    ],
   };
 }
 
@@ -413,6 +418,13 @@ function letterSheet(item: ReportItem, letter: PersonalLetter): ReportSheet {
       meta: sender.alliance ? `[${sender.alliance.tag}] ${sender.alliance.name}` : 'Без союза',
       portrait: letterSenderPortrait(sender),
     };
+  const attacker = letter.attacker;
+  const sides: ReportSide[] = [side, ...(attacker ? [{
+    key: 'attacker',
+    role: 'Кто нападает',
+    name: attacker.name,
+    portrait: attacker.factionId ? { kind: 'faction', factionId: attacker.factionId } as const : attacker.ownerId ? { kind: 'initial', text: attacker.name.slice(0, 1) } as const : { kind: 'pirate' } as const,
+  }] : [])];
   const answers = letter.answers.slice(0, 2);
   const primaryIndex = Math.max(0, answers.findIndex((answer) => answer.primary));
   return {
@@ -423,7 +435,7 @@ function letterSheet(item: ReportItem, letter: PersonalLetter): ReportSheet {
     time: item.timestamp,
     place: letter.place ?? null,
     result: letter.result,
-    sides: [side],
+    sides,
     ships: [],
     resources: [],
     assets: [],
@@ -487,6 +499,8 @@ function itemActions(item: ReportItem, context: ReportSheetContext): ReportSheet
   return actions;
 }
 
+const MAP_KINDS: ReadonlySet<ReportSheetKind> = new Set(['recycling', 'gas', 'exploration-recon', 'expedition', 'flight', 'pirate-recon', 'pirate-absence']);
+
 /** One sheet for any report: header, shared blocks, footer actions (at most one primary). */
 export function buildReportSheet(item: ReportItem, battle?: BattleReportViewModel | null, context: ReportSheetContext = {}): ReportSheet {
   const sheet = item.letter
@@ -500,7 +514,14 @@ export function buildReportSheet(item: ReportItem, battle?: BattleReportViewMode
           : item.pirateReconReport
             ? pirateReconSheet(item)
             : blockSheet(item);
-  const actions = [...sheet.actions, ...itemActions(item, context)];
+  const coordinate = sheet.place?.coordinate;
+  const mapAction: ReportSheetAction[] = MAP_KINDS.has(sheet.kind) && coordinate ? [{ kind: 'show_on_map', label: 'Показать на карте', primary: false, coordinate }] : [];
+  const seen = new Set<ReportSheetActionKind>();
+  const actions = [...sheet.actions, ...itemActions(item, context), ...mapAction].filter((action) => {
+    if (seen.has(action.kind)) return false;
+    seen.add(action.kind);
+    return true;
+  });
   let primarySeen = false;
   return {
     ...sheet,

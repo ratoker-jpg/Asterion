@@ -1,3 +1,5 @@
+import { getFactionShipCatalog } from './domain/combat/faction-catalog.ts';
+import { isCombatFactionId } from './domain/combat/factions.ts';
 import { isFlightEventForPlayer, isHostileFlightIncomingToPlayer } from './application/flight-visibility.ts';
 import { getClockNow, publishClock } from './application/shared-clock';
 import { SAVE_FLUSH_EVENT } from './application/save-storage.ts';
@@ -1664,6 +1666,17 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     return Object.values(getReportUnreadCounts(items, state.reports)).reduce((total, count) => total + count, 0);
   }, [state.combat.reports, state.operations, state.command, state.espionage?.reports, state.espionage?.hunterNotices, state.espionage?.missions, state.espionage?.targets, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.reports, state.pirate?.reconReports, state.flights.records, state.exploration, reportRetentionAt, state.npcStrategy, letterClock]);
   // «Профиль игрока» in «Сообщения»: the same standings as «Рейтинг», planets and crystals; nothing invented.
+  // «их флот сильнее в N раз» on a spy report: attack of every ship the player owns, only while «Сообщения» is open.
+  const reportOwnFleetAttack = useMemo(() => {
+    if (activeRoute !== 'reports') return undefined;
+    const factionId = state.profile.factionId;
+    if (!isCombatFactionId(factionId)) return undefined;
+    return getFactionShipCatalog(factionId).reduce((total, ship) => {
+      if (ship.id === 'spy-probe') return total;
+      const count = Object.values(state.planets).reduce((sum, planet) => sum + Math.max(0, Number(planet.fleet.ships[ship.id as keyof typeof planet.fleet.ships] ?? 0)), 0);
+      return total + count * (ship.combat?.attack ?? 0);
+    }, 0);
+  }, [activeRoute, state.planets, state.profile.factionId]);
   const reportProfileFacts = useMemo(() => {
     // Only while «Сообщения» is open: the rest of the game does not pay for it each tick.
     if (activeRoute !== 'reports') return {};
@@ -3515,6 +3528,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               npcStrategy={state.npcStrategy}
               worldNow={letterClock}
               onAnswerLetter={answerLetterFromReports}
+              ownFleetAttack={reportOwnFleetAttack}
             />
           ) : activeRoute === 'planet' && planetViewMode !== 'overview' ? (
             <ZoneView

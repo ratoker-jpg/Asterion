@@ -65,7 +65,9 @@ ${fleet}, подойдёт около ${clock(terms.strikeAt, reference)} (ра�
   let answers: LetterAnswer[] = [];
   let result: PersonalLetter['result'];
   let text = base;
+  let deadlineAt: number | undefined;
   if (proposal.status === 'proposed' && ctx.now < proposal.expiresAt) {
+    deadlineAt = proposal.expiresAt;
     result = { label: 'Новое', tone: 'info' };
     text = `${base}
 Ответьте до ${clock(proposal.expiresAt, reference)}.`;
@@ -78,6 +80,7 @@ ${fleet}, подойдёт около ${clock(terms.strikeAt, reference)} (ра�
     if (ctx.now > windowEnd) result = { label: 'Окно закрыто', tone: 'neutral' };
     else {
       result = { label: 'Принято', tone: 'success' };
+      deadlineAt = terms.strikeAt + terms.toleranceMs;
       text = `${base}
 Вы согласились: флот ${name} выйдет сам, ваш нужно отправить в это окно.`;
       answers = [{ ...OPEN_FLEETS }];
@@ -100,6 +103,7 @@ ${name} отозвал приглашение${proposal.reason === 'no-force' ? 
     subject: target ? `${name} зовёт на совместную атаку: ${target.name}` : `${name} зовёт на совместную атаку`,
     text, at: Math.max(proposal.createdAt, proposal.decidedAt ?? 0, proposal.closedAt ?? 0), result, answers,
     subjectRef: proposal.proposalId, ref: { kind: 'joint-strike', id: proposal.proposalId }, ...(place ? { place } : {}),
+    ...(deadlineAt !== undefined ? { deadlineAt } : {}),
   };
 }
 
@@ -128,7 +132,8 @@ function replyLetter(record: NpcLetterRecord, sender: PersonalLetter['sender']):
 
 function helpLetter(record: NpcLetterRecord, sender: PersonalLetter['sender'], ctx: NpcLetterContext): PersonalLetter {
   const target = record.planetId ? ctx.targets?.[record.planetId] : undefined;
-  const attacker = record.attackerId ? Object.values(ctx.targets ?? {}).find((item) => item.ownerId === record.attackerId)?.ownerName : undefined;
+  const attackerPlanet = record.attackerId ? Object.values(ctx.targets ?? {}).find((item) => item.ownerId === record.attackerId) : undefined;
+  const attacker = attackerPlanet?.ownerName;
   const where = target ? `${target.name} [${coordText(target.coordinate)}]` : 'его планету';
   const lands = record.arrivalAt !== undefined ? clock(record.arrivalAt, record.createdAt) : '';
   const who = record.attackerId ? `Флот игрока ${attacker ?? 'неизвестного'}` : 'Пираты';
@@ -137,8 +142,9 @@ function helpLetter(record: NpcLetterRecord, sender: PersonalLetter['sender'], c
   let answers: LetterAnswer[] = [];
   let result: PersonalLetter['result'];
   let text = base;
-  if (record.status === 'new' && ctx.now < record.expiresAt) { result = { label: 'Новое', tone: 'info' }; answers = [{ ...ACCEPT }, { ...DECLINE }]; }
-  else if (record.status === 'accepted' && ctx.now < record.expiresAt) { result = { label: 'Обещано', tone: 'success' }; text = `${base}
+  let deadlineAt: number | undefined;
+  if (record.status === 'new' && ctx.now < record.expiresAt) { result = { label: 'Новое', tone: 'info' }; answers = [{ ...ACCEPT }, { ...DECLINE }]; deadlineAt = record.expiresAt; }
+  else if (record.status === 'accepted' && ctx.now < record.expiresAt) { result = { label: 'Обещано', tone: 'success' }; deadlineAt = record.arrivalAt ?? record.expiresAt; text = `${base}
 Вы обещали помочь: отправьте дислокацию до ${lands}.`; answers = [{ ...OPEN_FLEETS }]; }
   else if (record.status === 'kept') { result = { label: 'Помощь пришла', tone: 'success' }; text = `${base}
 Ваш флот успел.`; }
@@ -151,6 +157,10 @@ function helpLetter(record: NpcLetterRecord, sender: PersonalLetter['sender'], c
     id: `letter:npc:${record.letterId}`, kind: 'bot-help-request', sender, subject: `${sender.name} просит помощи`, text,
     at: Math.max(record.createdAt, record.decidedAt ?? 0, record.closedAt ?? 0), result, answers,
     subjectRef: record.letterId, ref: { kind: 'help-request', id: record.letterId }, ...(place ? { place } : {}),
+    ...(deadlineAt !== undefined ? { deadlineAt } : {}),
+    attacker: record.attackerId
+      ? { name: attacker ?? 'Неизвестный', ownerId: record.attackerId, ...(attackerPlanet?.raceId ? { factionId: attackerPlanet.raceId } : {}) }
+      : { name: 'Пираты' },
   };
 }
 
@@ -162,8 +172,10 @@ function allyLetter(record: NpcLetterRecord, sender: PersonalLetter['sender'], c
   let answers: LetterAnswer[] = [];
   let result: PersonalLetter['result'];
   let text = base;
+  let deadlineAt: number | undefined;
   if (record.status === 'new' && ctx.now < record.expiresAt) {
     result = { label: 'Новое', tone: 'info' };
+    deadlineAt = record.expiresAt;
     text = `${base}
 Ответьте до ${clock(record.expiresAt, record.createdAt)}.`;
     answers = [{ ...ACCEPT }, { ...DECLINE }];
@@ -177,6 +189,7 @@ function allyLetter(record: NpcLetterRecord, sender: PersonalLetter['sender'], c
     id: `letter:npc:${record.letterId}`, kind: 'bot-ally-offer', sender, subject: `${sender.name} зовёт вас в союз`, text,
     at: Math.max(record.createdAt, record.decidedAt ?? 0, record.closedAt ?? 0), result, answers,
     subjectRef: record.letterId, ref: { kind: 'ally-offer', id: record.letterId },
+    ...(deadlineAt !== undefined ? { deadlineAt } : {}),
   };
 }
 
