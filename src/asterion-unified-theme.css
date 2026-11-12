@@ -480,21 +480,6 @@ html.asterion-repair-page .repair-page-head-v1::after{
 .science-missing-banner-v2{ border-radius:var(--ut-r-chip); }
 .science-requirement-badge-v2{ border-radius:7px; }
 
-/* --- settings --- */
-.settings-nav-v2{
-  border-radius:var(--ut-r-card);
-  background:var(--ut-surface-2);
-  border:1px solid var(--ut-border);
-}
-.settings-content-v2{ border-radius:var(--ut-r-panel); }
-.typography-row-v2{ border-radius:var(--ut-r-card); }
-.typography-stepper-v2{ border-radius:var(--ut-r-chip); }
-.typography-preview-v2{
-  border-radius:var(--ut-r-card);
-  background:var(--ut-surface-2);
-  border:1px solid var(--ut-border);
-}
-
 /* --- rating: src/rating.css --- */
 
 /* --- production bots interior --- */
@@ -793,9 +778,6 @@ html.asterion-repair-page .repair-page-head-v1::after{
 .sim-result-v1,
 .sim-unit-section-v1,
 .sim-race-v1,
-.settings-card-v2,
-.settings-reset-card-v2,
-.settings-disabled-card-v2,
 .module-placeholder-v3,
 .flight-timeline-route-panel,
 .shipyard-processes-v1,
@@ -871,12 +853,6 @@ html.asterion-repair-page .repair-page-head-v1::after{
 .science-ready-action-v2,
 .spaceport-sections-v2 button,
 .spaceport-queue-cancel,
-.settings-presets-v2 button,
-.typography-reset-v2,
-.preview-control-v2,
-.settings-segment-v2 button,
-.settings-reset-card-v2 .danger,
-.settings-disabled-card-v2 button,
 .fleet-selection-line-v1 button,
 .fleet-mission-icons-v1 button,
 .flight-timeline-close,
@@ -917,7 +893,6 @@ html.asterion-repair-page .repair-page-head-v1::after{
 .flight-timeline-step select,
 .flight-timeline-own-target select,
 .fleet-mission-select-v1 select,
-.settings-select-v2 select,
 .shipyard-count-v1 input,
 .sim-execution-v1 select,
 .sim-seed-v1 input,
@@ -1273,17 +1248,6 @@ body [data-asterion-typography="table"]{ font-size:calc(var(--ut-font-data) * va
 body [data-asterion-typography="control"]{ font-size:calc(var(--ut-font-control) * var(--text-scale-control)) !important; }
 body [data-asterion-typography="secondary"]{ font-size:calc(var(--ut-font-secondary) * var(--text-scale-secondary)) !important; }
 body [data-asterion-typography="helper"]{ font-size:calc(var(--ut-font-helper) * var(--text-scale-helper)) !important; }
-
-/* Settings rows retain their readable hierarchy at narrow desktop widths. */
-.settings-content-v2,
-.settings-panel-v2,
-.settings-presets-v2,
-.typography-controls-v2,
-.typography-preview-v2{ min-width:0; }
-.settings-reset-card-v2 > div{ min-width:0; }
-.settings-reset-card-v2 p,
-.settings-reset-card-v2 small,
-.settings-panel-heading-v2 p{ overflow-wrap:anywhere; }
 
 /* Operation cards are content, not HUD microcopy. The legacy typography
    controller applies the category floor to their text nodes; these rules

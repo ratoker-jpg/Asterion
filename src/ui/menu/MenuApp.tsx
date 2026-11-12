@@ -497,6 +497,7 @@ function MenuSettingsScreen({ onBack }: { onBack: () => void }) {
       <ScreenHeader eyebrow="ПАРАМЕТРЫ" title="НАСТРОЙКИ" onBack={onBack} />
       <div className="menu-settings__body">
         <SettingsView
+          variant="menu"
           preferences={preferences}
           onPreferencesChange={(next) => { setPreferences(next); persistPreferences(next); }}
           onReset={() => setPreferences(resetPreferences())}

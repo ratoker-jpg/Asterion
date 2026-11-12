@@ -10,7 +10,6 @@
 /* ---------- 1. Horizontal tabs and segments (recipe: fill from the top, thin light outline) ---------- */
 :root[data-faction] .rating-mode-tabs-v2 button.active,
 :root[data-faction] .main-tabs button.active,
-:root[data-faction] .settings-segment-v2 button.active,
 :root[data-faction] .battle-tabs-v1:not(.ops6 *) button.active,
 :root[data-faction] .sim-rounds-v1 button.active,
 :root[data-faction] .workspace--universe .universe-view-v3 .universe-tools button.active {
@@ -34,7 +33,6 @@
 /* ---------- 3. Vertical navigation and selected list rows (recipe: fill from the left, race bar) ---------- */
 :root[data-faction] .fleet-menu-group-v1 button.active,
 :root[data-faction] .science-sections-v2 button.active,
-:root[data-faction] .settings-nav-v2 nav button.active,
 :root[data-faction] .spaceport-sections-v2 button.active,
 :root[data-faction] .summary-zone-list button.active,
 :root[data-faction] .trade-resource-card.selected,

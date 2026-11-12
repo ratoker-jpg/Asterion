@@ -73,7 +73,7 @@ async function production(win, label) {
   await waitFor(win, `document.querySelector('[data-qa-settings-section="journal"]')`);
   await click(win, '[data-qa-settings-section="journal"]');
   await waitFor(win, `document.querySelector('[data-qa-bot-journal-download]')`);
-  if (!(await run(win, `/ЖУРНАЛ БОТОВ/.test(document.querySelector('[data-qa-bot-journal]').textContent)`))) throw new Error('Bot journal card is missing');
+  if (!(await run(win, `/Журнал ботов/i.test(document.querySelector('[data-qa-bot-journal]').textContent)`))) throw new Error('Bot journal card is missing');
   await capture(win, label, '01b-settings-bot-journal');
   await load(win);
   await waitFor(win, `document.querySelector('[data-qa-menu="main"]')`);

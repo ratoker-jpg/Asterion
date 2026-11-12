@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { describeServerStall, type CloudCampaignView } from '../../application/cloud/cloud-sync.ts';
 import { cloudBridge, type CloudServerStatus, type CloudSettings } from './cloud.ts';
+import { SettingsHead } from '../settings/SettingsParts.tsx';
 
 const dateTime = (ms: number) => new Date(ms).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
-const megabytes = (bytes: number) => `${(bytes / 1024 ** 2).toFixed(1)} МБ`;
-const gigabytes = (bytes: number) => `${(bytes / 1024 ** 3).toFixed(1)} ГБ`;
+const oneDecimal = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const megabytes = (bytes: number) => `${oneDecimal.format(bytes / 1024 ** 2)} МБ`;
+const gigabytes = (bytes: number) => `${oneDecimal.format(bytes / 1024 ** 3)} ГБ`;
 
 function lag(ms: number | null): string {
   if (ms === null) return '';
@@ -12,8 +14,10 @@ function lag(ms: number | null): string {
   return `отстаёт на ${Math.round(ms / 60_000)} мин`;
 }
 
-/** Settings → «Облачный мир»: address, key, on/off and what the relay did last. */
-export function CloudSettingsPanel({ heading }: { heading: (props: { eyebrow: string; title: string; description: string }) => ReactNode }) {
+const HEAD_TEXT = 'Сохранения хранятся на вашем сервере с резервными копиями. Пока вас нет, сервер продолжает мир; при входе игра сразу берёт его, если на этом компьютере ничего не менялось.';
+
+/** Settings → «Облачный мир»: address, key, on/off and what the relay did last. The key is never shown. */
+export function CloudSettingsPanel() {
   const bridge = cloudBridge();
   const [settings, setSettings] = useState<CloudSettings | null>(null);
   const [unavailable, setUnavailable] = useState(!bridge);
@@ -56,8 +60,14 @@ export function CloudSettingsPanel({ heading }: { heading: (props: { eyebrow: st
 
   if (unavailable) {
     return (
-      <section className="settings-panel-v2" data-qa-cloud-settings="unavailable">
-        {heading({ eyebrow: 'СИНХРОНИЗАЦИЯ', title: 'ОБЛАЧНЫЙ МИР', description: 'Облачное сохранение и мир, который живёт на сервере, пока вас нет, доступны в приложении Asterion для Windows.' })}
+      <section className="set-section" data-qa-cloud-settings="unavailable">
+        <SettingsHead title="Облачный мир" text={HEAD_TEXT} />
+        <div className="set-tile">
+          <div className="set-tile-text">
+            <strong>Только в приложении для Windows</strong>
+            <span>Облачные сохранения и мир, который живёт на сервере, пока вас нет, подключаются в приложении Asterion для Windows.</span>
+          </div>
+        </div>
       </section>
     );
   }
@@ -68,50 +78,52 @@ export function CloudSettingsPanel({ heading }: { heading: (props: { eyebrow: st
     : [];
   const live = server && 'status' in server ? server.status.live : null;
   const liveCampaign = live && server && 'campaigns' in server ? server.campaigns.find((campaign) => campaign.id === live.campaignId) : null;
+  const enabled = Boolean(settings?.enabled);
   return (
-    <section className="settings-panel-v2 cloud-settings" data-qa-cloud-settings={settings?.enabled ? 'on' : 'off'}>
-      {heading({
-        eyebrow: 'СИНХРОНИЗАЦИЯ',
-        title: 'ОБЛАЧНЫЙ МИР',
-        description: 'Сохранения кампаний хранятся на вашем сервере с резервными копиями. Пока вас нет в игре, сервер продолжает мир; при входе игра сразу получает его, если на этом компьютере ничего не менялось.',
-      })}
-      <div className="settings-grid-v2">
-        <div className="settings-card-v2">
-          <h3 className="utility-section-title">ПОДКЛЮЧЕНИЕ</h3>
-          <div className="settings-segment-v2">
-            <button type="button" className={`utility-control ${settings?.enabled ? 'active' : ''}`} onClick={() => void save({ enabled: true })} data-qa-cloud-toggle="on">ВКЛЮЧЁН</button>
-            <button type="button" className={`utility-control ${settings && !settings.enabled ? 'active' : ''}`} onClick={() => void save({ enabled: false })} data-qa-cloud-toggle="off">ВЫКЛЮЧЕН</button>
+    <section className="set-section cloud-settings" data-qa-cloud-settings={enabled ? 'on' : 'off'}>
+      <SettingsHead title="Облачный мир" text={HEAD_TEXT} />
+      <div className="set-grid set-grid--cloud">
+        <div className="set-tile">
+          <div className="set-tile-text">
+            <strong>Подключение</strong>
+            <span>На другом компьютере введите тот же адрес и ключ, затем откройте партию в «Загрузить игру → На сервере».</span>
           </div>
-          <label className="settings-select-v2">
-            <span className="utility-secondary">АДРЕС СЕРВЕРА</span>
-            <input className="utility-control cloud-settings__input" value={url} spellCheck={false} placeholder="https://сервер" onChange={(event) => setUrl(event.target.value)} data-qa-cloud-url />
+          <div className="set-seg" role="group" aria-label="Облачный мир">
+            <button type="button" className={enabled ? 'active' : ''} aria-pressed={enabled} onClick={() => void save({ enabled: true })} data-qa-cloud-toggle="on">Включён</button>
+            <button type="button" className={settings && !enabled ? 'active' : ''} aria-pressed={Boolean(settings) && !enabled} onClick={() => void save({ enabled: false })} data-qa-cloud-toggle="off">Выключен</button>
+          </div>
+          <label className="set-field">
+            <span>Адрес сервера</span>
+            <input className="set-input" value={url} spellCheck={false} placeholder="https://сервер" onChange={(event) => setUrl(event.target.value)} data-qa-cloud-url />
           </label>
-          <label className="settings-select-v2">
-            <span className="utility-secondary">КЛЮЧ ДОСТУПА</span>
-            <input className="utility-control cloud-settings__input" type="password" value={key} autoComplete="off" spellCheck={false}
+          <label className="set-field">
+            <span>Ключ доступа</span>
+            <input className="set-input" type="password" value={key} autoComplete="off" spellCheck={false}
               placeholder={settings?.hasKey ? 'ключ сохранён на этом компьютере' : 'вставьте ключ с сервера'} onChange={(event) => setKey(event.target.value)} data-qa-cloud-key />
           </label>
-          <div className="settings-presets-v2">
-            <button type="button" className="utility-control" onClick={() => void save({})} data-qa-cloud-save>СОХРАНИТЬ</button>
-            <button type="button" className="utility-control" disabled={checking || !settings?.enabled} onClick={() => void check()} data-qa-cloud-check>{checking ? 'ПРОВЕРКА…' : 'ПРОВЕРИТЬ СВЯЗЬ'}</button>
+          <div className="set-actions">
+            <button type="button" className="primary" onClick={() => void save({})} data-qa-cloud-save>Сохранить</button>
+            <button type="button" disabled={checking || !enabled} onClick={() => void check()} data-qa-cloud-check>{checking ? 'Проверяем…' : 'Проверить связь'}</button>
           </div>
-          {message ? <small className={`utility-helper cloud-settings__message is-${message.tone}`} role="status">{message.text}</small> : null}
-          <small className="utility-helper">Ключ хранится в папке профиля игры (cloud-key.txt) и не показывается здесь. На другом компьютере введите тот же адрес и ключ, затем откройте кампанию в «Загрузить игру → На сервере».</small>
+          {message ? <p className={`set-note cloud-settings__message is-${message.tone}`} role="status">{message.text}</p> : null}
+          <p className="set-note">Ключ хранится в папке профиля игры и здесь не показывается.</p>
         </div>
-        <div className="settings-card-v2" data-qa-cloud-status>
-          <h3 className="utility-section-title">СОСТОЯНИЕ</h3>
-          <dl className="cloud-settings__facts">
-            <div><dt>Последняя выгрузка</dt><dd data-qa-cloud-last-upload={upload ? (upload.ok ? 'ok' : 'error') : 'none'}>{upload
-              ? `${dateTime(upload.at)} · ${upload.ok ? `ревизия ${upload.revision}${upload.gzBytes ? ` · ${megabytes(upload.gzBytes)}` : ''}${upload.left ? ' · мир передан серверу' : ''}` : `ошибка: ${upload.error}`}`
+        <div className="set-tile" data-qa-cloud-status>
+          <div className="set-tile-text">
+            <strong>Состояние</strong>
+          </div>
+          <dl className="set-facts set-facts--stack">
+            <div><dt>Последняя копия на сервер</dt><dd data-qa-cloud-last-upload={upload ? (upload.ok ? 'ok' : 'error') : 'none'}>{upload
+              ? `${dateTime(upload.at)} · ${upload.ok ? `копия №${upload.revision}${upload.gzBytes ? ` · ${megabytes(upload.gzBytes)}` : ''}${upload.left ? ' · мир передан серверу' : ''}` : `ошибка: ${upload.error}`}`
               : 'ещё не было'}</dd></div>
             <div><dt>Мир на сервере</dt><dd data-qa-cloud-live={live ? 'running' : 'none'}>{live
-              ? `«${liveCampaign?.name ?? live.campaignId}» жив до ${live.worldAt ? dateTime(live.worldAt) : '—'}${live.lagMs !== null ? ` · ${lag(live.lagMs)}` : ''}${live.cpuShare !== null ? ` · CPU ${(live.cpuShare * 100).toFixed(1)}%` : ''}${live.rss ? ` · ${Math.round(live.rss / 1024 ** 2)} МБ` : ''}`
-              : server && 'status' in server ? 'сейчас никакой мир не живёт на сервере' : '—'}</dd></div>
-            {stalls.length ? <div><dt>Остановки мира</dt><dd data-qa-cloud-stall>{stalls.join(' ')}</dd></div> : null}
-            <div><dt>Сервер</dt><dd>{server && 'status' in server
-              ? `версия ${server.status.version} · кампаний ${server.status.campaigns} · копии ${gigabytes(server.status.storedBytes)}${server.status.disk ? ` · свободно ${gigabytes(server.status.disk.freeBytes)}` : ''}`
-              : server && 'error' in server ? `недоступен: ${server.error}` : '—'}</dd></div>
-            {settings?.lastError ? <div><dt>Последняя ошибка</dt><dd>{dateTime(settings.lastError.at)} · {settings.lastError.text}</dd></div> : null}
+              ? `«${liveCampaign?.name ?? live.campaignId}» живёт до ${live.worldAt ? dateTime(live.worldAt) : '—'}${live.lagMs !== null ? ` · ${lag(live.lagMs)}` : ''}${live.cpuShare !== null ? ` · нагрузка ${oneDecimal.format(live.cpuShare * 100)}%` : ''}${live.rss ? ` · память ${Math.round(live.rss / 1024 ** 2)} МБ` : ''}`
+              : server && 'status' in server ? 'сейчас на сервере не живёт ни один мир' : '—'}</dd></div>
+            {stalls.length ? <div className="is-warn"><dt>Остановки мира</dt><dd data-qa-cloud-stall>{stalls.join(' ')}</dd></div> : null}
+            <div className={server && 'error' in server ? 'is-bad' : ''}><dt>Сервер</dt><dd>{server && 'status' in server
+              ? `версия ${server.status.version} · партий ${server.status.campaigns} · копии занимают ${gigabytes(server.status.storedBytes)}${server.status.disk ? ` · свободно ${gigabytes(server.status.disk.freeBytes)}` : ''}`
+              : server && 'error' in server ? `не отвечает: ${server.error}` : enabled ? '—' : 'облачный мир выключен'}</dd></div>
+            {settings?.lastError ? <div className="is-bad"><dt>Последняя ошибка</dt><dd>{dateTime(settings.lastError.at)} · {settings.lastError.text}</dd></div> : null}
             <div><dt>Версия игры</dt><dd>{settings?.appVersion ?? '—'}</dd></div>
           </dl>
         </div>

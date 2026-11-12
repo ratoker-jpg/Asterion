@@ -493,6 +493,14 @@ async function typographyCoverage(win) {
   })()`);
 }
 
+/** «Настройки» opens on «Звук»; the text sizes live under «Размер текста». */
+async function openTextSettings(win) {
+  const clicked=await win.webContents.executeJavaScript(`(() => { const button=document.querySelector('[data-qa-settings-section="interface"]'); if(!button)return false; button.click(); return true; })()`);
+  if(!clicked) throw new Error('Text size section not found');
+  await waitFor(win, `document.querySelector('[data-qa-typography-row]')`);
+  await settle(win);
+}
+
 async function clickTypography(win, labelPart, count) {
   const encoded=JSON.stringify(labelPart);
   for (let index=0; index<count; index+=1) {
@@ -897,6 +905,7 @@ app.whenReady().then(async()=>{
       await verifyCommandScrollStability(win,directory,label);
       if(width===1920 && height===1080){
         await activateScreen(win,'settings','Настройки','settings-view-v2');
+        await openTextSettings(win);
         await clickTypography(win,'Подсказки и пояснения',16);
         const helper180=await metrics(win,'settings-helper-180');
         if(helper180.typography.helper!=='1.8'||helper180.typography.hud!=='1') throw new Error(`Typography isolation failed: ${JSON.stringify(helper180.typography)}`);
@@ -904,13 +913,13 @@ app.whenReady().then(async()=>{
         await resetTypography(win,'Подсказки и пояснения');
 
         const hudBefore=await fontSnapshot(win,'[data-qa-resource-chip="metal"] strong');
-        await clickTypography(win,'HUD / верхняя панель',6);
+        await clickTypography(win,'Верхняя панель',6);
         const hudAfter=await fontSnapshot(win,'[data-qa-resource-chip="metal"] strong');
         const hud130=await metrics(win,'settings-hud-130');
         if(hud130.typography.hud!=='1.3'||hud130.typography.helper!=='1') throw new Error(`Typography isolation failed: ${JSON.stringify(hud130.typography)}`);
         if(!hudBefore||!hudAfter||!approximately(hudAfter.size,hudBefore.size*1.3)) throw new Error(`HUD typography did not reach the global header: ${JSON.stringify({hudBefore,hudAfter})}`);
         await verifyCommon(hud130,label,'settings-hud-130',width,height); results.push({...hud130,hudFont:{before:hudBefore,after:hudAfter}}); await capture(win,directory,'settings-hud-130');
-        await resetTypography(win,'HUD / верхняя панель');
+        await resetTypography(win,'Верхняя панель');
 
         await activateMainScreen(win,'planet','.planet-page-v3 .scene-title h1');
         const legacyTitleBefore=await fontSnapshot(win,'.planet-page-v3 .scene-title h1');
@@ -918,6 +927,7 @@ app.whenReady().then(async()=>{
         if(!legacyTitleBefore||legacyTitleBefore.category!=='pageTitle'||coverageBefore.total<12) throw new Error(`Legacy typography controller did not classify the game screen: ${JSON.stringify({legacyTitleBefore,coverageBefore})}`);
 
         await activateScreen(win,'settings','Настройки','settings-view-v2');
+        await openTextSettings(win);
         await clickTypography(win,'Заголовки экранов',6);
         await activateMainScreen(win,'planet','.planet-page-v3 .scene-title h1');
         const legacyTitleAfter=await fontSnapshot(win,'.planet-page-v3 .scene-title h1');
