@@ -21,6 +21,8 @@ function isPlain(value: unknown): value is object {
 }
 
 function entry(value: unknown): string | undefined {
+  // A stub the window holds in place of a report (ui-projection.ts) carries the report's own text.
+  if (value !== null && typeof value === 'object' && typeof (value as { toRawJSON?: unknown }).toRawJSON === 'function') return (value as { toRawJSON(): string }).toRawJSON();
   if (!isPlain(value)) return JSON.stringify(value);
   let text = entryJson.get(value);
   if (text === undefined) entryJson.set(value, text = JSON.stringify(value));

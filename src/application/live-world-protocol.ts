@@ -31,7 +31,12 @@ export type LiveWorldVersion = number;
 
 export type LiveWorldRequest =
   /** The world (re)starts here: a load, a new campaign, a window's adoption of another's save. */
-  | { type: 'init'; version: LiveWorldVersion; state: SaveState; clockOffsetMs: number; persist: LiveWorldPersistPolicy }
+  | { type: 'init'; version: LiveWorldVersion; state: SaveState; clockOffsetMs: number; persist: LiveWorldPersistPolicy;
+      /**
+       * The window holds the bots' spy reports as stubs (ui-projection.ts): the worker posts its patches
+       * in the window's terms and reads the window's patches back into the full world.
+       */
+      projectReports?: boolean }
   /** The UI changed its world from `from` to `to` (a command, a setting, a selection). */
   | { type: 'commit'; from: LiveWorldVersion; to: LiveWorldVersion; patch: WorldPatch; at: number }
   /** Reconcile the world (at `from`) to `now`. */

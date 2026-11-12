@@ -7,6 +7,7 @@ import { applyWorldPatch, diffWorld, type PatchOp, type WorldPatch } from './wor
 import type { LiveWorldPersistPolicy, LiveWorldRequest, LiveWorldResponse, LiveWorldVersion } from './live-world-protocol.ts';
 import { EXTERNAL_SAVE_MIN_CHARS } from './save-storage.ts';
 import { QuietRegistry } from './quiet-fields.ts';
+import { projectWorld, unprojectPatch } from './ui-projection.ts';
 import { formatNpcJournalLines, NpcJournalRecorder, setNpcJournalSink, type NpcJournalEntry } from './npc-journal.ts';
 
 /**
@@ -73,6 +74,8 @@ export class LiveWorldEngine {
   /** The quiet values the window has, and when it was last told new ones. */
   private readonly quiet = new QuietRegistry();
   private lastQuietAt = Number.NEGATIVE_INFINITY;
+  /** The player whose reports the window holds whole, when the window holds the rest as stubs (ui-projection.ts). */
+  private projectFor: string | null = null;
 
   private readonly host: LiveWorldEngineHost;
 
@@ -114,6 +117,7 @@ export class LiveWorldEngine {
     this.quiet.reset();
     this.lastQuietAt = this.host.now();
     this.persist = message.persist;
+    this.projectFor = message.projectReports ? message.state.profile.playerId : null;
     applyCampaignRuntimeForCatchup(message.state, this.host.now());
   }
 
@@ -141,6 +145,8 @@ export class LiveWorldEngine {
 
   private commit(from: LiveWorldVersion, to: LiveWorldVersion, patch: WorldPatch): void {
     this.resolve(from, true);
+    // A stub the window sent back (a short list goes whole) is its report again.
+    if (this.projectFor !== null) patch = unprojectPatch(patch);
     const next = applyWorldPatch(this.ui!, patch);
     // A catch-up in progress takes the same records as the UI has them now.
     if (this.catchup) this.catchup.rebase.push(valuesOf(patch, next));
@@ -162,8 +168,10 @@ export class LiveWorldEngine {
     const to = this.version();
     this.posted.push({ from, to, state: next, journal: this.journal.take() });
     // The window gets the world with its quiet values as it has them; the rest of the difference is the patch.
-    const beforeShadow = this.quiet.shadowOf(before);
-    const patch = diffWorld(beforeShadow, this.quiet.shadowOf(next, before));
+    // ...and the bots' reports as the window holds them (stubs in their places).
+    const project = (world: SaveState) => (this.projectFor === null ? world : projectWorld(world, this.projectFor));
+    const beforeShadow = project(this.quiet.shadowOf(before));
+    const patch = diffWorld(beforeShadow, project(this.quiet.shadowOf(next, before)));
     this.host.post({ type: 'ticked', from, to, patch, events, computeMs });
   }
 

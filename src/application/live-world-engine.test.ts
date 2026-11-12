@@ -9,6 +9,8 @@ import { freezeNpcCatchupTarget, isNpcCatchupPending } from './npc-catchup.ts';
 import { serializeSaveForStorage } from './persistence.ts';
 import { campaign } from './npc-runtime.test-support.ts';
 import { applyQuietBatch } from './quiet-fields.ts';
+import { adoptPatch, hasProjection, projectWorld, rehydrateWorld } from './ui-projection.ts';
+import type { SpyReportSnapshot } from '../domain/espionage/types.ts';
 
 const PERSIST = { tickMaxIntervalMs: 60_000, tickCostFactor: 50, catchupIntervalMs: 15_000 };
 
@@ -20,6 +22,8 @@ class Ui {
   received: LiveWorldResponse[] = [];
   saves: Extract<LiveWorldResponse, { type: 'save' }>[] = [];
   state: SaveState;
+  /** The window holds the bots' spy reports as stubs. */
+  projecting = false;
   private readonly send: (message: LiveWorldRequest) => Promise<void>;
   constructor(state: SaveState, send: (message: LiveWorldRequest) => Promise<void>) {
     this.state = state;
@@ -52,13 +56,13 @@ class Ui {
       if (message.type !== 'ticked') continue;
       this.tickInFlight = false;
       if (message.from !== this.version) continue;
-      this.state = applyWorldPatch(this.state, message.patch);
+      this.state = applyWorldPatch(this.state, this.projecting ? adoptPatch(message.patch) : message.patch);
       this.version = message.to;
     }
   }
 }
 
-function setup(world: SaveState, now: () => number) {
+function setup(world: SaveState, now: () => number, projecting = false) {
   const timers: (() => void)[] = [];
   let ui: Ui;
   const engine = new LiveWorldEngine({
@@ -68,7 +72,8 @@ function setup(world: SaveState, now: () => number) {
     later: (task) => { timers.push(task); },
     clock: () => 0,
   });
-  ui = new Ui(structuredClone(world), (message) => engine.handle(message));
+  ui = new Ui(projecting ? projectWorld(structuredClone(world)) : structuredClone(world), (message) => engine.handle(message));
+  ui.projecting = projecting;
   const runTimers = () => { for (const task of timers.splice(0)) task(); };
   return { engine, ui, runTimers, worker: () => (engine as unknown as { ui: SaveState }).ui };
 }
@@ -238,4 +243,96 @@ test('a large save goes to the port as UTF-8 bytes and never reaches the UI thre
   assert.equal(fallback.length, 1);
   assert.equal(fallback[0]!.text, expected);
   assert.equal(sent.length, 1);
+});
+
+/** A bot's spy report of the shape a real one has (the fields beyond the four a lookup reads are payload). */
+function botReport(owner: string, index: number): SpyReportSnapshot {
+  return {
+    id: `spy-report-${owner}-${index}`, missionId: `spy-${owner}-${index}`, ownerId: owner, createdAt: 1_000 + index,
+    sourcePlanetId: 'npc-x', targetPlanetId: 'helion-01', targetPlanetName: 'Helion', targetOwnerId: 'player-current', targetOwnerName: 'Игрок',
+    targetRaceId: 'helion', targetRelation: 'enemy', targetCoordinate: { galaxy: 1, system: 2, position: 3 }, spyLevel: 4, targetEspionageLevel: 2, delta: 2, roll: 0.25,
+    quality: 'detailed', resources: { metal: 10.5, minerals: 20, gas: 0, debris: 0, developmentEnergy: 3 }, firstReport: index === 0,
+    defense: {}, fleet: { ships: { 'light-fighter': index } }, fleetLevels: {}, commanders: {}, population: { total: 1, fleet: 1, defense: 0 },
+  } as unknown as SpyReportSnapshot;
+}
+
+function withBotReports(world: SaveState, count: number): SaveState {
+  const reports = [] as SpyReportSnapshot[];
+  for (let index = 0; index < count; index += 1) {
+    reports.push(botReport(`npc-gen-${index % 5}`, index));
+    // The player's own report sits among them: it stays whole.
+    if (index % 9 === 0) reports.push({ ...botReport(world.profile.playerId, index), id: `own-${index}` });
+  }
+  return { ...world, espionage: { ...world.espionage!, reports } };
+}
+
+test("the window holds the bots' spy reports as stubs and still writes the same save", () => {
+  const world = withBotReports(campaign(12), 40);
+  const mine = projectWorld(world);
+  assert.ok(hasProjection(mine));
+  assert.equal(mine.espionage!.reports.length, world.espionage!.reports.length);
+  const own = mine.espionage!.reports.filter((report) => report.ownerId === world.profile.playerId);
+  assert.ok(own.length > 0 && own.every((report) => 'resources' in report), "the player's own reports are whole");
+  assert.equal(mine.espionage!.reports.find((report) => report.id === 'spy-report-npc-gen-1-1')!.createdAt, 1_001, 'a stub answers a lookup by id, owner, mission and time');
+  assert.equal(projectWorld(world), mine, 'the same world gives the same projection');
+  assert.equal(text(mine), text(world), 'production save');
+  assert.equal(serializeSaveForStorage(mine, 'test'), serializeSaveForStorage(world, 'test'), 'plain JSON save');
+  assert.equal(JSON.stringify(mine), JSON.stringify(world));
+  const whole = rehydrateWorld(mine);
+  assert.equal(hasProjection(whole), false);
+  assert.equal(JSON.stringify(whole), JSON.stringify(world));
+  assert.equal(rehydrateWorld(world), world);
+});
+
+test("ticks and commands racing them keep the window's world equal to the worker's while it holds stubs", async () => {
+  const world = withBotReports(campaign(12), 60);
+  const start = world.npcReplay!.processedThroughAt;
+  applyCampaignRuntimeForCatchup(world, start);
+  let clock = start;
+  const { ui, engine, runTimers, worker } = setup(world, () => clock, true);
+  assert.ok(hasProjection(ui.state));
+  await engine.handle(structuredClone({ type: 'init', version: 0, state: world, clockOffsetMs: 0, persist: PERSIST, projectReports: true }));
+  let added = 0;
+  for (let second = 1; second <= 60; second += 1) {
+    clock = start + second * 15_000;
+    await ui.tick(clock);
+    ui.receive();
+    // The player's command appends a report of their own (a long list: a run; the patch must not carry stubs back as values).
+    if (second % 11 === 0) {
+      added += 1;
+      const espionage = ui.state.espionage!;
+      await ui.commit({ ...ui.state, espionage: { ...espionage, reports: [...espionage.reports, { ...botReport(ui.state.profile.playerId, 500 + added), id: `mine-${added}`, createdAt: clock }] } });
+    }
+    // ...and one drops the oldest reports, as a retention step would: the stubs around them stay stubs.
+    if (second === 30) {
+      const espionage = ui.state.espionage!;
+      await ui.commit({ ...ui.state, espionage: { ...espionage, reports: espionage.reports.slice(5) } });
+    }
+    if (second % 20 === 0) runTimers();
+  }
+  await ui.tick(clock);
+  ui.receive();
+  await engine.handle({ type: 'quiet-now' });
+  ui.receive();
+  assert.ok(hasProjection(ui.state), 'the window still holds stubs');
+  assert.equal(hasProjection(worker()), false, 'the worker holds the reports');
+  for (const key of Object.keys(worker())) assert.ok(JSON.stringify((worker() as Record<string, unknown>)[key]) === JSON.stringify((ui.state as Record<string, unknown>)[key]), `section ${key} differs`);
+  assert.equal(text(worker()), text(ui.state));
+  assert.equal(JSON.stringify(rehydrateWorld(ui.state).espionage!.reports), JSON.stringify(worker().espionage!.reports));
+  assert.ok(added > 0 && worker().espionage!.reports.some((report) => report.id.startsWith('mine-')), 'own reports are in both worlds');
+});
+
+test('a short list of reports sent whole by the window comes back as reports, not stubs', async () => {
+  const base = campaign(12);
+  const world = { ...base, espionage: { ...base.espionage!, reports: [botReport('npc-gen-1', 1), botReport('npc-gen-2', 2)] } };
+  const start = world.npcReplay!.processedThroughAt;
+  applyCampaignRuntimeForCatchup(world, start);
+  const { ui, engine, worker } = setup(world, () => start, true);
+  await engine.handle(structuredClone({ type: 'init', version: 0, state: world, clockOffsetMs: 0, persist: PERSIST, projectReports: true }));
+  const espionage = ui.state.espionage!;
+  assert.ok(hasProjection(ui.state));
+  await ui.commit({ ...ui.state, espionage: { ...espionage, reports: [...espionage.reports, { ...botReport(ui.state.profile.playerId, 3), id: 'own-3' }] } });
+  assert.equal(hasProjection(worker()), false);
+  assert.equal(JSON.stringify(worker().espionage!.reports.map((report) => report.id)), JSON.stringify(['spy-report-npc-gen-1-1', 'spy-report-npc-gen-2-2', 'own-3']));
+  assert.equal(JSON.stringify(worker().espionage!.reports[0]), JSON.stringify(botReport('npc-gen-1', 1)));
 });

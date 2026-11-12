@@ -30,7 +30,8 @@ export type PatchOp =
 export type WorldPatch = readonly PatchOp[];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
+  // A report stub (ui-projection.ts) is replaced whole, never patched field by field.
+  return value !== null && typeof value === 'object' && !Array.isArray(value) && typeof (value as { __stubRaw?: unknown }).__stubRaw !== 'string';
 }
 
 function isContainer(value: unknown): value is object {

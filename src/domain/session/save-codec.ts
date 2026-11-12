@@ -75,7 +75,25 @@ type Encoder = {
 function encodeValue(value: unknown, encoder: Encoder, depth: number): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
   const json = (value as { toJSON?: unknown }).toJSON;
-  if (typeof json === 'function') return encodeValue((json as () => unknown).call(value), encoder, depth);
+  if (typeof json === 'function') {
+    // A stub the window holds in place of a report (application/ui-projection.ts) is immutable: its text is kept like a record's.
+    const keep = typeof (value as { toRawJSON?: unknown }).toRawJSON === 'function' && depth >= 1 && depth <= 3 && encoder.avoid === null;
+    const hit = keep ? encodedText.get(value) : undefined;
+    if (hit) {
+      for (const shape of hit.shapes) encoder.used.add(shape);
+      return hit.text;
+    }
+    const outer = encoder.used;
+    const own = keep ? new Set<Shape>() : null;
+    if (own) encoder.used = own;
+    const converted = encodeValue((json as () => unknown).call(value), encoder, depth);
+    if (own) {
+      encodedText.set(value, { text: converted, shapes: [...own] });
+      for (const shape of own) outer.add(shape);
+      encoder.used = outer;
+    }
+    return converted;
+  }
   // Records a few levels down (one report, one flight, one target) keep their text.
   const cached = depth >= 1 && depth <= 3 && encoder.avoid === null ? encodedText.get(value) : undefined;
   if (cached) {

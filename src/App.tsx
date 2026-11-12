@@ -205,6 +205,7 @@ import type { LiveWorldRequest, LiveWorldResponse, LiveWorldVersion } from './ap
 import { requestSavePort } from './application/save-port.ts';
 import { applyWorldPatch, diffWorld } from './application/world-diff.ts';
 import { QuietInbox } from './application/quiet-fields.ts';
+import { adoptPatch, projectWorld, rehydrateWorld } from './application/ui-projection.ts';
 import { setNpcCatchupProgress } from './ui/npc-catchup-progress-store.ts';
 import {
   FLIGHT_COMMAND_RESULT_EVENT,
@@ -368,6 +369,8 @@ const NPC_CATCHUP_WORKER_PERSIST_INTERVAL_MS = 15_000;
 type LiveWorldLink = {
   worker: Worker;
   synced: { version: LiveWorldVersion; state: SaveState };
+  /** The window holds the bots' spy reports as stubs (ui-projection.ts); patches are read in its terms. */
+  projecting: boolean;
   nextVersion: LiveWorldVersion;
   tickInFlight: boolean;
   /** Quiet fields (bot planets' economies, asteroid gas) the worker sent, waiting to be written into the world at idle. */
@@ -1344,6 +1347,12 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     liveWorld.current = null;
     liveWorldUnavailable.current = true;
     setNpcCatchupProgress(null);
+    if (link.projecting) {
+      // The world runs on this thread from now on: it needs the reports as they are.
+      const whole = rehydrateWorld(stateRef.current);
+      stateRef.current = whole;
+      setState((previous) => rehydrateWorld(previous));
+    }
     if (!isNpcCatchupPending(stateRef.current)) writeSave(stateRef.current);
     commitClock();
   }, [commitClock, writeSave]);
@@ -1359,8 +1368,12 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       liveWorldUnavailable.current = true;
       return false;
     }
+    // The worker gets the whole world; the window keeps the bots' spy reports as stubs (ui-projection.ts).
+    const whole = rehydrateWorld(initial);
+    const attached = stateRef.current === initial;
+    const mine = attached ? projectWorld(whole) : whole;
     const link: LiveWorldLink = {
-      worker, synced: { version: 0, state: initial }, nextVersion: 2, tickInFlight: false,
+      worker, synced: { version: 0, state: mine }, projecting: mine !== whole, nextVersion: 2, tickInFlight: false,
       // A batch waiting when this link ends is written nowhere (stateRef may already hold another world).
       quiet: new QuietInbox(() => (liveWorld.current === link ? [link.synced.state, stateRef.current] : []), undefined, undefined, (ms) => noteLiveWorldDuration('quiet-apply', ms)),
       steps: new Map([[0, 0]]), step: 0, committedStep: 0, savedStep: 0,
@@ -1377,7 +1390,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         // Made on a world App has left (a command meanwhile): the worker drops it too.
         if (message.from !== link.synced.version || stateRef.current !== link.synced.state) { startTransition(commitClock); return; }
         const base = link.synced.state;
-        const next = message.to === message.from ? base : applyWorldPatch(base, message.patch);
+        const next = message.to === message.from ? base : applyWorldPatch(base, link.projecting ? adoptPatch(message.patch) : message.patch);
         if (next !== base) {
           link.synced = { version: message.to, state: next };
           enterLiveWorldStep(link, message.to);
@@ -1419,11 +1432,16 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     worker.onerror = (event) => stopLiveWorld(event.message);
     // The worker's clock is wall time; the page's may differ by a whole (rounded) offset only under QA.
     const clockOffsetMs = Math.round((Date.now() - (performance.timeOrigin + performance.now())) / 60_000) * 60_000;
-    const request: LiveWorldRequest = { type: 'init', version: 0, state: initial, clockOffsetMs, persist: {
+    const request: LiveWorldRequest = { type: 'init', version: 0, state: whole, projectReports: link.projecting, clockOffsetMs, persist: {
       tickMaxIntervalMs: LIVE_TICK_PERSIST_MAX_INTERVAL_MS, tickCostFactor: LIVE_TICK_PERSIST_COST_FACTOR,
       catchupIntervalMs: NPC_CATCHUP_WORKER_PERSIST_INTERVAL_MS,
     } };
     worker.postMessage(request);
+    if (attached && mine !== initial) {
+      stateRef.current = mine;
+      // A functional update still queued on `initial` stays in effect: the window's copy is the projection of whatever it is by then.
+      setState((previous) => (previous === initial ? mine : projectWorld(previous)));
+    }
     // Desktop: large saves skip this thread (src/application/save-port.ts).
     void requestSavePort().then((port) => {
       if (!port) return;
