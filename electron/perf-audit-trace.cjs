@@ -419,10 +419,17 @@ async function main() {
     write();
   }
   // DIAG perf-6: which animation forces a main frame every frame. Kill one at a time, trace 3 s each.
+  const RAW = '/*raw*/';
   const EXPERIMENTS = {
-    planet: ['', '*,*::before,*::after', '.planet-orbit__ring', '.stage-ambient i', '.asterion-header__resource-fill i', '.planet-orbit__planet, .zone-hotspot, .planet-orbit__dock, .planet-orbit__worlds, .planet-orbit__side *'],
-    universe: ['', '*,*::before,*::after', '.shield-aura, .shield-aura::before', '.system-planet--pirate::before, .system-planet--pirate img', '.stage-ambient i', '.asterion-header__resource-fill i', '.universe-view *, .universe-view *::before, .universe-view *::after', '.asterion-header *, .asterion-header *::before, .asterion-header *::after'],
+    planet: ['', '.planet-orbit__ring', RAW + "@keyframes p6-off{from,to{transform:translate(-50%,-50%)}}@keyframes p6-rot{to{transform:rotate(360deg)}}.planet-orbit>.planet-orbit__ring{animation:ut-ring-in-centred 1100ms backwards,p6-off 1ms linear 0ms forwards!important;border-color:transparent!important}.planet-orbit>.planet-orbit__ring::before{content:'';position:absolute;inset:-1px;border-radius:50%;border:1px solid rgba(126,200,220,.12);animation:p6-rot 360s linear infinite}.planet-orbit>.planet-orbit__ring--outer::before{border-style:dashed;border-color:rgba(126,200,220,.08);animation-duration:240s;animation-direction:reverse}/*X*/"],
+    universe: ['', '.shield-aura, .shield-aura::before', '.shield-aura', '.shield-aura::before',
+      RAW + '.shield-aura::before{-webkit-mask:none!important;mask:none!important}',
+      RAW + '.shield-aura{animation-name:p6-op!important}@keyframes p6-op{0%,100%{opacity:.78}50%{opacity:1}}',
+      RAW + '.shield-aura{will-change:transform,opacity}.shield-aura::before{will-change:transform}',
+      RAW + '.shield-aura{box-shadow:none!important}',
+      RAW + '.system-planet:has(> .shield-aura){isolation:isolate}'],
   };
+
   result.diag = {};
   for (const [label, kills] of Object.entries(EXPERIMENTS)) {
     const screen = SCREENS.find((item) => item[0] === label);
@@ -431,7 +438,7 @@ async function main() {
       await sleep(3_000);
       result.diag[label] = {};
       for (const kill of kills) {
-        await run(win, `(() => { let s = document.getElementById('perf6-kill'); if (!s) { s = document.createElement('style'); s.id = 'perf6-kill'; document.head.appendChild(s); } s.textContent = ${JSON.stringify(kill ? kill + '{animation:none!important;transition:none!important}' : '')}; })()`);
+        await run(win, `(() => { let s = document.getElementById('perf6-kill'); if (!s) { s = document.createElement('style'); s.id = 'perf6-kill'; document.head.appendChild(s); } s.textContent = ${JSON.stringify(kill.startsWith('/*raw*/') ? kill : kill ? kill + '{animation:none!important;transition:none!important}' : '')}; })()`);
         await sleep(800);
         const traced = await traceWindow(win, `diag-${label}`, 3);
         result.diag[label][kill || '(none)'] = { bmtf: traced.trace.framesPerSecond?.BeginMainThreadFrame, ult: traced.trace.byEvent?.UpdateLayoutTree?.perSecondMs, layerize: traced.trace.byEvent?.Layerize?.perSecondMs, paint: traced.trace.byEvent?.Paint?.perSecondMs };
