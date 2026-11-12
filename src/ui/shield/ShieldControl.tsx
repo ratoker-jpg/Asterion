@@ -1,6 +1,8 @@
 import { checkShieldActivation, ownerShieldStatus } from '../../application/shield.ts';
 import type { SaveState } from '../../application/contracts.ts';
 import { useState } from 'react';
+import { getLiveSaveState } from '../../application/runtime.ts';
+import { useClockNow } from '../../application/shared-clock.ts';
 import { formatShieldRemaining, shieldTiming } from '../../domain/shield/shield.ts';
 import { ConfirmDialog } from '../menu/MenuApp.tsx';
 import './shield.css';
@@ -12,6 +14,16 @@ export type ShieldControlProps = {
   variant: 'compact' | 'full';
   onActivate: () => void;
 };
+
+/**
+ * The header's shield: reads the world App renders and the shared clock itself, so the header does not
+ * render again every second. `shields` only tells the header to redraw it the moment the shield changes.
+ */
+export function LiveShieldControl({ variant, onActivate }: { shields: SaveState['shields']; variant: 'compact' | 'full'; onActivate: () => void }) {
+  const now = useClockNow();
+  const state = getLiveSaveState();
+  return state ? <ShieldControl state={state} now={now} variant={variant} onActivate={onActivate} /> : null;
+}
 
 /** One button for all planets: shows the time left, the cooldown, or why it cannot be raised. */
 export function ShieldControl({ state, now, variant, onActivate }: ShieldControlProps) {

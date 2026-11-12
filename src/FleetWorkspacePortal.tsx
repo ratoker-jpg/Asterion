@@ -2690,7 +2690,13 @@ export function FleetWorkspacePortal() {
   const persistence = useMemo(() => createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }), []);
   const [target, setTarget] = useState<Element | null>(null);
   const [resetNonce, setResetNonce] = useState(0);
-  const [saveState, setSaveState] = useState<SaveState>(() => getLiveSaveState() ?? persistence.read());
+  const [heldSaveState, setSaveState] = useState<SaveState>(() => getLiveSaveState() ?? persistence.read());
+  // Closed (any other screen): the newest world waits in a ref and nothing renders, so the world published
+  // every second costs no React commit. The ref is the world shown while the fleets screen is open.
+  const latestSaveState = useRef(heldSaveState);
+  const fleetsOpen = useRef(false);
+  fleetsOpen.current = route === 'fleets';
+  const saveState = route === 'fleets' ? latestSaveState.current : heldSaveState;
   const [constructionRequested, setConstructionRequested] = useState(false);
   const [launchContext, setLaunchContext] = useState<FleetLaunchContext | null>(null);
   const [repeatPlan, setRepeatPlan] = useState<FlightRepeatPlan | null>(null);
@@ -2706,7 +2712,8 @@ export function FleetWorkspacePortal() {
     const onRuntimeStateChanged = (event: Event) => {
       const nextState = (event as CustomEvent<SaveState>).detail;
       if (nextState && nextState.planets && typeof nextState.currentPlanetId === 'string') {
-        setSaveState(nextState);
+        latestSaveState.current = nextState;
+        if (fleetsOpen.current) setSaveState(nextState);
       }
     };
     const onLaunchContext = (event: Event) => setLaunchContext((event as CustomEvent<FleetLaunchContext>).detail);
@@ -2725,7 +2732,7 @@ export function FleetWorkspacePortal() {
     const onCommandResult = (event: Event) => {
       const result = (event as CustomEvent<FlightCommandResult>).detail;
       // The workspace decides whether the target stays for the next wave.
-      if (result.ok) setSaveState(result.state);
+      if (result.ok) { latestSaveState.current = result.state; setSaveState(result.state); }
     };
 
     window.addEventListener(FLIGHT_LAUNCH_CONTEXT_EVENT, onLaunchContext);

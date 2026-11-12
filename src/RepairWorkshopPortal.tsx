@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { RepairWorkshopView } from './RepairWorkshopView';
 import { FLEET_ROOT_REQUEST_EVENT } from './FleetRootNavigationController';
@@ -26,17 +26,24 @@ export function RepairWorkshopPortal() {
   // The world App renders; the save is read from storage only outside a running campaign.
   const [state, setState] = useState<SaveState>(() => getLiveSaveState() ?? persistence.read());
   const active = route === 'fleets' && fleetSection === 'repair';
+  // Closed: the newest world waits in a ref, no React commit per published second.
+  const latestState = useRef(state);
+  const activeRef = useRef(active);
+  activeRef.current = active;
 
   useEffect(() => {
     const syncPlanet = () => {
       setTarget(document.querySelector('.fleet-main-v1'));
       setPlanet(readCurrentPlanet());
-      setState(getLiveSaveState() ?? persistence.read());
+      latestState.current = getLiveSaveState() ?? persistence.read();
+      setState(latestState.current);
     };
 
     const onRuntimeStateChanged = (event: Event) => {
       const next = (event as CustomEvent<SaveState>).detail;
-      if (next && typeof next === 'object' && next.planets) setState(next);
+      if (next && typeof next === 'object' && next.planets) latestState.current = next;
+      if (!activeRef.current) return;
+      if (latestState.current === next) setState(next);
       setTarget(document.querySelector('.fleet-main-v1'));
       setPlanet(readCurrentPlanet());
     };
@@ -72,7 +79,8 @@ export function RepairWorkshopPortal() {
 
   if (!active || !target) return null;
 
-  const snapshot = getRepairWorkshopSnapshot(state, state.currentPlanetId);
+  const shownState = latestState.current;
+  const snapshot = getRepairWorkshopSnapshot(shownState, shownState.currentPlanetId);
 
   return createPortal(
     <RepairWorkshopView

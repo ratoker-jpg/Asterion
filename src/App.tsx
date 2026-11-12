@@ -8,10 +8,11 @@ import { appendJournalEntries, setActiveJournalCampaign } from './ui/player-jour
 import { appendBotJournal } from './ui/bot-journal-store.ts';
 import { selectOwnerPresence } from './application/owner-presence.ts';
 import { dispatchBot01Exploration } from './application/exploration-bot01.ts';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { flushSync, createPortal } from 'react-dom';
 import './universe.css';
 import { UniverseView } from './UniverseView';
+import { memoScreen } from './ui/memo-screen.tsx';
 import { applyFleetUiUpdate, FLEET_UI_UPDATE_EVENT, type FleetUiUpdate } from './domain/flights/fleet-ui.ts';
 import type { FleetPlan } from './domain/fleet/fleet-plan.ts';
 import type { ShipId } from './domain/combat/ids.ts';
@@ -42,7 +43,7 @@ import {
   type AppRoute,
 } from './ui/navigation.tsx';
 import { AsterionHeader } from './ui/header/AsterionHeader';
-import { ShieldControl } from './ui/shield/ShieldControl';
+import { LiveShieldControl } from './ui/shield/ShieldControl';
 import { activateShield } from './application/shield.ts';
 import { selectHeaderAlerts, type HeaderAlert } from './ui/header/header-alerts.ts';
 import { ApprovedZoneIcon } from './ui/header/HeaderAssetIcons';
@@ -432,6 +433,11 @@ type PlanetDefinition = {
 
 const RUNTIME_MODE: RuntimeMode = ACTIVE_RUNTIME_MODE;
 
+// Screens that draw nothing from the clock (or read it themselves) render again only when their data changed.
+const UniverseScreen = memoScreen(UniverseView, 'UniverseView');
+const ReportsScreen = memoScreen(ReportsView, 'ReportsView');
+const PlanetOrbitScreen = memoScreen(PlanetOrbitView, 'PlanetOrbitView');
+
 /**
  * Test Mode only: `?faction=synod|veyra` (or the older `?headerFaction=`) previews
  * another race's interface theme. Presentation only, never saved.
@@ -510,6 +516,12 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const [, bumpClock] = useReducer((count: number) => count + 1, 0);
   const now = getClockNow();
   const commitClock = useCallback(() => { publishClock(Date.now()); bumpClock(); }, []);
+  // The tick reaches React as a transition (stateRef already holds its world). A player command must not be
+  // computed on the older world React still renders, so it first renders that world urgently, then runs.
+  const flushCommandSync = useCallback((work: () => void) => {
+    if (renderedStateRef.current !== stateRef.current) flushSync(() => setState(stateRef.current));
+    flushSync(work);
+  }, []);
   const [testTimeScale, setTestTimeScale] = useState<TestTimeScale>(() => resolveTestTimeScale());
   const [toasts, setToasts] = useState<RuntimeToast[]>([]);
   // Toasts take the first spot that covers no control or screen title (toast-placement.ts).
@@ -1004,7 +1016,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       enqueueApplicationStateUpdate(stateRef, setState, (latest) => {
         const result = runBuildPlans(latest, { now: at, mode: RUNTIME_MODE, testTimeScale });
         return { state: result.state, result };
-      }, flushSync, renderedStateRef, noteStateHeal);
+      }, flushCommandSync, renderedStateRef, noteStateHeal);
     }, 0);
     return () => window.clearTimeout(timer);
   }, [now, hasBuildPlans, testTimeScale]);
@@ -1363,7 +1375,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       if (message.type === 'ticked') {
         link.tickInFlight = false;
         // Made on a world App has left (a command meanwhile): the worker drops it too.
-        if (message.from !== link.synced.version || stateRef.current !== link.synced.state) { commitClock(); return; }
+        if (message.from !== link.synced.version || stateRef.current !== link.synced.state) { startTransition(commitClock); return; }
         const base = link.synced.state;
         const next = message.to === message.from ? base : applyWorldPatch(base, message.patch);
         if (next !== base) {
@@ -1371,14 +1383,17 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
           enterLiveWorldStep(link, message.to);
           stateRef.current = next;
           clockTickState.current = next;
-          // A functional update still queued wins; the autosave effect sends it on top of this world.
-          setState((previous) => (previous === base ? next : previous));
         }
         const replay = next.npcReplay;
         setNpcCatchupProgress(replay && isNpcCatchupPending(next) ? { processedThroughAt: replay.processedThroughAt, targetAt: replay.targetAt } : null);
         announceRuntimeEvents(message.events, next);
-        // Same batch as the setState above: one commit for the second.
-        commitClock();
+        // One non-urgent transition for the second: the world, the clock and its subscribers render together
+        // (React slices the work between frames). A functional update still queued wins; the autosave effect
+        // sends it on top of this world. A command meanwhile renders this world first (flushCommandSync).
+        startTransition(() => {
+          if (next !== base) setState((previous) => (previous === base ? next : previous));
+          commitClock();
+        });
       } else if (message.type === 'quiet') {
         link.quiet.push(message.batch);
       } else if (message.type === 'progress') {
@@ -1779,7 +1794,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         testTimeScale,
       }, assignment),
       result: undefined,
-    }), flushSync, renderedStateRef, noteStateHeal);
+    }), flushCommandSync, renderedStateRef, noteStateHeal);
     setNotice('Роботы перераспределены');
   };
 
@@ -1800,7 +1815,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         state: transition.ok ? transition.state : current,
         result: transition,
       };
-    }, flushSync, renderedStateRef, noteStateHeal);
+    }, flushCommandSync, renderedStateRef, noteStateHeal);
     if (!result.ok) {
       setNotice(result.reason ?? 'Переработка сейчас недоступна');
       return false;
@@ -1820,7 +1835,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         testTimeScale,
       });
       return { state: transition.state, result: transition };
-    }, flushSync, renderedStateRef, noteStateHeal);
+    }, flushCommandSync, renderedStateRef, noteStateHeal);
     if (!result.ok) {
       setNotice(result.reason ?? 'Ресурс пока недоступен');
       return false;
@@ -1840,7 +1855,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         testTimeScale,
       }, jobId);
       return { state: transition.state, result: transition };
-    }, flushSync, renderedStateRef, noteStateHeal);
+    }, flushCommandSync, renderedStateRef, noteStateHeal);
     if (!result.ok || !result.output) {
       setNotice(result.reason ?? 'Ресурс пока недоступен');
       return false;
@@ -1870,7 +1885,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         testTimeScale,
       }, selectOwnerScoresCached(current)[current.profile.playerId]?.resourcePoints ?? 0, request);
       return { state: transition.state, result: transition.execution };
-    }, flushSync, renderedStateRef, noteStateHeal);
+    }, flushCommandSync, renderedStateRef, noteStateHeal);
     if (!result.ok) {
       setNotice(result.reason ?? 'Обмен сейчас недоступен');
       return result;
@@ -1940,7 +1955,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         state: transition.ok ? transition.state : current,
         result: transition,
       };
-    }, flushSync, renderedStateRef, noteStateHeal);
+    }, flushCommandSync, renderedStateRef, noteStateHeal);
     if (!result.ok) {
       setNotice(result.reason ?? 'Строительство сейчас недоступно.');
       return false;
@@ -1957,7 +1972,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     const outcome = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
       const result = activateShield(current, current.profile.playerId, at);
       return result.ok ? { state: result.state, result: null as string | null } : { state: current, result: result.message };
-    }, flushSync, renderedStateRef, noteStateHeal);
+    }, flushCommandSync, renderedStateRef, noteStateHeal);
     const message = outcome;
     if (message) setNotice(message, 'error');
     else setNotice('Щит включён: все ваши планеты закрыты от нападений.', 'success');
@@ -1968,7 +1983,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     enqueueApplicationStateUpdate(stateRef, setState, (current) => ({
       state: { ...current, fleetUi: applyFleetUiUpdate(current.fleetUi, { kind: 'set-fleet-plan', planetId, plan }) },
       result: true,
-    }), flushSync, renderedStateRef, noteStateHeal);
+    }), flushCommandSync, renderedStateRef, noteStateHeal);
     return true;
   };
 
@@ -1978,7 +1993,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     enqueueApplicationStateUpdate(stateRef, setState, (current) => ({
       state: { ...current, fleetUi: applyFleetUiUpdate(current.fleetUi, { kind: 'set-build-plan', planetId, plan }) },
       result: true,
-    }), flushSync, renderedStateRef, noteStateHeal);
+    }), flushCommandSync, renderedStateRef, noteStateHeal);
     return true;
   };
 
@@ -1989,7 +2004,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     const run = enqueueApplicationStateUpdate(stateRef, setState, (latest) => {
       const result = runBuildPlans(latest, { now: at, mode: RUNTIME_MODE, testTimeScale }, planetId);
       return { state: result.state, result };
-    }, flushSync, renderedStateRef, noteStateHeal);
+    }, flushCommandSync, renderedStateRef, noteStateHeal);
     setNotice(run.started.length
       ? `${state.planets[planetId]?.name ?? ''}: ${run.started.map((item) => `${item.name} до ур. ${item.level}`).join(', ')} добавлено в очередь.`
       : 'Сейчас ничего не запустить: проверьте, чего не хватает у строк.');
@@ -2004,7 +2019,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     const started = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
       const action = startFleetPlanLines(current, { planetId: planetId as PlanetId, ...runtime }, runtime, shipIds);
       return { state: action.state, result: action };
-    }, flushSync, renderedStateRef, noteStateHeal);
+    }, flushCommandSync, renderedStateRef, noteStateHeal);
     if (announce) {
       const report = fleetPlanReport(started);
       setNotice(`${state.planets[planetId]?.name ?? currentPlanetName}: ${report.text}${report.warn ? ` ${report.warn}` : ''}`);
@@ -2019,7 +2034,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
       const action = startFleetProduction(current, { planetId, now: orderedAt, mode: RUNTIME_MODE, testTimeScale }, queueKind, itemId, quantity);
       return { state: action.state, result: action.transition };
-    }, flushSync, renderedStateRef, noteStateHeal);
+    }, flushCommandSync, renderedStateRef, noteStateHeal);
     if (!result.ok) {
       setNotice(result.reason ?? 'Производство сейчас недоступно.');
       return false;
@@ -2034,7 +2049,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
       const action = cancelFleetProduction(current, { planetId, now: canceledAt, mode: RUNTIME_MODE, testTimeScale }, orderId);
       return { state: action.state, result: action.transition as FleetProductionCancellationTransition };
-    }, flushSync, renderedStateRef, noteStateHeal);
+    }, flushCommandSync, renderedStateRef, noteStateHeal);
     setNotice(result.ok
       ? result.refundPercent == null
         ? 'Заказ отменён. Сохранённая стоимость отсутствует, возврат не начислен.'
@@ -3255,12 +3270,12 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
           planetMenuOpen={planetMenuOpen}
           alerts={headerAlerts}
           onAlertOpen={openHeaderAlert}
-            campaign={{ now, mode: RUNTIME_MODE, timeScale: testTimeScale, saveKey: persistence.saveKey, timeScaleOptions: TEST_TIME_SCALE_OPTIONS, onTimeScaleChange: setTestTimeScale, label: `Кампания${SPEED_SUFFIX[state.worldConfig?.world.campaignSpeed ?? 'standard'] ?? ''}` }}
+            campaign={{ mode: RUNTIME_MODE, timeScale: testTimeScale, saveKey: persistence.saveKey, timeScaleOptions: TEST_TIME_SCALE_OPTIONS, onTimeScaleChange: setTestTimeScale, label: `Кампания${SPEED_SUFFIX[state.worldConfig?.world.campaignSpeed ?? 'standard'] ?? ''}` }}
           onRouteChange={chooseRoute}
           onZoneChange={chooseZone}
           onPlanetChange={(planetId) => selectPlanet(planetId)}
           onPlanetMenuToggle={() => setPlanetMenuOpen((open) => !open)}
-          shield={<ShieldControl state={state} now={now} variant="compact" onActivate={raiseShield} />}
+          shield={<LiveShieldControl shields={state.shields} variant="compact" onActivate={raiseShield} />}
          />
         <NpcCatchupBanner replay={state.npcReplay} state={state} slot={catchupSlot} onDismissSummary={dismissWorldSummary} onOpenMenu={openPauseMenu} />
 
@@ -3322,7 +3337,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               onBack={returnToBuilding}
             />
           ) : activeRoute === 'universe' ? (
-            <UniverseView
+            <UniverseScreen
               shields={state.shields}
               ownerPresence={ownerPresence}
               pirateContacts={pirateContacts}
@@ -3463,7 +3478,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               )}
             />
           ) : activeRoute === 'reports' ? (
-            <ReportsView
+            <ReportsScreen
               retentionCutoff={reportRetentionAt}
               pirateReconReports={state.pirate?.reconReports}
               pirateFlights={state.flights.records}
@@ -3560,7 +3575,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
           ) : activeRoute === 'planet' ? (
             <>
             <PlanetSections section="current" planetCount={ownedPlanets.length} idleCount={ownedPlanets.filter((planet) => (state.queues[planet.id] ?? []).length === 0).length} onChange={setPlanetSection} />
-            <PlanetOrbitView
+            <PlanetOrbitScreen
               name={currentPlanetName}
               kicker={`Обзор планеты · ${PLAYER_FACTION_LABELS[state.profile.factionId]}`}
               subtitle={`${currentPlanet.coords} · ${currentPlanet.status}`}

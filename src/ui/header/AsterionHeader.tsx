@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useClockNow } from '../../application/shared-clock.ts';
+import { memoScreen } from '../memo-screen.tsx';
 import { HeaderAlertsIcon, HeaderGameIcon, HeaderNavigationIcon } from './HeaderAssetIcons';
 import type { HeaderAlert } from './header-alerts.ts';
 import { ResourceChip } from './ResourceChip';
@@ -13,7 +15,8 @@ import type { RuntimeMode, TestTimeScale } from '../../domain/runtime/mode.ts';
 import { HEADER_ZONE_IDS, type HeaderPlanetModel, type HeaderResourceModel, type HeaderZoneId, type HeaderZoneMeta } from './types.ts';
 
 export type HeaderCampaignModel = {
-  now: number;
+  /** Fixed time for tests; without it the clock shows the shared game second (shared-clock.ts). */
+  now?: number;
   mode: RuntimeMode;
   timeScale: number;
   saveKey: string;
@@ -64,7 +67,12 @@ function gaugeArc(from: number, to: number) {
  * The dial carries the three zones (military on top, resource left, industry right) and the faction emblem below.
  * Faction colours come from `data-faction` only — see docs/ui/race-accent.md.
  */
-export function AsterionHeader({
+function HeaderClock({ at }: { at?: number }) {
+  const live = useClockNow();
+  return <time>{new Date(at ?? live).toLocaleTimeString('ru-RU', { hour12: false })}</time>;
+}
+
+function AsterionHeaderView({
   factionId,
   currentPlanet,
   planets,
@@ -346,7 +354,7 @@ export function AsterionHeader({
         ) : (
           <div className="asterion-header__campaign-status"><i aria-hidden="true" />{campaign.label ?? 'Кампания'}</div>
         )}
-        <time>{new Date(campaign.now).toLocaleTimeString('ru-RU', { hour12: false })}</time>
+        <HeaderClock at={campaign.now} />
       </section>
 
       <nav className="hdr-utility" aria-label="Служебная навигация" data-qa-navigation="utility" onPointerDown={(event) => event.stopPropagation()}>
@@ -417,3 +425,6 @@ export function AsterionHeader({
     </header>
   );
 }
+
+/** Renders again only when its data changed (the screen below is cheap to compare, expensive to draw every second). */
+export const AsterionHeader = memoScreen(AsterionHeaderView, 'AsterionHeader');
