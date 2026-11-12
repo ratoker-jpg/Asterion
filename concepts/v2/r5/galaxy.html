@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Вселенная · галактика</title>
+<link rel="stylesheet" href="../frame.css">
+<style>
+:root { --dim: #8b97aa; --cyan: #56d9f2; --red: #ff4d5e; --gold: #e8b45a; --green: #57d98f; --panel: rgba(10,16,25,.9); --card: #121c29; }
+.stage { background: #02040a; }
+.frame { position: absolute; left: 38px; right: 38px; top: 54px; bottom: 20px; border-radius: 18px; border: 1px solid rgba(120,160,210,.16); background: radial-gradient(ellipse at 52% 50%, #0b1626 0%, #03060c 70%); overflow: hidden; }
+.gal { position: absolute; left: 44%; top: 50%; width: 900px; height: 900px; transform: translate(-50%, -50%) rotate(-10deg); opacity: .5; filter: saturate(.8); }
+.title { position: absolute; left: 24px; top: 20px; } .title small { display: block; font-size: 12px; letter-spacing: 3px; color: #7f8da1; font-weight: 800; } .title b { font-size: 24px; font-weight: 800; letter-spacing: 1px; }
+.gx { position: absolute; right: 24px; top: 20px; display: flex; gap: 8px; align-items: center; }
+.gx span { font-size: 15px; font-weight: 800; color: var(--dim); width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; background: #111b28; }
+.gx .on { color: #04121b; background: var(--cyan); } .gx em { font-style: normal; font-size: 14px; color: var(--dim); margin-right: 6px; font-weight: 700; } .gx .home { width: auto; padding: 0 14px; color: #dfe7f2; }
+.show { position: absolute; left: 24px; top: 96px; width: 290px; display: grid; gap: 6px; }
+.show .h { font-size: 12px; letter-spacing: 2px; color: #56627a; font-weight: 800; margin: 4px 6px; }
+.t { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; padding: 9px 10px; border-radius: 10px; background: rgba(17,27,40,.7); }
+.t img { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; }
+.t b { font-size: 15px; font-weight: 700; color: #c9d3e0; } .t span { font-size: 15px; font-weight: 800; color: var(--c); white-space: nowrap; }
+.t.on { background: color-mix(in srgb, var(--c) 14%, #0e1622); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 55%, transparent); } .t.on b { color: #fff; }
+.sys { position: absolute; transform: translate(-50%, -50%); width: 30px; height: 30px; border-radius: 50%; background: radial-gradient(circle, #fff 0 16%, #bfe3ff 30%, rgba(140,200,255,.25) 55%, transparent 72%); }
+.sys.own { box-shadow: 0 0 0 2px #5aa9ff; } .sys.foe { box-shadow: 0 0 0 2px rgba(255,59,78,.8); } .sys.ally { box-shadow: 0 0 0 2px rgba(79,209,139,.8); }
+.sys.cur { width: 46px; height: 46px; box-shadow: 0 0 0 3px #fff, 0 0 26px rgba(255,255,255,.6); }
+.sys b { position: absolute; left: 50%; top: calc(100% + 2px); transform: translateX(-50%); font-size: 12px; font-weight: 800; color: #7d8aa0; }
+.sys.cur b { color: #fff; font-size: 14px; }
+.mk { position: absolute; display: flex; gap: 4px; transform: translate(14px, -26px); }
+.mk span { display: flex; align-items: center; gap: 4px; padding: 2px 7px 2px 3px; border-radius: 12px; background: rgba(8,13,21,.9); font-size: 12px; font-weight: 800; white-space: nowrap; }
+.mk img { width: 18px; height: 18px; border-radius: 50%; }
+.card { position: absolute; right: 24px; top: 96px; width: 380px; padding: 20px; border-radius: 16px; background: var(--panel); border: 1px solid rgba(120,160,210,.16); display: grid; gap: 16px; }
+.card h3 { font-size: 24px; font-weight: 800; } .card .sub { font-size: 14px; color: var(--dim); margin-top: 2px; }
+.pos { display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px; }
+.pos i { aspect-ratio: 1; border-radius: 50%; background-size: cover; box-shadow: 0 0 0 2px var(--c); }
+.pos i.e { background: none; box-shadow: inset 0 0 0 1px #2a3647; transform: scale(.55); }
+.facts { display: grid; gap: 10px; }
+.f { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; } .f img { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; } .f b { font-size: 15px; font-weight: 700; } .f span { font-size: 16px; font-weight: 800; color: var(--c); white-space: nowrap; }
+.btn { font: inherit; font-size: 17px; font-weight: 800; border: 0; border-radius: 12px; padding: 14px; color: #04121b; background: linear-gradient(#7ee8fb, #3fc0e6); box-shadow: 0 0 20px rgba(86,217,242,.3); }
+.leg { position: absolute; left: 24px; bottom: 18px; display: flex; gap: 18px; font-size: 13px; color: var(--dim); } .leg i { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+</style></head><body>
+<div class="stage"><img class="hdr" src="../assets/header-universe.png"><main class="area"><div class="frame" id="f">
+  <img class="gal" src="../../../src/assets/ui/atlas/galaxy-01.webp">
+  <div class="title"><small>ВСЕЛЕННАЯ</small><b>Галактика 1 · 40 систем</b></div>
+  <div class="gx"><em>Галактика</em><span class="on">1</span><span>2</span><span>3</span><span>4</span><span>5</span><span class="home">Домой</span></div>
+</div></main></div>
+<script src="../universe/data.js"></script>
+<script>
+const f = document.getElementById('f');
+const act = (k) => `../../../src/assets/ui/actions/${k}.webp`;
+const add = (cls, html, css) => { const d = document.createElement('div'); d.className = cls; d.innerHTML = html; d.style.cssText = css || ''; f.appendChild(d); return d; };
+// filters: what to light up on the galaxy. Two are on in this shot.
+const ON = new Set(['targets', 'loot']);
+const T = [['targets', 'Цели в диапазоне', 'attack', '#ff8f98', '34'], ['loot', 'Газ и обломки', 'recycle', '#e8b45a', '2,1 трлн'], ['free', 'Свободные места', 'colonize', '#56d9f2', '120'], ['pirate', 'Пираты', 'pirate-raid', '#ff8a3d', '3'], ['obj', 'Объекты и аномалии', 'probe-explore', '#b48cff', '4'], ['sun', 'Солнце и Врата', 'sun-support', '#ffcf6a', 'рейд'], ['own', 'Ваши и союз', 'deployment', '#5aa9ff', '7 · 12']];
+add('show', `<div class="h">ПОКАЗАТЬ НА КАРТЕ</div>${T.map(([k, l, i, c, n]) => `<div class="t ${ON.has(k) ? 'on' : ''}" style="--c:${c}"><img src="${act(i)}"><b>${l}</b><span>${n}</span></div>`).join('')}`);
+// 40 systems spread over the galaxy disc, deterministic
+let seed = 5; const rr = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+const P = []; let g = 0;
+while (P.length < 40 && g++ < 30000) { const x = 370 + rr() * 940, y = 100 + rr() * 720; const dx = (x - 840) / 470, dy = (y - 455) / 350; if (dx * dx + dy * dy > 1 || P.some((q) => Math.hypot(q.x - x, q.y - y) < 100)) continue; P.push({ x, y }); }
+P.sort((a, b) => Math.atan2(a.y - 455, a.x - 840) - Math.atan2(b.y - 455, b.x - 840));
+P.forEach((p, i) => { const s = SYSTEMS[i]; const cur = s.n === CURRENT_SYSTEM;
+  add(`sys ${s.self ? 'own' : s.enemy >= 3 ? 'foe' : s.ally >= 2 ? 'ally' : ''} ${cur ? 'cur' : ''}`, `<b>${String(s.n).padStart(2, '0')}</b>`, `left:${p.x}px;top:${p.y}px`);
+  const m = [];
+  if (ON.has('targets') && s.range + (s.enemy >= 3 ? s.enemy : 0)) m.push(`<span style="color:#ff8f98"><img src="${act('attack')}">${s.range + (s.enemy >= 3 ? s.enemy : 0)}</span>`);
+  if (ON.has('loot') && s.debris) m.push(`<span style="color:#e8b45a"><img src="${ART.icon('debris')}">${short(s.debris)}</span>`);
+  if (ON.has('loot') && s.gas) m.push(`<span style="color:#7fe0c2"><img src="${act('gas')}">${s.gas}</span>`);
+  if (s.pirate) m.push(`<span><img src="${act('pirate-raid')}"></span>`);
+  if (s.sun === 'raid') m.push(`<span style="color:#ffcf6a"><img src="${act('sun-support')}">рейд</span>`);
+  if (m.length) add('mk', m.join(''), `left:${p.x}px;top:${p.y}px`); });
+
+</script>
+<script>
+// selected system card
+const s = SYSTEMS[CURRENT_SYSTEM - 1];
+const C = document.createElement('div'); C.className = 'card';
+C.innerHTML = `<div><h3>Система ${String(CURRENT_SYSTEM).padStart(2, '0')}</h3><div class="sub">Солнце 70% · 20 из 24 занято · 2 ваши планеты</div></div>
+  <div class="pos">${SYSTEM.map((o) => o.art ? `<i style="--c:${o.tone === 'uninhabited' || o.kind === 'asteroid' ? 'transparent' : TONE[o.tone].color};background-image:url('${o.art}')"></i>` : '<i class="e"></i>').join('')}</div>
+  <div class="facts">
+    <div class="f" style="--c:#ff8f98"><img src="../../../src/assets/ui/actions/attack.webp"><b>Цели в диапазоне</b><span>3</span></div>
+    <div class="f" style="--c:#e8b45a"><img src="../../../src/assets/ui/actions/recycle.webp"><b>Обломки</b><span>988 млрд</span></div>
+    <div class="f" style="--c:#7fe0c2"><img src="../../../src/assets/ui/actions/gas.webp"><b>Газ · 2 астероида</b><span>57 тыс/ч</span></div>
+    <div class="f" style="--c:#56d9f2"><img src="../../../src/assets/ui/actions/colonize.webp"><b>Свободно мест</b><span>4</span></div>
+    <div class="f" style="--c:#ff8a3d"><img src="../../../src/assets/ui/actions/pirate-raid.webp"><b>Пиратская база</b><span>41 с</span></div></div>
+  <button class="btn">Войти в систему</button>`;
+document.getElementById('f').appendChild(C);
+const L = document.createElement('div'); L.className = 'leg'; L.innerHTML = '<span><i style="box-shadow:0 0 0 2px #5aa9ff"></i>есть ваши планеты</span><span><i style="box-shadow:0 0 0 2px #4fd18b"></i>союзники</span><span><i style="box-shadow:0 0 0 2px #ff3b4e"></i>враги</span>'; document.getElementById('f').appendChild(L);
+</script><script src="../frame.js"></script>
+</body></html>

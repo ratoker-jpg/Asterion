@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Вселенная · система</title>
+<link rel="stylesheet" href="../frame.css">
+<style>
+:root { --dim: #8b97aa; --cyan: #56d9f2; --gold: #e8b45a; }
+.stage { background: #02040a; }
+.frame { position: absolute; left: 38px; right: 38px; top: 54px; bottom: 20px; border-radius: 18px; border: 1px solid rgba(120,160,210,.16); background: radial-gradient(ellipse at 50% 52%, #0c1828 0%, #03060c 68%); overflow: hidden; }
+.frame::before { content: ''; position: absolute; inset: 0; background-image: radial-gradient(1px 1px at 12% 22%, #fff6, transparent), radial-gradient(1px 1px at 38% 74%, #fff4, transparent), radial-gradient(1.5px 1.5px at 66% 12%, #fff7, transparent), radial-gradient(1px 1px at 82% 58%, #fff5, transparent), radial-gradient(1px 1px at 7% 81%, #fff4, transparent); background-size: 420px 300px; }
+svg { position: absolute; inset: 0; width: 1844px; height: 870px; }
+.sun { position: absolute; width: 190px; transform: translate(-50%, -50%); filter: drop-shadow(0 0 60px rgba(255,170,80,.45)); }
+.top { position: absolute; left: 24px; top: 20px; display: flex; gap: 16px; align-items: center; }
+.back { font-size: 15px; font-weight: 800; color: #dfe7f2; background: #111b28; border-radius: 10px; padding: 10px 14px; }
+.top small { display: block; font-size: 12px; letter-spacing: 3px; color: #7f8da1; font-weight: 800; } .top b { font-size: 22px; font-weight: 800; letter-spacing: 1px; }
+.rail { position: absolute; right: 26px; top: 50%; transform: translateY(-50%); display: grid; gap: 10px; justify-items: center; font-size: 15px; font-weight: 700; color: #5d6a7d; padding: 14px 10px; border-radius: 14px; background: rgba(10,16,25,.8); }
+.rail b { font-size: 30px; color: #fff; }
+.pl { position: absolute; transform: translate(-50%, -50%); }
+.pl img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 4px 12px #000); }
+.pl::after { content: ''; position: absolute; inset: -9%; border-radius: 50%; border: 2px solid var(--c); opacity: var(--o, .95); box-shadow: 0 0 12px color-mix(in srgb, var(--c) 40%, transparent); }
+.pl.t-range::after { border-style: dashed; box-shadow: none; } .pl.t-uninhabited::after, .pl.k-asteroid::after { display: none; } .pl.t-uninhabited img { filter: brightness(.55) saturate(.5); }
+.pl .n { position: absolute; right: -10%; top: -10%; font-size: 12px; font-weight: 800; min-width: 22px; height: 22px; border-radius: 6px; background: #0b111b; border: 1px solid #2a3647; display: grid; place-items: center; }
+.pl .sh { position: absolute; inset: -24%; border-radius: 50%; background: radial-gradient(circle, transparent 57%, rgba(120,200,255,.18) 69%, rgba(160,225,255,.55) 71%, transparent 73%); }
+.pl .db { position: absolute; left: -26%; bottom: -14%; width: 46%; }
+.empty { position: absolute; width: 14px; height: 14px; border-radius: 50%; border: 1px dashed rgba(150,185,230,.4); transform: translate(-50%, -50%); }
+.empty b { position: absolute; left: 50%; top: 16px; transform: translateX(-50%); font-size: 11px; color: #56627a; font-weight: 800; }
+.lab { position: absolute; max-width: 210px; padding: 5px 9px 6px; border-radius: 9px; background: rgba(8,13,21,.9); border: 1px solid color-mix(in srgb, var(--c) 55%, #1c2533); text-align: center; line-height: 1.2; }
+.lab b { display: block; font-size: 13px; font-weight: 800; color: #eef3fa; }
+.lab .tag { font-size: 12px; font-weight: 800; color: var(--c); }
+.lab .row { display: flex; gap: 8px; justify-content: center; align-items: center; margin-top: 3px; font-size: 12px; font-weight: 800; }
+.lab .row img { width: 16px; height: 16px; } .lab .deb { color: var(--gold); display: flex; align-items: center; gap: 4px; } .lab .shd { color: #9fdcff; }
+.lab.muted { border-color: #1c2533; background: rgba(8,13,21,.6); } .lab.muted b { color: #6c7889; font-weight: 600; font-size: 12px; }
+.flt { position: absolute; right: 24px; top: 16px; display: flex; gap: 6px; padding: 6px; border-radius: 14px; background: rgba(10,16,25,.88); border: 1px solid rgba(120,160,210,.14); }
+.flt span { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; color: #b7c2d1; padding: 7px 12px; border-radius: 10px; }
+.flt span.on { color: #fff; background: rgba(86,217,242,.14); } .flt img { width: 22px; height: 22px; border-radius: 50%; }
+</style></head><body>
+<div class="stage"><img class="hdr" src="../assets/header-universe.png"><main class="area"><div class="frame" id="f"><svg id="s" viewBox="0 0 1844 870"></svg>
+  <div class="top"><span class="back">← Галактика 1</span><div><small>СОЛНЕЧНАЯ СИСТЕМА</small><b>03 · Солнце 70%</b></div></div>
+  <div class="rail"><span>02</span><b>03</b><span>04</span></div>
+</div></main></div>
+<script src="../universe/data.js"></script>
+<script>
+const F = document.getElementById('f'), act = (k) => `../../../src/assets/ui/actions/${k}.webp`;
+const add = (cls, html, css) => { const d = document.createElement('div'); d.className = cls; d.innerHTML = html; d.style.cssText = css || ''; F.appendChild(d); return d; };
+const CX = 900, CY = 455, T = 0.56, RX = [240, 375, 510, 645];
+document.getElementById('s').innerHTML = RX.map((r) => `<ellipse cx="${CX}" cy="${CY}" rx="${r}" ry="${r * T}" fill="none" stroke="rgba(130,175,230,.16)" stroke-width="1.3"/>`).join('');
+add('sun', `<img src="${ART.sun(6)}" style="width:100%">`, `left:${CX}px;top:${CY}px`);
+const pos = SYSTEM.map((o, i) => { const k = Math.floor(i / 6), j = i % 6; const a = (-90 + j * 60 + k * 30 + 12) * Math.PI / 180; return { x: CX + Math.cos(a) * RX[k], y: CY + Math.sin(a) * RX[k] * T, a, k }; });
+const bodies = [];
+SYSTEM.forEach((o, i) => { const p = pos[i];
+  if (!o.art) { add('empty', `<b>${o.pos}</b>`, `left:${p.x}px;top:${p.y}px`); bodies.push({ l: p.x - 8, r: p.x + 8, t: p.y - 8, b: p.y + 22 }); return; }
+  const sz = o.kind === 'asteroid' ? 44 : o.tone === 'uninhabited' ? 50 : 74;
+  add(`pl k-${o.kind} t-${o.tone}`, `${o.shield ? '<i class="sh"></i>' : ''}<img src="${o.art}"><b class="n">${o.pos}</b>${o.debris ? `<img class="db" src="${ART.debris(o.debris > 1e9 ? 2 : 4)}">` : ''}`,
+    `left:${p.x}px;top:${p.y}px;width:${sz}px;height:${sz}px;--c:${TONE[o.tone].color};--o:${['neutral', 'protected'].includes(o.tone) ? .5 : .95};z-index:${Math.round(p.y)}`);
+  bodies.push({ l: p.x - sz / 2 - 6, r: p.x + sz / 2 + 6, t: p.y - sz / 2 - 6, b: p.y + sz / 2 + 6 }); });
+// labels: name, alliance tag + relation colour, debris and shield. Placed outward; moved if they would hit anything.
+const placed = [], W = 1844, H = 870;
+const hit = (a, b) => !(a.r < b.l || a.l > b.r || a.b < b.t || a.t > b.b);
+const order = SYSTEM.map((o, i) => i).sort((a, b) => pos[b].k - pos[a].k);
+order.forEach((i) => { const o = SYSTEM[i], p = pos[i]; if (!o.art) return;
+  let html, cls = 'lab';
+  if (o.tone === 'uninhabited') { cls += ' muted'; html = '<b>Необитаемая</b>'; }
+  else if (o.kind === 'asteroid') html = `<b>Астероид</b><div class="row"><span style="color:#7fe0c2">газ ${short(o.gas)}/ч</span>${o.debris ? `<span class="deb"><img src="${ART.icon('debris')}">${short(o.debris)}</span>` : ''}</div>`;
+  else { const tag = o.ally ? `<span class="tag">[${ALLIANCES[o.ally].tag}]</span> ` : o.kind === 'pirate' ? '<span class="tag">Пираты</span> ' : o.kind === 'unique' ? '<span class="tag">Объект</span> ' : o.kind === 'anomaly' ? '<span class="tag">Аномалия</span> ' : '';
+    html = `<b>${tag}${o.owner && o.owner !== 'Вы' && o.owner !== o.name ? o.owner : o.name}</b>${o.debris || o.shield || o.timer ? `<div class="row">${o.debris ? `<span class="deb"><img src="${ART.icon('debris')}">${short(o.debris)}</span>` : ''}${o.shield ? `<span class="shd">щит ${o.shield === 'новичок' ? 'новичка' : o.shield}</span>` : ''}${o.timer ? `<span style="color:#ff9a5a">${o.timer}</span>` : ''}</div>` : ''}`; }
+  const el = add(cls, html, `--c:${TONE[o.tone].color};z-index:2000;visibility:hidden`); const w = el.offsetWidth, h = el.offsetHeight;
+  const R = (o.kind === 'asteroid' ? 22 : o.tone === 'uninhabited' ? 25 : 37) + 8;
+  const sn = Math.sin(p.a), cs = Math.cos(p.a);
+  const C = { below: [p.x - w / 2, p.y + R], above: [p.x - w / 2, p.y - R - h], right: [p.x + R, p.y - h / 2], left: [p.x - R - w, p.y - h / 2] };
+  const first = p.k === 3 ? (sn > 0.5 ? 'below' : sn < -0.5 ? 'above' : cs > 0 ? 'right' : 'left') : (cs > 0 ? 'right' : 'left');
+  let best = null, bs = 1e9;
+  for (const k of [first, 'below', 'above', 'right', 'left']) { const [x, y] = C[k]; const b = { l: x, r: x + w, t: y, b: y + h };
+    let sc = (b.l < 8 || b.r > W - 90 || b.t < 70 || b.b > H - 6) ? 50 : 0; placed.forEach((q) => { if (hit(b, q)) sc += 10; }); bodies.forEach((q, j) => { if (j !== i && hit(b, q)) sc += 10; });
+    if (sc < bs) { bs = sc; best = [x, y, b]; } if (!sc) break; }
+  el.style.left = best[0] + 'px'; el.style.top = best[1] + 'px'; el.style.visibility = 'visible'; placed.push(best[2]); });
+add('flt', [['attack', 'Цели', 1], ['recycle', 'Газ и обломки', 1], ['colonize', 'Свободные', 0], ['pirate-raid', 'Пираты и объекты', 0], ['deployment', 'Свои и союз', 0]].map(([i, l, on]) => `<span class="${on ? 'on' : ''}"><img src="${act(i)}">${l}</span>`).join(''));
+</script><script src="../frame.js"></script>
+</body></html>
