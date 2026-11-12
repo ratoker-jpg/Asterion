@@ -72,6 +72,7 @@ NO borders, NO people unless asked, centered composition, clean edges.
 - `empty-battles.png` — тихая орбита, обломки дрейфуют, никого нет.
 - `empty-flights.png` — пустой ангар с открытыми воротами в космос.
 - `empty-reports.png` — голографический терминал с пустым экраном связи.
+- `empty-mail.webp` (12.11.2026, «Сообщения» v3, пустой раздел) — непрозрачная, кадр 16:9 вырезан из квадрата 1254×1254 и уменьшен до 720×405; края растворяются в панели CSS-маской. Запрос: «Empty-state illustration for a sci-fi strategy game's message inbox: a lone sleek communications relay satellite drifting in deep dark space, faint blue signal rings fading out, distant nebula in teal and violet, painterly-realistic, cinematic rim light, calm».
 
 ## 4. Рейтинг: медали и фон (приоритет 2)
 

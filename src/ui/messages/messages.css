@@ -1128,3 +1128,11 @@
   .reports-view .reports-hero__big > b { font-size: calc(30px * var(--text-scale-page-title, 1)) !important; }
   .reports-view--mail .reports-sheet-body { padding: 14px 18px 18px; gap: 14px; }
 }
+
+/* Empty section / empty list: the opaque relay-satellite picture fades into the panel at every edge. */
+.reports-view .reports-empty-art--mail {
+  width: min(420px, 78%) !important;
+  border-radius: 0;
+  -webkit-mask-image: radial-gradient(ellipse 70% 72% at 45% 50%, #000 52%, transparent 100%);
+  mask-image: radial-gradient(ellipse 70% 72% at 45% 50%, #000 52%, transparent 100%);
+}

@@ -177,13 +177,13 @@ function ReportListItem({ item, battle, value, who, command, active, read, saved
 
 function EmptyDossier({ category, savedOnly }: { category: ReportCategory; savedOnly: boolean }) {
   const copy = EMPTY_COPY[category];
-  return <div className="reports-empty-dossier"><img className="ui-empty-art" src={savedOnly ? EMPTY_ART.battles : EMPTY_ART.reports} alt="" draggable={false} /><strong>{savedOnly ? 'Сохранённых боёв нет' : copy.title}</strong><span>{savedOnly ? 'Сохрани нужный бой звездой в «Докладах» или во вкладке Флоты → Битвы.' : copy.body}</span></div>;
+  return <div className="reports-empty-dossier"><img className={`ui-empty-art ${savedOnly ? '' : 'reports-empty-art--mail'}`} src={savedOnly ? EMPTY_ART.battles : EMPTY_ART.mail} alt="" draggable={false} /><strong>{savedOnly ? 'Сохранённых боёв нет' : copy.title}</strong><span>{savedOnly ? 'Сохрани нужный бой звездой в «Докладах» или во вкладке Флоты → Битвы.' : copy.body}</span></div>;
 }
 
 function EmptyFolder({ folder }: { folder: MessageFolder }) {
   const title = folder.category ? EMPTY_COPY[folder.category].title : folder.emptyTitle ?? 'Раздел пока пуст';
   const body = folder.category ? EMPTY_COPY[folder.category].body : folder.emptyBody ?? 'Для этого раздела пока нет подключённого источника данных.';
-  return <div className="reports-empty-dossier reports-empty-folder" data-qa-empty-folder><img className="ui-empty-art" src={EMPTY_ART.reports} alt="" draggable={false} /><strong>{title}</strong><span>{body}</span></div>;
+  return <div className="reports-empty-dossier reports-empty-folder" data-qa-empty-folder><img className="ui-empty-art reports-empty-art--mail" src={EMPTY_ART.mail} alt="" draggable={false} /><strong>{title}</strong><span>{body}</span></div>;
 }
 
 function ProfileAvatar({ displayName, factionId }: { displayName: string; factionId: string }) {
