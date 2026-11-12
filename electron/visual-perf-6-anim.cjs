@@ -95,13 +95,7 @@ async function seed(win) {
   await settle(win, 500);
 }
 
-const STAGE = `(() => {
-  document.getElementById('p6-stage')?.remove();
-  const host = document.querySelector('.workspace') || document.body;
-  const stage = document.createElement('div');
-  stage.id = 'p6-stage';
-  stage.style.cssText = 'position:absolute;inset:0;z-index:9999;background:#050c12;display:flex;flex-wrap:wrap;align-content:flex-start;gap:56px;padding:56px;overflow:hidden';
-  stage.innerHTML = \`
+const FRAGMENTS = `
     <div id="p6-incoming" class="fleet-root-v2 has-incoming" style="width:560px;height:180px;padding:24px">
       <div class="fleet-incoming-alert-v2" role="alert"><b aria-hidden="true">⚠</b><div><strong>ВХОДЯЩАЯ АТАКА</strong><span>Отступники → 1:2:3 · прибытие через 04:12</span></div><button type="button">ПОКАЗАТЬ РЕЙС</button></div>
     </div>
@@ -117,9 +111,21 @@ const STAGE = `(() => {
     <div id="p6-briefing" class="flight-briefing-v2" style="position:relative;width:300px;height:300px"><div class="fa-route__pick" style="left:35px;top:35px">Выберите<br>цель</div></div>
     <div id="p6-alarm" class="opsA" style="width:420px;padding:24px"><button type="button" class="srp-alert"><span style="width:42px;height:42px;border-radius:8px;background:#3a1a22;display:block"></span><span><b>Солнце атакуют</b><small>Рейд на 1:5 · через 12:30</small></span></button></div>
     <div id="p6-new" style="padding:24px"><button type="button" class="igo-btn whats-new-entry is-new">Что нового<span class="whats-new-mark">НОВОЕ</span></button></div>
-    <div id="p6-atlas" style="padding:24px"><em class="star-atlas__presence is-online"><i></i>в сети</em></div>\`;
+    <div id="p6-atlas" style="padding:24px"><em class="star-atlas__presence is-online"><i></i>в сети</em></div>`;
+/** One fragment at a time over the workspace (top-left, so it is always inside the visible area). */
+const stageOne = (id) => `(() => {
+  document.getElementById('p6-stage')?.remove();
+  const host = document.querySelector('.workspace') || document.body;
+  const stage = document.createElement('div');
+  stage.id = 'p6-stage';
+  stage.style.cssText = 'position:absolute;inset:0;z-index:9999;background:#050c12;padding:48px;overflow:hidden';
+  const box = document.createElement('div');
+  box.innerHTML = ${JSON.stringify(FRAGMENTS)};
+  const fragment = box.querySelector('#' + ${JSON.stringify(id)});
+  if (!fragment) return false;
+  stage.appendChild(fragment);
   host.appendChild(stage);
-  return true;
+  return Boolean(fragment);
 })()`;
 
 async function runViewport(win, dir, report) {
@@ -185,21 +191,28 @@ async function runViewport(win, dir, report) {
   await click(win, '[data-qa-route="universe"]');
   await waitFor(win, `document.querySelector('.universe-view .system-planet img')`);
   await sleep(2500);
+  // UniverseView's markup for a shielded world in this build: the dome before the picture and, on the branch,
+  // the rim as a sibling after it (main draws the rim as the dome's ::before).
+  const rim = await js(win, `Array.from(document.styleSheets).some((sheet) => { try { return Array.from(sheet.cssRules).some((rule) => String(rule.selectorText || '').includes('shield-aura__rim')); } catch { return false; } })`);
+  report.shieldMarkup = rim ? 'dome + sibling rim (branch UniverseView)' : 'dome with ::before rim (main UniverseView)';
   await js(win, `(() => {
     const planet = document.querySelector('.universe-view .system-planet');
-    if (!planet.querySelector('.shield-aura')) { const aura = document.createElement('span'); aura.className = 'shield-aura'; aura.setAttribute('aria-hidden', 'true'); planet.insertBefore(aura, planet.querySelector('img')); }
+    const img = planet.querySelector(':scope > img');
+    const span = (cls) => { const node = document.createElement('span'); node.className = cls; node.setAttribute('aria-hidden', 'true'); return node; };
+    planet.insertBefore(span('shield-aura'), img);
+    if (${rim}) img.after(span('shield-aura__rim'));
     planet.id = 'p6-shielded';
   })()`);
   await sleep(400);
   await take('universe-map', null);
   await take('universe-shield-dome', '#p6-shielded', 40);
 
-  // Fragments (same markup in both runs) over the workspace.
-  await js(win, STAGE);
-  await sleep(800);
-  for (const [name, selector, pad] of [['fleets-incoming-attack', '#p6-incoming', 8], ['recycling-ready', '#p6-recycling', 8], ['bots-distribute', '#p6-bots', 8],
-    ['queued-stripes', '#p6-stripes', 8], ['flight-plan-pick', '#p6-briefing', 8], ['sun-raid-alarm', '#p6-alarm', 8], ['whats-new-mark', '#p6-new', 8], ['atlas-online', '#p6-atlas', 8]]) {
-    await take(name, selector, pad);
+  // Fragments (same markup in both runs) over the workspace, one at a time.
+  for (const [name, id, pad] of [['fleets-incoming-attack', 'p6-incoming', 8], ['recycling-ready', 'p6-recycling', 8], ['bots-distribute', 'p6-bots', 8],
+    ['queued-stripes', 'p6-stripes', 8], ['flight-plan-pick', 'p6-briefing', 8], ['sun-raid-alarm', 'p6-alarm', 8], ['whats-new-mark', 'p6-new', 8], ['atlas-online', 'p6-atlas', 8]]) {
+    if (!(await js(win, stageOne(id)))) throw new Error(`No fragment ${id}`);
+    await sleep(700);
+    await take(name, '#' + id, pad);
   }
   await js(win, `document.getElementById('p6-stage')?.remove()`);
   return shots;
