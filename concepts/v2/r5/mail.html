@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Сообщения · в стиле текущей игры</title>
+<link rel="stylesheet" href="../frame.css">
+<style>
+:root { --dim: #8b97aa; --line: rgba(150,180,220,.10); --cyan: #56d9f2; --red: #ff4d5e; --green: #57d98f; --gold: #e8b45a; --panel: rgba(12,19,29,.9); --card: #121c29; }
+.stage { background: #03060c url(../../../assets/source/battle-report-v2/battle-space-background-v1.png) center/cover; }
+.stage::before { content: ''; position: absolute; inset: 0; background: rgba(3,6,12,.8); }
+.area { top: 136px; }
+.pan { position: absolute; top: 64px; bottom: 26px; border-radius: 16px; background: var(--panel); border: 1px solid rgba(150,180,220,.08); }
+/* sections */
+.secs { left: 38px; width: 250px; padding: 18px 12px; display: flex; flex-direction: column; gap: 2px; }
+.secs h3 { font-size: 22px; font-weight: 800; padding: 0 10px 12px; }
+.s { display: grid; grid-template-columns: 30px 1fr auto; gap: 10px; align-items: center; padding: 10px; border-radius: 10px; font-size: 16px; font-weight: 700; color: #c9d3e0; }
+.s img { width: 30px; height: 30px; } .s em { font-style: normal; font-size: 13px; font-weight: 800; color: #fff; background: #2a6df0; border-radius: 10px; padding: 1px 8px; }
+.s.on { background: rgba(86,217,242,.12); box-shadow: inset 0 0 0 1px rgba(86,217,242,.4); color: #fff; }
+.s.quiet { color: #586377; } .s.quiet img { opacity: .35; }
+.secs .sep { font-size: 12px; letter-spacing: 2px; color: #4f5a6c; font-weight: 800; padding: 14px 10px 4px; }
+/* list */
+.lst { left: 306px; width: 470px; padding: 16px 12px; display: flex; flex-direction: column; }
+.lh { display: flex; justify-content: space-between; align-items: center; padding: 0 8px 10px; } .lh b { font-size: 20px; font-weight: 800; } .lh span { font-size: 14px; color: var(--dim); } .lh a { color: var(--cyan); font-weight: 700; font-size: 14px; }
+.flt { display: flex; gap: 6px; padding: 0 6px 10px; } .flt span { font-size: 14px; font-weight: 700; color: var(--dim); padding: 6px 12px; border-radius: 16px; background: #141f2d; } .flt .on { color: #fff; background: rgba(86,217,242,.16); }
+.day { font-size: 12px; letter-spacing: 2px; color: #56627a; font-weight: 800; margin: 8px 8px 4px; }
+.it { display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: center; padding: 9px 10px; border-radius: 10px; position: relative; }
+.it img { width: 44px; height: 44px; border-radius: 10px; object-fit: cover; }
+.it b { display: block; font-size: 15px; font-weight: 800; } .it span { display: block; font-size: 13px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px; }
+.it .v { text-align: right; } .it .v b { color: var(--vc, #fff); white-space: nowrap; } .it .v span { font-size: 12px; }
+.it.new::before { content: ''; position: absolute; left: 0; top: 14px; bottom: 14px; width: 3px; border-radius: 2px; background: var(--cyan); }
+.it.read b { color: #a9b4c4; font-weight: 700; }
+.it.on { background: rgba(86,217,242,.12); box-shadow: inset 0 0 0 1px rgba(86,217,242,.45); }
+.lst .fade { margin-top: auto; text-align: center; font-size: 13px; color: var(--dim); padding-top: 8px; }
+/* report */
+.rep { left: 794px; right: 38px; display: flex; flex-direction: column; overflow: hidden; }
+.hero { position: relative; height: 210px; border-radius: 16px 16px 0 0; background-size: cover; background-position: right center; flex: none; }
+.hero::before { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(8,13,21,.98) 0, rgba(8,13,21,.85) 45%, rgba(8,13,21,.15) 80%); }
+.hero > div { position: relative; padding: 26px 34px; height: 100%; display: flex; flex-direction: column; }
+.hero .k { font-size: 14px; letter-spacing: 2px; text-transform: uppercase; font-weight: 800; color: var(--kc, var(--cyan)); }
+.hero h2 { font-size: 34px; font-weight: 800; line-height: 1.05; margin: 8px 0 6px; }
+.hero p { font-size: 16px; color: #b8c3d3; } .hero p i { font-style: normal; color: var(--cyan); font-weight: 700; }
+.hero .big { display: flex; align-items: baseline; gap: 16px; margin-top: auto; } .hero .big b { font-size: 40px; font-weight: 800; color: var(--bc, var(--green)); line-height: 1; white-space: nowrap; } .hero .big span { font-size: 15px; color: #c7d1de; max-width: 420px; }
+.body { padding: 22px 34px; display: flex; flex-direction: column; gap: 22px; flex: 1; min-height: 0; }
+.h { font-size: 13px; letter-spacing: 2px; text-transform: uppercase; color: var(--dim); font-weight: 800; margin-bottom: 10px; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.card { background: var(--card); border-radius: 12px; padding: 14px 16px; }
+.who { display: grid; grid-template-columns: 58px 1fr; gap: 14px; align-items: center; } .who img { width: 58px; height: 58px; border-radius: 12px; object-fit: cover; }
+.who small { font-size: 13px; color: var(--dim); display: block; } .who b { font-size: 17px; font-weight: 800; display: block; line-height: 1.25; } .who span { font-size: 14px; color: #b6c1d0; } .who i { font-style: normal; color: var(--cyan); font-weight: 700; } .who em { font-style: normal; color: #ff7a86; font-weight: 800; }
+.res { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.res .card { display: grid; grid-template-columns: 34px 1fr; gap: 10px; align-items: center; } .res img { width: 34px; height: 34px; } .res small { font-size: 13px; color: var(--dim); display: block; } .res b { font-size: 20px; font-weight: 800; white-space: nowrap; }
+.tbl .tr { display: grid; grid-template-columns: 1fr 100px 100px 100px; gap: 8px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 15px; font-weight: 800; }
+.tbl .th { font-size: 12px; letter-spacing: 1.5px; color: #56627a; text-transform: uppercase; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.tbl .tr > span:not(:first-child) { text-align: right; } .tbl .nm { display: flex; gap: 10px; align-items: center; } .tbl .nm img { width: 46px; height: 30px; object-fit: contain; }
+.tbl .lost { color: #ff7a86; } .tbl .was { color: var(--dim); font-weight: 600; }
+.foot { margin-top: auto; display: flex; gap: 10px; justify-content: flex-end; align-items: center; padding: 16px 34px; border-top: 1px solid var(--line); flex: none; }
+.foot .del { margin-right: auto; color: #ff7a86; font-weight: 700; font-size: 15px; }
+.btn { font: inherit; font-size: 16px; font-weight: 700; color: #dfe7f2; background: #172232; border: 0; border-radius: 10px; padding: 12px 20px; white-space: nowrap; }
+.btn.pri { color: #04121b; background: linear-gradient(#7ee8fb, #3fc0e6); box-shadow: 0 0 20px rgba(86,217,242,.3); }
+.btn.red { color: #fff; background: linear-gradient(#ff6a78, #d93446); }
+.warn { display: flex; gap: 14px; align-items: center; padding: 14px 18px; border-radius: 12px; background: rgba(255,77,94,.12); box-shadow: inset 0 0 0 1px rgba(255,77,94,.35); font-size: 16px; } .warn b { color: #ff8f98; }
+.ok { background: rgba(87,217,143,.1); box-shadow: inset 0 0 0 1px rgba(87,217,143,.35); } .ok b { color: var(--green); }
+.ships { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; } .ships .card { display: grid; grid-template-columns: 54px 1fr; gap: 8px; align-items: center; padding: 10px 12px; } .ships img { width: 54px; height: 36px; object-fit: contain; } .ships small { display: block; font-size: 13px; color: var(--dim); } .ships b { font-size: 17px; white-space: nowrap; }
+.letter { font-size: 20px; line-height: 1.5; color: #dfe6f0; max-width: 820px; } .letter i { font-style: normal; color: var(--cyan); font-weight: 700; }
+.timer { font-size: 15px; color: var(--dim); } .timer b { font-size: 30px; color: var(--gold); margin-left: 10px; }
+.empty { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 10px; } .empty img { width: 360px; margin: 0 auto; } .empty b { font-size: 26px; } .empty span { font-size: 16px; color: var(--dim); }
+</style></head><body>
+<div class="stage"><img class="hdr" src="../assets/header-messages.png"><main class="area" id="a"></main></div>
+<script src="../messages/data.js"></script>
+<script>
+const { A, fmt, short } = MSG;
+const sec = new URLSearchParams(location.search).get('sec') || 'battle';
+const R = '../../../', act = (k) => `${R}src/assets/ui/actions/${k}.webp`, ban = (k) => `${R}src/assets/ui/missions/banner-${k}.webp`, ship = (r, k) => A.ship(r, k);
+const P = (n) => A.planet(n), F = (f) => A.face(f), RES = (r) => A.res(r);
+const strip = (s) => s.replace('+', '').replace('−', '');
+// sections: the ones with letters first, empty ones at the bottom and quiet
+const SECS = [['profile', 'Профиль', 'profile', 0], ['letters', 'Личные', 'alliances', 6], ['battle', 'Бои', 'arena', 13], ['spy', 'Разведка', 'system', 5], ['flights', 'Полёты', 'flights', 99], ['command', 'Командные', 'command-reports', 2], ['system', 'Система', 'achievements', 1], ['ally', 'Союзы', 'alliances', 0], ['arena', 'Арена', 'arena', 0], ['ach', 'Достижения', 'achievements', 0]];
+const secHTML = () => `<div class="pan secs"><h3>Сообщения</h3>${SECS.filter((s) => s[3] || s[0] === 'profile' || s[0] === sec).map((s) => `<div class="s ${s[0] === sec || (sec === 'empty' && s[0] === 'arena') ? 'on' : ''}"><img src="${A.icon(s[2])}"><span>${s[1]}</span>${s[3] ? `<em>${s[3] > 98 ? '99+' : s[3]}</em>` : ''}</div>`).join('')}
+  <div class="sep">ПУСТО</div>${SECS.filter((s) => !s[3] && s[0] !== 'profile' && s[0] !== sec).map((s) => `<div class="s quiet ${sec === 'empty' && s[0] === 'arena' ? 'on' : ''}"><img src="${A.icon(s[2])}"><span>${s[1]}</span></div>`).join('')}</div>`;
+const LONG = 'Звездоплаватель-Командор Северного Предела';
+// list items per section: [pic, title, sub, value, valueColor, time, new]
+const L = {
+  battle: [[F('aegis'), 'Победа при атаке', `${LONG} · [1:140:24]`, '+312 млрд', '#57d98f', '23:41', 1], [F('veyra'), 'На вас напали', 'Рой Кассиопеи · Helion 01', '−859 млрд', '#ff7a86', '22:17', 1], [F('synod'), 'Поражение при атаке', 'Тавр · [2:15:6]', '−47 млрд', '#ff7a86', '18:08', 1], [F('pirates'), 'Налёт пиратов отбит', 'Helion 03', '+1,2 млн', '#57d98f', '16:42', 0], [F('aegis'), 'Ничья', 'Мицелия · [3:16:7]', '0', '#8b97aa', '14:59', 0], [F('veyra'), 'Победа при обороне', 'Бот 01 · Helion 02', '+45 млн', '#57d98f', '12:33', 0], [F('synod'), 'Победа при атаке', 'Кальдера · [2:19:1]', '+150 млрд', '#57d98f', '09:07', 0]],
+  spy: [[P(9), 'Разведка · полная', `${LONG}`, '1,2 трлн', '#56d9f2', '23:12', 1], [P(4), 'Разведка · базовая', 'Тавр · [2:15:6]', '1 200', '#56d9f2', '22:40', 1], [P(11), 'Разведка не удалась', 'Кальдера · зонд сбит', '—', '#ff7a86', '21:05', 0], [P(2), 'Вас разведали', 'Рой Кассиопеи · Helion 01', '', '#e8b45a', '19:30', 1], [P(7), 'Разведка · полная', 'Аурелия · [1:44:2]', '88 млрд', '#56d9f2', '17:15', 0]],
+  flights: [[act('gas'), 'Газ добыт', 'Астероид [2:31:16]', '+48 250', '#57d98f', '17:10', 1], [act('recycle'), 'Обломки собраны', '[1:17:9]', '+1 037', '#57d98f', '17:07', 1], [act('recycle'), 'Обломков не было', '[1:1:1] · пусто', '0', '#8b97aa', '17:07', 0], [act('expedition'), 'Экспедиция вернулась', 'Рудные пустоши', '+780 тыс', '#57d98f', '17:08', 1], [act('transport'), 'Груз доставлен', 'Helion 02', '+987 млрд', '#57d98f', '16:40', 0], [act('deployment'), 'Флот передислоцирован', 'Helion 03', '', '#fff', '15:12', 0]],
+  letters: [[F('aegis'), 'Просит помощи', 'Лорд-протектор Орбитальных Верфей · Дом 5', 'до 18:02', '#e8b45a', '17:02', 1], [F('veyra'), 'Зовёт на совместную атаку', 'Командир Тёмной Звезды · Кассиопея', 'до 19:40', '#e8b45a', '16:47', 1], [F('synod'), 'Заявка в союз', 'Командир Объединённого Флота', '', '#fff', '17:10', 0], [F('aegis'), 'Заявка отклонена', '[NOX] Рой Ноктиса', '', '#fff', '17:07', 0], [F('veyra'), 'Ответил с угрозой', 'Ор · после вашей атаки', '', '#ff7a86', '16:30', 0]],
+};
+const items = L[sec] || [];
+const listHTML = () => {
+  const t = SECS.find((s) => s[0] === sec);
+  return `<div class="pan lst"><div class="lh"><b>${sec === 'empty' ? 'Арена' : t[1]}</b>${items.length ? '<a>Прочитать все</a>' : ''}</div>
+  ${items.length ? `<div class="flt"><span class="on">Все</span><span>Новые</span>${sec === 'battle' ? '<span>Сохранённые</span>' : ''}</div><div class="day">СЕГОДНЯ</div>
+  ${items.map((x, i) => `<div class="it ${x[6] ? 'new' : 'read'} ${i === 0 ? 'on' : ''}"><img src="${x[0]}"><div><b>${x[1]}</b><span>${x[2]}</span></div><div class="v" style="--vc:${x[4]}"><b>${x[3]}</b><span>${x[5]}</span></div></div>`).join('')}
+  <div class="fade">прокрутка · ещё ${sec === 'flights' ? 197 : 30} писем</div>` : '<div class="fade" style="margin:auto">здесь пусто</div>'}</div>`;
+};
+let rep = '';
+if (sec === 'battle') {
+  const B = MSG.battle, sh = (arr, race) => arr.filter((s) => s[2]).map(([k, n, was, lost]) => `<div class="tr"><span class="nm"><img src="${ship(race, k)}">${n}</span><span class="was">${fmt(was)}</span><span class="lost">−${fmt(lost)}</span><span>${fmt(was - lost)}</span></div>`).join('');
+  rep = `<div class="hero" style="background-image:url('${ban('attack')}')"><div><div class="k" style="--kc:#57d98f">Боевой доклад · 12.11 · 23:41</div><h2>Победа при атаке</h2><p>6 раундов · флот противника уничтожен</p>
+    <div class="big"><b>+312 млрд</b><span>выгода: унесли 326 млрд, потеряли кораблей на 12,8 млрд</span></div></div></div>
+  <div class="body"><div class="two">
+    <div class="card who"><img src="${F('synod')}"><div><small>Вы атаковали</small><b>${B.me.name}</b><span>с планеты <i>[${B.me.coord}]</i></span></div></div>
+    <div class="card who"><img src="${F('aegis')}"><div><small>Противник</small><b>${B.foe.name}</b><span><em>[ТЬМА]</em> ${B.foe.planet} <i>[${B.foe.coord}]</i></span></div></div></div>
+    <div><div class="h">Добыча и обломки</div><div class="res">
+      <div class="card"><img src="${RES('metal')}"><div><small>Металл</small><b style="color:#57d98f">${strip(short(B.loot.metal))}</b></div></div>
+      <div class="card"><img src="${RES('mineral')}"><div><small>Минералы</small><b style="color:#57d98f">${strip(short(B.loot.mineral))}</b></div></div>
+      <div class="card"><img src="${RES('gas')}"><div><small>Газ</small><b style="color:#57d98f">${strip(short(B.loot.gas))}</b></div></div>
+      <div class="card"><img src="${RES('debris')}"><div><small>Обломки на орбите</small><b style="color:#e8b45a">${strip(short(B.debris))}</b></div></div></div></div>
+    <div class="two"><div class="tbl"><div class="tr th"><span>Ваши потери</span><span>было</span><span>потеряно</span><span>осталось</span></div>${sh(B.myShips, 'synod')}</div>
+      <div class="tbl"><div class="tr th"><span>Потери противника</span><span>было</span><span>потеряно</span><span>осталось</span></div>${sh(B.foeShips, 'aegis')}</div></div></div>
+  <div class="foot"><span class="del">Удалить</span><button class="btn">Ход боя</button><button class="btn">Сохранить бой</button><button class="btn">Напасть снова</button><button class="btn pri">Собрать обломки · 00:08:41</button></div>`;
+} else if (sec === 'spy') {
+  const S = MSG.spy;
+  rep = `<div class="hero" style="background-image:url('${ban('espionage')}')"><div><div class="k">Полный шпионский отчёт · 23:12</div><h2>${LONG}</h2><p>планета ${S.planet} <i>[${S.coord}]</i> · Вейра · без щита</p>
+    <div class="big" style="--bc:#56d9f2"><b>1,2 трлн</b><span>можно унести за один налёт · нужно 24 600 мегатранспортов</span></div></div></div>
+  <div class="body"><div class="warn"><img src="${act('attack')}" style="width:40px;height:40px;border-radius:50%"><span>Опасно: <b>их флот сильнее вашего в 2,4 раза</b> · оборона 1,24 млн</span></div>
+    <div><div class="h">На планете</div><div class="res">
+      <div class="card"><img src="${RES('metal')}"><div><small>Металл</small><b>987,7 млрд</b></div></div><div class="card"><img src="${RES('mineral')}"><div><small>Минералы</small><b>888,9 млрд</b></div></div>
+      <div class="card"><img src="${RES('gas')}"><div><small>Газ</small><b>777,8 млрд</b></div></div><div class="card"><img src="${RES('debris')}"><div><small>Обломки</small><b style="color:#e8b45a">123,5 млрд</b></div></div></div></div>
+    <div><div class="h">Флот · 1 млрд кораблей</div><div class="ships">${S.fleet.map(([k, n]) => `<div class="card"><img src="${ship('veyra', k)}"><div><small>${{ titan: 'Титан', goliath: 'Голиаф', frigate: 'Фрегат', interceptor: 'Перехватчик' }[k]}</small><b>${short(n).replace('+', '')}</b></div></div>`).join('')}</div></div>
+    <div class="two"><div class="card"><small style="color:#8b97aa">Оборона</small><b style="display:block;font-size:20px;margin-top:4px">1,24 млн · 9 типов</b></div><div class="card"><small style="color:#8b97aa">Постройки</small><b style="display:block;font-size:20px;margin-top:4px">34 здания · подробно ›</b></div></div></div>
+  <div class="foot"><span class="del">Удалить</span><button class="btn">Ещё зонд</button><button class="btn">Моделировать бой</button><button class="btn pri">Атаковать</button></div>`;
+} else if (sec === 'flights') {
+  rep = `<div class="hero" style="background-image:url('${ban('gas')}')"><div><div class="k" style="--kc:#57d98f">Добыча газа · 17:10</div><h2>Газ добыт</h2><p>Астероид <i>[2:31:16]</i> · флот летит домой, будет в 17:24</p>
+    <div class="big"><b>+48 250</b><span>газа, и ещё 1 200 обломков</span></div></div></div>
+  <div class="body"><div class="res" style="grid-template-columns:repeat(3,1fr)">
+      <div class="card"><img src="${RES('gas')}"><div><small>Газ</small><b style="color:#57d98f">+48 250</b></div></div>
+      <div class="card"><img src="${RES('debris')}"><div><small>Обломки</small><b style="color:#57d98f">+1 200</b></div></div>
+      <div class="card"><img src="${act('gas')}" style="border-radius:50%"><div><small>Осталось на астероиде</small><b>2,1 млн · сменит место через 2 ч</b></div></div></div>
+    <div class="two"><div class="card who"><img src="${P(3)}" style="object-fit:contain"><div><small>Откуда</small><b>Helion 03</b><span><i>[1:40:2]</i></span></div></div>
+      <div class="card who"><img src="${ship('aegis', 'large_cargo')}" style="object-fit:contain"><div><small>Флот</small><b>900 газовозов · 120 больших</b><span>грузоподъёмность заполнена на 64%</span></div></div></div></div>
+  <div class="foot"><span class="del">Удалить</span><button class="btn">Показать на карте</button><button class="btn pri">Повторить добычу · 00:06:30</button></div>`;
+} else if (sec === 'letters') {
+  rep = `<div class="hero" style="background-image:url('${ban('aid')}')"><div><div class="k" style="--kc:#e8b45a">Письмо командующего · 17:02</div><h2>Просит помощи</h2><p>Лорд-протектор Орбитальных Верфей Северного Пояса</p>
+    <div class="big" style="--bc:#e8b45a"><b>до 18:02</b><span>осталось 58 минут</span></div></div></div>
+  <div class="body"><div class="letter">«Флот игрока <i>Командор Тёмной Звезды</i> идёт на Дом 5 <i>[1:25:3]</i>, будет около 18:02. Нужна дислокация вашего флота на эту планету до этого времени.»</div>
+    <div class="two"><div class="card who"><img src="${F('aegis')}"><div><small>Отправитель</small><b>Лорд-протектор Орбитальных Верфей Северного Пояса</b><span>без союза · Эгида</span></div></div>
+      <div class="card who"><img src="${F('veyra')}"><div><small>Кто нападает</small><b>Командор Тёмной Звезды Девятого Сектора</b><span><em>[ТЬМА]</em> · 2,4 млн кораблей</span></div></div></div>
+    <div class="warn ok"><img src="${act('deployment')}" style="width:40px;height:40px;border-radius:50%"><span>Ваш ближайший флот успеет: <b>Helion 02 → Дом 5 за 41 мин</b></span></div></div>
+  <div class="foot"><span class="del">Удалить</span><button class="btn">Отказаться</button><button class="btn pri">Помочь · отправить флот</button></div>`;
+}
+document.getElementById('a').innerHTML = secHTML() + listHTML() + `<div class="pan rep">${rep || `<div class="empty"><img src="${A.empty}"><b>На Арене пока не было боёв</b><span>Когда вы сразитесь на Арене, отчёты появятся здесь.</span></div>`}</div>`;
+</script><script src="../frame.js"></script>
+</body></html>
