@@ -8,7 +8,7 @@ import { asterionAssetIntegrationAssets } from '../../assets/generated/asterionA
 import { getFactionCombatEntity } from '../../domain/combat/faction-catalog.ts';
 import type { CommandState } from '../../domain/command/types.ts';
 import type { ExplorationState } from '../../domain/exploration/ledger.ts';
-import { formatReportCoordinate, roundsLabel, type ReportSheet } from '../../domain/reports/sheet.ts';
+import { formatReportCoordinate, letterSenderPortrait, roundsLabel, type ReportSheet } from '../../domain/reports/sheet.ts';
 import type {
   ReportCategory,
   ReportFact,
@@ -57,7 +57,8 @@ function explorationArt(sheet: ReportSheet, exploration?: ExplorationState): str
 }
 
 /** The picture of the report in the list and in the header. */
-export function ReportArtwork({ item }: { item: ReportItem }) {
+export function ReportArtwork({ item, command }: { item: ReportItem; command?: CommandState }) {
+  if (item.letter) return <Portrait portrait={letterSenderPortrait(item.letter.sender)} command={command} />;
   if (item.spyReport) return <img src={getFactionCombatEntity(item.spyReport.targetRaceId, 'spy-probe').art} alt="" aria-hidden="true" draggable={false} />;
   if (item.pirateReconReport) {
     const cycle = item.pirateReconReport.contactCycleKey.split(':');
