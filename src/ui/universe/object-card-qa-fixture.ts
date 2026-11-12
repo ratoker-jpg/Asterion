@@ -1,6 +1,7 @@
 import type { UniverseCoordinate, UniversePlanetNode } from '../../domain/universe/types.ts';
 import type { PirateContactPresentation } from '../../pirate-ui.ts';
 import type { QuickActionId } from '../../application/quick-actions.ts';
+import { seedQaAsteroidState } from '../../application/universe-card-qa-seed.ts';
 import type { AtlasCell } from './atlas-plans.ts';
 import type { DebrisEntry, ExplorationIntel } from './object-card-model.ts';
 
@@ -106,7 +107,7 @@ export function createUniverseCardQaFixture(scenario: UniverseCardQaScenario, no
   const asteroid = (coordinate: UniverseCoordinate): UniversePlanetNode => ({
     id: `qa-card:asteroid:${coordinate.system}:${coordinate.position}`, coordinate, kind: 'asteroid', name: 'Астероид', art: arts.asteroid,
     statusLabel: 'Движется', description: '',
-    asteroid: { spawnIndex: 7, spawnedAt: nowMs - 90 * MINUTE, movementIndex: 4, previousMoveAt: nowMs - 6 * MINUTE, nextMoveAt: nowMs + 13 * MINUTE + 25_000, nextCoordinate: at(coordinate.system, coordinate.position + 1), gasYield: 0 },
+    asteroid: seedQaAsteroidState(nowMs, at(coordinate.system, coordinate.position + 1)),
   });
   const pirateNode = (coordinate: UniverseCoordinate, leftMs: number): UniversePlanetNode => ({
     id: `qa-card:pirate:${coordinate.system}:${coordinate.position}`, coordinate, kind: 'pirate', name: 'Пиратская база', art: arts.pirate,

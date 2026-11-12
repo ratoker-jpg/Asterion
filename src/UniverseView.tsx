@@ -102,7 +102,7 @@ import type {
 import type { PirateContactState } from './domain/pirates/contact.ts';
 import type { PirateContactPresentation, PirateSystemSelection } from './pirate-ui.ts';
 import type { TargetRelation } from './domain/flights/types.ts';
-import type { SpyTargetState } from './domain/espionage/types.ts';
+import type { UiSpyTarget } from './application/contracts.ts';
 import { planetSkinMapArt } from './planet-skin-art.ts';
 import { QuickActions } from './ui/universe/QuickActions.tsx';
 import { SunQuickMenu } from './ui/universe/SunQuickMenu.tsx';
@@ -141,7 +141,7 @@ type UniverseViewProps = {
   shields?: Readonly<Record<string, import('./domain/shield/shield.ts').ShieldRecord>>;
   command: CommandState;
   playerPlanets: readonly UniversePersistedPlayerPlanet[];
-  spyTargets: readonly SpyTargetState[];
+  spyTargets: readonly UiSpyTarget[];
   orbitalDebrisByCoordinate: readonly { coordinate: UniverseCoordinate; debris: number }[];
   asteroidDebrisPresenceBySpawnIndex?: Readonly<Record<string, boolean>>;
   asteroidStates?: readonly UniverseAsteroidRuntimeState[];

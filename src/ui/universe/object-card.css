@@ -338,8 +338,9 @@
 .universe-object-card.oc-finder .oc-title h2 {
   font-size: calc(20px * var(--text-scale-section-title, 1)) !important;
 }
-.universe-object-card .oc-finder__scope { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; color: var(--oc-muted); font-size: calc(13px * var(--text-scale-secondary, 1)) !important; }
-.universe-object-card .oc-finder__scope > span:last-child { font-size: calc(13px * var(--text-scale-secondary, 1)) !important; }
+.universe-object-card .oc-finder__scope { max-width: 100%; min-width: 0; display: flex; flex-wrap: nowrap; align-items: center; gap: 10px; color: var(--oc-muted); font-size: calc(13px * var(--text-scale-secondary, 1)) !important; white-space: nowrap; }
+.universe-object-card .oc-finder__scope > span { flex: none; font-size: calc(13px * var(--text-scale-secondary, 1)) !important; }
+.universe-object-card .oc-finder__scope > .oc-finder__planet { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .universe-object-card .oc-finder__total { display: grid; justify-items: end; gap: 2px; }
 .universe-object-card .oc-finder__total small { color: var(--oc-label); font-size: calc(12px * var(--text-scale-secondary, 1)) !important; font-weight: 700; }
 .universe-object-card .oc-finder__total b {

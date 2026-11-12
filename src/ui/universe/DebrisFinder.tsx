@@ -54,10 +54,11 @@ export function DebrisFinder({ search, span, targetOf, closeRef, sendEnabled, on
         <header className="universe-debris-finder__head oc-finder__head">
           <img className="universe-debris-finder__icon" src={DEBRIS_FINDER_ICON} alt="" draggable={false} />
           <div className="oc-title">
-            <h2>Обломки рядом с {origin.planetName}</h2>
-            <p className="oc-finder__scope">
+            <h2>Обломки поблизости</h2>
+            <p className="oc-finder__scope" data-qa-debris-finder-origin={formatUniverseCoordinate(origin.coordinate)}>
+              <span className="oc-finder__planet">от планеты {origin.planetName}</span>
               <span className="oc-coord">{formatUniverseCoordinate(origin.coordinate)}</span>
-              <span>Системы {pad2(search.from)}–{pad2(search.to)}, галактика {origin.coordinate.galaxy}</span>
+              <span>системы {pad2(search.from)}–{pad2(search.to)}</span>
             </p>
           </div>
           {results.length ? (
@@ -84,6 +85,8 @@ export function DebrisFinder({ search, span, targetOf, closeRef, sendEnabled, on
                 const key = formatUniverseCoordinate(entry.coordinate);
                 const isSun = entry.coordinate.position === 0;
                 const plan = plansOverride ? plansOverride[key] : plans[key]?.recycle;
+                // No recyclers can reach it: the button goes muted and the reason stays in the flight column.
+                const blocked = sendEnabled && plan?.kind === 'refused';
                 return (
                   <li key={key} data-qa-debris-row={key}>
                     {isSun
@@ -98,7 +101,9 @@ export function DebrisFinder({ search, span, targetOf, closeRef, sendEnabled, on
                       {...(plan?.kind === 'refused' ? { 'data-tip': plan.reason } : {})}>
                       {!sendEnabled ? '—' : plan?.kind === 'ready' ? flightClock(plan.durationMs) : plan?.kind === 'refused' ? shortRefusal(plan.reason) : '··:··:··'}
                     </span>
-                    <button type="button" className="oc-btn primary" disabled={!sendEnabled} data-qa-debris-send={key}
+                    <button type="button" className={blocked ? 'oc-btn' : 'oc-btn primary'} disabled={!sendEnabled || blocked} data-qa-debris-send={key}
+                      data-qa-debris-send-reason={blocked ? plan.reason : undefined}
+                      aria-label={blocked ? `Собрать: ${plan.reason}` : `Собрать обломки ${key}`}
                       onClick={(event) => onSend(entry, event.currentTarget)}>Собрать</button>
                   </li>
                 );
