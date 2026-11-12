@@ -78,7 +78,7 @@
 .fleet-workspace-v1 > .fleet-sidebar-v1 { animation: ut-slide-in-left var(--ut-motion-screen) var(--ut-spring) backwards; }
 
 /* Panels inside a screen follow one another (first eight staggered). */
-:is(.cmdA, .opsA, .op-view, .reports-view, .science-view-v2, .spaceport-upgrades-v2, .settings-view-v2, .rating-view-v2, .fleet-main-v1 > *) > *,
+:is(.cmdA, .opsA, .op-view, .reports-view, .science-view-v2, .spaceport-upgrades-v2, .set-view, .rating-view-v2, .fleet-main-v1 > *) > *,
 :is(.cmdA-content, .op-grid, .reports-profile-view) > * {
   animation: ut-rise-in var(--ut-motion-item) var(--ut-spring) backwards;
   animation-delay: calc(min(sibling-index(), 8) * var(--ut-stagger) + 60ms);
@@ -360,11 +360,11 @@ body :is(.system-planet, .resource-building-node, .zone-hotspot, .universe-radar
 }
 
 /* Tabs, section menus and segmented filters: the active plate fades in (colour only). */
-:is(.fleet-menu-group-v1 button, .science-sections-v2 button, .spaceport-sections-v2 button, .settings-nav-v2 nav button, .command-tabs button, .fleet-ship-filter-v2 button, .universe-radar__seg button) {
+:is(.fleet-menu-group-v1 button, .science-sections-v2 button, .spaceport-sections-v2 button, .set-tabs button, .command-tabs button, .fleet-ship-filter-v2 button, .universe-radar__seg button) {
   transition-duration: var(--ut-motion-base);
 }
 @media (hover: hover) and (pointer: fine) {
-  :is(.fleet-menu-group-v1 button, .science-sections-v2 button, .spaceport-sections-v2 button, .settings-nav-v2 nav button):not([disabled]):hover { translate: 3px 0; }
+  :is(.fleet-menu-group-v1 button, .science-sections-v2 button, .spaceport-sections-v2 button, .set-tabs button):not([disabled]):hover { translate: 3px 0; }
 }
 
 /* ---------------------------------------------------------------- 11. Living stage
@@ -436,7 +436,7 @@ body :is(.system-planet, .resource-building-node, .zone-hotspot, .universe-radar
 @media (prefers-reduced-motion: reduce) {
   .workspace > *, .fleet-main-v1 > *, .utility-screen-host > *, .building-interior-host > *,
   .fleet-workspace-v1 > .fleet-sidebar-v1,
-  :is(.cmdA, .opsA, .op-view, .reports-view, .science-view-v2, .spaceport-upgrades-v2, .settings-view-v2, .rating-view-v2) > *,
+  :is(.cmdA, .opsA, .op-view, .reports-view, .science-view-v2, .spaceport-upgrades-v2, .set-view, .rating-view-v2) > *,
   :is(.cmdA-content, .op-grid, .reports-profile-view) > *,
   .shipyard-card-v1, .repair-card-v1, .science-row-v2, .spaceport-row-v2, .srp-card, .cmdA-tile, .op-tile, .report-card, .rating-row-v2,
   .universe-debris-finder__list > li, .universe-radar__row, .resource-zone-queue-card, .owned-planet-row-v4,

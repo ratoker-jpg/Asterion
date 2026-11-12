@@ -22,11 +22,6 @@
 /* The legacy prototype notice is not part of the rebuilt utility page. */
 .stage:has(.utility-screen-host) .shell-notice{visibility:hidden}
 
-/* Settings follows the shared document/page scroll. Individual settings panels do not
-   own a nested vertical scrollbar anymore. */
-.settings-view-v2{min-height:846px;height:auto}
-.settings-nav-v2,.settings-content-v2{height:auto;overflow:visible}
-.typography-preview-v2{position:static}
 
 /* Rating: page-level scroll and row heights live in src/rating.css. */
 

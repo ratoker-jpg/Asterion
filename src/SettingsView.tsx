@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { downloadJournal, getActiveJournalCampaign, readJournal } from './ui/player-journal-store.ts';
 import { botJournalAvailable, downloadBotJournal } from './ui/bot-journal-store.ts';
 import { getDesktopBridge } from './domain/settings/desktop.ts';
@@ -8,279 +8,179 @@ import { useAudioPreferences } from './audio/hooks.ts';
 import { SETTINGS_ICONS } from './ui/ui-art.ts';
 import { isFrameMeterEnabled, setFrameMeterEnabled, subscribeFrameMeter } from './ui/frame-meter-overlay.ts';
 import { CloudSettingsPanel } from './ui/menu/CloudSettingsPanel.tsx';
-import './ui/menu/cloud.css';
+import { AmountSlider } from './ui/AmountSlider.tsx';
+import { GameSelect } from './ui/GameSelect.tsx';
 import type { SoundId } from './audio/sounds.ts';
-import {
-  TYPOGRAPHY_MAX,
-  TYPOGRAPHY_MIN,
-  TYPOGRAPHY_STEP,
-  updateTypographyScale,
-} from './domain/settings/preferences.ts';
-import {
-  TYPOGRAPHY_KEYS,
-  WINDOW_PRESETS,
-  type TypographyKey,
-  type UiPreferencesV2,
-} from './domain/settings/types.ts';
+import { SettingsHead, SettingsSwitch } from './ui/settings/SettingsParts.tsx';
+import { TYPOGRAPHY_MAX, TYPOGRAPHY_MIN, TYPOGRAPHY_STEP, updateTypographyScale } from './domain/settings/preferences.ts';
+import { TYPOGRAPHY_KEYS, WINDOW_PRESETS, type TypographyKey, type UiPreferencesV2 } from './domain/settings/types.ts';
 
-type SettingsSection = 'screen' | 'interface' | 'controls' | 'sound' | 'notifications' | 'save' | 'cloud' | 'journal';
+/*
+ * «Настройки» (old-screens redo, 12.11.2026). Grouped by what the player comes for:
+ * sound, text size, the window and smoothness, the cloud world, the journals.
+ * The old «Управление» and «Уведомления» placeholders had nothing behind them and
+ * are gone; the real keys are listed under «Экран». «Сохранение» (one reset
+ * button) became «Сбросить всё» at the foot of the rail, with a confirmation.
+ */
 
-const sections: readonly { id: SettingsSection; label: string; subtitle: string }[] = [
-  { id: 'screen', label: 'ЭКРАН', subtitle: 'Режим окна' },
-  { id: 'interface', label: 'ИНТЕРФЕЙС', subtitle: 'Типографика' },
-  { id: 'controls', label: 'УПРАВЛЕНИЕ', subtitle: 'Клавиши' },
-  { id: 'sound', label: 'ЗВУК', subtitle: 'Аудиосистема' },
-  { id: 'notifications', label: 'УВЕДОМЛЕНИЯ', subtitle: 'Системные сигналы' },
-  { id: 'save', label: 'СОХРАНЕНИЕ', subtitle: 'Настройки интерфейса' },
-  { id: 'cloud', label: 'ОБЛАЧНЫЙ МИР', subtitle: 'Сервер и резервные копии' },
-  { id: 'journal', label: 'ЖУРНАЛ ИГРОКА', subtitle: 'Ваши действия и журнал ботов' },
+type SettingsSection = 'sound' | 'interface' | 'screen' | 'cloud' | 'journal';
+
+const sections: readonly { id: SettingsSection; label: string; hint: string; icon: string }[] = [
+  { id: 'sound', label: 'Звук', hint: 'Громкость, музыка', icon: 'sound' },
+  { id: 'interface', label: 'Размер текста', hint: 'Крупнее, мельче', icon: 'interface' },
+  { id: 'screen', label: 'Экран', hint: 'Окно, кадры, клавиши', icon: 'screen' },
+  { id: 'cloud', label: 'Облачный мир', hint: 'Мир на сервере', icon: 'save' },
+  { id: 'journal', label: 'Журналы', hint: 'Для разбора партии', icon: 'journal' },
 ];
 
-const typographyMeta: Record<TypographyKey, { label: string; sample: string }> = {
-  hud: { label: 'HUD / верхняя панель', sample: 'МЕТАЛЛ 15 880 · HELION 01 · ФЛОТЫ' },
-  pageTitle: { label: 'Заголовки экранов', sample: 'НАСТРОЙКИ' },
-  sectionTitle: { label: 'Заголовки секций', sample: 'ТИПОГРАФИКА' },
-  body: { label: 'Основной текст', sample: 'Основной текст игровых экранов и описаний.' },
-  table: { label: 'Таблицы и значения', sample: '37  ·  482 910  ·  155 240' },
-  control: { label: 'Кнопки и элементы управления', sample: 'ПОКАЗАТЬ МОЮ ПОЗИЦИЮ' },
-  secondary: { label: 'Вторичные подписи', sample: 'Экспериментальный центр · уровень 7' },
-  helper: { label: 'Подсказки и пояснения', sample: 'Изменение этой категории не влияет на HUD и основной текст.' },
+/** What each text size changes, in the player's words, and a sample shown at that size. */
+const textMeta: Record<TypographyKey, { label: string; where: string; sample: string }> = {
+  hud: { label: 'Верхняя панель', where: 'Ресурсы, планета и время вверху экрана', sample: 'Металл 15 880' },
+  pageTitle: { label: 'Заголовки экранов', where: '«Операции», «Флоты», «Командование»', sample: 'Операции' },
+  sectionTitle: { label: 'Заголовки блоков', where: 'Названия частей экрана', sample: 'Доступные операции' },
+  body: { label: 'Основной текст', where: 'Описания, письма, отчёты', sample: 'Флот вернулся с грузом.' },
+  table: { label: 'Числа и таблицы', where: 'Ресурсы, рейтинг, бои', sample: '482 910 · 155 240' },
+  control: { label: 'Кнопки', where: 'Надписи на кнопках и вкладках', sample: 'Отправить флот' },
+  secondary: { label: 'Подписи', where: 'Мелкие пояснения под названиями', sample: 'Уровень 7 · 3 мин' },
+  helper: { label: 'Подсказки и пояснения', where: 'Всплывающие подсказки и советы', sample: 'Зонд покажет чужой флот.' },
 };
+
+const TEXT_PRESETS = [
+  { value: 100, label: 'Обычный' },
+  { value: 125, label: 'Крупный' },
+  { value: 145, label: 'Очень крупный' },
+] as const;
 
 type SettingsViewProps = {
   preferences: UiPreferencesV2;
   onPreferencesChange: (preferences: UiPreferencesV2) => void;
   onReset: () => void;
+  /** «menu»: opened from the main menu, which already shows the «Настройки» title. */
+  variant?: 'game' | 'menu';
 };
 
-export function SettingsView({ preferences, onPreferencesChange, onReset }: SettingsViewProps) {
-  const [section, setSection] = useState<SettingsSection>('interface');
-  const [desktopAvailable, setDesktopAvailable] = useState(false);
-  const [displayMessage, setDisplayMessage] = useState('');
+export function SettingsView({ preferences, onPreferencesChange, onReset, variant = 'game' }: SettingsViewProps) {
+  const [section, setSection] = useState<SettingsSection>('sound');
+  const [confirmReset, setConfirmReset] = useState(false);
+  const sound = useAudioPreferences();
+  const desktopAvailable = useDesktopAvailable();
 
-  useEffect(() => {
-    setDesktopAvailable(Boolean(getDesktopBridge()));
-  }, []);
-
-  const setScale = (key: TypographyKey, value: number) => {
-    onPreferencesChange(updateTypographyScale(preferences, key, value));
+  const resetAll = () => {
+    onReset();
+    audio.setPreferences(createDefaultAudioPreferences());
+    setFrameMeterEnabled(false);
+    setConfirmReset(false);
   };
 
-  const applyPreset = (kind: 'standard' | 'large' | 'readable') => {
-    const value = kind === 'standard' ? 100 : kind === 'large' ? 125 : 145;
-    const typography = Object.fromEntries(TYPOGRAPHY_KEYS.map((key) => [key, value])) as UiPreferencesV2['typography'];
-    onPreferencesChange({ ...preferences, typography });
-  };
-
-  const updateDisplay = async (next: UiPreferencesV2['display']) => {
-    const bridge = getDesktopBridge();
-    if (!bridge) return;
-    try {
-      const state = await bridge.setDisplay(next);
-      onPreferencesChange({ ...preferences, display: next });
-      setDisplayMessage(state.mode === 'fullscreen'
-        ? 'Полноэкранный режим включён.'
-        : `Оконный режим: ${state.width}×${state.height}.`);
-    } catch {
-      setDisplayMessage('Не удалось применить режим окна.');
-    }
+  const sizes = TYPOGRAPHY_KEYS.map((key) => preferences.typography[key]);
+  const sameSize = sizes.every((value) => value === sizes[0]) ? sizes[0] : null;
+  const badge: Record<SettingsSection, string | null> = {
+    sound: sound.muted ? 'выкл.' : `${sound.master}%`,
+    interface: sameSize === null ? 'свой' : `${sameSize}%`,
+    screen: desktopAvailable ? (preferences.display.mode === 'fullscreen' ? 'весь экран' : preferences.display.preset.replace('x', '×')) : null,
+    cloud: null,
+    journal: null,
   };
 
   return (
-    <div className="utility-view settings-view-v2">
-      <aside className="settings-nav-v2">
-        <div className="settings-brand-v2">
-          <small className="utility-secondary">СИСТЕМНОЕ МЕНЮ</small>
-          <h1 className="utility-page-title">НАСТРОЙКИ</h1>
-          <p className="utility-helper">Параметры интерфейса хранятся отдельно от прогресса кампании.</p>
-        </div>
-        <nav aria-label="Разделы настроек">
+    <div className={`utility-view settings-view-v2 set-view${variant === 'menu' ? ' set-view--menu' : ''}`}>
+      <aside className="set-panel set-rail">
+        {variant === 'game' ? <h1>Настройки</h1> : null}
+        <p className="set-rail-note">Хранятся на этом компьютере и не меняют ход партии.</p>
+        <nav className="set-tabs" aria-label="Разделы настроек">
           {sections.map((item) => (
             <button
               key={item.id}
               type="button"
-              className={`utility-control ${section === item.id ? 'active' : ''}`}
-              onClick={() => setSection(item.id)}
+              className={section === item.id ? 'active' : ''}
+              aria-current={section === item.id ? 'page' : undefined}
+              onClick={() => { setSection(item.id); setConfirmReset(false); }}
               data-qa-settings-section={item.id}
             >
-              <img className="settings-nav-icon-v2" src={SETTINGS_ICONS[item.id] ?? SETTINGS_ICONS.save} alt="" draggable={false} />
-              <span>{item.label}</span>
-              <small className="utility-secondary">{item.subtitle}</small>
-              <b>›</b>
+              <img src={SETTINGS_ICONS[item.icon] ?? SETTINGS_ICONS.save} alt="" draggable={false} />
+              <span>
+                <span className="set-tab-top">
+                  <b>{item.label}</b>
+                  {badge[item.id] ? <em className={`set-badge${item.id === 'sound' && sound.muted ? ' is-off' : ''}`}>{badge[item.id]}</em> : null}
+                </span>
+                <small>{item.hint}</small>
+              </span>
             </button>
           ))}
         </nav>
+        <div className={`set-reset${confirmReset ? ' is-asking' : ''}`} data-qa-settings-reset-box>
+          {confirmReset ? (
+            <>
+              <strong>Сбросить всё?</strong>
+              <span>Звук, размер текста, режим окна и счётчик кадров вернутся к исходным. Облачный мир, журналы и партия не меняются.</span>
+              <div className="set-actions">
+                <button type="button" className="danger-fill" onClick={resetAll} data-qa-settings-reset-confirm>Сбросить</button>
+                <button type="button" onClick={() => setConfirmReset(false)} data-qa-settings-reset-cancel>Отмена</button>
+              </div>
+            </>
+          ) : (
+            <button type="button" className="set-link" onClick={() => setConfirmReset(true)} data-qa-settings-reset>Сбросить всё по умолчанию</button>
+          )}
+        </div>
       </aside>
 
-      <main className="settings-content-v2" data-qa-scroll="settings-content">
-        {section === 'interface' ? (
-          <TypographyPanel preferences={preferences} setScale={setScale} applyPreset={applyPreset} />
-        ) : section === 'screen' ? (
-          <section className="settings-panel-v2">
-            <PanelHeading eyebrow="ОТОБРАЖЕНИЕ" title="ЭКРАН" description="Режим окна меняет только окно Asterion и не меняет физическое разрешение монитора." />
-            <div className="settings-grid-v2">
-              <div className="settings-card-v2">
-                <h3 className="utility-section-title">РЕЖИМ ОКНА</h3>
-                <p className="utility-body-text">Переключение доступно в приложении Asterion. В браузере эти параметры недоступны.</p>
-                <div className="settings-segment-v2">
-                  <button type="button" className={`utility-control ${preferences.display.mode === 'fullscreen' ? 'active' : ''}`} disabled={!desktopAvailable} onClick={() => void updateDisplay({ ...preferences.display, mode: 'fullscreen' })}>ПОЛНЫЙ ЭКРАН</button>
-                  <button type="button" className={`utility-control ${preferences.display.mode === 'windowed' ? 'active' : ''}`} disabled={!desktopAvailable} onClick={() => void updateDisplay({ ...preferences.display, mode: 'windowed' })}>ОКОННЫЙ</button>
-                </div>
-                <label className="settings-select-v2">
-                  <span className="utility-secondary">РАЗМЕР ОКНА</span>
-                  <select
-                    className="utility-control"
-                    disabled={!desktopAvailable || preferences.display.mode !== 'windowed'}
-                    value={preferences.display.preset}
-                    onChange={(event: { target: { value: string } }) => void updateDisplay({ mode: 'windowed', preset: event.target.value as UiPreferencesV2['display']['preset'] })}
-                  >
-                    {WINDOW_PRESETS.map((preset) => <option key={preset} value={preset}>{preset.replace('x', ' × ')}</option>)}
-                  </select>
-                </label>
-                <small className="utility-helper">{desktopAvailable ? (displayMessage || 'F11 и Escape продолжают работать как раньше.') : 'Доступно в приложении Asterion для Windows.'}</small>
-              </div>
-              <FrameMeterCard />
-            </div>
-          </section>
-        ) : section === 'controls' ? (
-          <UnavailablePanel eyebrow="УПРАВЛЕНИЕ" title="КЛАВИШИ" body="Текущие системные клавиши продолжают работать. Полное переназначение клавиш будет подключено отдельным этапом." />
-        ) : section === 'sound' ? (
-          <SoundPanel />
-        ) : section === 'journal' ? (
-          <JournalPanel />
-        ) : section === 'cloud' ? (
-          <CloudSettingsPanel heading={(props) => <PanelHeading {...props} />} />
-        ) : section === 'notifications' ? (
-          <UnavailablePanel eyebrow="СИСТЕМНЫЕ СИГНАЛЫ" title="УВЕДОМЛЕНИЯ" body="Системные уведомления пока недоступны. Настройки появятся после их подключения." />
-        ) : (
-          <section className="settings-panel-v2">
-            <PanelHeading eyebrow="ХРАНЕНИЕ" title="НАСТРОЙКИ ИНТЕРФЕЙСА" description="Сброс этого раздела не затрагивает ресурсы, кампанию, флот, операции и отчёты." />
-            <div className="settings-reset-card-v2">
-              <div>
-                <h3 className="utility-section-title">СБРОСИТЬ НАСТРОЙКИ</h3>
-                <p className="utility-body-text">Вернуть типографику и режим окна к значениям по умолчанию.</p>
-                <small className="utility-helper">Прогресс кампании не изменяется.</small>
-              </div>
-              <button type="button" className="utility-control danger" onClick={onReset}>СБРОСИТЬ НАСТРОЙКИ</button>
-            </div>
-          </section>
-        )}
+      <main className="set-panel set-content" data-qa-scroll="settings-content" data-qa-settings-current={section}>
+        {section === 'sound' ? <SoundPanel />
+          : section === 'interface' ? <TextPanel preferences={preferences} onPreferencesChange={onPreferencesChange} />
+          : section === 'screen' ? <ScreenPanel preferences={preferences} onPreferencesChange={onPreferencesChange} desktopAvailable={desktopAvailable} />
+          : section === 'cloud' ? <CloudSettingsPanel />
+          : <JournalPanel />}
       </main>
     </div>
   );
 }
 
-function TypographyPanel({
-  preferences,
-  setScale,
-  applyPreset,
-}: {
-  preferences: UiPreferencesV2;
-  setScale: (key: TypographyKey, value: number) => void;
-  applyPreset: (kind: 'standard' | 'large' | 'readable') => void;
-}) {
-  return (
-    <section className="settings-panel-v2">
-      <PanelHeading eyebrow="ИНТЕРФЕЙС" title="ТИПОГРАФИКА" description="Каждый тип текста настраивается отдельно и не меняет размер других категорий." />
-
-      <div className="settings-presets-v2">
-        <span className="utility-secondary">ПРЕСЕТЫ</span>
-        <button type="button" className="utility-control" onClick={() => applyPreset('standard')}>СТАНДАРТ</button>
-        <button type="button" className="utility-control" onClick={() => applyPreset('large')}>КРУПНЫЙ ТЕКСТ</button>
-        <button type="button" className="utility-control" onClick={() => applyPreset('readable')}>МАКС. ЧИТАЕМОСТЬ</button>
-      </div>
-
-      <div className="typography-layout-v2">
-        <div className="typography-controls-v2">
-          {TYPOGRAPHY_KEYS.map((key) => {
-            const value = preferences.typography[key];
-            return (
-              <div className="typography-row-v2" key={key}>
-                <div>
-                  <strong className="utility-section-title">{typographyMeta[key].label}</strong>
-                  <small className="utility-helper">{TYPOGRAPHY_MIN}% — {TYPOGRAPHY_MAX}% · шаг {TYPOGRAPHY_STEP}%</small>
-                </div>
-                <div className="typography-stepper-v2">
-                  <button type="button" className="utility-control" aria-label={`Уменьшить ${typographyMeta[key].label}`} onClick={() => setScale(key, value - TYPOGRAPHY_STEP)}>−</button>
-                  <output className="utility-data-text">{value}%</output>
-                  <button type="button" className="utility-control" aria-label={`Увеличить ${typographyMeta[key].label}`} onClick={() => setScale(key, value + TYPOGRAPHY_STEP)}>+</button>
-                </div>
-                <input
-                  aria-label={`Масштаб: ${typographyMeta[key].label}`}
-                  type="range"
-                  min={TYPOGRAPHY_MIN}
-                  max={TYPOGRAPHY_MAX}
-                  step={TYPOGRAPHY_STEP}
-                  value={value}
-                  onChange={(event: { target: { value: string } }) => setScale(key, Number(event.target.value))}
-                />
-                <button type="button" className="utility-control typography-reset-v2" onClick={() => setScale(key, 100)}>100%</button>
-              </div>
-            );
-          })}
-        </div>
-
-        <aside className="typography-preview-v2">
-          <span className="utility-secondary">ПРЕДПРОСМОТР</span>
-          <div className="preview-hud-v2">{typographyMeta.hud.sample}</div>
-          <div className="preview-page-title-v2">{typographyMeta.pageTitle.sample}</div>
-          <div className="preview-section-title-v2">{typographyMeta.sectionTitle.sample}</div>
-          <p className="preview-body-v2">{typographyMeta.body.sample}</p>
-          <div className="preview-table-v2">{typographyMeta.table.sample}</div>
-          <button type="button" className="preview-control-v2">{typographyMeta.control.sample}</button>
-          <div className="preview-secondary-v2">{typographyMeta.secondary.sample}</div>
-          <div className="preview-helper-v2">{typographyMeta.helper.sample}</div>
-        </aside>
-      </div>
-    </section>
-  );
+function useDesktopAvailable() {
+  const [available, setAvailable] = useState(() => Boolean(getDesktopBridge()));
+  useEffect(() => { setAvailable(Boolean(getDesktopBridge())); }, []);
+  return available;
 }
 
-const audioChannelMeta: Record<AudioChannel, { label: string; hint: string; sample: SoundId }> = {
-  master: { label: 'Общая громкость', hint: 'Все звуки игры', sample: 'confirm' },
-  music: { label: 'Музыка', hint: 'Фоновая партитура меню и кампании', sample: 'info' },
-  effects: { label: 'События', hint: 'Экраны, окна, отчёты, тревоги', sample: 'success' },
-  interface: { label: 'Интерфейс', hint: 'Клики, вкладки, наведение', sample: 'tab' },
+const soundMeta: Record<AudioChannel, { label: string; where: string; sample: SoundId }> = {
+  master: { label: 'Общая громкость', where: 'Все звуки и музыка вместе', sample: 'confirm' },
+  music: { label: 'Музыка', where: 'Фоновая музыка в меню и в партии', sample: 'info' },
+  effects: { label: 'События', where: 'Окна, отчёты, тревоги', sample: 'success' },
+  interface: { label: 'Нажатия', where: 'Кнопки, вкладки, наведение', sample: 'tab' },
 };
 
-/** Sound settings apply at once and are stored apart from the interface preferences. */
+/** Sound applies at once and is stored apart from the interface preferences. */
 function SoundPanel() {
   const preferences = useAudioPreferences();
   const update = (patch: Partial<typeof preferences>) => audio.setPreferences({ ...preferences, ...patch });
+  const defaults = createDefaultAudioPreferences();
+  const isDefault = (Object.keys(soundMeta) as AudioChannel[]).every((channel) => preferences[channel] === defaults[channel]) && preferences.muted === defaults.muted;
   return (
-    <section className="settings-panel-v2" data-qa-sound-settings>
-      <PanelHeading eyebrow="АУДИО" title="ЗВУК" description="Все звуки и музыка синтезируются игрой на лету. Громкость применяется сразу и хранится отдельно от кампании." />
-      <div className="settings-presets-v2">
-        <span className="utility-secondary">{preferences.muted ? 'ЗВУК ВЫКЛЮЧЕН' : 'ЗВУК ВКЛЮЧЁН'}</span>
-        <button type="button" className={`utility-control ${preferences.muted ? 'active' : ''}`} data-sfx="none" onClick={() => update({ muted: !preferences.muted })} data-qa-sound-mute>
-          {preferences.muted ? 'ВКЛЮЧИТЬ ЗВУК' : 'ВЫКЛЮЧИТЬ ЗВУК'}
-        </button>
-        <button type="button" className="utility-control" data-sfx="none" onClick={() => playSound('success')}>ПРОВЕРИТЬ</button>
-        <button type="button" className="utility-control" onClick={() => audio.setPreferences(createDefaultAudioPreferences())}>ПО УМОЛЧАНИЮ</button>
+    <section className="set-section" data-qa-sound-settings>
+      <SettingsHead
+        title="Звук"
+        text="Громкость меняется сразу, пока вы двигаете ползунок."
+        aside={<button type="button" className="set-link" disabled={isDefault} onClick={() => audio.setPreferences(defaults)}>Вернуть громкость по умолчанию</button>}
+      />
+      <div className="set-tile set-tile--row">
+        <div className="set-tile-text">
+          <strong>Звук в игре</strong>
+          <span>{preferences.muted ? 'Сейчас тихо. Громкость каналов сохранится до включения.' : 'Музыка, события и нажатия звучат.'}</span>
+        </div>
+        <div className="set-actions">
+          <button type="button" data-sfx="none" disabled={preferences.muted} onClick={() => playSound('success')}>Проверить</button>
+          <SettingsSwitch on={!preferences.muted} onChange={(next) => update({ muted: !next })} label="Звук в игре" qa="sound" data-sfx="none" data-qa-sound-mute />
+        </div>
       </div>
-      <div className="typography-controls-v2 sound-controls-v2">
-        {(Object.keys(audioChannelMeta) as AudioChannel[]).map((channel) => {
-          const meta = audioChannelMeta[channel];
+      <div className={`set-list${preferences.muted ? ' is-muted' : ''}`}>
+        {(Object.keys(soundMeta) as AudioChannel[]).map((channel) => {
+          const meta = soundMeta[channel];
           const value = preferences[channel];
           return (
-            <div className="typography-row-v2 sound-row-v2" key={channel} data-qa-sound-channel={channel}>
-              <div>
-                <strong className="utility-section-title">{meta.label}</strong>
-                <small className="utility-helper">{meta.hint}</small>
-              </div>
-              <output className="utility-data-text">{value}%</output>
-              <input
-                aria-label={`Громкость: ${meta.label}`}
-                type="range"
-                min={AUDIO_VOLUME_MIN}
-                max={AUDIO_VOLUME_MAX}
-                step={5}
-                value={value}
-                disabled={preferences.muted}
-                onChange={(event: { target: { value: string } }) => update({ [channel]: Number(event.target.value) })}
-                onPointerUp={() => playSound(meta.sample)}
-              />
-              <button type="button" className="utility-control typography-reset-v2" data-sfx="none" disabled={preferences.muted} onClick={() => playSound(meta.sample)}>ТЕСТ</button>
+            <div className="set-row set-row--sound" key={channel} data-qa-sound-channel={channel}>
+              <div className="set-row-label"><strong>{meta.label}</strong><small>{meta.where}</small></div>
+              <AmountSlider compact value={value} min={AUDIO_VOLUME_MIN} max={AUDIO_VOLUME_MAX} step={5} label={`Громкость: ${meta.label}`} onChange={(next) => update({ [channel]: next })} qa={`sound-${channel}`} />
+              <output className="set-value">{value}%</output>
+              <button type="button" className="set-mini" data-sfx="none" disabled={preferences.muted} onClick={() => playSound(meta.sample)} aria-label={`Послушать: ${meta.label}`}>Послушать</button>
             </div>
           );
         })}
@@ -289,7 +189,127 @@ function SoundPanel() {
   );
 }
 
-/** Owner request: export everything the player did in this campaign so NPC play can be studied and improved. */
+function TextPanel({ preferences, onPreferencesChange }: { preferences: UiPreferencesV2; onPreferencesChange: (preferences: UiPreferencesV2) => void }) {
+  const setScale = (key: TypographyKey, value: number) => onPreferencesChange(updateTypographyScale(preferences, key, value));
+  const setAll = (value: number) => {
+    const typography = Object.fromEntries(TYPOGRAPHY_KEYS.map((key) => [key, value])) as UiPreferencesV2['typography'];
+    onPreferencesChange({ ...preferences, typography });
+  };
+  const sizes = TYPOGRAPHY_KEYS.map((key) => preferences.typography[key]);
+  const same = sizes.every((value) => value === sizes[0]) ? sizes[0] : null;
+  return (
+    <section className="set-section">
+      <SettingsHead title="Размер текста" text={`Каждый вид текста меняется отдельно, от ${TYPOGRAPHY_MIN}% до ${TYPOGRAPHY_MAX}%. Образец в строке сразу показывает новый размер.`} />
+      <div className="set-tile set-tile--row">
+        <div className="set-tile-text">
+          <strong>Весь текст сразу</strong>
+          <span>{same === null ? 'Сейчас размеры разные — выберите один для всего текста.' : `Сейчас весь текст ${same}%.`}</span>
+        </div>
+        <div className="set-seg" role="group" aria-label="Размер всего текста">
+          {TEXT_PRESETS.map((preset) => (
+            <button key={preset.value} type="button" className={same === preset.value ? 'active' : ''} aria-pressed={same === preset.value} onClick={() => setAll(preset.value)} data-qa-text-preset={preset.value}>
+              {preset.label} <small>{preset.value}%</small>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="set-list">
+        {TYPOGRAPHY_KEYS.map((key) => {
+          const meta = textMeta[key];
+          const value = preferences.typography[key];
+          return (
+            <div className="set-row set-row--text typography-row-v2" key={key} data-qa-typography-row={key}>
+              <div className="set-row-label"><strong>{meta.label}</strong><small>{meta.where}</small></div>
+              <div className={`set-sample set-sample--${key}`} aria-hidden="true"><span>{meta.sample}</span></div>
+              <AmountSlider compact value={value} min={TYPOGRAPHY_MIN} max={TYPOGRAPHY_MAX} step={TYPOGRAPHY_STEP} label={meta.label} onChange={(next) => setScale(key, next)} qa={`text-${key}`} />
+              <output className="set-value">{value}%</output>
+              {/* Only when the size differs from the default: a plain «Вернуть 100%», nothing at 100%. */}
+              <span className="set-row-reset">
+                {value !== 100 ? <button type="button" className="set-mini typography-reset-v2" onClick={() => setScale(key, 100)} aria-label={`Вернуть 100%: ${meta.label}`}>Вернуть 100%</button> : null}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function ScreenPanel({ preferences, onPreferencesChange, desktopAvailable }: {
+  preferences: UiPreferencesV2;
+  onPreferencesChange: (preferences: UiPreferencesV2) => void;
+  desktopAvailable: boolean;
+}) {
+  const [message, setMessage] = useState('');
+  const updateDisplay = async (next: UiPreferencesV2['display']) => {
+    const bridge = getDesktopBridge();
+    if (!bridge) return;
+    try {
+      const state = await bridge.setDisplay(next);
+      onPreferencesChange({ ...preferences, display: next });
+      setMessage(state.mode === 'fullscreen' ? 'Игра на весь экран.' : `Игра в окне ${state.width} × ${state.height}.`);
+    } catch {
+      setMessage('Не получилось сменить режим окна. Попробуйте ещё раз или нажмите F11.');
+    }
+  };
+  const windowed = preferences.display.mode === 'windowed';
+  return (
+    <section className="set-section">
+      <SettingsHead title="Экран" text="Окно игры, плавность картинки и клавиши. Разрешение монитора не меняется." />
+      <div className="set-grid">
+        <div className="set-tile" data-qa-settings-window>
+          <div className="set-tile-text">
+            <strong>Окно игры</strong>
+            <span>{desktopAvailable
+              ? (message || 'Меняется сразу. F11 тоже переключает весь экран и окно.')
+              : 'Работает в приложении Asterion для Windows. В браузере окном управляет сам браузер.'}</span>
+          </div>
+          <div className="set-seg" role="group" aria-label="Режим окна">
+            <button type="button" className={!windowed ? 'active' : ''} aria-pressed={!windowed} disabled={!desktopAvailable} onClick={() => void updateDisplay({ ...preferences.display, mode: 'fullscreen' })} data-qa-display-mode="fullscreen">Весь экран</button>
+            <button type="button" className={windowed ? 'active' : ''} aria-pressed={windowed} disabled={!desktopAvailable} onClick={() => void updateDisplay({ ...preferences.display, mode: 'windowed' })} data-qa-display-mode="windowed">В окне</button>
+          </div>
+          <div className="set-field" data-qa-settings-window-size>
+            <span>Размер окна{desktopAvailable && !windowed ? ' — сначала выберите «В окне»' : ''}</span>
+            <GameSelect
+              label="Размер окна"
+              value={preferences.display.preset}
+              disabled={!desktopAvailable || !windowed}
+              options={WINDOW_PRESETS.map((preset) => ({ value: preset, label: preset.replace('x', ' × ') }))}
+              onChange={(value) => void updateDisplay({ mode: 'windowed', preset: value as UiPreferencesV2['display']['preset'] })}
+            />
+          </div>
+        </div>
+        <FrameMeterTile />
+        <div className="set-tile" data-qa-settings-keys>
+          <div className="set-tile-text">
+            <strong>Клавиши</strong>
+            <span>Переназначить их пока нельзя.</span>
+          </div>
+          <dl className="set-keys">
+            <div><dt><kbd>Esc</kbd></dt><dd>Меню игры. Если открыто окно — закрыть его.</dd></div>
+            <div><dt><kbd>F11</kbd></dt><dd>Весь экран или окно (в приложении для Windows).</dd></div>
+          </dl>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FrameMeterTile() {
+  const on = useSyncExternalStore(subscribeFrameMeter, isFrameMeterEnabled);
+  return (
+    <div className="set-tile" data-qa-frame-meter-card>
+      <div className="set-tile-text">
+        <strong>Счётчик кадров</strong>
+        <span>Маленькая панель в углу: кадры в секунду, самый долгий кадр за 5 секунд и сколько кадров не успели за 8,3 мс. Выключенный счётчик ничего не считает.</span>
+      </div>
+      <SettingsSwitch on={on} onChange={setFrameMeterEnabled} label="Счётчик кадров" qa="frame-meter" />
+      <p className="set-note" data-qa-frame-meter-hint>Для 120 кадров в секунду окно игры должно стоять на мониторе 120 Гц.</p>
+    </div>
+  );
+}
+
+/** Owner request: export what the player did in this campaign so bots can learn from it. */
 function JournalPanel() {
   const [count, setCount] = useState<number | null>(null);
   const [message, setMessage] = useState('');
@@ -299,81 +319,50 @@ function JournalPanel() {
     readJournal(campaign).then((entries) => setCount(entries.length)).catch(() => setCount(null));
   }, [campaign]);
   return (
-    <section className="settings-panel-v2" data-qa-player-journal>
-      <PanelHeading eyebrow="ИЗУЧЕНИЕ ИГРЫ" title="ЖУРНАЛ ИГРОКА" description="Игра записывает ваши действия в этой кампании: стройки, науку, заказы флота, полёты с целью, составом и грузом, отзывы, колонии, союз — и раз в час игрового времени снимок вашего положения. Журнал хранится отдельно от сохранения и не влияет на игру." />
-      <div className="settings-reset-card-v2">
-        <div>
-          <h3 className="utility-section-title">ЗАПИСЕЙ: {count ?? '—'}</h3>
-          <p className="utility-body-text">Скачайте файл после партии и передайте его для разбора: по нему NPC учатся играть как опытный игрок.</p>
-          {message ? <small className="utility-helper">{message}</small> : null}
+    <section className="set-section" data-qa-player-journal>
+      <SettingsHead title="Журналы" text="Файлы для разбора партии: по ним боты учатся играть сильнее. На игру журналы не влияют и хранятся отдельно от сохранения." />
+      <div className="set-grid">
+        <div className="set-tile">
+          <div className="set-tile-text">
+            <strong>Журнал игрока</strong>
+            <span>Ваши действия в этой партии: стройки, наука, флот, полёты с грузом, колонии, союз. Раз в игровой час — снимок вашего положения.</span>
+          </div>
+          <dl className="set-facts">
+            <div><dt>Записей</dt><dd>{campaign ? (count === null ? '—' : count.toLocaleString('ru-RU')) : 'нет открытой партии'}</dd></div>
+          </dl>
+          <div className="set-actions">
+            <button type="button" className="primary" disabled={!campaign} onClick={() => {
+              if (!campaign) return;
+              downloadJournal(campaign, {}).then((total) => setMessage(`Сохранён файл: ${total.toLocaleString('ru-RU')} записей.`)).catch(() => setMessage('Не удалось прочитать журнал.'));
+            }} data-qa-player-journal-download>Скачать журнал</button>
+          </div>
+          {message ? <p className="set-note" role="status">{message}</p> : null}
+          {!campaign ? <p className="set-note">Откройте партию, чтобы скачать её журнал.</p> : null}
         </div>
-        <button type="button" className="utility-control" disabled={!campaign} onClick={() => {
-          if (!campaign) return;
-          downloadJournal(campaign, {}).then((total) => setMessage(`Файл с ${total} записями сохранён.`)).catch(() => setMessage('Не удалось прочитать журнал.'));
-        }} data-qa-player-journal-download>СКАЧАТЬ ЖУРНАЛ (JSON)</button>
+        <BotJournalTile campaign={campaign} />
       </div>
-      <BotJournalCard campaign={campaign} />
     </section>
   );
 }
 
 /** Owner request 31.10.2026: what the strongest bots chose and why, from a file next to the save. */
-function BotJournalCard({ campaign }: { campaign: string | null }) {
+function BotJournalTile({ campaign }: { campaign: string | null }) {
   const [message, setMessage] = useState('');
   const available = botJournalAvailable();
   return (
-    <div className="settings-reset-card-v2" data-qa-bot-journal>
-      <div>
-        <h3 className="utility-section-title">ЖУРНАЛ БОТОВ</h3>
-        <p className="utility-body-text">Десять сильнейших NPC по рейтингу: что выбрали, какие 2–3 варианта рассматривали и с какими оценками, почему отказались, когда сменили стиль игры. Последние 3 игровых дня, пока вас нет — пишет облачный сервер. Журнал лежит рядом с сохранением и не влияет на игру.</p>
-        {!available ? <small className="utility-helper">Журнал ботов ведёт только настольная версия игры.</small> : null}
-        {message ? <small className="utility-helper">{message}</small> : null}
+    <div className="set-tile" data-qa-bot-journal>
+      <div className="set-tile-text">
+        <strong>Журнал ботов</strong>
+        <span>Десять сильнейших ботов: что выбрали, какие 2–3 варианта взвешивали и почему отказались, когда сменили стиль игры. Последние 3 игровых дня; пока вас нет, его пишет облачный сервер.</span>
       </div>
-      <button type="button" className="utility-control" disabled={!campaign || !available} onClick={() => {
-        if (!campaign) return;
-        downloadBotJournal(campaign).then((total) => setMessage(`Файл с ${total} записями сохранён.`)).catch(() => setMessage('Не удалось прочитать журнал ботов.'));
-      }} data-qa-bot-journal-download>ВЫГРУЗИТЬ ЖУРНАЛ БОТОВ</button>
+      <div className="set-actions">
+        <button type="button" disabled={!campaign || !available} onClick={() => {
+          if (!campaign) return;
+          downloadBotJournal(campaign).then((total) => setMessage(`Сохранён файл: ${total.toLocaleString('ru-RU')} записей.`)).catch(() => setMessage('Не удалось прочитать журнал ботов.'));
+        }} data-qa-bot-journal-download>Скачать журнал ботов</button>
+      </div>
+      {!available ? <p className="set-note">Журнал ботов ведёт только приложение Asterion для Windows.</p> : null}
+      {message ? <p className="set-note" role="status">{message}</p> : null}
     </div>
-  );
-}
-
-function FrameMeterCard() {
-  const on = useSyncExternalStore(subscribeFrameMeter, isFrameMeterEnabled);
-  return (
-    <div className="settings-card-v2" data-qa-frame-meter-card>
-      <h3 className="utility-section-title">СЧЁТЧИК КАДРОВ</h3>
-      <p className="utility-body-text">Маленькая панель в углу экрана: кадры в секунду, самый долгий кадр за 5 секунд и сколько кадров не уложились в 8,3 мс (120 Гц). Пока она выключена, игра её не считает.</p>
-      <p className="utility-body-text" data-qa-frame-meter-hint>Для 120 кадров держите окно игры на мониторе 120 Гц.</p>
-      <div className="settings-segment-v2">
-        <button type="button" className={`utility-control ${on ? 'active' : ''}`} aria-pressed={on} onClick={() => setFrameMeterEnabled(true)}>ВКЛЮЧИТЬ</button>
-        <button type="button" className={`utility-control ${on ? '' : 'active'}`} aria-pressed={!on} onClick={() => setFrameMeterEnabled(false)}>ВЫКЛЮЧИТЬ</button>
-      </div>
-    </div>
-  );
-}
-
-function PanelHeading({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) {
-  return (
-    <header className="settings-panel-heading-v2">
-      <small className="utility-secondary">{eyebrow}</small>
-      <h2 className="utility-section-title">{title}</h2>
-      <p className="utility-body-text">{description}</p>
-    </header>
-  );
-}
-
-function UnavailablePanel({ eyebrow, title, body }: { eyebrow: string; title: string; body: string }) {
-  return (
-    <section className="settings-panel-v2">
-      <PanelHeading eyebrow={eyebrow} title={title} description={body} />
-      <div className="settings-disabled-card-v2">
-        <span className="settings-disabled-icon-v2">◇</span>
-        <div>
-          <strong className="utility-section-title">ПОКА НЕДОСТУПНО</strong>
-          <p className="utility-body-text">Параметры появятся здесь только вместе с реальной системой.</p>
-        </div>
-        <button type="button" className="utility-control" disabled>НЕДОСТУПНО</button>
-      </div>
-    </section>
   );
 }

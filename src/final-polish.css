@@ -14,7 +14,6 @@
 /* Mission tiles: «Транспортировка» fits a quarter column without breaking mid-word. */
 
 /* Settings → Typography: long labels wrap to a second line instead of «…». */
-.typography-row-v2 > div:first-child strong { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.25; }
 
 /* ---------------------------------------------------------------------------
    Science ⇄ Spaceport: one layout. Both are a 330px sidebar + catalog on the

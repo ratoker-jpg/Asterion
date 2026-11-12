@@ -182,7 +182,7 @@ function MainMenuScreen({ continueSlot, slotCount, onNavigate, onContinue }: Mai
     { id: 'continue', label: 'Продолжить', hint: continueSlot ? `${continueSlot.name} · ${raceCard(continueSlot.factionId).name}` : 'Нет сохранённых кампаний', disabled: !continueSlot, action: onContinue, primary: Boolean(continueSlot) },
     { id: 'new', label: 'Новая игра', hint: 'Раса, мир, скорость партии', action: () => onNavigate('new'), primary: !continueSlot },
     { id: 'load', label: 'Загрузить игру', hint: slotCount ? `Слотов: ${slotCount}` : 'Импорт сохранения из файла', action: () => onNavigate('load') },
-    { id: 'settings', label: 'Настройки', hint: 'Экран, интерфейс, шрифты', action: () => onNavigate('settings') },
+    { id: 'settings', label: 'Настройки', hint: 'Звук, размер текста, экран, облако', action: () => onNavigate('settings') },
     ...(desktop ? [{ id: 'quit', label: 'Выход', hint: 'Закрыть Asterion', action: quitDesktopApp }] : []),
   ];
   const firstRef = useRef<HTMLButtonElement>(null);
@@ -497,6 +497,7 @@ function MenuSettingsScreen({ onBack }: { onBack: () => void }) {
       <ScreenHeader eyebrow="ПАРАМЕТРЫ" title="НАСТРОЙКИ" onBack={onBack} />
       <div className="menu-settings__body">
         <SettingsView
+          variant="menu"
           preferences={preferences}
           onPreferencesChange={(next) => { setPreferences(next); persistPreferences(next); }}
           onReset={() => setPreferences(resetPreferences())}
