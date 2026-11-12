@@ -30,6 +30,7 @@ test('«в N раз» is spelled for the risk plaque', () => {
   assert.equal(plain(timesLabel(2)), '2 раза');
   assert.equal(plain(timesLabel(5)), '5 раз');
   assert.equal(plain(timesLabel(12.3)), '12 раз');
+  assert.equal(plain(timesLabel(40_123_555_511)), '40,1 млрд раз');
 });
 
 function cost(factionId: 'aegis' | 'synod' | 'veyra', id: string) {
@@ -78,7 +79,8 @@ const spy = (overrides: Partial<SpyReportSnapshot> = {}): SpyReportSnapshot => (
 test('spy: what one raid may take, and how many of the biggest hold carry it', () => {
   const raid = spyRaid(spy(), { playerFactionId: 'aegis' });
   assert.equal(raid.lootable, 750_000 + 300_000);
-  const hold = getFactionShipCatalog('aegis').filter((ship) => (ship.ship?.cargo ?? 0) > 0).sort((a, b) => (b.ship!.cargo) - (a.ship!.cargo))[0]!;
+  // The big transport, not a warship with a bigger hold.
+  const hold = getFactionShipCatalog('aegis').find((ship) => ship.id === 'mega-transporter')!;
   assert.deepEqual(raid.transports, { count: Math.ceil(1_050_000 / hold.ship!.cargo), shipName: hold.name });
   // Protected stores: with buildings known, a small stock under the protected part stays (base storage protects 10 000).
   const small = spy({ resources: { metal: 5_000, minerals: 0, gas: 0, debris: 0, developmentEnergy: 0 } });

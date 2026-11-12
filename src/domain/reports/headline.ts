@@ -144,11 +144,13 @@ export function battleBalance(report: BattleReport, isMine?: HeadlineContext['is
 
 // ---------------------------------------------------------------- espionage
 
+/** The race's big transport carries the loot (the warship holds are not what a raid counts in). */
 function biggestHold(factionId: string | undefined) {
   if (!isCombatFactionId(factionId)) return null;
-  return getFactionShipCatalog(factionId)
-    .filter((ship) => (ship.ship?.cargo ?? 0) > 0)
-    .sort((left, right) => (right.ship?.cargo ?? 0) - (left.ship?.cargo ?? 0))[0] ?? null;
+  const catalog = getFactionShipCatalog(factionId);
+  return catalog.find((ship) => ship.id === 'mega-transporter' && (ship.ship?.cargo ?? 0) > 0)
+    ?? catalog.find((ship) => ship.id === 'transporter' && (ship.ship?.cargo ?? 0) > 0)
+    ?? null;
 }
 
 function attackOf(factionId: string, values: Partial<Record<string, number>> | undefined): number {
@@ -186,6 +188,7 @@ export function spyRaid(report: SpyReportSnapshot, context: HeadlineContext = {}
 
 /** «2,4 раза», «1,5 раза», «12 раз». */
 export function timesLabel(ratio: number) {
+  if (ratio >= 100_000) return `${formatShortAmount(Math.round(ratio))}${NBSP}раз`;
   const value = ratio >= 10 ? Math.round(ratio) : Math.round(ratio * 10) / 10;
   const text = oneDecimal.format(value).replace(/\s/g, NBSP);
   if (!Number.isInteger(value)) return `${text}${NBSP}раза`;

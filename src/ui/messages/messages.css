@@ -1133,8 +1133,8 @@
 .reports-view .reports-empty-art--mail {
   width: min(420px, 78%) !important;
   border-radius: 0;
-  -webkit-mask-image: radial-gradient(ellipse 70% 72% at 45% 50%, #000 52%, transparent 100%);
-  mask-image: radial-gradient(ellipse 70% 72% at 45% 50%, #000 52%, transparent 100%);
+  -webkit-mask-image: radial-gradient(closest-side, #000 50%, transparent 100%);
+  mask-image: radial-gradient(closest-side, #000 50%, transparent 100%);
 }
 
 /* The typography layer sizes every text node's parent: a span inside the header title keeps the title size. */
