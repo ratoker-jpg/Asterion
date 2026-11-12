@@ -30,13 +30,15 @@
 .lst .fade { margin-top: auto; text-align: center; font-size: 13px; color: var(--dim); padding-top: 8px; }
 /* report */
 .rep { left: 794px; right: 38px; display: flex; flex-direction: column; overflow: hidden; }
-.hero { position: relative; height: 210px; border-radius: 16px 16px 0 0; background-size: cover; background-position: right center; flex: none; }
-.hero::before { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(8,13,21,.98) 0, rgba(8,13,21,.85) 45%, rgba(8,13,21,.15) 80%); }
-.hero > div { position: relative; padding: 26px 34px; height: 100%; display: flex; flex-direction: column; }
+.hero { position: relative; min-height: 210px; border-radius: 16px 16px 0 0; background-size: cover; background-position: right center; flex: none; }
+.hero::before { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(8,13,21,1) 0, rgba(8,13,21,.97) 50%, rgba(8,13,21,.75) 66%, rgba(8,13,21,.1) 90%); }
+.hero > div { max-width: 66%; }
+.hero h2, .hero p, .hero .big, .hero .k { text-shadow: 0 2px 10px rgba(0,0,0,.9); }
+.hero > div { position: relative; padding: 26px 34px; min-height: 210px; display: flex; flex-direction: column; gap: 2px; }
 .hero .k { font-size: 14px; letter-spacing: 2px; text-transform: uppercase; font-weight: 800; color: var(--kc, var(--cyan)); }
 .hero h2 { font-size: 34px; font-weight: 800; line-height: 1.05; margin: 8px 0 6px; }
 .hero p { font-size: 16px; color: #b8c3d3; } .hero p i { font-style: normal; color: var(--cyan); font-weight: 700; }
-.hero .big { display: flex; align-items: baseline; gap: 16px; margin-top: auto; } .hero .big b { font-size: 40px; font-weight: 800; color: var(--bc, var(--green)); line-height: 1; white-space: nowrap; } .hero .big span { font-size: 15px; color: #c7d1de; max-width: 420px; }
+.hero .big { display: flex; align-items: baseline; gap: 16px; margin-top: auto; padding-top: 14px; } .hero .big b { font-size: 40px; font-weight: 800; color: var(--bc, var(--green)); line-height: 1; white-space: nowrap; } .hero .big span { font-size: 15px; color: #c7d1de; max-width: 420px; }
 .body { padding: 22px 34px; display: flex; flex-direction: column; gap: 22px; flex: 1; min-height: 0; }
 .h { font-size: 13px; letter-spacing: 2px; text-transform: uppercase; color: var(--dim); font-weight: 800; margin-bottom: 10px; }
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
