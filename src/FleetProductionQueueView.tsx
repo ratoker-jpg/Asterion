@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import { useClockNow } from './application/shared-clock';
 import {
   getFleetProductionEntity,
   getFleetProductionQueue,
@@ -31,11 +32,7 @@ function cancelOrder(orderId: string) {
 }
 
 export function FleetProductionQueueView({ queueKind, state, factionId }: FleetProductionQueueViewProps) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
-    return () => window.clearInterval(timer);
-  }, []);
+  const now = useClockNow();
 
   const queue = getFleetProductionQueue(state, queueKind);
   return (
