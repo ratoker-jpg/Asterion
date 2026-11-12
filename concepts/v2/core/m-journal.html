@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Сообщения · Ядро · Журнал</title>
+<link rel="stylesheet" href="../frame.css"><link rel="stylesheet" href="core.css">
+<style>
+.col { position: absolute; left: 30px; top: 100px; bottom: 20px; width: 260px; display: grid; align-content: start; gap: 12px; }
+.day { font-size: 11px; letter-spacing: 3px; color: var(--dim); font-weight: 700; margin: 6px 0 0 4px; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; }
+.m { position: relative; width: 56px; height: 56px; }
+.m img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.m::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--c); opacity: .9; }
+.m.read { opacity: .45; } .m.read::after { opacity: .4; }
+.m.sel::after { inset: -8px; border-width: 3px; box-shadow: 0 0 16px var(--c); }
+.m i { position: absolute; right: -2px; top: -2px; width: 12px; height: 12px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 0 3px #03060b; }
+.page { position: absolute; left: 400px; right: 120px; top: 70px; bottom: 30px; display: grid; justify-items: center; align-content: start; text-align: center; }
+.medal { position: relative; width: 330px; height: 330px; }
+.medal .pl { position: absolute; inset: 40px; } .medal .pl img { width: 100%; height: 100%; object-fit: contain; }
+.medal .fc { position: absolute; width: 120px; height: 120px; border-radius: 50%; box-shadow: 0 0 0 3px var(--c), 0 0 26px var(--c); }
+.verdict { font-size: 72px; font-weight: 800; letter-spacing: 8px; color: #8ff0b4; margin-top: 6px; }
+.line { font-size: 17px; color: #b9c5d6; max-width: 820px; line-height: 1.45; margin-top: 4px; }
+.line b { color: #fff; }
+.nums { display: flex; gap: 70px; margin-top: 34px; }
+.nums div { display: grid; justify-items: center; gap: 8px; }
+.nums img { width: 64px; height: 64px; object-fit: contain; }
+.nums b { font-size: 30px; font-weight: 800; } .nums small { font-size: 12px; letter-spacing: 2px; color: var(--dim); font-weight: 700; text-transform: uppercase; }
+.page .acts { position: static; display: flex; gap: 34px; margin-top: 40px; }
+</style></head><body>
+<div class="stage"><img class="hdr" src="../assets/game-header.png"><main class="area">
+  <div class="sky"></div><svg class="rings" id="s" viewBox="0 0 1920 944"></svg>
+</main></div>
+<script src="../messages/data.js"></script><script src="core.js"></script>
+<script>
+const { A, short, items, battle: B } = MSG;
+const TONE = { ok: '#57d98f', bad: '#ff4d5e', info: '#56d9f2', warn: '#d9a74a', neutral: '#7d8aa0' };
+const pic = (x) => x.cat === 'battle' || x.kind === 'letter' ? A.face(x.fac) : x.cat === 'intel' ? A.planet(x.planet) : A.icon(x.icon);
+// left edge: the letters as circles, grouped by day; no text but the day
+const days = [...new Set(items.slice(0, 30).map((x) => x.day))];
+el('col', days.map((d) => `<div class="day">${d.toUpperCase()}</div><div class="row">${items.slice(0, 30).filter((x) => x.day === d).map((x, i) => `<div class="m ${x.unread ? '' : 'read'} ${x.id === 0 ? 'sel' : ''}" style="--c:${TONE[x.tone]}"><img src="${pic(x)}">${x.unread ? '<i></i>' : ''}</div>`).join('')}</div>`).join('')
+  + (items.length > 30 ? `<div class="day">ЕЩЁ ${items.length - 30}</div>` : ''));
+if (!items.length) { el('page', `<div class="medal"><div class="pl"><img src="${A.empty}"></div></div><div class="verdict" style="color:#cfd8e6;font-size:44px">Писем нет</div><div class="line">Отчёты о боях, разведке и полётах появятся здесь.</div>`); }
+else {
+  document.getElementById('s').innerHTML = DEFS + dial(1100, 235, 175, { w: 18, ticks: 90, major: 6, tone: 'rgba(120,230,170,' });
+  el('page', `<div class="medal"><div class="pl"><img src="${A.bigPlanet}"></div>
+      <div class="fc" style="left:-70px;top:120px;--c:#56d9f2;background:url('${A.face(B.me.fac)}') center/cover"></div>
+      <div class="fc" style="right:-70px;top:120px;--c:#ff4d5e;background:url('${A.face(B.foe.fac)}') center/cover"></div></div>
+    <div class="verdict">ПОБЕДА</div>
+    <div class="line">Разбит флот игрока <b>${B.foe.name}</b> у планеты ${B.foe.planet}, ${B.rounds} раундов.</div>
+    <div class="nums"><div><img src="${A.res('metal')}"><b style="color:#8ff0b4">${short(B.loot.metal + B.loot.mineral + B.loot.gas)}</b><small>унесли</small></div>
+      <div><img src="${A.ship('synod', 'frigate')}"><b style="color:#ff8f98">${short(-B.lostValue)}</b><small>потеряли</small></div>
+      <div><img src="${A.res('debris')}"><b>${short(B.debris).replace('+', '')}</b><small>обломки</small></div></div>
+    <div class="acts"><div class="main"><img src="../../../src/assets/ui/actions/attack.webp"><div><b>Ещё раз</b><small>00:12:48</small></div></div>
+      <div><img src="../../../src/assets/ui/actions/recycle.webp"><div><b>Собрать</b><small>00:08:41</small></div></div>
+      <div><img src="../../../src/assets/ui/actions/object-card.webp"><div><b>Весь бой</b><small>6 раундов</small></div></div></div>`);
+}
+</script><script src="../frame.js"></script>
+</body></html>

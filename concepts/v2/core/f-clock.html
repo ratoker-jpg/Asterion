@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Рейсы · Ядро · Часы</title>
+<link rel="stylesheet" href="../frame.css"><link rel="stylesheet" href="core.css">
+<style>
+.ctr { position: absolute; left: 760px; top: 450px; transform: translate(-50%, -50%); text-align: center; }
+.ctr .big { color: var(--red); font-size: 64px; } .ctr .cap { margin-top: 6px; }
+.ctr img { width: 92px; height: 92px; margin: 0 auto 10px; border-radius: 50%; box-shadow: 0 0 0 3px var(--red), 0 0 30px rgba(255,77,94,.5); }
+.fl { position: absolute; transform: translate(-50%, -50%); width: var(--sz); height: var(--sz); }
+.fl img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.fl::after { content: ''; position: absolute; inset: -5px; border-radius: 50%; border: 2px solid var(--c); }
+.fl.hot::after { box-shadow: 0 0 16px var(--c); }
+.fl.sel::after { inset: -9px; border-width: 3px; box-shadow: 0 0 20px var(--c); }
+.fl b { position: absolute; left: 50%; top: calc(100% + 6px); transform: translateX(-50%); font-size: 13px; font-weight: 800; white-space: nowrap; color: var(--ink); text-shadow: 0 1px 4px #000; }
+.fl em { position: absolute; right: -6px; top: -6px; width: 22px; height: 22px; border-radius: 50%; background: #0a0f18; border: 1px solid var(--line); font-style: normal; font-size: 12px; display: grid; place-items: center; color: var(--dim); }
+.tick { position: absolute; transform: translate(-50%, -50%); font-size: 12px; font-weight: 700; color: #5f6c80; letter-spacing: 1px; }
+.side { position: absolute; left: 1290px; top: 90px; width: 560px; display: grid; gap: 26px; }
+.route { display: grid; grid-template-columns: 110px 1fr 110px; align-items: center; text-align: center; gap: 10px; }
+.route img { width: 96px; height: 96px; margin: 0 auto; object-fit: contain; }
+.route span { display: block; font-size: 14px; font-weight: 700; margin-top: 6px; line-height: 1.25; }
+.route i { height: 2px; background: repeating-linear-gradient(90deg, var(--red) 0 8px, transparent 8px 16px); }
+.ships { display: flex; gap: 18px; justify-content: center; }
+.ships div { text-align: center; } .ships img { width: 74px; height: 56px; object-fit: contain; } .ships b { font-size: 15px; font-weight: 800; }
+.when { text-align: center; } .when .big { color: var(--red); }
+</style></head><body>
+<div class="stage"><img class="hdr" src="../assets/game-header.png"><main class="area">
+  <div class="sky"></div><svg class="rings" id="s" viewBox="0 0 1920 944"></svg>
+</main></div>
+<script src="../fleets/data.js"></script><script src="core.js"></script>
+<script>
+// A clock of the next four hours: top = now, clockwise = later. Outer ring: your fleets. Inner ring: what flies at you.
+const CX = 760, CY = 470, RO = 360, RI = 230;
+const T_MAX = 4 * 3600; const toA = (t) => -90 + 330 * Math.sqrt(Math.min(t, T_MAX) / T_MAX);
+let s = DEFS + dial(CX, CY, RO, { w: 26, ticks: 120, major: 10 }) + dial(CX, CY, RI, { w: 16, ticks: 72, major: 6, tone: 'rgba(255,120,130,' });
+[[60, '1 мин'], [300, '5 мин'], [900, '15 мин'], [3600, '1 час'], [7200, '2 часа'], [14400, '4 часа']].forEach(([t, w]) => { const [x, y] = pt(CX, CY, RO + 46, toA(t)); el('tick', w, `left:${x}px;top:${y}px`); });
+el('tick', 'СЕЙЧАС', `left:${CX}px;top:${CY - RO - 46}px;color:#fff`);
+s += arc(CX, CY, RO + 22, -90, toA(400), 'rgba(255,255,255,.35)', 2);
+document.getElementById('s').innerHTML = s;
+const sel = FLIGHTS.find((f) => f.id === SEL0) || FLIGHTS[0];
+// flights placed by time; neighbours pushed apart along the ring
+const placed = [];
+[...FLIGHTS].sort((a, b) => a.t - b.t).forEach((f) => {
+  const r = f.hostile ? RI : RO; let a = toA(f.t);
+  while (placed.some((p) => p.r === r && Math.abs(p.a - a) < (r === RO ? 15 : 22))) a += 3;
+  placed.push({ r, a }); const [x, y] = pt(CX, CY, r, a); const M = MISSION[f.m];
+  el(`fl ${f.hostile ? 'hot' : ''} ${f === sel ? 'sel' : ''}`, `<img src="${ICON(M.icon)}"><b>${tf(f.t)}</b>${f.phase === 'back' ? '<em>↩</em>' : ''}`,
+    `left:${x}px;top:${y}px;--sz:${f.hostile ? 70 : 60}px;--c:${GROUP_COLOR[M.group]}`); });
+if (!FLIGHTS.length) { el('ctr', `<div class="big" style="color:#fff">Тихо</div><div class="cap">в небе ни одного флота</div>`); }
+else {
+  const next = [...FLIGHTS].sort((a, b) => (!!b.hostile - !!a.hostile) || a.t - b.t)[0];
+  el('ctr', `<img src="${ICON('attack')}"><div class="big">${tf(next.t)}</div><div class="cap">удар по Helion 01</div>`);
+  const a = origin(sel), b = target(sel);
+  el('side', `<div class="when"><div class="cap" style="color:#ff8f98">Атака на вас</div><div class="big">${tf(sel.t)}</div></div>
+    <div class="route"><div><img src="${PLANET(a.p)}"><span>${a.name}</span></div><i></i><div><img src="${PLANET(b.p)}"><span>${b.name}</span></div></div>
+    <div class="ships">${sel.ships.map(([k, n]) => `<div><img src="${SHIP(k)}"><b>${nshort(n)}</b></div>`).join('')}</div>`);
+  el('acts', `<div class="main"><img src="${ICON('attack')}"><div><b>Ответный удар</b><small>00:03:40</small></div></div><div><img src="${ICON('deployment')}"><div><b>Увести флот</b><small>успеете</small></div></div>`, 'left:1440px;top:640px');
+}
+</script><script src="../frame.js"></script>
+</body></html>

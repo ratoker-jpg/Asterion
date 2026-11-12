@@ -1,0 +1,29 @@
+/* «Ядро» language for v2 round 3: the screen is the world, rings carry the interface, almost no words.
+   Taken from the approved header (dial with a planet in the middle, cyan and gold rings), in the spirit
+   of radial city-builders: centre, rings around it, small circles on the edge. */
+:root { --ink: #e9eef6; --dim: #7d8aa0; --line: rgba(150,180,220,.16); --cyan: #56d9f2; --blue: #4f8dff; --gold: #d9a74a; --red: #ff4d5e; --green: #57d98f; }
+.area { overflow: hidden; background: radial-gradient(ellipse at 50% 55%, #08111d 0%, #03060b 70%); }
+.sky { position: absolute; inset: 0; background-image:
+  radial-gradient(1px 1px at 12% 22%, #fff7, transparent), radial-gradient(1px 1px at 38% 74%, #fff5, transparent), radial-gradient(1.5px 1.5px at 66% 12%, #fff8, transparent),
+  radial-gradient(1px 1px at 82% 58%, #fff6, transparent), radial-gradient(1px 1px at 52% 44%, #fff4, transparent), radial-gradient(1.5px 1.5px at 91% 86%, #fff7, transparent),
+  radial-gradient(1px 1px at 7% 81%, #fff5, transparent), radial-gradient(1px 1px at 27% 51%, #fff3, transparent); background-size: 520px 380px; }
+svg.rings { position: absolute; inset: 0; width: 1920px; height: 944px; pointer-events: none; }
+/* small round sockets: the only "buttons" on the world */
+.sock { position: absolute; transform: translate(-50%, -50%); border-radius: 50%; }
+.sock img { width: 100%; height: 100%; object-fit: contain; border-radius: 50%; }
+.sock.ring::after { content: ''; position: absolute; inset: -12%; border-radius: 50%; border: 2px solid var(--c, var(--line)); }
+.sock.dash::after { border-style: dashed; }
+.sock.glow::after { box-shadow: 0 0 18px var(--c); }
+/* one quiet plate, never more than three lines */
+.plate { position: absolute; padding: 10px 14px; border-radius: 12px; background: rgba(6,10,17,.88); border: 1px solid var(--line); }
+.plate b { display: block; font-size: 15px; font-weight: 800; line-height: 1.25; }
+.plate span { display: block; font-size: 12px; color: var(--dim); margin-top: 3px; }
+.plate i { font-style: normal; font-weight: 800; color: var(--c, var(--cyan)); }
+.cap { font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: var(--dim); font-weight: 700; }
+.big { font-size: 40px; font-weight: 800; letter-spacing: -.5px; }
+/* edge circles: actions sit in a column next to the object (owner's choice 05.11) */
+.acts { position: absolute; display: grid; gap: 12px; }
+.acts > div { display: grid; grid-template-columns: 58px auto; gap: 12px; align-items: center; }
+.acts img { width: 58px; height: 58px; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 2px rgba(255,255,255,.12), 0 6px 16px #000; }
+.acts b { font-size: 15px; font-weight: 800; text-shadow: 0 1px 6px #000; } .acts small { display: block; font-size: 13px; color: var(--cyan); font-weight: 800; }
+.acts .main img { box-shadow: 0 0 0 2px var(--red), 0 0 18px rgba(255,77,94,.5); } .acts .main b { color: #ff9aa3; }

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Вселенная · Ядро · Колесо галактики</title>
+<link rel="stylesheet" href="../frame.css"><link rel="stylesheet" href="core.css">
+<style>
+.sun { position: absolute; left: 960px; top: 470px; width: 150px; transform: translate(-50%, -50%); filter: drop-shadow(0 0 40px rgba(120,200,255,.6)); }
+.st { position: absolute; transform: translate(-50%, -50%); width: 26px; height: 26px; border-radius: 50%; background: radial-gradient(circle, #fff 0 18%, var(--c) 40%, transparent 72%); }
+.st.cur { width: 46px; height: 46px; box-shadow: 0 0 0 2px #fff, 0 0 24px #fff; }
+.st.sun-raid::after { content: ''; position: absolute; inset: -8px; border-radius: 50%; border: 2px solid #ff8a3d; }
+.sn { position: absolute; transform: translate(-50%, -50%); font-size: 13px; font-weight: 800; color: #6d7b91; }
+.sn.cur { color: #fff; font-size: 18px; }
+.gname { position: absolute; left: 50%; top: 18px; transform: translateX(-50%); }
+.leg { position: absolute; left: 30px; bottom: 26px; display: grid; gap: 10px; font-size: 13px; color: var(--dim); font-weight: 600; }
+.leg span { display: flex; align-items: center; gap: 10px; } .leg i { width: 14px; height: 14px; border-radius: 50%; }
+</style></head><body>
+<div class="stage"><img class="hdr" src="../assets/game-header.png"><main class="area">
+  <div class="sky"></div><svg class="rings" id="s" viewBox="0 0 1920 944"></svg>
+  <img class="sun" src="../../../assets/source/universe-navigation/active-suns/active-sun.variant-03.png">
+  <div class="leg"><span><i style="background:#4f8dff"></i>ваши планеты</span><span><i style="background:#57d98f"></i>союз</span><span><i style="background:#ff4d5e"></i>враги</span><span><i style="border:2px solid #ff8a3d"></i>рейд на Солнце</span></div>
+</main></div>
+<script src="../universe/data.js"></script><script src="core.js"></script>
+<script>
+// Outer wheel: the 40 systems of the galaxy. Turning the wheel brings a system to the top.
+// Inside the wheel: the system at the top, its 24 positions on two rings.
+const CX = 960, CY = 470, RW = 400;
+const cur = CURRENT_SYSTEM;
+let s = DEFS + dial(CX, CY, RW, { w: 40, ticks: 200, major: 5 });
+s += dial(CX, CY, 140, { w: 16, ticks: 48, major: 2 });
+s += `<circle cx="${CX}" cy="${CY}" r="215" fill="none" stroke="rgba(150,185,230,.16)"/><circle cx="${CX}" cy="${CY}" r="300" fill="none" stroke="rgba(150,185,230,.16)"/>`;
+// pointer from the current system down to the sun
+s += `<line x1="${CX}" y1="${CY + RW - 24}" x2="${CX}" y2="${CY + 150}" stroke="rgba(255,255,255,.22)" stroke-width="1.5" stroke-dasharray="3 6"/>`;
+const ang = (n) => 90 - (n - cur) * 9;
+SYSTEMS.forEach((y) => { const a = ang(y.n); const enemy = y.enemy >= 3; const c = enemy ? '#ff4d5e' : y.self ? '#4f8dff' : y.ally ? '#57d98f' : '#cfe0f5';
+  if (y.debris || enemy) s += arc(CX, CY, RW + 34, a - 3.5, a + 3.5, enemy ? 'rgba(255,77,94,.75)' : 'rgba(217,167,74,.8)', 4); });
+document.getElementById('s').innerHTML = s;
+SYSTEMS.forEach((y) => { const a = ang(y.n); const [x, yy] = pt(CX, CY, RW, a); const enemy = y.enemy >= 3; const c = enemy ? '#ff4d5e' : y.self ? '#4f8dff' : y.ally ? '#57d98f' : '#cfe0f5';
+  el(`st ${y.n === cur ? 'cur' : ''} ${y.sun === 'raid' ? 'sun-raid' : ''}`, '', `left:${x}px;top:${yy}px;--c:${c}`);
+  if (y.n % 5 === 0 || y.n === cur) { const [tx, ty] = pt(CX, CY, RW - 46, a); el(`sn ${y.n === cur ? 'cur' : ''}`, String(y.n).padStart(2, '0'), `left:${tx}px;top:${ty}px`); } });
+// 24 positions: 1-12 inner ring, 13-24 outer ring, starting at the top, clockwise
+SYSTEM.forEach((o, i) => { const r = i < 12 ? 215 : 300; const a = -90 + (i % 12) * 30 + (i < 12 ? 0 : 15); const [x, y] = pt(CX, CY, r, a);
+  const sel = o.pos === SELECTED.pos;
+  if (!o.art) { el('sock', '', `left:${x}px;top:${y}px;width:12px;height:12px;border:1px dashed rgba(150,185,230,.35)`); return; }
+  const sz = (o.kind === 'asteroid' ? 36 : o.tone === 'uninhabited' ? 44 : 66) * (sel ? 1.3 : 1);
+  const ring2 = !['uninhabited', 'asteroid'].includes(o.tone);
+  el(`sock ${ring2 ? 'ring' : ''} ${o.tone === 'range' ? 'dash' : ''} ${sel ? 'glow' : ''}`, `<img src="${o.art}" style="${o.tone === 'uninhabited' ? 'filter:brightness(.55) saturate(.5)' : ''}">`,
+    `left:${x}px;top:${y}px;width:${sz}px;height:${sz}px;--c:${TONE[o.tone].color};opacity:${['neutral', 'protected'].includes(o.tone) ? .75 : 1}`); });
+if (!isEmpty) {
+  el('plate', `<b>${SELECTED.name}</b><span><i style="--c:#ff6b78">[${SELECTED.ally.tag}]</i> · ${short(SELECTED.points[0].v)} · разведка ${SELECTED.spy.ago}</span>`, 'left:1470px;top:250px;max-width:340px');
+  el('acts', SELECTED.actions.filter((a) => !a.off).map((a) => `<div class="${a.main ? 'main' : ''}"><img src="${ART.action(a.k)}"><div><b>${a.label}</b><small>${a.time}</small></div></div>`).join(''), 'left:1470px;top:340px');
+  const [x, y] = pt(CX, CY, 215, -90 + 2 * 30);
+  document.getElementById('s').insertAdjacentHTML('beforeend', `<path d="M${x + 50} ${y} C ${x + 250} ${y}, 1380 300, 1460 300" fill="none" stroke="rgba(255,90,100,.6)" stroke-width="1.5" stroke-dasharray="3 6"/>`);
+} else el('plate', '<b>Система 37 пуста</b><span>3 необитаемые планеты · можно колонизировать</span>', 'left:1470px;top:300px');
+</script><script src="../frame.js"></script>
+</body></html>

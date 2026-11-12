@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Вселенная · Ядро · Генератор</title>
+<link rel="stylesheet" href="../frame.css"><link rel="stylesheet" href="core.css">
+<style>
+.sun { position: absolute; left: 960px; top: 470px; width: 200px; transform: translate(-50%, -50%); filter: drop-shadow(0 0 50px rgba(255,190,110,.55)); }
+.ev { position: absolute; left: 30px; top: 110px; display: grid; gap: 34px; }
+.ev div { position: relative; width: 64px; height: 64px; }
+.ev img { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; }
+.ev div::after { content: ''; position: absolute; inset: -5px; border-radius: 50%; border: 2px solid var(--c); }
+.ev b { position: absolute; left: 50%; bottom: -20px; transform: translateX(-50%); font-size: 14px; font-weight: 800; padding: 1px 7px; border-radius: 8px; background: #0a0f18; color: var(--c); white-space: nowrap; }
+.sysn { position: absolute; right: 34px; top: 50%; transform: translateY(-50%); text-align: center; }
+.sysn b { display: block; font-size: 44px; font-weight: 800; } .sysn span { display: block; font-size: 15px; color: var(--dim); font-weight: 700; margin: 8px 0; }
+</style></head><body>
+<div class="stage"><img class="hdr" src="../assets/game-header.png"><main class="area">
+  <div class="sky"></div><svg class="rings" id="s" viewBox="0 0 1920 944"></svg>
+  <img class="sun" src="../../../assets/source/universe-navigation/active-suns/active-sun.variant-02.png">
+  <div class="sysn"><span>02</span><b>03</b><span>04</span></div>
+</main></div>
+<script src="../universe/data.js"></script><script src="core.js"></script>
+<script>
+const CX = 960, CY = 470, SY = 0.6, RS = [250, 375, 500];
+const empty = isEmpty;
+let s = DEFS;
+// warm zone near the sun, cold at the edge (heat-map feeling)
+s += `<ellipse cx="${CX}" cy="${CY}" rx="560" ry="${560 * SY}" fill="url(#heat)"/><defs><radialGradient id="heat"><stop offset="0" stop-color="rgba(255,170,90,.16)"/><stop offset=".45" stop-color="rgba(255,150,80,.05)"/><stop offset="1" stop-color="rgba(80,140,255,.02)"/></radialGradient></defs>`;
+// 8 radial streets dividing the system into sectors of three positions
+for (let k = 0; k < 8; k++) { const a = k * 45 - 90 + 22.5; const [x1, y1] = pt(CX, CY, 150, a, SY), [x2, y2] = pt(CX, CY, 560, a, SY); s += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="rgba(150,185,230,.14)" stroke-width="1.5"/>`; }
+// danger sectors glow red where an enemy alliance sits
+if (!empty) [0, 3].forEach((k) => { const a0 = k * 45 - 90 - 22.5, a1 = a0 + 45; s += arc(CX, CY, 560, a0 + 2, a1 - 2, 'rgba(255,77,94,.55)', 4, SY); });
+s += dial(CX, CY, 150, { w: 22, ticks: 72, major: 3, sy: SY });
+RS.forEach((r) => { s += `<ellipse cx="${CX}" cy="${CY}" rx="${r}" ry="${r * SY}" fill="none" stroke="rgba(150,185,230,.16)" stroke-width="1.2"/>`; });
+s += dial(CX, CY, 560, { w: 14, ticks: 96, major: 12, sy: SY });
+document.getElementById('s').innerHTML = s;
+// planet i sits in sector i%8, ring by i/8 : position numbers go round the sectors
+SYSTEM.forEach((o, i) => { const sec = i % 8, ring = Math.floor(i / 8); const a = sec * 45 - 90 + (ring - 1) * 11; const [x, y] = pt(CX, CY, RS[ring], a, SY);
+  const depth = (Math.sin(a * D2R) + 1) / 2; const sel = o.pos === SELECTED.pos;
+  if (!o.art) { el('sock', '', `left:${x}px;top:${y}px;width:12px;height:12px;border:1px dashed rgba(150,185,230,.35)`); return; }
+  const sz = (o.kind === 'asteroid' ? 34 : o.tone === 'uninhabited' ? 46 : 76) * (0.85 + depth * 0.3) * (sel ? 1.35 : 1);
+  const ring2 = !['uninhabited', 'asteroid'].includes(o.tone);
+  el(`sock ${ring2 ? 'ring' : ''} ${o.tone === 'range' ? 'dash' : ''} ${sel ? 'glow' : ''}`, `<img src="${o.art}" style="${o.tone === 'uninhabited' ? 'filter:brightness(.55) saturate(.5)' : ''}">`,
+    `left:${x}px;top:${y}px;width:${sz}px;height:${sz}px;--c:${TONE[o.tone].color};z-index:${Math.round(y)};opacity:${['neutral', 'protected'].includes(o.tone) ? .75 : 1}`); });
+// left edge: only events that need a decision
+if (!empty) el('ev', [
+  ['attack', '#ff4d5e', '4:07'], ['recycle', '#d9a74a', '988 млрд'], ['pirate-raid', '#ff8a3d', '41 с'], ['gas', '#57d98f', '48 тыс/ч']
+].map(([k, c, t]) => `<div style="--c:${c}"><img src="${ART.action(k)}"><b>${t}</b></div>`).join(''));
+// selected: one plate + action circles
+if (!empty) {
+  const i = SELECTED.pos - 1, sec = i % 8, ring = Math.floor(i / 8); const [x, y] = pt(CX, CY, RS[ring], sec * 45 - 90 + (ring - 1) * 11, SY);
+  el('plate', `<b>${SELECTED.name}</b><span><i style="--c:#ff6b78">[${SELECTED.ally.tag}]</i> · ${short(SELECTED.points[0].v)} · разведка ${SELECTED.spy.ago}</span>`, `left:1480px;top:250px;max-width:330px;--c:#ff6b78;z-index:2000`);
+  el('acts', SELECTED.actions.filter((a) => !a.off).map((a) => `<div class="${a.main ? 'main' : ''}"><img src="${ART.action(a.k)}"><div><b>${a.label}</b><small>${a.time}</small></div></div>`).join(''), `left:1480px;top:340px;z-index:2000`);
+  document.getElementById('s').insertAdjacentHTML('beforeend', `<path d="M${x + 46} ${y} C ${x + 200} ${y}, 1380 300, 1470 300" fill="none" stroke="rgba(255,90,100,.6)" stroke-width="1.5" stroke-dasharray="3 6"/>`);
+}
+</script><script src="../frame.js"></script>
+</body></html>

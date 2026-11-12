@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Рейсы · Ядро · Узлы планет</title>
+<link rel="stylesheet" href="../frame.css"><link rel="stylesheet" href="core.css">
+<style>
+.hp { position: absolute; transform: translate(-50%, -50%); width: 170px; height: 170px; }
+.hp img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 0 24px rgba(80,150,255,.35)); }
+.hp.hot img { filter: drop-shadow(0 0 30px rgba(255,77,94,.55)); }
+.hn { position: absolute; transform: translateX(-50%); width: 300px; text-align: center; font-size: 17px; font-weight: 800; line-height: 1.25; }
+.hn small { display: block; font-size: 13px; color: var(--dim); font-weight: 700; margin-top: 4px; }
+.fl { position: absolute; transform: translate(-50%, -50%); width: var(--sz); height: var(--sz); }
+.fl img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.fl::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--c); }
+.fl.hot::after { box-shadow: 0 0 14px var(--c); }
+.fl.sel::after { inset: -8px; border-width: 3px; box-shadow: 0 0 18px var(--c); }
+.fl b { position: absolute; left: 50%; top: calc(100% + 5px); transform: translateX(-50%); font-size: 13px; font-weight: 800; white-space: nowrap; text-shadow: 0 1px 4px #000; }
+.fl.hot b { color: #ff8f98; }
+.bar { position: absolute; left: 120px; right: 120px; bottom: 30px; height: 150px; display: grid; grid-template-columns: 240px 1fr auto; gap: 40px; align-items: center; padding: 0 34px; border-radius: 75px; background: rgba(6,10,17,.82); border: 1px solid rgba(255,77,94,.35); }
+.bar .big { color: var(--red); } .bar .route { display: flex; align-items: center; gap: 18px; }
+.bar .route img { width: 70px; height: 70px; object-fit: contain; } .bar .route i { width: 90px; height: 2px; background: repeating-linear-gradient(90deg, var(--red) 0 8px, transparent 8px 16px); }
+.bar .route span { font-size: 15px; font-weight: 700; max-width: 220px; line-height: 1.25; }
+.bar .ships { display: flex; gap: 14px; margin-left: 30px; } .bar .ships div { text-align: center; } .bar .ships img { width: 60px; height: 44px; object-fit: contain; } .bar .ships b { font-size: 13px; font-weight: 800; }
+.bar .acts { position: static; display: flex; gap: 16px; }
+</style></head><body>
+<div class="stage"><img class="hdr" src="../assets/game-header.png"><main class="area">
+  <div class="sky"></div><svg class="rings" id="s" viewBox="0 0 1920 944"></svg>
+</main></div>
+<script src="../fleets/data.js"></script><script src="core.js"></script>
+<script>
+// Each own planet is a hub like the header dial. Its fleets sit on its ring:
+// the angle is how far the flight has gone (top = just left, round = back home). Attacks on it wait outside, red.
+const keys = Object.keys(HOME); const Y = 330, RH = 150;
+const X = keys.map((_, i) => 260 + i * (1400 / (keys.length - 1)));
+let s = DEFS;
+const sel = FLIGHTS.find((f) => f.id === SEL0) || FLIGHTS[0];
+keys.forEach((k, i) => { const h = HOME[k]; const hot = FLIGHTS.some((f) => f.hostile && f.home === k);
+  s += dial(X[i], Y, RH, { w: 20, ticks: 60, major: 5, tone: hot ? 'rgba(255,120,130,' : 'rgba(150,185,230,' });
+  el(`hp ${hot ? 'hot' : ''}`, `<img src="${PLANET(h.p)}">`, `left:${X[i]}px;top:${Y}px`);
+  el('hn', `${h.name}<small>${h.c}</small>`, `left:${X[i]}px;top:${Y + RH + 70}px`);
+  const mine = FLIGHTS.filter((f) => f.home === k);
+  const used = [];
+  mine.forEach((f) => { const M = MISSION[f.m]; let a = -90 + 360 * (f.phase === 'back' ? 0.5 + frac(f) * 0.5 : f.phase === 'work' ? 0.5 : frac(f) * 0.5);
+    const r = f.hostile ? RH + 95 : RH; if (f.hostile) a = -140;
+    while (used.some((u) => u.r === r && Math.abs(u.a - a) < 34)) a += 34; used.push({ r, a });
+    const [x, y] = pt(X[i], Y, r, a);
+    s += arc(X[i], Y, RH, -90, f.hostile ? -90 : a, GROUP_COLOR[M.group] + '88', 3);
+    if (f.hostile) { const [x2, y2] = pt(X[i], Y, RH + 16, a); s += `<line x1="${x}" y1="${y}" x2="${x2}" y2="${y2}" stroke="#ff4d5e" stroke-width="2" stroke-dasharray="4 5"/>`; }
+    el(`fl ${f.hostile ? 'hot' : ''} ${f === sel ? 'sel' : ''}`, `<img src="${ICON(M.icon)}"><b>${tf(f.t)}</b>`, `left:${x}px;top:${y}px;--sz:${f.hostile ? 66 : 52}px;--c:${GROUP_COLOR[M.group]};z-index:5`); });
+});
+document.getElementById('s').innerHTML = s;
+if (sel) { const a = origin(sel), b = target(sel);
+  el('bar', `<div><div class="cap" style="color:#ff8f98">Атака на вас</div><div class="big">${tf(sel.t)}</div></div>
+    <div class="route"><img src="${PLANET(a.p)}"><span>${a.name}</span><i></i><img src="${PLANET(b.p)}"><span>${b.name}</span>
+      <div class="ships">${sel.ships.map(([k, n]) => `<div><img src="${SHIP(k)}"><b>${nshort(n)}</b></div>`).join('')}</div></div>
+    <div class="acts"><div class="main"><img src="${ICON('attack')}"><div><b>Ответный удар</b><small>00:03:40</small></div></div><div><img src="${ICON('deployment')}"><div><b>Увести</b><small>успеете</small></div></div></div>`); }
+else el('plate', '<b>В небе тихо</b><span>ни один ваш флот не летит</span>', 'left:860px;top:780px');
+</script><script src="../frame.js"></script>
+</body></html>

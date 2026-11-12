@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Сообщения · Ядро · Кольцо суток</title>
+<link rel="stylesheet" href="../frame.css"><link rel="stylesheet" href="core.css">
+<style>
+.m { position: absolute; transform: translate(-50%, -50%); width: var(--sz); height: var(--sz); }
+.m img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.m::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--c); }
+.m.read { opacity: .4; }
+.m.sel::after { inset: -9px; border-width: 3px; box-shadow: 0 0 18px var(--c); }
+.hr { position: absolute; transform: translate(-50%, -50%); font-size: 12px; font-weight: 700; color: #5f6c80; }
+.core { position: absolute; left: 760px; top: 470px; transform: translate(-50%, -50%); width: 380px; text-align: center; }
+.core .faces { display: flex; justify-content: center; gap: 26px; align-items: center; }
+.core .faces img { width: 110px; height: 110px; border-radius: 50%; }
+.core .faces .a { box-shadow: 0 0 0 3px #56d9f2, 0 0 22px rgba(86,217,242,.5); } .core .faces .b { box-shadow: 0 0 0 3px #ff4d5e; filter: grayscale(.6) brightness(.7); }
+.core .faces span { font-size: 22px; font-weight: 800; color: var(--dim); }
+.core .v { font-size: 46px; font-weight: 800; letter-spacing: 5px; color: #8ff0b4; margin-top: 14px; }
+.core .p { font-size: 34px; font-weight: 800; margin-top: 2px; } .core .p small { display: block; font-size: 12px; letter-spacing: 2px; color: var(--dim); }
+.side { position: absolute; left: 1330px; top: 130px; width: 520px; display: grid; gap: 26px; }
+.who { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.who b { font-size: 16px; line-height: 1.25; display: block; } .who span { font-size: 13px; color: var(--dim); }
+.lost { display: grid; gap: 14px; }
+.lost div { display: grid; grid-template-columns: 70px 1fr 90px; gap: 14px; align-items: center; }
+.lost img { width: 70px; height: 50px; object-fit: contain; }
+.lost i { height: 8px; border-radius: 4px; background: rgba(255,255,255,.08); position: relative; overflow: hidden; }
+.lost i::after { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: var(--w); background: var(--c); }
+.lost b { font-size: 15px; font-weight: 800; text-align: right; }
+.side .acts { position: static; display: flex; gap: 26px; }
+.filt { position: absolute; left: 30px; top: 110px; display: grid; gap: 18px; }
+.filt div { position: relative; width: 56px; height: 56px; } .filt img { width: 100%; height: 100%; border-radius: 50%; }
+.filt div::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid rgba(150,185,230,.25); } .filt .on::after { border-color: #fff; }
+.filt em { position: absolute; right: -8px; top: -8px; min-width: 24px; height: 24px; border-radius: 12px; background: #ff4d5e; font-style: normal; font-size: 12px; font-weight: 800; display: grid; place-items: center; padding: 0 6px; }
+</style></head><body>
+<div class="stage"><img class="hdr" src="../assets/game-header.png"><main class="area">
+  <div class="sky"></div><svg class="rings" id="s" viewBox="0 0 1920 944"></svg>
+</main></div>
+<script src="../messages/data.js"></script><script src="core.js"></script>
+<script>
+// The last 24 hours as a dial: midnight on top, letters sit at their hour. Unread are bright, read are dim.
+// The middle of the dial is the opened report.
+const { A, short, items, battle: B, CATS } = MSG;
+const TONE = { ok: '#57d98f', bad: '#ff4d5e', info: '#56d9f2', warn: '#d9a74a', neutral: '#7d8aa0' };
+const pic = (x) => x.cat === 'battle' || x.kind === 'letter' ? A.face(x.fac) : x.cat === 'intel' ? A.planet(x.planet) : A.icon(x.icon);
+const CX = 760, CY = 470, R1 = 300, R2 = 380;
+let s = DEFS + dial(CX, CY, 240, { w: 20, ticks: 96, major: 4 }) + `<circle cx="${CX}" cy="${CY}" r="${R1}" fill="none" stroke="rgba(150,185,230,.1)"/><circle cx="${CX}" cy="${CY}" r="${R2}" fill="none" stroke="rgba(150,185,230,.1)"/>`;
+document.getElementById('s').innerHTML = s;
+[0, 6, 12, 18].forEach((h) => { const [x, y] = pt(CX, CY, 205, h * 15 - 90); el('hr', String(h).padStart(2, '0') + ':00', `left:${x}px;top:${y}px`); });
+el('filt', CATS.slice(1).map((c, i) => `<div class="${i === 0 ? 'on' : ''}"><img src="${A.icon(c.icon)}">${[13, 5, 6, 2, 1][i] ? `<em>${[13, 5, 6, 2, 1][i]}</em>` : ''}</div>`).join(''));
+const today = items.filter((x) => x.day === 'Сегодня' || x.day === 'Вчера').slice(0, 30);
+const used = [];
+today.forEach((x) => { const [hh, mm] = x.time.split(':').map(Number); let a = (hh + mm / 60) * 15 - 90; let r = x.unread ? R1 : R2;
+  while (used.some((u) => u.r === r && Math.abs(u.a - a) < 11)) { if (r === R1) r = R2; else a += 11; } used.push({ r, a });
+  const [px, py] = pt(CX, CY, r, a);
+  el(`m ${x.unread ? '' : 'read'} ${x.id === 0 ? 'sel' : ''}`, `<img src="${pic(x)}">`, `left:${px}px;top:${py}px;--sz:${x.unread ? 58 : 46}px;--c:${TONE[x.tone]}`); });
+if (!items.length) el('core', `<div class="v" style="color:#cfd8e6">Тихо</div><div class="p"><small>ЗА СУТКИ НИ ОДНОГО ПИСЬМА</small></div>`);
+else {
+  el('core', `<div class="faces"><img class="a" src="${A.face(B.me.fac)}"><span>×</span><img class="b" src="${A.face(B.foe.fac)}"></div><div class="v">ПОБЕДА</div>
+    <div class="p" style="color:#8ff0b4">${short(B.profit)}<small>ЧИСТАЯ ПРИБЫЛЬ</small></div>`);
+  const L = (ships, race, col) => ships.filter((x) => x[2]).map(([k, , n, lost]) => `<div><img src="${A.ship(race, k)}"><i style="--w:${Math.round(lost / n * 100)}%;--c:${col}"></i><b>−${short(lost).replace('+', '').replace('−', '')}</b></div>`).join('');
+  el('side', `<div class="who"><div><b style="color:#8fe3f5">${B.me.name}</b><span>${short(B.me.before).replace('+', '')} → ${short(B.me.after).replace('+', '')}</span></div><div><b style="color:#ff9aa3">${B.foe.name}</b><span>${short(B.foe.before).replace('+', '')} → 0</span></div></div>
+    <div class="lost">${L(B.myShips, 'synod', '#56d9f2')}${L(B.foeShips, 'aegis', '#ff4d5e')}</div>
+    <div class="acts"><div class="main"><img src="../../../src/assets/ui/actions/attack.webp"><div><b>Ещё раз</b><small>00:12:48</small></div></div><div><img src="../../../src/assets/ui/actions/recycle.webp"><div><b>Собрать</b><small>988 млрд</small></div></div></div>`);
+}
+</script><script src="../frame.js"></script>
+</body></html>
