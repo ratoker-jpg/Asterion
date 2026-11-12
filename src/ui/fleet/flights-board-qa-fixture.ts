@@ -57,9 +57,11 @@ type Spec = {
 };
 
 function build(spec: Spec, home: string, homeAt: UniverseCoordinate, playerId: string): FlightRecord {
+  // `ago`: minutes since departure; `leg`: minutes left until the next event (arrival, return or release).
   const departedAt = NOW - spec.ago * MIN;
-  const oneWay = spec.leg * MIN;
-  const arrivalAt = departedAt + oneWay;
+  const outbound = spec.phase === 'outbound';
+  const oneWay = outbound ? (spec.ago + spec.leg) * MIN : Math.round((spec.ago + spec.leg) / 2) * MIN;
+  const arrivalAt = outbound ? departedAt + oneWay : spec.phase === 'arrived' ? NOW - 10 * MIN : departedAt + oneWay;
   const target = spec.target ?? at(2, 301, 11);
   const foreign = spec.ownerSide && spec.ownerSide !== 'player';
   return {
@@ -82,7 +84,7 @@ function build(spec: Spec, home: string, homeAt: UniverseCoordinate, playerId: s
     oneWayDurationMs: oneWay,
     departedAt,
     arrivalAt,
-    ...(spec.phase === 'returning' || spec.phase === 'arrived' ? { returnAt: arrivalAt + oneWay + (spec.phase === 'arrived' ? 40 * MIN : 0), arrivedAt: arrivalAt } : {}),
+    ...(spec.phase === 'returning' || spec.phase === 'arrived' ? { returnAt: NOW + spec.leg * MIN, arrivedAt: arrivalAt } : {}),
     gasCost: 0,
     phase: spec.phase,
     ...spec.extra,
@@ -96,11 +98,11 @@ const NINE: Partial<Record<ShipId, number>> = {
 
 function attackSpecs(): Spec[] {
   return [
-    { id: 'qa-attack-npc', missionId: 'attack', phase: 'outbound', ago: 30, leg: 34, ownerSide: 'npc', ships: { 'death-star': 3, battleship: 88_210, bomber: 12_044, cruiser: 900_311 }, extra: { targetOwnerName: LONG_OWNER, ownerId: 'qa-npc-1' } },
-    { id: 'qa-attack-pirate', missionId: 'pirate-raid', phase: 'outbound', ago: 20, leg: 31, ownerSide: 'pirate', ships: {}, extra: {
+    { id: 'qa-attack-npc', missionId: 'attack', phase: 'outbound', ago: 30, leg: 4, ownerSide: 'npc', ships: { 'death-star': 3, battleship: 88_210, bomber: 12_044, cruiser: 900_311 }, extra: { targetOwnerName: LONG_OWNER, ownerId: 'qa-npc-1' } },
+    { id: 'qa-attack-pirate', missionId: 'pirate-raid', phase: 'outbound', ago: 20, leg: 11, ownerSide: 'pirate', ships: {}, extra: {
       pirateRaidSnapshot: { composition: { 'pirate-hound': 4_200, 'pirate-raider': 610 } } as unknown as PirateRaidSnapshot,
     } },
-    { id: 'qa-attack-bot', missionId: 'attack', phase: 'outbound', ago: 5, leg: 125, ownerSide: 'bot01', ships: { scout: BIG, cruiser: 1 } },
+    { id: 'qa-attack-bot', missionId: 'attack', phase: 'outbound', ago: 5, leg: 120, ownerSide: 'bot01', ships: { scout: BIG, cruiser: 1 } },
   ];
 }
 
@@ -127,7 +129,7 @@ function ownSpecs(count: number, colony: string): Spec[] {
       missionId: pick.missionId,
       phase: pick.missionId === 'expedition' || pick.missionId === 'gas' ? 'arrived' : pick.missionId === 'colonize' || pick.missionId === 'deployment' ? 'outbound' : phase,
       ago: 400 - index * 14,
-      leg: 120 + (index % 5) * 45,
+      leg: 12 + (index % 5) * 47 + index,
       origin: index % 3 === 1 ? colony : undefined,
       ships: index === 0 ? NINE : pick.ships,
       target: at(1 + (index % 4), 100 + index * 7, 1 + (index % 15)),
@@ -149,7 +151,7 @@ export function createFlightsBoardQaFixture(
     case 'empty':
       return { ...base, records: [] };
     case 'one':
-      return { ...base, records: make([{ id: 'qa-one', missionId: 'transport', phase: 'outbound', ago: 10, leg: 52, ships: { transporter: 120, 'mega-transporter': 4 }, target: at(1, 12, 8), targetName: 'Helion 02', extra: { cargo: { metal: 1_200_000, minerals: 640_000, gas: 0, debris: 0 }, targetRelation: 'self' } }]) };
+      return { ...base, records: make([{ id: 'qa-one', missionId: 'transport', phase: 'outbound', ago: 10, leg: 42, ships: { transporter: 120, 'mega-transporter': 4 }, target: at(1, 12, 8), targetName: 'Helion 02', extra: { cargo: { metal: 1_200_000, minerals: 640_000, gas: 0, debris: 0 }, targetRelation: 'self' } }]) };
     case 'attacks':
       return { ...base, records: make(attackSpecs()) };
     case 'many':

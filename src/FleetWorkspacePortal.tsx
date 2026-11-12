@@ -1794,7 +1794,11 @@ function FleetWorkspace({
       <strong>{originName}</strong>
       {allyAid ? <small>помощь по запросу</small> : <CoordinateLink coordinate={flight.originCoordinate} />}
     </>;
-    const targetNode = <>
+    const attackedHomeId = attackNow ? attackedPlanetId(flight) : null;
+    const targetNode = attackedHomeId ? <>
+      <strong>{boardPlanetName(attackedHomeId) ?? 'Ваша планета'}</strong>
+      <CoordinateLink coordinate={flight.destinationCoordinate} />
+    </> : <>
       <strong data-qa-space-flight-targetless={flight.missionId === 'space-flight' || undefined}>{flight.missionId === 'space-flight' ? 'Глубокий космос' : flight.targetPlanetName ?? <CoordinateLink coordinate={flight.destinationCoordinate} />}</strong>
       {flight.missionId === 'space-flight' ? <small>Без планетарной цели</small> : null}
       {flight.missionId !== 'space-flight' && flight.targetPlanetName && flight.destinationCoordinate ? <CoordinateLink coordinate={flight.destinationCoordinate} /> : null}
