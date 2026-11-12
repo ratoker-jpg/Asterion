@@ -27,6 +27,7 @@ import {
   formatClock,
   formatShortAmount,
   formatSignedAmount,
+  gasYield,
   spyRaid,
   timesLabel,
   toneOf,
@@ -277,6 +278,8 @@ function heroNumbers(item: ReportItem, sheet: ReportSheet, battle: BattleReport 
     const removed = item.overpopulationReport.removedShips.reduce((total, loss) => total + loss.count, 0);
     return { value: removed ? formatSignedAmount(-removed) : '0', tone: removed ? 'danger' : 'success', caption: removed ? 'кораблей и спутников потеряно' : 'потерь нет' };
   }
+  const gas = sheet.kind === 'gas' ? gasYield(item) : null;
+  if (gas) return { value: gas.gas > 0 ? formatSignedAmount(gas.gas) : '0', tone: gas.gas > 0 ? 'success' : 'neutral', caption: gas.scrap > 0 ? `газа, и ещё ${formatShortAmount(gas.scrap)} обломков` : 'газа' };
   const gain = sheet.resources.filter((group) => group.tone === 'gain');
   if (gain.length) {
     const total = gain.flatMap((group) => group.items).filter((resource) => resource.kind !== 'energy').reduce((sum, resource) => sum + resource.value, 0);

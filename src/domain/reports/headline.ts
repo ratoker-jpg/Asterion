@@ -1,5 +1,5 @@
 import { getFactionCombatEntity, getFactionShipCatalog } from '../combat/faction-catalog.ts';
-import { isCombatFactionId, type CombatFactionId } from '../combat/factions.ts';
+import { getCombatFactionId, isCombatFactionId, type CombatFactionId } from '../combat/factions.ts';
 import type { CombatEntityId } from '../combat/ids.ts';
 import type { BattleReport, BattleStackSnapshot } from '../combat/report.ts';
 import type { SpyReportSnapshot } from '../espionage/types.ts';
@@ -102,8 +102,10 @@ export function formatClock(ms: number) {
 
 // ---------------------------------------------------------------- battle
 
+/** Battles store the race as an id or its name («Астеры»); pirates have no price list. */
 function factionOf(race: string | undefined): CombatFactionId | null {
-  return isCombatFactionId(race) ? race : null;
+  if (!race || /pirat|пират/i.test(race)) return null;
+  return getCombatFactionId(race);
 }
 
 function unitCost(factionId: CombatFactionId | null, entityId: string): number {
@@ -194,6 +196,14 @@ export function timesLabel(ratio: number) {
 
 // ---------------------------------------------------------------- the row value
 
+/** Gas extraction: the gas is the number, the scrap rides along («и ещё 1 200 обломков»). */
+export function gasYield(item: ReportItem): { gas: number; scrap: number } | null {
+  const items = item.blocks?.resources?.filter((group) => group.tone === 'gain').flatMap((group) => group.items) ?? [];
+  if (!items.length) return null;
+  const sum = (kind: string) => items.filter((resource) => resource.kind === kind).reduce((total, resource) => total + resource.value, 0);
+  return { gas: sum('gas'), scrap: sum('debris') };
+}
+
 function gainOf(item: ReportItem): number | null {
   const groups = item.blocks?.resources?.filter((resourceGroup) => resourceGroup.tone === 'gain') ?? [];
   if (!groups.length) return null;
@@ -217,6 +227,10 @@ export function reportRowValue(item: ReportItem, battle: BattleReport | null | u
     return { amount: raid.lootable, text: formatShortAmount(raid.lootable), tone: 'info' };
   }
   if (item.spyHunterNotice) return { text: '—', tone: 'danger' };
+  if (item.source === 'gas-extraction') {
+    const gas = gasYield(item);
+    if (gas) return { amount: gas.gas, text: gas.gas > 0 ? formatSignedAmount(gas.gas) : '0', tone: gas.gas > 0 ? 'success' : 'neutral' };
+  }
   const gain = gainOf(item);
   if (gain != null) return { amount: gain, text: gain > 0 ? formatSignedAmount(gain) : '0', tone: gain > 0 ? 'success' : 'neutral' };
   return null;

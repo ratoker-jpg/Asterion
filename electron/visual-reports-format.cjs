@@ -1,13 +1,13 @@
-// «Сообщения»: one report format (11.11.2026). Worst-case screenshots of every report
-// kind at 1280×720 and 2560×1080: a big battle (11 ship types a side, defence, 6
-// rounds), a spy report with everything revealed and an almost empty one, recycling
-// with nothing collected, gas extraction, a pirate raid, an exploration find, an
-// overpopulation loss, an alliance letter in «Личные», an empty «Личные» and 200
-// unread reports.
+// «Сообщения» v3 (concept r5/mail.html, 12.11.2026). Worst-case screenshots of every
+// report kind at 1280×720 and 2560×1080: a big battle (11 ship types a side, defence, 6
+// rounds, 12-digit loot), a spy report with everything revealed and an almost empty one,
+// recycling with nothing collected, gas extraction, a pirate raid, an exploration find,
+// an overpopulation loss, an alliance letter in «Личные», an empty «Личные», an empty
+// section under «ПУСТО» and 300 unread reports in one scrolling list.
 // Layout contracts (ASTERION_QA_CHECKS=0 records them without failing, used for the
 // «before» run on main): no text cut off without an ellipsis, no native title
-// tooltips, the screen fits the window, every report shows the shared header
-// (title, place, time, result word) and at most one primary button.
+// tooltips, the screen fits the window, every report shows the art header (title,
+// time, result word, the main number on one line) and at most one primary button.
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
@@ -90,6 +90,9 @@ async function layout(win) {
   return win.webContents.executeJavaScript(`(() => {
     const view = document.querySelector('.reports-view')?.getBoundingClientRect();
     const sheet = document.querySelector('[data-report-sheet]');
+    const value = sheet?.querySelector('[data-report-value]');
+    const valueBox = value?.getBoundingClientRect();
+    const lineHeight = value ? parseFloat(getComputedStyle(value).lineHeight) || parseFloat(getComputedStyle(value).fontSize) * 1.2 : 0;
     return {
       fits: Boolean(view) && view.bottom <= innerHeight + 1 && view.right <= innerWidth + 1,
       horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 2,
@@ -100,6 +103,9 @@ async function layout(win) {
         title: Boolean(sheet.querySelector('[data-report-title]')?.textContent.trim()),
         time: Boolean(sheet.querySelector('[data-report-time]')?.textContent.trim()),
         result: sheet.querySelector('[data-report-result]')?.textContent.trim() || '',
+        hero: Boolean(sheet.querySelector('[data-report-hero] .reports-hero__art')),
+        value: value?.textContent.trim() || '',
+        valueOneLine: !valueBox || valueBox.height <= lineHeight * 1.5,
       } : null,
     };
   })()`);
@@ -125,10 +131,10 @@ function seedSource(now, letters) {
   const reports = [spy('qa-spy-full', 2, 'full', true), spy('qa-spy-basic', 3, 'basic', false)];
   const recycler = [
     { id: 'recycler-arrival:qa-recycle-empty', flightId: 'qa-recycle-empty', coordinate: { galaxy: 1, system: 17, position: 9 }, arrivedAtMs: now - 60_000, collectedDebris: 0, remainingOrbitalDebris: 0 },
-    ...Array.from({ length: 200 }, (_, index) => ({
+    ...Array.from({ length: 300 }, (_, index) => ({
       id: `recycler-arrival:qa-recycle-${index}`, flightId: `qa-recycle-${index}`,
       coordinate: { galaxy: 1 + (index % 3), system: 1 + (index % 40), position: 1 + (index % 15) },
-      arrivedAtMs: now - 4 * 60_000 - index * 3_000, collectedDebris: 1000 + index * 37, remainingOrbitalDebris: index % 4 ? 99999 : 0,
+      arrivedAtMs: now - 4 * 60_000 - index * 600_000, collectedDebris: 1000 + index * 37, remainingOrbitalDebris: index % 4 ? 99999 : 0,
     })),
   ];
   const gas = [{ id: 'gas-extraction-arrival:qa-gas', flightId: 'qa-gas', coordinate: { galaxy: 2, system: 31, position: 16 }, arrivalAt: now - 90_000, outcome: 'found', gasCollected: 48250, scrapCollected: 1200 }];
@@ -162,7 +168,7 @@ function seedSource(now, letters) {
       defender: { ...base.defender, playerId: 'npc-bot-01', playerName: 'Командор Объединённого Флота Южных Рубежей', planetName: 'Кассиопея Восточный Рубеж Обороны', coordinates: '[1:40:24]' },
       attackerForce: { ...base.attackerForce, populationBefore: 1000000, populationAfter: 460000, stacks: stacks(${JSON.stringify(SHIPS)}, 12000, 0.4), defenses: [] },
       defenderForce: { ...base.defenderForce, populationBefore: 820000, populationAfter: 0, stacks: stacks(${JSON.stringify(SHIPS)}, 9000, 1), defenses: stacks(${JSON.stringify(DEFENSE)}, 4000, 1) },
-      resources: { metal: 305864678, minerals: 19657583, gas: 13704441 }, debris: 98000000, experience: 4200,
+      resources: { metal: 999999999999, minerals: 19657583, gas: 13704441 }, debris: 987654321098, experience: 4200,
     });
     const pirateRaid = battle('qa-pirate-raid', 4, {
       missionType: 'pirate-raid', winner: 'attacker', roundCount: 3, rounds: rounds.slice(0, 3),
@@ -219,17 +225,22 @@ async function openFolder(win, folder) {
 
 async function openReport(win, id) {
   const selector = `[data-report-item-id="${id}"] .reports-list-open`;
-  // Long folders page by seven: go back to the first page, then turn pages until the wanted report shows.
-  for (let turn = 0; turn < 60 && !await exists(win, selector) && await exists(win, '.reports-pagination button:first-child:not(:disabled)'); turn += 1) await click(win, '.reports-pagination button:first-child');
-  for (let turn = 0; turn < 60 && !await exists(win, selector); turn += 1) {
-    if (!await exists(win, '.reports-pagination button:last-child:not(:disabled)')) break;
-    await click(win, '.reports-pagination button:last-child');
-  }
+  // One scrolling list, no pages: bring the row into view, then open it.
   if (!await exists(win, selector)) return false;
+  await win.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(selector)}).scrollIntoView({ block: 'center' })`);
   await click(win, selector);
   await waitFor(win, `document.querySelector('[data-report-item-id="${id}"] .reports-list-open[aria-current="true"]')`);
   await settle(win, 400);
   return true;
+}
+
+/** «Полёты: 12 непрочитанных из 300» → { unread, total }. */
+function folderCounts(win, folder) {
+  return win.webContents.executeJavaScript(`(() => {
+    const label = document.querySelector('[data-message-folder="${folder}"]')?.getAttribute('aria-label') || '';
+    const match = /(\\d+) непрочитанных из (\\d+)/.exec(label);
+    return { unread: match ? Number(match[1]) : 0, total: match ? Number(match[2]) : 0 };
+  })()`);
 }
 
 async function runViewport(win, directory, label) {
@@ -246,7 +257,8 @@ async function runViewport(win, directory, label) {
     if (!box.fits || box.horizontalOverflow) fail(`${name}: screen does not fit`, box);
     if (box.nativeTitles.length) fail(`${name}: native title tooltips remain`, box.nativeTitles);
     if (box.primaryButtons > 1) fail(`${name}: more than one primary button`, box);
-    if (sheetExpected && (!box.sheet || !box.sheet.title || !box.sheet.time || !box.sheet.result)) fail(`${name}: the shared report header is incomplete`, box.sheet);
+    if (sheetExpected && (!box.sheet || !box.sheet.title || !box.sheet.time || !box.sheet.result || !box.sheet.hero || !box.sheet.value)) fail(`${name}: the art header is incomplete`, box.sheet);
+    if (box.sheet && !box.sheet.valueOneLine) fail(`${name}: the main number breaks over lines`, box.sheet);
   };
   const shoot = async (name, folder, id) => {
     await openFolder(win, folder);
@@ -273,14 +285,46 @@ async function runViewport(win, directory, label) {
     await capture(win, directory, '10-personal-empty');
   }
 
-  // 200 unread reports in «Полёты».
+  // Sections with mail on top, empty ones grey under «ПУСТО» (owner, 12.11).
+  metrics.rail = await win.webContents.executeJavaScript(`(() => {
+    const nav = Array.from(document.querySelectorAll('.reports-message-nav > *'));
+    const label = nav.findIndex((node) => node.matches('[data-qa-empty-label]'));
+    const filled = nav.slice(0, label < 0 ? nav.length : label).map((node) => node.getAttribute('data-message-folder'));
+    const empty = label < 0 ? [] : nav.slice(label + 1).map((node) => node.getAttribute('data-message-folder'));
+    return { label: label >= 0, filled, empty, emptyAllMarked: nav.slice(label + 1).every((node) => node.hasAttribute('data-folder-empty')) };
+  })()`);
+  if (!metrics.rail.label || !metrics.rail.empty.includes('arena') || !metrics.rail.emptyAllMarked || metrics.rail.filled.includes('arena')) fail('Empty sections are not under «ПУСТО»', metrics.rail);
+  await openFolder(win, 'arena');
+  await check('arena-empty', false);
+  if (await exists(win, '[data-qa-message-list] [data-report-item-id]')) fail('An empty section lists messages', null);
+  await capture(win, directory, '10b-empty-section');
+
+  // 300 unread reports in «Полёты»: one scrolling list, no pages, no checkboxes.
   await openFolder(win, 'flights');
-  metrics.unread = await win.webContents.executeJavaScript(`Number(document.querySelector('[data-message-folder="flights"] .reports-v2-unread-count')?.textContent || 0)`);
-  if (metrics.unread < 200) fail('«Полёты» does not hold 200 unread reports', metrics.unread);
-  await check('flights-200-unread');
-  await capture(win, directory, '11-flights-200-unread');
+  metrics.unread = (await folderCounts(win, 'flights')).unread;
+  if (metrics.unread < 300) fail('«Полёты» does not hold 300 unread reports', metrics.unread);
+  metrics.flightRows = await win.webContents.executeJavaScript(`document.querySelectorAll('[data-qa-message-list] [data-report-item-id]').length`);
+  if (metrics.flightRows < 300) fail('The list does not show every message', metrics.flightRows);
+  if (await exists(win, '.reports-view input[type="checkbox"], .reports-pagination')) fail('Checkboxes or pages are back', null);
+  metrics.stripes = await win.webContents.executeJavaScript(`getComputedStyle(document.querySelector('[data-qa-message-list] .reports-list-item.unread'), '::before').width`);
+  if (metrics.stripes !== '3px') fail('Unread rows have no stripe', metrics.stripes);
+  await check('flights-300-unread');
+  await capture(win, directory, '11-flights-300-unread');
+  await win.webContents.executeJavaScript(`(() => { const list = document.querySelector('[data-qa-message-list]'); list.scrollTop = list.scrollHeight; })()`);
+  await settle(win, 200);
+  await check('flights-300-bottom');
+  await capture(win, directory, '11b-flights-300-bottom');
 
   await shoot('01-battle-big-6-rounds', 'battle', 'battle:qa-big-battle');
+  metrics.battle = await win.webContents.executeJavaScript(`(() => ({
+    value: document.querySelector('[data-report-value]')?.textContent.trim() || '',
+    row: document.querySelector('[data-report-item-id="battle:qa-big-battle"] .reports-list-value')?.textContent.trim() || '',
+    lossRows: { own: document.querySelectorAll('[data-report-losses="own"] .reports-loss-table__row').length, enemy: document.querySelectorAll('[data-report-losses="enemy"] .reports-loss-table__row').length },
+    actions: Array.from(document.querySelectorAll('.reports-preview-footer [data-report-action]')).map((button) => button.getAttribute('data-report-action')),
+  }))()`);
+  if (!/^[+−]/.test(metrics.battle.value) || metrics.battle.value !== metrics.battle.row) fail('Battle profit: header and row disagree', metrics.battle);
+  if (metrics.battle.lossRows.own < 11 || metrics.battle.lossRows.enemy < 20) fail('The losses table misses ship types', metrics.battle);
+  if (!metrics.battle.actions.includes('open_battle') || !metrics.battle.actions.includes('save_battle') || !metrics.battle.actions.includes('collect_debris')) fail('Battle actions missing', metrics.battle);
   if (await exists(win, '[data-report-sheet] details summary')) {
     await click(win, '[data-report-sheet] details summary');
     await win.webContents.executeJavaScript(`(() => { const s = document.querySelector('.reports-preview-scroll'); const d = document.querySelector('[data-report-sheet] details'); if (s && d) s.scrollTop = d.offsetTop - 40; })()`);
@@ -289,9 +333,17 @@ async function runViewport(win, directory, label) {
     await capture(win, directory, '01b-battle-rounds-open');
   }
   await shoot('02-spy-everything', 'battle', 'espionage:qa-spy-full');
+  metrics.spy = await win.webContents.executeJavaScript(`({
+    value: document.querySelector('[data-report-value]')?.textContent.trim() || '',
+    caption: document.querySelector('[data-report-caption]')?.textContent.trim() || '',
+    risk: document.querySelector('[data-report-risk]')?.getAttribute('data-report-risk') || '',
+  })`);
+  if (!/налёт/.test(metrics.spy.caption) || !/нужно/.test(metrics.spy.caption) || !metrics.spy.risk) fail('Spy header lacks «можно унести», transports or the risk plaque', metrics.spy);
   await shoot('03-spy-almost-empty', 'battle', 'espionage:qa-spy-basic');
   await shoot('04-recycling-nothing', 'flights', 'recycler-arrival:qa-recycle-empty');
   await shoot('05-gas-extraction', 'flights', 'gas-extraction-arrival:qa-gas');
+  metrics.gas = await win.webContents.executeJavaScript(`document.querySelector('[data-report-value]')?.textContent.trim() || ''`);
+  if (metrics.gas.replace(/\s/g, '') !== '+48250') fail('Gas header is not the real yield', metrics.gas);
   await shoot('06-pirate-raid', 'battle', 'battle:qa-pirate-raid');
   await shoot('07-exploration-find', 'flights', 'exploration-return:qa-find-flight');
   const overpopulationId = await win.webContents.executeJavaScript(`(${PARSE_SAVE})(localStorage.getItem(${JSON.stringify(SAVE_KEY)})).reports?.overpopulationReports?.find((report) => report.planetId === 'qa-colony')?.id || ''`);
@@ -339,7 +391,7 @@ async function runBotLetters(win, directory, metrics, fail, check) {
     if (expectActions && now.actions.join() !== expectActions.join()) fail(`${name}: buttons`, { expected: expectActions, got: now });
     await capture(win, directory, name);
   };
-  const total = await win.webContents.executeJavaScript(`Number(document.querySelector('[data-message-folder="personal"] .reports-folder-counter i')?.textContent.replace('/', '') || 0)`);
+  const total = (await folderCounts(win, 'personal')).total;
   metrics.botLetters = total;
   const portraits = await win.webContents.executeJavaScript(`(() => {
     const rows = Array.from(document.querySelectorAll('[data-qa-message-list] [data-report-item-id^="letter:"] .reports-list-icon'));
@@ -354,6 +406,12 @@ async function runBotLetters(win, directory, metrics, fail, check) {
   await shot('17-letter-strike-declined', 'letter:npc-pact:qa-pact-declined', 'Вы отказались', []);
   await shot('18-letter-strike-expired', 'letter:npc-pact:qa-pact-expired', 'Истекло', []);
   await shot('19-letter-help-new', 'letter:npc:qa-help-new', 'Новое', ['decline', 'accept']);
+  metrics.deadline = await win.webContents.executeJavaScript(`({
+    value: document.querySelector('[data-report-value]')?.textContent.trim() || '',
+    row: document.querySelector('[data-report-item-id="letter:npc:qa-help-new"] .reports-list-value')?.textContent.trim() || '',
+    attacker: Array.from(document.querySelectorAll('.reports-battle-side small')).some((node) => node.textContent.includes('Кто нападает')),
+  })`);
+  if (!/^до \d\d:\d\d$/.test(metrics.deadline.value) || metrics.deadline.row !== metrics.deadline.value || !metrics.deadline.attacker) fail('Help letter: no reply deadline or attacker', metrics.deadline);
   await shot('20-letter-help-kept', 'letter:npc:qa-help-kept', 'Помощь пришла', []);
   await shot('21-letter-ally-new', 'letter:npc:qa-ally-new', 'Новое', ['decline', 'accept']);
   await shot('22-letter-reply-angry', 'letter:npc:qa-reply-angry', 'Гнев', []);

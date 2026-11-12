@@ -185,6 +185,8 @@ async function openFolder(win, folder) {
 }
 
 async function openReport(win, id) {
+  // v3: one scrolling list, no pages.
+  await win.webContents.executeJavaScript(`document.querySelector('[data-report-item-id="${id}"]')?.scrollIntoView({ block: 'center' })`);
   await click(win, `[data-report-item-id="${id}"] .reports-list-open`);
   await waitFor(win, `document.querySelector('[data-report-item-id="${id}"] .reports-list-open[aria-current="true"]')`);
   await settle(win, 400);
@@ -260,12 +262,13 @@ async function runViewport(win, directory, label) {
   metrics.flights = await win.webContents.executeJavaScript(`({
     rows: document.querySelectorAll('[data-qa-message-list] .reports-list-item').length,
     unreadBadge: document.querySelector('[data-message-folder="flights"] .reports-v2-unread-count')?.textContent,
-    unreadTotal: Array.from(document.querySelectorAll('[data-message-folder] .reports-v2-unread-count')).reduce((sum, node) => sum + Number(node.textContent || 0), 0),
+    unreadTotal: Array.from(document.querySelectorAll('[data-message-folder]')).reduce((sum, node) => sum + Number(/(\\d+) непрочитанных/.exec(node.getAttribute('aria-label') || '')?.[1] || 0), 0),
   })`);
   metrics.counters = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-message-folder] .reports-folder-counter')).map((node) => node.textContent)`);
-  const badCounter = metrics.counters.filter((text) => !/^(\d{1,2}|99\+)\/[\d   ]+$/.test(text) || /\s\//.test(text) || /\/\s/.test(text));
-  if (badCounter.length) fail('Folder counter is not «unread/total» without spaces', { counters: metrics.counters, badCounter });
-  if (!metrics.counters.some((text) => text.startsWith('99+/'))) fail('A folder with more than 99 unread does not show 99+', metrics.counters);
+  // v3: one badge per section with mail: the unread count (or the size when all is read), «99+» above 99.
+  const badCounter = metrics.counters.filter((text) => !/^(\d{1,2}|99\+)$/.test(text));
+  if (badCounter.length) fail('Folder counter is not one short badge', { counters: metrics.counters, badCounter });
+  if (!metrics.counters.includes('99+')) fail('A folder with more than 99 unread does not show 99+', metrics.counters);
   if (metrics.flights.unreadTotal < 500) fail('The inbox does not hold 500 unread messages', metrics.flights);
   await check('500 flights');
   await capture(win, directory, '04-flights-500-unread');
@@ -273,7 +276,8 @@ async function runViewport(win, directory, label) {
   await capture(win, directory, '05-flights-unread-filter');
   await click(win, '.reports-v2-filter-segments button:nth-child(1)');
 
-  // 5. Search with no result.
+  // 5. Search with no result (v3: the magnifier opens the field).
+  await click(win, '[data-qa-search-toggle]');
   await win.webContents.executeJavaScript(`(() => {
     const input = document.querySelector('.reports-search input');
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'нет такого письма');
