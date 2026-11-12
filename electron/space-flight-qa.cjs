@@ -47,8 +47,9 @@ async function readSave(win) {
 }
 
 function countdownSeconds(value) {
-  const match = /^(\d+):(\d{2})$/.exec(value);
-  return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+  // «Рейсы и миссии» shows mm:ss under an hour and h:mm:ss above it.
+  const match = /^(?:(\d+):)?(\d+):(\d{2})$/.exec(value);
+  return match ? Number(match[1] ?? 0) * 3600 + Number(match[2]) * 60 + Number(match[3]) : null;
 }
 
 function assertArrivalCountdown(label, displayed, savedArrivalAt) {

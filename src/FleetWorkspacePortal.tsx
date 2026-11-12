@@ -95,6 +95,10 @@ import './fleet-workspace.css';
 import './ui/fleet/fleet-root-v2.css';
 import { GameSelect } from './ui/GameSelect';
 import './ui/fleet/fleet-repeat.css';
+import { boardTimer, FlightsBoard, type FlightBoardItem, type FlightBoardCargo } from './ui/fleet/FlightsBoard.tsx';
+import './ui/fleet/flights-board.css';
+import { createFlightsBoardQaFixture, getFlightsBoardQaScenario } from './ui/fleet/flights-board-qa-fixture.ts';
+import { planetCoordinate } from './application/quick-actions.ts';
 
 const FLEET_ROOT_STATUS = 'Выберите корабли и миссию. Для колонизации сначала выберите свободную координату во Вселенной.';
 const GAS_PREVIEW_FRESHNESS_WINDOW_MS = 10_000;
@@ -464,6 +468,8 @@ function FleetWorkspace({
   const [planOpenRequest, setPlanOpenRequest] = useState<{ originPlanetId: string; nonce: number } | null>(null);
   const dispatchRequestIdRef = useRef<string | null>(null);
   const pendingRepeatRef = useRef<FlightRepeatPlan | null>(null);
+  /** «Увести флот»: the repeat plan above carries a space flight from the planet under attack. */
+  const pendingEvadeRef = useRef(false);
   const clockNow = useClockNow();
   const fleetSnapshot = useMemo(() => getFleetSnapshot(saveState, planetId as SaveState['currentPlanetId']), [planetId, saveState]);
   const fleetBudget = useMemo(() => getFleetBuildBudget(saveState, planetId as SaveState['currentPlanetId']), [planetId, saveState]);
@@ -485,6 +491,8 @@ function FleetWorkspace({
   const [simulatorHandoff, setSimulatorHandoff] = useState<SimulatorScenario | null>(() => consumeSimulatorHandoff());
   const [spyOperationsOpen, setSpyOperationsOpen] = useState(false);
   const [flightsOpen, setFlightsOpen] = useState(false);
+  /** The flight the board opens first (the incoming-attack alert and chip pick the nearest attack). */
+  const [boardFocus, setBoardFocus] = useState<{ id: string; nonce: number } | null>(null);
   const [shipFilter, setShipFilter] = useState<'all' | 'combat' | 'civil'>('all');
   const [selectedSpyMissionIds, setSelectedSpyMissionIds] = useState<Set<string>>(() => new Set());
   const satelliteConfirmYesRef = useRef<HTMLButtonElement>(null);
@@ -749,13 +757,17 @@ function FleetWorkspace({
     setSentFlight(null);
     const repeat = pendingRepeatRef.current ?? (repeatPlan && repeatPlan.context === launchContext ? repeatPlan : null);
     pendingRepeatRef.current = null;
+    if (!repeat) pendingEvadeRef.current = false;
     if (repeat && repeat.context === launchContext && runtimeState.planets[repeat.originPlanetId]) {
       // «Повторить»: the same source, target and composition, capped by what is on the planet now.
       const available = getAvailableFleetForPlanet(runtimeState, repeat.originPlanetId);
       setSelectedQuantities(clampComposition(repeat.ships, available.ships));
       setSelectedCommanders(clampComposition(repeat.commanders, available.commanders));
       if (repeat.cargo) setTransportCargoDraft(repeat.cargo);
-      setStatus(`Повтор рейса: ${flightMissionLabel(launchContext.missionId)} с планеты ${runtimeState.planets[repeat.originPlanetId]!.name}.`);
+      setStatus(pendingEvadeRef.current
+        ? `Увести флот: космический рейс с планеты ${runtimeState.planets[repeat.originPlanetId]!.name}. Проверьте состав и время.`
+        : `Повтор рейса: ${flightMissionLabel(launchContext.missionId)} с планеты ${runtimeState.planets[repeat.originPlanetId]!.name}.`);
+      pendingEvadeRef.current = false;
       requestPlan(repeat.originPlanetId);
     }
   }, [launchContext]);
@@ -1651,6 +1663,202 @@ function FleetWorkspace({
     window.dispatchEvent(new CustomEvent<FlightLaunchContext>(FLIGHT_LAUNCH_CONTEXT_EVENT, { detail: plan.context }));
   };
 
+  // Test Mode screenshot route `#flights-board-<scenario>`: seeded flights on a frozen clock, nothing in the save.
+  const boardQa = useMemo(() => {
+    const scenario = getFlightsBoardQaScenario(ACTIVE_RUNTIME_MODE);
+    if (!scenario) return null;
+    return createFlightsBoardQaFixture(scenario, {
+      home: planetId,
+      homeAt: planetCoordinate(saveState, planetId),
+      colony: Object.keys(saveState.planets).find((id) => id !== planetId) ?? planetId,
+      playerId: saveState.profile.playerId,
+    });
+  }, [planetId]);
+  const boardNow = boardQa?.nowMs ?? clockNow;
+  const boardRecords = boardQa?.records ?? activeFlightRecords;
+  const boardEspionageLevel = boardQa?.espionageLevel ?? playerEspionageLevel;
+  const boardPlanetName = (id: string) => boardQa?.planetNames[id] ?? saveState.planets[id]?.name;
+  useEffect(() => {
+    if (boardQa?.focusId) setBoardFocus({ id: boardQa.focusId, nonce: 1 });
+  }, [boardQa]);
+
+  /** The player's planet a hostile flight is heading to. */
+  const attackedPlanetId = (flight: FlightRecord) => {
+    const id = flight.destination.kind === 'planet' ? flight.destination.planetId : flight.destinationPlanetId;
+    return id && saveState.planets[id] ? id : null;
+  };
+
+  /**
+   * «Увести флот»: no new rule, only a shortcut to the existing «Космический рейс»
+   * from the planet under attack with every ship that is home now. The player
+   * still checks the plan and presses Send.
+   */
+  const evadeFromAttack = (flight: FlightRecord) => {
+    const origin = attackedPlanetId(flight);
+    if (!origin) {
+      setStatus('Планета под атакой не найдена.');
+      return;
+    }
+    const available = getAvailableFleetForPlanet(saveState, origin);
+    const ships = Object.fromEntries((Object.entries(available.ships) as [ShipId, number | undefined][])
+      .filter(([id, count]) => id !== SOLAR_SATELLITE_ID && (count ?? 0) > 0)) as Partial<Record<ShipId, number>>;
+    const commanders = Object.fromEntries((Object.entries(available.commanders) as [CommanderId, number | undefined][])
+      .filter(([, count]) => (count ?? 0) > 0)) as Partial<Record<CommanderId, number>>;
+    if (!Object.keys(ships).length && !Object.keys(commanders).length) {
+      setStatus(`На планете ${saveState.planets[origin]?.name ?? ''} нет кораблей, которые можно увести.`);
+      return;
+    }
+    const context: FlightLaunchContext = { missionId: 'space-flight' };
+    pendingRepeatRef.current = { context, originPlanetId: origin, ships, commanders };
+    pendingEvadeRef.current = true;
+    window.dispatchEvent(new CustomEvent<FlightLaunchContext>(FLIGHT_LAUNCH_CONTEXT_EVENT, { detail: context }));
+  };
+
+  const boardClock = (at: number) => new Date(at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Europe/Moscow' });
+  /** Planet art: own planets and scouted ones by skin, anything else by a stable pick. */
+  const boardPlanetArt = (planetId: string | undefined, coordinate: UniverseCoordinate | undefined) => {
+    const own = planetId ? saveState.planets[planetId] : undefined;
+    if (own) return planetSkinMapArt(own.skin) ?? planetSkins[0].art;
+    if (!coordinate) return undefined;
+    const scouted = Object.values(saveState.espionage?.targets ?? {}).find((target) => sameUniverseCoordinate(target.coordinate, coordinate));
+    return planetSkinMapArt(scouted?.skin)
+      ?? planetSkins[Math.abs(coordinate.galaxy * 31 + coordinate.system * 7 + coordinate.position) % planetSkins.length].art;
+  };
+  const boardMissionLabel = (missionId: MissionId) => missionId === 'pirate-raid' ? 'Пиратский налёт' : flightMissionLabel(missionId);
+
+  const describeBoardFlight = (flight: FlightRecord): FlightBoardItem => {
+    const own = !flight.ownerSide || flight.ownerSide === 'player';
+    const isIncomingBotAttack = (flight.ownerSide === 'bot01' || flight.ownerSide === 'npc') && flight.missionId === 'attack';
+    const isBot01Explorer = (flight.ownerSide === 'bot01' || flight.ownerSide === 'npc') && (flight.missionId === 'expedition' || Boolean(flight.explorationAttack));
+    const isIncomingPirateRaid = flight.ownerSide === 'pirate' && flight.missionId === 'pirate-raid';
+    const isHostileIncoming = isIncomingBotAttack || isIncomingPirateRaid || isBot01Explorer;
+    const attackNow = isHostileFlightIncomingToPlayer(flight, saveState.profile.playerId);
+    const allyAid = flight.ownerSide === 'npc' && flight.missionId === 'aid';
+    const expeditionLike = flight.missionId === 'expedition' || Boolean(flight.explorationAttack);
+    const liveTransportState = boardQa ? { overflowWarning: false, targetUnavailable: false } : getActiveTransportState(flight);
+    const targetUnavailable = flight.completionReason === 'target-unavailable' || liveTransportState.targetUnavailable;
+    const ownerLabel = flightOwnerLabel(flight, saveState.espionage?.targets);
+    const originName = allyAid ? 'Союзник' : own ? boardPlanetName(flight.originPlanetId) ?? 'Ваша планета' : ownerLabel;
+
+    // Composition: own fleets always; incoming attacks only from Espionage 10 at the moment of viewing (owner rule).
+    const incomingKnowledge = isIncomingBotAttack || isIncomingPirateRaid ? describeIncomingAttack(flight, boardEspionageLevel) : null;
+    const foreignCatalog = getFactionShipCatalog(flight.attackSnapshot?.attackerFactionId ?? flight.explorationFactionId ?? factionId);
+    let ships: FlightBoardItem['ships'];
+    if (incomingKnowledge) {
+      const composition = incomingKnowledge.composition;
+      ships = !composition ? null : composition.kind === 'pirate'
+        ? (Object.entries(composition.ships) as [PirateBaseShipId, number][]).map(([id, count]) => ({ id, name: PIRATE_CATALOG_BY_ID[id].name, art: PIRATE_CATALOG_BY_ID[id].art, count }))
+        : (Object.entries(composition.ships) as [ShipId, number][]).map(([id, count]) => {
+          const entity = foreignCatalog.find((ship) => ship.id === id);
+          return { id, name: entity?.name ?? id, art: entity?.art, count };
+        });
+    } else {
+      const catalog = own ? shipDefinitions : foreignCatalog;
+      ships = (Object.entries(flight.selectedShips) as [ShipId, number | undefined][]).filter(([, count]) => (count ?? 0) > 0).map(([id, count]) => {
+        const entity = catalog.find((ship) => ship.id === id);
+        return { id, name: entity?.name ?? id, art: entity?.art, count: count ?? 0 };
+      });
+    }
+    ships = ships ? [...ships].sort((left, right) => right.count - left.count) : null;
+    const compositionText = ships
+      ? [
+        ...(incomingKnowledge?.composition?.kind === 'pirate' ? [`Угроза ${flightNumberLabel(incomingKnowledge.composition.population)} населения`] : []),
+        ...ships.map((ship) => `${ship.name} ×${flightNumberLabel(ship.count)}`),
+        ...(incomingKnowledge?.composition?.kind === 'fleet' ? (Object.keys(incomingKnowledge.composition.commanders) as CommanderId[]).map((id) => `Командир ${getCommanderPresentedAbility(id).commanderName}`) : []),
+      ].join(' · ') || 'Кораблей нет'
+      : undefined;
+
+    const stateLabel = isBot01Explorer
+      ? (flight.phase === 'outbound' ? 'Летит к объекту' : flight.phase === 'arrived' ? 'Занял объект' : 'Возвращается')
+      : expeditionLike && flight.phase === 'arrived' ? 'Добывает ресурсы'
+        : targetUnavailable ? 'Цель недоступна'
+          : attackNow ? 'Летит на вас'
+            : flight.phase === 'outbound' ? 'Летит туда'
+              : flight.phase === 'returning' ? 'Возвращается'
+                : 'На месте';
+    const tone = attackNow ? 'hot' : targetUnavailable ? 'warn' : !own ? 'foreign' : flight.phase === 'returning' ? 'back' : flight.phase === 'arrived' ? 'work' : 'out';
+
+    const legStart = flight.phase === 'returning' ? (flight.recalledAt ?? flight.arrivedAt ?? flight.arrivalAt) : flight.departedAt;
+    const legEnd = flight.phase === 'returning' ? flight.returnAt : flight.phase === 'outbound' ? flight.arrivalAt : flight.returnAt;
+    const progress = flight.phase === 'arrived' && (!legEnd || legEnd <= boardNow) ? 1
+      : legEnd && legEnd > legStart ? (boardNow - (flight.phase === 'arrived' ? (flight.arrivedAt ?? flight.arrivalAt) : legStart)) / (legEnd - (flight.phase === 'arrived' ? (flight.arrivedAt ?? flight.arrivalAt) : legStart))
+        : 0;
+    const timerAt = flight.phase === 'outbound' ? flight.arrivalAt : flight.returnAt;
+    const whenLabel = timerAt === undefined ? (flight.phase === 'arrived' ? 'на месте' : '')
+      : attackNow ? `удар в ${boardClock(timerAt)}`
+        : flight.phase === 'outbound' ? `прибытие в ${boardClock(timerAt)}`
+          : flight.phase === 'returning' ? `дома в ${boardClock(timerAt)}`
+            : `свободен в ${boardClock(timerAt)}`;
+
+    const originNode = <>
+      <strong>{originName}</strong>
+      {allyAid ? <small>помощь по запросу</small> : <CoordinateLink coordinate={flight.originCoordinate} />}
+    </>;
+    const targetNode = <>
+      <strong data-qa-space-flight-targetless={flight.missionId === 'space-flight' || undefined}>{flight.missionId === 'space-flight' ? 'Глубокий космос' : flight.targetPlanetName ?? <CoordinateLink coordinate={flight.destinationCoordinate} />}</strong>
+      {flight.missionId === 'space-flight' ? <small>Без планетарной цели</small> : null}
+      {flight.missionId !== 'space-flight' && flight.targetPlanetName && flight.destinationCoordinate ? <CoordinateLink coordinate={flight.destinationCoordinate} /> : null}
+      {flight.targetOwnerName || flight.targetRelation === 'ally' || flight.targetRelation === 'self' || targetUnavailable ? <small>{flight.targetOwnerName ?? ''}{flight.targetRelation === 'ally' ? ' · союзник' : flight.targetRelation === 'self' ? ' · своя' : ''}{targetUnavailable ? <b data-qa-flight-target-unavailable> · цель недоступна</b> : null}</small> : null}
+    </>;
+    const attackOrder = attackOrderByFlightId.get(flight.id);
+    const tags = <>
+      {isIncomingBotAttack && flight.ownerSide === 'bot01' ? <em className="fl-tag" data-qa-flight-bot01-label>BOT 01</em> : null}
+      {attackOrder && own ? <em className="fl-tag" data-qa-flight-attack-order>атака #{attackOrder}</em> : null}
+      {liveTransportState.overflowWarning ? <em className="fl-tag is-warn" data-qa-flight-overflow-warning>часть груза сгорит</em> : null}
+    </>;
+    const cargo: FlightBoardCargo[] = (['metal', 'minerals', 'gas', 'debris'] as const)
+      .map((kind) => ({ kind, amount: Math.max(0, Math.floor(flight.cargo?.[kind as keyof NonNullable<FlightRecord['cargo']>] ?? 0)) }))
+      .filter((entry) => entry.amount > 0);
+    const attackedId = attackNow ? attackedPlanetId(flight) : null;
+    const missionLabel = flight.explorationAttack && !own ? 'Боевой захват · экспедиция' : boardMissionLabel(flight.missionId);
+    const targetTitle = flight.missionId === 'space-flight' ? 'Глубокий космос' : flight.targetPlanetName ?? flightCoordinateLabel(flight.destinationCoordinate);
+
+    return {
+      flight,
+      section: attackNow ? 'attack' : own ? 'own' : 'other',
+      hostile: isHostileIncoming,
+      pirateRaid: isIncomingPirateRaid,
+      missionLabel,
+      missionArt: flightMissionIcon(flight.missionId),
+      bannerArt: MISSION_BANNERS[flight.missionId] ?? (isIncomingPirateRaid ? MISSION_BANNERS.attack : undefined),
+      sinceLabel: own ? `отправлен в ${boardClock(flight.departedAt)}` : attackNow ? `замечен · вылет в ${boardClock(flight.departedAt)}` : ownerLabel,
+      origin: { node: originNode, art: own ? boardPlanetArt(flight.originPlanetId, flight.originCoordinate) : boardPlanetArt(undefined, flight.originCoordinate) },
+      target: { node: targetNode, art: flight.missionId === 'space-flight' ? undefined : boardPlanetArt(flight.destination.kind === 'planet' ? flight.destination.planetId : flight.destinationPlanetId, flight.destinationCoordinate) },
+      stateLabel,
+      tone,
+      progress,
+      timerAt,
+      whenLabel,
+      ships,
+      hiddenNote: `Откроется с наукой «Шпионаж» ${INCOMING_ATTACK_COMPOSITION_ESPIONAGE_LEVEL}`,
+      compositionText,
+      tags,
+      cargo,
+      canRepeat: own && canRepeatFlight(saveState, flight),
+      recall: isHostileIncoming || allyAid || !own ? 'none'
+        : flight.phase === 'outbound' || (expeditionLike && flight.phase === 'arrived') ? 'enabled' : 'disabled',
+      canEvade: Boolean(attackedId),
+      details: own ? () => (expeditionLike ? setSelectedExpeditionFlightId(flight.id) : setSelectedFlightDetailsId(flight.id)) : undefined,
+      cardKicker: attackNow ? `${isIncomingPirateRaid ? 'Пиратский налёт' : 'Атака'} на вашу планету · удар в ${boardClock(flight.arrivalAt)}` : `${missionLabel} · ${stateLabel.toLowerCase()}`,
+      cardTitle: attackNow ? (attackedId ? boardPlanetName(attackedId) ?? targetTitle : targetTitle) : targetTitle,
+      cardLine: attackNow ? `Летит ${ownerLabel} ${flightCoordinateLabel(flight.originCoordinate)}` : `${originName} ${flightCoordinateLabel(flight.originCoordinate)} → ${targetTitle}${flight.missionId === 'space-flight' ? '' : ` ${flightCoordinateLabel(flight.destinationCoordinate)}`}`,
+    };
+  };
+
+  /** Attacks by strike time, own missions by departure, other fleets last. */
+  const boardItems = boardRecords.map(describeBoardFlight).sort((left, right) => {
+    const rank = { attack: 0, own: 1, other: 2 } as const;
+    if (rank[left.section] !== rank[right.section]) return rank[left.section] - rank[right.section];
+    if (left.section === 'attack') return left.flight.arrivalAt - right.flight.arrivalAt || left.flight.id.localeCompare(right.flight.id);
+    return left.flight.departedAt - right.flight.departedAt || left.flight.id.localeCompare(right.flight.id);
+  });
+  const boardAttacks = boardItems.filter((item) => item.section === 'attack');
+  const boardOwnCount = boardItems.filter((item) => item.section === 'own').length;
+  const openBoardOn = (flightId: string | undefined) => {
+    setFlightsOpen(true);
+    if (flightId) setBoardFocus((current) => ({ id: flightId, nonce: (current?.nonce ?? 0) + 1 }));
+  };
+
   const sendNextWave = () => {
     if (!sentFlight || !nextWaveSourceId) return;
     const origin = sentFlight.originPlanetId;
@@ -1812,9 +2020,9 @@ function FleetWorkspace({
             {hostileIncomingFlights.length ? <div className="fleet-incoming-alert-v2" role="alert" data-qa-fleet-incoming-alert>
               <b aria-hidden="true">⚠</b>
               <div><strong>{hostileIncomingFlights.length > 1 ? `ВХОДЯЩИЕ АТАКИ · ${hostileIncomingFlights.length}` : 'ВХОДЯЩАЯ АТАКА'}</strong><span>{hostileIncomingFlights[0].originLabel} → {flightCoordinateLabel(hostileIncomingFlights[0].flight.destinationCoordinate)} · прибытие через {flightCountdown(hostileIncomingFlights[0].flight.arrivalAt, clockNow)}</span></div>
-              <button type="button" onClick={() => setFlightsOpen(true)}>ПОКАЗАТЬ РЕЙС</button>
+              <button type="button" onClick={() => openBoardOn(boardAttacks[0]?.flight.id)}>ПОКАЗАТЬ РЕЙС</button>
             </div> : null}
-            <section className={`fleet-flights-v2${sentFlight ? ' is-sent' : ''}`}>
+            <section className={`fleet-flights-v2${sentFlight ? ' is-sent' : ''}${flightsOpen ? ' is-board' : ''}`}>
               {sentFlight ? <div className="fleet-sent-strip-v1" role="status" data-qa-fleet-sent-strip>
                 <div>
                   <strong>{`Рейс «${flightMissionLabel(sentFlight.missionId)}» отправлен · ${saveState.planets[sentFlight.originPlanetId]?.name ?? 'ваша планета'}`}</strong>
@@ -1822,6 +2030,9 @@ function FleetWorkspace({
                 </div>
                 <button type="button" className="is-primary" data-qa-fleet-next-wave disabled={!nextWaveSourceId} onClick={sendNextWave}>ЕЩЁ С ДРУГОЙ ПЛАНЕТЫ</button>
                 <button type="button" data-qa-fleet-sent-done onClick={() => { clearLaunchContext(); setStatus(FLEET_ROOT_STATUS); }}>ГОТОВО</button>
+              </div> : flightsOpen ? <div className="fl-head" data-qa-flights-head>
+                <h2>Рейсы и миссии</h2>
+                <span>{boardItems.length ? `${boardOwnCount} ${boardOwnCount % 10 === 1 && boardOwnCount % 100 !== 11 ? 'ваш' : 'ваших'} · рейсов занято ${flightSlots.used} из ${flightSlots.limit}` : 'ни одного флота в пути'}</span>
               </div> : <>
               <small className="fleet-flights-v2__label">В пути <b>{activeFlightRecords.length}</b></small>
               <span
@@ -1852,95 +2063,46 @@ function FleetWorkspace({
                   }}
                 >×</button>
               </div>
+              {flightsOpen && !sentFlight && boardAttacks.length ? <button type="button" className="fl-attack-chip" onClick={() => openBoardOn(boardAttacks[0].flight.id)} data-qa-flights-attack-chip>
+                <img src={missionAttackIcon} alt="" draggable={false} />Атак на вас <b>{boardAttacks.length}</b> · ближайшая <b>{boardTimer(boardAttacks[0].flight.arrivalAt - boardNow)}</b>
+              </button> : null}
               <button type="button" onClick={() => setSpyOperationsOpen(true)} aria-haspopup="dialog">Шпионские отчёты</button>
-              <button type="button" className={flightsOpen ? 'is-on' : ''} aria-expanded={flightsOpen} onClick={() => setFlightsOpen((open) => !open)} data-qa-flights-toggle>{flightsOpen ? 'Свернуть ▴' : `Все рейсы · ${activeFlightRecords.length} ▾`}</button>
+              <button type="button" className={`fl-toggle${flightsOpen ? ' is-on' : ''}${boardAttacks.length && !flightsOpen ? ' has-attack' : ''}`} aria-expanded={flightsOpen} onClick={() => setFlightsOpen((open) => !open)} data-qa-flights-toggle>{flightsOpen ? 'Отправить флот' : <>Рейсы и миссии <b>{boardItems.length}</b><i aria-hidden="true">›</i></>}</button>
             </section>
             <div className={`fleet-flights-drop-v2${flightsOpen ? ' is-open' : ''}`} data-qa-flights-drop>
             <div className="fleet-flights-drop-v2__panel">
-              <div className="fleet-flight-table-v1">
-                <div className="fleet-flight-row-v1 fleet-flight-head-v1">
-                  <span>МИССИЯ</span><span>МАРШРУТ</span><span>СТАТУС</span><span>ОСТАЛОСЬ</span><span>ДЕЙСТВИЕ</span>
-                </div>
-                {activeFlightRecords.length === 0 && recentFlights.length === 0 ? <div className="fleet-flight-empty-v1" data-qa-flight-empty>
-                  <img className="ui-empty-art" src={EMPTY_ART.flights} alt="" draggable={false} />
-                  <strong>Активных полётов нет</strong>
-                  <span>Флоты, находящиеся в пути, будут отображаться здесь.</span>
-                </div> : activeFlightRecords.map((flight) => {
-                  const isIncomingBotAttack = (flight.ownerSide === 'bot01' || flight.ownerSide === 'npc') && flight.missionId === 'attack';
-                  const isBot01Explorer = (flight.ownerSide === 'bot01' || flight.ownerSide === 'npc') && (flight.missionId === 'expedition'||flight.explorationAttack);
-                  const isIncomingPirateRaid = flight.ownerSide === 'pirate' && flight.missionId === 'pirate-raid';
-                  const isHostileIncoming = isIncomingBotAttack || isIncomingPirateRaid || isBot01Explorer;
-                  // Composition only from espionage 10 at the moment of viewing (owner rule); below it only the fact of the attack.
-                  const incomingKnowledge = isIncomingBotAttack || isIncomingPirateRaid ? describeIncomingAttack(flight, playerEspionageLevel) : null;
-                  const incomingComposition = incomingKnowledge?.composition ?? null;
-                  const incomingCompositionLabel = incomingComposition?.kind === 'pirate'
-                    ? `УГРОЗА ${flightNumberLabel(incomingComposition.population)} НАСЕЛЕНИЯ · ${(Object.entries(incomingComposition.ships) as [PirateBaseShipId, number][])
-                      .map(([id, count]) => `${PIRATE_CATALOG_BY_ID[id].name} ×${flightNumberLabel(count)}`).join(' · ') || 'КОРАБЛЕЙ НЕТ'}`
-                    : incomingComposition?.kind === 'fleet'
-                      ? [
-                        ...(Object.entries(incomingComposition.ships) as [ShipId, number][]).map(([id, count]) =>
-                          `${getFactionShipCatalog(flight.attackSnapshot?.attackerFactionId ?? factionId).find((ship) => ship.id === id)?.name ?? id} ×${flightNumberLabel(count)}`),
-                        ...(Object.keys(incomingComposition.commanders) as CommanderId[]).map((id) => `Командир ${getCommanderPresentedAbility(id).commanderName}`),
-                      ].join(' · ') || 'КОРАБЛЕЙ НЕТ'
-                      : '';
-                  const liveTransportState = getActiveTransportState(flight);
-                  const targetUnavailable = flight.completionReason === 'target-unavailable' || liveTransportState.targetUnavailable;
-                  const statusLabel = isBot01Explorer ? (flight.phase === 'outbound' ? 'NPC · К ОБЪЕКТУ' : flight.phase === 'arrived' ? 'ЗАНЯТО NPC' : 'NPC · ВОЗВРАЩАЕТСЯ') : (flight.missionId === 'expedition' || flight.explorationAttack) && flight.phase === 'arrived' ? '⛏ ДОБЫВАЕТ РЕСУРСЫ' : targetUnavailable
-                    ? 'ЦЕЛЬ НЕДОСТУПНА'
-                    : isHostileIncoming && flight.phase === 'outbound'
-                      ? '⚠ ВХОДЯЩАЯ АТАКА'
-                    : flight.phase === 'outbound'
-                      ? 'В ПУТИ'
-                      : flight.phase === 'returning'
-                        ? 'ВОЗВРАЩАЕТСЯ'
-                        : 'ПРИБЫЛ';
-                  const attackOrder = attackOrderByFlightId.get(flight.id);
-                  return <div className={`fleet-flight-row-v1${isHostileIncoming ? ' fleet-flight-row-v1--incoming-attack' : ''}`} key={flight.id} data-qa-flight-row={flight.id} data-qa-flight-phase={flight.phase} data-qa-flight-owner-side={flight.ownerSide ?? 'player'} data-qa-flight-incoming-attack={isHostileIncoming || undefined} data-qa-flight-pirate-raid={isIncomingPirateRaid || undefined}>
-                  <span className="fleet-flight-mission-cell"><img className="fleet-flight-mission-icon" src={flightMissionIcon(flight.missionId)} alt="" /><span>{(flight.ownerSide !== 'bot01' && flight.ownerSide !== 'npc' && (flight.missionId === 'expedition' || flight.explorationAttack)) ? <button type="button" className="fleet-expedition-details-trigger" onClick={() => setSelectedExpeditionFlightId(flight.id)} data-qa-expedition-flight-details={flight.id}>ЭКСПЕДИЦИЯ · ПОДРОБНЕЕ ↗</button> : flight.explorationAttack ? 'БОЕВОЙ ЗАХВАТ · ЭКСПЕДИЦИЯ' : !isHostileIncoming && flight.ownerSide !== 'npc' ? <button type="button" className="fleet-expedition-details-trigger" onClick={() => setSelectedFlightDetailsId(flight.id)} data-qa-flight-details={flight.id}>{flightMissionLabel(flight.missionId)} · ПОДРОБНЕЕ ↗</button> : flightMissionLabel(flight.missionId)}{incomingKnowledge ? incomingComposition
-                    ? <small data-qa-incoming-composition data-qa-pirate-raid-force={isIncomingPirateRaid || undefined}>{incomingCompositionLabel}</small>
-                    : <small data-qa-incoming-composition-hidden>СОСТАВ СКРЫТ · ШПИОНАЖ {INCOMING_ATTACK_COMPOSITION_ESPIONAGE_LEVEL}</small> : null}{isIncomingBotAttack && flight.ownerSide === 'bot01' ? <small data-qa-flight-bot01-label>BOT 01</small> : null}{attackOrder && !isHostileIncoming ? <small data-qa-flight-attack-order>АТАКА #{attackOrder}</small> : null}</span>{liveTransportState.overflowWarning ? <b className="fleet-flight-overflow-warning" aria-label="Часть груза может сгореть: склады цели заполнены" data-qa-flight-overflow-warning>!</b> : null}</span>
-                  <span className="fleet-flight-route-cell">
-                    <span data-qa-flight-origin>{flight.ownerSide === 'npc' && flight.missionId === 'aid' ? <><strong>СОЮЗНИК</strong><small>помощь по запросу</small></> : isIncomingBotAttack || isBot01Explorer || isIncomingPirateRaid ? <><strong>{flightOwnerLabel(flight, saveState.espionage?.targets)}</strong><CoordinateLink coordinate={flight.originCoordinate} /></> : <><strong>{saveState.planets[flight.originPlanetId]?.name ?? 'Ваша планета'}</strong><CoordinateLink coordinate={flight.originCoordinate} /></>}</span>
-                    <b className="fleet-flight-route-arrow" aria-hidden="true">→</b>
-                    <span data-qa-flight-target><strong data-qa-space-flight-targetless={flight.missionId === 'space-flight' || undefined}>{flight.missionId === 'space-flight' ? 'Без планетарной цели' : flight.targetPlanetName ?? <CoordinateLink coordinate={flight.destinationCoordinate} />}</strong>{flight.missionId !== 'space-flight' && flight.targetPlanetName && flight.destinationCoordinate ? <CoordinateLink coordinate={flight.destinationCoordinate} /> : null}{flight.targetOwnerName || flight.targetRelation === 'ally' || flight.targetRelation === 'self' || targetUnavailable ? <small>{flight.targetOwnerName ?? ''}{flight.targetRelation === 'ally' ? ' · СОЮЗНИК' : flight.targetRelation === 'self' ? ' · СВОЯ' : ''}{targetUnavailable ? <b data-qa-flight-target-unavailable> · ЦЕЛЬ НЕДОСТУПНА</b> : null}</small> : null}</span>
-                  </span>
-                  <span data-qa-flight-status>{statusLabel}</span>
-                  <span className="fleet-flight-time-cell">
-                    {flight.phase === 'outbound' ? <small>до прибытия</small> : flight.phase === 'returning' ? <small>до возврата</small> : null}
-                    <strong data-qa-flight-arrival data-qa-flight-arrival-at={flight.arrivalAt} hidden={flight.phase !== 'outbound'}>{flight.phase === 'outbound' ? flightCountdown(flight.arrivalAt, clockNow) : '—'}</strong>
-                    <strong data-qa-flight-return hidden={flight.phase !== 'returning'}>{flight.phase === 'returning' ? flightCountdown(flight.returnAt, clockNow) : '—'}</strong>
-                    {flight.phase !== 'outbound' && flight.phase !== 'returning' ? <strong>—</strong> : null}
-                  </span>
-                  <span className="fleet-flight-actions-cell">{!isHostileIncoming && canRepeatFlight(saveState, flight) ? <button type="button" data-qa-flight-repeat={flight.id} onClick={() => repeatFlight(flight)}>ПОВТОРИТЬ</button> : null}{isHostileIncoming || (flight.ownerSide === 'npc' && flight.missionId === 'aid') ? <span aria-label="Чужой флот нельзя отозвать" data-qa-flight-no-recall>—</span> : <button type="button" data-qa-flight-recall={flight.id} disabled={flight.phase !== 'outbound' && !((flight.missionId === 'expedition' || flight.explorationAttack) && flight.phase === 'arrived')} onClick={() => setPendingRecall(flight)}>ОТОЗВАТЬ</button>}</span>
-                </div>;
-                })}
-                {recentFlights.length ? <div className="fleet-flight-recent-head-v1">НЕДАВНО ЗАВЕРШЁННЫЕ</div> : null}
-                {recentFlights.map((flight) => <div className="fleet-flight-row-v1 is-recent" key={flight.id} data-qa-flight-recent={flight.id}>
-                  <span className="fleet-flight-mission-cell"><img className="fleet-flight-mission-icon" src={flightMissionIcon(flight.missionId)} alt="" /><span>{flightMissionLabel(flight.missionId).toUpperCase()}<small>{Object.entries(flight.selectedShips).filter(([, quantity]) => (quantity ?? 0) > 0).map(([id, quantity]) => `${shipDefinitions.find((ship) => ship.id === id)?.name ?? id} ×${flightNumberLabel(quantity ?? 0)}`).join(' · ')}</small></span></span>
-                  <span className="fleet-flight-route-cell">
-                    <span><strong>{saveState.planets[flight.originPlanetId]?.name ?? 'Ваша планета'}</strong><CoordinateLink coordinate={flight.originCoordinate} /></span>
-                    <b className="fleet-flight-route-arrow" aria-hidden="true">→</b>
-                    <span><strong>{flight.targetPlanetName ?? <CoordinateLink coordinate={flight.destinationCoordinate} />}</strong>{flight.targetPlanetName ? <CoordinateLink coordinate={flight.destinationCoordinate} /> : null}</span>
-                  </span>
-                  <span>ВЕРНУЛСЯ</span>
-                  <span className="fleet-flight-time-cell"><strong>—</strong></span>
-                  <span className="fleet-flight-actions-cell"><button type="button" data-qa-flight-repeat={flight.id} onClick={() => repeatFlight(flight)}>ПОВТОРИТЬ</button></span>
-                </div>)}
-              </div>
-
-              <div className="fleet-flight-actions-v1">
-                                {ACTIVE_RUNTIME_MODE === 'test' ? <button
-                  type="button"
-                  data-qa-bot01-scenario
-                  disabled={Boolean(espionageState.bot01IncomingScenario)}
-                  onClick={() => window.dispatchEvent(new CustomEvent(BOT01_INCOMING_SCENARIO_REQUEST_EVENT, { detail: { now: Date.now() } }))}
-                >{espionageState.bot01IncomingScenario ? 'СЦЕНАРИЙ BOT 01 УЖЕ ЗАПУЩЕН' : 'ЗАПУСТИТЬ АТАКУ BOT 01'}</button> : null}
-                {ACTIVE_RUNTIME_MODE === 'test' ? <button type="button"
-                  data-qa-bot01-exploration-scenario
-                  onClick={() => window.dispatchEvent(new CustomEvent(BOT01_EXPLORATION_SCENARIO_REQUEST_EVENT,{detail:{now:Date.now()}}))}
-                  title="Выбрать действующий свободный объект и направить туда реальный флот Bot 01"
-                >BOT 01 · ЗАХВАТИТЬ ОБЪЕКТ (ТЕСТ)</button> : null}
-              </div>
+              <FlightsBoard
+                items={boardItems}
+                now={boardNow}
+                focus={boardFocus}
+                onRecall={(flight) => setPendingRecall(flight)}
+                onRepeat={repeatFlight}
+                onEvade={evadeFromAttack}
+                onSend={() => setFlightsOpen(false)}
+                footer={<>
+                  {recentFlights.length ? <h3 className="fl-sec">Недавно вернулись</h3> : null}
+                  {recentFlights.map((flight) => <div className="fl-recent" key={flight.id} data-qa-flight-recent={flight.id}>
+                    <img src={MISSION_BANNERS[flight.missionId] ?? flightMissionIcon(flight.missionId)} alt="" draggable={false} />
+                    <b>{boardMissionLabel(flight.missionId)}</b>
+                    <span className="fl-recent__route"><strong>{saveState.planets[flight.originPlanetId]?.name ?? 'Ваша планета'}</strong> → <strong>{flight.targetPlanetName ?? flightCoordinateLabel(flight.destinationCoordinate)}</strong></span>
+                    <small>{Object.entries(flight.selectedShips).filter(([, quantity]) => (quantity ?? 0) > 0).map(([id, quantity]) => `${shipDefinitions.find((ship) => ship.id === id)?.name ?? id} ×${flightNumberLabel(quantity ?? 0)}`).join(' · ')}</small>
+                    <button type="button" data-qa-flight-repeat={flight.id} onClick={() => repeatFlight(flight)}>Повторить</button>
+                  </div>)}
+                  <div className="fleet-flight-actions-v1">
+                    {ACTIVE_RUNTIME_MODE === 'test' ? <button
+                      type="button"
+                      data-qa-bot01-scenario
+                      disabled={Boolean(espionageState.bot01IncomingScenario)}
+                      onClick={() => window.dispatchEvent(new CustomEvent(BOT01_INCOMING_SCENARIO_REQUEST_EVENT, { detail: { now: Date.now() } }))}
+                    >{espionageState.bot01IncomingScenario ? 'СЦЕНАРИЙ BOT 01 УЖЕ ЗАПУЩЕН' : 'ЗАПУСТИТЬ АТАКУ BOT 01'}</button> : null}
+                    {ACTIVE_RUNTIME_MODE === 'test' ? <button type="button"
+                      data-qa-bot01-exploration-scenario
+                      onClick={() => window.dispatchEvent(new CustomEvent(BOT01_EXPLORATION_SCENARIO_REQUEST_EVENT,{detail:{now:Date.now()}}))}
+                      title="Выбрать действующий свободный объект и направить туда реальный флот Bot 01"
+                    >BOT 01 · ЗАХВАТИТЬ ОБЪЕКТ (ТЕСТ)</button> : null}
+                  </div>
+                </>}
+              />
             </div>
             </div>
 

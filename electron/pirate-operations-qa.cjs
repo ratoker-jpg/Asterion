@@ -446,14 +446,14 @@ async function runViewport(width, height) {
     const hiddenUi=await readIncomingUi();
     // Below 10 nothing of the composition reaches the row, its tooltips or data attributes.
     if (!hiddenUi.hostile || !hiddenUi.hidden || hiddenUi.force || /Гончий|НАС\./.test(hiddenUi.html)
-      || !hiddenUi.status.includes('ВХОДЯЩАЯ АТАКА') || !hiddenUi.target.includes('Helion') || hiddenUi.clock==='—') {
+      || !hiddenUi.status.includes('Летит на вас') || !hiddenUi.target.includes('Helion') || hiddenUi.clock==='—') {
       throw new Error(`Incoming pirate composition leaked below Espionage 10 at ${label}: ${JSON.stringify(hiddenUi)}`);
     }
     await capture(win,directory,'pirate-incoming-espionage-9');
     await setEspionage(10);
     const incomingUi=await readIncomingUi();
     if (!incomingUi.hostile || !incomingUi.icon || incomingUi.recall || !incomingUi.noRecall || incomingUi.hidden
-      || !incomingUi.row.includes('ПИРАТСКИЙ НАЛЁТ') || !incomingUi.status.includes('ВХОДЯЩАЯ АТАКА')
+      || !incomingUi.row.toUpperCase().includes('ПИРАТСКИЙ НАЛЁТ') || !incomingUi.status.includes('Летит на вас')
       || !incomingUi.source.toUpperCase().includes('ПИРАТЫ') || !incomingUi.target.includes('Helion')
       || !incomingUi.force.includes('Гончий ×2') || incomingUi.clock==='—' || incomingUi.overflow) {
       throw new Error(`Incoming pirate warning/presentation invalid at ${label}: ${JSON.stringify(incomingUi)}`);
