@@ -256,7 +256,10 @@
   transition: opacity 200ms var(--set-ease);
 }
 .set-view .set-row--sound { grid-template-columns: minmax(170px, 1fr) minmax(200px, 1.6fr) 56px auto; }
-.set-view .set-row--text { grid-template-columns: minmax(170px, 1fr) minmax(150px, 1.15fr) minmax(170px, 1fr) 56px auto; }
+.set-view .set-row--text { grid-template-columns: minmax(170px, 1fr) minmax(150px, 1.15fr) minmax(170px, 1fr) 56px calc(124px * var(--text-scale-control, 1)); }
+.set-view .set-row-reset { display: flex; justify-content: flex-end; min-width: 0; }
+/* The slider's − and + keep full contrast; at the limit the button just stops (cursor), it does not fade away. */
+.set-view .set-row .amount-slider > button:disabled { opacity: 1; color: #e8f4f7; cursor: not-allowed; }
 .set-view .set-list.is-muted .set-row { opacity: .55; }
 .set-view .set-row-label { display: grid; gap: 3px; min-width: 0; }
 .set-view .set-row-label strong { color: #f4fcff; font-size: calc(14px * var(--text-scale-control, 1)) !important; font-weight: 800; line-height: 1.25; overflow-wrap: anywhere; }
@@ -322,7 +325,7 @@
 
 /* ---------- narrow content (large text, small windows) ---------- */
 @container set-content (max-width: 980px) {
-  .set-view .set-row--text { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 56px auto; }
+  .set-view .set-row--text { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 56px calc(124px * var(--text-scale-control, 1)); }
   .set-view .set-row--text .set-sample { grid-column: 1 / -1; grid-row: 2; }
 }
 .set-view .set-content { container: set-content / inline-size; }

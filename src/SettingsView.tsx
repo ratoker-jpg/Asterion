@@ -223,7 +223,10 @@ function TextPanel({ preferences, onPreferencesChange }: { preferences: UiPrefer
               <div className={`set-sample set-sample--${key}`} aria-hidden="true"><span>{meta.sample}</span></div>
               <AmountSlider compact value={value} min={TYPOGRAPHY_MIN} max={TYPOGRAPHY_MAX} step={TYPOGRAPHY_STEP} label={meta.label} onChange={(next) => setScale(key, next)} qa={`text-${key}`} />
               <output className="set-value">{value}%</output>
-              <button type="button" className="set-mini typography-reset-v2" disabled={value === 100} onClick={() => setScale(key, 100)} aria-label={`Вернуть 100%: ${meta.label}`}>100%</button>
+              {/* Only when the size differs from the default: a plain «Вернуть 100%», nothing at 100%. */}
+              <span className="set-row-reset">
+                {value !== 100 ? <button type="button" className="set-mini typography-reset-v2" onClick={() => setScale(key, 100)} aria-label={`Вернуть 100%: ${meta.label}`}>Вернуть 100%</button> : null}
+              </span>
             </div>
           );
         })}
