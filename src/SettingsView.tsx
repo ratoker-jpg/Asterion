@@ -26,11 +26,11 @@ import { TYPOGRAPHY_KEYS, WINDOW_PRESETS, type TypographyKey, type UiPreferences
 type SettingsSection = 'sound' | 'interface' | 'screen' | 'cloud' | 'journal';
 
 const sections: readonly { id: SettingsSection; label: string; hint: string; icon: string }[] = [
-  { id: 'sound', label: 'Звук', hint: 'Громкость и музыка', icon: 'sound' },
-  { id: 'interface', label: 'Размер текста', hint: 'Крупнее или мельче', icon: 'interface' },
-  { id: 'screen', label: 'Экран', hint: 'Окно, плавность, клавиши', icon: 'screen' },
-  { id: 'cloud', label: 'Облачный мир', hint: 'Мир живёт на сервере', icon: 'save' },
-  { id: 'journal', label: 'Журналы', hint: 'Файлы для разбора партии', icon: 'journal' },
+  { id: 'sound', label: 'Звук', hint: 'Громкость, музыка', icon: 'sound' },
+  { id: 'interface', label: 'Размер текста', hint: 'Крупнее, мельче', icon: 'interface' },
+  { id: 'screen', label: 'Экран', hint: 'Окно, кадры, клавиши', icon: 'screen' },
+  { id: 'cloud', label: 'Облачный мир', hint: 'Мир на сервере', icon: 'save' },
+  { id: 'journal', label: 'Журналы', hint: 'Для разбора партии', icon: 'journal' },
 ];
 
 /** What each text size changes, in the player's words, and a sample shown at that size. */
@@ -194,7 +194,7 @@ function TextPanel({ preferences, onPreferencesChange }: { preferences: UiPrefer
   const same = sizes.every((value) => value === sizes[0]) ? sizes[0] : null;
   return (
     <section className="set-section">
-      <SettingsHead title="Размер текста" text={`Каждый вид текста меняется отдельно, от ${TYPOGRAPHY_MIN}% до ${TYPOGRAPHY_MAX}%. Образец справа показывает новый размер сразу.`} />
+      <SettingsHead title="Размер текста" text={`Каждый вид текста меняется отдельно, от ${TYPOGRAPHY_MIN}% до ${TYPOGRAPHY_MAX}%. Образец в строке сразу показывает новый размер.`} />
       <div className="set-tile set-tile--row">
         <div className="set-tile-text">
           <strong>Весь текст сразу</strong>

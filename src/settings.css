@@ -51,7 +51,7 @@
   position: relative;
   inset: auto;
   display: grid;
-  grid-template-columns: 248px minmax(0, 1fr);
+  grid-template-columns: 268px minmax(0, 1fr);
   align-items: start;
   gap: 14px;
   width: 100%;
