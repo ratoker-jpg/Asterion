@@ -63,9 +63,9 @@
 .asterion-header__resource-fill--warning i{background:#FFE15A;box-shadow:0 0 6px rgba(255,225,90,.5)}
 .asterion-header__resource-fill--danger i{background:#FFB347;box-shadow:0 0 6px rgba(255,179,71,.5)}
 .asterion-header__resource-fill--critical i{background:#F0445E;box-shadow:0 0 7px rgba(240,68,94,.6)}
-.asterion-header__resource.is-pulsing .asterion-header__resource-fill i{position:relative;animation:asterion-header-resource-critical-pulse 1.1s ease-in-out infinite}
-/* Perf PR 6: the brightness swell is a pre-brightened copy of the bar fading in (opacity only, on the GPU). */
-.asterion-header__resource.is-pulsing .asterion-header__resource-fill i::after{content:"";position:absolute;inset:0;border-radius:inherit;background:inherit;box-shadow:inherit;filter:brightness(1.3);opacity:0;pointer-events:none;animation:ut-glow-peak 1.1s ease-in-out infinite}
+/* Perf PR 6: kept as is on purpose. brightness() + opacity already run on the GPU (Chromium only refuses filters
+   that move pixels: blur, drop-shadow); a copy layer would nest two loops, which costs a UI-thread frame each frame. */
+.asterion-header__resource.is-pulsing .asterion-header__resource-fill i{animation:asterion-header-resource-critical-pulse 1.1s ease-in-out infinite;will-change:opacity,filter}
 
 .asterion-header__resource-tooltip{
   position:absolute;z-index:30;left:50%;top:calc(100% + 10px);
@@ -222,12 +222,11 @@
 }
 
 @keyframes asterion-header-resource-critical-pulse{
-  0%,100%{opacity:1}
-  50%{opacity:.62}
+  0%,100%{opacity:1;filter:brightness(1)}
+  50%{opacity:.62;filter:brightness(1.3)}
 }
 @media (prefers-reduced-motion:reduce){
-  .asterion-header__resource.is-pulsing .asterion-header__resource-fill i,
-  .asterion-header__resource.is-pulsing .asterion-header__resource-fill i::after{animation:none}
+  .asterion-header__resource.is-pulsing .asterion-header__resource-fill i{animation:none}
   .hdr-zone,.hdr-core__planet,.hdr-route{transition:none}
 }
 
