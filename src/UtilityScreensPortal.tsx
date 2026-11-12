@@ -54,6 +54,11 @@ export function UtilityScreensPortal() {
   const [preferences, setPreferences] = useState<UiPreferencesV2>(() => readPreferences());
   const [runtimeState, setRuntimeState] = useState<RuntimeStateSnapshot | null>(() => getRuntimeStateSnapshot());
   const preferencesRef = useRef(preferences);
+  // A closed portal keeps the newest snapshot in a ref and renders nothing: a world publish every second
+  // must not cost it a React commit. The snapshot is taken when a utility screen opens.
+  const latestRuntimeState = useRef(runtimeState);
+  const activeRef = useRef(false);
+  activeRef.current = isUtilityRoute(route);
 
   useEffect(() => {
     preferencesRef.current = preferences;
@@ -61,7 +66,10 @@ export function UtilityScreensPortal() {
   }, [preferences]);
 
   useEffect(() => {
-    const syncRuntimeState = () => setRuntimeState(getRuntimeStateSnapshot());
+    const syncRuntimeState = () => {
+      latestRuntimeState.current = getRuntimeStateSnapshot();
+      if (activeRef.current) setRuntimeState(latestRuntimeState.current);
+    };
     syncRuntimeState();
     return subscribeRuntimeStateSnapshot(syncRuntimeState);
   }, []);
@@ -115,18 +123,19 @@ export function UtilityScreensPortal() {
   };
 
   const active = isUtilityRoute(route) ? route : null;
-  const ratingFixture = active === 'rating' && runtimeState ? readRatingQaFixture(runtimeState) : null;
   if (!active || !target) return null;
+  const liveRuntimeState = latestRuntimeState.current ?? runtimeState;
+  const ratingFixture = active === 'rating' && liveRuntimeState ? readRatingQaFixture(liveRuntimeState) : null;
 
   return createPortal(
     <div className="utility-screen-host" data-utility-screen={APP_ROUTE_LABELS[active]} data-qa-utility-screen={active}>
       {active === 'settings' ? (
         <SettingsView preferences={preferences} onPreferencesChange={updatePreferences} onReset={resetUiPreferences} />
       ) : active === 'rating' ? (
-        runtimeState ? (ratingFixture ? (
+        liveRuntimeState ? (ratingFixture ? (
           <RatingView
             mode="production"
-            command={{ ...runtimeState.command, alliances: ratingFixture.alliances }}
+            command={{ ...liveRuntimeState.command, alliances: ratingFixture.alliances }}
             ownerScores={ratingFixture.ownerScores}
             currentPlayerScore={ratingFixture.ownerScores[ratingFixture.currentPlayerId]}
             currentPlayerId={ratingFixture.currentPlayerId}
@@ -135,17 +144,17 @@ export function UtilityScreensPortal() {
           />
         ) : (
           <RatingView
-            mode={runtimeState.mode}
-            command={runtimeState.command}
-            ownerScores={runtimeState.ownerScores}
-            currentPlayerScore={runtimeState.ownerScores[runtimeState.currentPlayerId]}
-            currentPlayerId={runtimeState.currentPlayerId}
-            owners={runtimeState.owners}
-            allianceDetails={runtimeState.alliances}
+            mode={liveRuntimeState.mode}
+            command={liveRuntimeState.command}
+            ownerScores={liveRuntimeState.ownerScores}
+            currentPlayerScore={liveRuntimeState.ownerScores[liveRuntimeState.currentPlayerId]}
+            currentPlayerId={liveRuntimeState.currentPlayerId}
+            owners={liveRuntimeState.owners}
+            allianceDetails={liveRuntimeState.alliances}
           />
         )) : null
       ) : (
-        <ScienceView factionId={playerFaction(runtimeState)} />
+        <ScienceView factionId={playerFaction(liveRuntimeState)} />
       )}
     </div>,
     target,
