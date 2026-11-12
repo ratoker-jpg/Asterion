@@ -98,8 +98,13 @@ export function SettingsView({ preferences, onPreferencesChange, onReset, varian
               data-qa-settings-section={item.id}
             >
               <img src={SETTINGS_ICONS[item.icon] ?? SETTINGS_ICONS.save} alt="" draggable={false} />
-              <span><b>{item.label}</b><small>{item.hint}</small></span>
-              {badge[item.id] ? <em className={`set-badge${item.id === 'sound' && sound.muted ? ' is-off' : ''}`}>{badge[item.id]}</em> : null}
+              <span>
+                <span className="set-tab-top">
+                  <b>{item.label}</b>
+                  {badge[item.id] ? <em className={`set-badge${item.id === 'sound' && sound.muted ? ' is-off' : ''}`}>{badge[item.id]}</em> : null}
+                </span>
+                <small>{item.hint}</small>
+              </span>
             </button>
           ))}
         </nav>

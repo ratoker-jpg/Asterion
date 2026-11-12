@@ -222,9 +222,9 @@ async function runViewport(win, directory, label) {
   await shot('07-screen-app-meter-on');
   if (await click('[data-qa-settings-window-size] .game-select__trigger')) {
     await shot('08-screen-window-size-open');
-    await win.webContents.executeJavaScript(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+    // Close the list with the trigger: Escape would also open the in-game menu.
     await click('[data-qa-settings-window-size] .game-select__trigger');
-    await settle(win, 200);
+    if (await win.webContents.executeJavaScript(`Boolean(document.querySelector('[data-qa-pause-menu]'))`)) fail('In-game menu opened while closing the window-size list', true);
   }
   await openSettings(win, 'cloud');
   await waitFor(win, `/1\\.8\\.99/.test(document.querySelector('[data-qa-cloud-status]')?.textContent || '')`, 8000).catch(() => {});

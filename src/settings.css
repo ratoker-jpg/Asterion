@@ -51,7 +51,8 @@
   position: relative;
   inset: auto;
   display: grid;
-  grid-template-columns: 268px minmax(0, 1fr);
+  /* The rail widens with the player's text size, so section names never break mid-word. */
+  grid-template-columns: calc(196px + 72px * var(--text-scale-control, 1)) minmax(0, 1fr);
   align-items: start;
   gap: 14px;
   width: 100%;
@@ -177,7 +178,7 @@
 .set-view .set-tabs { display: grid; gap: 2px; }
 .set-view .set-tabs button {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) auto;
+  grid-template-columns: 34px minmax(0, 1fr);
   justify-content: stretch;
   gap: 10px;
   width: 100%;
@@ -194,10 +195,11 @@
 .set-view .set-tabs button img { width: 34px; aspect-ratio: 1; border-radius: 8px; object-fit: contain; transition: transform 240ms var(--set-ease); }
 .set-view .set-tabs button:hover img, .set-view .set-tabs button.active img { transform: scale(1.08); }
 .set-view .set-tabs button > span { display: grid; gap: 2px; min-width: 0; }
-.set-view .set-tabs button b { font-size: calc(14px * var(--text-scale-control, 1)) !important; font-weight: 800; line-height: 1.25; overflow-wrap: anywhere; }
-.set-view .set-tabs button small { color: var(--set-muted); font-size: calc(12px * var(--text-scale-secondary, 1)) !important; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+.set-view .set-tab-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 2px 8px; min-width: 0; }
+.set-view .set-tabs button b { font-size: calc(14px * var(--text-scale-control, 1)) !important; font-weight: 800; line-height: 1.25; overflow-wrap: break-word; }
+.set-view .set-tabs button small { color: var(--set-muted); font-size: calc(12px * var(--text-scale-secondary, 1)) !important; font-weight: 600; line-height: 1.3; overflow-wrap: break-word; }
 .set-view .set-badge {
-  max-width: 82px;
+  max-width: 100%;
   padding: 2px 8px;
   overflow: hidden;
   border-radius: 999px;
@@ -230,7 +232,8 @@
 /* Tiles: tinted, no frame. */
 .set-view .set-tile { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; min-width: 0; padding: 16px; border-radius: var(--ut-r-card, 13px); background: var(--set-tint); }
 .set-view .set-tile--row { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; }
-.set-view .set-tile-text { display: grid; gap: 4px; min-width: 0; flex: 1 1 260px; }
+.set-view .set-tile-text { display: grid; gap: 4px; min-width: 0; flex: none; align-self: stretch; }
+.set-view .set-tile--row > .set-tile-text { flex: 1 1 260px; align-self: auto; }
 .set-view .set-tile-text strong { color: #f4fcff; font-size: calc(16px * var(--text-scale-section-title, 1)) !important; font-weight: 800; line-height: 1.25; }
 .set-view .set-tile-text span { max-width: 720px; color: var(--set-muted); font-size: calc(14px * var(--text-scale-body, 1)) !important; line-height: 1.45; overflow-wrap: anywhere; }
 .set-view .set-tile > .set-seg { align-self: stretch; }
