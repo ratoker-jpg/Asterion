@@ -33,6 +33,7 @@ type PopupPlace = { left: number; width: number; top?: number; bottom?: number; 
 const POPUP_GAP = 6;
 const POPUP_MARGIN = 12;
 const POPUP_MAX_HEIGHT = 320;
+const POPUP_MIN_WIDTH = 96;
 
 /**
  * An in-game dropdown. The list lives in document.body at window coordinates, so
@@ -63,9 +64,11 @@ export function GameSelect({ value, options, onChange, placeholder, label, disab
       const below = window.innerHeight - rect.bottom - POPUP_GAP - POPUP_MARGIN;
       const above = rect.top - POPUP_GAP - POPUP_MARGIN;
       const openUp = below < Math.min(POPUP_MAX_HEIGHT, 180) && above > below;
+      // A compact trigger (the map's system picker, drawn on a scaled stage) still gets a readable list.
+      const width = Math.max(rect.width, POPUP_MIN_WIDTH);
       setPlace({
-        left: rect.left,
-        width: rect.width,
+        left: Math.max(POPUP_MARGIN, Math.min(rect.left, window.innerWidth - width - POPUP_MARGIN)),
+        width,
         ...(openUp ? { bottom: window.innerHeight - rect.top + POPUP_GAP } : { top: rect.bottom + POPUP_GAP }),
         maxHeight: Math.min(POPUP_MAX_HEIGHT, openUp ? above : below),
       });
