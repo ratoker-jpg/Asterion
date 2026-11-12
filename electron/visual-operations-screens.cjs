@@ -103,6 +103,11 @@ async function selectCard(win, kind, index = 0) {
   await settle(win, 420);
 }
 
+/** Visible button labels of the open dossier. */
+function dossierButtons(win) {
+  return win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('.op-dossier button')).map((node) => node.textContent.replace(/\s+/g, ' ').trim())`);
+}
+
 /** Text that is cut off (an ellipsis is allowed). */
 function clippedText(win) {
   return win.webContents.executeJavaScript(`(() => {
@@ -183,6 +188,8 @@ async function runViewport(win, directory, label) {
   await selectCard(win, 'pirate', 1);
   await shot('08-active-pirate-no-probes');
   await selectCard(win, 'unique');
+  const mining = await dossierButtons(win);
+  if (!mining.includes('Отозвать флот') || mining.some((text) => /ФЛОТЫ|Флоты: отозвать/.test(text))) fail('Mining dossier primary button is not «Отозвать флот»', mining);
   await shot('09-active-mining-huge-cargo');
   await selectCard(win, 'anomaly');
   await shot('10-active-object-taken');
@@ -191,6 +198,8 @@ async function runViewport(win, directory, label) {
   await scenario(win, 'completed');
   await openTab(win, 'completed');
   await selectCard(win, 'pirate');
+  const victory = await dossierButtons(win);
+  if (!victory.includes('Собрать обломки')) fail('Completed pirate victory has no «Собрать обломки»', victory);
   await shot('11-completed-pirate-victory');
   await selectCard(win, 'unique');
   await shot('12-completed-expedition-delivered');

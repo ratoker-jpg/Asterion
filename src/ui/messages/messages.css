@@ -133,7 +133,8 @@
 /* «new/total», as in Nemexia: the unread badge, then the folder size. */
 .reports-view .reports-folder-counter { display: inline-flex; align-items: center; gap: 0; white-space: nowrap; }
 .reports-view .reports-message-nav .reports-folder-counter .reports-v2-unread-count { min-width: 0; padding: 0; }
-.reports-view .reports-message-nav .reports-folder-counter .reports-v2-unread-count.is-new { min-width: 20px; padding: 1px 6px; margin-right: 2px; }
+.reports-view .reports-message-nav .reports-folder-counter .reports-v2-unread-count.is-new { min-width: 0; padding: 0; margin: 0; background: none; color: var(--rm-accent-strong); }
+.reports-view .reports-folder-counter > i { margin: 0; }
 .reports-view .reports-folder-counter > i { color: rgba(143, 182, 192, .55); font-size: calc(12px * var(--text-scale-table, 1)) !important; font-style: normal; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 .reports-view .reports-categories .reports-mark-all {
@@ -316,6 +317,9 @@
   background: var(--rm-tint);
 }
 .reports-view .reports-list-icon img { width: 34px; height: 34px; object-fit: contain; }
+.reports-view .reports-list-icon .reports-sheet-portrait { width: 100%; height: 100%; }
+.reports-view .reports-list-icon .reports-sheet-portrait--crest :is(svg, img) { width: 30px; height: 30px; }
+.reports-view .reports-list-icon .reports-sheet-portrait--initial { font-size: 18px !important; }
 .reports-view .reports-list-copy { min-width: 0; display: grid; gap: 2px; }
 .reports-view .reports-list-copy :is(small, strong, em) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .reports-view .reports-list-copy small { color: var(--rm-muted); font-size: calc(12px * var(--text-scale-secondary, 1)) !important; }

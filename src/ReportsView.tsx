@@ -132,8 +132,14 @@ function ActionGlyph({ kind }: { kind: 'prev' | 'next' }) {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="m9 5 7 7-7 7" /></svg>;
 }
 
-function ReportListItem({ item, active, read, saved, selected, onOpen, onSelect }: {
+/** Folder counter: unread / total, the unread part capped so the pill never outgrows the nav. */
+function formatUnread(unread: number) {
+  return unread > 99 ? '99+' : String(unread);
+}
+
+function ReportListItem({ item, command, active, read, saved, selected, onOpen, onSelect }: {
   item: ReportItem;
+  command?: CommandState;
   active: boolean;
   read: boolean;
   saved: boolean;
@@ -148,7 +154,7 @@ function ReportListItem({ item, active, read, saved, selected, onOpen, onSelect 
         <span aria-hidden="true" />
       </label>
       <button type="button" className="reports-list-open" onClick={onOpen} aria-current={active ? 'true' : undefined} aria-label={`Открыть сообщение: ${item.title}`}>
-        <span className={`reports-list-icon reports-list-icon--${item.category} reports-v2-art`}><ReportArtwork item={item} /></span>
+        <span className={`reports-list-icon reports-list-icon--${item.category} reports-v2-art`}><ReportArtwork item={item} command={command} /></span>
         <span className="reports-list-copy">{item.brief ? null : <small>{item.typeLabel}</small>}<strong>{item.title}</strong><em>{item.preview}</em></span>
         <span className="reports-list-meta"><time>{formatTime(item.timestamp)}</time>{saved ? <i className="reports-favorite-dot" aria-label="Бой сохранён" /> : null}{!read ? <b className="reports-unread-dot" aria-label="Непрочитано" /> : null}</span>
       </button>
@@ -509,7 +515,7 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
           {MESSAGE_FOLDERS.map((folder) => {
             const unread = folder.category ? unreadCounts[folder.category] : 0;
             const total = folder.category ? counts[folder.category] : 0;
-            return <button key={folder.id} type="button" data-message-folder={folder.id} className={activeFolder === folder.id ? 'active' : ''} onClick={() => openFolder(folder.id)} aria-current={activeFolder === folder.id ? 'page' : undefined} aria-label={`${folder.label}: ${unread} непрочитанных из ${total}`}><span className="reports-nav-art"><ReportGlyph kind={folder.glyph} /></span><strong>{folder.label}</strong><span className="reports-folder-counter" aria-hidden="true"><b className={`reports-v2-unread-count ${unread > 0 ? 'is-new' : ''}`}>{unread}</b><i>/{numberFormat.format(total)}</i></span></button>;
+            return <button key={folder.id} type="button" data-message-folder={folder.id} className={activeFolder === folder.id ? 'active' : ''} onClick={() => openFolder(folder.id)} aria-current={activeFolder === folder.id ? 'page' : undefined} aria-label={`${folder.label}: ${unread} непрочитанных из ${total}`}><span className="reports-nav-art"><ReportGlyph kind={folder.glyph} /></span><strong>{folder.label}</strong><span className="reports-folder-counter" aria-hidden="true"><b className={`reports-v2-unread-count ${unread > 0 ? 'is-new' : ''}`}>{formatUnread(unread)}</b><i>/{numberFormat.format(total)}</i></span></button>;
           })}
         </nav>
         <button className="reports-mark-all" type="button" data-qa-mark-all-read disabled={!markableItems.some((item) => !isRead(item))} onClick={markAll}>Отметить все прочитанными</button>
@@ -524,7 +530,7 @@ export function ReportsView({ retentionCutoff, battleReports, planetNames, saved
           </div> : null}
           {activeCategory ? <FolderActions folder={activeFolderMeta} items={folderItems} selectedIds={selectedIds} onSelectAll={selectAll} onDeleteAll={deleteAll} onDeleteSelected={deleteSelected} /> : null}
           <div className="reports-list" data-qa-message-list>
-            {activeCategory ? pagedItems.length ? pagedItems.map((item) => <ReportListItem key={item.id} item={item} active={item.id === selectedId} read={isRead(item)} selected={selectedIds.has(item.id)} saved={Boolean(item.battleReportId && savedBattleReportIds.includes(item.battleReportId))} onOpen={() => openItem(item)} onSelect={(checked) => toggleSelected(item.id, checked)} />) : <p className="reports-list-empty-status" role="status">{search || filter !== 'all' ? 'Ничего не найдено.' : 'Сообщений в этом разделе пока нет.'}</p> : <EmptyFolder folder={activeFolderMeta} />}
+            {activeCategory ? pagedItems.length ? pagedItems.map((item) => <ReportListItem key={item.id} item={item} command={command} active={item.id === selectedId} read={isRead(item)} selected={selectedIds.has(item.id)} saved={Boolean(item.battleReportId && savedBattleReportIds.includes(item.battleReportId))} onOpen={() => openItem(item)} onSelect={(checked) => toggleSelected(item.id, checked)} />) : <p className="reports-list-empty-status" role="status">{search || filter !== 'all' ? 'Ничего не найдено.' : 'Сообщений в этом разделе пока нет.'}</p> : <EmptyFolder folder={activeFolderMeta} />}
           </div>
           {activeCategory && pageCount > 1 ? <footer className="reports-pagination"><button type="button" aria-label="Предыдущая страница" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}><ActionGlyph kind="prev" /></button><span>Страница <b>{page}</b> из {pageCount}</span><button type="button" aria-label="Следующая страница" disabled={page >= pageCount} onClick={() => setPage((current) => Math.min(pageCount, current + 1))}><ActionGlyph kind="next" /></button></footer> : null}
         </section>

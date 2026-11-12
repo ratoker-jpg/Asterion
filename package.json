@@ -71,6 +71,7 @@
     "test:fleet-repeat-ui": "electron electron/fleet-repeat-qa.cjs",
     "test:empire-ui": "electron electron/empire-management-qa.cjs",
     "test:fleet-planner-ui": "electron electron/fleet-planner-qa.cjs",
+    "test:fleet-ship-cards-ui": "electron electron/visual-fleet-ship-cards.cjs",
     "test:build-planner-ui": "electron electron/build-planner-qa.cjs",
     "test:whats-new-ui": "electron electron/whats-new-qa.cjs",
     "test:rating-ui": "electron electron/rating-alliance-qa.cjs",

@@ -202,6 +202,7 @@ import LiveWorldWorker from './live-world.worker.ts?worker';
 import type { LiveWorldRequest, LiveWorldResponse, LiveWorldVersion } from './application/live-world-protocol.ts';
 import { requestSavePort } from './application/save-port.ts';
 import { applyWorldPatch, diffWorld } from './application/world-diff.ts';
+import { QuietInbox } from './application/quiet-fields.ts';
 import { setNpcCatchupProgress } from './ui/npc-catchup-progress-store.ts';
 import {
   FLIGHT_COMMAND_RESULT_EVENT,
@@ -341,6 +342,14 @@ function noteLiveWorldMessage(type: string, handle: () => void): void {
   entry.totalMs += took;
   if (took > entry.maxMs) entry.maxMs = took;
 }
+/** One more timed piece of work for the same stats (the quiet batch written at idle). */
+function noteLiveWorldDuration(type: string, took: number): void {
+  const stats = ((window as unknown as { __liveWorldMsgStats?: Record<string, { count: number; totalMs: number; maxMs: number }> }).__liveWorldMsgStats ??= {});
+  const entry = (stats[type] ??= { count: 0, totalMs: 0, maxMs: 0 });
+  entry.count += 1;
+  entry.totalMs += took;
+  if (took > entry.maxMs) entry.maxMs = took;
+}
 const LIVE_TICK_PERSIST_COST_FACTOR = 50;
 const LIVE_TICK_PERSIST_MAX_INTERVAL_MS = 60_000;
 /** A deferred clock-tick write is serialized in steps this long, so a late-game save does not freeze a frame. */
@@ -358,6 +367,8 @@ type LiveWorldLink = {
   synced: { version: LiveWorldVersion; state: SaveState };
   nextVersion: LiveWorldVersion;
   tickInFlight: boolean;
+  /** Quiet fields (bot planets' economies, asteroid gas) the worker sent, waiting to be written into the world at idle. */
+  quiet: QuietInbox;
   /**
    * Order of the worlds App had (version -> step), App's last commit's step
    * and the step the worker last saved: a close writes at once only when a
@@ -1167,6 +1178,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     const flush = () => {
       const link = liveWorld.current;
       if (link) {
+        // The window's copy is saved below: first the quiet fields the worker already sent.
+        link.quiet.flush();
         // The worker saves its catch-up progress itself; App's copy is the frozen start.
         if (isNpcCatchupPending(link.synced.state)) return;
         // As before the worker: only a change already made and not yet saved (the play time is folded in on unload).
@@ -1334,6 +1347,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     }
     const link: LiveWorldLink = {
       worker, synced: { version: 0, state: initial }, nextVersion: 2, tickInFlight: false,
+      // A batch waiting when this link ends is written nowhere (stateRef may already hold another world).
+      quiet: new QuietInbox(() => (liveWorld.current === link ? [link.synced.state, stateRef.current] : []), undefined, undefined, (ms) => noteLiveWorldDuration('quiet-apply', ms)),
       steps: new Map([[0, 0]]), step: 0, committedStep: 0, savedStep: 0,
     };
     liveWorld.current = link;
@@ -1360,6 +1375,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         const replay = next.npcReplay;
         setNpcCatchupProgress(replay && isNpcCatchupPending(next) ? { processedThroughAt: replay.processedThroughAt, targetAt: replay.targetAt } : null);
         announceRuntimeEvents(message.events, next);
+      } else if (message.type === 'quiet') {
+        link.quiet.push(message.batch);
       } else if (message.type === 'progress') {
         setNpcCatchupProgress({ processedThroughAt: message.processedThroughAt, targetAt: message.targetAt });
       } else if (message.type === 'save') {
@@ -1398,6 +1415,12 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     return true;
   }, [announceRuntimeEvents, persistence, reportWriteResult, stopLiveWorld]);
   restartLiveWorld.current = (next) => { startLiveWorld(next); };
+  // The Universe lists every bot planet and asteroid: the worker sends the quiet fields it holds back as the screen opens.
+  useEffect(() => {
+    if (activeRoute !== 'universe') return;
+    const link = liveWorld.current;
+    if (link) link.worker.postMessage({ type: 'quiet-now' } satisfies LiveWorldRequest);
+  }, [activeRoute]);
   useEffect(() => () => {
     liveWorld.current?.worker.terminate();
     liveWorld.current = null;
@@ -3348,6 +3371,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               onAccept={acceptOperationsOperation}
               onCancel={cancelOperationsOperation}
               onOpenFleets={openFleetRootFromOperations}
+              onPirateCollectDebris={collectDebrisFromReport}
             />
           ) : activeRoute === 'command' ? (
             <CommandView

@@ -8,6 +8,7 @@ import { applyCampaignRuntimeForCatchup, runNpcCatchup } from './npc-catchup-run
 import { freezeNpcCatchupTarget, isNpcCatchupPending } from './npc-catchup.ts';
 import { serializeSaveForStorage } from './persistence.ts';
 import { campaign } from './npc-runtime.test-support.ts';
+import { applyQuietBatch } from './quiet-fields.ts';
 
 const PERSIST = { tickMaxIntervalMs: 60_000, tickCostFactor: 50, catchupIntervalMs: 15_000 };
 
@@ -46,6 +47,8 @@ class Ui {
     for (const message of this.received.splice(0)) {
       if (message.type === 'save') this.saves.push(message);
       if (message.type === 'error') throw new Error(message.message);
+      // As App does: the quiet fields are written into the world in place.
+      if (message.type === 'quiet') applyQuietBatch([this.state], message.batch);
       if (message.type !== 'ticked') continue;
       this.tickInFlight = false;
       if (message.from !== this.version) continue;
@@ -94,6 +97,9 @@ test('ticks and commands racing them leave the mirror equal to the world in the 
   await ui.tick(clock);
   ui.receive();
   await ui.commit({ ...ui.state, currentPlanetId: ui.state.currentPlanetId });
+  // The quiet fields (bot economies) come in batches: once more, now.
+  await engine.handle({ type: 'quiet-now' });
+  ui.receive();
   assert.equal(text(worker()), text(ui.state));
   assert.equal(ui.state.planets[ui.state.currentPlanetId]!.name, 'P238');
   assert.ok(ui.saves.length > 0, 'the worker wrote saves');
@@ -144,6 +150,8 @@ test('a command made on the world before the freeze reached App cancels the catc
   assert.ok(ui.state.npcReplay!.processedThroughAt >= now - 2_000, 'App has the caught-up world');
   // The worker learns App took the caught-up world from App's next message.
   await ui.tick(now);
+  ui.receive();
+  await engine.handle({ type: 'quiet-now' });
   ui.receive();
   assert.equal(text(worker()), text(ui.state));
 });
