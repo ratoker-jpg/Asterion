@@ -422,12 +422,11 @@ async function main() {
   const RAW = '/*raw*/';
   const EXPERIMENTS = {
     planet: ['', '.planet-orbit__ring', RAW + "@keyframes p6-off{from,to{transform:translate(-50%,-50%)}}@keyframes p6-rot{to{transform:rotate(360deg)}}.planet-orbit>.planet-orbit__ring{animation:ut-ring-in-centred 1100ms backwards,p6-off 1ms linear 0ms forwards!important;border-color:transparent!important}.planet-orbit>.planet-orbit__ring::before{content:'';position:absolute;inset:-1px;border-radius:50%;border:1px solid rgba(126,200,220,.12);animation:p6-rot 360s linear infinite}.planet-orbit>.planet-orbit__ring--outer::before{border-style:dashed;border-color:rgba(126,200,220,.08);animation-duration:240s;animation-direction:reverse}/*X*/"],
-    universe: ['', '.shield-aura, .shield-aura::before', '.shield-aura', '.shield-aura::before',
-      RAW + '.shield-aura::before{-webkit-mask:none!important;mask:none!important}',
-      RAW + '.shield-aura{animation-name:p6-op!important}@keyframes p6-op{0%,100%{opacity:.78}50%{opacity:1}}',
-      RAW + '.shield-aura{will-change:transform,opacity}.shield-aura::before{will-change:transform}',
-      RAW + '.shield-aura{box-shadow:none!important}',
-      RAW + '.system-planet:has(> .shield-aura){isolation:isolate}'],
+    universe: ['',
+      RAW + '.shield-aura{animation-name:p6-tr!important}@keyframes p6-tr{0%,100%{transform:scale(.985)}50%{transform:scale(1.025)}}',
+      RAW + '.shield-aura::before{animation-name:p6-rot2!important}@keyframes p6-rot2{to{rotate:360deg}}',
+      RAW + '.shield-aura{animation-name:p6-ind!important}@keyframes p6-ind{0%,100%{opacity:.78;scale:.985}50%{opacity:1;scale:1.025}}',
+      '/*js*/' + "(() => { document.querySelectorAll('.shield-aura').forEach((aura) => { const rim = document.createElement('span'); rim.className = 'p6-rim'; aura.after(rim); }); const st = document.createElement('style'); st.id='p6-js'; st.textContent = `.shield-aura::before{display:none!important}.p6-rim{position:absolute;left:50%;top:-18px;width:124px;height:124px;margin-left:-62px;border-radius:50%;pointer-events:none;z-index:2;background:conic-gradient(from 0deg,transparent 0 58%,rgba(255,255,255,.95) 70%,transparent 82% 100%);-webkit-mask:radial-gradient(circle,transparent 0 74%,#000 79%,#000 82%,transparent 90%);mask:radial-gradient(circle,transparent 0 74%,#000 79%,#000 82%,transparent 90%);animation:p6-br 3.8s ease-in-out infinite,p6-sp 6s linear infinite}.shield-aura{animation-name:p6-br!important}@keyframes p6-br{0%,100%{opacity:.78;scale:.985}50%{opacity:1;scale:1.025}}@keyframes p6-sp{to{rotate:360deg}}`; document.head.appendChild(st); })()"],
   };
 
   result.diag = {};
@@ -438,8 +437,9 @@ async function main() {
       await sleep(3_000);
       result.diag[label] = {};
       for (const kill of kills) {
-        await run(win, `(() => { let s = document.getElementById('perf6-kill'); if (!s) { s = document.createElement('style'); s.id = 'perf6-kill'; document.head.appendChild(s); } s.textContent = ${JSON.stringify(kill.startsWith('/*raw*/') ? kill : kill ? kill + '{animation:none!important;transition:none!important}' : '')}; })()`);
-        await sleep(800);
+        if (kill.startsWith('/*js*/')) { await run(win, `document.getElementById('perf6-kill') && (document.getElementById('perf6-kill').textContent = '')`); await run(win, kill.slice(6)); }
+        else await run(win, `(() => { let s = document.getElementById('perf6-kill'); if (!s) { s = document.createElement('style'); s.id = 'perf6-kill'; document.head.appendChild(s); } s.textContent = ${JSON.stringify(kill.startsWith('/*raw*/') ? kill : kill ? kill + '{animation:none!important;transition:none!important}' : '')}; })()`);
+        await sleep(kill ? 2500 : 800);
         const traced = await traceWindow(win, `diag-${label}`, 3);
         result.diag[label][kill || '(none)'] = { bmtf: traced.trace.framesPerSecond?.BeginMainThreadFrame, ult: traced.trace.byEvent?.UpdateLayoutTree?.perSecondMs, layerize: traced.trace.byEvent?.Layerize?.perSecondMs, paint: traced.trace.byEvent?.Paint?.perSecondMs };
       }
