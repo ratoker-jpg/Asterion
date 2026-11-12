@@ -1,0 +1,25 @@
+name: Perf 6 frames (throwaway, never merge)
+on:
+  push:
+    branches: ['claude/qa-perf6-*']
+jobs:
+  frames:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Frames
+        shell: bash
+        run: npx electron electron/visual-perf-6-anim.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: perf6-frames
+          path: visual-qa/perf-6/run
+          retention-days: 7
