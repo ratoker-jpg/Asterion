@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>M3 Килл-карта</title>
+<link rel="stylesheet" href="../frame.css"><link rel="stylesheet" href="base.css">
+<style>
+/* «по мотивам» EVE killmail: цель крупно, участники по доле урона, «досталось / сгорело» */
+.card { position: absolute; left: 32px; right: 32px; top: 96px; height: 596px; border-radius: 30px; overflow: hidden; background: #060c18; box-shadow: inset 0 0 0 1.5px rgba(86, 217, 242, .16); animation: rise .5s both; }
+.card .bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .35; }
+.card .fade { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(4, 8, 16, .3), rgba(4, 8, 16, .88) 38%, rgba(4, 8, 16, .95)); }
+.z { position: absolute; top: 34px; bottom: 30px; }
+.victim { left: 36px; width: 560px; }
+.victim .pl { position: absolute; left: 40px; top: 10px; width: 400px; height: 400px; }
+.victim .pl img { width: 100%; height: 100%; filter: saturate(.7) brightness(.8) drop-shadow(0 0 40px rgba(255, 90, 106, .35)); animation: drift 5s ease-in-out infinite alternate; }
+.victim .crack { position: absolute; left: 40px; top: 10px; width: 400px; height: 400px; border-radius: 50%; background: radial-gradient(circle at 60% 40%, rgba(255, 90, 106, .0) 40%, rgba(255, 90, 106, .35) 72%, transparent 73%); }
+.stamp { position: absolute; left: 92px; top: 175px; transform: rotate(-12deg); padding: 6px 22px; border: 3px solid var(--red); border-radius: 12px; font-size: 40px; font-weight: 900; letter-spacing: .08em; color: var(--red); background: rgba(20, 4, 8, .55); text-shadow: 0 0 18px rgba(255, 90, 106, .6); }
+.vic-face { position: absolute; left: 400px; top: 10px; }
+.vic-face .circ { width: 118px; height: 118px; box-shadow: 0 0 0 3px var(--red), 0 0 30px rgba(255, 90, 106, .45); }
+.vic-name { position: absolute; left: 0; right: 40px; bottom: 0; }
+.vic-name b { font-size: 24px; font-weight: 800; line-height: 1.25; }
+.vic-name span { display: block; margin-top: 6px; font-size: 19px; color: var(--cyan); font-weight: 700; }
+.vic-name .big { display: flex; gap: 26px; margin-top: 14px; }
+.vic-name .big div b { display: block; font-size: 40px; font-weight: 900; color: var(--red); }
+.vic-name .big div small { font-size: 18px; color: var(--ink-2); }
+.parties { left: 640px; width: 520px; }
+h4 { font-size: 19px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 18px; }
+.p { display: grid; grid-template-columns: 76px 1fr; gap: 16px; align-items: center; margin-bottom: 18px; animation: rise .5s both; }
+.p > div { min-width: 0; }
+.p .circ { width: 76px; height: 76px; }
+.p .circ.me { box-shadow: 0 0 0 3px var(--cyan); }
+.p .nm { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; font-size: 20px; font-weight: 700; line-height: 1.25; }
+.p .nm .ell { flex: 1; }
+.dr { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.dr em { font-style: normal; font-size: 20px; font-weight: 800; color: var(--cyan); }
+.dr .dmg { flex: 1; margin-top: 0; }
+.dmg { height: 14px; border-radius: 7px; background: rgba(255, 255, 255, .07); margin-top: 10px; overflow: hidden; }
+.dmg i { display: block; height: 100%; border-radius: 7px; background: linear-gradient(90deg, #2fb6d6, var(--cyan)); transform-origin: left; animation: grow 1s .4s both; }
+.fb { font-size: 18px; font-weight: 800; color: var(--amber); margin-left: 8px; }
+.drops { left: 1200px; right: 36px; }
+.cells { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.cell { height: 106px; border-radius: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: rgba(255, 255, 255, .04); animation: rise .4s both; }
+.cell img { width: 52px; height: 52px; object-fit: contain; }
+.cell b { font-size: 21px; font-weight: 800; white-space: nowrap; }
+.cell.got { background: rgba(95, 227, 161, .1); box-shadow: inset 0 0 0 2px rgba(95, 227, 161, .45); }
+.cell.got b { color: var(--green); }
+.cell.lost { background: rgba(255, 90, 106, .08); box-shadow: inset 0 0 0 2px rgba(255, 90, 106, .4); }
+.cell.lost b { color: var(--red); }
+.cell.orb { box-shadow: inset 0 0 0 2px rgba(159, 176, 198, .35); }
+.key { display: flex; gap: 22px; margin-top: 16px; font-size: 18px; color: var(--ink-2); }
+.key i { display: inline-block; width: 14px; height: 14px; border-radius: 4px; margin-right: 8px; vertical-align: -1px; }
+.acts { position: absolute; left: 1200px; right: 36px; bottom: 30px; display: flex; gap: 14px; }
+.acts .sp { flex: 1; }
+/* bottom log strip */
+.log { position: absolute; left: 32px; right: 32px; top: 716px; bottom: 20px; }
+.log-top { display: flex; align-items: center; gap: 14px; height: 52px; }
+.log-top .f { position: relative; height: 48px; padding: 0 18px 0 6px; border-radius: 24px; display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 700; color: var(--ink-2); background: rgba(86, 217, 242, .06); }
+.log-top .f .circ { width: 38px; height: 38px; }
+.log-top .f.on { color: #04121c; background: linear-gradient(180deg, #6fe6fb, #2fb6d6); }
+.log-top .f .n { color: var(--red); font-weight: 800; }
+.log-top .f.on .n { color: #6a0d18; }
+.log-top .sp { flex: 1; }
+.log-top .tot { font-size: 18px; color: var(--ink-3); font-weight: 600; }
+.strip { display: flex; gap: 12px; margin-top: 14px; overflow: hidden; -webkit-mask: linear-gradient(90deg, #000 90%, transparent); }
+.ev { flex: none; width: 112px; height: 136px; border-radius: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; position: relative; }
+.ev .circ { width: 72px; height: 72px; }
+.ev.unread .circ { box-shadow: 0 0 0 3px var(--cyan); }
+.ev b { font-size: 18px; font-weight: 800; white-space: nowrap; }
+.ev small { font-size: 16px; color: var(--ink-3); font-weight: 600; }
+.ev.sel { background: rgba(86, 217, 242, .14); box-shadow: inset 0 0 0 2px var(--cyan); }
+.ev.sel::before { content: ''; position: absolute; top: -18px; left: 50%; border: 10px solid transparent; border-bottom-color: var(--cyan); transform: translateX(-50%); }
+.dsep { flex: none; width: 2px; margin: 18px 8px; background: rgba(140, 180, 220, .2); position: relative; }
+html.is-empty .empty-state { top: 96px; bottom: 236px; }
+</style></head>
+<body><div class="stage"><img class="hdr" src="../assets/game-header.png"><main class="area">
+  <section class="card when-full" id="card"></section>
+  <div class="log"><div class="log-top" id="filters"></div><div class="strip when-full" id="strip"></div></div>
+  <div class="empty-state"><img id="emptyImg" alt=""><b>Журнал пуст</b><span>Здесь появятся бои и полёты</span></div>
+</main></div>
+<script src="../frame.js"></script><script src="data.js"></script>
+<script>
+const { A, fmt, short, CATS, items, battle: B } = MSG;
+const S = (n) => short(n).replace('+', '');
+document.getElementById('emptyImg').src = A.empty;
+const unread = items.filter((x) => x.unread).length;
+document.getElementById('filters').innerHTML = CATS.map((c, i) => {
+  const n = items.filter((x) => x.unread && (c.id === 'all' || x.cat === c.id)).length;
+  return `<div class="f ${i === 0 ? 'on' : ''}"><div class="circ pad"><img src="${A.icon(c.icon)}"></div>${c.label}${n ? ` <span class="n">${n}</span>` : ''}</div>`;
+}).join('') + `<span class="sp"></span>${items.length ? `<span class="tot">${items.length} записей</span><button class="btn">Прочитать все</button>` : ''}`;
+const pic = (x) => x.cat === 'battle' && x.kind !== 'sun' ? [A.face(x.fac), ''] : x.kind === 'sun' ? [A.sun, ''] : x.cat === 'fleet' || x.cat === 'intel' ? [A.planet(x.planet), ''] : [A.icon(x.icon), 'pad'];
+let h = '', day = items[0] && items[0].day;
+items.slice(0, 22).forEach((x, i) => {
+  if (x.day !== day) { day = x.day; h += '<i class="dsep"></i>'; }
+  const [src, p] = pic(x);
+  const v = x.value ? `<b class="${x.tone === 'info' ? 'info' : x.value > 0 ? 'ok' : 'bad'}">${x.tone === 'info' ? S(x.value) : short(x.value)}</b>` : `<b class="${x.tone}">${x.kind === 'spied' ? 'Зонд' : x.kind === 'letter' ? 'Письмо' : x.kind === 'ally' ? 'Заявка' : 'Новое'}</b>`;
+  h += `<div class="ev ${x.unread ? 'unread' : ''} ${i === 0 ? 'sel' : ''}"><div class="circ ${p}"><img src="${src}"></div>${v}<small>${x.time}</small></div>`;
+});
+document.getElementById('strip').innerHTML = h;
+const parties = [
+  [B.me.name, B.me.fac, 62, true], ['Хранитель Южных Рубежей', 'aegis', 21], ['Мицелия', 'veyra', 12], ['Тавр', 'synod', 5],
+];
+const lootCells = [['metal', B.loot.metal], ['mineral', B.loot.mineral], ['gas', B.loot.gas]];
+const lost = [...B.foeShips.map((s) => [A.ship(B.foe.race, s[0]), s[3], 'lost']), ...B.myShips.slice(0, 3).map((s) => [A.ship(B.me.race, s[0]), s[3], 'lost'])];
+document.getElementById('card').innerHTML = `<img class="bg" src="${A.battleBg}"><div class="fade"></div>
+  <div class="z victim">
+    <div class="pl"><img src="${A.bigPlanet}"></div><div class="crack"></div>
+    <div class="stamp">ЗАХВАЧЕНО</div>
+    <div class="vic-face"><div class="circ"><img src="${A.face(B.foe.fac)}"></div></div>
+    <div class="vic-name"><b class="clamp2">${B.foe.name}</b><span>[${B.foe.coord}] ${B.foe.planet}</span>
+      <div class="big"><div><b>${S(B.foe.before)}</b><small>кораблей сгорело</small></div><div><b style="color:var(--ink)">${B.rounds}</b><small>раундов · 23:41</small></div></div></div>
+  </div>
+  <div class="z parties"><h4>Урон по участникам</h4>
+    ${parties.map((p, i) => `<div class="p" style="animation-delay:${200 + i * 80}ms"><div class="circ ${p[3] ? 'me' : ''}"><img src="${A.face(p[1])}"></div><div><div class="nm"><span class="clamp2" style="flex:1">${p[0]}</span></div><div class="dr"><div class="dmg"><i style="width:${p[2]}%"></i></div><em>${p[2]}%</em>${i === 0 ? '<span class="fb">добил</span>' : ''}</div></div></div>`).join('')}
+  </div>
+  <div class="z drops"><h4>Досталось и сгорело</h4>
+    <div class="cells">
+      ${lootCells.map(([k, v]) => `<div class="cell got"><img src="${A.res(k)}"><b>${short(v)}</b></div>`).join('')}
+      <div class="cell orb"><img src="${A.res('debris')}"><b>${S(B.debris)}</b></div>
+      ${lost.map(([src, v], i) => `<div class="cell lost" style="animation-delay:${300 + i * 50}ms"><img src="${src}"><b>${short(-v)}</b></div>`).join('')}
+    </div>
+    <div class="key"><span><i style="background:var(--green)"></i>ваше</span><span><i style="background:var(--red)"></i>сгорело</span><span><i style="background:var(--ink-3)"></i>на орбите</span></div>
+  </div>
+  <div class="acts"><button class="btn primary">Ударить снова</button><button class="btn">Собрать</button><span class="sp"></span><button class="btn icon">
+    <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button><button class="btn icon danger"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button></div>`;
+</script></body></html>

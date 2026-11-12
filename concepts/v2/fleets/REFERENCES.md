@@ -1,0 +1,29 @@
+# Референсы: как игры показывают движение флотов
+
+- Stellaris — Outliner (правая колонка: флоты и планеты списком, иконки, жалобы на тесноту; моды «Tiny Outliner» вмещают ~50 строк вместо ~12)
+  - https://admin-forum.paradoxplaza.com/forum/developer-diary/stellaris-dev-diary-154-ux-design-in-stellaris.1244013/page-3
+  - https://www.fandomspot.com/stellaris-ui-mods/
+- Sins of a Solar Empire — Empire Tree (дерево «планета → флоты на ней», всегда видно, где что) — идея для f4
+  - https://forums.sinsofasolarempire2.com/467533
+  - https://forums.sinsofasolarempire2.com/472516
+  - https://en.wikipedia.org/wiki/Sins_of_a_Solar_Empire
+- Rise of Kingdoms / мобильные 4X — очередь походов (слоты маршей у края карты, марши нарисованы прямо на карте) — идея для f3
+  - https://riseofkingdomsguides.com/rise-of-kingdoms-troop-capacity-and-march-queue-guide/
+  - https://hbogamessupport.wbgames.com/hc/en-us/articles/360013296833
+  - https://throne-support.plarium.com/web/en/guide/marches
+- OGame — список событий в обзоре (таблица прибытий; новая «mission overview» в Project Orion, 2026)
+  - https://board.origin.ogame.gameforge.com/index.php/Thread/787-Tactic-15b-Blind-phalanx-guide
+  - https://ogame.fandom.com/wiki/Fleetsaving
+  - https://www.gamespress.com/OGame-Announces-Project-Orion-with-Wave-Defense-Battles-and-Cooperativ
+- EVE Online — Overview и окно флота (настраиваемые колонки, пресеты «только мой флот», жалобы на занимаемое место)
+  - https://www.eveonline.com/news/view/new-default-overview-in-testing
+  - https://wiki.eveuniversity.org/Fleet_interface
+- X4: Foundations — Property Owned на карте (группы: станции, флоты, свободные корабли)
+  - https://wiki.egosoft.com/X4%20Foundations%20Wiki/Manual%20and%20Guides/X4%3A%20Foundations%20Manual/The%20X-Universe%20And%20Map/
+- Homeworld 3 — Sensors Manager (тактический вид всей карты с движением флотов)
+  - https://www.cogconnected.com/review/homeworld-3-review/
+  - https://gameranx.com/?p=26824
+- Dribbble / прочее — sci-fi коллекции и карточки миссий
+  - https://dribbble.com/supermattzor/collections/1015541-Sci-fi
+  - https://dribbble.com/shots/22710650-NASA-Mission-concept
+  - https://blushing-cardboard-aac.notion.site/The-Apollo-Project-b2335e08f1544c23bcfa21a9e02b7d34

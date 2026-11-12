@@ -1,0 +1,13 @@
+/* Shared game frame for every v2 concept: the real 1920x1080 stage, scaled to the window height
+   (black bars on 2560x1080, as the game does now), with the real header cut from a game screenshot.
+   Usage: <body><div class="stage"><img class="hdr" src="../assets/game-header.png"> ... <main class="area">...</main></div>
+   plus <script src="../frame.js"></script> at the end. The free area is .area: x 0..1920, y 136..1080. Keep the
+   header ornament zone (x 860..1060, y 136..222) free of important content. */
+@font-face { font-family: 'Montserrat'; src: url('../../../public/fonts/Montserrat-Variable.ttf') format('truetype'); font-weight: 100 900; }
+html { font-size: 22px; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { width: 100vw; height: 100vh; overflow: hidden; background: #000; font-family: 'Montserrat', sans-serif; color: #e8eef7; font-variant-numeric: tabular-nums; }
+img { display: block; }
+.stage { position: absolute; left: 50%; top: 50%; width: 1920px; height: 1080px; transform: translate(-50%, -50%) scale(var(--k, 1)); overflow: hidden; background: #03060c; }
+.hdr { position: absolute; left: 0; top: 0; width: 1920px; z-index: 5000; pointer-events: none; }
+.area { position: absolute; left: 0; right: 0; top: 136px; bottom: 0; }

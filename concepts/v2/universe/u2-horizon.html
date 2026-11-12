@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Вселенная · U2 · Над своей планетой</title>
+<link rel="stylesheet" href="../frame.css">
+<style>
+.area { overflow: hidden; background: linear-gradient(#02040a 0%, #050b18 55%, #0b1a2e 78%); }
+.dawn { position: absolute; left: 50%; bottom: 150px; width: 1500px; height: 600px; transform: translateX(-50%); background: radial-gradient(ellipse at 50% 100%, rgba(255,190,110,.45), rgba(255,140,60,.12) 35%, transparent 65%); }
+.sunrise { position: absolute; left: 50%; bottom: 210px; width: 230px; transform: translateX(-50%); filter: drop-shadow(0 0 60px rgba(255,190,110,.7)); }
+.horizon { position: absolute; left: -60px; right: -60px; bottom: -40px; width: 2040px; }
+svg { position: absolute; inset: 0; width: 1920px; height: 944px; }
+.pl { position: absolute; transform: translate(-50%, -50%); }
+.pl img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 4px 12px #000); }
+.pl::after { content: ''; position: absolute; inset: -16%; border-radius: 50%; border: 2px solid var(--c); opacity: var(--o, .9); }
+.pl.t-uninhabited::after, .pl.k-asteroid::after { display: none; }
+.pl.t-uninhabited img { filter: brightness(.55) saturate(.5); }
+.pl.t-range::after { border-style: dashed; }
+.pl.sel::after { inset: -28%; box-shadow: 0 0 22px var(--c); }
+.dot { position: absolute; width: 10px; height: 10px; border-radius: 50%; border: 1px dashed #3a4658; transform: translate(-50%, -50%); }
+.tip { position: absolute; padding: 8px 12px; border-radius: 10px; background: rgba(6,10,17,.88); border: 1px solid #ff3b4e88; font-size: 14px; font-weight: 700; white-space: nowrap; transform: translate(-50%, 0); }
+.tip small { display: block; font-size: 12px; color: #93a0b3; font-weight: 600; } .tip i { font-style: normal; color: #ff6b78; }
+.col { position: absolute; display: grid; gap: 12px; }
+.col > div { display: grid; grid-template-columns: 64px auto; gap: 12px; align-items: center; }
+.col img { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 2px rgba(255,255,255,.14), 0 8px 20px #000; }
+.col { background: rgba(4,8,16,.55); padding: 14px 18px 14px 14px; border-radius: 18px; }
+.col b { font-size: 17px; font-weight: 800; text-shadow: 0 1px 6px #000; } .col span { display: block; font-size: 14px; color: #56d9f2; font-weight: 800; }
+.col .main b { color: #ff8f98; }
+.ship { position: absolute; width: 34px; transform: translate(-50%, -50%) rotate(var(--r)); filter: drop-shadow(0 0 8px rgba(120,220,255,.8)); }
+.home { position: absolute; left: 50%; bottom: 40px; transform: translateX(-50%); text-align: center; }
+.home b { font-size: 18px; font-weight: 800; text-shadow: 0 2px 8px #000; } .home small { display: block; font-size: 13px; color: #a8c4e0; }
+.title { position: absolute; left: 28px; top: 22px; } .title small { display: block; font-size: 12px; letter-spacing: 3px; color: #7f8da1; font-weight: 700; } .title b { font-size: 22px; font-weight: 800; }
+.nav { position: absolute; right: 30px; top: 50%; display: grid; gap: 10px; justify-items: center; font-weight: 700; color: #5d6a7d; font-size: 15px; transform: translateY(-50%); } .nav b { font-size: 32px; color: #fff; }
+</style></head><body>
+<div class="stage"><img class="hdr" src="../assets/game-header.png"><main class="area">
+  <div class="dawn"></div><img class="sunrise" src="../../../assets/source/universe-navigation/active-suns/active-sun.variant-02.png">
+  <svg id="s" viewBox="0 0 1920 944"></svg>
+  <img class="horizon" src="art/planet-horizon.png">
+  <div class="home"><b>Helion 02</b><small>вы здесь · система 03</small></div>
+  <div class="title"><small>ГАЛАКТИКА 1</small><b>Система 03</b></div>
+  <div class="nav"><span>02</span><b>03</b><span>04</span></div>
+</main></div>
+<script src="data.js"></script>
+<script>
+const area = document.querySelector('.area');
+// the 24 positions sit on an arch over the horizon: 1 on the left, 24 on the right
+const CX = 960, CY = 1120, RX = 1000, RY = 900; const T0 = 146, T1 = 34;
+const at = (i) => { const a = Math.PI * (1.08 - i * 0.84 / 23 * 1.0) ; const t = (T0 - i * ((T0 - T1) / 23)) * Math.PI / 180; return { x: CX + Math.cos(t) * RX, y: CY - Math.sin(t) * RY * 0.95 }; };
+let svg = `<path d="${Array.from({ length: 60 }, (_, k) => { const t = (T0 + 4 - k * ((T0 - T1 + 8) / 59)) * Math.PI / 180; return (k ? 'L' : 'M') + (CX + Math.cos(t) * RX).toFixed(1) + ' ' + (CY - Math.sin(t) * RY * .95).toFixed(1); }).join('')}" fill="none" stroke="rgba(140,200,255,.22)" stroke-width="1.5"/>`;
+// own fleets in flight: thin trails from home to targets
+const home = { x: 960, y: 830 };
+[[3, '#ff6b78'], [8, '#7fe0c2'], [15, '#b48cff']].forEach(([p, c]) => { const q = at(p - 1); const mx = (home.x + q.x) / 2, my = Math.min(home.y, q.y) - 120;
+  svg += `<path d="M${home.x} ${home.y} Q${mx} ${my} ${q.x} ${q.y + 30}" fill="none" stroke="${c}" stroke-width="2" stroke-dasharray="2 9" opacity=".8"/>`; });
+document.getElementById('s').innerHTML = svg;
+[[3, 0.62, 'attack'], [8, 0.4, 'gas'], [15, 0.75, 'expedition']].forEach(([p, t]) => { const q = at(p - 1); const mx = (home.x + q.x) / 2, my = Math.min(home.y, q.y) - 120;
+  const x = (1 - t) ** 2 * home.x + 2 * (1 - t) * t * mx + t * t * q.x, y = (1 - t) ** 2 * home.y + 2 * (1 - t) * t * my + t * t * (q.y + 30);
+  const dx = 2 * (1 - t) * (mx - home.x) + 2 * t * (q.x - mx), dy = 2 * (1 - t) * (my - home.y) + 2 * t * (q.y + 30 - my);
+  const im = document.createElement('img'); im.className = 'ship'; im.src = '../../../assets/source/faction-delivery-v1/ships/aegis_frigate_ship.png'; im.style.left = x + 'px'; im.style.top = y + 'px'; im.style.setProperty('--r', (Math.atan2(dy, dx) * 180 / Math.PI + 90) + 'deg'); area.appendChild(im); });
+SYSTEM.forEach((o, i) => { const q = at(i);
+  if (!o.art) { const d = document.createElement('i'); d.className = 'dot'; d.style.left = q.x + 'px'; d.style.top = q.y + 'px'; area.appendChild(d); return; }
+  const sel = o.pos === SELECTED.pos; const sz = (o.kind === 'asteroid' ? 34 : o.tone === 'uninhabited' ? 40 : 62) * (sel ? 1.5 : 1);
+  const d = document.createElement('div'); d.className = `pl k-${o.kind} t-${o.tone} ${sel ? 'sel' : ''}`;
+  d.style.cssText = `left:${q.x}px;top:${q.y}px;width:${sz}px;height:${sz}px;--c:${TONE[o.tone].color};--o:${['neutral', 'protected'].includes(o.tone) ? .45 : .9}`;
+  d.innerHTML = `<img src="${o.art}">`; area.appendChild(d); });
+const q = at(SELECTED.pos - 1);
+const tip = document.createElement('div'); tip.className = 'tip'; tip.style.left = q.x + 'px'; tip.style.top = (q.y - 150) + 'px';
+tip.innerHTML = `${SELECTED.name}<small><i>[${SELECTED.ally.tag}]</i> · ${short(SELECTED.points[0].v)} · разведка ${SELECTED.spy.ago}</small>`; area.appendChild(tip);
+const col = document.createElement('div'); col.className = 'col'; col.style.left = (q.x + 110) + 'px'; col.style.top = (q.y + 10) + 'px';
+col.innerHTML = SELECTED.actions.filter((a) => !a.off).map((a) => `<div class="${a.main ? 'main' : ''}"><img src="${ART.action(a.k)}"><div><b>${a.label}</b><span>${a.time}</span></div></div>`).join(''); area.appendChild(col);
+</script><script src="../frame.js"></script>
+</body></html>

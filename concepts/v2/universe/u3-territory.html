@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Вселенная · U3 · Карта территорий</title>
+<link rel="stylesheet" href="../frame.css">
+<style>
+.area { background: radial-gradient(ellipse at 50% 55%, #0b1424 0%, #03060c 70%); overflow: hidden; }
+.gal { position: absolute; left: 50%; top: 52%; width: 1500px; height: 1500px; transform: translate(-50%, -50%) rotate(-8deg) scaleY(.62); opacity: .22; filter: saturate(.6); }
+svg { position: absolute; inset: 0; width: 1920px; height: 944px; }
+.tag { font: 800 44px Montserrat; letter-spacing: 8px; opacity: .2; }
+.n { font: 700 13px Montserrat; fill: #7e8ca2; }
+.pop { position: absolute; padding: 14px 16px 12px; border-radius: 14px; background: rgba(6,10,17,.9); border: 1px solid #2a3a52; display: grid; gap: 10px; }
+.pop .h { display: flex; justify-content: space-between; align-items: baseline; gap: 20px; }
+.pop .h b { font-size: 17px; font-weight: 800; } .pop .h span { font-size: 13px; color: #8b98ad; }
+.row { display: flex; gap: 4px; }
+.row i { width: 26px; height: 26px; border-radius: 50%; display: block; background-size: cover; box-shadow: 0 0 0 2px var(--c); }
+.row i.e { background: none; box-shadow: inset 0 0 0 1px #2a3647; transform: scale(.5); }
+.leg { position: absolute; left: 28px; bottom: 26px; display: flex; gap: 18px; font-size: 13px; color: #8b98ad; }
+.leg span { display: flex; gap: 7px; align-items: center; } .leg i { width: 12px; height: 12px; border-radius: 3px; }
+.title { position: absolute; left: 28px; top: 22px; } .title small { display: block; font-size: 12px; letter-spacing: 3px; color: #7f8da1; font-weight: 700; } .title b { font-size: 22px; font-weight: 800; letter-spacing: 1px; }
+.mk { position: absolute; width: 30px; height: 30px; transform: translate(-50%, -50%); }
+</style></head><body>
+<div class="stage"><img class="hdr" src="../assets/game-header.png"><main class="area">
+  <img class="gal" src="../../../src/assets/ui/atlas/galaxy-02.webp">
+  <svg id="s" viewBox="0 0 1920 944"></svg>
+  <div class="title"><small>ВСЕЛЕННАЯ</small><b>Галактика 1</b></div>
+  <div class="leg"><span><i style="background:#5aa9ff"></i>ваш союз</span><span><i style="background:#4fd18b"></i>союзники</span><span><i style="background:#ff3b4e"></i>враги</span><span><i style="background:#8d99ab"></i>нейтралы</span></div>
+</main></div>
+<script src="data.js"></script>
+<script>
+const empty = new URLSearchParams(location.search).get('state') === 'empty';
+// 40 systems on two spiral arms, deterministic
+let seed = 11; const rr = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+const P = []; let guard = 0;
+while (P.length < 40 && guard++ < 20000) { const x = 230 + rr() * 1460, y = 150 + rr() * 700; const dx = (x - 960) / 760, dy = (y - 500) / 360;
+  if (dx * dx + dy * dy > 1 || P.some((q) => Math.hypot(q.x - x, q.y - y) < 128)) continue; P.push({ x, y }); }
+P.sort((a, b) => Math.hypot(a.x - 960, a.y - 480) - Math.hypot(b.x - 960, b.y - 480)).forEach((p, i) => p.n = i + 1);
+const OWN = {}; if (!empty) { const caps = { mine: P[2], light: P[9], dark: P[16], trade: P[29] };
+  P.forEach((p) => { let best = null, bd = 1e9; for (const [k, c] of Object.entries(caps)) { const d = Math.hypot(p.x - c.x, p.y - c.y); if (d < bd) { bd = d; best = k; } } if (bd < 300) OWN[p.n] = best; }); }
+const COL = { mine: '#5aa9ff', light: '#4fd18b', dark: '#ff3b4e', trade: '#8d99ab' };
+const TAGS = { mine: 'HLN', light: 'СВЕТ', dark: 'ТЬМА', trade: 'КУПЦЫ' };
+const lanes = []; P.forEach((p, i) => { P.map((q, j) => [j, Math.hypot(p.x - q.x, (p.y - q.y) * 1.6)]).filter(([j]) => j !== i).sort((a, b) => a[1] - b[1]).slice(0, 2).forEach(([j]) => { if (!lanes.some(([a, b]) => (a === j && b === i))) lanes.push([i, j]); }); });
+let svg = '<defs><filter id="edge" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="22" result="b"/><feColorMatrix in="b" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 40 -14" result="g"/><feMorphology in="g" operator="erode" radius="3" result="e"/><feComposite in="g" in2="e" operator="out"/></filter><filter id="goo" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="22"/><feColorMatrix values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 40 -14"/></filter><radialGradient id="st"><stop offset="0" stop-color="#fff"/><stop offset=".3" stop-color="#bfe6ff"/><stop offset="1" stop-color="#bfe6ff" stop-opacity="0"/></radialGradient></defs>';
+for (const k of Object.keys(COL)) {
+  const pts = P.filter((p) => OWN[p.n] === k); if (!pts.length) continue;
+  svg += `<g filter="url(#goo)" opacity=".16">${pts.map((p) => `<circle cx="${p.x}" cy="${p.y}" r="62" fill="${COL[k]}"/>`).join('')}</g>`;
+  svg += `<g filter="url(#edge)" opacity=".85">${pts.map((p) => `<circle cx="${p.x}" cy="${p.y}" r="62" fill="${COL[k]}"/>`).join('')}</g>`;
+  const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length, cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+  svg += `<text class="tag" x="${cx}" y="${cy + 22}" text-anchor="middle" fill="${COL[k]}">${TAGS[k]}</text>`;
+}
+lanes.forEach(([a, b]) => { const A = P[a], B = P[b]; const hostile = (OWN[A.n] === 'dark') !== (OWN[B.n] === 'dark') && (OWN[A.n] || OWN[B.n]);
+  svg += `<line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke="${hostile ? 'rgba(255,90,100,.45)' : 'rgba(150,190,255,.28)'}" stroke-width="1.6" ${hostile ? 'stroke-dasharray="6 6"' : ''}/>`; });
+P.forEach((p) => { const cur = p.n === (empty ? 37 : 3);
+  svg += `<circle cx="${p.x}" cy="${p.y}" r="${cur ? 22 : 13}" fill="url(#st)"/>${cur ? `<circle cx="${p.x}" cy="${p.y}" r="30" fill="none" stroke="#fff" stroke-width="2"/>` : ''}<text class="n" x="${p.x}" y="${p.y + 30}" text-anchor="middle">${String(p.n).padStart(2, '0')}</text>`; });
+document.getElementById('s').innerHTML = svg;
+const area = document.querySelector('.area');
+// markers only for things that need action: debris, pirates, raid on the Sun, gates
+if (!empty) {
+  [[3, 'debris'], [21, 'debris'], [36, 'debris'], [14, 'pirate'], [27, 'pirate'], [18, 'sun'], [7, 'gate']].forEach(([n, k]) => {
+    const p = P[n - 1]; const im = document.createElement('img'); im.className = 'mk';
+    im.src = k === 'debris' ? ART.icon('debris') : k === 'pirate' ? '../../../public/assets/generated/asterion/factions/battle-icons/pirates.webp' : k === 'sun' ? '../../../public/assets/generated/sun-raid/sun-bright.webp' : '../../../public/assets/generated/sun-raid/gates-aegis-construction.webp';
+    im.style.left = `${p.x + 24}px`; im.style.top = `${p.y - 22}px`; area.appendChild(im); });
+}
+// hover card of the current system: its 24 positions as dots
+const cur = P[(empty ? 37 : 3) - 1];
+const pop = document.createElement('div'); pop.className = 'pop';
+pop.innerHTML = `<div class="h"><b>Система ${empty ? '37' : '03'}</b><span>${empty ? 'игроков нет' : '3 врага в диапазоне · обломки 988 млрд'}</span></div>
+  <div class="row">${SYSTEM.slice(0, 12).map((o) => o.art ? `<i style="--c:${TONE[o.tone].color};background-image:url('${o.art}')"></i>` : '<i class="e"></i>').join('')}</div>
+  <div class="row">${SYSTEM.slice(12).map((o) => o.art ? `<i style="--c:${TONE[o.tone].color};background-image:url('${o.art}')"></i>` : '<i class="e"></i>').join('')}</div>`;
+pop.style.left = `${cur.x - 210}px`; pop.style.top = `${cur.y + 46}px`; area.appendChild(pop);
+</script><script src="../frame.js"></script>
+</body></html>

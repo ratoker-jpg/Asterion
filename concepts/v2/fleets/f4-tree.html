@@ -1,0 +1,62 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Рейсы · 4 · Дерево империи</title>
+<link rel="stylesheet" href="../frame.css"><link rel="stylesheet" href="common.css">
+<style>
+/* по мотивам «дерева империи» космических 4X: каждая планета — ствол, её флоты — ветки */
+.cols { position: absolute; left: 30px; top: 100px; width: 1260px; bottom: 20px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.col { position: relative; display: flex; flex-direction: column; align-items: center; min-width: 0; }
+.pl { position: relative; width: 150px; height: 150px; flex: none; }
+.pl img { width: 100%; height: 100%; border-radius: 50%; animation: turn 80s linear infinite; }
+.pl::after { content: ''; position: absolute; inset: -8px; border-radius: 50%; box-shadow: 0 0 0 2px rgba(86, 217, 242, .45), 0 0 34px rgba(86, 217, 242, .25); }
+.col.att .pl::after { box-shadow: 0 0 0 4px var(--red), 0 0 50px rgba(255, 77, 94, .7); animation: alarm 1.2s ease-in-out infinite; }
+@keyframes turn { to { transform: rotate(360deg); } }
+.pn { margin-top: 16px; height: 78px; font-size: 19px; font-weight: 700; text-align: center; line-height: 1.3; padding: 0 10px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.trunk { position: relative; width: 100%; flex: 1; margin-top: 0; }
+.trunk::before { content: ''; position: absolute; left: 70px; top: 0; bottom: 40px; width: 2px; background: linear-gradient(rgba(86, 217, 242, .45), rgba(86, 217, 242, .05)); }
+.trunk.none::before { display: none; }
+.br { position: relative; height: 104px; display: flex; align-items: center; gap: 22px; padding-left: 34px; cursor: pointer; }
+.br::before { content: ''; position: absolute; left: 70px; top: 50%; width: 0; }
+.br .pc { flex: none; }
+.br .pc > img { transition: transform .2s; }
+.br:hover .pc > img { transform: scale(1.06); }
+.br b { display: block; font-size: 23px; font-weight: 700; white-space: nowrap; }
+.br small { display: block; font-size: 16px; color: var(--dim); margin-top: 2px; white-space: nowrap; }
+.br.hot b { color: #ff8a95; }
+.br.hot small { color: #ff8a95; }
+.br .dir { position: absolute; left: 92px; top: 66px; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-size: 17px; font-weight: 700; background: #0d1828; box-shadow: 0 0 0 2px #03060c; }
+.br.back .dir { color: var(--cyan); } .br.work .dir { color: #7ee0a8; } .br.out .dir { color: #fff; }
+.br.hot .dir { background: var(--red); color: #fff; }
+.br.on::after { content: ''; position: absolute; left: 14px; right: 10px; top: 6px; bottom: 6px; border-radius: 48px; background: rgba(86, 217, 242, .1); box-shadow: inset 0 0 0 1px rgba(86, 217, 242, .45); z-index: -1; }
+.br.enter { animation: grow .5s cubic-bezier(.2, .9, .3, 1.2) both; }
+@keyframes grow { from { opacity: 0; transform: translateX(-16px); } }
+.home-n { font-size: 17px; color: var(--dim); margin-top: 4px; }
+.detail { right: 30px; width: 560px; }
+.detail .d-banner { height: 140px; } .detail .d-head { margin-top: -46px; }
+.detail .d-ships { gap: 6px; } .detail .d-ship { width: 84px; } .detail .d-ship img { width: 80px; height: 80px; }
+.calm { position: absolute; left: 1320px; top: 50%; transform: translateY(-50%); width: 560px; display: flex; flex-direction: column; align-items: center; gap: 20px; text-align: center; }
+.calm img { width: 520px; height: 292px; object-fit: cover; -webkit-mask: radial-gradient(closest-side, #000 55%, transparent); mask: radial-gradient(closest-side, #000 55%, transparent); }
+.calm strong { font-size: 30px; }
+</style></head><body>
+<div class="stage"><img class="hdr" src="../assets/game-header.png"><main class="area" id="area"></main></div>
+<script src="../frame.js"></script><script src="data.js"></script>
+<script>
+const area = document.getElementById('area');
+let sel = SEL0;
+const word = (f) => f.hostile ? MISSION[f.m].label : MISSION[f.m].label;
+function render() {
+  const cols = Object.keys(HOME).map((k) => {
+    const h = HOME[k], mine = FLIGHTS.filter((f) => f.home === k).sort((a, b) => (b.hostile ? 1 : 0) - (a.hostile ? 1 : 0) || a.t - b.t);
+    const att = mine.some((f) => f.hostile);
+    const br = mine.map((f, i) => `<div class="br enter ${f.phase}${f.hostile ? ' hot' : ''}${f.id === sel ? ' on' : ''}" data-id="${f.id}" style="animation-delay:${i * 70}ms">
+      ${pcHTML(f, 72)}<span class="dir">${f.hostile ? '!' : f.phase === 'back' ? '←' : f.phase === 'work' ? '●' : '→'}</span>
+      <div><b data-t="${f.id}">${tf(f.t)}</b><small>${word(f)}</small></div></div>`).join('');
+    return `<div class="col${att ? ' att' : ''}"><div class="pl"><img src="${PLANET(h.p)}" alt=""></div><div class="pn">${h.name}</div>
+      <div class="trunk${br ? '' : ' none'}">${br}</div></div>`;
+  }).join('');
+  const S = FLIGHTS.find((f) => f.id === sel);
+  area.innerHTML = tabsHTML() + `<div class="cols">${cols}</div>` + (S ? `<section class="detail">${detailHTML(S)}</section>`
+    : `<div class="calm"><img src="${R}src/assets/ui/empty/empty-flights.webp" alt=""><strong>Все флоты дома</strong><button class="btn primary">Отправить флот</button></div>`);
+  const d = area.querySelector('.detail'); if (d) d.style.top = Math.max(84, (944 - d.offsetHeight) / 2 + 20) + 'px';
+  area.querySelectorAll('.br[data-id]').forEach((el) => el.onclick = () => { sel = +el.dataset.id; render(); });
+}
+render();
+</script></body></html>

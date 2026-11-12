@@ -1,0 +1,75 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Рейсы · 2 · Дорожки времени</title>
+<link rel="stylesheet" href="../frame.css"><link rel="stylesheet" href="common.css">
+<style>
+.axis { position: absolute; left: 0; right: 0; top: 84px; height: 30px; }
+.axis span { position: absolute; transform: translateX(-50%); font-size: 17px; font-weight: 600; color: #6f8299; white-space: nowrap; }
+.grid { position: absolute; top: 118px; bottom: 30px; width: 2px; background: rgba(120, 175, 255, .08); }
+.now { position: absolute; top: 96px; bottom: 44px; width: 3px; background: var(--cyan); box-shadow: 0 0 18px var(--cyan); }
+.now::before { content: 'сейчас'; position: absolute; bottom: -8px; left: 50%; transform: translate(-50%, 100%); font-size: 17px; font-weight: 700; color: var(--cyan); }
+.row { position: absolute; left: 0; right: 0; height: 44px; cursor: pointer; }
+.row.hot::before { content: ''; position: absolute; left: 24px; right: 650px; top: -3px; bottom: -3px; border-radius: 29px; background: linear-gradient(90deg, rgba(255, 77, 94, .2), rgba(255, 77, 94, .03)); }
+.row.sel::before { content: ''; position: absolute; left: 24px; right: 650px; top: -3px; bottom: -3px; border-radius: 29px; background: rgba(86, 217, 242, .1); box-shadow: inset 0 0 0 1px rgba(86, 217, 242, .4); }
+.ends { position: absolute; left: 44px; top: 2px; display: flex; align-items: center; gap: 8px; }
+.ends img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
+.ends i { width: 30px; height: 2px; background: var(--c); position: relative; }
+.ends i::after { content: ''; position: absolute; right: -2px; top: -5px; border: 6px solid transparent; border-left: 8px solid var(--c); border-right: 0; }
+.ends .blank { width: 40px; height: 40px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #26344a, #0b1220); display: grid; place-items: center; }
+.ends .blank img { width: 26px; height: 26px; border-radius: 0; }
+.detail { left: 1290px; width: 600px; }
+.detail .d-banner { height: 150px; } .detail .d-head { margin-top: -48px; }
+.detail .d-ships { gap: 8px; } .detail .d-ship { width: 86px; } .detail .d-ship img { width: 82px; height: 82px; }
+.bar { position: absolute; top: 19px; height: 6px; border-radius: 3px; background: repeating-linear-gradient(90deg, var(--c) 0 16px, color-mix(in srgb, var(--c) 45%, transparent) 16px 26px); background-size: 26px 6px; animation: run 1.1s linear infinite; transition: width 1s linear; }
+.row.back .bar { animation-direction: reverse; opacity: .7; }
+.row.work .bar { background: repeating-linear-gradient(135deg, var(--c) 0 6px, transparent 6px 12px); opacity: .8; }
+@keyframes run { to { background-position: 26px 0; } }
+.tip { position: absolute; top: 0; display: flex; align-items: center; gap: 12px; transition: left 1s linear; }
+.tip .pc { flex: none; }
+.tip b { font-size: 20px; font-weight: 700; white-space: nowrap; }
+.row.hot .tip b { color: #ff8a95; }
+.tip small { font-size: 16px; color: var(--dim); white-space: nowrap; }
+.gap { position: absolute; left: 44px; height: 2px; right: 670px; background: rgba(120, 175, 255, .07); }
+.calm .now { top: 96px; }
+.calm-t { position: absolute; left: 50%; top: 52%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 22px; }
+.calm-t img { width: 620px; height: 350px; object-fit: cover; -webkit-mask: radial-gradient(closest-side, #000 55%, transparent); mask: radial-gradient(closest-side, #000 55%, transparent); }
+.calm-t strong { font-size: 32px; }
+</style></head><body>
+<div class="stage"><img class="hdr" src="../assets/game-header.png"><main class="area" id="area"></main></div>
+<script src="../frame.js"></script><script src="data.js"></script>
+<script>
+const X0 = 330, W = 840, area = document.getElementById('area');
+const X = (t) => X0 + W * Math.log(1 + t / 60) / Math.log(1 + 16000 / 60);
+const TICKS = [[60, '1 мин'], [300, '5 мин'], [900, '15 мин'], [1800, '30 мин'], [3600, '1 час'], [7200, '2 часа'], [14400, '4 часа']];
+const ORDER = ['threat', 'war', 'move', 'mine', 'intel'];
+let sel = SEL0;
+function render() {
+  if (!FLIGHTS.length) {
+    area.innerHTML = tabsHTML() + `<div class="calm"><div class="axis">${TICKS.map(([t, l]) => `<span style="left:${X(t)}px">${l}</span>`).join('')}</div>
+      ${TICKS.map(([t]) => `<div class="grid" style="left:${X(t)}px"></div>`).join('')}<div class="now" style="left:${X0}px"></div></div>
+      <div class="calm-t"><img src="${R}src/assets/ui/empty/empty-flights.webp" alt=""><strong>Дорожки пусты</strong><button class="btn primary">Отправить флот</button></div>`;
+    return;
+  }
+  const rows = [...FLIGHTS].sort((a, b) => ORDER.indexOf(MISSION[a.m].group) - ORDER.indexOf(MISSION[b.m].group) || a.t - b.t);
+  let y = 132, prev = null, html = '';
+  rows.forEach((f) => {
+    const g = MISSION[f.m].group, col = GROUP_COLOR[g];
+    if (prev && prev !== g) { html += `<div class="gap" style="top:${y + 3}px"></div>`; y += 10; }
+    prev = g;
+    const a = origin(f), b = target(f), x = X(f.t);
+    const orb = (o) => o.p ? `<img src="${PLANET(o.p)}" alt="">` : `<div class="blank"><img src="${HICON({ recycle: 'debris', gas: 'gas' }[f.m] || 'universe')}" alt=""></div>`;
+    html += `<div class="row ${f.phase}${f.hostile ? ' hot' : ''}${f.id === sel ? ' sel' : ''}" data-id="${f.id}" data-y="${y}" style="top:${y}px;--c:${col}">
+      <div class="ends">${orb(a)}<i></i>${orb(b)}</div>
+      <div class="bar" data-bar="${f.id}" style="left:${X0}px;width:${x - X0}px"></div>
+      <div class="tip" data-tip="${f.id}" style="left:${x - 22}px">${pcHTML(f, 44)}<b data-t="${f.id}">${tf(f.t)}</b></div></div>`;
+    y += 50;
+  });
+  area.innerHTML = tabsHTML() + `<div class="axis">${TICKS.map(([t, l]) => `<span style="left:${X(t)}px">${l}</span>`).join('')}</div>
+    ${TICKS.map(([t]) => `<div class="grid" style="left:${X(t)}px"></div>`).join('')}<div class="now" style="left:${X0}px"></div>` + html;
+  const r = area.querySelector(`.row[data-id="${sel}"]`), f = FLIGHTS.find((q) => q.id === sel);
+  if (f) { area.insertAdjacentHTML('beforeend', `<section class="detail">${detailHTML(f)}</section>`);
+    const d = area.querySelector('.detail'); d.style.top = Math.max(84, (944 - d.offsetHeight) / 2 + 20) + 'px'; }
+  area.querySelectorAll('.row').forEach((el) => el.onclick = () => { sel = +el.dataset.id; render(); });
+}
+render();
+onTick(() => FLIGHTS.forEach((f) => { const x = X(f.t), b = area.querySelector(`[data-bar="${f.id}"]`), t = area.querySelector(`[data-tip="${f.id}"]`);
+  if (b) b.style.width = x - X0 + 'px'; if (t) t.style.left = x - 22 + 'px'; }));
+</script></body></html>

@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>M2 Досье</title>
+<link rel="stylesheet" href="../frame.css"><link rel="stylesheet" href="base.css">
+<style>
+.top { position: absolute; left: 32px; right: 32px; top: 98px; height: 64px; display: flex; align-items: center; }
+.chips { display: flex; gap: 10px; }
+.chip { position: relative; height: 60px; padding: 0 22px 0 8px; border-radius: 30px; display: flex; align-items: center; gap: 12px; font-size: 19px; font-weight: 700; color: var(--ink-2); background: rgba(86, 217, 242, .06); }
+.chip .circ { width: 46px; height: 46px; }
+.chip.on { color: #04121c; background: linear-gradient(180deg, #6fe6fb, #2fb6d6); }
+.chip .badge { position: static; margin-left: 2px; box-shadow: none; }
+.top .sp { flex: 1; }
+.top .btn { margin-left: 12px; }
+.grid { grid-auto-flow: dense; padding: 4px; position: absolute; left: 28px; right: 28px; top: 182px; bottom: 0; -webkit-mask: linear-gradient(#000 80%, transparent); display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 18px; align-content: start; overflow: hidden; }
+.tile { position: relative; height: 196px; border-radius: 26px; padding: 18px 20px; background: linear-gradient(160deg, rgba(20, 36, 60, .9), rgba(8, 14, 26, .9)); display: flex; flex-direction: column; animation: rise .5s both; }
+.tile .circ { width: 84px; height: 84px; }
+.tile.unread .circ { box-shadow: 0 0 0 3px var(--cyan); }
+.tile .tm { position: absolute; right: 18px; top: 18px; font-size: 17px; color: var(--ink-3); font-weight: 600; }
+.tile .dot { position: absolute; right: 22px; top: 50px; width: 14px; height: 14px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 12px var(--cyan); }
+.tile b { margin-top: auto; font-size: 30px; font-weight: 800; }
+.tile span { font-size: 18px; color: var(--ink-2); margin-top: 2px; }
+.modal { grid-column: 3 / span 4; grid-row: 1 / span 3; position: relative; border-radius: 30px; overflow: hidden; background: radial-gradient(800px 600px at 15% 40%, #10284a, #060c18 70%); box-shadow: 0 0 0 2px var(--cyan), 0 0 50px rgba(86, 217, 242, .25); animation: rise .6s .15s both; }
+.modal .x { position: absolute; right: 22px; top: 22px; }
+.scan { position: absolute; left: 30px; top: 40px; width: 330px; height: 330px; border-radius: 50%; border: 2px dashed rgba(86, 217, 242, .45); animation: spin 18s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.planet { position: absolute; left: 45px; top: 55px; width: 300px; height: 300px; }
+.planet img { width: 100%; height: 100%; animation: drift 6s ease-in-out infinite alternate; filter: drop-shadow(0 0 50px rgba(86, 160, 242, .35)); }
+.who { position: absolute; left: 34px; top: 410px; width: 330px; display: flex; gap: 16px; align-items: center; }
+.who .circ { width: 84px; height: 84px; box-shadow: 0 0 0 3px var(--red); }
+.who b { font-size: 21px; font-weight: 800; line-height: 1.25; }
+.who span { display: block; margin-top: 6px; font-size: 19px; color: var(--cyan); font-weight: 700; }
+.threat { position: absolute; left: 34px; bottom: 30px; display: flex; align-items: center; gap: 12px; height: 52px; padding: 0 20px; border-radius: 26px; background: rgba(255, 90, 106, .14); font-size: 19px; color: #ffc2c8; }
+.threat b { font-size: 21px; font-weight: 800; color: var(--red); }
+.body { position: absolute; left: 400px; right: 40px; top: 30px; bottom: 30px; display: flex; flex-direction: column; }
+.kick { font-size: 19px; font-weight: 700; color: var(--cyan); letter-spacing: .06em; text-transform: uppercase; }
+.hero { display: flex; align-items: baseline; gap: 18px; margin-top: 6px; }
+.hero b { font-size: 64px; font-weight: 900; line-height: 1; color: var(--green); text-shadow: 0 0 30px rgba(95, 227, 161, .4); }
+.hero span { font-size: 21px; color: var(--ink-2); }
+.res { margin-top: 22px; display: flex; flex-direction: column; gap: 12px; }
+.r { display: grid; grid-template-columns: 44px 1fr 170px; align-items: center; gap: 16px; }
+.r img { width: 44px; height: 44px; object-fit: contain; }
+.track { position: relative; height: 16px; border-radius: 8px; background: rgba(255, 255, 255, .07); overflow: hidden; }
+.track i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 8px; transform-origin: left; animation: grow 1.1s .5s both; }
+.track i.all { background: rgba(86, 217, 242, .25); }
+.track i.take { background: linear-gradient(90deg, #2fb6d6, var(--green)); }
+.r b { font-size: 26px; font-weight: 800; text-align: right; }
+.legend { display: flex; gap: 28px; margin: 10px 0 0 60px; font-size: 18px; color: var(--ink-2); }
+.legend i { display: inline-block; width: 16px; height: 16px; border-radius: 5px; margin-right: 8px; vertical-align: -2px; }
+.layers { display: flex; gap: 26px; margin-top: 24px; }
+.layer h5 { font-size: 18px; font-weight: 700; color: var(--ink-2); margin-bottom: 10px; }
+.fleet { display: flex; gap: 4px; }
+.fleet .u { text-align: center; width: 88px; }
+.fleet .circ { width: 68px; height: 68px; margin: 0 auto; }
+.fleet .circ img { object-fit: contain; padding: 10%; }
+.fleet b { display: block; font-size: 19px; font-weight: 800; margin-top: 6px; white-space: nowrap; }
+.bigc { display: flex; align-items: center; gap: 14px; }
+.bigc .circ { width: 68px; height: 68px; }
+.bigc b { font-size: 30px; font-weight: 800; display: block; white-space: nowrap; }
+.bigc small { font-size: 18px; color: var(--ink-2); white-space: nowrap; }
+.acts { display: flex; gap: 14px; margin-top: auto; }
+</style></head>
+<body><div class="stage"><img class="hdr" src="../assets/game-header.png"><main class="area">
+  <div class="top"><div class="chips" id="chips"></div><span class="sp"></span><button class="btn when-full">Прочитать все</button><button class="btn icon"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m15.5 15.5 5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button></div>
+  <div class="grid when-full" id="grid"></div>
+  <div class="empty-state"><img id="emptyImg" alt=""><b>Писем пока нет</b><span>Отчёты появятся здесь сами</span></div>
+</main></div>
+<script src="../frame.js"></script><script src="data.js"></script>
+<script>
+const { A, fmt, short, CATS, items, spy: S } = MSG;
+document.getElementById('emptyImg').src = A.empty;
+document.getElementById('chips').innerHTML = CATS.map((c, i) => {
+  const n = items.filter((x) => x.unread && (c.id === 'all' || x.cat === c.id)).length;
+  return `<div class="chip ${i === 0 ? 'on' : ''}"><div class="circ pad"><img src="${A.icon(c.icon)}"></div>${c.label}${n ? `<span class="badge">${n}</span>` : ''}</div>`;
+}).join('');
+const pic = (x) => x.cat === 'battle' && x.kind !== 'sun' ? [A.face(x.fac), ''] : x.kind === 'sun' ? [A.sun, ''] : x.cat === 'fleet' || x.cat === 'intel' ? [A.planet(x.planet), ''] : [A.icon(x.icon), 'pad'];
+document.getElementById('grid').innerHTML = '<section class="modal" id="modal"></section>' + items.slice(0, 18).map((x, i) => {
+  const [src, p] = pic(x);
+  const v = x.value ? `<b class="${x.tone === 'info' ? 'info' : x.value > 0 ? 'ok' : 'bad'}">${x.tone === 'info' ? short(x.value).replace('+', '') : short(x.value)}</b>` : `<b class="${x.tone} ell" style="font-size:23px">${x.title}</b>`;
+  return `<div class="tile ${x.unread ? 'unread' : ''}" style="animation-delay:${i * 25}ms"><div class="circ ${p}"><img src="${src}"></div><span class="tm">${x.time}</span>${x.unread ? '<i class="dot"></i>' : ''}${v}<span class="ell">${x.value ? x.title : x.who}</span></div>`;
+}).join('');
+const total = S.res.metal + S.res.mineral + S.res.gas;
+const take = Math.min(total / 2, S.canCarry);
+const mx = Math.max(S.res.metal, S.res.mineral, S.res.gas);
+const row = (k, v) => `<div class="r"><img src="${A.res(k)}"><div class="track"><i class="all" style="width:${v / mx * 100}%"></i><i class="take" style="width:${v / 2 / mx * 100}%"></i></div><b>${short(v).replace('+', '')}</b></div>`;
+document.getElementById('modal').innerHTML = `
+  <div class="scan"></div><div class="planet"><img src="${A.planet(S.planetImg)}"></div>
+  <div class="threat"><b>Опасно</b>их флот ×2,4</div>
+  <div class="who"><div class="circ"><img src="${A.face(S.fac)}"></div><div><b class="clamp2">${S.who}</b><span>[${S.coord}]</span></div></div>
+  <button class="btn icon x"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+  <div class="body">
+    <div class="kick">Разведка · 23:12</div>
+    <div class="hero"><b>${short(take).replace('+', '')}</b><span>можно унести за один налёт</span></div>
+    <div class="res">${row('metal', S.res.metal)}${row('mineral', S.res.mineral)}${row('gas', S.res.gas)}</div>
+    <div class="legend"><span><i style="background:rgba(86,217,242,.35)"></i>на планете</span><span><i style="background:var(--green)"></i>унесёте</span></div>
+    <div class="layers">
+      <div class="layer"><h5>Флот</h5><div class="fleet">${S.fleet.map(([s, n]) => `<div class="u"><div class="circ"><img src="${A.ship(S.race, s)}"></div><b>${short(n).replace('+', '')}</b></div>`).join('')}</div></div>
+      <div class="layer"><h5>Оборона</h5><div class="bigc"><div class="circ pad"><img src="${A.icon('arena')}"></div><div><b>${short(S.defence).replace('+', '')}</b><small>${S.defenceTypes} типов</small></div></div></div>
+      <div class="layer"><h5>Постройки</h5><div class="bigc"><div class="circ pad"><img src="${A.res('zone-industry')}"></div><div><b>${S.buildings}</b><small>зданий</small></div></div></div>
+    </div>
+        <div class="acts"><button class="btn primary">Атаковать</button><button class="btn">Симулятор</button><button class="btn">Ещё зонд</button><span style="flex:1"></span><button class="btn icon danger"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button></div>
+  </div>`;
+</script></body></html>

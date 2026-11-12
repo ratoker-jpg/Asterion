@@ -1,0 +1,95 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Рейсы · 3 · Очередь походов</title>
+<link rel="stylesheet" href="../frame.css"><link rel="stylesheet" href="common.css">
+<style>
+/* по мотивам «очереди походов» мобильных 4X: слоты у края, походы нарисованы прямо на карте */
+.map { position: absolute; inset: 0; }
+.map svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.obj { position: absolute; transform: translate(-50%, -50%); border-radius: 50%; }
+.obj img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.obj.mine::after { content: ''; position: absolute; inset: -8px; border-radius: 50%; box-shadow: 0 0 0 2px rgba(86, 217, 242, .55), 0 0 26px rgba(86, 217, 242, .35); }
+.obj.att::after { content: ''; position: absolute; inset: -12px; border-radius: 50%; box-shadow: 0 0 0 3px var(--red), 0 0 40px rgba(255, 77, 94, .6); animation: alarm 1.2s ease-in-out infinite; }
+.obj.spot { background: radial-gradient(circle, rgba(140, 180, 255, .35), transparent 70%); display: grid; place-items: center; }
+.obj.spot img { width: 60%; height: 60%; border-radius: 0; opacity: .9; }
+.name { position: absolute; transform: translate(-50%, 0); font-size: 18px; font-weight: 700; text-align: center; width: 260px; line-height: 1.25; text-shadow: 0 2px 8px #000, 0 0 2px #000; }
+.dot { position: absolute; width: 56px; height: 56px; transform: translate(-50%, -50%); transition: left 1s linear, top 1s linear; }
+.dot img { width: 100%; height: 100%; border-radius: 50%; box-shadow: 0 0 0 3px var(--c), 0 0 16px var(--c); }
+.map.focus .dot:not(.on) { opacity: .35; }
+.queue { position: absolute; left: 24px; top: 92px; width: 330px; display: flex; flex-direction: column; gap: 0; z-index: 6; }
+.slot { position: relative; height: 54px; display: flex; align-items: center; gap: 16px; padding-left: 6px; border-radius: 28px; cursor: pointer; transition: background .2s; }
+.slot:hover { background: rgba(255, 255, 255, .05); }
+.slot.on { background: rgba(86, 217, 242, .12); box-shadow: inset 0 0 0 1px rgba(86, 217, 242, .45); }
+.slot.hot { background: rgba(255, 77, 94, .16); }
+.slot.hot.on { box-shadow: inset 0 0 0 2px var(--red); }
+.slot .pc { flex: none; background: radial-gradient(circle at 40% 35%, #1b2a40, #060b14); }
+.slot .pc > img { object-fit: contain; padding: 4px; }
+.slot .badge { position: absolute; left: 34px; top: 28px; width: 26px; height: 26px; border-radius: 50%; box-shadow: 0 0 0 2px #03060c; }
+.slot b { margin-left: 10px; font-size: 22px; font-weight: 700; white-space: nowrap; }
+.slot.hot b { color: #ff8a95; }
+.slot i { margin-left: auto; margin-right: 18px; font-style: normal; font-size: 22px; color: var(--dim); }
+.detail { right: 30px; width: 560px; }
+.detail .d-banner { height: 140px; } .detail .d-head { margin-top: -46px; }
+.detail .d-ships { gap: 6px; } .detail .d-ship { width: 84px; } .detail .d-ship img { width: 80px; height: 80px; }
+.slots-cap { font-size: 17px; font-weight: 600; color: var(--dim); padding: 0 0 6px 14px; }
+.calm-t { position: absolute; left: 960px; top: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 20px; z-index: 7; }
+.calm-t strong { font-size: 32px; text-shadow: 0 2px 10px #000; }
+.ghost { height: 54px; border-radius: 28px; display: flex; align-items: center; gap: 16px; padding-left: 6px; }
+.ghost span { width: 44px; height: 44px; border-radius: 50%; box-shadow: inset 0 0 0 2px rgba(120, 175, 255, .2); }
+.ghost em { width: 120px; height: 12px; border-radius: 6px; background: rgba(120, 175, 255, .08); }
+</style></head><body>
+<div class="stage"><img class="hdr" src="../assets/game-header.png"><main class="area" id="area"></main></div>
+<script src="../frame.js"></script><script src="data.js"></script>
+<script>
+const area = document.getElementById('area');
+/* sector map positions (area coords); the header ornament zone x 860..1060, y 0..86 stays empty */
+const POS = {
+  h1: [640, 470], h2: [800, 700], h3: [470, 780], h4: [1170, 380],
+  'Звездоплаватель-Командор Северного Предела': [1000, 210], 'Пиратская база Чёрного Ветра': [470, 250],
+  'Крепость Северного Предела-Прайм': [1240, 790], 'Обломки': [1030, 560], 'Астероид Кассиопея-7': [600, 640],
+  'Туманность Кассиопея-Прайм': [1270, 160], 'Ноктюрн-9': [950, 870], 'Свободная планета': [1290, 560],
+  'Орден Синей Звезды': [430, 470], 'Глубокий космос': [760, 150],
+};
+const homeKey = (o) => Object.keys(HOME).find((k) => HOME[k].name === o.name);
+const posOf = (o) => POS[homeKey(o)] || POS[o.name] || [0, 0];
+let sel = SEL0;
+const ctrl = (a, b) => { const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2, dx = b[0] - a[0], dy = b[1] - a[1]; return [mx - dy * 0.18, my + dx * 0.18]; };
+const at = (a, c, b, u) => [(1 - u) ** 2 * a[0] + 2 * (1 - u) * u * c[0] + u * u * b[0], (1 - u) ** 2 * a[1] + 2 * (1 - u) * u * c[1] + u * u * b[1]];
+/* where the fleet is now along its path: out/hostile go a→b, back goes b→a, work sits at b */
+const where = (f) => { const a = posOf(origin(f)), b = posOf(target(f)), c = ctrl(a, b), u = frac(f);
+  return f.phase === 'work' ? b : f.phase === 'back' ? at(a, c, b, 1 - u) : at(a, c, b, u); };
+function objs(flights) {
+  const seen = new Map();
+  Object.values(HOME).forEach((h) => seen.set(h.name, { o: h, mine: true }));
+  flights.forEach((f) => [origin(f), target(f)].forEach((o) => { if (!seen.has(o.name)) seen.set(o.name, { o }); }));
+  return [...seen.values()];
+}
+function render() {
+  const empty = !FLIGHTS.length;
+  const list = [...FLIGHTS].sort((a, b) => (b.hostile ? 1 : 0) - (a.hostile ? 1 : 0) || a.t - b.t);
+  const S = FLIGHTS.find((f) => f.id === sel);
+  const attacked = new Set(FLIGHTS.filter((f) => f.hostile).map((f) => f.home));
+  const routes = list.map((f) => { const a = posOf(origin(f)), b = posOf(target(f)), c = ctrl(a, b), col = GROUP_COLOR[MISSION[f.m].group], on = f.id === sel;
+    return `<path d="M${a} Q${c} ${b}" fill="none" stroke="${col}" stroke-opacity="${on ? 1 : .32}" stroke-width="${on ? 5 : 2.5}" stroke-dasharray="${on ? '16 10' : '6 10'}"><animate attributeName="stroke-dashoffset" from="${on ? 52 : 32}" to="0" dur="${on ? 1 : 2}s" repeatCount="indefinite"/></path>`; }).join('');
+  const objHTML = objs(FLIGHTS).map(({ o, mine }) => { const [x, y] = posOf(o), size = mine ? 110 : o.p ? 84 : 72;
+    const key = homeKey(o);
+    const cls = (mine ? ' mine' : '') + (key && attacked.has(key) ? ' att' : '') + (o.p ? '' : ' spot');
+    const img = o.p ? PLANET(o.p) : HICON(o.name === 'Обломки' ? 'debris' : o.name.startsWith('Астероид') ? 'gas' : 'universe');
+    return `<div class="obj${cls}" style="left:${x}px;top:${y}px;width:${size}px;height:${size}px"><img src="${img}" alt=""></div>`; }).join('');
+  const names = S ? [origin(S), target(S)].map((o) => { const [x, y] = posOf(o), mine = !!homeKey(o);
+    return `<div class="name" style="left:${x}px;top:${y + (mine ? 66 : 52)}px">${o.name}</div>`; }).join('') : '';
+  const dots = list.map((f) => { const [x, y] = where(f), col = GROUP_COLOR[MISSION[f.m].group];
+    return `<div class="dot${f.id === sel ? ' on' : ''}" data-dot="${f.id}" style="left:${x}px;top:${y}px;--c:${col}"><img src="${ICON(MISSION[f.m].icon)}" alt=""></div>`; }).join('');
+  const queue = empty
+    ? Array.from({ length: 6 }, () => `<div class="ghost"><span></span><em></em></div>`).join('')
+    : list.map((f) => `<div class="slot${f.hostile ? ' hot' : ''}${f.id === sel ? ' on' : ''}" data-id="${f.id}">
+        ${pcHTML(f, 40).replace(`src="${ICON(MISSION[f.m].icon)}"`, `src="${SHIP(f.ships[0][0])}"`)}
+        <img class="badge" src="${ICON(MISSION[f.m].icon)}" alt=""><b data-t="${f.id}">${tf(f.t)}</b><i>${f.phase === 'back' ? '←' : f.phase === 'work' ? '●' : '→'}</i></div>`).join('');
+  area.innerHTML = tabsHTML() + `<div class="map${S ? ' focus' : ''}"><svg>${empty ? '' : routes}</svg>${objHTML}${names}${empty ? '' : dots}</div>
+    <div class="queue"><div class="slots-cap">Походы ${FLIGHTS.length} из 16</div>${queue}</div>
+    ${S ? `<section class="detail">${detailHTML(S)}</section>` : ''}
+    ${empty ? `<div class="calm-t"><strong>Все флоты дома</strong><button class="btn primary">Отправить флот</button></div>` : ''}`;
+  const d = area.querySelector('.detail'); if (d) d.style.top = Math.max(84, (944 - d.offsetHeight) / 2 + 20) + 'px';
+  area.querySelectorAll('.slot').forEach((el) => el.onclick = () => { sel = +el.dataset.id; render(); });
+}
+render();
+onTick(() => FLIGHTS.forEach((f) => { const el = area.querySelector(`[data-dot="${f.id}"]`); if (!el) return; const [x, y] = where(f); el.style.left = x + 'px'; el.style.top = y + 'px'; }));
+</script></body></html>

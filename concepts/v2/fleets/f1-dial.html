@@ -1,0 +1,89 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Рейсы · 1 · Циферблат прибытий</title>
+<link rel="stylesheet" href="../frame.css"><link rel="stylesheet" href="common.css">
+<style>
+.dial { position: absolute; left: 0; top: 0; width: 1160px; height: 944px; }
+.dial svg.rings { position: absolute; inset: 0; width: 100%; height: 100%; }
+.ring-l { font: 600 17px Montserrat; fill: #6f8299; }
+.sweep { position: absolute; width: 820px; height: 820px; border-radius: 50%; transform: translate(-50%, -50%);
+  background: conic-gradient(from 0deg, rgba(86, 217, 242, .16), transparent 60deg); animation: spin 8s linear infinite;
+  -webkit-mask: radial-gradient(closest-side, transparent 110px, #000 112px); mask: radial-gradient(closest-side, transparent 110px, #000 112px); }
+@keyframes spin { to { transform: translate(-50%, -50%) rotate(360deg); } }
+.home { position: absolute; width: 210px; height: 210px; transform: translate(-50%, -50%); }
+.home img { width: 100%; height: 100%; border-radius: 50%; animation: turn 60s linear infinite; }
+.home::after { content: ''; position: absolute; inset: -6px; border-radius: 50%; box-shadow: 0 0 60px 10px rgba(86, 217, 242, .25); }
+@keyframes turn { to { transform: rotate(360deg); } }
+.mk { position: absolute; transform: translate(-50%, -50%); transition: left 1s linear, top 1s linear; cursor: pointer; display: flex; flex-direction: column; align-items: center; }
+.mk .pc { animation: pop .6s cubic-bezier(.2, .9, .3, 1.3) both; }
+.mk:hover .pc { transform: scale(1.08); }
+@keyframes pop { from { transform: scale(.4); opacity: 0; } }
+.mk b { margin-top: 10px; font-size: 18px; font-weight: 700; padding: 3px 12px; border-radius: 14px; background: rgba(3, 6, 12, .85); white-space: nowrap; }
+.mk.back .pc > img { filter: saturate(.6) brightness(.8); }
+.mk.back b::before { content: '\2190\00a0'; color: var(--cyan); }
+.mk.work b::before { content: '\25CF\00a0'; color: #7ee0a8; }
+.mk.hot b { background: var(--red); color: #fff; }
+.threat { position: absolute; left: 1180px; top: 18px; display: flex; align-items: center; gap: 14px; height: 60px; padding: 0 24px 0 10px; border-radius: 30px; background: rgba(255, 77, 94, .14); box-shadow: inset 0 0 0 1px rgba(255, 77, 94, .5); }
+.threat img { width: 44px; height: 44px; border-radius: 50%; }
+.threat span { font-size: 20px; font-weight: 700; color: #ffd6da; }
+.threat b { font-size: 24px; color: #fff; }
+.detail { left: 1180px; top: 96px; width: 700px; }
+.d-banner { height: 150px; }
+.d-head { margin-top: -48px; }
+.dial.calm { width: 1920px; } .calm-t { position: absolute; left: 960px; top: 900px; transform: translate(-50%, -100%); display: flex; align-items: center; gap: 28px; }
+.calm-t strong { font-size: 32px; }
+.legend { position: absolute; left: 40px; bottom: 26px; display: flex; gap: 26px; font-size: 17px; color: var(--dim); }
+.legend span::before { content: ''; display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; background: var(--c); }
+</style></head><body>
+<div class="stage"><img class="hdr" src="../assets/game-header.png"><main class="area" id="area"></main></div>
+<script src="../frame.js"></script><script src="data.js"></script>
+<script>
+const CX = 580, CY = 470, area = document.getElementById('area');
+const rad = (t) => 140 + 250 * Math.log(1 + t / 30) / Math.log(1 + 15000 / 30);
+let sel = SEL0;
+const STEP = 360 / 14 * 5, A0 = -140;
+function layout() {
+  const sorted = [...FLIGHTS].sort((a, b) => a.t - b.t);
+  const pts = sorted.map((f, i) => ({ f, a: (A0 + i * STEP) * Math.PI / 180, r: rad(f.t) }));
+  for (let k = 0; k < 80; k++) for (const p of pts) for (const q of pts) { if (p === q) continue;
+    const dx = p.r * Math.cos(p.a) - q.r * Math.cos(q.a), dy = p.r * Math.sin(p.a) - q.r * Math.sin(q.a), d = Math.hypot(dx, dy);
+    if (d < 135) { const s = Math.sign(Math.sin(p.a - q.a)) || 1; p.a += s * 0.01; } }
+  const m = new Map(); pts.forEach((p) => m.set(p.f.id, p)); return m;
+}
+
+function render() {
+  if (!FLIGHTS.length) { area.innerHTML = tabsHTML() + `<div class="dial calm"><div class="sweep" style="left:${CX + 380}px;top:${CY}px"></div>
+    <svg class="rings">${[60, 600, 3600, 14400].map((t) => `<circle cx="${CX + 380}" cy="${CY}" r="${rad(t)}" fill="none" stroke="rgba(120,175,255,.2)" stroke-width="2" stroke-dasharray="4 8"/>`).join('')}</svg>
+    <div class="home" style="left:${CX + 380}px;top:${CY}px"><img src="${PLANET(HOME.h1.p)}" alt=""></div></div>
+    <div class="calm-t"><strong>В небе тихо</strong><button class="btn primary">Отправить флот</button></div>`; return; }
+  const sorted = [...FLIGHTS].sort((a, b) => a.t - b.t);
+  const ringT = [[60, '1 мин'], [600, '10 мин'], [3600, '1 час'], [14400, '4 часа']];
+  const hostile = FLIGHTS.filter((f) => f.hostile).sort((a, b) => a.t - b.t);
+  const L = layout();
+  const lblA = (t) => { let A = 0, best = -1;
+    for (let d = 0; d < 360; d += 3) { const a = d * Math.PI / 180, x = rad(t) * Math.cos(a), y = rad(t) * Math.sin(a); let m = 1e9;
+      for (const p of L.values()) { const px = p.r * Math.cos(p.a), py = p.r * Math.sin(p.a) + 14; m = Math.min(m, Math.hypot((x - px) * 0.7, y - py)); }
+      if (x < -480 || y < -400 || y > 440) m = -1;
+      if (m > best) { best = m; A = a; } } return A; };
+  const beams = hostile.map((f) => { const a = L.get(f.id).a;
+    return `<line x1="${CX + (L.get(f.id).r + 110) * Math.cos(a)}" y1="${CY + (L.get(f.id).r + 110) * Math.sin(a)}" x2="${CX + 110 * Math.cos(a)}" y2="${CY + 110 * Math.sin(a)}" stroke="url(#beam)" data-b="1" stroke-width="6" stroke-dasharray="14 10"><animate attributeName="stroke-dashoffset" from="48" to="0" dur="1s" repeatCount="indefinite"/></line>`; }).join('');
+  area.innerHTML = tabsHTML() + `<div class="dial">
+    <div class="sweep" style="left:${CX}px;top:${CY}px"></div>
+    <svg class="rings"><defs><linearGradient id="beam" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1160" y2="944"><stop offset="0" stop-color="#ff4d5e" stop-opacity=".2"/><stop offset="1" stop-color="#ff4d5e" stop-opacity=".9"/></linearGradient></defs>
+      ${ringT.map(([t, l]) => `<circle cx="${CX}" cy="${CY}" r="${rad(t)}" fill="none" stroke="rgba(120,175,255,.22)" stroke-width="2" stroke-dasharray="4 8"/>
+        <text class="ring-l" text-anchor="middle" x="${CX + rad(t) * Math.cos(lblA(t))}" y="${CY + rad(t) * Math.sin(lblA(t)) + 6}">${l}</text>`).join('')}
+      ${beams}</svg>
+    <div class="home" style="left:${CX}px;top:${CY}px"><img src="${PLANET(HOME.h1.p)}" alt=""></div>
+    ${sorted.map((f, i) => { const { a, r } = L.get(f.id);
+      return `<div class="mk ${f.phase}${f.hostile ? ' hot' : ''}" data-i="${i}" data-id="${f.id}" style="left:${CX + r * Math.cos(a)}px;top:${CY + r * Math.sin(a) + 14}px">
+        ${pcHTML(f, f.hostile ? 96 : 78, f.id === sel ? 'sel' : '')}<b data-t="${f.id}">${tf(f.t)}</b></div>`; }).join('')}
+  </div>
+  <div class="threat">${hostile.map((f) => `<img src="${ICON(MISSION[f.m].icon)}" alt="">`).join('')}<span>Атаки на вас</span><b data-t="${hostile[0].id}">${tf(hostile[0].t)}</b></div>
+  <section class="detail">${detailHTML(FLIGHTS.find((f) => f.id === sel))}</section>`;
+  area.querySelectorAll('.mk').forEach((el) => el.onclick = () => { sel = +el.dataset.id; render(); place(); });
+}
+render();
+function place() { const d = area.querySelector('.detail'), th = area.querySelector('.threat'); if (!d) return; const h = d.offsetHeight + 78; const top = Math.max(18, (944 - h) / 2); th.style.top = top + 'px'; d.style.top = top + 78 + 'px'; }
+place();
+onTick(() => { const L = layout();
+  area.querySelectorAll('.mk').forEach((el) => { const { a, r } = L.get(+el.dataset.id);
+    el.style.left = CX + r * Math.cos(a) + 'px'; el.style.top = CY + r * Math.sin(a) + 14 + 'px'; }); });
+</script></body></html>

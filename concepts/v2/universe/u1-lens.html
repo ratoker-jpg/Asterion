@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Вселенная · U1 · Галактика с лупой</title>
+<link rel="stylesheet" href="../frame.css">
+<style>
+.area { overflow: hidden; background: #02040a; }
+.gal { position: absolute; left: 130px; top: 40px; width: 880px; height: 880px; filter: saturate(1.1); }
+svg { position: absolute; inset: 0; width: 1920px; height: 944px; pointer-events: none; }
+.lens { position: absolute; left: 1060px; top: 70px; width: 800px; height: 800px; border-radius: 50%; overflow: hidden;
+  background: radial-gradient(circle at 50% 50%, #0b1a2e 0%, #040811 70%); box-shadow: 0 0 0 2px rgba(150,210,255,.35), 0 0 0 14px rgba(150,210,255,.05), 0 0 80px rgba(80,160,255,.25), inset 0 0 120px rgba(0,0,0,.8); }
+.lens .sun { position: absolute; left: 50%; top: 50%; width: 170px; transform: translate(-50%, -50%); filter: drop-shadow(0 0 40px rgba(120,200,255,.6)); }
+.pl { position: absolute; transform: translate(-50%, -50%); }
+.pl img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 4px 10px #000); }
+.pl::after { content: ''; position: absolute; inset: -16%; border-radius: 50%; border: 2px solid var(--c); opacity: var(--o, .9); }
+.pl.t-uninhabited::after, .pl.k-asteroid::after { display: none; } .pl.t-uninhabited img { filter: brightness(.55) saturate(.5); }
+.pl.t-range::after { border-style: dashed; } .pl.sel::after { inset: -28%; box-shadow: 0 0 20px var(--c); }
+.sys { position: absolute; width: 14px; height: 14px; border-radius: 50%; transform: translate(-50%, -50%); background: radial-gradient(circle, #fff 0 25%, var(--c) 45%, transparent 72%); }
+.sys.big { width: 22px; height: 22px; }
+.sys.cur { width: 34px; height: 34px; box-shadow: 0 0 0 2px #fff, 0 0 18px #fff; }
+.tip { position: absolute; padding: 8px 12px; border-radius: 10px; background: rgba(6,10,17,.9); border: 1px solid #ff3b4e88; font-size: 14px; font-weight: 700; transform: translateX(-50%); white-space: nowrap; }
+.tip small { display: block; font-size: 12px; color: #93a0b3; font-weight: 600; } .tip i { font-style: normal; color: #ff6b78; }
+.lens-n { position: absolute; left: 1460px; top: 880px; transform: translateX(-50%); font-size: 14px; color: #8fb6dd; font-weight: 800; letter-spacing: 3px; }
+.title { position: absolute; left: 28px; top: 22px; } .title small { display: block; font-size: 12px; letter-spacing: 3px; color: #7f8da1; font-weight: 700; } .title b { font-size: 22px; font-weight: 800; }
+.gx { position: absolute; left: 28px; bottom: 26px; display: flex; gap: 8px; }
+.gx img { width: 54px; height: 54px; border-radius: 50%; opacity: .5; } .gx img.on { opacity: 1; box-shadow: 0 0 0 2px #fff; }
+</style></head><body>
+<div class="stage"><img class="hdr" src="../assets/game-header.png"><main class="area">
+  <img class="gal" src="../../../src/assets/ui/atlas/galaxy-01.webp">
+  <svg id="s" viewBox="0 0 1920 944"></svg>
+  <div class="lens" id="lens"><img class="sun" src="../../../assets/source/universe-navigation/active-suns/active-sun.variant-02.png"></div>
+  <div class="lens-n">СИСТЕМА 03</div>
+  <div class="title"><small>ВСЕЛЕННАЯ</small><b>Галактика 1</b></div>
+  <div class="gx">${''}</div>
+</main></div>
+<script src="data.js"></script>
+<script>
+const area = document.querySelector('.area');
+document.querySelector('.gx').innerHTML = [1, 2, 3, 4, 5].map((n) => `<img class="${n === 1 ? 'on' : ''}" src="../../../src/assets/ui/atlas/galaxy-0${n}.webp">`).join('');
+// 40 systems along the two arms of the galaxy picture
+const GX = 570, GY = 480;
+const P = Array.from({ length: 40 }, (_, i) => { const arm = i % 2, t = 0.12 + Math.floor(i / 2) / 20 * 0.88; const a = t * 6.0 + arm * Math.PI + 0.6; const r = 60 + t * 360; return { n: i + 1, x: GX + Math.cos(a) * r, y: GY + Math.sin(a) * r }; });
+const tone = (s) => s.enemy >= 3 ? '#ff3b4e' : s.self ? '#5aa9ff' : s.ally ? '#4fd18b' : '#cfe6ff';
+P.forEach((p, i) => { const s = SYSTEMS[i]; const d = document.createElement('i'); d.className = `sys ${s.self || s.enemy >= 3 ? 'big' : ''} ${p.n === CURRENT_SYSTEM ? 'cur' : ''}`; d.style.cssText = `left:${p.x}px;top:${p.y}px;--c:${tone(s)}`; area.appendChild(d); });
+// two lines from the current system to the lens edge
+const c = P[CURRENT_SYSTEM - 1];
+document.getElementById('s').innerHTML = `<line x1="${c.x}" y1="${c.y}" x2="1460" y2="70" stroke="rgba(150,210,255,.35)" stroke-width="1.5"/><line x1="${c.x}" y1="${c.y}" x2="1460" y2="870" stroke="rgba(150,210,255,.35)" stroke-width="1.5"/>`;
+// inside the lens: the system top-down, 24 positions on 4 rings
+const lens = document.getElementById('lens');
+const LC = 400; const RS = [150, 215, 280, 345];
+lens.insertAdjacentHTML('afterbegin', `<svg viewBox="0 0 800 800" style="position:absolute;inset:0;width:800px;height:800px">${RS.map((r) => `<circle cx="400" cy="400" r="${r}" fill="none" stroke="rgba(120,175,255,.2)"/>`).join('')}</svg>`);
+SYSTEM.forEach((o, i) => { const k = Math.floor(i / 6), j = i % 6; const a = (-90 + j * 60 + k * 30) * Math.PI / 180; const x = LC + Math.cos(a) * RS[k], y = LC + Math.sin(a) * RS[k];
+  if (!o.art) return; const sel = o.pos === SELECTED.pos; const sz = (o.kind === 'asteroid' ? 30 : o.tone === 'uninhabited' ? 36 : 56) * (sel ? 1.35 : 1);
+  const d = document.createElement('div'); d.className = `pl k-${o.kind} t-${o.tone} ${sel ? 'sel' : ''}`;
+  d.style.cssText = `left:${x}px;top:${y}px;width:${sz}px;height:${sz}px;--c:${TONE[o.tone].color};--o:${['neutral', 'protected'].includes(o.tone) ? .45 : .9}`;
+  d.innerHTML = `<img src="${o.art}">`; lens.appendChild(d);
+  if (sel) { const t = document.createElement('div'); t.className = 'tip'; t.style.left = x + 'px'; t.style.top = (y - 100) + 'px'; t.style.zIndex = 5; t.innerHTML = `${o.name}<small><i>[ТЬМА]</i> · ${short(o.points)} · разведка ${o.spy}</small>`; lens.appendChild(t); } });
+</script><script src="../frame.js"></script>
+</body></html>

@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>M4 Письмо-отчёт</title>
+<link rel="stylesheet" href="../frame.css"><link rel="stylesheet" href="base.css">
+<style>
+/* «по мотивам» Rise of Kingdoms / Evony: письмо с лентой «Победа», зеркальные стороны, убито / в ремонт / уцелело */
+.tabs { position: absolute; left: 24px; top: 24px; bottom: 24px; width: 96px; display: flex; flex-direction: column; gap: 18px; align-items: center; }
+.tab { position: relative; }
+.tab .circ { width: 84px; height: 84px; }
+.tab.on .circ { box-shadow: 0 0 0 3px var(--amber), 0 0 24px rgba(242, 184, 75, .45); }
+.tab .badge { right: -10px; top: -6px; }
+.tabs .sp { flex: 1; }
+.mails { padding-top: 10px; position: absolute; left: 138px; top: 24px; bottom: 24px; width: 120px; display: flex; flex-direction: column; align-items: center; gap: 14px; overflow: hidden; -webkit-mask: linear-gradient(#000 88%, transparent); border-left: 2px solid rgba(140, 180, 220, .1); }
+.mail { position: relative; width: 92px; height: 92px; flex: none; border-radius: 50%; padding: 5px; animation: rise .4s both; }
+.mail .circ { width: 82px; height: 82px; }
+.mail.ok { background: conic-gradient(var(--green) 0 100%); } .mail.bad { background: var(--red); } .mail.info { background: var(--cyan); } .mail.warn { background: var(--amber); } .mail.neutral { background: #34465e; }
+.mail.read { opacity: .45; }
+.mail.sel { box-shadow: 0 0 0 4px #050a14, 0 0 0 7px var(--amber); }
+.mail .new { position: absolute; right: 0; top: 2px; width: 18px; height: 18px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 0 3px #050a14, 0 0 10px var(--cyan); }
+.more { font-size: 18px; font-weight: 800; color: var(--ink-2); }
+.letter { position: absolute; left: 286px; right: 32px; top: 96px; bottom: 24px; border-radius: 30px; overflow: hidden; background: linear-gradient(180deg, #0d1a30, #060c18 60%); box-shadow: inset 0 0 0 1.5px rgba(242, 184, 75, .2); animation: slideL .6s both; }
+.letter .bg { position: absolute; left: 0; right: 0; top: 0; height: 420px; width: 100%; object-fit: cover; opacity: .4; -webkit-mask: linear-gradient(#000 40%, transparent); }
+.ribbon { position: relative; margin: 34px auto 0; width: 620px; height: 104px; display: flex; align-items: center; justify-content: center; clip-path: polygon(0 0, 100% 0, 94% 50%, 100% 100%, 0 100%, 6% 50%); background: linear-gradient(180deg, #ffd27a, #c98a1f); animation: rise .6s .2s both; }
+.ribbon b { font-size: 58px; font-weight: 900; letter-spacing: .12em; color: #2a1600; }
+.sub { position: relative; text-align: center; margin-top: 14px; font-size: 20px; color: var(--ink-2); }
+.sub em { font-style: normal; color: var(--cyan); font-weight: 700; }
+.vs { position: relative; display: grid; grid-template-columns: 1fr 840px 1fr; align-items: start; margin-top: 28px; padding: 0 40px; }
+.hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px; }
+.hero .circ { width: 150px; height: 150px; box-shadow: 0 0 0 4px var(--cyan), 0 0 40px rgba(86, 217, 242, .35); }
+.hero.foe .circ { box-shadow: 0 0 0 4px var(--red), 0 0 40px rgba(255, 90, 106, .35); }
+.hero b { font-size: 20px; font-weight: 800; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.hero span { font-size: 19px; color: var(--cyan); font-weight: 700; }
+.cmp { display: flex; flex-direction: column; gap: 20px; padding-top: 6px; }
+.line { display: grid; grid-template-columns: 1fr 190px 1fr; align-items: center; gap: 18px; }
+.half { display: flex; align-items: center; gap: 14px; }
+.half.l { flex-direction: row-reverse; }
+.half .bar { flex: 1; height: 26px; border-radius: 13px; background: rgba(255, 255, 255, .05); position: relative; overflow: hidden; }
+.half .bar i { position: absolute; top: 0; bottom: 0; border-radius: 13px; animation: grow 1s .5s both; }
+.half.l .bar i { right: 0; transform-origin: right; }
+.half.r .bar i { left: 0; transform-origin: left; }
+.half b { width: 130px; font-size: 26px; font-weight: 800; white-space: nowrap; }
+.half.l b { text-align: right; }
+.lab { text-align: center; font-size: 19px; font-weight: 700; color: var(--ink-2); display: flex; align-items: center; justify-content: center; gap: 10px; }
+.lab i { width: 14px; height: 14px; border-radius: 50%; flex: none; }
+.c-all { background: linear-gradient(90deg, #3a5578, #6b86a8); } .c-dead { background: linear-gradient(90deg, #b8323f, var(--red)); } .c-fix { background: linear-gradient(90deg, #b87b1f, var(--amber)); } .c-live { background: linear-gradient(90deg, #2fb6d6, var(--cyan)); }
+.losses { position: absolute; left: 40px; right: 40px; bottom: 200px; display: flex; justify-content: center; gap: 120px; }
+.ls { display: flex; gap: 18px; }
+.ls .u { text-align: center; }
+.ls .circ { width: 84px; height: 84px; box-shadow: inset 0 0 0 2px rgba(255, 90, 106, .45); }
+.ls .circ img { object-fit: contain; padding: 10%; }
+.ls b { display: block; margin-top: 6px; font-size: 19px; font-weight: 800; color: var(--red); white-space: nowrap; }
+.reward { position: absolute; left: 40px; right: 40px; bottom: 112px; display: flex; align-items: center; justify-content: center; gap: 46px; }
+.rw { display: flex; align-items: center; gap: 14px; }
+.rw img { width: 56px; height: 56px; object-fit: contain; }
+.rw b { font-size: 32px; font-weight: 800; color: var(--green); white-space: nowrap; }
+.rw b.g { color: var(--ink); }
+.acts { position: absolute; left: 40px; right: 40px; bottom: 28px; display: flex; justify-content: center; gap: 16px; }
+html.is-empty .empty-state { left: 286px; }
+</style></head>
+<body><div class="stage"><img class="hdr" src="../assets/game-header.png"><main class="area">
+  <nav class="tabs" id="tabs"></nav>
+  <div class="mails when-full" id="mails"></div>
+  <section class="letter when-full" id="letter"></section>
+  <div class="empty-state"><img id="emptyImg" alt=""><b>Писем пока нет</b><span>Отчёты придут сюда после первого полёта</span></div>
+</main></div>
+<script src="../frame.js"></script><script src="data.js"></script>
+<script>
+const { A, fmt, short, CATS, items, battle: B } = MSG;
+const S = (n) => short(n).replace('+', '');
+document.getElementById('emptyImg').src = A.empty;
+document.getElementById('tabs').innerHTML = CATS.map((c, i) => {
+  const n = items.filter((x) => x.unread && (c.id === 'all' || x.cat === c.id)).length;
+  return `<div class="tab ${i === 1 ? 'on' : ''}"><div class="circ pad"><img src="${A.icon(c.icon)}"></div>${n ? `<span class="badge">${n}</span>` : ''}</div>`;
+}).join('') + '<span class="sp"></span><button class="btn icon" title="Прочитать все"><svg viewBox="0 0 24 24"><path d="m4 12 5 5L20 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>';
+const battles = items.filter((x) => x.cat === 'battle');
+const pic = (x) => x.kind === 'sun' ? A.sun : A.face(x.fac);
+document.getElementById('mails').innerHTML = battles.slice(0, 8).map((x, i) => `<div class="mail ${x.tone} ${x.unread ? '' : 'read'} ${i === 0 ? 'sel' : ''}" style="animation-delay:${i * 40}ms"><div class="circ"><img src="${pic(x)}"></div>${x.unread && i ? '<i class="new"></i>' : ''}</div>`).join('') + `<span class="more">+${battles.length - 8}</span>`;
+const me = { all: B.me.before, dead: B.me.before - B.me.after - 104_000, fix: 104_000, live: B.me.after };
+const foe = { all: B.foe.before, dead: B.foe.before - 150_000, fix: 150_000, live: 0 };
+const mx = Math.max(me.all, foe.all);
+const line = (k, label) => `<div class="line"><div class="half l"><b>${fmt(me[k])}</b><div class="bar"><i class="c-${k}" style="width:${me[k] / mx * 100}%"></i></div></div><div class="lab"><i class="c-${k}"></i>${label}</div><div class="half r"><div class="bar"><i class="c-${k}" style="width:${foe[k] / mx * 100}%"></i></div><b>${fmt(foe[k])}</b></div></div>`;
+document.getElementById('letter').innerHTML = `<img class="bg" src="${A.spaceBg}">
+  <div class="ribbon"><b>ПОБЕДА</b></div>
+  <div class="sub">Атака на <em>[${B.foe.coord}]</em> · ${B.rounds} раундов · 23:41</div>
+  <div class="vs">
+    <div class="hero"><div class="circ"><img src="${A.face(B.me.fac)}"></div><b>${B.me.name}</b><span>Вы</span></div>
+    <div class="cmp">${line('all', 'Кораблей')}${line('dead', 'Сгорело')}${line('fix', 'В ремонт')}${line('live', 'Уцелело')}</div>
+    <div class="hero foe"><div class="circ"><img src="${A.face(B.foe.fac)}"></div><b>${B.foe.name}</b><span>[${B.foe.coord}]</span></div>
+  </div>
+  <div class="losses"><div class="ls">${B.myShips.slice(0, 3).map((x) => `<div class="u"><div class="circ"><img src="${A.ship(B.me.race, x[0])}"></div><b>${short(-x[3])}</b></div>`).join('')}</div><div class="ls">${B.foeShips.map((x) => `<div class="u"><div class="circ"><img src="${A.ship(B.foe.race, x[0])}"></div><b>${short(-x[3])}</b></div>`).join('')}</div></div>
+  <div class="reward">
+    <div class="rw"><img src="${A.res('metal')}"><b>${short(B.loot.metal)}</b></div>
+    <div class="rw"><img src="${A.res('mineral')}"><b>${short(B.loot.mineral)}</b></div>
+    <div class="rw"><img src="${A.res('gas')}"><b>${short(B.loot.gas)}</b></div>
+    <div class="rw"><img src="${A.res('debris')}"><b class="g">${S(B.debris)}</b></div>
+  </div>
+  <div class="acts"><button class="btn primary">Повторить атаку</button><button class="btn">Собрать обломки</button><button class="btn">Подробно по раундам</button><button class="btn icon danger"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button></div>`;
+</script></body></html>
