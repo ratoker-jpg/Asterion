@@ -4,8 +4,7 @@
     "planet-orbit": {
       "ut-twinkle @ i": "gpu",
       "ut-drift @ i": "gpu",
-      "asterion-header-resource-critical-pulse @ i": "gpu",
-      "ut-glow-peak @ i::after": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
       "ut-glow-peak @ hdr-route__icon::after": "gpu",
       "ut-ring-spin @ planet-orbit__ring::before": "gpu",
       "ut-sheen @ i::after": "gpu"
@@ -13,8 +12,7 @@
     "header-storage-pulse": {
       "ut-twinkle @ i": "gpu",
       "ut-drift @ i": "gpu",
-      "asterion-header-resource-critical-pulse @ i": "gpu",
-      "ut-glow-peak @ i::after": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
       "ut-glow-peak @ hdr-route__icon::after": "gpu",
       "ut-ring-spin @ planet-orbit__ring::before": "gpu",
       "ut-sheen @ i::after": "gpu"
@@ -22,8 +20,7 @@
     "header-fleets-alarm": {
       "ut-twinkle @ i": "gpu",
       "ut-drift @ i": "gpu",
-      "asterion-header-resource-critical-pulse @ i": "gpu",
-      "ut-glow-peak @ i::after": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
       "ut-glow-peak @ hdr-route__icon::after": "gpu",
       "ut-ring-spin @ planet-orbit__ring::before": "gpu",
       "ut-sheen @ i::after": "gpu"
@@ -31,8 +28,7 @@
     "zone-building-under-construction": {
       "ut-twinkle @ i": "gpu",
       "ut-drift @ i": "gpu",
-      "asterion-header-resource-critical-pulse @ i": "gpu",
-      "ut-glow-peak @ i::after": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
       "ut-glow-peak @ hdr-route__icon::after": "gpu",
       "ut-glow-peak @ resource-building-art__glow": "gpu",
       "ut-sheen @ span::after": "gpu"
@@ -41,8 +37,7 @@
     "zone-gate-under-construction": {
       "ut-twinkle @ i": "gpu",
       "ut-drift @ i": "gpu",
-      "asterion-header-resource-critical-pulse @ i": "gpu",
-      "ut-glow-peak @ i::after": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
       "ut-glow-peak @ hdr-route__icon::after": "gpu",
       "ut-glow-peak @ resource-building-art__glow": "gpu",
       "ut-sheen @ i::after": "gpu",
@@ -52,8 +47,7 @@
     "universe-map": {
       "ut-twinkle @ i": "gpu",
       "ut-drift @ i": "gpu",
-      "asterion-header-resource-critical-pulse @ i": "gpu",
-      "ut-glow-peak @ i::after": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
       "ut-glow-peak @ hdr-route__icon::after": "gpu",
       "shield-aura-breath @ shield-aura": "gpu",
       "shield-aura-rim-breath @ shield-aura__rim": "gpu",
@@ -63,8 +57,7 @@
     "universe-shield-dome": {
       "ut-twinkle @ i": "gpu",
       "ut-drift @ i": "gpu",
-      "asterion-header-resource-critical-pulse @ i": "gpu",
-      "ut-glow-peak @ i::after": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
       "ut-glow-peak @ hdr-route__icon::after": "gpu",
       "shield-aura-breath @ shield-aura": "gpu",
       "shield-aura-rim-breath @ shield-aura__rim": "gpu",
@@ -74,22 +67,20 @@
     "fleets-incoming-attack": {
       "ut-twinkle @ i": "gpu",
       "ut-drift @ i": "gpu",
-      "asterion-header-resource-critical-pulse @ i": "gpu",
-      "ut-glow-peak @ i::after": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
       "ut-glow-peak @ hdr-route__icon::after": "gpu",
       "shield-aura-breath @ shield-aura": "gpu",
       "shield-aura-rim-breath @ shield-aura__rim": "gpu",
       "shield-aura-spin @ shield-aura__rim": "gpu",
       "universe-pirate-signal @ system-planet::before": "gpu",
       "ut-glow-peak @ fleet-root-v2::after": "gpu",
-      "fleet-incoming-pulse @ b": "gpu",
-      "ut-glow-peak @ b::after": "gpu"
+      "fleet-incoming-badge-glow @ fleet-incoming-alert-v2::before": "gpu",
+      "fleet-incoming-pulse @ b": "gpu"
     },
     "recycling-ready": {
       "ut-twinkle @ i": "gpu",
       "ut-drift @ i": "gpu",
-      "asterion-header-resource-critical-pulse @ i": "gpu",
-      "ut-glow-peak @ i::after": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
       "ut-glow-peak @ hdr-route__icon::after": "gpu",
       "shield-aura-breath @ shield-aura": "gpu",
       "shield-aura-rim-breath @ shield-aura__rim": "gpu",
@@ -101,8 +92,7 @@
     "bots-distribute": {
       "ut-twinkle @ i": "gpu",
       "ut-drift @ i": "gpu",
-      "asterion-header-resource-critical-pulse @ i": "gpu",
-      "ut-glow-peak @ i::after": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
       "ut-glow-peak @ hdr-route__icon::after": "gpu",
       "shield-aura-breath @ shield-aura": "gpu",
       "shield-aura-rim-breath @ shield-aura__rim": "gpu",
@@ -112,8 +102,7 @@
     "queued-stripes": {
       "ut-twinkle @ i": "gpu",
       "ut-drift @ i": "gpu",
-      "asterion-header-resource-critical-pulse @ i": "gpu",
-      "ut-glow-peak @ i::after": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
       "ut-glow-peak @ hdr-route__icon::after": "gpu",
       "shield-aura-breath @ shield-aura": "gpu",
       "shield-aura-rim-breath @ shield-aura__rim": "gpu",
@@ -125,8 +114,7 @@
     "flight-plan-pick": {
       "ut-twinkle @ i": "gpu",
       "ut-drift @ i": "gpu",
-      "asterion-header-resource-critical-pulse @ i": "gpu",
-      "ut-glow-peak @ i::after": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
       "ut-glow-peak @ hdr-route__icon::after": "gpu",
       "shield-aura-breath @ shield-aura": "gpu",
       "shield-aura-rim-breath @ shield-aura__rim": "gpu",
@@ -137,8 +125,7 @@
     "sun-raid-alarm": {
       "ut-twinkle @ i": "gpu",
       "ut-drift @ i": "gpu",
-      "asterion-header-resource-critical-pulse @ i": "gpu",
-      "ut-glow-peak @ i::after": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
       "ut-glow-peak @ hdr-route__icon::after": "gpu",
       "shield-aura-breath @ shield-aura": "gpu",
       "shield-aura-rim-breath @ shield-aura__rim": "gpu",
@@ -149,8 +136,7 @@
     "whats-new-mark": {
       "ut-twinkle @ i": "gpu",
       "ut-drift @ i": "gpu",
-      "asterion-header-resource-critical-pulse @ i": "gpu",
-      "ut-glow-peak @ i::after": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
       "ut-glow-peak @ hdr-route__icon::after": "gpu",
       "shield-aura-breath @ shield-aura": "gpu",
       "shield-aura-rim-breath @ shield-aura__rim": "gpu",
@@ -161,8 +147,7 @@
     "atlas-online": {
       "ut-twinkle @ i": "gpu",
       "ut-drift @ i": "gpu",
-      "asterion-header-resource-critical-pulse @ i": "gpu",
-      "ut-glow-peak @ i::after": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
       "ut-glow-peak @ hdr-route__icon::after": "gpu",
       "shield-aura-breath @ shield-aura": "gpu",
       "shield-aura-rim-breath @ shield-aura__rim": "gpu",
@@ -175,8 +160,7 @@
     "planet-orbit": {
       "ut-twinkle @ i": "gpu",
       "ut-drift @ i": "gpu",
-      "asterion-header-resource-critical-pulse @ i": "gpu",
-      "ut-glow-peak @ i::after": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
       "ut-glow-peak @ hdr-route__icon::after": "gpu",
       "ut-ring-spin @ planet-orbit__ring::before": "gpu",
       "ut-sheen @ i::after": "gpu"
@@ -184,8 +168,7 @@
     "header-storage-pulse": {
       "ut-twinkle @ i": "gpu",
       "ut-drift @ i": "gpu",
-      "asterion-header-resource-critical-pulse @ i": "gpu",
-      "ut-glow-peak @ i::after": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
       "ut-glow-peak @ hdr-route__icon::after": "gpu",
       "ut-ring-spin @ planet-orbit__ring::before": "gpu",
       "ut-sheen @ i::after": "gpu"
@@ -193,8 +176,7 @@
     "header-fleets-alarm": {
       "ut-twinkle @ i": "gpu",
       "ut-drift @ i": "gpu",
-      "asterion-header-resource-critical-pulse @ i": "gpu",
-      "ut-glow-peak @ i::after": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
       "ut-glow-peak @ hdr-route__icon::after": "gpu",
       "ut-ring-spin @ planet-orbit__ring::before": "gpu",
       "ut-sheen @ i::after": "gpu"
@@ -202,8 +184,7 @@
     "zone-building-under-construction": {
       "ut-twinkle @ i": "gpu",
       "ut-drift @ i": "gpu",
-      "asterion-header-resource-critical-pulse @ i": "gpu",
-      "ut-glow-peak @ i::after": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
       "ut-glow-peak @ hdr-route__icon::after": "gpu",
       "ut-glow-peak @ resource-building-art__glow": "gpu",
       "ut-sheen @ span::after": "gpu"
@@ -212,8 +193,7 @@
     "zone-gate-under-construction": {
       "ut-twinkle @ i": "gpu",
       "ut-drift @ i": "gpu",
-      "asterion-header-resource-critical-pulse @ i": "gpu",
-      "ut-glow-peak @ i::after": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
       "ut-glow-peak @ hdr-route__icon::after": "gpu",
       "ut-glow-peak @ resource-building-art__glow": "gpu",
       "ut-sheen @ i::after": "gpu",
@@ -223,8 +203,7 @@
     "universe-map": {
       "ut-twinkle @ i": "gpu",
       "ut-drift @ i": "gpu",
-      "asterion-header-resource-critical-pulse @ i": "gpu",
-      "ut-glow-peak @ i::after": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
       "ut-glow-peak @ hdr-route__icon::after": "gpu",
       "shield-aura-breath @ shield-aura": "gpu",
       "shield-aura-rim-breath @ shield-aura__rim": "gpu",
@@ -234,8 +213,7 @@
     "universe-shield-dome": {
       "ut-twinkle @ i": "gpu",
       "ut-drift @ i": "gpu",
-      "asterion-header-resource-critical-pulse @ i": "gpu",
-      "ut-glow-peak @ i::after": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
       "ut-glow-peak @ hdr-route__icon::after": "gpu",
       "shield-aura-breath @ shield-aura": "gpu",
       "shield-aura-rim-breath @ shield-aura__rim": "gpu",
@@ -245,22 +223,20 @@
     "fleets-incoming-attack": {
       "ut-twinkle @ i": "gpu",
       "ut-drift @ i": "gpu",
-      "asterion-header-resource-critical-pulse @ i": "gpu",
-      "ut-glow-peak @ i::after": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
       "ut-glow-peak @ hdr-route__icon::after": "gpu",
       "shield-aura-breath @ shield-aura": "gpu",
       "shield-aura-rim-breath @ shield-aura__rim": "gpu",
       "shield-aura-spin @ shield-aura__rim": "gpu",
       "universe-pirate-signal @ system-planet::before": "gpu",
       "ut-glow-peak @ fleet-root-v2::after": "gpu",
-      "fleet-incoming-pulse @ b": "gpu",
-      "ut-glow-peak @ b::after": "gpu"
+      "fleet-incoming-badge-glow @ fleet-incoming-alert-v2::before": "gpu",
+      "fleet-incoming-pulse @ b": "gpu"
     },
     "recycling-ready": {
       "ut-twinkle @ i": "gpu",
       "ut-drift @ i": "gpu",
-      "asterion-header-resource-critical-pulse @ i": "gpu",
-      "ut-glow-peak @ i::after": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
       "ut-glow-peak @ hdr-route__icon::after": "gpu",
       "shield-aura-breath @ shield-aura": "gpu",
       "shield-aura-rim-breath @ shield-aura__rim": "gpu",
@@ -272,8 +248,7 @@
     "bots-distribute": {
       "ut-twinkle @ i": "gpu",
       "ut-drift @ i": "gpu",
-      "asterion-header-resource-critical-pulse @ i": "gpu",
-      "ut-glow-peak @ i::after": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
       "ut-glow-peak @ hdr-route__icon::after": "gpu",
       "shield-aura-breath @ shield-aura": "gpu",
       "shield-aura-rim-breath @ shield-aura__rim": "gpu",
@@ -283,8 +258,7 @@
     "queued-stripes": {
       "ut-twinkle @ i": "gpu",
       "ut-drift @ i": "gpu",
-      "asterion-header-resource-critical-pulse @ i": "gpu",
-      "ut-glow-peak @ i::after": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
       "ut-glow-peak @ hdr-route__icon::after": "gpu",
       "shield-aura-breath @ shield-aura": "gpu",
       "shield-aura-rim-breath @ shield-aura__rim": "gpu",
@@ -296,8 +270,7 @@
     "flight-plan-pick": {
       "ut-twinkle @ i": "gpu",
       "ut-drift @ i": "gpu",
-      "asterion-header-resource-critical-pulse @ i": "gpu",
-      "ut-glow-peak @ i::after": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
       "ut-glow-peak @ hdr-route__icon::after": "gpu",
       "shield-aura-breath @ shield-aura": "gpu",
       "shield-aura-rim-breath @ shield-aura__rim": "gpu",
@@ -308,8 +281,7 @@
     "sun-raid-alarm": {
       "ut-twinkle @ i": "gpu",
       "ut-drift @ i": "gpu",
-      "asterion-header-resource-critical-pulse @ i": "gpu",
-      "ut-glow-peak @ i::after": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
       "ut-glow-peak @ hdr-route__icon::after": "gpu",
       "shield-aura-breath @ shield-aura": "gpu",
       "shield-aura-rim-breath @ shield-aura__rim": "gpu",
@@ -320,8 +292,7 @@
     "whats-new-mark": {
       "ut-twinkle @ i": "gpu",
       "ut-drift @ i": "gpu",
-      "asterion-header-resource-critical-pulse @ i": "gpu",
-      "ut-glow-peak @ i::after": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
       "ut-glow-peak @ hdr-route__icon::after": "gpu",
       "shield-aura-breath @ shield-aura": "gpu",
       "shield-aura-rim-breath @ shield-aura__rim": "gpu",
@@ -332,8 +303,7 @@
     "atlas-online": {
       "ut-twinkle @ i": "gpu",
       "ut-drift @ i": "gpu",
-      "asterion-header-resource-critical-pulse @ i": "gpu",
-      "ut-glow-peak @ i::after": "gpu",
+      "asterion-header-resource-critical-pulse @ i": "filter",
       "ut-glow-peak @ hdr-route__icon::after": "gpu",
       "shield-aura-breath @ shield-aura": "gpu",
       "shield-aura-rim-breath @ shield-aura__rim": "gpu",
