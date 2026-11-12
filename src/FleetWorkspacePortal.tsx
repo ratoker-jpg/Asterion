@@ -2098,7 +2098,6 @@ function FleetWorkspace({
                     {ACTIVE_RUNTIME_MODE === 'test' ? <button type="button"
                       data-qa-bot01-exploration-scenario
                       onClick={() => window.dispatchEvent(new CustomEvent(BOT01_EXPLORATION_SCENARIO_REQUEST_EVENT,{detail:{now:Date.now()}}))}
-                      title="Выбрать действующий свободный объект и направить туда реальный флот Bot 01"
                     >BOT 01 · ЗАХВАТИТЬ ОБЪЕКТ (ТЕСТ)</button> : null}
                   </div>
                 </>}
