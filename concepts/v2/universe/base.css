@@ -1,0 +1,16 @@
+@font-face { font-family: 'Montserrat'; src: url('../../../public/fonts/Montserrat-Variable.ttf') format('truetype'); font-weight: 100 900; }
+/* One rem = 13px at 720p, 19.5px at 1080p: proportions stay the same, extra WIDTH is real space. */
+html { font-size: 1.806vh; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { width: 100vw; height: 100vh; overflow: hidden; font-family: 'Montserrat', sans-serif; color: #e8eef7; background: #05080e; display: flex; flex-direction: column; font-variant-numeric: tabular-nums; }
+img { display: block; }
+.hud { height: 3.4rem; flex: none; display: flex; align-items: center; gap: 1.2rem; padding: 0 1.2rem; background: linear-gradient(#0c131e, #080d15); border-bottom: 1px solid #1a2636; position: relative; z-index: 5; }
+.hud-res { display: flex; align-items: center; gap: .45rem; }
+.hud-res img { width: 1.6rem; height: 1.6rem; object-fit: contain; }
+.hud-res small { display: block; font-size: .62rem; color: #7f8da1; }
+.hud-res b { font-size: .86rem; font-weight: 700; white-space: nowrap; }
+.hud-nav { margin-left: auto; display: flex; gap: 1.4rem; font-size: .8rem; color: #8e9bb0; font-weight: 600; }
+.hud-nav .on { color: #fff; box-shadow: 0 .2rem 0 -.05rem #56d9f2; }
+.hud-note { position: absolute; right: .6rem; bottom: -1.3rem; font-size: .55rem; color: #4a5566; letter-spacing: .04em; }
+main { flex: 1; min-height: 0; position: relative; }
+.clamp2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }

@@ -1,0 +1,14 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Вселенная · 3 · Спиральный рукав</title><link rel="stylesheet" href="orrery.css"></head><body><script src="data.js"></script><script src="orrery.js"></script><script>
+const CX = 960, CY = 620, T = 0.58, K = 8.3, th = (r) => K * Math.log(r / 200);
+const arm = Array.from({ length: 3200 }, () => { const u = Math.random(); const r = 120 + u * 700; return { r: r + (Math.random() - .5) * 70, th: th(Math.max(r, 60)) + (Math.random() - .5) * 0.35 + (Math.random() < .5 ? 0 : Math.PI), s: Math.random() * 1.5 + .4, o: Math.random() }; });
+const path = (rot, off) => { let d = ''; for (let r = 150; r < 760; r += 5) { const a = th(r) + rot + off; d += (d ? 'L' : 'M') + (CX + r * Math.cos(a)).toFixed(1) + ' ' + (CY + r * T * Math.sin(a)).toFixed(1); } return d; };
+makeOrrery({
+  quiet: true, cls: 'quiet',
+  cx: CX, cy: CY, tilt: T, sun: 3, sunSize: 190, sunColor: 'rgba(120,220,255,.3)', labels: 'outward', skyIn: '#06121c', skyOut: '#010306',
+  bg: (g, rot) => { for (const p of arm) { const a = p.th + rot; g.globalAlpha = 0.06 + p.o * 0.2; g.fillStyle = p.r < 450 ? '#9fe6ff' : '#7aa8ff';
+      g.fillRect(CX + p.r * Math.cos(a), CY + p.r * T * Math.sin(a), p.s, p.s); } g.globalAlpha = 1; },
+  orbits: (rot) => `<path d="${path(rot, 0)}" fill="none" stroke="rgba(130,210,255,.35)" stroke-width="1.5"/><path d="${path(rot, 0)}" fill="none" stroke="rgba(130,210,255,.07)" stroke-width="40"/>`,
+  place: (i, rot) => { const r = 200 + i * 21.7; const a = th(r) + rot; const sn = Math.sin(a);
+    return { x: CX + r * Math.cos(a), y: CY + r * T * sn, s: 0.82 + 0.18 * (sn + 1) / 2 + i * 0.006, lit: 0.8 + 0.2 * (sn + 1) / 2 }; },
+});
+</script></body></html>

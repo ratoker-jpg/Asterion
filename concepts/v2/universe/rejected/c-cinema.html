@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Вселенная · C · Кино</title>
+<link rel="stylesheet" href="../base.css">
+<style>
+:root { --amber: #ffc069; --cyan: #56d9f2; --dim: #9aa3b2; }
+main { display: grid; grid-template-rows: auto 1fr auto; overflow: hidden; }
+.bg { position: absolute; inset: 0; background: url(../../../../assets/source/universe-navigation/galaxies/galaxy.nebula-03.png) 70% 40%/cover; opacity: .55; }
+.bg::after { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 22% 55%, transparent 0 18%, rgba(4,6,10,.55) 45%, rgba(4,6,10,.92) 85%), linear-gradient(transparent 70%, #04060a); }
+.top { position: relative; display: flex; align-items: center; gap: 1rem; padding: 1rem 1.6rem 0; }
+.top h1 { font-size: .8rem; letter-spacing: .2em; text-transform: uppercase; color: var(--dim); font-weight: 700; }
+.top h1 b { color: #fff; }
+.jump { margin-left: auto; display: flex; gap: .4rem; align-items: center; }
+.jump span { font-size: .7rem; font-weight: 700; padding: .35rem .7rem; border-radius: 2rem; background: rgba(255,255,255,.06); color: var(--dim); }
+.jump .cur { background: #fff; color: #05070b; }
+.jump small { font-size: .6rem; color: var(--dim); margin-left: .3rem; }
+.stage { position: relative; display: grid; grid-template-columns: 24rem minmax(0, 1fr) 19rem; align-items: center; gap: 1.4rem; padding: 0 1.6rem; min-height: 0; }
+.hero { position: relative; height: 100%; display: grid; place-items: center; }
+.hero img { width: 25rem; height: 25rem; object-fit: contain; filter: drop-shadow(0 0 3rem rgba(255,140,60,.35)); margin-left: -3rem; }
+.hero .deb { position: absolute; right: 1rem; bottom: 18%; width: 6rem; opacity: .9; }
+.info { min-width: 0; }
+.kick { display: inline-flex; gap: .5rem; align-items: center; font-size: .66rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: #ff6b78; }
+.kick i { width: .55rem; height: .55rem; border-radius: 50%; background: #ff3b4e; box-shadow: 0 0 .8rem #ff3b4e; }
+.info h2 { font-size: 2.05rem; line-height: 1.08; font-weight: 800; margin: .35rem 0 .3rem; letter-spacing: -.01em; }
+.co { font-size: .8rem; color: var(--amber); font-weight: 800; }
+.co span { color: var(--dim); font-weight: 600; }
+.who { display: flex; gap: .7rem; align-items: center; margin: 1rem 0; }
+.who img { width: 2.8rem; height: 2.8rem; object-fit: contain; }
+.who b { font-size: .8rem; display: block; } .who small { font-size: .66rem; color: var(--dim); display: block; line-height: 1.4; }
+.who small i { font-style: normal; color: #ff6b78; font-weight: 800; }
+.pts { display: flex; gap: 1.6rem; flex-wrap: wrap; }
+.pts div small { font-size: .58rem; color: var(--dim); letter-spacing: .14em; text-transform: uppercase; }
+.pts div b { display: block; font-size: .92rem; font-weight: 800; }
+.spy { margin-top: .9rem; font-size: .7rem; color: var(--dim); line-height: 1.55; max-width: 40rem; }
+.spy b { color: #fff; } .spy .ago { color: #7fe0a0; font-weight: 800; }
+.fam { margin-top: 1rem; display: flex; gap: .5rem; flex-wrap: wrap; }
+.fam div { display: flex; flex-direction: column; align-items: center; width: 4.2rem; }
+.fam img { width: 2.2rem; height: 2.2rem; object-fit: contain; }
+.fam div.here img { outline: 2px solid #ff3b4e; outline-offset: 2px; border-radius: 50%; }
+.fam em { font-style: normal; font-size: .58rem; color: var(--amber); font-weight: 800; margin-top: .2rem; }
+.fam-h { margin-top: 1rem; font-size: .58rem; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
+.acts { display: grid; gap: .65rem; }
+.act { display: grid; grid-template-columns: 4.4rem 1fr; gap: .9rem; align-items: center; }
+.act img { width: 4.4rem; height: 4.4rem; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 2px rgba(255,255,255,.12), 0 .6rem 1.6rem rgba(0,0,0,.5); }
+.act b { font-size: 1.02rem; font-weight: 800; display: block; }
+.act span { font-size: .8rem; color: var(--cyan); font-weight: 800; }
+.act.main b { color: #ff8f98; } .act.main img { box-shadow: 0 0 0 2px #ff3b4e, 0 0 1.6rem rgba(255,59,78,.45); }
+.act.off { opacity: .4; } .act.off span { color: var(--dim); font-weight: 600; font-size: .7rem; }
+.strip { position: relative; display: grid; grid-template-columns: repeat(24, 1fr); gap: .25rem; padding: .6rem 1.6rem 1rem; background: linear-gradient(transparent, rgba(0,0,0,.6) 30%); }
+.tile { position: relative; height: 5.6rem; border-radius: .5rem; background: rgba(255,255,255,.035); display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding-bottom: .35rem; overflow: hidden; }
+.tile::after { content: ''; position: absolute; left: 20%; right: 20%; bottom: 0; height: 3px; border-radius: 3px 3px 0 0; background: var(--c); }
+.tile.t-empty::after, .tile.t-uninhabited::after { display: none; }
+.tile img { width: 2.7rem; height: 2.7rem; object-fit: contain; margin-bottom: .2rem; }
+.tile.t-uninhabited img { filter: grayscale(.8) brightness(.55); width: 2rem; height: 2rem; }
+.tile b { position: absolute; top: .25rem; left: .35rem; font-size: .6rem; color: var(--dim); }
+.tile small { font-size: .56rem; font-weight: 800; color: var(--c); white-space: nowrap; }
+.tile .d { position: absolute; top: .3rem; right: .3rem; width: .5rem; height: .5rem; transform: rotate(45deg); background: var(--amber); }
+.tile.sel { background: rgba(255,255,255,.12); box-shadow: inset 0 0 0 1px rgba(255,255,255,.5); }
+.tile .nm { display: none; }
+.strip-h { position: absolute; left: 1.6rem; top: -.5rem; font-size: .58rem; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
+@media (min-aspect-ratio: 2/1) {
+  .stage { grid-template-columns: 36rem minmax(0, 1fr) 24rem; }
+  .hero img { width: 36rem; height: 36rem; margin-left: 0; }
+  .info h2 { font-size: 2.5rem; }
+  .tile { height: 7rem; } .tile img { width: 3.4rem; height: 3.4rem; }
+  .tile .nm { display: block; font-size: .56rem; color: #d7dde6; text-align: center; line-height: 1.2; padding: 0 .2rem; max-height: 2.4em; overflow: hidden; }
+}
+.emptyh { font-size: .8rem; color: var(--dim); line-height: 1.6; max-width: 32rem; margin-top: .8rem; }
+</style></head>
+<body>
+<script src="../data.js"></script>
+<script>
+document.write(headerHTML());
+const S = SELECTED;
+const WORD = { range: 'цель', neutral: 'вне', protected: 'щит', pirate: 'пираты', anomaly: 'аномалия', unique: 'объект', self: 'вы', ally: 'союз', enemy: 'враг', asteroid: 'газ' };
+const tile = (o) => `<div class="tile t-${o.tone} ${o.pos === S.pos ? 'sel' : ''}" style="--c:${TONE[o.tone].color}"><b>${o.pos}</b>${o.debris ? '<i class="d"></i>' : ''}
+  ${o.art ? `<img src="${o.art}">` : ''}${o.name && o.tone !== 'uninhabited' && o.kind !== 'asteroid' ? `<span class="nm">${o.name}</span>` : ''}<small>${o.kind === 'empty' || o.tone === 'uninhabited' ? '' : o.ally ? `[${ALLIANCES[o.ally].tag}]` : WORD[o.tone]}</small></div>`;
+const stage = S.tone === 'empty' ? `
+  <div class="hero"><div style="width:18rem;height:18rem;border-radius:50%;border:1px dashed rgba(255,255,255,.2)"></div></div>
+  <div class="info"><span class="kick" style="color:var(--dim)"><i style="background:#3d4757;box-shadow:none"></i>Позиция ${S.pos}</span><h2>${S.name}</h2><div class="co">${S.coord} <span>· в системе 3 необитаемые планеты, игроков нет</span></div>
+    <p class="emptyh">${S.status}. Обломков на орбите нет. Переработчики можно отправить сюда заранее, они дождутся боя.</p></div>
+  <div class="acts">${S.actions.map((a) => `<div class="act ${a.off ? 'off' : ''}"><img src="${ART.action(a.k)}"><div><b>${a.label}</b><span>${a.off || a.time}</span></div></div>`).join('')}</div>`
+: `
+  <div class="hero"><img src="${S.planets[0].art}"><img class="deb" src="${ART.debris(2)}"></div>
+  <div class="info"><span class="kick"><i></i>${S.status}</span><h2>${S.name}</h2><div class="co">${S.coord} <span>· позиция ${S.pos} · обломки на орбите ${fmt(S.debris)}</span></div>
+    <div class="who"><img src="${ART.emblem(S.race)}"><div><b>${S.owner}</b><small>${RACE[S.race]} · ${S.online}</small><small><i>[${S.ally.tag}]</i> ${S.ally.name}</small></div></div>
+    <div class="pts">${S.points.map((p) => `<div><small>${p.label}</small><b>${fmt(p.v)}</b></div>`).join('')}</div>
+    <p class="spy">Разведка <span class="ago">${S.spy.ago}</span>: металл <b>${fmt(S.spy.metal)}</b> · минералы <b>${fmt(S.spy.mineral)}</b> · газ <b>${fmt(S.spy.gas)}</b> · флот <b>${fmt(S.spy.fleet)}</b> · оборона <b>${fmt(S.spy.defence)}</b></p>
+    <div class="fam-h">Все планеты игрока · ${S.planets.length} из 7</div>
+    <div class="fam">${S.planets.map((p) => `<div class="${p.here ? 'here' : ''}"><img src="${p.art}"><em>${p.coord}</em></div>`).join('')}</div></div>
+  <div class="acts">${S.actions.map((a) => `<div class="act ${a.main ? 'main' : ''} ${a.off ? 'off' : ''}"><img src="${ART.action(a.k)}"><div><b>${a.label}</b><span>${a.off || a.time}</span></div></div>`).join('')}</div>`;
+const n = CURRENT_SYSTEM, p2 = (x) => String(x).padStart(2, '0');
+document.write(`<main><div class="bg"></div>
+  <div class="top"><h1>Галактика 1 · <b>Система ${p2(n)}</b> · Солнце 70%</h1>
+    <div class="jump"><span>‹ ${p2(n - 1)}<small>${SYSTEMS[n - 2].enemy} враг</small></span><span class="cur">${p2(n)}</span><span>${p2(n + 1)} ›<small>${SYSTEMS[n].debris ? 'обломки' : SYSTEMS[n].ally + ' союз'}</small></span><span>Все 40 систем</span><span>Домой</span></div></div>
+  <div class="stage">${stage}</div>
+  <div class="strip"><span class="strip-h">Система ${p2(n)} · 24 позиции</span>${SYSTEM.map(tile).join('')}</div>
+</main>`);
+</script>
+</body></html>

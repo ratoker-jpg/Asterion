@@ -1,0 +1,16 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Вселенная · 2 · Наклонный диск</title><link rel="stylesheet" href="orrery.css"></head><body><script src="data.js"></script><script src="orrery.js"></script><script>
+const CX = 960, CY = 630, T = 0.46;
+const rx = (k) => 290 + k * 175;
+const dust = Array.from({ length: 2600 }, () => { const r = 230 + Math.pow(Math.random(), 0.8) * 820; return { r, a: Math.random() * 6.283, s: Math.random() * 1.6 + 0.4, o: Math.random() }; });
+makeOrrery({
+  quiet: true, cls: 'quiet',
+  cx: CX, cy: CY, tilt: T, sun: 6, sunSize: 150, sunColor: 'rgba(255,150,70,.35)', labels: 'pin', skyIn: '#160d08', skyOut: '#020104',
+  bg: (g, rot) => { for (const d of dust) { const a = d.a + rot; const sn = Math.sin(a);
+      g.globalAlpha = (0.08 + d.o * 0.22) * (0.55 + 0.45 * (sn + 1) / 2); g.fillStyle = d.r < 500 ? '#ffb27a' : '#c99bff';
+      g.fillRect(CX + d.r * Math.cos(a), CY + d.r * T * sn, d.s, d.s); } g.globalAlpha = 1; },
+  orbits: () => Array.from({ length: 4 }, (_, k) => `<ellipse cx="${CX}" cy="${CY}" rx="${rx(k)}" ry="${rx(k) * T}" fill="none" stroke="url(#og)" stroke-width="1.4"/>`).join('')
+    + '<defs><linearGradient id="og" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="rgba(255,190,130,.08)"/><stop offset="1" stop-color="rgba(255,190,130,.5)"/></linearGradient></defs>',
+  place: (i, rot) => { const k = Math.floor(i / 6); const a = (k * 30 + (i % 6) * 60 + 20) * Math.PI / 180 + rot; const sn = Math.sin(a);
+    return { x: CX + rx(k) * Math.cos(a), y: CY + rx(k) * T * sn, s: 0.66 + 0.34 * (sn + 1) / 2, lit: 0.6 + 0.4 * (sn + 1) / 2, fade: 0.75 + 0.25 * (sn + 1) / 2 }; },
+});
+</script></body></html>

@@ -1,0 +1,12 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Вселенная · 1 · Пояса</title><link rel="stylesheet" href="orrery.css"></head><body><script src="data.js"></script><script src="orrery.js"></script><script>
+const CX = 960, CY = 630, T = 0.55;
+const rx = (k) => 235 + k * 148;
+makeOrrery({
+  quiet: true, cls: 'quiet',
+  cx: CX, cy: CY, tilt: T, sun: 2, sunSize: 210, labels: 'outward',
+  orbits: () => [0, 1, 2, 3].map((k) => `<ellipse cx="${CX}" cy="${CY}" rx="${rx(k)}" ry="${rx(k) * T}" fill="none" stroke="rgba(120,175,255,${0.3 - k * 0.04})" stroke-width="1.4"/>
+    <ellipse cx="${CX}" cy="${CY}" rx="${rx(k)}" ry="${rx(k) * T}" fill="none" stroke="rgba(110,160,255,.06)" stroke-width="34"/>`).join(''),
+  place: (i, rot) => { const k = Math.floor(i / 6), j = i % 6; const a = (-90 + j * 60 + k * 30 + 10) * Math.PI / 180 + rot;
+    const sn = Math.sin(a); return { x: CX + rx(k) * Math.cos(a), y: CY + rx(k) * T * sn, s: 0.78 + 0.12 * sn + k * 0.04, lit: 0.82 + 0.18 * (sn + 1) / 2 }; },
+});
+</script></body></html>
