@@ -220,7 +220,7 @@ async function activateResourceZone(win) {
   await waitFor(win, `document.querySelector('[data-qa-resource-zone]')`);
   await waitFor(win, `(() => {
     const terrain=document.querySelector('[data-qa-zone-terrain]');
-    const images=Array.from(document.querySelectorAll('[data-resource-building-role] img'));
+    const images=Array.from(document.querySelectorAll('[data-resource-building-role] img:not(.resource-building-art__glow)'));
     return terrain?.complete && terrain.naturalWidth>0 && images.length===10 && images.every((image)=>image.complete && image.naturalWidth>0);
   })()`);
   await settle(win);
