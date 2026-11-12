@@ -37,6 +37,7 @@ import type { ReportStatusTone } from '../../domain/reports/types.ts';
 import { getPiratePlanetArt } from '../../pirate-planet-art.ts';
 import { EXPLORATION_ARTS } from '../../exploration-art.ts';
 import { MISSION_BANNERS } from '../ui-art.ts';
+import { ACTION_ART, type ActionArtId } from '../actions/action-art.ts';
 
 const numberFormat = new Intl.NumberFormat('ru-RU');
 const dateTimeFormat = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -78,7 +79,26 @@ export function ReportArtwork({ item, command }: { item: ReportItem; command?: C
     const cycle = item.pirateReconReport.contactCycleKey.split(':');
     return <img src={getPiratePlanetArt(Number(cycle[2]), Number(cycle[3]))} alt="" aria-hidden="true" draggable={false} />;
   }
+  const action = actionArtOf(item);
+  if (action) return <img className="reports-action-art" src={ACTION_ART[action]} alt="" aria-hidden="true" draggable={false} />;
   return <ReportGlyph kind={item.category} />;
+}
+
+/** The round mission picture of a report in the list (owner's action art set). */
+function actionArtOf(item: ReportItem): ActionArtId | null {
+  if (item.id.startsWith('exploration-recon:')) return 'probe-explore';
+  if (item.id.startsWith('exploration-return:')) return 'expedition';
+  if (item.spyHunterNotice) return 'espionage';
+  switch (item.source) {
+    case 'recycling': return 'recycle';
+    case 'gas-extraction': return 'gas';
+    case 'combat': case 'operations': case 'command': return 'attack';
+    case 'pirate-mission': return 'pirate-scout';
+    case 'overpopulation': return 'colonize';
+    case 'flights': return 'transport';
+    case 'exploration': return 'expedition';
+    default: return null;
+  }
 }
 
 function PlaceLink({ place, onOpen }: { place: ReportPlace; onOpen?: OpenPlace }) {
@@ -166,7 +186,7 @@ function ResourceGroups({ groups }: { groups: readonly ReportResourceGroup[] }) 
     <header><strong>{group.title}</strong></header>
     {group.items.length
       ? <div className="reports-sheet-resources">{group.items.map((resource) => <div className={`reports-v3-res reports-v3-res--${resource.kind}`} key={`${resource.kind}-${resource.label}`}>
-        <ResourceIcon kind={resource.kind} /><span><small>{resource.label}</small><b>{group.tone === 'loss' ? '−' : ''}{numberFormat.format(resource.value)}</b></span>
+        <ResourceIcon kind={resource.kind} /><span><small>{resource.label}</small><b aria-label={`${group.tone === 'loss' ? '−' : ''}${numberFormat.format(resource.value)}`}>{group.tone === 'loss' ? '−' : ''}{resource.value >= 1e9 ? formatShortAmount(resource.value) : numberFormat.format(resource.value)}</b></span>
       </div>)}</div>
       : <p className="spy-report-empty">{group.empty ?? 'Ничего.'}</p>}
   </div>)}</div>;

@@ -31,7 +31,7 @@ import {
   markAllReportsRead,
   markReportRead,
 } from './domain/reports/repository.ts';
-import { buildReportSheet, type ReportSheetAction } from './domain/reports/sheet.ts';
+import { buildReportSheet, parseReportCoordinate, titleWithoutPlace, type ReportSheetAction } from './domain/reports/sheet.ts';
 import type { LetterRef, ReportCategory, ReportFilter, ReportItem, ReportsState } from './domain/reports/types.ts';
 import type { NpcStrategyState } from './domain/npc/strategy.ts';
 import type { PlayerProfileState } from './domain/profile/types.ts';
@@ -160,7 +160,9 @@ function ReportListItem({ item, battle, value, who, command, active, read, saved
   saved: boolean;
   onOpen: () => void;
 }) {
-  const title = item.letter?.subject ?? item.title;
+  // The place is on the second line: «Переработчик прибыл к координатам [1:2:3]» reads «Переработчик прибыл».
+  const coordinate = parseReportCoordinate(item.coordinates[0]);
+  const title = item.letter?.subject ?? titleWithoutPlace(item.title, coordinate || item.planetNames[0] ? { name: item.planetNames[0], coordinate } : null);
   return (
     <article className={`reports-list-item reports-v2-tone-${item.statusTone} ${item.brief ? 'reports-list-item--brief' : ''} ${active ? 'active' : ''} ${read ? 'read' : 'unread'}`} data-report-item-id={item.id} data-report-kind={item.spyReport ? "spy" : item.pirateReconReport ? "pirate-recon" : item.overpopulationReport ? "overpopulation" : battle ? "battle" : item.source} data-pirate-recon-outcome={item.pirateReconReport?.outcome}>
       <button type="button" className="reports-list-open" onClick={onOpen} aria-current={active ? 'true' : undefined} aria-label={`Открыть сообщение: ${title}${read ? '' : ', новое'}`}>
@@ -325,6 +327,9 @@ export function ReportsView({ ownFleetAttack, retentionCutoff, battleReports, pl
   const [answerError, setAnswerError] = useState('');
   useEffect(() => { setAnswerError(''); }, [selectedId]);
   const pendingInitialReportId = useRef<string | null>(null);
+  const previewScrollRef = useRef<HTMLDivElement | null>(null);
+  // Another message opens at its header, not where the last one was scrolled to.
+  useEffect(() => { if (previewScrollRef.current) previewScrollRef.current.scrollTop = 0; }, [selectedId, activeFolder]);
   const handledInitialReportId = useRef<string | null>(null);
 
   const npcLetterContext = useMemo(() => (npcStrategy && worldNow !== undefined ? { strategy: npcStrategy, now: worldNow, targets: espionage?.targets } : undefined), [npcStrategy, worldNow, espionage?.targets]);
@@ -571,7 +576,7 @@ export function ReportsView({ ownFleetAttack, retentionCutoff, battleReports, pl
         </section>
 
         <section className="reports-preview" aria-label="Открытое сообщение">
-          <div className="reports-preview-scroll">{previewBody}</div>
+          <div className="reports-preview-scroll" ref={previewScrollRef}>{previewBody}</div>
           {activeCategory && selectedItem ? <footer className="reports-preview-footer">
             {answerError ? <p className="reports-answer-error" role="alert" data-qa-letter-error>{answerError}</p> : null}
             <button type="button" className="reports-delete-current" onClick={deleteCurrent}>Удалить</button>

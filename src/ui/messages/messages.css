@@ -1136,3 +1136,8 @@
   -webkit-mask-image: radial-gradient(ellipse 70% 72% at 45% 50%, #000 52%, transparent 100%);
   mask-image: radial-gradient(ellipse 70% 72% at 45% 50%, #000 52%, transparent 100%);
 }
+
+/* The typography layer sizes every text node's parent: a span inside the header title keeps the title size. */
+.reports-view .reports-hero h2 > span { font-size: inherit !important; font-weight: inherit; }
+/* Round mission pictures fill the row tile. */
+.reports-view .reports-list-icon .reports-action-art { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
