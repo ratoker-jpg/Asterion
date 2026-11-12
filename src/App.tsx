@@ -1357,12 +1357,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     worker.onmessage = (event: MessageEvent<LiveWorldResponse>) => {
       if (liveWorld.current !== link) return;
       const message = event.data;
-      // The reply, the clock subscribers (a sync-lane store update) and App's own bump must share one lane,
-      // or React renders them as two commits. onmessage runs in its own task, so flushSync is allowed here.
-      noteLiveWorldMessage(message.type, () => {
-        if (message.type === 'ticked') flushSync(() => handleLiveWorldMessage(message));
-        else handleLiveWorldMessage(message);
-      });
+      noteLiveWorldMessage(message.type, () => handleLiveWorldMessage(message));
     };
     const handleLiveWorldMessage = (message: LiveWorldResponse) => {
       if (message.type === 'ticked') {
