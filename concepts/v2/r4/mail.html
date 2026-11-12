@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Сообщения · почта</title>
+<link rel="stylesheet" href="../frame.css">
+<style>
+:root { --ink: #e9eef6; --dim: #8592a6; --line: rgba(150,180,220,.12); --cyan: #56d9f2; --red: #ff4d5e; --green: #57d98f; --gold: #e0b158; }
+.area { background: linear-gradient(#060b13, #04070c); }
+.left { position: absolute; left: 30px; top: 18px; bottom: 0; width: 610px; display: flex; flex-direction: column; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.tab { font-size: 14px; font-weight: 700; color: var(--dim); padding: 7px 10px; border-radius: 18px; }
+.tab.on { color: #fff; background: rgba(86,217,242,.12); box-shadow: inset 0 0 0 1px rgba(86,217,242,.45); }
+.tab em { font-style: normal; margin-left: 6px; font-size: 12px; color: #fff; background: var(--red); border-radius: 9px; padding: 0 6px; }
+.tools { display: flex; justify-content: space-between; align-items: center; margin: 14px 0 6px; font-size: 13px; color: var(--dim); }
+.tools b { color: #fff; } .link { color: var(--cyan); font-weight: 700; }
+.list { flex: 1; overflow: hidden; position: relative; }
+.day { font-size: 12px; letter-spacing: 2px; color: #5f6c80; font-weight: 800; margin: 10px 0 4px; }
+.it { display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: center; padding: 8px 10px; border-radius: 10px; position: relative; }
+.it img { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 2px var(--c); }
+.it b { font-size: 15px; font-weight: 700; display: block; } .it span { font-size: 13px; color: var(--dim); display: block; line-height: 1.3; }
+.it .v { text-align: right; } .it .v b { font-size: 16px; font-weight: 800; color: var(--vc, #fff); white-space: nowrap; } .it .v span { font-size: 12px; }
+.it.read b { font-weight: 600; color: #aab5c5; } .it.read img { opacity: .6; }
+.it.unread::before { content: ''; position: absolute; left: -10px; top: 14px; bottom: 14px; width: 3px; border-radius: 2px; background: var(--cyan); }
+.it.sel { background: rgba(86,217,242,.1); }
+.fade { position: absolute; left: 0; right: 0; bottom: 0; height: 60px; background: linear-gradient(transparent, #04070c 80%); }
+/* report */
+.rep { position: absolute; left: 680px; right: 34px; top: 100px; bottom: 24px; border-left: 1px solid var(--line); padding-left: 44px; display: flex; flex-direction: column; gap: 34px; }
+.kick { font-size: 13px; letter-spacing: 2px; text-transform: uppercase; color: var(--dim); font-weight: 700; }
+.head { display: flex; align-items: flex-end; justify-content: space-between; gap: 30px; }
+.verdict { font-size: 52px; font-weight: 800; color: var(--green); line-height: 1; margin-top: 6px; }
+.profit { text-align: right; } .profit b { font-size: 46px; font-weight: 800; color: var(--green); display: block; line-height: 1; } .profit span { font-size: 15px; color: var(--dim); display: block; margin-top: 8px; }
+.sides { display: grid; grid-template-columns: 1fr 50px 1fr; align-items: center; }
+.vs { text-align: center; font-size: 18px; font-weight: 800; color: #5f6c80; }
+.side { display: grid; grid-template-columns: 76px 1fr; gap: 16px; align-items: center; }
+.side.foe { grid-template-columns: 1fr 76px; text-align: right; }
+.side img { width: 76px; height: 76px; border-radius: 50%; box-shadow: 0 0 0 2px var(--c); }
+.side b { font-size: 18px; font-weight: 800; display: block; line-height: 1.25; } .side span { font-size: 14px; color: var(--dim); display: block; margin-top: 4px; } .side span i { font-style: normal; color: var(--cyan); font-weight: 700; } .side span em { font-style: normal; color: #ff7a86; font-weight: 800; }
+.btns { display: flex; gap: 8px; margin-top: 10px; } .side.foe .btns { justify-content: flex-end; }
+.btn { font: inherit; font-size: 14px; font-weight: 700; color: #cfd8e6; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.14); border-radius: 18px; padding: 8px 16px; white-space: nowrap; }
+.btn.main { color: #04101a; background: var(--cyan); border-color: var(--cyan); }
+.btn.red { color: #fff; background: rgba(255,77,94,.25); border-color: rgba(255,77,94,.6); }
+.loss { display: grid; grid-template-columns: 1fr 1fr; gap: 50px; }
+.tbl .th, .tbl .tr { display: grid; grid-template-columns: 1fr 110px 110px 110px; align-items: center; gap: 10px; }
+.tbl .th { font-size: 12px; letter-spacing: 1.5px; color: #5f6c80; font-weight: 700; text-transform: uppercase; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.tbl .th span:not(:first-child), .tbl .tr span:not(:first-child) { text-align: right; }
+.tbl .tr { padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 15px; font-weight: 700; }
+.tbl .nm { display: flex; align-items: center; gap: 10px; } .tbl .nm img { width: 44px; height: 30px; object-fit: contain; }
+.tbl .lost { color: #ff7a86; } .tbl .left2 { color: #fff; } .tbl .was { color: var(--dim); font-weight: 600; }
+.tbl .sum { font-size: 14px; color: var(--dim); margin-top: 10px; } .tbl .sum b { color: #fff; }
+.bottom { display: grid; gap: 22px; padding-top: 22px; border-top: 1px solid var(--line); }
+.loot { display: flex; gap: 26px; align-items: center; } .loot div { display: flex; align-items: center; gap: 10px; } .loot img { width: 36px; height: 36px; } .loot b { font-size: 20px; font-weight: 800; display: block; white-space: nowrap; } .loot span { font-size: 12px; color: var(--dim); white-space: nowrap; }
+.deb b { color: var(--gold); }
+.empty { position: absolute; left: 680px; right: 34px; top: 200px; text-align: center; } .empty img { width: 300px; margin: 0 auto 16px; } .empty b { font-size: 24px; display: block; } .empty span { font-size: 16px; color: var(--dim); }
+</style></head><body>
+<div class="stage"><img class="hdr" src="../assets/game-header.png"><main class="area" id="a"></main></div>
+<script src="../messages/data.js"></script>
+<script>
+const { A, fmt, short, items, CATS, battle: B } = MSG;
+const COL = { ok: '#57d98f', bad: '#ff4d5e', info: '#56d9f2', warn: '#e0b158', neutral: '#8592a6' };
+const pic = (x) => x.cat === 'battle' || x.kind === 'letter' ? A.face(x.fac) : x.cat === 'intel' ? A.planet(x.planet) : A.icon(x.icon);
+// one line that tells what happened, one value that tells how much
+const TITLE = { win: 'Атака · победа', loss: 'Атака · поражение', defence: 'На вас напали', pirate: 'Налёт пиратов', spy: 'Разведка', spied: 'Вас разведали', recycle: 'Обломки собраны', gas: 'Газ добыт', cargo: 'Груз доставлен', ally: 'Заявка в союз', letter: 'Письмо', sun: 'Бой у Солнца', system: 'Обновление игры' };
+const VAL = (x) => {
+  if (['win', 'loss', 'defence', 'pirate', 'sun'].includes(x.kind)) return [short(x.value), x.value >= 0 ? '#57d98f' : '#ff7a86', 'итог боя'];
+  if (x.kind === 'spy') return [short(x.value).replace('+', ''), '#56d9f2', 'можно унести'];
+  if (['recycle', 'gas', 'cargo'].includes(x.kind)) return [short(x.value), '#57d98f', 'получено'];
+  return ['', '#fff', ''];
+};
+const cnt = { all: 27, battle: 13, intel: 5, fleet: 6, ally: 2, system: 1 };
+const shown = items.slice(0, 13);
+const days = [...new Set(shown.map((x) => x.day))];
+const list = items.length ? days.map((d) => `<div class="day">${d.toUpperCase()}</div>${shown.filter((x) => x.day === d).map((x) => { const [v, c, u] = VAL(x);
+  return `<div class="it ${x.unread ? 'unread' : 'read'} ${x.id === 0 ? 'sel' : ''}" style="--c:${COL[x.tone]}"><img src="${pic(x)}"><div><b>${TITLE[x.kind]}</b><span>${x.who} · [${x.coord}]</span></div><div class="v" style="--vc:${c}"><b>${v}</b><span>${x.time}</span></div></div>`; }).join('')}`).join('') : '';
+const ships = (arr, race) => arr.filter((s) => s[2]).map(([k, n, was, lost]) => `<div class="tr"><span class="nm"><img src="${A.ship(race, k)}">${n}</span><span class="was">${fmt(was)}</span><span class="lost">−${fmt(lost)}</span><span class="left2">${fmt(was - lost)}</span></div>`).join('');
+const sumLost = (arr) => arr.reduce((a, s) => a + s[3], 0), sumWas = (arr) => arr.reduce((a, s) => a + s[2], 0);
+document.getElementById('a').innerHTML = `
+<div class="left"><div class="tabs">${CATS.map((c, i) => `<span class="tab ${i === 0 ? 'on' : ''}">${c.label}${items.length && cnt[c.id] ? `<em>${cnt[c.id]}</em>` : ''}</span>`).join('')}</div>
+  <div class="tools"><span>${items.length ? `<b>${items.length}</b> писем · <b>27</b> новых` : 'писем нет'}</span>${items.length ? '<span class="link">Прочитать все</span>' : ''}</div>
+  <div class="list">${list}${items.length ? '<div class="fade"></div>' : ''}</div></div>
+${items.length ? `<section class="rep">
+  <div class="head"><div><div class="kick">Атака · ${B.time} · ${B.rounds} раундов</div><div class="verdict">Победа</div></div>
+    <div class="profit"><b>${short(B.profit)}</b><span>выгода: унесли ${short(B.loot.metal + B.loot.mineral + B.loot.gas).replace('+', '')} − потери ${short(B.lostValue).replace('+', '')}</span></div></div>
+  <div class="sides">
+    <div class="side" style="--c:#56d9f2"><img src="${A.face(B.me.fac)}"><div><b>Вы · ${B.me.name}</b><span>с планеты <i>[${B.me.coord}]</i></span></div></div>
+    <div class="vs">VS</div>
+    <div class="side foe" style="--c:#ff4d5e"><div><b>${B.foe.name}</b><span><em>[ТЬМА]</em> · ${B.foe.planet} <i>[${B.foe.coord}]</i></span>
+      <div class="btns"><button class="btn">Шпионить</button><button class="btn red">Напасть снова</button></div></div><img src="${A.face(B.foe.fac)}"></div>
+  </div>
+  <div class="loss">
+    <div class="tbl"><div class="th"><span>Ваш флот</span><span>было</span><span>потеряно</span><span>осталось</span></div>${ships(B.myShips, 'synod')}
+      <div class="sum">Потеряно <b>${fmt(sumLost(B.myShips))}</b> из ${fmt(sumWas(B.myShips))} · в ремонт <b>104 000</b></div></div>
+    <div class="tbl"><div class="th"><span>Флот противника</span><span>было</span><span>потеряно</span><span>осталось</span></div>${ships(B.foeShips, 'aegis')}
+      <div class="sum">Флот противника <b>уничтожен</b></div></div>
+  </div>
+  <div class="bottom"><div class="loot">
+      <div><img src="${A.res('metal')}"><div><b>${short(B.loot.metal).replace('+', '')}</b><span>металл</span></div></div>
+      <div><img src="${A.res('mineral')}"><div><b>${short(B.loot.mineral).replace('+', '')}</b><span>минералы</span></div></div>
+      <div><img src="${A.res('gas')}"><div><b>${short(B.loot.gas).replace('+', '')}</b><span>газ</span></div></div>
+      <div class="deb"><img src="${A.res('debris')}"><div><b>${short(B.debris).replace('+', '')}</b><span>обломки на орбите</span></div></div></div>
+    <div class="btns"><button class="btn main">Собрать обломки · 00:08:41</button><button class="btn">Повторить атаку</button><button class="btn">Ход боя по раундам</button><button class="btn">В избранное</button><button class="btn">Удалить</button></div></div>
+</section>` : `<div class="empty"><img src="${A.empty}"><b>Писем пока нет</b><span>Здесь будут отчёты о боях, разведке и полётах.</span></div>`}`;
+</script><script src="../frame.js"></script>
+</body></html>

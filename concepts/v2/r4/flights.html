@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Рейсы и миссии · список</title>
+<link rel="stylesheet" href="../frame.css">
+<style>
+:root { --ink: #e9eef6; --dim: #8592a6; --line: rgba(150,180,220,.12); --cyan: #56d9f2; --red: #ff4d5e; --gold: #e0b158; }
+.area { background: linear-gradient(#060b13, #04070c); padding: 18px 40px 0; }
+.top { display: flex; align-items: center; gap: 8px; height: 52px; }
+.tab { font-size: 17px; font-weight: 700; color: var(--dim); padding: 10px 20px; border-radius: 26px; }
+.tab.on { color: #fff; background: rgba(86,217,242,.12); box-shadow: inset 0 0 0 1px rgba(86,217,242,.45); }
+.tab em { font-style: normal; margin-left: 8px; padding: 1px 8px; border-radius: 10px; background: var(--cyan); color: #04101a; font-size: 14px; }
+.sum { margin-left: auto; display: flex; gap: 28px; font-size: 15px; color: var(--dim); }
+.sum b { color: #fff; font-size: 17px; margin-left: 6px; }
+.sec { margin: 12px 0 4px; display: flex; align-items: baseline; gap: 12px; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; font-weight: 800; color: var(--dim); }
+.sec.red { color: #ff7a86; }
+.cols, .row { display: grid; grid-template-columns: 215px 265px 26px 265px 155px 160px 180px 235px 1fr; align-items: center; column-gap: 0; }
+.list { position: absolute; left: 40px; right: 40px; top: 120px; bottom: 0; overflow: hidden; }
+.more { position: absolute; left: 0; right: 0; bottom: 0; height: 70px; background: linear-gradient(transparent, #04070c 75%); display: flex; align-items: flex-end; justify-content: center; padding-bottom: 12px; font-size: 14px; font-weight: 700; color: var(--cyan); }
+.cols { font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; color: #5f6c80; font-weight: 700; padding: 0 0 8px; border-bottom: 1px solid var(--line); }
+.row { min-height: 49px; border-bottom: 1px solid var(--line); }
+.mis { display: grid; grid-template-columns: 38px 1fr; gap: 12px; align-items: center; }
+.mis img { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 2px var(--c); }
+.mis b { font-size: 16px; font-weight: 700; display: block; } .mis small { font-size: 13px; color: var(--dim); }
+.pl { display: grid; grid-template-columns: 32px 1fr; gap: 10px; align-items: center; padding-right: 12px; }
+.pl img { width: 32px; height: 32px; object-fit: contain; }
+.pl .ico { border-radius: 50%; }
+.pl b { font-size: 14px; font-weight: 600; line-height: 1.2; display: block; } .pl small { font-size: 13px; color: var(--cyan); font-weight: 700; }
+.pl.own b { color: #9ec9ff; }
+.arr { color: #5f6c80; font-size: 20px; text-align: center; }
+.st b { font-size: 15px; font-weight: 700; display: block; margin-bottom: 7px; }
+.st i { display: block; width: 160px; height: 6px; border-radius: 3px; background: rgba(255,255,255,.08); position: relative; overflow: hidden; }
+.st i::after { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: var(--p); background: var(--c); border-radius: 3px; }
+.tm b { font-size: 20px; font-weight: 800; display: block; } .tm small { font-size: 13px; color: var(--dim); }
+.sh { display: flex; align-items: center; gap: 10px; } .sh img { width: 38px; height: 28px; object-fit: contain; } .sh b { font-size: 15px; font-weight: 700; margin-right: 4px; } .sh small { font-size: 13px; color: var(--dim); }
+.cg { display: flex; flex-wrap: wrap; gap: 4px 14px; } .cg span { display: flex; align-items: center; gap: 5px; font-size: 14px; font-weight: 700; } .cg img { width: 22px; height: 22px; } .cg .none { color: #4b5566; font-weight: 500; }
+.ac { display: flex; gap: 8px; justify-content: flex-end; }
+.btn { font: inherit; font-size: 14px; font-weight: 700; color: #cfd8e6; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12); border-radius: 18px; padding: 7px 14px; white-space: nowrap; }
+.btn.red { color: #fff; background: rgba(255,77,94,.22); border-color: rgba(255,77,94,.6); }
+/* incoming attacks: bigger, red, always on top */
+.hot { min-height: 70px; background: linear-gradient(90deg, rgba(255,77,94,.14), rgba(255,77,94,.03) 70%); border-bottom: 1px solid rgba(255,77,94,.3); border-radius: 10px; margin-bottom: 6px; box-shadow: inset 3px 0 0 var(--red); }
+.hot .tm b { color: var(--red); font-size: 28px; }
+.hot .mis img { box-shadow: 0 0 0 2px var(--red), 0 0 16px rgba(255,77,94,.6); }
+.empty { text-align: center; margin-top: 140px; } .empty img { width: 320px; margin: 0 auto 20px; opacity: .9; } .empty b { font-size: 24px; display: block; } .empty span { font-size: 16px; color: var(--dim); display: block; margin: 8px 0 20px; }
+</style></head><body>
+<div class="stage"><img class="hdr" src="../assets/game-header.png"><main class="area" id="a"></main></div>
+<script src="../fleets/data.js"></script>
+<script>
+// sent = how long ago the fleet left (for the sort "по времени отправления")
+FLIGHTS.forEach((f) => { f.sent = f.phase === 'back' ? f.T * 2 - f.t : f.phase === 'work' ? f.T + 600 : f.T - f.t; });
+const now = 23 * 3600 + 41 * 60;
+const clock = (sec) => { const s = ((now + sec) % 86400 + 86400) % 86400; return `${String(Math.floor(s / 3600)).padStart(2, '0')}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}`; };
+const STATE = { out: 'летит туда', work: 'на месте', back: 'возвращается' };
+const RES = { metal: 'metal', mineral: 'mineral', gas: 'gas' };
+const place = (o, own, ico) => `<div class="pl ${own ? 'own' : ''}">${o.p ? `<img src="${PLANET(o.p)}">` : `<img class="ico" src="${ICON(ico)}">`}<div><b>${o.name}</b><small>${o.c === '—' ? '' : `[${o.c}]`}</small></div></div>`;
+const shipsCell = (f) => `<div class="sh"><b>${nshort(shipCount(f))}</b>${f.ships.slice(0, 3).map(([k]) => `<img src="${SHIP(k)}">`).join('')}${f.ships.length > 3 ? `<small>+${f.ships.length - 3}</small>` : ''}</div>`;
+const cargoCell = (f) => `<div class="cg">${f.cargo ? f.cargo.map(([r, n]) => `<span><img src="${HICON(RES[r])}">${nshort(n)}</span>`).join('') : '<span class="none">—</span>'}</div>`;
+function row(f) {
+  const M = MISSION[f.m], col = GROUP_COLOR[M.group];
+  const a = f.hostile ? f.from : HOME[f.home], b = f.hostile ? HOME[f.home] : f.to;
+  const when = f.hostile ? 'удар в ' + clock(f.t) : f.phase === 'back' ? 'дома в ' + clock(f.t) : f.phase === 'work' ? 'освободится в ' + clock(f.t) : 'прибытие в ' + clock(f.t);
+  const acts = f.hostile ? '<button class="btn red">Увести флот</button><button class="btn">Позвать союз</button>'
+    : `${f.phase !== 'back' ? '<button class="btn">Отозвать</button>' : ''}<button class="btn">Повторить</button>`;
+  return `<div class="row ${f.hostile ? 'hot' : ''}" style="--c:${col}">
+    <div class="mis"><img src="${ICON(M.icon)}"><div><b>${M.label}</b><small>${f.hostile ? 'обнаружен ' + clock(-(f.T - f.t)) : 'отправлен ' + clock(-f.sent)}</small></div></div>
+    ${place(a, !f.hostile, 'profile')}<div class="arr">${f.phase === 'back' ? '←' : '→'}</div>${place(b, f.hostile || b.own, M.icon)}
+    <div class="st"><b>${f.hostile ? 'летит на вас' : STATE[f.phase]}</b><i style="--p:${Math.round(frac(f) * 100)}%"></i></div>
+    <div class="tm"><b>${tf(f.t)}</b><small>${when}</small></div>
+    ${shipsCell(f)}${cargoCell(f)}<div class="ac">${acts}</div></div>`;
+}
+const hot = FLIGHTS.filter((f) => f.hostile).sort((x, y) => x.t - y.t);
+const mine = FLIGHTS.filter((f) => !f.hostile).sort((x, y) => y.sent - x.sent);
+const out = mine.filter((f) => f.phase !== 'back').length, back = mine.filter((f) => f.phase === 'back').length;
+document.getElementById('a').innerHTML = `<div class="top"><span class="tab">Отправка</span><span class="tab on">Рейсы и миссии${FLIGHTS.length ? `<em>${FLIGHTS.length}</em>` : ''}</span><span class="tab">Симулятор</span>
+  <div class="sum"><span>в пути<b>${out}</b></span><span>возвращаются<b>${back}</b></span><span>флотов занято<b>${mine.length} из 16</b></span></div></div>
+  ${FLIGHTS.length ? `
+  <div class="list"><div class="cols"><span>Миссия</span><span>Откуда</span><span></span><span>Куда</span><span>Сейчас</span><span>Осталось</span><span>Корабли</span><span>Груз</span><span></span></div>
+  ${hot.length ? `<div class="sec red">Атаки на ваши планеты · ${hot.length}</div>${hot.map(row).join('')}` : ''}
+  <div class="sec">Ваши миссии · по времени отправки</div>${mine.map(row).join('')}<div class="more">ещё ниже · прокрутка колесом</div></div>`
+  : `<div class="empty"><img src="${R}src/assets/ui/empty/empty-flights.webp"><b>Сейчас ни один флот не летит</b><span>Атаки на вас тоже появятся здесь, сверху и красным.</span><button class="btn">Отправить флот</button></div>`}`;
+</script><script src="../frame.js"></script>
+</body></html>
