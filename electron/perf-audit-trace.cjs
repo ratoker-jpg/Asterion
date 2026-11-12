@@ -418,6 +418,38 @@ async function main() {
     }
     write();
   }
+  // DIAG perf-6: which animation forces a main frame every frame. Kill one at a time, trace 3 s each.
+  const EXPERIMENTS = {
+    planet: ['', '*,*::before,*::after', '.planet-orbit__ring', '.stage-ambient i', '.asterion-header__resource-fill i', '.planet-orbit__planet, .zone-hotspot, .planet-orbit__dock, .planet-orbit__worlds, .planet-orbit__side *'],
+    universe: ['', '*,*::before,*::after', '.shield-aura, .shield-aura::before', '.system-planet--pirate::before, .system-planet--pirate img', '.stage-ambient i', '.asterion-header__resource-fill i', '.universe-view *, .universe-view *::before, .universe-view *::after', '.asterion-header *, .asterion-header *::before, .asterion-header *::after'],
+  };
+  result.diag = {};
+  for (const [label, kills] of Object.entries(EXPERIMENTS)) {
+    const screen = SCREENS.find((item) => item[0] === label);
+    try {
+      await openScreen(win, screen);
+      await sleep(3_000);
+      result.diag[label] = {};
+      for (const kill of kills) {
+        await run(win, `(() => { let s = document.getElementById('perf6-kill'); if (!s) { s = document.createElement('style'); s.id = 'perf6-kill'; document.head.appendChild(s); } s.textContent = ${JSON.stringify(kill ? kill + '{animation:none!important;transition:none!important}' : '')}; })()`);
+        await sleep(800);
+        const traced = await traceWindow(win, `diag-${label}`, 3);
+        result.diag[label][kill || '(none)'] = { bmtf: traced.trace.framesPerSecond?.BeginMainThreadFrame, ult: traced.trace.byEvent?.UpdateLayoutTree?.perSecondMs, layerize: traced.trace.byEvent?.Layerize?.perSecondMs, paint: traced.trace.byEvent?.Paint?.perSecondMs };
+      }
+      // Restart all animations inside a trace to catch the compositor verdicts.
+      await run(win, `document.getElementById('perf6-kill').textContent = '*,*::before,*::after{animation:none!important}'`);
+      await sleep(500);
+      await contentTracing.startRecording({ included_categories: TRACE_CATEGORIES, excluded_categories: ['*'], recording_mode: 'record-until-full', trace_buffer_size_in_kb: 300 * 1024 });
+      await sleep(300);
+      await run(win, `document.getElementById('perf6-kill').textContent = ''`);
+      await sleep(1500);
+      const file = path.join(OUTPUT, `trace-diag-restart-${label}.json`);
+      await contentTracing.stopRecording(file);
+      result.diag[label].restart = summariseTrace(file, 1.8).animDiag;
+      fs.rmSync(file, { force: true });
+    } catch (error) { result.diag[label] = { error: String(error && error.stack || error) }; }
+    write();
+  }
   if (MODE === 'trace' && AUTOSAVE_SECONDS > 0) {
     // A long quiet window on the planet screen: autosaves (the worker posts the save text) land here.
     try {
