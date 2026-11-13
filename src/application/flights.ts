@@ -14,7 +14,6 @@ import {
 } from '../domain/command/aid.ts';
 import type { ResourceRequest } from '../domain/command/types.ts';
 import {
-  AID_MISSION_ENABLED,
   aidInFlightUnits,
   isAidTransportComposition,
   validateAidCargo,
@@ -1294,7 +1293,6 @@ function planPlayerAidLaunch(
     cargo?: TransportCargo;
   },
 ): AidLaunchPlan {
-  if (!AID_MISSION_ENABLED) return { ok: false, code: 'mission-not-supported', message: 'Помощь союзу пока недоступна.' };
   const request = input.aidRequestId ? selectRequestById(state.command, input.aidRequestId) : null;
   if (!request || !isRequestOpen(request)) {
     return { ok: false, code: 'target-not-available', message: 'Запрос помощи закрыт или не найден.' };

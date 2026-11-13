@@ -38,7 +38,7 @@ export function inferTypographyCategory(element: HTMLElement): TypographyKey {
   const signature = classSignature(element);
 
   if (element.closest('.footer-status, .shell-notice, .asterion-header__campaign-status, .asterion-header__campaign')) return 'hud';
-  if (tag === 'h1' || /page-title|scene-title|screen-title|module-placeholder/.test(signature)) return 'pageTitle';
+  if (tag === 'h1' || /page-title|scene-title|screen-title/.test(signature)) return 'pageTitle';
   if (element.closest('button, [role="button"], input, select, textarea') || tag === 'option') return 'control';
   if (element.closest('table, [role="table"], [role="row"]') || /table|score|rank|points|stat|metric|resource|cost|value|amount|counter|countdown|time/.test(signature)) return 'table';
   if (element.matches('.utility-helper') || /helper|hint|tooltip|description|caption|note/.test(signature)) return 'helper';
@@ -53,34 +53,51 @@ function isManagedTarget(element: HTMLElement) {
   return hasDirectText(element);
 }
 
-function tagElement(element: HTMLElement) {
-  if (!isManagedTarget(element)) return;
-  if (element.hasAttribute(CATEGORY_ATTR)) return;
-
-  const category = inferTypographyCategory(element);
-  const declaredSize = Number.parseFloat(getComputedStyle(element).fontSize);
-  const baseSize = Math.max(declaredSize, MIN_BASE_FONT_SIZE[category]);
-  if (!Number.isFinite(baseSize) || baseSize <= 0) return;
-
-  element.style.setProperty(BASE_SIZE_PROPERTY, `${baseSize}px`);
-  element.setAttribute(CATEGORY_ATTR, category);
+/** Elements under `root` (and `root`) that still need a category, in document order. */
+function collectTargets(root: ParentNode): HTMLElement[] {
+  const targets: HTMLElement[] = [];
+  const consider = (element: HTMLElement) => {
+    if (isManagedTarget(element) && !element.hasAttribute(CATEGORY_ATTR)) targets.push(element);
+  };
+  if (root instanceof HTMLElement) consider(root);
+  root.querySelectorAll<HTMLElement>('*').forEach(consider);
+  return targets;
 }
 
-function scan(root: ParentNode) {
-  if (root instanceof HTMLElement) tagElement(root);
-  root.querySelectorAll<HTMLElement>('*').forEach(tagElement);
+// Two passes over everything added at once: all reads (the computed size), then all writes (the
+// CSS variable, which is inherited and would dirty the style of the whole subtree). Reading after
+// each write forced a style recalculation per node (audit 13.11, 4.4).
+function tagElements(elements: HTMLElement[]) {
+  const sizes = elements.map((element) => {
+    const category = inferTypographyCategory(element);
+    const declaredSize = Number.parseFloat(getComputedStyle(element).fontSize);
+    return { element, category, baseSize: Math.max(declaredSize, MIN_BASE_FONT_SIZE[category]) };
+  });
+  for (const { element, category, baseSize } of sizes) {
+    if (!Number.isFinite(baseSize) || baseSize <= 0) continue;
+    element.style.setProperty(BASE_SIZE_PROPERTY, `${baseSize}px`);
+    element.setAttribute(CATEGORY_ATTR, category);
+  }
+}
+
+function scan(roots: ParentNode[]) {
+  const targets = new Set<HTMLElement>();
+  for (const root of roots) for (const element of collectTargets(root)) targets.add(element);
+  tagElements([...targets]);
 }
 
 export function GlobalTypographyController() {
   useEffect(() => {
-    scan(document.body);
+    scan([document.body]);
 
     const observer = new MutationObserver((mutations) => {
+      const added: HTMLElement[] = [];
       for (const mutation of mutations) {
         for (const node of mutation.addedNodes) {
-          if (node instanceof HTMLElement) scan(node);
+          if (node instanceof HTMLElement) added.push(node);
         }
       }
+      if (added.length) scan(added);
     });
     observer.observe(document.body, { childList: true, subtree: true });
 

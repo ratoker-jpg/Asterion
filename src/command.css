@@ -405,8 +405,6 @@
 .cmdA .cmdA-art--resource { aspect-ratio: 1; }
 .cmdA .cmdA-art--resource .cmdA-art-resource { width: 62% !important; height: auto !important; aspect-ratio: 1; filter: drop-shadow(-8px -10px 14px rgba(0, 0, 0, .6)); }
 .cmdA .cmdA-art--resource .cmdA-art-ship { position: absolute; right: 0; bottom: 8%; width: 58%; object-fit: contain; filter: drop-shadow(-8px -10px 12px rgba(0, 0, 0, .6)); }
-.cmdA .cmdA-art--sun { aspect-ratio: 1; }
-.cmdA .cmdA-art--sun > img { filter: drop-shadow(0 0 60px rgba(255, 150, 40, .45)); }
 
 .cmdA .cmdA-people { display: flex; flex-wrap: wrap; gap: 10px 28px; }
 .cmdA .cmdA-person { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 0 1 300px; }
@@ -558,17 +556,6 @@
 }
 .cmdA .cmdA-range:active::-webkit-slider-thumb { cursor: grabbing; }
 .cmdA .cmdA-range:focus-visible { outline: var(--ut-focus, 2px solid #56d9f2); outline-offset: 4px; }
-
-/* ---------- operations fallback ---------- */
-.cmdA .cmdA-operations-dossier .cmdA-hero { align-items: start; }
-.cmdA .cmdA-stub { display: flex; gap: 14px; align-items: flex-start; max-width: 640px; padding: 14px 16px; border-radius: var(--ut-r-card, 13px); background: rgba(230, 173, 80, .08); }
-.cmdA .cmdA-stub small { display: block; color: var(--cm-label); font-weight: 600; }
-.cmdA .cmdA-stub h2 { margin-top: 3px; font-size: calc(22px * var(--text-scale-section-title, 1)) !important; font-weight: 800; }
-.cmdA .cmdA-stub p { margin-top: 6px; color: var(--cm-muted); line-height: 1.5; }
-.cmdA .cmdA-stub-icon { width: 54px; }
-.cmdA .cmdA-ghost-fleet { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; max-width: 640px; }
-.cmdA .cmdA-ghost-fleet span { display: grid; place-items: center; padding: 8px; border-radius: var(--ut-r-card, 13px); background: var(--cm-tint); opacity: .55; }
-.cmdA .cmdA-ghost-fleet img { width: 86%; aspect-ratio: 4 / 3; object-fit: contain; filter: grayscale(.5) drop-shadow(-6px -8px 10px rgba(0, 0, 0, .6)); }
 
 /* ---------- locked ---------- */
 .cmdA .cmdA-locked { flex: 1 1 auto; display: grid; grid-template-columns: minmax(280px, 560px) minmax(0, 1fr); align-items: center; gap: 30px; padding: 30px 48px; }

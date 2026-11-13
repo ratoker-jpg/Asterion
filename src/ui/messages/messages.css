@@ -838,3 +838,323 @@
 
 /* Bot letters write the facts one per line. */
 .reports-view .reports-sheet-summary { white-space: pre-line; }
+
+/* ==========================================================================
+   «Сообщения» v3 (owner, 12.11.2026, concept r5/mail.html). Three columns,
+   most of the width to the report. Rail: sections with mail on top with a
+   counter, empty ones grey under «ПУСТО». List: no checkboxes, no pages,
+   grouped by day, one value in the colour of the outcome, a stripe on unread.
+   Report: an art header (kind and time, title, who and where, the big number
+   and what it means), cards below, actions at the bottom. Text over art always
+   sits on the dark left gradient with a shadow (owner rule).
+   ========================================================================== */
+/* Shares of the screen, not viewport units: the shell scales the whole UI (mockup: 166 / 312 / 724 at 1280). */
+.reports-view.reports-view--mail { grid-template-columns: minmax(170px, 15%) minmax(0, 1fr); gap: 12px; }
+.reports-view--mail .reports-folder-workspace { grid-template-columns: minmax(300px, 31%) minmax(0, 1fr); gap: 12px; }
+.reports-view--mail .reports-folder-workspace--empty { grid-template-columns: minmax(0, 1fr); }
+
+.reports-view .reports-tone--success { color: #5fe39a !important; }
+.reports-view .reports-tone--danger { color: #ff7e8b !important; }
+.reports-view .reports-tone--warning { color: #f2bd5c !important; }
+.reports-view .reports-tone--info { color: #6fe0f6 !important; }
+.reports-view .reports-tone--neutral { color: #cfe3e8 !important; }
+
+/* ------------------------------------------------------------------ rail */
+.reports-view--mail .reports-categories { padding: 16px 10px 12px; }
+.reports-view--mail .reports-categories > header { padding: 0 8px 10px; }
+.reports-view--mail .reports-message-nav { margin-top: 4px; padding-top: 8px; }
+.reports-view--mail :is(.reports-profile-nav, .reports-message-nav > button) { grid-template-columns: 32px minmax(0, 1fr) auto; gap: 9px; min-height: 40px; padding: 4px 8px 4px 6px; }
+.reports-view--mail .reports-nav-art { width: 32px; height: 32px; }
+.reports-view--mail .reports-nav-art .reports-glyph-image { width: 30px; height: 30px; }
+.reports-view--mail :is(.reports-profile-nav, .reports-message-nav > button) strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; }
+.reports-view--mail .reports-message-nav .reports-folder-counter .reports-v2-unread-count {
+  min-width: 24px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(143, 182, 192, .14);
+  color: #b9d2d9;
+  white-space: nowrap;
+}
+.reports-view--mail .reports-message-nav .reports-folder-counter .reports-v2-unread-count.is-new { padding: 1px 7px; background: #2f7ff0; color: #fff; }
+.reports-view--mail .reports-nav-empty-label {
+  margin: 12px 8px 2px;
+  color: rgba(143, 182, 192, .55);
+  font-size: calc(11px * var(--text-scale-secondary, 1)) !important;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.reports-view--mail .reports-message-nav > button.is-empty { color: rgba(143, 182, 192, .5); }
+.reports-view--mail .reports-message-nav > button.is-empty .reports-nav-art { opacity: .4; filter: grayscale(1); }
+.reports-view--mail .reports-message-nav > button.is-empty.active { color: #dbeff4; }
+
+/* ------------------------------------------------------------------ list */
+.reports-view--mail .reports-feed-head { align-items: center; padding: 14px 14px 8px 16px; }
+.reports-view--mail .reports-feed-head .reports-mark-all {
+  flex: none;
+  min-height: 28px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--rm-cyan);
+  font-size: calc(12px * var(--text-scale-control, 1)) !important;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.reports-view--mail .reports-feed-head .reports-mark-all:hover:not(:disabled) { background: var(--rm-tint-hover); }
+.reports-view--mail .reports-feed-head .reports-mark-all:disabled { color: var(--rm-muted); opacity: .6; }
+.reports-view--mail .reports-feed-tools { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px 8px 14px; }
+.reports-view--mail .reports-v2-filter-segments { flex: 0 1 auto; min-width: 0; padding: 0; gap: 4px; background: none; }
+.reports-view--mail .reports-v2-filter-segments button { flex: 0 0 auto; min-height: 28px; padding: 2px 10px; border-radius: 999px; background: var(--rm-tint); font-size: calc(12px * var(--text-scale-control, 1)) !important; }
+.reports-view--mail .reports-search-toggle {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--rm-tint);
+  color: var(--rm-label);
+}
+.reports-view--mail .reports-search-toggle svg { width: 16px; height: 16px; }
+.reports-view--mail .reports-search-toggle:hover,
+.reports-view--mail .reports-search-toggle.is-on { background: var(--rm-active); color: #fff; }
+.reports-view--mail .reports-search { height: 36px; margin: 0 12px 8px 14px; }
+
+.reports-view--mail .reports-list { gap: 0; padding: 0 8px 8px; }
+.reports-view--mail .reports-list-day { display: grid; gap: 2px; }
+.reports-view--mail .reports-list-day__label {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 8px 8px 4px;
+  background: rgb(10, 17, 22);
+  color: rgba(143, 182, 192, .7);
+  font-size: calc(11px * var(--text-scale-secondary, 1)) !important;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.reports-view--mail .reports-list-item { grid-template-columns: minmax(0, 1fr); border-radius: 10px; }
+.reports-view--mail .reports-list-item.unread::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--rm-accent-strong);
+}
+.reports-view--mail .reports-list-open { grid-template-columns: 36px minmax(0, 1fr) auto; gap: 10px; padding: 7px 10px; }
+.reports-view--mail .reports-list-icon { width: 36px; height: 36px; border-radius: 9px; }
+.reports-view--mail .reports-list-icon img { width: 32px; height: 32px; }
+.reports-view--mail .reports-list-copy strong { color: #cfe3e8; font-size: calc(13px * var(--text-scale-body, 1)) !important; font-weight: 700; }
+.reports-view--mail .reports-list-item.unread .reports-list-copy strong { color: #fff; font-weight: 800; }
+.reports-view--mail .reports-list-copy em { color: var(--rm-muted); }
+.reports-view--mail .reports-list-meta { display: grid; justify-items: end; gap: 2px; min-width: 0; max-width: 118px; }
+.reports-view--mail .reports-list-value {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: calc(13px * var(--text-scale-table, 1)) !important;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reports-view--mail .reports-list-meta time { display: inline-flex; align-items: center; gap: 5px; font-size: calc(11px * var(--text-scale-table, 1)) !important; }
+.reports-view--mail .reports-list-meta .reports-favorite-dot { width: 7px; height: 7px; }
+.reports-view--mail .reports-list-empty-status--folder { margin-top: 40%; color: var(--rm-muted); }
+.reports-view--mail .reports-feed-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px 8px 16px;
+  border-top: 1px solid var(--rm-line);
+}
+.reports-view--mail .reports-feed-foot .reports-folder-count { color: var(--rm-muted); font-size: calc(12px * var(--text-scale-secondary, 1)) !important; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.reports-view--mail .reports-delete-all { min-height: 28px; padding: 2px 8px; border: 0; border-radius: 8px; background: none; color: #ff9aa5; font-size: calc(12px * var(--text-scale-control, 1)) !important; font-weight: 700; white-space: nowrap; }
+.reports-view--mail .reports-delete-all:hover:not(:disabled) { background: rgba(255, 107, 122, .12); }
+.reports-view--mail .reports-delete-all:disabled { color: var(--rm-muted); opacity: .5; }
+
+/* ---------------------------------------------------------------- report */
+.reports-view--mail .reports-preview-scroll { padding: 0; }
+.reports-view--mail .reports-dossier { gap: 0; }
+.reports-view--mail .reports-sheet-body { display: grid; gap: 18px; padding: 18px 22px 22px; min-width: 0; }
+
+.reports-view .reports-hero {
+  position: relative;
+  min-height: 176px;
+  overflow: hidden;
+  border-radius: var(--ut-r-panel, 18px) var(--ut-r-panel, 18px) 0 0;
+  background: #080d15;
+  isolation: isolate;
+}
+.reports-view .reports-hero__art {
+  position: absolute;
+  inset: 0 0 0 auto;
+  z-index: -2;
+  width: 78%;
+  height: 100%;
+  object-fit: cover;
+  object-position: right center;
+}
+.reports-view .reports-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(90deg, rgb(8, 13, 21) 0, rgba(8, 13, 21, .97) 45%, rgba(8, 13, 21, .78) 65%, rgba(8, 13, 21, .12) 92%), linear-gradient(0deg, rgba(8, 13, 21, .6), transparent 45%);
+}
+.reports-view .reports-hero__copy {
+  max-width: min(68%, 760px);
+  min-height: 176px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 20px 26px 18px;
+}
+.reports-view .reports-hero :is(small, h2, p, b, span) { text-shadow: 0 2px 10px rgba(0, 0, 0, .9); }
+.reports-view .reports-hero__kicker {
+  color: var(--rm-cyan);
+  font-size: calc(12px * var(--text-scale-secondary, 1)) !important;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.reports-view .reports-hero--success .reports-hero__kicker { color: #5fe39a; }
+.reports-view .reports-hero--danger .reports-hero__kicker { color: #ff7e8b; }
+.reports-view .reports-hero--warning .reports-hero__kicker { color: #f2bd5c; }
+.reports-view .reports-hero__kicker time { color: inherit; font-variant-numeric: tabular-nums; }
+.reports-view .reports-hero h2 {
+  margin: 6px 0 4px;
+  color: #fff;
+  font-size: calc(28px * var(--text-scale-page-title, 1)) !important;
+  font-weight: 800;
+  line-height: 1.08;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+.reports-view .reports-hero__subline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  margin: 0;
+  color: #b8c3d3;
+  font-size: calc(14px * var(--text-scale-body, 1)) !important;
+  overflow-wrap: anywhere;
+}
+.reports-view .reports-hero__subline .reports-sheet-place__name { color: #dbe6ee; font-size: inherit !important; font-weight: 600; }
+.reports-view .reports-hero__subline .reports-v3-coord { font-size: inherit !important; }
+.reports-view .reports-hero__big { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin-top: auto; padding-top: 12px; }
+.reports-view .reports-hero__big > b {
+  font-size: calc(36px * var(--text-scale-page-title, 1)) !important;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.reports-view .reports-hero__big > span { flex: 1 1 220px; min-width: 0; max-width: 440px; color: #c7d1de; font-size: calc(14px * var(--text-scale-body, 1)) !important; line-height: 1.35; overflow-wrap: break-word; }
+
+/* Cards: one tinted tile per block item. */
+.reports-view--mail .reports-sheet-summary { margin: 0; padding: 0; border: 0; }
+.reports-view--mail .reports-sheet-summary--letter { color: #e8f1f6; font-size: calc(16px * var(--text-scale-body, 1)) !important; line-height: 1.5; }
+.reports-view--mail .reports-sheet-sides { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.reports-view--mail .reports-battle-side { padding: 12px 14px; border: 1px solid var(--rm-line); background: rgba(255, 255, 255, .03); }
+.reports-view--mail .reports-sheet-resources { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.reports-view--mail .reports-v3-res { border: 1px solid var(--rm-line); background: rgba(255, 255, 255, .03); }
+.reports-view--mail .reports-v3-res b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; }
+.reports-view--mail .reports-v3-res--debris b { color: #f2bd5c; }
+
+/* Losses: was / lost / left for both sides. */
+.reports-view .reports-loss-tables { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px 24px; }
+.reports-view .reports-loss-table { min-width: 0; display: grid; align-content: start; }
+.reports-view .reports-loss-table__head,
+.reports-view .reports-loss-table__row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(56px, auto) minmax(64px, auto) minmax(56px, auto);
+  align-items: center;
+  gap: 10px;
+  padding: 6px 2px;
+  border-bottom: 1px solid var(--rm-line);
+}
+.reports-view .reports-loss-table__head { padding-top: 0; }
+.reports-view .reports-loss-table__head span { color: var(--rm-label); font-size: calc(11px * var(--text-scale-secondary, 1)) !important; font-weight: 800; letter-spacing: .08em; text-align: right; text-transform: uppercase; white-space: nowrap; }
+.reports-view .reports-loss-table__head span:first-child { overflow: hidden; text-align: left; text-overflow: ellipsis; }
+.reports-view .reports-loss-table__row > span { color: #dbe6ee; font-size: calc(13px * var(--text-scale-table, 1)) !important; font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.reports-view .reports-loss-table__row > span.is-loss { color: #ff7e8b; }
+.reports-view .reports-loss-table__row > span:last-child { color: #fff; }
+.reports-view .reports-loss-table__name { min-width: 0; display: grid !important; grid-template-columns: 26px minmax(0, 1fr); align-items: center; gap: 8px; text-align: left !important; }
+.reports-view .reports-loss-table__name img,
+.reports-view .reports-loss-table__name i { width: 26px; height: 26px; object-fit: contain; }
+.reports-view .reports-loss-table__name b { min-width: 0; overflow: hidden; color: #fff; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.reports-view .reports-loss-table__empty { margin: 8px 0 0; color: var(--rm-muted); font-size: calc(13px * var(--text-scale-body, 1)) !important; }
+
+/* Spy risk plaque */
+.reports-view .reports-risk {
+  margin: 0;
+  padding: 12px 16px;
+  border: 1px solid;
+  border-radius: 12px;
+  font-size: calc(14px * var(--text-scale-body, 1)) !important;
+  line-height: 1.45;
+  overflow-wrap: break-word;
+}
+.reports-view .reports-risk--danger { border-color: rgba(255, 107, 122, .45); background: rgba(255, 107, 122, .1); color: #ffd3d8; }
+.reports-view .reports-risk--danger b { color: #ff8c98; }
+.reports-view .reports-risk--success { border-color: rgba(53, 229, 138, .35); background: rgba(53, 229, 138, .08); color: #c9f6dc; }
+.reports-view .reports-risk--success b { color: #6ff0a6; }
+.reports-view .reports-risk--warning { border-color: rgba(230, 173, 80, .35); background: rgba(230, 173, 80, .08); color: #f6e2bd; }
+
+/* Footer: «Удалить» left, the actions right, one primary. */
+.reports-view--mail .reports-preview-footer { padding: 12px 18px; flex-wrap: wrap; }
+.reports-view--mail .reports-preview-footer-actions { justify-content: flex-end; margin-left: auto; }
+.reports-view--mail .reports-preview-footer .reports-delete-current { color: #ff7e8b; }
+
+/* Profile: the same frame, the art header on top. */
+.reports-view--mail .reports-profile-view { grid-template-rows: auto minmax(0, 1fr) auto; padding: 0 0 18px; }
+.reports-view--mail .reports-profile-view > :not(.reports-hero, [hidden]) { margin: 0 22px; }
+.reports-view--mail .reports-profile-avatar__caption h3 { font-size: calc(20px * var(--text-scale-section-title, 1)) !important; }
+
+@media (max-width: 1500px) {
+  .reports-view .reports-hero, .reports-view .reports-hero__copy { min-height: 158px; }
+  .reports-view .reports-hero__copy { padding: 16px 20px 14px; max-width: 74%; }
+  .reports-view .reports-hero h2 { font-size: calc(24px * var(--text-scale-page-title, 1)) !important; }
+  .reports-view .reports-hero__big > b { font-size: calc(30px * var(--text-scale-page-title, 1)) !important; }
+  .reports-view--mail .reports-sheet-body { padding: 14px 18px 18px; gap: 14px; }
+}
+
+/* Empty section / empty list: the opaque relay-satellite picture fades into the panel at every edge. */
+.reports-view .reports-empty-art--mail {
+  width: min(420px, 78%) !important;
+  border-radius: 0;
+  -webkit-mask-image: radial-gradient(closest-side, #000 50%, transparent 100%);
+  mask-image: radial-gradient(closest-side, #000 50%, transparent 100%);
+}
+
+/* The typography layer sizes every text node's parent: a span inside the header title keeps the title size. */
+.reports-view .reports-hero h2 > span { font-size: inherit !important; font-weight: inherit; }
+/* Round mission pictures fill the row tile. */
+.reports-view .reports-list-icon .reports-action-art { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
+
+/* A row title wraps to a second line instead of being cut (owner rule); who / where may ellipsize. */
+.reports-view--mail .reports-list-copy strong { white-space: normal; text-overflow: clip; overflow-wrap: anywhere; line-height: 1.25; }
+.reports-view--mail .reports-list-open { align-items: start; }
+.reports-view--mail .reports-list-meta { padding-top: 1px; }
+
+/* Ship and defence groups stack in the report column; tiles never squeeze a count into a name. */
+.reports-view--mail .reports-sheet-groups:not(.reports-sheet-groups--resources) { grid-template-columns: minmax(0, 1fr); }
+.reports-view--mail .spy-report-entity-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.reports-view--mail .reports-sheet-resources { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+/* Loot and debris side by side only when both fit; a card never shrinks below its amount. */
+.reports-view--mail .reports-sheet-groups--resources { grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); }
+.reports-view--mail .reports-sheet-resources { grid-template-columns: repeat(auto-fill, minmax(172px, 1fr)); }
+/* A card amount may put its unit on a second line, never cut it. */
+.reports-view--mail .reports-v3-res b { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: normal; }

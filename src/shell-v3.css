@@ -63,7 +63,7 @@
 .queue-panel-v3{padding:20px 18px;display:flex;flex-direction:column}.queue-panel-v3 .queue-card-v2{margin-top:14px}.queue-panel-v3 .build-preview-v2{margin-top:auto}.queue-panel-v3 .aegis-button{margin-top:12px}
 
 /* Every other module replaces the workspace while the header remains intact. */
-.module-placeholder-v3{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px solid rgba(62,184,214,.12);background:radial-gradient(circle at 50% 48%,rgba(0,128,177,.08),transparent 35%);text-align:center}.module-placeholder-v3>span{font-size:8px;letter-spacing:3px;color:#4e9eb1}.module-placeholder-v3 h1{margin:13px 0 10px;font-size:44px;letter-spacing:7px;color:#dff8ff}.module-placeholder-v3 p{width:520px;margin:0;color:#6d939e;font-size:11px;line-height:1.7}
+
 
 /* Universe gets the entire replaceable workspace. */
 .workspace--universe .universe-view.universe-view-v3{left:0;right:0;top:0;bottom:0;border:1px solid rgba(60,195,226,.22);background:linear-gradient(180deg,rgba(3,18,28,.72),rgba(1,8,14,.28))}.universe-view-v3 .universe-nav-v3{left:0;right:0;top:0;height:58px;padding:0 14px;clip-path:none;border-left:0;border-right:0;border-top:0;background:linear-gradient(180deg,rgba(5,31,44,.94),rgba(3,18,28,.94))}.universe-view-v3 .universe-breadcrumb{gap:10px}.universe-view-v3 .universe-breadcrumb>span{font-size:9px;letter-spacing:1.4px;color:#5cb3c8}.universe-view-v3 .universe-breadcrumb strong{height:auto;padding:0;border:0;background:transparent;font-size:11px;color:#e3f8fc}.universe-view-v3 .universe-breadcrumb b{color:#456d78}

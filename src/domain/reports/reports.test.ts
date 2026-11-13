@@ -30,7 +30,6 @@ import {
   upsertRecyclerArrivalReport,
   upsertOverpopulationEpisodeReport,
 } from './adapters.ts';
-import { NON_COMBAT_REPORT_FIXTURES } from './catalog.ts';
 import {
   createDefaultReportsState,
   deleteAllReports,
@@ -69,7 +68,6 @@ async function loadPersistence() {
 }
 
 test('Reports does not fabricate non-combat runtime history', () => {
-  assert.deepEqual(NON_COMBAT_REPORT_FIXTURES, []);
   const counts = getReportCategoryCounts(buildReportsFeed([], createDefaultOperationsState(), commandWithoutJointOperations()));
   assert.equal(counts.system, 0);
   assert.equal(counts.battle, 0);
@@ -861,11 +859,11 @@ test('one mission is one report: a recycler arrival takes the return of the same
   assert.equal(item.blocks?.ships?.[0]?.title, 'Вернувшийся флот');
   assert.equal(item.timestamp, new Date(2_000).toISOString());
   const sheet = buildReportSheet(item, null, { canRepeatFlight: (id) => id === 'mission-7' });
-  assert.deepEqual(sheet.actions.map((action) => [action.kind, action.primary, action.flightId]), [['repeat_flight', true, 'mission-7']]);
+  assert.deepEqual(sheet.actions.map((action) => [action.kind, action.primary, action.flightId]), [['repeat_flight', true, 'mission-7'], ['show_on_map', false, undefined]]);
   assert.equal(sheet.title, 'Переработчик прибыл');
   assert.match(sheet.summary, /На орбите обломков не найдено/);
-  // Without the possibility the button is not offered.
-  assert.deepEqual(buildReportSheet(item).actions, []);
+  // Without the possibility the repeat is not offered; the map link stays.
+  assert.deepEqual(buildReportSheet(item).actions.map((action) => action.kind), ['show_on_map']);
 });
 
 test('an application decided in Command turns its «Личные» letter from «Новая» into the outcome', () => {
