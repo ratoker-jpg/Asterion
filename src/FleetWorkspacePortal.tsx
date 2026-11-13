@@ -1843,7 +1843,7 @@ function FleetWorkspace({
         : flight.phase === 'outbound' || (expeditionLike && flight.phase === 'arrived') ? 'enabled' : 'disabled',
       canEvade: Boolean(attackedId),
       details: own ? () => (expeditionLike ? setSelectedExpeditionFlightId(flight.id) : setSelectedFlightDetailsId(flight.id)) : undefined,
-      cardKicker: attackNow ? `${isIncomingPirateRaid ? 'Пиратский налёт' : 'Атака'} на вашу планету · удар в ${boardClock(flight.arrivalAt)}` : `${missionLabel} · ${stateLabel.toLowerCase()}`,
+      cardKicker: attackNow ? `${isIncomingPirateRaid ? 'Пиратский налёт' : 'Атака'} · удар в ${boardClock(flight.arrivalAt)}` : `${missionLabel} · ${stateLabel.toLowerCase()}`,
       cardTitle: attackNow ? (attackedId ? boardPlanetName(attackedId) ?? targetTitle : targetTitle) : targetTitle,
       cardLine: attackNow ? `Летит ${ownerLabel} ${flightCoordinateLabel(flight.originCoordinate)}` : `${originName} ${flightCoordinateLabel(flight.originCoordinate)} → ${targetTitle}${flight.missionId === 'space-flight' ? '' : ` ${flightCoordinateLabel(flight.destinationCoordinate)}`}`,
     };
@@ -1858,6 +1858,10 @@ function FleetWorkspace({
   });
   const boardAttacks = boardItems.filter((item) => item.section === 'attack');
   const boardOwnCount = boardItems.filter((item) => item.section === 'own').length;
+  // The fixture's flights are not in the save: their slots are counted from the fixture (spies take no slot).
+  const boardSlots = boardQa
+    ? { used: boardQa.records.filter((flight) => (!flight.ownerSide || flight.ownerSide === 'player') && flight.missionId !== 'espionage').length, limit: boardQa.slotLimit }
+    : flightSlots;
   const openBoardOn = (flightId: string | undefined) => {
     setFlightsOpen(true);
     if (flightId) setBoardFocus((current) => ({ id: flightId, nonce: (current?.nonce ?? 0) + 1 }));
@@ -2036,7 +2040,7 @@ function FleetWorkspace({
                 <button type="button" data-qa-fleet-sent-done onClick={() => { clearLaunchContext(); setStatus(FLEET_ROOT_STATUS); }}>ГОТОВО</button>
               </div> : flightsOpen ? <div className="fl-head" data-qa-flights-head>
                 <h2>Рейсы и миссии</h2>
-                <span>{boardItems.length ? `${boardOwnCount} ${boardOwnCount % 10 === 1 && boardOwnCount % 100 !== 11 ? 'ваш' : 'ваших'} · рейсов занято ${flightSlots.used} из ${flightSlots.limit}` : 'ни одного флота в пути'}</span>
+                <span>{boardItems.length ? `${boardOwnCount ? `${boardOwnCount} ${boardOwnCount % 10 === 1 && boardOwnCount % 100 !== 11 ? 'ваш рейс' : 'ваших рейсов'} в пути` : 'ваших рейсов нет'} · слотов занято ${boardSlots.used} из ${boardSlots.limit}` : 'ни одного флота в пути'}</span>
               </div> : <>
               <small className="fleet-flights-v2__label">В пути <b>{activeFlightRecords.length}</b></small>
               <span

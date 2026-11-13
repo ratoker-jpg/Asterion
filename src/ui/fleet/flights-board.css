@@ -247,11 +247,17 @@
   .fleet-workspace-v1.fleet-workspace-v1 .fl-board .fl-focus__actions button { min-height: 46px; padding: 0 18px; font-size: calc(16px * var(--text-scale-control, 1)) !important; }
   .fleet-workspace-v1.fleet-workspace-v1 .fl-board { gap: 8px; }
 }
+/* 1280 wide: the card's buttons stay in one row, the composition strip gives way and scrolls */
 @media (max-width: 1400px) {
-  .fleet-workspace-v1.fleet-workspace-v1 .fl-focus { grid-template-columns: minmax(200px, 300px) minmax(0, 1fr) auto; }
-  .fleet-workspace-v1.fleet-workspace-v1 .fl-focus__actions { flex-direction: column; }
-  .fleet-workspace-v1.fleet-workspace-v1 .fl-board .fl-focus__actions button { min-height: 38px; }
+  .fleet-workspace-v1.fleet-workspace-v1 .fl-focus { grid-template-columns: minmax(200px, 300px) minmax(0, 1fr) auto; gap: 16px; }
+  .fleet-workspace-v1.fleet-workspace-v1 .fl-focus__actions { gap: 8px; }
+  .fleet-workspace-v1.fleet-workspace-v1 .fl-board .fl-focus__actions button { min-height: 42px; padding: 0 14px; font-size: calc(15px * var(--text-scale-control, 1)) !important; }
 }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-focus__cargo { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-focus__cargo span { display: inline-flex; align-items: center; gap: 6px; color: #fff; font-size: calc(15px * var(--text-scale-table, 1)) !important; font-weight: 700; white-space: nowrap; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-focus__cargo span > :first-child { width: 20px; height: 20px; flex: none; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__cargo .is-many { color: #fff; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__cargo .is-many i { margin-left: 6px; font-style: normal; color: var(--fl-cyan); }
 
 @media (prefers-reduced-motion: reduce) {
   .fleet-workspace-v1.fleet-workspace-v1 .fl-board .fl-list .fl-row { transition: none; }

@@ -102,8 +102,14 @@ function ShipsButton({ item, selected, onOpen }: { item: FlightBoardItem; select
   </button>;
 }
 
+function resourcesLabel(count: number) {
+  return count === 1 ? '1 ресурс' : count < 5 ? `${count} ресурса` : `${count} ресурсов`;
+}
+
+/** Two resources fit the cell; more show their count and the full list waits in the bottom card. */
 function Cargo({ cargo }: { cargo: FlightBoardCargo[] }) {
   if (!cargo.length) return <div className="fl-row__cargo"><span className="is-none">без груза</span></div>;
+  if (cargo.length > 2) return <div className="fl-row__cargo" data-qa-flight-cargo={cargo.length}><span className="is-many">{resourcesLabel(cargo.length)}<i aria-hidden="true">›</i></span></div>;
   return <div className="fl-row__cargo" data-qa-flight-cargo>{cargo.map((entry) => <span key={entry.kind}><ResourceIcon kind={entry.kind} /><b>{compactAmount(entry.amount)}</b></span>)}</div>;
 }
 
@@ -160,6 +166,7 @@ function FocusCard({ item, now, onRecall, onRepeat, onEvade }: {
       <small className="fl-focus__kicker">{item.cardKicker}</small>
       <h2>{item.cardTitle}{remaining ? <> · <em data-qa-flight-card-timer>{remaining}</em></> : null}</h2>
       <p>{item.cardLine}</p>
+      {item.cargo.length ? <div className="fl-focus__cargo" data-qa-flight-card-cargo>{item.cargo.map((entry) => <span key={entry.kind}><ResourceIcon kind={entry.kind} /><b>{compactAmount(entry.amount)}</b></span>)}</div> : null}
     </div>
     <div className={`fl-focus__ships${expanded ? ' is-open' : ''}`} data-qa-flight-card-ships>
       {item.ships

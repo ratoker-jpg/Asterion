@@ -30,6 +30,8 @@ export type FlightsBoardQaFixture = {
   planetNames: Record<string, string>;
   /** The flight the bottom card opens on. */
   focusId?: string;
+  /** Fleet-slot limit of the seeded player (3 + 1,5 per «Компьютерные системы»), so «занято X из Y» matches the list. */
+  slotLimit: number;
 };
 
 const NOW = Date.UTC(2026, 10, 12, 20, 41, 0);
@@ -146,7 +148,7 @@ export function createFlightsBoardQaFixture(
 ): FlightsBoardQaFixture {
   const { home, homeAt, colony, playerId } = context;
   const make = (specs: Spec[]) => specs.map((spec) => build(spec, home, homeAt, playerId));
-  const base = { nowMs: NOW, planetNames: {} as Record<string, string>, espionageLevel: 10 };
+  const base = { nowMs: NOW, planetNames: {} as Record<string, string>, espionageLevel: 10, slotLimit: 3 };
   switch (scenario) {
     case 'empty':
       return { ...base, records: [] };
@@ -156,15 +158,16 @@ export function createFlightsBoardQaFixture(
       return { ...base, records: make(attackSpecs()) };
     case 'many':
       // 3 attacks with the composition hidden (Espionage 9) and 25 own missions.
-      return { ...base, espionageLevel: 9, records: make([...attackSpecs(), ...ownSpecs(28, colony)]) };
+      return { ...base, espionageLevel: 9, slotLimit: 30, records: make([...attackSpecs(), ...ownSpecs(28, colony)]) };
     case 'long':
       return {
         ...base,
+        slotLimit: 9,
         planetNames: { [home]: LONG_PLANET, [colony]: 'Пояс Отступников Кассиопеи-Прайм у Северного Предела' },
         records: make([...attackSpecs().slice(0, 1), ...ownSpecs(6, colony)]),
         focusId: 'qa-own-05',
       };
     case 'nine':
-      return { ...base, records: make(ownSpecs(4, colony)), focusId: 'qa-own-01' };
+      return { ...base, slotLimit: 6, records: make(ownSpecs(4, colony)), focusId: 'qa-own-01' };
   }
 }

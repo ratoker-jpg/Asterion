@@ -33,12 +33,12 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // [frame, scenario, step, expectations]
 const SHOTS_LIST = [
   ['01-empty', 'empty', null, { rows: 0, empty: true }],
-  ['02-one-flight', 'one', null, { rows: 1, hot: 0 }],
-  ['03-attacks-3-composition', 'attacks', null, { rows: 3, hot: 3, cardShips: 4 }],
+  ['02-one-flight', 'one', null, { rows: 1, hot: 0, head: '1 ваш рейс в пути · слотов занято 1 из 3' }],
+  ['03-attacks-3-composition', 'attacks', null, { rows: 3, hot: 3, cardShips: 4, head: 'ваших рейсов нет · слотов занято 0 из 3' }],
   ['04-attack-second-picked', 'attacks', 'pick-second', { rows: 3, hot: 3, cardShips: 2 }],
-  ['05-many-28-top', 'many', null, { rows: 28, hot: 3, scrolls: true, hiddenComposition: true }],
+  ['05-many-28-top', 'many', null, { rows: 28, hot: 3, scrolls: true, hiddenComposition: true, head: '25 ваших рейсов в пути · слотов занято 25 из 30' }],
   ['06-many-28-end', 'many', 'end', { rows: 28, hot: 3, scrolls: true }],
-  ['07-long-names-12-digits', 'long', null, { rows: 7, hot: 1 }],
+  ['07-long-names-12-digits', 'long', null, { rows: 7, hot: 1, head: '6 ваших рейсов в пути · слотов занято 6 из 9', cardCargo: 4 }],
   ['08-nine-types-card', 'nine', null, { cardShips: 5, more: '+4' }],
   ['09-nine-types-card-open', 'nine', 'more', { cardShips: 9 }],
 ];
@@ -149,6 +149,20 @@ async function layout(win) {
       horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 2,
       nativeTitles: Array.from(document.querySelectorAll('${BOARD} [title], .fleet-flights-v2 [title]')).map((node) => node.getAttribute('title').slice(0, 60)),
       nativeSelects: document.querySelectorAll('${BOARD} select').length,
+      head: document.querySelector('[data-qa-flights-head] span')?.textContent?.trim() ?? '',
+      cardCargo: card ? card.querySelectorAll('[data-qa-flight-card-cargo] > span').length : 0,
+      // The card's buttons: one row, fully inside the card.
+      cardButtons: (() => {
+        const buttons = card ? Array.from(card.querySelectorAll('.fl-focus__actions button')).map((node) => node.getBoundingClientRect()) : [];
+        const outer = card?.getBoundingClientRect();
+        return {
+          count: buttons.length,
+          oneRow: buttons.every((box) => Math.abs(box.top - (buttons[0]?.top ?? 0)) < 2),
+          inside: !outer || buttons.every((box) => box.top >= outer.top - 1 && box.bottom <= outer.bottom + 1 && box.left >= outer.left - 1 && box.right <= outer.right + 1),
+        };
+      })(),
+      // A cargo cell never grows past two lines.
+      tallCargo: Array.from(document.querySelectorAll('[data-qa-flight-row] .fl-row__cargo')).filter((node) => node.getBoundingClientRect().height > 52).length,
     };
   })()`);
 }
@@ -179,6 +193,10 @@ async function runViewport(win, directory, label) {
       if (expect.cardShips !== undefined && box.cardShips !== expect.cardShips) fail(`${name}: expected ${expect.cardShips} ship cards`, box);
       if (expect.more !== undefined && box.more !== expect.more) fail(`${name}: expected «${expect.more}»`, box);
       if (expect.scrolls && !box.listScrolls) fail(`${name}: the long list must scroll inside`, box);
+      if (!box.cardButtons.oneRow || !box.cardButtons.inside) fail(`${name}: the card's buttons must sit in one row inside the card`, box.cardButtons);
+      if (box.tallCargo) fail(`${name}: a cargo cell is taller than two lines`, box);
+      if (expect.head !== undefined && box.head !== expect.head) fail(`${name}: header counter «${box.head}», expected «${expect.head}»`, box);
+      if (expect.cardCargo !== undefined && box.cardCargo !== expect.cardCargo) fail(`${name}: expected ${expect.cardCargo} cargo entries in the card`, box);
       if (expect.hiddenComposition && (box.hiddenComposition !== 3 || !box.cardHidden)) fail(`${name}: attacks below Espionage 10 must hide the composition`, box);
     } else if (CHECKS) {
       fail(`${name}: «Рейсы и миссии» board missing`, box);
