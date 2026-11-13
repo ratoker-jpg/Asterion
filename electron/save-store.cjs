@@ -26,13 +26,26 @@ function filesOf(key) {
     && WRITE_ID.test(name.slice(prefix.length, -'.save.json'.length)));
 }
 
-// Older versions stay until the renderer points at the new one; the one
-// before the previous is no longer referenced by anything.
+// Older versions stay until the renderer points at the new one. The pointer lives in the
+// window, which moves it a moment after a file lands, so the main process cannot know which
+// file it still references. A file is therefore dropped only when it is both beyond the
+// `keep` newest others and older than STALE_GRACE_MS (audit 13.11: three quick writes used to
+// delete the file the pointer still named). More than MAX_OTHERS older files are dropped
+// regardless of age, so a burst cannot fill the disk.
+const STALE_GRACE_MS = 2 * 60 * 1000;
+const MAX_OTHERS = 6;
+
+/** Which of `entries` ({ name, at }) may be deleted after `targetName` was written. Pure. */
+function staleVersionsToDrop(entries, targetName, keep = 1, now = Date.now()) {
+  const others = entries.filter((entry) => entry.name !== targetName).sort((left, right) => right.at - left.at);
+  return others.slice(keep)
+    .filter((entry, index) => now - entry.at >= STALE_GRACE_MS || keep + index >= MAX_OTHERS)
+    .map((entry) => entry.name);
+}
+
 function dropStaleVersions(key, target, keep = 1) {
-  const others = filesOf(key).filter((name) => name !== path.basename(target))
-    .map((name) => ({ name, at: fs.statSync(path.join(savesDir(), name)).mtimeMs }))
-    .sort((left, right) => right.at - left.at);
-  for (const stale of others.slice(keep)) fs.rmSync(path.join(savesDir(), stale.name), { force: true });
+  const entries = filesOf(key).map((name) => ({ name, at: fs.statSync(path.join(savesDir(), name)).mtimeMs }));
+  for (const name of staleVersionsToDrop(entries, path.basename(target), keep)) fs.rmSync(path.join(savesDir(), name), { force: true });
 }
 
 // Bot journal (src/application/npc-journal.ts): JSON lines next to the save,
@@ -228,4 +241,4 @@ function registerSaveStore() {
   });
 }
 
-module.exports = { registerSaveStore, pruneOrphanFiles, readSaveFile, readSaveFileSync };
+module.exports = { staleVersionsToDrop, STALE_GRACE_MS, registerSaveStore, pruneOrphanFiles, readSaveFile, readSaveFileSync };

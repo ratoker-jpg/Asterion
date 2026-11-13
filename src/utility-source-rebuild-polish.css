@@ -2,7 +2,6 @@
 
 /* Utility screens replace the placeholder in normal workspace flow so the existing
    GlobalPageScrollController can measure their real content height. */
-.workspace:has(.utility-screen-host)>.module-placeholder-v3{display:none}
 .utility-screen-host{
   position:relative;inset:auto;width:100%;min-height:846px;height:auto;overflow:visible
 }

@@ -3642,13 +3642,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               onColonize={() => navigateTo('universe')}
             />
             </>
-          ) : (
-            <main className="module-placeholder-v3">
-              <span>ASTERION COMMAND MODULE</span>
-              <h1>{activeTab.toUpperCase()}</h1>
-              <p>Верхняя командная панель остаётся неизменной. Этот рабочий экран будет реализован отдельным модулем.</p>
-            </main>
-          )}
+          ) : null}
         </section>
 
         {foreignWriterAt ? (
