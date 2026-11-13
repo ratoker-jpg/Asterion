@@ -198,7 +198,12 @@ export function FlightsBoard({ items, now, onRecall, onRepeat, onEvade, onSend, 
   footer?: ReactNode;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  useEffect(() => { if (focus) setSelectedId(focus.id); }, [focus]);
+  useEffect(() => {
+    if (!focus) return;
+    setSelectedId(focus.id);
+    // A flight opened from outside the list (the attack alert, the chip) comes into view.
+    requestAnimationFrame(() => document.querySelector(`[data-qa-flight-row="${CSS.escape(focus.id)}"]`)?.scrollIntoView({ block: 'nearest' }));
+  }, [focus]);
   const groups = useMemo(() => ({
     attack: items.filter((item) => item.section === 'attack'),
     own: items.filter((item) => item.section === 'own'),

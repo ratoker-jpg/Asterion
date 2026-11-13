@@ -262,3 +262,10 @@
 @media (prefers-reduced-motion: reduce) {
   .fleet-workspace-v1.fleet-workspace-v1 .fl-board .fl-list .fl-row { transition: none; }
 }
+
+/* numbers in cells and buttons keep their parent's size (a global «b» rule shrinks them) */
+.fleet-workspace-v1.fleet-workspace-v1 :is(.fl-row__cargo, .fl-focus__cargo, .fl-row__ships) b { font-size: inherit !important; font-weight: 800; }
+@media (max-width: 1400px) {
+  .fleet-workspace-v1.fleet-workspace-v1 .fl-focus { grid-template-columns: minmax(220px, 380px) minmax(0, 1fr) auto; }
+  .fleet-workspace-v1.fleet-workspace-v1 .fl-focus__kicker { letter-spacing: 1px; font-size: calc(13px * var(--text-scale-secondary, 1)) !important; }
+}
