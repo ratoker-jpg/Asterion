@@ -84,6 +84,7 @@
     "test:command-screens-ui": "electron electron/visual-command-screens.cjs",
     "test:operations-screens-ui": "electron electron/visual-operations-screens.cjs",
     "test:universe-card-ui": "electron electron/visual-universe-card.cjs",
+    "test:flights-board-ui": "electron electron/visual-flights-board.cjs",
     "test:reports-format-ui": "electron electron/visual-reports-format.cjs",
     "qa:visual:trade": "electron electron/visual-trade-center.cjs",
     "qa:visual": "electron electron/visual-capture.cjs && electron electron/visual-industry-requirements.cjs && electron electron/visual-building-interiors.cjs && electron electron/visual-production-bots.cjs && electron electron/visual-recycling-center.cjs && electron electron/command-tick-race-qa.cjs && electron electron/visual-trade-center.cjs && npm run test:spaceport-ui && electron electron/visual-spaceport-upgrades.cjs",
