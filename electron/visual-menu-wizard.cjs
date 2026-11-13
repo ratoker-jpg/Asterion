@@ -281,7 +281,7 @@ async function phaseB(win, directory, label) {
   return metrics;
 }
 
-/** Clones the real slot into 16 slots: long names, every race, past rounds, one broken. */
+/** Clones the real slot into 16 slots: long names, every race, past rounds, one broken, one with a backup copy. */
 async function seedManySlots(win) {
   await run(win, `(() => {
     const index = JSON.parse(localStorage.getItem(${JSON.stringify(INDEX_KEY)}));
@@ -296,6 +296,15 @@ async function seedManySlots(win) {
       'Тестовый мир 3',
     ];
     const speeds = ['slow', 'standard', 'fast', 'superfast'];
+    // The first card (the «Продолжить» campaign) has its own save with a pre-migration copy (#231).
+    let backupKey = base.storageKey;
+    try {
+      const own = 'asterion.slot.qa-backup.v1';
+      localStorage.setItem(own, localStorage.getItem(base.storageKey));
+      localStorage.setItem(own + '.backup-qa1', '{"schemaVersion":1}');
+      localStorage.setItem(own + '.backups', JSON.stringify([{ key: own + '.backup-qa1', at: ${T} - 2 * 86_400_000, fromSchema: 41, chars: 18 }]));
+      backupKey = own;
+    } catch (error) { console.warn('QA: no room for the backup copy', error); }
     const slots = [];
     for (let i = 0; i < 16; i += 1) {
       slots.push({
@@ -310,7 +319,7 @@ async function seedManySlots(win) {
         createdAt: ${T} - 90 * 86_400_000,
         playTimeMs: i === 0 ? 9_999 * 3_600_000 + 59 * 60_000 : (i + 1) * 5_400_000,
         summary: { ...base.summary, planets: i === 0 ? 7 : 1 + (i % 7), npcCount: 100, galaxyCount: 10, days: 400, crystals: i % 5, victory: i === 4 },
-        storageKey: i === 6 ? 'asterion.slot.qa-missing.v1' : base.storageKey,
+        storageKey: i === 6 ? 'asterion.slot.qa-missing.v1' : i === 0 ? backupKey : base.storageKey,
         ...(i >= 13 ? { retiredAt: ${T} - i * 86_400_000 } : {}),
       });
     }
