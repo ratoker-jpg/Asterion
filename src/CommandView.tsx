@@ -1,3 +1,4 @@
+import { useClockNow } from './application/shared-clock';
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 
 import { MAX_ALLIANCE_MEMBERS, TEST_BOT_ALLIANCE_ID } from './domain/command/catalog.ts';
@@ -114,8 +115,6 @@ type CommandViewProps = {
   /** Set when Command was opened from the Палата управления interior: the way back to the building. */
   returnToBuilding?: { label: string; onBack: () => void };
   aid: AidOverview;
-  /** Wall-clock milliseconds; drives the re-application countdowns. */
-  now: number;
   actions: CommandActions;
   /** «Операции → Рейд на Солнце» panel (App renders it with the live save). */
   operationsPanel?: ReactNode;
@@ -1451,7 +1450,8 @@ function DiplomacyTab({ command, allianceId, role, ownerScores, allianceDetails,
 
 // ---- root ----------------------------------------------------------------------
 
-export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFactions = {}, allianceDetails, playerFactionId, testTimeScale = 1, returnToBuilding, aid, now, actions, operationsPanel, operationsAlertCount = 0, focusTab = null, quickHelp }: CommandViewProps) {
+export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFactions = {}, allianceDetails, playerFactionId, testTimeScale = 1, returnToBuilding, aid, actions, operationsPanel, operationsAlertCount = 0, focusTab = null, quickHelp }: CommandViewProps) {
+  const now = useClockNow();
   const [tab, setTab] = useState<CommandTab>(focusTab?.tab ?? 'overview');
   useEffect(() => { if (focusTab) setTab(focusTab.tab); }, [focusTab?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
   const [feedback, setFeedback] = useState<CommandActionResult | null>(null);

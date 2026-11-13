@@ -136,7 +136,6 @@ import {
 } from './domain/profile/repository.ts';
 import type { PlayerFactionId } from './domain/profile/types.ts';
 import { selectOwnerScoresCached } from './domain/rating/scoring.ts';
-import { advancePirateThreat, isOwnerProtectedFromPirates, pirateRaidChance } from './domain/pirates/threat.ts';
 import {defaultPirateOwnerAdaptation} from './domain/pirates/adaptive.ts';
 import { buildPirateBattleAnalysisExport } from './application/pirate-battle-export.ts';
 import {
@@ -437,6 +436,10 @@ const RUNTIME_MODE: RuntimeMode = ACTIVE_RUNTIME_MODE;
 const UniverseScreen = memoScreen(UniverseView, 'UniverseView');
 const ReportsScreen = memoScreen(ReportsView, 'ReportsView');
 const PlanetOrbitScreen = memoScreen(PlanetOrbitView, 'PlanetOrbitView');
+const OperationsScreen = memoScreen(OperationsView, 'OperationsView');
+const CommandScreen = memoScreen(CommandView, 'CommandView');
+const ZoneScreen = memoScreen(ZoneView, 'ZoneView');
+const EmpireScreen = memoScreen(EmpireView, 'EmpireView');
 
 /**
  * Test Mode only: `?faction=synod|veyra` (or the older `?headerFaction=`) previews
@@ -1658,11 +1661,16 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const reportRetentionAt = state.npcReplay ? reportRetentionCutoff(state.npcReplay.processedThroughAt) : undefined;
   // Bot letters expire by the minute, not by the second.
   const letterClock = Math.floor(now / 60_000) * 60_000;
+  // The header badge needs the unread count on every screen, but the feed is rebuilt from the volatile parts of
+  // the world (every bot flight, every probe target) only while «Сообщения» is open; elsewhere it is refreshed
+  // when the player's own letters change and at most every 10 s for the rest.
+  const reportsOpen = activeRoute === 'reports';
+  const feedBucket = Math.floor(now / 10_000);
   const reportsUnreadCount = useMemo(() => {
     const items = dropExpiredReportItems(buildReportsFeed(state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.pirate?.reconReports, state.flights.records, state.exploration, state.profile.playerId, undefined, { strategy: state.npcStrategy, now: letterClock, targets: state.espionage?.targets }),
       reportRetentionAt, state.combat.savedReportIds);
     return Object.values(getReportUnreadCounts(items, state.reports)).reduce((total, count) => total + count, 0);
-  }, [state.combat.reports, state.operations, state.command, state.espionage?.reports, state.espionage?.hunterNotices, state.espionage?.missions, state.espionage?.targets, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.reports, state.pirate?.reconReports, state.flights.records, state.exploration, reportRetentionAt, state.npcStrategy, letterClock]);
+  }, [state.combat.reports, state.operations, state.command, state.espionage?.reports, state.espionage?.hunterNotices, state.espionage?.missions, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.reports, state.pirate?.reconReports, reportsOpen ? state.flights.records : feedBucket, reportsOpen ? state.exploration : feedBucket, reportsOpen ? state.espionage?.targets : feedBucket, reportRetentionAt, state.npcStrategy, reportsOpen ? letterClock : feedBucket]);
   // «Профиль игрока» in «Сообщения»: the same standings as «Рейтинг», planets and crystals; nothing invented.
   const reportProfileFacts = useMemo(() => {
     // Only while «Сообщения» is open: the rest of the game does not pay for it each tick.
@@ -3390,7 +3398,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               onFocusHandled={() => { setUniverseFocusTarget(null); setPirateFocusTarget(null); }}
             />
           ) : activeRoute === 'operations' ? (
-            <OperationsView
+            <OperationsScreen
               pirateContacts={operationsVariantAFixture?.pirateContacts ?? pirateContacts}
               explorationContacts={operationsVariantAFixture?.explorationContacts ?? selectExplorationOperations(state, now, RUNTIME_MODE)}
               onExpedition={openExpeditionLaunch}
@@ -3406,21 +3414,15 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               pirateAdaptiveDiagnostics={RUNTIME_MODE==='test'?(state.pirate?.ownerAdaptations?.[state.profile.playerId]??defaultPirateOwnerAdaptation()):undefined}
               onPirateBattleExport={RUNTIME_MODE==='test'?exportPirateBattleAnalysis:undefined}
               pirateCheckDelayMs={scaleRuntimeDuration(15*60_000,RUNTIME_MODE,testTimeScale)}
-              pirateThreatPercent={isOwnerProtectedFromPirates(
-                selectOwnerScoresCached(state)[state.profile.playerId]?.resourcePoints??0,
-                selectOwnerScoresCached(state)[state.profile.playerId]?.battlePoints??0,
-              ) ? 0 : 100*pirateRaidChance(
-                selectOwnerScoresCached(state)[state.profile.playerId]?.resourcePoints??0,
-                selectOwnerScoresCached(state)[state.profile.playerId]?.battlePoints??0,
-                advancePirateThreat(
-                  state.pirate?.ownerThreats?.[state.profile.playerId] ??
-                    {version:1,ageHours:0,integratedAt:state.pirate?.raidProcessedAt??now},
-                  now,
-                ).ageHours,
-              )}
+              pirateThreatSeed={{
+                resourcePoints: selectOwnerScoresCached(state)[state.profile.playerId]?.resourcePoints ?? 0,
+                battlePoints: selectOwnerScoresCached(state)[state.profile.playerId]?.battlePoints ?? 0,
+                threat: state.pirate?.ownerThreats?.[state.profile.playerId] ??
+                  { version: 1, ageHours: 0, integratedAt: state.pirate?.raidProcessedAt ?? now },
+              }}
               completedPirateOperations={operationsVariantAFixture?.completedPirateOperations ?? completedPirateOperations}
               onPirateBattleReport={openPirateReport}
-              nowMs={operationsVariantAFixture?.nowMs ?? now}
+              nowMs={operationsVariantAFixture?.nowMs}
               onPirateAccept={acceptPirateOperation}
               onPirateCancel={cancelPirateOperation}
               onPirateRecon={launchPirateRecon}
@@ -3434,7 +3436,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               onPirateCollectDebris={collectDebrisFromReport}
             />
           ) : activeRoute === 'command' ? (
-            <CommandView
+            <CommandScreen
               mode={RUNTIME_MODE}
               command={state.command}
               ownerId={state.profile.playerId}
@@ -3452,7 +3454,6 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
                 : undefined}
               testTimeScale={RUNTIME_MODE === 'test' ? testTimeScale : 1}
               aid={selectAidOverview(state, { now, mode: RUNTIME_MODE, testTimeScale })}
-              now={now}
               actions={commandActions}
               quickHelp={(requestId, anchor, onClose) => (
                 <AidQuickSend state={state} requestId={requestId} anchor={anchor} onClose={onClose} onSend={sendQuickFlights}
@@ -3518,7 +3519,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               onAnswerLetter={answerLetterFromReports}
             />
           ) : activeRoute === 'planet' && planetViewMode !== 'overview' ? (
-            <ZoneView
+            <ZoneScreen
               zone={planetViewMode}
               planetName={currentPlanetName}
               planetCoords={currentPlanet.coords}
@@ -3530,7 +3531,6 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               scienceLevels={state.science.levels}
               energyLedger={currentEnergyLedger}
               energyCoordinates={currentEnergyCoordinates}
-              now={now}
               selectedRole={selectedBuildingRole}
               onSelectedRoleChange={setSelectedBuildingRole}
               onBuild={buildBuilding}
@@ -3554,9 +3554,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
           ) : activeRoute === 'planet' && planetSection === 'empire' ? (
             <>
               <PlanetSections section="empire" planetCount={ownedPlanets.length} idleCount={ownedPlanets.filter((planet) => (state.queues[planet.id] ?? []).length === 0).length} onChange={setPlanetSection} />
-              <EmpireView
+              <EmpireScreen
                 state={state}
-                now={now}
                 mode={RUNTIME_MODE}
                 testTimeScale={testTimeScale}
                 planetArt={Object.fromEntries(ownedPlanets.map((planet) => [planet.id, planetSkins.find((skin) => skin.id === state.planets[planet.id].skin)?.art ?? planetSkins[0].art]))}

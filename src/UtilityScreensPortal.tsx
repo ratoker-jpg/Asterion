@@ -13,6 +13,7 @@ import {
 } from './domain/settings/preferences.ts';
 import { getDesktopBridge, getWindowPresetDimensions } from './domain/settings/desktop.ts';
 import { WINDOW_PRESETS, type DesktopDisplayState, type UiPreferencesV2 } from './domain/settings/types.ts';
+import { propValuesEqual } from './ui/prop-equal.ts';
 import { APP_ROUTE_LABELS, isUtilityRoute, useNavigation } from './ui/navigation.tsx';
 
 function presetForDisplayState(state: DesktopDisplayState, fallback: UiPreferencesV2['display']['preset']) {
@@ -43,6 +44,15 @@ function readRatingQaFixture(state: RuntimeStateSnapshot): RatingQaFixture | nul
   }
 }
 
+function snapshotsEqual(a: RuntimeStateSnapshot, b: RuntimeStateSnapshot): boolean {
+  return a.mode === b.mode
+    && a.currentPlayerId === b.currentPlayerId
+    && a.command === b.command
+    && propValuesEqual(a.ownerScores, b.ownerScores)
+    && propValuesEqual(a.owners, b.owners)
+    && propValuesEqual(a.alliances, b.alliances);
+}
+
 function playerFaction(state: RuntimeStateSnapshot | null): BuildingFaction {
   const factionId = state?.owners[state.currentPlayerId]?.factionId;
   return factionId === 'synod' || factionId === 'veyra' ? factionId : 'aegis';
@@ -68,7 +78,18 @@ export function UtilityScreensPortal() {
   useEffect(() => {
     const syncRuntimeState = () => {
       latestRuntimeState.current = getRuntimeStateSnapshot();
-      if (activeRef.current) setRuntimeState(latestRuntimeState.current);
+      if (!activeRef.current) return;
+      // A world publish usually changes nothing the screen shows (the standings move rarely): compare by value
+      // and keep the old snapshot, so the open screen commits only when its numbers changed.
+      setRuntimeState((current) => {
+        const next = latestRuntimeState.current;
+        if (current === next) return current;
+        if (current && next && snapshotsEqual(current, next)) {
+          latestRuntimeState.current = current;
+          return current;
+        }
+        return next;
+      });
     };
     syncRuntimeState();
     return subscribeRuntimeStateSnapshot(syncRuntimeState);

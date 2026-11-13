@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { SunReportStrip } from './ui/sun-raid/SunReportStrip.tsx';
 import { EMPTY_ART } from './ui/ui-art.ts';
 import {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -399,7 +400,7 @@ function BattleRowSide({ participant, mine }: { participant: BattleParticipantVi
   );
 }
 
-export function BattleCard({
+function BattleCardInner({
   viewModel,
   playerId,
   saved,
@@ -1312,10 +1313,27 @@ export function BattleReportModal({
   );
 }
 
+/** Handlers of a row only close over its report id and refs, so a new closure is never a reason to redraw it. */
+export const BattleCard = memo(BattleCardInner, (a, b) => a.viewModel === b.viewModel && a.playerId === b.playerId
+  && a.saved === b.saved && a.expiresInMs === b.expiresInMs && a.nowMs === b.nowMs && a.index === b.index);
+
+const BATTLE_PAGE_SIZE = 25;
+
 export function BattleReportsView({ planetName, coords, onBack }: { planetName: string; coords: string; onBack: () => void }) {
   // The world App renders; the save is read from storage only outside a running campaign.
-  const [saveState, setSaveState] = useState(() => getLiveSaveState() ?? createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read());
-  const [history, setHistory] = useState<BattleHistoryState>(() => migrateBattleHistory(saveState.combat, ACTIVE_RUNTIME_MODE));
+  // Only what the list reads is kept from the save (the player and the rating awards): the live state is replaced
+  // every second and a whole-save state would redraw the screen with it.
+  const [initialSave] = useState(() => getLiveSaveState() ?? createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read());
+  const [saveState, setSaveStateRaw] = useState(() => ({ profile: { playerId: initialSave.profile.playerId }, rating: initialSave.rating }));
+  const setSaveState = useCallback((next: SaveState) => {
+    setSaveStateRaw((current) => current.profile.playerId === next.profile.playerId && current.rating === next.rating
+      ? current
+      : { profile: { playerId: next.profile.playerId }, rating: next.rating });
+  }, []);
+  const [history, setHistory] = useState<BattleHistoryState>(() => migrateBattleHistory(initialSave.combat, ACTIVE_RUNTIME_MODE));
+  const historyRef = useRef(history);
+  historyRef.current = history;
+  const [shown, setShown] = useState(BATTLE_PAGE_SIZE);
   const [mode, setMode] = useState<BattleListMode>('recent');
   const [openReportId, setOpenReportId] = useState<string | null>(null);
   const [saveNotice, setSaveNotice] = useState<SaveNotice>({ kind: 'saved', message: '✓ Автосохранение активно' });
@@ -1371,30 +1389,34 @@ export function BattleReportsView({ planetName, coords, onBack }: { planetName: 
   const battleList = useMemo(() => selectBattleList(history, playerId, nowMs), [history, playerId, nowMs]);
   // View models depend on the listed reports, the awards and the player only,
   // not on the whole save the clock replaces every second.
-  const viewModels = useMemo(
-    () => new Map([...battleList.recent, ...battleList.saved].map((report) => [report.id, createBattleReportViewModel(report, {
+  // A card model is built once per report and only for the rows on screen (25 at a time).
+  const modelCache = useRef(new Map<string, { report: unknown; rating: unknown; model: BattleReportViewModel }>());
+  const modelFor = useCallback((report: BattleHistoryState['reports'][number]) => {
+    const cached = modelCache.current.get(report.id);
+    if (cached && cached.report === report && cached.rating === saveState.rating) return cached.model;
+    const model = createBattleReportViewModel(report, {
       awardedBattlePoints: selectRecordedBattlePointAwards(saveState.rating, report, playerId),
-    })])),
-    [battleList, saveState.rating, playerId],
-  );
+    });
+    modelCache.current.set(report.id, { report, rating: saveState.rating, model });
+    return model;
+  }, [saveState.rating, playerId]);
+  const modeReports = mode === 'recent' ? battleList.recent : battleList.saved;
   const visibleReports = useMemo(
-    () => (mode === 'recent' ? battleList.recent : battleList.saved)
-      .map((report) => viewModels.get(report.id))
-      .filter((viewModel): viewModel is BattleReportViewModel => Boolean(viewModel)),
-    [battleList, mode, viewModels],
+    () => modeReports.slice(0, shown).map(modelFor),
+    [modeReports, shown, modelFor],
   );
+  const savedIds = useMemo(() => new Set(history.savedReportIds), [history.savedReportIds]);
   const openReport = openReportId ? history.reports.find((report) => report.id === openReportId) ?? null : null;
   // An open report does not depend on the lists: removing its star must not close it.
   const openViewModel = useMemo(() => {
     if (!openReport) return null;
-    return viewModels.get(openReport.id) ?? createBattleReportViewModel(openReport, {
-      awardedBattlePoints: selectRecordedBattlePointAwards(saveState.rating, openReport, playerId),
-    });
-  }, [openReport, viewModels, saveState.rating, playerId]);
+    return modelFor(openReport);
+  }, [openReport, modelFor]);
 
   const toggleSaved = (reportId: string) => {
-    const currentlySaved = history.savedReportIds.includes(reportId);
-    const next = setBattleReportSaved(history, reportId, !currentlySaved, ACTIVE_RUNTIME_MODE);
+    const current = historyRef.current;
+    const currentlySaved = current.savedReportIds.includes(reportId);
+    const next = setBattleReportSaved(current, reportId, !currentlySaved, ACTIVE_RUNTIME_MODE);
     const result = persistBattleHistory(next, undefined, ACTIVE_RUNTIME_MODE);
     setHistory(result.value);
     setSaveNotice(result.ok
@@ -1410,8 +1432,8 @@ export function BattleReportsView({ planetName, coords, onBack }: { planetName: 
       </header>
 
       <div className="battle-tabs-v1" role="tablist" aria-label="Фильтр боевых отчётов">
-        <button type="button" role="tab" aria-selected={mode === 'recent'} className={mode === 'recent' ? 'active' : ''} onClick={() => setMode('recent')}>ПОСЛЕДНИЕ <b>{battleList.recent.length}</b></button>
-        <button type="button" role="tab" aria-selected={mode === 'saved'} className={mode === 'saved' ? 'active' : ''} onClick={() => setMode('saved')}>СОХРАНЁННЫЕ <b>{battleList.saved.length}</b></button>
+        <button type="button" role="tab" aria-selected={mode === 'recent'} className={mode === 'recent' ? 'active' : ''} onClick={() => { setMode('recent'); setShown(BATTLE_PAGE_SIZE); }}>ПОСЛЕДНИЕ <b>{battleList.recent.length}</b></button>
+        <button type="button" role="tab" aria-selected={mode === 'saved'} className={mode === 'saved' ? 'active' : ''} onClick={() => { setMode('saved'); setShown(BATTLE_PAGE_SIZE); }}>СОХРАНЁННЫЕ <b>{battleList.saved.length}</b></button>
         <span className="battle-tabs-v1__note">Отчёты хранятся 8 часов · отмеченные ★ — бессрочно</span>
       </div>
 
@@ -1425,7 +1447,7 @@ export function BattleReportsView({ planetName, coords, onBack }: { planetName: 
                 key={viewModel.id}
                 viewModel={viewModel}
                 playerId={playerId}
-                saved={history.savedReportIds.includes(viewModel.id)}
+                saved={savedIds.has(viewModel.id)}
                 onToggleSaved={() => toggleSaved(viewModel.id)}
                 onOpen={() => setOpenReportId(viewModel.id)}
                 expiresInMs={mode === 'recent' && !isDemoBattleReport(viewModel.id) ? Date.parse(viewModel.timestamp) + BATTLE_RECENT_RETENTION_MS - nowMs : null}
@@ -1433,6 +1455,11 @@ export function BattleReportsView({ planetName, coords, onBack }: { planetName: 
                 index={index}
               />
             ))}
+            {modeReports.length > shown ? (
+              <button type="button" className="battle-list-back-v1" data-qa-battle-more onClick={() => setShown((count) => count + BATTLE_PAGE_SIZE)}>
+                ПОКАЗАТЬ ЕЩЁ · {modeReports.length - shown}
+              </button>
+            ) : null}
           </>
         ) : (
           <div className="battle-empty-v1" data-qa-battle-empty={mode}><img className="ui-empty-art" src={EMPTY_ART.battles} alt="" draggable={false} /><strong>{mode === 'recent' ? 'За последние 8 часов вы не участвовали в боях.' : 'Нет сохранённых боевых отчётов.'}</strong><p>{mode === 'saved' ? 'Отметьте нужный отчёт звездой во вкладке «Последние».' : 'Здесь появляются только ваши бои: атаки, оборона планет, налёты пиратов и рейды на Солнце. Отчёт можно отметить звездой, чтобы сохранить его навсегда.'}</p></div>
