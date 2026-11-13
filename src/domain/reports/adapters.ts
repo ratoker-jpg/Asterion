@@ -26,6 +26,7 @@ import { getCombatFactionName } from '../combat/factions.ts';
 import { noCombatVerdict } from '../combat/battle-report-view-model.ts';
 import { pirateReconReportToReportItem } from '../pirates/recon-report.ts';
 import { personalLetterItems, type NpcLetterContext } from './letters.ts';
+import { captionFact, captionNumber } from './caption.ts';
 import type { PirateReconReport } from '../pirates/recon-report.ts';
 
 const CATEGORY_TYPE_LABEL: Record<ReportItem['category'], string> = {
@@ -78,9 +79,9 @@ function lostUnits(force: BattleReport['attackerForce']) {
 function battleNumbers(report: BattleReport) {
   const loot = (['metal', 'minerals', 'gas'] as const).reduce((total, kind) => total + Number(report.resources?.[kind] ?? 0), 0);
   const parts = [
-    ...(loot > 0 ? [`Добыча ${new Intl.NumberFormat('ru-RU').format(loot)}`] : []),
-    `потери ${new Intl.NumberFormat('ru-RU').format(lostUnits(report.attackerForce))} / ${new Intl.NumberFormat('ru-RU').format(lostUnits(report.defenderForce))}`,
-    ...(Number(report.debris ?? 0) > 0 ? [`обломки ${new Intl.NumberFormat('ru-RU').format(Number(report.debris))}`] : []),
+    ...(loot > 0 ? [captionFact('Добыча', loot)] : []),
+    captionFact('потери', `${captionNumber(lostUnits(report.attackerForce))} / ${captionNumber(lostUnits(report.defenderForce))}`),
+    ...(Number(report.debris ?? 0) > 0 ? [captionFact('обломки', Number(report.debris))] : []),
   ];
   const text = parts.join(' · ');
   return text[0]!.toLocaleUpperCase('ru-RU') + text.slice(1);
@@ -178,15 +179,13 @@ function spyReportTitleLabel(report: SpyReportSnapshot) {
   return report.quality === 'full' ? 'Полный' : report.quality === 'detailed' ? 'Подробный' : 'Базовый';
 }
 
-const feedNumber = new Intl.NumberFormat('ru-RU');
-
 /** The list row says what the probe saw, not what kind of report it is. */
 function spyPreview(report: SpyReportSnapshot) {
-  const parts = [`Металл ${feedNumber.format(report.resources.metal)}`, `минералы ${feedNumber.format(report.resources.minerals)}`, `газ ${feedNumber.format(report.resources.gas)}`];
+  const parts = [captionFact('Металл', report.resources.metal), captionFact('минералы', report.resources.minerals), captionFact('газ', report.resources.gas)];
   const ships = Object.entries(report.fleet ?? {}).filter(([id]) => id !== 'spy-probe').reduce((total, [, count]) => total + Number(count ?? 0), 0);
   const defense = Object.values(report.defense ?? {}).reduce((total, count) => total + Number(count ?? 0), 0);
-  if (report.quality === 'full') parts.push(`флот ${feedNumber.format(ships)}`);
-  if (report.quality !== 'basic') parts.push(`оборона ${feedNumber.format(defense)}`);
+  if (report.quality === 'full') parts.push(captionFact('флот', ships));
+  if (report.quality !== 'basic') parts.push(captionFact('оборона', defense));
   return parts.join(' · ');
 }
 
@@ -297,7 +296,7 @@ export function overpopulationEpisodeReportToReportItem(report: OverpopulationEp
     category: 'system',
     typeLabel: 'Итог перенаселения',
     title: `Планета разблокирована: ${report.planetName}`,
-    preview: `${removedCount} кораблей уничтожено · население ${report.populationBefore} → ${report.populationAfter} · вместимость ${report.capacity}`,
+    preview: `${captionNumber(removedCount)} кораблей уничтожено · ${captionFact('население', `${captionNumber(report.populationBefore)} → ${captionNumber(report.populationAfter)}`)} · ${captionFact('вместимость', report.capacity)}`,
     body: `Планета ${report.planetName} разблокирована. Эпизод перенаселения завершён; итоговое население, уничтоженные корабли и спутники перечислены в отчёте.`,
     timestamp,
     statusLabel: 'ПЛАНЕТА РАЗБЛОКИРОВАНА',
@@ -360,7 +359,7 @@ export function recyclerArrivalReportToReportItem(report: RecyclerArrivalReport)
     category: 'flights',
     typeLabel: 'Отчёт переработчика',
     title: `Переработчик прибыл к координатам ${coordinate}`,
-    preview: report.collectedDebris === 0 ? `Пусто · осталось на орбите ${remaining}` : `Собрано ${collected} · осталось на орбите ${remaining}`,
+    preview: report.collectedDebris === 0 ? `Пусто · ${captionFact('осталось на орбите', report.remainingOrbitalDebris)}` : `${captionFact('Собрано', report.collectedDebris)} · ${captionFact('осталось на орбите', report.remainingOrbitalDebris)}`,
     body: report.collectedDebris === 0 && report.remainingOrbitalDebris === 0
       ? `${summary} К моменту прибытия флота здесь ничего не было, корабли возвращаются пустыми.`
       : `${summary} На орбите осталось свободных обломков: ${remaining}.`,
@@ -422,7 +421,7 @@ export function gasExtractionArrivalReportToReportItem(report: GasExtractionArri
     category: 'flights',
     typeLabel: 'Отчёт добычи газа',
     title,
-    preview: report.outcome === 'found' ? `Газ ${gas} · обломки ${scrap}` : 'Пусто: астероида на месте не было',
+    preview: report.outcome === 'found' ? `${captionFact('Газ', report.gasCollected)} · ${captionFact('обломки', report.scrapCollected)}` : 'Пусто: астероида на месте не было',
     body: `${title}. Координаты: ${coordinate}. Собрано газа: ${gas}. Собрано обломков: ${scrap}.`,
     timestamp: new Date(report.arrivalAt).toISOString(),
     statusLabel: report.outcome === 'found' ? 'АСТЕРОИД НАЙДЕН' : 'АСТЕРОИД НЕ НАЙДЕН',

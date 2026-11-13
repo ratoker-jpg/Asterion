@@ -6,6 +6,7 @@ import { getCombatEntity } from '../combat/catalog.ts';
 import { getFactionCombatEntity } from '../combat/faction-catalog.ts';
 import type { ReportFact, ReportItem, ReportResourceGroup, ReportResource, ReportUnitGroup } from '../reports/types.ts';
 import { explorationProfile } from './model.ts';
+import { captionFact } from '../reports/caption.ts';
 import type { ExplorationState } from './ledger.ts';
 
 const number = new Intl.NumberFormat('ru-RU');
@@ -81,7 +82,7 @@ export function explorationMailboxReports(ledger?: ExplorationState, flights: re
       const credited = event.creditedCargo ?? cargo;
       const burned = event.burnedCargo;
       const total = KINDS.reduce((sum,key)=>sum + credited[key],0);
-      const pieces = KINDS.map(key => LABELS[key] + ' ' + number.format(credited[key]));
+      const pieces = KINDS.map(key => captionFact(LABELS[key], credited[key]));
       const location = coords(contact.coordinate);
       return {
         id: 'exploration-return:' + event.flightId,

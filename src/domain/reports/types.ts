@@ -198,6 +198,12 @@ export type PersonalLetter = {
   ref?: LetterRef;
   /** Where the letter points on the map (the target of a strike, the planet under attack). */
   place?: ReportPlace;
+  /** Until when the answer (or the promised fleet) is still useful; the header shows it big. */
+  deadlineAt?: number;
+  /** Help requests: when the attackers reach the planet (the defence must be there before). */
+  arriveBy?: number;
+  /** Help requests: who attacks the sender. */
+  attacker?: { name: string; ownerId?: string; factionId?: string };
 };
 
 export type ReportItem = {

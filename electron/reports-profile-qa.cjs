@@ -17,7 +17,7 @@ const OUTPUT = process.env.ASTERION_QA_OUTPUT || path.join(ROOT, 'artifacts-pass
 const SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
 const EXPECTED_FOLDER_IDS = ['personal', 'system', 'battle', 'command', 'arena', 'flights', 'alliances', 'achievements'];
-const EXPECTED_FOLDER_LABELS = ['Личные', 'Система', 'Доклады', 'Командные доклады', 'Арена', 'Полёты', 'Союзы', 'Достижения'];
+const EXPECTED_FOLDER_LABELS = ['Личные', 'Система', 'Бои', 'Командные', 'Арена', 'Полёты', 'Союзы', 'Достижения'];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function waitFor(win, expression, timeoutMs = 8000) {
@@ -179,9 +179,12 @@ async function checkMarkAllRead(win, directory, label) {
     return true;
   })()`, `${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}').reports?.recyclerArrivalReports?.length === 600`);
   await clickPrimary(win, 'reports');
-  const folderSum = `Array.from(document.querySelectorAll('[data-message-folder] .reports-v2-unread-count')).map((node) => Number(node.textContent || 0)).reduce((sum, count) => sum + count, 0)`;
+  // The badge shows «99+»: the exact unread count is in each section's label.
+  const folderSum = `Array.from(document.querySelectorAll('[data-message-folder]')).map((node) => Number(/(\\d+) непрочитанных/.exec(node.getAttribute('aria-label') || '')?.[1] || 0)).reduce((sum, count) => sum + count, 0)`;
   const before = await win.webContents.executeJavaScript(folderSum);
   if (before < 600) throw new Error(`Mark-all fixture did not show 600+ unread at ${label}: ${before}`);
+  // «Прочитать все» sits at the top of a section's list (v3).
+  await clickFolder(win, 'flights');
   await win.webContents.executeJavaScript(`document.querySelector('[data-qa-mark-all-read]')?.click()`);
   await waitFor(win, `!document.querySelector('[data-qa-navigation="primary"] [data-qa-route="reports"] .asterion-header__nav-badge')`);
   const folderUnread = await win.webContents.executeJavaScript(folderSum);
@@ -476,11 +479,15 @@ async function runViewport(win, width, height) {
   if (!profile.visible || profile.name !== 'Dendrilion' || !profile.avatar.includes('aegis_general') || profile.alliance !== 'Содружество Гелион' || profile.allianceTag !== 'HLN') throw new Error(`Profile contract failed at ${label}: ${JSON.stringify(profile)}`);
   const profilePortraits = await inspectRenderedFactionGeneralPortraits(win, '[data-qa-profile] [data-qa-faction-general]');
   assertRenderedFactionGeneralPortraits(profilePortraits, ['aegis'], `${label} profile`);
-  if (JSON.stringify(profile.folderIds) !== JSON.stringify(EXPECTED_FOLDER_IDS) || JSON.stringify(profile.folderLabels) !== JSON.stringify(EXPECTED_FOLDER_LABELS)) throw new Error(`Reports folder contract failed at ${label}: ${JSON.stringify(profile)}`);
+  // v3: sections with mail first, empty ones under «ПУСТО»; the set of sections is fixed, the order follows the mail.
+  const sameSet = (left, right) => JSON.stringify([...left].sort()) === JSON.stringify([...right].sort());
+  if (!sameSet(profile.folderIds, EXPECTED_FOLDER_IDS) || !sameSet(profile.folderLabels, EXPECTED_FOLDER_LABELS)) throw new Error(`Reports folder contract failed at ${label}: ${JSON.stringify(profile)}`);
   const expectedReportIconSuffixes = ['/profile.webp', '/system.webp', '/reports.webp', '/command-reports.webp', '/arena.webp', '/flights.webp', '/alliances.webp', '/achievements.webp'];
   const expectedScoreIconSuffixes = ['/resource-crystal.webp', '/battle.webp', '/overall-star.webp', '/achievement-trophy.webp'];
   if (profile.folderIcons.length !== expectedReportIconSuffixes.length
-    || profile.folderIcons.some((icon, index) => !icon.loaded || !icon.decorative || !icon.src.endsWith(expectedReportIconSuffixes[index]))
+    // v3 orders sections by mail (filled first, empty under «ПУСТО»): every icon is there, in any order.
+    || profile.folderIcons.some((icon) => !icon.loaded || !icon.decorative)
+    || !sameSet(profile.folderIcons.map((icon) => icon.src.slice(icon.src.lastIndexOf('/'))), expectedReportIconSuffixes)
     || !profile.profileIcon.loaded || !profile.profileIcon.decorative || !profile.profileIcon.src.endsWith('/profile.webp')
     || profile.profileIcon.cssWidth !== '30px' || profile.profileIcon.cssHeight !== '30px'
     || profile.profileIcon.label !== 'Профиль' || profile.profileIcon.accessibleLabel !== 'Открыть профиль'
@@ -569,17 +576,17 @@ async function runViewport(win, width, height) {
   const canonicalItemSelector = `[data-report-item-id=${JSON.stringify(`battle:${canonicalBattleId}`)}]`;
   await waitFor(win, `document.querySelector(${JSON.stringify(`${canonicalItemSelector} .reports-list-open`)})`);
   await win.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(`${canonicalItemSelector} .reports-list-open`)})?.click()`);
-  await waitFor(win, `document.querySelector('.reports-preview-footer button')?.textContent?.includes('СОХРАНИТЬ БОЙ')`);
+  await waitFor(win, `document.querySelector('[data-report-action="save_battle"]')?.textContent?.includes('Сохранить бой')`);
   const saveBattleClicked = await win.webContents.executeJavaScript(`(() => {
-    const button = document.querySelector('.reports-preview-footer button');
-    if (!button || !button.textContent?.includes('СОХРАНИТЬ БОЙ')) return false;
+    const button = document.querySelector('[data-report-action="save_battle"]');
+    if (!button || !button.textContent?.includes('Сохранить бой')) return false;
     button.click();
     return true;
   })()`);
   if (!saveBattleClicked) throw new Error(`Canonical battle save action missing at ${label}`);
   const savedBattleExpression = `JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}').combat?.savedReportIds?.includes(${JSON.stringify(canonicalBattleId)}) === true`;
   await waitFor(win, savedBattleExpression);
-  await waitFor(win, `document.querySelector('.reports-preview-footer button')?.textContent?.includes('УБРАТЬ ИЗ СОХРАНЁННЫХ')`);
+  await waitFor(win, `document.querySelector('[data-report-action="save_battle"]')?.textContent?.includes('Убрать из сохранённых')`);
   const afterBattleSave = await savedState(win);
   if (!afterBattleSave.combat?.savedReportIds?.includes(canonicalBattleId)) throw new Error(`Canonical battle was not saved through Reports at ${label}: ${JSON.stringify(afterBattleSave.combat)}`);
 
@@ -591,14 +598,16 @@ async function runViewport(win, width, height) {
   await waitFor(win, `document.querySelector(${JSON.stringify(`${canonicalItemSelector} .reports-favorite-dot`)})`);
   const deletedCanonicalBattle = await win.webContents.executeJavaScript(`(() => {
     window.confirm = () => true;
-    const item = document.querySelector(${JSON.stringify(canonicalItemSelector)});
-    if (!item?.querySelector('input[type="checkbox"]')) return false;
-    item.querySelector('input[type="checkbox"]').click();
-    document.querySelector('[data-qa-delete-selected]')?.click();
+    const open = document.querySelector(${JSON.stringify(`${canonicalItemSelector} .reports-list-open`)});
+    if (!open) return false;
+    open.click();
     return true;
   })()`);
-  if (!deletedCanonicalBattle) throw new Error(`Canonical battle row could not be selected at ${label}`);
-  await waitFor(win, `document.querySelector('[data-qa-delete-selected]')?.disabled === true`);
+  if (!deletedCanonicalBattle) throw new Error(`Canonical battle row could not be opened at ${label}`);
+  // v3 has no checkboxes: the open message is deleted with «Удалить» under it.
+  await waitFor(win, `document.querySelector(${JSON.stringify(`${canonicalItemSelector} .reports-list-open[aria-current="true"]`)})`);
+  await win.webContents.executeJavaScript(`document.querySelector('.reports-preview-footer .reports-delete-current')?.click()`);
+  await waitFor(win, `!document.querySelector(${JSON.stringify(canonicalItemSelector)})`);
   const afterBattleDelete = await savedState(win);
   if (afterBattleDelete.combat?.reports?.length !== battleBefore.combat.reports.length || !afterBattleDelete.combat.savedReportIds.includes(canonicalBattleId) || !afterBattleDelete.reports.hiddenIds.includes(`battle:${canonicalBattleId}`)) throw new Error(`Canonical battle preservation failed at ${label}: ${JSON.stringify({ before: battleBefore.combat, afterSave: afterBattleSaveReload.combat, after: afterBattleDelete.combat, reports: afterBattleDelete.reports })}`);
   await capture(win, directory, 'battle-after-delete');
@@ -610,7 +619,7 @@ async function runViewport(win, width, height) {
   const persisted = await win.webContents.executeJavaScript(`(() => {
     const id = ${JSON.stringify(`battle:${canonicalBattleId}`)};
     const visible = Array.from(document.querySelectorAll('[data-report-item-id]')).some((item) => item.getAttribute('data-report-item-id') === id);
-    return !visible && Boolean(document.querySelector('[data-qa-delete-selected]')?.disabled);
+    return !visible;
   })()`);
   if (!persisted || !reloaded.reports?.hiddenIds?.includes(`battle:${canonicalBattleId}`)) throw new Error(`Tombstone reload failed at ${label}: ${JSON.stringify({ persisted, reports: reloaded.reports })}`);
 

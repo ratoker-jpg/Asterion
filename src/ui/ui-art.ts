@@ -24,6 +24,7 @@ import emptyRepair from '../assets/ui/empty/empty-repair.webp';
 import emptyBattles from '../assets/ui/empty/empty-battles.webp';
 import emptyFlights from '../assets/ui/empty/empty-flights.webp';
 import emptyReports from '../assets/ui/empty/empty-reports.webp';
+import emptyMail from '../assets/ui/empty/empty-mail.webp';
 import medal1 from '../assets/ui/rating/medal-1.webp';
 import medal2 from '../assets/ui/rating/medal-2.webp';
 import medal3 from '../assets/ui/rating/medal-3.webp';
@@ -58,7 +59,8 @@ export const MISSION_BANNERS: Readonly<Record<string, string>> = {
   'pirate-elimination': bannerPirateElimination,
 };
 
-export const EMPTY_ART = { repair: emptyRepair, battles: emptyBattles, flights: emptyFlights, reports: emptyReports } as const;
+/** `mail`: opaque dark space, faded into the panel by `.reports-empty-art--mail`. */
+export const EMPTY_ART = { repair: emptyRepair, battles: emptyBattles, flights: emptyFlights, reports: emptyReports, mail: emptyMail } as const;
 
 export const RATING_MEDALS = [medal1, medal2, medal3] as const;
 export const RATING_BACKDROP = ratingBackdrop;
