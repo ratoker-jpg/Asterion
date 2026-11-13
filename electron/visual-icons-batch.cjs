@@ -105,6 +105,34 @@ app.whenReady().then(async () => {
           await settle(win, 450);
         });
       }
+      // «Командование»: help and Sun-raid tiles use the mission icons.
+      await step('05-command-missions', async () => { await route(win, 'command'); await settle(win, 400); });
+    }
+    // «Рейсы и миссии» with 25 seeded missions (Test Mode fixture, nothing saved): mission counts.
+    await run(win, `history.replaceState(null, '', '#flights-board-many')`);
+    const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
+    win.webContents.reload();
+    await loaded;
+    await waitFor(win, `document.querySelector('[data-qa-navigation="primary"]')`);
+    await waitForCommands(win);
+    for (const [width, height] of VIEWPORTS) {
+      const size = `${width}x${height}`;
+      await win.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false, screenWidth: width, screenHeight: height });
+      await settle(win, 400);
+      try {
+        await route(win, 'fleets');
+        await waitFor(win, `document.querySelector('.fleet-workspace-v1 [data-qa-flights-toggle]')`);
+        await run(win, `(() => { const t = document.querySelector('[data-qa-flights-toggle]'); if (t && t.getAttribute('aria-expanded') !== 'true') t.click(); })()`);
+        await settle(win, 500);
+        const broken = await brokenImages(win);
+        if (broken.length) failures.push({ size, name: '06-flights-missions', broken });
+        await capture(win, path.join(OUTPUT, size), '06-flights-missions');
+        shots.push(`${size}/06-flights-missions`);
+        await run(win, `document.querySelector('[data-qa-flights-toggle]')?.click()`);
+        await settle(win, 200);
+      } catch (error) {
+        failures.push({ size, name: '06-flights-missions', error: String(error?.message || error) });
+      }
     }
     fs.writeFileSync(path.join(OUTPUT, 'metrics.json'), JSON.stringify({ shots, failures }, null, 2));
     console.log(JSON.stringify({ shots, failures }, null, 2));
