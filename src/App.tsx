@@ -1,3 +1,5 @@
+import { LiveWorldSupervisor, guardWorkerStep } from './application/live-world-supervisor.ts';
+import { anchorWorldClockToState, worldClockOffsetMs, worldNow } from './application/world-clock.ts';
 import { isFlightEventForPlayer, isHostileFlightIncomingToPlayer } from './application/flight-visibility.ts';
 import { getClockNow, publishClock } from './application/shared-clock';
 import { SAVE_FLUSH_EVENT } from './application/save-storage.ts';
@@ -370,6 +372,9 @@ type LiveWorldLink = {
   synced: { version: LiveWorldVersion; state: SaveState };
   nextVersion: LiveWorldVersion;
   tickInFlight: boolean;
+  /** performance.now() of the last tick sent and of the last message heard (the watchdog, see live-world-supervisor.ts). */
+  tickSentAt: number;
+  lastHeardAt: number;
   /** Quiet fields (bot planets' economies, asteroid gas) the worker sent, waiting to be written into the world at idle. */
   quiet: QuietInbox;
   /**
@@ -486,7 +491,7 @@ function AegisButton({ children, onClick, disabled = false }: { children: ReactN
 function applyCampaignRuntime(state: SaveState, mode: RuntimeMode) {
   if (mode === 'production') setCampaignTimeScale(CAMPAIGN_SPEED_SCALE[state.worldConfig?.world.campaignSpeed ?? 'standard'] ?? 1);
   setActiveGalaxyCount(state.worldConfig?.world.galaxyCount ?? 1);
-  publishSunBrightness(state, Date.now());
+  publishSunBrightness(state, worldNow());
 }
 
 const SPEED_SUFFIX: Record<string, string> = { slow: ' ×0.5', standard: '', fast: ' ×2' };
@@ -515,7 +520,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   // and only countdown components subscribe to it (shared-clock.ts).
   const [, bumpClock] = useReducer((count: number) => count + 1, 0);
   const now = getClockNow();
-  const commitClock = useCallback(() => { publishClock(Date.now()); bumpClock(); }, []);
+  const commitClock = useCallback(() => { publishClock(worldNow()); bumpClock(); }, []);
   // The tick reaches React as a transition (stateRef already holds its world). A player command must not be
   // computed on the older world React still renders, so it first renders that world urgently, then runs.
   const flushCommandSync = useCallback((work: () => void) => {
@@ -539,6 +544,9 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   // worker (tests, or after it fails) App runs the world on this thread as before.
   const liveWorld = useRef<LiveWorldLink | null>(null);
   const liveWorldUnavailable = useRef(RUNTIME_MODE !== 'production' || typeof Worker === 'undefined');
+  // Restarts the worker after a failure; gives it up for a cool-down when it keeps failing (live-world-supervisor.ts).
+  const liveWorldSupervisor = useRef(new LiveWorldSupervisor());
+  const liveWorldCooldownUntil = useRef(0);
   /** Sends what App changed since the world the worker knows it has (commands, selections, settings). */
   const commitToLiveWorld = useCallback(() => {
     const link = liveWorld.current;
@@ -546,7 +554,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     if (!link || current === link.synced.state) return;
     const to = link.nextVersion;
     link.nextVersion += 2;
-    const request: LiveWorldRequest = { type: 'commit', from: link.synced.version, to, patch: diffWorld(link.synced.state, current), at: Date.now() };
+    const request: LiveWorldRequest = { type: 'commit', from: link.synced.version, to, patch: diffWorld(link.synced.state, current), at: worldNow() };
     link.worker.postMessage(request);
     link.synced = { version: to, state: current };
     link.committedStep = enterLiveWorldStep(link, to);
@@ -581,7 +589,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   // click on, and the bounded catch-up continues in its own tasks.
   const rejectNpcCatchupCommand = useCallback(() => {
     const current = stateRef.current;
-    const at = Date.now();
+    const at = worldNow();
     if (!needsNpcCatchupBefore(current, at)) return false;
     const frozen = freezeNpcCatchupTarget(current, at);
     if (frozen !== current) {
@@ -758,7 +766,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   };
 
   const openPirateAttack = (contact: PirateContactPresentation) => {
-    const eligible = selectOwnedPirateTargets(stateRef.current, Date.now()).some((target) =>
+    const eligible = selectOwnedPirateTargets(stateRef.current, worldNow()).some((target) =>
       target.contactCycleKey === contact.contactCycleKey
       && target.coordinate.galaxy === contact.coordinate.galaxy
       && target.coordinate.system === contact.coordinate.system
@@ -784,7 +792,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       originPlanetId: stateRef.current.currentPlanetId,
       destination: { kind: 'coordinate', coordinate: { ...contact.coordinate } },
       selectedShips: { 'spy-probe': 1 }, targetKind: 'pirate', targetRelation: 'neutral',
-    }, { now: Date.now(), mode: RUNTIME_MODE, testTimeScale });
+    }, { now: worldNow(), mode: RUNTIME_MODE, testTimeScale });
     if (result.ok) { stateRef.current = result.state; setState(result.state); setNotice(result.notice); }
     else setNotice(result.error.message, 'error');
   };
@@ -823,7 +831,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         return;
       }
       const result = dispatchFlight(stateRef.current, detail, {
-        now: detail.now ?? Date.now(),
+        now: detail.now ?? worldNow(),
         mode: RUNTIME_MODE,
         testTimeScale,
       });
@@ -845,7 +853,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         return;
       }
       const result = recallFlight(stateRef.current, detail.flightId, {
-        now: detail.now ?? Date.now(),
+        now: detail.now ?? worldNow(),
         mode: RUNTIME_MODE,
         testTimeScale,
       });
@@ -862,7 +870,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       if (rejectNpcCatchupCommand()) return;
       const detail = (event as CustomEvent<{ now?: number }>).detail;
       const result = startBot01IncomingScenario(stateRef.current, {
-        now: detail.now ?? Date.now(),
+        now: detail.now ?? worldNow(),
         mode: RUNTIME_MODE,
         testTimeScale,
       });
@@ -879,7 +887,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       if (rejectNpcCatchupCommand()) return;
       if(RUNTIME_MODE !== 'test') return;
       const detail=(event as CustomEvent<{now?:number}>).detail;
-      const now=detail?.now ?? Date.now();
+      const now=detail?.now ?? worldNow();
       const candidates=selectExplorationTargets(stateRef.current,now,'test',25);
       const node=candidates.find(item=>explorationTargetStatus(stateRef.current,item)==='free'
         && (item.special?.expiresAt ?? 0)-now>180_000);
@@ -907,7 +915,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         window.dispatchEvent(new CustomEvent(SPY_REPORT_RESULT_EVENT, { detail: result }));
         return;
       }
-      const result = requestSpyReport(stateRef.current, detail.missionId, { now: detail.now ?? Date.now() });
+      const result = requestSpyReport(stateRef.current, detail.missionId, { now: detail.now ?? worldNow() });
       if (result.ok) {
         stateRef.current = result.state;
         setState(result.state);
@@ -929,7 +937,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         window.dispatchEvent(new CustomEvent(SPY_REPORT_RESULT_EVENT, { detail: result }));
         return;
       }
-      const result = requestAllSpyReports(stateRef.current, detail.missionIds ?? [], { now: detail.now ?? Date.now() });
+      const result = requestAllSpyReports(stateRef.current, detail.missionIds ?? [], { now: detail.now ?? worldNow() });
       if (result.ok) {
         stateRef.current = result.state;
         setState(result.state);
@@ -1009,7 +1017,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     // flushSync may not run inside an effect, so the command goes in its own task, like a click would.
     const timer = window.setTimeout(() => {
       if (document.visibilityState !== 'visible' || !document.hasFocus()) return;
-      const at = Date.now();
+      const at = worldNow();
       const current = stateRef.current;
       if (isApplicationCommandBlocked(current) || needsNpcCatchupBefore(current, at)) return;
       // Auto-starts are ordinary build orders and say nothing: the queue and the planner show them.
@@ -1028,7 +1036,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     if (typeof window.requestIdleCallback !== 'function') return;
     let handle = 0;
     const step = (deadline: IdleDeadline) => {
-      if (!warmUniverseTimedSchedules(galaxyCount, Date.now() + 3_600_000, () => deadline.timeRemaining() > 2)) {
+      if (!warmUniverseTimedSchedules(galaxyCount, worldNow() + 3_600_000, () => deadline.timeRemaining() > 2)) {
         handle = window.requestIdleCallback(step);
       }
     };
@@ -1102,7 +1110,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const presenceMinute = Math.floor(now / 60_000);
   useEffect(() => {
     setState((current) => {
-      const at = Date.now();
+      const at = worldNow();
       const playerId = current.profile.playerId;
       if (needsNpcCatchupBefore(current, at)) return current;
       const command = refreshPresence(current.command, playerId, at, current.profile.displayName);
@@ -1122,7 +1130,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     const onStorage = (event: StorageEvent) => {
       if (event.storageArea !== window.localStorage || event.key !== persistence.saveKey) return;
       if (event.newValue !== null && !isCurrentBuildSave(event.newValue)) {
-        setForeignWriterAt(Date.now());
+        setForeignWriterAt(worldNow());
         persistence.write(stateRef.current);
         return;
       }
@@ -1130,7 +1138,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       // An unreadable or newer-schema write is never adopted as a fresh campaign;
       // the write guard keeps it intact and this window stops overwriting it.
       if (loaded.status !== 'loaded') {
-        setForeignWriterAt(Date.now());
+        setForeignWriterAt(worldNow());
         return;
       }
       adoptedFromOtherWindow.current = loaded.state;
@@ -1148,7 +1156,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     if (!result.ok) {
       // A save near the storage limit can alternate between failing and
       // succeeding; tell the player once in a while, not on every write.
-      const now = Date.now();
+      const now = worldNow();
       if (persistenceFailureNotified.current === null || now - persistenceFailureNotified.current >= SAVE_FAILURE_NOTICE_INTERVAL_MS) {
         persistenceFailureNotified.current = now;
         const reason = result.error.trim().slice(0, 160);
@@ -1248,17 +1256,17 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     const interval = isNpcCatchupPending(state) ? NPC_CATCHUP_PERSIST_INTERVAL_MS
       : state === clockTickState.current ? Math.min(LIVE_TICK_PERSIST_MAX_INTERVAL_MS, lastWriteCostMs.current * LIVE_TICK_PERSIST_COST_FACTOR) : 0;
     if (interval > 0) {
-      const wait = lastThrottledWriteAt.current + interval - Date.now();
+      const wait = lastThrottledWriteAt.current + interval - worldNow();
       if (wait > 0) {
         // Trailing write of this prefix unless a newer state replaces it first.
         deferredThrottledWrite.current = window.setTimeout(() => {
           deferredThrottledWrite.current = null;
-          lastThrottledWriteAt.current = Date.now();
+          lastThrottledWriteAt.current = worldNow();
           writeSaveInSlices(state);
         }, wait);
         return;
       }
-      lastThrottledWriteAt.current = Date.now();
+      lastThrottledWriteAt.current = worldNow();
       if (state === clockTickState.current) {
         writeSaveInSlices(state);
         return;
@@ -1295,7 +1303,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         const planet = result.state.planets[event.planetId] ?? result.state.planets[result.state.currentPlanetId];
         const name = getBuildingDefinition(event.assetRole, result.state.profile.factionId).name;
         // Short builds finish quietly; the rest wait a moment and come out as one notice with one sound.
-        const at = Date.now();
+        const at = worldNow();
         buildNoticeBatch.current = addBuildCompletion(buildNoticeBatch.current, { planetId: event.planetId, planetName: planet.name, name, durationMs: event.durationMs, at });
         if (buildNoticeBatch.current) {
           if (buildNoticeTimer.current != null) window.clearTimeout(buildNoticeTimer.current);
@@ -1335,16 +1343,28 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       }
     });
   }, [setNotice]);
-  /** The worker cannot go on: App takes the world on its own thread from what it has. */
+  /**
+   * The worker cannot go on (an error, a patch that does not apply, a hang): it is started again from the world
+   * this window has (the last good one). A worker that keeps failing is left alone for a few minutes and the
+   * window runs the world meanwhile; then it is tried again.
+   */
   const stopLiveWorld = useCallback((reason: string) => {
     const link = liveWorld.current;
     if (!link) return;
-    console.error(`Live world worker stopped; the world runs on the UI thread. ${reason}`);
     link.worker.terminate();
     liveWorld.current = null;
-    liveWorldUnavailable.current = true;
     setNpcCatchupProgress(null);
-    if (!isNpcCatchupPending(stateRef.current)) writeSave(stateRef.current);
+    const decision = liveWorldSupervisor.current.onFailure(performance.now());
+    if (decision.action === 'restart') {
+      console.error(`Live world worker failed; restarting it from the window's world (${decision.restartsInWindow}). ${reason}`);
+      // The window's world (not the worker's, which may be broken) is the last good state.
+      if (!isNpcCatchupPending(stateRef.current)) writeSave(stateRef.current);
+    } else {
+      console.error(`Live world worker keeps failing; the world runs in the window until the next try. ${reason}`);
+      liveWorldUnavailable.current = true;
+      liveWorldCooldownUntil.current = decision.retryAt;
+      if (!isNpcCatchupPending(stateRef.current)) writeSave(stateRef.current);
+    }
     commitClock();
   }, [commitClock, writeSave]);
   /** Starts the live world worker on `initial` (a load, another window's world). */
@@ -1363,13 +1383,15 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       worker, synced: { version: 0, state: initial }, nextVersion: 2, tickInFlight: false,
       // A batch waiting when this link ends is written nowhere (stateRef may already hold another world).
       quiet: new QuietInbox(() => (liveWorld.current === link ? [link.synced.state, stateRef.current] : []), undefined, undefined, (ms) => noteLiveWorldDuration('quiet-apply', ms)),
-      steps: new Map([[0, 0]]), step: 0, committedStep: 0, savedStep: 0,
+      steps: new Map([[0, 0]]), step: 0, committedStep: 0, savedStep: 0, tickSentAt: performance.now(), lastHeardAt: performance.now(),
     };
     liveWorld.current = link;
     worker.onmessage = (event: MessageEvent<LiveWorldResponse>) => {
       if (liveWorld.current !== link) return;
       const message = event.data;
-      noteLiveWorldMessage(message.type, () => handleLiveWorldMessage(message));
+      link.lastHeardAt = performance.now();
+      // A message that cannot be applied (a patch for a record the window lacks) must not leave the two worlds apart.
+      guardWorkerStep(() => noteLiveWorldMessage(message.type, () => handleLiveWorldMessage(message)), stopLiveWorld);
     };
     const handleLiveWorldMessage = (message: LiveWorldResponse) => {
       if (message.type === 'ticked') {
@@ -1417,8 +1439,9 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       }
     };
     worker.onerror = (event) => stopLiveWorld(event.message);
+    worker.onmessageerror = () => stopLiveWorld('The worker sent a message that could not be read.');
     // The worker's clock is wall time; the page's may differ by a whole (rounded) offset only under QA.
-    const clockOffsetMs = Math.round((Date.now() - (performance.timeOrigin + performance.now())) / 60_000) * 60_000;
+    const clockOffsetMs = Math.round((Date.now() - (performance.timeOrigin + performance.now())) / 60_000) * 60_000 + worldClockOffsetMs();
     const request: LiveWorldRequest = { type: 'init', version: 0, state: initial, clockOffsetMs, persist: {
       tickMaxIntervalMs: LIVE_TICK_PERSIST_MAX_INTERVAL_MS, tickCostFactor: LIVE_TICK_PERSIST_COST_FACTOR,
       catchupIntervalMs: NPC_CATCHUP_WORKER_PERSIST_INTERVAL_MS,
@@ -1446,6 +1469,11 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     setNpcCatchupProgress(null);
   }, []);
   const runRuntimeReconcile = useCallback((at: number, budgetMs = 0) => {
+    // A worker given up after repeated failures is tried again once its cool-down is over.
+    if (liveWorldUnavailable.current && liveWorldCooldownUntil.current > 0 && !liveWorldSupervisor.current.inCooldown(performance.now())) {
+      liveWorldUnavailable.current = false;
+      liveWorldCooldownUntil.current = 0;
+    }
     if (!liveWorld.current && !liveWorldUnavailable.current) startLiveWorld(stateRef.current);
     const link = liveWorld.current;
     if (link) {
@@ -1453,6 +1481,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       commitToLiveWorld();
       if (link.tickInFlight) { commitClock(); return; }
       link.tickInFlight = true;
+      link.tickSentAt = performance.now();
       const request: LiveWorldRequest = { type: 'tick', from: link.synced.version, now: at, testTimeScale };
       link.worker.postMessage(request);
       return;
@@ -1483,7 +1512,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
 
   // The once-a-second tick asks the worker for the world; its reply (not this timer) makes the commit.
   const reconcileTickRef = useRef<() => void>(() => undefined);
-  reconcileTickRef.current = () => runOutsideApplicationCommand(() => runRuntimeReconcile(Date.now()));
+  reconcileTickRef.current = () => runOutsideApplicationCommand(() => { anchorWorldClockToState(stateRef.current); runRuntimeReconcile(worldNow()); });
   useEffect(() => {
     reconcileTickRef.current();
   }, [runRuntimeReconcile]);
@@ -1491,6 +1520,16 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     const timer = window.setInterval(() => reconcileTickRef.current(), 1000);
     return () => window.clearInterval(timer);
   }, []);
+  // Watchdog: a worker that does not answer a tick (and sends no progress) for 30 s hangs; it is restarted.
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const link = liveWorld.current;
+      if (link && LiveWorldSupervisor.isHung(performance.now(), link.tickInFlight, link.tickSentAt, link.lastHeardAt)) {
+        stopLiveWorld('The worker did not answer for 30 seconds.');
+      }
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [stopLiveWorld]);
 
   // Long offline gaps are reconciled in bounded groups. Continue each persisted
   // prefix in its own task so catch-up does not wait for the next clock tick or
@@ -1504,7 +1543,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       npcReplayContinuation.current = null;
       const current = stateRef.current;
       if (!isApplicationCommandBlocked(current) || current.npcReplay?.targetAt !== continuationTarget) return;
-      runRuntimeReconcile(Date.now(), NPC_CATCHUP_TASK_BUDGET_MS);
+      anchorWorldClockToState(stateRef.current);
+      runRuntimeReconcile(worldNow(), NPC_CATCHUP_TASK_BUDGET_MS);
     }, 0);
 
     return () => {
@@ -1643,7 +1683,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     if (RUNTIME_MODE !== 'production' || !previous || previous === state) return;
     // A different campaign is a fresh start, not a burst of actions.
     if (previous.profile.playerId !== state.profile.playerId || previous.worldConfig?.seed !== state.worldConfig?.seed) return;
-    const at = Date.now();
+    const at = worldNow();
     const entries = diffPlayerActions(previous, state, at);
     if (at - journalSnapshotAt.current >= PLAYER_JOURNAL_SNAPSHOT_INTERVAL_MS) {
       journalSnapshotAt.current = at;
@@ -1800,7 +1840,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
 
   const startRecycling = (totalDebris: number, processCount: number, allocation: ResourceAllocationPercent) => {
     if (rejectNpcCatchupCommand()) return false;
-    const startedAt = Date.now();
+    const startedAt = worldNow();
     const jobIds = Array.from({ length: Math.max(0, Math.floor(processCount)) }, () => (
       globalThis.crypto?.randomUUID?.() ?? `recycling-${startedAt}-${Math.random().toString(36).slice(2, 11)}`
     ));
@@ -1826,7 +1866,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
 
   const collectAllRecycling = () => {
     if (rejectNpcCatchupCommand()) return false;
-    const collectedAt = Date.now();
+    const collectedAt = worldNow();
     const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
       const transition = collectAllRecyclingAction(current, {
         planetId: state.currentPlanetId,
@@ -1846,7 +1886,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
 
   const collectRecycling = (jobId: string) => {
     if (rejectNpcCatchupCommand()) return false;
-    const collectedAt = Date.now();
+    const collectedAt = worldNow();
     const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
       const transition = collectRecyclingAction(current, {
         planetId: state.currentPlanetId,
@@ -1876,7 +1916,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       state: { wallet: { metal: 0, minerals: 0, gas: 0, debris: 0 }, trade: { refillAtQueue: [] } },
       refillAt: null,
     };
-    const tradedAt = Date.now();
+    const tradedAt = worldNow();
     const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
       const transition = executeTradeAction(current, {
         planetId: state.currentPlanetId,
@@ -1896,7 +1936,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
 
   const startSpaceportUpgrade = (track: SpaceportUpgradeTrack, shipId: string) => {
     if (rejectNpcCatchupCommand()) return false;
-    const enqueuedAt = Date.now();
+    const enqueuedAt = worldNow();
     const taskId = globalThis.crypto?.randomUUID?.() ?? `spaceport-${track}-${shipId}-${enqueuedAt}-${Math.random().toString(36).slice(2, 9)}`;
     const result = startSpaceportUpgradeAction(stateRef.current, {
       planetId: state.currentPlanetId,
@@ -1916,7 +1956,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
 
   const cancelSpaceportUpgrade = (taskId: string) => {
     if (rejectNpcCatchupCommand()) return false;
-    const canceledAt = Date.now();
+    const canceledAt = worldNow();
     const result = cancelSpaceportUpgradeAction(stateRef.current, {
       planetId: state.currentPlanetId,
       now: canceledAt,
@@ -1940,7 +1980,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
 
   const buildBuilding = (assetRole: BuildingRole, planetId: PlanetId = state.currentPlanetId) => {
     if (rejectNpcCatchupCommand()) return false;
-    const enqueuedAt = Date.now();
+    const enqueuedAt = worldNow();
     const context = { planetId, now: enqueuedAt, mode: RUNTIME_MODE, testTimeScale };
     const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
       const availability = previewBuilding(current, context, assetRole).availability;
@@ -1968,7 +2008,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   /** Planet shield: one button for all planets; the rule lives in application/shield.ts. */
   const raiseShield = () => {
     if (rejectNpcCatchupCommand()) return;
-    const at = Date.now();
+    const at = worldNow();
     const outcome = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
       const result = activateShield(current, current.profile.playerId, at);
       return result.ok ? { state: result.state, result: null as string | null } : { state: current, result: result.message };
@@ -2000,7 +2040,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   /** Build planner: «Запустить сейчас», one click on a button; works even with the auto-start off. */
   const runBuildPlanNow = (planetId: string) => {
     if (rejectNpcCatchupCommand()) return 0;
-    const at = Date.now();
+    const at = worldNow();
     const run = enqueueApplicationStateUpdate(stateRef, setState, (latest) => {
       const result = runBuildPlans(latest, { now: at, mode: RUNTIME_MODE, testTimeScale }, planetId);
       return { state: result.state, result };
@@ -2014,7 +2054,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   /** Planner: starts the missing ships of some lines (or all) in one update, through the ordinary shipyard command. */
   const startFleetPlan = (planetId: string, shipIds?: readonly ShipId[], announce = false): FleetPlanStartResult | null => {
     if (rejectNpcCatchupCommand()) return null;
-    const orderedAt = Date.now();
+    const orderedAt = worldNow();
     const runtime = { now: orderedAt, mode: RUNTIME_MODE, testTimeScale };
     const started = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
       const action = startFleetPlanLines(current, { planetId: planetId as PlanetId, ...runtime }, runtime, shipIds);
@@ -2030,7 +2070,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   /** «Империя»: an order on any own planet's shipyard, through the same command as the shipyard screen. */
   const orderProduction = (planetId: PlanetId, queueKind: 'ships' | 'defense', itemId: string, quantity: number) => {
     if (rejectNpcCatchupCommand()) return false;
-    const orderedAt = Date.now();
+    const orderedAt = worldNow();
     const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
       const action = startFleetProduction(current, { planetId, now: orderedAt, mode: RUNTIME_MODE, testTimeScale }, queueKind, itemId, quantity);
       return { state: action.state, result: action.transition };
@@ -2045,7 +2085,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
 
   const cancelProduction = (planetId: PlanetId, orderId: string) => {
     if (rejectNpcCatchupCommand()) return;
-    const canceledAt = Date.now();
+    const canceledAt = worldNow();
     const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
       const action = cancelFleetProduction(current, { planetId, now: canceledAt, mode: RUNTIME_MODE, testTimeScale }, orderId);
       return { state: action.state, result: action.transition as FleetProductionCancellationTransition };
@@ -2059,7 +2099,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
 
   const cancelBuilding = (queueId: string, planetId: PlanetId = state.currentPlanetId) => {
     if (rejectNpcCatchupCommand()) return false;
-    const canceledAt = Date.now();
+    const canceledAt = worldNow();
     const current = stateRef.current;
     const result = cancelBuildingAction(current, {
       planetId,
@@ -2141,7 +2181,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const acceptPirateOperation = (contact: PirateContactPresentation) => {
     if (rejectNpcCatchupCommand()) return;
     const current = stateRef.current;
-    const live = selectOwnedPiratePresentations(current, Date.now()).find((item) => item.contactCycleKey === contact.contactCycleKey);
+    const live = selectOwnedPiratePresentations(current, worldNow()).find((item) => item.contactCycleKey === contact.contactCycleKey);
     if (!live) {
       setNotice('Пиратский контакт больше не доступен в системах ваших колоний.', 'error');
       return;
@@ -2176,7 +2216,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const acceptExplorationContact = (node: import('./domain/universe/types.ts').UniversePlanetNode) => {
     if (rejectNpcCatchupCommand()) return;
     const current = stateRef.current;
-    const next = acceptLiveExploration(current, node.id, Date.now(), RUNTIME_MODE);
+    const next = acceptLiveExploration(current, node.id, worldNow(), RUNTIME_MODE);
     if (!next) { setNotice('Контакт уже исчез. Принять операцию нельзя.', 'error'); return; }
     stateRef.current = next;
     setState(next);
@@ -2194,7 +2234,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const launchExplorationRecon = (node: import('./domain/universe/types.ts').UniversePlanetNode) => {
     if (rejectNpcCatchupCommand()) return;
     const current = stateRef.current;
-    const nowMs = Date.now();
+    const nowMs = worldNow();
     const live = getExplorationTarget(current, node.id, nowMs, RUNTIME_MODE);
     if (!live) { setNotice('Объект исчез. Исследование невозможно.', 'error'); return; }
     // From the Universe inspector, accepting the contact and launching the probe is one operation.
@@ -2225,7 +2265,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   };
 
   const openExpeditionLaunch = (node: import('./domain/universe/types.ts').UniversePlanetNode) => {
-    const live = getExplorationTarget(stateRef.current, node.id, Date.now(), RUNTIME_MODE);
+    const live = getExplorationTarget(stateRef.current, node.id, worldNow(), RUNTIME_MODE);
     if (!live || explorationTargetStatus(stateRef.current, live) !== 'free') {
       setNotice('Экспедиция недоступна: объект исчез или занят. Проверь актуальные контакты.', 'error');
       return;
@@ -2251,7 +2291,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const launchBot01Exploration = (node: import('./domain/universe/types.ts').UniversePlanetNode) => {
     if (rejectNpcCatchupCommand()) return;
     if (RUNTIME_MODE !== 'test')return;
-    const at=Date.now();
+    const at=worldNow();
     const result=dispatchBot01Exploration(stateRef.current,node,at,testTimeScale);
     if(!result.ok){setNotice(result.notice,'error');return;}
     stateRef.current=result.state;
@@ -2260,7 +2300,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   };
 
   const openExplorationAttackLaunch = (node: import('./domain/universe/types.ts').UniversePlanetNode) => {
-    const plan = planExplorationAttackLaunch(stateRef.current, node.id, Date.now(), RUNTIME_MODE);
+    const plan = planExplorationAttackLaunch(stateRef.current, node.id, worldNow(), RUNTIME_MODE);
     if (!plan.ok) {
       setNotice(plan.notice, 'error');
       return;
@@ -2295,7 +2335,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     if (selectCommandHallLevel(current.planets) <= 0) {
       return { ok: false, message: `Командование недоступно: на планетах нет здания «${getBuildingDefinition('planetary-government', current.profile.factionId).name}».` };
     }
-    const at = Date.now();
+    const at = worldNow();
     const result = action(current.command, at, current.profile.playerId, current.profile.displayName);
     if (result.state !== current.command) {
       const applied = {
@@ -2321,7 +2361,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     if (selectCommandHallLevel(current.planets) <= 0) {
       return { ok: false, message: `Командование недоступно: на планетах нет здания «${getBuildingDefinition('planetary-government', current.profile.factionId).name}».` };
     }
-    const result = action(current, Date.now());
+    const result = action(current, worldNow());
     if (result.state !== current) {
       stateRef.current = result.state;
       setState(result.state);
@@ -2536,7 +2576,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     if (rejectNpcCatchupCommand()) return;
     const targetRaceId = target.owner.raceId === 'synod' || target.owner.raceId === 'veyra' ? target.owner.raceId : 'aegis';
     const result = dispatchFlight(stateRef.current, {
-      requestId: `spy-universe-${target.planetId}-${Date.now()}`,
+      requestId: `spy-universe-${target.planetId}-${worldNow()}`,
       missionId: 'espionage',
       originPlanetId: stateRef.current.currentPlanetId,
       targetKind: target.targetKind,
@@ -2548,8 +2588,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       targetAlliance: target.owner.alliance ?? null,
       selectedShips: { 'spy-probe': 1 },
       destination: { kind: 'planet', planetId: target.planetId, coordinate: target.coordinate },
-      departedAt: Date.now(),
-    }, { now: Date.now(), mode: RUNTIME_MODE, testTimeScale });
+      departedAt: worldNow(),
+    }, { now: worldNow(), mode: RUNTIME_MODE, testTimeScale });
     if (result.ok) {
       stateRef.current = result.state;
       setState(result.state);
@@ -2591,7 +2631,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       return commands.map((command) => ({ originPlanetId: command.originPlanetId ?? stateRef.current.currentPlanetId,
         result: { ok: false as const, state: stateRef.current, error: { code: 'invalid-command' as const, message: NPC_CATCHUP_COMMAND_BLOCKED_MESSAGE } } }));
     }
-    const { state: next, outcomes } = sendQuickLegs(stateRef.current, commands, { now: Date.now(), mode: RUNTIME_MODE, testTimeScale }, dispatchFlight);
+    const { state: next, outcomes } = sendQuickLegs(stateRef.current, commands, { now: worldNow(), mode: RUNTIME_MODE, testTimeScale }, dispatchFlight);
     const sent = outcomes.filter((outcome) => outcome.result.ok);
     const refused = outcomes.find((outcome) => !outcome.result.ok);
     if (sent.length) {
@@ -2660,10 +2700,10 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   /** Sun and Gate notices name the place and jump there in one click. */
   const sunNoticeToast = (notice: SunRaidNotice): { text: string; action?: ToastAction } => {
     if (notice.gateId) {
-      const beacon = selectGateBeacons(stateRef.current, Date.now()).find((item) => item.gateId === notice.gateId);
+      const beacon = selectGateBeacons(stateRef.current, worldNow()).find((item) => item.gateId === notice.gateId);
       if (!beacon?.coordinate) return { text: notice.text };
       const coordinate = beacon.coordinate;
-      const left = Math.max(1, Math.ceil((beacon.completesAt - Date.now()) / 60_000));
+      const left = Math.max(1, Math.ceil((beacon.completesAt - worldNow()) / 60_000));
       const span = left >= 60 ? `${Math.floor(left / 60)} ч ${left % 60} мин` : `${left} мин`;
       return {
         text: `${notice.text.replace(/\.$/, '')} · [${coordinate.galaxy}:${coordinate.system}:${coordinate.position}] · готовы через ${span}.`,
@@ -2711,7 +2751,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       setNotice('Связанный шпионский зонд уже не находится на орбите.');
       return;
     }
-    window.dispatchEvent(new CustomEvent(FLIGHT_RECALL_REQUEST_EVENT, { detail: { flightId: flight.id, now: Date.now() } }));
+    window.dispatchEvent(new CustomEvent(FLIGHT_RECALL_REQUEST_EVENT, { detail: { flightId: flight.id, now: worldNow() } }));
   };
 
   const openFleetRootFromReports = () => {
@@ -2735,7 +2775,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   /** «Принять» / «Отказаться» on a bot's letter: acts on the save at once, tells why when it cannot. */
   const answerLetterFromReports = (ref: LetterRef, answer: 'accept' | 'decline'): string | null => {
     const current = stateRef.current;
-    const outcome = answerNpcLetter(current, ref, answer, Date.now());
+    const outcome = answerNpcLetter(current, ref, answer, worldNow());
     if (!outcome.ok) return outcome.reason;
     const nextState: SaveState = { ...outcome.state, schemaVersion: SAVE_SCHEMA_VERSION };
     stateRef.current = nextState;
@@ -2922,14 +2962,14 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     // Without an alliance there are no Sun operations: a Sun under attack opens «Поддержка солнца» in «Флоты».
     if (!selectOwnerMembership(stateRef.current.command, stateRef.current.profile.playerId) || selectCommandHallLevel(stateRef.current.planets) <= 0) {
       const target = sun ?? selectedSun;
-      const raid = selectIncomingSunAlerts(stateRef.current, Date.now()).find((alert) => alert.raid.galaxy === target.galaxy && alert.raid.system === target.system);
+      const raid = selectIncomingSunAlerts(stateRef.current, worldNow()).find((alert) => alert.raid.galaxy === target.galaxy && alert.raid.system === target.system);
       if (raid) openSunSupportInFleets(raid.raid);
       else setNotice(`Солнце ${target.galaxy}:${target.system}. Рейды на Солнца — операция союза («Командование → Операции»).`);
       return;
     }
     clearBuildingInterior();
     if (sun) setSelectedSun(sun);
-    setCommandFocus({ tab: 'operations', nonce: Date.now() });
+    setCommandFocus({ tab: 'operations', nonce: worldNow() });
     navigateTo('command');
     setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
@@ -2991,13 +3031,13 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const startGate = () => {
     if (rejectNpcCatchupCommand()) return;
     if (!gateDialogPlanetId) return;
-    commitSunAction(startGateConstruction(stateRef.current, gateDialogPlanetId, { now: Date.now(), mode: RUNTIME_MODE, testTimeScale }));
+    commitSunAction(startGateConstruction(stateRef.current, gateDialogPlanetId, { now: worldNow(), mode: RUNTIME_MODE, testTimeScale }));
   };
   const testGateAssault = RUNTIME_MODE === 'test' ? () => {
     if (rejectNpcCatchupCommand()) return;
     const gate = currentSunRaidState(stateRef.current).gates.find((item) => item.status === 'building');
     if (!gate || !stateRef.current.planets[gate.hostPlanetId]) { setNotice('Нет строящихся Врат на вашей планете.', 'error'); return; }
-    const result = startBot01GateAssault(stateRef.current, gate.hostPlanetId, { now: Date.now(), mode: RUNTIME_MODE, testTimeScale });
+    const result = startBot01GateAssault(stateRef.current, gate.hostPlanetId, { now: worldNow(), mode: RUNTIME_MODE, testTimeScale });
     if (result.ok) { stateRef.current = result.state; setState(result.state); setNotice(result.notice); }
     else setNotice(result.error.message, 'error');
   } : undefined;
@@ -3025,11 +3065,11 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   }, [sunAlerts, setNotice]);
 
   // Play time of the campaign and the slot card (production slots only).
-  const lastPlayTickRef = useRef(Date.now());
+  const lastPlayTickRef = useRef(worldNow());
   /** Adds the time since the last tick (at most 2 min: a sleeping laptop is not play time). */
   const foldPlayTime = useCallback((commit: boolean) => {
     if (RUNTIME_MODE !== 'production') return stateRef.current;
-    const at = Date.now();
+    const at = worldNow();
     const elapsed = Math.min(120_000, Math.max(0, at - lastPlayTickRef.current));
     lastPlayTickRef.current = at;
     if (elapsed <= 0) return stateRef.current;
@@ -3115,7 +3155,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     if (read.status !== 'ok') return null;
     const saved = persistence.write(stateRef.current);
     if (!saved.ok) return null;
-    const fold = settleCampaign(read.registry, stateRef.current, kind, Date.now());
+    const fold = settleCampaign(read.registry, stateRef.current, kind, worldNow());
     if (!fold) return null;
     if (fold.changed && !writePersonaRegistry(fold.registry).ok) return null;
     return fold.seriesId;
@@ -3140,7 +3180,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   };
   const restartCampaign = () => {
     const config = stateRef.current.worldConfig;
-    const nextState = createInitialSaveState(RUNTIME_MODE, Date.now(), config && !config.legacy ? config : undefined);
+    const nextState = createInitialSaveState(RUNTIME_MODE, worldNow(), config && !config.legacy ? config : undefined);
     dispatchRuntimeReset(RUNTIME_MODE, window);
     // Restarting is the player's explicit decision to replace this campaign.
     persistence.write(nextState, { replaceUnreadable: true });
@@ -3470,7 +3510,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
                   onSelect={setSelectedSun}
                   onCommit={commitSunAction}
                   onOpenReport={openPirateReport}
-                  onOpenCommand={() => setCommandFocus({ tab: 'overview', nonce: Date.now() })}
+                  onOpenCommand={() => setCommandFocus({ tab: 'overview', nonce: worldNow() })}
                   onOpenGate={() => { setGateDialogPlanetId(state.currentPlanetId); }}
                   onSendSupport={(raid) => setSunDefence({ galaxy: raid.galaxy, system: raid.system })}
                   onRecycleDebris={openSunRecycleInFleets}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { worldNow } from './world-clock.ts';
 
 /**
  * One wall-clock source for the whole window. App no longer keeps `now` in its
@@ -21,29 +22,29 @@ let watchdog: number | null = null;
 /** The last published time. */
 export function getClockNow(): number {
   if (value === 0) {
-    value = Date.now();
+    value = worldNow();
     publishedAt = value;
   }
   return value;
 }
 
 /** Sets the shared time and wakes the subscribers; call it next to the state update it belongs to. */
-export function publishClock(at: number = Date.now()): void {
+export function publishClock(at: number = worldNow()): void {
   value = at;
-  publishedAt = Date.now();
+  publishedAt = worldNow();
   for (const listener of listeners) listener(at);
 }
 
 function subscribe(listener: (at: number) => void): () => void {
   listeners.add(listener);
   // Nobody drives the clock (a screen on its own, a stopped world): keep it moving once a second.
-  if (Date.now() - publishedAt > STALE_AFTER_MS) {
-    value = Date.now();
+  if (worldNow() - publishedAt > STALE_AFTER_MS) {
+    value = worldNow();
     publishedAt = value;
   }
   if (watchdog === null) {
     watchdog = window.setInterval(() => {
-      if (Date.now() - publishedAt > STALE_AFTER_MS) publishClock(Date.now());
+      if (worldNow() - publishedAt > STALE_AFTER_MS) publishClock(worldNow());
     }, 1_000);
   }
   return () => {

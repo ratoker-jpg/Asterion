@@ -1,3 +1,4 @@
+import { clearSaveBackups, listSaveBackups, restoreSaveBackup, type SaveBackup } from './save-backup.ts';
 import { getBrowserSaveStorage } from './save-storage.ts';
 import {
   LEGACY_PRODUCTION_SAVE_KEY,
@@ -329,8 +330,24 @@ export function deleteSaveSlot(slotId: string, storage?: SlotStorage | null): Sl
   const index = readSlotIndex(target);
   const slot = index.slots.find((item) => item.id === slotId);
   if (!target || !slot) return { ok: false, error: 'Слот не найден.', index };
-  try { target.removeItem(slot.storageKey); } catch { /* the index entry is removed regardless */ }
+  try { clearSaveBackups(target, slot.storageKey); target.removeItem(slot.storageKey); } catch { /* the index entry is removed regardless */ }
   return writeSlotIndex(removeSlot(index, slotId), target);
+}
+
+/** Copies of a campaign kept before its save was migrated to a newer format (newest first). */
+export function listSlotBackups(slotId: string, storage?: SlotStorage | null): SaveBackup[] {
+  const target = resolveStorage(storage);
+  const slot = target ? readSlotIndex(target).slots.find((item) => item.id === slotId) : undefined;
+  return target && slot ? listSaveBackups(target, slot.storageKey) : [];
+}
+
+/** «Восстановить из копии»: the chosen copy becomes the campaign's save (the save it replaces is kept as a copy too). */
+export function restoreSlotBackup(slotId: string, backupKey: string, options: { storage?: SlotStorage | null; now?: number } = {}): { ok: true } | { ok: false; error: string } {
+  const target = resolveStorage(options.storage);
+  const slot = target ? readSlotIndex(target).slots.find((item) => item.id === slotId) : undefined;
+  if (!target || !slot) return { ok: false, error: 'Слот не найден.' };
+  const restored = restoreSaveBackup(target, slot.storageKey, backupKey, options.now ?? Date.now());
+  return restored.ok ? { ok: true } : restored;
 }
 
 export function duplicateSaveSlot(slotId: string, options: { storage?: SlotStorage | null; now?: number; random?: () => number } = {}): SlotWriteResult {

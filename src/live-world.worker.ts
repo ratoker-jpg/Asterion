@@ -25,10 +25,12 @@ const engine = new LiveWorldEngine(host);
  */
 function attachSavePort(saveKey: string, port: MessagePort): void {
   const computeMsOf = new Map<string, number>();
-  port.onmessage = (event: MessageEvent<{ ok: boolean; version: number; writeId: string; chars: number; error?: string }>) => {
+  port.onmessage = (event: MessageEvent<{ ok: boolean; skipped?: boolean; version: number; writeId: string; chars: number; error?: string }>) => {
     const reply = event.data;
     const computeMs = computeMsOf.get(reply.writeId) ?? 0;
     computeMsOf.delete(reply.writeId);
+    // Replaced by a newer write before it started (a slow disk): nothing was stored, the newer one will be.
+    if (reply.skipped) return;
     if (reply.ok) {
       scope.postMessage({ type: 'saved', version: reply.version, writeId: reply.writeId, chars: reply.chars, computeMs } satisfies LiveWorldResponse);
       return;
@@ -53,5 +55,7 @@ scope.onmessage = (event: MessageEvent<LiveWorldRequest>) => {
     return;
   }
   if (event.data.type === 'init') clockOffsetMs = event.data.clockOffsetMs;
+  // The UI's world clock rules (it may be ahead of or behind the PC clock, see world-clock.ts).
+  if (event.data.type === 'tick') clockOffsetMs = event.data.now - Date.now();
   void engine.handle(event.data);
 };
