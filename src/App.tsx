@@ -1684,7 +1684,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     const current = stateRef.current;
     const factionId = current.profile.factionId;
     if (!isCombatFactionId(factionId)) return null;
-    const combatIds = new Set(getFactionShipCatalog(factionId)
+    const combatIds = new Set<string>(getFactionShipCatalog(factionId)
       .filter((ship) => ship.id !== 'spy-probe' && ship.id !== 'solar-satellite' && (ship.combat?.attack ?? 0) > 0)
       .map((ship) => ship.id));
     let best: { planetName: string; durationMs: number } | null = null;
