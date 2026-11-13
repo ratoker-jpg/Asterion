@@ -12,13 +12,6 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            src
-            docs/audit/probes
-            electron
-            public
-          sparse-checkout-cone-mode: true
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -27,4 +20,5 @@ jobs:
       - name: Clock shift probe
         run: node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs docs/audit/probes/clock-shift.probe.ts
       - name: Esc in full screen probe
+        if: always()
         run: npx electron docs/audit/probes/esc-fullscreen.probe.cjs
