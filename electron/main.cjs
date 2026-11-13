@@ -3,6 +3,7 @@ const path = require('path');
 const { registerSaveStore } = require('./save-store.cjs');
 const { registerUpdater } = require('./updater.cjs');
 const { registerCloud } = require('./cloud.cjs');
+const { handleWindowKey } = require('./window-keys.cjs');
 
 const WINDOW_PRESETS = {
   '1280x720': [1280, 720],
@@ -108,29 +109,7 @@ function createWindow() {
   win.on('leave-full-screen', () => emitDisplayState(win));
   win.on('resize', () => emitDisplayState(win));
 
-  win.webContents.on('before-input-event', (event, input) => {
-    if (input.type === 'mouseWheel' && (input.control || input.meta)) {
-      event.preventDefault();
-      return;
-    }
-
-    if (input.type !== 'keyDown') return;
-
-    if ((input.control || input.meta) && ['+', '=', '-', '_', '0'].includes(input.key)) {
-      event.preventDefault();
-      return;
-    }
-
-    if (input.key === 'F11') {
-      event.preventDefault();
-      win.setFullScreen(!win.isFullScreen());
-    }
-
-    if (input.key === 'Escape' && win.isFullScreen()) {
-      event.preventDefault();
-      win.setFullScreen(false);
-    }
-  });
+  win.webContents.on('before-input-event', (event, input) => handleWindowKey(win, event, input));
 
   win.once('ready-to-show', () => win.show());
 }

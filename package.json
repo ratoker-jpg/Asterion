@@ -106,7 +106,9 @@
     "test:cloud-world-ui": "electron electron/cloud-world-qa.cjs",
     "test:catchup-summary-ui": "electron electron/catchup-summary-qa.cjs",
     "test:npc-rounds-ui": "electron electron/npc-rounds-qa.cjs",
-    "test:settings-screens-ui": "electron electron/visual-settings-screens.cjs"
+    "test:settings-screens-ui": "electron electron/visual-settings-screens.cjs",
+    "test:save-store": "node --test electron/save-store.test.cjs",
+    "test:esc-fullscreen-ui": "electron electron/esc-fullscreen-qa.cjs"
   },
   "dependencies": {
     "electron-updater": "6.8.11",

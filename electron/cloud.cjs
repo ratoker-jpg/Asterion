@@ -8,7 +8,7 @@
 //   <userData>/cloud.json        address, on/off, this computer's device id
 //   <userData>/cloud-key.txt     the access key (written only from the settings screen or the deploy script)
 //   <userData>/cloud-sync.json   per campaign: the revision and digest the local save equals, last upload
-const { app, ipcMain } = require('electron');
+const { app, ipcMain, BrowserWindow } = require('electron');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
@@ -20,8 +20,14 @@ const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
 
 const CAMPAIGN_ID = /^slot-[a-z0-9-]{1,40}$/;
-/** A closing window waits this long for the network once the save is compressed. */
-const EXIT_NETWORK_WAIT_MS = 2_500;
+/**
+ * A closing window waits this long for the network once the save is compressed (audit 13.11: 2.5 s
+ * was too little for a 3 MB save on a slow line; the server then lost up to 3 minutes of orders).
+ * 10 s is the most the player ever waits for it, and after 0.8 s a small «Сохраняю в облако…» window
+ * shows why the game has not closed yet.
+ */
+const EXIT_NETWORK_WAIT_MS = 10_000;
+const EXIT_NOTICE_AFTER_MS = 800;
 /** ...and at most this long for compressing it (a late world takes 1–2 s). */
 const EXIT_COMPRESS_WAIT_MS = 6_000;
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -382,10 +388,29 @@ function registerCloud() {
     waitedForExit = true;
     const entries = [...exitUploads];
     const timeout = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    let notice = null;
+    const noticeTimer = setTimeout(() => { notice = showExitNotice(); }, EXIT_NOTICE_AFTER_MS);
     Promise.race([Promise.all(entries.map((entry) => entry.compressedPromise)), timeout(EXIT_COMPRESS_WAIT_MS)])
       .then(() => Promise.race([Promise.allSettled(entries.map((entry) => entry.running)), timeout(EXIT_NETWORK_WAIT_MS)]))
-      .finally(() => app.quit());
+      .finally(() => {
+        clearTimeout(noticeTimer);
+        try { notice?.destroy(); } catch { /* already closed */ }
+        app.quit();
+      });
   });
+}
+
+/** A small window with the reason the game is still open: the world is being sent to the cloud. */
+function showExitNotice() {
+  try {
+    const win = new BrowserWindow({
+      width: 360, height: 96, frame: false, resizable: false, movable: false, alwaysOnTop: true, skipTaskbar: false,
+      backgroundColor: '#02050a', title: 'Asterion', webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
+    });
+    const page = '<!doctype html><meta charset="utf-8"><body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:#02050a;color:#dff8ff;font:600 16px Segoe UI,sans-serif;border:1px solid #1d4a5a;box-sizing:border-box">Сохраняю в облако…</body>';
+    win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(page)}`);
+    return win;
+  } catch { return null; }
 }
 
 module.exports = { registerCloud, normalizeUrl };

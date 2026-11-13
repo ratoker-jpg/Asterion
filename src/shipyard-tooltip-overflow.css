@@ -6,10 +6,4 @@
    screen. Extending .stage to ~2860px would otherwise make background-size:
    cover recrop the 1920x1080 starfield. Pin it to the base canvas instead. */
 
-/* The App-level placeholder sits underneath the Fleet portal. Hide only that
-   placeholder while the long shipyard is open, so its old “ФЛОТЫ” text cannot
-   bleed through while the actual starfield remains visible. */
-html.asterion-long-page .module-placeholder-v3 {
-  visibility: hidden;
-}
 

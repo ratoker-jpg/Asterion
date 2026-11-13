@@ -427,6 +427,30 @@ for (const [label, afterStatuses] of [['before any checkpoint (the revision it s
   });
 }
 
+test('a runner that does not stop in time is killed, and the world is raised again by itself (audit 13.11)', async (t) => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'asterion-cloud-'));
+  const base0 = config(dataDir);
+  const lines: string[] = [];
+  const cloud = createCloudServer(config(dataDir, {
+    runnerOverride: { ...base0.runnerOverride!, script: path.join(here, 'runner-hang.test-support.ts') },
+    stopTimeoutMs: 1_500,
+    restart: { backoffMs: [150, 300], maxAttempts: 6, sameSpotMs: 30 * 60_000 },
+    log: (line) => lines.push(line),
+  }));
+  const server = `http://127.0.0.1:${await cloud.listen()}`;
+  t.after(() => cloud.close().finally(() => fs.rmSync(dataDir, { recursive: true, force: true })));
+  const id = 'slot-hang-0001';
+  assert.equal((await upload(server, id, leftWorld(30), { 'x-asterion-left': '1' })).status, 200);
+  await waitFor(async () => (await api(server, `/v1/campaigns/${id}`)).json(), (view) => view.live?.status === 'running', 60_000);
+  const claim = await claimWorld(server, id, 1, VERSION);
+  assert.notEqual(claim.status, 200, 'the stuck runner could not hand the world back');
+  const recovered = await waitFor(async () => (await api(server, `/v1/campaigns/${id}`)).json(),
+    () => lines.filter((line) => line.includes(': started (')).length >= 2, 60_000);
+  assert.ok(lines.some((line) => /did not stop in .* killed/.test(line)));
+  assert.ok(lines.some((line) => /runner crashed .* attempt 1\//.test(line)), 'the kill is a crash for the supervisor, not a silent exit');
+  assert.equal(recovered.live?.status, 'running');
+});
+
 test('the same error at the same place of the world stops the restarts: failed with a reason, evidence kept, raised by hand', async (t) => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'asterion-cloud-'));
   const faultFile = path.join(dataDir, 'fault.json');

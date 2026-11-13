@@ -75,7 +75,7 @@
 /* ---------------------------------------------------------------- 1. Screens
    A route, a Fleets section, a building interior or a planet zone comes into
    focus: 22px rise, blur 8px → 0 on a smooth spring (no scale: QA measures it). */
-.workspace > :not(.module-placeholder-v3, .route-sweep),
+.workspace > :not(.route-sweep),
 .fleet-main-v1 > *,
 .utility-screen-host > *,
 .building-interior-host > * {

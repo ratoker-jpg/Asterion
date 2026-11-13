@@ -46,7 +46,6 @@ import { GameSelect } from './ui/GameSelect';
 import commandHeaderIcon from './assets/ui/header-icons/command.png';
 import aidMissionIcon from '../assets/source/mission-icons-v1/33_trade_convoy.png';
 import sunMissionIcon from '../assets/source/mission-icons-v1/08_sun_support.png';
-import sunArt from '../assets/source/battle-report-v2/battle-sun-transparent-v1.png';
 import './command.css';
 
 export type CommandActionResult = { ok: true; message?: string } | { ok: false; message: string };
@@ -118,7 +117,7 @@ type CommandViewProps = {
   now: number;
   actions: CommandActions;
   /** «Операции → Рейд на Солнце» panel (App renders it with the live save). */
-  operationsPanel?: ReactNode;
+  operationsPanel: ReactNode;
   /** Incoming Sun raids in the player's galaxies: a hot badge on «Операции». */
   operationsAlertCount?: number;
   /** Jump request from the map, alerts or the Fleet tile; `nonce` makes repeats work. */
@@ -153,7 +152,6 @@ const FACTION_LABELS: Record<string, string> = { aegis: 'Астеры', synod: '
 const SCORE_ICONS = asterionAssetIntegrationAssets.scoreIcons;
 const REPORT_ICONS = asterionAssetIntegrationAssets.reportIcons;
 const FACTION_FACES: Readonly<Record<string, string>> = asterionAssetIntegrationAssets.battleFactionIcons;
-const SUN_RAID_SHIP_IDS = ['death-star', 'battleship', 'destroyer', 'cruiser'] as const;
 const TAB_ICONS: Record<CommandTab, string> = {
   overview: commandHeaderIcon,
   members: REPORT_ICONS.profile,
@@ -344,19 +342,6 @@ function ScoreGrid({ score }: { score: MemberScore }) {
       <div><Medal kind="battle" /><dt>Боевые</dt><dd>{number.format(score.battlePoints)}</dd></div>
       <div><Medal kind="achievement" /><dt>Достижения</dt><dd>{number.format(score.achievementPoints)}</dd></div>
     </dl>
-  );
-}
-
-function Stub({ title, children, qa, icon }: { title: string; children: string; qa: 'sun'; icon: ReactNode }) {
-  return (
-    <div className={`command-stub cmdA-stub cmdA-stub--${qa}`} data-qa-command-stub data-qa-sun-raid="" role="status">
-      {icon}
-      <div>
-        <small>Совместная операция</small>
-        <h2>{title}</h2>
-        <p>{children}</p>
-      </div>
-    </div>
   );
 }
 
@@ -1287,34 +1272,6 @@ function RequestsTab({ aid, now, actions, onFeedback, testControls, playerFactio
 
 const RESOURCE_TONES: Record<AidResource, string> = { metal: '#c9d6de', minerals: '#7f8cff', gas: '#35e58a', debris: '#e6ad50' };
 
-// ---- operations ----------------------------------------------------------------
-
-
-function OperationsTab({ playerFactionId }: { playerFactionId?: string }) {
-  return (
-    <div className="cmdA-grid command-operations" data-qa-operations>
-      <ListPanel title="Операции союза" count={1}>
-        <ul className="cmdA-items">
-          <li className="cmdA-item is-selected" style={{ '--k': '#e6ad50' } as CSSProperties}>
-            <MissionTile src={sunMissionIcon} className="cmdA-item-icon" />
-            <div className="cmdA-item-main"><strong>Рейд на Солнце</strong><span>Совместная операция</span></div>
-            <Chip tone="am">Скоро</Chip>
-          </li>
-        </ul>
-        <p className="cmdA-note">Журнал союза — во вкладке «Штаб», война и перемирие — в «Дипломатии».</p>
-      </ListPanel>
-      <Dossier className="cmdA-operations-dossier" footer={<FootStatus label="Статус" value="Появится в будущей версии" />}>
-        <Hero art={<div className="cmdA-art cmdA-art--sun"><Img src={sunArt} /></div>}>
-          <Stub qa="sun" title="Рейд на Солнце" icon={<MissionTile src={sunMissionIcon} className="cmdA-stub-icon" />}>Появится в будущей версии. Сейчас союз не может собрать совместный флот — механика не меняется.</Stub>
-          <div className="cmdA-ghost-fleet" aria-hidden="true">
-            {SUN_RAID_SHIP_IDS.map((shipId) => <span key={shipId}><Img src={shipArtOf(playerFactionId, shipId)} /></span>)}
-          </div>
-        </Hero>
-      </Dossier>
-    </div>
-  );
-}
-
 // ---- diplomacy -----------------------------------------------------------------
 
 function DiplomacyTab({ command, allianceId, role, ownerScores, allianceDetails, now, timeScale, actions, onFeedback, testControls }: {
@@ -1552,10 +1509,8 @@ export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFa
           <RequestsTab aid={aid} now={now} actions={actions} onFeedback={onFeedback} testControls={testControls} playerFactionId={playerFactionId} quickHelp={quickHelp} />
         ) : activeTab === 'diplomacy' ? (
           <DiplomacyTab command={command} allianceId={membership.alliance.id} role={membership.role} ownerScores={ownerScores} allianceDetails={allianceDetails} now={now} timeScale={testTimeScale} actions={actions} onFeedback={onFeedback} testControls={testControls} />
-        ) : operationsPanel ? (
-          <div className="opsA srp-host" data-qa-command-operations>{operationsPanel}</div>
         ) : (
-          <OperationsTab playerFactionId={playerFactionId} />
+          <div className="opsA srp-host" data-qa-command-operations>{operationsPanel}</div>
         )}
       </section>
     </main>

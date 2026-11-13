@@ -41,6 +41,8 @@ export type ServerConfig = {
   stepMs: number;
   stepBudgetMs: number;
   checkpointEveryMs: number;
+  /** How long a runner may take to write the world out on a stop before it is killed (default 3 min). */
+  stopTimeoutMs?: number;
   /** A game silent for this long loses its campaign to the server (cloud-sync.ts CLOUD_LEASE_MS). */
   leaseMs: number;
   /** How often the server looks for lapsed leases. */
@@ -443,14 +445,28 @@ export function createCloudServer(config: ServerConfig) {
   }
 
   /** Stops the living world and writes it to `out`; `finish` hands it back (closes the absence). */
-  async function stopRun(run: LiveRun, out: string, finish: boolean, timeoutMs = 180_000): Promise<RunnerWritten> {
+  async function stopRun(run: LiveRun, out: string, finish: boolean, timeoutMs = config.stopTimeoutMs ?? 180_000): Promise<RunnerWritten> {
     await run.ready;
     if (run.exited) throw new Error('The world runner is not running.');
     run.stopping = true;
     const stopped = new Promise<RunnerMessage>((resolve) => run.waiting.set('stopped', resolve));
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('The world runner did not stop in time.')), timeoutMs); timer.unref(); });
+    let message: RunnerMessage;
     send(run, { type: 'stop', out, finish });
-    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('The world runner did not stop in time.')), timeoutMs).unref());
-    const message = await Promise.race([stopped, timeout]);
+    try {
+      message = await Promise.race([stopped, timeout]);
+    } catch (error) {
+      // A runner that is stuck must not stay "stopping" for ever: that hides its later death from the
+      // crash handler and the world would never be raised again. Kill it; its exit is then a crash.
+      run.waiting.delete('stopped');
+      run.stopping = false;
+      config.log(`live ${run.campaignId}: runner did not stop in ${Math.round(timeoutMs / 1000)} s, killed`);
+      try { run.child.kill('SIGKILL'); } catch { /* already gone */ }
+      throw error;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
     if (message.type !== 'stopped') throw new Error(message.type === 'error' ? message.message : 'The world runner failed.');
     if (live === run) live = null;
     return message.written;
