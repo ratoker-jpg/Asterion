@@ -11,12 +11,15 @@ import type { UiPreferencesV2 } from '../../domain/settings/types.ts';
 import { formatPlayTime, selectContinueSlot, sortSlotsByRecent, type SaveSlotIndex, type SaveSlotMeta } from '../../domain/session/slots.ts';
 import { CAMPAIGN_SPEED_LABELS, NPC_ACTIVITY_LABELS } from '../../domain/world/config.ts';
 import { SAVE_SCHEMA_VERSION } from '../../application/persistence.ts';
+import type { SaveBackup } from '../../application/save-backup.ts';
 import {
   deleteSaveSlot,
   duplicateSaveSlot,
   exportSaveSlot,
   importSaveSlot,
   inspectSlot,
+  listSlotBackups,
+  restoreSlotBackup,
   pruneOrphanSaveFiles,
   updateSlotSummary,
   readSlotIndex,
@@ -330,6 +333,7 @@ function LoadGameScreen({ index, onBack, onLoad, onChanged }: LoadGameScreenProp
   const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<SaveSlotMeta | null>(null);
+  const [confirmRestore, setConfirmRestore] = useState<{ slot: SaveSlotMeta; backup: SaveBackup } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const result = (outcome: { ok: boolean; error?: string }, success: string) => {
@@ -364,6 +368,8 @@ function LoadGameScreen({ index, onBack, onLoad, onChanged }: LoadGameScreenProp
         setMessage(exported.ok ? { tone: 'ok', text: `Файл ${exported.fileName} сохранён.` } : { tone: 'error', text: exported.error });
       }}
       onDelete={() => setConfirmDelete(slot)}
+      backup={listSlotBackups(slot.id)[0] ?? null}
+      onRestore={(backup) => setConfirmRestore({ slot, backup })}
     />
   );
 
@@ -390,6 +396,15 @@ function LoadGameScreen({ index, onBack, onLoad, onChanged }: LoadGameScreenProp
         </details>
       ) : null}
       <ServerCampaigns slots={slots} onLoad={onLoad} onOpened={(slot) => { onChanged(); onLoad(slot); }} />
+      {confirmRestore ? (
+        <ConfirmDialog
+          title="Восстановить из копии?"
+          text={`Кампания «${confirmRestore.slot.name}» вернётся к копии от ${dateLabel(confirmRestore.backup.at)} (формат ${confirmRestore.backup.fromSchema}), которую игра сделала перед обновлением сохранения. Текущее сохранение тоже останется копией.`}
+          confirmLabel="ВОССТАНОВИТЬ"
+          onConfirm={() => { result(restoreSlotBackup(confirmRestore.slot.id, confirmRestore.backup.key), 'Сохранение восстановлено из копии.'); setConfirmRestore(null); }}
+          onCancel={() => setConfirmRestore(null)}
+        />
+      ) : null}
       {confirmDelete ? (
         <ConfirmDialog
           title="Удалить сохранение?"
@@ -417,9 +432,11 @@ type SlotCardProps = {
   onDuplicate: () => void;
   onExport: () => void;
   onDelete: () => void;
+  backup: SaveBackup | null;
+  onRestore: (backup: SaveBackup) => void;
 };
 
-function SlotCard({ slot, active, health, renaming, onRenameStart, onRenameChange, onRenameCommit, onRenameCancel, onLoad, onDuplicate, onExport, onDelete }: SlotCardProps) {
+function SlotCard({ slot, active, health, renaming, onRenameStart, onRenameChange, onRenameCommit, onRenameCancel, onLoad, onDuplicate, onExport, onDelete, backup, onRestore }: SlotCardProps) {
   const card = raceCard(slot.factionId);
   const loadable = health.status === 'ok';
   const problem = health.status === 'broken' ? `Повреждено: ${health.reason}` : health.status === 'newer' ? `Создано новой версией (схема ${health.schemaVersion})` : health.status === 'missing' ? 'Данные слота отсутствуют' : null;
@@ -451,6 +468,9 @@ function SlotCard({ slot, active, health, renaming, onRenameStart, onRenameChang
         </dl>
         <div className="menu-slot__crystals"><CrystalSet owned={CRYSTALS.slice(0, slot.summary.crystals)} size={18} />{slot.summary.victory ? <b>ПОБЕДА</b> : null}</div>
         {problem ? <p className="menu-slot__problem" role="status">{problem}</p> : null}
+        {backup ? (
+          <button type="button" className="menu-btn menu-btn--compact" onClick={() => onRestore(backup)} data-qa-slot-restore={slot.id}>Восстановить из копии ({dateLabel(backup.at)})</button>
+        ) : null}
         {/* «Загрузить» leads; the four other actions share one compact row, so all five fit every card width. */}
         <div className="menu-slot__actions">
           <button type="button" className="menu-btn menu-btn--primary" disabled={!loadable} onClick={onLoad} data-qa-slot-load={slot.id}>ЗАГРУЗИТЬ</button>
