@@ -176,7 +176,8 @@ async function runViewport(win, width, directory) {
   metrics.list = await listMetrics(win);
   metrics.tabs = await tabs(win);
   if (metrics.tabs[0] !== expected || metrics.tabs[1] !== 0) fail('counters are not his battles', { tabs: metrics.tabs, expected });
-  if (metrics.list.rows !== expected) fail('rows are not his battles', { rows: metrics.list.rows, expected });
+  // The list shows 25 rows and «Показать ещё» adds 25 more: the first page is 25, the rest is behind the button.
+  if (metrics.list.rows !== Math.min(25, expected)) fail('rows are not his battles', { rows: metrics.list.rows, expected });
   if (metrics.list.foreignShown) fail('another owner\'s battle is on the list');
   if (metrics.list.fullRowsOnScreen < MIN_FULL_ROWS[width]) fail('too few rows on screen', metrics.list.fullRowsOnScreen);
   if (metrics.list.tallestRow > 56) fail('a row is not compact', metrics.list.tallestRow);
