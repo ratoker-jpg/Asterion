@@ -1148,3 +1148,8 @@
 .reports-view--mail .reports-list-copy strong { white-space: normal; text-overflow: clip; overflow-wrap: anywhere; line-height: 1.25; }
 .reports-view--mail .reports-list-open { align-items: start; }
 .reports-view--mail .reports-list-meta { padding-top: 1px; }
+
+/* Ship and defence groups stack in the report column; tiles never squeeze a count into a name. */
+.reports-view--mail .reports-sheet-groups:not(.reports-sheet-groups--resources) { grid-template-columns: minmax(0, 1fr); }
+.reports-view--mail .spy-report-entity-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.reports-view--mail .reports-sheet-resources { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }

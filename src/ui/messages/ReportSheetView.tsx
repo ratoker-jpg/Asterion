@@ -153,6 +153,11 @@ function SideCard({ side, command, onOpen }: { side: ReportSide; command?: Comma
   </article>;
 }
 
+/** Cards are narrow: from a million on the short form («19,7 млн», «1 млрд»), the exact number stays in the label. */
+function cardAmount(value: number) {
+  return Math.abs(value) >= 1e6 ? formatShortAmount(value) : numberFormat.format(value);
+}
+
 function UnitRow({ unit, qa }: { unit: ReportUnit; qa?: Record<string, string> }) {
   const inspected = Boolean(unit.ability);
   return <article className={`spy-report-entity ${inspected ? 'spy-report-entity--inspected' : ''} ${unit.lost ? 'has-loss' : ''}`} tabIndex={inspected ? 0 : undefined} {...qa}>
@@ -161,7 +166,7 @@ function UnitRow({ unit, qa }: { unit: ReportUnit; qa?: Record<string, string> }
     {unit.percent != null
       ? <strong className="reports-sheet-unit-share">{unit.percent}%</strong>
       : <span className="reports-sheet-unit-count">
-        <b>{unit.count == null ? '—' : numberFormat.format(unit.count)}</b>
+        <b aria-label={unit.count == null ? undefined : numberFormat.format(unit.count)}>{unit.count == null ? '—' : cardAmount(unit.count)}</b>
         {unit.lost ? <em aria-label={`Потеряно ${numberFormat.format(unit.lost)}`}>−{numberFormat.format(unit.lost)}</em> : null}
       </span>}
     {unit.ability ? <span className="spy-entity-tooltip" role="tooltip"><strong>{unit.ability.title}</strong><span>{unit.ability.body}</span><b>Эффект: {unit.ability.effect}</b>{unit.ability.note ? <small>{unit.ability.note}</small> : null}</span> : null}
@@ -189,7 +194,7 @@ function ResourceGroups({ groups }: { groups: readonly ReportResourceGroup[] }) 
     <header><strong>{group.title}</strong></header>
     {group.items.length
       ? <div className="reports-sheet-resources">{group.items.map((resource) => <div className={`reports-v3-res reports-v3-res--${resource.kind}`} key={`${resource.kind}-${resource.label}`}>
-        <ResourceIcon kind={resource.kind} /><span><small>{resource.label}</small><b aria-label={`${group.tone === 'loss' ? '−' : ''}${numberFormat.format(resource.value)}`}>{group.tone === 'loss' ? '−' : ''}{resource.value >= 1e9 ? formatShortAmount(resource.value) : numberFormat.format(resource.value)}</b></span>
+        <ResourceIcon kind={resource.kind} /><span><small>{resource.label}</small><b aria-label={`${group.tone === 'loss' ? '−' : ''}${numberFormat.format(resource.value)}`}>{group.tone === 'loss' ? '−' : ''}{cardAmount(resource.value)}</b></span>
       </div>)}</div>
       : <p className="spy-report-empty">{group.empty ?? 'Ничего.'}</p>}
   </div>)}</div>;
