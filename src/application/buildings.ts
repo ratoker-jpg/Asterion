@@ -596,6 +596,7 @@ export function startSpaceportUpgrade(
     wallet: getPlanetResources(state, context.planetId),
     buildings: planet.buildings,
     scienceLevels: state.science.levels,
+    fleetShips: planet.fleet.ships,
     spaceportLevel: planet.buildings.spaceport,
     factionId: state.profile.factionId,
     capacities: getStorageCapacities(planet.buildings),

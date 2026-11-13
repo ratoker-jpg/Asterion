@@ -3324,6 +3324,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               tradeWallet={tradeWallet}
               spaceportUpgrades={{ ...currentPlanetState.spaceportUpgrades, shipLevels: getOwnerShipUpgradeLevels(state) }}
               spaceportWallet={spaceportWallet}
+              spaceportFleetShips={currentPlanetState.fleet.ships}
               resourceRatingPoints={selectOwnerScoresCached(state)[state.profile.playerId]?.resourcePoints ?? 0}
               now={now}
               testTimeScale={testTimeScale}

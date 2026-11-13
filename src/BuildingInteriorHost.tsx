@@ -38,6 +38,7 @@ type BuildingInteriorHostProps<PlanetId extends string> = {
   trade: TradeState;
   tradeWallet: TradeWallet;
   spaceportUpgrades: SpaceportUpgradeState;
+  spaceportFleetShips?: Readonly<Record<string, number>>;
   spaceportWallet: SpaceportUpgradeWallet;
   resourceRatingPoints: number;
   now: number;
@@ -64,6 +65,7 @@ export function BuildingInteriorHost<PlanetId extends string>({
   trade,
   tradeWallet,
   spaceportUpgrades,
+  spaceportFleetShips,
   spaceportWallet,
   resourceRatingPoints,
   now,
@@ -117,6 +119,7 @@ export function BuildingInteriorHost<PlanetId extends string>({
         buildingLevel={buildings.spaceport}
         buildings={buildings}
         scienceLevels={scienceLevels}
+        fleetShips={spaceportFleetShips}
         upgrades={spaceportUpgrades}
         wallet={spaceportWallet}
         now={now}

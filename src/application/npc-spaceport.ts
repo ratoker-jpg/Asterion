@@ -41,6 +41,7 @@ function contextOf(target: SpyTargetState, scienceLevels: ScienceLevels, timeSca
     wallet: { metal: target.resources.metal, minerals: target.resources.minerals, gas: target.resources.gas },
     buildings: migrateBuildingLevels(target.buildings),
     scienceLevels,
+    fleetShips: target.fleet?.ships,
     spaceportLevel: spaceportLevelOf(target),
     factionId: target.raceId,
     mode: ACTIVE_RUNTIME_MODE,

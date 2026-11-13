@@ -153,6 +153,24 @@ function shipQuantityRequirementState(
   };
 }
 
+/**
+ * Ship-quantity requirement («Нокс разум · количество 20») against the ships a
+ * planet holds. Returns null when the string is not a quantity requirement.
+ * Shared by production and the Spaceport so both count ships the same way.
+ */
+export function evaluateShipQuantityRequirement(
+  source: string,
+  factionId: CombatFactionId | undefined,
+  ships: Readonly<Record<string, number>> | undefined,
+): ProductionRequirementState | null {
+  const parsed = parseShipQuantityRequirement(source);
+  if (!parsed) return null;
+  return shipQuantityRequirementState(source, parsed, {
+    factionId,
+    fleet: ships ? { ships: ships as Record<string, number>, commanders: {} } : undefined,
+  } as ProductionRequirementContext);
+}
+
 function scienceRequirementStates(
   entity: CatalogEntity,
   context: ProductionRequirementContext,

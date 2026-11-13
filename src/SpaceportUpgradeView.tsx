@@ -27,6 +27,8 @@ type SpaceportUpgradeViewProps = {
   buildingLevel: number;
   buildings: BuildingLevels;
   scienceLevels: ScienceLevels;
+  /** Ships standing on this planet, for «корабль · количество N» requirements. */
+  fleetShips?: Readonly<Record<string, number>>;
   upgrades: SpaceportUpgradeState;
   wallet: SpaceportUpgradeWallet;
   now: number;
@@ -88,7 +90,11 @@ function requirementRequiredLabel(requirement: SpaceportRequirementState) {
 function requirementShortLabel(requirement: SpaceportRequirementState, factionId: CombatFactionId) {
   const label = localizeBuildingNames(requirement.label, factionId);
   if (requirement.valueKind === 'level') return `${label} ур. ${requirement.requiredLevel}`;
-  if (requirement.valueKind === 'quantity') return `${label}: ${requirement.requiredLevel} шт.`;
+  if (requirement.valueKind === 'quantity') {
+    return requirement.currentLevel == null
+      ? `${label}: ${requirement.requiredLevel} шт.`
+      : `${label} · ${requirement.currentLevel} / ${requirement.requiredLevel}`;
+  }
   return `${label}: ${requirement.requiredLevel}`;
 }
 
@@ -318,6 +324,7 @@ export function SpaceportUpgradeView({
   buildingLevel,
   buildings,
   scienceLevels,
+  fleetShips,
   upgrades,
   wallet,
   now,
@@ -425,6 +432,7 @@ export function SpaceportUpgradeView({
               wallet,
               buildings,
               scienceLevels,
+              fleetShips,
               spaceportLevel: buildingLevel,
               factionId,
               mode: ACTIVE_RUNTIME_MODE,

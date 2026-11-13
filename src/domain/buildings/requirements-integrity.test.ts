@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { evaluateSpaceportUpgradeRequirements, getSpaceportUpgradeCatalog } from './spaceport-upgrades.ts';
 
 import { BUILDING_ROLES, type BuildingFaction } from './balance-v1.ts';
 import {
@@ -215,4 +216,17 @@ test('production queues: new orders meet the new table, an order already queued 
   assert.equal(queued.ok, true);
   const finished = reconcileFleetProductionState(queued.state, queued.fleet, queued.defense, 'aegis', 1e12);
   assert.equal(finished.defense.defenses['ion-turret'], 2);
+});
+
+test('guard: no Spaceport upgrade requirement of any race stays unresolved', () => {
+  const buildings = createDefaultBuildingLevels();
+  for (const factionId of FACTIONS) {
+    for (const track of ['ships', 'commanders'] as const) {
+      for (const entity of getSpaceportUpgradeCatalog(track, factionId)) {
+        const unresolved = evaluateSpaceportUpgradeRequirements(track, entity.id, buildings, noScience, factionId, {})
+          .filter((requirement) => requirement.kind === 'unresolved-catalog-requirement');
+        assert.deepEqual(unresolved.map((requirement) => requirement.label), [], `${factionId} ${track} ${entity.id}`);
+      }
+    }
+  }
 });

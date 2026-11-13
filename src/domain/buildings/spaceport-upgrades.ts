@@ -5,6 +5,7 @@ import {
 import { isCommanderId, type CommanderId } from '../combat/commanders.ts';
 import { getFactionShipCatalog } from '../combat/faction-catalog.ts';
 import type { CombatFactionId } from '../combat/factions.ts';
+import { evaluateShipQuantityRequirement } from '../fleet/requirements.ts';
 import { SCIENCE_CATALOG } from '../science/catalog.ts';
 import type { ScienceId } from '../science/types.ts';
 import type { BuildingLevels, BuildingRole, ScienceLevels } from './resource-zone.ts';
@@ -71,7 +72,7 @@ export type SpaceportUpgradeState = {
 };
 
 export type SpaceportRequirementState = {
-  kind: 'building-level' | 'science-level' | 'unresolved-catalog-requirement';
+  kind: 'building-level' | 'science-level' | 'ship-quantity' | 'unresolved-catalog-requirement';
   label: string;
   requiredLevel: number;
   currentLevel: number | null;
@@ -79,6 +80,7 @@ export type SpaceportRequirementState = {
   valueKind: 'level' | 'quantity' | 'unknown';
   buildingRole?: BuildingRole;
   scienceId?: ScienceId;
+  shipId?: string;
 };
 
 export type SpaceportUpgradePreview = {
@@ -105,6 +107,12 @@ export type SpaceportUpgradeContext = {
   capacities?: ResourceCapacitiesInput;
   buildings: BuildingLevels;
   scienceLevels: ScienceLevels;
+  /**
+   * Ships standing on the planet that starts the upgrade (same count the
+   * Shipyard uses for «корабль · количество N»). Not consumed by the upgrade.
+   * Without it quantity requirements stay unmet.
+   */
+  fleetShips?: Readonly<Record<string, number>>;
   spaceportLevel: number;
   factionId?: CombatFactionId;
   mode?: RuntimeMode;
@@ -275,6 +283,8 @@ function parseCatalogRequirement(
   raw: string,
   buildings: BuildingLevels,
   scienceLevels: ScienceLevels,
+  factionId: CombatFactionId,
+  fleetShips: Readonly<Record<string, number>> | undefined,
 ): SpaceportRequirementState | null {
   const match = raw.match(/^(.+?)\s*[·•]\s*(уровень|количество)\s*(\d+)\s*$/iu);
   if (!match) {
@@ -292,9 +302,19 @@ function parseCatalogRequirement(
   const valueKind = match[2].toLocaleLowerCase('ru-RU') === 'количество' ? 'quantity' : 'level';
   const requiredLevel = Math.max(0, Number(match[3]));
   if (valueKind === 'quantity') {
-    // TODO(phase6): connect Veyra sacrifice/quantity requirements to the
-    // future fleet-production inventory. Until that model exists, keep the
-    // requirement explicitly unresolved instead of inventing a current count.
+    const ship = evaluateShipQuantityRequirement(raw.trim(), factionId, fleetShips);
+    if (ship?.kind === 'ship-quantity') {
+      return {
+        kind: 'ship-quantity',
+        label,
+        requiredLevel,
+        currentLevel: ship.currentQuantity ?? 0,
+        met: ship.met,
+        valueKind,
+        shipId: ship.shipId,
+      };
+    }
+    // No fleet given or the name is not one of the race's ships: stay unmet.
     return {
       kind: 'unresolved-catalog-requirement',
       label,
@@ -348,12 +368,13 @@ export function evaluateSpaceportUpgradeRequirements(
   buildings: BuildingLevels,
   scienceLevels: ScienceLevels,
   factionId: CombatFactionId = 'aegis',
+  fleetShips?: Readonly<Record<string, number>>,
 ): SpaceportRequirementState[] {
   const entity = getSpaceportUpgradeEntity(track, shipId, factionId);
   if (!entity) return [];
 
   const parsed = entity.construction.requirements
-    .map((raw) => parseCatalogRequirement(raw, buildings, scienceLevels))
+    .map((raw) => parseCatalogRequirement(raw, buildings, scienceLevels, factionId, fleetShips))
     .filter((item): item is SpaceportRequirementState => item != null);
 
   const hasShipyardRequirement = parsed.some((requirement) => requirement.kind === 'building-level');
@@ -409,6 +430,7 @@ export function previewSpaceportUpgrade(
     context.buildings,
     context.scienceLevels,
     context.factionId,
+    context.fleetShips,
   );
   // A max-level preview still needs a stable display payload, but there is no
   // L -> L+1 row after the cap. Reuse the last real row for display only; it
