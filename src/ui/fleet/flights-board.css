@@ -1,0 +1,271 @@
+/* ==========================================================================
+   «Рейсы и миссии» (concepts v2, r5/flights.html, approved 12.11).
+   Opened from «Отправка флота» instead of the old «Все рейсы ▾» table: the
+   list takes the space of the mission picture, the ribbon and the hangar,
+   the picked flight opens in the big mission card at the bottom.
+   Every selector starts with a doubled .fleet-workspace-v1 so it wins over
+   the older fleet layers (fleet-command / fleet-cinema / fleet-repeat).
+   Text never sits on light art: the card's picture is under a dark gradient
+   to ~65% and every line over it carries a text shadow.
+   ========================================================================== */
+
+.fleet-workspace-v1.fleet-workspace-v1 {
+  --fl-card: rgba(14, 22, 33, .86);
+  --fl-dim: #93a7bd;
+  --fl-cyan: #5fd4ff;
+  --fl-red: #ff5a69;
+  --fl-green: #6fe0a2;
+  --fl-amber: #f3b25e;
+}
+
+/* ---------- open board: the dispatch view steps aside ---------- */
+.fleet-workspace-v1.fleet-workspace-v1 .fleet-root-v2:has(> .fleet-flights-drop-v2.is-open) > .fa-hero,
+.fleet-workspace-v1.fleet-workspace-v1 .fleet-root-v2:has(> .fleet-flights-drop-v2.is-open) > .fleet-incoming-alert-v2 { display: none; }
+
+/* the bar becomes the board's title line */
+.fleet-workspace-v1.fleet-workspace-v1 .fleet-root-v2 > .fleet-flights-v2.is-board:not(.is-sent) {
+  align-self: stretch; margin: 0; min-height: 52px; gap: 10px; padding: 0;
+}
+.fleet-workspace-v1.fleet-workspace-v1 .fleet-root-v2 > .fleet-flights-v2.is-board .fc-orbit { display: none; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-head { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 14px; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-head h2 { margin: 0; color: #fff; font-size: calc(26px * var(--text-scale-section-title, 1)) !important; font-weight: 800; letter-spacing: 0; text-transform: none; white-space: nowrap; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-head span { color: var(--fl-dim); font-size: calc(15px * var(--text-scale-secondary, 1)) !important; }
+
+.fleet-workspace-v1.fleet-workspace-v1 .fleet-root-v2 > .fleet-flights-v2 > button.fl-attack-chip {
+  display: inline-flex; align-items: center; gap: 8px; background: rgba(255, 90, 105, .16); color: #ffb9c0; font-weight: 700;
+}
+.fleet-workspace-v1.fleet-workspace-v1 .fleet-root-v2 > .fleet-flights-v2 > button.fl-attack-chip:hover { background: rgba(255, 90, 105, .3); }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-attack-chip img { width: 24px; height: 24px; border-radius: 50%; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-attack-chip b { color: var(--fl-red); font-size: inherit !important; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+.fleet-workspace-v1.fleet-workspace-v1 .fleet-root-v2 > .fleet-flights-v2 > button.fl-toggle { display: inline-flex; align-items: center; gap: 8px; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-toggle b { font-size: inherit !important; color: var(--fl-cyan); font-variant-numeric: tabular-nums; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-toggle i { font-style: normal; color: var(--fl-cyan); }
+.fleet-workspace-v1.fleet-workspace-v1 .fleet-root-v2 > .fleet-flights-v2 > button.fl-toggle.has-attack { box-shadow: inset 0 0 0 2px rgba(255, 90, 105, .6); }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-toggle.has-attack b { color: var(--fl-red); }
+.fleet-workspace-v1.fleet-workspace-v1 .fleet-root-v2 > .fleet-flights-v2 > button.fl-toggle.is-on {
+  color: #04121b; background: linear-gradient(#7ee8fb, #3fc0e6); box-shadow: 0 0 20px rgba(86, 217, 242, .35);
+}
+.fleet-workspace-v1.fleet-workspace-v1 .fleet-root-v2 > .fleet-flights-v2 > button.fl-toggle.is-on:hover { filter: brightness(1.08); background: linear-gradient(#7ee8fb, #3fc0e6); }
+
+/* the panel holds the board: list scrolls inside, the card stays under it */
+.fleet-workspace-v1.fleet-workspace-v1 .fleet-root-v2 .fleet-flights-drop-v2.is-open .fleet-flights-drop-v2__panel {
+  display: block; height: 100%; overflow: hidden; padding: 0; background: none; border: 0;
+}
+.fleet-workspace-v1.fleet-workspace-v1 .fl-board { height: 100%; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 12px; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-list {
+  container-type: inline-size; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 6px;
+  scrollbar-width: thin; scrollbar-color: rgba(150, 200, 255, .28) transparent;
+}
+.fleet-workspace-v1.fleet-workspace-v1 .fl-sec {
+  margin: 12px 0 8px; color: var(--fl-dim); font-size: calc(13px * var(--text-scale-secondary, 1)) !important; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;
+}
+.fleet-workspace-v1.fleet-workspace-v1 .fl-sec:first-child { margin-top: 2px; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-sec.is-hot { color: #ff8a95; }
+
+/* ---------- one flight = one card ---------- */
+.fleet-workspace-v1.fleet-workspace-v1 .fl-board .fl-list .fl-row {
+  --fl-c: var(--fl-cyan);
+  display: grid; align-items: center; column-gap: 12px;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) 16px minmax(0, 1fr) 156px 118px auto minmax(118px, .8fr) auto;
+  min-height: 66px; margin: 0 0 6px; padding: 8px 14px; border-radius: 12px; background: var(--fl-card);
+  box-shadow: none; color: #dbe7f2; cursor: pointer;
+  transition: background-color var(--ut-motion-base, .18s) ease, box-shadow var(--ut-motion-base, .18s) ease;
+}
+.fleet-workspace-v1.fleet-workspace-v1 .fl-board .fl-list .fl-row:hover { background: rgba(24, 36, 52, .92); }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-board .fl-list .fl-row.is-on { box-shadow: inset 0 0 0 2px rgba(95, 212, 255, .7); }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-board .fl-list .fl-row.is-hot {
+  --fl-c: var(--fl-red);
+  min-height: 78px; background: linear-gradient(90deg, rgba(120, 20, 32, .7), rgba(40, 12, 18, .85)); box-shadow: inset 0 0 0 1px rgba(255, 90, 105, .5);
+}
+.fleet-workspace-v1.fleet-workspace-v1 .fl-board .fl-list .fl-row.is-hot.is-on { box-shadow: inset 0 0 0 2px var(--fl-red), 0 0 24px rgba(255, 90, 105, .25); }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-board .fl-list .fl-row.is-foreign { background: rgba(14, 22, 33, .7); }
+
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__mission { display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 12px; align-items: center; min-width: 0; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-board .fl-row .fleet-flight-mission-icon { width: 46px; height: 46px; border-radius: 10px; object-fit: cover; object-position: right center; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__mission b { display: block; color: #fff; font-size: calc(17px * var(--text-scale-table, 1)) !important; font-weight: 800; line-height: 1.2; overflow-wrap: anywhere; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__mission small { display: block; color: var(--fl-dim); font-size: calc(13px * var(--text-scale-secondary, 1)) !important; overflow-wrap: anywhere; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-tag {
+  display: inline-block; margin: 3px 6px 0 0; padding: 1px 7px; border-radius: 6px; background: rgba(150, 200, 255, .12);
+  color: #cfe3f5; font-size: calc(12px * var(--text-scale-secondary, 1)) !important; font-style: normal; font-weight: 700; white-space: nowrap;
+}
+.fleet-workspace-v1.fleet-workspace-v1 .fl-tag.is-warn { background: rgba(243, 178, 94, .18); color: var(--fl-amber); }
+
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__place { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 10px; align-items: center; min-width: 0; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__place > img { width: 36px; height: 36px; border-radius: 50%; object-fit: contain; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__dot { width: 12px; height: 12px; margin-left: 12px; border-radius: 50%; background: rgba(150, 200, 255, .3); }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__place > div { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__place strong { color: #fff; font-size: calc(15px * var(--text-scale-table, 1)) !important; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__place small { color: var(--fl-dim); font-size: calc(13px * var(--text-scale-secondary, 1)) !important; overflow-wrap: anywhere; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-board .fl-row .fleet-coordinate-link-v2 {
+  margin: 0; color: var(--fl-cyan); font-size: calc(13px * var(--text-scale-secondary, 1)) !important; font-weight: 700; text-decoration: none;
+}
+.fleet-workspace-v1.fleet-workspace-v1 .fl-board .fl-row .fleet-coordinate-link-v2:hover { text-decoration: underline; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__arrow { color: var(--fl-c); font-size: 18px; text-align: center; }
+
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__state { --fl-s: var(--fl-cyan); min-width: 0; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__state.is-work { --fl-s: var(--fl-green); }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__state.is-back { --fl-s: #a89bff; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__state.is-hot { --fl-s: var(--fl-red); }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__state.is-warn { --fl-s: var(--fl-amber); }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__state.is-foreign { --fl-s: #b9c6d6; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-board .fl-row__state [data-qa-flight-status] {
+  display: inline-block; max-width: 100%; margin-bottom: 7px; padding: 3px 9px; border-radius: 8px;
+  background: color-mix(in srgb, var(--fl-s) 18%, transparent); color: var(--fl-s) !important;
+  font-size: calc(14px * var(--text-scale-table, 1)) !important; font-weight: 800; letter-spacing: 0 !important; text-transform: none; line-height: 1.2;
+}
+.fleet-workspace-v1.fleet-workspace-v1 .fl-board .fl-row__state [data-qa-flight-status]::first-letter { text-transform: none; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__state i { display: block; width: 100%; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, .08); overflow: hidden; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__state i::after { content: ''; display: block; width: 100%; height: 100%; background: var(--fl-s); transform-origin: left; scale: var(--fl-p, 0%) 1; }
+
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__time { min-width: 0; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__time strong { display: block; color: #fff; font-size: calc(21px * var(--text-scale-table, 1)) !important; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__time strong[hidden] { display: none; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row.is-hot .fl-row__time strong { color: var(--fl-red); font-size: calc(26px * var(--text-scale-table, 1)) !important; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__time small { display: block; color: var(--fl-dim); font-size: calc(13px * var(--text-scale-secondary, 1)) !important; white-space: nowrap; }
+
+.fleet-workspace-v1.fleet-workspace-v1 .fl-board .fl-row button.fl-row__ships {
+  position: relative; justify-self: start; display: inline-flex; align-items: center; gap: 7px; min-height: 40px; padding: 0 12px;
+  border: 0; border-radius: 10px; background: #172232; color: #fff; box-shadow: none; white-space: nowrap; cursor: pointer;
+  font-size: calc(15px * var(--text-scale-control, 1)) !important; font-weight: 800; text-transform: none; letter-spacing: 0;
+}
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__ships b { font-variant-numeric: tabular-nums; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__ships small { color: var(--fl-dim); font-size: calc(13px * var(--text-scale-secondary, 1)) !important; font-weight: 700; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__ships i { font-style: normal; color: var(--fl-cyan); }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-board .fl-row button.fl-row__ships:hover { background: rgba(95, 212, 255, .2); }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-board .fl-row.is-hot button.fl-row__ships { background: rgba(255, 90, 105, .18); }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-board .fl-row button.fl-row__ships.is-on { box-shadow: inset 0 0 0 1px var(--fl-cyan); }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__cargo { display: flex; flex-wrap: wrap; gap: 2px 12px; min-width: 0; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__cargo span { display: inline-flex; align-items: center; gap: 5px; color: #fff; font-size: calc(14px * var(--text-scale-table, 1)) !important; font-weight: 700; white-space: nowrap; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__cargo span > :first-child { width: 20px; height: 20px; flex: none; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__cargo .is-none { color: #5b677a; font-weight: 600; }
+
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__actions { display: flex; justify-content: flex-end; gap: 8px; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-board button:is(.fl-row__actions button, .fl-recent button, .fl-focus__actions button, .fl-empty button) {
+  min-height: 40px; padding: 0 16px; border: 0; border-radius: 10px; background: #172232; box-shadow: none; color: #dfe7f2;
+  font-size: calc(15px * var(--text-scale-control, 1)) !important; font-weight: 700; letter-spacing: 0; text-transform: none; white-space: nowrap; cursor: pointer;
+  transition: background-color var(--ut-motion-base, .18s) ease, filter var(--ut-motion-base, .18s) ease;
+}
+.fleet-workspace-v1.fleet-workspace-v1 .fl-board button:is(.fl-row__actions button, .fl-recent button, .fl-focus__actions button):hover { background: rgba(95, 212, 255, .24); }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-board .fl-row__actions button[data-qa-flight-recall]:hover,
+.fleet-workspace-v1.fleet-workspace-v1 .fl-board .fl-focus__actions button[data-qa-flight-card-recall]:hover { background: rgba(255, 90, 105, .28); }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-board button.is-red:is(.fl-row__actions button, .fl-focus__actions button) { color: #fff; background: linear-gradient(#ff6a78, #d93446); }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-board button.is-red:is(.fl-row__actions button, .fl-focus__actions button):hover { filter: brightness(1.1); background: linear-gradient(#ff6a78, #d93446); }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-board button.is-primary:is(.fl-empty button) { color: #04121b; background: linear-gradient(#7ee8fb, #3fc0e6); box-shadow: 0 0 20px rgba(86, 217, 242, .35); }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__norecall { color: #5b677a; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__norecall:empty { display: none; }
+
+/* narrower lists (1280 wide): the actions stack, the columns get tighter */
+@container (max-width: 1500px) {
+  .fleet-workspace-v1.fleet-workspace-v1 .fl-board .fl-list .fl-row {
+    column-gap: 10px; padding: 8px 12px;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) 14px minmax(0, 1fr) 132px 100px auto minmax(104px, .7fr) auto;
+  }
+  .fleet-workspace-v1.fleet-workspace-v1 .fl-row__actions { flex-direction: column; align-items: stretch; gap: 4px; }
+  .fleet-workspace-v1.fleet-workspace-v1 .fl-board .fl-row__actions button { min-height: 32px; padding: 0 12px; font-size: calc(14px * var(--text-scale-control, 1)) !important; }
+  .fleet-workspace-v1.fleet-workspace-v1 .fl-row__mission { grid-template-columns: 40px minmax(0, 1fr); gap: 10px; }
+  .fleet-workspace-v1.fleet-workspace-v1 .fl-board .fl-row .fleet-flight-mission-icon { width: 40px; height: 40px; }
+  .fleet-workspace-v1.fleet-workspace-v1 .fl-row__mission b { font-size: calc(16px * var(--text-scale-table, 1)) !important; }
+  .fleet-workspace-v1.fleet-workspace-v1 .fl-row__place { grid-template-columns: 30px minmax(0, 1fr); gap: 8px; }
+  .fleet-workspace-v1.fleet-workspace-v1 .fl-row__place > img { width: 30px; height: 30px; }
+  .fleet-workspace-v1.fleet-workspace-v1 .fl-row__place strong { font-size: calc(14px * var(--text-scale-table, 1)) !important; }
+  .fleet-workspace-v1.fleet-workspace-v1 .fl-row__time strong { font-size: calc(19px * var(--text-scale-table, 1)) !important; }
+  .fleet-workspace-v1.fleet-workspace-v1 .fl-row.is-hot .fl-row__time strong { font-size: calc(22px * var(--text-scale-table, 1)) !important; }
+  .fleet-workspace-v1.fleet-workspace-v1 .fl-board .fl-row button.fl-row__ships { padding: 0 10px; font-size: calc(14px * var(--text-scale-control, 1)) !important; }
+  .fleet-workspace-v1.fleet-workspace-v1 .fl-board .fl-row__state [data-qa-flight-status] { font-size: calc(13px * var(--text-scale-table, 1)) !important; }
+}
+
+/* finished routes the player can send again */
+.fleet-workspace-v1.fleet-workspace-v1 .fl-recent {
+  display: grid; grid-template-columns: 40px minmax(120px, auto) minmax(0, 1fr) minmax(0, 1.2fr) auto; gap: 12px; align-items: center;
+  margin: 0 0 6px; padding: 6px 14px; border-radius: 12px; background: rgba(14, 22, 33, .6); color: #cfdbe8;
+}
+.fleet-workspace-v1.fleet-workspace-v1 .fl-recent img { width: 40px; height: 40px; border-radius: 9px; object-fit: cover; object-position: right center; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-recent b { color: #fff; font-size: calc(15px * var(--text-scale-table, 1)) !important; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-recent__route,
+.fleet-workspace-v1.fleet-workspace-v1 .fl-recent small { min-width: 0; overflow-wrap: anywhere; font-size: calc(14px * var(--text-scale-secondary, 1)) !important; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-recent small { color: var(--fl-dim); }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-board .fleet-flight-actions-v1 { margin: 10px 0 4px; }
+
+/* ---------- empty ---------- */
+.fleet-workspace-v1.fleet-workspace-v1 .fl-empty { display: grid; justify-items: center; gap: 8px; padding: 40px 16px 24px; text-align: center; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-empty img { width: min(340px, 60%); height: auto; margin-bottom: 8px; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-empty strong { color: #fff; font-size: calc(26px * var(--text-scale-section-title, 1)) !important; font-weight: 800; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-empty span { margin-bottom: 14px; color: var(--fl-dim); font-size: calc(16px * var(--text-scale-body, 1)) !important; }
+
+/* ---------- the picked flight: big mission card ---------- */
+.fleet-workspace-v1.fleet-workspace-v1 .fl-focus {
+  position: relative; isolation: isolate; overflow: hidden; min-height: 190px; border-radius: 16px; background: #060a11;
+  display: grid; grid-template-columns: minmax(240px, auto) minmax(0, 1fr) auto; align-items: end; gap: 28px; padding: 22px 30px;
+}
+.fleet-workspace-v1.fleet-workspace-v1 .fl-focus__art { position: absolute; inset: 0 0 0 28%; z-index: -2; width: 72%; height: 100%; object-fit: cover; object-position: right center; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-focus::before {
+  content: ''; position: absolute; inset: 0; z-index: -1;
+  background: linear-gradient(90deg, rgba(6, 10, 17, 1) 0, rgba(6, 10, 17, .96) 45%, rgba(6, 10, 17, .78) 65%, rgba(6, 10, 17, .3) 88%);
+}
+.fleet-workspace-v1.fleet-workspace-v1 .fl-focus__text,
+.fleet-workspace-v1.fleet-workspace-v1 .fl-focus__ship { text-shadow: 0 2px 10px rgba(0, 0, 0, .9); }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-focus__text { min-width: 0; max-width: 560px; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-focus__kicker { display: block; color: var(--fl-cyan); font-size: calc(14px * var(--text-scale-secondary, 1)) !important; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-focus.is-hot .fl-focus__kicker { color: #ff8a95; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-focus h2 { margin: 4px 0 6px; color: #fff; font-size: calc(36px * var(--text-scale-section-title, 1)) !important; font-weight: 800; line-height: 1.08; letter-spacing: 0; text-transform: none; overflow-wrap: anywhere; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-focus h2 em { font-size: inherit !important; font-weight: inherit; font-style: normal; color: var(--fl-cyan); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-focus.is-hot h2 em { color: var(--fl-red); }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-focus p { margin: 0; color: #c2ccda; font-size: calc(16px * var(--text-scale-body, 1)) !important; overflow-wrap: anywhere; }
+
+.fleet-workspace-v1.fleet-workspace-v1 .fl-focus__ships {
+  display: flex; gap: 10px; min-width: 0; overflow-x: auto; padding-bottom: 4px;
+  scrollbar-width: thin; scrollbar-color: rgba(150, 200, 255, .28) transparent;
+}
+.fleet-workspace-v1.fleet-workspace-v1 .fl-focus__ship {
+  flex: none; min-width: 124px; padding: 10px 12px; border-radius: 12px; background: rgba(8, 13, 21, .88); box-shadow: inset 0 0 0 1px rgba(150, 200, 255, .2);
+}
+.fleet-workspace-v1.fleet-workspace-v1 .fl-focus.is-hot .fl-focus__ship { box-shadow: inset 0 0 0 1px rgba(255, 90, 105, .4); }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-focus__ship img { display: block; width: 100%; height: 48px; object-fit: contain; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-focus__ship small { display: block; margin-top: 4px; color: #c2ccda; font-size: calc(13px * var(--text-scale-secondary, 1)) !important; white-space: nowrap; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-focus__ship b { display: block; color: #fff; font-size: calc(19px * var(--text-scale-table, 1)) !important; font-weight: 800; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-focus__hidden { align-self: center; padding: 12px 16px; border-radius: 12px; background: rgba(8, 13, 21, .88); }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-focus__hidden b { display: block; color: #fff; font-size: calc(18px * var(--text-scale-table, 1)) !important; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-focus__hidden small { color: var(--fl-dim); font-size: calc(14px * var(--text-scale-secondary, 1)) !important; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-board button.fl-focus__more {
+  flex: none; align-self: stretch; min-width: 70px; border: 0; border-radius: 12px; background: rgba(8, 13, 21, .88); color: #cfdbe8; cursor: pointer;
+  font-size: calc(18px * var(--text-scale-control, 1)) !important; font-weight: 800;
+}
+.fleet-workspace-v1.fleet-workspace-v1 .fl-board button.fl-focus__more:hover { background: rgba(95, 212, 255, .24); }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-focus__actions { display: flex; gap: 10px; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-board .fl-focus__actions button { min-height: 54px; padding: 0 24px; border-radius: 12px; font-size: calc(17px * var(--text-scale-control, 1)) !important; background: rgba(23, 34, 50, .94); }
+
+/* short windows (720 tall): a lower card leaves the list more rows */
+@media (max-height: 820px) {
+  .fleet-workspace-v1.fleet-workspace-v1 .fl-focus { min-height: 0; padding: 14px 22px; gap: 20px; }
+  .fleet-workspace-v1.fleet-workspace-v1 .fl-focus h2 { font-size: calc(28px * var(--text-scale-section-title, 1)) !important; }
+  .fleet-workspace-v1.fleet-workspace-v1 .fl-focus__ship { min-width: 108px; padding: 8px 10px; }
+  .fleet-workspace-v1.fleet-workspace-v1 .fl-focus__ship img { height: 36px; }
+  .fleet-workspace-v1.fleet-workspace-v1 .fl-focus__ship b { font-size: calc(17px * var(--text-scale-table, 1)) !important; }
+  .fleet-workspace-v1.fleet-workspace-v1 .fl-board .fl-focus__actions button { min-height: 46px; padding: 0 18px; font-size: calc(16px * var(--text-scale-control, 1)) !important; }
+  .fleet-workspace-v1.fleet-workspace-v1 .fl-board { gap: 8px; }
+}
+/* 1280 wide: the card's buttons stay in one row, the composition strip gives way and scrolls */
+@media (max-width: 1400px) {
+  .fleet-workspace-v1.fleet-workspace-v1 .fl-focus { grid-template-columns: minmax(200px, 300px) minmax(0, 1fr) auto; gap: 16px; }
+  .fleet-workspace-v1.fleet-workspace-v1 .fl-focus__actions { gap: 8px; }
+  .fleet-workspace-v1.fleet-workspace-v1 .fl-board .fl-focus__actions button { min-height: 42px; padding: 0 14px; font-size: calc(15px * var(--text-scale-control, 1)) !important; }
+}
+.fleet-workspace-v1.fleet-workspace-v1 .fl-focus__cargo { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-focus__cargo span { display: inline-flex; align-items: center; gap: 6px; color: #fff; font-size: calc(15px * var(--text-scale-table, 1)) !important; font-weight: 700; white-space: nowrap; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-focus__cargo span > :first-child { width: 20px; height: 20px; flex: none; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__cargo .is-many { color: #fff; }
+.fleet-workspace-v1.fleet-workspace-v1 .fl-row__cargo .is-many i { margin-left: 6px; font-style: normal; color: var(--fl-cyan); }
+
+@media (prefers-reduced-motion: reduce) {
+  .fleet-workspace-v1.fleet-workspace-v1 .fl-board .fl-list .fl-row { transition: none; }
+}
+
+/* numbers in cells and buttons keep their parent's size (a global «b» rule shrinks them) */
+.fleet-workspace-v1.fleet-workspace-v1 :is(.fl-row__cargo, .fl-focus__cargo, .fl-row__ships) b { font-size: inherit !important; font-weight: 800; }
+@media (max-width: 1400px) {
+  .fleet-workspace-v1.fleet-workspace-v1 .fl-focus { grid-template-columns: minmax(220px, 380px) minmax(0, 1fr) auto; }
+  .fleet-workspace-v1.fleet-workspace-v1 .fl-focus__kicker { letter-spacing: 1px; font-size: calc(13px * var(--text-scale-secondary, 1)) !important; }
+}
