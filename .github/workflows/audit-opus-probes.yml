@@ -1,0 +1,30 @@
+name: Audit Opus probes
+
+# Temporary (13.11.2026): runs the two probes of docs/audit/probes on this branch only.
+on:
+  push:
+    branches: ['claude/audit-opus-check']
+    paths: ['docs/audit/probes/**', '.github/workflows/audit-opus-probes.yml']
+
+jobs:
+  probes:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            src
+            docs/audit/probes
+            electron
+            public
+          sparse-checkout-cone-mode: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Clock shift probe
+        run: node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs docs/audit/probes/clock-shift.probe.ts
+      - name: Esc in full screen probe
+        run: npx electron docs/audit/probes/esc-fullscreen.probe.cjs
