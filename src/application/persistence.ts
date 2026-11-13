@@ -1,3 +1,4 @@
+import { backupBeforeMigration } from './save-backup.ts';
 import { stringifyCompactSave, stringifyCompactSaveInSlices, stringifySave, stringifySaveInSlices } from './save-json.ts';
 import { migrateShieldRecord, type ShieldRecord } from '../domain/shield/shield.ts';
 import { getBrowserSaveStorage } from './save-storage.ts';
@@ -1438,6 +1439,11 @@ export function loadSavedState(options: PersistenceOptions = {}): SaveLoadResult
   }
   const health = inspectParsedSave(parsed, SAVE_SCHEMA_VERSION);
   if (isSaveProblem(health)) return { status: health.status, problem: health, state: initialState };
+  // An older format is migrated in memory and the next autosave overwrites the file: keep the original first.
+  const fromSchema = numberOr((parsed as StoredSave).schemaVersion, 0);
+  if (fromSchema < SAVE_SCHEMA_VERSION && mode === 'production') {
+    backupBeforeMigration(storage, options.saveKey ?? getRuntimeSaveKey(mode), raw, fromSchema, timestamp);
+  }
   try {
     return { status: 'loaded', state: migrateParsedSave(parsed as StoredSave, mode, timestamp, initialState, options) };
   } catch (error) {

@@ -6,6 +6,7 @@ const { app, ipcMain } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { readPersonaFile, writePersonaFile } = require('./persona-file.cjs');
+const { createLatestWinsQueue } = require('./write-queue.cjs');
 
 const KEY = /^asterion\.[A-Za-z0-9._-]{1,120}$/;
 const WRITE_ID = /^[a-z0-9-]{1,40}$/;
@@ -72,7 +73,7 @@ function pruneBotJournal(file) {
 // the file and the index): its saves and bot journal. Only slot keys, only
 // files untouched for an hour, so a campaign being created right now is safe.
 const ORPHAN_MIN_AGE_MS = 60 * 60 * 1000;
-const SLOT_FILE = /^(asterion\.(?:slot\.slot-[a-z0-9-]{1,40}\.v1|vertical-slice\.v1))\.(?:[a-z0-9-]{1,40}\.save\.json|bots\.jsonl)$/;
+const SLOT_FILE = /^(asterion\.(?:slot\.slot-[a-z0-9-]{1,40}\.v1|vertical-slice\.v1))(?:\.backup-[a-z0-9]{1,16})?\.(?:[a-z0-9-]{1,40}\.save\.json|bots\.jsonl)$/;
 
 function pruneOrphanFiles(keep, now = Date.now()) {
   const kept = new Set(keep);
@@ -125,8 +126,15 @@ function registerSaveStore() {
   ipcMain.on('asterion:save-store:port', (event) => {
     const port = event.ports && event.ports[0];
     if (!port) return;
-    let chain = Promise.resolve();
-    port.on('message', (portEvent) => { chain = chain.then(() => writeFromPort(port, portEvent.data)); });
+    // One write in flight, only the newest waits: a slow disk cannot pile up 50-500 MB buffers.
+    // A write replaced by a newer one is answered `skipped`; the newer one becomes the save.
+    const queue = createLatestWinsQueue(
+      (message) => writeFromPort(port, message),
+      (message) => {
+        try { port.postMessage({ ok: true, skipped: true, version: message && message.version, writeId: message && message.writeId, chars: message && message.chars }); } catch { /* the worker is gone */ }
+      },
+    );
+    port.on('message', (portEvent) => queue.push(portEvent.data));
     port.start();
   });
   ipcMain.on('asterion:save-store:prune', (event, keep) => {
