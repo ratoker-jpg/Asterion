@@ -224,8 +224,11 @@ async function phaseA(win, directory, label) {
   // Worst case: back to the first step with the fields, then the longest names and the largest world.
   const gotoStep = async (id) => {
     if (await click(win, `[data-qa-wizard-rail="${id}"]`, { optional: true })) return;
-    for (let guard = 0; guard < 8 && (await stepOf(win)) !== id; guard += 1) await click(win, '[data-qa-menu-back]');
-    for (let guard = 0; guard < 8 && (await stepOf(win)) !== id; guard += 1) await click(win, '[data-qa-wizard-next]');
+    // The old wizard has no rail: walk with «Назад»/«Далее» in the right direction.
+    const at = (step) => metrics.steps.indexOf(step);
+    for (let guard = 0; guard < 8 && (await stepOf(win)) !== id; guard += 1) {
+      await click(win, at(await stepOf(win)) > at(id) ? '[data-qa-menu-back]' : '[data-qa-wizard-next]');
+    }
     if ((await stepOf(win)) !== id) throw new Error(`Could not reach step ${id}`);
   };
   const fieldStep = async (qa) => {
