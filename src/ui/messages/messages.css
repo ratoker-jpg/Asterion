@@ -1153,3 +1153,6 @@
 .reports-view--mail .reports-sheet-groups:not(.reports-sheet-groups--resources) { grid-template-columns: minmax(0, 1fr); }
 .reports-view--mail .spy-report-entity-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
 .reports-view--mail .reports-sheet-resources { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+/* Loot and debris side by side only when both fit; a card never shrinks below its amount. */
+.reports-view--mail .reports-sheet-groups--resources { grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); }
+.reports-view--mail .reports-sheet-resources { grid-template-columns: repeat(auto-fill, minmax(156px, 1fr)); }
