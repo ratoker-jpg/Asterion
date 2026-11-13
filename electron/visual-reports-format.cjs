@@ -101,6 +101,8 @@ async function layout(win) {
       // Owner rule: a row title wraps, it is never cut (not even with an ellipsis).
       // Amounts are never cut either: cards switch to the short form instead.
       cutAmounts: Array.from(document.querySelectorAll('.reports-preview :is(.reports-v3-res b, .reports-sheet-unit-count b, .reports-loss-table__row > span)')).filter((node) => node.getClientRects().length && node.scrollWidth > node.clientWidth + 1).map((node) => node.textContent.trim()).slice(0, 5),
+      // Row captions share one number format: digit groups split by spaces («1 037», «99 999»), never «99999».
+      rawCaptionNumbers: Array.from(document.querySelectorAll('[data-qa-message-list] .reports-list-copy em')).map((node) => node.textContent.trim()).filter((text) => /\\d{4,}/.test(text.replace(/\\[[\\d:]+\\]/g, ''))).slice(0, 5),
       cutTitles: Array.from(document.querySelectorAll('[data-qa-message-list] .reports-list-copy strong')).filter((node) => node.scrollWidth > node.clientWidth + 1).map((node) => node.textContent.trim().slice(0, 40)).slice(0, 5),
       sheet: sheet ? {
         kind: sheet.getAttribute('data-report-sheet'),
@@ -265,6 +267,7 @@ async function runViewport(win, directory, label) {
     if (box.nativeTitles.length) fail(`${name}: native title tooltips remain`, box.nativeTitles);
     if (box.primaryButtons > 1) fail(`${name}: more than one primary button`, box);
     if (box.cutTitles.length) fail(`${name}: list titles are cut`, box.cutTitles);
+    if (box.rawCaptionNumbers.length) fail(`${name}: row captions have ungrouped numbers`, box.rawCaptionNumbers);
     if (box.cutAmounts.length) fail(`${name}: amounts are cut`, box.cutAmounts);
     if (sheetExpected && (!box.sheet || !box.sheet.title || !box.sheet.time || !box.sheet.result || !box.sheet.hero || !box.sheet.value)) fail(`${name}: the art header is incomplete`, box.sheet);
     if (box.sheet && !box.sheet.valueOneLine) fail(`${name}: the main number breaks over lines`, box.sheet);

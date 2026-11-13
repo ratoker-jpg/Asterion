@@ -6,7 +6,8 @@ import { getFactionCombatEntity, getFactionShipCatalog } from '../combat/faction
 import type { BattleReport } from '../combat/report.ts';
 import type { SpyReportSnapshot } from '../espionage/types.ts';
 import { battleBalance, durationLabel, transportsLabel, formatShortAmount, formatSignedAmount, extractionYield, reportRowValue, spyRaid, timesLabel } from './headline.ts';
-import { gasExtractionArrivalReportToReportItem } from './adapters.ts';
+import { gasExtractionArrivalReportToReportItem, recyclerArrivalReportToReportItem } from './adapters.ts';
+import { captionFact, captionNumber } from './caption.ts';
 import type { ReportItem } from './types.ts';
 
 const NBSP = '\u00a0';
@@ -100,6 +101,15 @@ test('gas extraction: gas is the number, the scrap rides along', () => {
   const item = gasExtractionArrivalReportToReportItem({ id: 'gas-extraction-arrival:f', flightId: 'f', coordinate: { galaxy: 1, system: 2, position: 3 }, arrivalAt: 0, outcome: 'found', gasCollected: 48_250, scrapCollected: 1_200 });
   assert.deepEqual(extractionYield(item), { gas: 48_250, scrap: 1_200 });
   assert.equal(reportRowValue(item, null)?.amount, 48_250);
+});
+
+test('row captions group digits with non-breaking spaces, one format for every report kind', () => {
+  assert.equal(captionNumber(99_999), `99${NBSP}999`);
+  assert.equal(captionFact('Собрано', 1_037), `Собрано${NBSP}1${NBSP}037`);
+  const gas = gasExtractionArrivalReportToReportItem({ id: 'gas-extraction-arrival:f', flightId: 'f', coordinate: { galaxy: 1, system: 2, position: 3 }, arrivalAt: 0, outcome: 'found', gasCollected: 48_250, scrapCollected: 1_200 });
+  assert.equal(gas.preview, `Газ${NBSP}48${NBSP}250 · обломки${NBSP}1${NBSP}200`);
+  const recycler = recyclerArrivalReportToReportItem({ id: 'recycler-arrival:r', flightId: 'r', coordinate: { galaxy: 1, system: 2, position: 3 }, arrivedAtMs: 0, collectedDebris: 1_037, remainingOrbitalDebris: 99_999 } as Parameters<typeof recyclerArrivalReportToReportItem>[0]);
+  assert.equal(recycler.preview, `Собрано${NBSP}1${NBSP}037 · осталось на орбите${NBSP}99${NBSP}999`);
 });
 
 test('a letter waiting for an answer shows its deadline, an old one does not', () => {

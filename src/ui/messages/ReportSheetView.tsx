@@ -36,6 +36,7 @@ import {
   toneOf,
   type HeadlineContext,
 } from '../../domain/reports/headline.ts';
+import { captionFact } from '../../domain/reports/caption.ts';
 import type { ReportStatusTone } from '../../domain/reports/types.ts';
 import { getPiratePlanetArt } from '../../pirate-planet-art.ts';
 import { EXPLORATION_ARTS } from '../../exploration-art.ts';
@@ -275,7 +276,7 @@ type HeroNumbers = { value?: string; tone?: ReportStatusTone; caption?: ReactNod
 
 function gainCaption(groups: readonly ReportResourceGroup[]) {
   const items = groups.filter((group) => group.tone === 'gain').flatMap((group) => group.items).filter((resource) => resource.kind !== 'energy');
-  return items.map((resource) => `${resource.label.toLocaleLowerCase('ru-RU')} ${formatShortAmount(resource.value)}`).join(' · ');
+  return items.map((resource) => captionFact(resource.label.toLocaleLowerCase('ru-RU'), formatShortAmount(resource.value))).join(' · ');
 }
 
 function heroNumbers(item: ReportItem, sheet: ReportSheet, battle: BattleReport | null | undefined, context: HeadlineContext): HeroNumbers {
