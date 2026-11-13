@@ -195,7 +195,8 @@ type MainMenuScreenProps = {
 function MainMenuScreen({ continueSlot, slotCount, onNavigate, onContinue }: MainMenuScreenProps) {
   const desktop = isDesktopShell();
   const items: Array<{ id: string; label: string; hint: string; disabled?: boolean; action: () => void; primary?: boolean }> = [
-    { id: 'continue', label: 'Продолжить', hint: continueSlot ? `${continueSlot.name} · ${raceCard(continueSlot.factionId).name}` : 'Нет сохранённых кампаний', disabled: !continueSlot, action: onContinue, primary: Boolean(continueSlot) },
+    // First launch: no dead «Продолжить» on top; «Новая игра» leads (redo 14.11.2026).
+    ...(continueSlot ? [{ id: 'continue', label: 'Продолжить', hint: `${continueSlot.name} · ${raceCard(continueSlot.factionId).name}`, action: onContinue, primary: true }] : []),
     { id: 'new', label: 'Новая игра', hint: 'Раса, мир, скорость партии', action: () => onNavigate('new'), primary: !continueSlot },
     { id: 'load', label: 'Загрузить игру', hint: slotCount ? `Слотов: ${slotCount}` : 'Импорт сохранения из файла', action: () => onNavigate('load') },
     { id: 'settings', label: 'Настройки', hint: 'Звук, размер текста, экран, облако', action: () => onNavigate('settings') },
@@ -265,8 +266,8 @@ function ContinueShowcase({ slot, onContinue }: { slot: SaveSlotMeta; onContinue
           <div><dt>Скорость</dt><dd>{CAMPAIGN_SPEED_LABELS[slot.campaignSpeed].label}</dd></div>
         </dl>
         <div className="menu-showcase__crystals">
-          <small>КРИСТАЛЛЫ СОЛНЦ</small>
-          <CrystalSet owned={CRYSTALS.slice(0, slot.summary.crystals)} size={26} />
+          <small>КРИСТАЛЛЫ СОЛНЦ · {slot.summary.crystals} ИЗ 4</small>
+          <CrystalSet owned={CRYSTALS.slice(0, slot.summary.crystals)} size={26} bare />
         </div>
         <p className="menu-showcase__date">Сохранено {dateLabel(slot.updatedAt)}{slot.summary.victory ? ' · Врата построены' : ''}</p>
         <button type="button" className="menu-btn menu-btn--primary menu-btn--wide" onClick={onContinue} data-qa-continue>ПРОДОЛЖИТЬ КАМПАНИЮ</button>
@@ -479,7 +480,7 @@ function SlotCard({ slot, active, health, renaming, onRenameStart, onRenameChang
           <div><dt>Активность NPC</dt><dd>{NPC_ACTIVITY_LABELS[slot.npcActivity ?? 'normal'].label}</dd></div>
           <div><dt>Версия</dt><dd>схема {slot.schemaVersion}</dd></div>
         </dl>
-        <div className="menu-slot__crystals"><CrystalSet owned={CRYSTALS.slice(0, slot.summary.crystals)} size={18} />{slot.summary.victory ? <b>ПОБЕДА</b> : null}</div>
+        <div className="menu-slot__crystals"><CrystalSet owned={CRYSTALS.slice(0, slot.summary.crystals)} size={18} bare /><span>Кристаллы: {slot.summary.crystals} из 4</span>{slot.summary.victory ? <b>ПОБЕДА</b> : null}</div>
         {problem ? <p className="menu-slot__problem" role="status">{problem}</p> : null}
         {backup ? (
           <button type="button" className="menu-btn menu-btn--compact" onClick={() => onRestore(backup)} data-qa-slot-restore={slot.id}>Восстановить из копии ({dateLabel(backup.at)})</button>

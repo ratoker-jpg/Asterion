@@ -66,7 +66,9 @@ async function production(win, label) {
   await run(win, 'localStorage.clear(); sessionStorage.clear();');
   await load(win);
   await waitFor(win, `document.querySelector('[data-qa-menu="main"]')`);
-  if (!(await run(win, `document.querySelector('[data-qa-menu-action="continue"]').disabled`))) throw new Error('Continue must be disabled without saves');
+  // Without saves there is no «Продолжить» at all; «Новая игра» leads the menu.
+  if (await run(win, `Boolean(document.querySelector('[data-qa-menu-action="continue"]'))`)) throw new Error('Continue must be absent without saves');
+  if (!(await run(win, `document.querySelector('[data-qa-menu-action="new"]').classList.contains('is-primary')`))) throw new Error('New game must lead without saves');
   await capture(win, label, '01-main-menu-empty');
   // Settings → «Журнал игрока»: the bot journal card sits beside the player's journal (PR 10).
   await click(win, '[data-qa-menu-action="settings"]');

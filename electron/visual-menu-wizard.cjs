@@ -157,6 +157,10 @@ async function layout(win) {
       nativeTitles: Array.from(document.querySelectorAll('${ROOT_SELECTOR} [title]')).map((node) => node.getAttribute('title').slice(0, 60)),
       visibleSelects: Array.from(document.querySelectorAll('${ROOT_SELECTOR} select')).filter((node) => !node.closest('.game-select')).length,
       nativeRanges: Array.from(document.querySelectorAll('${ROOT_SELECTOR} input[type="range"]')).filter((node) => !node.closest('.amount-slider')).length,
+      // A card that hides part of its content (a cut save card, a cut summary).
+      clippedBoxes: Array.from(document.querySelectorAll('${ROOT_SELECTOR} .menu-slot, ${ROOT_SELECTOR} .wz-panel, ${ROOT_SELECTOR} .wz-group, ${ROOT_SELECTOR} .menu-showcase'))
+        .filter((node) => getComputedStyle(node).overflowY === 'hidden' && node.scrollHeight > node.clientHeight + 2)
+        .map((node) => (node.dataset.qaSlot || node.className).slice(0, 50)),
       primary,
     };
   })()`);
@@ -178,6 +182,7 @@ function shooter(win, directory, metrics, label) {
     if (box.nativeTitles.length) fail(`${name}: native title tooltips remain`, box.nativeTitles);
     if (box.visibleSelects) fail(`${name}: native select remains`, box.visibleSelects);
     if (box.nativeRanges) fail(`${name}: bare native range inputs remain`, box.nativeRanges);
+    if (box.clippedBoxes.length) fail(`${name}: a card hides part of its content`, box.clippedBoxes);
     if (primary && box.primary.length && !box.primary.some((item) => item.inside)) fail(`${name}: the primary action is off screen`, box.primary);
     await capture(win, directory, name);
   };
@@ -259,9 +264,9 @@ async function phaseA(win, directory, label) {
   await shot('a09-worst-world-max-end');
   await scrollAll(win, false);
 
-  // A modest world to start (generation time on CI), the long names stay.
-  await setField(win, 'galaxies', 3);
-  await setField(win, 'npc', 30);
+  // A small world to start: generation time on CI, and 16 copies of its save must fit the storage.
+  await setField(win, 'galaxies', 1);
+  await setField(win, 'npc', 8);
   await setField(win, 'seed', 'QAMENU42');
   await gotoStep('confirm');
   await shot('a10-worst-confirm-long');
@@ -299,20 +304,25 @@ async function seedManySlots(win) {
       'Тестовый мир 3',
     ];
     const speeds = ['slow', 'standard', 'fast', 'superfast'];
-    // The first card (the «Продолжить» campaign) has its own save with a pre-migration copy (#231).
-    let backupKey = base.storageKey;
-    try {
-      const own = 'asterion.slot.qa-backup.v1';
-      localStorage.setItem(own, localStorage.getItem(base.storageKey));
-      localStorage.setItem(own + '.backup-qa1', '{"schemaVersion":1}');
-      localStorage.setItem(own + '.backups', JSON.stringify([{ key: own + '.backup-qa1', at: ${T} - 2 * 86_400_000, fromSchema: 41, chars: 18 }]));
-      backupKey = own;
-    } catch (error) { console.warn('QA: no room for the backup copy', error); }
+    // The index derives each slot's storage key from its id, so every clone gets its own copy
+    // of the real save (a small world keeps 16 copies inside the storage quota). Slot 6 gets
+    // none on purpose: the broken card. Slot 0 (the «Продолжить» campaign) also has a
+    // pre-migration copy, so «Восстановить из копии» shows (#231).
+    const raw = localStorage.getItem(base.storageKey);
     const slots = [];
     for (let i = 0; i < 16; i += 1) {
+      const id = 'slot-qa-' + String(i).padStart(2, '0');
+      const storageKey = 'asterion.slot.' + id + '.v1';
+      if (i !== 6) {
+        try { localStorage.setItem(storageKey, raw); } catch (error) { console.warn('QA: storage full at slot ' + i, error); break; }
+      }
+      if (i === 0) {
+        localStorage.setItem(storageKey + '.backup-qa1', '{"schemaVersion":1}');
+        localStorage.setItem(storageKey + '.backups', JSON.stringify([{ key: storageKey + '.backup-qa1', at: ${T} - 2 * 86_400_000, fromSchema: 28, chars: 18 }]));
+      }
       slots.push({
         ...base,
-        id: 'slot-qa-' + String(i).padStart(2, '0'),
+        id,
         name: (names[i % names.length] + (i >= names.length ? ' ' + (i + 1) : '')).slice(0, 40),
         factionId: races[i % 3],
         playerName: i % 2 ? ${JSON.stringify(LONG_COMMANDER)} : 'Ая',
@@ -322,10 +332,12 @@ async function seedManySlots(win) {
         createdAt: ${T} - 90 * 86_400_000,
         playTimeMs: i === 0 ? 9_999 * 3_600_000 + 59 * 60_000 : (i + 1) * 5_400_000,
         summary: { ...base.summary, planets: i === 0 ? 7 : 1 + (i % 7), npcCount: 100, galaxyCount: 10, days: 400, crystals: i % 5, victory: i === 4 },
-        storageKey: i === 6 ? 'asterion.slot.qa-missing.v1' : i === 0 ? backupKey : base.storageKey,
+        storageKey,
         ...(i >= 13 ? { retiredAt: ${T} - i * 86_400_000 } : {}),
       });
     }
+    // The real campaign stays in the index (otherwise it comes back as a rescued orphan).
+    slots.push({ ...base, name: 'Настоящая кампания этого прогона', updatedAt: ${T} - 30 * 86_400_000 });
     localStorage.setItem(${JSON.stringify(INDEX_KEY)}, JSON.stringify({ ...index, activeSlotId: slots[0].id, slots }));
   })()`);
 }
