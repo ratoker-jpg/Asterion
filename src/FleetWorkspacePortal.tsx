@@ -139,7 +139,7 @@ import missionRepairIcon from '../assets/source/mission-icons-v1/36_salvage.png'
 import missionPriorityIcon from '../assets/source/mission-icons-v1/18_escort.png';
 import missionBattlesIcon from '../assets/source/mission-icons-v1/20_bombardment.png';
 import missionSimulatorIcon from '../assets/source/mission-icons-v1/24_track_target.png';
-import { AID_MISSION_DESCRIPTION, AID_MISSION_ENABLED, AID_TRANSPORT_SHIP_IDS } from './domain/flights/aid-mission.ts';
+import { AID_MISSION_DESCRIPTION, AID_TRANSPORT_SHIP_IDS } from './domain/flights/aid-mission.ts';
 import { AID_RESOURCE_LABELS, selectFulfillableRequests, selectRequestById } from './domain/command/aid.ts';
 import { selectRequestProgress } from './application/alliance-aid.ts';
 import {
@@ -175,7 +175,7 @@ const missions: MissionDefinition[] = [
   { id: 'recycle', label: 'Переработка', description: 'Сбор и переработка обломков в космосе.', icon: missionRecycleIcon },
   { id: 'gas', label: 'Добыча газа', description: 'Специализированная экспедиция за газом.', icon: missionGasIcon },
   { id: 'sun-support', label: 'Поддержка солнца', description: 'Защита Солнца под атакой командного рейда. Союз не нужен: летят только боевые и командирские корабли с любых ваших планет.', icon: missionSunSupportIcon },
-  { id: 'aid', label: 'Помощь союзу', description: AID_MISSION_DESCRIPTION, icon: missionAidIcon, enabled: AID_MISSION_ENABLED },
+  { id: 'aid', label: 'Помощь союзу', description: AID_MISSION_DESCRIPTION, icon: missionAidIcon, enabled: true },
   { id: 'space-flight', label: 'Космический рейс', description: 'Дальний автономный рейс с заданной продолжительностью.', icon: missionSpaceFlightIcon },
 ];
 
