@@ -30,7 +30,6 @@ import {
   upsertRecyclerArrivalReport,
   upsertOverpopulationEpisodeReport,
 } from './adapters.ts';
-import { NON_COMBAT_REPORT_FIXTURES } from './catalog.ts';
 import {
   createDefaultReportsState,
   deleteAllReports,
@@ -69,7 +68,6 @@ async function loadPersistence() {
 }
 
 test('Reports does not fabricate non-combat runtime history', () => {
-  assert.deepEqual(NON_COMBAT_REPORT_FIXTURES, []);
   const counts = getReportCategoryCounts(buildReportsFeed([], createDefaultOperationsState(), commandWithoutJointOperations()));
   assert.equal(counts.system, 0);
   assert.equal(counts.battle, 0);

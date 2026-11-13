@@ -8,8 +8,6 @@ import type { FlightRecord } from './types.ts';
  * bound to one open resource request. The request layer reserves the shipped
  * amount at launch and credits only what the planet actually accepted.
  */
-export const AID_MISSION_ENABLED = true;
-
 export const AID_MISSION_DESCRIPTION = 'Отправка запрошенного ресурса союзнику по его открытому запросу: только свободные транспортёры и только тот ресурс, который указан в запросе.';
 
 /** Only dedicated cargo hulls can carry aid; this is not a combat or espionage mission. */
