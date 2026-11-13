@@ -155,7 +155,8 @@ function SideCard({ side, command, onOpen }: { side: ReportSide; command?: Comma
 
 /** Cards are narrow: from a million on the short form («19,7 млн», «1 млрд»), the exact number stays in the label. */
 function cardAmount(value: number) {
-  return Math.abs(value) >= 1e6 ? formatShortAmount(value) : numberFormat.format(value);
+  // The unit may go to the next line; the digits stay glued by non-breaking spaces.
+  return Math.abs(value) >= 1e6 ? formatShortAmount(value).replace(/\u00a0(?=[а-яё])/u, ' ') : numberFormat.format(value);
 }
 
 function UnitRow({ unit, qa }: { unit: ReportUnit; qa?: Record<string, string> }) {

@@ -1155,4 +1155,6 @@
 .reports-view--mail .reports-sheet-resources { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
 /* Loot and debris side by side only when both fit; a card never shrinks below its amount. */
 .reports-view--mail .reports-sheet-groups--resources { grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); }
-.reports-view--mail .reports-sheet-resources { grid-template-columns: repeat(auto-fill, minmax(156px, 1fr)); }
+.reports-view--mail .reports-sheet-resources { grid-template-columns: repeat(auto-fill, minmax(172px, 1fr)); }
+/* A card amount may put its unit on a second line, never cut it. */
+.reports-view--mail .reports-v3-res b { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: normal; }
