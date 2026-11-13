@@ -529,7 +529,8 @@ export function describeWorld(state, journal = [], tally = null, sunTally = null
     const shipsOn = planets.map((planet) => positiveSum(planet.fleet?.ships));
     const score = selectOwnerScore(state, ownerId);
     return {
-      ownerId, planets: planets.length,
+      ownerId, planets: planets.length, raceId: main?.raceId ?? null,
+      shipUpgradeLevels: Object.values(main?.ownerProfile?.shipLevels ?? {}).reduce((total, level) => total + (Number(level) || 0), 0),
       points: Math.round(score?.totalPoints ?? 0), battlePoints: Math.round(score?.battlePoints ?? 0),
       resources: Math.round(sum(planets.map((planet) => planet.resources.metal + planet.resources.minerals + planet.resources.gas))),
       mainDefense: positiveSum(main?.defense?.defenses), allDefense: sum(planets.map((planet) => positiveSum(planet.defense?.defenses))),
@@ -650,6 +651,13 @@ export function describeWorld(state, journal = [], tally = null, sunTally = null
       conscious: { done: conscious.length, net: planNet(conscious) } },
     fleetOnLargestMedian: median(perOwner.map((owner) => owner.fleetOnLargest)),
     transport: { transporters: sum(perOwner.map((owner) => owner.transporters)), mega: sum(perOwner.map((owner) => owner.megaTransporters)) },
+    // Per race (veyra balance check, 13.11.2026): how each race fares in the same world.
+    byRace: Object.fromEntries([...new Set(perOwner.map((owner) => owner.raceId).filter(Boolean))].sort().map((raceId) => {
+      const group = perOwner.filter((owner) => owner.raceId === raceId);
+      return [raceId, { owners: group.length, pointsMedian: median(group.map((owner) => owner.points)), pointsMean: Math.round(sum(group.map((owner) => owner.points)) / group.length),
+        battlePointsMedian: median(group.map((owner) => owner.battlePoints)), shipsMedian: median(group.map((owner) => owner.ships)),
+        shipUpgradeLevelsMean: +(sum(group.map((owner) => owner.shipUpgradeLevels)) / group.length).toFixed(2), planetsMean: +(sum(group.map((owner) => owner.planets)) / group.length).toFixed(2) }];
+    })),
     points: { top: points[0] ?? 0, median: median(points), bottom: points.at(-1) ?? 0, topToBottom: points.at(-1) ? +(points[0] / points.at(-1)).toFixed(1) : null },
     actions: { started: started.length, refused: decisions.length - started.length, byKind, topRefusals: Object.entries(refusals).sort((a, b) => b[1] - a[1]).slice(0, 6) },
     plans: { closed: plans.length, done: plans.filter((entry) => entry.d?.st === 'done').length,

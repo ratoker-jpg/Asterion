@@ -164,18 +164,30 @@ test('Spaceport preview uses the selected faction ship data and keeps Balance v1
 
   const buildings = createDefaultBuildingLevels();
   buildings.shipyard = 20;
-  const unresolvedVeyraRequirement = evaluateSpaceportUpgradeRequirements(
+  const nemesis = evaluateSpaceportUpgradeRequirements(
     'ships',
     'destroyer',
     buildings,
     unlockedScienceLevels(),
     'veyra',
+    { cruiser: 0 },
   ).find((requirement) => requirement.label === 'Немезис' && requirement.valueKind === 'quantity');
-  assert.ok(unresolvedVeyraRequirement);
-  assert.equal(unresolvedVeyraRequirement.kind, 'unresolved-catalog-requirement');
-  assert.equal(unresolvedVeyraRequirement.valueKind, 'quantity');
-  assert.equal(unresolvedVeyraRequirement.currentLevel, null);
-  assert.equal(unresolvedVeyraRequirement.met, false);
+  assert.ok(nemesis);
+  assert.equal(nemesis.kind, 'ship-quantity');
+  assert.equal(nemesis.currentLevel, 0);
+  assert.equal(nemesis.met, false);
+
+  const owned = evaluateSpaceportUpgradeRequirements(
+    'ships', 'destroyer', buildings, unlockedScienceLevels(), 'veyra', { cruiser: 3 },
+  ).find((requirement) => requirement.label === 'Немезис');
+  assert.equal(owned?.currentLevel, 3);
+  assert.equal(owned?.met, true);
+
+  // Without a fleet the count is unknown, so the requirement stays unmet.
+  const noFleet = evaluateSpaceportUpgradeRequirements(
+    'ships', 'destroyer', buildings, unlockedScienceLevels(), 'veyra',
+  ).find((requirement) => requirement.label === 'Немезис');
+  assert.equal(noFleet?.met, false);
 });
 
 test('Factory upgrades are faction-specific and resolve L → L+1 without a level shift', () => {
@@ -763,4 +775,33 @@ test('migration restores FIFO timestamps, sequential duplicate levels and track-
   assert.deepEqual(restored.shipQueue[0].cost, { metal: 0, minerals: 0, gas: 0 });
   assert.equal(restored.shipQueue[0].costSource, 'legacy-unknown');
   assert.equal(restored.shipQueue[0].refundEligible, false);
+});
+
+test('Veyra upgrade starts only when the planet holds the required ships; the screen text shows progress', () => {
+  const buildings = createDefaultBuildingLevels();
+  buildings.shipyard = 20;
+  buildings.spaceport = 5;
+  const base = {
+    state: createDefaultSpaceportUpgradeState(),
+    wallet: { metal: 1e12, minerals: 1e12, gas: 1e12 },
+    buildings,
+    scienceLevels: unlockedScienceLevels(),
+    spaceportLevel: 5,
+    factionId: 'veyra' as const,
+  };
+  // Defender needs two «Нокс Дарт» (scout) on the planet.
+  const without = previewSpaceportUpgrade({ ...base, fleetShips: { scout: 1 } }, 'ships', 'defender');
+  assert.equal(without.canStart, false);
+  assert.equal(without.status, 'requirements-unmet');
+  const missing = without.requirements.find((requirement) => requirement.kind === 'ship-quantity');
+  assert.equal(missing?.currentLevel, 1);
+  assert.equal(missing?.requiredLevel, 2);
+  assert.match(without.reason ?? '', /Нокс Дарт/);
+
+  const withShips = previewSpaceportUpgrade({ ...base, fleetShips: { scout: 2 } }, 'ships', 'defender');
+  assert.equal(withShips.status, 'available');
+  assert.equal(withShips.canStart, true);
+  assert.equal(enqueueSpaceportUpgrade({ ...base, fleetShips: { scout: 2 } }, 'ships', 'defender', 1000, 't1').ok, true);
+  // No fleet passed at all: stays blocked instead of guessing.
+  assert.equal(previewSpaceportUpgrade(base, 'ships', 'defender').canStart, false);
 });

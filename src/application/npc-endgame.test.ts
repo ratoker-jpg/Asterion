@@ -246,6 +246,24 @@ test('Spaceport upgrades: an NPC pays for one, and on finishing the level reache
   assert.equal(targets[colony.id]!.ownerProfile?.shipLevels.cruiser, done.ownerProfile?.shipLevels.cruiser);
 });
 
+test('Spaceport upgrades: a Veyra NPC needs the sacrifice ships on its planet, and starts once it has them', () => {
+  const { state: initial, owners } = world();
+  const main = home(initial, owners[0]!);
+  const base = {
+    ...main,
+    raceId: 'veyra' as const,
+    buildings: { ...main.buildings, spaceport: 10, shipyard: 14 },
+    resources: { ...main.resources, metal: 50_000_000, minerals: 50_000_000, gas: 50_000_000 },
+  };
+  const levels = Object.fromEntries(Array.from({ length: 23 }, (_, index) => [index + 1, 20]));
+  // Veyra defender («Абсорбатор») needs two «Нокс Дарт» (scout).
+  const short = { ...base, fleet: { ...base.fleet, ships: { ...base.fleet.ships, defender: 5, scout: 1 } } };
+  assert.equal(getNpcSpaceportCandidates(short, levels, 1, { defender: 5 }).some((p) => p.shipId === 'defender'), false);
+  const ready = { ...base, fleet: { ...base.fleet, ships: { ...base.fleet.ships, defender: 5, scout: 2 } } };
+  assert.equal(getNpcSpaceportCandidates(ready, levels, 1, { defender: 5 }).some((p) => p.shipId === 'defender'), true);
+  assert.equal(startNpcSpaceportUpgrade(ready, 'defender', levels, NOW, 1, 'npc-autonomy:veyra-upgrade').ok, true);
+});
+
 test('transport between own planets lands the cargo in the main planet stores; what does not fit flies back', () => {
   const { state: initial, owners } = world();
   const ownerId = owners[0]!;
