@@ -239,6 +239,20 @@ Single planet sprite for a dark sci-fi space strategy game map, 1024x1024, trans
 | `src/assets/ui/empty/empty-mail.webp` | `--transparent --size 1536x1024` | Empty-state illustration, transparent background: a small sealed courier capsule drifting alone in the dark with a faint cyan running light, a few tiny particles around it. Painterly-realistic, same family as other cut-out empty-state objects (a hologram table, a docking ring, a repair station). Object centered, fills ~60% of the width. No text, no envelope symbol. |
 | `faction-delivery-v1/territories/{resource,industry,military}-terrain.png` | `--size 1536x1024` | только если на проверке в игре подписи стоят прямо на земле: тот же сюжет (вид сверху на плато в кратере), но тёмный — средняя яркость не выше 40, холодные сине-серые тона. |
 
+### Пакет 6. Иконки других наборов (дописано в пакете 1, 14.11)
+
+Владелец хочет один стиль во всей игре. Пакет 1 сделан по `docs/art/STYLE.md` (светлый металл + бирюзовая эмаль, прозрачный фон): шапка, ресурсы, зоны, вкладки «Операций», все используемые значки `mission-icons-v1` (включая `29_wormhole_expedition` у Врат), `mission-sun-raid` и `debris-finder`. Четыре иконки вкладок «Флотов» (`tab-*`) не генерировались: с варианта А вкладки «Флотов» без картинок, старые импорты были мёртвыми и удалены.
+
+Осталось из других наборов, перерисовать по `STYLE.md` тем же базовым промптом:
+
+| Папка | Шт. | Сейчас | Где видно |
+|---|---|---|---|
+| `src/assets/ui/actions` | 19 | круглые живописные медальоны со сценой | быстрые действия, карточки объектов карты |
+| `src/assets/ui/settings` | 7 | стеклянные плашки | «Настройки» |
+| `public/.../asterion/ui/report-icons`, `score-icons` | 12 | гравированный тёмный металл | отчёты, очки, «Командование» |
+
+Пакет 2 (два медальона) после этого не нужен: если медальоны `actions` перерисовываются в новом стиле, `sun-raid` и `debris-finder` уже есть в `assets/source/ui/icons-v2/`. Баннеры миссий (`src/assets/ui/missions`, 1440×360) — это иллюстрации, а не иконки, их стиль не трогаем.
+
 ### Итог по стоимости
 
 | Пакет | Картинок | Токенов Codex | Время генерации |

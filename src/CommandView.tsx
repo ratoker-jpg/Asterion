@@ -43,9 +43,9 @@ import { CrystalDots, ROLE_NAMES, RoleBadge } from './ui/command/AllianceBadges'
 import { Dialog } from './ui/command/Dialog';
 import { renderRichText } from './ui/command/rich-text';
 import { GameSelect } from './ui/GameSelect';
-import commandHeaderIcon from './assets/ui/header-icons/command.png';
-import aidMissionIcon from '../assets/source/mission-icons-v1/33_trade_convoy.png';
-import sunMissionIcon from '../assets/source/mission-icons-v1/08_sun_support.png';
+import commandHeaderIcon from './assets/ui/header-icons/command.webp';
+import aidMissionIcon from './assets/ui/mission-icons/aid.webp';
+import sunMissionIcon from './assets/ui/mission-icons/sun-support.webp';
 import './command.css';
 
 export type CommandActionResult = { ok: true; message?: string } | { ok: false; message: string };

@@ -15,7 +15,7 @@ import { ObjectCard } from './ui/universe/ObjectCard.tsx';
 import { DebrisFinder, type DebrisSearch } from './ui/universe/DebrisFinder.tsx';
 import type { DebrisEntry, ExplorationIntel } from './ui/universe/object-card-model.ts';
 import { createUniverseCardQaFixture, getUniverseCardQaScenario } from './ui/universe/object-card-qa-fixture.ts';
-import debrisIcon from './assets/ui/header-icons/debris.png';
+import debrisIcon from './assets/ui/header-icons/debris.webp';
 import './ui/universe/universe-radar.css';
 import './ui/universe/map-relations.css';
 import './ui/shield/shield.css';
