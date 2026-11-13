@@ -37,7 +37,9 @@ export type ReportSheetActionKind =
   | 'collect_debris' | 'attack_target' | 'repeat_flight'
   | 'accept' | 'decline'
   /** The report's place on the map (the same link as its coordinates). */
-  | 'show_on_map';
+  | 'show_on_map'
+  /** The Fleets screen prefilled with an attack on the same planet (the same launch as «Атаковать» from a spy report). */
+  | 'attack_again';
 export type ReportSheetAction = { kind: ReportSheetActionKind; label: string; primary: boolean; missionId?: string; flightId?: string; coordinate?: ReportCoordinate };
 
 /** A titled list of facts inside «Подробности» (the bonuses of one battle side…). */

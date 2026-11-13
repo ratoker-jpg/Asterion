@@ -41,7 +41,7 @@ import type { OwnerScore } from './domain/rating/types.ts';
 import type { RatingPrototypeState } from './domain/rating/fixtures.ts';
 import { selectRecordedBattlePointAwards } from './domain/rating/scoring.ts';
 import { RUNTIME_RESET_EVENT, type RuntimeMode } from './domain/runtime/mode.ts';
-import type { SpyReportSnapshot } from './domain/espionage/types.ts';
+import type { SpyReportSnapshot, SpyTargetState } from './domain/espionage/types.ts';
 import { getCombatFactionName } from './domain/combat/factions.ts';
 import type { UniverseCoordinate } from './domain/universe/types.ts';
 import type { PirateReconReport } from './domain/pirates/recon-report.ts';
@@ -81,14 +81,14 @@ const MESSAGE_FOLDERS: readonly MessageFolder[] = [
 ];
 
 const EMPTY_COPY: Record<ReportCategory, { title: string; body: string }> = {
-  personal: { title: 'Личных писем пока нет', body: 'Сюда приходят письма лично вам: ответы союзов на ваши заявки и заявки в союз, которым вы управляете.' },
-  system: { title: 'Системных данных пока нет', body: 'Сюда попадут шпионские отчёты, уведомления контрразведки и результаты операций, которые дают новую информацию.' },
-  battle: { title: 'Боевых докладов пока нет', body: 'Здесь хранятся реальные боевые отчёты и бои из операций. Симуляции и Арена в этот канал не попадают.' },
-  command: { title: 'Командных докладов пока нет', body: 'Здесь будут отчёты об атаках на союзников и результаты атак на Солнце, когда эти события появятся в боевом контуре.' },
-  arena: { title: 'Арена — пока пусто', body: 'Отчёты и очки Арены появятся здесь вместе с реализацией самой Арены.' },
-  flights: { title: 'Завершённых полётов пока нет', body: 'После подключения реальной отправки флотов сюда будут сохраняться завершённые рейсы, прибытия и возвраты флота на ваши планеты.' },
-  alliances: { title: 'Союзных приглашений пока нет', body: 'Здесь появляются доступные совместные операции союза. Из приглашения можно сразу перейти к выбору флота.' },
-  achievements: { title: 'Достижения — пока пусто', body: 'Этот канал зарезервирован под будущую систему достижений.' },
+  personal: { title: 'Личных писем пока нет', body: 'Здесь будут письма вам: ответы союзов на заявки, приглашения и просьбы других командующих.' },
+  system: { title: 'Системных сообщений пока нет', body: 'Здесь будут шпионские отчёты, сообщения контрразведки и итоги перенаселения.' },
+  battle: { title: 'Боёв пока не было', body: 'Отчёты о ваших атаках и об атаках на вас появятся здесь сразу после боя.' },
+  command: { title: 'Командных докладов пока нет', body: 'Здесь будут бои ваших союзников и налёты на Солнце, когда они случатся.' },
+  arena: { title: 'Арена ещё не открыта', body: 'Отчёты появятся, когда она заработает.' },
+  flights: { title: 'Полётов пока не было', body: 'Здесь будут итоги рейсов: что привёз флот, сколько собрано обломков и газа.' },
+  alliances: { title: 'Союзных приглашений пока нет', body: 'Здесь будут совместные операции союза. Из приглашения можно сразу выбрать флот.' },
+  achievements: { title: 'Достижения ещё не открыты', body: 'Сообщения о наградах появятся, когда достижения заработают.' },
 };
 
 const FILTER_LABELS: Record<ReportFilter, string> = {
@@ -276,7 +276,7 @@ function PlayerProfile({ profile, score, command, mode, recentItems, facts, onOp
   );
 }
 
-export function ReportsView({ ownFleetAttack, retentionCutoff, battleReports, planetNames, savedBattleReportIds, operations, command, espionage, pirateReconReports, pirateFlights, exploration, initialSelectedReportId, profile, score, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy, onOpenUniverseTarget, onOpenPirateUniverse, canRepeatFlight, onRepeatFlight, onCollectDebris, onAttackSpyTarget, profileFacts, npcStrategy, worldNow, onAnswerLetter }: {
+export function ReportsView({ ownFleetAttack, nearestFleet, onAttackPlanet, retentionCutoff, battleReports, planetNames, savedBattleReportIds, operations, command, espionage, pirateReconReports, pirateFlights, exploration, initialSelectedReportId, profile, score, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy, onOpenUniverseTarget, onOpenPirateUniverse, canRepeatFlight, onRepeatFlight, onCollectDebris, onAttackSpyTarget, profileFacts, npcStrategy, worldNow, onAnswerLetter }: {
   /** Letters older than this world time are gone (24-hour rule); absent in Test Mode. */
   retentionCutoff?: number;
   battleReports: readonly BattleReport[];
@@ -317,6 +317,10 @@ export function ReportsView({ ownFleetAttack, retentionCutoff, battleReports, pl
   onAnswerLetter?: (ref: LetterRef, answer: 'accept' | 'decline') => string | null;
   /** Attack of all the player's ships: the risk plaque of a spy report. */
   ownFleetAttack?: number;
+  /** The player's fastest combat fleet to a coordinate: the plaque of a help request. */
+  nearestFleet?: HeadlineContext['nearestFleet'];
+  /** «Напасть снова»: the Fleets screen prefilled with an attack on this bot planet. */
+  onAttackPlanet?: (target: SpyTargetState) => void;
 }) {
   const [activeFolder, setActiveFolder] = useState<MessageFolderId>('profile');
   const [filter, setFilter] = useState<ReportFilter>('all');
@@ -358,8 +362,9 @@ export function ReportsView({ ownFleetAttack, retentionCutoff, battleReports, pl
     playerFactionId: profile.factionId,
     targetBuildings: (planetId) => espionage?.targets?.[planetId]?.buildings,
     ownFleetAttack,
+    nearestFleet,
     now: worldNow,
-  }), [isMine, profile.factionId, espionage?.targets, ownFleetAttack, worldNow]);
+  }), [isMine, profile.factionId, espionage?.targets, ownFleetAttack, nearestFleet, worldNow]);
   // One value and one «who / where» per row; the list scrolls, so all rows are built.
   const rows = useMemo(() => visibleItems.map((item) => {
     const battle = item.battleReportId ? battleById.get(item.battleReportId) ?? null : null;
@@ -469,6 +474,15 @@ export function ReportsView({ ownFleetAttack, retentionCutoff, battleReports, pl
     awardedBattlePoints: selectRecordedBattlePointAwards(rating, selectedBattle, profile.playerId),
   }) : null, [selectedBattle, rating, profile.playerId]);
   const selectedSheet = useMemo(() => selectedItem ? buildReportSheet(selectedItem, selectedBattleViewModel, { canRepeatFlight: onRepeatFlight ? canRepeatFlight : undefined }) : null, [selectedItem, selectedBattleViewModel, canRepeatFlight, onRepeatFlight]);
+  // «Напасть снова»: only when the player attacked a bot planet that still exists at those coordinates.
+  const attackAgainTarget = useMemo(() => {
+    if (!selectedBattle || !isMine(selectedBattle.attacker.playerId) || /pirat|пират/i.test(selectedBattle.defender.race ?? '')) return null;
+    const coordinate = parseReportCoordinate(selectedBattle.defender.coordinates);
+    if (!coordinate) return null;
+    return Object.values(espionage?.targets ?? {}).find((target) => target.kind !== 'player'
+      && target.coordinate.galaxy === coordinate.galaxy && target.coordinate.system === coordinate.system && target.coordinate.position === coordinate.position
+      && (!selectedBattle.defender.playerId || target.ownerId === selectedBattle.defender.playerId)) ?? null;
+  }, [selectedBattle, isMine, espionage?.targets]);
   const runAction = (action: ReportSheetAction) => {
     if (!selectedItem) return;
     if (action.kind === 'open_battle' && selectedBattle) setOpenBattleReportId(selectedBattle.id);
@@ -480,6 +494,7 @@ export function ReportsView({ ownFleetAttack, retentionCutoff, battleReports, pl
     else if (action.kind === 'collect_debris' && action.coordinate) onCollectDebris?.(action.coordinate);
     else if (action.kind === 'attack_target' && selectedItem.spyReport) onAttackSpyTarget?.(selectedItem.spyReport);
     else if (action.kind === 'repeat_flight' && action.flightId) onRepeatFlight?.(action.flightId);
+    else if (action.kind === 'attack_again' && attackAgainTarget) onAttackPlanet?.(attackAgainTarget);
     else if (action.kind === 'show_on_map' && action.coordinate) {
       const place = selectedItem.pirateReconReport;
       if (place) onOpenPirateUniverse(action.coordinate, place.contactCycleKey);
@@ -491,7 +506,10 @@ export function ReportsView({ ownFleetAttack, retentionCutoff, battleReports, pl
     // «Принять» / «Отказаться» are drawn only on a bot letter that has something to act on.
     accept: Boolean(onAnswerLetter && selectedItem?.letter?.ref), decline: Boolean(onAnswerLetter && selectedItem?.letter?.ref),
   };
-  const offered = (selectedSheet?.actions ?? []).filter((action) => wired[action.kind] !== false);
+  const offered = [
+    ...(selectedSheet?.actions ?? []),
+    ...(attackAgainTarget && onAttackPlanet ? [{ kind: 'attack_again' as const, label: 'Напасть снова', primary: false }] : []),
+  ].filter((action) => wired[action.kind] !== false);
   // One primary: the first offered primary keeps it.
   const firstPrimary = offered.findIndex((action) => action.primary);
   const sheetActions = offered.map((action, index) => ({ ...action, primary: index === firstPrimary }));
@@ -548,8 +566,8 @@ export function ReportsView({ ownFleetAttack, retentionCutoff, battleReports, pl
         </nav>
       </aside>
 
-      {activeFolder === 'profile' ? <PlayerProfile profile={profile} score={score} command={command} mode={mode} recentItems={recentProfileItems} facts={profileFacts ?? {}} onOpenCommand={onOpenCommand} onOpenItem={openFromProfile} /> : <section className="reports-folder-workspace" data-qa-folder-view={activeFolder}>
-        <section className="reports-feed" data-qa-message-folder-view={activeFolder}>
+      {activeFolder === 'profile' ? <PlayerProfile profile={profile} score={score} command={command} mode={mode} recentItems={recentProfileItems} facts={profileFacts ?? {}} onOpenCommand={onOpenCommand} onOpenItem={openFromProfile} /> : <section className={`reports-folder-workspace ${hasMail ? '' : 'reports-folder-workspace--empty'}`} data-qa-folder-view={activeFolder}>
+        {hasMail ? <section className="reports-feed" data-qa-message-folder-view={activeFolder}>
           <header className="reports-feed-head">
             <h2>{activeFolderMeta.label}</h2>
             {hasMail ? <button className="reports-mark-all" type="button" data-qa-mark-all-read disabled={!markableItems.some((item) => !isRead(item))} onClick={markAll}>Прочитать все</button> : null}
@@ -573,7 +591,7 @@ export function ReportsView({ ownFleetAttack, retentionCutoff, battleReports, pl
             <span className="reports-folder-count">{messagesLabel(visibleItems.length)}</span>
             <button type="button" className="reports-delete-all" data-qa-delete-all disabled={!folderItems.length} onClick={deleteAll}>Удалить все</button>
           </footer> : null}
-        </section>
+        </section> : null}
 
         <section className="reports-preview" aria-label="Открытое сообщение">
           <div className="reports-preview-scroll" ref={previewScrollRef}>{previewBody}</div>

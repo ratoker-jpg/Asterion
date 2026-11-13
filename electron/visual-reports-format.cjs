@@ -98,6 +98,8 @@ async function layout(win) {
       horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 2,
       nativeTitles: Array.from(document.querySelectorAll('.reports-view [title]')).map((node) => node.getAttribute('title')),
       primaryButtons: document.querySelectorAll('.reports-preview .reports-primary-action').length,
+      // Owner rule: a row title wraps, it is never cut (not even with an ellipsis).
+      cutTitles: Array.from(document.querySelectorAll('[data-qa-message-list] .reports-list-copy strong')).filter((node) => node.scrollWidth > node.clientWidth + 1).map((node) => node.textContent.trim().slice(0, 40)).slice(0, 5),
       sheet: sheet ? {
         kind: sheet.getAttribute('data-report-sheet'),
         title: Boolean(sheet.querySelector('[data-report-title]')?.textContent.trim()),
@@ -162,10 +164,13 @@ function seedSource(now, letters) {
     const battle = (id, minutesAgo, extra) => ({
       ...rest, id, timestamp: new Date(now - minutesAgo * 60_000).toISOString(), ...extra,
     });
+    // The beaten planet is a real bot planet of the save, so «Напасть снова» can be offered.
+    const botPlanet = Object.values(save.espionage?.targets || {}).find((target) => target.kind !== 'player') || null;
+    const botCoordinate = botPlanet ? '[' + botPlanet.coordinate.galaxy + ':' + botPlanet.coordinate.system + ':' + botPlanet.coordinate.position + ']' : '[1:40:24]';
     const bigBattle = battle('qa-big-battle', 1, {
       missionType: 'attack', winner: 'attacker', roundCount: 6, rounds,
       attacker: { ...base.attacker, playerId: me, playerName: 'Владыка Великой Северной Империи Астеров', planetName: 'Новая Кассиопея Северная', coordinates: '[1:17:17]' },
-      defender: { ...base.defender, playerId: 'npc-bot-01', playerName: 'Командор Объединённого Флота Южных Рубежей', planetName: 'Кассиопея Восточный Рубеж Обороны', coordinates: '[1:40:24]' },
+      defender: { ...base.defender, playerId: botPlanet ? botPlanet.ownerId : 'npc-bot-01', playerName: 'Командор Объединённого Флота Южных Рубежей', planetName: 'Кассиопея Восточный Рубеж Обороны', coordinates: botCoordinate },
       attackerForce: { ...base.attackerForce, populationBefore: 1000000, populationAfter: 460000, stacks: stacks(${JSON.stringify(SHIPS)}, 12000, 0.4), defenses: [] },
       defenderForce: { ...base.defenderForce, populationBefore: 820000, populationAfter: 0, stacks: stacks(${JSON.stringify(SHIPS)}, 9000, 1), defenses: stacks(${JSON.stringify(DEFENSE)}, 4000, 1) },
       resources: { metal: 999999999999, minerals: 19657583, gas: 13704441 }, debris: 987654321098, experience: 4200,
@@ -257,6 +262,7 @@ async function runViewport(win, directory, label) {
     if (!box.fits || box.horizontalOverflow) fail(`${name}: screen does not fit`, box);
     if (box.nativeTitles.length) fail(`${name}: native title tooltips remain`, box.nativeTitles);
     if (box.primaryButtons > 1) fail(`${name}: more than one primary button`, box);
+    if (box.cutTitles.length) fail(`${name}: list titles are cut`, box.cutTitles);
     if (sheetExpected && (!box.sheet || !box.sheet.title || !box.sheet.time || !box.sheet.result || !box.sheet.hero || !box.sheet.value)) fail(`${name}: the art header is incomplete`, box.sheet);
     if (box.sheet && !box.sheet.valueOneLine) fail(`${name}: the main number breaks over lines`, box.sheet);
   };
@@ -296,7 +302,7 @@ async function runViewport(win, directory, label) {
   if (!metrics.rail.label || !metrics.rail.empty.includes('arena') || !metrics.rail.emptyAllMarked || metrics.rail.filled.includes('arena')) fail('Empty sections are not under «ПУСТО»', metrics.rail);
   await openFolder(win, 'arena');
   await check('arena-empty', false);
-  if (await exists(win, '[data-qa-message-list] [data-report-item-id]')) fail('An empty section lists messages', null);
+  if (await exists(win, '[data-qa-message-list], [data-qa-message-folder-view]')) fail('An empty section still shows the list column', null);
   await capture(win, directory, '10b-empty-section');
 
   // 300 unread reports in «Полёты»: one scrolling list, no pages, no checkboxes.
@@ -325,6 +331,10 @@ async function runViewport(win, directory, label) {
   if (!/^[+−]/.test(metrics.battle.value) || metrics.battle.value !== metrics.battle.row) fail('Battle profit: header and row disagree', metrics.battle);
   if (metrics.battle.lossRows.own < 11 || metrics.battle.lossRows.enemy < 20) fail('The losses table misses ship types', metrics.battle);
   if (!metrics.battle.actions.includes('open_battle') || !metrics.battle.actions.includes('save_battle') || !metrics.battle.actions.includes('collect_debris')) fail('Battle actions missing', metrics.battle);
+  // «Напасть снова»: offered on a beaten bot planet that still exists, never on a pirate raid.
+  if (!metrics.battle.actions.includes('attack_again')) fail('«Напасть снова» is missing on a won attack on a bot planet', metrics.battle);
+  if (await openReport(win, 'battle:qa-pirate-raid') && await exists(win, '[data-report-action="attack_again"]')) fail('«Напасть снова» offered on a pirate raid', null);
+  await openReport(win, 'battle:qa-big-battle');
   if (await exists(win, '[data-report-sheet] details summary')) {
     await click(win, '[data-report-sheet] details summary');
     await win.webContents.executeJavaScript(`(() => { const s = document.querySelector('.reports-preview-scroll'); const d = document.querySelector('[data-report-sheet] details'); if (s && d) s.scrollTop = d.offsetTop - 40; })()`);
@@ -338,7 +348,9 @@ async function runViewport(win, directory, label) {
     caption: document.querySelector('[data-report-caption]')?.textContent.trim() || '',
     risk: document.querySelector('[data-report-risk]')?.getAttribute('data-report-risk') || '',
   })`);
-  if (!/налёт/.test(metrics.spy.caption) || !/нужно/.test(metrics.spy.caption) || !metrics.spy.risk) fail('Spy header lacks «можно унести», transports or the risk plaque', metrics.spy);
+  metrics.spy.riskText = await win.webContents.executeJavaScript(`document.querySelector('[data-report-risk]')?.textContent.trim() || ''`);
+  if (!/налёт/.test(metrics.spy.caption) || !/нужно .*транспорт/.test(metrics.spy.caption) || !metrics.spy.risk) fail('Spy header lacks «можно унести», transports or the risk plaque', metrics.spy);
+  if (/(млрд|млн|трлн|тыс)\s*раз/.test(metrics.spy.riskText) || /\d{4,}\s*раз/.test(metrics.spy.riskText.replace(/\s/g, ''))) fail('The risk plaque prints an absurd ratio', metrics.spy);
   await shoot('03-spy-almost-empty', 'battle', 'espionage:qa-spy-basic');
   await shoot('04-recycling-nothing', 'flights', 'recycler-arrival:qa-recycle-empty');
   await shoot('05-gas-extraction', 'flights', 'gas-extraction-arrival:qa-gas');
@@ -410,7 +422,10 @@ async function runBotLetters(win, directory, metrics, fail, check) {
     value: document.querySelector('[data-report-value]')?.textContent.trim() || '',
     row: document.querySelector('[data-report-item-id="letter:npc:qa-help-new"] .reports-list-value')?.textContent.trim() || '',
     attacker: Array.from(document.querySelectorAll('.reports-battle-side small')).some((node) => node.textContent.includes('Кто нападает')),
+    nearest: document.querySelector('[data-report-nearest]')?.getAttribute('data-report-nearest') || '',
+    nearestText: document.querySelector('[data-report-nearest]')?.textContent.trim() || '',
   })`);
+  if (!metrics.deadline.nearest) fail('Help letter: no «ваш ближайший флот» plaque', metrics.deadline);
   if (!/^до \d\d:\d\d$/.test(metrics.deadline.value) || metrics.deadline.row !== metrics.deadline.value || !metrics.deadline.attacker) fail('Help letter: no reply deadline or attacker', metrics.deadline);
   await shot('20-letter-help-kept', 'letter:npc:qa-help-kept', 'Помощь пришла', []);
   await shot('21-letter-ally-new', 'letter:npc:qa-ally-new', 'Новое', ['decline', 'accept']);

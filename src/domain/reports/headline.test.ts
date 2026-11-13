@@ -5,7 +5,7 @@ import { DEMO_BATTLE_REPORTS } from '../combat/battle-fixtures.ts';
 import { getFactionCombatEntity, getFactionShipCatalog } from '../combat/faction-catalog.ts';
 import type { BattleReport } from '../combat/report.ts';
 import type { SpyReportSnapshot } from '../espionage/types.ts';
-import { battleBalance, formatShortAmount, formatSignedAmount, extractionYield, reportRowValue, spyRaid, timesLabel } from './headline.ts';
+import { battleBalance, durationLabel, transportsLabel, formatShortAmount, formatSignedAmount, extractionYield, reportRowValue, spyRaid, timesLabel } from './headline.ts';
 import { gasExtractionArrivalReportToReportItem } from './adapters.ts';
 import type { ReportItem } from './types.ts';
 
@@ -109,4 +109,17 @@ test('a letter waiting for an answer shows its deadline, an old one does not', (
   assert.equal(live?.tone, 'warning');
   assert.match(live?.text ?? '', /^до \d\d:\d\d$/);
   assert.equal(reportRowValue(item, null, { now: deadlineAt + 1 }), null);
+});
+
+test('transports read as a short number with the right plural', () => {
+  assert.equal(plain(transportsLabel(1, 'Мегатранспорт')), 'нужно 1 транспорт «Мегатранспорт»');
+  assert.equal(plain(transportsLabel(3, 'Мегатранспорт')), 'нужно 3 транспорта «Мегатранспорт»');
+  assert.equal(plain(transportsLabel(24_600, 'Мегатранспорт')), 'нужно 24 600 транспортов «Мегатранспорт»');
+  assert.equal(plain(transportsLabel(100_000_000, 'Мегатранспорт')), 'нужно 100 млн транспортов «Мегатранспорт»');
+});
+
+test('flight time for the nearest-fleet plaque', () => {
+  assert.equal(plain(durationLabel(41 * 60_000)), '41 мин');
+  assert.equal(plain(durationLabel(80 * 60_000)), '1 ч 20 мин');
+  assert.equal(plain(durationLabel(120 * 60_000)), '2 ч');
 });

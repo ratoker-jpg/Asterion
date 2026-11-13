@@ -158,6 +158,7 @@ function helpLetter(record: NpcLetterRecord, sender: PersonalLetter['sender'], c
     at: Math.max(record.createdAt, record.decidedAt ?? 0, record.closedAt ?? 0), result, answers,
     subjectRef: record.letterId, ref: { kind: 'help-request', id: record.letterId }, ...(place ? { place } : {}),
     ...(deadlineAt !== undefined ? { deadlineAt } : {}),
+    ...(record.arrivalAt !== undefined ? { arriveBy: record.arrivalAt } : {}),
     attacker: record.attackerId
       ? { name: attacker ?? 'Неизвестный', ownerId: record.attackerId, ...(attackerPlanet?.raceId ? { factionId: attackerPlanet.raceId } : {}) }
       : { name: 'Пираты' },

@@ -226,11 +226,12 @@ import {
   requestAllSpyReports,
   requestSpyReport,
   recallFlight,
+  estimateFlightRoute,
   type DispatchFlightCommand,
   type FlightLaunchContext,
 } from './application/flights.ts';
 import { createSimulatorScenarioFromSpyReport, requestSimulatorHandoff } from './application/simulator-handoff.ts';
-import type { SpyReportSnapshot } from './domain/espionage/types.ts';
+import type { SpyReportSnapshot, SpyTargetState } from './domain/espionage/types.ts';
 import { getEspionageTargets, getEspionageState } from './domain/espionage/runtime.ts';
 import { getOrbitalDebrisByCoordinate } from './domain/espionage/orbital-debris.ts';
 import type { UniverseCoordinate, UniverseObjectKind, UniverseOwnerProfile } from './domain/universe/types.ts';
@@ -1677,6 +1678,24 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       return total + count * (ship.combat?.attack ?? 0);
     }, 0);
   }, [activeRoute, state.planets, state.profile.factionId]);
+  // «Ваш ближайший флот успеет» under a help request: the fastest of the player's planets with combat
+  // ships, timed by the same route estimate as the Fleets screen (world speed and floors included).
+  const reportNearestFleet = useCallback((coordinate: UniverseCoordinate) => {
+    const current = stateRef.current;
+    const factionId = current.profile.factionId;
+    if (!isCombatFactionId(factionId)) return null;
+    const combatIds = new Set(getFactionShipCatalog(factionId)
+      .filter((ship) => ship.id !== 'spy-probe' && ship.id !== 'solar-satellite' && (ship.combat?.attack ?? 0) > 0)
+      .map((ship) => ship.id));
+    let best: { planetName: string; durationMs: number } | null = null;
+    for (const [planetId, planet] of Object.entries(current.planets)) {
+      const ships = Object.fromEntries(Object.entries(planet.fleet.ships).filter(([id, count]) => combatIds.has(id) && Number(count) > 0)) as Parameters<typeof estimateFlightRoute>[2];
+      if (!Object.keys(ships).length) continue;
+      const route = estimateFlightRoute(current, planetId, ships, {}, coordinate, { mode: RUNTIME_MODE, testTimeScale });
+      if (route && (!best || route.oneWayDurationMs < best.durationMs)) best = { planetName: planet.name, durationMs: route.oneWayDurationMs };
+    }
+    return best;
+  }, [testTimeScale]);
   const reportProfileFacts = useMemo(() => {
     // Only while «Сообщения» is open: the rest of the game does not pay for it each tick.
     if (activeRoute !== 'reports') return {};
@@ -2983,6 +3002,17 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const collectDebrisFromReport = (coordinate: UniverseCoordinate) => openSunFleetLaunch({
     missionId: 'recycle', destination: { kind: 'coordinate', coordinate: { ...coordinate } },
   });
+  // «Напасть снова» from a battle report: the same prefilled attack as «Атаковать» from a spy report.
+  const attackPlanetFromReport = (target: SpyTargetState) => openSunFleetLaunch({
+    missionId: 'attack',
+    targetRelation: 'neutral',
+    targetKind: 'npc',
+    targetPlanetName: target.name,
+    targetOwnerId: target.ownerId,
+    targetOwnerName: target.ownerName,
+    targetRaceId: target.raceId,
+    destination: { kind: 'planet', planetId: target.id, coordinate: { ...target.coordinate } },
+  });
   const attackFromSpyReport = (report: SpyReportSnapshot) => openSunFleetLaunch({
     missionId: 'attack',
     targetRelation: report.targetRelation === 'enemy' ? 'enemy' : 'neutral',
@@ -3529,6 +3559,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               worldNow={letterClock}
               onAnswerLetter={answerLetterFromReports}
               ownFleetAttack={reportOwnFleetAttack}
+              nearestFleet={reportNearestFleet}
+              onAttackPlanet={attackPlanetFromReport}
             />
           ) : activeRoute === 'planet' && planetViewMode !== 'overview' ? (
             <ZoneView

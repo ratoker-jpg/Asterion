@@ -28,8 +28,11 @@ import {
   formatShortAmount,
   formatSignedAmount,
   extractionYield,
+  RISK_RATIO_CAP,
+  durationLabel,
   spyRaid,
   timesLabel,
+  transportsLabel,
   toneOf,
   type HeadlineContext,
 } from '../../domain/reports/headline.ts';
@@ -283,7 +286,7 @@ function heroNumbers(item: ReportItem, sheet: ReportSheet, battle: BattleReport 
   }
   if (item.spyReport) {
     const raid = spyRaid(item.spyReport, context);
-    const transports = raid.transports ? ` · нужно ${numberFormat.format(raid.transports.count)} × ${raid.transports.shipName}` : '';
+    const transports = raid.transports ? ` · ${transportsLabel(raid.transports.count, raid.transports.shipName)}` : '';
     return {
       value: formatShortAmount(raid.lootable),
       tone: 'info',
@@ -343,9 +346,28 @@ function RiskPlaque({ item, context }: { item: ReportItem; context: HeadlineCont
   if (raid.targetAttack == null) return <p className="reports-risk reports-risk--warning" data-report-risk="unknown">Флот и оборона не раскрыты: зонду не хватило уровня шпионажа.</p>;
   if (raid.targetAttack <= 0) return <p className="reports-risk reports-risk--success" data-report-risk="none">Безопасно: на орбите нет боевого флота и обороны.</p>;
   const power = formatShortAmount(raid.targetAttack);
+  if (context.ownFleetAttack === 0) return <p className="reports-risk reports-risk--danger" data-report-risk="no-fleet">Опасно: <b>у вас нет боевого флота</b> · огневая мощь цели {power}</p>;
   if (raid.ratio == null) return <p className="reports-risk reports-risk--warning" data-report-risk="unknown">Огневая мощь флота и обороны цели: <b>{power}</b>.</p>;
+  if (raid.ratio > RISK_RATIO_CAP) return <p className="reports-risk reports-risk--danger" data-report-risk="danger">Опасно: <b>их флот и оборона во много раз сильнее вашего (×100+)</b> · огневая мощь {power}</p>;
   if (raid.ratio > 1) return <p className="reports-risk reports-risk--danger" data-report-risk="danger">Опасно: <b>их флот и оборона сильнее вашего флота в {timesLabel(raid.ratio)}</b> · огневая мощь {power}</p>;
+  if (raid.ratio < 1 / RISK_RATIO_CAP) return <p className="reports-risk reports-risk--success" data-report-risk="safe">Ваш флот <b>во много раз сильнее (×100+)</b> · огневая мощь цели {power}</p>;
   return <p className="reports-risk reports-risk--success" data-report-risk="safe">Ваш флот сильнее в <b>{timesLabel(1 / Math.max(raid.ratio, 1e-9))}</b> · огневая мощь цели {power}</p>;
+}
+
+/** «Ваш ближайший флот успеет / не успеет» under a help request (spec r5/mail.html, letters). */
+function NearestFleetPlaque({ item, context }: { item: ReportItem; context: HeadlineContext }) {
+  const letter = item.letter;
+  const coordinate = letter?.place?.coordinate;
+  const until = letter?.arriveBy ?? letter?.deadlineAt;
+  if (!letter || letter.kind !== 'bot-help-request' || letter.deadlineAt === undefined || !coordinate || until === undefined || !context.nearestFleet || context.now === undefined || context.now >= until) return null;
+  const fleet = context.nearestFleet(coordinate);
+  const target = letter.place?.name ?? formatReportCoordinate(coordinate);
+  if (!fleet) return <p className="reports-risk reports-risk--warning" data-report-nearest="none">У вас нет боевого флота, который может долететь до {target}.</p>;
+  const arrival = context.now + fleet.durationMs;
+  const inTime = arrival <= until;
+  return <p className={`reports-risk reports-risk--${inTime ? 'success' : 'danger'}`} data-report-nearest={inTime ? 'in-time' : 'late'}>
+    Ваш ближайший флот {inTime ? 'успеет' : 'не успеет'}: <b>{fleet.planetName} → {target} за {durationLabel(fleet.durationMs)}</b> · будет в {formatClock(arrival)}, нападающие в {formatClock(until)}
+  </p>;
 }
 
 export function ReportSheetView({ item, sheet, battle, context = {}, exploration, command, onOpenUniverseTarget, onOpenPirateUniverse, lead }: {
@@ -410,6 +432,7 @@ export function ReportSheetView({ item, sheet, battle, context = {}, exploration
             {sides.map((side, index) => <SideCard key={side.key + index} side={side} command={command} onOpen={openPlace} />)}
           </div>
         </Block> : null}
+        {isLetter ? <NearestFleetPlaque item={item} context={context} /> : null}
         {sheet.resources.length ? <Block id="resources" title={isBattle ? 'Добыча и обломки' : 'Ресурсы'}><ResourceGroups groups={sheet.resources} /></Block> : null}
         {isBattle ? <Block id="ships" title="Потери">
           <div className="reports-loss-tables">

@@ -34,6 +34,8 @@ export type HeadlineContext = {
   ownFleetAttack?: number;
   /** World time the letters are read at. */
   now?: number;
+  /** The player's fastest fleet with combat ships to a coordinate (the game's own route estimate), or null when none can fly. */
+  nearestFleet?: (coordinate: { galaxy: number; system: number; position: number }) => { planetName: string; durationMs: number } | null;
 };
 
 export type BattleBalance = {
@@ -195,6 +197,32 @@ export function timesLabel(ratio: number) {
   const tens = value % 100;
   const ones = value % 10;
   return `${text}${NBSP}${tens >= 11 && tens <= 14 ? 'раз' : ones >= 2 && ones <= 4 ? 'раза' : 'раз'}`;
+}
+
+/** Above this a ratio says nothing exact any more: «во много раз (×100+)». */
+export const RISK_RATIO_CAP = 100;
+
+/** «нужно 24 600 транспортов «Мегатранспорт»», «нужно 100 млн транспортов …»: short number, right plural. */
+export function transportsLabel(count: number, shipName: string) {
+  const word = count >= 1e5 ? 'транспортов' : pluralRu(count, 'транспорт', 'транспорта', 'транспортов');
+  return `нужно ${formatShortAmount(count)}${NBSP}${word} «${shipName}»`;
+}
+
+function pluralRu(count: number, one: string, few: string, many: string) {
+  const tens = count % 100;
+  const ones = count % 10;
+  if (tens >= 11 && tens <= 14) return many;
+  if (ones === 1) return one;
+  return ones >= 2 && ones <= 4 ? few : many;
+}
+
+/** «за 41 мин», «за 1 ч 20 мин». */
+export function durationLabel(ms: number) {
+  const minutes = Math.max(1, Math.ceil(ms / 60_000));
+  if (minutes < 60) return `${minutes}${NBSP}мин`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `${group(hours)}${NBSP}ч ${rest}${NBSP}мин` : `${group(hours)}${NBSP}ч`;
 }
 
 // ---------------------------------------------------------------- the row value
