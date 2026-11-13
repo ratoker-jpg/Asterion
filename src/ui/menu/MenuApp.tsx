@@ -40,15 +40,28 @@ import type { CloudConflict, CloudServerWait } from './cloud.ts';
 import './menu.css';
 import './menu-motion.css';
 
-function useMenuScale() {
-  const calc = () => Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
-  const [scale, setScale] = useState(calc);
+/**
+ * The menu stage fills the window. It is laid out at the window size divided by
+ * the scale: the shorter side fits 1920×1080 as before (an ultrawide screen gets a
+ * wider stage, not black bars); smaller windows shrink it, but never below 80 %,
+ * so a 1280×720 window lays the menu out at 1600×900 and text stays readable.
+ */
+export const MENU_MIN_SCALE = 0.8;
+function menuFrame() {
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  const scale = Math.max(MENU_MIN_SCALE, Math.min(width / 1920, height / 1080));
+  return { scale, width: Math.round(width / scale), height: Math.round(height / scale) };
+}
+
+function useMenuFrame() {
+  const [frame, setFrame] = useState(menuFrame);
   useEffect(() => {
-    const onResize = () => setScale(calc());
+    const onResize = () => setFrame(menuFrame());
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
-  return scale;
+  return frame;
 }
 
 const CRYSTALS: readonly SolarCrystalId[] = ['crystal-1', 'crystal-2', 'crystal-3', 'crystal-4'];
@@ -79,7 +92,7 @@ type MenuAppProps = {
 
 /** Main menu, «Новая игра», «Загрузить игру» and settings, on the same 1920×1080 stage as the game. */
 export function MenuApp({ initialScreen, onEnterSlot, entryProblem = null, onDismissEntryProblem, cloudStage = null, cloudConflict = null, onResolveCloudConflict, onCancelCloudConflict, cloudWait = null, onCloudWaitReady, onCloudWaitTakeNow, onCloudWaitMenu }: MenuAppProps) {
-  const scale = useMenuScale();
+  const frame = useMenuFrame();
   useMusic('menu');
   const viewportRef = useRef<HTMLDivElement>(null);
   usePointerDepth(viewportRef);
@@ -114,7 +127,7 @@ export function MenuApp({ initialScreen, onEnterSlot, entryProblem = null, onDis
 
   return (
     <div className="menu-viewport" ref={viewportRef} data-qa-menu={screen}>
-      <div className="menu-stage" style={{ '--menu-scale': scale } as CSSProperties} data-faction={themeFaction}>
+      <div className="menu-stage" style={{ '--menu-scale': frame.scale, '--menu-w': `${frame.width}px`, '--menu-h': `${frame.height}px` } as CSSProperties} data-faction={themeFaction} data-short={frame.height < 1000 ? '' : undefined}>
         {/* Key art per race: the planet horizon and the crystal-ringed star are part of the image. */}
         <div className="menu-bg" aria-hidden="true" style={{ backgroundImage: `url(${menuBackground(themeFaction)})` }} data-qa-menu-bg={themeFaction} />
         <div className="menu-stars" aria-hidden="true" />

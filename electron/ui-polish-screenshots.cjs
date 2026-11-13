@@ -134,11 +134,13 @@ async function newGame(win) {
   await click(win, '[data-qa-menu-action="new"]');
   await waitFor(win, `document.querySelector('[data-qa-wizard-step="race"]')`);
   await click(win, `[data-qa-race="${RACE}"]`);
-  await click(win, '[data-qa-wizard-next]');
-  await waitFor(win, `document.querySelector('[data-qa-wizard-step="world"]')`);
+  await click(win, '[data-qa-wizard-rail="campaign"]');
+  await waitFor(win, `document.querySelector('[data-qa-wizard-step="campaign"]')`);
   await setField(win, '[data-qa-world="player-name"]', PLAYER_NAME);
+  await click(win, '[data-qa-wizard-rail="world"]');
+  await waitFor(win, `document.querySelector('[data-qa-wizard-step="world"]')`);
   await setField(win, '[data-qa-world="seed"]', 'UIPOLISH');
-  await click(win, '[data-qa-wizard-next]');
+  await click(win, '[data-qa-wizard-rail="confirm"]');
   await waitFor(win, `document.querySelector('[data-qa-wizard-step="confirm"]')`);
   await click(win, '[data-qa-wizard-start]');
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`, 90_000);

@@ -25,16 +25,31 @@ import { NPC_ACTIVITY_LEVELS, type NpcActivityLevel } from '../../domain/npc/cal
 import { bindNewCampaignToSeries } from '../../application/npc-series.ts';
 import { readPersonaRegistry, writePersonaRegistry } from '../../application/persona-store.ts';
 import { findSeries, latestSeries, type PersonaRegistry, type PersonaSeries } from '../../domain/npc/persona-registry.ts';
+import { AmountSlider } from '../AmountSlider.tsx';
 import type { SeriesRoundRequest } from './session.ts';
 import { RACE_CARDS, raceCard, type RaceCard } from './race-catalog.ts';
 import { ATLAS_GALAXIES } from '../ui-art.ts';
+import './wizard.css';
 
-type Step = 'race' | 'world' | 'confirm';
-const STEPS: ReadonlyArray<{ id: Step; label: string }> = [
-  { id: 'race', label: 'Раса' },
-  { id: 'world', label: 'Мир' },
-  { id: 'confirm', label: 'Подтверждение' },
+/*
+ * «Новая игра» (old-screens redo, 14.11.2026): the «Настройки» scheme. A rail of
+ * four steps on the left (each shows the current choice and an error mark), one
+ * panel on the right with a one-line explanation and a single primary action.
+ * «Сводка» is the only place «Начать игру» lives. Every option of the old wizard
+ * stays; the campaign rules (speed, NPC activity) moved next to the names, where
+ * the player decides how the campaign plays, the world shape stays with the atlas.
+ */
+
+type Step = 'race' | 'campaign' | 'world' | 'confirm';
+const STEPS: ReadonlyArray<{ id: Step; label: string; next: string }> = [
+  { id: 'race', label: 'Раса', next: 'Далее: кампания' },
+  { id: 'campaign', label: 'Кампания', next: 'Далее: мир' },
+  { id: 'world', label: 'Мир', next: 'Далее: сводка' },
+  { id: 'confirm', label: 'Сводка', next: 'Начать игру' },
 ];
+
+/** Which step holds the field an issue points at. */
+const ISSUE_STEP: Record<string, Step> = { playerName: 'campaign', campaignName: 'campaign', seed: 'world', npcCount: 'world', galaxyCount: 'world' };
 
 const DEFAULT_CAMPAIGN_NAME: Record<PlayerFactionId, string> = { aegis: 'Кампания Астеров', synod: 'Кампания Иларов', veyra: 'Кампания Роя' };
 
@@ -76,6 +91,8 @@ function initialConfig(seriesRound: SeriesRoundRequest | null | undefined, offer
   };
 }
 
+const number = new Intl.NumberFormat('ru-RU');
+
 export function NewGameWizard({ onBack, onThemeChange, onCreated, seriesRound = null }: WizardProps) {
   const [step, setStep] = useState<Step>('race');
   const [offer] = useState<SeriesOffer>(() => readSeriesOffer(seriesRound?.seriesId));
@@ -100,9 +117,16 @@ export function NewGameWizard({ onBack, onThemeChange, onCreated, seriesRound = 
     return { ...current, world: { ...world, npcCount: Math.min(world.npcCount, maxNpcForSpeed(world.campaignSpeed)) } };
   });
 
+  const stepIndex = STEPS.findIndex((item) => item.id === step);
+  const issuesOf = (id: Step) => issues.filter((issue) => (ISSUE_STEP[issue.field] ?? 'world') === id);
+  const stepIssues = issuesOf(step);
   const goBack = () => {
-    if (step === 'race') onBack();
-    else setStep(step === 'confirm' ? 'world' : 'race');
+    if (stepIndex === 0) onBack();
+    else setStep(STEPS[stepIndex - 1]!.id);
+  };
+  const goNext = () => {
+    if (stepIssues.length) return;
+    setStep(STEPS[Math.min(STEPS.length - 1, stepIndex + 1)]!.id);
   };
 
   useEffect(() => {
@@ -142,30 +166,101 @@ export function NewGameWizard({ onBack, onThemeChange, onCreated, seriesRound = 
     onCreated(created.slot);
   };
 
-  const stepIndex = STEPS.findIndex((item) => item.id === step);
+  const card = raceCard(config.factionId);
+  const summary = summarizeWorld(config);
+  const seriesLine = continueSeries && offer.kind === 'ready'
+    ? `Серия продолжается · раунд ${offer.series.rounds + 1} · ${offer.series.personas.length} личностей с их опытом`
+    : 'Новые личности, без чужого опыта';
+  const railValue: Record<Step, string> = {
+    race: `${card.name} · ${card.people}`,
+    campaign: `${config.playerName || 'без имени'} · ${CAMPAIGN_SPEED_LABELS[config.world.campaignSpeed].label} ×${CAMPAIGN_SPEED_SCALE[config.world.campaignSpeed]}`,
+    world: `${config.world.galaxyCount} гал. · ${summary.npcCount} NPC · сид ${config.seed || '—'}`,
+    confirm: issues.length ? `Исправьте: ${issues.length}` : 'Всё готово к старту',
+  };
+
+  const head: Record<Step, { title: string; text: string }> = {
+    race: { title: 'Выберите расу', text: 'Раса задаёт корабли, стартовый флот и особую способность. Её нельзя сменить в этой кампании.' },
+    campaign: { title: 'Командир и правила партии', text: 'Имя видят другие игроки. Скорость и активность NPC фиксируются на старте и не меняются до конца кампании.' },
+    world: { title: 'Вселенная', text: 'Размер галактики и соседи. Один и тот же сид всегда создаёт одну и ту же карту.' },
+    confirm: { title: 'Сводка перед стартом', text: 'Проверьте выбор. Любой пункт можно поменять: нажмите «Изменить» или шаг слева.' },
+  };
+
+  const primary = step === 'confirm' ? (
+    <button type="button" className="menu-btn menu-btn--primary menu-btn--large wz-primary" disabled={issues.length > 0 || starting} onClick={start} data-qa-wizard-start data-qa-primary-action>
+      {starting ? 'Создание мира…' : 'Начать игру'}
+    </button>
+  ) : (
+    <button type="button" className="menu-btn menu-btn--primary menu-btn--large wz-primary" disabled={stepIssues.length > 0} onClick={goNext} data-qa-wizard-next data-qa-primary-action>
+      {STEPS[stepIndex]!.next}
+    </button>
+  );
+  const footNote = step === 'confirm'
+    ? (error ?? (issues.length ? issues[0]!.message : 'Мир создаётся за несколько секунд. Потом откроется ваша первая планета.'))
+    : (stepIssues.length ? stepIssues[0]!.message : step === 'race' ? `${card.name}: ${card.tagline}` : step === 'campaign' ? 'Имя и название можно поменять позже в «Загрузить игру».' : 'Мир готов. Одинаковый сид всегда создаёт одинаковую вселенную.');
+  const footIsError = step === 'confirm' ? Boolean(error || issues.length) : stepIssues.length > 0;
+
   return (
-    <main className="menu-screen menu-wizard" data-qa-wizard-step={step}>
-      <header className="menu-screen-head">
-        <button type="button" className="menu-back" onClick={goBack} data-qa-menu-back><span aria-hidden="true">←</span>{step === 'race' ? 'МЕНЮ' : 'НАЗАД'}</button>
-        <div className="menu-screen-head__title"><small>КАМПАНИЯ · ШАГ {stepIndex + 1} ИЗ 3</small><h1>НОВАЯ ИГРА</h1></div>
-        <ol className="menu-stepper" aria-label="Шаги">
-          {STEPS.map((item, position) => (
-            <li key={item.id} className={position < stepIndex ? 'is-done' : position === stepIndex ? 'is-current' : ''} aria-current={position === stepIndex ? 'step' : undefined}>
-              <span>{position + 1}</span>{item.label}
-            </li>
-          ))}
-        </ol>
+    <main className="menu-screen menu-wizard wz" data-qa-wizard-step={step}>
+      <header className="menu-screen-head wz-head">
+        <button type="button" className="menu-back" onClick={goBack} data-qa-menu-back><span aria-hidden="true">←</span>{stepIndex === 0 ? 'Меню' : 'Назад'}</button>
+        <div className="menu-screen-head__title"><small>Шаг {stepIndex + 1} из {STEPS.length}</small><h1>Новая игра</h1></div>
       </header>
 
-      {step === 'race' ? (
-        <RaceStep selected={config.factionId} onSelect={chooseRace} onNext={() => setStep('world')} />
-      ) : step === 'world' ? (
-        <WorldStep config={config} issues={issues} onChange={setConfig} onWorld={patchWorld} onNext={() => setStep('confirm')}
-          series={<SeriesToggle offer={offer} checked={continueSeries} onChange={setContinueSeries} />} />
-      ) : (
-        <ConfirmStep config={config} error={error} starting={starting} disabledReason={issues[0]?.message ?? null} onStart={start} onEdit={setStep}
-          seriesLine={continueSeries && offer.kind === 'ready' ? `Серия продолжается · раунд ${offer.series.rounds + 1} · ${offer.series.personas.length} личностей с их опытом` : 'Новые личности, без чужого опыта'} />
-      )}
+      <div className="wz-body">
+        <aside className="wz-rail" aria-label="Шаги новой игры">
+          <ol className="wz-steps">
+            {STEPS.map((item, position) => {
+              const bad = item.id !== 'confirm' && issuesOf(item.id).length > 0;
+              const state = item.id === step ? 'current' : position < stepIndex ? 'done' : 'next';
+              return (
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    className={`wz-step is-${state}${bad ? ' is-bad' : ''}`}
+                    aria-current={item.id === step ? 'step' : undefined}
+                    onClick={() => setStep(item.id)}
+                    data-qa-wizard-rail={item.id}
+                  >
+                    <span className="wz-step__num" aria-hidden="true">{bad ? '!' : position < stepIndex ? '✓' : position + 1}</span>
+                    <span className="wz-step__copy">
+                      <b>{item.label}</b>
+                      <small>{railValue[item.id]}</small>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+          <div className="wz-rail__race" data-faction={card.id}>
+            <img src={card.emblem} alt="" draggable={false} />
+            <span><small>Ваша сторона</small><b>{card.name}</b></span>
+          </div>
+          <p className="wz-rail__note">Все настройки можно менять в любом порядке. Игра начнётся только из «Сводки».</p>
+        </aside>
+
+        <section className={`wz-panel wz-panel--${step}`} key={step}>
+          <header className="wz-panel__head">
+            <h2>{head[step].title}</h2>
+            <p>{head[step].text}</p>
+          </header>
+          <div className="wz-panel__body" data-qa-scroll="wizard">
+            {step === 'race' ? (
+              <RaceStep selected={config.factionId} onSelect={chooseRace} onNext={goNext} />
+            ) : step === 'campaign' ? (
+              <CampaignStep config={config} issues={issues} onChange={setConfig} onWorld={patchWorld}
+                series={<SeriesToggle offer={offer} checked={continueSeries} onChange={setContinueSeries} />} />
+            ) : step === 'world' ? (
+              <WorldStep config={config} issues={issues} onChange={setConfig} onWorld={patchWorld} />
+            ) : (
+              <ConfirmStep config={config} onEdit={setStep} seriesLine={seriesLine} />
+            )}
+          </div>
+          <footer className="wz-foot">
+            <p className={footIsError ? 'is-error' : ''} role={footIsError ? 'alert' : undefined}>{footNote}</p>
+            {primary}
+          </footer>
+        </section>
+      </div>
     </main>
   );
 }
@@ -191,26 +286,20 @@ function RaceStep({ selected, onSelect, onNext }: { selected: PlayerFactionId; o
   };
 
   return (
-    <section className="menu-race-step">
-      <div className="menu-races" role="radiogroup" aria-label="Выбор расы" data-hovered={hovered ?? undefined}>
-        {RACE_CARDS.map((card, position) => (
-          <RaceColumn
-            key={card.id}
-            card={card}
-            selected={card.id === selected}
-            dimmed={hovered !== null && hovered !== card.id}
-            buttonRef={(element) => { refs.current[position] = element; }}
-            onSelect={() => onSelect(card.id)}
-            onHover={(value) => setHovered(value ? card.id : null)}
-            onKeyDown={(event) => onKey(event, position)}
-          />
-        ))}
-      </div>
-      <footer className="menu-actionbar">
-        <p><b>{raceCard(selected).name}</b> · {raceCard(selected).tagline}</p>
-        <button type="button" className="menu-btn menu-btn--primary menu-btn--large" onClick={onNext} data-qa-wizard-next>ДАЛЕЕ: НАСТРОЙКИ МИРА</button>
-      </footer>
-    </section>
+    <div className="menu-races" role="radiogroup" aria-label="Выбор расы" data-hovered={hovered ?? undefined}>
+      {RACE_CARDS.map((card, position) => (
+        <RaceColumn
+          key={card.id}
+          card={card}
+          selected={card.id === selected}
+          dimmed={hovered !== null && hovered !== card.id}
+          buttonRef={(element) => { refs.current[position] = element; }}
+          onSelect={() => onSelect(card.id)}
+          onHover={(value) => setHovered(value ? card.id : null)}
+          onKeyDown={(event) => onKey(event, position)}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -245,7 +334,7 @@ function RaceColumn({ card, selected, dimmed, buttonRef, onSelect, onHover, onKe
       <img className="menu-race__bg" src={card.background} alt="" draggable={false} />
       <span className="menu-race__vignette" aria-hidden="true" />
       <img className="menu-race__general" src={card.general} alt="" draggable={false} />
-      <span className="menu-race__badge" aria-hidden="true">{selected ? 'ВЫБРАНО' : 'ВЫБРАТЬ'}</span>
+      <span className="menu-race__badge" aria-hidden="true">{selected ? 'Выбрано' : 'Выбрать'}</span>
       <span className="menu-race__info">
         <span className="menu-race__title">
           <img src={card.emblem} alt="" draggable={false} />
@@ -255,10 +344,10 @@ function RaceColumn({ card, selected, dimmed, buttonRef, onSelect, onHover, onKe
         <span className="menu-race__traits">
           {card.traits.map((trait) => <span key={trait}><i aria-hidden="true" />{trait}</span>)}
         </span>
-        <span className="menu-race__ability"><small>СПОСОБНОСТЬ РАСЫ</small><b>{card.ability.name}</b><span>{card.ability.text}</span></span>
-        <span className="menu-race__roster" aria-label="Стартовый флот">
+        <span className="menu-race__ability"><small>Способность расы</small><b>{card.ability.name}</b><span>{card.ability.text}</span></span>
+        <span className="menu-race__roster" aria-label={`Стартовый флот: ${card.roster.map((ship) => `${ship.name} ${ship.count}`).join(', ')}`}>
           {card.roster.map((ship) => (
-            <span key={ship.id} title={`${ship.name}: ${ship.count}`}>
+            <span key={ship.id}>
               {ship.art ? <img src={ship.art} alt="" draggable={false} /> : null}
               <b>{ship.count}</b>
             </span>
@@ -274,7 +363,7 @@ function RaceColumn({ card, selected, dimmed, buttonRef, onSelect, onHover, onKe
 function SeriesToggle({ offer, checked, onChange }: { offer: SeriesOffer; checked: boolean; onChange: (value: boolean) => void }) {
   const ready = offer.kind === 'ready';
   return (
-    <label className={`menu-toggle menu-series-toggle ${ready ? '' : 'is-off'}`} data-qa-series={ready ? 'ready' : 'none'}>
+    <label className={`menu-toggle menu-series-toggle wz-tile ${ready ? '' : 'is-off'}`} data-qa-series={ready ? 'ready' : 'none'}>
       <input type="checkbox" checked={checked} disabled={!ready} onChange={(event) => onChange(event.target.checked)} data-qa-series-toggle />
       <span aria-hidden="true" />
       <span>
@@ -287,22 +376,38 @@ function SeriesToggle({ offer, checked, onChange }: { offer: SeriesOffer; checke
   );
 }
 
-/* ---------------------------------------------------------------- world */
+/* ------------------------------------------------------------- controls */
 
-type WorldStepProps = {
-  config: NewGameConfig;
-  issues: ReturnType<typeof validateNewGameConfig>;
-  onChange: (updater: (current: NewGameConfig) => NewGameConfig) => void;
-  onWorld: (patch: Partial<NewGameConfig['world']>) => void;
-  onNext: () => void;
-  series: ReactNode;
-};
+type Issues = ReturnType<typeof validateNewGameConfig>;
+type ConfigUpdater = (updater: (current: NewGameConfig) => NewGameConfig) => void;
+type WorldPatcher = (patch: Partial<NewGameConfig['world']>) => void;
 
-function Segmented<T extends string | number>({ value, options, onChange, label }: { value: T; options: ReadonlyArray<{ value: T; label: string; hint?: string }>; onChange: (value: T) => void; label: string }) {
+/** Visible choices with their explanation under each one: no hover tooltips. */
+function ChoiceCards<T extends string | number>({ value, options, onChange, label, qa, columns }: {
+  value: T;
+  options: ReadonlyArray<{ value: T; label: string; badge?: string; hint: string }>;
+  onChange: (value: T) => void;
+  label: string;
+  qa?: string;
+  columns?: number;
+}) {
+  return (
+    <div className="wz-choices" role="radiogroup" aria-label={label} data-qa-world={qa} style={{ '--wz-cols': columns ?? options.length } as CSSProperties}>
+      {options.map((option) => (
+        <button key={String(option.value)} type="button" role="radio" aria-checked={value === option.value} className={`wz-choice${value === option.value ? ' is-on' : ''}`} onClick={() => onChange(option.value)}>
+          <span className="wz-choice__top"><b>{option.label}</b>{option.badge ? <em>{option.badge}</em> : null}</span>
+          <small>{option.hint}</small>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Segmented<T extends string | number>({ value, options, onChange, label }: { value: T; options: ReadonlyArray<{ value: T; label: string }>; onChange: (value: T) => void; label: string }) {
   return (
     <div className="menu-seg" role="radiogroup" aria-label={label}>
       {options.map((option) => (
-        <button key={String(option.value)} type="button" role="radio" aria-checked={value === option.value} className={value === option.value ? 'is-on' : ''} title={option.hint} onClick={() => onChange(option.value)}>
+        <button key={String(option.value)} type="button" role="radio" aria-checked={value === option.value} className={value === option.value ? 'is-on' : ''} onClick={() => onChange(option.value)}>
           {option.label}
         </button>
       ))}
@@ -310,109 +415,116 @@ function Segmented<T extends string | number>({ value, options, onChange, label 
   );
 }
 
-function RangeField({ label, value, min, max, step = 1, onChange, suffix, qa }: { label: string; value: number; min: number; max: number; step?: number; onChange: (value: number) => void; suffix?: string; qa: string }) {
-  const percent = ((value - min) / Math.max(1, max - min)) * 100;
+function Field({ label, hint, error, children, wide = false }: { label: string; hint?: ReactNode; error?: string; children: ReactNode; wide?: boolean }) {
   return (
-    <label className="menu-range">
-      <span className="menu-range__head"><small>{label}</small><b>{value}{suffix ? ` ${suffix}` : ''}</b></span>
-      <input type="range" min={min} max={max} step={step} value={value} onChange={(event) => onChange(Number(event.target.value))} style={{ '--range-p': `${percent}%` } as CSSProperties} data-qa-world={qa} />
-      <span className="menu-range__scale"><span>{min}</span><span>{max}</span></span>
-    </label>
+    <div className={`wz-field${wide ? ' wz-field--wide' : ''}`}>
+      <span className="wz-field__label">{label}</span>
+      {children}
+      {error ? <em className="wz-field__error" role="alert">{error}</em> : hint ? <span className="wz-field__hint">{hint}</span> : null}
+    </div>
   );
 }
 
-function WorldStep({ config, issues, onChange, onWorld, onNext, series }: WorldStepProps) {
+/* ------------------------------------------------------------- campaign */
+
+function CampaignStep({ config, issues, onChange, onWorld, series }: { config: NewGameConfig; issues: Issues; onChange: ConfigUpdater; onWorld: WorldPatcher; series: ReactNode }) {
+  const issueFor = (field: string) => issues.find((issue) => issue.field === field)?.message;
+  return (
+    <div className="wz-grid wz-grid--campaign">
+      <section className="wz-group">
+        <h3>Командир и кампания</h3>
+        <Field label="Имя командира" hint={`${config.playerName.length} из ${WORLD_LIMITS.playerNameMax} символов · его видят другие игроки`} error={issueFor('playerName')}>
+          <input className="wz-input" value={config.playerName} maxLength={WORLD_LIMITS.playerNameMax} onChange={(event) => onChange((current) => ({ ...current, playerName: event.target.value }))} aria-invalid={Boolean(issueFor('playerName'))} aria-label="Имя командира" data-qa-world="player-name" />
+        </Field>
+        <Field label="Название кампании" hint={`${config.campaignName.length} из ${WORLD_LIMITS.campaignNameMax} символов · так слот называется в сохранениях`} error={issueFor('campaignName')}>
+          <input className="wz-input" value={config.campaignName} maxLength={WORLD_LIMITS.campaignNameMax} onChange={(event) => onChange((current) => ({ ...current, campaignName: event.target.value }))} aria-invalid={Boolean(issueFor('campaignName'))} aria-label="Название кампании" data-qa-world="campaign-name" />
+        </Field>
+        {series}
+      </section>
+      <section className="wz-group">
+        <h3>Правила партии <span className="wz-lock">фиксируются на старте</span></h3>
+        <Field label="Скорость партии" hint="Во сколько раз быстрее идут стройка, исследования и полёты.">
+          <ChoiceCards<CampaignSpeed> label="Скорость партии" columns={2} value={config.world.campaignSpeed} onChange={(value) => onWorld({ campaignSpeed: value })} qa="speed"
+            options={(Object.keys(CAMPAIGN_SPEED_LABELS) as CampaignSpeed[]).map((value) => ({ value, label: CAMPAIGN_SPEED_LABELS[value].label, badge: `×${CAMPAIGN_SPEED_SCALE[value]}`, hint: CAMPAIGN_SPEED_LABELS[value].hint }))} />
+        </Field>
+        <Field label="Активность NPC" hint="Как часто соседи-боты бывают в игре.">
+          <ChoiceCards<NpcActivityLevel> label="Активность NPC" columns={1} value={npcActivityOf(config)} onChange={(value) => onWorld({ npcActivity: value })} qa="npc-activity"
+            options={NPC_ACTIVITY_LEVELS.map((value) => ({ value, label: NPC_ACTIVITY_LABELS[value].label, hint: NPC_ACTIVITY_LABELS[value].hint }))} />
+        </Field>
+        <span className="wz-sr" data-qa-world="npc-activity-hint">{NPC_ACTIVITY_LABELS[npcActivityOf(config)].hint}</span>
+      </section>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- world */
+
+function WorldStep({ config, issues, onChange, onWorld }: { config: NewGameConfig; issues: Issues; onChange: ConfigUpdater; onWorld: WorldPatcher }) {
   const summary = summarizeWorld(config);
   const issueFor = (field: string) => issues.find((issue) => issue.field === field)?.message;
   const capacity = getWorldNpcCapacity(config.world);
+  const npcMax = maxNpcForSpeed(config.world.campaignSpeed);
   return (
-    <section className="menu-world-step">
-      <div className="menu-panel menu-world-form">
-        <h2>Командир и кампания</h2>
-        <div className="menu-field-row">
-          <label className="menu-field">
-            <small>ИМЯ КОМАНДИРА</small>
-            <input value={config.playerName} maxLength={WORLD_LIMITS.playerNameMax} onChange={(event) => onChange((current) => ({ ...current, playerName: event.target.value }))} aria-invalid={Boolean(issueFor('playerName'))} data-qa-world="player-name" />
-            {issueFor('playerName') ? <em>{issueFor('playerName')}</em> : null}
-          </label>
-          <label className="menu-field">
-            <small>НАЗВАНИЕ КАМПАНИИ</small>
-            <input value={config.campaignName} maxLength={WORLD_LIMITS.campaignNameMax} onChange={(event) => onChange((current) => ({ ...current, campaignName: event.target.value }))} aria-invalid={Boolean(issueFor('campaignName'))} data-qa-world="campaign-name" />
-            {issueFor('campaignName') ? <em>{issueFor('campaignName')}</em> : null}
-          </label>
-        </div>
-        {series}
-
-        <h2>Вселенная</h2>
-        <RangeField label="ГАЛАКТИКИ" value={config.world.galaxyCount} min={WORLD_LIMITS.galaxyMin} max={WORLD_LIMITS.galaxyMax} onChange={(value) => onWorld({ galaxyCount: value })} suffix={`× ${WORLD_LIMITS.systemsPerGalaxy} систем`} qa="galaxies" />
-        <RangeField label="NPC-ВЛАДЕЛЬЦЫ" value={config.world.npcCount} min={WORLD_LIMITS.npcMin} max={maxNpcForSpeed(config.world.campaignSpeed)} onChange={(value) => onWorld({ npcCount: value })} suffix={`из ${capacity} мест`} qa="npc" />
-        {config.world.campaignSpeed === 'superfast' ? <p className="menu-field__hint" data-qa-world="superfast-npc-cap">При скорости «Супербыстрая» ×5 — не больше {WORLD_LIMITS.superfastNpcMax} NPC: так мир ×5 укладывается в память и нагрузку сервера.</p> : null}
-        {issueFor('npcCount') ? <p className="menu-inline-error" role="alert">{issueFor('npcCount')}</p> : null}
-        <div className="menu-field-row">
-          <div className="menu-field">
-            <small>NPC НА СИСТЕМУ</small>
+    <div className="wz-grid wz-grid--world">
+      <section className="wz-group wz-group--scroll">
+        <h3>Размер и соседи</h3>
+        <Field label={`Галактики · по ${WORLD_LIMITS.systemsPerGalaxy} систем в каждой`} hint={`${config.world.galaxyCount} гал. = ${number.format(summary.systems)} систем`}>
+          <div data-qa-world="galaxies">
+            <AmountSlider value={config.world.galaxyCount} min={WORLD_LIMITS.galaxyMin} max={WORLD_LIMITS.galaxyMax} label="Галактики" onChange={(value) => onWorld({ galaxyCount: value })} qa="world-galaxies" />
+          </div>
+        </Field>
+        <Field label="NPC-владельцы" error={issueFor('npcCount')}
+          hint={config.world.campaignSpeed === 'superfast'
+            ? <span data-qa-world="superfast-npc-cap">При скорости «Супербыстрая» ×5 — не больше {WORLD_LIMITS.superfastNpcMax} NPC: так мир ×5 укладывается в память и нагрузку сервера.</span>
+            : `${config.world.npcCount} из ${capacity} мест в этом мире`}>
+          <div data-qa-world="npc">
+            <AmountSlider value={config.world.npcCount} min={WORLD_LIMITS.npcMin} max={npcMax} label="NPC-владельцы" onChange={(value) => onWorld({ npcCount: value })} qa="world-npc" />
+          </div>
+        </Field>
+        <div className="wz-pair">
+          <Field label="NPC на систему" hint="Сколько NPC может жить в одной системе.">
             <Segmented label="NPC на систему" value={config.world.maxNpcPerSystem} onChange={(value) => onWorld({ maxNpcPerSystem: value })}
               options={[{ value: 1 as const, label: '1' }, { value: 2 as const, label: '2' }, { value: 3 as const, label: '3' }]} />
-          </div>
-          <div className="menu-field">
-            <small>ПЛОТНОСТЬ</small>
+          </Field>
+          <Field label="Плотность" hint={WORLD_DENSITY_RULES[config.world.density].hint}>
             <Segmented<WorldDensity> label="Плотность" value={config.world.density} onChange={(value) => onWorld({ density: value })}
-              options={(Object.keys(WORLD_DENSITY_RULES) as WorldDensity[]).map((value) => ({ value, label: WORLD_DENSITY_RULES[value].label, hint: WORLD_DENSITY_RULES[value].hint }))} />
-          </div>
+              options={(Object.keys(WORLD_DENSITY_RULES) as WorldDensity[]).map((value) => ({ value, label: WORLD_DENSITY_RULES[value].label }))} />
+          </Field>
         </div>
         <NpcRaceMix config={config} onChange={onChange} />
-        <div className="menu-field">
-          <small>СКОРОСТЬ ПАРТИИ · ФИКСИРУЕТСЯ НА СТАРТЕ</small>
-          <Segmented<CampaignSpeed> label="Скорость партии" value={config.world.campaignSpeed} onChange={(value) => onWorld({ campaignSpeed: value })}
-            options={(Object.keys(CAMPAIGN_SPEED_LABELS) as CampaignSpeed[]).map((value) => ({ value, label: `${CAMPAIGN_SPEED_LABELS[value].label} ×${CAMPAIGN_SPEED_SCALE[value]}`, hint: CAMPAIGN_SPEED_LABELS[value].hint }))} />
-          <em className="menu-field__hint">{CAMPAIGN_SPEED_LABELS[config.world.campaignSpeed].hint}</em>
-        </div>
-        <div className="menu-field" data-qa-world="npc-activity">
-          <small>АКТИВНОСТЬ NPC · ФИКСИРУЕТСЯ НА СТАРТЕ</small>
-          <Segmented<NpcActivityLevel> label="Активность NPC" value={npcActivityOf(config)} onChange={(value) => onWorld({ npcActivity: value })}
-            options={NPC_ACTIVITY_LEVELS.map((value) => ({ value, label: NPC_ACTIVITY_LABELS[value].label, hint: NPC_ACTIVITY_LABELS[value].hint }))} />
-          <em className="menu-field__hint" data-qa-world="npc-activity-hint">{NPC_ACTIVITY_LABELS[npcActivityOf(config)].hint}</em>
-        </div>
-        <div className="menu-field-row">
-          <label className="menu-field">
-            <small>СИД МИРА</small>
-            <span className="menu-seed">
-              <input value={config.seed} maxLength={16} onChange={(event) => onChange((current) => ({ ...current, seed: event.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase() }))} aria-invalid={Boolean(issueFor('seed'))} data-qa-world="seed" />
-              <button type="button" className="menu-btn menu-btn--small" onClick={() => onChange((current) => ({ ...current, seed: createCampaignSeed() }))} title="Новый случайный сид">↻</button>
+        <div className="wz-pair">
+          <Field label="Сид мира" error={issueFor('seed')} hint="Буквы и цифры, до 16 знаков.">
+            <span className="wz-seed">
+              <input className="wz-input wz-input--mono" value={config.seed} maxLength={16} onChange={(event) => onChange((current) => ({ ...current, seed: event.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase() }))} aria-invalid={Boolean(issueFor('seed'))} aria-label="Сид мира" data-qa-world="seed" />
+              <button type="button" className="menu-btn menu-btn--small" onClick={() => onChange((current) => ({ ...current, seed: createCampaignSeed() }))} aria-label="Новый случайный сид" data-qa-world="seed-new">Новый</button>
             </span>
-            {issueFor('seed') ? <em>{issueFor('seed')}</em> : null}
-          </label>
-          <label className="menu-toggle">
+          </Field>
+          <label className="menu-toggle wz-tile wz-toggle-start">
             <input type="checkbox" checked={config.world.randomPlayerStart} onChange={(event) => onWorld({ randomPlayerStart: event.target.checked })} />
             <span aria-hidden="true" />
-            <span><b>Случайный старт</b><small>Система и позиция по сиду</small></span>
+            <span><b>Случайный старт</b><small>{config.world.randomPlayerStart ? 'Система и позиция по сиду' : 'Галактика 1 · система 1'}</small></span>
           </label>
         </div>
-      </div>
+      </section>
 
-      <div className="menu-panel menu-world-preview">
-        <header><small>АТЛАС · ПРЕДПРОСМОТР ПО СИДУ</small><h2>{config.seed || '—'}</h2></header>
+      <section className="wz-group wz-atlas-box">
+        <header className="wz-atlas-head"><span><small>Атлас по сиду</small><b className="menu-mono">{config.seed || '—'}</b></span><span className="wz-atlas-legend"><i className="is-start" />старт <i className="is-npc" />NPC</span></header>
         <WorldAtlas config={config} />
-        <dl className="menu-world-summary">
-          <div><dt>Систем</dt><dd>{summary.systems}</dd></div>
-          <div><dt>Солнц для рейдов</dt><dd>{summary.suns}</dd></div>
-          <div><dt>Позиций планет</dt><dd>{summary.planetSlots.toLocaleString('ru-RU')}</dd></div>
-          <div><dt>NPC</dt><dd>{summary.npcCount}</dd></div>
-          <div><dt>Заполненность NPC</dt><dd>{summary.occupancyPercent}%</dd></div>
+        <dl className="wz-stats">
+          <div><dt>Систем</dt><dd>{number.format(summary.systems)}</dd></div>
+          <div><dt>Солнц для рейдов</dt><dd>{number.format(summary.suns)}</dd></div>
+          <div><dt>Позиций планет</dt><dd>{number.format(summary.planetSlots)}</dd></div>
+          <div><dt>NPC</dt><dd>{number.format(summary.npcCount)}</dd></div>
+          <div><dt>Заполненность</dt><dd>{summary.occupancyPercent}%</dd></div>
         </dl>
-        <p className="menu-world-note">NPC — самостоятельные игроки: стартуют как вы, строятся, исследуют, воюют, колонизируют и вступают в союзы по тем же правилам. У каждого свой характер, опыт и время в игре.</p>
-      </div>
-
-      <footer className="menu-actionbar">
-        <p>{issues.length ? <span className="menu-inline-error">{issues[0]!.message}</span> : 'Мир готов. Одинаковый сид всегда создаёт одинаковую вселенную.'}</p>
-        <button type="button" className="menu-btn menu-btn--primary menu-btn--large" disabled={issues.length > 0} onClick={onNext} title={issues[0]?.message} data-qa-wizard-next>ДАЛЕЕ: ПОДТВЕРЖДЕНИЕ</button>
-      </footer>
-    </section>
+        <p className="wz-note">NPC — самостоятельные игроки: стартуют как вы, строятся, исследуют, воюют, колонизируют и вступают в союзы по тем же правилам.</p>
+      </section>
+    </div>
   );
 }
 
 /** NPC race composition: seeded random or exact shares that always sum to 100%. */
-function NpcRaceMix({ config, onChange }: { config: NewGameConfig; onChange: WorldStepProps['onChange'] }) {
+function NpcRaceMix({ config, onChange }: { config: NewGameConfig; onChange: ConfigUpdater }) {
   const mix = config.npcFactions === 'random' ? null : config.npcFactions;
   const counts = useMemo(() => {
     const world = generateWorld(config, 0);
@@ -422,8 +534,8 @@ function NpcRaceMix({ config, onChange }: { config: NewGameConfig; onChange: Wor
     }, { aegis: 0, synod: 0, veyra: 0 });
   }, [config]);
   return (
-    <div className="menu-field menu-race-mix" data-qa-npc-mix={mix ? 'mix' : 'random'}>
-      <small>РАСЫ NPC</small>
+    <div className="wz-field menu-race-mix" data-qa-npc-mix={mix ? 'mix' : 'random'}>
+      <span className="wz-field__label">Расы NPC</span>
       <Segmented<'random' | 'mix'> label="Расы NPC" value={mix ? 'mix' : 'random'}
         onChange={(value) => onChange((current) => ({ ...current, npcFactions: value === 'random' ? 'random' : { ...DEFAULT_NPC_FACTION_MIX } }))}
         options={[{ value: 'random', label: 'Случайно по сиду' }, { value: 'mix', label: 'Задать соотношение' }]} />
@@ -435,16 +547,14 @@ function NpcRaceMix({ config, onChange }: { config: NewGameConfig; onChange: Wor
       </div>
       <div className="menu-race-mix__rows">
         {RACE_CARDS.map((card) => (
-          <label key={card.id} className="menu-race-mix__row" style={{ '--mix-color': RACE_DOT[card.id] } as CSSProperties}>
+          <div key={card.id} className={`menu-race-mix__row${mix ? '' : ' is-random'}`} style={{ '--mix-color': RACE_DOT[card.id] } as CSSProperties} data-qa-npc-mix-race={card.id}>
             <span className="menu-race-mix__name"><img src={card.emblem} alt="" />{card.name}</span>
             {mix ? (
-              <input type="range" min={0} max={100} value={mix[card.id]}
-                style={{ '--range-p': `${mix[card.id]}%` } as CSSProperties}
-                onChange={(event) => onChange((current) => ({ ...current, npcFactions: setNpcFactionShare(current.npcFactions === 'random' ? { ...DEFAULT_NPC_FACTION_MIX } : current.npcFactions, card.id, Number(event.target.value)) }))}
-                aria-label={`Доля расы ${card.name}`} data-qa-npc-mix-race={card.id} />
-            ) : <span className="menu-race-mix__random">случайно</span>}
-            <b>{mix ? `${Math.round(mix[card.id])}%` : ''} · {counts[card.id]} NPC</b>
-          </label>
+              <AmountSlider compact value={Math.round(mix[card.id])} min={0} max={100} label={`Доля расы ${card.name}`}
+                onChange={(value) => onChange((current) => ({ ...current, npcFactions: setNpcFactionShare(current.npcFactions === 'random' ? { ...DEFAULT_NPC_FACTION_MIX } : current.npcFactions, card.id, value) }))} qa={`mix-${card.id}`} />
+            ) : <span className="menu-race-mix__random">по сиду</span>}
+            <b>{mix ? `${Math.round(mix[card.id])}% · ` : ''}{counts[card.id]} NPC</b>
+          </div>
         ))}
       </div>
     </div>
@@ -480,9 +590,6 @@ function WorldAtlas({ config }: { config: NewGameConfig }) {
   }).join(' ');
   return (
     <svg className="menu-atlas" viewBox={`0 0 ${columns * cell} ${rows * cell}`} role="img" aria-label={`Атлас: ${count} галактик, ${world.npcPlanets.length} NPC`} data-qa-world-atlas>
-      <defs>
-        <filter id="menu-atlas-soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation={Math.max(2, cell * 0.012)} /></filter>
-      </defs>
       {Array.from({ length: count }, (_, index) => {
         const galaxy = index + 1;
         const ox = (index % columns) * cell;
@@ -492,7 +599,7 @@ function WorldAtlas({ config }: { config: NewGameConfig }) {
             <circle cx={cell / 2} cy={cell / 2} r={cell * 0.46} className="menu-atlas__disc" />
             <image href={ATLAS_GALAXIES[(galaxy - 1) % ATLAS_GALAXIES.length]} x={cell * 0.03} y={cell * 0.03} width={cell * 0.94} height={cell * 0.94} preserveAspectRatio="xMidYMid meet" className="menu-atlas__art" />
             <path d={armPath} className="menu-atlas__arm-line" />
-            <text x={cell / 2} y={cell * 0.97} className="menu-atlas__label" textAnchor="middle">ГАЛАКТИКА {String(galaxy).padStart(2, '0')}</text>
+            <text x={cell / 2} y={cell * 0.97} className="menu-atlas__label" textAnchor="middle" style={{ fontSize: Math.max(11, cell * 0.05) }}>ГАЛАКТИКА {String(galaxy).padStart(2, '0')}</text>
             {Array.from({ length: 40 }, (_, systemIndex) => {
               const system = systemIndex + 1;
               const point = systemPoint(system);
@@ -523,63 +630,68 @@ function WorldAtlas({ config }: { config: NewGameConfig }) {
 
 /* -------------------------------------------------------------- confirm */
 
-function ConfirmStep({ config, error, starting, disabledReason, onStart, onEdit, seriesLine }: { config: NewGameConfig; error: string | null; starting: boolean; disabledReason: string | null; onStart: () => void; onEdit: (step: Step) => void; seriesLine: string }) {
+function ConfirmStep({ config, onEdit, seriesLine }: { config: NewGameConfig; onEdit: (step: Step) => void; seriesLine: string }) {
   const card = raceCard(config.factionId);
   const summary = summarizeWorld(config);
-  const startRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => { startRef.current?.focus(); }, []);
+  const rows: Array<{ label: string; value: string; step: Step; mono?: boolean; qa?: string }> = [
+    { label: 'Командир', value: config.playerName, step: 'campaign' },
+    { label: 'Кампания', value: config.campaignName, step: 'campaign' },
+    { label: 'Скорость', value: `${CAMPAIGN_SPEED_LABELS[config.world.campaignSpeed].label} ×${CAMPAIGN_SPEED_SCALE[config.world.campaignSpeed]}`, step: 'campaign' },
+    { label: 'Активность NPC', value: NPC_ACTIVITY_LABELS[npcActivityOf(config)].label, step: 'campaign' },
+    { label: 'Личности NPC', value: seriesLine, step: 'campaign', qa: 'series' },
+    { label: 'Мир', value: `${config.world.galaxyCount} гал. · ${number.format(summary.systems)} систем · ${summary.npcCount} NPC`, step: 'world' },
+    { label: 'Расселение NPC', value: `${WORLD_DENSITY_RULES[config.world.density].label} · до ${config.world.maxNpcPerSystem} на систему`, step: 'world' },
+    { label: 'Расы NPC', value: config.npcFactions === 'random' ? 'Случайно по сиду' : `Астеры ${config.npcFactions.aegis}% · Илары ${config.npcFactions.synod}% · Рой ${config.npcFactions.veyra}%`, step: 'world' },
+    { label: 'Старт', value: config.world.randomPlayerStart ? 'Случайная система по сиду' : 'Галактика 1 · система 1', step: 'world' },
+    { label: 'Сид', value: config.seed, step: 'world', mono: true },
+  ];
   return (
-    <section className="menu-confirm-step">
-      <article className="menu-confirm-hero" data-faction={card.id}>
+    <div className="wz-grid wz-grid--confirm">
+      <article className="menu-confirm-hero wz-hero" data-faction={card.id}>
         <img className="menu-confirm-hero__bg" src={card.background} alt="" draggable={false} />
         <img className="menu-confirm-hero__ship" src={card.flagship} alt="" draggable={false} />
         <img className="menu-confirm-hero__general" src={card.general} alt="" draggable={false} />
         <div className="menu-confirm-hero__copy">
-          <small>ВАША СТОРОНА</small>
+          <small>Ваша сторона</small>
           <h2>{card.name}</h2>
-          <p>{card.people} · {card.tagline}</p>
+          <p>{card.people} · {card.ability.name}</p>
+          <button type="button" className="wz-edit" onClick={() => onEdit('race')}>Изменить расу</button>
         </div>
       </article>
-      <div className="menu-panel menu-confirm-summary">
-        <small>СВОДКА КАМПАНИИ</small>
-        <h2>{config.campaignName}</h2>
-        <dl>
-          <div><dt>Командир</dt><dd>{config.playerName}</dd><button type="button" onClick={() => onEdit('world')}>изменить</button></div>
-          <div><dt>Раса</dt><dd>{card.name}</dd><button type="button" onClick={() => onEdit('race')}>изменить</button></div>
-          <div><dt>Мир</dt><dd>{config.world.galaxyCount} гал. · {summary.systems} систем · {summary.npcCount} NPC</dd><button type="button" onClick={() => onEdit('world')}>изменить</button></div>
-          <div><dt>Расселение NPC</dt><dd>{WORLD_DENSITY_RULES[config.world.density].label} · до {config.world.maxNpcPerSystem} на систему</dd></div>
-          <div><dt>Расы NPC</dt><dd>{config.npcFactions === 'random' ? 'Случайно по сиду' : `Астеры ${config.npcFactions.aegis}% · Илары ${config.npcFactions.synod}% · Рой ${config.npcFactions.veyra}%`}</dd><button type="button" onClick={() => onEdit('world')}>изменить</button></div>
-          <div data-qa-series-line><dt>Личности NPC</dt><dd>{seriesLine}</dd><button type="button" onClick={() => onEdit('world')}>изменить</button></div>
-          <div><dt>Скорость</dt><dd>{CAMPAIGN_SPEED_LABELS[config.world.campaignSpeed].label}</dd></div>
-          <div><dt>Активность NPC</dt><dd>{NPC_ACTIVITY_LABELS[npcActivityOf(config)].label}</dd></div>
-          <div><dt>Старт</dt><dd>{config.world.randomPlayerStart ? 'Случайная система по сиду' : 'Галактика 1 · система 1'}</dd></div>
-          <div><dt>Сид</dt><dd className="menu-mono">{config.seed}</dd></div>
+      <section className="wz-group wz-summary">
+        <h3 className="wz-summary__name">{config.campaignName}</h3>
+        <dl className="wz-summary__rows">
+          {rows.map((row) => (
+            <div key={row.label} data-qa-series-line={row.qa === 'series' ? '' : undefined}>
+              <dt>{row.label}</dt>
+              <dd className={row.mono ? 'menu-mono' : undefined}>{row.value}</dd>
+              <button type="button" className="wz-edit" onClick={() => onEdit(row.step)} aria-label={`Изменить: ${row.label}`}>Изменить</button>
+            </div>
+          ))}
         </dl>
-        <section className="menu-confirm-roster">
-          <small>СТАРТОВЫЙ ФЛОТ · {card.name.toUpperCase()}</small>
-          <div>
-            {card.roster.map((ship) => (
-              <span key={ship.id} title={ship.name}>
-                {ship.art ? <img src={ship.art} alt="" draggable={false} /> : null}
-                <b>{ship.count}</b>
-                <em>{ship.name}</em>
-              </span>
-            ))}
-          </div>
-        </section>
-        <section className="menu-goal">
-          <small>ЦЕЛЬ КАМПАНИИ</small>
-          <ol>
-            <li>Постройте «Палату управления» и создайте союз в «Командовании».</li>
-            <li>Водите командные рейды на Солнца из «Командование → Операции»: победа — шанс 70% на кристалл.</li>
-            <li>Соберите 4 разных кристалла и достройте Звёздные Врата в военной зоне — это победа.</li>
-          </ol>
-        </section>
-        {error ? <p className="menu-inline-error" role="alert">{error}</p> : null}
-        <button ref={startRef} type="button" className="menu-btn menu-btn--primary menu-btn--start" disabled={Boolean(disabledReason) || starting} title={disabledReason ?? undefined} onClick={onStart} data-qa-wizard-start>
-          {starting ? 'СОЗДАНИЕ МИРА…' : 'НАЧАТЬ ИГРУ'}
-        </button>
-      </div>
-    </section>
+        <div className="wz-summary__bottom">
+          <section className="menu-confirm-roster">
+            <small>Стартовый флот</small>
+            <div>
+              {card.roster.map((ship) => (
+                <span key={ship.id}>
+                  {ship.art ? <img src={ship.art} alt="" draggable={false} /> : null}
+                  <b>{ship.count}</b>
+                  <em>{ship.name}</em>
+                </span>
+              ))}
+            </div>
+          </section>
+          <section className="menu-goal">
+            <small>Цель кампании</small>
+            <ol>
+              <li>Постройте «Палату управления» и создайте союз в «Командовании».</li>
+              <li>Водите командные рейды на Солнца из «Командование → Операции»: победа — шанс 70% на кристалл.</li>
+              <li>Соберите 4 разных кристалла и достройте Звёздные Врата в военной зоне — это победа.</li>
+            </ol>
+          </section>
+        </div>
+      </section>
+    </div>
   );
 }

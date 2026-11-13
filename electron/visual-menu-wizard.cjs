@@ -239,7 +239,7 @@ async function phaseA(win, directory, label) {
   await setField(win, 'player-name', LONG_COMMANDER);
   await setField(win, 'campaign-name', LONG_CAMPAIGN);
   await clickText(win, 'Супербыстрая');
-  await clickText(win, '^Максимальная$');
+  await clickText(win, '^Максимальная');
   await scrollAll(win, false);
   await shot('a06-worst-names-superfast');
   await setField(win, 'player-name', '');
@@ -314,7 +314,7 @@ async function seedManySlots(win) {
         factionId: races[i % 3],
         playerName: i % 2 ? ${JSON.stringify(LONG_COMMANDER)} : 'Ая',
         campaignSpeed: speeds[i % 4],
-        npcActivity: ['low', 'normal', 'high', 'max'][i % 4],
+        npcActivity: ['normal', 'high', 'max'][i % 3],
         updatedAt: ${T} - i * 3_600_000 * 7,
         createdAt: ${T} - 90 * 86_400_000,
         playTimeMs: i === 0 ? 9_999 * 3_600_000 + 59 * 60_000 : (i + 1) * 5_400_000,
