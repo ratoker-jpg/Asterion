@@ -224,8 +224,11 @@ async function phaseA(win, directory, label) {
   // Worst case: back to the first step with the fields, then the longest names and the largest world.
   const gotoStep = async (id) => {
     if (await click(win, `[data-qa-wizard-rail="${id}"]`, { optional: true })) return;
-    for (let guard = 0; guard < 8 && (await stepOf(win)) !== id; guard += 1) await click(win, '[data-qa-menu-back]');
-    for (let guard = 0; guard < 8 && (await stepOf(win)) !== id; guard += 1) await click(win, '[data-qa-wizard-next]');
+    // The old wizard has no rail: walk with «Назад»/«Далее» in the right direction.
+    const at = (step) => metrics.steps.indexOf(step);
+    for (let guard = 0; guard < 8 && (await stepOf(win)) !== id; guard += 1) {
+      await click(win, at(await stepOf(win)) > at(id) ? '[data-qa-menu-back]' : '[data-qa-wizard-next]');
+    }
     if ((await stepOf(win)) !== id) throw new Error(`Could not reach step ${id}`);
   };
   const fieldStep = async (qa) => {
@@ -239,7 +242,7 @@ async function phaseA(win, directory, label) {
   await setField(win, 'player-name', LONG_COMMANDER);
   await setField(win, 'campaign-name', LONG_CAMPAIGN);
   await clickText(win, 'Супербыстрая');
-  await clickText(win, '^Максимальная$');
+  await clickText(win, '^Максимальная');
   await scrollAll(win, false);
   await shot('a06-worst-names-superfast');
   await setField(win, 'player-name', '');
@@ -314,7 +317,7 @@ async function seedManySlots(win) {
         factionId: races[i % 3],
         playerName: i % 2 ? ${JSON.stringify(LONG_COMMANDER)} : 'Ая',
         campaignSpeed: speeds[i % 4],
-        npcActivity: ['low', 'normal', 'high', 'max'][i % 4],
+        npcActivity: ['normal', 'high', 'max'][i % 3],
         updatedAt: ${T} - i * 3_600_000 * 7,
         createdAt: ${T} - 90 * 86_400_000,
         playTimeMs: i === 0 ? 9_999 * 3_600_000 + 59 * 60_000 : (i + 1) * 5_400_000,
