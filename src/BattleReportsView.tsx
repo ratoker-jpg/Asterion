@@ -1457,7 +1457,7 @@ export function BattleReportsView({ planetName, coords, onBack }: { planetName: 
             ))}
             {modeReports.length > shown ? (
               <button type="button" className="battle-list-back-v1" data-qa-battle-more onClick={() => setShown((count) => count + BATTLE_PAGE_SIZE)}>
-                ПОКАЗАТЬ ЕЩЁ · {modeReports.length - shown}
+                Показать ещё ({modeReports.length - shown})
               </button>
             ) : null}
           </>
