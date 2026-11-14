@@ -157,6 +157,7 @@ async function layout(win) {
       visibleSelects: Array.from(document.querySelectorAll('${ROOT_SELECTOR} select')).filter((node) => !node.closest('.game-select')).length,
       nativeRanges: Array.from(document.querySelectorAll('${ROOT_SELECTOR} input[type="range"]')).filter((node) => !node.closest('.amount-slider')).length,
       // A card that hides part of its content (a cut save card, a cut summary).
+      slotTitleLines: Array.from(document.querySelectorAll('${ROOT_SELECTOR} .menu-slot__head h3')).map((node) => Math.round(node.offsetHeight / (parseFloat(getComputedStyle(node).lineHeight) || 24))),
       schemaText: /схема \d/i.test(document.querySelector('${ROOT_SELECTOR}')?.innerText || ''),
       clippedBoxes: Array.from(document.querySelectorAll('${ROOT_SELECTOR} .menu-slot, ${ROOT_SELECTOR} .wz-panel, ${ROOT_SELECTOR} .wz-group, ${ROOT_SELECTOR} .menu-showcase'))
         .filter((node) => getComputedStyle(node).overflowY === 'hidden' && node.scrollHeight > node.clientHeight + 2)
@@ -296,13 +297,15 @@ async function seedManySlots(win) {
     const index = JSON.parse(localStorage.getItem(${JSON.stringify(INDEX_KEY)}));
     const base = index.slots[0];
     const races = ['aegis', 'synod', 'veyra'];
+    // Names are capped at 40 characters by the slot index. The worst case is long unbreakable
+    // words on the narrowest card (the «ПОСЛЕДНЯЯ» one, slot 0), and wide letters (slot 4).
     const names = [
-      ${JSON.stringify(LONG_CAMPAIGN)},
+      'Межгалактическая Конфедерация Сверхновых',
       'Долгая кампания Иларов на десяти мирах',
       'Рой',
       'Кампания Астеров · раунд 12',
       'ШШШШШШШШШШШШШШШШШШШШШШШШШШШШШШШШШШШШШШШШ',
-      'Тестовый мир 3',
+      ${JSON.stringify(LONG_CAMPAIGN)},
     ];
     const speeds = ['slow', 'standard', 'fast', 'superfast'];
     // The index derives each slot's storage key from its id, so every clone gets its own copy
