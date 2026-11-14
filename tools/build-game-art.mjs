@@ -6,7 +6,7 @@
 //   node tools/build-game-art.mjs           convert every source that the code references
 //   node tools/build-game-art.mjs --check   list what would change, write nothing
 //
-// A source is converted when its destination path (assets/art/<rel>.webp) appears in src/**
+// A source is converted when its destination path (art/<rel>.webp) appears in src/** (as art/<rel>.webp)
 // (or when it lives in a folder that is addressed through a template, e.g. buildings/${faction}).
 // Mapping: assets/source/New assets/ship/aegis/a.png → src/assets/art/ship/aegis/a.webp
 import fs from 'node:fs';
@@ -62,7 +62,7 @@ for (const file of walk(SRC)) {
   const rule = RULES.find((item) => item.test.test(rel));
   if (!rule) continue;
   const outRel = rel.replace(/^New assets\//, '').replace(/\.png$/, '.webp');
-  if (!rule.templated && !codeText.includes(`assets/art/${outRel}`)) continue;
+  if (!rule.templated && !codeText.includes(`art/${outRel}`)) continue;
   const outFile = path.join(OUT, outRel);
   const pipeline = sharp(file, { limitInputPixels: false }).rotate();
   if (!rule.keep) pipeline.resize({ width: rule.max, height: rule.max, fit: 'inside', withoutEnlargement: true });
