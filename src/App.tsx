@@ -3868,6 +3868,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         {editingPlanet && editingPlanetState ? (
           <div className="skin-picker-backdrop" onMouseDown={closePlanetEditor}>
             <PlanetEditorDialog
+              key={editingPlanet.id}
               planetName={editingPlanetState.name}
               coords={editingPlanet.coords}
               status={editingPlanet.status}

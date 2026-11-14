@@ -70,10 +70,6 @@ async function closeEditor(win) {
   await settle(win, 200);
 }
 const clickQa = (win, selector) => run(win, `document.querySelector(${JSON.stringify(selector)})?.click()`);
-const metrics = () => `(() => {
-  const entries = performance.getEntriesByType('resource').filter((e) => /\\.(png|webp|jpe?g)(\\?|$)/i.test(e.name));
-  return { requests: entries.length, kilobytes: Math.round(entries.reduce((sum, e) => sum + (e.transferSize || e.encodedBodySize || 0), 0) / 1024) };
-})()`;
 /** Alliance seat: 'leader' makes the player lead their alliance, 'member' hands the lead to another member. */
 const allianceEdit = (seat, skin) => `(save) => {
   const playerId = save.profile?.playerId;
@@ -110,12 +106,12 @@ app.whenReady().then(async () => {
     // What opening the editor loads, on a fresh page (nothing cached).
     await setSize(1280, 720);
     await route(win, 'planet');
-    await run(win, 'performance.clearResourceTimings()');
     const openedAt = Date.now();
     await openEditor(win);
     await run(win, `Promise.all(Array.from(document.querySelectorAll('.skin-picker-modal img')).map((img) => img.decode().catch(() => null)))`);
     numbers.openMs = Date.now() - openedAt;
-    numbers.openLoads = await run(win, metrics());
+    // file:// pages record no resource sizes, so count decoded pixels: that is what the old editor choked on.
+    numbers.editorMegapixels = await run(win, `Math.round(Array.from(document.querySelectorAll('.skin-picker-modal img')).reduce((sum, img) => sum + img.naturalWidth * img.naturalHeight, 0) / 1e5) / 10`);
     numbers.editorImages = await run(win, `document.querySelectorAll('.skin-picker-modal img').length`);
     const isNew = await run(win, `Boolean(document.querySelector('.planet-editor-v6'))`);
     numbers.newEditor = isNew;
@@ -244,7 +240,7 @@ app.whenReady().then(async () => {
       }
       // The old editor loaded every full picture at once; the new one only one page of thumbnails.
       if (numbers.editorImages > 17) failures.push({ name: 'open', error: `editor holds ${numbers.editorImages} images` });
-      if (numbers.openLoads.kilobytes > 1500) failures.push({ name: 'open', error: `opening the editor loaded ${numbers.openLoads.kilobytes} KB of pictures` });
+      if (numbers.editorMegapixels > 3) failures.push({ name: 'open', error: `opening the editor decodes ${numbers.editorMegapixels} megapixels of pictures` });
     }
     fs.mkdirSync(OUTPUT, { recursive: true });
     fs.writeFileSync(path.join(OUTPUT, 'metrics.json'), JSON.stringify({ numbers, shots, failures }, null, 2));
