@@ -9,3 +9,7 @@ Thumbs.db
 assets/source/New assets/ui/
 dist-server
 lab-runs/
+
+# CI marker for tools/ci-frames.mjs and its output
+.ci-qa-start
+qa-frames/

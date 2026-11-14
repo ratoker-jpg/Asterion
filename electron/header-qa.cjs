@@ -44,7 +44,9 @@ const EXPECTED_RESOURCE_COLORS = {
 };
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function waitFor(win, expression, timeoutMs = 8000) {
+// Polls every 50 ms, so a generous limit costs nothing when the UI is fast; 8 s was too
+// tight for route switches on a loaded shared runner.
+async function waitFor(win, expression, timeoutMs = 25000) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     if (await win.webContents.executeJavaScript(`Boolean(${expression})`)) return;

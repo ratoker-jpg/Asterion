@@ -32,6 +32,11 @@ const { PARSE_SAVE } = require('./qa-save.cjs');
 
 const IDLE_FILE = path.join(os.tmpdir(), 'asterion-qa-idle.html');
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// A reloaded seeded save replays the NPC gap behind a progress banner before the
+// navigation exists; on a shared CI runner that took longer than the old 60 s
+// (flaky «game boot» timeouts). The wait polls, so a fast boot still returns at once.
+const BOOT_TIMEOUT_MS = 150_000;
+const HELD_TIMEOUT_MS = 45_000;
 
 function idleUrl() {
   if (!fs.existsSync(IDLE_FILE)) {
@@ -80,13 +85,13 @@ async function waitForCommands(win, timeoutMs = 180_000) {
  * @param {string} [options.ready] page-side expression, true when the reloaded game has booted
  *   (default: the primary navigation exists)
  * @param {string} [options.held] page-side expression, true when the reloaded game holds the edit
- * @param {number} [options.timeoutMs] boot and check timeout, default 60 s
+ * @param {number} [options.timeoutMs] boot and check timeout, default 150 s
  * @param {boolean} [options.commands] wait until the game takes commands (default true)
  * @param {string} [options.url] load this instead of the page the window showed
  * @param {string} [options.label] names the edit in errors
  */
 async function editSaveIdle(win, source, options = {}) {
-  const { ready = `document.querySelector('[data-qa-navigation="utility"]')`, held, timeoutMs = 60_000, label = 'save edit', commands = true } = options;
+  const { ready = `document.querySelector('[data-qa-navigation="utility"]')`, held, timeoutMs = BOOT_TIMEOUT_MS, label = 'save edit', commands = true } = options;
   const gameUrl = options.url || win.webContents.getURL();
   if (!gameUrl || gameUrl === idleUrl()) throw new Error(`${label}: the window shows no game page to return to (${gameUrl || 'empty url'})`);
 
@@ -96,10 +101,21 @@ async function editSaveIdle(win, source, options = {}) {
 
   await win.loadURL(gameUrl);
   await waitExpression(win, `document.readyState === 'complete'`, timeoutMs, label);
-  await waitExpression(win, ready, timeoutMs, `${label} (game boot)`);
+  try {
+    await waitExpression(win, ready, timeoutMs, `${label} (game boot)`);
+  } catch (error) {
+    // What the page showed instead, so a hung boot is diagnosed from the CI log.
+    const seen = await win.webContents.executeJavaScript(`(() => ({
+      url: location.href, ready: document.readyState, hidden: document.hidden,
+      catchup: Boolean(document.querySelector('[data-qa-npc-catchup]')),
+      body: (document.body?.innerText || '').replace(/\s+/g, ' ').slice(0, 200),
+      children: document.body?.children.length,
+    }))()`).catch((inner) => ({ unreadable: String(inner) }));
+    throw new Error(`${error.message} | page: ${JSON.stringify(seen)}`);
+  }
   if (held) {
     try {
-      await waitExpression(win, held, Math.min(timeoutMs, 15_000), label);
+      await waitExpression(win, held, Math.min(timeoutMs, HELD_TIMEOUT_MS), label);
     } catch (error) {
       throw new Error(`${label}: the reloaded game does not hold the edit. ${error.message}`);
     }
