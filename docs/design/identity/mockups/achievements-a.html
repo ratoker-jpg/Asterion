@@ -13,9 +13,10 @@
 .rank small { font-size: 14px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .rank small i { font-style: normal; color: #e8eef7; font-weight: 700; }
 .count { text-align: right; } .count b { font-size: 26px; font-weight: 800; } .count span { display: block; font-size: 14px; color: var(--dim); }
 /* итоговый вариант: шапка из варианта B (слепое A/B, раунд 01) */
-.top.hero { grid-template-columns: auto 1fr; padding: 20px 30px; border-radius: 18px 18px 0 0;
+.top.hero { grid-template-columns: auto 1fr auto; padding: 20px 30px; border-radius: 18px 18px 0 0;
   background: linear-gradient(90deg, rgba(10,16,22,.98) 0, rgba(10,16,22,.92) 60%, rgba(10,16,22,.7)), url('../../../../src/assets/ui/rating/rating-backdrop.webp') right center/cover; }
 .top.hero .me { display: flex; align-items: center; gap: 18px; } .top.hero .pts span em { font-style: normal; color: var(--g); font-weight: 800; }
+.seg2 { display: flex; flex-direction: column; gap: 6px; align-items: stretch; } .seg2 span { font-size: 15px; font-weight: 800; color: #aab5c5; padding: 9px 16px; border-radius: 10px; background: #121d26; text-align: center; } .seg2 span.on { color: #fff; background: rgba(86,217,242,.16); box-shadow: inset 0 0 0 1px rgba(86,217,242,.5); } .seg2 small { font-size: 13px; color: var(--dim); text-align: center; } .seg2 small b { color: var(--g); }
 .unl { display: flex; gap: 10px; margin-top: 4px; } .unl .card { display: grid; grid-template-columns: 48px 1fr; gap: 10px; align-items: center; padding: 6px 12px 6px 6px; }
 .unl img { width: 48px; height: 48px; object-fit: contain; } .unl b { font-size: 14px; display: block; } .unl small { font-size: 13px; color: var(--dim); }
 .filters { display: flex; gap: 8px; padding: 14px 30px 4px; flex-wrap: wrap; }
@@ -63,10 +64,11 @@ document.getElementById('a').innerHTML = nav('ach') + `
 <div class="pan main">
   ${UI.q.get('hero') === '1' ? `<div class="top hero">
     <div class="me">${medal({ tier: 'g', cat: 'round', id: 'top-ten' }, 104)}<div class="pts"><div class="k">Летопись командира</div><b>${fmt(pts)}</b><span>${got} из ${ACH.LIST.length} · ранг <em>${cur.name}</em></span></div></div>
-    <div class="rank"><div class="row"><span>До ранга «${next.name}»</span><em>ещё ${fmt(next.at - pts)}</em></div>
+    <div class="rank"><div class="row"><span>Ранг за все заработанные очки: до «${next.name}»</span><em>ещё ${fmt(next.at - pts)}</em></div>
       <div class="bar gold"><i style="width:${(pts - cur.at) / (next.at - cur.at) * 100}%"></i></div>
-      <div class="unl"><div class="card"><img src="${A.ship('aegis', 'titan')}"><div><b>Титан · Чёрный бастион</b><small>облик флагмана</small></div></div>
-        <div class="card"><img src="${A.skin('028')}"><div><b>6 обликов планет</b><small>раздел «Редкие»</small></div></div></div></div>
+      <div class="unl"><div class="card"><img src="${A.ship('aegis', 'titan')}"><div><b>Титан · Чёрный бастион · 400</b><small>в магазине обликов</small></div></div>
+        <div class="card"><img src="assets/planets/fan-ringworld.webp"><div><b>Мир-кольцо · 200</b><small>хватит после ещё 105</small></div></div></div></div>
+    <div class="seg2"><span class="on">Все достижения</span><span>Облик · магазин</span><small>на счету <b>${fmt(pts - 520)}</b> очков</small></div>
   </div>` : `<div class="top">
     <div class="pts"><div class="k">Летопись командира</div><b>${fmt(pts)}</b><span>очков за все раунды</span></div>
     <div class="rank"><div class="row"><span>Ранг <b>${cur.name}</b></span><em>ещё ${fmt(next.at - pts)} до ранга «${next.name}»</em></div>
@@ -80,7 +82,7 @@ document.getElementById('a').innerHTML = nav('ach') + `
 </div>
 <div class="pan side">
   <div class="det">${medal(sel, 150)}<span class="tier ${sel.tier}">${{ b: 'бронза', s: 'серебро', g: 'золото', l: 'легенда' }[sel.tier]} · веха</span>
-    <h2>${sel.name}</h2><p>${sel.how}.</p><div class="big">+${sel.points}<small>очков навсегда</small></div></div>
+    <h2>${sel.name}</h2><p>${sel.how}.</p><div class="big">+${sel.points}<small>очков в летопись</small></div></div>
   <div class="facts">
     <div class="card fact"><span>Получено</span><b>Раунд 2 · 14 октября</b></div>
     <div class="card fact"><span>Как это было</span><b>Флот Ор Кровавого, сильнее в 5,3 раза</b></div>

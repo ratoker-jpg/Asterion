@@ -70,7 +70,7 @@
 
   // Разделы «Сообщений»; «Облик» — новый раздел под профилем.
   const nav = (active) => {
-    const S = [['profile', 'Профиль', A.report('profile'), 0], ['look', 'Облик', A.mission('expedition'), 'new'], ['ach', 'Достижения', A.report('achievements'), 3],
+    const S = [['profile', 'Профиль', A.report('profile'), 0], ['ach', 'Достижения', A.report('achievements'), 3],
       ['system', 'Система', A.report('system'), 1], ['battle', 'Бои', A.report('arena'), 7], ['flights', 'Полёты', A.report('flights'), 99]];
     const quiet = [['letters', 'Личные', A.report('alliances')], ['command', 'Командные', A.report('command-reports')], ['arena', 'Арена', A.report('arena')], ['ally', 'Союзы', A.report('alliances')]];
     return `<div class="pan secs"><h3>Сообщения</h3>${S.map(([id, n, ic, c]) => `<div class="s ${id === active ? 'on' : ''}"><img src="${ic}"><span>${n}</span>${c === 'new' ? '<em class="new">новое</em>' : c ? `<em>${c > 98 ? '99+' : c}</em>` : ''}</div>`).join('')}

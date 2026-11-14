@@ -65,7 +65,7 @@ const rounds = npc
 const mid = `<div class="col">
   <div class="k2"><div class="k">${npc ? 'Профиль командира · NPC' : 'Ваш профиль'}</div><span class="h">Ранг «${cur.name}»</span></div>
   <div class="scores">
-    <div class="card sc"><img src="${A.score('achievement-trophy')}"><div><small>Очки достижений · навсегда</small><b>${fmt(P.points)}</b><em>${npc ? '31 из 66 достижений' : `${Object.keys(PROG.done).length} из 66 достижений`}</em></div></div>
+    <div class="card sc"><img src="${A.score('achievement-trophy')}"><div><small>Очки достижений · заработано всего</small><b>${fmt(P.points)}</b><em>${npc ? '31 из 66 достижений' : `${Object.keys(PROG.done).length} из 66 достижений`}</em></div></div>
     <div class="card sc"><img src="${A.score('overall-star')}"><div><small>Общие очки · этот раунд</small><b>${npc ? '1 912 400' : '20 708'}</b><em style="color:var(--dim)">${npc ? '6 место из 101' : '37 место из 101'}</em></div></div>
   </div>
   <div class="h">Витрина</div>
@@ -85,7 +85,7 @@ const right = npc ? `<div class="col">
     <div class="card"><div class="ring"><img src="${A.skin('011')}"><\/div><b>Пепел</b><small>редкий</small></div>
   </div>
   <div class="h">Командир флота</div>
-  <div class="card mapcard"><div class="ring"><img src="${A.commander('executioner')}"></div><div><b>Палач · «Кровавый рассвет»</b><span>второй облик командира, открыт с 500 очков</span></div></div>
+  <div class="card mapcard"><div class="ring"><img src="${A.commander('executioner')}"></div><div><b>Палач · «Кровавый рассвет»</b><span>второй облик командира, куплен за 80 очков</span></div></div>
 </div>` : `<div class="col seen">
   <div class="h">Так вас видят другие</div>
   <div><div class="lbl">Рейтинг</div><div class="card rrow"><span class="n">37</span>${crest(P.crest, 34)}<div><b>${P.name} <span style="color:var(--cyan)">[${P.tag}]</span></b>${title(byId(P.title))}</div><span class="p">20 708</span></div></div>
