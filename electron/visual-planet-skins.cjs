@@ -21,8 +21,8 @@ const SKINS = ['terran', 'volcanic', 'fan-cube'];
 // «before» = the 512 px pictures (loader switched off), «after» = the 1024 px pictures.
 const PASSES = [['before', false], ['after', true]];
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
-// The planet sphere's share of its picture (every 1024 px frame has the same margin).
-const SPHERE_SHARE = 0.909;
+// Zone plates keep at least this distance from the planet's visible part (coordinator rule, 14.11.2026).
+const MIN_PLATE_GAP = 16;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function waitFor(win, expression, timeoutMs = 15000) {
@@ -72,28 +72,40 @@ async function seed(win, skin, large) {
   await settle(win, 400);
 }
 
-/** CSS scale per look (src/planet-skin-large.generated.ts): the «after» scale of 1024 px looks. */
-function lookScales() {
+/** Per look (src/planet-skin-large.generated.ts): the «after» CSS scale and the visible box (half sizes, shares of the side). */
+function lookTables() {
   const text = fs.readFileSync(path.join(ROOT, 'src', 'planet-skin-large.generated.ts'), 'utf8');
-  return Object.fromEntries([...text.matchAll(/'([^']+)': ([\d.]+),/g)].map((m) => [m[1], Number(m[2])]));
+  const scales = Object.fromEntries([...text.matchAll(/'([^']+)': ([\d.]+),\n/g)].map((m) => [m[1], Number(m[2])]));
+  const boxes = Object.fromEntries([...text.matchAll(/'([^']+)': \[([\d.]+), ([\d.]+)\],/g)].map((m) => [m[1], [Number(m[2]), Number(m[3])]]));
+  return { scales, boxes };
 }
 
 /**
- * Sphere on screen (circle) and the zone plates: which plates the planet covers.
- * `share` is the planet's share of the picture on screen: 0.909 for the 1024 px frames,
- * and the look's old share (0.909 × its scale) for the «before» pass.
+ * Zone plates against the planet's visible part (the alpha box of the picture on screen).
+ * gap = the larger of the horizontal and vertical distances between the plate and the box
+ * (negative = the plate sits over the box). Also: plates over the side columns, plates off the screen.
+ * `box` = [half width, half height] as shares of the picture side, or null for the «before» pass.
  */
-function zoneCover(win, share) {
+function zoneCover(win, box) {
   return win.webContents.executeJavaScript(`(() => {
     const img = document.querySelector('img[data-qa-planet-skin-art]').getBoundingClientRect();
-    const cx = img.left + img.width / 2, cy = img.top + img.height / 2, r = img.width * ${share} / 2;
-    // Gap = distance from the sphere's edge to the plate (negative = the planet covers it).
+    const cx = img.left + img.width / 2, cy = img.top + img.height / 2;
+    const hw = ${box ? `img.width * ${box[0]}` : 'null'}, hh = ${box ? `img.height * ${box[1]}` : 'null'};
+    const cols = ['.planet-orbit__side', '.planet-orbit__worlds'].map((s) => document.querySelector(s)?.getBoundingClientRect()).filter(Boolean);
+    const overlap = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
     const plates = Array.from(document.querySelectorAll('.planet-orbit__zone')).map((zone) => {
-      const box = zone.getBoundingClientRect();
-      const nx = Math.min(Math.max(cx, box.left), box.right), ny = Math.min(Math.max(cy, box.top), box.bottom);
-      return { name: zone.textContent.trim().slice(0, 30), gap: Math.round(Math.hypot(cx - nx, cy - ny) - r) };
+      const plate = zone.getBoundingClientRect();
+      const gap = hw === null ? null : Math.round(Math.max(
+        Math.max(plate.left - (cx + hw), (cx - hw) - plate.right),
+        Math.max(plate.top - (cy + hh), (cy - hh) - plate.bottom)));
+      return {
+        name: zone.textContent.trim().slice(0, 30),
+        gap,
+        overColumn: cols.some((col) => overlap(plate, col)),
+        offScreen: plate.left < 0 || plate.top < 0 || plate.right > innerWidth || plate.bottom > innerHeight,
+      };
     });
-    return { sphereDiameter: Math.round(r * 2), plates, covered: plates.filter((plate) => plate.gap < 0).map((plate) => plate.name) };
+    return { planet: { left: Math.round(cx - img.width / 2), right: Math.round(cx + img.width / 2), diameter: Math.round(img.width) }, plates };
   })()`);
 }
 
@@ -124,7 +136,7 @@ app.whenReady().then(async () => {
     fs.mkdirSync(OUTPUT, { recursive: true });
     const report = {};
     const failures = [];
-    const scales = lookScales();
+    const { boxes } = lookTables();
     for (const [width, height] of VIEWPORTS) {
       await win.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false, screenWidth: width, screenHeight: height });
       for (const [pass, large] of PASSES) {
@@ -137,20 +149,23 @@ app.whenReady().then(async () => {
           await waitFor(win, `(() => { const img = document.querySelector('img[data-qa-planet-skin-art]'); return Boolean(img && img.complete && img.naturalWidth > 0); })()`);
           await settle(win, 1200);
           const image = await win.webContents.executeJavaScript(`(() => { const img = document.querySelector('img[data-qa-planet-skin-art]'); return { naturalWidth: img.naturalWidth, shownWidth: Math.round(img.getBoundingClientRect().width) }; })()`);
-          const share = pass === 'after' ? SPHERE_SHARE : SPHERE_SHARE * (scales[skin] || 1);
-          const cover = await zoneCover(win, share);
+          // The «before» pass shows the old 512 px art with the old plates: recorded, not gated.
+          const cover = await zoneCover(win, pass === 'after' ? boxes[skin] : null);
           report[key] = { ...image, ...cover };
-          // Gate on the shipped pictures only; the «before» pass is recorded for comparison.
-          if (pass === 'after' && cover.covered.length) failures.push(`${key}: planet covers ${cover.covered.join(', ')}`);
+          if (pass === 'after') {
+            for (const plate of cover.plates) {
+              if (plate.gap < MIN_PLATE_GAP) failures.push(`${key}: «${plate.name}» gap ${plate.gap} px`);
+              if (plate.overColumn) failures.push(`${key}: «${plate.name}» over a side column`);
+              if (plate.offScreen) failures.push(`${key}: «${plate.name}» off the screen`);
+            }
+          }
           await capture(win, path.join(OUTPUT, `${skin}-${pass}-${width}x${height}.png`));
         }
       }
     }
     fs.writeFileSync(path.join(OUTPUT, 'planet-skins-metrics.json'), JSON.stringify(report, null, 2));
     console.log(JSON.stringify(report, null, 2));
-    // Informational: the plate overlap at the size the planet had before this batch is a layout fact
-    // to decide on (move the plates or shrink the planet), not a reason to fail the shard.
-    if (failures.length) console.warn(`WARN zone plates covered by the planet:\n${failures.join('\n')}`);
+    if (failures.length) throw new Error(`zone plates break the rule (gap ${MIN_PLATE_GAP} px, no side columns, on screen):\n${failures.join('\n')}`);
     win.webContents.debugger.detach();
     win.destroy();
     app.exit(0);

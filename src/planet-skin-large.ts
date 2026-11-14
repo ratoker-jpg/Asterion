@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { LARGE_PLANET_SCALE } from './planet-skin-large.generated.ts';
+import { LARGE_PLANET_BOX, LARGE_PLANET_SCALE } from './planet-skin-large.generated.ts';
 
 /**
  * 1024 px pictures of the planet looks, for the planet screen only.
@@ -43,6 +43,22 @@ export function planetLargeScale(skinId: string | undefined): number {
   // The QA «before» pass shows the 512 px picture, which needs no scale.
   if (switchedOff()) return 1;
   return (skinId && LARGE_PLANET_SCALE[skinId]) || 1;
+}
+
+/**
+ * Half width and half height of the look's visible part, as CSS lengths for the orbit
+ * (the planet's CSS box is --orbit-size × scale). Undefined for the QA «before» pass and unknown looks:
+ * the zone plates then keep their old places.
+ */
+export function planetLargeBox(skinId: string | undefined): { hw: string; hh: string } | undefined {
+  if (!skinId || switchedOff()) return undefined;
+  const box = LARGE_PLANET_BOX[skinId];
+  if (!box) return undefined;
+  const scale = LARGE_PLANET_SCALE[skinId] ?? 1;
+  return {
+    hw: `calc(var(--orbit-size) * ${box[0]} * ${scale})`,
+    hh: `calc(var(--orbit-size) * ${box[1]} * ${scale})`,
+  };
 }
 
 /**

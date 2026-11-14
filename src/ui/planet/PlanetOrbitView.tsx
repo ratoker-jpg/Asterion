@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
 
-import { planetLargeScale, usePlanetLargeArt } from '../../planet-skin-large.ts';
+import { planetLargeBox, planetLargeScale, usePlanetLargeArt } from '../../planet-skin-large.ts';
 import { ResourceIcon } from '../resources/ResourceIcon';
 
 export type PlanetOrbitZone = 'resource' | 'industry' | 'military';
@@ -42,8 +42,11 @@ export function PlanetOrbitView({
 }) {
   const freeSlots = Math.max(0, queueCapacity - queue.length);
   const bigArt = usePlanetLargeArt(skinId, skinArt);
+  // The zone plates sit 16 px outside the planet's visible part (planet-screens.css, .planet-orbit--fit).
+  const box = planetLargeBox(skinId);
+  const fitStyle = box ? { '--planet-hw': box.hw, '--planet-hh': box.hh } as CSSProperties : undefined;
   return (
-    <div className="planet-page-v3 planet-orbit" data-qa-planet-orbit>
+    <div className={`planet-page-v3 planet-orbit${box ? ' planet-orbit--fit' : ''}`} style={fitStyle} data-qa-planet-orbit>
       <div className="planet-orbit__ring planet-orbit__ring--outer" aria-hidden="true" />
       <div className="planet-orbit__ring" aria-hidden="true" />
       <img className="planet-image-v3 planet-orbit__planet" data-qa-planet-skin-art src={bigArt} alt={name} draggable={false} style={{ '--planet-scale': planetLargeScale(skinId) } as CSSProperties} />
