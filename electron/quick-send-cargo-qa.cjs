@@ -137,7 +137,7 @@ async function seed(win) {
       planet.resources = { metal: 900000, minerals: 700000, gas: 500000 };
     }
     // «Москва» has no gas: it cannot send, and the panel must say why.
-    // (The `held` check allows a few units of gas: the reloaded game's first production tick runs before the check.)
+    // (The held check allows a few units of gas: the reloaded game's first production tick runs before the check.)
     save.planets['qa-colony-b'].resources = { metal: 900000, minerals: 700000, gas: 0 };
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     return Object.keys(save.planets);
