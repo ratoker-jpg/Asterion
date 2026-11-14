@@ -346,9 +346,8 @@ async function runSaveCards(width, height, directory, label) {
     await click(win, '[data-qa-menu-action="new"]');
     await waitFor(win, `document.querySelector('[data-qa-wizard-step="race"]')`);
     await click(win, '[data-qa-race="aegis"]');
-    await click(win, '[data-qa-wizard-next]');
-    await waitFor(win, `document.querySelector('[data-qa-wizard-step="world"]')`);
-    await click(win, '[data-qa-wizard-next]');
+    // The wizard rail jumps straight to «Сводка».
+    await click(win, '[data-qa-wizard-rail="confirm"]');
     await waitFor(win, `document.querySelector('[data-qa-wizard-step="confirm"]')`);
     await click(win, '[data-qa-wizard-start]');
     await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`, 60000);
