@@ -49,19 +49,19 @@ export const ZONE_VIEW_META: Readonly<Record<BuildingZone, {
     title: 'Ресурсная зона',
     subtitle: 'Добыча, энергия и инфраструктура планеты',
     queueLabel: 'Ресурсная',
-    terrainFile: 'resource-terrain.png',
+    terrainFile: 'resource-terrain.webp',
   },
   industry: {
     title: 'Промышленная зона',
     subtitle: 'Производство и инфраструктура планеты',
     queueLabel: 'Промышленная',
-    terrainFile: 'industry-terrain.png',
+    terrainFile: 'industry-terrain.webp',
   },
   military: {
     title: 'Военная зона',
     subtitle: 'Флот, исследования и управление планетой',
     queueLabel: 'Военная',
-    terrainFile: 'military-terrain.png',
+    terrainFile: 'military-terrain.webp',
   },
 };
 

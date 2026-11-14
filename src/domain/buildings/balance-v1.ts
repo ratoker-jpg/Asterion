@@ -310,7 +310,7 @@ const FACTIONS = ['aegis', 'synod', 'veyra'] as const;
 const ART_FILE_BY_FACTION: Record<BuildingFaction, Record<BuildingRole, string>> = Object.fromEntries(
   FACTIONS.map((faction) => [faction, Object.fromEntries(BUILDING_ROLES.map((role) => [
     role,
-    new URL(`../../../assets/source/New assets/buildings/${faction}/building.${faction}.${role}.png`, import.meta.url).href,
+    new URL(`../../assets/art/buildings/${faction}/building.${faction}.${role}.webp`, import.meta.url).href,
   ]))]),
 ) as Record<BuildingFaction, Record<BuildingRole, string>>;
 

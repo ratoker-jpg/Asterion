@@ -1,7 +1,7 @@
 import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
-import uniqueIslands from '../assets/source/planets/skins/planet-010.png';
-import uniqueVortex from '../assets/source/planets/skins/planet-013.png';
-import uniqueCrystal from '../assets/source/planets/skins/planet-021.png';
+import uniqueIslands from './assets/art/planets/skins/planet-010.webp';
+import uniqueVortex from './assets/art/planets/skins/planet-013.webp';
+import uniqueCrystal from './assets/art/planets/skins/planet-021.webp';
 import type { ExplorationKind } from './domain/exploration/model.ts';
 
 /** One authoritative visual mapping for the Universe, Operations and Fleet contact cards. */

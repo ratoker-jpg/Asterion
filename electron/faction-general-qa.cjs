@@ -11,7 +11,7 @@ function getBuiltFactionGeneralAssets(root) {
   const assetDirectory = path.join(root, 'dist', 'assets');
   const files = fs.readdirSync(assetDirectory);
   return Object.entries(FACTION_GENERAL_STEMS).map(([faction, stem]) => {
-    const file = files.find((candidate) => candidate.startsWith(`${stem}-`) && candidate.endsWith('.png'));
+    const file = files.find((candidate) => candidate.startsWith(`${stem}-`) && candidate.endsWith('.webp'));
     if (!file) throw new Error(`Built faction general asset is missing: ${stem}`);
     return { faction, stem, file };
   });
@@ -130,7 +130,7 @@ function assertRenderedFactionGeneralPortraits(snapshot, expectedFactions, label
   }
   snapshot.forEach((item, index) => {
     const expectedFaction = expectedFactions[index];
-    const expectedAsset = `${FACTION_GENERAL_STEMS[expectedFaction]}.png`;
+    const expectedAsset = `${FACTION_GENERAL_STEMS[expectedFaction]}.webp`;
     if (item.faction !== expectedFaction || item.asset !== expectedAsset || !item.assetFile.includes(FACTION_GENERAL_STEMS[expectedFaction])) {
       throw new Error(`${label}: wrong faction general asset ${JSON.stringify({ expectedFaction, item })}`);
     }

@@ -16,7 +16,7 @@ test('every building of every race resolves to that race\'s own art file on disk
       const art = getBuildingDefinition(role, faction).art;
       const file = fileURLToPath(art);
       assert.ok(existsSync(file), `${faction}/${role}: missing ${file}`);
-      assert.match(art, new RegExp(`/buildings/${faction}/building\\.${faction}\\.${role}\\.png$`), `${faction}/${role}: ${art}`);
+      assert.match(art, new RegExp(`/buildings/${faction}/building\\.${faction}\\.${role}\\.webp$`), `${faction}/${role}: ${art}`);
       assert.equal(getBuildingPresentation(role, faction).art, art);
       assert.ok(!seen.has(art), `${faction}/${role}: art shared with another race or role`);
       seen.add(art);

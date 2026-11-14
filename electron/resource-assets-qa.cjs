@@ -276,7 +276,7 @@ async function assertCanonicalShipyard(win) {
       image: root?.querySelector('[data-qa-construction-header] img')?.getAttribute('src') || '',
     };
   })()`);
-  if (identity.name !== 'Верфь' || !/building\.aegis\.shipyard(?:-[^/]+)?\.png$/.test(assetName(identity.asset)) || identity.image !== identity.asset) {
+  if (identity.name !== 'Верфь' || !/building\.aegis\.shipyard(?:-[^/]+)?\.webp$/.test(assetName(identity.asset)) || identity.image !== identity.asset) {
     throw new Error(`shipyard identity contract mismatch ${JSON.stringify(identity)}`);
   }
 }

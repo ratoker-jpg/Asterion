@@ -12,3 +12,10 @@ This directory is reserved for original/generated source packs supplied for Stel
 - Do not rename mechanical IDs merely to match source filenames.
 
 See `docs/assets/user-supplied-asset-intake.md` for the validated 162-file pack inventory and publication status.
+
+## Что попадает в игру
+
+`assets/source` — только исходники, в сборку они не идут. Игра грузит лёгкие WebP из `src/assets/art/`
+(зеркало путей, без папки `New assets`). Пересборка после замены исходника: `node tools/build-game-art.mjs`
+(размеры по папкам заданы в `RULES` внутри скрипта: корабли и оборона 512, здания 640, планеты 512).
+Исходник, на который не ссылается ни код, ни скрипты, в репозитории не хранится (история git его помнит).

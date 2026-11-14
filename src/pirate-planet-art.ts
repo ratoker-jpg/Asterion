@@ -1,7 +1,7 @@
-import pirate01 from '../assets/source/planets/pirate/pirate-planet-01-graveyard.png';
-import pirate02 from '../assets/source/planets/pirate/pirate-planet-02-corsair-ocean.png';
-import pirate03 from '../assets/source/planets/pirate/pirate-planet-03-treasure-vault.png';
-import pirateSkull from '../assets/source/planets/pirate/planet-020.png';
+import pirate01 from './assets/art/planets/pirate/pirate-planet-01-graveyard.webp';
+import pirate02 from './assets/art/planets/pirate/pirate-planet-02-corsair-ocean.webp';
+import pirate03 from './assets/art/planets/pirate/pirate-planet-03-treasure-vault.webp';
+import pirateSkull from './assets/art/planets/pirate/planet-020.webp';
 import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
 
 /** Shared art ordering for the real Universe planet and its Operations card. */

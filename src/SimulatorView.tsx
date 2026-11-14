@@ -49,16 +49,16 @@ import {
   type CombatTechnologyLevels,
 } from './domain/combat/technologies.ts';
 import type { BattleReport } from './domain/combat/report.ts';
-import criticalHitArt from '../assets/source/New assets/technologies/technology.shared.critical-hit.png';
-import heavyArmorArt from '../assets/source/New assets/technologies/technology.shared.heavy-armor.png';
-import ionScienceArt from '../assets/source/New assets/technologies/technology.shared.ion-science.png';
-import laserScienceArt from '../assets/source/New assets/technologies/technology.shared.laser-science.png';
-import lightArmorArt from '../assets/source/New assets/technologies/technology.shared.light-armor.png';
-import maneuverDefenseArt from '../assets/source/New assets/technologies/technology.shared.maneuver-defense.png';
-import mediumArmorArt from '../assets/source/New assets/technologies/technology.shared.medium-armor.png';
-import piercingAttackArt from '../assets/source/New assets/technologies/technology.shared.piercing-attack.png';
-import plasmaScienceArt from '../assets/source/New assets/technologies/technology.shared.plasma-science.png';
-import shipArmorArt from '../assets/source/New assets/technologies/technology.shared.ship-armor.png';
+import criticalHitArt from './assets/art/technologies/technology.shared.critical-hit.webp';
+import heavyArmorArt from './assets/art/technologies/technology.shared.heavy-armor.webp';
+import ionScienceArt from './assets/art/technologies/technology.shared.ion-science.webp';
+import laserScienceArt from './assets/art/technologies/technology.shared.laser-science.webp';
+import lightArmorArt from './assets/art/technologies/technology.shared.light-armor.webp';
+import maneuverDefenseArt from './assets/art/technologies/technology.shared.maneuver-defense.webp';
+import mediumArmorArt from './assets/art/technologies/technology.shared.medium-armor.webp';
+import piercingAttackArt from './assets/art/technologies/technology.shared.piercing-attack.webp';
+import plasmaScienceArt from './assets/art/technologies/technology.shared.plasma-science.webp';
+import shipArmorArt from './assets/art/technologies/technology.shared.ship-armor.webp';
 import './simulator.css';
 import { MISSION_BANNERS } from './ui/ui-art.ts';
 import type { CSSProperties } from 'react';

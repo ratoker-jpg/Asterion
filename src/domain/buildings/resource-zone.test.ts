@@ -65,24 +65,24 @@ test('Aster ordinary catalog exposes exactly 10 resource, 7 industry and 4 milit
 
 test('all eleven new roles match canonical names, zones and real Aegis PNG paths', () => {
   const expected = {
-    construction: ['Фабрика', 'industry', 'building.aegis.construction.png'],
-    'advanced-factory': ['Промышленный комплекс', 'industry', 'building.aegis.advanced-factory.png'],
-    'metal-storage': ['Склад металла', 'industry', 'building.aegis.metal-storage.png'],
-    'mineral-storage': ['Склад минералов', 'industry', 'building.aegis.mineral-storage.png'],
-    'gas-storage': ['Газовое хранилище', 'industry', 'building.aegis.gas-storage.png'],
-    recycling: ['Перерабатывающий центр', 'industry', 'building.aegis.recycling.png'],
-    'trade-center': ['Торговый центр', 'industry', 'building.aegis.trade-center.png'],
-    shipyard: ['Верфь', 'military', 'building.aegis.shipyard.png'],
-    research: ['Лаборатория', 'military', 'building.aegis.research.png'],
-    spaceport: ['Космодром', 'military', 'building.aegis.spaceport.png'],
-    'planetary-government': ['Палата управления', 'military', 'building.aegis.planetary-government.png'],
+    construction: ['Фабрика', 'industry', 'building.aegis.construction.webp'],
+    'advanced-factory': ['Промышленный комплекс', 'industry', 'building.aegis.advanced-factory.webp'],
+    'metal-storage': ['Склад металла', 'industry', 'building.aegis.metal-storage.webp'],
+    'mineral-storage': ['Склад минералов', 'industry', 'building.aegis.mineral-storage.webp'],
+    'gas-storage': ['Газовое хранилище', 'industry', 'building.aegis.gas-storage.webp'],
+    recycling: ['Перерабатывающий центр', 'industry', 'building.aegis.recycling.webp'],
+    'trade-center': ['Торговый центр', 'industry', 'building.aegis.trade-center.webp'],
+    shipyard: ['Верфь', 'military', 'building.aegis.shipyard.webp'],
+    research: ['Лаборатория', 'military', 'building.aegis.research.webp'],
+    spaceport: ['Космодром', 'military', 'building.aegis.spaceport.webp'],
+    'planetary-government': ['Палата управления', 'military', 'building.aegis.planetary-government.webp'],
   } as const;
 
   for (const [role, [name, zone, fileName]] of Object.entries(expected)) {
     const item = getBuildingDefinition(role as keyof typeof expected);
     assert.equal(item.name, name);
     assert.equal(item.zone, zone);
-    assert.equal(item.art.includes(fileName.replace('.png', '')), true);
+    assert.equal(item.art.includes(fileName.replace('.webp', '')), true);
     assert.equal(item.prototypeBalance, true);
   }
 });

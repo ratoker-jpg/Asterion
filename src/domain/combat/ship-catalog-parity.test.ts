@@ -357,6 +357,6 @@ test('Veyra Nemesis and Absorber keep their approved local names and art assets 
   assert.ok(defender);
   assert.equal(cruiser.name, 'Стрекоза');
   assert.equal(defender.name, 'Панцирник');
-  assert.equal(artBasename(cruiser.art), 'ship.veyra.nemesis.png');
-  assert.equal(artBasename(defender.art), 'ship.veyra.absorber.png');
+  assert.equal(artBasename(cruiser.art), 'ship.veyra.nemesis.webp');
+  assert.equal(artBasename(defender.art), 'ship.veyra.absorber.webp');
 });
