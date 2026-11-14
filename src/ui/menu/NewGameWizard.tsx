@@ -196,7 +196,7 @@ export function NewGameWizard({ onBack, onThemeChange, onCreated, seriesRound = 
   );
   const footNote = step === 'confirm'
     ? (error ?? (issues.length ? issues[0]!.message : 'Мир создаётся за несколько секунд. Потом откроется ваша первая планета.'))
-    : (stepIssues.length ? stepIssues[0]!.message : step === 'race' ? `${card.name}: ${card.tagline}` : step === 'campaign' ? 'Имя и название можно поменять позже в «Загрузить игру».' : 'Мир готов. Одинаковый сид всегда создаёт одинаковую вселенную.');
+    : (stepIssues.length ? stepIssues[0]!.message : step === 'race' ? `Выбрано: ${card.name}. ${head.race.text}` : step === 'campaign' ? 'Имя и название можно поменять позже в «Загрузить игру».' : 'Мир готов. Одинаковый сид всегда создаёт одинаковую вселенную.');
   const footIsError = step === 'confirm' ? Boolean(error || issues.length) : stepIssues.length > 0;
 
   return (
@@ -238,11 +238,14 @@ export function NewGameWizard({ onBack, onThemeChange, onCreated, seriesRound = 
           <p className="wz-rail__note">Все настройки можно менять в любом порядке. Игра начнётся только из «Сводки».</p>
         </aside>
 
-        <section className={`wz-panel wz-panel--${step}`} key={step}>
-          <header className="wz-panel__head">
-            <h2>{head[step].title}</h2>
-            <p>{head[step].text}</p>
-          </header>
+        <section className={`wz-panel wz-panel--${step}`} key={step} aria-label={head[step].title}>
+          {/* «Раса»: the cards are the heading (A/B round 01: the portraits need the height); the line moves to the foot. */}
+          {step === 'race' ? null : (
+            <header className="wz-panel__head">
+              <h2>{head[step].title}</h2>
+              <p>{head[step].text}</p>
+            </header>
+          )}
           <div className="wz-panel__body" data-qa-scroll="wizard">
             {step === 'race' ? (
               <RaceStep selected={config.factionId} onSelect={chooseRace} onNext={goNext} />

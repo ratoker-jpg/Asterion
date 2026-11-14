@@ -224,7 +224,11 @@
 .menu-viewport .wz .menu-races { gap: 16px; min-height: 0; height: 100%; }
 .menu-viewport .wz .menu-race { border-radius: 18px; }
 /* The figure fits between the badge and the info block: never cropped. */
-.menu-viewport .wz .menu-race__general { top: 52px; height: calc(100% - 52px - var(--wz-info, 330px)); }
+/* The figure fits between the badge row and the info block, never cropped; it may stand
+   behind the race name, which sits on the card's dark vignette. */
+.menu-viewport .wz .menu-race__general { top: 22px; height: calc(100% - 22px - var(--wz-info, 250px)); }
+/* «Раса»: no panel title (the section is labelled), the cards get the height. */
+.wz-panel--race { grid-template-rows: minmax(0, 1fr) auto; }
 .menu-viewport .wz .menu-race__info { padding: 0 20px 18px; gap: 10px; }
 .menu-viewport .wz .menu-race__title b { font-size: 34px !important; }
 .menu-viewport .wz .menu-race__title small { font-size: 13px; letter-spacing: .12em; }
@@ -305,3 +309,5 @@
 .menu-stage[data-short] .wz-panel__head h2 { font-size: 22px !important; }
 .menu-stage[data-short] .wz-foot { min-height: 74px; padding-block: 8px; }
 .menu-stage[data-short] .wz-step { min-height: 66px; }
+/* Narrow race columns wrap the info block taller: the figure stops above it. */
+.menu-stage[data-short] .wz .menu-race__general { --wz-info: 320px; }
