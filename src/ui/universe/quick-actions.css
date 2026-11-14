@@ -83,7 +83,9 @@
 @keyframes quick-item-in { from { opacity: 0; translate: -14px 0; } }
 @keyframes quick-item-in-left { from { opacity: 0; translate: 14px 0; } }
 .quick-pop__item img {
-  width: 76px; height: 76px; border-radius: 50%; object-fit: cover;
+  /* Transparent icon on a round glass plate (icons batch 6): the plate is the button, the icon sits inside it uncut. */
+  box-sizing: border-box; width: 76px; height: 76px; padding: 11px; border-radius: 50%; object-fit: contain;
+  background: radial-gradient(circle at 38% 30%, #1b3846 0%, #0d1a22 58%, #081016 100%);
   box-shadow: 0 0 0 1.5px rgba(150, 214, 240, .38), 0 8px 20px rgba(0, 0, 0, .65);
   animation: quick-circle-in 380ms cubic-bezier(.34, 1.56, .64, 1) both;
   animation-delay: calc(var(--qa-i, 0) * 45ms + 60ms);

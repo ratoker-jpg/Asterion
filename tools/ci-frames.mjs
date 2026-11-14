@@ -44,6 +44,13 @@ for (const dir of dirs) {
       } catch (error) {
         console.warn(`skip ${rel}: ${error.message}`);
       }
+    } else if (ext === '.jpg' || ext === '.jpeg') {
+      // Screen QA scripts (settings, universe card, icons) already write JPEG.
+      const target = join(outDir, rel);
+      mkdirSync(dirname(target), { recursive: true });
+      cpSync(file, target);
+      bytes += stat.size;
+      frames += 1;
     } else if (TEXT.has(ext) && stat.size <= MAX_TEXT_BYTES) {
       const target = join(outDir, rel);
       mkdirSync(dirname(target), { recursive: true });
