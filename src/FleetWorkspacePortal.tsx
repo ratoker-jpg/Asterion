@@ -89,7 +89,8 @@ import {
 } from './ui/navigation.tsx';
 import { AmountSlider } from './ui/AmountSlider';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
-import { planetSkinMapArt, planetSkins } from './planet-skin-art.ts';
+import { planetSkinArtByCoordinate, planetSkinFor, planetSkinMapArt } from './planet-skin-art.ts';
+import { selectOwnerMembership } from './domain/command/selectors.ts';
 import { EMPTY_ART, MISSION_BANNERS } from './ui/ui-art.ts';
 import './fleet-workspace.css';
 import './ui/fleet/fleet-root-v2.css';
@@ -1719,15 +1720,16 @@ function FleetWorkspace({
     window.dispatchEvent(new CustomEvent<FlightLaunchContext>(FLIGHT_LAUNCH_CONTEXT_EVENT, { detail: context }));
   };
 
+  const playerAllianceRole = selectOwnerMembership(saveState.command, saveState.profile.playerId)?.role ?? null;
   const boardClock = (at: number) => new Date(at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Europe/Moscow' });
   /** Planet art: own planets and scouted ones by skin, anything else by a stable pick. */
   const boardPlanetArt = (planetId: string | undefined, coordinate: UniverseCoordinate | undefined) => {
     const own = planetId ? saveState.planets[planetId] : undefined;
-    if (own) return planetSkinMapArt(own.skin) ?? planetSkins[0].art;
+    if (own) return planetSkinFor(own.skin, playerAllianceRole).mapArt;
     if (!coordinate) return undefined;
     const scouted = Object.values(saveState.espionage?.targets ?? {}).find((target) => sameUniverseCoordinate(target.coordinate, coordinate));
     return planetSkinMapArt(scouted?.skin)
-      ?? planetSkins[Math.abs(coordinate.galaxy * 31 + coordinate.system * 7 + coordinate.position) % planetSkins.length].art;
+      ?? planetSkinArtByCoordinate(coordinate);
   };
   const boardMissionLabel = (missionId: MissionId) => missionId === 'pirate-raid' ? 'Пиратский налёт' : flightMissionLabel(missionId);
 
@@ -1925,14 +1927,14 @@ function FleetWorkspace({
   const planState = previewRuntimeState ?? saveState;
   const planSourceId = (previewSourceId ?? planetId) as SaveState["currentPlanetId"];
   const planSource = planState.planets[planSourceId];
-  const planSourceArt = planetSkinMapArt(planSource?.skin) ?? planetSkins[0].art;
+  const planSourceArt = planetSkinFor(planSource?.skin, playerAllianceRole).mapArt;
   const planSpyTarget = previewCoordinate
     ? Object.values(saveState.espionage?.targets ?? {}).find((target) => sameUniverseCoordinate(target.coordinate, previewCoordinate))
     : undefined;
   const planTargetCoordinate = missionId === 'space-flight' ? null : previewTargetDestination?.coordinate ?? previewCoordinate;
   const planTargetArt = planTargetCoordinate
-    ? planetSkinMapArt(previewTargetPlanet?.skin) ?? planetSkinMapArt(planSpyTarget?.skin)
-      ?? planetSkins[Math.abs(planTargetCoordinate.galaxy * 31 + planTargetCoordinate.system * 7 + planTargetCoordinate.position) % planetSkins.length].art
+    ? planetSkinMapArt(previewTargetPlanet?.skin, playerAllianceRole) ?? planetSkinMapArt(planSpyTarget?.skin)
+      ?? planetSkinArtByCoordinate(planTargetCoordinate)
     : null;
   const planTargetName = previewTargetPlanet?.name ?? planSpyTarget?.name ?? launchContext?.targetPlanetName ?? currentExpeditionTarget?.name ?? null;
   const planTargetWho = previewTargetRelation === 'self' ? 'Своя планета'
@@ -1955,7 +1957,7 @@ function FleetWorkspace({
   const planQuickTargets = !planTiming && (missionId === 'transport' || missionId === 'deployment')
     ? transportTargetOptions.filter((target) => !(missionId === 'deployment' && target.blocked)).slice(0, 4).map((target) => ({
       target,
-      art: planetSkinMapArt(planState.planets[target.id]?.skin) ?? planetSkins[0].art,
+      art: planetSkinFor(planState.planets[target.id]?.skin, playerAllianceRole).mapArt,
       estimate: estimateFlightRoute(saveState, planSourceId, selectedQuantities, selectedCommanders, target.coordinate, { mode: ACTIVE_RUNTIME_MODE, testTimeScale: resolveTestTimeScale(), speedPercent: chosenSpeed }),
     }))
     : [];

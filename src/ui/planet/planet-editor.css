@@ -1,0 +1,329 @@
+/* ==========================================================================
+   «Редактировать планету»: name + «Облик планеты» (old-screens redo, 14.11.2026).
+
+   Layout chosen by a blind A/B of two mockups (PR «Облики планет: новое окно
+   и новые облики»): header with the name, rail of rubrics, a 5 × 3 page of
+   small WebP thumbnails, the preview on the right with the action right under
+   it. Style follows «Сообщения»: one surface per panel, tinted tiles without
+   borders, race accent for the active state, colour-only motion. Font sizes
+   carry !important and two classes because the typography observer pins text
+   nodes to their category size; they stay scaled by the player's settings.
+   Entrance animation comes from motion.css (.skin-picker-modal).
+   ========================================================================== */
+
+html body .skin-picker-modal.planet-editor-v6 {
+  --pe-accent: var(--race-accent, var(--ut-accent, #56d9f2));
+  --pe-active: color-mix(in srgb, var(--race-accent-strong, var(--ut-accent, #56d9f2)) 15%, transparent);
+  --pe-active-line: color-mix(in srgb, var(--pe-accent) 55%, transparent);
+  --pe-tint: rgba(255, 255, 255, .035);
+  --pe-tint-hover: rgba(255, 255, 255, .065);
+  --pe-line: rgba(126, 200, 220, .1);
+  --pe-border: var(--ut-border, rgba(126, 200, 220, .16));
+  --pe-border-strong: var(--ut-border-strong, rgba(126, 200, 220, .3));
+  --pe-label: var(--ut-label, #8fb6c0);
+  --pe-muted: #7f98a0;
+  --pe-text: #e8f6fa;
+  --pe-rare: #c9a2ff;
+  --pe-gold: #f0c96a;
+  --pe-green: var(--ut-positive, #35e58a);
+  --pe-fast: 160ms;
+  --pe-ease: var(--ut-ease-out, cubic-bezier(.23, 1, .32, 1));
+
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(1120px, calc(100vw - 48px));
+  height: min(720px, calc(100vh - 48px));
+  max-height: none;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--pe-border-strong);
+  border-radius: var(--ut-r-panel, 18px);
+  background: linear-gradient(180deg, rgba(13, 22, 28, .985), rgba(7, 12, 16, .985));
+  box-shadow: 0 30px 90px rgba(0, 0, 0, .7), inset 0 1px 0 rgba(255, 255, 255, .04);
+  color: var(--pe-text);
+  clip-path: none;
+}
+.planet-editor-v6 :is(button, input) { font-family: inherit; }
+.planet-editor-v6 button { color: inherit; cursor: pointer; }
+.planet-editor-v6 button:disabled { cursor: default; }
+.planet-editor-v6 :is(button, input):focus-visible { outline: var(--ut-focus, 2px solid #56d9f2); outline-offset: 2px; }
+.planet-editor-v6 .pe-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* ------------------------------------------------------------- header */
+.planet-editor-v6 .pe-head {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) minmax(300px, 400px) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--pe-border);
+}
+.planet-editor-v6 .pe-head-art { width: 56px; height: 56px; object-fit: contain; }
+.planet-editor-v6 .pe-head-title { min-width: 0; }
+.planet-editor-v6 .pe-head-title small {
+  display: block;
+  color: var(--pe-accent);
+  font-size: calc(11px * var(--text-scale-secondary, 1)) !important;
+  font-weight: 800;
+  letter-spacing: .16em;
+}
+html body .planet-editor-v6 .pe-head-title h2 {
+  margin: 4px 0 2px;
+  overflow: hidden;
+  color: #f4fcff;
+  font-size: calc(18px * var(--text-scale-section-title, 1)) !important;
+  font-weight: 800;
+  letter-spacing: .02em;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.planet-editor-v6 .pe-head-title p { margin: 0; color: var(--pe-label); font-size: calc(11px * var(--text-scale-secondary, 1)) !important; }
+
+.planet-editor-v6 .pe-name { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 8px; }
+.planet-editor-v6 .pe-name input {
+  min-width: 0;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--pe-border-strong);
+  border-radius: var(--ut-r-input, 9px);
+  background: rgba(0, 0, 0, .35);
+  color: #effcff;
+  font-size: calc(13px * var(--text-scale-control, 1)) !important;
+  font-weight: 700;
+  transition: border-color var(--pe-fast) var(--pe-ease);
+}
+.planet-editor-v6 .pe-name input:focus { border-color: var(--pe-accent); outline: none; }
+.planet-editor-v6 .pe-name button {
+  height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--pe-border-strong);
+  border-radius: var(--ut-r-btn, 10px);
+  background: var(--pe-tint);
+  font-size: calc(12px * var(--text-scale-control, 1)) !important;
+  font-weight: 800;
+  letter-spacing: .08em;
+  transition: background-color var(--pe-fast) var(--pe-ease), border-color var(--pe-fast) var(--pe-ease);
+}
+.planet-editor-v6 .pe-name button:hover { border-color: var(--pe-accent); background: var(--pe-tint-hover); }
+.planet-editor-v6 .pe-name small { grid-column: 1 / -1; color: var(--pe-muted); font-size: calc(11px * var(--text-scale-helper, 1)) !important; }
+
+/* --------------------------------------------------------------- body */
+.planet-editor-v6 .pe-body { display: grid; grid-template-columns: 216px minmax(0, 1fr) 300px; min-height: 0; }
+
+.planet-editor-v6 .pe-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  padding: 14px 10px;
+  overflow-y: auto;
+  border-right: 1px solid var(--pe-border);
+  scrollbar-width: thin;
+}
+.planet-editor-v6 .pe-rail-item { display: grid; }
+.planet-editor-v6 .pe-rail-heading {
+  margin: 10px 12px 4px;
+  color: var(--pe-muted);
+  font-size: calc(11px * var(--text-scale-secondary, 1)) !important;
+  font-weight: 800;
+  letter-spacing: .14em;
+}
+.planet-editor-v6 .pe-rail-item:first-child .pe-rail-heading { margin-top: 0; }
+.planet-editor-v6 .pe-rail-heading.pe-tier-rare { color: var(--pe-rare); }
+.planet-editor-v6 .pe-rail-heading.pe-tier-alliance { color: var(--pe-gold); }
+.planet-editor-v6 .pe-rail button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--ut-r-chip, 9px);
+  background: transparent;
+  color: var(--pe-label);
+  font-size: calc(12px * var(--text-scale-control, 1)) !important;
+  font-weight: 700;
+  text-align: left;
+  transition: background-color var(--pe-fast) var(--pe-ease), color var(--pe-fast) var(--pe-ease);
+}
+.planet-editor-v6 .pe-rail button:hover { background: var(--pe-tint); color: var(--pe-text); }
+.planet-editor-v6 .pe-rail button.is-on { background: var(--pe-active); color: #f4fcff; box-shadow: inset 0 0 0 1px var(--pe-active-line); }
+.planet-editor-v6 .pe-rail button i { color: var(--pe-muted); font-size: calc(11px * var(--text-scale-table, 1)) !important; font-style: normal; font-variant-numeric: tabular-nums; }
+
+/* ------------------------------------------------------------ catalog */
+.planet-editor-v6 .pe-catalog { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 10px; min-width: 0; min-height: 0; padding: 14px 16px; }
+.planet-editor-v6 .pe-catalog-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+html body .planet-editor-v6 .pe-catalog-head h3,
+html body .planet-editor-v6 .pe-detail h3 {
+  margin: 0;
+  color: var(--pe-label);
+  font-size: calc(12px * var(--text-scale-section-title, 1)) !important;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.planet-editor-v6 .pe-catalog-head span { color: var(--pe-muted); font-size: calc(11px * var(--text-scale-secondary, 1)) !important; }
+
+.planet-editor-v6 .pe-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  min-height: 0;
+}
+.planet-editor-v6 .pe-card {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  justify-items: center;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 0;
+  padding: 8px 6px 9px;
+  border: 0;
+  border-radius: var(--ut-r-card, 13px);
+  background: var(--pe-tint);
+  transition: background-color var(--pe-fast) var(--pe-ease), box-shadow var(--pe-fast) var(--pe-ease);
+}
+.planet-editor-v6 .pe-card:hover { background: var(--pe-tint-hover); }
+.planet-editor-v6 .pe-card.is-focus { background: var(--pe-active); box-shadow: inset 0 0 0 1px var(--pe-active-line); }
+.planet-editor-v6 .pe-card img { width: auto; max-width: 84px; height: 100%; max-height: 84px; object-fit: contain; }
+.planet-editor-v6 .pe-card span {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--pe-text);
+  font-size: calc(11px * var(--text-scale-body, 1)) !important;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.planet-editor-v6 .pe-card.is-locked img { filter: grayscale(.65) brightness(.55); }
+.planet-editor-v6 .pe-card.is-locked span { color: var(--pe-muted); }
+/* State badges: on the planet (green check), locked (gold lock). */
+.planet-editor-v6 .pe-card:is(.is-current, .is-locked)::after {
+  content: "";
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: center / 12px no-repeat;
+}
+.planet-editor-v6 .pe-card.is-current::after {
+  background-color: var(--pe-green);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8.5l2.5 2.5L12 5.5' stroke='%2303221b' stroke-width='2.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+.planet-editor-v6 .pe-card.is-locked::after {
+  background-color: rgba(240, 201, 106, .16);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='4' y='7' width='8' height='6' rx='1.5' fill='%23f0c96a'/%3E%3Cpath d='M5.5 7V5.5a2.5 2.5 0 015 0V7' stroke='%23f0c96a' stroke-width='1.6' fill='none'/%3E%3C/svg%3E");
+}
+/* Rare and alliance looks: a thin tier colour under the name. */
+.planet-editor-v6 .pe-card.pe-tier-rare span { box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--pe-rare) 45%, transparent); }
+.planet-editor-v6 .pe-card.pe-tier-alliance span { box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--pe-gold) 45%, transparent); }
+
+.planet-editor-v6 .pe-pager { display: flex; justify-content: center; gap: 6px; }
+.planet-editor-v6 .pe-pager button {
+  min-width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--pe-tint);
+  font-size: calc(12px * var(--text-scale-control, 1)) !important;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  transition: background-color var(--pe-fast) var(--pe-ease);
+}
+.planet-editor-v6 .pe-pager button:hover:not(:disabled) { background: var(--pe-tint-hover); }
+.planet-editor-v6 .pe-pager button.is-on { background: var(--pe-active); box-shadow: inset 0 0 0 1px var(--pe-active-line); }
+.planet-editor-v6 .pe-pager button:disabled { opacity: .35; }
+
+/* ------------------------------------------------------------- detail */
+.planet-editor-v6 .pe-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 14px 16px 16px;
+  overflow-y: auto;
+  border-left: 1px solid var(--pe-border);
+  background: rgba(0, 0, 0, .18);
+}
+.planet-editor-v6 .pe-stage {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  aspect-ratio: 1;
+  border-radius: var(--ut-r-card, 13px);
+  background: radial-gradient(circle at 50% 48%, color-mix(in srgb, var(--pe-accent) 12%, transparent), transparent 64%);
+}
+.planet-editor-v6 .pe-stage.pe-tier-rare { background: radial-gradient(circle at 50% 48%, rgba(201, 162, 255, .12), transparent 64%); }
+.planet-editor-v6 .pe-stage.pe-tier-alliance { background: radial-gradient(circle at 50% 48%, rgba(240, 201, 106, .13), transparent 64%); }
+.planet-editor-v6 .pe-stage img { width: 88%; height: 88%; object-fit: contain; animation: pe-stage-in 320ms var(--pe-ease) both; }
+.planet-editor-v6 .pe-stage img.is-locked { filter: saturate(.8) brightness(.8); }
+@keyframes pe-stage-in { from { opacity: 0; } to { opacity: 1; } }
+
+.planet-editor-v6 .pe-detail-title { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.planet-editor-v6 .pe-detail-title strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: calc(15px * var(--text-scale-section-title, 1)) !important;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.planet-editor-v6 .pe-tag {
+  flex: 0 0 auto;
+  padding: 3px 9px;
+  border-radius: var(--ut-r-chip, 9px);
+  background: var(--pe-tint);
+  color: var(--pe-label);
+  font-size: calc(11px * var(--text-scale-secondary, 1)) !important;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.planet-editor-v6 .pe-tag.pe-tier-rare { background: rgba(201, 162, 255, .12); color: var(--pe-rare); }
+.planet-editor-v6 .pe-tag.pe-tier-alliance { background: rgba(240, 201, 106, .12); color: var(--pe-gold); }
+.planet-editor-v6 .pe-detail-state { margin: 0; color: var(--pe-label); font-size: calc(12px * var(--text-scale-body, 1)) !important; }
+.planet-editor-v6 .pe-detail-state b { color: #f4fcff; }
+.planet-editor-v6 :is(.pe-lock, .pe-note) {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--ut-r-chip, 9px);
+  background: rgba(240, 201, 106, .08);
+  color: #f5dfa8;
+  font-size: calc(12px * var(--text-scale-body, 1)) !important;
+  line-height: 1.4;
+}
+.planet-editor-v6 .pe-apply {
+  min-height: 42px;
+  border: 1px solid #8cefff;
+  border-radius: var(--ut-r-btn, 10px);
+  background: linear-gradient(180deg, #5fe2f8, #2bb6d6);
+  color: #03222b;
+  font-size: calc(12px * var(--text-scale-control, 1)) !important;
+  font-weight: 800;
+  letter-spacing: .1em;
+  transition: filter var(--pe-fast) var(--pe-ease);
+}
+.planet-editor-v6 .pe-apply:hover:not(:disabled) { filter: brightness(1.08); }
+.planet-editor-v6 .pe-apply:disabled { border-color: var(--pe-border-strong); background: var(--pe-tint); color: var(--pe-muted); }
+.planet-editor-v6 .pe-apply.is-done { border-color: color-mix(in srgb, var(--pe-green) 45%, transparent); color: var(--pe-green); }
+.planet-editor-v6 .pe-help { margin-top: auto; color: var(--pe-muted); font-size: calc(11px * var(--text-scale-helper, 1)) !important; }
+
+/* 1280 × 720: a narrower rail and preview. */
+@media (max-width: 1360px), (max-height: 780px) {
+  .planet-editor-v6 .pe-body { grid-template-columns: 188px minmax(0, 1fr) 260px; }
+  .planet-editor-v6 .pe-head { grid-template-columns: 48px minmax(0, 1fr) minmax(260px, 340px) auto; padding: 12px 16px; }
+  .planet-editor-v6 .pe-head-art { width: 48px; height: 48px; }
+  .planet-editor-v6 .pe-name small { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .planet-editor-v6 .pe-stage img { animation: none; }
+}

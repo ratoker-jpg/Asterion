@@ -3,7 +3,7 @@ import type { AllianceAccent, AllianceCrest, AllianceEmblem, AllianceRecord, Com
 import { defaultPatternOpacity, parseCrest, CREST_GLYPH_SCALE } from '../domain/command/crest.ts';
 import { selectAllianceRelations } from '../domain/command/diplomacy.ts';
 import { updateAllianceSettings } from '../domain/command/membership.ts';
-import { DEFAULT_COLONY_SKIN, PLANET_SKIN_IDS, type PlanetSkinId } from '../domain/universe/planet-skins.ts';
+import { DEFAULT_COLONY_SKIN, PUBLIC_PLANET_SKIN_IDS, type PlanetSkinId } from '../domain/universe/planet-skins.ts';
 import type { UniverseCoordinate } from '../domain/universe/types.ts';
 import type { SaveState } from './contracts.ts';
 
@@ -96,8 +96,8 @@ export function npcColonySkin(profile: Pick<NpcProfile, 'privateSeed' | 'ownerId
   const base = `npc-colony-skin:v1:${profile.ownerId}:${profile.privateSeed}:${coordinateKey(coordinate)}`;
   const preferred = STYLE_SKINS[npcNamingStyle(profile.traits)].filter((skin) => !worn.has(skin));
   if (preferred.length) return pick(preferred, base);
-  const rest = PLANET_SKIN_IDS.filter((skin) => skin !== DEFAULT_COLONY_SKIN && !worn.has(skin));
-  return rest.length ? pick(rest, base) : pick(PLANET_SKIN_IDS.filter((skin) => skin !== DEFAULT_COLONY_SKIN), base);
+  const rest = PUBLIC_PLANET_SKIN_IDS.filter((skin) => skin !== DEFAULT_COLONY_SKIN && !worn.has(skin));
+  return rest.length ? pick(rest, base) : pick(PUBLIC_PLANET_SKIN_IDS.filter((skin) => skin !== DEFAULT_COLONY_SKIN), base);
 }
 
 function takenNames(state: SaveState): Set<string> {

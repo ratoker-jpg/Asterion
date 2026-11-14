@@ -285,7 +285,9 @@ import { reloadToMenu, requestSeriesRound, type ActiveSession } from './ui/menu/
 import { useCampaignCloudUploads } from './ui/menu/cloud.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
-import { planetSkins } from './planet-skin-art.ts';
+import { planetSkinFor, type PlanetSkinArt } from './planet-skin-art.ts';
+import { canPickPlanetSkin } from './domain/universe/planet-skins.ts';
+import { PlanetEditorDialog } from './ui/planet/PlanetEditorDialog.tsx';
 
 type Zone = BuildingZone;
 type PlanetViewMode = 'overview' | Zone;
@@ -1618,9 +1620,14 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     () => getPlanetOverpopulationSummary(state, currentPlanet.id),
     [state.planets, state.profile, currentPlanet.id],
   );
+  // Alliance looks show only while the player leads an alliance.
+  const playerAllianceRole = useMemo(
+    () => selectOwnerMembership(state.command, state.profile.playerId)?.role ?? null,
+    [state.command, state.profile.playerId],
+  );
   const currentSkin = useMemo(
-    () => planetSkins.find((skin) => skin.id === currentPlanetState.skin) ?? planetSkins[0],
-    [currentPlanetState.skin],
+    () => planetSkinFor(currentPlanetState.skin, playerAllianceRole),
+    [currentPlanetState.skin, playerAllianceRole],
   );
   // Exploration contacts rebuild up to 11 systems; on a 1 s clock that stalled
   // the universe map. Status changes are coarse, a 5 s bucket is enough.
@@ -1645,8 +1652,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const universeSpyTargets = useMemo(() => Object.values(getEspionageTargets(state.espionage)), [state.espionage]);
   const universePlayerPlanets = useMemo(() => ownedPlanets.map((planet) => {
     const runtimePlanet = state.planets[planet.id];
-    const skin = planetSkins.find((candidate) => candidate.id === runtimePlanet.skin) ?? planetSkins[0];
-    const art = 'mapArt' in skin ? skin.mapArt : skin.art;
+    const art = planetSkinFor(runtimePlanet.skin, playerAllianceRole).mapArt;
     return {
       id: planet.id,
       coordinate: {
@@ -1659,7 +1665,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       isHomeworld: planet.id === 'helion-01',
       ownerId: state.profile.playerId,
     };
-  }), [ownedPlanets, state.planets, state.profile.playerId]);
+  }), [ownedPlanets, state.planets, state.profile.playerId, playerAllianceRole]);
   const currentQueue = state.queues[currentPlanet.id] ?? [];
   const currentActiveQueueItem = currentQueue[0] ?? null;
   const currentQueueDefinition = currentActiveQueueItem
@@ -1864,8 +1870,12 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     setNotice(`Планета переименована: ${safeName}.`);
   };
 
-  const chooseSkin = (skin: (typeof planetSkins)[number]) => {
+  const chooseSkin = (skin: PlanetSkinArt) => {
     if (!editingPlanetId) return;
+    if (!canPickPlanetSkin(skin.id, playerAllianceRole)) {
+      setNotice('Облик союза может выбрать только глава союза.');
+      return;
+    }
     setState((current) => ({
       ...current,
       planets: {
@@ -3342,7 +3352,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
             name: state.planets[planet.id].name,
             coords: planet.coords,
             status: planet.status,
-            art: planetSkins.find((skin) => skin.id === state.planets[planet.id].skin)?.art ?? planetSkins[0].art,
+            art: planetSkinFor(state.planets[planet.id].skin, playerAllianceRole).art,
           }))}
           resources={[
              { kind: 'metal', label: 'МЕТАЛЛ', value: resourceWallet.metal, capacity: storageCapacities.metal, hourlyGain: effectiveResourceIncomePerHour.metal },
@@ -3455,7 +3465,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               onPirateAttack={openPirateAttack}
               onPirateReport={openPirateReport}
               onNotice={setNotice}
-              ownedPlanetArt={'mapArt' in currentSkin ? currentSkin.mapArt : currentSkin.art}
+              ownedPlanetArt={currentSkin.mapArt}
               ownedPlanetName={currentPlanetName}
               profile={state.profile}
               ownerScores={selectOwnerScoresCached(state)}
@@ -3659,7 +3669,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
                 state={state}
                 mode={RUNTIME_MODE}
                 testTimeScale={testTimeScale}
-                planetArt={Object.fromEntries(ownedPlanets.map((planet) => [planet.id, planetSkins.find((skin) => skin.id === state.planets[planet.id].skin)?.art ?? planetSkins[0].art]))}
+                planetArt={Object.fromEntries(ownedPlanets.map((planet) => [planet.id, planetSkinFor(state.planets[planet.id].skin, playerAllianceRole).thumb]))}
                 onOpenPlanet={(id) => { if (id !== state.currentPlanetId) selectPlanet(id as PlanetId); setPlanetSection('current'); }}
                 onBuild={(id, role) => buildBuilding(role, id as PlanetId)}
                 onCancelBuilding={(id, queueId) => cancelBuilding(queueId, id as PlanetId)}
@@ -3694,7 +3704,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
                   name: planetState.name,
                   coords: planet.coords,
                   status: planet.status,
-                  art: planetSkins.find((skin) => skin.id === planetState.skin)?.art ?? planetSkins[0].art,
+                  art: planetSkinFor(planetState.skin, playerAllianceRole).art,
                   active: planet.id === currentPlanet.id,
                 };
               })}
@@ -3779,7 +3789,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
             now={now}
             galaxy={sunDefence.galaxy}
             system={sunDefence.system}
-            planetArt={Object.fromEntries(ownedPlanets.map((planet) => [planet.id, planetSkins.find((skin) => skin.id === state.planets[planet.id]?.skin)?.art ?? planetSkins[0].art]))}
+            planetArt={Object.fromEntries(ownedPlanets.map((planet) => [planet.id, planetSkinFor(state.planets[planet.id]?.skin, playerAllianceRole).thumb]))}
             onClose={() => setSunDefence(null)}
             onSend={sendQuickFlights}
             onDetails={openSunDefenceDetails}
@@ -3793,7 +3803,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
             mode={RUNTIME_MODE}
             testTimeScale={testTimeScale}
             planetId={fleetPlannerPlanetId}
-            planetArt={Object.fromEntries(ownedPlanets.map((planet) => [planet.id, planetSkins.find((skin) => skin.id === state.planets[planet.id].skin)?.art ?? planetSkins[0].art]))}
+            planetArt={Object.fromEntries(ownedPlanets.map((planet) => [planet.id, planetSkinFor(state.planets[planet.id].skin, playerAllianceRole).thumb]))}
             onPlanet={setFleetPlannerPlanetId}
             onClose={() => setFleetPlannerPlanetId(null)}
             onSavePlan={saveFleetPlan}
@@ -3857,43 +3867,19 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
 
         {editingPlanet && editingPlanetState ? (
           <div className="skin-picker-backdrop" onMouseDown={closePlanetEditor}>
-            <section className="skin-picker-modal planet-editor-modal-v5" onMouseDown={(event) => event.stopPropagation()}>
-              <header>
-                <div><small>РЕДАКТИРОВАТЬ ПЛАНЕТУ</small><h2>{editingPlanetState.name}</h2><p>{editingPlanet.coords} · {editingPlanet.status}</p></div>
-                <button
-                  type="button"
-                  data-asterion-close
-                  aria-label="Закрыть редактор планеты"
-                  title="Закрыть редактор планеты"
-                  onClick={closePlanetEditor}
-                >×</button>
-              </header>
-
-              <form className="planet-editor-name-v5" onSubmit={(event) => { event.preventDefault(); savePlanetName(); }}>
-                <label htmlFor="planet-name-input">НАЗВАНИЕ ПЛАНЕТЫ</label>
-                <div>
-                  <input
-                    id="planet-name-input"
-                    value={editingName}
-                    maxLength={28}
-                    autoComplete="off"
-                    spellCheck={false}
-                    onChange={(event) => setEditingName(event.target.value)}
-                  />
-                  <button type="submit">СОХРАНИТЬ</button>
-                </div>
-                <small>2–28 символов. Название отображается в шапке, на планете и во Вселенной.</small>
-              </form>
-
-              <div className="planet-editor-skins-title-v5"><strong>ОБЛИК ПЛАНЕТЫ</strong><small>Можно менять независимо от названия</small></div>
-              <div className="skin-picker-grid">
-                {planetSkins.map((skin) => (
-                  <button key={skin.id} type="button" data-qa-planet-skin={skin.id} className={editingPlanetState.skin === skin.id ? 'active' : ''} onClick={() => chooseSkin(skin)}>
-                    <img src={skin.art} alt="" /><span>{skin.label}</span><small>{editingPlanetState.skin === skin.id ? 'АКТИВИРОВАНА' : 'ИСПОЛЬЗОВАТЬ'}</small>
-                  </button>
-                ))}
-              </div>
-            </section>
+            <PlanetEditorDialog
+              planetName={editingPlanetState.name}
+              coords={editingPlanet.coords}
+              status={editingPlanet.status}
+              skinId={editingPlanetState.skin}
+              allianceRole={playerAllianceRole}
+              allianceName={selectOwnerMembership(state.command, state.profile.playerId)?.alliance.name}
+              editingName={editingName}
+              onEditingNameChange={setEditingName}
+              onSaveName={savePlanetName}
+              onChooseSkin={chooseSkin}
+              onClose={closePlanetEditor}
+            />
           </div>
         ) : null}
 

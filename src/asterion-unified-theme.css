@@ -291,7 +291,6 @@
 .queue-panel-v3,
 .queue-card-v2,
 .aegis-button,
-.planet-editor-name-v5 button,
 .passport-panel-v2,
 .planet-selector-v2,
 .details-button,
@@ -394,7 +393,6 @@ html.asterion-repair-page .repair-page-head-v1::after{
   background:var(--ut-surface);
   border:1px solid var(--ut-border);
 }
-.planet-editor-name-v5 button{ border-radius:var(--ut-r-chip); }
 .passport-panel-v2,
 .planet-selector-v2,
 .notice-panel-v2,
@@ -924,7 +922,6 @@ html.asterion-repair-page .repair-page-head-v1::after{
 .shipyard-requirements-list-v1 span,
 .system-stepper{ border-radius:var(--ut-r-chip); }
 .system-stepper > button,
-.skin-picker-grid button,
 .ship-info-close-v1{ border-radius:var(--ut-r-btn); }
 .system-stepper select{ border-radius:var(--ut-r-input); }
 .ship-info-art-v1{ border-radius:var(--ut-r-chip); overflow:hidden; }

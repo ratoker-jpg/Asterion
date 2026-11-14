@@ -21,36 +21,94 @@ import generated028 from '../assets/source/planets/skins/planet-028.png';
 import generated030 from '../assets/source/planets/skins/planet-030.png';
 import generated032 from '../assets/source/planets/skins/planet-032.png';
 import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
+import type { AllianceRole } from './domain/command/types.ts';
+import {
+  DEFAULT_COLONY_SKIN, LEGACY_PLANET_SKIN_IDS, PLANET_SKIN_CATALOG, displayedPlanetSkinId,
+  type PlanetSkinGroup, type PlanetSkinId, type PlanetSkinTier,
+} from './domain/universe/planet-skins.ts';
 
-/** The planet editor's looks with their art; NPC planets on the map use the same list. */
-export const planetSkins = [
-  { id: 'colonized', label: 'Колония', art: planetColonized },
-  { id: 'terran', label: 'Терран', art: planetTerran },
-  { id: 'oceanic', label: 'Океан', art: planetOceanic },
-  { id: 'desert', label: 'Пустыня', art: planetDesert },
-  { id: 'ice', label: 'Ледяная', art: planetIce },
-  { id: 'volcanic', label: 'Вулкан', art: planetVolcanic },
-  { id: 'toxic', label: 'Токсичная', art: planetToxic },
-  { id: 'barren', label: 'Каменная', art: planetBarren },
-  { id: 'gas', label: 'Газовый гигант', art: planetGas },
-  { id: 'skin-002', label: 'Облик 002', art: generated002 },
-  { id: 'skin-003', label: 'Облик 003', art: generated003 },
-  { id: 'skin-005', label: 'Облик 005', art: generated005 },
-  { id: 'skin-011', label: 'Облик 011', art: generated011 },
-  { id: 'skin-012', label: 'Облик 012', art: generated012 },
-  { id: 'skin-015', label: 'Облик 015', art: generated015 },
-  { id: 'skin-016', label: 'Облик 016', art: generated016 },
-  { id: 'skin-026', label: 'Облик 026', art: generated026 },
-  { id: 'skin-027', label: 'Облик 027', art: generated027 },
-  { id: 'skin-028', label: 'Облик 028', art: generated028 },
-  { id: 'skin-030', label: 'Облик 030', art: generated030 },
-  { id: 'skin-032', label: 'Облик 032', art: generated032 },
-  ...asterionAssetIntegrationAssets.regularPlanetSkins,
-] as const;
+/** A look with its pictures. */
+export interface PlanetSkinArt {
+  readonly id: PlanetSkinId;
+  readonly label: string;
+  readonly tier: PlanetSkinTier;
+  readonly group: PlanetSkinGroup;
+  /** Full picture: the planet screen, the header, Empire. */
+  readonly art: string;
+  /** Small picture for the map and the fleet board. */
+  readonly mapArt: string;
+  /** 192 px WebP for the editor's grid (one per look, a few KB each). */
+  readonly thumb: string;
+}
 
-/** Map art of a planet-editor look, or undefined for an unknown id (the map then keeps its own art). */
-export function planetSkinMapArt(skinId: string | undefined): string | undefined {
-  if (!skinId) return undefined;
-  const skin = planetSkins.find((candidate) => candidate.id === skinId);
-  return skin ? ('mapArt' in skin ? skin.mapArt : skin.art) : undefined;
+/** Looks shipped before the 14.11.2026 batch: their own art files. */
+const legacyArt: Partial<Record<PlanetSkinId, string>> = {
+  colonized: planetColonized,
+  terran: planetTerran,
+  oceanic: planetOceanic,
+  desert: planetDesert,
+  ice: planetIce,
+  volcanic: planetVolcanic,
+  toxic: planetToxic,
+  barren: planetBarren,
+  gas: planetGas,
+  'skin-002': generated002,
+  'skin-003': generated003,
+  'skin-005': generated005,
+  'skin-011': generated011,
+  'skin-012': generated012,
+  'skin-015': generated015,
+  'skin-016': generated016,
+  'skin-026': generated026,
+  'skin-027': generated027,
+  'skin-028': generated028,
+  'skin-030': generated030,
+  'skin-032': generated032,
+};
+const legacyMapArt = new Map<string, { art: string; mapArt: string }>(
+  asterionAssetIntegrationAssets.regularPlanetSkins.map((entry) => [entry.id, { art: entry.art, mapArt: entry.mapArt }]),
+);
+
+const THUMBS = './assets/generated/asterion/universe/planet-skin-thumbs';
+const PREVIEWS = './assets/generated/asterion/universe/planet-skins-v2';
+
+function artFor(id: PlanetSkinId): { art: string; mapArt: string; thumb: string } {
+  const thumb = `${THUMBS}/${id}.webp`;
+  const legacy = legacyArt[id];
+  if (legacy) return { art: legacy, mapArt: legacy, thumb };
+  const manifest = legacyMapArt.get(id);
+  if (manifest) return { ...manifest, thumb };
+  // Looks from 14.11.2026 on: a 512 px WebP, the thumbnail doubles as map art.
+  return { art: `${PREVIEWS}/${id}.webp`, mapArt: thumb, thumb };
+}
+
+/** The planet editor's looks with their art, in the editor's order. */
+export const planetSkins: readonly PlanetSkinArt[] = PLANET_SKIN_CATALOG.map((meta) => ({ ...meta, ...artFor(meta.id) }));
+
+const byId = new Map<string, PlanetSkinArt>(planetSkins.map((entry) => [entry.id, entry]));
+const defaultSkin = byId.get(DEFAULT_COLONY_SKIN)!;
+
+/** The look by id (unknown ids → «Колония»), no alliance check: for the editor's own list. */
+export function planetSkinById(skinId: string | undefined): PlanetSkinArt {
+  return (skinId && byId.get(skinId)) || defaultSkin;
+}
+
+/**
+ * The look a player's planet shows. Alliance looks show only while the owner
+ * leads an alliance (see displayedPlanetSkinId).
+ */
+export function planetSkinFor(skinId: string | undefined, allianceRole: AllianceRole | null | undefined): PlanetSkinArt {
+  return planetSkinById(displayedPlanetSkinId(skinId, allianceRole));
+}
+
+/** Map art of a look, or undefined for an unknown id (the map then keeps its own art). */
+export function planetSkinMapArt(skinId: string | undefined, allianceRole?: AllianceRole | null): string | undefined {
+  if (!skinId || !byId.has(skinId)) return undefined;
+  return planetSkinFor(skinId, allianceRole === undefined ? 'leader' : allianceRole).mapArt;
+}
+
+/** A stable look for a planet nobody has scouted, by coordinate (the old 30, so nothing repaints). */
+export function planetSkinArtByCoordinate(coordinate: { galaxy: number; system: number; position: number }): string {
+  const id = LEGACY_PLANET_SKIN_IDS[Math.abs(coordinate.galaxy * 31 + coordinate.system * 7 + coordinate.position) % LEGACY_PLANET_SKIN_IDS.length];
+  return planetSkinById(id).art;
 }
