@@ -159,6 +159,7 @@ async function productionScenario(win, label) {
   await click(win, '[data-qa-create-alliance]');
   await setField(win, '[data-qa-alliance-name]', 'Дозор QA');
   await setField(win, '[data-qa-alliance-tag]', 'QA');
+  await win.webContents.executeJavaScript(`(async () => { for (let i = 0; i < 3 && document.querySelector('[data-qa-founding-next]'); i += 1) { document.querySelector('[data-qa-founding-next]').click(); await new Promise((resolve) => setTimeout(resolve, 150)); } })()`);
   await click(win, '[data-qa-alliance-submit]');
   await waitFor(win, `document.querySelector('.command-view')?.getAttribute('data-qa-command-state') === 'leader'`);
   view = await snapshot(win);

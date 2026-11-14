@@ -1,10 +1,17 @@
 import type { ReactNode } from 'react';
 
-export function Dialog({ title, onClose, children, size = 'default' }: { title: string; onClose: () => void; children: ReactNode; size?: 'default' | 'wide' | 'studio' | 'crest' }) {
+export function Dialog({ title, onClose, children, size = 'default', headerExtra }: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+  size?: 'default' | 'wide' | 'studio' | 'crest' | 'founding';
+  /** Shown between the title and the close button (the step rail of a wizard). */
+  headerExtra?: ReactNode;
+}) {
   return (
     <div className="command-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <div className={`command-dialog command-dialog--${size}`} role="dialog" aria-modal="true" aria-label={title}>
-        <header><h3>{title}</h3><button type="button" className="command-close" data-asterion-close aria-label="Закрыть" onClick={onClose}>✕</button></header>
+        <header><h3>{title}</h3>{headerExtra}<button type="button" className="command-close" data-asterion-close aria-label="Закрыть" onClick={onClose}>✕</button></header>
         {children}
       </div>
     </div>
