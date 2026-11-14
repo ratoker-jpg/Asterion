@@ -1114,14 +1114,14 @@ async function runViewport(width, height) {
     await win.webContents.executeJavaScript(`document.querySelector('.planet-editor-v6 [data-qa-skin-apply]')?.click()`);
     await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}').planets?.['helion-01']?.skin === ${JSON.stringify(selectedSkinId)}`);
     // The 1024 px picture of the look loads on demand: wait until the planet art shows a loaded picture.
-    await waitFor(win, `document.querySelector('[data-qa-planet-skin-art]')?.complete && document.querySelector('[data-qa-planet-skin-art]')?.naturalWidth > 0`);
+    await waitFor(win, `(() => { const i = document.querySelector('[data-qa-planet-skin-art]'); return Boolean(i && i.complete && i.naturalWidth > 0 && /\\/skin-asterion-09-\\w+\\.webp$/.test(i.getAttribute('src') || '')); })()`, 20000);
     const selectedSkin = await win.webContents.executeJavaScript(`(() => ({ src: document.querySelector('[data-qa-planet-skin-art]')?.getAttribute('src') || '', loaded: Boolean(document.querySelector('[data-qa-planet-skin-art]')?.complete && document.querySelector('[data-qa-planet-skin-art]')?.naturalWidth > 0) }))()`);
     if (!selectedSkin.loaded || !/\/skin-asterion-09(-\w+)?\.webp$/.test(selectedSkin.src)) throw new Error(`${label}: selected planet art did not update ${JSON.stringify(selectedSkin)}`);
     await win.webContents.executeJavaScript(`document.querySelector('.planet-editor-v6 [data-asterion-close]')?.click()`);
     await waitFor(win, `!document.querySelector('.planet-editor-v6')`);
     await reload(win);
     await win.webContents.executeJavaScript(`document.querySelector('[data-qa-navigation="primary"] [data-qa-route="planet"]')?.click()`);
-    await waitFor(win, `document.querySelector('[data-qa-planet-skin-art]')?.complete && document.querySelector('[data-qa-planet-skin-art]')?.naturalWidth > 0`);
+    await waitFor(win, `(() => { const i = document.querySelector('[data-qa-planet-skin-art]'); return Boolean(i && i.complete && i.naturalWidth > 0 && /\\/skin-asterion-09-\\w+\\.webp$/.test(i.getAttribute('src') || '')); })()`, 20000);
     const persistedSkin = await win.webContents.executeJavaScript(`(() => { const image = document.querySelector('[data-qa-planet-skin-art]'); const rect = image?.getBoundingClientRect(); return { saved: JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}').planets?.['helion-01']?.skin || '', src: image?.getAttribute('src') || '', naturalWidth: image?.naturalWidth || 0, naturalHeight: image?.naturalHeight || 0, displayWidth: rect?.width || 0, displayHeight: rect?.height || 0 }; })()`);
     if (persistedSkin.saved !== selectedSkinId || !/\/skin-asterion-09(-\w+)?\.webp$/.test(persistedSkin.src) || persistedSkin.naturalWidth !== 1024 || persistedSkin.naturalHeight !== 1024 || persistedSkin.displayWidth <= 0 || persistedSkin.displayHeight <= 0 || persistedSkin.displayWidth > 800 || persistedSkin.displayHeight > 800) throw new Error(`${label}: selected high-resolution skin did not survive reload or has unexpected display size ${JSON.stringify(persistedSkin)}`);
     await capture(win, directory, 'planet-skin-persisted');
