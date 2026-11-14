@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Все достижения · вариант B (витрина)</title>
+<link rel="stylesheet" href="ui.css">
+<style>
+.main { left: 326px; right: 38px; display: flex; flex-direction: column; overflow: hidden; }
+.hero { position: relative; padding: 26px 34px; display: grid; grid-template-columns: auto 1fr 430px; gap: 34px; align-items: center; border-bottom: 1px solid var(--line);
+  background: linear-gradient(90deg, rgba(10,16,22,.98) 0, rgba(10,16,22,.9) 55%, rgba(10,16,22,.55)), url('../../../../src/assets/ui/rating/rating-backdrop.webp') right center/cover; border-radius: 18px 18px 0 0; }
+.me { display: flex; align-items: center; gap: 22px; }
+.me .pts b { display: block; font-size: 52px; font-weight: 800; line-height: 1; } .me .pts span { font-size: 15px; color: var(--dim); }
+.me .pts .r { font-size: 20px; font-weight: 800; color: var(--g); margin-top: 6px; display: block; }
+.next .row { display: flex; justify-content: space-between; font-size: 15px; font-weight: 700; color: #c7d1de; margin-bottom: 8px; } .next .row em { font-style: normal; color: var(--g); }
+.unl { display: flex; gap: 12px; margin-top: 14px; }
+.unl .card { display: grid; grid-template-columns: 56px 1fr; gap: 10px; align-items: center; padding: 8px 12px 8px 8px; }
+.unl img { width: 56px; height: 56px; object-fit: contain; } .unl b { font-size: 14px; display: block; } .unl small { font-size: 13px; color: var(--dim); }
+.ttl { padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; } .ttl small { font-size: 13px; color: var(--dim); }
+.ttl .line { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 800; }
+.ttl .title { font-size: 16px; }
+.bar2 { display: flex; gap: 8px; padding: 14px 34px 6px; flex-wrap: wrap; }
+.grid { padding: 4px 24px; overflow: hidden; flex: 1; position: relative; }
+.grp { display: flex; align-items: baseline; gap: 10px; padding: 14px 10px 10px; } .grp b { font-size: 15px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; color: #c7d1de; } .grp span { font-size: 14px; color: var(--dim); }
+.tiles { display: grid; grid-template-columns: repeat(10, 1fr); gap: 10px; }
+.t { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 6px 12px; border-radius: 13px; background: rgba(16,26,31,.6); text-align: center; }
+.t b { font-size: 14px; font-weight: 800; line-height: 1.2; min-height: 34px; } .t:not(.got) b { color: #8d99ab; }
+.t small { font-size: 13px; color: var(--dim); font-weight: 700; } .t.got small { color: var(--green); }
+.t.on { background: rgba(86,217,242,.12); box-shadow: inset 0 0 0 1px rgba(86,217,242,.5); }
+.t .ring { position: absolute; top: 10px; right: 10px; width: 26px; height: 26px; border-radius: 50%; background: conic-gradient(var(--cyan) calc(var(--p) * 1%), #24313d 0); }
+.t .ring::after { content: ''; position: absolute; inset: 5px; border-radius: 50%; background: #111b23; }
+.pop { position: absolute; z-index: 5; width: 420px; padding: 20px 22px; border-radius: 14px; background: #0f1a22; box-shadow: 0 18px 50px rgba(0,0,0,.6), inset 0 0 0 1px rgba(86,217,242,.35); display: flex; flex-direction: column; gap: 10px; }
+.pop .hd { display: flex; gap: 16px; align-items: center; } .pop h4 { font-size: 22px; font-weight: 800; } .pop p { font-size: 15px; color: #b8c3d3; }
+.pop .f { display: flex; justify-content: space-between; font-size: 14px; } .pop .f span { color: var(--dim); }
+.pop .btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }
+</style></head><body>
+<div class="stage"><img class="hdr" src="assets/header-messages.webp"><main class="area" id="a"></main></div>
+<script src="../catalog.js"></script><script src="ui.js"></script><script src="progress.js"></script>
+<script>
+const { medal, nav, byId, fmt, A, rankOf, title, PLAYER } = UI;
+const pts = PROG.points, { cur, next } = rankOf(pts);
+const cats = ACH.CATS.map((c) => { const all = ACH.LIST.filter((a) => a.cat === c.id); return [c, all.filter((a) => PROG.done[a.id]).length, all.length]; });
+const tile = (a) => {
+  const d = PROG.done[a.id], p = d ? 100 : Math.round(Math.min(1, (PROG.have[a.id] || 0) / a.goal) * 100);
+  return `<div class="t ${d ? 'got' : ''} ${a.id === 'david' ? 'on' : ''}" ${a.id === 'david' ? 'id="sel"' : ''}>${!d && p ? `<i class="ring" style="--p:${p}"></i>` : ''}${medal(a, 76, !d)}<b>${a.name}</b><small>${d ? `+${a.points} · раунд ${d}` : `+${a.points}${p ? ` · ${p}%` : ''}`}</small></div>`;
+};
+const group = (id) => { const c = ACH.CATS.find((x) => x.id === id); const all = ACH.LIST.filter((a) => a.cat === id);
+  return `<div class="grp"><b>${c.name}</b><span>${all.filter((a) => PROG.done[a.id]).length} из ${all.length}</span></div><div class="tiles">${all.map(tile).join('')}</div>`; };
+const sel = byId('david');
+document.getElementById('a').innerHTML = nav('ach') + `
+<div class="pan main">
+  <div class="hero">
+    <div class="me">${medal({ tier: 'g', cat: 'round', id: 'top-ten' }, 120)}<div class="pts"><div class="k">Летопись командира</div><b>${fmt(pts)}</b><span>очков за все раунды · ${Object.keys(PROG.done).length} из ${ACH.LIST.length} достижений</span><span class="r">${cur.name}</span></div></div>
+    <div class="next"><div class="row"><span>До ранга «${next.name}»</span><em>ещё ${fmt(next.at - pts)}</em></div><div class="bar gold"><i style="width:${(pts - cur.at) / (next.at - cur.at) * 100}%"></i></div>
+      <div class="unl">
+        <div class="card"><img src="${A.ship('aegis', 'titan')}"><div><b>Титан · Чёрный бастион</b><small>облик флагмана</small></div></div>
+        <div class="card"><img src="${A.skin('028')}"><div><b>6 обликов планет</b><small>раздел «Редкие»</small></div></div>
+      </div></div>
+    <div class="card ttl"><small>Ваш титул — его видят все рядом с ником</small><div class="line">${PLAYER.name} ${title(byId(PLAYER.title))}</div><small>Сменить: выберите любое полученное достижение</small></div>
+  </div>
+  <div class="bar2"><span class="chip on">Все разделы</span>${cats.map(([c, g, n]) => `<span class="chip">${c.name} <b>${g}/${n}</b></span>`).join('')}</div>
+  <div class="grid">${group('war')}${group('chronicle')}<div class="scroll-fade"></div></div>
+</div>`;
+const t = document.getElementById('sel').getBoundingClientRect(), st = document.querySelector('.stage').getBoundingClientRect(), k = st.width / 1920;
+const pop = document.createElement('div'); pop.className = 'pop';
+pop.innerHTML = `<div class="hd">${medal(sel, 70)}<div><span class="tier g">золото · веха</span><h4>${sel.name}</h4></div></div><p>${sel.how}. Получено в раунде 2: флот Ор Кровавого был сильнее в 5,3 раза.</p>
+  <div class="f"><span>Очки</span><b>+${sel.points} навсегда</b></div><div class="f"><span>Редкость</span><b>у ${PROG.rarity.david} из 101 командира</b></div>
+  <div class="btns"><button class="btn ghost">В витрину профиля</button><button class="btn pri">Сделать титулом</button></div>`;
+pop.style.left = `${(t.right - st.left) / k - 1920 * 0 + 10 - 326}px`; pop.style.top = `${(t.top - st.top) / k - 136 - 64 - 40}px`;
+document.querySelector('.main').appendChild(pop);
+</script></body></html>

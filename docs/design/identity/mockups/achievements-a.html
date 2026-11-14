@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Все достижения · вариант A (список)</title>
+<link rel="stylesheet" href="ui.css">
+<style>
+.main { left: 326px; width: 1090px; display: flex; flex-direction: column; overflow: hidden; }
+.side { left: 1434px; right: 38px; display: flex; flex-direction: column; overflow: hidden; }
+.top { padding: 24px 30px 18px; display: grid; grid-template-columns: auto 1fr auto; gap: 22px; align-items: center; border-bottom: 1px solid var(--line); }
+.top .pts b { display: block; font-size: 44px; font-weight: 800; line-height: 1; }
+.top .pts span { font-size: 15px; color: var(--dim); }
+.rank { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.rank .row { display: flex; justify-content: space-between; font-size: 15px; font-weight: 700; color: #c7d1de; }
+.rank .row b { color: #fff; } .rank .row em { font-style: normal; color: var(--g); }
+.rank small { font-size: 14px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .rank small i { font-style: normal; color: #e8eef7; font-weight: 700; }
+.count { text-align: right; } .count b { font-size: 26px; font-weight: 800; } .count span { display: block; font-size: 14px; color: var(--dim); }
+/* итоговый вариант: шапка из варианта B (слепое A/B, раунд 01) */
+.top.hero { grid-template-columns: auto 1fr; padding: 20px 30px; border-radius: 18px 18px 0 0;
+  background: linear-gradient(90deg, rgba(10,16,22,.98) 0, rgba(10,16,22,.92) 60%, rgba(10,16,22,.7)), url('../../../../src/assets/ui/rating/rating-backdrop.webp') right center/cover; }
+.top.hero .me { display: flex; align-items: center; gap: 18px; } .top.hero .pts span em { font-style: normal; color: var(--g); font-weight: 800; }
+.unl { display: flex; gap: 10px; margin-top: 4px; } .unl .card { display: grid; grid-template-columns: 48px 1fr; gap: 10px; align-items: center; padding: 6px 12px 6px 6px; }
+.unl img { width: 48px; height: 48px; object-fit: contain; } .unl b { font-size: 14px; display: block; } .unl small { font-size: 13px; color: var(--dim); }
+.filters { display: flex; gap: 8px; padding: 14px 30px 4px; flex-wrap: wrap; }
+.filters.sub { padding-top: 6px; padding-bottom: 12px; }
+.list { padding: 0 20px 20px; overflow: hidden; flex: 1; position: relative; }
+.grp { display: flex; align-items: baseline; gap: 10px; padding: 16px 10px 8px; } .grp b { font-size: 15px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; color: #c7d1de; } .grp span { font-size: 14px; color: var(--dim); }
+.row { display: grid; grid-template-columns: 56px 1fr 230px 86px; gap: 16px; align-items: center; padding: 9px 10px; border-radius: 12px; }
+.row.on { background: rgba(86,217,242,.10); box-shadow: inset 0 0 0 1px rgba(86,217,242,.42); }
+.row .nm b { display: block; font-size: 17px; font-weight: 800; } .row .nm span { display: block; font-size: 14px; color: var(--dim); margin-top: 2px; }
+.row.got .nm b { color: #fff; } .row:not(.got) .nm b { color: #b7c2d1; }
+.row .pr { display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--dim); }
+.row .pr .got { color: var(--green); font-weight: 700; }
+.row .pt { text-align: right; font-size: 18px; font-weight: 800; } .row .pt small { display: block; }
+.row.cur .nm b::after { content: 'ваш титул'; margin-left: 10px; font-size: 12px; font-weight: 800; color: #04121b; background: var(--cyan); border-radius: 6px; padding: 2px 7px; vertical-align: 2px; }
+/* правая карточка */
+.det { padding: 30px 30px 0; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; }
+.det h2 { font-size: 28px; font-weight: 800; margin-top: 8px; }
+.det p { font-size: 16px; color: #b8c3d3; max-width: 380px; }
+.det .big { font-size: 40px; font-weight: 800; color: var(--g); line-height: 1; margin-top: 6px; } .det .big small { font-size: 16px; color: var(--dim); font-weight: 700; margin-left: 6px; }
+.facts { width: 100%; padding: 18px 30px; display: flex; flex-direction: column; gap: 10px; }
+.fact { display: flex; justify-content: space-between; gap: 12px; font-size: 15px; padding: 10px 14px; } .fact span { color: var(--dim); } .fact b { text-align: right; }
+.who { display: flex; align-items: center; gap: 8px; padding: 12px 14px; } .who img { width: 38px; height: 38px; border-radius: 9px; }
+.who span { font-size: 14px; color: var(--dim); margin-left: 6px; text-align: left; line-height: 1.3; }
+.foot { margin-top: auto; padding: 18px 30px; border-top: 1px solid var(--line); display: flex; gap: 10px; justify-content: flex-end; }
+</style></head><body>
+<div class="stage"><img class="hdr" src="assets/header-messages.webp"><main class="area" id="a"></main></div>
+<script src="../catalog.js"></script><script src="ui.js"></script><script src="progress.js"></script>
+<script>
+const { medal, nav, byId, fmt, A, rankOf, NPC } = UI;
+const pts = PROG.points, { cur, next } = rankOf(pts);
+const got = Object.keys(PROG.done).length;
+const sel = byId(UI.q.get('sel') || 'david');
+const cats = ACH.CATS.map((c) => { const all = ACH.LIST.filter((a) => a.cat === c.id); return [c, all.filter((a) => PROG.done[a.id]).length, all.length]; });
+const prog = (a) => {
+  if (PROG.done[a.id]) return `<div class="pr"><span class="got">Получено · раунд ${PROG.done[a.id]}</span></div>`;
+  const h = PROG.have[a.id] || 0, pct = Math.min(100, h / a.goal * 100);
+  const short = (n) => n >= 1e9 ? `${fmt(Math.round(n / 1e8) / 10)} млрд` : n >= 1e6 ? `${fmt(Math.round(n / 1e5) / 10)} млн` : fmt(n);
+  return `<div class="pr"><div class="bar ${a.kind === 'chronicle' ? 'gold' : ''}"><i style="width:${pct}%"></i></div><span>${short(h)} из ${short(a.goal)}</span></div>`;
+};
+const row = (a) => `<div class="row ${PROG.done[a.id] ? 'got' : ''} ${a.id === sel.id ? 'on' : ''} ${a.id === UI.PLAYER.title ? 'cur' : ''}">${medal(a, 56, !PROG.done[a.id])}
+  <div class="nm"><b>${a.name}</b><span>${a.how}</span></div>${prog(a)}<div class="pt">+${a.points}<small class="tier ${a.tier}">${{ b: 'бронза', s: 'серебро', g: 'золото', l: 'легенда' }[a.tier]}</small></div></div>`;
+const groups = ['war', 'chronicle', 'sun'].map((id) => { const c = ACH.CATS.find((x) => x.id === id); const all = ACH.LIST.filter((a) => a.cat === id);
+  return `<div class="grp"><b>${c.name}</b><span>${all.filter((a) => PROG.done[a.id]).length} из ${all.length}${id === 'chronicle' ? ' · считается через раунды' : ''}</span></div>${all.map(row).join('')}`; }).join('');
+document.getElementById('a').innerHTML = nav('ach') + `
+<div class="pan main">
+  ${UI.q.get('hero') === '1' ? `<div class="top hero">
+    <div class="me">${medal({ tier: 'g', cat: 'round', id: 'top-ten' }, 104)}<div class="pts"><div class="k">Летопись командира</div><b>${fmt(pts)}</b><span>${got} из ${ACH.LIST.length} · ранг <em>${cur.name}</em></span></div></div>
+    <div class="rank"><div class="row"><span>До ранга «${next.name}»</span><em>ещё ${fmt(next.at - pts)}</em></div>
+      <div class="bar gold"><i style="width:${(pts - cur.at) / (next.at - cur.at) * 100}%"></i></div>
+      <div class="unl"><div class="card"><img src="${A.ship('aegis', 'titan')}"><div><b>Титан · Чёрный бастион</b><small>облик флагмана</small></div></div>
+        <div class="card"><img src="${A.skin('028')}"><div><b>6 обликов планет</b><small>раздел «Редкие»</small></div></div></div></div>
+  </div>` : `<div class="top">
+    <div class="pts"><div class="k">Летопись командира</div><b>${fmt(pts)}</b><span>очков за все раунды</span></div>
+    <div class="rank"><div class="row"><span>Ранг <b>${cur.name}</b></span><em>ещё ${fmt(next.at - pts)} до ранга «${next.name}»</em></div>
+      <div class="bar gold"><i style="width:${(pts - cur.at) / (next.at - cur.at) * 100}%"></i></div>
+      <small>На ${fmt(next.at)} откроются: <i>флагман «Титан · Чёрный бастион»</i> и 6 обликов планет</small></div>
+    <div class="count"><b>${got} / ${ACH.LIST.length}</b><span>получено</span></div>
+  </div>`}
+  <div class="filters"><span class="chip on">Все разделы</span>${cats.map(([c, g, n]) => `<span class="chip">${c.name} <b>${g}/${n}</b></span>`).join('')}</div>
+  <div class="filters sub"><span class="chip on">Все</span><span class="chip">Получены</span><span class="chip">Близко к цели</span><span class="chip">Не начаты</span></div>
+  <div class="list">${groups}<div class="scroll-fade"></div></div>
+</div>
+<div class="pan side">
+  <div class="det">${medal(sel, 150)}<span class="tier ${sel.tier}">${{ b: 'бронза', s: 'серебро', g: 'золото', l: 'легенда' }[sel.tier]} · веха</span>
+    <h2>${sel.name}</h2><p>${sel.how}.</p><div class="big">+${sel.points}<small>очков навсегда</small></div></div>
+  <div class="facts">
+    <div class="card fact"><span>Получено</span><b>Раунд 2 · 14 октября</b></div>
+    <div class="card fact"><span>Как это было</span><b>Флот Ор Кровавого, сильнее в 5,3 раза</b></div>
+    <div class="card fact"><span>Редкость</span><b>У ${PROG.rarity[sel.id]} из 101 командира</b></div>
+    <div class="card who">${NPC.slice(0, 4).map((n) => `<img src="${A.face(n.race)}">`).join('')}<span>Есть у Ор Кровавого, Селесты<br>и ещё 5 командиров</span></div>
+  </div>
+  <div class="foot"><button class="btn ghost">Показать в профиле</button><button class="btn pri">Сделать титулом</button></div>
+</div>`;
+</script></body></html>

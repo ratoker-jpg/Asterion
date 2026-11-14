@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Профиль с титулом и гербом</title>
+<link rel="stylesheet" href="ui.css">
+<style>
+.main { left: 326px; right: 38px; display: grid; grid-template-columns: 500px 1fr 430px; gap: 22px; padding: 22px; overflow: hidden; }
+/* карточка профиля: фон, рамка, портрет, герб, титул — всё выбирается в «Облике» */
+.pc { position: relative; border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; background: #0a1118 var(--bg) center/cover; }
+.pc::before { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(5,9,14,.15) 0, rgba(5,9,14,.25) 40%, rgba(5,9,14,.96) 78%); }
+.pc::after { content: ''; position: absolute; inset: 0; border-radius: 16px; pointer-events: none; padding: 3px; background: var(--frame);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
+.pc .gen { position: absolute; left: 50%; top: 10px; height: 74%; transform: translateX(-50%); }
+.pc .crest { position: absolute; top: 18px; left: 18px; filter: drop-shadow(0 6px 14px rgba(0,0,0,.7)); }
+.pc .laur { position: absolute; top: 22px; right: 18px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.laurel { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 800; color: #ffe39a; background: rgba(40,26,4,.82); box-shadow: inset 0 0 0 1px rgba(241,195,92,.6); border-radius: 9px; padding: 5px 10px 5px 6px; }
+.laurel img { width: 26px; height: 26px; }
+.pc .info { position: relative; padding: 0 26px 22px; display: flex; flex-direction: column; gap: 8px; }
+.pc h2 { font-size: 34px; font-weight: 800; line-height: 1.05; text-shadow: 0 2px 12px #000; }
+.pc .sub { font-size: 16px; color: #c7d1de; } .pc .sub i { font-style: normal; color: var(--cyan); font-weight: 700; }
+.pc .title { font-size: 16px; align-self: flex-start; }
+.pc .acts { display: flex; gap: 10px; margin-top: 10px; }
+.col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.scores { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.sc { display: grid; grid-template-columns: 52px 1fr; gap: 12px; align-items: center; padding: 14px 16px; } .sc img { width: 52px; height: 52px; }
+.sc small { font-size: 14px; color: var(--dim); display: block; } .sc b { font-size: 24px; white-space: nowrap; font-weight: 800; } .sc em { font-style: normal; font-size: 13px; color: var(--g); font-weight: 700; display: block; }
+.show { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.show .card { padding: 16px 10px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; } .show b { font-size: 15px; } .show small { font-size: 13px; color: var(--dim); }
+.hist .tr { display: grid; grid-template-columns: 84px 1fr 70px 70px 70px; gap: 10px; align-items: center; padding: 10px 6px; border-bottom: 1px solid var(--line); font-size: 15px; font-weight: 700; }
+.hist .tr span:not(:first-child):not(:nth-child(2)) { text-align: right; }
+.hist .th { font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; color: #56627a; font-weight: 800; }
+.hist .win { color: var(--g); } .hist .now { color: var(--cyan); }
+.seen { display: flex; flex-direction: column; gap: 12px; }
+.seen .lbl { font-size: 13px; color: var(--dim); margin-bottom: 6px; }
+.rrow { display: grid; grid-template-columns: 40px 34px 1fr auto; gap: 12px; align-items: center; padding: 10px 14px; }
+.rrow .n { font-size: 18px; font-weight: 800; color: var(--dim); } .rrow b { font-size: 16px; display: block; } .rrow .title { margin-top: 3px; font-size: 13px; }
+.rrow .p { font-size: 16px; font-weight: 800; }
+.letter { padding: 12px 14px; display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: center; } .letter img { width: 44px; height: 44px; border-radius: 10px; }
+.letter b { font-size: 15px; display: block; } .letter span { font-size: 13px; color: var(--dim); }
+.mapcard { padding: 12px 14px; display: grid; grid-template-columns: 88px 1fr; gap: 14px; align-items: center; }
+.ring { position: relative; width: 88px; height: 88px; } .ring img { width: 100%; height: 100%; object-fit: contain; position: relative; }
+.ring.win::before { content: ''; position: absolute; inset: -6px; border-radius: 50%; background: radial-gradient(circle, transparent 54%, rgba(255,210,110,.55) 60%, transparent 72%); }
+.mapcard b { font-size: 15px; display: block; } .mapcard span { font-size: 13px; color: var(--dim); display: block; margin-top: 3px; }
+.planets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.planets .card { padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; } .planets b { font-size: 14px; } .planets small { font-size: 12px; color: var(--dim); }
+.trait { padding: 14px 16px; font-size: 15px; color: #c7d1de; line-height: 1.45; } .trait b { color: #fff; }
+.k2 { display: flex; justify-content: space-between; align-items: baseline; }
+</style></head><body>
+<div class="stage"><img class="hdr" src="assets/header-messages.webp"><main class="area" id="a"></main></div>
+<script src="../catalog.js"></script><script src="ui.js"></script><script src="progress.js"></script>
+<script>
+const { medal, nav, byId, fmt, A, rankOf, title, crest, PLAYER, NPC, npcCrest, STYLE } = UI;
+const npc = UI.q.get('who') === 'npc';
+const P = npc ? { ...NPC[0], raceName: 'Рой', alliance: 'Рой Ноктиса', crest: npcCrest(NPC[0]) } : { ...PLAYER, points: PROG.points };
+const { cur } = rankOf(P.points);
+const FRAMES = { gold: 'conic-gradient(from 210deg, #8a5d12, #ffe08a, #b07a1d, #fff1b8, #8a5d12)', crimson: 'conic-gradient(from 210deg, #5b0d16, #ff7a86, #8d1d2a, #ffb3ba, #5b0d16)' };
+const laurels = P.wins ? `<div class="laur"><span class="laurel"><img src="${A.sun('campaign-victory')}">${P.wins === 1 ? 'Победитель раунда' : `Победитель ${P.wins} раундов`}</span>${npc ? '<span class="laurel"><img src="' + A.medalRank(1) + '">Первый в рейтинге ×1</span>' : ''}</div>` : '';
+const card = `<div class="pc" style="--bg:url('${npc ? A.factionBg('veyra') : A.banner('sun-support')}');--frame:${npc ? FRAMES.crimson : FRAMES.gold}">
+  <img class="gen" src="${A.general(P.race)}">${crest(P.crest, 120)}${laurels}
+  <div class="info"><span class="title ${byId(P.title).tier}">${byId(P.title).name}</span><h2>${P.name}</h2>
+    <div class="sub">${P.raceName} · <i>[${P.tag}]</i> ${P.alliance}${npc ? ' · член союза' : ' · глава'}</div>
+    <div class="acts">${npc ? '<button class="btn">Написать</button><button class="btn">На карте</button><button class="btn pri">Все достижения</button>' : '<button class="btn">Все достижения</button><button class="btn pri">Изменить облик</button>'}</div></div></div>`;
+const showcase = (npc ? ['two-crowns', 'five-ruins', 'best-fighter'] : ['world-breaker', 'round-winner', 'david']).map(byId);
+const rounds = npc
+  ? [['Раунд 1', '12 · Рой', '7', '410', ''], ['Раунд 2', '1 · Рой', '7', '720', 'win'], ['Раунд 3', '3 · Рой', '7', '540', 'win'], ['Раунд 4', 'сейчас 6 · Рой', '6', '—', 'now']]
+  : [['Раунд 1', '23 · Астеры', '5', '230', ''], ['Раунд 2', '4 · Астеры', '7', '585', 'win'], ['Раунд 3', 'сейчас 37 · Астеры', '4', '—', 'now']];
+const mid = `<div class="col">
+  <div class="k2"><div class="k">${npc ? 'Профиль командира · NPC' : 'Ваш профиль'}</div><span class="h">Ранг «${cur.name}»</span></div>
+  <div class="scores">
+    <div class="card sc"><img src="${A.score('achievement-trophy')}"><div><small>Очки достижений · навсегда</small><b>${fmt(P.points)}</b><em>${npc ? '31 из 66 достижений' : `${Object.keys(PROG.done).length} из 66 достижений`}</em></div></div>
+    <div class="card sc"><img src="${A.score('overall-star')}"><div><small>Общие очки · этот раунд</small><b>${npc ? '1 912 400' : '20 708'}</b><em style="color:var(--dim)">${npc ? '6 место из 101' : '37 место из 101'}</em></div></div>
+  </div>
+  <div class="h">Витрина</div>
+  <div class="show">${showcase.map((a) => `<div class="card">${medal(a, 76)}<b>${a.name}</b><small>+${a.points} · ${{ b: 'бронза', s: 'серебро', g: 'золото', l: 'легенда' }[a.tier]}</small></div>`).join('')}</div>
+  <div class="h">Летопись раундов</div>
+  <div class="hist"><div class="tr th"><span>Раунд</span><span>Место</span><span>Планет</span><span>Очков</span><span>Итог</span></div>
+    ${rounds.map(([r, w, p, o, t]) => `<div class="tr"><span>${r}</span><span>${w}</span><span>${p}</span><span>${o}</span><span class="${t}">${t === 'win' ? 'Врата' : t === 'now' ? 'идёт' : '—'}</span></div>`).join('')}</div>
+</div>`;
+const n1 = NPC[4];
+const right = npc ? `<div class="col">
+  <div class="h">Характер и вкус</div>
+  <div class="card trait"><b>Военный.</b> Выбирает алые гербы, вулканические и мёртвые планеты, тёмные фоны карточки. Ставит титулом самое редкое боевое достижение.</div>
+  <div class="h">Его планеты на карте</div>
+  <div class="planets">
+    <div class="card"><div class="ring win"><img src="${A.starter('volcanic')}"></div><b>Двойная корона</b><small>облик победителя</small></div>
+    <div class="card"><div class="ring"><img src="${A.starter('barren_rocky')}"></div><b>Каменная</b><small>обычный</small></div>
+    <div class="card"><div class="ring"><img src="${A.skin('011')}"><\/div><b>Пепел</b><small>редкий</small></div>
+  </div>
+  <div class="h">Командир флота</div>
+  <div class="card mapcard"><div class="ring"><img src="${A.commander('executioner')}"></div><div><b>Палач · «Кровавый рассвет»</b><span>второй облик командира, открыт с 500 очков</span></div></div>
+</div>` : `<div class="col seen">
+  <div class="h">Так вас видят другие</div>
+  <div><div class="lbl">Рейтинг</div><div class="card rrow"><span class="n">37</span>${crest(P.crest, 34)}<div><b>${P.name} <span style="color:var(--cyan)">[${P.tag}]</span></b>${title(byId(P.title))}</div><span class="p">20 708</span></div></div>
+  <div><div class="lbl">Письмо</div><div class="card letter"><img src="${A.general('aegis')}" style="object-fit:cover;object-position:top"><div><b>${P.name} · <span style="color:#ffd77a">Разрушитель миров</span></b><span>Предлагает совместную атаку на [2:15:6]</span></div><span style="font-size:13px;color:var(--dim)">17:02</span></div></div>
+  <div><div class="lbl">Карта — ваша планета</div><div class="card mapcard"><div class="ring win"><img src="${A.skin('026')}"></div><div><b>Helion 01 · «Венец победителя»</b><span>золотой ореол виден всем в галактике</span><span>${P.name} · Разрушитель миров</span></div></div></div>
+  <div><div class="lbl">Боевой доклад</div><div class="card rrow" style="grid-template-columns:44px 1fr"><img src="${A.face('aegis')}" style="width:44px;height:44px;border-radius:10px"><div><b>Атакующий: ${P.name}</b>${title(byId(P.title))}</div></div></div>
+</div>`;
+document.getElementById('a').innerHTML = nav(npc ? '' : 'profile') + `<div class="pan main">${card}${mid}${right}</div>`;
+</script></body></html>

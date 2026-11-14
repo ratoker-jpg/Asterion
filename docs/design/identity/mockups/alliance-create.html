@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Основание союза</title>
+<link rel="stylesheet" href="ui.css">
+<style>
+/* шапка: активна вкладка «Командование» */
+.hfix { position: absolute; z-index: 5001; left: 1706px; top: 104px; width: 130px; height: 16px; background: #0c1520; }
+.hline { position: absolute; z-index: 5001; left: 1489px; top: 111px; width: 116px; height: 3px; border-radius: 2px; background: #56d9f2; box-shadow: 0 0 10px rgba(86,217,242,.6); }
+.dim { position: absolute; inset: 0; background: rgba(2,5,9,.72); }
+.dlg { position: absolute; left: 150px; right: 150px; top: 40px; bottom: 26px; border-radius: 18px; background: rgba(11,18,24,.98); border: 1px solid rgba(126,200,220,.18); box-shadow: 0 30px 80px rgba(0,0,0,.7); display: flex; flex-direction: column; overflow: hidden; }
+.dh { display: flex; align-items: center; gap: 26px; padding: 20px 28px; border-bottom: 1px solid var(--line); }
+.dh h2 { font-size: 22px; font-weight: 800; }
+.rail { display: flex; gap: 8px; margin-left: 30px; }
+.st { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 700; color: #7d8a9d; padding: 8px 14px; border-radius: 10px; }
+.st i { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 13px; font-weight: 800; background: #1a2733; color: #9aa6b6; }
+.st.on { color: #fff; background: rgba(86,217,242,.12); box-shadow: inset 0 0 0 1px rgba(86,217,242,.45); } .st.on i { background: var(--cyan); color: #04121b; }
+.st.done i { background: rgba(53,229,138,.2); color: var(--green); }
+.x { margin-left: auto; width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; color: #ff6b7e; font-size: 22px; font-weight: 800; background: rgba(240,68,94,.12); }
+.db { flex: 1; display: grid; grid-template-columns: 420px 1fr 440px; min-height: 0; }
+.db > div { padding: 22px 26px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.db > div + div { border-left: 1px solid var(--line); }
+.hero { align-items: center; text-align: center; justify-content: center; background: radial-gradient(circle at 50% 40%, var(--glow), transparent 60%); }
+.hero h3 { font-size: 26px; font-weight: 800; margin-top: 10px; line-height: 1.15; } .hero .tag { font-size: 18px; font-weight: 800; color: var(--acc); }
+.hero p { font-size: 16px; color: #c7d1de; font-style: italic; max-width: 340px; }
+.hero .btns { display: flex; gap: 8px; margin-top: 10px; }
+.lbl { font-size: 13px; color: var(--dim); font-weight: 700; display: flex; justify-content: space-between; margin-bottom: 6px; }
+.in { background: #0c151d; border: 1px solid rgba(126,200,220,.18); border-radius: 9px; padding: 11px 14px; font-size: 16px; font-weight: 700; }
+.two { display: grid; grid-template-columns: 1fr 170px; gap: 12px; }
+.pick { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.pick .o { border-radius: 11px; background: rgba(16,26,31,.7); padding: 6px; display: grid; place-items: center; }
+.pick .o.on { background: rgba(86,217,242,.14); box-shadow: inset 0 0 0 2px rgba(86,217,242,.6); }
+.sw { display: flex; gap: 10px; } .sw span { flex: 1; height: 42px; border-radius: 10px; background: var(--c); display: grid; place-items: end center; font-size: 12px; font-weight: 800; color: rgba(0,0,0,.65); padding-bottom: 4px; }
+.sw span.on { box-shadow: 0 0 0 3px #0b1218, 0 0 0 5px #fff; }
+.hint { font-size: 13px; color: var(--dim); }
+.seen .lbl2 { font-size: 13px; color: var(--dim); margin-bottom: 6px; }
+.cat { display: grid; grid-template-columns: 48px 1fr auto; gap: 12px; align-items: center; padding: 12px 14px; } .cat b { font-size: 15px; display: block; } .cat span { font-size: 13px; color: var(--dim); }
+.mapl { display: grid; grid-template-columns: 90px 1fr; gap: 12px; align-items: center; padding: 12px 14px; }
+.mapl .pl { position: relative; width: 90px; height: 90px; } .mapl .pl img { width: 100%; height: 100%; object-fit: contain; }
+.mapl .pl .t { position: absolute; left: 50%; bottom: -4px; transform: translateX(-50%); font-size: 12px; font-weight: 800; color: var(--acc); background: rgba(5,9,14,.9); border-radius: 6px; padding: 1px 6px; white-space: nowrap; }
+.mapl b { font-size: 15px; display: block; } .mapl span { font-size: 13px; color: var(--dim); display: block; }
+.df { display: flex; align-items: center; gap: 10px; padding: 16px 28px; border-top: 1px solid var(--line); } .df .sp { margin-right: auto; font-size: 14px; color: var(--dim); }
+/* первый экран союза */
+.full { position: absolute; left: 38px; right: 38px; top: 64px; bottom: 26px; display: grid; grid-template-columns: 1fr 520px; gap: 20px; }
+.banner { position: relative; border-radius: 18px; overflow: hidden; padding: 30px 34px; display: grid; grid-template-columns: 220px 1fr; gap: 30px; align-items: center;
+  background: linear-gradient(90deg, rgba(9,15,21,.98) 0, rgba(9,15,21,.95) 78%, rgba(9,15,21,.6)), url('../../../../src/assets/ui/missions/banner-sun-support.webp') right center/cover; border: 1px solid rgba(126,200,220,.14); }
+.banner h1 { font-size: 38px; font-weight: 800; line-height: 1.05; } .banner .tag { color: var(--acc); }
+.banner p { font-size: 18px; font-style: italic; color: #d5dde8; margin-top: 8px; } .chips { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.colL { display: flex; flex-direction: column; gap: 20px; min-height: 0; }
+.steps { padding: 20px 24px; display: flex; flex-direction: column; gap: 10px; }
+.step { display: grid; grid-template-columns: 34px 1fr auto; gap: 14px; align-items: center; padding: 12px 14px; border-radius: 12px; background: rgba(16,26,31,.7); }
+.step i { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-weight: 800; background: #1a2733; color: #9aa6b6; }
+.step.ok i { background: rgba(53,229,138,.18); color: var(--green); } .step b { font-size: 16px; display: block; } .step span { font-size: 14px; color: var(--dim); }
+.cands { padding: 20px 22px; display: flex; flex-direction: column; gap: 10px; }
+.cand { display: grid; grid-template-columns: 56px 1fr auto; gap: 12px; align-items: center; padding: 10px 12px; border-radius: 12px; background: rgba(16,26,31,.7); }
+.cand b { font-size: 15px; display: block; } .cand .title { font-size: 12px; margin-top: 3px; } .cand small { display: block; font-size: 13px; color: var(--dim); margin-top: 3px; }
+.cand .btn { padding: 9px 14px; font-size: 14px; }
+.lead { padding: 16px 22px; display: grid; grid-template-columns: 110px 1fr; gap: 16px; align-items: center; } .lead img { width: 110px; height: 110px; object-fit: contain; }
+.lead b { font-size: 16px; display: block; } .lead span { font-size: 14px; color: var(--dim); display: block; margin-top: 4px; }
+</style></head><body>
+<div class="stage"><img class="hdr" src="assets/header-messages.webp"><div class="hfix"></div><div class="hline"></div><main class="area" id="a"></main></div>
+<script src="../catalog.js"></script><script src="ui.js"></script>
+<script>
+const { A, crest, title, byId, NPC, npcCrest } = UI;
+const done = UI.q.get('step') === 'done';
+const ACC = { cyan: '#56d9f2', amber: '#e6ad50', violet: '#b38cff', crimson: '#ff6b7e', emerald: '#35e58a', silver: '#d6dde7' };
+const C = { frame: 'orbital', field: 'navy', glyph: 'crown', color: 'amber' };
+const name = 'Орден Последнего Рассвета', tag = 'DAWN', motto = 'Мы приходим первыми и уходим последними';
+const root = document.querySelector('.stage'); root.style.setProperty('--acc', ACC[C.color]); root.style.setProperty('--glow', 'rgba(230,173,80,.16)');
+if (!done) {
+  const presets = [C, { frame: 'aegis', field: 'abyss', glyph: 'phoenix', color: 'cyan' }, { frame: 'octagon', field: 'crimson', glyph: 'blades', color: 'crimson' }, { frame: 'hex', field: 'forest', glyph: 'compass', color: 'emerald' }, { frame: 'diamond', field: 'royal', glyph: 'nexus', color: 'violet' }, { frame: 'pennant', field: 'bronze', glyph: 'anvil', color: 'silver' }];
+  const glyphs = ['crown', 'phoenix', 'nova', 'leviathan', 'citadel', 'comet'];
+  document.getElementById('a').innerHTML = `<div class="dim"></div><div class="dlg">
+    <div class="dh"><h2>Основание союза</h2><div class="rail"><span class="st on"><i>1</i>Знамя</span><span class="st"><i>2</i>О союзе</span><span class="st"><i>3</i>Основание</span></div><span class="x">✕</span></div>
+    <div class="db">
+      <div class="hero">${crest(C, 260)}<h3>${name}</h3><span class="tag">[${tag}]</span><p>«${motto}»</p>
+        <div class="btns"><button class="btn">Случайный герб</button><button class="btn ghost">Тонкая настройка</button></div></div>
+      <div>
+        <div><div class="lbl"><span>Готовые образы — с них удобно начать</span><span>или соберите свой ниже</span></div><div class="pick">${presets.map((p, i) => `<div class="o ${i === 0 ? 'on' : ''}">${crest(p, 82)}</div>`).join('')}</div></div>
+        <div><div class="lbl"><span>Знак</span><span>12 знаков</span></div><div class="pick">${glyphs.map((g, i) => `<div class="o ${i === 0 ? 'on' : ''}">${crest({ ...C, glyph: g }, 70)}</div>`).join('')}</div></div>
+        <div><div class="lbl"><span>Цвет союза — им окрашены знак, тег, девиз и метки на карте</span></div>
+          <div class="sw">${Object.entries({ cyan: 'Голубой', amber: 'Янтарный', violet: 'Фиолетовый', crimson: 'Алый', emerald: 'Зелёный', silver: 'Серебряный' }).map(([k, n]) => `<span class="${k === C.color ? 'on' : ''}" style="--c:${ACC[k]}">${n}</span>`).join('')}</div></div>
+        <div class="two"><div><div class="lbl"><span>Название</span><span>26 / 42</span></div><div class="in">${name}</div></div><div><div class="lbl"><span>Тег</span><span>авто</span></div><div class="in">${tag}</div></div></div>
+        <div><div class="lbl"><span>Девиз</span><span>40 / 72</span></div><div class="in">${motto}</div></div>
+      </div>
+      <div class="seen"><div class="h" style="margin-bottom:4px">Так союз увидят другие</div>
+        <div><div class="lbl2">Каталог союзов</div><div class="card cat">${crest(C, 48)}<div><b>${name}</b><span>[${tag}] · 1 из 15 · набор открыт</span></div><span style="color:var(--acc);font-weight:800">новый</span></div></div>
+        <div><div class="lbl2">Галактика — ваша столица</div><div class="card mapl"><div class="pl"><img src="${A.skin('skin-asterion-03')}"><span class="t">[${tag}]</span></div><div><b>Helion 01 · Dendrilion</b><span>метка союза его цветом</span><span>облик главы откроется после основания</span></div></div></div>
+        <div><div class="lbl2">Письмо от союза</div><div class="card cat">${crest(C, 48)}<div><b>[${tag}] ${name}</b><span>«${motto}»</span></div><span></span></div></div>
+      </div>
+    </div>
+    <div class="df"><span class="sp">Создание бесплатно. Название, герб и девиз глава сможет изменить в любой момент.</span><button class="btn">Отмена</button><button class="btn pri">Далее: о союзе</button></div>
+  </div>`;
+} else {
+  const cands = [NPC[3], NPC[2], NPC[5], NPC[6]];
+  const why = ['тоже копит на Солнце', 'ищет союз учёных', 'рядом с вами · [1:19:4]', 'торговец, просит защиты'];
+  document.getElementById('a').innerHTML = `<div class="full"><div class="colL">
+    <div class="banner"><div>${crest(C, 220)}</div><div><div class="k" style="color:var(--acc)">Союз основан · сегодня</div><h1>${name} <span class="tag">[${tag}]</span></h1><p>«${motto}»</p>
+      <div class="chips"><span class="chip">Глава: Dendrilion</span><span class="chip">1 из 15</span><span class="chip">Набор открыт</span><span class="chip">Место в рейтинге союзов появится завтра</span></div></div></div>
+    <div class="card steps"><div class="h">Первые шаги союза</div>
+      <div class="step ok"><i>✓</i><div><b>Знамя поднято</b><span>герб, название и девиз видны в каталоге и на карте</span></div><span></span></div>
+      <div class="step"><i>2</i><div><b>Позовите первых соратников</b><span>боты справа уже присматриваются к союзу; заявки придут в «Командование»</span></div><button class="btn pri">Пригласить</button></div>
+      <div class="step"><i>3</i><div><b>Поставьте облик главы на столицу</b><span>облики союза носит только глава; планету узнают все</span></div><button class="btn">Облик</button></div>
+      <div class="step"><i>4</i><div><b>Первый общий запрос ресурсов</b><span>союзники смогут прислать помощь на любую вашу планету</span></div><button class="btn">Запрос</button></div>
+    </div></div>
+    <div style="display:flex;flex-direction:column;gap:20px;min-height:0">
+      <div class="card cands"><div class="h">Им подходит ваш союз</div>${cands.map((n, i) => `<div class="cand">${crest(npcCrest(n), 56)}<div><b>${n.name}</b>${title(byId(n.title))}<small>${why[i]}</small></div><button class="btn">Позвать</button></div>`).join('')}</div>
+      <div class="card lead"><img src="${A.skin('skin-asterion-03')}"><div><span class="tier g">открыт облик главы</span><b>Знамя союза</b><span>Планета в цвете союза. Пока вы глава — она видна всем; передадите главенство — облик снимется.</span></div></div>
+    </div></div>`;
+}
+</script></body></html>
