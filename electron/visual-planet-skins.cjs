@@ -77,14 +77,13 @@ function zoneCover(win) {
   return win.webContents.executeJavaScript(`(() => {
     const img = document.querySelector('img[data-qa-planet-skin-art]').getBoundingClientRect();
     const cx = img.left + img.width / 2, cy = img.top + img.height / 2, r = img.width * ${SPHERE_SHARE} / 2;
-    return {
-      sphereDiameter: Math.round(r * 2),
-      covered: Array.from(document.querySelectorAll('.planet-orbit__zone')).filter((zone) => {
-        const box = zone.getBoundingClientRect();
-        const nx = Math.min(Math.max(cx, box.left), box.right), ny = Math.min(Math.max(cy, box.top), box.bottom);
-        return Math.hypot(cx - nx, cy - ny) < r;
-      }).map((zone) => zone.textContent.trim().slice(0, 30)),
-    };
+    // Gap = distance from the sphere's edge to the plate (negative = the planet covers it).
+    const plates = Array.from(document.querySelectorAll('.planet-orbit__zone')).map((zone) => {
+      const box = zone.getBoundingClientRect();
+      const nx = Math.min(Math.max(cx, box.left), box.right), ny = Math.min(Math.max(cy, box.top), box.bottom);
+      return { name: zone.textContent.trim().slice(0, 30), gap: Math.round(Math.hypot(cx - nx, cy - ny) - r) };
+    });
+    return { sphereDiameter: Math.round(r * 2), plates, covered: plates.filter((plate) => plate.gap < 0).map((plate) => plate.name) };
   })()`);
 }
 

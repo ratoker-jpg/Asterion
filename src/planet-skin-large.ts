@@ -40,6 +40,8 @@ export function largePlanetArt(skinId: string): Promise<string | undefined> {
  * look was before the 1024 px batch (see build-large.py). 1 for an unknown look.
  */
 export function planetLargeScale(skinId: string | undefined): number {
+  // The QA «before» pass shows the 512 px picture, which needs no scale.
+  if (switchedOff()) return 1;
   return (skinId && LARGE_PLANET_SCALE[skinId]) || 1;
 }
 
