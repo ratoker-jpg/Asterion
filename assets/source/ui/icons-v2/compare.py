@@ -6,7 +6,7 @@ OLDM=os.path.join(W,'assets','source','mission-icons-v1')
 NEWH=os.path.join(W,'src','assets','ui','header-icons'); NEWM=os.path.join(W,'src','assets','ui','mission-icons'); SR=os.path.join(W,'public','assets','generated','sun-raid')
 import subprocess
 oldsr=r'D:\Desktop\Asterion\worktrees\quick-upgrade\public\assets\generated\sun-raid'
-H=['planet','universe','fleets','operations','command','reports','settings','rating','science','alerts','zone-resource','zone-industry','zone-military','metal','mineral','gas','energy','population','debris']
+H=['planet','universe','fleets','operations','command','reports','rating','science','alerts','zone-resource','zone-industry','zone-military','metal','mineral','gas','energy','population','debris']
 rows=[(n,os.path.join(OLDH,n+'.png'),os.path.join(NEWH,n+'.webp')) for n in H]
 rows+=[('ops-available',os.path.join(OLDM,'23_deep_scan.png'),os.path.join(NEWH,'ops-available.webp')),('ops-active',os.path.join(OLDM,'31_expedition.png'),os.path.join(NEWH,'ops-active.webp'))]
 M=[('transport','01_transport'),('espionage','02_espionage'),('attack','03_attack'),('deployment','04_deployment'),('colonize','05_colonize'),('recycle','06_recycle'),('gas','07_gas_harvest'),('sun-support','08_sun_support'),('space-flight','09_space_flight'),('pirate-elimination','10_pirate_elimination'),('expedition','31_expedition'),('aid','33_trade_convoy'),('gate','29_wormhole_expedition')]

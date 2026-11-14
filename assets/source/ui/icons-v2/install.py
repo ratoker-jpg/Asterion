@@ -1,4 +1,4 @@
-import sys, os
+import sys, os, re
 from PIL import Image
 W=r'D:\Desktop\Asterion\worktrees\icons-batch-1'
 SRC=os.path.join(W,'assets','source','ui','icons-v2'); HI=os.path.join(W,'src','assets','ui','header-icons'); MI=os.path.join(W,'src','assets','ui','mission-icons'); SR=os.path.join(W,'public','assets','generated','sun-raid')
@@ -10,7 +10,7 @@ def prep(f):
   bb=a2.point(lambda v:255 if v>8 else 0).getbbox(); c=im.crop(bb); s=int(max(c.size)*1.06)
   cv=Image.new('RGBA',(s,s),(0,0,0,0)); cv.alpha_composite(c,((s-c.width)//2,(s-c.height)//2)); return im,cv
 for name in sys.argv[1:]:
-  base=name.replace('-r2','')
+  base=re.sub(r'-r\d+$','',name)
   im,cv=prep(os.path.join('out',name+'.png'))
   im.resize((1024,1024),Image.LANCZOS).save(os.path.join(SRC,base+'.png'),optimize=True)
   def w(path,size): cv.resize((size,size),Image.LANCZOS).save(path,'WEBP',quality=90,method=6,alpha_quality=100)

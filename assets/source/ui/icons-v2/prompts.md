@@ -28,7 +28,7 @@ Game UI icon for a dark sci-fi space strategy game. Subject: {S}. House style: p
 | `alerts` | a compact signal bell-shaped beacon emitting two cyan arcs, warm amber light at its tip |
 | `zone-resource` | three faceted cyan crystals growing from a silver metal socket |
 | `zone-industry` | a compact orbital factory block with one chimney venting warm amber light (signature colour: amber) |
-| `zone-military` | two crossed cannon barrels over a small armoured silver shield |
+| `zone-military` | the Military zone: a silver armoured shield with a red double chevron rank emblem and a single cannon barrel behind it pointing up (signature colour: red) |
 | `metal` | a stack of three bevelled steel ingots (signature colour: cool steel grey) |
 | `mineral` | a cluster of deep blue faceted crystals in a silver clasp (signature colour: sapphire blue) |
 | `gas` | a sealed glass capsule with swirling emerald gas between two silver caps (signature colour: emerald green) |
@@ -54,3 +54,5 @@ Game UI icon for a dark sci-fi space strategy game. Subject: {S}. House style: p
 | `m-debris-finder` | a big round scanner lens in a silver ring hovering over one broken jagged hull plate, cyan scan light |
 
 Переделаны после проверки листа: `m-aid` (первая версия читалась как аптечка), `m-debris-finder` (полупрозрачный конус терялся в 24 px), `m-transport` (слишком тонкий силуэт в 24 px).
+
+`zone-military` переделана 14.11 по слову владельца: «скрещённые стволы на щите» не читались как военная зона; из трёх вариантов (ракета, турель, щит с шевронами) выбран щит с красными шевронами.
