@@ -122,6 +122,12 @@ app.whenReady().then(async () => {
       try {
         await route(win, 'fleets');
         await waitFor(win, `document.querySelector('.fleet-workspace-v1 [data-qa-flights-toggle]')`);
+        await run(win, `document.querySelector('[data-qa-fleet-section="root"]')?.click()`);
+        await settle(win, 400);
+        // Mission counts on the banner («Транспорт 2» …): the only place most mission icons show.
+        const chips = await run(win, `Array.from(document.querySelectorAll('.fleet-flights-v2__count')).filter((n) => n.getClientRects().length).map((n) => n.textContent.trim())`);
+        await capture(win, path.join(OUTPUT, size), '06a-fleets-mission-chips');
+        shots.push(`${size}/06a-fleets-mission-chips:${chips.length}`);
         await run(win, `(() => { const t = document.querySelector('[data-qa-flights-toggle]'); if (t && t.getAttribute('aria-expanded') !== 'true') t.click(); })()`);
         await settle(win, 500);
         const broken = await brokenImages(win);
