@@ -1,10 +1,10 @@
-import ashfangArt from '../../../assets/source/ships/pirates/ashfang.png';
-import blackHarrowArt from '../../../assets/source/ships/pirates/black_harrow.png';
-import chainjackArt from '../../../assets/source/ships/pirates/chainjack.png';
-import crownEaterArt from '../../../assets/source/ships/pirates/crown_eater.png';
-import gutterstarArt from '../../../assets/source/ships/pirates/gutterstar.png';
-import redWraithArt from '../../../assets/source/ships/pirates/red_wraith.png';
-import voidButcherArt from '../../../assets/source/ships/pirates/void_butcher.png';
+import ashfangArt from '../../assets/art/ships/pirates/ashfang.webp';
+import blackHarrowArt from '../../assets/art/ships/pirates/black_harrow.webp';
+import chainjackArt from '../../assets/art/ships/pirates/chainjack.webp';
+import crownEaterArt from '../../assets/art/ships/pirates/crown_eater.webp';
+import gutterstarArt from '../../assets/art/ships/pirates/gutterstar.webp';
+import redWraithArt from '../../assets/art/ships/pirates/red_wraith.webp';
+import voidButcherArt from '../../assets/art/ships/pirates/void_butcher.webp';
 
 import { getFactionShipCatalog } from '../combat/faction-catalog.ts';
 import type { CombatFactionId } from '../combat/factions.ts';

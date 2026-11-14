@@ -4,7 +4,7 @@ import { REPORT_ICONS } from '../ui-icons.ts';
 import { FactionGeneralPortrait } from '../FactionGeneralPortrait.tsx';
 import { EmblemGlyph } from '../command/EmblemGlyph.tsx';
 import { ResourceIcon } from '../resources/ResourceIcon.tsx';
-import pirateWarlordArt from '../../../assets/source/characters/pirates/pirate_warlord.png';
+import pirateWarlordArt from '../../assets/art/characters/pirates/pirate_warlord.webp';
 import { getFactionCombatEntity } from '../../domain/combat/faction-catalog.ts';
 import type { CommandState } from '../../domain/command/types.ts';
 import type { ExplorationState } from '../../domain/exploration/ledger.ts';

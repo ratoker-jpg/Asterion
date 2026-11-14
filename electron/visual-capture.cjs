@@ -617,7 +617,7 @@ async function verifyResourceZoneFlow(win, directory, label) {
       hasHorizon:Boolean(document.querySelector('.resource-zone-horizon')),
     } : null;
   })()`);
-  if(!terrain || terrain.zone!=='resource' || terrain.source!=='resource-terrain.png' || !terrain.src.includes('resource-terrain') || terrain.naturalWidth<=0 || terrain.naturalHeight<=0 || terrain.hasGrid || terrain.hasHorizon){
+  if(!terrain || terrain.zone!=='resource' || terrain.source!=='resource-terrain.webp' || !terrain.src.includes('resource-terrain') || terrain.naturalWidth<=0 || terrain.naturalHeight<=0 || terrain.hasGrid || terrain.hasHorizon){
     throw new Error(`Resource terrain contract failed: ${JSON.stringify(terrain)}`);
   }
 

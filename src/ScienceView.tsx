@@ -1,27 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useClockNow } from './application/shared-clock';
 import { createPortal } from 'react-dom';
-import astronomyArt from '../assets/source/New assets/technologies/technology.shared.astronomy.png';
-import chemistryArt from '../assets/source/New assets/technologies/technology.shared.chemistry.png';
-import computerSystemsArt from '../assets/source/New assets/technologies/technology.shared.computer-systems.png';
-import criticalHitArt from '../assets/source/New assets/technologies/technology.shared.critical-hit.png';
-import espionageArt from '../assets/source/New assets/technologies/technology.shared.espionage.png';
-import fuelCellsArt from '../assets/source/New assets/technologies/technology.shared.fuel-cells.png';
-import heavyArmorArt from '../assets/source/New assets/technologies/technology.shared.heavy-armor.png';
-import hyperspaceArt from '../assets/source/New assets/technologies/technology.shared.hyperspace.png';
-import improvedConstructionArt from '../assets/source/New assets/technologies/technology.shared.improved-construction.png';
-import ionScienceArt from '../assets/source/New assets/technologies/technology.shared.ion-science.png';
-import jetEnginesArt from '../assets/source/New assets/technologies/technology.shared.jet-engines.png';
-import laserScienceArt from '../assets/source/New assets/technologies/technology.shared.laser-science.png';
-import lightArmorArt from '../assets/source/New assets/technologies/technology.shared.light-armor.png';
-import maneuverDefenseArt from '../assets/source/New assets/technologies/technology.shared.maneuver-defense.png';
-import mathematicsArt from '../assets/source/New assets/technologies/technology.shared.mathematics.png';
-import mediumArmorArt from '../assets/source/New assets/technologies/technology.shared.medium-armor.png';
-import parallelUniversesArt from '../assets/source/New assets/technologies/technology.shared.parallel-universes.png';
-import physicsArt from '../assets/source/New assets/technologies/technology.shared.physics.png';
-import piercingAttackArt from '../assets/source/New assets/technologies/technology.shared.piercing-attack.png';
-import plasmaScienceArt from '../assets/source/New assets/technologies/technology.shared.plasma-science.png';
-import shipArmorArt from '../assets/source/New assets/technologies/technology.shared.ship-armor.png';
+import astronomyArt from './assets/art/technologies/technology.shared.astronomy.webp';
+import chemistryArt from './assets/art/technologies/technology.shared.chemistry.webp';
+import computerSystemsArt from './assets/art/technologies/technology.shared.computer-systems.webp';
+import criticalHitArt from './assets/art/technologies/technology.shared.critical-hit.webp';
+import espionageArt from './assets/art/technologies/technology.shared.espionage.webp';
+import fuelCellsArt from './assets/art/technologies/technology.shared.fuel-cells.webp';
+import heavyArmorArt from './assets/art/technologies/technology.shared.heavy-armor.webp';
+import hyperspaceArt from './assets/art/technologies/technology.shared.hyperspace.webp';
+import improvedConstructionArt from './assets/art/technologies/technology.shared.improved-construction.webp';
+import ionScienceArt from './assets/art/technologies/technology.shared.ion-science.webp';
+import jetEnginesArt from './assets/art/technologies/technology.shared.jet-engines.webp';
+import laserScienceArt from './assets/art/technologies/technology.shared.laser-science.webp';
+import lightArmorArt from './assets/art/technologies/technology.shared.light-armor.webp';
+import maneuverDefenseArt from './assets/art/technologies/technology.shared.maneuver-defense.webp';
+import mathematicsArt from './assets/art/technologies/technology.shared.mathematics.webp';
+import mediumArmorArt from './assets/art/technologies/technology.shared.medium-armor.webp';
+import parallelUniversesArt from './assets/art/technologies/technology.shared.parallel-universes.webp';
+import physicsArt from './assets/art/technologies/technology.shared.physics.webp';
+import piercingAttackArt from './assets/art/technologies/technology.shared.piercing-attack.webp';
+import plasmaScienceArt from './assets/art/technologies/technology.shared.plasma-science.webp';
+import shipArmorArt from './assets/art/technologies/technology.shared.ship-armor.webp';
 import {
   ADDITIONAL_SCIENCE_HINT,
   SCIENCE_CATALOG,

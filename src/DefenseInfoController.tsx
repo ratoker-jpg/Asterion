@@ -2,29 +2,29 @@ import { useEffect, useRef, useState } from 'react';
 import { DEFENSE_COMBAT_CATALOG } from './domain/combat/catalog.ts';
 import { createPortal } from 'react-dom';
 
-import aegisScoutArt from '../assets/source/New assets/ship/aegis/ship.aegis.scout.png';
-import aegisCruiserArt from '../assets/source/New assets/ship/aegis/ship.aegis.cruiser.png';
-import aegisDefenderArt from '../assets/source/New assets/ship/aegis/ship.aegis.defender.png';
-import aegisBattleshipArt from '../assets/source/New assets/ship/aegis/ship.aegis.battleship.png';
-import aegisDestroyerArt from '../assets/source/New assets/ship/aegis/ship.aegis.destroyer.png';
-import aegisBomberArt from '../assets/source/New assets/ship/aegis/ship.aegis.bomber.png';
-import aegisDeathStarArt from '../assets/source/New assets/ship/aegis/ship.aegis.death-star.png';
+import aegisScoutArt from './assets/art/ship/aegis/ship.aegis.scout.webp';
+import aegisCruiserArt from './assets/art/ship/aegis/ship.aegis.cruiser.webp';
+import aegisDefenderArt from './assets/art/ship/aegis/ship.aegis.defender.webp';
+import aegisBattleshipArt from './assets/art/ship/aegis/ship.aegis.battleship.webp';
+import aegisDestroyerArt from './assets/art/ship/aegis/ship.aegis.destroyer.webp';
+import aegisBomberArt from './assets/art/ship/aegis/ship.aegis.bomber.webp';
+import aegisDeathStarArt from './assets/art/ship/aegis/ship.aegis.death-star.webp';
 
-import synodFighterArt from '../assets/source/New assets/ship/synod/ship.synod.fighter.png';
-import synodInterceptorArt from '../assets/source/New assets/ship/synod/ship.synod.interceptor.png';
-import synodShieldBotArt from '../assets/source/New assets/ship/synod/ship.synod.shield-bot.png';
-import synodStarArmadaArt from '../assets/source/New assets/ship/synod/ship.synod.star-armada.png';
-import synodGoliathArt from '../assets/source/New assets/ship/synod/ship.synod.goliath.png';
-import synodBomberArt from '../assets/source/New assets/ship/synod/ship.synod.bomberbot.png';
-import synodTitanArt from '../assets/source/New assets/ship/synod/ship.synod.titan.png';
+import synodFighterArt from './assets/art/ship/synod/ship.synod.fighter.webp';
+import synodInterceptorArt from './assets/art/ship/synod/ship.synod.interceptor.webp';
+import synodShieldBotArt from './assets/art/ship/synod/ship.synod.shield-bot.webp';
+import synodStarArmadaArt from './assets/art/ship/synod/ship.synod.star-armada.webp';
+import synodGoliathArt from './assets/art/ship/synod/ship.synod.goliath.webp';
+import synodBomberArt from './assets/art/ship/synod/ship.synod.bomberbot.webp';
+import synodTitanArt from './assets/art/ship/synod/ship.synod.titan.webp';
 
-import veyraNoxDartArt from '../assets/source/New assets/ship/veyra/ship.veyra.nox-dart.png';
-import veyraNemesisArt from '../assets/source/New assets/ship/veyra/ship.veyra.nemesis.png';
-import veyraAbsorberArt from '../assets/source/New assets/ship/veyra/ship.veyra.absorber.png';
-import veyraGhostArt from '../assets/source/New assets/ship/veyra/ship.veyra.ghost.png';
-import veyraHornetArt from '../assets/source/New assets/ship/veyra/ship.veyra.hornet.png';
-import veyraBomberArt from '../assets/source/New assets/ship/veyra/ship.veyra.bomber.png';
-import veyraQueenArt from '../assets/source/New assets/ship/veyra/ship.veyra.nox-queen.png';
+import veyraNoxDartArt from './assets/art/ship/veyra/ship.veyra.nox-dart.webp';
+import veyraNemesisArt from './assets/art/ship/veyra/ship.veyra.nemesis.webp';
+import veyraAbsorberArt from './assets/art/ship/veyra/ship.veyra.absorber.webp';
+import veyraGhostArt from './assets/art/ship/veyra/ship.veyra.ghost.webp';
+import veyraHornetArt from './assets/art/ship/veyra/ship.veyra.hornet.webp';
+import veyraBomberArt from './assets/art/ship/veyra/ship.veyra.bomber.webp';
+import veyraQueenArt from './assets/art/ship/veyra/ship.veyra.nox-queen.webp';
 
 import './ship-info-modal.css';
 

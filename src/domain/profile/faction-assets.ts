@@ -1,6 +1,6 @@
-import aegisGeneral from '../../../assets/source/generated-factions-v1/factions/aegis_general.png';
-import synodGeneral from '../../../assets/source/generated-factions-v1/factions/synod_general.png';
-import veyraGeneral from '../../../assets/source/generated-factions-v1/factions/veyra_general.png';
+import aegisGeneral from '../../assets/art/generated-factions-v1/factions/aegis_general.webp';
+import synodGeneral from '../../assets/art/generated-factions-v1/factions/synod_general.webp';
+import veyraGeneral from '../../assets/art/generated-factions-v1/factions/veyra_general.webp';
 
 export type FactionGeneralId = 'aegis' | 'synod' | 'veyra';
 

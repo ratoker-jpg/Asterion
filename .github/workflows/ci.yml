@@ -357,6 +357,20 @@ jobs:
         run: npm ci
       - name: Package Windows app
         run: npm run dist:win
+      - name: Report package size
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem release -Filter *.exe | Select-Object -First 1
+          $asar = Get-Item release/win-unpacked/resources/app.asar
+          $dist = (Get-ChildItem dist -Recurse -File | Measure-Object Length -Sum).Sum
+          $lines = @(
+            "### Package size",
+            "- installer ($($exe.Name)): $([math]::Round($exe.Length/1MB,1)) MB",
+            "- app.asar: $([math]::Round($asar.Length/1MB,1)) MB",
+            "- dist (renderer build): $([math]::Round($dist/1MB,1)) MB"
+          )
+          $lines | ForEach-Object { Write-Host $_ }
+          $lines | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
       # 600 MB per PR run is not needed to merge: the installer is attached
       # only to manual runs (Actions > CI > Run workflow); a PR still builds it.
       - name: Upload Windows installer

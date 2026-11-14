@@ -67,7 +67,7 @@
         "asterion": {
           "commanderId": "annihilator",
           "name": "Аннигилятор",
-          "artAsset": "assets/source/New assets/comander_ship/commander-ship.annihilator.png",
+          "artAsset": "src/assets/art/comander_ship/commander-ship.annihilator.webp",
           "factsSource": "src/domain/combat/catalog.ts COMMANDER_COMBAT_CATALOG; commander ID/name contract: src/domain/combat/commanders.ts"
         },
         "unresolved": []
@@ -131,7 +131,7 @@
         "asterion": {
           "commanderId": "corsair",
           "name": "Корсар",
-          "artAsset": "assets/source/New assets/comander_ship/commander-ship.corsair.png",
+          "artAsset": "src/assets/art/comander_ship/commander-ship.corsair.webp",
           "factsSource": "src/domain/combat/catalog.ts COMMANDER_COMBAT_CATALOG; commander ID/name contract: src/domain/combat/commanders.ts"
         },
         "unresolved": []
@@ -195,7 +195,7 @@
         "asterion": {
           "commanderId": "reanimator",
           "name": "Реаниматор",
-          "artAsset": "assets/source/New assets/comander_ship/commander-ship.reanimator.png",
+          "artAsset": "src/assets/art/comander_ship/commander-ship.reanimator.webp",
           "factsSource": "src/domain/combat/catalog.ts COMMANDER_COMBAT_CATALOG; commander ID/name contract: src/domain/combat/commanders.ts"
         },
         "unresolved": [
@@ -261,7 +261,7 @@
         "asterion": {
           "commanderId": "viper",
           "name": "Вайпер",
-          "artAsset": "assets/source/New assets/comander_ship/commander-ship.viper.png",
+          "artAsset": "src/assets/art/comander_ship/commander-ship.viper.webp",
           "factsSource": "src/domain/combat/catalog.ts COMMANDER_COMBAT_CATALOG; commander ID/name contract: src/domain/combat/commanders.ts"
         },
         "unresolved": []
@@ -325,7 +325,7 @@
         "asterion": {
           "commanderId": "scorpion",
           "name": "Скорпион",
-          "artAsset": "assets/source/New assets/comander_ship/commander-ship.scorpion.png",
+          "artAsset": "src/assets/art/comander_ship/commander-ship.scorpion.webp",
           "factsSource": "src/domain/combat/catalog.ts COMMANDER_COMBAT_CATALOG; commander ID/name contract: src/domain/combat/commanders.ts"
         },
         "unresolved": []
@@ -389,7 +389,7 @@
         "asterion": {
           "commanderId": "phantom",
           "name": "Фантом",
-          "artAsset": "assets/source/New assets/comander_ship/commander-ship.phantom.png",
+          "artAsset": "src/assets/art/comander_ship/commander-ship.phantom.webp",
           "factsSource": "src/domain/combat/catalog.ts COMMANDER_COMBAT_CATALOG; commander ID/name contract: src/domain/combat/commanders.ts"
         },
         "unresolved": []
@@ -453,7 +453,7 @@
         "asterion": {
           "commanderId": "hunter",
           "name": "Охотник",
-          "artAsset": "assets/source/New assets/comander_ship/commander-ship.hunter.png",
+          "artAsset": "src/assets/art/comander_ship/commander-ship.hunter.webp",
           "factsSource": "src/domain/combat/catalog.ts COMMANDER_COMBAT_CATALOG; commander ID/name contract: src/domain/combat/commanders.ts"
         },
         "unresolved": []
@@ -517,7 +517,7 @@
         "asterion": {
           "commanderId": "typhoon",
           "name": "Тайфун",
-          "artAsset": "assets/source/New assets/comander_ship/commander-ship.typhoon.png",
+          "artAsset": "src/assets/art/comander_ship/commander-ship.typhoon.webp",
           "factsSource": "src/domain/combat/catalog.ts COMMANDER_COMBAT_CATALOG; commander ID/name contract: src/domain/combat/commanders.ts"
         },
         "unresolved": []
@@ -581,7 +581,7 @@
         "asterion": {
           "commanderId": "executioner",
           "name": "Палач",
-          "artAsset": "assets/source/New assets/comander_ship/commander-ship.executioner.png",
+          "artAsset": "src/assets/art/comander_ship/commander-ship.executioner.webp",
           "factsSource": "src/domain/combat/catalog.ts COMMANDER_COMBAT_CATALOG; commander ID/name contract: src/domain/combat/commanders.ts"
         },
         "unresolved": []
@@ -645,7 +645,7 @@
         "asterion": {
           "commanderId": "juggernaut",
           "name": "Джаггернаут",
-          "artAsset": "assets/source/New assets/comander_ship/commander-ship.juggernaut.png",
+          "artAsset": "src/assets/art/comander_ship/commander-ship.juggernaut.webp",
           "factsSource": "src/domain/combat/catalog.ts COMMANDER_COMBAT_CATALOG; commander ID/name contract: src/domain/combat/commanders.ts"
         },
         "unresolved": []
@@ -709,7 +709,7 @@
         "asterion": {
           "commanderId": "argo",
           "name": "Арго",
-          "artAsset": "assets/source/New assets/comander_ship/commander-ship.argo.png",
+          "artAsset": "src/assets/art/comander_ship/commander-ship.argo.webp",
           "factsSource": "src/domain/combat/catalog.ts COMMANDER_COMBAT_CATALOG; commander ID/name contract: src/domain/combat/commanders.ts"
         },
         "unresolved": [
@@ -775,7 +775,7 @@
         "asterion": {
           "commanderId": "judge",
           "name": "Судья",
-          "artAsset": "assets/source/New assets/comander_ship/commander-ship.judge.png",
+          "artAsset": "src/assets/art/comander_ship/commander-ship.judge.webp",
           "factsSource": "src/domain/combat/catalog.ts COMMANDER_COMBAT_CATALOG; commander ID/name contract: src/domain/combat/commanders.ts"
         },
         "unresolved": [
@@ -841,7 +841,7 @@
         "asterion": {
           "commanderId": "polias",
           "name": "Полиас",
-          "artAsset": "assets/source/New assets/comander_ship/commander-ship.polias.png",
+          "artAsset": "src/assets/art/comander_ship/commander-ship.polias.webp",
           "factsSource": "src/domain/combat/catalog.ts COMMANDER_COMBAT_CATALOG; commander ID/name contract: src/domain/combat/commanders.ts"
         },
         "unresolved": []
