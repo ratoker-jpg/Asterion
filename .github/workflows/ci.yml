@@ -163,7 +163,7 @@ jobs:
           - shard: electron-1
             suites: "qa:visual test:command-screens-ui test:fleet-ship-cards-ui test:energy-ui:skip test:production-test-isolation-ui:skip"
           - shard: electron-2
-            suites: "test:cloud-world-ui:skip test:settings-screens-ui test:empire-ui test:quick-actions-ui test:header-ui test:esc-fullscreen-ui"
+            suites: "test:cloud-world-ui:skip test:settings-screens-ui test:empire-ui test:quick-actions-ui test:header-ui test:esc-fullscreen-ui test:menu-wizard-ui"
           - shard: electron-3
             suites: "test:new-game-ui:skip test:test-mode-ui:skip test:operations-screens-ui test:command-aid-ui:skip test:fleet-repeat-ui test:catchup-summary-ui:skip test:save-store-ui"
           - shard: electron-4

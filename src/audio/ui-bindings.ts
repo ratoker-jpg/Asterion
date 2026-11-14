@@ -29,7 +29,7 @@ const CLICK_RULES: ReadonlyArray<readonly [string, SoundId]> = [
   [[
     '[role="tab"]', '.hdr-route', '.hdr-zone', '.menu-seg button', '.fleet-menu-group-v1 button',
     '.science-sections-v2 button', '.spaceport-sections-v2 button', '.set-tabs button',
-    '.command-tabs button', '.fleet-ship-filter-v2 button', '.universe-radar__seg button', '.menu-stepper button',
+    '.command-tabs button', '.fleet-ship-filter-v2 button', '.universe-radar__seg button', '.wz-step', '.wz-choice', '.wz-edit',
   ].join(', '), 'tab'],
 ];
 

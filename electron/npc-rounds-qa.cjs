@@ -96,10 +96,19 @@ async function setValue(win, qa, value) {
   await sleep(150);
 }
 
+/** «Кампания»: names, the series switch and the campaign rules (the redone wizard, 14.11.2026). */
 async function goToWorldStep(win) {
   await waitFor(win, `document.querySelector('[data-qa-wizard-step="race"]')`);
   await click(win, '[data-qa-wizard-next]');
-  await waitFor(win, `document.querySelector('[data-qa-wizard-step="world"]')`);
+  await waitFor(win, `document.querySelector('[data-qa-wizard-step="campaign"]')`);
+}
+
+async function seedValue(win) {
+  await click(win, '[data-qa-wizard-rail="world"]');
+  await waitFor(win, `document.querySelector('[data-qa-world="seed"]')`);
+  const value = await run(win, `document.querySelector('[data-qa-world="seed"]').value`);
+  await click(win, '[data-qa-wizard-rail="campaign"]');
+  return value;
 }
 
 async function main() {
@@ -161,11 +170,11 @@ async function main() {
   await goToWorldStep(win);
   check(await run(win, `document.querySelector('[data-qa-series-toggle]').checked`), 'the switch must be on after «Новый раунд»');
   check(await run(win, `document.querySelector('[data-qa-world="player-name"]').value`) === firstNick, 'the commander name did not carry over');
-  check(await run(win, `document.querySelector('[data-qa-world="seed"]').value`) !== finished.worldConfig.seed, 'the seed must be new');
+  check((await seedValue(win)) !== finished.worldConfig.seed, 'the seed must be new');
   check(/раунд 2/.test(await run(win, `document.querySelector('[data-qa-world="campaign-name"]').value`)), 'the campaign name does not say the round');
   await setValue(win, 'player-name', NEW_NICK);
   await capture(win, '03-wizard-series-on');
-  await click(win, '[data-qa-wizard-next]');
+  await click(win, '[data-qa-wizard-rail="confirm"]');
   await waitFor(win, `document.querySelector('[data-qa-wizard-step="confirm"]')`);
   check(/раунд 2/.test(await run(win, `document.querySelector('[data-qa-series-line]').textContent`)), 'the summary does not name the series');
   await capture(win, '04-wizard-confirm');
@@ -206,7 +215,7 @@ async function main() {
   const beforeClean = fs.readFileSync(REGISTRY, 'utf8');
   const slots = await slotsCount(win);
   await click(win, '[data-qa-series-toggle]');
-  await click(win, '[data-qa-wizard-next]');
+  await click(win, '[data-qa-wizard-rail="confirm"]');
   await waitFor(win, `document.querySelector('[data-qa-wizard-step="confirm"]')`);
   check(/без чужого опыта/.test(await run(win, `document.querySelector('[data-qa-series-line]').textContent`)), 'the summary must say the population is clean');
   await click(win, '[data-qa-wizard-start]');

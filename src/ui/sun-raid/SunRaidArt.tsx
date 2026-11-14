@@ -8,7 +8,7 @@ import './sun-raid-art.css';
  * procedural Gate ring and brightness meter.
  */
 
-type CrystalGemProps = { id: SolarCrystalId; size?: number; owned?: boolean; locked?: boolean; title?: string };
+type CrystalGemProps = { id: SolarCrystalId; size?: number; owned?: boolean; locked?: boolean; /** null: no native tooltip (the screen says the count in words). */ title?: string | null };
 
 /** One solar crystal. A missing crystal is its empty glass at 40% opacity. */
 export function CrystalGem({ id, size = 40, owned = true, locked = false, title }: CrystalGemProps) {
@@ -17,7 +17,7 @@ export function CrystalGem({ id, size = 40, owned = true, locked = false, title 
     <span
       className={`sr-gem ${owned ? 'is-owned' : 'is-missing'} ${locked ? 'is-locked' : ''}`}
       style={{ '--gem-color': crystal.color, '--gem-glow': crystal.glow, width: size, height: size * 1.3 } as CSSProperties}
-      title={title ?? `${crystal.name}${owned ? '' : ' — не собран'}`}
+      title={title === null ? undefined : title ?? `${crystal.name}${owned ? '' : ' — не собран'}`}
       role="img"
       aria-label={`${crystal.name}: ${owned ? 'собран' : 'не собран'}`}
       data-qa-crystal={id}
@@ -29,10 +29,10 @@ export function CrystalGem({ id, size = 40, owned = true, locked = false, title 
 }
 
 /** The four crystals of a holder: collected ones glow, missing ones are sockets. */
-export function CrystalSet({ owned, size = 34, locked = false }: { owned: readonly SolarCrystalId[]; size?: number; locked?: boolean }) {
+export function CrystalSet({ owned, size = 34, locked = false, bare = false }: { owned: readonly SolarCrystalId[]; size?: number; locked?: boolean; bare?: boolean }) {
   return (
     <span className="sr-gem-set" data-qa-crystal-set={owned.length}>
-      {SOLAR_CRYSTAL_IDS.map((id) => <CrystalGem key={id} id={id} size={size} owned={owned.includes(id)} locked={locked} />)}
+      {SOLAR_CRYSTAL_IDS.map((id) => <CrystalGem key={id} id={id} size={size} owned={owned.includes(id)} locked={locked} title={bare ? null : undefined} />)}
     </span>
   );
 }

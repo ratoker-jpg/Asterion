@@ -89,14 +89,14 @@ async function productionAttackRefusal() {
     await click(win, '[data-qa-menu-action="new"]');
     await waitFor(win, `document.querySelector('[data-qa-wizard-step="race"]')`);
     await click(win, '[data-qa-race="aegis"]');
-    await click(win, '[data-qa-wizard-next]');
+    await click(win, '[data-qa-wizard-rail="world"]');
     await waitFor(win, `document.querySelector('[data-qa-wizard-step="world"]')`);
     await run(win, `(() => {
       const input = document.querySelector('[data-qa-world="seed"]');
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'ATTACKRULES');
       input.dispatchEvent(new Event('input', { bubbles: true }));
     })()`);
-    await click(win, '[data-qa-wizard-next]');
+    await click(win, '[data-qa-wizard-rail="confirm"]');
     await waitFor(win, `document.querySelector('[data-qa-wizard-step="confirm"]')`);
     await click(win, '[data-qa-wizard-start]');
     await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`, 60_000);

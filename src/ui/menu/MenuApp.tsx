@@ -40,15 +40,28 @@ import type { CloudConflict, CloudServerWait } from './cloud.ts';
 import './menu.css';
 import './menu-motion.css';
 
-function useMenuScale() {
-  const calc = () => Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
-  const [scale, setScale] = useState(calc);
+/**
+ * The menu stage fills the window. It is laid out at the window size divided by
+ * the scale: the shorter side fits 1920×1080 as before (an ultrawide screen gets a
+ * wider stage, not black bars); smaller windows shrink it, but never below 80 %,
+ * so a 1280×720 window lays the menu out at 1600×900 and text stays readable.
+ */
+export const MENU_MIN_SCALE = 0.8;
+function menuFrame() {
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  const scale = Math.max(MENU_MIN_SCALE, Math.min(width / 1920, height / 1080));
+  return { scale, width: Math.round(width / scale), height: Math.round(height / scale) };
+}
+
+function useMenuFrame() {
+  const [frame, setFrame] = useState(menuFrame);
   useEffect(() => {
-    const onResize = () => setScale(calc());
+    const onResize = () => setFrame(menuFrame());
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
-  return scale;
+  return frame;
 }
 
 const CRYSTALS: readonly SolarCrystalId[] = ['crystal-1', 'crystal-2', 'crystal-3', 'crystal-4'];
@@ -79,7 +92,7 @@ type MenuAppProps = {
 
 /** Main menu, «Новая игра», «Загрузить игру» and settings, on the same 1920×1080 stage as the game. */
 export function MenuApp({ initialScreen, onEnterSlot, entryProblem = null, onDismissEntryProblem, cloudStage = null, cloudConflict = null, onResolveCloudConflict, onCancelCloudConflict, cloudWait = null, onCloudWaitReady, onCloudWaitTakeNow, onCloudWaitMenu }: MenuAppProps) {
-  const scale = useMenuScale();
+  const frame = useMenuFrame();
   useMusic('menu');
   const viewportRef = useRef<HTMLDivElement>(null);
   usePointerDepth(viewportRef);
@@ -114,7 +127,7 @@ export function MenuApp({ initialScreen, onEnterSlot, entryProblem = null, onDis
 
   return (
     <div className="menu-viewport" ref={viewportRef} data-qa-menu={screen}>
-      <div className="menu-stage" style={{ '--menu-scale': scale } as CSSProperties} data-faction={themeFaction}>
+      <div className="menu-stage" style={{ '--menu-scale': frame.scale, '--menu-w': `${frame.width}px`, '--menu-h': `${frame.height}px` } as CSSProperties} data-faction={themeFaction} data-short={frame.height < 1000 ? '' : undefined}>
         {/* Key art per race: the planet horizon and the crystal-ringed star are part of the image. */}
         <div className="menu-bg" aria-hidden="true" style={{ backgroundImage: `url(${menuBackground(themeFaction)})` }} data-qa-menu-bg={themeFaction} />
         <div className="menu-stars" aria-hidden="true" />
@@ -182,9 +195,10 @@ type MainMenuScreenProps = {
 function MainMenuScreen({ continueSlot, slotCount, onNavigate, onContinue }: MainMenuScreenProps) {
   const desktop = isDesktopShell();
   const items: Array<{ id: string; label: string; hint: string; disabled?: boolean; action: () => void; primary?: boolean }> = [
-    { id: 'continue', label: 'Продолжить', hint: continueSlot ? `${continueSlot.name} · ${raceCard(continueSlot.factionId).name}` : 'Нет сохранённых кампаний', disabled: !continueSlot, action: onContinue, primary: Boolean(continueSlot) },
+    // First launch: no dead «Продолжить» on top; «Новая игра» leads (redo 14.11.2026).
+    ...(continueSlot ? [{ id: 'continue', label: 'Продолжить', hint: `${continueSlot.name} · ${raceCard(continueSlot.factionId).name}`, action: onContinue, primary: true }] : []),
     { id: 'new', label: 'Новая игра', hint: 'Раса, мир, скорость партии', action: () => onNavigate('new'), primary: !continueSlot },
-    { id: 'load', label: 'Загрузить игру', hint: slotCount ? `Слотов: ${slotCount}` : 'Импорт сохранения из файла', action: () => onNavigate('load') },
+    { id: 'load', label: 'Загрузить игру', hint: slotCount ? `Ваши сохранения (${slotCount}) и импорт из файла` : 'Ваши сохранения и импорт из файла', action: () => onNavigate('load') },
     { id: 'settings', label: 'Настройки', hint: 'Звук, размер текста, экран, облако', action: () => onNavigate('settings') },
     ...(desktop ? [{ id: 'quit', label: 'Выход', hint: 'Закрыть Asterion', action: quitDesktopApp }] : []),
   ];
@@ -223,7 +237,7 @@ function MainMenuScreen({ continueSlot, slotCount, onNavigate, onContinue }: Mai
         <footer className="menu-foot">
           <WhatsNewMenuEntry hasNew={whatsNew.hasNew} onOpen={whatsNew.show} />
           <GameUpdateRow variant="menu" />
-          <span>Сохранения хранятся локально · схема {SAVE_SCHEMA_VERSION}</span>
+          <span>Сохранения хранятся на этом компьютере</span>
           <span><kbd>↑</kbd><kbd>↓</kbd> выбор · <kbd>Enter</kbd> подтвердить</span>
         </footer>
       </section>
@@ -252,8 +266,8 @@ function ContinueShowcase({ slot, onContinue }: { slot: SaveSlotMeta; onContinue
           <div><dt>Скорость</dt><dd>{CAMPAIGN_SPEED_LABELS[slot.campaignSpeed].label}</dd></div>
         </dl>
         <div className="menu-showcase__crystals">
-          <small>КРИСТАЛЛЫ СОЛНЦ</small>
-          <CrystalSet owned={CRYSTALS.slice(0, slot.summary.crystals)} size={26} />
+          <small>КРИСТАЛЛЫ СОЛНЦ · {slot.summary.crystals} ИЗ 4</small>
+          <CrystalSet owned={CRYSTALS.slice(0, slot.summary.crystals)} size={26} bare />
         </div>
         <p className="menu-showcase__date">Сохранено {dateLabel(slot.updatedAt)}{slot.summary.victory ? ' · Врата построены' : ''}</p>
         <button type="button" className="menu-btn menu-btn--primary menu-btn--wide" onClick={onContinue} data-qa-continue>ПРОДОЛЖИТЬ КАМПАНИЮ</button>
@@ -439,7 +453,7 @@ type SlotCardProps = {
 function SlotCard({ slot, active, health, renaming, onRenameStart, onRenameChange, onRenameCommit, onRenameCancel, onLoad, onDuplicate, onExport, onDelete, backup, onRestore }: SlotCardProps) {
   const card = raceCard(slot.factionId);
   const loadable = health.status === 'ok';
-  const problem = health.status === 'broken' ? `Повреждено: ${health.reason}` : health.status === 'newer' ? `Создано новой версией (схема ${health.schemaVersion})` : health.status === 'missing' ? 'Данные слота отсутствуют' : null;
+  const problem = health.status === 'broken' ? `Повреждено: ${health.reason}` : health.status === 'newer' ? `Сохранено более новой версией игры (формат ${health.schemaVersion}, эта версия понимает до ${SAVE_SCHEMA_VERSION}). Обновите игру.` : health.status === 'missing' ? 'Данные слота отсутствуют' : null;
   return (
     <li className={`menu-slot ${active ? 'is-active' : ''} ${problem ? 'is-broken' : ''}`} data-faction={slot.factionId} data-qa-slot={slot.id}>
       <div className="menu-slot__art">
@@ -464,21 +478,20 @@ function SlotCard({ slot, active, health, renaming, onRenameStart, onRenameChang
           <div><dt>Мир</dt><dd>{slot.summary.galaxyCount} гал. · {slot.summary.npcCount} NPC</dd></div>
           <div><dt>Скорость</dt><dd>{CAMPAIGN_SPEED_LABELS[slot.campaignSpeed].label}</dd></div>
           <div><dt>Активность NPC</dt><dd>{NPC_ACTIVITY_LABELS[slot.npcActivity ?? 'normal'].label}</dd></div>
-          <div><dt>Версия</dt><dd>схема {slot.schemaVersion}</dd></div>
         </dl>
-        <div className="menu-slot__crystals"><CrystalSet owned={CRYSTALS.slice(0, slot.summary.crystals)} size={18} />{slot.summary.victory ? <b>ПОБЕДА</b> : null}</div>
+        <div className="menu-slot__crystals"><CrystalSet owned={CRYSTALS.slice(0, slot.summary.crystals)} size={18} bare /><span>Кристаллы: {slot.summary.crystals} из 4</span>{slot.summary.victory ? <b>ПОБЕДА</b> : null}</div>
         {problem ? <p className="menu-slot__problem" role="status">{problem}</p> : null}
-        {backup ? (
-          <button type="button" className="menu-btn menu-btn--compact" onClick={() => onRestore(backup)} data-qa-slot-restore={slot.id}>Восстановить из копии ({dateLabel(backup.at)})</button>
-        ) : null}
-        {/* «Загрузить» leads; the four other actions share one compact row, so all five fit every card width. */}
+        {/* «Загрузить» is the one button; the rare actions are a quiet row of text links under it. */}
         <div className="menu-slot__actions">
           <button type="button" className="menu-btn menu-btn--primary" disabled={!loadable} onClick={onLoad} data-qa-slot-load={slot.id}>ЗАГРУЗИТЬ</button>
           <div className="menu-slot__more" role="group" aria-label={`Другие действия с кампанией «${slot.name}»`}>
-            <button type="button" className="menu-btn menu-btn--compact" onClick={onRenameStart} disabled={renaming !== null} data-qa-slot-rename={slot.id}>Переименовать</button>
-            <button type="button" className="menu-btn menu-btn--compact" onClick={onDuplicate} disabled={!loadable} data-qa-slot-copy={slot.id}>Копия</button>
-            <button type="button" className="menu-btn menu-btn--compact" onClick={onExport} disabled={health.status === 'missing'} data-qa-slot-export={slot.id}>Экспорт</button>
-            <button type="button" className="menu-btn menu-btn--compact menu-btn--danger" onClick={onDelete} data-qa-slot-delete={slot.id}>Удалить</button>
+            <button type="button" className="menu-slot__link" onClick={onRenameStart} disabled={renaming !== null} data-qa-slot-rename={slot.id}>Переименовать</button>
+            <button type="button" className="menu-slot__link" onClick={onDuplicate} disabled={!loadable} data-qa-slot-copy={slot.id}>Копия</button>
+            <button type="button" className="menu-slot__link" onClick={onExport} disabled={health.status === 'missing'} data-qa-slot-export={slot.id}>Экспорт</button>
+            {backup ? (
+              <button type="button" className="menu-slot__link is-restore" onClick={() => onRestore(backup)} data-qa-slot-restore={slot.id}>Вернуть копию от {dateLabel(backup.at)}</button>
+            ) : null}
+            <button type="button" className="menu-slot__link is-danger" onClick={onDelete} data-qa-slot-delete={slot.id}>Удалить</button>
           </div>
         </div>
       </div>
