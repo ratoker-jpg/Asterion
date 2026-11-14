@@ -977,7 +977,7 @@ function Overview({ command, allianceId, ownerId, role, ownerScores, ownerFactio
       { id: 'banner', title: 'Знамя поднято', text: 'герб, название и девиз видны в каталоге союзов и рядом с вашими планетами', done: true },
       {
         id: 'invite', title: 'Позовите первых соратников', done: asked,
-        text: asked ? `заявок ждут решения: ${pendingCount}` : 'боты справа уже присматриваются к союзу; их заявки придут во вкладку «Заявки»',
+        text: asked ? `заявок ждут решения: ${pendingCount}` : (founding?.prospects.length ? 'боты справа уже присматриваются к союзу; их заявки придут во вкладку «Заявки»' : 'заявки придут во вкладку «Заявки»; описание в карточке помогает их собрать'),
         action: asked ? <button type="button" className="primary" onClick={() => setTab('applications')} data-qa-first-step-action="invite">Заявки · {pendingCount}</button> : null,
       },
       {
