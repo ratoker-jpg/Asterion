@@ -1032,7 +1032,7 @@ export function startBot01IncomingScenario(
   options: FlightRuntimeOptions = {},
 ): FlightCommandResult {
   if ((options.mode ?? 'production') !== 'test') {
-    return failure(state, 'invalid-command', 'Входящая демонстрационная атака доступна только в Test Mode.');
+    return failure(state, 'invalid-command', 'Входящая демонстрационная атака доступна только в тестовом режиме.');
   }
   const now = options.now ?? Date.now();
   const espionage = state.espionage;
@@ -1241,7 +1241,7 @@ export function startBot01GateAssault(
   options: FlightRuntimeOptions = {},
 ): FlightCommandResult {
   if ((options.mode ?? 'production') !== 'test') {
-    return failure(state, 'invalid-command', 'Штурм Врат Ботом 01 доступен только в Test Mode.');
+    return failure(state, 'invalid-command', 'Штурм Врат Ботом 01 доступен только в тестовом режиме.');
   }
   const now = options.now ?? Date.now();
   const espionage = state.espionage;
@@ -2101,7 +2101,7 @@ export function dispatchNpcAidFlight(
   const existing = getFlightByRequestId(flights, command.requestId);
   if (existing) return { ok: true, state, flight: existing, created: false, notice: noticeForDispatch(existing) };
   if (runtimeOptions.mode !== 'test' || !command.requestId.startsWith('aid-npc:')) {
-    return failure(state, 'mission-not-supported', 'Помощь от NPC доступна только в сценарии Test Mode.');
+    return failure(state, 'mission-not-supported', 'Помощь от NPC доступна только в сценарии тестового режима.');
   }
   const request = selectRequestById(state.command, command.aidRequestId);
   if (!request || !isRequestOpen(request)) return failure(state, 'target-not-available', 'Запрос помощи закрыт или не найден.');

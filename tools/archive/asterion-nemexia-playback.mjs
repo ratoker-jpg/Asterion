@@ -4,16 +4,16 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline';
 
-import { COMBAT_CATALOG } from '../src/domain/combat/catalog.ts';
-import { COMMANDER_ABILITIES, COMMANDER_IDS } from '../src/domain/combat/commanders.ts';
-import { SIMULATOR_MAX_ROUNDS } from '../src/domain/combat/config.ts';
-import { getFactionDefenseCatalog, getFactionShipCatalog } from '../src/domain/combat/faction-catalog.ts';
-import { createDefaultCombatPriority } from '../src/domain/combat/priority.ts';
-import { COMBAT_ENGINE_VERSION } from '../src/domain/combat/report.ts';
-import { resolveCombat } from '../src/domain/combat/resolver.ts';
-import { COMBAT_TECHNOLOGIES, createDefaultCombatTechnologies } from '../src/domain/combat/technologies.ts';
+import { COMBAT_CATALOG } from '../../src/domain/combat/catalog.ts';
+import { COMMANDER_ABILITIES, COMMANDER_IDS } from '../../src/domain/combat/commanders.ts';
+import { SIMULATOR_MAX_ROUNDS } from '../../src/domain/combat/config.ts';
+import { getFactionDefenseCatalog, getFactionShipCatalog } from '../../src/domain/combat/faction-catalog.ts';
+import { createDefaultCombatPriority } from '../../src/domain/combat/priority.ts';
+import { COMBAT_ENGINE_VERSION } from '../../src/domain/combat/report.ts';
+import { resolveCombat } from '../../src/domain/combat/resolver.ts';
+import { COMBAT_TECHNOLOGIES, createDefaultCombatTechnologies } from '../../src/domain/combat/technologies.ts';
 
-const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const raceFaction = new Map([[1, 'aegis'], [2, 'synod'], [3, 'veyra']]);
 const sourceShipNames = new Map();
 const legacyShipSlots = new Map();

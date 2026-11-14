@@ -37,6 +37,11 @@ contextBridge.exposeInMainWorld('asterionDesktop', {
       const result = ipcRenderer.sendSync('asterion:save-store:remove', key);
       if (!result || !result.ok) throw new Error(result && result.error || 'Save store remove failed.');
     },
+    // Only the save files; the bot journal stays.
+    removeSaves: (key) => {
+      const result = ipcRenderer.sendSync('asterion:save-store:remove', key, true);
+      if (!result || !result.ok) throw new Error(result && result.error || 'Save store remove failed.');
+    },
   },
   // Bot journal next to the save (src/ui/bot-journal-store.ts, electron/save-store.cjs).
   botJournal: {

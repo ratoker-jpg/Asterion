@@ -1,4 +1,5 @@
 import type { CommandState } from '../command/types.ts';
+import { plural } from '../plural.ts';
 import type { SpyTargetState } from '../espionage/types.ts';
 import { NPC_LETTER_BALANCE, type NpcLetterRecord } from '../npc/letters.ts';
 import type { NpcJointStrikeProposal } from '../npc/pacts.ts';
@@ -56,7 +57,7 @@ function strikeLetter(proposal: NpcJointStrikeProposal, sender: PersonalLetter['
   const ownerName = target?.ownerName ?? 'владелец';
   const reference = proposal.createdAt;
   const window = `от ${clock(terms.strikeAt + 2 * MINUTE, reference)} до ${clock(terms.strikeAt + terms.toleranceMs, reference)}`;
-  const fleet = terms.fromShips ? `Его флот: около ${terms.fromShips.toLocaleString('ru-RU')} кораблей` : 'Его флот выйдет сам';
+  const fleet = terms.fromShips ? `Его флот: около ${terms.fromShips.toLocaleString('ru-RU')} ${plural(terms.fromShips, 'корабля', 'кораблей', 'кораблей')}` : 'Его флот выйдет сам';
   const where = target ? `${target.name} [${coordText(target.coordinate)}], владелец ${ownerName}` : `планета игрока ${ownerName}`;
   const base = `Цель: ${where}.
 ${fleet}, подойдёт около ${clock(terms.strikeAt, reference)} (разброс до ${NPC_LETTER_BALANCE.scatterMinutes} мин).

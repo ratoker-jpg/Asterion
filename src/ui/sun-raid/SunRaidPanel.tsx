@@ -1,3 +1,4 @@
+import { GameSelect } from '../GameSelect.tsx';
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { SUN_DEBRIS_ART, SUN_RAID_MISSION_ICON } from './sun-raid-assets.ts';
 import { createPortal } from 'react-dom';
@@ -159,9 +160,7 @@ export function SunRaidPanel({ state, now, mode, testTimeScale, selected, onSele
             <small>СОЛНЦА ГАЛАКТИКИ</small>
             <label className="srp-galaxy">
               <span className="srp-sr">Галактика</span>
-              <select value={galaxy} onChange={(event) => setGalaxy(Number(event.target.value))} aria-label="Галактика">
-                {Array.from({ length: galaxyCount }, (_, index) => <option key={index + 1} value={index + 1}>Галактика {pad2(index + 1)}</option>)}
-              </select>
+              <GameSelect value={String(galaxy)} label="Галактика" options={Array.from({ length: galaxyCount }, (_, index) => ({ value: String(index + 1), label: `Галактика ${pad2(index + 1)}` }))} onChange={(next) => setGalaxy(Number(next))} />
             </label>
           </header>
           <div className="srp-suns" role="listbox" aria-label="Солнца галактики">
@@ -514,12 +513,10 @@ function SunLaunchDialog({ state, now, options, kind, raid, galaxy, system, onCl
     <div className="srp-launch__origin">
       <label>
         <small>ПЛАНЕТА ОТПРАВЛЕНИЯ</small>
-        <select value={originPlanetId} onChange={(event) => setOriginPlanetId(event.target.value)}>
-          {planetIds.map((id) => {
-            const planet = state.planets[id]!;
-            return <option key={id} value={id}>{planet.name} [{planet.universeGalaxy ?? 1}:{planet.universeSystem ?? 1}:{planet.universePosition ?? 1}]</option>;
-          })}
-        </select>
+        <GameSelect value={originPlanetId} label="Планета отправления" options={planetIds.map((id) => {
+          const planet = state.planets[id]!;
+          return { value: id, label: `${planet.name} [${planet.universeGalaxy ?? 1}:${planet.universeSystem ?? 1}:${planet.universePosition ?? 1}]` };
+        })} onChange={setOriginPlanetId} />
       </label>
       <button type="button" className="opsA-btn opsA-btn--small" onClick={() => fillToCap()} data-qa-sun-fill>{orderRoom ? 'ЗАПОЛНИТЬ ПО ЗАКАЗУ' : 'ЗАПОЛНИТЬ ДО ЛИМИТА'}</button>
       <button type="button" className="opsA-btn opsA-btn--small" onClick={() => setShips({})}>СБРОСИТЬ</button>

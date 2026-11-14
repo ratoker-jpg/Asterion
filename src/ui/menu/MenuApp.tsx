@@ -29,6 +29,7 @@ import {
 import { CrystalSet } from '../sun-raid/SunRaidArt.tsx';
 import { RACE_CARDS, raceCard } from './race-catalog.ts';
 import { NewGameWizard } from './NewGameWizard.tsx';
+import { clearJournal } from '../player-journal-store.ts';
 import { GameUpdateRow } from './GameUpdateRow.tsx';
 import { WhatsNewDialog, WhatsNewMenuEntry, useWhatsNew } from './WhatsNew.tsx';
 import { consumeSeriesRound, isDesktopShell, quitDesktopApp, type MenuScreen } from './session.ts';
@@ -425,7 +426,7 @@ function LoadGameScreen({ index, onBack, onLoad, onChanged }: LoadGameScreenProp
           text={`Кампания «${confirmDelete.name}» будет удалена без возможности восстановления. Сначала можно сделать экспорт в файл.`}
           confirmLabel="УДАЛИТЬ"
           danger
-          onConfirm={() => { result(deleteSaveSlot(confirmDelete.id), 'Слот удалён.'); setConfirmDelete(null); }}
+          onConfirm={() => { void clearJournal(confirmDelete.storageKey).catch(() => undefined); result(deleteSaveSlot(confirmDelete.id), 'Слот удалён.'); setConfirmDelete(null); }}
           onCancel={() => setConfirmDelete(null)}
         />
       ) : null}

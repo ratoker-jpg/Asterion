@@ -1,7 +1,10 @@
 // Revision rules and backup rotation of the cloud store.
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { addSnapshot, checkUpload, createCampaign, planRotation, protectedSnapshots, type Campaign } from './store.ts';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { addSnapshot, checkUpload, createCampaign, planRotation, protectedSnapshots, sweepLeftoverFiles, type Campaign } from './store.ts';
 
 const GB = 1024 ** 3;
 
@@ -54,4 +57,19 @@ test('rotation by disk: oldest snapshots of every campaign go until the budget a
   assert.deepEqual(planRotation([a, b], { ...policy, maxTotalBytes: 100 * GB }, 8 * GB).map((entry) => `${entry.campaignId}:${entry.snapshotId}`),
     ['slot-a:1', 'slot-a:2'], 'a full disk frees its reserve');
   assert.equal(planRotation([a, b], { ...policy, maxTotalBytes: GB }, 0).length, 8, 'never the heads, even over budget');
+});
+
+test('leftover runner outputs and temporary copies are swept once old; young files and snapshots stay', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'asterion-sweep-'));
+  try {
+    const dir = path.join(dataDir, 'campaigns', 'slot-a');
+    fs.mkdirSync(dir, { recursive: true });
+    const old = ['out-0123456789ab.json.gz', 'campaign.json.tmp-123'];
+    for (const name of [...old, 'out-ffffffffffff.json.gz', 'snap-1.json.gz']) fs.writeFileSync(path.join(dir, name), 'x');
+    const longAgo = new Date(Date.now() - 2 * 3_600_000);
+    for (const name of [...old, 'snap-1.json.gz']) fs.utimesSync(path.join(dir, name), longAgo, longAgo);
+    const removed = sweepLeftoverFiles(dataDir).sort();
+    assert.deepEqual(removed, ['slot-a/campaign.json.tmp-123', 'slot-a/out-0123456789ab.json.gz']);
+    assert.deepEqual(fs.readdirSync(dir).sort(), ['out-ffffffffffff.json.gz', 'snap-1.json.gz']);
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });

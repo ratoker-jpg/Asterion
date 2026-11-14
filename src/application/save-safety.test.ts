@@ -222,3 +222,18 @@ test('the slot card counts NPC owners, not their planets; a summary cached by an
   assert.equal(fixed.summary.npcCount, owners.size);
   assert.equal(fixed.updatedAt, slot.updatedAt, 'the correction does not touch the slot dates');
 });
+
+test('a broken resource clock never starts a catch-up from 1970 (audit 13.11, 2.6)', () => {
+  const now = Date.UTC(2026, 10, 14, 12);
+  const base = JSON.parse(JSON.stringify(createInitialSaveState('production', now))) as Record<string, unknown>;
+  delete base.npcReplay;
+  // Garbage in the clock, no replay cursor: the save is refused instead of replayed from 1970.
+  const broken = JSON.stringify({ ...base, resourceClock: { ...(base.resourceClock as object), lastReconciledAt: 'oops' } });
+  assert.equal(inspectSavePayload(broken, SAVE_SCHEMA_VERSION).status, 'malformed');
+  // A clock that is simply missing falls back to now, not to 0.
+  const missing = { ...base, resourceClock: { remainder: {} } };
+  const storage = memoryStorage({ 'asterion.k': JSON.stringify(missing) });
+  const loaded = loadSavedState({ mode: 'production', storage, saveKey: 'asterion.k', now: () => now });
+  const target = loaded.state.npcReplay?.processedThroughAt ?? 0;
+  assert.ok(target >= now - 1000, `the replay cursor starts near now, not at ${target}`);
+});

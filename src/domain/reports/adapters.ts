@@ -5,6 +5,7 @@ import {
   type BattleReport,
   type BattleSide,
 } from '../combat/report.ts';
+import { plural } from '../plural.ts';
 import type { CommandState } from '../command/types.ts';
 import type { FlightRecord } from '../flights/types.ts';
 import { explorationMailboxReports, type FlightReportContext } from '../exploration/report-items.ts';
@@ -296,7 +297,7 @@ export function overpopulationEpisodeReportToReportItem(report: OverpopulationEp
     category: 'system',
     typeLabel: 'Итог перенаселения',
     title: `Планета разблокирована: ${report.planetName}`,
-    preview: `${captionNumber(removedCount)} кораблей уничтожено · ${captionFact('население', `${captionNumber(report.populationBefore)} → ${captionNumber(report.populationAfter)}`)} · ${captionFact('вместимость', report.capacity)}`,
+    preview: `${captionNumber(removedCount)} ${plural(removedCount, 'корабль уничтожен', 'корабля уничтожено', 'кораблей уничтожено')} · ${captionFact('население', `${captionNumber(report.populationBefore)} → ${captionNumber(report.populationAfter)}`)} · ${captionFact('вместимость', report.capacity)}`,
     body: `Планета ${report.planetName} разблокирована. Эпизод перенаселения завершён; итоговое население, уничтоженные корабли и спутники перечислены в отчёте.`,
     timestamp,
     statusLabel: 'ПЛАНЕТА РАЗБЛОКИРОВАНА',

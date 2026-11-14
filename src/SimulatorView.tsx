@@ -1,5 +1,7 @@
+import { GameSelect } from './ui/GameSelect.tsx';
 import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from 'react';
 
+import { plural } from './domain/plural.ts';
 import { BattleReportModal } from './BattleReportsView';
 import { COMMANDER_COMBAT_CATALOG, type CatalogEntity } from './domain/combat/catalog.ts';
 import { getCombatEntityForStack } from './domain/combat/side-entity.ts';
@@ -519,34 +521,33 @@ function CommanderSelector({
       ? `Ведущий: ${activeEntity.name}`
       : 'Выбери ведущего командира';
   return (
-    <label className="sim-commander-select-v1" htmlFor={`sim-leading-commander-${side}`}>
+    <div className="sim-commander-select-v1">
       <span>ВЕДУЩИЙ КОМАНДИР</span>
-      <select
-        id={`sim-leading-commander-${side}`}
-        data-qa-simulator-leading-commander={side}
+      <GameSelect
         value={active ?? ''}
-        onChange={(event) => onChange(event.target.value ? event.target.value as CommanderId : null)}
-        aria-describedby={`sim-leading-commander-help-${side}`}
-      >
-        <option value="">{selectedLabel}</option>
-        {selected.map((stack) => {
-          const entity = COMMANDER_COMBAT_CATALOG.find((item) => item.id === stack.entityId);
-          return entity ? <option key={entity.id} value={entity.id}>{entity.name}</option> : null;
-        })}
-      </select>
+        label="Ведущий командир"
+        options={[
+          { value: '', label: selectedLabel },
+          ...selected.flatMap((stack) => {
+            const entity = COMMANDER_COMBAT_CATALOG.find((item) => item.id === stack.entityId);
+            return entity ? [{ value: entity.id, label: entity.name }] : [];
+          }),
+        ]}
+        onChange={(value) => onChange(value ? value as CommanderId : null)}
+        selectProps={{ id: `sim-leading-commander-${side}`, 'data-qa-simulator-leading-commander': side, 'aria-describedby': `sim-leading-commander-help-${side}` }}
+      />
       <small id={`sim-leading-commander-help-${side}`}>Добавь по одному кораблю каждого типа в разделе «Командирские». Здесь выбери ведущего; остальные командирские корабли тоже участвуют в бою.</small>
-    </label>
+    </div>
   );
 }
 
 function RaceSelector({ id, label, value, onChange }: { id: string; label: string; value?: CombatFactionId; onChange: (factionId: CombatFactionId) => void }) {
   return (
-    <label className="sim-race-v1" htmlFor={id}>
+    <div className="sim-race-v1">
       <span>{label}</span>
-      <select id={id} value={value ?? 'aegis'} onChange={(event) => onChange(event.target.value as CombatFactionId)}>
-        {COMBAT_FACTIONS.map((faction) => <option key={faction.id} value={faction.id}>{faction.name}</option>)}
-      </select>
-    </label>
+      <GameSelect value={value ?? 'aegis'} label={label} options={COMBAT_FACTIONS.map((faction) => ({ value: faction.id, label: faction.name }))}
+        onChange={(next) => onChange(next as CombatFactionId)} selectProps={{ id }} />
+    </div>
   );
 }
 
@@ -711,7 +712,7 @@ export function SimulatorView({ planetName, coords, onBack, initialScenario }: {
     setResult(report);
     setDetailsOpen(false);
     setEditing({ attacker: false, defender: false });
-    setNotice(`Расчёт завершён: ${report.roundCount} раунд(ов), результат — ${report.winner === 'draw' ? 'ничья' : report.winner === 'attacker' ? 'победа атакующего' : 'победа защитника'}.`);
+    setNotice(`Расчёт завершён: ${report.roundCount} ${plural(report.roundCount, 'раунд', 'раунда', 'раундов')}, результат — ${report.winner === 'draw' ? 'ничья' : report.winner === 'attacker' ? 'победа атакующего' : 'победа защитника'}.`);
   };
 
   const savePreset = () => {
@@ -896,7 +897,7 @@ export function SimulatorView({ planetName, coords, onBack, initialScenario }: {
 
       <section className="sim-presets-v1" aria-label="Сценарии симулятора">
         <div><label htmlFor="sim-preset-name">Имя сценария</label><input id="sim-preset-name" value={presetName} maxLength={48} placeholder="Например: Линкоры против матриц" onChange={(event) => setPresetName(event.target.value)} /><button type="button" onClick={savePreset}>Сохранить сценарий</button></div>
-        <div><label htmlFor="sim-preset-select">Сохранённые</label><select id="sim-preset-select" value={selectedPresetId} onChange={(event) => setSelectedPresetId(event.target.value)}><option value="">Выбери сценарий</option>{simulatorState.presets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}</select><button type="button" disabled={!selectedPresetId} onClick={loadPreset}>Загрузить</button><button type="button" disabled={!selectedPresetId} onClick={deletePreset}>Удалить</button></div>
+        <div><label htmlFor="sim-preset-select">Сохранённые</label><GameSelect value={selectedPresetId} label="Сохранённые сценарии" options={[{ value: '', label: 'Выбери сценарий' }, ...simulatorState.presets.map((preset) => ({ value: preset.id, label: preset.name }))]} onChange={setSelectedPresetId} selectProps={{ id: 'sim-preset-select' }} /><button type="button" disabled={!selectedPresetId} onClick={loadPreset}>Загрузить</button><button type="button" disabled={!selectedPresetId} onClick={deletePreset}>Удалить</button></div>
       </section>
 
       {result && detailsOpen ? <BattleReportModal report={result} context="simulation" onClose={closeResult} /> : null}

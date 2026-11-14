@@ -5,11 +5,11 @@
 //     tools/score-drops.mjs [--days=2] [--bots=15] [--seed=1] [--out=FILE.json]
 import fs from 'node:fs';
 import { createLabWorld } from './bot-lab.mjs';
-import { loadSavedState, serializeSaveForStorage } from '../src/application/persistence.ts';
-import { applyCampaignRuntimeForCatchup } from '../src/application/npc-catchup-runner.ts';
-import { advanceLiveWorld, beginLiveWorld } from '../src/application/npc-live-world.ts';
-import { selectOwnerScore } from '../src/domain/rating/scoring.ts';
-import { getFactionDefenseCatalog, getFactionShipCatalog } from '../src/domain/combat/faction-catalog.ts';
+import { loadSavedState, serializeSaveForStorage } from '../../src/application/persistence.ts';
+import { applyCampaignRuntimeForCatchup } from '../../src/application/npc-catchup-runner.ts';
+import { advanceLiveWorld, beginLiveWorld } from '../../src/application/npc-live-world.ts';
+import { selectOwnerScore } from '../../src/domain/rating/scoring.ts';
+import { getFactionDefenseCatalog, getFactionShipCatalog } from '../../src/domain/combat/faction-catalog.ts';
 
 const HOUR = 3_600_000;
 const option = (name, fallback) => process.argv.find((arg) => arg.startsWith(`--${name}=`))?.slice(name.length + 3) ?? fallback;

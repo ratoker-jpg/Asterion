@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
-import { FACTION_SHIP_MECHANICS } from '../src/domain/combat/faction-ship-data.ts';
-import { getCombatEntity } from '../src/domain/combat/catalog.ts';
-import { getFactionCombatEntity } from '../src/domain/combat/faction-catalog.ts';
+import { FACTION_SHIP_MECHANICS } from '../../src/domain/combat/faction-ship-data.ts';
+import { getCombatEntity } from '../../src/domain/combat/catalog.ts';
+import { getFactionCombatEntity } from '../../src/domain/combat/faction-catalog.ts';
 
 const CSV_PATH = 'docs/evidence/nemexia-target-priority-corpus/target-transitions.csv';
 const RACE_TO_FACTION = { '1': 'aegis', '2': 'synod', '3': 'veyra' };

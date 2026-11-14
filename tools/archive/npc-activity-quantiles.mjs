@@ -1,7 +1,7 @@
 // Online hours per day by quantile for each NPC activity level (npc-activity-setting report).
 // Usage: node --experimental-strip-types tools/npc-activity-quantiles.mjs
-import { createNpcState } from '../src/domain/npc/state.ts';
-import { getNpcSessionEvents, NPC_CALENDAR_DAY_MS } from '../src/domain/npc/calendar.ts';
+import { createNpcState } from '../../src/domain/npc/state.ts';
+import { getNpcSessionEvents, NPC_CALENDAR_DAY_MS } from '../../src/domain/npc/calendar.ts';
 
 const START = Date.UTC(2026, 10, 2, 0, 0, 0);
 const DAYS = 28;

@@ -150,6 +150,35 @@ export function liveCheckpointFile(dataDir: string, id: string): string {
   return path.join(campaignDir(dataDir, id), 'live-checkpoint.json.gz');
 }
 
+/** Files a failed or interrupted step leaves in a campaign folder: runner outputs and temporary copies. */
+const LEFTOVER_FILE = /^(?:out-[0-9a-f]{6,32}\.json\.gz|.+\.tmp-\d+)$/;
+
+/**
+ * Deletes leftovers (`out-<hex>.json.gz` of a runner that died before the server took its file, `*.tmp-<pid>`)
+ * untouched for `minAgeMs`: a file written right now (a stop in progress) is never touched. Returns the names.
+ */
+export function sweepLeftoverFiles(dataDir: string, now = Date.now(), minAgeMs = 60 * 60_000): string[] {
+  const removed: string[] = [];
+  let ids: string[] = [];
+  try { ids = fs.readdirSync(path.join(dataDir, 'campaigns')); } catch { return removed; }
+  for (const id of ids) {
+    if (!CAMPAIGN_ID.test(id)) continue;
+    const dir = campaignDir(dataDir, id);
+    let names: string[] = [];
+    try { names = fs.readdirSync(dir); } catch { continue; }
+    for (const name of names) {
+      if (!LEFTOVER_FILE.test(name)) continue;
+      const file = path.join(dir, name);
+      try {
+        if (now - fs.statSync(file).mtimeMs < minAgeMs) continue;
+        fs.rmSync(file, { force: true });
+        removed.push(`${id}/${name}`);
+      } catch { /* busy or gone: next time */ }
+    }
+  }
+  return removed;
+}
+
 function writeJsonAtomic(file: string, value: unknown): void {
   const temporary = `${file}.tmp-${process.pid}`;
   fs.writeFileSync(temporary, JSON.stringify(value, null, 1));

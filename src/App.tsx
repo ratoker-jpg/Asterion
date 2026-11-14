@@ -1,4 +1,5 @@
 import { LiveWorldSupervisor, guardWorkerStep } from './application/live-world-supervisor.ts';
+import { plural } from './domain/plural.ts';
 import { anchorWorldClockToState, worldClockOffsetMs, worldNow } from './application/world-clock.ts';
 import { getFactionShipCatalog } from './domain/combat/faction-catalog.ts';
 import { isCombatFactionId } from './domain/combat/factions.ts';
@@ -8,7 +9,7 @@ import { SAVE_FLUSH_EVENT } from './application/save-storage.ts';
 import { answerNpcLetter } from './application/npc-letters.ts';
 import type { LetterRef } from './domain/reports/types.ts';
 import { diffPlayerActions, PLAYER_JOURNAL_SNAPSHOT_INTERVAL_MS, snapshotPlayer } from './application/player-journal.ts';
-import { appendJournalEntries, setActiveJournalCampaign } from './ui/player-journal-store.ts';
+import { appendJournalEntries, clearJournal, setActiveJournalCampaign } from './ui/player-journal-store.ts';
 import { appendBotJournal } from './ui/bot-journal-store.ts';
 import { selectOwnerPresence } from './application/owner-presence.ts';
 import { dispatchBot01Exploration } from './application/exploration-bot01.ts';
@@ -27,7 +28,7 @@ import type { BuildPlan } from './domain/buildings/build-plan.ts';
 import { fleetPlanReport } from './ui/fleet-plan/fleet-plan-text.ts';
 import { FleetPlannerDialog } from './ui/fleet-plan/FleetPlannerDialog.tsx';
 import { OperationsView } from './OperationsView';
-import { createOperationsVariantAQaFixture, getOperationsVariantAQaStatus } from './operations-variant-a-qa-fixture.ts';
+import type { createOperationsVariantAQaFixture as CreateOperationsVariantAQaFixture } from './operations-variant-a-qa-fixture.ts';
 import { createUniverseNpcOwnerProfile, rerollTestUniverseLayout, TEST_MODE_ALLY_PLANET_FIXTURE, UNIVERSE_NPC_OWNER_ID } from './domain/universe/runtime.ts';
 import { CommandView, type CommandActionResult, type CommandActions } from './CommandView';
 import { ReportsView } from './ReportsView';
@@ -650,7 +651,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       anchor.click();
       anchor.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      setNotice(`Пиратские бои: выгружено ${payload.currentState.exportedBattleCount} отчётов в JSON.`, 'success');
+      setNotice(`Пиратские бои: выгружено ${payload.currentState.exportedBattleCount} ${plural(payload.currentState.exportedBattleCount, 'отчёт', 'отчёта', 'отчётов')} в JSON.`, 'success');
     } catch {
       setNotice('Не удалось подготовить выгрузку пиратских боёв.', 'error');
     }
@@ -662,13 +663,21 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       ? selectOwnedPiratePresentations(state, now)
       : selectPirateContacts(state, now, pirateSystem);
   }, [activeRoute, state, now, pirateSystem]);
-  const operationsVariantAFixtureStatus = getOperationsVariantAQaStatus(RUNTIME_MODE);
+  // Test Mode screenshot route only (`#operations-variant-a-<status>`): the QA data is loaded on demand,
+  // the shipped game never carries it (audit 13.11, 3.6). Without a live base the fixture brings its own stand-in.
+  const operationsVariantAFixtureRequested = RUNTIME_MODE === 'test' && typeof window !== 'undefined' && window.location.hash.startsWith('#operations-variant-a-') ? window.location.hash : '';
   const fixturePirateContact = pirateContacts[0];
-  // Test Mode screenshot route only; without a live base the fixture brings its own stand-in.
-  const operationsVariantAFixture = useMemo(() => operationsVariantAFixtureStatus
-    ? createOperationsVariantAQaFixture(fixturePirateContact, state.profile.playerId, operationsVariantAFixtureStatus)
-    : null,
-  [operationsVariantAFixtureStatus, fixturePirateContact?.contactCycleKey, state.profile.playerId]);
+  const [operationsVariantAFixture, setOperationsVariantAFixture] = useState<ReturnType<typeof CreateOperationsVariantAQaFixture> | null>(null);
+  useEffect(() => {
+    if (!operationsVariantAFixtureRequested) { setOperationsVariantAFixture(null); return; }
+    let live = true;
+    void import('./operations-variant-a-qa-fixture.ts').then((module) => {
+      const status = module.getOperationsVariantAQaStatus(RUNTIME_MODE);
+      if (live && status) setOperationsVariantAFixture(module.createOperationsVariantAQaFixture(fixturePirateContact, state.profile.playerId, status));
+    });
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [operationsVariantAFixtureRequested, fixturePirateContact?.contactCycleKey, state.profile.playerId]);
   const completedPirateOperations = useMemo(() => {
     if (activeRoute !== 'operations') return [];
     const reports = new Map(state.combat.reports.map((report) => [report.id, report]));
@@ -1427,15 +1436,18 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       } else if (message.type === 'progress') {
         setNpcCatchupProgress({ processedThroughAt: message.processedThroughAt, targetAt: message.targetAt });
       } else if (message.type === 'save') {
+        // The step counts as saved only once its write succeeded: a failed one is written again when the window closes.
+        const result = persistence.writeSerialized(message.text);
         const step = link.steps.get(message.version);
-        if (step !== undefined) link.savedStep = Math.max(link.savedStep, step);
-        reportWriteResult(persistence.writeSerialized(message.text));
+        if (result.ok && step !== undefined) link.savedStep = Math.max(link.savedStep, step);
+        reportWriteResult(result);
       } else if (message.type === 'saved') {
         // The main process wrote the file; the window only moves the pointer.
+        const result = persistence.adoptSavedFile(message.writeId, message.chars);
         const step = link.steps.get(message.version);
-        if (step !== undefined) link.savedStep = Math.max(link.savedStep, step);
+        if (result.ok && step !== undefined) link.savedStep = Math.max(link.savedStep, step);
         lastWriteCostMs.current = message.computeMs;
-        reportWriteResult(persistence.adoptSavedFile(message.writeId, message.chars));
+        reportWriteResult(result);
       } else if (message.type === 'save-port-failed') {
         console.error('Live world save port failed; the worker sends save text.', message.error);
       } else if (message.type === 'bot-journal') {
@@ -2187,6 +2199,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
 
   const reset = () => {
     dispatchRuntimeReset(RUNTIME_MODE, window);
+    // The old campaign's action journal must not carry into the new one.
+    void clearJournal(persistence.saveKey).catch(() => undefined);
     persistence.clear();
     // Reroll generated free planets, pirates, anomalies and unique objects.
     // Production world layouts are never randomized by the reset control.
@@ -3233,6 +3247,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     const config = stateRef.current.worldConfig;
     const nextState = createInitialSaveState(RUNTIME_MODE, worldNow(), config && !config.legacy ? config : undefined);
     dispatchRuntimeReset(RUNTIME_MODE, window);
+    void clearJournal(persistence.saveKey).catch(() => undefined);
     // Restarting is the player's explicit decision to replace this campaign.
     persistence.write(nextState, { replaceUnreadable: true });
     applyCampaignRuntime(nextState, RUNTIME_MODE);

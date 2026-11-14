@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { writeFile } from 'node:fs/promises';
-import { createInitialSaveState, serializeSaveForStorage } from '../src/application/persistence.ts';
-import { createColonyPlanetRuntime } from '../src/application/owned-planets.ts';
-import { getEspionageTargets } from '../src/domain/espionage/runtime.ts';
-import { COMPUTER_SYSTEMS_SCIENCE_ID } from '../src/domain/flights/limit.ts';
+import { createInitialSaveState, serializeSaveForStorage } from '../../src/application/persistence.ts';
+import { createColonyPlanetRuntime } from '../../src/application/owned-planets.ts';
+import { getEspionageTargets } from '../../src/domain/espionage/runtime.ts';
+import { COMPUTER_SYSTEMS_SCIENCE_ID } from '../../src/domain/flights/limit.ts';
 
 // Synthetic worst-case screen input (never a user save): four own planets with huge fleets for the
 // quick-send waves screenshots. Usage: node --experimental-strip-types tools/generate-preview-waves-fixture.mjs out.json

@@ -1,3 +1,4 @@
+import { GameSelect } from '../GameSelect.tsx';
 import { useMemo, useState } from 'react';
 import { COMMANDER_IDS } from '../../domain/combat/commanders.ts';
 import { getFactionCombatEntity } from '../../domain/combat/faction-catalog.ts';
@@ -162,16 +163,8 @@ export function SunOrderEditor({ order, onChange, races, members, perSide, parti
       </ol>
 
       <div className="sro__add">
-        <label><span className="srp-sr">Раса</span>
-          <select value={addRace} onChange={(event) => setAddRace(event.target.value as CombatFactionId)} aria-label="Раса позиции">
-            {races.map((race) => <option key={race} value={race}>{getCombatFactionName(race)}</option>)}
-          </select>
-        </label>
-        <label><span className="srp-sr">Корабль</span>
-          <select value={entityOk} onChange={(event) => setAddEntity(event.target.value)} aria-label="Корабль позиции">
-            {addOptions.map((id) => <option key={id} value={id} disabled={taken.has(`${addRace}:${id}`)}>{getFactionCombatEntity(addRace, id).name}</option>)}
-          </select>
-        </label>
+        <GameSelect value={addRace} label="Раса позиции" options={races.map((race) => ({ value: race, label: getCombatFactionName(race) }))} onChange={(value) => setAddRace(value as CombatFactionId)} />
+        <GameSelect value={entityOk} label="Корабль позиции" options={addOptions.map((id) => ({ value: id, label: getFactionCombatEntity(addRace, id).name, disabled: taken.has(`${addRace}:${id}`) }))} onChange={setAddEntity} />
         <button type="button" className="opsA-btn opsA-btn--small" onClick={add} disabled={taken.has(`${addRace}:${entityOk}`) || order.slots.length >= SUN_ORDER_MAX_SLOTS} data-qa-sun-order-add>+ ПОЗИЦИЯ</button>
         <button type="button" className="opsA-btn opsA-btn--small" onClick={addAny} disabled={hasAny || room <= 0 || order.slots.length >= SUN_ORDER_MAX_SLOTS} title="Место для любых боевых кораблей союза">+ ЛЮБЫЕ</button>
         <button type="button" className="opsA-btn opsA-btn--small" onClick={() => onChange(padSunOrder(order, races, perSide))} disabled={room <= SUN_RAID_CONFIG.raidLaunchTolerance || !races.length} title="Добавить самые малые корабли, чтобы заказ стал ровно лимитом стороны" data-qa-sun-order-pad>ДОБИТЬ ОСТАТОК</button>
@@ -193,9 +186,7 @@ function LevelSelect({ value, max, onChange }: { value: number; max: number; onC
   return (
     <label className="sro__level" title="Минимальный уровень корабля у участника">
       <span className="srp-sr">Минимальный уровень</span>
-      <select value={value} onChange={(event) => onChange(Number(event.target.value))} aria-label="Минимальный уровень">
-        {Array.from({ length: max + 1 }, (_, level) => <option key={level} value={level}>{level ? `ур. ${level}+` : 'любой'}</option>)}
-      </select>
+      <GameSelect value={String(value)} label="Минимальный уровень" options={Array.from({ length: max + 1 }, (_, level) => ({ value: String(level), label: level ? `ур. ${level}+` : 'любой' }))} onChange={(next) => onChange(Number(next))} />
     </label>
   );
 }

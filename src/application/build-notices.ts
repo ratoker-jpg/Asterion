@@ -6,6 +6,8 @@
  * - long builds still get their notice.
  * Pure: the screen keeps the batch and the timer, this module decides the text.
  */
+import { plural } from '../domain/plural.ts';
+
 export const QUIET_BUILD_MS = 5 * 60_000;
 /** Completions closer than this to the previous one join its notice. */
 export const BUILD_NOTICE_WINDOW_MS = 3_000;
@@ -57,5 +59,5 @@ export function buildNoticeText(batch: BuildNoticeBatch | null): string | null {
   const names = [...new Set(items.map((item) => item.name))];
   const shown = names.length > 4 ? `${names.slice(0, 3).join(', ')} и ещё ${names.length - 3}` : names.join(', ');
   if (planets.length === 1) return `${items[0]!.planetName}: готово ${items.length} ${countWord(items.length)} — ${shown}.`;
-  return `Готово ${items.length} ${countWord(items.length)} на ${planets.length} планетах — ${shown}.`;
+  return `Готово ${items.length} ${countWord(items.length)} на ${planets.length} ${plural(planets.length, 'планете', 'планетах', 'планетах')} — ${shown}.`;
 }

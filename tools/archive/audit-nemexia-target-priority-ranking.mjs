@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
-import { FACTION_SHIP_MECHANICS } from '../src/domain/combat/faction-ship-data.ts';
-import { FACTION_DEFENSE_CONSTRUCTION_BALANCE } from '../src/domain/combat/defense-construction-data.ts';
-import { DEFENSE_COMBAT_CATALOG, COMMANDER_COMBAT_CATALOG, getCombatEntity } from '../src/domain/combat/catalog.ts';
-import { getFactionCombatEntity } from '../src/domain/combat/faction-catalog.ts';
+import { FACTION_SHIP_MECHANICS } from '../../src/domain/combat/faction-ship-data.ts';
+import { FACTION_DEFENSE_CONSTRUCTION_BALANCE } from '../../src/domain/combat/defense-construction-data.ts';
+import { DEFENSE_COMBAT_CATALOG, COMMANDER_COMBAT_CATALOG, getCombatEntity } from '../../src/domain/combat/catalog.ts';
+import { getFactionCombatEntity } from '../../src/domain/combat/faction-catalog.ts';
 
 const ROOT = 'docs/evidence/nemexia-target-priority-corpus';
 const CSV_PATH = `${ROOT}/target-transitions.csv`;

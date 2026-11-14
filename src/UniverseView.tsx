@@ -14,7 +14,7 @@ import { GameSelect } from './ui/GameSelect.tsx';
 import { ObjectCard } from './ui/universe/ObjectCard.tsx';
 import { DebrisFinder, type DebrisSearch } from './ui/universe/DebrisFinder.tsx';
 import type { DebrisEntry, ExplorationIntel } from './ui/universe/object-card-model.ts';
-import { createUniverseCardQaFixture, getUniverseCardQaScenario } from './ui/universe/object-card-qa-fixture.ts';
+import type { UniverseCardQaFixture, UniverseCardQaScenario } from './ui/universe/object-card-qa-fixture.ts';
 import debrisIcon from './assets/ui/header-icons/debris.png';
 import './ui/universe/universe-radar.css';
 import './ui/universe/map-relations.css';
@@ -622,10 +622,20 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
   const onPirateSystemChangeRef = useRef(onPirateSystemChange);
   const nowMs = useClockNow();
   // Test Mode screenshot route `#universe-card-<scenario>`: a seeded object card or debris list, frozen clock.
-  const qaScenario = useMemo(() => getUniverseCardQaScenario(mode), [mode]);
-  const qaFixture = useMemo(() => (qaScenario ? createUniverseCardQaFixture(qaScenario, Date.now(), {
-    planet: planetArts[3], asteroid: asteroidArts[2], pirate: pirateArts[1] ?? pirateArts[0], unique: assets.uniqueArts?.[0] ?? '', anomaly: anomalyArts[0] ?? '',
-  }) : null), [qaScenario]);
+  // The QA data is loaded only under the Test Mode route flag: the shipped game never carries it (audit 13.11, 3.6).
+  const qaScenarioRequested = mode === 'test' && typeof window !== 'undefined' && window.location.hash.startsWith('#universe-card-') ? window.location.hash : '';
+  const [qaFixture, setQaFixture] = useState<UniverseCardQaFixture | null>(null);
+  useEffect(() => {
+    if (!qaScenarioRequested) return;
+    let live = true;
+    void import('./ui/universe/object-card-qa-fixture.ts').then((module) => {
+      const scenario: UniverseCardQaScenario | null = module.getUniverseCardQaScenario(mode);
+      if (live && scenario) setQaFixture(module.createUniverseCardQaFixture(scenario, Date.now(), {
+        planet: planetArts[3], asteroid: asteroidArts[2], pirate: pirateArts[1] ?? pirateArts[0], unique: assets.uniqueArts?.[0] ?? '', anomaly: anomalyArts[0] ?? '',
+      }));
+    });
+    return () => { live = false; };
+  }, [qaScenarioRequested, mode]);
   const [qaCardOpen, setQaCardOpen] = useState(true);
 
   useEffect(() => {

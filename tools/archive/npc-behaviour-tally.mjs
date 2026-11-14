@@ -10,9 +10,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createFullWorldFixture, FULL_WORLD_START_AT } from './benchmark-npc-full-world.mjs';
-import { reconcileRuntime } from '../src/application/reconcile.ts';
-import { freezeNpcCatchupTarget, isNpcCatchupPending } from '../src/application/npc-catchup.ts';
-import { serializeSaveForStorage } from '../src/application/persistence.ts';
+import { reconcileRuntime } from '../../src/application/reconcile.ts';
+import { freezeNpcCatchupTarget, isNpcCatchupPending } from '../../src/application/npc-catchup.ts';
+import { serializeSaveForStorage } from '../../src/application/persistence.ts';
 
 const DAY_MS = 86_400_000;
 

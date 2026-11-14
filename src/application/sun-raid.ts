@@ -1901,7 +1901,7 @@ export function selectPlayerRaidRole(state: SaveState): PlayerRaidRole {
 /* ------------------------------------------------------ Test Mode fixtures */
 
 function requireTest(state: SaveState, options: SunRuntimeOptions): SunActionResult | null {
-  return options.mode === 'test' ? null : { ok: false, state, error: 'Сценарий доступен только в Test Mode.' };
+  return options.mode === 'test' ? null : { ok: false, state, error: 'Сценарий доступен только в тестовом режиме.' };
 }
 
 function botSource(state: SaveState): SpyTargetState | null {

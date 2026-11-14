@@ -1,3 +1,4 @@
+import { plural } from './domain/plural.ts';
 import { getLiveSaveState } from './application/runtime.ts';
 import { createPortal } from 'react-dom';
 import { SunReportStrip } from './ui/sun-raid/SunReportStrip.tsx';
@@ -958,7 +959,7 @@ function roundActionLine(round: BattleRoundViewModel) {
     parts.push(`урон: атакующий ${formatKnownNumber(summary.attackerDamage)}, защитник ${formatKnownNumber(summary.defenderDamage)}`);
   }
   if (summary.destroyedPopulation != null || summary.destroyedUnits != null) {
-    parts.push(`потери: ${formatKnownNumber(summary.destroyedPopulation ?? summary.destroyedUnits)}${summary.destroyedPopulation != null ? ' населения' : ' кораблей'}${summary.destroyedUnits != null ? ` (${formatKnownNumber(summary.destroyedUnits)} кораблей/сооружений)` : ''}`);
+    parts.push(`потери: ${formatKnownNumber(summary.destroyedPopulation ?? summary.destroyedUnits)}${summary.destroyedPopulation != null ? ' населения' : ` ${plural(Number(summary.destroyedPopulation ?? summary.destroyedUnits) || 0, 'корабль', 'корабля', 'кораблей')}`}${summary.destroyedUnits != null ? ` (${formatKnownNumber(summary.destroyedUnits)} кораблей/сооружений)` : ''}`);
   }
   if (summary.procs != null || summary.repairs != null) {
     parts.push(`способности: ${formatKnownNumber(summary.procs)}, восстановлено ${formatKnownNumber(summary.repairs)}`);

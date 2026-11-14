@@ -4,7 +4,7 @@ import { basename, resolve } from 'node:path';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const defaultOutput = resolve(repositoryRoot, 'docs/evidence/nemexia-target-priority-corpus');
 const defaultTransitions = resolve(repositoryRoot, 'docs/evidence/nemexia-target-transitions.csv');
 const sourceFilePattern = /^battles-\d{4}-\d{2}-\d{2}\.jsonl$/i;

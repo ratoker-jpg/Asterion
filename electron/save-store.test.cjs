@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { staleVersionsToDrop, STALE_GRACE_MS } = require('./save-store.cjs');
+const { staleVersionsToDrop, STALE_GRACE_MS, sweepStaleTemporaryFiles } = require('./save-store.cjs');
 
 const NOW = 1_000_000_000;
 const file = (name, agoMs) => ({ name, at: NOW - agoMs });
@@ -25,4 +25,26 @@ test('a burst of young files cannot grow without limit', () => {
   const dropped = staleVersionsToDrop(entries, 'target', 2, NOW);
   assert.equal(entries.length - 1 - dropped.length, 6, 'at most six older files stay');
   assert.ok(!dropped.includes('f0') && !dropped.includes('f5'), 'the newest stay');
+});
+
+test('leftover .tmp files older than an hour are swept at start, young ones and saves stay', () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'asterion-sweep-'));
+  const saves = path.join(dir, 'saves');
+  fs.mkdirSync(saves);
+  const old = path.join(saves, 'asterion.slot.slot-a.v1.w1.save.json.tmp');
+  const young = path.join(saves, 'asterion.slot.slot-a.v1.w2.save.json.tmp');
+  const save = path.join(saves, 'asterion.slot.slot-a.v1.w3.save.json');
+  for (const file of [old, young, save]) fs.writeFileSync(file, 'x');
+  const longAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  fs.utimesSync(old, longAgo, longAgo);
+  fs.utimesSync(save, longAgo, longAgo);
+  try {
+    const removed = sweepStaleTemporaryFiles(saves);
+    assert.deepEqual(removed, ['asterion.slot.slot-a.v1.w1.save.json.tmp']);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
