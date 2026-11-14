@@ -142,7 +142,7 @@ export function AllianceFounding({ leaderName, capital, validate, onSubmit, onCl
                   ))}
                 </div>
               </Field>
-              <Field label="Цвет союза — им окрашены знак, тег, девиз и метки на карте">
+              <Field label="Цвет союза — им окрашены знак, тег и девиз">
                 <div className="founding-colors">
                   {CREST_COLORS.map((color) => (
                     <button key={color} type="button" className={crest.color === color ? 'is-on' : ''} aria-pressed={crest.color === color} style={{ '--swatch': ACCENT_COLORS[color] } as CSSProperties} onClick={() => pickCrest({ ...crest, color })} data-qa-color={color}>
@@ -224,7 +224,7 @@ export function AllianceFounding({ leaderName, capital, validate, onSubmit, onCl
             <Field label="Галактика — ваша столица">
               <div className="founding-seen-map">
                 <span className="founding-planet"><img src={capital.art} alt="" draggable={false} /><i>[{shownTag}]</i></span>
-                <div><b>{capital.planetName} · {capital.ownerName}</b><small>метка союза в его цвете</small></div>
+                <div><b>{capital.planetName} · {capital.ownerName}</b><small>тег союза рядом с вашими планетами</small></div>
               </div>
             </Field>
           ) : null}

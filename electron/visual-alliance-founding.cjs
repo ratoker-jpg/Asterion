@@ -123,6 +123,10 @@ function noAllianceSeed() {
       alliance.members = alliance.members.filter((member) => member.ownerId !== playerId);
     }
     command.alliances = command.alliances.filter((alliance) => alliance.members.length);
+    // Bots with a Hall may choose an alliance: «Им подходит ваш союз» lists those that want the new one.
+    for (const target of Object.values(save.espionage?.targets || {})) {
+      if (target.kind === 'npc' && target.buildings) target.buildings['planetary-government'] = Math.max(1, target.buildings['planetary-government'] || 0);
+    }
     if (save.profile) save.profile.allianceId = null;
     command.cooldowns = command.cooldowns.filter((cooldown) => cooldown.ownerId !== playerId);
     command.applications = command.applications.filter((application) => application.ownerId !== playerId);

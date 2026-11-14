@@ -2,7 +2,9 @@
    mockup docs/design/identity/shots/1280x720/alliance-create.jpg). Lives inside the
    scaled 1920×1080 stage like every «Командование» dialog. */
 
-.command-dialog.command-dialog--founding { width: min(1640px, calc(100vw - 48px)); padding-bottom: 18px; }
+/* The backdrop is the 1920-wide stage (it is scaled as a whole), so the width follows it, not 100vw. */
+.command-dialog-backdrop:has(> .command-dialog--founding) { grid-template-columns: minmax(0, 1fr); }
+.command-dialog.command-dialog--founding { width: min(1640px, 100%); justify-self: center; padding-bottom: 18px; }
 .command-dialog--founding > header { justify-content: flex-start; }
 .command-dialog--founding > header .command-close { margin-left: auto; }
 
@@ -138,7 +140,7 @@
 /* ---------- first screen of a new alliance (mockup alliance-founded.jpg) ---------- */
 .cmdA .alliance-first-hero { flex: 0 0 auto; }
 .cmdA .alliance-first-kicker { color: var(--founding-accent); font-size: calc(13px * var(--text-scale-secondary, 1)) !important; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
-.cmdA .alliance-first-title span { color: var(--founding-accent); white-space: nowrap; }
+.cmdA .alliance-first-tag { color: var(--founding-accent); font-size: calc(20px * var(--text-scale-section-title, 1)) !important; font-weight: 800; letter-spacing: .06em; }
 .cmdA .alliance-first-motto { color: color-mix(in srgb, var(--founding-accent) 45%, #e8f4f7); font-size: calc(17px * var(--text-scale-body, 1)) !important; font-style: italic; font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; }
 
 .alliance-first-steps { display: flex; flex-direction: column; gap: 10px; }

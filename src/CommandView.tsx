@@ -997,7 +997,8 @@ function Overview({ command, allianceId, ownerId, role, ownerScores, ownerFactio
         <Dossier footer={footer}>
           <Hero art={<div className="cmdA-art cmdA-art--emblem"><EmblemGlyph emblem={alliance.emblem} /></div>} backdrop={hall.art} className="command-summary alliance-first-hero">
             <small className="alliance-first-kicker">Союз основан · {formatDate(alliance.createdAt)}</small>
-            <h2 className="cmdA-hero-title alliance-first-title" data-qa-first-name>{alliance.name} <span>[{alliance.tag}]</span></h2>
+            <h2 className="cmdA-hero-title alliance-first-title" data-qa-first-name>{alliance.name}</h2>
+            <strong className="alliance-first-tag">[{alliance.tag}]</strong>
             {alliance.motto ? <p className="alliance-first-motto">«{alliance.motto}»</p> : null}
             <div className="cmdA-chips">
               <Chip>Глава: {leader?.displayName ?? '—'}</Chip>
@@ -1029,7 +1030,7 @@ function Overview({ command, allianceId, ownerId, role, ownerScores, ownerFactio
               <div>
                 <small>Открыт облик главы</small>
                 <b>{founding.leaderLook.name}</b>
-                <span>Планета в облике союза. Пока вы глава, её видят все; передадите главенство — облик снимется.</span>
+                <span>Столица в облике союза. Его носит только глава.</span>
               </div>
             </div>
           ) : undefined}
