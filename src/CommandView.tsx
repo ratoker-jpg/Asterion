@@ -1,5 +1,6 @@
 import { useClockNow } from './application/shared-clock';
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { REPORT_ICONS, SCORE_ICONS } from './ui/ui-icons.ts';
 
 import { MAX_ALLIANCE_MEMBERS, TEST_BOT_ALLIANCE_ID } from './domain/command/catalog.ts';
 import {
@@ -44,9 +45,9 @@ import { CrystalDots, ROLE_NAMES, RoleBadge } from './ui/command/AllianceBadges'
 import { Dialog } from './ui/command/Dialog';
 import { renderRichText } from './ui/command/rich-text';
 import { GameSelect } from './ui/GameSelect';
-import commandHeaderIcon from './assets/ui/header-icons/command.png';
-import aidMissionIcon from '../assets/source/mission-icons-v1/33_trade_convoy.png';
-import sunMissionIcon from '../assets/source/mission-icons-v1/08_sun_support.png';
+import commandHeaderIcon from './assets/ui/header-icons/command.webp';
+import aidMissionIcon from './assets/ui/mission-icons/aid.webp';
+import sunMissionIcon from './assets/ui/mission-icons/sun-support.webp';
 import './command.css';
 
 export type CommandActionResult = { ok: true; message?: string } | { ok: false; message: string };
@@ -148,8 +149,6 @@ const ROLE_COLORS: Record<AllianceRole, string> = {
 
 const FACTION_LABELS: Record<string, string> = { aegis: 'Астеры', synod: 'Илары', veyra: 'Рой' };
 
-const SCORE_ICONS = asterionAssetIntegrationAssets.scoreIcons;
-const REPORT_ICONS = asterionAssetIntegrationAssets.reportIcons;
 const FACTION_FACES: Readonly<Record<string, string>> = asterionAssetIntegrationAssets.battleFactionIcons;
 const TAB_ICONS: Record<CommandTab, string> = {
   overview: commandHeaderIcon,

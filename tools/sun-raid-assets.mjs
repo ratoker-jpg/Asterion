@@ -19,8 +19,8 @@ const JOBS = [
   ...['bright', 'dimmed', 'frozen'].map((state) => square(`sun-raid/sun/sun-${state}.png`, `sun-${state}.webp`, 640)),
   ...['aegis', 'synod', 'veyra'].flatMap((race) => ['', '-construction', '-ruined'].map((stage) =>
     square(`New assets/buildings/${race}/building.${race}.supreme-galactic-gates${stage}.png`, `gates-${race}${stage || '-built'}.webp`, 768))),
-  square('mission-icons-v1/37_sun_raid.png', 'mission-sun-raid.webp', 256),
-  square('debris/debris-finder.png', 'debris-finder.webp', 96),
+  square('ui/icons-v2/m-sun-raid.png', 'mission-sun-raid.webp', 256),
+  square('ui/icons-v2/m-debris-finder.png', 'debris-finder.webp', 96),
   square('debris/sun-debris.png', 'sun-debris.webp', 256),
   ...['', '-aegis', '-synod', '-veyra'].map((race) => wide(`menu/menu-background${race}.png`, `menu-background${race || ''}.webp`)),
   wide('menu/campaign-victory.png', 'campaign-victory.webp'),

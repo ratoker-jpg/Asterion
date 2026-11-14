@@ -202,7 +202,7 @@ function assertUpgradeCosts(snapshot, label, shipId, fromLevel = 0) {
   }));
   const contractMatches = actual.every((item, index) => {
     const expectedItem = expected[index];
-    const pattern = new RegExp(`^${expectedItem.assetBase}(?:-[^/]+)?\\.png$`, 'i');
+    const pattern = new RegExp(`^${expectedItem.assetBase}(?:-[^/]+)?\\.(?:png|webp)$`, 'i');
     return (
       item.resource === expectedItem.resource &&
       item.kind === expectedItem.kind &&

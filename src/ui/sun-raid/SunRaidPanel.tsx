@@ -2,7 +2,7 @@ import { GameSelect } from '../GameSelect.tsx';
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { SUN_DEBRIS_ART, SUN_RAID_MISSION_ICON } from './sun-raid-assets.ts';
 import { createPortal } from 'react-dom';
-import sunSupportIcon from '../../../assets/source/mission-icons-v1/08_sun_support.png';
+import sunSupportIcon from '../../assets/ui/mission-icons/sun-support.webp';
 import { getFactionCombatEntity, getFactionShipCatalog } from '../../domain/combat/faction-catalog.ts';
 import { COMMANDER_IDS, type CommanderId } from '../../domain/combat/commanders.ts';
 import type { ShipId } from '../../domain/combat/ids.ts';
