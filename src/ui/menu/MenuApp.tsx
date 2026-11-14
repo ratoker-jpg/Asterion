@@ -198,7 +198,7 @@ function MainMenuScreen({ continueSlot, slotCount, onNavigate, onContinue }: Mai
     // First launch: no dead «Продолжить» on top; «Новая игра» leads (redo 14.11.2026).
     ...(continueSlot ? [{ id: 'continue', label: 'Продолжить', hint: `${continueSlot.name} · ${raceCard(continueSlot.factionId).name}`, action: onContinue, primary: true }] : []),
     { id: 'new', label: 'Новая игра', hint: 'Раса, мир, скорость партии', action: () => onNavigate('new'), primary: !continueSlot },
-    { id: 'load', label: 'Загрузить игру', hint: slotCount ? `Слотов: ${slotCount}` : 'Импорт сохранения из файла', action: () => onNavigate('load') },
+    { id: 'load', label: 'Загрузить игру', hint: slotCount ? `Ваши сохранения (${slotCount}) и импорт из файла` : 'Ваши сохранения и импорт из файла', action: () => onNavigate('load') },
     { id: 'settings', label: 'Настройки', hint: 'Звук, размер текста, экран, облако', action: () => onNavigate('settings') },
     ...(desktop ? [{ id: 'quit', label: 'Выход', hint: 'Закрыть Asterion', action: quitDesktopApp }] : []),
   ];
@@ -237,7 +237,7 @@ function MainMenuScreen({ continueSlot, slotCount, onNavigate, onContinue }: Mai
         <footer className="menu-foot">
           <WhatsNewMenuEntry hasNew={whatsNew.hasNew} onOpen={whatsNew.show} />
           <GameUpdateRow variant="menu" />
-          <span>Сохранения хранятся локально · схема {SAVE_SCHEMA_VERSION}</span>
+          <span>Сохранения хранятся на этом компьютере</span>
           <span><kbd>↑</kbd><kbd>↓</kbd> выбор · <kbd>Enter</kbd> подтвердить</span>
         </footer>
       </section>
@@ -453,7 +453,7 @@ type SlotCardProps = {
 function SlotCard({ slot, active, health, renaming, onRenameStart, onRenameChange, onRenameCommit, onRenameCancel, onLoad, onDuplicate, onExport, onDelete, backup, onRestore }: SlotCardProps) {
   const card = raceCard(slot.factionId);
   const loadable = health.status === 'ok';
-  const problem = health.status === 'broken' ? `Повреждено: ${health.reason}` : health.status === 'newer' ? `Создано новой версией (схема ${health.schemaVersion})` : health.status === 'missing' ? 'Данные слота отсутствуют' : null;
+  const problem = health.status === 'broken' ? `Повреждено: ${health.reason}` : health.status === 'newer' ? `Сохранено более новой версией игры (формат ${health.schemaVersion}, эта версия понимает до ${SAVE_SCHEMA_VERSION}). Обновите игру.` : health.status === 'missing' ? 'Данные слота отсутствуют' : null;
   return (
     <li className={`menu-slot ${active ? 'is-active' : ''} ${problem ? 'is-broken' : ''}`} data-faction={slot.factionId} data-qa-slot={slot.id}>
       <div className="menu-slot__art">
@@ -478,21 +478,20 @@ function SlotCard({ slot, active, health, renaming, onRenameStart, onRenameChang
           <div><dt>Мир</dt><dd>{slot.summary.galaxyCount} гал. · {slot.summary.npcCount} NPC</dd></div>
           <div><dt>Скорость</dt><dd>{CAMPAIGN_SPEED_LABELS[slot.campaignSpeed].label}</dd></div>
           <div><dt>Активность NPC</dt><dd>{NPC_ACTIVITY_LABELS[slot.npcActivity ?? 'normal'].label}</dd></div>
-          <div><dt>Версия</dt><dd>схема {slot.schemaVersion}</dd></div>
         </dl>
         <div className="menu-slot__crystals"><CrystalSet owned={CRYSTALS.slice(0, slot.summary.crystals)} size={18} bare /><span>Кристаллы: {slot.summary.crystals} из 4</span>{slot.summary.victory ? <b>ПОБЕДА</b> : null}</div>
         {problem ? <p className="menu-slot__problem" role="status">{problem}</p> : null}
-        {backup ? (
-          <button type="button" className="menu-btn menu-btn--compact" onClick={() => onRestore(backup)} data-qa-slot-restore={slot.id}>Восстановить из копии ({dateLabel(backup.at)})</button>
-        ) : null}
-        {/* «Загрузить» leads; the four other actions share one compact row, so all five fit every card width. */}
+        {/* «Загрузить» is the one button; the rare actions are a quiet row of text links under it. */}
         <div className="menu-slot__actions">
           <button type="button" className="menu-btn menu-btn--primary" disabled={!loadable} onClick={onLoad} data-qa-slot-load={slot.id}>ЗАГРУЗИТЬ</button>
           <div className="menu-slot__more" role="group" aria-label={`Другие действия с кампанией «${slot.name}»`}>
-            <button type="button" className="menu-btn menu-btn--compact" onClick={onRenameStart} disabled={renaming !== null} data-qa-slot-rename={slot.id}>Переименовать</button>
-            <button type="button" className="menu-btn menu-btn--compact" onClick={onDuplicate} disabled={!loadable} data-qa-slot-copy={slot.id}>Копия</button>
-            <button type="button" className="menu-btn menu-btn--compact" onClick={onExport} disabled={health.status === 'missing'} data-qa-slot-export={slot.id}>Экспорт</button>
-            <button type="button" className="menu-btn menu-btn--compact menu-btn--danger" onClick={onDelete} data-qa-slot-delete={slot.id}>Удалить</button>
+            <button type="button" className="menu-slot__link" onClick={onRenameStart} disabled={renaming !== null} data-qa-slot-rename={slot.id}>Переименовать</button>
+            <button type="button" className="menu-slot__link" onClick={onDuplicate} disabled={!loadable} data-qa-slot-copy={slot.id}>Копия</button>
+            <button type="button" className="menu-slot__link" onClick={onExport} disabled={health.status === 'missing'} data-qa-slot-export={slot.id}>Экспорт</button>
+            {backup ? (
+              <button type="button" className="menu-slot__link is-restore" onClick={() => onRestore(backup)} data-qa-slot-restore={slot.id}>Вернуть копию от {dateLabel(backup.at)}</button>
+            ) : null}
+            <button type="button" className="menu-slot__link is-danger" onClick={onDelete} data-qa-slot-delete={slot.id}>Удалить</button>
           </div>
         </div>
       </div>

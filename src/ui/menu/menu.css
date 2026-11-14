@@ -406,7 +406,25 @@
 .menu-slot__actions { display: grid; gap: 8px; margin-top: auto; padding-top: 4px; }
 .menu-slot__actions > .menu-btn--primary { width: 100%; min-height: 44px; }
 /* Four short actions in a row when the card is wide, two rows when it is not: never a cut label. */
-.menu-slot__more { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 6px; }
+.menu-slot__more { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; margin: 0 -8px; }
+.menu-viewport .menu-slot__link {
+  min-height: 34px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #9fbfca;
+  font: 600 14px Montserrat, sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 160ms, color 160ms;
+}
+.menu-viewport .menu-slot__link:hover:not(:disabled) { background: rgba(255, 255, 255, .07); color: #fff; }
+.menu-viewport .menu-slot__link:focus-visible { outline: var(--ut-focus); outline-offset: 1px; }
+.menu-viewport .menu-slot__link:disabled { opacity: .4; cursor: not-allowed; }
+.menu-viewport .menu-slot__link.is-restore { color: var(--ut-amber, #e6ad50); }
+.menu-viewport .menu-slot__link.is-danger { margin-left: auto; color: #ff9dab; }
+.menu-viewport .menu-slot__link.is-danger:hover:not(:disabled) { background: rgba(240, 68, 94, .14); }
 .menu-viewport .menu-btn--compact { min-width: 0; min-height: 38px; padding: 0 8px; overflow: hidden; font-size: 13px; letter-spacing: .02em; text-overflow: ellipsis; white-space: nowrap; }
 .menu-empty { display: grid; place-content: center; text-align: center; gap: 10px; color: #a7c6d0; }
 .menu-empty h2 { margin: 0; color: #fff; font-size: 24px !important; }

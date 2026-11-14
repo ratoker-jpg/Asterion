@@ -157,6 +157,7 @@ async function layout(win) {
       visibleSelects: Array.from(document.querySelectorAll('${ROOT_SELECTOR} select')).filter((node) => !node.closest('.game-select')).length,
       nativeRanges: Array.from(document.querySelectorAll('${ROOT_SELECTOR} input[type="range"]')).filter((node) => !node.closest('.amount-slider')).length,
       // A card that hides part of its content (a cut save card, a cut summary).
+      schemaText: /схема \d/i.test(document.querySelector('${ROOT_SELECTOR}')?.innerText || ''),
       clippedBoxes: Array.from(document.querySelectorAll('${ROOT_SELECTOR} .menu-slot, ${ROOT_SELECTOR} .wz-panel, ${ROOT_SELECTOR} .wz-group, ${ROOT_SELECTOR} .menu-showcase'))
         .filter((node) => getComputedStyle(node).overflowY === 'hidden' && node.scrollHeight > node.clientHeight + 2)
         .map((node) => (node.dataset.qaSlot || node.className).slice(0, 50)),
@@ -181,6 +182,7 @@ function shooter(win, directory, metrics, label) {
     if (box.nativeTitles.length) fail(`${name}: native title tooltips remain`, box.nativeTitles);
     if (box.visibleSelects) fail(`${name}: native select remains`, box.visibleSelects);
     if (box.nativeRanges) fail(`${name}: bare native range inputs remain`, box.nativeRanges);
+    if (box.schemaText) fail(`${name}: technical «схема N» text is shown`, true);
     if (box.clippedBoxes.length) fail(`${name}: a card hides part of its content`, box.clippedBoxes);
     if (primary && box.primary.length && !box.primary.some((item) => item.inside)) fail(`${name}: the primary action is off screen`, box.primary);
     await capture(win, directory, name);
@@ -296,7 +298,7 @@ async function seedManySlots(win) {
     const races = ['aegis', 'synod', 'veyra'];
     const names = [
       ${JSON.stringify(LONG_CAMPAIGN)},
-      'Длинная кампания Иларов на десяти галактиках',
+      'Долгая кампания Иларов на десяти мирах',
       'Рой',
       'Кампания Астеров · раунд 12',
       'ШШШШШШШШШШШШШШШШШШШШШШШШШШШШШШШШШШШШШШШШ',
@@ -322,7 +324,8 @@ async function seedManySlots(win) {
       slots.push({
         ...base,
         id,
-        name: (names[i % names.length] + (i >= names.length ? ' ' + (i + 1) : '')).slice(0, 40),
+        // Whole words only: a name the game accepts is never cut by the QA itself (max 40).
+        name: (() => { const base = names[i % names.length]; const suffix = i >= names.length ? ' ' + (i + 1) : ''; return (base + suffix).length <= 40 ? base + suffix : base; })(),
         factionId: races[i % 3],
         playerName: i % 2 ? ${JSON.stringify(LONG_COMMANDER)} : 'Ая',
         campaignSpeed: speeds[i % 4],
