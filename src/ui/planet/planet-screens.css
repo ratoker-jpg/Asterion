@@ -1071,9 +1071,9 @@
   width: var(--orbit-size);
   height: var(--orbit-size);
   object-fit: contain;
-  /* Per look (planet-skin-large.generated.ts): keeps the planet as big on screen as before the 1024 px batch. */
-  scale: var(--planet-scale, 1);
-  transform: translate(-50%, -50%);
+  /* Per look (planet-skin-large.generated.ts): keeps the planet as big on screen as before the 1024 px batch.
+     Inside transform, so the scale is about the centre (the `scale` property shifted the planet). */
+  transform: translate(-50%, -50%) scale(var(--planet-scale, 1));
   filter: drop-shadow(-34px -24px 60px rgba(0, 0, 0, .62)) drop-shadow(0 0 70px rgba(86, 217, 242, .18));
 }
 
