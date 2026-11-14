@@ -111,6 +111,7 @@
     "test:menu-wizard-ui": "electron electron/visual-menu-wizard.cjs",
     "test:planet-editor-ui": "electron electron/visual-planet-editor.cjs",
     "test:planet-skins-ui": "electron electron/visual-planet-skins.cjs",
+    "test:alliance-founding-ui": "electron electron/visual-alliance-founding.cjs",
     "test:save-store": "node --test electron/save-store.test.cjs electron/navigation-guard.test.cjs",
     "test:esc-fullscreen-ui": "electron electron/esc-fullscreen-qa.cjs"
   },

@@ -322,6 +322,7 @@ async function longAllianceScene(win) {
   await setField(win, '[data-qa-alliance-name]', LONG_ALLIANCE);
   await setField(win, '[data-qa-alliance-tag]', LONG_TAG);
   await capture(win, '07-command-create-alliance-long', `Командование → Создать союз «${LONG_ALLIANCE}» [${LONG_TAG}] (name 42, tag 8 = maximums). Save edit: Command hall level 1.`);
+  await win.webContents.executeJavaScript(`(async () => { for (let i = 0; i < 3 && document.querySelector('[data-qa-founding-next]'); i += 1) { document.querySelector('[data-qa-founding-next]').click(); await new Promise((resolve) => setTimeout(resolve, 150)); } })()`);
   await click(win, '[data-qa-alliance-submit]');
   await settle(win, 800);
   await capture(win, '07-command-alliance-long', 'Командование after creating the long-named alliance');

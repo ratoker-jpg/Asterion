@@ -36,6 +36,7 @@ import {
 import { pruneDiplomacy } from './diplomacy.ts';
 import { parseCrest } from './crest.ts';
 import { normalizeEmblem } from './emblem.ts';
+import { withFoundingCrest } from './founding.ts';
 import type {
   AllianceApplication,
   AllianceCooldown,
@@ -217,6 +218,8 @@ export function createAlliance(
   const alliance: AllianceRecord = {
     id,
     ...settings.value,
+    // A new alliance is founded under a constructor crest, never the flat legacy emblem.
+    emblem: withFoundingCrest(settings.value.emblem),
     createdAt: options.now,
     leaderOwnerId: input.ownerId,
     deputyOwnerId: null,

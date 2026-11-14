@@ -28,6 +28,8 @@ import { getFactionGeneralAsset } from './domain/profile/faction-assets.ts';
 import { ALLIANCE_CRYSTALS_NOTE, GATE_RULE_ALLIANCE } from './domain/rating/alliances.ts';
 import type { RatedAllianceDetails } from './domain/runtime/state-store.ts';
 import type { AidOverview, AidRequestRow } from './application/alliance-aid.ts';
+import type { AllianceProspect } from './application/alliance-prospects.ts';
+import { validateAllianceSettings } from './domain/command/membership.ts';
 import type {
   AidResource,
   AllianceApplication,
@@ -41,6 +43,7 @@ import { asterionAssetIntegrationAssets } from './assets/generated/asterionAsset
 import { ResourceIcon } from './ui/resources/ResourceIcon';
 import { ACCENT_COLORS, EmblemGlyph } from './ui/command/EmblemGlyph';
 import { AllianceEditor } from './ui/command/AllianceEditor';
+import { AllianceFounding, type FoundingCapital } from './ui/command/AllianceFounding';
 import { CrystalDots, ROLE_NAMES, RoleBadge } from './ui/command/AllianceBadges';
 import { Dialog } from './ui/command/Dialog';
 import { renderRichText } from './ui/command/rich-text';
@@ -94,7 +97,23 @@ export type CommandActions = {
   testBotProposeTruce?: () => CommandActionResult;
   /** Test Mode only: Bot 01 declares war on the player's alliance. */
   testBotDeclareWar?: () => CommandActionResult;
+  /** First screen of a new alliance: the bot is asked now and files an ordinary application if it wants to. */
+  inviteProspect?: (npcOwnerId: string) => CommandActionResult;
+  /** First screen of a new alliance: opens the capital's look picker. */
+  openLeaderLook?: () => void;
 };
+
+/** What the founding wizard and the first screen of a new alliance read from the live save. */
+export type FoundingContext = Readonly<{
+  leaderName: string;
+  capital?: FoundingCapital;
+  /** The capital already wears an alliance look. */
+  leaderLookSet: boolean;
+  /** The alliance look offered to the leader on the first screen. */
+  leaderLook?: Readonly<{ name: string; art: string }>;
+  /** Bots that would ask to join the player's alliance now (only while the player leads an alliance of one). */
+  prospects: readonly AllianceProspect[];
+}>;
 
 export type CommandHallInfo = { level: number; name: string; art: string };
 
@@ -127,6 +146,7 @@ type CommandViewProps = {
    * Without it the button opens the full fleet window, as before.
    */
   quickHelp?: (requestId: string, anchor: HTMLElement, onClose: () => void) => ReactNode;
+  founding?: FoundingContext;
 };
 
 type CommandTab = 'overview' | 'members' | 'applications' | 'requests' | 'alliances' | 'diplomacy' | 'operations';
@@ -223,6 +243,12 @@ function Avatar({ name, role, factionId, size = 'md' }: { name: string; role?: A
       {face ? <Img src={face} /> : initials(name)}
     </span>
   );
+}
+
+/** A bot without an alliance has no crest yet: its race portrait, or a neutral commander mark — never initials. */
+function ProspectFace({ factionId }: { factionId?: string }) {
+  const face = factionId ? FACTION_FACES[factionId] : undefined;
+  return <span className="alliance-first-face" data-qa-prospect-face={face ? factionId : 'neutral'}><Img src={face ?? REPORT_ICONS.profile} /></span>;
 }
 
 /** Large hero art for a person: the race general when the race is really known, otherwise an honest monogram. */
@@ -884,7 +910,7 @@ function memberTiles(record: AllianceMember | undefined, place: number, total: n
 
 // ---- overview («Штаб») ---------------------------------------------------------
 
-function Overview({ command, allianceId, ownerId, role, ownerScores, ownerFactions, details, hall, aid, now, actions, onFeedback, setTab }: {
+function Overview({ command, allianceId, ownerId, role, ownerScores, ownerFactions, details, hall, aid, now, actions, onFeedback, setTab, founding }: {
   command: CommandState;
   allianceId: string;
   ownerId: string;
@@ -898,6 +924,7 @@ function Overview({ command, allianceId, ownerId, role, ownerScores, ownerFactio
   actions: CommandActions;
   onFeedback: (result: CommandActionResult) => void;
   setTab: (tab: CommandTab) => void;
+  founding?: FoundingContext;
 }) {
   const alliance = command.alliances.find((candidate) => candidate.id === allianceId);
   const journal = useMemo(() => selectAllianceJournal(command, ownerId, now), [command, ownerId, now]);
@@ -914,17 +941,139 @@ function Overview({ command, allianceId, ownerId, role, ownerScores, ownerFactio
   const charges = aid.charges;
   const awaiting = [manage && pendingCount ? `${pendingCount} заяв${pendingCount === 1 ? 'ка' : pendingCount < 5 ? 'ки' : 'ок'} на вступление` : '', aid.incoming.length ? `${aid.incoming.length} запрос${aid.incoming.length === 1 ? '' : aid.incoming.length < 5 ? 'а' : 'ов'} союзников` : ''].filter(Boolean);
 
+  // A leader alone in the alliance sees its first screen: what to do next instead of an empty roster.
+  const firstScreen = role === 'leader' && alliance.members.length === 1;
+  const footer = (
+    <>
+      <button type="button" className="danger" onClick={() => setLeaving(true)} data-qa-leave>Покинуть союз</button>
+      <div className="command-actions">
+        {manage ? <button type="button" aria-label="Редактировать союз" onClick={() => setEditing(true)} data-qa-edit-alliance>Редактировать</button> : null}
+        <button type="button" className="primary" onClick={() => setTab('members')}>Открыть состав</button>
+      </div>
+    </>
+  );
+  const dialogs = (
+    <>
+      {editing ? (
+        <AllianceEditor
+          title="Настройки союза"
+          submitLabel="Сохранить"
+          initial={{ name: alliance.name, tag: alliance.tag, motto: alliance.motto, description: alliance.description, emblem: alliance.emblem }}
+          onSubmit={actions.updateSettings}
+          onClose={() => setEditing(false)}
+        />
+      ) : null}
+      {leaving ? (
+        <LeaveDialog
+          isLeader={role === 'leader'}
+          defaultSuccessorId={alliance.deputyOwnerId}
+          others={others.map((member) => ({ ownerId: member.ownerId, name: member.displayName }))}
+          onLeave={(successorId) => onFeedback(actions.leave(successorId))}
+          onClose={() => setLeaving(false)}
+        />
+      ) : null}
+    </>
+  );
+
+  if (firstScreen) {
+    const accent = ACCENT_COLORS[alliance.emblem.crest?.color ?? alliance.emblem.accent];
+    const asked = pendingCount > 0;
+    const requested = aid.mine.length > 0 || aid.closed.length > 0;
+    const steps: Array<{ id: string; title: string; text: string; done: boolean; action?: ReactNode }> = [
+      { id: 'banner', title: 'Знамя поднято', text: 'герб, название и девиз видны в каталоге союзов и рядом с вашими планетами', done: true },
+      {
+        id: 'invite', title: 'Позовите первых соратников', done: asked,
+        text: asked ? `заявок ждут решения: ${pendingCount}` : (founding?.prospects.length ? 'боты справа уже присматриваются к союзу; их заявки придут во вкладку «Заявки»' : 'заявки придут во вкладку «Заявки»; описание в карточке помогает их собрать'),
+        action: asked ? <button type="button" className="primary" onClick={() => setTab('applications')} data-qa-first-step-action="invite">Заявки · {pendingCount}</button> : null,
+      },
+      {
+        id: 'look', title: 'Поставьте облик главы на столицу', done: Boolean(founding?.leaderLookSet),
+        text: 'облики союза носит только глава; планету узнают все',
+        action: actions.openLeaderLook && !founding?.leaderLookSet ? <button type="button" onClick={actions.openLeaderLook} data-qa-first-step-action="look">Облик</button> : null,
+      },
+      {
+        id: 'request', title: 'Первый общий запрос ресурсов', done: requested,
+        text: 'союзники смогут прислать помощь на любую вашу планету',
+        action: !requested ? <button type="button" onClick={() => setTab('requests')} data-qa-first-step-action="request">Запрос</button> : null,
+      },
+    ];
+    const prospects = founding?.prospects ?? [];
+    return (
+      <div className="cmdA-grid cmdA-grid--aside-right command-overview alliance-first" style={{ '--founding-accent': accent } as CSSProperties} data-qa-alliance-first
+        data-qa-first-crest={alliance.emblem.crest ? `${alliance.emblem.crest.frame}/${alliance.emblem.crest.field}/${alliance.emblem.crest.glyph}/${alliance.emblem.crest.color}` : 'legacy'}>
+        <Dossier footer={footer}>
+          <Hero art={<div className="cmdA-art cmdA-art--emblem"><EmblemGlyph emblem={alliance.emblem} /></div>} backdrop={hall.art} className="command-summary alliance-first-hero">
+            <small className="alliance-first-kicker">Союз основан · {formatDate(alliance.createdAt)}</small>
+            <h2 className="cmdA-hero-title alliance-first-title" data-qa-first-name>{alliance.name}</h2>
+            <strong className="alliance-first-tag">[{alliance.tag}]</strong>
+            {alliance.motto ? <p className="alliance-first-motto">«{alliance.motto}»</p> : null}
+            <div className="cmdA-chips">
+              <Chip>Глава: {leader?.displayName ?? '—'}</Chip>
+              <Chip>1 из {MAX_ALLIANCE_MEMBERS}</Chip>
+              <Chip tone="ok">Набор открыт</Chip>
+              {rank ? <Chip tone="am">Место #{rank} среди союзов</Chip> : null}
+            </div>
+          </Hero>
+          <section className="alliance-first-steps" aria-label="Первые шаги союза">
+            <h4>Первые шаги союза</h4>
+            <ol>
+              {steps.map((item, index) => (
+                <li key={item.id} className={item.done ? 'is-done' : ''} data-qa-first-step={item.id} data-qa-done={item.done ? '1' : '0'}>
+                  <i aria-hidden="true">{item.done ? '✓' : index + 1}</i>
+                  <div><b>{item.title}</b><span>{item.text}</span></div>
+                  {item.action ?? <span />}
+                </li>
+              ))}
+            </ol>
+          </section>
+        </Dossier>
+        <ListPanel
+          title="Им подходит ваш союз"
+          count={prospects.length ? String(prospects.length) : undefined}
+          className="alliance-first-side"
+          footer={founding?.leaderLook && !founding.leaderLookSet ? (
+            <div className="alliance-first-look">
+              <Img src={founding.leaderLook.art} />
+              <div>
+                <small>Открыт облик главы</small>
+                <b>{founding.leaderLook.name}</b>
+                <span>Столица в облике союза. Его носит только глава.</span>
+              </div>
+            </div>
+          ) : undefined}
+        >
+          {prospects.length ? (
+            <ul className="alliance-first-prospects" data-qa-prospects>
+              {prospects.map((prospect) => (
+                <li key={prospect.ownerId} data-qa-prospect={prospect.ownerId}>
+                  <ProspectFace factionId={prospect.factionId ?? ownerFactions[prospect.ownerId]} />
+                  <div>
+                    <b>{prospect.name}</b>
+                    <span>{prospect.reason} · {number.format(memberScore(ownerScores, prospect.ownerId).totalPoints)} очков</span>
+                  </div>
+                  {actions.inviteProspect ? (
+                    <button type="button" onClick={() => onFeedback(actions.inviteProspect!(prospect.ownerId))} data-qa-prospect-invite>Позвать</button>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="alliance-first-empty" data-qa-prospects-empty>
+              <Img src={REPORT_ICONS.alliances} />
+              <b>Пока никто не присматривается</b>
+              <span>Все свободные командиры сейчас выбирают другие союзы или держатся одни. Как только кто-то захочет к вам, он появится здесь, а его заявка придёт во вкладку «Заявки».</span>
+              {manage ? <button type="button" onClick={() => setEditing(true)} data-qa-prospects-edit>Дополнить описание</button> : null}
+            </div>
+          )}
+        </ListPanel>
+        {dialogs}
+      </div>
+    );
+  }
+
   return (
     <div className="cmdA-grid cmdA-grid--aside-right command-overview">
-      <Dossier
-        footer={<>
-          <button type="button" className="danger" onClick={() => setLeaving(true)} data-qa-leave>Покинуть союз</button>
-          <div className="command-actions">
-            {manage ? <button type="button" aria-label="Редактировать союз" onClick={() => setEditing(true)} data-qa-edit-alliance>Редактировать</button> : null}
-            <button type="button" className="primary" onClick={() => setTab('members')}>Открыть состав</button>
-          </div>
-        </>}
-      >
+      <Dossier footer={footer}>
         <Hero art={<div className="cmdA-art cmdA-art--emblem"><EmblemGlyph emblem={alliance.emblem} /></div>} backdrop={hall.art} className="command-summary">
           <HeroTitle
             title={alliance.name}
@@ -957,33 +1106,15 @@ function Overview({ command, allianceId, ownerId, role, ownerScores, ownerFactio
         ) : null}
       </Dossier>
       <JournalPanel view={journal} now={now} />
-
-      {editing ? (
-        <AllianceEditor
-          title="Настройки союза"
-          submitLabel="Сохранить"
-          initial={{ name: alliance.name, tag: alliance.tag, motto: alliance.motto, description: alliance.description, emblem: alliance.emblem }}
-          onSubmit={actions.updateSettings}
-          onClose={() => setEditing(false)}
-        />
-      ) : null}
-      {leaving ? (
-        <LeaveDialog
-          isLeader={role === 'leader'}
-          defaultSuccessorId={alliance.deputyOwnerId}
-          others={others.map((member) => ({ ownerId: member.ownerId, name: member.displayName }))}
-          onLeave={(successorId) => onFeedback(actions.leave(successorId))}
-          onClose={() => setLeaving(false)}
-        />
-      ) : null}
+      {dialogs}
     </div>
   );
 }
 
 // ---- no alliance ---------------------------------------------------------------
 
-function NoAlliance(props: CatalogProps & { hall: CommandHallInfo }) {
-  const { command, ownerId, ownerScores, now, actions, onFeedback, hall } = props;
+function NoAlliance(props: CatalogProps & { hall: CommandHallInfo; founding?: FoundingContext }) {
+  const { command, ownerId, ownerScores, now, actions, onFeedback, hall, founding } = props;
   const [creating, setCreating] = useState(false);
   const [query, setQuery] = useState('');
   const entries = useCatalog(command, ownerScores, query);
@@ -1039,10 +1170,10 @@ function NoAlliance(props: CatalogProps & { hall: CommandHallInfo }) {
         ]} />
       </Dossier>
       {creating ? (
-        <AllianceEditor
-          title="Создание союза"
-          submitLabel="Создать"
-          initial={{ name: '', tag: '', motto: '', description: '', emblem: { glyph: 'starforge', accent: 'cyan' } }}
+        <AllianceFounding
+          leaderName={founding?.leaderName ?? 'вы'}
+          capital={founding?.capital}
+          validate={(settings) => { const checked = validateAllianceSettings(command, settings); return checked.ok ? null : checked.message; }}
           onSubmit={actions.createAlliance}
           onClose={() => setCreating(false)}
         />
@@ -1406,7 +1537,7 @@ function DiplomacyTab({ command, allianceId, role, ownerScores, allianceDetails,
 
 // ---- root ----------------------------------------------------------------------
 
-export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFactions = {}, allianceDetails, playerFactionId, testTimeScale = 1, returnToBuilding, aid, actions, operationsPanel, operationsAlertCount = 0, focusTab = null, quickHelp }: CommandViewProps) {
+export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFactions = {}, allianceDetails, playerFactionId, testTimeScale = 1, returnToBuilding, aid, actions, operationsPanel, operationsAlertCount = 0, focusTab = null, quickHelp, founding }: CommandViewProps) {
   const now = useClockNow();
   const [tab, setTab] = useState<CommandTab>(focusTab?.tab ?? 'overview');
   useEffect(() => { if (focusTab) setTab(focusTab.tab); }, [focusTab?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1495,9 +1626,9 @@ export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFa
         {locked ? (
           <LockedHall hall={hall} onBuild={actions.openHallConstruction} />
         ) : !membership ? (
-          <NoAlliance {...catalogProps} hall={hall} />
+          <NoAlliance {...catalogProps} hall={hall} founding={founding} />
         ) : activeTab === 'overview' ? (
-          <Overview command={command} allianceId={membership.alliance.id} ownerId={ownerId} role={membership.role} ownerScores={ownerScores} ownerFactions={ownerFactions} details={allianceDetails?.[membership.alliance.id]} hall={hall} aid={aid} now={now} actions={actions} onFeedback={onFeedback} setTab={setTab} />
+          <Overview command={command} allianceId={membership.alliance.id} ownerId={ownerId} role={membership.role} ownerScores={ownerScores} ownerFactions={ownerFactions} details={allianceDetails?.[membership.alliance.id]} hall={hall} aid={aid} now={now} actions={actions} onFeedback={onFeedback} setTab={setTab} founding={founding} />
         ) : activeTab === 'members' ? (
           <MembersTab command={command} allianceId={membership.alliance.id} ownerId={ownerId} role={membership.role} ownerScores={ownerScores} ownerFactions={ownerFactions} actions={actions} onFeedback={onFeedback} />
         ) : activeTab === 'applications' ? (

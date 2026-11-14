@@ -30,7 +30,7 @@ import { FleetPlannerDialog } from './ui/fleet-plan/FleetPlannerDialog.tsx';
 import { OperationsView } from './OperationsView';
 import type { createOperationsVariantAQaFixture as CreateOperationsVariantAQaFixture } from './operations-variant-a-qa-fixture.ts';
 import { createUniverseNpcOwnerProfile, rerollTestUniverseLayout, TEST_MODE_ALLY_PLANET_FIXTURE, UNIVERSE_NPC_OWNER_ID } from './domain/universe/runtime.ts';
-import { CommandView, type CommandActionResult, type CommandActions } from './CommandView';
+import { CommandView, type CommandActionResult, type CommandActions, type FoundingContext } from './CommandView';
 import { ReportsView } from './ReportsView';
 import { buildReportsFeed, dropExpiredReportItems, getReportUnreadCounts } from './domain/reports/adapters.ts';
 import { reportRetentionCutoff } from './application/history-retention.ts';
@@ -286,7 +286,8 @@ import { useCampaignCloudUploads } from './ui/menu/cloud.ts';
 
 import systemBackground from './assets/art/starter/backgrounds/system_background.webp';
 import { planetSkinFor, type PlanetSkinArt } from './planet-skin-art.ts';
-import { canPickPlanetSkin } from './domain/universe/planet-skins.ts';
+import { canPickPlanetSkin, isAlliancePlanetSkin, planetSkinMeta } from './domain/universe/planet-skins.ts';
+import { inviteAllianceProspect, selectAllianceProspects } from './application/alliance-prospects.ts';
 import { PlanetEditorDialog } from './ui/planet/PlanetEditorDialog.tsx';
 
 type Zone = BuildingZone;
@@ -1807,6 +1808,22 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     [state.profile.playerId]: state.profile.factionId,
   }), [state.profile.playerId, state.profile.factionId]);
   const commandAllianceDetails = useMemo(() => selectRatedAlliances(state), [state.command, state.sunRaid]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Founding wizard and the first screen of a new alliance. Bots are asked only while the player
+  // leads an alliance of one (the only time the first screen shows them).
+  const foundingCapitalId = state.planets['helion-01'] ? 'helion-01' : state.currentPlanetId;
+  const foundingContext = useMemo<FoundingContext>(() => {
+    const capitalState = state.planets[foundingCapitalId];
+    const membership = selectOwnerMembership(state.command, state.profile.playerId);
+    const alone = membership?.role === 'leader' && membership.alliance.members.length === 1;
+    const leaderLookId = 'ally-banner';
+    return {
+      leaderName: state.profile.displayName,
+      ...(capitalState ? { capital: { planetName: capitalState.name, ownerName: state.profile.displayName, art: planetSkinFor(capitalState.skin, playerAllianceRole).thumb } } : {}),
+      leaderLookSet: isAlliancePlanetSkin(capitalState?.skin),
+      leaderLook: { name: planetSkinMeta(leaderLookId)?.label ?? 'Знамя', art: planetSkinFor(leaderLookId, 'leader').thumb },
+      prospects: alone && membership ? selectAllianceProspects(state, membership.alliance.id, worldNow()) : [],
+    };
+  }, [state.command, state.npc, state.espionage, state.planets, state.profile, foundingCapitalId, playerAllianceRole]); // eslint-disable-line react-hooks/exhaustive-deps
   const buildingInteriorTarget = buildingInterior
     ? getBuildingInteriorTarget(buildingInterior.buildingRole)
     : null;
@@ -2510,9 +2527,23 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     previewOverflow: (planetId: string, resource: AidResource, amount: number) =>
       previewRequestOverflow(stateRef.current, planetId, resource, amount),
     createAlliance: (settings: AllianceSettingsInput) => runCommandAction(
+      // No toast: the first screen of the alliance opens at once and says it was founded.
       (command, at, ownerId, ownerName) => createAlliance(command, { ownerId, displayName: ownerName, settings }, { now: at }),
-      'Союз создан.',
     ),
+    inviteProspect: (npcOwnerId: string): CommandActionResult => {
+      if (rejectNpcCatchupCommand()) return { ok: false, message: NPC_CATCHUP_COMMAND_BLOCKED_MESSAGE };
+      const current = stateRef.current;
+      const own = selectOwnerMembership(current.command, current.profile.playerId);
+      if (!own) return { ok: false, message: 'Сначала основайте союз.' };
+      const invited = inviteAllianceProspect(current, own.alliance.id, npcOwnerId, worldNow());
+      if (!invited.ok) return { ok: false, message: invited.message };
+      stateRef.current = invited.state;
+      setState(invited.state);
+      const message = `«${invited.name}» подаёт заявку в ваш союз. Ответьте во вкладке «Заявки».`;
+      setNotice(message);
+      return { ok: true, message };
+    },
+    openLeaderLook: () => openPlanetEditor(foundingCapitalId),
     updateSettings: (settings: AllianceSettingsInput) => runCommandAction(
       (command, _at, ownerId) => updateAllianceSettings(command, ownerId, settings),
       'Настройки союза сохранены.',
@@ -3571,6 +3602,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               )}
               operationsAlertCount={sunAlerts.length}
               focusTab={commandFocus}
+              founding={foundingContext}
               operationsPanel={(
                 <SunRaidPanel
                   state={state}
