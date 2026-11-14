@@ -173,7 +173,7 @@ jobs:
           - shard: electron-6
             suites: "test:planet-screens-ui test:map-colors-ui test:recycle-own-planet-ui test:universe-ui:skip test:battles-mine-ui test:command-ui:skip test:simulator-ui:skip test:icons-batch-ui"
           - shard: electron-7
-            suites: "test:universe-card-ui test:planet-pass-ui test:build-planner-ui test:reports-ui test:repair-ui:skip test:rating-ui test:space-flight-ui:skip test:resource-assets-ui test:planet-editor-ui"
+            suites: "test:universe-card-ui test:planet-pass-ui test:build-planner-ui test:reports-ui test:repair-ui:skip test:rating-ui test:space-flight-ui:skip test:resource-assets-ui test:planet-editor-ui test:planet-skins-ui"
           # The PR gate replays six game hours: the banner, command gate,
           # completion and state checks need no full day, which took about
           # 14 minutes. Whole days run in the long-horizon job (main and nightly).

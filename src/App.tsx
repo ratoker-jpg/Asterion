@@ -3690,6 +3690,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               name={currentPlanetName}
               kicker={`Обзор планеты · ${PLAYER_FACTION_LABELS[state.profile.factionId]}`}
               subtitle={`${currentPlanet.coords} · ${currentPlanet.status}`}
+              skinId={currentSkin.id}
               skinArt={currentSkin.art}
               vitals={[
                 { label: 'Население', value: `${planetPopulation} / ${fleetSummary.capacity}` },
