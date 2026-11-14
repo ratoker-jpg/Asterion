@@ -1,3 +1,4 @@
+import { useClockNow } from '../../application/shared-clock';
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { getFactionDefenseCatalog, getFactionShipCatalog } from '../../domain/combat/faction-catalog.ts';
@@ -38,7 +39,6 @@ const SHOWN_FLIGHTS = 3;
 export type EmpireViewProps = {
   onActivateShield?: () => void;
   state: SaveState;
-  now: number;
   mode: RuntimeMode;
   testTimeScale: TestTimeScale;
   planetArt: Record<string, string>;
@@ -92,7 +92,8 @@ function Bar({ value }: { value: number }) {
  * can be done without leaving the console. Every action goes through the same
  * command as its own screen.
  */
-export function EmpireView({ state, now, mode, testTimeScale, planetArt, onOpenPlanet, onBuild, onCancelBuilding, onProduce, onCancelProduction, onSend, onSavePlan, onStartPlan, onSaveBuildPlan, onRunBuildPlan, onActivateShield }: EmpireViewProps) {
+export function EmpireView({ state, mode, testTimeScale, planetArt, onOpenPlanet, onBuild, onCancelBuilding, onProduce, onCancelProduction, onSend, onSavePlan, onStartPlan, onSaveBuildPlan, onRunBuildPlan, onActivateShield }: EmpireViewProps) {
+  const now = useClockNow();
   const overview = useMemo(() => buildEmpireOverview(state, { now, mode, testTimeScale }), [state, now, mode, testTimeScale]);
   const factionId = state.profile.factionId as CombatFactionId;
   const units = useMemo(() => new Map<string, Unit>([...getFactionShipCatalog(factionId), ...getFactionDefenseCatalog(factionId), ...COMMANDER_COMBAT_CATALOG].map((entity) => [entity.id, { name: entity.name, art: entity.art }])), [factionId]);

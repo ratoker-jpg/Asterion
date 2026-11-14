@@ -108,6 +108,7 @@
     "test:catchup-summary-ui": "electron electron/catchup-summary-qa.cjs",
     "test:npc-rounds-ui": "electron electron/npc-rounds-qa.cjs",
     "test:settings-screens-ui": "electron electron/visual-settings-screens.cjs",
+    "test:menu-wizard-ui": "electron electron/visual-menu-wizard.cjs",
     "test:save-store": "node --test electron/save-store.test.cjs",
     "test:esc-fullscreen-ui": "electron electron/esc-fullscreen-qa.cjs"
   },

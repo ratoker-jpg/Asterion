@@ -176,7 +176,8 @@ async function runViewport(win, width, directory) {
   metrics.list = await listMetrics(win);
   metrics.tabs = await tabs(win);
   if (metrics.tabs[0] !== expected || metrics.tabs[1] !== 0) fail('counters are not his battles', { tabs: metrics.tabs, expected });
-  if (metrics.list.rows !== expected) fail('rows are not his battles', { rows: metrics.list.rows, expected });
+  // The list shows 25 rows and «Показать ещё» adds 25 more: the first page is 25, the rest is behind the button.
+  if (metrics.list.rows !== Math.min(25, expected)) fail('rows are not his battles', { rows: metrics.list.rows, expected });
   if (metrics.list.foreignShown) fail('another owner\'s battle is on the list');
   if (metrics.list.fullRowsOnScreen < MIN_FULL_ROWS[width]) fail('too few rows on screen', metrics.list.fullRowsOnScreen);
   if (metrics.list.tallestRow > 56) fail('a row is not compact', metrics.list.tallestRow);
@@ -184,6 +185,19 @@ async function runViewport(win, width, directory) {
   if (metrics.list.rootOverflow || metrics.list.listOverflow) fail('horizontal scroll', metrics.list);
   if (metrics.list.arrives !== 'brow-arrive') fail('rows do not arrive with an animation', metrics.list.arrives);
   await capture(win, directory, 'worst-cases');
+
+  // The end of the first page: the way to the older battles is a button with the number left.
+  const more = await win.webContents.executeJavaScript(`(() => { const button = document.querySelector('[data-qa-battle-more]'); if (!button) return null; button.scrollIntoView({ block: 'end' }); return button.textContent.trim(); })()`);
+  if (more !== `Показать ещё (${expected - 25})`) fail('no «Показать ещё» button after the first page', { more, expected });
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  await capture(win, directory, 'first-page-end');
+  for (let guard = 0; guard < 20; guard += 1) {
+    const clicked = await win.webContents.executeJavaScript(`(() => { const button = document.querySelector('[data-qa-battle-more]'); if (!button) return false; button.click(); return true; })()`);
+    if (!clicked) break;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  const allRows = await win.webContents.executeJavaScript(`document.querySelectorAll('[data-qa-battle-card]').length`);
+  if (allRows !== expected) fail('older battles cannot be reached with «Показать ещё»', { allRows, expected });
 
   const verdicts = await win.webContents.executeJavaScript(`(() => {
     const row = (id) => document.querySelector('[data-qa-battle-card="' + id + '"] summary');

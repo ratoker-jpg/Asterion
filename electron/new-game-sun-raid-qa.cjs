@@ -66,7 +66,9 @@ async function production(win, label) {
   await run(win, 'localStorage.clear(); sessionStorage.clear();');
   await load(win);
   await waitFor(win, `document.querySelector('[data-qa-menu="main"]')`);
-  if (!(await run(win, `document.querySelector('[data-qa-menu-action="continue"]').disabled`))) throw new Error('Continue must be disabled without saves');
+  // Without saves there is no «Продолжить» at all; «Новая игра» leads the menu.
+  if (await run(win, `Boolean(document.querySelector('[data-qa-menu-action="continue"]'))`)) throw new Error('Continue must be absent without saves');
+  if (!(await run(win, `document.querySelector('[data-qa-menu-action="new"]').classList.contains('is-primary')`))) throw new Error('New game must lead without saves');
   await capture(win, label, '01-main-menu-empty');
   // Settings → «Журнал игрока»: the bot journal card sits beside the player's journal (PR 10).
   await click(win, '[data-qa-menu-action="settings"]');
@@ -84,34 +86,45 @@ async function production(win, label) {
   await click(win, '[data-qa-race="synod"]');
   if ((await run(win, 'document.documentElement.dataset.faction')) !== 'synod') throw new Error('Race theme did not follow the selection');
   await capture(win, label, '03-new-game-race-synod');
-  await click(win, '[data-qa-wizard-next]');
-  await waitFor(win, `document.querySelector('[data-qa-wizard-step="world"]')`);
-  await run(win, `(() => {
-    const set = (qa, value) => { const input = document.querySelector('[data-qa-world="' + qa + '"]'); const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; setter.call(input, String(value)); input.dispatchEvent(new Event('input', { bubbles: true })); };
-    set('galaxies', 3); set('npc', 80);
+  // The redone wizard (14.11.2026): «Кампания» holds the names and the campaign rules, «Мир» the world.
+  const setWorld = (pairs) => run(win, `(() => {
+    const pairs = ${JSON.stringify(pairs)};
+    for (const [qa, value] of pairs) {
+      let input = document.querySelector('[data-qa-world="' + qa + '"]');
+      if (input && input.tagName !== 'INPUT') input = input.querySelector('input');
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      setter.call(input, String(value));
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
   })()`);
-  // «Супербыстрая» ×5 holds at most 75 NPC: the slider stops there and 80 drops to 75 with the reason shown.
-  await run(win, `[...document.querySelectorAll('[role="radio"]')].find((button) => /Супербыстрая ×5/.test(button.textContent)).click()`);
-  await waitFor(win, `document.querySelector('[data-qa-world="superfast-npc-cap"]')`);
-  const capped = await run(win, `({ max: document.querySelector('[data-qa-world="npc"]').max, value: document.querySelector('[data-qa-world="npc"]').value })`);
-  if (capped.max !== '75' || capped.value !== '75') throw new Error(`Superfast NPC cap: ${JSON.stringify(capped)}`);
+  const pickRadio = (pattern) => run(win, `[...document.querySelectorAll('[role="radio"]')].find((button) => new RegExp(${JSON.stringify(pattern)}).test(button.textContent)).click()`);
+  await click(win, '[data-qa-wizard-next]');
+  await waitFor(win, `document.querySelector('[data-qa-wizard-step="campaign"]')`);
   // «Активность NPC»: three choices, «Обычная» by default, the hint follows the choice.
-  const activityOf = () => run(win, `(() => { const box = document.querySelector('[data-qa-world="npc-activity"]'); return { checked: [...box.querySelectorAll('[role="radio"]')].filter((button) => button.getAttribute('aria-checked') === 'true').map((button) => button.textContent.trim()), hint: box.querySelector('[data-qa-world="npc-activity-hint"]').textContent }; })()`);
-  const pickActivity = (name) => run(win, `[...document.querySelectorAll('[data-qa-world="npc-activity"] [role="radio"]')].find((button) => button.textContent.trim() === ${JSON.stringify(name)}).click()`);
+  const activityOf = () => run(win, `(() => { const box = document.querySelector('[data-qa-world="npc-activity"]'); return { checked: [...box.querySelectorAll('[role="radio"]')].filter((button) => button.getAttribute('aria-checked') === 'true').map((button) => (button.querySelector('b') ?? button).textContent.trim()), hint: document.querySelector('[data-qa-world="npc-activity-hint"]').textContent }; })()`);
+  const pickActivity = (name) => run(win, `[...document.querySelectorAll('[data-qa-world="npc-activity"] [role="radio"]')].find((button) => (button.querySelector('b') ?? button).textContent.trim() === ${JSON.stringify(name)}).click()`);
   const activityDefault = await activityOf();
   if (activityDefault.checked.join() !== 'Обычная') throw new Error(`Activity default: ${JSON.stringify(activityDefault)}`);
   await pickActivity('Максимальная');
   await sleep(200);
   const activityMax = await activityOf();
   if (activityMax.checked.join() !== 'Максимальная' || !/70%/.test(activityMax.hint)) throw new Error(`Activity max: ${JSON.stringify(activityMax)}`);
-  await run(win, `document.querySelector('[data-qa-world="npc-activity"]').scrollIntoView({ block: 'end' })`);
+  // «Супербыстрая» ×5 holds at most 75 NPC: the slider stops there and 80 drops to 75 with the reason shown.
+  await pickRadio('Супербыстрая');
+  await sleep(200);
   await capture(win, label, '04a-new-game-superfast');
+  await click(win, '[data-qa-wizard-next]');
+  await waitFor(win, `document.querySelector('[data-qa-wizard-step="world"]')`);
+  await setWorld([['galaxies', 3], ['npc', 80]]);
+  await waitFor(win, `document.querySelector('[data-qa-world="superfast-npc-cap"]')`);
+  const capped = await run(win, `({ max: document.querySelector('[data-qa-world="npc"] input').max, value: document.querySelector('[data-qa-world="npc"] input').value })`);
+  if (capped.max !== '75' || capped.value !== '75') throw new Error(`Superfast NPC cap: ${JSON.stringify(capped)}`);
+  await click(win, '[data-qa-wizard-rail="campaign"]');
   await pickActivity('Высокая');
-  await run(win, `[...document.querySelectorAll('[role="radio"]')].find((button) => /Стандартная ×1/.test(button.textContent)).click()`);
-  await run(win, `(() => {
-    const set = (qa, value) => { const input = document.querySelector('[data-qa-world="' + qa + '"]'); const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; setter.call(input, String(value)); input.dispatchEvent(new Event('input', { bubbles: true })); };
-    set('npc', 40); set('seed', 'QASEED42');
-  })()`);
+  await pickRadio('Стандартная');
+  await sleep(200);
+  await click(win, '[data-qa-wizard-rail="world"]');
+  await setWorld([['npc', 40], ['seed', 'QASEED42']]);
   await sleep(300);
   await capture(win, label, '04-new-game-world');
   await click(win, '[data-qa-wizard-next]');

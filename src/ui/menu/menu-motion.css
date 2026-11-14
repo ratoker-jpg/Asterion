@@ -160,11 +160,12 @@
 /* ------------------------------------------------------------ screen frame */
 
 .menu-screen-head > * { animation: menu-focus-down .8s var(--menu-spring) backwards; animation-delay: calc(sibling-index() * 70ms); }
-.menu-stepper li { transition: background .4s var(--menu-ease), border-color .4s, color .4s, box-shadow .4s; }
-.menu-stepper li span { transition: background .4s, border-color .4s, color .4s; }
-.menu-stepper li.is-current span { animation: menu-pop .55s var(--menu-pop) backwards; }
-.menu-stepper li.is-current { box-shadow: 0 0 24px color-mix(in srgb, var(--race-accent-strong) 30%, transparent); }
-.menu-actionbar { animation: menu-focus-up .9s var(--menu-spring) .45s backwards; }
+/* «Новая игра» rail and panel (14.11.2026): the rail lands first, then the panel;
+   the current step number pops, and every step change replays the panel entrance. */
+.wz-rail { animation: menu-focus-left .8s var(--menu-spring) .05s backwards; }
+.wz-steps li { animation: menu-focus-up .6s var(--menu-spring) backwards; animation-delay: calc(120ms + sibling-index() * 60ms); }
+.wz-step.is-current .wz-step__num { animation: menu-pop .5s var(--menu-pop) backwards; box-shadow: 0 0 22px color-mix(in srgb, var(--race-accent-strong) 40%, transparent); }
+.wz-foot { animation: menu-focus-up .7s var(--menu-spring) .2s backwards; }
 .menu-message { animation: menu-focus-down .5s var(--menu-pop) backwards; }
 
 /* ------------------------------------------------------------ race step (the reference)
@@ -239,11 +240,10 @@
 
 /* ------------------------------------------------------------ world step */
 
-.menu-world-form { animation: menu-focus-left .9s var(--menu-spring) .1s backwards; }
-.menu-world-preview { animation: menu-focus-right .9s var(--menu-spring) .2s backwards; }
-.menu-world-form > * { animation: menu-focus-up .7s var(--menu-spring) backwards; animation-delay: calc(150ms + min(sibling-index(), 10) * 50ms); }
-.menu-world-summary div { animation: menu-focus-up .7s var(--menu-spring) backwards; animation-delay: calc(450ms + sibling-index() * 60ms); transition: border-color .3s, translate .4s var(--menu-pop); }
-.menu-world-summary div:hover { border-color: var(--race-border); translate: 0 -3px; }
+.wz-group > * { animation: menu-focus-up .6s var(--menu-spring) backwards; animation-delay: calc(80ms + min(sibling-index(), 10) * 45ms); }
+.wz-stats div { animation: menu-focus-up .7s var(--menu-spring) backwards; animation-delay: calc(350ms + sibling-index() * 60ms); transition: translate .4s var(--menu-pop); }
+.wz-stats div:hover { translate: 0 -3px; }
+.menu-viewport .wz-choice.is-on b { animation: menu-pop .4s var(--menu-pop); display: inline-block; }
 .menu-atlas > g { animation: menu-atlas-in 1s var(--menu-ease) backwards; animation-delay: calc(300ms + sibling-index() * 110ms); }
 @keyframes menu-atlas-in { from { opacity: 0; filter: blur(8px) brightness(2); } }
 .menu-viewport .menu-seg button { transition: background .3s var(--menu-ease), color .2s, box-shadow .3s; }
@@ -257,9 +257,9 @@
 .menu-confirm-hero__general { animation: menu-card-rise 1.3s var(--menu-ease) .25s backwards; }
 .menu-confirm-hero__ship { animation: menu-focus-right 1.4s var(--menu-ease) .4s backwards, menu-float 9s ease-in-out 1.8s infinite; }
 .menu-confirm-hero__copy > * { animation: menu-focus-up .9s var(--menu-spring) backwards; animation-delay: calc(600ms + sibling-index() * 90ms); }
-.menu-confirm-summary { animation: menu-focus-right 1s var(--menu-spring) .15s backwards; }
-.menu-confirm-summary > *, .menu-confirm-summary dl div { animation: menu-focus-up .7s var(--menu-spring) backwards; animation-delay: calc(260ms + min(sibling-index(), 10) * 55ms); }
+.wz-summary__rows > div { animation: menu-focus-up .6s var(--menu-spring) backwards; animation-delay: calc(200ms + min(sibling-index(), 10) * 45ms); }
 .menu-confirm-roster span { animation: menu-pop .55s var(--menu-pop) backwards; animation-delay: calc(700ms + sibling-index() * 70ms); }
+.menu-viewport .wz-panel--confirm .wz-primary:not(:disabled) { animation: menu-glow-breathe 3.2s ease-in-out 1.2s infinite; }
 .menu-viewport .menu-btn--start:not(:disabled) { animation: menu-focus-up .8s var(--menu-spring) .7s backwards, menu-glow-breathe 3.2s ease-in-out 1.6s infinite; }
 .menu-viewport .menu-btn--start:not(:disabled)::after { animation: menu-sheen-loop 4.2s var(--ut-ease-in-out) 1.6s infinite; }
 

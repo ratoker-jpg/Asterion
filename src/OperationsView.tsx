@@ -1,3 +1,5 @@
+import { useClockNow } from './application/shared-clock';
+import { advancePirateThreat, isOwnerProtectedFromPirates, pirateRaidChance, type OwnerPirateThreat } from './domain/pirates/threat.ts';
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { REPORT_ICONS } from './ui/ui-icons.ts';
 
@@ -45,6 +47,8 @@ type OperationsViewProps = {
   onPirateCollectDebris?: (coordinate: CompletedPirateOperation['coordinate']) => void;
   pirateContacts?: readonly PirateContactPresentation[];
   pirateThreatPercent?: number;
+  /** What the threat percent grows from; the screen advances it with its own clock (no per-second prop). */
+  pirateThreatSeed?: { resourcePoints: number; battlePoints: number; threat: OwnerPirateThreat };
   /** Diagnostic only; NEVER pass in production runtime. */
   pirateAdaptiveDiagnostics?: PirateOwnerAdaptation;
   onPirateBattleExport?: () => void;
@@ -750,7 +754,13 @@ function PirateDiagnostics({ diagnostics, onExport }: { diagnostics: PirateOwner
 
 // ---- screen --------------------------------------------------------------------
 
-export function OperationsView({ state, onAccept, onCancel, onOpenFleets, explorationContacts = [], onExpedition, onExplorationAttack, onBot01Occupy, onExplorationAccept, onExplorationCancel, onExplorationRecon, onExplorationUniverse, onExplorationReport, pirateContacts = [], pirateThreatPercent = 2, pirateAdaptiveDiagnostics, onPirateBattleExport, pirateRaidRolls = {}, pirateOwnerId = '', pirateCheckDelayMs, completedPirateOperations = [], nowMs = Date.now(), onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse, onPirateCollectDebris }: OperationsViewProps) {
+export function OperationsView({ state, onAccept, onCancel, onOpenFleets, explorationContacts = [], onExpedition, onExplorationAttack, onBot01Occupy, onExplorationAccept, onExplorationCancel, onExplorationRecon, onExplorationUniverse, onExplorationReport, pirateContacts = [], pirateThreatPercent: pirateThreatOverride, pirateThreatSeed, pirateAdaptiveDiagnostics, onPirateBattleExport, pirateRaidRolls = {}, pirateOwnerId = '', pirateCheckDelayMs, completedPirateOperations = [], nowMs: nowOverride, onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse, onPirateCollectDebris }: OperationsViewProps) {
+  const clockNow = useClockNow();
+  const nowMs = nowOverride ?? clockNow;
+  const pirateThreatPercent = pirateThreatOverride ?? (pirateThreatSeed
+    ? (isOwnerProtectedFromPirates(pirateThreatSeed.resourcePoints, pirateThreatSeed.battlePoints) ? 0
+      : 100 * pirateRaidChance(pirateThreatSeed.resourcePoints, pirateThreatSeed.battlePoints, advancePirateThreat(pirateThreatSeed.threat, nowMs).ageHours))
+    : 2);
   const [tab, setTab] = useState<OperationsTab>('available');
   const [selectedId, setSelectedId] = useState<OperationId | null>(null);
   const [contactFilter, setContactFilter] = useState<ContactFilter>('all');
