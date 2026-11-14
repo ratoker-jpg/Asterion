@@ -21,6 +21,7 @@ import generated028 from './assets/art/planets/skins/planet-028.webp';
 import generated030 from './assets/art/planets/skins/planet-030.webp';
 import generated032 from './assets/art/planets/skins/planet-032.webp';
 import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
+import { planetSkinPictures, planetSkinThumbs } from './planet-skin-images.generated.ts';
 import type { AllianceRole } from './domain/command/types.ts';
 import {
   DEFAULT_COLONY_SKIN, LEGACY_PLANET_SKIN_IDS, PLANET_SKIN_CATALOG, displayedPlanetSkinId,
@@ -69,17 +70,15 @@ const legacyMapArt = new Map<string, { art: string; mapArt: string }>(
   asterionAssetIntegrationAssets.regularPlanetSkins.map((entry) => [entry.id, { art: entry.art, mapArt: entry.mapArt }]),
 );
 
-const THUMBS = './assets/generated/asterion/universe/planet-skin-thumbs';
-const PREVIEWS = './assets/generated/asterion/universe/planet-skins-v2';
-
 function artFor(id: PlanetSkinId): { art: string; mapArt: string; thumb: string } {
-  const thumb = `${THUMBS}/${id}.webp`;
   const legacy = legacyArt[id];
-  if (legacy) return { art: legacy, mapArt: legacy, thumb };
   const manifest = legacyMapArt.get(id);
+  // A look without its pictures yet (a source still missing) falls back to «Колония».
+  const thumb = planetSkinThumbs[id] ?? planetSkinThumbs[DEFAULT_COLONY_SKIN] ?? planetColonized;
+  if (legacy) return { art: legacy, mapArt: legacy, thumb };
   if (manifest) return { ...manifest, thumb };
   // Looks from 14.11.2026 on: a 512 px WebP, the thumbnail doubles as map art.
-  return { art: `${PREVIEWS}/${id}.webp`, mapArt: thumb, thumb };
+  return { art: planetSkinPictures[id] ?? planetColonized, mapArt: thumb, thumb };
 }
 
 /** The planet editor's looks with their art, in the editor's order. */

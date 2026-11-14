@@ -1,22 +1,30 @@
 # Облики планет (пакет 14.11.2026): промпты
 
-Сгенерировано 14.11.2026 через Codex (GPT image) сразу на прозрачном фоне, пачками по 6 (`gen-batch.cjs jobs.json out/`, до 3 процессов параллельно). Исходники здесь — PNG около 1254×1254. В игру идут WebP: 512 px предпросмотр (`public/assets/generated/asterion/universe/planet-skins-v2/`) и 192 px миниатюра для сетки и карты (`.../planet-skin-thumbs/`, для всех 78 обликов, включая старые). Собрать заново: `python assets/source/planets/skins-v2/build-art.py`.
+84 новых облика: 52 обычных и редких, 24 «Фантазии», 8 обликов союза. Сгенерированы 14.11.2026 через Codex (GPT image) сразу на прозрачном фоне, пачками по 6 (`node gen-batch.cjs jobs.json out/`, до 3 процессов параллельно). Каждый проверен глазами.
 
-Стиль: как у базовых планет (Терран, Океан…): один шар по центру, мягкий свет сверху слева, тонкое свечение атмосферы, без колец-рамок и текста. Облики союза — тот же шар плюс мотив союза: серебряные орбитальные конструкции, гербовые огни, крылатая эмблема, ленты-знамёна.
+Исходники здесь — PNG около 1254×1254. В игру идут только WebP (тот же принцип, что у `tools/build-game-art.mjs`): 512 px в `src/assets/art/planets/skins-v2/` и миниатюра 192 px для сетки, карты и Империи в `src/assets/art/planets/skin-thumbs/` (для всех 114 обликов, включая старые). Поля обрезаются по планете, чтобы все облики были одного размера. Собрать заново: `python assets/source/planets/skins-v2/build-art.py`, контакт-лист: `python assets/source/planets/skins-v2/contact-sheet.py`.
 
-## База (обычные и редкие)
+Добавить облик: строка в `src/domain/universe/planet-skins.ts` (рубрика, по желанию цена или достижение), PNG сюда под тем же id, затем build-art.py.
+
+## База: обычные и редкие
 
 ```
 Planet art for the look picker of a dark sci-fi space strategy game. One single whole planet seen from space, perfectly centered, the sphere fills about 66% of the canvas width. Painterly-realistic, rich detail, soft key light from the upper left with a gentle terminator shadow toward the lower right, a thin soft atmospheric rim glow hugging the edge of the sphere. No moons, no stars, no nebula, no ring, no frame, no badge, no text. Transparent background. Planet: {S}
 ```
 
-## База (облики союза)
+## База: «Фантазия»
+
+```
+Art for the look picker of a dark sci-fi space strategy game: one single whole imaginative celestial world, perfectly centered, fills about 64% of the canvas width, every part stays fully inside the canvas. Same painterly-realistic rendering as a planet set: soft key light from the upper left, gentle shadow toward the lower right, thin soft rim glow. Bold, playful, memorable, original design. No stars, no nebula, no frame, no badge, no text, no letters, no numbers. Transparent background. World: {S}
+```
+
+## База: облики союза
 
 ```
 Planet art for the look picker of a dark sci-fi space strategy game, an exclusive look reserved for the planet of an alliance leader. One single whole planet seen from space, perfectly centered, the sphere fills about 60% of the canvas width, any orbital structure stays fully inside the canvas. Painterly-realistic, rich detail, soft key light from the upper left with a gentle terminator shadow toward the lower right, thin soft atmospheric rim glow. Alliance motif: polished silver orbital structures, heraldic beacon lights in cyan and warm gold, a stylised emblem of two swept wings around a crystal, banner-like light ribbons. No stars, no nebula, no frame, no badge, no text or letters. Transparent background. Planet: {S}
 ```
 
-## Облики
+## Обычные и редкие
 
 | Файл | Имя в игре | Planet |
 |---|---|---|
@@ -41,7 +49,7 @@ Planet art for the look picker of a dark sci-fi space strategy game, an exclusiv
 | `ps-aurora` | Сияние | a polar aurora world, dark blue ocean planet with glowing green and violet aurora curtains around the poles |
 | `ps-fog` | Туманная | a fog world, pale lavender fog blanket covering everything, dark mountain peaks poking through the fog |
 | `ps-ash` | Пепельная | a dead ash world, grey ash deserts, dried dark seabeds, faint smoke wisps, no life |
-| `ps-cold-dead` | Остывшая | a long dead frozen world, black ice and dark grey rock with dim frost, only a very faint rim glow |
+| `ps-cold-dead` | Остывшая | a long dead frozen world of glossy jet-black ice sheets with faint pale blue frost veins and dark navy shadows, almost no atmosphere, eerie and cold, clearly black and blue, not grey rock |
 | `ps-tidal` | Приливная | a tidally locked world, the day half scorched cracked orange desert, the night half frozen dark blue ice, a thin ring of green land along the boundary |
 | `ps-ecumenopolis` | Город-планета | a city-planet, the entire surface covered by a dense megacity grid, the night side glowing with golden city lights |
 | `ps-forge` | Кузня | a forge world, dark metal plating covering the surface with glowing orange molten vents and factory lines |
@@ -60,6 +68,52 @@ Planet art for the look picker of a dark sci-fi space strategy game, an exclusiv
 | `ps-gas-teal` | Бирюзовый гигант | a teal gas giant with smooth cyan, teal and white cloud bands, soft storms |
 | `ps-gas-rose` | Розовый гигант | a rose and gold gas giant with soft pastel pink, peach and gold cloud bands |
 | `ps-mercury` | Ртутная | a liquid metal world, mirror-like silver mercury oceans reflecting light, dark islands |
+| `ps-steppe` | Степь | a windswept steppe world, endless pale green and straw-yellow grass plains, low rolling hills, thin streaky clouds |
+| `ps-mangrove` | Мангровая | a mangrove world, tangled dark green mangrove forests over shallow brown-green tidal waters, warm haze |
+| `ps-karst` | Карстовая | a karst world, grey-white limestone tower forests and sinkholes covered in green moss, misty river valleys |
+| `ps-lakes` | Озёрная | a lake world, green and brown land dotted with thousands of small bright blue lakes, light clouds |
+| `ps-mesa` | Плато | a mesa world, flat-topped ochre and terracotta plateaus with sheer cliffs, sage-green valleys |
+| `ps-taiga` | Тайга | a taiga world, endless dark green conifer forests, grey rivers, snowy northern half, cold clouds |
+| `ps-blizzard` | Метель | a blizzard world, white snow storms swirling over the whole planet, only glimpses of grey ice beneath |
+| `ps-sunset` | Закатная | a golden hour world, green and ocean planet lit warm orange-gold from the side, long soft terminator glow |
+| `ps-flood` | Половодье | a flood season world, green continents half drowned under wide shining sheets of muddy brown flood water, river valleys turned into lakes, heavy grey rain clouds |
+| `ps-drought` | Засуха | a drought world, bone-dry cracked yellow-ochre earth with a polygon crack pattern, dried white lake beds, almost no clouds, thin dusty haze |
+| `ps-frost` | Иней | a hoarfrost world, frosted silver-white forests and plains with pale blue frozen rivers, crisp clear air |
+| `ps-irradiated` | Радиоактивная | an irradiated dead world, ash grey land with sickly glowing green craters and toxic green haze |
+
+## «Фантазия»
+
+| Файл | Имя в игре | World |
+|---|---|---|
+| `fan-cube` | Куб | a cube-shaped planet with rounded edges, oceans, green continents and clouds wrapping over its six faces |
+| `fan-faceted` | Огранка | a faceted polyhedron planet cut like a gemstone, each flat facet a different landscape: desert, ocean, ice, forest |
+| `fan-hollow` | Полая | a hollow planet shell with a big round opening, a tiny bright sun glowing inside lighting green inner landscapes |
+| `fan-ringworld` | Мир-кольцо | a ring-shaped world, a wide habitable band of oceans and continents curving around a small bright star at its centre, seen at an angle |
+| `fan-wrapped` | В скорлупе | a blue planet partly enclosed in a cracked open silver metal shell sphere, light leaking through the gaps |
+| `fan-fire-ring` | Огненное кольцо | a dark basalt planet circled by a blazing ring of fire and embers |
+| `fan-ice-ring` | Ледяное кольцо | a deep blue planet circled by a sparkling ring of floating ice shards and frost crystals |
+| `fan-eye` | Око | a planet that looks like a giant eye: a white cloudy sphere with a huge round turquoise iris ocean and a dark pupil crater |
+| `fan-mask` | Маска | a stone planet whose mountains form a calm ceremonial mask face, glowing amber eyes and mouth lava pools |
+| `fan-crest` | Герб кометы | a midnight blue planet with a glowing silver heraldic emblem of a comet over a shield traced across its surface in light |
+| `fan-winter-orb` | Ёлочный шар | a festive glass ornament planet: a shiny deep red glass bauble world with a silver cap on top, frosted snowflake patterns and tiny warm garland lights |
+| `fan-easter` | Писанка | a spring festival planet painted like a decorated egg, pastel stripes, zigzags and dots in mint, pink, lilac and yellow |
+| `fan-pumpkin` | Тыква | a harvest night planet shaped like a carved pumpkin with ribbed orange surface, glowing carved eyes and grin, a curly green stem |
+| `fan-candy` | Карамель | a candy planet with pink and white swirled frosting oceans, chocolate continents and colourful sprinkles |
+| `fan-lantern` | Фонарь | a lantern festival planet glowing from within like a paper lantern, warm red and gold light through thin translucent bands |
+| `fan-dragon` | Спящий дракон | a planet coiled by a colossal sleeping stone dragon whose scaled body forms mountain ranges around the globe, its head resting on a continent |
+| `fan-turtle` | Черепаха | a planet shaped as a giant cosmic turtle shell dome with mossy plates and small forests, little head and flippers peeking out |
+| `fan-whale` | Небесный кит | a deep ocean planet with a gigantic luminous space whale swimming through its upper atmosphere, curving along the sphere |
+| `fan-phoenix` | Феникс | a fire planet with flame-feather patterns, two great wings of fire unfolding from its sides |
+| `fan-kraken` | Кракен | a purple ocean planet gripped by enormous tentacles rising from the sea and wrapping around the globe |
+| `fan-clockwork` | Часовой механизм | a clockwork planet built of brass gears, cogs and turning rings, a blank clock face without numbers on one side |
+| `fan-core` | Звёздное ядро | a planet with a transparent glassy crust revealing a blazing white-gold miniature star core inside |
+| `fan-geode` | Жеода | a planet split open like a geode, rough grey outside and a glittering violet amethyst crystal interior |
+| `fan-circuit` | Схема | a dark planet covered with glowing cyan and green circuit board traces, chips and data light pulses |
+
+## Облики союза
+
+| Файл | Имя в игре | Planet |
+|---|---|---|
 | `ally-citadel` | Цитадель союза | a fortress world with dark armoured continents, one thin silver orbital ring station circling it, bearing many cyan and gold heraldic beacon lights |
 | `ally-banner` | Знамя | a night-side ocean world whose city lights on the continents form a huge symmetrical emblem of two swept wings around a glowing crystal, gold and cyan |
 | `ally-throne` | Престол | a regal golden world, polished gold-plated surface patterns, a thin gold orbital ring with bright beacon lights |
@@ -69,6 +123,10 @@ Planet art for the look picker of a dark sci-fi space strategy game, an exclusiv
 | `ally-beacon` | Маяк союза | a dark world with one tall glowing beacon tower sending a vertical cyan light beam, a halo ring of small gold orbital lights |
 | `ally-sigil` | Печать | a violet and silver world with a glowing winged crystal sigil drawn across its surface in cyan light, gold rim lights |
 
-## Переделки после проверки
+## Замены и переделки после проверки
 
-(заполняется по ходу проверки листа)
+- Ещё до генерации заменены четыре задумки, слишком похожие на старые облики: «Дюны» → `ps-oasis`, аметист → `ps-pearl`, лавовый океан → `ps-geyser`, гигант с бурей → `ps-gas-rose`.
+- `ps-cold-dead`: первая версия была серым камнем, как «Пепельная»; перерисована чёрным льдом.
+- `ps-flood`, `ps-drought`: первая картинка не читалась ни как половодье, ни как засуха; обе перерисованы с более явным описанием.
+- `ps-mercury`: вокруг шара висели мелкие осколки; альфа обнулена кругом по планете (фон не вырезался).
+- Сбой сети в пачке сдвигает имена файлов (скрипт раскладывает картинки по порядку). Все пачки сверены глазами, сдвиги исправлены переименованием, пропавшие перерисованы.

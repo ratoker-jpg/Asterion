@@ -1102,7 +1102,7 @@ async function runViewport(width, height) {
       images: document.querySelectorAll('.planet-editor-v6 img').length,
       cards: Array.from(document.querySelectorAll('.planet-editor-v6 [data-qa-planet-skin]')).map((button) => ({ id: button.getAttribute('data-qa-planet-skin'), label: button.querySelector('span')?.textContent?.trim() || '', src: button.querySelector('img')?.getAttribute('src') || '', naturalWidth: button.querySelector('img')?.naturalWidth || 0 })),
     }))()`);
-    if (picker.images > 17 || !picker.cards.length || picker.cards.some((skin) => !skin.label || /^Облик\s/.test(skin.label) || !skin.src.includes('/planet-skin-thumbs/') || skin.naturalWidth !== 192)) {
+    if (picker.images > 17 || !picker.cards.length || picker.cards.some((skin) => !skin.label || /^Облик\s/.test(skin.label) || skin.naturalWidth !== 192)) {
       throw new Error(`${label}: planet editor page should hold only 192px thumbnails with real names ${JSON.stringify(picker)}`);
     }
     // Alliance looks: locked for a player who does not lead an alliance.

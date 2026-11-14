@@ -10,7 +10,7 @@ import re
 from PIL import Image, ImageDraw, ImageFont
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
-THUMBS = os.path.join(ROOT, 'public', 'assets', 'generated', 'asterion', 'universe', 'planet-skin-thumbs')
+THUMBS = os.path.join(ROOT, 'src', 'assets', 'art', 'planets', 'skin-thumbs')
 OUT = os.path.join(ROOT, 'docs', 'art', 'sheets', 'planet-skins-v2.jpg')
 BG = (9, 13, 20)
 
@@ -39,8 +39,8 @@ strip_h = 48 + 24
 height = 70 + sum(HEAD if kind == 'head' else CELL + LABEL for kind, _, _ in rows) + strip_h + 30
 sheet = Image.new('RGB', (COLS * CELL + 40, height), BG)
 draw = ImageDraw.Draw(sheet)
-draw.text((20, 18), f'Облики планет: {len(skins)} (новых {sum(1 for s in skins if s[0].startswith(("ps-", "ally-")))})', fill=(230, 246, 250), font=font(26, True))
-colours = {'common': (143, 182, 192), 'rare': (201, 162, 255), 'alliance': (240, 201, 106)}
+draw.text((20, 18), f'Облики планет: {len(skins)} (новых {sum(1 for s in skins if s[0].startswith(("ps-", "fan-", "ally-")))})', fill=(230, 246, 250), font=font(26, True))
+colours = {'common': (143, 182, 192), 'rare': (201, 162, 255), 'fantasy': (255, 159, 122), 'alliance': (240, 201, 106)}
 y = 70
 for kind, payload, tier in rows:
     if kind == 'head':
@@ -52,7 +52,7 @@ for kind, payload, tier in rows:
         im = Image.open(os.path.join(THUMBS, f'{sid}.webp')).convert('RGBA').resize((CELL - 22, CELL - 22), Image.LANCZOS)
         sheet.paste(im, (x + 11, y + 6), im)
         draw.text((x + 6, y + CELL - 6), label, fill=(232, 246, 250), font=font(13))
-        if sid.startswith(('ps-', 'ally-')):
+        if sid.startswith(('ps-', 'fan-', 'ally-')):
             draw.text((x + 6, y + CELL + 10), 'NEW', fill=colours[tier], font=font(11, True))
     y += CELL + LABEL
 draw.text((20, y + 2), '48 px', fill=(127, 152, 160), font=font(13))
