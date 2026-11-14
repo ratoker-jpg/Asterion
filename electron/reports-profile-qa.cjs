@@ -152,6 +152,8 @@ async function updateAllianceThroughCommand(win) {
   await win.webContents.executeJavaScript(`document.querySelector('[data-qa-crest-apply]')?.click()`);
   await waitFor(win, `!document.querySelector('[data-qa-crest-constructor]')`);
   await settle(win);
+  await win.webContents.executeJavaScript(`(async () => { for (let i = 0; i < 3 && document.querySelector('[data-qa-founding-next]'); i += 1) { document.querySelector('[data-qa-founding-next]').click(); await new Promise((resolve) => setTimeout(resolve, 150)); } })()`);
+  await settle(win);
   await win.webContents.executeJavaScript(`document.querySelector('[data-qa-alliance-submit]')?.click()`);
   await waitFor(win, `document.querySelector('.command-view__status strong')?.textContent?.includes('Содружество Север')`);
   await settle(win);

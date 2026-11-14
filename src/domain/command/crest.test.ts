@@ -109,6 +109,7 @@ test('founding and editing validate the crest; saves, identity and profile keep 
   assert.equal(rejected.ok, false);
   if (!rejected.ok) assert.equal(rejected.code, 'invalid_emblem');
 
-  const legacyState = founded({ glyph: 'crown', accent: 'amber' });
-  assert.equal('crest' in legacyState.alliances[0].emblem, false, 'no crest is invented for a legacy emblem');
+  // Founding never creates the flat legacy emblem (identity PR 1): without a crest the default one in its colour.
+  const plainState = founded({ glyph: 'crown', accent: 'amber' });
+  assert.deepEqual(plainState.alliances[0].emblem.crest, { ...DEFAULT_ALLIANCE_CREST, color: 'amber' });
 });

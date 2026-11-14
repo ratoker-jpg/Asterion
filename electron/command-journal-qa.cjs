@@ -252,9 +252,15 @@ async function productionScenario(win, label) {
   await click(win, '[data-qa-create-alliance]');
   await setField(win, '[data-qa-alliance-name]', 'Журнал Дозора с очень длинным названием');
   await setField(win, '[data-qa-alliance-tag]', 'JRN');
+  await win.webContents.executeJavaScript(`(async () => { for (let i = 0; i < 3 && document.querySelector('[data-qa-founding-next]'); i += 1) { document.querySelector('[data-qa-founding-next]').click(); await new Promise((resolve) => setTimeout(resolve, 150)); } })()`);
   await click(win, '[data-qa-alliance-submit]');
   await waitFor(win, `document.querySelector('.command-view')?.getAttribute('data-qa-command-state') === 'leader'`);
-  await click(win, '[data-qa-command-tab="overview"]');
+  // A lone leader sees the first screen of the alliance (no journal there); a second member brings the ordinary «Штаб» back.
+  await waitFor(win, `document.querySelector('[data-qa-alliance-first]')`);
+  await patchAndReload(win, PRODUCTION_KEY, 'production', `(save) => { const own = save.command.alliances.find((alliance) => alliance.members.some((member) => member.ownerId === save.profile.playerId));
+    own.members.push({ ownerId: 'qa-journal-ally', displayName: 'Союзник Журнала', joinedAt: Date.now(), lastActiveAt: Date.now(), deliveredUnits: 0, jointOperationCount: 0, tieBreaker: 0.5 }); }`,
+    `(save) => save.command?.alliances?.some((alliance) => alliance.members.some((member) => member.ownerId === 'qa-journal-ally'))`);
+  await openJournal(win);
   await waitFor(win, `document.querySelector('[data-qa-journal-state="locked"]')`);
   let state = await journal(win);
   assert(state.entries.length === 0 && !state.overflowX && !state.contentOverflow, `${label}: production journal is locked and fits`, state);
