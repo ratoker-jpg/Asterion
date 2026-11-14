@@ -19,8 +19,7 @@ app.on('window-all-closed', () => {});
 
 const ROOT = path.join(__dirname, '..');
 const OUTPUT = process.env.ASTERION_QA_OUTPUT || path.join(ROOT, 'visual-qa', 'screens-menu-wizard', 'run');
-// The «before» commit records the contracts only; the redo switches them on.
-const CHECKS = process.env.ASTERION_QA_CHECKS ? process.env.ASTERION_QA_CHECKS !== '0' : false;
+const CHECKS = process.env.ASTERION_QA_CHECKS !== '0';
 const SHOTS = process.env.ASTERION_SKIP_SCREENSHOTS !== '1';
 const VIEWPORTS = [[1280, 720], [2560, 1080]];
 const ROOT_SELECTOR = '.menu-stage';

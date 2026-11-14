@@ -383,12 +383,14 @@ type ConfigUpdater = (updater: (current: NewGameConfig) => NewGameConfig) => voi
 type WorldPatcher = (patch: Partial<NewGameConfig['world']>) => void;
 
 /** Visible choices with their explanation under each one: no hover tooltips. */
-function ChoiceCards<T extends string | number>({ value, options, onChange, label, qa, columns }: {
+function ChoiceCards<T extends string | number>({ value, options, onChange, label, qa, hintQa, columns }: {
   value: T;
   options: ReadonlyArray<{ value: T; label: string; badge?: string; hint: string }>;
   onChange: (value: T) => void;
   label: string;
   qa?: string;
+  /** data-qa-world name put on the chosen option's explanation (QA reads the current hint). */
+  hintQa?: string;
   columns?: number;
 }) {
   return (
@@ -396,7 +398,7 @@ function ChoiceCards<T extends string | number>({ value, options, onChange, labe
       {options.map((option) => (
         <button key={String(option.value)} type="button" role="radio" aria-checked={value === option.value} className={`wz-choice${value === option.value ? ' is-on' : ''}`} onClick={() => onChange(option.value)}>
           <span className="wz-choice__top"><b>{option.label}</b>{option.badge ? <em>{option.badge}</em> : null}</span>
-          <small>{option.hint}</small>
+          <small data-qa-world={value === option.value ? hintQa : undefined}>{option.hint}</small>
         </button>
       ))}
     </div>
@@ -448,10 +450,9 @@ function CampaignStep({ config, issues, onChange, onWorld, series }: { config: N
             options={(Object.keys(CAMPAIGN_SPEED_LABELS) as CampaignSpeed[]).map((value) => ({ value, label: CAMPAIGN_SPEED_LABELS[value].label, badge: `×${CAMPAIGN_SPEED_SCALE[value]}`, hint: CAMPAIGN_SPEED_LABELS[value].hint }))} />
         </Field>
         <Field label="Активность NPC" hint="Как часто соседи-боты бывают в игре.">
-          <ChoiceCards<NpcActivityLevel> label="Активность NPC" columns={1} value={npcActivityOf(config)} onChange={(value) => onWorld({ npcActivity: value })} qa="npc-activity"
+          <ChoiceCards<NpcActivityLevel> label="Активность NPC" columns={1} value={npcActivityOf(config)} onChange={(value) => onWorld({ npcActivity: value })} qa="npc-activity" hintQa="npc-activity-hint"
             options={NPC_ACTIVITY_LEVELS.map((value) => ({ value, label: NPC_ACTIVITY_LABELS[value].label, hint: NPC_ACTIVITY_LABELS[value].hint }))} />
         </Field>
-        <span className="wz-sr" data-qa-world="npc-activity-hint">{NPC_ACTIVITY_LABELS[npcActivityOf(config)].hint}</span>
       </section>
     </div>
   );

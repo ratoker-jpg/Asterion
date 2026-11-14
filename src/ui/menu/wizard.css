@@ -150,7 +150,6 @@
 .wz-field__hint { color: var(--wz-muted); font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; }
 .wz-field__error { color: var(--wz-red); font-size: 14px; font-style: normal; font-weight: 600; line-height: 1.4; }
 .wz-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
-.wz-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 .menu-viewport .wz-input {
   width: 100%;
@@ -259,7 +258,11 @@
 
 /* -------------------------------------------------------- confirm step */
 
-.menu-viewport .wz-hero { min-height: 100%; border-radius: var(--ut-r-card, 13px); }
+/* The hero stays the height of the visible panel body, so the race name and «Изменить расу»
+   never slide below the fold when the summary list is long (it scrolls beside the hero). */
+.wz-grid--confirm { align-items: start; }
+.menu-viewport .wz-hero { position: sticky; top: 0; height: calc(var(--menu-h, 1080px) - 330px); min-height: 420px; border-radius: var(--ut-r-card, 13px); }
+.menu-stage[data-short] .wz-hero { height: calc(var(--menu-h, 900px) - 286px); }
 /* Text over art: a dark calm zone under the copy (owner's rule). */
 .menu-viewport .wz-hero::after { background: linear-gradient(0deg, rgba(2, 5, 8, .97) 0%, rgba(2, 5, 8, .82) 26%, rgba(2, 5, 8, .1) 58%), linear-gradient(90deg, rgba(2, 5, 8, .55), transparent 60%); }
 .menu-viewport .wz-hero .menu-confirm-hero__ship { width: 46%; right: 4%; top: 6%; }
