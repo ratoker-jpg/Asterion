@@ -23,7 +23,7 @@ import { FlightSpeedControl } from '../flight-speed/FlightSpeedControl.tsx';
 import { AmountSlider } from '../AmountSlider.tsx';
 import { ResourceIcon } from '../resources/ResourceIcon.tsx';
 import { flightDurationLabel, quickRuntimeNow } from '../quick-send/QuickSendPanel.tsx';
-import aidIcon from '../../../assets/source/mission-icons-v1/33_trade_convoy.png';
+import aidIcon from '../../assets/ui/mission-icons/aid.webp';
 import '../universe/quick-actions.css';
 import '../quick-send/quick-send.css';
 import './aid-quick-send.css';

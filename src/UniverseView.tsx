@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { SCORE_ICONS } from './ui/ui-icons.ts';
 import { useClockNow } from './application/shared-clock';
 import { describeOwnerPresence, type OwnerPresence } from './application/owner-presence.ts';
 import { DEBRIS_FINDER_ICON, SUN_DEBRIS_ART } from './ui/sun-raid/sun-raid-assets.ts';
@@ -9,13 +10,12 @@ import { selectAllianceRelations } from './domain/command/diplomacy.ts';
 import { FactionGeneralPortrait } from './ui/FactionGeneralPortrait.tsx';
 import { EXPLORATION_ARTS } from './exploration-art.ts';
 import { PIRATE_PLANET_ARTS } from './pirate-planet-art.ts';
-import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
 import { GameSelect } from './ui/GameSelect.tsx';
 import { ObjectCard } from './ui/universe/ObjectCard.tsx';
 import { DebrisFinder, type DebrisSearch } from './ui/universe/DebrisFinder.tsx';
 import type { DebrisEntry, ExplorationIntel } from './ui/universe/object-card-model.ts';
 import { createUniverseCardQaFixture, getUniverseCardQaScenario } from './ui/universe/object-card-qa-fixture.ts';
-import debrisIcon from './assets/ui/header-icons/debris.png';
+import debrisIcon from './assets/ui/header-icons/debris.webp';
 import './ui/universe/universe-radar.css';
 import './ui/universe/map-relations.css';
 import './ui/shield/shield.css';
@@ -492,7 +492,7 @@ function OwnerInspector({
         <dl className={`star-atlas__points ${owner.points ? '' : 'is-empty'}`} data-qa-universe-points>
           {POINT_LABELS.map(({ key }, index) => (
             <div key={key} className="star-atlas__point" style={{ '--i': index } as CSSProperties}>
-              <img src={asterionAssetIntegrationAssets.scoreIcons[SCORE_ICON_KEYS[key]]} alt="" aria-hidden="true" draggable={false} />
+              <img src={SCORE_ICONS[SCORE_ICON_KEYS[key]]} alt="" aria-hidden="true" draggable={false} />
               <dt>{SHORT_POINT_LABELS[key]}</dt>
               <dd>{owner.points ? scoreLabel(owner.points[key] ?? 0) : '—'}</dd>
             </div>

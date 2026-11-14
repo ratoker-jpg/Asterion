@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { REPORT_ICONS, SCORE_ICONS } from './ui/ui-icons.ts';
 
 import { SunReportStrip } from './ui/sun-raid/SunReportStrip.tsx';
 import { BattleReportModal } from './BattleReportsView';
@@ -8,7 +9,6 @@ import { EmblemGlyph } from './ui/command/EmblemGlyph.tsx';
 import { ReportArtwork, ReportGlyph, ReportHero, ReportSheetView } from './ui/messages/ReportSheetView.tsx';
 import { MISSION_BANNERS } from './ui/ui-art.ts';
 import { formatShortAmount, reportRowValue, type HeadlineContext, type ReportValue } from './domain/reports/headline.ts';
-import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
 import { isAsterionLocalPlayerId, type BattleReport } from './domain/combat/report.ts';
 import { createBattleReportViewModel } from './domain/combat/battle-report-view-model.ts';
 import type { AllianceRole, CommandState } from './domain/command/types.ts';
@@ -115,7 +115,7 @@ function withOverpopulationReports(next: ReportsState, previous: ReportsState): 
 }
 
 function ProfileGlyph() {
-  return <img className="reports-glyph-image" src={asterionAssetIntegrationAssets.reportIcons.profile} alt="" aria-hidden="true" draggable={false} />;
+  return <img className="reports-glyph-image" src={REPORT_ICONS.profile} alt="" aria-hidden="true" draggable={false} />;
 }
 
 function SearchGlyph() {
@@ -198,7 +198,7 @@ function ProfileAvatar({ displayName, factionId }: { displayName: string; factio
 }
 
 function MetricGlyph({ metric }: { metric: PlayerProfileMetricKey }) {
-  return <img className="reports-score-glyph" src={asterionAssetIntegrationAssets.scoreIcons[metric]} alt="" aria-hidden="true" draggable={false} />;
+  return <img className="reports-score-glyph" src={SCORE_ICONS[metric]} alt="" aria-hidden="true" draggable={false} />;
 }
 
 /** The player's last messages from every folder; a click opens the message. */

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import gateIcon from '../../../assets/source/mission-icons-v1/29_wormhole_expedition.png';
+import gateIcon from '../../assets/ui/mission-icons/gate.webp';
 import { SUN_RAID_CONFIG, SOLAR_CRYSTALS } from '../../domain/sun-raid/config.ts';
 import { gateProgressPercent, holderKey } from '../../domain/sun-raid/rules.ts';
 import { scaleRuntimeDuration, type RuntimeMode } from '../../domain/runtime/mode.ts';

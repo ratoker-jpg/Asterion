@@ -1,6 +1,7 @@
 import { useClockNow } from './application/shared-clock';
 import { advancePirateThreat, isOwnerProtectedFromPirates, pirateRaidChance, type OwnerPirateThreat } from './domain/pirates/threat.ts';
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { REPORT_ICONS } from './ui/ui-icons.ts';
 
 import { OPERATION_MODIFIER_LABELS } from './domain/operations/catalog.ts';
 import type {
@@ -23,10 +24,9 @@ import { explorationProfile, EXPLORATION_RULES } from './domain/exploration/mode
 import { reconcileExplorationContact } from './domain/exploration/ledger.ts';
 import type { ExplorationOperationPresentation } from './application/exploration.ts';
 import type { UniversePlanetNode } from './domain/universe/types.ts';
-import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
-import operationsHeaderIcon from './assets/ui/header-icons/operations.png';
-import availableIcon from '../assets/source/mission-icons-v1/23_deep_scan.png';
-import activeIcon from '../assets/source/mission-icons-v1/31_expedition.png';
+import operationsHeaderIcon from './assets/ui/header-icons/operations.webp';
+import availableIcon from './assets/ui/header-icons/ops-available.webp';
+import activeIcon from './assets/ui/header-icons/ops-active.webp';
 import './operations.css';
 
 export type ExplorationOperationContact = ExplorationOperationPresentation;
@@ -75,7 +75,6 @@ type OperationRow = { operation: OperationInstance; contact?: PirateContactPrese
 type Tone = '' | 'ok' | 'bad' | 'am' | 'cy' | 'vi' | 'own';
 type Resource = 'metal' | 'minerals' | 'gas' | 'debris';
 
-const REPORT_ICONS = asterionAssetIntegrationAssets.reportIcons;
 const TAB_LABELS: Record<OperationsTab, string> = { available: 'Доступные', active: 'В работе', completed: 'Завершённые' };
 const TAB_ICONS: Record<OperationsTab, string> = { available: availableIcon, active: activeIcon, completed: REPORT_ICONS.battle };
 const LIST_TITLES: Record<OperationsTab, string> = { available: 'Доступные операции', active: 'Операции в работе', completed: 'Завершённые операции' };

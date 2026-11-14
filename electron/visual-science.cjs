@@ -424,7 +424,7 @@ async function runViewport(width, height) {
   await click(win, '.science-sections-v2 button:nth-child(2)');
   await waitFor(win, `document.querySelector('[data-qa-science-id="10"]')`);
   const laserZero = await readScienceCosts(win, 10);
-  if (laserZero.status !== 'available' || laserZero.disabled || laserZero.costs.metal !== 200 || laserZero.costs.minerals !== 100 || laserZero.costs.gas !== 0 || laserZero.assets.length !== 3 || !laserZero.assets.every(({ kind, asset }) => ['metal', 'minerals', 'gas'].includes(kind) && /(?:metal|mineral|gas)(?:-[^/]+)?\.png$/.test(asset ?? ''))) {
+  if (laserZero.status !== 'available' || laserZero.disabled || laserZero.costs.metal !== 200 || laserZero.costs.minerals !== 100 || laserZero.costs.gas !== 0 || laserZero.assets.length !== 3 || !laserZero.assets.every(({ kind, asset }) => ['metal', 'minerals', 'gas'].includes(kind) && /(?:metal|mineral|gas)(?:-[^/]+)?\.(?:png|webp)$/.test(asset ?? ''))) {
     throw new Error(`${label}: Laser 0 → 1 cost/assets mismatch ${JSON.stringify(laserZero)}`);
   }
   await click(win, '[data-qa-science-id="10"] [data-qa-science-action]');

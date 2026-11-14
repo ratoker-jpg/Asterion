@@ -171,7 +171,7 @@ jobs:
           - shard: electron-5
             suites: "test:science-ui:skip test:fleet-ui:skip test:command-journal-ui:skip test:whats-new-ui test:building-actions-ui test:quick-send-cargo-ui"
           - shard: electron-6
-            suites: "test:planet-screens-ui test:map-colors-ui test:universe-ui:skip test:battles-mine-ui test:command-ui:skip test:simulator-ui:skip"
+            suites: "test:planet-screens-ui test:map-colors-ui test:universe-ui:skip test:battles-mine-ui test:command-ui:skip test:simulator-ui:skip test:icons-batch-ui"
           - shard: electron-7
             suites: "test:universe-card-ui test:planet-pass-ui test:build-planner-ui test:reports-ui test:repair-ui:skip test:rating-ui test:space-flight-ui:skip test:resource-assets-ui"
           # The PR gate replays six game hours: the banner, command gate,

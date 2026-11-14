@@ -20,7 +20,7 @@ const RESOURCE_ASSET_BASE = {
   debris: 'debris',
 };
 const RESOURCE_ICON_OPTICAL_SCALES = {
-  metal: 1.28,
+  metal: 1,
   minerals: 1,
   gas: 1,
   energy: 1,
@@ -160,7 +160,7 @@ function assertResourceImages(label, images, requiredKinds, { exact = false } = 
     if (!matching.length) throw new Error(`${label}: missing resource kind ${kind} ${JSON.stringify({ availableKinds, images })}`);
     const base = RESOURCE_ASSET_BASE[kind];
     const expectedOpticalScale = RESOURCE_ICON_OPTICAL_SCALES[kind];
-    const pattern = new RegExp(`^${base}(?:-[^/]+)?\\.png$`, 'i');
+    const pattern = new RegExp(`^${base}(?:-[^/]+)?\\.(?:png|webp)$`, 'i');
     for (const image of matching) {
       const asset = assetName(image.asset);
       const source = assetName(image.src);
