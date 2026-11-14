@@ -1105,15 +1105,7 @@ async function runViewport(width, height) {
     if (picker.images > 17 || !picker.cards.length || picker.cards.some((skin) => !skin.label || /^Облик\s/.test(skin.label) || skin.naturalWidth !== 192)) {
       throw new Error(`${label}: planet editor page should hold only 192px thumbnails with real names ${JSON.stringify(picker)}`);
     }
-    // Alliance looks: locked for a player who does not lead an alliance.
-    await win.webContents.executeJavaScript(`document.querySelector('.planet-editor-v6 [data-qa-skin-group="alliance"]')?.click()`);
-    await waitFor(win, `document.querySelector('.planet-editor-v6 [data-qa-planet-skin="ally-crown"]')`);
-    await win.webContents.executeJavaScript(`document.querySelector('.planet-editor-v6 [data-qa-planet-skin="ally-crown"]')?.click()`);
-    await waitFor(win, `document.querySelector('.planet-editor-v6 [data-qa-skin-lock]') && document.querySelector('.planet-editor-v6 .pe-apply')?.disabled === true`);
-    if (await win.webContents.executeJavaScript(`document.querySelectorAll('.planet-editor-v6 [data-qa-planet-skin][data-state="locked"]').length < 6`)) {
-      throw new Error(`${label}: alliance looks should be locked for a player who does not lead an alliance`);
-    }
-    await capture(win, directory, 'planet-skin-alliance-locked');
+    // Alliance looks (locked for a non-leader) are covered by visual-planet-editor.cjs, which sets the seat itself.
     await win.webContents.executeJavaScript(`document.querySelector('.planet-editor-v6 [data-qa-skin-group="ruined"]')?.click()`);
     const selectedSkinId = 'skin-asterion-09';
     await waitFor(win, `document.querySelector('.planet-editor-v6 [data-qa-planet-skin="${selectedSkinId}"]')`);
