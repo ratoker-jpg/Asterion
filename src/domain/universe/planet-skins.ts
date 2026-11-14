@@ -5,6 +5,10 @@
  *
  * Ids never change once shipped: saves store them. Old saves keep loading
  * because every id ever shipped stays in the catalogue.
+ *
+ * Adding a look: one line below in its rubric, the source PNG in
+ * assets/source/planets/skins-v2/<id>.png, then build-art.py. The editor's
+ * rubric counts and pages follow the catalogue, nothing else to change.
  */
 import type { AllianceRole } from '../command/types.ts';
 
@@ -67,6 +71,12 @@ export const PLANET_SKIN_CATALOG = [
   skin('ps-glacier', 'Ледник', 'worlds'),
   skin('ps-crater', 'Кратерная', 'worlds'),
   skin('ps-rust', 'Ржавая', 'worlds'),
+  skin('ps-steppe', 'Степь', 'worlds'),
+  skin('ps-mangrove', 'Мангровая', 'worlds'),
+  skin('ps-karst', 'Карстовая', 'worlds'),
+  skin('ps-lakes', 'Озёрная', 'worlds'),
+  skin('ps-mesa', 'Плато', 'worlds'),
+  skin('ps-taiga', 'Тайга', 'worlds'),
   // Погода и сезоны.
   skin('skin-027', 'Полярная', 'seasons'),
   skin('skin-asterion-08', 'Снежная', 'seasons'),
@@ -79,6 +89,11 @@ export const PLANET_SKIN_CATALOG = [
   skin('ps-duststorm', 'Пыльная буря', 'seasons'),
   skin('ps-aurora', 'Сияние', 'seasons'),
   skin('ps-fog', 'Туманная', 'seasons'),
+  skin('ps-blizzard', 'Метель', 'seasons'),
+  skin('ps-sunset', 'Закатная', 'seasons'),
+  skin('ps-flood', 'Половодье', 'seasons'),
+  skin('ps-drought', 'Засуха', 'seasons'),
+  skin('ps-frost', 'Иней', 'seasons'),
   // Мёртвые и разрушенные.
   skin('skin-032', 'Тлеющая', 'ruined'),
   skin('skin-asterion-09', 'Лёд и пламя', 'ruined'),
@@ -88,6 +103,9 @@ export const PLANET_SKIN_CATALOG = [
   skin('ps-shattered', 'Расколотая', 'ruined'),
   skin('ps-scarred', 'Поле битвы', 'ruined'),
   skin('ps-cracked-ice', 'Треснувший лёд', 'ruined'),
+  skin('ps-irradiated', 'Радиоактивная', 'ruined'),
+  skin('ps-sunken', 'Затонувшая', 'ruined'),
+  skin('ps-mined', 'Выработанная', 'ruined'),
   // Искусственные.
   skin('skin-012', 'Механоид', 'artificial'),
   skin('skin-028', 'Орбитальный пояс', 'artificial'),
@@ -96,6 +114,9 @@ export const PLANET_SKIN_CATALOG = [
   skin('ps-forge', 'Кузня', 'artificial'),
   skin('ps-hexshell', 'Панцирь', 'artificial'),
   skin('ps-terraform', 'Терраформинг', 'artificial'),
+  skin('ps-solar', 'Солнечная ферма', 'artificial'),
+  skin('ps-domes', 'Купола', 'artificial'),
+  skin('ps-lattice', 'Решётка', 'artificial'),
   // Кристаллы и металл.
   skin('skin-asterion-05', 'Хрустальная', 'crystal'),
   skin('skin-002', 'Янтарная буря', 'crystal'),
@@ -103,6 +124,8 @@ export const PLANET_SKIN_CATALOG = [
   skin('ps-pearl', 'Жемчужная', 'crystal'),
   skin('ps-obsidian', 'Обсидиан', 'crystal'),
   skin('ps-mercury', 'Ртутная', 'crystal'),
+  skin('ps-ruby', 'Рубиновая', 'crystal'),
+  skin('ps-goldvein', 'Золотые жилы', 'crystal'),
   // Экзотика.
   skin('skin-003', 'Магматическая', 'exotic'),
   skin('skin-005', 'Радужный гигант', 'exotic'),
@@ -116,6 +139,9 @@ export const PLANET_SKIN_CATALOG = [
   skin('ps-gas-teal', 'Бирюзовый гигант', 'exotic'),
   skin('ps-gas-rose', 'Розовый гигант', 'exotic'),
   skin('ps-geyser', 'Гейзеры', 'exotic'),
+  skin('ps-ice-giant', 'Ледяной гигант', 'exotic'),
+  skin('ps-storm-giant', 'Грозовой гигант', 'exotic'),
+  skin('ps-magnetar', 'Магнитная', 'exotic'),
   // Облики союза: только глава союза.
   skin('ally-citadel', 'Цитадель союза', 'alliance'),
   skin('ally-banner', 'Знамя', 'alliance'),

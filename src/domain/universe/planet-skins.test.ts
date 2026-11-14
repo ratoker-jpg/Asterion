@@ -20,7 +20,7 @@ test('catalogue: unique ids and names, real names instead of «Облик 002»,
   for (const skin of PLANET_SKIN_CATALOG) assert.doesNotMatch(skin.label, /^Облик\s/, skin.id);
   for (const group of PLANET_SKIN_GROUPS) assert.ok(PLANET_SKIN_CATALOG.some((skin) => skin.group === group.id), group.id);
   assert.ok(allianceSkins.length >= 6 && allianceSkins.length <= 10);
-  assert.ok(PLANET_SKIN_CATALOG.length >= 70);
+  assert.ok(PLANET_SKIN_CATALOG.length >= 95);
 });
 
 test('alliance looks: only the alliance leader may pick them, other looks are open to all', () => {
