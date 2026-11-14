@@ -33,7 +33,7 @@ for (const dir of dirs) {
     const stat = statSync(file);
     if (stat.mtimeMs <= since) continue;
     const ext = extname(file).toLowerCase();
-    const rel = file.replace(/\/g, '/');
+    const rel = file.split('\\').join('/');
     if (ext === '.png') {
       const target = join(outDir, rel.replace(/\.png$/i, '.jpg'));
       mkdirSync(dirname(target), { recursive: true });

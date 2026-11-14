@@ -101,7 +101,18 @@ async function editSaveIdle(win, source, options = {}) {
 
   await win.loadURL(gameUrl);
   await waitExpression(win, `document.readyState === 'complete'`, timeoutMs, label);
-  await waitExpression(win, ready, timeoutMs, `${label} (game boot)`);
+  try {
+    await waitExpression(win, ready, timeoutMs, `${label} (game boot)`);
+  } catch (error) {
+    // What the page showed instead, so a hung boot is diagnosed from the CI log.
+    const seen = await win.webContents.executeJavaScript(`(() => ({
+      url: location.href, ready: document.readyState, hidden: document.hidden,
+      catchup: Boolean(document.querySelector('[data-qa-npc-catchup]')),
+      body: (document.body?.innerText || '').replace(/\s+/g, ' ').slice(0, 200),
+      children: document.body?.children.length,
+    }))()`).catch((inner) => ({ unreadable: String(inner) }));
+    throw new Error(`${error.message} | page: ${JSON.stringify(seen)}`);
+  }
   if (held) {
     try {
       await waitExpression(win, held, Math.min(timeoutMs, HELD_TIMEOUT_MS), label);
