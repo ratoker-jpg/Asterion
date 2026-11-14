@@ -2525,8 +2525,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     previewOverflow: (planetId: string, resource: AidResource, amount: number) =>
       previewRequestOverflow(stateRef.current, planetId, resource, amount),
     createAlliance: (settings: AllianceSettingsInput) => runCommandAction(
+      // No toast: the first screen of the alliance opens at once and says it was founded.
       (command, at, ownerId, ownerName) => createAlliance(command, { ownerId, displayName: ownerName, settings }, { now: at }),
-      'Союз основан. Знамя поднято.',
     ),
     inviteProspect: (npcOwnerId: string): CommandActionResult => {
       if (rejectNpcCatchupCommand()) return { ok: false, message: NPC_CATCHUP_COMMAND_BLOCKED_MESSAGE };

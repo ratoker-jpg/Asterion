@@ -159,7 +159,10 @@
 .alliance-first-prospects li > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .cmdA .alliance-first-prospects b { color: #fff; font-weight: 800; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .cmdA .alliance-first-prospects span { color: var(--cm-muted); font-size: calc(13px * var(--text-scale-secondary, 1)) !important; overflow-wrap: anywhere; }
-.cmdA .alliance-first-empty { padding: 4px 2px; color: var(--cm-muted); line-height: 1.5; }
+.alliance-first-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 28px 18px; border-radius: var(--ut-r-card, 13px); background: var(--cm-tint); text-align: center; }
+.alliance-first-empty img { width: 72px; aspect-ratio: 1; object-fit: contain; opacity: .85; }
+.cmdA .alliance-first-empty b { color: #fff; font-size: calc(15px * var(--text-scale-table, 1)) !important; font-weight: 800; }
+.cmdA .alliance-first-empty span { color: var(--cm-muted); font-size: calc(13px * var(--text-scale-secondary, 1)) !important; line-height: 1.5; }
 
 .alliance-first-look { display: grid; grid-template-columns: 96px minmax(0, 1fr); align-items: center; gap: 14px; margin-top: 12px; padding: 12px 14px; border-radius: var(--ut-r-card, 13px); background: var(--cm-tint); }
 .alliance-first-look img { width: 96px; aspect-ratio: 1; object-fit: contain; }

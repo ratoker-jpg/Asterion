@@ -110,7 +110,7 @@ export function AllianceFounding({ leaderName, capital, validate, onSubmit, onCl
   return (
     <Dialog title="Основание союза" onClose={onClose} size="founding" headerExtra={rail}>
       <div className="founding" style={{ '--founding-accent': accent } as CSSProperties} data-qa-founding data-qa-founding-step={step}>
-        <aside className="founding-hero">
+        <aside className="founding-hero" data-qa-founding-crest={`${crest.frame}/${crest.field}/${crest.glyph}/${crest.color}`}>
           <EmblemGlyph emblem={settings.emblem} />
           <strong data-qa-founding-hero-name>{shownName}</strong>
           <span className="founding-tag">[{shownTag}]</span>

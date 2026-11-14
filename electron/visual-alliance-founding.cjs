@@ -23,6 +23,7 @@ const NAME_42 = 'Объединённый Северный Союз Звёздн
 const TAG_8 = 'NORTHSTR';
 const MOTTO_72 = 'Пока горят наши звёзды, ни один флот не пройдёт через Северный Рубеж!!';
 const DESCRIPTION_220 = 'Мы держим **Северный Рубеж** с первого дня кампании. Принимаем командиров с флотом от 500 кораблей, помогаем ресурсами и вместе ходим в рейды на Солнце. Тихих не держим: *участие* в операциях обязательно для всех.';
+const PROSPECTS = ['Вольный Предел', 'Сигма-7', 'Тавр', 'Кальдера', 'Северная Гавань', 'Орин Странник'];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function waitFor(win, expression, timeoutMs = 15000) {
@@ -123,10 +124,17 @@ function noAllianceSeed() {
       alliance.members = alliance.members.filter((member) => member.ownerId !== playerId);
     }
     command.alliances = command.alliances.filter((alliance) => alliance.members.length);
-    // Bots with a Hall may choose an alliance: «Им подходит ваш союз» lists those that want the new one.
-    for (const target of Object.values(save.espionage?.targets || {})) {
-      if (target.kind === 'npc' && target.buildings) target.buildings['planetary-government'] = Math.max(1, target.buildings['planetary-government'] || 0);
-    }
+    // Test Mode has one bot (Bot 01, in its own alliance). Free bots with a Hall join the world for this scene;
+    // their characters are generated on load like for any owner new to the save, and they choose by their own rule.
+    const targets = save.espionage?.targets || {};
+    const base = Object.values(targets).find((target) => target.kind === 'npc');
+    const names = ${JSON.stringify(PROSPECTS)};
+    if (base) names.forEach((name, index) => {
+      const id = 'qa-prospect-planet-' + (index + 1);
+      targets[id] = { ...JSON.parse(JSON.stringify(base)), id, name: 'Колония ' + (index + 1), ownerId: 'qa-prospect-' + (index + 1), ownerName: name,
+        coordinate: { galaxy: 1, system: 30 + index, position: 4 + index }, buildings: { ...base.buildings, 'planetary-government': 1 } };
+    });
+    if (save.espionage) { save.espionage.targets = targets; save.espionage.bot01Planets = targets; }
     if (save.profile) save.profile.allianceId = null;
     command.cooldowns = command.cooldowns.filter((cooldown) => cooldown.ownerId !== playerId);
     command.applications = command.applications.filter((application) => application.ownerId !== playerId);
@@ -175,6 +183,9 @@ async function runViewport(win, directory, label) {
   await shot('02-banner-worst-case');
   await click(win, '[data-qa-crest-random]');
   await shot('03-banner-random-crest');
+  await click(win, '[data-qa-preset="2"]');
+  await click(win, '[data-qa-glyph="leviathan"]');
+  await click(win, '[data-qa-color="violet"]');
   // Fine tuning: the full constructor, then back to the wizard.
   await click(win, '[data-qa-crest-open]');
   await waitFor(win, `document.querySelector('[data-qa-crest-constructor]')`);
@@ -194,7 +205,8 @@ async function runViewport(win, directory, label) {
   await waitFor(win, `document.querySelector('[data-qa-founding-step="3"]')`);
   await shot('06-founding-summary');
 
-  // The first screen of the alliance.
+  // The first screen of the alliance: the same crest the wizard showed, saved and drawn.
+  metrics.wizardCrest = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-founding-crest]')?.dataset.qaFoundingCrest`);
   await click(win, '[data-qa-alliance-submit]');
   await waitFor(win, `document.querySelector('[data-qa-alliance-first]')`);
   await settle(win, 600);
@@ -205,6 +217,14 @@ async function runViewport(win, directory, label) {
   metrics.prospects = await win.webContents.executeJavaScript(`document.querySelectorAll('[data-qa-prospect]').length`);
   metrics.crest = await win.webContents.executeJavaScript(`(() => { const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}'); const id = save.profile?.playerId;
     const own = save.command?.alliances?.find((alliance) => alliance.members.some((member) => member.ownerId === id)); return own ? { crest: Boolean(own.emblem?.crest), motto: own.motto } : null; })()`).catch(() => null);
+  metrics.firstCrest = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-alliance-first]')?.dataset.qaFirstCrest`);
+  metrics.savedCrest = await win.webContents.executeJavaScript(`(() => { const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}'); const id = save.profile?.playerId;
+    const crest = save.command?.alliances?.find((alliance) => alliance.members.some((member) => member.ownerId === id))?.emblem?.crest; return crest ? [crest.frame, crest.field, crest.glyph, crest.color].join('/') : null; })()`);
+  if (metrics.wizardCrest !== 'octagon/crimson/leviathan/violet' || metrics.firstCrest !== metrics.wizardCrest || metrics.savedCrest !== metrics.wizardCrest) {
+    fail('The founded crest is not the one picked in the wizard', { wizard: metrics.wizardCrest, firstScreen: metrics.firstCrest, saved: metrics.savedCrest });
+  }
+  if (metrics.prospects < 2) fail('«Им подходит ваш союз» shows fewer than 2 bots', metrics.prospects);
+  metrics.toastOverFirstScreen = await win.webContents.executeJavaScript(`Boolean(document.querySelector('.command-feedback, [role="status"].toast, .asterion-toast'))`);
   await shot('07-first-screen', { allowScroll: true });
   if (metrics.prospects > 0) {
     await click(win, '[data-qa-prospect-invite]');

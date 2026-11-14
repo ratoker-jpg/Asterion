@@ -993,7 +993,8 @@ function Overview({ command, allianceId, ownerId, role, ownerScores, ownerFactio
     ];
     const prospects = founding?.prospects ?? [];
     return (
-      <div className="cmdA-grid cmdA-grid--aside-right command-overview alliance-first" style={{ '--founding-accent': accent } as CSSProperties} data-qa-alliance-first>
+      <div className="cmdA-grid cmdA-grid--aside-right command-overview alliance-first" style={{ '--founding-accent': accent } as CSSProperties} data-qa-alliance-first
+        data-qa-first-crest={alliance.emblem.crest ? `${alliance.emblem.crest.frame}/${alliance.emblem.crest.field}/${alliance.emblem.crest.glyph}/${alliance.emblem.crest.color}` : 'legacy'}>
         <Dossier footer={footer}>
           <Hero art={<div className="cmdA-art cmdA-art--emblem"><EmblemGlyph emblem={alliance.emblem} /></div>} backdrop={hall.art} className="command-summary alliance-first-hero">
             <small className="alliance-first-kicker">Союз основан · {formatDate(alliance.createdAt)}</small>
@@ -1051,7 +1052,12 @@ function Overview({ command, allianceId, ownerId, role, ownerScores, ownerFactio
               ))}
             </ul>
           ) : (
-            <p className="alliance-first-empty" data-qa-prospects-empty>Свободные командиры пока выбирают другие союзы. Их заявки придут сами, когда союз окрепнет; помогает и описание в карточке.</p>
+            <div className="alliance-first-empty" data-qa-prospects-empty>
+              <Img src={REPORT_ICONS.alliances} />
+              <b>Пока никто не присматривается</b>
+              <span>Все свободные командиры сейчас выбирают другие союзы или держатся одни. Как только кто-то захочет к вам, он появится здесь, а его заявка придёт во вкладку «Заявки».</span>
+              {manage ? <button type="button" onClick={() => setEditing(true)} data-qa-prospects-edit>Дополнить описание</button> : null}
+            </div>
           )}
         </ListPanel>
         {dialogs}
