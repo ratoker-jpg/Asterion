@@ -83,7 +83,7 @@ body .sdef .sdef__head h3 { margin: 0; font-size: 18px !important; font-weight: 
   color: #ffd2a6; font: 800 12px/1 Montserrat, Arial, sans-serif; letter-spacing: .04em; cursor: pointer;
   transition: background var(--ut-motion-fast) ease, transform 120ms var(--ut-ease-out);
 }
-.sdef__all img { width: 34px; height: 34px; border-radius: 50%; }
+.sdef__all img { width: 34px; height: 34px; object-fit: contain; }
 .sdef__all:hover:not(:disabled) { background: rgba(255, 140, 60, .22); }
 .sdef__all:active:not(:disabled) { transform: scale(.97); }
 .sdef__all:disabled { opacity: .45; cursor: default; }

@@ -75,3 +75,25 @@ Game UI icon for a dark sci-fi space strategy game. Subject: {S}. House style: p
 | `s-battle` | battle points: a silver shield with two crossed cannon barrels behind it and a red glowing centre (signature colour: red) |
 | `s-overall-star` | total points: a bold five-pointed star with bevelled facets (signature colour: warm gold) |
 | `s-resource-crystal` | resource points: one big faceted cyan crystal standing in a gold-trimmed silver base |
+
+## Быстрые действия и «Настройки» (пакет 6, 14.11)
+
+Медальоны `src/assets/ui/actions` (WebP 192 px) и плашки `src/assets/ui/settings` (WebP 96 px). Установка: `python assets/source/ui/icons-v2/install-batch6.py`.
+
+У одной миссии везде одна иконка, поэтому 13 медальонов собраны из готовых исходников: `aid`, `attack`, `colonize`, `deployment`, `espionage`, `expedition`, `gas`, `recycle`, `space-flight`, `sun-support`, `transport` ← `m-<то же>`; `pirate-raid` ← `m-pirate-elimination`; `profile` ← `r-profile`. Новые (13 шт., все `hasAlpha: true` с первого раза, без перегенерации):
+
+| Файл | Subject |
+|---|---|
+| `a-object-attack` | a sharp missile diving down-left into a jagged glowing anomaly crystal cluster, a bright impact flash where it hits (signature colour: violet for the crystals) |
+| `a-object-card` | a small planet sphere floating above a thin metal hologram tablet, a cyan scan beam rising from the tablet to the planet |
+| `a-pirate-report` | a thin metal data tablet with a horned pirate skull emblem on it (signature colour: red for the skull eyes) |
+| `a-pirate-scout` | a small round spy probe with a big glowing cyan lens, a small horned pirate skull emblem on its side (signature colour: red for the skull eyes) |
+| `a-probe-explore` | a spherical probe with four thin antennas sending a cyan scan beam toward a small glowing anomaly crystal |
+| `a-show-on-map` | a bold location pin marker with a glowing cyan core standing above a small flat spiral galaxy disc |
+| `st-screen` | a sleek widescreen display panel on a short stand, the screen glows plain cyan with no content |
+| `st-interface` | a round magnifying lens over three horizontal glowing cyan bars of different lengths (larger text size) |
+| `st-controls` | one big keyboard key cap with a glowing cyan edge, seen in three-quarter view, blank top |
+| `st-sound` | a loudspeaker with three cyan sound wave arcs coming out of it |
+| `st-notifications` | a classic bell with a small glowing cyan dot on its rim |
+| `st-save` | a rounded cloud shape made of polished silver metal with a glowing cyan data core inside it (world stored on a server) |
+| `st-journal` | a partly unrolled thin metal scroll with glowing cyan lines on it, no readable symbols |

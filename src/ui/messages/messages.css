@@ -1141,8 +1141,6 @@
 
 /* The typography layer sizes every text node's parent: a span inside the header title keeps the title size. */
 .reports-view .reports-hero h2 > span { font-size: inherit !important; font-weight: inherit; }
-/* Round mission pictures fill the row tile. */
-.reports-view .reports-list-icon .reports-action-art { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
 
 /* A row title wraps to a second line instead of being cut (owner rule); who / where may ellipsize. */
 .reports-view--mail .reports-list-copy strong { white-space: normal; text-overflow: clip; overflow-wrap: anywhere; line-height: 1.25; }
