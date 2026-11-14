@@ -30,7 +30,10 @@ export type DesktopSaveStore = {
   write(key: string, writeId: string, text: string): void;
   /** The same write, finished by the main process while the renderer goes on. */
   writeAsync?(key: string, writeId: string, text: string): Promise<void>;
+  /** Deletes the key's save files and its bot journal (the campaign is gone). */
   remove(key: string): void;
+  /** Deletes only the key's save files: the bot journal stays (a save that shrank back into localStorage). */
+  removeSaves?(key: string): void;
   /**
    * Opens a MessagePort to the main process for save files: the live world
    * worker sends UTF-8 bytes through it, the window never sees the text. The
@@ -136,9 +139,11 @@ export function createExternalizingStorage(local: SaveStorage, store: DesktopSav
       local.setItem(key, pointerText({ version: 1, writeId, chars: value.length }));
       memory.set(key, { writeId, text: value });
     }, (error: unknown) => {
-      // Later writes go synchronously, where a failure reaches the caller.
+      // Later writes go synchronously, where a failure reaches the caller. The value that
+      // failed is not lost: it waits again (unless a newer one already does) and is retried below.
       console.error('Asterion: saving to the desktop store failed.', error);
       synchronous = true;
+      entry.waiting ??= entry.latest;
     }).finally(() => {
       if ((generation.get(key) ?? 0) !== startedGeneration || pending.get(key) !== entry) return;
       entry.inFlight = false;
@@ -148,7 +153,11 @@ export function createExternalizingStorage(local: SaveStorage, store: DesktopSav
       else if (!synchronous) startAsync(key, next);
       else {
         touch(key);
-        try { writeNow(key, next); } catch (error) { console.error('Asterion: saving to the desktop store failed.', error); }
+        try { writeNow(key, next); } catch (error) {
+          console.error('Asterion: saving to the desktop store failed.', error);
+          // Still unsaved: keep it pending so `flush` (closing the window) tries once more.
+          pending.set(key, { latest: next, inFlight: false, waiting: null });
+        }
       }
     });
   };
@@ -197,7 +206,7 @@ export function createExternalizingStorage(local: SaveStorage, store: DesktopSav
         const previous = readSavePointer(local.getItem(key));
         local.setItem(key, value);
         memory.delete(key);
-        if (previous) store.remove(key);
+        if (previous) (store.removeSaves ?? store.remove)(key);
         return;
       }
       if (synchronous) {

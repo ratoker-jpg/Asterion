@@ -161,7 +161,7 @@ test('a failed asynchronous write switches to synchronous writes, whose failures
   } finally {
     console.error = errors;
   }
-  assert.equal(storage.getItem('asterion.k'), null, 'nothing was saved');
+  assert.equal(storage.getItem('asterion.k'), 'a'.repeat(20), 'the failed value is kept and written again synchronously, not lost');
   storage.setItem('asterion.k', 'b'.repeat(20));
   assert.equal(writes.length, 1);
   assert.equal(createExternalizingStorage(local, store, 10).getItem('asterion.k'), 'b'.repeat(20));
@@ -214,4 +214,40 @@ test('the facade refuses to adopt over an unreadable save it did not write', () 
   const result = facade.adoptSavedFile(writeId, 2_000);
   assert.equal(result.ok, false);
   assert.equal(local.data.get(key), '{"schemaVersion":99999,"broken":', 'the foreign bytes stay');
+});
+
+test('a failed async write is not lost: it is retried and a later flush still writes it', async () => {
+  const local = memoryLocal();
+  const { files, store } = memoryStore();
+  let failNext = true;
+  store.writeAsync = async (key, writeId, text) => {
+    if (failNext) { failNext = false; throw new Error('disk full'); }
+    files.set(`${key}.${writeId}`, text);
+  };
+  const storage = createExternalizingStorage(local, store, 10);
+  const originalError = console.error;
+  console.error = () => {};
+  try {
+    storage.setItem('asterion.k', 'v'.repeat(50));
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  } finally { console.error = originalError; }
+  assert.equal(storage.getItem('asterion.k'), 'v'.repeat(50));
+  assert.equal(files.size, 1, 'the failed value was written again, synchronously');
+  assert.ok(readSavePointer(local.data.get('asterion.k')!), 'the pointer moved only after the write');
+});
+
+test('shrinking back into localStorage keeps the bot journal: only the save files go', () => {
+  const local = memoryLocal();
+  const { files, store } = memoryStore();
+  const calls: string[] = [];
+  store.removeSaves = (key) => { calls.push(`saves:${key}`); };
+  const originalRemove = store.remove;
+  store.remove = (key) => { calls.push(`all:${key}`); originalRemove(key); };
+  const storage = createExternalizingStorage(local, store, 10);
+  storage.setItem('asterion.k', 'v'.repeat(50));
+  storage.setItem('asterion.k', 'tiny');
+  assert.deepEqual(calls, ['saves:asterion.k']);
+  storage.removeItem('asterion.k');
+  assert.deepEqual(calls, ['saves:asterion.k', 'all:asterion.k'], 'deleting the campaign removes the journal too');
+  assert.equal(files.size, 0);
 });

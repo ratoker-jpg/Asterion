@@ -735,3 +735,13 @@ test('a world left by an older game moves to this release on takeover, and the p
   assert.equal(lived.live.migratedFrom, '1.0.0');
   assert.equal((await claimWorld(base, 'slot-new-0001', 1, VERSION)).status, 200);
 });
+
+test('a broken x-asterion-name header is a 400, not a 500 (audit 13.11, 2.10)', async (t) => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'asterion-cloud-'));
+  t.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+  const cloud = createCloudServer(config(dataDir));
+  const port = await cloud.listen();
+  t.after(() => cloud.close());
+  const response = await upload(`http://127.0.0.1:${port}`, 'slot-test-name', 'x', { 'x-asterion-name': '%E0%A4%A' });
+  assert.equal(response.status, 400);
+});

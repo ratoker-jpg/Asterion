@@ -1,9 +1,9 @@
 // Why an NPC build queue stands empty: samples every few minutes and sorts every idle planet by reason.
 //   ... tools/npc-growth-diag.mjs [--bots=50] [--hours=2] [--step=5] [--seed=GROWTH1] [--speed=superfast] [--activity=max]
 import { pathToFileURL } from 'node:url';
-import { applyCampaignRuntimeForCatchup } from '../src/application/npc-catchup-runner.ts';
-import { advanceLiveWorld, beginLiveWorld } from '../src/application/npc-live-world.ts';
-import { getNpcBuildingCandidates } from '../src/application/npc-economy.ts';
+import { applyCampaignRuntimeForCatchup } from '../../src/application/npc-catchup-runner.ts';
+import { advanceLiveWorld, beginLiveWorld } from '../../src/application/npc-live-world.ts';
+import { getNpcBuildingCandidates } from '../../src/application/npc-economy.ts';
 import { createGrowthWorld } from './npc-growth-lab.mjs';
 
 const MIN = 60_000;

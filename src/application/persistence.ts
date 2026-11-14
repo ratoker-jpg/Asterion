@@ -1816,6 +1816,9 @@ function migrateParsedSave(
 
   const savedReplayTarget = isNpcReplayMetadata(parsed.npcReplay) ? parsed.npcReplay.targetAt : 0;
   const resourceClockBaseline = objectRecord(parsed.resourceClock)?.lastReconciledAt;
+  // A missing or broken clock must never start a catch-up "from 1970": it falls back to now (audit 13.11, 2.6).
+  const resourceClockStart = Number.isSafeInteger(resourceClockBaseline) && Number(resourceClockBaseline) > 0
+    ? Number(resourceClockBaseline) : Math.max(0, Math.floor(timestamp));
   const activationBaseline = Math.max(
     Number.isSafeInteger(resourceClockBaseline) && Number(resourceClockBaseline) >= 0 ? Number(resourceClockBaseline) : 0,
     savedReplayTarget,
@@ -1825,14 +1828,14 @@ function migrateParsedSave(
     schemaVersion: SAVE_SCHEMA_VERSION,
     npc: migrateNpcState(parsed.npc, getNpcOwnerIds(espionage.targets, profile.playerId),
       parsed.npc === undefined ? deriveLegacyNpcSalt(parsed) : '',
-      Math.max(0, numberOr(objectRecord(parsed.resourceClock)?.lastReconciledAt, 0))),
+      resourceClockStart),
     npcScience: migrateNpcScienceState(parsed.npcScience, espionage.targets, activationBaseline),
     ...(migrateNpcStrategyState(parsed.npcStrategy) ? { npcStrategy: migrateNpcStrategyState(parsed.npcStrategy) } : {}),
     ...(mode === 'production' ? { npcReplay: isNpcReplayMetadata(parsed.npcReplay)
       ? migrateNpcReplayState(parsed.npcReplay)
       : { version: 1 as const,
-        processedThroughAt: Math.max(0, Math.floor(numberOr(objectRecord(parsed.resourceClock)?.lastReconciledAt, 0))),
-        targetAt: Math.max(0, Math.floor(numberOr(objectRecord(parsed.resourceClock)?.lastReconciledAt, 0))) } } : {}),
+        processedThroughAt: resourceClockStart,
+        targetAt: resourceClockStart } } : {}),
     metal: currentWallet.metal,
     minerals: currentWallet.minerals,
     gas: currentWallet.gas,

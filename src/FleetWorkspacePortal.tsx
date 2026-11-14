@@ -97,7 +97,7 @@ import { GameSelect } from './ui/GameSelect';
 import './ui/fleet/fleet-repeat.css';
 import { boardTimer, FlightsBoard, type FlightBoardItem, type FlightBoardCargo } from './ui/fleet/FlightsBoard.tsx';
 import './ui/fleet/flights-board.css';
-import { createFlightsBoardQaFixture, getFlightsBoardQaScenario } from './ui/fleet/flights-board-qa-fixture.ts';
+import type { FlightsBoardQaFixture } from './ui/fleet/flights-board-qa-fixture.ts';
 import { planetCoordinate } from './application/quick-actions.ts';
 
 const FLEET_ROOT_STATUS = 'Выберите корабли и миссию. Для колонизации сначала выберите свободную координату во Вселенной.';
@@ -1660,16 +1660,25 @@ function FleetWorkspace({
   };
 
   // Test Mode screenshot route `#flights-board-<scenario>`: seeded flights on a frozen clock, nothing in the save.
-  const boardQa = useMemo(() => {
-    const scenario = getFlightsBoardQaScenario(ACTIVE_RUNTIME_MODE);
-    if (!scenario) return null;
-    return createFlightsBoardQaFixture(scenario, {
-      home: planetId,
-      homeAt: planetCoordinate(saveState, planetId),
-      colony: Object.keys(saveState.planets).find((id) => id !== planetId) ?? planetId,
-      playerId: saveState.profile.playerId,
+  const boardQaRequested = ACTIVE_RUNTIME_MODE === 'test' && typeof window !== 'undefined' && window.location.hash.startsWith('#flights-board-') ? window.location.hash : '';
+  const [boardQa, setBoardQa] = useState<FlightsBoardQaFixture | null>(null);
+  useEffect(() => {
+    if (!boardQaRequested) return;
+    let live = true;
+    // Loaded only under the Test Mode route flag: the shipped game never carries the QA data (audit 13.11, 3.6).
+    void import('./ui/fleet/flights-board-qa-fixture.ts').then((module) => {
+      const scenario = module.getFlightsBoardQaScenario(ACTIVE_RUNTIME_MODE);
+      if (!live || !scenario) return;
+      setBoardQa(module.createFlightsBoardQaFixture(scenario, {
+        home: planetId,
+        homeAt: planetCoordinate(saveState, planetId),
+        colony: Object.keys(saveState.planets).find((id) => id !== planetId) ?? planetId,
+        playerId: saveState.profile.playerId,
+      }));
     });
-  }, [planetId]);
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boardQaRequested, planetId]);
   const boardNow = boardQa?.nowMs ?? clockNow;
   const boardRecords = boardQa?.records ?? activeFlightRecords;
   const boardEspionageLevel = boardQa?.espionageLevel ?? playerEspionageLevel;

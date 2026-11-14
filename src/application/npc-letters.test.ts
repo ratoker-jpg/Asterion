@@ -112,7 +112,7 @@ test('a bot invites the player to a joint attack: target, arrival window and fle
   assert.deepEqual(letter.answers.map((answer) => answer.kind), ['accept', 'decline']);
   assert.equal(letter.place?.planetId, w.targetPlanet, 'the target opens on the map');
   assert.match(letter.text, /Цель:/);
-  assert.match(letter.text, /кораблей/);
+  assert.match(letter.text, /около \d+ корабл/);
   assert.match(letter.text, /Ваш флот ждут/);
   assert.equal(buildReportSheet(personalItem(state, letter.id, START + 2 * MINUTE)).actions.map((action) => action.kind).join(), 'accept,decline');
 });

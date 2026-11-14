@@ -12,7 +12,7 @@ Status: focused pirate-operation and relevant domain/application checks have pas
 
 ## Implemented scenario
 
-Production UI and application wiring were implemented by the feature agents. This verification note records QA evidence only; see `PR3_IMPLEMENTATION_REPORT.md` for the implementation inventory.
+Production UI and application wiring were implemented by the feature agents. This verification note records QA evidence only; the implementation inventory file was removed from the repository root (see git history).
 
 ## State transitions and idempotency
 

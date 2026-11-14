@@ -1,3 +1,4 @@
+import { plural } from '../plural.ts';
 import { COMBAT_CATALOG, getCombatEntity } from './catalog.ts';
 import { getFactionCombatEntity } from './faction-catalog.ts';
 import { getCommanderCombatEffect, type CommanderId } from './commanders.ts';
@@ -1253,7 +1254,7 @@ function resolveReanimator(
   target.count += repairedCount;
   target.hpPool += repairedCount * target.lifePerUnit;
   events.push({
-    ...createAbilityEvent(sequence.value++, reanimator, 'reanimator', chance, draw, target, `Восстановлено ${repairedCount} кораблей; лимит за фазу ${effect?.cap ?? 15}.`),
+    ...createAbilityEvent(sequence.value++, reanimator, 'reanimator', chance, draw, target, `Восстановлено ${repairedCount} ${plural(repairedCount, 'корабль', 'корабля', 'кораблей')}; лимит за фазу ${effect?.cap ?? 15}.`),
     repairedCount,
     repairLimit: effect?.cap ?? 15,
     lifeBefore: target.hpPool - repairedCount * target.lifePerUnit,
@@ -1323,7 +1324,7 @@ function resolveDestroyerRevival(
         confidence: 'medium',
         note: 'The chance and amount coefficients match the official source and archive. Asterion approximates chance as one seeded opportunity per target ship stack with losses in this round; exact Nemexia RNG granularity is undocumented.',
       },
-      note: `Destroyer Revival (Aegis/Confederation): восстановлено ${repairedCount} кораблей из ${destroyedThisRound} потерь этого раунда; функционирующих Destroyers после действий — ${destroyerCount}, шанс ${(chance * 100).toFixed(3)}%, доля потерь ${(revivedShare * 100).toFixed(3)}%.`,
+      note: `Destroyer Revival (Aegis/Confederation): восстановлено ${repairedCount} ${plural(repairedCount, 'корабль', 'корабля', 'кораблей')} из ${destroyedThisRound} потерь этого раунда; функционирующих Destroyers после действий — ${destroyerCount}, шанс ${(chance * 100).toFixed(3)}%, доля потерь ${(revivedShare * 100).toFixed(3)}%.`,
     });
   }
 }

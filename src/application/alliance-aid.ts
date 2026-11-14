@@ -350,7 +350,7 @@ export function selectIraPlanet(state: SaveState) {
 export function prepareIraAidFixture(state: SaveState, context: AidContext): IraAidFixtureResult {
   const ira = selectIraPlanet(state);
   if (context.mode !== 'test' || !ira) {
-    return { ok: false, state, message: 'Сценарий Иры Вель доступен только в Test Mode.' };
+    return { ok: false, state, message: 'Сценарий Иры Вель доступен только в тестовом режиме.' };
   }
   const caps = getStorageCapacities(ira.buildings);
   const resources = ira.resources ?? { metal: 0, minerals: 0, gas: 0 };
@@ -394,7 +394,7 @@ export function createIraAidRequest(
 ): AidActionResult {
   const ira = selectIraPlanet(state);
   if (context.mode !== 'test' || !ira) {
-    return { ok: false, state, code: 'not_allowed', message: 'Сценарий Иры Вель доступен только в Test Mode.' };
+    return { ok: false, state, code: 'not_allowed', message: 'Сценарий Иры Вель доступен только в тестовом режиме.' };
   }
   const granted = grantAidChargesForTest(state.command, TEST_ALLY_OWNER_ID, 1, context.now);
   const result = createResourceRequest(granted, {

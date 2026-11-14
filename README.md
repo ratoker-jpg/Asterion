@@ -1,32 +1,50 @@
 # Asterion
 
-Desktop sci-fi strategy game prototype.
+Космическая стратегия для Windows (Electron + TypeScript + React). Игрок развивает планеты, строит флот, исследует вселенную, воюет с пиратами и ботами, вступает в союзы и штурмует Солнца. Мир живёт, пока игра открыта: боты и NPC действуют сами, а при выходе мир может продолжаться на облачном сервере.
 
-## Current vertical slice
-
-- Aegis planet screen
-- native 1920×1080 design canvas
-- launches fullscreen in Electron
-- `F11` toggles fullscreen
-- `Esc` exits fullscreen
-- planet/resource HUD
-- zone switching
-- one working construction queue item
-- local persistence via `localStorage`
-- existing Asterion source art is imported directly by Vite
-
-## Run locally
+## Запуск
 
 ```bash
 npm install
-npm run desktop
+npm run desktop      # сборка и запуск в Electron (полный экран, F11 — окно/весь экран)
+npm run dev          # только интерфейс в браузере, http://127.0.0.1:5173
 ```
 
-## Build Windows installer
+Тестовый режим (отдельное сохранение, ускорение времени, QA-сценарии): адрес с `?mode=test`.
+
+## Сборка установщика
 
 ```bash
-npm install
-npm run dist:win
+npm run dist:win     # установщик Windows в release/
 ```
 
-The installer is written to `release/`.
+## Проверки
+
+Локально достаточно типов и одиночных тестов:
+
+```bash
+npx tsc --noEmit
+node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test путь/к/файлу.test.ts
+```
+
+Всё тяжёлое (наборы `npm run test:*`, экранные QA `test:*-ui` в Electron, длинные прогоны мира) идёт на GitHub Actions: `.github/workflows/ci.yml`. Каждый тест должен входить ровно в один набор, а каждый набор — в CI; это проверяет `npm run test:inventory`.
+
+## Как устроены папки
+
+| Папка | Что там |
+| --- | --- |
+| `src/domain/` | Правила игры без интерфейса: бой, флот, постройки, наука, вселенная, пираты, NPC, союзы. Чистая логика, покрыта тестами. |
+| `src/application/` | Состояние кампании: сохранение (`persistence.ts`, `save-storage.ts`), полёты, миграции, мир в отдельном потоке (`live-world-*`), облачная синхронизация. |
+| `src/ui/`, `src/*.tsx`, `src/*.css` | Экраны и стили. Главный компонент — `src/App.tsx`. |
+| `electron/` | Оболочка: окно, файловое хранилище сохранений, облако, обновления, QA-сценарии экранов (`*-qa.cjs`). |
+| `server/` | Облачный сервер мира (раннер кампании, хранилище, выдача обновлений). |
+| `tools/` | Скрипты разработки: нумерация версий, «Что нового», стенды ботов, замеры. Одноразовые инструменты прошлых PR лежат в `tools/archive/`. |
+| `changelog/` | Заметки для игроков («Что нового»): по файлу на изменение в `changelog/notes/`. |
+| `docs/` | Аудиты, решения, отчёты, планы. Свежий аудит: `docs/audit/`. Выпуск версий: `docs/RELEASES.md`. |
+| `assets/`, `public/` | Исходная графика и звук. |
+
+## Правила работы
+
+- Версии только патчем (1.8.x); минорные и мажорные — по решению владельца.
+- Каждое заметное для игрока изменение — заметка в `changelog/notes/` (проверяет workflow «Player note»).
+- Сохранения только вперёд: новая схема получает миграцию, а перед миграцией игра делает копию.

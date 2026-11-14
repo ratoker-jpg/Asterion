@@ -37,6 +37,14 @@ export function inspectParsedSave(parsed: unknown, currentSchemaVersion: number)
   if (parsed.npcReplay !== undefined && !isNpcReplayMetadata(parsed.npcReplay)) {
     return { status: 'malformed', reason: 'Повреждён курсор экономического расчёта NPC.' };
   }
+  // Without a valid replay cursor the resource clock is the catch-up baseline: a broken value
+  // there would replay the world from 1970 (audit 13.11, 2.6), so such a save is not admitted.
+  if (parsed.npcReplay === undefined && plainObject(parsed.resourceClock) && parsed.resourceClock.lastReconciledAt !== undefined) {
+    const last = parsed.resourceClock.lastReconciledAt;
+    if (typeof last !== 'number' || !Number.isFinite(last) || last < 0) {
+      return { status: 'malformed', reason: 'Повреждены часы начисления ресурсов.' };
+    }
+  }
   // Do not admit or autosave a private foundation we cannot losslessly read.
   // Rescue/backup export remains available for these original bytes.
   if (parsed.npc !== undefined && !validateNpcState(parsed.npc)) {

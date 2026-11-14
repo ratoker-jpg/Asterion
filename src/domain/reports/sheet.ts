@@ -1,3 +1,4 @@
+import { plural } from '../plural.ts';
 import type { BattleReportViewModel, BattleSideViewModel, BattleStackViewModel } from '../combat/battle-report-view-model.ts';
 import { COMMANDER_ABILITIES, formatCommanderPresentedEffect, getCommanderPresentedAbility, type CommanderId } from '../combat/commanders.ts';
 import { getFactionCombatEntity } from '../combat/faction-catalog.ts';
@@ -97,13 +98,6 @@ function entity(factionId: string, id: string) {
   }
 }
 
-function plural(count: number, one: string, few: string, many: string) {
-  const tens = count % 100;
-  const ones = count % 10;
-  if (tens >= 11 && tens <= 14) return many;
-  if (ones === 1) return one;
-  return ones >= 2 && ones <= 4 ? few : many;
-}
 
 // ---------------------------------------------------------------- battle
 

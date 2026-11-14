@@ -4,6 +4,7 @@ const { registerSaveStore } = require('./save-store.cjs');
 const { registerUpdater } = require('./updater.cjs');
 const { registerCloud } = require('./cloud.cjs');
 const { handleWindowKey } = require('./window-keys.cjs');
+const { isGamePageUrl } = require('./navigation-guard.cjs');
 
 const WINDOW_PRESETS = {
   '1280x720': [1280, 720],
@@ -103,7 +104,14 @@ function createWindow() {
     if (Math.abs(win.webContents.getZoomFactor() - 1) > 0.001) win.webContents.setZoomFactor(1);
   });
 
-  win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+  const gamePage = path.join(__dirname, '..', 'dist', 'index.html');
+  // Only the game's own page is ever shown (audit 13.11, 2.12): no new windows, no navigation away
+  // (a link in a player's name from the cloud must not open a site inside the game window).
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('will-navigate', (event, url) => {
+    if (!isGamePageUrl(url, gamePage)) event.preventDefault();
+  });
+  win.loadFile(gamePage);
 
   win.on('enter-full-screen', () => emitDisplayState(win));
   win.on('leave-full-screen', () => emitDisplayState(win));

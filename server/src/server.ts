@@ -14,10 +14,11 @@ import zlib from 'node:zlib';
 import { fork, type ChildProcess } from 'node:child_process';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { pipeline } from 'node:stream/promises';
+import { promisify } from 'node:util';
 import { Transform } from 'node:stream';
 import {
   addSnapshot, campaignDir, checkUpload, crashCheckpointFile, crashDiagnosticsFile, createCampaign, describeCampaign, headSnapshot, listCampaigns,
-  liveCheckpointFile, planRotation, readCampaign, removeSnapshots, snapshotFile, writeCampaign, CAMPAIGN_ID, DEFAULT_RETENTION,
+  liveCheckpointFile, planRotation, readCampaign, removeSnapshots, snapshotFile, sweepLeftoverFiles, writeCampaign, CAMPAIGN_ID, DEFAULT_RETENTION,
   type Campaign, type LiveRecovery, type RetentionPolicy, type Snapshot,
 } from './store.ts';
 import type { RunnerMessage, RunnerRequest, RunnerStart, RunnerWritten } from './runner.ts';
@@ -25,6 +26,8 @@ import { CLOUD_LEASE_MS, compareGameVersions } from '../../src/application/cloud
 import { formatNpcJournalLines, parseNpcJournalLines } from '../../src/application/npc-journal.ts';
 
 declare const __ASTERION_SERVER_VERSION__: string | undefined;
+
+const gzipAsync = promisify(zlib.gzip);
 
 export type ServerConfig = {
   host: string;
@@ -289,7 +292,10 @@ export function createCloudServer(config: ServerConfig) {
       run.waiting.set('ready', (message) => (message.type === 'ready' ? resolve() : reject(new Error((message as { message?: string }).message ?? 'runner failed'))));
     });
     run.ready.catch(() => undefined);
-    child.on('message', (message: RunnerMessage) => onRunnerMessage(run, message));
+    child.on('message', (message: RunnerMessage) => {
+      // A full disk while recording a runner message must not take the whole server down.
+      try { onRunnerMessage(run, message); } catch (error) { config.log(`live ${campaign.id}: runner message not handled: ${String(error)}`); }
+    });
     child.on('exit', (code, signal) => {
       run.exited = true;
       for (const [, waiter] of run.waiting) waiter({ type: 'error', message: `runner exited (${code ?? signal})` });
@@ -563,6 +569,8 @@ export function createCloudServer(config: ServerConfig) {
       const stats = fs.statfsSync(config.dataDir);
       free = stats.bavail * stats.bsize;
     } catch { /* no statfs: the size budget still applies */ }
+    const swept = sweepLeftoverFiles(config.dataDir);
+    if (swept.length) config.log(`rotation: removed ${swept.length} leftover file(s)`);
     const campaigns = listCampaigns(config.dataDir);
     const doomed = planRotation(campaigns, config.retention, free);
     const byCampaign = new Map<string, Set<number>>();
@@ -583,6 +591,12 @@ export function createCloudServer(config: ServerConfig) {
   const failures = new Map<string, { count: number; since: number; blockedUntil: number }>();
   const buckets = new Map<string, { tokens: number; at: number }>();
 
+  /** Forgets addresses that are neither blocked nor recently seen: the maps would grow for ever. */
+  function pruneLimiters(now = Date.now()): void {
+    for (const [ip, record] of failures) if (record.blockedUntil <= now && now - record.since >= 10 * 60_000) failures.delete(ip);
+    for (const [ip, bucket] of buckets) if (now - bucket.at >= 2 * 60_000) buckets.delete(ip);
+  }
+
   function clientIp(request: http.IncomingMessage): string {
     const remote = request.socket.remoteAddress ?? '';
     const forwarded = request.headers['x-forwarded-for'];
@@ -594,6 +608,7 @@ export function createCloudServer(config: ServerConfig) {
 
   function rateLimit(ip: string): void {
     const now = Date.now();
+    if (buckets.size > 512 || failures.size > 512) pruneLimiters(now);
     const bucket = buckets.get(ip) ?? { tokens: 60, at: now };
     bucket.tokens = Math.min(60, bucket.tokens + ((now - bucket.at) / 60_000) * 60);
     bucket.at = now;
@@ -655,7 +670,8 @@ export function createCloudServer(config: ServerConfig) {
     const force = header(request, 'x-asterion-force') === '1';
     const worldAt = Number(header(request, 'x-asterion-world-at'));
     const clockOffsetMs = Math.round(Number(header(request, 'x-asterion-clock-offset') || 0));
-    const name = decodeURIComponent(header(request, 'x-asterion-name') || '').slice(0, 60);
+    let name: string;
+    try { name = decodeURIComponent(header(request, 'x-asterion-name') || '').slice(0, 60); } catch { throw new HttpError(400, 'bad-headers', 'Bad upload headers.'); }
     if (!Number.isSafeInteger(baseRevision) || baseRevision < 0 || !VERSION.test(gameVersion) || !Number.isSafeInteger(schemaVersion)
       || !DIGEST.test(digest) || !DEVICE.test(deviceId) || !Number.isFinite(worldAt) || !Number.isFinite(clockOffsetMs)
       || Math.abs(clockOffsetMs) > 400 * 86_400_000) {
@@ -1014,7 +1030,9 @@ export function createCloudServer(config: ServerConfig) {
     if (action === 'bot-journal' && request.method === 'GET' && !snapshotId) {
       if (!readCampaign(config.dataDir, id)) throw new HttpError(404, 'not-found', 'Кампании нет на сервере.');
       const file = botJournalFile(id);
-      const body = zlib.gzipSync(fs.existsSync(file) ? fs.readFileSync(file) : Buffer.alloc(0));
+      // Off the main loop: a journal of tens of MB must not stall heartbeats.
+      const raw = await fs.promises.readFile(file).catch(() => Buffer.alloc(0));
+      const body = await gzipAsync(raw);
       response.writeHead(200, { 'content-type': 'application/x-ndjson; charset=utf-8', 'content-encoding': 'gzip', 'content-length': body.length });
       response.end(body);
       return;
@@ -1080,7 +1098,7 @@ export function createCloudServer(config: ServerConfig) {
           writeCampaign(config.dataDir, { ...campaign, live: { ...campaign.live!, status: 'paused' } });
         }
       }
-      leaseTimer = setInterval(() => void takeOverLapsed(), config.leaseCheckMs);
+      leaseTimer = setInterval(() => { pruneLimiters(); void takeOverLapsed(); }, config.leaseCheckMs);
       leaseTimer.unref();
       config.log(`asterion cloud ${config.version} listening on ${config.host}:${typeof address === 'object' && address ? address.port : config.port}`);
       return typeof address === 'object' && address ? address.port : config.port;
@@ -1119,6 +1137,10 @@ if (isMain) {
     stopping = true;
     cloud.close().finally(() => process.exit(0));
   };
+  // A full disk inside a runner message handler (or anything else unforeseen) is logged, not fatal:
+  // the world would otherwise stop for everyone until someone restarts the service.
+  process.on('uncaughtException', (error) => { console.error(`asterion cloud: uncaught exception (kept running): ${error instanceof Error ? error.stack ?? error.message : String(error)}`); });
+  process.on('unhandledRejection', (reason) => { console.error(`asterion cloud: unhandled rejection (kept running): ${reason instanceof Error ? reason.stack ?? reason.message : String(reason)}`); });
   process.on('SIGTERM', stop);
   process.on('SIGINT', stop);
 }

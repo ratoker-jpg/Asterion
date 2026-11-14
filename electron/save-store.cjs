@@ -89,6 +89,23 @@ function pruneOrphanFiles(keep, now = Date.now()) {
   return removed;
 }
 
+// A write cut short by a crash leaves `<file>.tmp` (50-500 MB each): swept at start when older than an hour.
+function sweepStaleTemporaryFiles(dir, now = Date.now()) {
+  const removed = [];
+  let names = [];
+  try { dir = dir || savesDir(); names = fs.readdirSync(dir); } catch { return removed; }
+  for (const name of names) {
+    if (!name.endsWith('.tmp')) continue;
+    const file = path.join(dir, name);
+    try {
+      if (now - fs.statSync(file).mtimeMs < ORPHAN_MIN_AGE_MS) continue;
+      fs.rmSync(file, { force: true });
+      removed.push(name);
+    } catch { /* busy or gone: next start */ }
+  }
+  return removed;
+}
+
 // Reads the save file a pointer names (the cloud upload, from the main process).
 function readSaveFile(key, writeId) {
   if (!KEY.test(key) || !WRITE_ID.test(writeId)) throw new Error('Invalid save key.');
@@ -123,6 +140,7 @@ async function writeFromPort(port, message) {
 }
 
 function registerSaveStore() {
+  sweepStaleTemporaryFiles();
   ipcMain.on('asterion:save-store:port', (event) => {
     const port = event.ports && event.ports[0];
     if (!port) return;
@@ -237,11 +255,11 @@ function registerSaveStore() {
       return { ok: false, error: String(error && error.message || error) };
     }
   });
-  ipcMain.on('asterion:save-store:remove', (event, key) => {
+  ipcMain.on('asterion:save-store:remove', (event, key, savesOnly) => {
     try {
       if (!KEY.test(key)) throw new Error('Invalid save key.');
       for (const name of filesOf(key)) fs.rmSync(path.join(savesDir(), name), { force: true });
-      fs.rmSync(botJournalFile(key), { force: true });
+      if (savesOnly !== true) fs.rmSync(botJournalFile(key), { force: true });
       event.returnValue = { ok: true };
     } catch (error) {
       event.returnValue = { ok: false, error: String(error && error.message || error) };
@@ -249,4 +267,4 @@ function registerSaveStore() {
   });
 }
 
-module.exports = { staleVersionsToDrop, STALE_GRACE_MS, registerSaveStore, pruneOrphanFiles, readSaveFile, readSaveFileSync };
+module.exports = { staleVersionsToDrop, STALE_GRACE_MS, registerSaveStore, pruneOrphanFiles, sweepStaleTemporaryFiles, readSaveFile, readSaveFileSync };
