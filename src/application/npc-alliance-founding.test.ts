@@ -121,6 +121,7 @@ test('first screen: bots that want the new alliance are listed, «Позвать
   assert.equal(prospects[0]!.keenness, 1, 'the keenest first');
   for (const prospect of prospects) {
     assert.ok(prospect.name && prospect.reason, 'a name and a reason in words');
+    assert.ok(prospect.factionId, 'the race portrait instead of initials');
     assert.equal(selectOwnerMembership(founded.command, prospect.ownerId), null, 'only bots without an alliance');
   }
   // Pure reading: the same save gives the same list.

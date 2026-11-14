@@ -224,6 +224,8 @@ async function runViewport(win, directory, label) {
     fail('The founded crest is not the one picked in the wizard', { wizard: metrics.wizardCrest, firstScreen: metrics.firstCrest, saved: metrics.savedCrest });
   }
   if (metrics.prospects < 2) fail('«Им подходит ваш союз» shows fewer than 2 bots', metrics.prospects);
+  metrics.prospectFaces = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-qa-prospect-face]')).map((node) => node.dataset.qaProspectFace)`);
+  if (metrics.prospectFaces.length !== metrics.prospects) fail('A prospect has no face (initials?)', metrics.prospectFaces);
   metrics.toastOverFirstScreen = await win.webContents.executeJavaScript(`Boolean(document.querySelector('.command-feedback, [role="status"].toast, .asterion-toast'))`);
   await shot('07-first-screen', { allowScroll: true });
   if (metrics.prospects > 0) {

@@ -13,6 +13,8 @@ import { applyNpcDiplomacyAction, getNpcDiplomacyCandidates } from './npc-diplom
 export type AllianceProspect = Readonly<{
   ownerId: string;
   name: string;
+  /** The bot's race as its planets show it on the map (a bot without an alliance has no crest to show). */
+  factionId?: string;
   /** What the bot looks for in an alliance, in words. */
   reason: string;
   /** 0..1 against the other prospects: how keen it is. */
@@ -21,9 +23,12 @@ export type AllianceProspect = Readonly<{
 
 export const ALLIANCE_PROSPECT_LIMIT = 4;
 
+function ownerTarget(state: SaveState, ownerId: string) {
+  return Object.values(state.espionage?.targets ?? {}).find((item) => item.ownerId === ownerId && item.kind === 'npc');
+}
+
 function ownerName(state: SaveState, ownerId: string): string {
-  const target = Object.values(state.espionage?.targets ?? {}).find((item) => item.ownerId === ownerId && item.kind === 'npc');
-  return target?.ownerName.trim() || ownerId;
+  return ownerTarget(state, ownerId)?.ownerName.trim() || ownerId;
 }
 
 /** What the bot looks for, from the same taste its choice uses. */
@@ -56,6 +61,7 @@ export function selectAllianceProspects(state: SaveState, allianceId: string, at
   return found.slice(0, limit).map(({ profile, weight }) => ({
     ownerId: profile.ownerId,
     name: ownerName(state, profile.ownerId),
+    ...(ownerTarget(state, profile.ownerId)?.raceId ? { factionId: ownerTarget(state, profile.ownerId)!.raceId } : {}),
     reason: prospectReason(profile),
     keenness: top > 0 ? Math.round((weight / top) * 100) / 100 : 0,
   }));

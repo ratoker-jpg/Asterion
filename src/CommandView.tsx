@@ -245,6 +245,12 @@ function Avatar({ name, role, factionId, size = 'md' }: { name: string; role?: A
   );
 }
 
+/** A bot without an alliance has no crest yet: its race portrait, or a neutral commander mark — never initials. */
+function ProspectFace({ factionId }: { factionId?: string }) {
+  const face = factionId ? FACTION_FACES[factionId] : undefined;
+  return <span className="alliance-first-face" data-qa-prospect-face={face ? factionId : 'neutral'}><Img src={face ?? REPORT_ICONS.profile} /></span>;
+}
+
 /** Large hero art for a person: the race general when the race is really known, otherwise an honest monogram. */
 function PersonArt({ name, factionId }: { name: string; factionId?: string }) {
   const general = getFactionGeneralAsset(factionId);
@@ -1040,7 +1046,7 @@ function Overview({ command, allianceId, ownerId, role, ownerScores, ownerFactio
             <ul className="alliance-first-prospects" data-qa-prospects>
               {prospects.map((prospect) => (
                 <li key={prospect.ownerId} data-qa-prospect={prospect.ownerId}>
-                  <Avatar name={prospect.name} factionId={ownerFactions[prospect.ownerId]} />
+                  <ProspectFace factionId={prospect.factionId ?? ownerFactions[prospect.ownerId]} />
                   <div>
                     <b>{prospect.name}</b>
                     <span>{prospect.reason} · {number.format(memberScore(ownerScores, prospect.ownerId).totalPoints)} очков</span>

@@ -156,6 +156,8 @@
 
 .alliance-first-prospects { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .alliance-first-prospects li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--ut-r-card, 13px); background: var(--cm-tint); }
+.alliance-first-face { display: grid; place-items: center; width: 52px; aspect-ratio: 1; overflow: hidden; border-radius: 12px; background: radial-gradient(circle at 50% 35%, rgba(126, 200, 220, .16), rgba(0, 0, 0, .25)); box-shadow: inset 0 0 0 1px var(--cm-line); }
+.alliance-first-face img { width: 100%; height: 100%; object-fit: cover; }
 .alliance-first-prospects li > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .cmdA .alliance-first-prospects b { color: #fff; font-weight: 800; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .cmdA .alliance-first-prospects span { color: var(--cm-muted); font-size: calc(13px * var(--text-scale-secondary, 1)) !important; overflow-wrap: anywhere; }
