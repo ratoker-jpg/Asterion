@@ -26,6 +26,12 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          # 428 MB of committed QA frames are not needed to run any job.
+          sparse-checkout: |
+            /*
+            !/visual-qa/
+          sparse-checkout-cone-mode: false
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -121,6 +127,12 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          # 428 MB of committed QA frames are not needed to run any job.
+          sparse-checkout: |
+            /*
+            !/visual-qa/
+          sparse-checkout-cone-mode: false
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -137,24 +149,31 @@ jobs:
     timeout-minutes: ${{ matrix.timeout-minutes || 25 }}
     strategy:
       fail-fast: false
-      # Shards are balanced by measured CI step times (about 4-6 minutes each, 27.10.2026).
+      # Shards are balanced by measured per-suite times from CI (14.11.2026): seven
+      # shards of about 8 minutes of suites each (was 5 shards of 5-19 minutes).
+      # Re-balance with the per-suite group times in the job log when a suite is
+      # added: the sum of suite seconds / 7 is the target for each shard.
+      # NPC replay (owner decision 25.10.2026): a long absence is caught up in full
+      # behind a progress bar; long-horizon durations are measured by npc-full-world.
+      # The cloud world QA runs the game against the server's own code on localhost.
       # Entry format: npm-script[:skip] where :skip sets ASTERION_SKIP_SCREENSHOTS=1
       # (GitHub's hidden Windows compositor can block captures on long pages).
       matrix:
         include:
-          - shard: visual
-            suites: "qa:visual test:test-mode-ui:skip test:header-ui test:resource-assets-ui test:save-safety-ui:skip test:save-store-ui test:whats-new-ui test:rating-ui test:settings-screens-ui test:menu-wizard-ui test:esc-fullscreen-ui"
-          - shard: science-reports
-            suites: "test:science-ui:skip test:building-actions-ui test:planet-pass-ui test:planet-screens-ui test:messages-screens-ui test:command-screens-ui test:operations-screens-ui test:universe-card-ui test:reports-format-ui test:reports-ui test:battle-reports-ui:skip test:battles-mine-ui test:simulator-ui:skip test:space-flight-ui:skip test:production-test-isolation-ui:skip"
-          # Owner decision (25.10.2026): a long absence is caught up in full
-          # behind a progress bar and the player waits; there is no 14-day /
-          # 120 s limit any more. The scoped replay QA checks the progress
-          # banner, the pending-command gate, completion and state consistency.
-          # Long-horizon durations are measured by the npc-full-world job.
-          # The cloud world QA runs the game against the server's own code on
-          # localhost (no real server is reached from CI).
-          - shard: campaign-command
-            suites: "test:new-game-ui:skip test:command-ui:skip test:command-aid-ui:skip test:command-journal-ui:skip test:cloud-world-ui:skip test:catchup-summary-ui:skip"
+          - shard: electron-1
+            suites: "qa:visual test:command-screens-ui test:fleet-ship-cards-ui test:energy-ui:skip test:production-test-isolation-ui:skip"
+          - shard: electron-2
+            suites: "test:cloud-world-ui:skip test:settings-screens-ui test:empire-ui test:quick-actions-ui test:header-ui test:esc-fullscreen-ui test:menu-wizard-ui"
+          - shard: electron-3
+            suites: "test:new-game-ui:skip test:test-mode-ui:skip test:operations-screens-ui test:command-aid-ui:skip test:fleet-repeat-ui test:catchup-summary-ui:skip test:save-store-ui"
+          - shard: electron-4
+            suites: "test:fleet-planner-ui test:reports-format-ui test:messages-screens-ui test:flights-board-ui test:save-safety-ui:skip test:battle-reports-ui:skip"
+          - shard: electron-5
+            suites: "test:science-ui:skip test:fleet-ui:skip test:command-journal-ui:skip test:whats-new-ui test:building-actions-ui test:quick-send-cargo-ui"
+          - shard: electron-6
+            suites: "test:planet-screens-ui test:map-colors-ui test:universe-ui:skip test:battles-mine-ui test:command-ui:skip test:simulator-ui:skip test:icons-batch-ui"
+          - shard: electron-7
+            suites: "test:universe-card-ui test:planet-pass-ui test:build-planner-ui test:reports-ui test:repair-ui:skip test:rating-ui test:space-flight-ui:skip test:resource-assets-ui"
           # The PR gate replays six game hours: the banner, command gate,
           # completion and state checks need no full day, which took about
           # 14 minutes. Whole days run in the long-horizon job (main and nightly).
@@ -164,10 +183,14 @@ jobs:
           # catches a screen that blocks the UI thread every second again.
           - shard: npc-replay
             suites: "test:npc-replay-ui-6h test:pirate-operations-ui test:late-game-fps-ui:skip"
-          - shard: fleet-universe
-            suites: "test:map-colors-ui test:fleet-ui:skip test:universe-ui:skip test:quick-actions-ui test:quick-send-cargo-ui test:empire-ui test:fleet-planner-ui test:fleet-ship-cards-ui test:icons-batch-ui test:build-planner-ui test:fleet-repeat-ui test:flights-board-ui test:energy-ui:skip test:repair-ui:skip"
     steps:
       - uses: actions/checkout@v4
+        with:
+          # 428 MB of committed QA frames are not needed to run any job.
+          sparse-checkout: |
+            /*
+            !/visual-qa/
+          sparse-checkout-cone-mode: false
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -176,6 +199,9 @@ jobs:
         run: npm ci
       - name: Build renderer
         run: npm run build
+      - name: Mark QA start
+        shell: bash
+        run: touch .ci-qa-start
       - name: Run Electron QA suites
         shell: bash
         run: |
@@ -186,11 +212,26 @@ jobs:
             npm run "$script" || { echo "::endgroup::"; echo "::error::$script failed"; exit 1; }
             echo "::endgroup::"
           done
-      - name: Upload visual QA artifact
+      # Sessions download this: only the frames this shard made, as JPEG (a few MB).
+      - name: Pack QA frames (JPEG)
+        if: always()
+        shell: bash
+        run: node tools/ci-frames.mjs .ci-qa-start qa-frames visual-qa artifacts-pass1 artifacts
+      - name: Upload QA frames
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: Asterion-QA-${{ matrix.shard }}
+          name: qa-frames-${{ matrix.shard }}
+          path: qa-frames/**/*
+          if-no-files-found: ignore
+          retention-days: 7
+          compression-level: 0
+      # Full-size originals only when a suite failed (traces for diagnosis).
+      - name: Upload failure originals
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: qa-failure-${{ matrix.shard }}
           path: |
             visual-qa/**/*
             artifacts-pass1/science-qa/**/*
@@ -201,8 +242,8 @@ jobs:
             artifacts/pirate-operations-qa/**/*
             artifacts/save-safety-qa/**/*
             artifacts/npc-replay-qa*/**/*
-          if-no-files-found: warn
-          retention-days: 14
+          if-no-files-found: ignore
+          retention-days: 3
 
   # 30-day NPC replay horizons and the one-day Electron catch-up hold a runner
   # for about 25 minutes, so pull requests run 1-7 day horizons and six game
@@ -214,6 +255,12 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+        with:
+          # 428 MB of committed QA frames are not needed to run any job.
+          sparse-checkout: |
+            /*
+            !/visual-qa/
+          sparse-checkout-cone-mode: false
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -252,6 +299,12 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
+        with:
+          # 428 MB of committed QA frames are not needed to run any job.
+          sparse-checkout: |
+            /*
+            !/visual-qa/
+          sparse-checkout-cone-mode: false
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -290,6 +343,12 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          # 428 MB of committed QA frames are not needed to run any job.
+          sparse-checkout: |
+            /*
+            !/visual-qa/
+          sparse-checkout-cone-mode: false
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -298,13 +357,16 @@ jobs:
         run: npm ci
       - name: Package Windows app
         run: npm run dist:win
+      # 600 MB per PR run is not needed to merge: the installer is attached
+      # only to manual runs (Actions > CI > Run workflow); a PR still builds it.
       - name: Upload Windows installer
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v6
         with:
           name: Asterion-Windows
           path: release/*.exe
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 7
 
   # Every push to main (a merged PR) becomes a GitHub Release vX.Y.Z that the
   # installed game finds through electron-updater (docs/RELEASES.md). The
