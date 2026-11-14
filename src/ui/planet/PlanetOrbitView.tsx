@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
 
-import { usePlanetLargeArt } from '../../planet-skin-large.ts';
+import { planetLargeScale, usePlanetLargeArt } from '../../planet-skin-large.ts';
 import { ResourceIcon } from '../resources/ResourceIcon';
 
 export type PlanetOrbitZone = 'resource' | 'industry' | 'military';
@@ -46,7 +46,7 @@ export function PlanetOrbitView({
     <div className="planet-page-v3 planet-orbit" data-qa-planet-orbit>
       <div className="planet-orbit__ring planet-orbit__ring--outer" aria-hidden="true" />
       <div className="planet-orbit__ring" aria-hidden="true" />
-      <img className="planet-image-v3 planet-orbit__planet" data-qa-planet-skin-art src={bigArt} alt={name} draggable={false} />
+      <img className="planet-image-v3 planet-orbit__planet" data-qa-planet-skin-art src={bigArt} alt={name} draggable={false} style={{ '--planet-scale': planetLargeScale(skinId) } as CSSProperties} />
 
       <div className="planet-orbit__side">
       <header className="planet-orbit__name scene-title">

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 
+import { LARGE_PLANET_SCALE } from './planet-skin-large.generated.ts';
+
 /**
  * 1024 px pictures of the planet looks, for the planet screen only.
  * Each file is fetched the first time its look is shown; the rest of the app
@@ -31,6 +33,14 @@ export function largePlanetArt(skinId: string): Promise<string | undefined> {
   const request = load ? load().catch(() => undefined) : Promise.resolve(undefined);
   requests.set(skinId, request);
   return request;
+}
+
+/**
+ * CSS scale for the look's 1024 px picture, so the planet is as big on screen as the
+ * look was before the 1024 px batch (see build-large.py). 1 for an unknown look.
+ */
+export function planetLargeScale(skinId: string | undefined): number {
+  return (skinId && LARGE_PLANET_SCALE[skinId]) || 1;
 }
 
 /**
