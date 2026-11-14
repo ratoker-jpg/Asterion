@@ -1,4 +1,5 @@
 import { Fragment, useMemo, useState, type CSSProperties } from 'react';
+import { SCORE_ICONS } from './ui/ui-icons.ts';
 import { describeOwnerPresence } from './application/owner-presence.ts';
 import { UNIVERSE_COORDINATE_OPEN_EVENT } from './application/flights.ts';
 import { getFactionGeneralAsset } from './domain/profile/faction-assets.ts';
@@ -6,7 +7,6 @@ import type { RatedAllianceDetails, RatedOwnerIdentity } from './domain/runtime/
 import { EmblemGlyph } from './CommandView';
 import { CrystalDots, RoleBadge } from './ui/command/AllianceBadges';
 import { RATING_BACKDROP, RATING_MEDALS } from './ui/ui-art.ts';
-import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
 import { CURRENT_PLAYER_ID, createOwnerRatingEntries, createPlayerRatingEntries, withTestOwnerScoreFixtures } from './domain/rating/fixtures.ts';
 import {
   ALLIANCE_CRYSTALS_NOTE,
@@ -300,9 +300,9 @@ function PlayerTable({
     <div className="rating-table-v2 rating-table-v2--players" role="table" aria-label="Рейтинг игроков">
       <div className="rating-row-v2 rating-head-v2" role="row">
         <span>МЕСТО</span><span>ИГРОК</span><span>РАСА</span><span>АЛЬЯНС</span>
-        <ScoreHead label="ОБЩИЕ" iconPath={asterionAssetIntegrationAssets.scoreIcons.totalPoints} scoreKey="totalPoints" selected={sortKey === 'totalPoints'} direction={direction} onSort={onSort} />
-        <ScoreHead label="РЕСУРС." iconPath={asterionAssetIntegrationAssets.scoreIcons.resourcePoints} scoreKey="resourcePoints" selected={sortKey === 'resourcePoints'} direction={direction} onSort={onSort} />
-        <ScoreHead label="БОЕВЫЕ" iconPath={asterionAssetIntegrationAssets.scoreIcons.battlePoints} scoreKey="battlePoints" selected={sortKey === 'battlePoints'} direction={direction} onSort={onSort} />
+        <ScoreHead label="ОБЩИЕ" iconPath={SCORE_ICONS.totalPoints} scoreKey="totalPoints" selected={sortKey === 'totalPoints'} direction={direction} onSort={onSort} />
+        <ScoreHead label="РЕСУРС." iconPath={SCORE_ICONS.resourcePoints} scoreKey="resourcePoints" selected={sortKey === 'resourcePoints'} direction={direction} onSort={onSort} />
+        <ScoreHead label="БОЕВЫЕ" iconPath={SCORE_ICONS.battlePoints} scoreKey="battlePoints" selected={sortKey === 'battlePoints'} direction={direction} onSort={onSort} />
       </div>
       {entries.map((entry) => (
         <Fragment key={entry.id}>

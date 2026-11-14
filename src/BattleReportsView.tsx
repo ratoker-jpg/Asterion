@@ -1,4 +1,5 @@
 import { getLiveSaveState } from './application/runtime.ts';
+import { SCORE_ICONS } from './ui/ui-icons.ts';
 import { createPortal } from 'react-dom';
 import { SunReportStrip } from './ui/sun-raid/SunReportStrip.tsx';
 import { EMPTY_ART } from './ui/ui-art.ts';
@@ -308,11 +309,11 @@ function BattleSideLedger({ viewModel, side }: { viewModel: BattleReportViewMode
       </div>
       <div className="battle-card-points-v1 bcard-ledger__points" data-qa-battle-award-state={awardDisplay.state}>
         <span className={awardDisplay.state === 'not-awarded' || awardDisplay.points == null ? 'is-off' : 'is-good'}>
-          <img src={asterionAssetIntegrationAssets.scoreIcons.battlePoints} alt="" aria-hidden="true" draggable={false} />
+          <img src={SCORE_ICONS.battlePoints} alt="" aria-hidden="true" draggable={false} />
           <small>Боевые очки</small><b>{battleValue}</b>
         </span>
         <span className="is-bad">
-          <img src={asterionAssetIntegrationAssets.scoreIcons.resourcePoints} alt="" aria-hidden="true" draggable={false} />
+          <img src={SCORE_ICONS.resourcePoints} alt="" aria-hidden="true" draggable={false} />
           <small>Ресурсные очки · потеряно</small><b>−{formatResourcePoints(battleCardResourcePointsLost(viewModel, side))}</b>
         </span>
       </div>

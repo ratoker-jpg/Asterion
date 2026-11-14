@@ -56,3 +56,22 @@ Game UI icon for a dark sci-fi space strategy game. Subject: {S}. House style: p
 Переделаны после проверки листа: `m-aid` (первая версия читалась как аптечка), `m-debris-finder` (полупрозрачный конус терялся в 24 px), `m-transport` (слишком тонкий силуэт в 24 px).
 
 `zone-military` переделана 14.11 по слову владельца: «скрещённые стволы на щите» не читались как военная зона; из трёх вариантов (ракета, турель, щит с шевронами) выбран щит с красными шевронами.
+
+## Иконки отчётов и очков (добавлены 14.11)
+
+Владелец: в «Командовании» и «Операциях» новые иконки стояли вперемешку со старым тёмным набором `report-icons` / `score-icons`. Набор перерисован целиком, в игру — WebP 96 px в `public/assets/generated/ui-icons-v2/` (имена файлов прежние), подключение через `src/ui/ui-icons.ts`. Старые файлы интеграции не тронуты: их исходники охраняет `tools/asterion-asset-integration.mjs`.
+
+| Файл | Subject |
+|---|---|
+| `r-achievements` | achievements: a round medal with a small laurel wreath and a star in the centre (signature colour: warm gold) |
+| `r-alliances` | alliance members: two interlocked thick silver rings with glowing cyan cores |
+| `r-arena` | diplomacy and war: two crossed glowing cyan energy blades with silver hilts |
+| `r-command_reports` | alliance applications: a thin metal data tablet with a bold cyan arrow entering it from the right |
+| `r-flights` | flights: a small sleek ship travelling along a thin elliptical orbit path with a cyan trail |
+| `r-profile` | player profile: a single commander helmet seen from the front with a wide cyan visor |
+| `r-reports` | reports: a thin metal data tablet with a glowing cyan bar chart and a small check mark |
+| `r-system` | system messages: a glowing cyan core with two small satellites on thin silver orbit rings |
+| `s-achievement-trophy` | achievement points: a trophy cup with two handles on a short base (signature colour: warm gold) |
+| `s-battle` | battle points: a silver shield with two crossed cannon barrels behind it and a red glowing centre (signature colour: red) |
+| `s-overall-star` | total points: a bold five-pointed star with bevelled facets (signature colour: warm gold) |
+| `s-resource-crystal` | resource points: one big faceted cyan crystal standing in a gold-trimmed silver base |

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { REPORT_ICONS, SCORE_ICONS } from './ui/ui-icons.ts';
 
 import { MAX_ALLIANCE_MEMBERS, TEST_BOT_ALLIANCE_ID } from './domain/command/catalog.ts';
 import {
@@ -149,8 +150,6 @@ const ROLE_COLORS: Record<AllianceRole, string> = {
 
 const FACTION_LABELS: Record<string, string> = { aegis: 'Астеры', synod: 'Илары', veyra: 'Рой' };
 
-const SCORE_ICONS = asterionAssetIntegrationAssets.scoreIcons;
-const REPORT_ICONS = asterionAssetIntegrationAssets.reportIcons;
 const FACTION_FACES: Readonly<Record<string, string>> = asterionAssetIntegrationAssets.battleFactionIcons;
 const TAB_ICONS: Record<CommandTab, string> = {
   overview: commandHeaderIcon,

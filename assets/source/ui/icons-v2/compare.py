@@ -12,6 +12,10 @@ rows+=[('ops-available',os.path.join(OLDM,'23_deep_scan.png'),os.path.join(NEWH,
 M=[('transport','01_transport'),('espionage','02_espionage'),('attack','03_attack'),('deployment','04_deployment'),('colonize','05_colonize'),('recycle','06_recycle'),('gas','07_gas_harvest'),('sun-support','08_sun_support'),('space-flight','09_space_flight'),('pirate-elimination','10_pirate_elimination'),('expedition','31_expedition'),('aid','33_trade_convoy'),('gate','29_wormhole_expedition')]
 rows+=[('m '+n,os.path.join(OLDM,o+'.png'),os.path.join(NEWM,n+'.webp')) for n,o in M]
 rows+=[('sun-raid',os.path.join(oldsr,'mission-sun-raid.webp'),os.path.join(SR,'mission-sun-raid.webp')),('debris-finder',os.path.join(oldsr,'debris-finder.webp'),os.path.join(SR,'debris-finder.webp'))]
+
+OLDR=os.path.join(W,'public','assets','generated','asterion','ui'); NEWR=os.path.join(W,'public','assets','generated','ui-icons-v2')
+for grp,names in (('report-icons',['profile','alliances','command-reports','arena','reports','flights','system','achievements']),('score-icons',['overall-star','resource-crystal','battle','achievement-trophy'])):
+  rows+=[(n,os.path.join(OLDR,grp,n+'.webp'),os.path.join(NEWR,grp,n+'.webp')) for n in names]
 def strip(path):
   im=Image.open(path).convert('RGBA'); cell=Image.new('RGBA',(96+48+24+40,100),(0,0,0,0)); x=0
   for s in (96,48,24): cell.alpha_composite(im.resize((s,s),Image.LANCZOS),(x,(100-s)//2)); x+=s+12

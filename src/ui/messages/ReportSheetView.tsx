@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react';
+import { REPORT_ICONS } from '../ui-icons.ts';
 
 import { FactionGeneralPortrait } from '../FactionGeneralPortrait.tsx';
 import { EmblemGlyph } from '../command/EmblemGlyph.tsx';
 import { ResourceIcon } from '../resources/ResourceIcon.tsx';
 import pirateWarlordArt from '../../../assets/source/characters/pirates/pirate_warlord.png';
-import { asterionAssetIntegrationAssets } from '../../assets/generated/asterionAssetIntegrationManifest.generated.ts';
 import { getFactionCombatEntity } from '../../domain/combat/faction-catalog.ts';
 import type { CommandState } from '../../domain/command/types.ts';
 import type { ExplorationState } from '../../domain/exploration/ledger.ts';
@@ -50,13 +50,13 @@ export type UniverseTarget = { coordinate: UniverseCoordinate; planetId?: string
 
 type OpenPlace = (place: ReportPlace) => void;
 
-const GLYPH_KEY: Record<ReportCategory, keyof typeof asterionAssetIntegrationAssets.reportIcons> = {
+const GLYPH_KEY: Record<ReportCategory, keyof typeof REPORT_ICONS> = {
   personal: 'profile', system: 'system', battle: 'battle', command: 'command', arena: 'arena',
   flights: 'flights', alliances: 'alliances', achievements: 'achievements',
 };
 
 export function ReportGlyph({ kind }: { kind: ReportCategory }) {
-  return <img className="reports-glyph-image" src={asterionAssetIntegrationAssets.reportIcons[GLYPH_KEY[kind]]} alt="" aria-hidden="true" draggable={false} />;
+  return <img className="reports-glyph-image" src={REPORT_ICONS[GLYPH_KEY[kind]]} alt="" aria-hidden="true" draggable={false} />;
 }
 
 export function formatReportDate(timestamp?: string) {
