@@ -1,0 +1,76 @@
+/* Общая рамка макетов «Достижения и облик»: сцена 1920×1080 игры, масштаб по окну (как в игре),
+   настоящая шапка вырезана из кадра игры. Свободная область .area: y 136..1080.
+   Цвета и радиусы — из src/asterion-unified-theme.css. */
+@font-face { font-family: 'Montserrat'; src: url('../../../../public/fonts/Montserrat-Variable.ttf') format('truetype'); font-weight: 100 900; }
+:root {
+  --cyan: #56d9f2; --amber: #e6ad50; --red: #f0445e; --green: #35e58a; --violet: #b38cff;
+  --dim: #8b97aa; --dim2: #5d6a7e; --line: rgba(126,200,220,.12);
+  --panel: rgba(12,20,24,.92); --card: rgba(16,26,31,.88); --card2: #142029;
+  --b: #c8834f; --s: #c9d4e2; --g: #f1c35c; --l: #c58bff;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; }
+body { overflow: hidden; background: #000; font-family: 'Montserrat', sans-serif; color: #e8eef7; font-variant-numeric: tabular-nums; }
+img { display: block; }
+.stage { position: absolute; left: 50%; top: 50%; width: 1920px; height: 1080px; transform: translate(-50%, -50%) scale(var(--k, 1)); overflow: hidden;
+  background: #03060c url('../../../../assets/source/battle-report-v2/battle-space-background-v1.png') center/cover; }
+.stage::before { content: ''; position: absolute; inset: 0; background: rgba(3,6,12,.82); }
+.hdr { position: absolute; left: 0; top: 0; width: 1920px; z-index: 5000; pointer-events: none; }
+.area { position: absolute; left: 0; right: 0; top: 136px; bottom: 0; }
+.pan { position: absolute; top: 64px; bottom: 26px; border-radius: 18px; background: var(--panel); border: 1px solid rgba(126,200,220,.10); }
+
+/* «Сообщения»: колонка разделов, как в игре */
+.secs { left: 38px; width: 270px; padding: 18px 12px; display: flex; flex-direction: column; gap: 2px; }
+.secs h3 { font-size: 24px; font-weight: 800; padding: 0 10px 12px; }
+.s { display: grid; grid-template-columns: 32px 1fr auto; gap: 12px; align-items: center; padding: 10px; border-radius: 10px; font-size: 17px; font-weight: 700; color: #c9d3e0; }
+.s img { width: 32px; height: 32px; }
+.s em { font-style: normal; font-size: 13px; font-weight: 800; color: #fff; background: #2a6df0; border-radius: 10px; padding: 1px 8px; }
+.s em.new { background: linear-gradient(#f6cf6c, #d99a2b); color: #1b1203; }
+.s.on { background: rgba(86,217,242,.12); box-shadow: inset 0 0 0 1px rgba(86,217,242,.4); color: #fff; }
+.s.quiet { color: #586377; } .s.quiet img { opacity: .35; }
+.secs .sep { font-size: 12px; letter-spacing: 2px; color: #4f5a6c; font-weight: 800; padding: 14px 10px 4px; }
+
+/* общие детали */
+.k { font-size: 13px; letter-spacing: 2px; text-transform: uppercase; font-weight: 800; color: var(--cyan); }
+.h { font-size: 13px; letter-spacing: 2px; text-transform: uppercase; color: var(--dim); font-weight: 800; }
+.card { background: var(--card); border-radius: 13px; border: 1px solid rgba(126,200,220,.08); }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 700; color: #c7d1de; background: #15212c; border-radius: 9px; padding: 5px 11px; white-space: nowrap; }
+.chip.on { color: #fff; background: rgba(86,217,242,.16); box-shadow: inset 0 0 0 1px rgba(86,217,242,.45); }
+.chip b { color: var(--dim); font-weight: 700; }
+.btn { font: inherit; font-size: 16px; font-weight: 700; color: #dfe7f2; background: #172232; border: 0; border-radius: 10px; padding: 12px 20px; white-space: nowrap; }
+.btn.pri { color: #04121b; background: linear-gradient(#7ee8fb, #3fc0e6); box-shadow: 0 0 20px rgba(86,217,242,.3); }
+.btn.gold { color: #1d1303; background: linear-gradient(#f8d77c, #d9a23a); }
+.btn.ghost { background: transparent; box-shadow: inset 0 0 0 1px rgba(126,200,220,.25); }
+.bar { height: 8px; border-radius: 4px; background: #1a2733; overflow: hidden; } .bar i { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, #2fb4d6, #7ee8fb); }
+.bar.gold i { background: linear-gradient(90deg, #c98f2a, #f6d27a); }
+
+/* медаль достижения: кольцо по редкости + значок раздела внутри */
+.medal { --m: 64px; width: var(--m); height: var(--m); border-radius: 50%; position: relative; flex: none; display: grid; place-items: center;
+  background: radial-gradient(circle at 50% 38%, #1d2c39, #0a1119 70%); }
+.medal::before { content: ''; position: absolute; inset: 0; border-radius: 50%; padding: calc(var(--m) * .07);
+  background: var(--ring); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
+.medal img { width: 64%; height: 64%; object-fit: contain; position: relative; }
+.medal.b { --ring: conic-gradient(from 200deg, #6d3f1f, #e2a06a, #8a522b, #f0b989, #6d3f1f); }
+.medal.s { --ring: conic-gradient(from 200deg, #6c7787, #f2f6fb, #8994a4, #ffffff, #6c7787); }
+.medal.g { --ring: conic-gradient(from 200deg, #8a5d12, #ffe08a, #b07a1d, #fff1b8, #8a5d12); box-shadow: 0 0 18px rgba(241,195,92,.25); }
+.medal.l { --ring: conic-gradient(from 200deg, #4a2a8a, #e6c6ff, #7a44d6, #9ff0ff, #4a2a8a); box-shadow: 0 0 22px rgba(197,139,255,.35); }
+.medal.off { filter: grayscale(1) brightness(.55); }
+.medal.off img { opacity: .55; }
+.tier { font-size: 12px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; }
+.tier.b { color: var(--b); } .tier.s { color: var(--s); } .tier.g { color: var(--g); } .tier.l { color: var(--l); }
+
+/* титул рядом с ником */
+.title { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 800; padding: 3px 10px 3px 8px; border-radius: 8px; white-space: nowrap; letter-spacing: .2px; }
+.title::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: currentColor; box-shadow: 0 0 8px currentColor; }
+.title.b { color: #f0b989; background: rgba(200,131,79,.14); } .title.s { color: #e3eaf3; background: rgba(201,212,226,.12); }
+.title.g { color: #ffd77a; background: rgba(241,195,92,.14); } .title.l { color: #dcbcff; background: rgba(197,139,255,.16); }
+
+/* герб из слоёв конструктора */
+.crest { position: relative; flex: none; }
+.crest > * { position: absolute; inset: 0; width: 100%; height: 100%; }
+.crest .fld { -webkit-mask-size: 100% 100%; mask-size: 100% 100%; }
+.crest .gl { position: absolute; inset: auto; }
+.lock { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 800; color: #ffd77a; }
+.lock::before { content: ''; width: 11px; height: 13px; border-radius: 2px; background: currentColor;
+  -webkit-mask: radial-gradient(circle at 50% 30%, transparent 2.5px, #000 3px) top/100% 60% no-repeat, linear-gradient(#000 0 0) bottom/100% 55% no-repeat; }
+.scroll-fade { position: absolute; left: 0; right: 0; bottom: 0; height: 60px; background: linear-gradient(transparent, rgba(12,20,24,.98)); pointer-events: none; border-radius: 0 0 18px 18px; }

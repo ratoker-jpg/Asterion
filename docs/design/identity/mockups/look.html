@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Облик · магазин и что надето</title>
+<link rel="stylesheet" href="ui.css">
+<style>
+.main { left: 326px; right: 38px; display: flex; flex-direction: column; overflow: hidden; }
+.bar1 { display: flex; align-items: center; gap: 14px; padding: 18px 26px 14px; border-bottom: 1px solid var(--line); }
+.seg { display: flex; gap: 4px; padding: 4px; border-radius: 12px; background: #0c151d; }
+.seg span { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 800; color: #9aa6b6; padding: 9px 16px; border-radius: 9px; }
+.seg span img { width: 28px; height: 28px; } .seg span.on { color: #fff; background: rgba(86,217,242,.16); box-shadow: inset 0 0 0 1px rgba(86,217,242,.5); }
+.wallet { margin-left: auto; display: flex; align-items: center; gap: 14px; padding: 8px 16px; border-radius: 12px; background: rgba(241,195,92,.08); box-shadow: inset 0 0 0 1px rgba(241,195,92,.3); }
+.wallet img { width: 40px; height: 40px; } .wallet b { font-size: 26px; font-weight: 800; color: var(--g); display: block; line-height: 1; } .wallet span { font-size: 13px; color: var(--dim); }
+.bar2 { display: flex; align-items: center; gap: 8px; padding: 12px 26px; flex-wrap: wrap; }
+.bar2 .sp { width: 14px; }
+.kind { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; color: #aab5c5; padding: 8px 14px; border-radius: 10px; background: #121d26; }
+.kind img { width: 26px; height: 26px; object-fit: contain; } .kind em { font-style: normal; color: var(--dim); font-size: 13px; }
+.kind.on { color: #fff; background: rgba(86,217,242,.14); box-shadow: inset 0 0 0 1px rgba(86,217,242,.45); }
+.body { flex: 1; display: grid; grid-template-columns: 1fr 400px; min-height: 0; border-top: 1px solid var(--line); }
+.shop { padding: 14px 22px 0; display: flex; flex-direction: column; min-height: 0; }
+.rub { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.tiles { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
+.t { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 8px 10px; border-radius: 13px; background: rgba(16,26,31,.7); text-align: center; }
+.t .pic { width: 112px; height: 112px; display: grid; place-items: center; position: relative; } .t .pic img { width: 100%; height: 100%; object-fit: contain; position: relative; }
+.t b { font-size: 14px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.t .r { font-size: 12px; color: var(--dim); }
+.price { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 800; color: #1d1303; background: linear-gradient(#f8d77c, #d9a23a); border-radius: 8px; padding: 4px 10px; }
+.price.no { color: #ffd77a; background: rgba(241,195,92,.1); box-shadow: inset 0 0 0 1px rgba(241,195,92,.35); }
+.own { font-size: 13px; font-weight: 800; color: var(--green); padding: 4px 0; } .worn { font-size: 12px; font-weight: 800; color: #04121b; background: var(--cyan); border-radius: 6px; padding: 3px 8px; }
+.t .lock { font-size: 12px; padding: 4px 0; } .t.ach .pic img { filter: brightness(.55) saturate(.6); }
+.t.win .pic::before { content: ''; position: absolute; inset: -6px; border-radius: 50%; background: radial-gradient(circle, transparent 52%, rgba(255,210,110,.55) 59%, transparent 72%); }
+.t.on { background: rgba(86,217,242,.12); box-shadow: inset 0 0 0 1px rgba(86,217,242,.55); }
+.t .tag { position: absolute; top: 8px; left: 8px; font-size: 11px; font-weight: 800; letter-spacing: .5px; color: #dcbcff; background: rgba(197,139,255,.16); border-radius: 6px; padding: 2px 6px; }
+.pages { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 14px 0; margin-top: auto; }
+.pages span { min-width: 36px; height: 36px; display: grid; place-items: center; border-radius: 9px; font-size: 15px; font-weight: 800; color: #aab5c5; background: #121d26; }
+.pages span.on { color: #04121b; background: var(--cyan); } .pages small { font-size: 14px; color: var(--dim); margin-left: 12px; }
+.prev { border-left: 1px solid var(--line); padding: 22px 24px; display: flex; flex-direction: column; gap: 12px; }
+.prev .big { height: 250px; display: grid; place-items: center; border-radius: 14px; background: radial-gradient(circle, rgba(86,217,242,.08), transparent 65%); }
+.prev .big img { width: 230px; height: 230px; object-fit: contain; }
+.prev h3 { font-size: 24px; font-weight: 800; } .prev p { font-size: 15px; color: #b8c3d3; line-height: 1.45; }
+.prev .f { display: flex; justify-content: space-between; font-size: 15px; padding: 10px 14px; } .prev .f span { color: var(--dim); }
+.prev .acts { margin-top: auto; display: flex; flex-direction: column; gap: 8px; }
+/* надето */
+.worn-v { flex: 1; padding: 16px 26px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; min-height: 0; overflow: hidden; border-top: 1px solid var(--line); }
+.box { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+.box .hd { display: flex; justify-content: space-between; align-items: baseline; } .box .hd a { font-size: 14px; font-weight: 700; color: var(--cyan); }
+.pl { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+.pl div { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; padding: 8px 4px; border-radius: 11px; background: rgba(12,20,26,.8); }
+.pl img { width: 104px; height: 104px; object-fit: contain; } .pl b { font-size: 13px; } .pl small { font-size: 12px; color: var(--dim); }
+.sh { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.sh div { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px; border-radius: 11px; background: rgba(12,20,26,.8); text-align: center; }
+.sh img { width: 150px; height: 84px; object-fit: contain; } .sh b { font-size: 14px; } .sh small { font-size: 12px; color: var(--dim); }
+.cm { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.cm div { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; border-radius: 11px; background: rgba(12,20,26,.8); text-align: center; }
+.cm img { width: 104px; height: 58px; object-fit: contain; } .cm b { font-size: 13px; } .cm small { font-size: 12px; color: var(--dim); }
+.me { display: grid; grid-template-columns: 110px 1fr; gap: 16px; align-items: center; }
+.me ul { list-style: none; display: flex; flex-direction: column; gap: 8px; font-size: 15px; } .me li { display: flex; justify-content: space-between; gap: 10px; } .me li span { color: var(--dim); }
+</style></head><body>
+<div class="stage"><img class="hdr" src="assets/header-messages.webp"><main class="area" id="a"></main></div>
+<script src="../catalog.js"></script><script src="ui.js"></script><script src="progress.js"></script>
+<script>
+const { nav, fmt, A, crest, PLAYER, title, byId } = UI;
+const view = UI.q.get('view') || 'shop';
+const kind = UI.q.get('kind') || 'planet';
+const earned = PROG.points, spent = 520, wallet = earned - spent;
+const P = (n) => `assets/planets/${n}.webp`, st = A.starter, sk = A.skin;
+const kinds = Object.entries(ACH.KINDS).map(([k, n]) => [k, n, ACH.SHOP.filter((g) => g.kind === k).reduce((s, g) => s + g.count, 0)]);
+const KIC = { planet: A.head('planet'), flagship: A.head('fleets'), commander: A.head('operations'), portrait: A.report('profile'), crest: A.head('command'), profile: A.score('achievement-trophy') };
+const topBar = `<div class="bar1"><div class="seg"><span><img src="${A.report('achievements')}">Все достижения</span><span class="on"><img src="${A.mission('expedition')}">Облик</span></div>
+  <div class="seg"><span class="${view === 'worn' ? 'on' : ''}">Надето</span><span class="${view === 'shop' ? 'on' : ''}">Магазин</span></div>
+  <div class="wallet"><img src="${A.score('achievement-trophy')}"><div><b>${fmt(wallet)}</b><span>очков на счету · заработано всего ${fmt(earned)}</span></div></div></div>`;
+const kindsBar = `<div class="bar2">${kinds.map(([k, n, c]) => `<span class="kind ${k === kind ? 'on' : ''}"><img src="${KIC[k]}">${n} <em>${c}</em></span>`).join('')}
+  <span class="sp"></span><span class="chip on">Все</span><span class="chip">Доступно</span><span class="chip">Куплено</span></div>`;
+// [картинка, имя, рубрика, статус]; статус: число (цена) | 'own' | 'worn' | 'ach:…' | 'win' | 'free'
+const tile = ([pic, name, rub, s, extra = '']) => {
+  const st = typeof s === 'number' ? `<span class="price ${s > wallet ? 'no' : ''}">${fmt(s)} очков</span>`
+    : s === 'own' ? '<span class="own">куплено</span>' : s === 'worn' ? '<span class="worn">надето · Helion 01</span>'
+    : s === 'win' ? '<span class="lock">победа в раунде</span>' : s === 'free' ? '<span class="own">бесплатно</span>' : `<span class="lock">за «${s.slice(4)}»</span>`;
+  return `<div class="t ${String(s).startsWith('ach') ? 'ach' : ''} ${extra}">${rub === 'Фантазия' ? '<span class="tag">ФАНТАЗИЯ</span>' : ''}<div class="pic"><img src="${pic}"></div><b>${name}</b><span class="r">${rub}</span>${st}</div>`;
+};
+let body;
+if (view === 'shop') {
+  const items = kind === 'planet' ? [
+    [P('fan-ringworld'), 'Мир-кольцо', 'Фантазия', 200, 'on'], [P('fan-cube'), 'Куб', 'Фантазия', 200], [P('fan-fire-ring'), 'Огненное кольцо', 'Фантазия', 200], [P('fan-eye'), 'Око', 'Фантазия', 150], [P('fan-crest'), 'Герб', 'Фантазия', 150], [P('fan-wrapped'), 'В скорлупе', 'Фантазия', 200],
+    [P('fan-faceted'), 'Огранка', 'Фантазия', 'own'], [P('fan-ice-ring'), 'Ледяное кольцо', 'Фантазия', 200], [P('fan-mask'), 'Маска', 'Фантазия', 150], [P('fan-hollow'), 'Полая', 'Фантазия', 200], [P('fan-winter-orb'), 'Зимний шар', 'Фантазия', 100], [P('fan-easter'), 'Писанка', 'Фантазия', 100],
+    [P('ps-ecumenopolis'), 'Мегаполис', 'Искусственные', 60], [P('ps-hexshell'), 'Сота', 'Искусственные', 'worn'], [P('ps-crystal'), 'Друза', 'Кристаллы', 60], [P('ps-plasma'), 'Плазма', 'Экзотика', 80], [sk('026'), 'Венец победителя', 'Победителям', 'win', 'win'], [sk('011'), 'Пепел миров', 'За достижения', 'ach:Пять руин'],
+  ] : [];
+  const sel = items[0];
+  body = `<div class="body"><div class="shop">
+      <div class="rub"><span class="chip on">Все рубрики</span><span class="chip">Обычные <b>48</b></span><span class="chip">Редкие <b>34</b></span><span class="chip">Фантазия <b>24</b></span><span class="chip">Победителям <b>4</b></span><span class="chip">За достижения <b>8</b></span><span class="chip">Облики союза <b>8</b></span><span class="chip">Сначала дешёвые ▾</span></div>
+      <div class="tiles">${items.map(tile).join('')}</div>
+      <div class="pages"><span>‹</span><span>1</span><span class="on">2</span><span>3</span><span>4</span><span>…</span><span>7</span><span>›</span><small>18 из 126 на странице</small></div></div>
+    <div class="prev"><div class="big"><img src="${sel[0]}"></div><div><span class="tier l">фантазия · формы</span><h3>${sel[1]}</h3></div>
+      <p>Мир, свёрнутый в кольцо вокруг своего солнца. Облик покупается навсегда: его можно ставить на любую свою планету в любом раунде.</p>
+      <div class="card f"><span>Цена</span><b style="color:var(--g)">200 очков</b></div><div class="card f"><span>После покупки на счету</span><b>95</b></div><div class="card f"><span>Носят</span><b>4 командира из 101</b></div>
+      <div class="acts"><button class="btn">Примерить на Helion 01</button><button class="btn gold">Купить за 200 очков</button></div></div></div>`;
+} else {
+  const planets = [[P('ps-hexshell'), 'Helion 01', 'Сота'], [sk('026'), 'Helion 02', 'Венец победителя'], [P('fan-faceted'), 'Helion 03', 'Огранка'], [st('oceanic'), 'Helion 04', 'Океан'], [st('ice'), 'Helion 05', 'Ледяная'], [P('ps-jungle'), 'Helion 06', 'Джунгли'], [st('terran'), 'Helion 07', 'Терран']];
+  body = `<div class="worn-v">
+    <div class="card box" style="grid-column: 1 / -1"><div class="hd"><span class="h">Планеты · 7 из 7</span><a>Сменить в магазине ›</a></div>
+      <div class="pl">${planets.map(([p, n, l], i) => `<div><img src="${p}"><b>${n}</b><small>${l}${i === 1 ? ' · победа' : ''}</small></div>`).join('')}</div></div>
+    <div class="card box"><div class="hd"><span class="h">Флагманы Астеров</span><a>Сменить ›</a></div>
+      <div class="sh"><div><img src="${A.ship('aegis', 'titan')}"><b>Титан</b><small>Стандарт</small></div><div><img src="${A.ship('aegis', 'goliath')}"><b>Голиаф</b><small>Страж орбиты · куплен</small></div><div><img src="${A.ship('aegis', 'frigate')}"><b>Фрегат</b><small>Клинок · куплен</small></div></div></div>
+    <div class="card box"><div class="hd"><span class="h">Командиры · 4 облика куплено</span><a>Все 13 ›</a></div>
+      <div class="cm">${[['corsair', 'Корсар', 'Буревестник'], ['executioner', 'Палач', 'Кровавый рассвет'], ['viper', 'Вайпер', 'Стандарт'], ['phantom', 'Фантом', 'Тень'], ['typhoon', 'Тайфун', 'Стандарт']].map(([id, n, l]) => `<div><img src="${A.commander(id)}"><b>${n}</b><small>${l}</small></div>`).join('')}</div></div>
+    <div class="card box"><div class="hd"><span class="h">Личный герб</span><a>Конструктор ›</a></div>
+      <div class="me">${crest(PLAYER.crest, 110)}<ul><li><span>Рамка</span><b>Эгида</b></li><li><span>Знак</span><b>Феникс · голубой</b></li><li><span>Личный узор</span><b>Звёздная пыль · куплен</b></li></ul></div></div>
+    <div class="card box"><div class="hd"><span class="h">Профиль</span><a>Сменить ›</a></div>
+      <div class="me"><img src="${A.general('aegis')}" style="width:110px;height:110px;object-fit:cover;object-position:top;border-radius:12px"><ul><li><span>Титул</span>${title(byId(PLAYER.title))}</li><li><span>Портрет</span><b>Генерал · второй образ</b></li><li><span>Фон и рамка</span><b>Солнце Врат · Золото</b></li></ul></div></div>
+  </div>`;
+}
+document.getElementById('a').innerHTML = nav('ach') + `<div class="pan main">${topBar}${view === 'shop' ? kindsBar : ''}${body}</div>`;
+</script></body></html>
