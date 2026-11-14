@@ -30,7 +30,15 @@ app.commandLine.appendSwitch('disable-gpu');
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.on('window-all-closed', () => {});
 
-const run = (win, source) => win.webContents.executeJavaScript(source);
+// Nothing here may wait for ever: a page call that never answers (a window the platform does not
+// paint, a stuck loader) fails with its source instead of hanging the whole CI job.
+const run = (win, source) => Promise.race([
+  win.webContents.executeJavaScript(source),
+  new Promise((_resolve, reject) => setTimeout(() => reject(new Error(`The page did not answer in 30 s: ${String(source).slice(0, 160)}`)), 30_000).unref()),
+]);
+let lastStep = 'start';
+const step = (name) => { lastStep = name; console.log(`[npc-rounds-qa] ${name}`); };
+setTimeout(() => { console.error(`NPC rounds QA: stuck for 8 minutes after «${lastStep}».`); app.exit(1); }, 8 * 60_000).unref();
 const REGISTRY = path.join(PROFILE, 'personas.v1.json');
 const registry = () => JSON.parse(fs.readFileSync(REGISTRY, 'utf8'));
 
@@ -54,10 +62,13 @@ async function click(win, selector) {
 }
 
 async function capture(win, name) {
+  step(`screenshot ${name}`);
+  if (process.env.ASTERION_SKIP_SCREENSHOTS) return;
   fs.mkdirSync(OUT_DIR, { recursive: true });
   await sleep(1700); // entrance animations
   win.webContents.invalidate();
-  await run(win, 'new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+  // A window that is not painted never runs animation frames: do not wait for them for ever.
+  await run(win, 'new Promise((resolve) => { requestAnimationFrame(() => requestAnimationFrame(resolve)); setTimeout(resolve, 1500); })');
   await sleep(200);
   const [width, height] = win.getContentSize();
   fs.writeFileSync(path.join(OUT_DIR, `${name}.png`), (await win.capturePage({ x: 0, y: 0, width, height })).toPNG());
@@ -120,6 +131,7 @@ async function main() {
   const open = (search) => win.loadFile(path.join(ROOT, 'dist', 'index.html'), search ? { search } : undefined);
   const results = {};
 
+  step('1 no series');
   // 1. No series yet: the switch is there, off, and says why.
   await open();
   await run(win, 'localStorage.clear(); sessionStorage.clear();');
@@ -131,6 +143,7 @@ async function main() {
   check(/Серии пока нет/.test(await run(win, `document.querySelector('[data-qa-series-note]').textContent`)), 'no reason shown without a series');
   await capture(win, '01-wizard-no-series');
 
+  step('2 result window');
   // 2. The result window. Reaching it folds the campaign into a new series, once.
   const finished = finishedWorld();
   const firstNick = finished.profile.displayName;
@@ -156,6 +169,7 @@ async function main() {
   check(!/"coordinate"|"resources"|"fleet"/.test(founded), 'a world leaked into the registry');
   results.founded = { personas: registry().series[0].personas.length, bytes: founded.length };
 
+  step('3 back to the result');
   // 3. Coming back to the finished campaign changes nothing. (By the menu: a reload to the wizard must not autostart.)
   await open();
   await waitFor(win, `document.querySelector('[data-qa-menu="main"]')`);
@@ -165,6 +179,7 @@ async function main() {
   check(fs.readFileSync(REGISTRY, 'utf8') === founded, 'a reload folded the campaign again');
   check(!fs.existsSync(path.join(PROFILE, 'personas.v1.backup.json')), 'a reload rewrote the registry');
 
+  step('4 new round');
   // 4. «Новый раунд»: the wizard opens with the switch on, the same commander, a new seed.
   await click(win, '[data-qa-result-round]');
   await goToWorldStep(win);
@@ -182,6 +197,7 @@ async function main() {
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await sleep(1500);
 
+  step('5 new world');
   // 5. A new world of the same personas; their ids nowhere in the game.
   const roundTwo = await slotSave(win);
   const profiles = Object.values(roundTwo.save.npc.profiles);
@@ -198,6 +214,7 @@ async function main() {
   }
   results.roundTwo = { nick: roundTwo.save.profile.displayName, inherited: profiles.length };
 
+  step('6 pause menu');
   // 6. The pause menu ends the round: its outcome goes into the series, the wizard opens for the next.
   await run(win, `document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));`);
   await waitFor(win, `document.querySelector('[data-qa-pause="end-round"]')`);
@@ -211,6 +228,7 @@ async function main() {
   check(fs.existsSync(path.join(PROFILE, 'personas.v1.backup.json')), 'no backup of the previous registry');
   check(/раунд 3/i.test(await run(win, `document.querySelector('[data-qa-series-note]').textContent`)), 'the wizard does not offer round 3');
 
+  step('7 clean population');
   // 7. The switch turned off: a clean population, the series untouched.
   const beforeClean = fs.readFileSync(REGISTRY, 'utf8');
   const slots = await slotsCount(win);
@@ -231,6 +249,7 @@ async function main() {
   check(fs.readFileSync(REGISTRY, 'utf8') === beforeClean, 'a clean game touched the series');
   results.clean = { npc: Object.keys(clean.npc.profiles).length };
 
+  step('8 browser');
   // 8. Without the desktop bridge (the web version): honest about it.
   const browser = new BrowserWindow({ show: false, width: 1920, height: 1080, webPreferences: { contextIsolation: true, sandbox: true } });
   await browser.loadFile(path.join(ROOT, 'dist', 'index.html'));

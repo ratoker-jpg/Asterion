@@ -83,7 +83,9 @@ function seed(recyclersHome, recyclersColony, debris = 44100000) {
     home.buildings = { ...home.buildings, hangar: Math.max(home.buildings?.hangar ?? 0, 25) };
     if (!save.planets['qa-colony-a']) save.planets['qa-colony-a'] = { ...JSON.parse(JSON.stringify(home)), name: 'Вега', universeGalaxy: 1, universeSystem: 9, universePosition: 5 };
     save.planets['helion-01'].fleet.ships = { ...home.fleet.ships, recycler: ${recyclersHome}, 'mega-transporter': 2500, transporter: 40, cruiser: 146 };
-    save.planets['qa-colony-a'].fleet.ships = { ...save.planets['qa-colony-a'].fleet.ships, recycler: ${recyclersColony}, 'mega-transporter': 0, transporter: 0, cruiser: 0 };
+    // The colony holds only its recyclers: any other ship with a cargo bay would make «transport» possible from it.
+    save.planets['qa-colony-a'].fleet.ships = Object.fromEntries(Object.keys(save.planets['qa-colony-a'].fleet.ships).map((id) => [id, 0]));
+    save.planets['qa-colony-a'].fleet.ships.recycler = ${recyclersColony};
     const coordinate = { galaxy: home.universeGalaxy ?? 1, system: home.universeSystem ?? 1, position: home.universePosition ?? 1 };
     save.espionage = { ...(save.espionage || {}), orbitalDebris: { ...((save.espionage || {}).orbitalDebris || {}), qaown: {
       id: 'qaown', targetPlanetId: 'helion-01', targetPlanetName: home.name, targetOwnerId: save.profile.playerId, targetCoordinate: coordinate, debris: ${debris}, createdAt: Date.now() - 1000,
