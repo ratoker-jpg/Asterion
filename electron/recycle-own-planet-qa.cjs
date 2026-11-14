@@ -100,6 +100,22 @@ async function openUniverseAt(win, system) {
   await selectSystem(win, system);
 }
 
+/** «Подробно»: the quick window hands over to the fleet screen; some recyclers are chosen there and the plan opens. */
+async function openFleetPlanWithRecyclers(win) {
+  await js(win, `document.querySelector('[data-qa-quick-details]').click()`);
+  await waitFor(win, `document.querySelector('.fleet-workspace-v1')`, 20_000);
+  await waitFor(win, `document.querySelector('[data-qa-fleet-ship="recycler"] input[type="number"]')`, 20_000);
+  await js(win, `(() => {
+    const element = document.querySelector('[data-qa-fleet-ship="recycler"] input[type="number"]');
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(element, '5');
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+  })()`);
+  await waitFor(win, `document.querySelector('[data-qa-flight-preview-open]') && !document.querySelector('[data-qa-flight-preview-open]').disabled`, 15_000);
+  await js(win, `document.querySelector('[data-qa-flight-preview-open]').click()`);
+  await waitFor(win, `document.querySelector('[data-qa-flight-dispatch-confirm]')`, 15_000);
+  await sleep(600);
+}
+
 async function main() {
   const [width, height] = [1920, 1080];
   const win = new BrowserWindow({
@@ -134,13 +150,7 @@ async function main() {
   console.log('note', note);
 
   // 1b. «Подробно»: the fleet screen's «Переработка» plan to the planet's own coordinate can be sent.
-  await js(win, `document.querySelector('[data-qa-quick-details]').click()`);
-  await sleep(1200);
-  await js(win, `[...document.querySelectorAll('button')].find((b) => ['МАКС.', 'Все'].includes(b.textContent.trim()) && b.closest('.fleet-ship-card, article, div'))?.click()`);
-  await sleep(300);
-  await js(win, `[...document.querySelectorAll('button')].find((b) => b.hasAttribute('data-qa-flight-preview-open'))?.click()`);
-  await waitFor(win, `document.querySelector('[data-qa-flight-dispatch-confirm]')`, 15_000);
-  await sleep(600);
+  await openFleetPlanWithRecyclers(win);
   const dispatchState = await js(win, `(() => { const b = document.querySelector('[data-qa-flight-dispatch-confirm]'); return { disabled: b.disabled, text: document.querySelector('[data-qa-flight-dispatch-confirm]').closest('section,aside,div')?.innerText.slice(0, 400) }; })()`);
   console.log('fleet screen send', JSON.stringify(dispatchState));
   await capture(win, 'fleet-screen-recycle-own-orbit');
@@ -182,13 +192,7 @@ async function main() {
   await waitFor(win, `document.querySelector('[data-qa-quick-recycle-note]')`);
   console.log('note 4', await js(win, `document.querySelector('[data-qa-quick-recycle-note]').textContent`));
   await capture(win, 'recycle-panel-no-debris-note');
-  await js(win, `document.querySelector('[data-qa-quick-details]').click()`);
-  await sleep(1200);
-  await js(win, `[...document.querySelectorAll('button')].find((b) => ['МАКС.', 'Все'].includes(b.textContent.trim()))?.click()`);
-  await sleep(300);
-  await js(win, `[...document.querySelectorAll('button')].find((b) => b.hasAttribute('data-qa-flight-preview-open'))?.click()`);
-  await waitFor(win, `document.querySelector('[data-qa-flight-dispatch-confirm]')`, 15_000);
-  await sleep(600);
+  await openFleetPlanWithRecyclers(win);
   if (await js(win, `document.querySelector('[data-qa-flight-dispatch-confirm]').disabled`)) throw new Error('fleet screen: ОТПРАВИТЬ disabled for recycle without debris');
   await capture(win, 'fleet-screen-recycle-no-debris');
   win.destroy();
