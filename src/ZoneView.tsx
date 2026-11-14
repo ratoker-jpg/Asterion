@@ -1,3 +1,4 @@
+import { useClockNow } from './application/shared-clock';
 import { localizeBuildingNames } from './domain/buildings/balance-v1.ts';
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
@@ -185,7 +186,6 @@ export type ZoneViewProps = {
   scienceLevels: ScienceLevels;
   energyLedger: EnergyLedger;
   energyCoordinates: PlanetEnergyCoordinates;
-  now: number;
   selectedRole: BuildingRole | null;
   onSelectedRoleChange: (role: BuildingRole | null) => void;
   onBuild: (assetRole: BuildingRole) => boolean;
@@ -225,7 +225,6 @@ export function ZoneView({
   scienceLevels,
   energyLedger,
   energyCoordinates,
-  now,
   selectedRole,
   onSelectedRoleChange,
   onBuild,
@@ -235,6 +234,7 @@ export function ZoneView({
   factionId = 'aegis',
   gate,
 }: ZoneViewProps) {
+  const now = useClockNow();
   const economy = useMemo<BuildingEconomyState>(
     () => ({ resources, buildings, queue, scienceLevels }),
     [resources, buildings, queue, scienceLevels],
