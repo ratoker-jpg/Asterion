@@ -25,6 +25,7 @@ html body .skin-picker-modal.planet-editor-v6 {
   --pe-text: #e8f6fa;
   --pe-rare: #c9a2ff;
   --pe-gold: #f0c96a;
+  --pe-fantasy: #ff9f7a;
   --pe-green: var(--ut-positive, #35e58a);
   --pe-fast: 160ms;
   --pe-ease: var(--ut-ease-out, cubic-bezier(.23, 1, .32, 1));
@@ -132,6 +133,7 @@ html body .planet-editor-v6 .pe-head-title h2 {
 .planet-editor-v6 .pe-rail-item:first-child .pe-rail-heading { margin-top: 0; }
 .planet-editor-v6 .pe-rail-heading.pe-tier-rare { color: var(--pe-rare); }
 .planet-editor-v6 .pe-rail-heading.pe-tier-alliance { color: var(--pe-gold); }
+.planet-editor-v6 .pe-rail-heading.pe-tier-fantasy { color: var(--pe-fantasy); }
 .planet-editor-v6 .pe-rail button {
   display: flex;
   align-items: center;
@@ -177,7 +179,7 @@ html body .planet-editor-v6 .pe-detail h3 {
 .planet-editor-v6 .pe-card {
   position: relative;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr) auto auto;
   justify-items: center;
   align-items: center;
   gap: 4px;
@@ -225,6 +227,18 @@ html body .planet-editor-v6 .pe-detail h3 {
 /* Rare and alliance looks: a thin tier colour under the name. */
 .planet-editor-v6 .pe-card.pe-tier-rare span { box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--pe-rare) 45%, transparent); }
 .planet-editor-v6 .pe-card.pe-tier-alliance span { box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--pe-gold) 45%, transparent); }
+.planet-editor-v6 .pe-card.pe-tier-fantasy span { box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--pe-fantasy) 45%, transparent); }
+/* Price tag for looks sold for points (looks economy, later). */
+.planet-editor-v6 .pe-price {
+  padding: 1px 7px;
+  border-radius: var(--ut-r-chip, 9px);
+  background: rgba(240, 201, 106, .12);
+  color: var(--pe-gold);
+  font-size: calc(11px * var(--text-scale-table, 1)) !important;
+  font-style: normal;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
 
 .planet-editor-v6 .pe-pager { display: flex; justify-content: center; gap: 6px; }
 .planet-editor-v6 .pe-pager button {
@@ -262,6 +276,7 @@ html body .planet-editor-v6 .pe-detail h3 {
   background: radial-gradient(circle at 50% 48%, color-mix(in srgb, var(--pe-accent) 12%, transparent), transparent 64%);
 }
 .planet-editor-v6 .pe-stage.pe-tier-rare { background: radial-gradient(circle at 50% 48%, rgba(201, 162, 255, .12), transparent 64%); }
+.planet-editor-v6 .pe-stage.pe-tier-fantasy { background: radial-gradient(circle at 50% 48%, rgba(255, 159, 122, .12), transparent 64%); }
 .planet-editor-v6 .pe-stage.pe-tier-alliance { background: radial-gradient(circle at 50% 48%, rgba(240, 201, 106, .13), transparent 64%); }
 .planet-editor-v6 .pe-stage img { width: 88%; height: 88%; object-fit: contain; animation: pe-stage-in 320ms var(--pe-ease) both; }
 .planet-editor-v6 .pe-stage img.is-locked { filter: saturate(.8) brightness(.8); }
@@ -288,6 +303,7 @@ html body .planet-editor-v6 .pe-detail h3 {
   text-transform: uppercase;
 }
 .planet-editor-v6 .pe-tag.pe-tier-rare { background: rgba(201, 162, 255, .12); color: var(--pe-rare); }
+.planet-editor-v6 .pe-tag.pe-tier-fantasy { background: rgba(255, 159, 122, .12); color: var(--pe-fantasy); }
 .planet-editor-v6 .pe-tag.pe-tier-alliance { background: rgba(240, 201, 106, .12); color: var(--pe-gold); }
 .planet-editor-v6 .pe-detail-state { margin: 0; color: var(--pe-label); font-size: calc(12px * var(--text-scale-body, 1)) !important; }
 .planet-editor-v6 .pe-detail-state b { color: #f4fcff; }

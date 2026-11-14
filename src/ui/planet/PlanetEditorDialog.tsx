@@ -1,14 +1,15 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import type { AllianceRole } from '../../domain/command/types.ts';
-import { PLANET_SKIN_GROUPS, canPickPlanetSkin, displayedPlanetSkinId, isAlliancePlanetSkin, type PlanetSkinGroup, type PlanetSkinTier } from '../../domain/universe/planet-skins.ts';
+import { PLANET_SKIN_GROUPS, displayedPlanetSkinId, isAlliancePlanetSkin, planetSkinAccess, type PlanetSkinAccess, type PlanetSkinGroup, type PlanetSkinTier } from '../../domain/universe/planet-skins.ts';
 import { planetSkinById, planetSkins, type PlanetSkinArt } from '../../planet-skin-art.ts';
 import './planet-editor.css';
 
 /** Cards per page: 5 × 3, so a page never scrolls and loads at most 15 small pictures. */
 export const PLANET_SKIN_PAGE_SIZE = 15;
 
-const TIER_LABEL: Record<PlanetSkinTier, string> = { common: 'Обычный', rare: 'Редкий', alliance: 'Союз' };
-const TIER_HEADING: Record<PlanetSkinTier, string> = { common: 'ОБЫЧНЫЕ', rare: 'РЕДКИЕ', alliance: 'СОЮЗ' };
+const TIER_LABEL: Record<PlanetSkinTier, string> = { common: 'Обычный', rare: 'Редкий', fantasy: 'Фантазия', alliance: 'Союз' };
+const TIER_HEADING: Record<PlanetSkinTier, string> = { common: 'ОБЫЧНЫЕ', rare: 'РЕДКИЕ', fantasy: 'ФАНТАЗИЯ', alliance: 'СОЮЗ' };
+const points = (value: number) => `${value.toLocaleString('ru-RU')} очк.`;
 const ROLE_LABEL: Record<AllianceRole, string> = { leader: 'глава', deputy: 'заместитель', member: 'участник' };
 
 export interface PlanetEditorDialogProps {
@@ -41,17 +42,28 @@ export function PlanetEditorDialog({
   const [page, setPage] = useState(() => Math.floor(Math.max(0, groupSkins(saved.group).findIndex((skin) => skin.id === saved.id)) / PLANET_SKIN_PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
   const pageItems = items.slice(safePage * PLANET_SKIN_PAGE_SIZE, (safePage + 1) * PLANET_SKIN_PAGE_SIZE);
+  const accessOf = (id: string): PlanetSkinAccess => planetSkinAccess(id, { allianceRole });
   const focus = planetSkinById(focusId);
-  const focusOpen = canPickPlanetSkin(focus.id, allianceRole);
+  const focusAccess = accessOf(focus.id);
+  const focusOpen = focusAccess.open;
   const focusIsShown = focus.id === shown.id;
   const groupMeta = PLANET_SKIN_GROUPS.find((entry) => entry.id === group)!;
   const hiddenAllianceSkin = isAlliancePlanetSkin(saved.id) && saved.id !== shown.id;
 
   const pickGroup = (next: PlanetSkinGroup) => { setGroup(next); setPage(0); };
   const submitName = (event: FormEvent) => { event.preventDefault(); onSaveName(); };
-  const lockReason = allianceRole
-    ? `Выбрать может только глава союза. Вы ${ROLE_LABEL[allianceRole]}${allianceName ? ` союза «${allianceName}»` : ' союза'}.`
-    : 'Выбрать может только глава союза. Вступите в союз или создайте свой.';
+  const allianceLock = allianceRole
+    ? `Облик союза. Выбрать может только глава союза. Вы ${ROLE_LABEL[allianceRole]}${allianceName ? ` союза «${allianceName}»` : ' союза'}.`
+    : 'Облик союза. Выбрать может только глава союза. Вступите в союз или создайте свой.';
+  const lockText = (access: PlanetSkinAccess) => {
+    if (access.open) return '';
+    switch (access.reason) {
+      case 'alliance-leader': return allianceLock;
+      case 'price': return `Открывается за ${points(access.points)}`;
+      case 'achievement': return `Откроется за достижение «${access.label}».`;
+      default: return 'Облик недоступен.';
+    }
+  };
 
   let tierShown: PlanetSkinTier | null = null;
   return (
@@ -103,7 +115,8 @@ export function PlanetEditorDialog({
           </div>
           <div className="pe-grid">
             {pageItems.map((skin) => {
-              const open = canPickPlanetSkin(skin.id, allianceRole);
+              const access = accessOf(skin.id);
+              const open = access.open;
               const isShown = skin.id === shown.id;
               const state = isShown ? 'на планете' : open ? 'доступен' : 'закрыт';
               return (
@@ -120,6 +133,7 @@ export function PlanetEditorDialog({
                 >
                   <img src={skin.thumb} alt="" width={84} height={84} loading="lazy" decoding="async" draggable={false} />
                   <span>{skin.label}</span>
+                  {!access.open && access.reason === 'price' ? <em className="pe-price">{points(access.points)}</em> : null}
                 </button>
               );
             })}
@@ -150,8 +164,8 @@ export function PlanetEditorDialog({
           ) : null}
           {!focusOpen ? (
             <>
-              <p className="pe-lock" data-qa-skin-lock>Облик союза. {lockReason}</p>
-              <button type="button" className="pe-apply" disabled>ЗАКРЫТ</button>
+              <p className="pe-lock" data-qa-skin-lock>{lockText(focusAccess)}</p>
+              <button type="button" className="pe-apply" disabled>{!focusAccess.open && focusAccess.reason === 'price' ? points(focusAccess.points) : 'ЗАКРЫТ'}</button>
             </>
           ) : focusIsShown ? (
             <button type="button" className="pe-apply is-done" disabled>ВЫБРАН</button>

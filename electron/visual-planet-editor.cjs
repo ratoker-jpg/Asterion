@@ -149,6 +149,12 @@ app.whenReady().then(async () => {
         await clickQa(win, '.planet-editor-v6 [data-qa-planet-skin="ps-plasma"]');
         await settle(win, 400);
       });
+      await step('03b-fantasy-shapes', async () => {
+        await clickQa(win, '.planet-editor-v6 [data-qa-skin-group="shapes"]');
+        await settle(win, 200);
+        await clickQa(win, '.planet-editor-v6 [data-qa-planet-skin="fan-ringworld"]');
+        await settle(win, 400);
+      });
       await step('04-alliance-locked', async () => {
         await clickQa(win, '.planet-editor-v6 [data-qa-skin-group="alliance"]');
         await settle(win, 200);

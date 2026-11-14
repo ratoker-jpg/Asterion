@@ -15,16 +15,30 @@ import type { AllianceRole } from '../command/types.ts';
 export const DEFAULT_COLONY_SKIN = 'colonized';
 
 /** How rare a look is: the editor's three sections. */
-export type PlanetSkinTier = 'common' | 'rare' | 'alliance';
+export type PlanetSkinTier = 'common' | 'rare' | 'fantasy' | 'alliance';
 
 /** The editor's rubrics inside a section. */
-export type PlanetSkinGroup = 'classic' | 'worlds' | 'seasons' | 'ruined' | 'artificial' | 'crystal' | 'exotic' | 'alliance';
+export type PlanetSkinGroup = 'classic' | 'worlds' | 'seasons' | 'ruined' | 'artificial' | 'crystal' | 'exotic'
+  | 'shapes' | 'signs' | 'festive' | 'myth' | 'machine' | 'alliance';
+
+/**
+ * How a look opens. Every look is free today except the alliance ones; the
+ * price and achievement kinds are ready for the looks economy (session
+ * «identity-concept»): set `unlock` on a catalogue line, the editor shows the
+ * price tag or the achievement lock by itself.
+ */
+export type PlanetSkinUnlock =
+  | { readonly kind: 'free' }
+  | { readonly kind: 'alliance-leader' }
+  | { readonly kind: 'price'; readonly points: number }
+  | { readonly kind: 'achievement'; readonly achievementId: string; readonly label: string };
 
 export interface PlanetSkinMeta {
   readonly id: string;
   readonly label: string;
   readonly tier: PlanetSkinTier;
   readonly group: PlanetSkinGroup;
+  readonly unlock: PlanetSkinUnlock;
 }
 
 export const PLANET_SKIN_GROUPS: readonly { id: PlanetSkinGroup; tier: PlanetSkinTier; label: string }[] = [
@@ -35,11 +49,19 @@ export const PLANET_SKIN_GROUPS: readonly { id: PlanetSkinGroup; tier: PlanetSki
   { id: 'artificial', tier: 'rare', label: 'Искусственные' },
   { id: 'crystal', tier: 'rare', label: 'Кристаллы и металл' },
   { id: 'exotic', tier: 'rare', label: 'Экзотика' },
+  { id: 'shapes', tier: 'fantasy', label: 'Формы' },
+  { id: 'signs', tier: 'fantasy', label: 'Лики и знаки' },
+  { id: 'festive', tier: 'fantasy', label: 'Праздники' },
+  { id: 'myth', tier: 'fantasy', label: 'Звери и мифы' },
+  { id: 'machine', tier: 'fantasy', label: 'Механика и ядра' },
   { id: 'alliance', tier: 'alliance', label: 'Облики союза' },
 ];
 
 const tierOf = (group: PlanetSkinGroup): PlanetSkinTier => PLANET_SKIN_GROUPS.find((entry) => entry.id === group)!.tier;
-const skin = (id: string, label: string, group: PlanetSkinGroup): PlanetSkinMeta => ({ id, label, tier: tierOf(group), group });
+const skin = (id: string, label: string, group: PlanetSkinGroup, unlock?: PlanetSkinUnlock): PlanetSkinMeta => ({
+  id, label, tier: tierOf(group), group,
+  unlock: unlock ?? (tierOf(group) === 'alliance' ? { kind: 'alliance-leader' } : { kind: 'free' }),
+});
 
 /** Every look, in the editor's order. */
 export const PLANET_SKIN_CATALOG = [
@@ -104,8 +126,6 @@ export const PLANET_SKIN_CATALOG = [
   skin('ps-scarred', 'Поле битвы', 'ruined'),
   skin('ps-cracked-ice', 'Треснувший лёд', 'ruined'),
   skin('ps-irradiated', 'Радиоактивная', 'ruined'),
-  skin('ps-sunken', 'Затонувшая', 'ruined'),
-  skin('ps-mined', 'Выработанная', 'ruined'),
   // Искусственные.
   skin('skin-012', 'Механоид', 'artificial'),
   skin('skin-028', 'Орбитальный пояс', 'artificial'),
@@ -114,9 +134,6 @@ export const PLANET_SKIN_CATALOG = [
   skin('ps-forge', 'Кузня', 'artificial'),
   skin('ps-hexshell', 'Панцирь', 'artificial'),
   skin('ps-terraform', 'Терраформинг', 'artificial'),
-  skin('ps-solar', 'Солнечная ферма', 'artificial'),
-  skin('ps-domes', 'Купола', 'artificial'),
-  skin('ps-lattice', 'Решётка', 'artificial'),
   // Кристаллы и металл.
   skin('skin-asterion-05', 'Хрустальная', 'crystal'),
   skin('skin-002', 'Янтарная буря', 'crystal'),
@@ -124,8 +141,6 @@ export const PLANET_SKIN_CATALOG = [
   skin('ps-pearl', 'Жемчужная', 'crystal'),
   skin('ps-obsidian', 'Обсидиан', 'crystal'),
   skin('ps-mercury', 'Ртутная', 'crystal'),
-  skin('ps-ruby', 'Рубиновая', 'crystal'),
-  skin('ps-goldvein', 'Золотые жилы', 'crystal'),
   // Экзотика.
   skin('skin-003', 'Магматическая', 'exotic'),
   skin('skin-005', 'Радужный гигант', 'exotic'),
@@ -139,9 +154,31 @@ export const PLANET_SKIN_CATALOG = [
   skin('ps-gas-teal', 'Бирюзовый гигант', 'exotic'),
   skin('ps-gas-rose', 'Розовый гигант', 'exotic'),
   skin('ps-geyser', 'Гейзеры', 'exotic'),
-  skin('ps-ice-giant', 'Ледяной гигант', 'exotic'),
-  skin('ps-storm-giant', 'Грозовой гигант', 'exotic'),
-  skin('ps-magnetar', 'Магнитная', 'exotic'),
+  // Фантазия: смелые формы и мотивы.
+  skin('fan-cube', 'Куб', 'shapes'),
+  skin('fan-faceted', 'Огранка', 'shapes'),
+  skin('fan-hollow', 'Полая', 'shapes'),
+  skin('fan-ringworld', 'Мир-кольцо', 'shapes'),
+  skin('fan-wrapped', 'В скорлупе', 'shapes'),
+  skin('fan-fire-ring', 'Огненное кольцо', 'shapes'),
+  skin('fan-ice-ring', 'Ледяное кольцо', 'shapes'),
+  skin('fan-eye', 'Око', 'signs'),
+  skin('fan-mask', 'Маска', 'signs'),
+  skin('fan-crest', 'Герб кометы', 'signs'),
+  skin('fan-winter-orb', 'Ёлочный шар', 'festive'),
+  skin('fan-easter', 'Писанка', 'festive'),
+  skin('fan-pumpkin', 'Тыква', 'festive'),
+  skin('fan-candy', 'Карамель', 'festive'),
+  skin('fan-lantern', 'Фонарь', 'festive'),
+  skin('fan-dragon', 'Спящий дракон', 'myth'),
+  skin('fan-turtle', 'Черепаха', 'myth'),
+  skin('fan-whale', 'Небесный кит', 'myth'),
+  skin('fan-phoenix', 'Феникс', 'myth'),
+  skin('fan-kraken', 'Кракен', 'myth'),
+  skin('fan-clockwork', 'Часовой механизм', 'machine'),
+  skin('fan-core', 'Звёздное ядро', 'machine'),
+  skin('fan-geode', 'Жеода', 'machine'),
+  skin('fan-circuit', 'Схема', 'machine'),
   // Облики союза: только глава союза.
   skin('ally-citadel', 'Цитадель союза', 'alliance'),
   skin('ally-banner', 'Знамя', 'alliance'),
@@ -158,9 +195,9 @@ export type PlanetSkinId = (typeof PLANET_SKIN_CATALOG)[number]['id'];
 /** Every id a save may hold. */
 export const PLANET_SKIN_IDS: readonly PlanetSkinId[] = PLANET_SKIN_CATALOG.map((entry) => entry.id);
 
-/** Looks anyone may wear: NPC colonies pick from these. */
+/** Looks open to everyone for free: NPC colonies pick from these. */
 export const PUBLIC_PLANET_SKIN_IDS: readonly PlanetSkinId[] = PLANET_SKIN_CATALOG
-  .filter((entry) => entry.tier !== 'alliance').map((entry) => entry.id);
+  .filter((entry) => entry.unlock.kind === 'free').map((entry) => entry.id);
 
 /**
  * The 30 looks shipped before 14.11.2026, in their old order. Planets nobody
@@ -189,11 +226,40 @@ export function isAlliancePlanetSkin(id: string | undefined): boolean {
   return planetSkinMeta(id)?.tier === 'alliance';
 }
 
+export interface PlanetSkinAccessContext {
+  readonly allianceRole: AllianceRole | null | undefined;
+  /** Looks the player has bought (looks economy, later). */
+  readonly owned?: ReadonlySet<string>;
+  /** Achievements the player has earned (looks economy, later). */
+  readonly achievements?: ReadonlySet<string>;
+}
+
+export type PlanetSkinAccess =
+  | { readonly open: true }
+  | { readonly open: false; readonly reason: 'unknown' }
+  | { readonly open: false; readonly reason: 'alliance-leader' }
+  | { readonly open: false; readonly reason: 'price'; readonly points: number }
+  | { readonly open: false; readonly reason: 'achievement'; readonly label: string };
+
+/** May the player put this look on a planet, and if not, why. */
+export function planetSkinAccess(id: string, context: PlanetSkinAccessContext): PlanetSkinAccess {
+  const meta = planetSkinMeta(id);
+  return meta ? unlockAccess(meta.unlock, id, context) : { open: false, reason: 'unknown' };
+}
+
+/** The unlock rule itself, for a look's `unlock` (exported for tests and the economy). */
+export function unlockAccess(unlock: PlanetSkinUnlock, id: string, context: PlanetSkinAccessContext): PlanetSkinAccess {
+  switch (unlock.kind) {
+    case 'free': return { open: true };
+    case 'alliance-leader': return context.allianceRole === 'leader' ? { open: true } : { open: false, reason: 'alliance-leader' };
+    case 'price': return context.owned?.has(id) ? { open: true } : { open: false, reason: 'price', points: unlock.points };
+    case 'achievement': return context.achievements?.has(unlock.achievementId) ? { open: true } : { open: false, reason: 'achievement', label: unlock.label };
+  }
+}
+
 /** Who may pick a look: alliance looks need the alliance leader, the rest are open to all. */
 export function canPickPlanetSkin(id: string, allianceRole: AllianceRole | null | undefined): boolean {
-  const meta = planetSkinMeta(id);
-  if (!meta) return false;
-  return meta.tier !== 'alliance' || allianceRole === 'leader';
+  return planetSkinAccess(id, { allianceRole }).open;
 }
 
 /**

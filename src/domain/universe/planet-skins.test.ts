@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   DEFAULT_COLONY_SKIN, LEGACY_PLANET_SKIN_IDS, PLANET_SKIN_CATALOG, PLANET_SKIN_GROUPS, PLANET_SKIN_IDS, PUBLIC_PLANET_SKIN_IDS,
-  canPickPlanetSkin, displayedPlanetSkinId, isAlliancePlanetSkin, isPlanetSkinId,
+  canPickPlanetSkin, displayedPlanetSkinId, isAlliancePlanetSkin, isPlanetSkinId, unlockAccess,
 } from './planet-skins.ts';
 import { selectOwnerMembership } from '../command/selectors.ts';
 import type { AllianceRecord } from '../command/types.ts';
@@ -20,7 +20,9 @@ test('catalogue: unique ids and names, real names instead of «Облик 002»,
   for (const skin of PLANET_SKIN_CATALOG) assert.doesNotMatch(skin.label, /^Облик\s/, skin.id);
   for (const group of PLANET_SKIN_GROUPS) assert.ok(PLANET_SKIN_CATALOG.some((skin) => skin.group === group.id), group.id);
   assert.ok(allianceSkins.length >= 6 && allianceSkins.length <= 10);
-  assert.ok(PLANET_SKIN_CATALOG.length >= 95);
+  assert.ok(PLANET_SKIN_CATALOG.length >= 100);
+  // About a third bold looks (fantasy rubrics plus the rare ones).
+  assert.ok(PLANET_SKIN_CATALOG.filter((skin) => skin.tier === 'fantasy').length >= 20);
 });
 
 test('alliance looks: only the alliance leader may pick them, other looks are open to all', () => {
@@ -60,4 +62,15 @@ test('leader steps down: the alliance look hides behind «Колония» and c
   // Regular looks never depend on the alliance.
   assert.equal(displayedPlanetSkinId('ps-autumn', null), 'ps-autumn');
   assert.equal(displayedPlanetSkinId('unknown-look', 'leader'), DEFAULT_COLONY_SKIN);
+});
+
+test('looks economy hooks: a price or an achievement closes a look until it is owned or earned', () => {
+  const price = { kind: 'price', points: 700 } as const;
+  assert.deepEqual(unlockAccess(price, 'fan-cube', { allianceRole: null }), { open: false, reason: 'price', points: 700 });
+  assert.deepEqual(unlockAccess(price, 'fan-cube', { allianceRole: null, owned: new Set(['fan-cube']) }), { open: true });
+  const feat = { kind: 'achievement', achievementId: 'first-sun', label: 'Первое Солнце' } as const;
+  assert.deepEqual(unlockAccess(feat, 'fan-core', { allianceRole: 'leader' }), { open: false, reason: 'achievement', label: 'Первое Солнце' });
+  assert.deepEqual(unlockAccess(feat, 'fan-core', { allianceRole: null, achievements: new Set(['first-sun']) }), { open: true });
+  // Today every look outside the alliance rubric is free.
+  for (const skin of PLANET_SKIN_CATALOG) if (skin.tier !== 'alliance') assert.equal(skin.unlock.kind, 'free', skin.id);
 });

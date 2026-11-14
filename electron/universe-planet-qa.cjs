@@ -1094,7 +1094,7 @@ async function runViewport(width, height) {
     })()`);
     if (!openSkinPicker) throw new Error(`${label}: could not open the homeworld skin picker`);
     // The editor shows one rubric page at a time: small WebP thumbnails, never the full pictures.
-    await waitFor(win, `document.querySelectorAll('.planet-editor-v6 [data-qa-skin-group]').length === 8`);
+    await waitFor(win, `document.querySelectorAll('.planet-editor-v6 [data-qa-skin-group]').length >= 13`);
     await win.webContents.executeJavaScript(`document.querySelector('.planet-editor-v6 [data-qa-skin-group="ruined"]')?.click()`);
     await waitFor(win, `document.querySelector('.planet-editor-v6 [data-qa-planet-skin="skin-asterion-09"]')`);
     await waitFor(win, `Array.from(document.querySelectorAll('.planet-editor-v6 .pe-grid img')).every((image) => image.complete && image.naturalWidth > 0)`);
