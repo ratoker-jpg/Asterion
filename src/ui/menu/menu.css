@@ -206,7 +206,8 @@
 .menu-showcase__general { position: absolute; right: 0; top: 4%; width: 48%; height: 96%; object-fit: contain; object-position: right bottom; z-index: 1; filter: drop-shadow(0 0 40px var(--race-glow)); }
 .menu-showcase__copy { position: relative; z-index: 2; width: 470px; height: 100%; padding: 48px 0 44px 48px; display: flex; flex-direction: column; gap: 16px; }
 .menu-showcase__copy > small { color: var(--race-accent); font-size: 14px; font-weight: 700; letter-spacing: .28em; }
-.menu-showcase__copy h2 { margin: 0; font-size: 40px; line-height: 1.05; font-weight: 800; overflow-wrap: anywhere; }
+/* Names wrap between words (Russian hyphens where a word is longer than the line); never a cut mid-word without a hyphen. */
+.menu-showcase__copy h2 { margin: 0; font-size: 38px; line-height: 1.08; font-weight: 800; overflow-wrap: break-word; hyphens: auto; }
 .menu-race-chip { display: inline-flex; align-items: center; gap: 10px; margin: 0; color: #cfe6ef; font-size: 16px; font-weight: 600; }
 .menu-race-chip img { width: 28px; height: 28px; object-fit: contain; filter: drop-shadow(0 0 6px var(--race-glow)); }
 .menu-showcase__stats { margin: 6px 0 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
@@ -391,7 +392,7 @@
 .menu-slot__body { padding: 20px 22px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .menu-slot__head { display: flex; align-items: center; gap: 12px; min-width: 0; }
 /* A 40-character name wraps to a second line instead of hiding behind «…». */
-.menu-slot__head h3 { min-width: 0; margin: 0; font-size: 20px !important; font-weight: 800; line-height: 1.2; overflow-wrap: anywhere; }
+.menu-slot__head h3 { min-width: 0; margin: 0; font-size: 20px !important; font-weight: 800; line-height: 1.2; overflow-wrap: break-word; hyphens: auto; }
 .menu-slot__rename { display: flex; gap: 8px; flex: 1; }
 .menu-slot__rename input { flex: 1; min-width: 0; }
 .menu-tag { flex: 0 0 auto; padding: 4px 10px; border-radius: 999px; background: var(--race-fill); color: var(--race-accent); font-size: 11px; font-weight: 800; letter-spacing: .14em; }

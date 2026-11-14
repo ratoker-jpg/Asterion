@@ -277,11 +277,11 @@
 .menu-viewport .wz-hero .menu-confirm-hero__copy p { font-size: 16px; }
 
 .wz-summary { grid-template-rows: auto auto 1fr; }
-.wz-summary__name { font-size: 24px !important; overflow-wrap: anywhere; }
+.wz-summary__name { font-size: 24px !important; overflow-wrap: break-word; hyphens: auto; }
 .wz-summary__rows { display: grid; margin: 0; }
 .wz-summary__rows > div { display: grid; grid-template-columns: 170px minmax(0, 1fr) auto; align-items: center; gap: 4px 14px; min-height: 44px; padding: 4px 0; border-bottom: 1px solid var(--wz-line); }
 .wz-summary__rows dt { color: var(--wz-label); font-size: 15px; font-weight: 600; }
-.wz-summary__rows dd { margin: 0; min-width: 0; color: #fff; font-size: 16px; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
+.wz-summary__rows dd { margin: 0; min-width: 0; color: #fff; font-size: 16px; font-weight: 700; line-height: 1.35; overflow-wrap: break-word; hyphens: auto; }
 .menu-viewport .wz-edit {
   min-height: 34px;
   padding: 0 12px;
