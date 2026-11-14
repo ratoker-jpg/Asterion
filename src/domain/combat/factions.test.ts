@@ -178,7 +178,7 @@ test('commander catalog uses the Asterion naming contract and the canonical sour
       description: COMMANDER_ABILITIES[id].description,
       ratePerLevel: COMMANDER_ABILITIES[id].ratePerLevel,
     });
-    assert.match(entity.art, /commander-ship\.[a-z-]+\.png$/i);
+    assert.match(entity.art, /commander-ship\.[a-z-]+\.webp$/i);
   }
 });
 

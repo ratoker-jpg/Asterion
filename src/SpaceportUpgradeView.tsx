@@ -55,7 +55,7 @@ const RESOURCE_NAMES: Readonly<Record<keyof SpaceportUpgradeWallet, string>> = {
   gas: 'Газ',
 };
 
-const SCIENCE_ARTS = import.meta.glob('../assets/source/New assets/technologies/*.png', {
+const SCIENCE_ARTS = import.meta.glob('./assets/art/technologies/*.webp', {
   eager: true,
   import: 'default',
 }) as Record<string, string>;
@@ -103,7 +103,7 @@ function requirementArt(requirement: SpaceportRequirementState, factionId: Comba
   if (requirement.scienceId == null) return null;
   const science = SCIENCE_CATALOG.find((item) => item.id === requirement.scienceId);
   if (!science) return null;
-  return SCIENCE_ARTS[`../assets/source/New assets/technologies/${science.artSlug}`] ?? null;
+  return SCIENCE_ARTS[`./assets/art/technologies/${science.artSlug.replace(/\.png$/, '.webp')}`] ?? null;
 }
 
 function RequirementBadge({ requirement, factionId }: { requirement: SpaceportRequirementState; factionId: CombatFactionId }) {

@@ -284,7 +284,7 @@ import { readPersonaRegistry, writePersonaRegistry } from './application/persona
 import { reloadToMenu, requestSeriesRound, type ActiveSession } from './ui/menu/session.ts';
 import { useCampaignCloudUploads } from './ui/menu/cloud.ts';
 
-import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
+import systemBackground from './assets/art/starter/backgrounds/system_background.webp';
 import { planetSkinFor, type PlanetSkinArt } from './planet-skin-art.ts';
 import { canPickPlanetSkin } from './domain/universe/planet-skins.ts';
 import { PlanetEditorDialog } from './ui/planet/PlanetEditorDialog.tsx';

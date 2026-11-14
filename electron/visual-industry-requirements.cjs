@@ -91,7 +91,7 @@ async function verifyIndustryRequirements(win, directory) {
     };
   })()`);
 
-  if (!blocked.terrain || blocked.terrain.source !== 'industry-terrain.png' || !blocked.terrain.src.includes('industry-terrain') || blocked.terrain.naturalWidth <= 0 || blocked.terrain.naturalHeight <= 0) {
+  if (!blocked.terrain || blocked.terrain.source !== 'industry-terrain.webp' || !blocked.terrain.src.includes('industry-terrain') || blocked.terrain.naturalWidth <= 0 || blocked.terrain.naturalHeight <= 0) {
     throw new Error(`Industry terrain contract failed: ${JSON.stringify(blocked.terrain)}`);
   }
   for (const item of [blocked.advancedFactory, blocked.recycling]) {
