@@ -1093,22 +1093,30 @@ async function runViewport(width, height) {
       return Boolean(button);
     })()`);
     if (!openSkinPicker) throw new Error(`${label}: could not open the homeworld skin picker`);
-    await waitFor(win, `document.querySelectorAll('.skin-picker-grid [data-qa-planet-skin^="skin-asterion-"]').length === 9`);
-    await waitFor(win, `Array.from(document.querySelectorAll('.skin-picker-grid [data-qa-planet-skin^="skin-asterion-"] img')).every((image) => image.complete && image.naturalWidth > 0)`);
+    // The editor shows one rubric page at a time: small WebP thumbnails, never the full pictures.
+    await waitFor(win, `document.querySelectorAll('.planet-editor-v6 [data-qa-skin-group]').length >= 13`);
+    await win.webContents.executeJavaScript(`document.querySelector('.planet-editor-v6 [data-qa-skin-group="ruined"]')?.click()`);
+    await waitFor(win, `document.querySelector('.planet-editor-v6 [data-qa-planet-skin="skin-asterion-09"]')`);
+    await waitFor(win, `Array.from(document.querySelectorAll('.planet-editor-v6 .pe-grid img')).every((image) => image.complete && image.naturalWidth > 0)`);
     const picker = await win.webContents.executeJavaScript(`(() => ({
-      total: document.querySelectorAll('.skin-picker-grid [data-qa-planet-skin]').length,
-      newSkins: Array.from(document.querySelectorAll('.skin-picker-grid [data-qa-planet-skin^="skin-asterion-"]')).map((button) => ({ id: button.getAttribute('data-qa-planet-skin'), label: button.querySelector('span')?.textContent?.trim() || '', src: button.querySelector('img')?.getAttribute('src') || '', loaded: Boolean(button.querySelector('img')?.complete && button.querySelector('img')?.naturalWidth > 0), naturalWidth: button.querySelector('img')?.naturalWidth || 0, naturalHeight: button.querySelector('img')?.naturalHeight || 0 })),
+      images: document.querySelectorAll('.planet-editor-v6 img').length,
+      cards: Array.from(document.querySelectorAll('.planet-editor-v6 [data-qa-planet-skin]')).map((button) => ({ id: button.getAttribute('data-qa-planet-skin'), label: button.querySelector('span')?.textContent?.trim() || '', src: button.querySelector('img')?.getAttribute('src') || '', naturalWidth: button.querySelector('img')?.naturalWidth || 0 })),
     }))()`);
-    if (picker.total !== 30 || picker.newSkins.length !== 9 || picker.newSkins.some((skin, index) => skin.id !== `skin-asterion-${String(index + 1).padStart(2, '0')}` || !skin.label || !skin.loaded || skin.naturalWidth !== 1024 || skin.naturalHeight !== 1024 || !skin.src.endsWith('.webp'))) {
-      throw new Error(`${label}: new planet skins are missing from the picker ${JSON.stringify(picker)}`);
+    if (picker.images > 17 || !picker.cards.length || picker.cards.some((skin) => !skin.label || /^Облик\s/.test(skin.label) || skin.naturalWidth !== 192)) {
+      throw new Error(`${label}: planet editor page should hold only 192px thumbnails with real names ${JSON.stringify(picker)}`);
     }
+    // Alliance looks (locked for a non-leader) are covered by visual-planet-editor.cjs, which sets the seat itself.
+    await win.webContents.executeJavaScript(`document.querySelector('.planet-editor-v6 [data-qa-skin-group="ruined"]')?.click()`);
     const selectedSkinId = 'skin-asterion-09';
+    await waitFor(win, `document.querySelector('.planet-editor-v6 [data-qa-planet-skin="${selectedSkinId}"]')`);
     await win.webContents.executeJavaScript(`document.querySelector('[data-qa-planet-skin="${selectedSkinId}"]')?.click()`);
+    await waitFor(win, `document.querySelector('.planet-editor-v6 [data-qa-skin-apply]')`);
+    await win.webContents.executeJavaScript(`document.querySelector('.planet-editor-v6 [data-qa-skin-apply]')?.click()`);
     await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}').planets?.['helion-01']?.skin === ${JSON.stringify(selectedSkinId)}`);
     const selectedSkin = await win.webContents.executeJavaScript(`(() => ({ src: document.querySelector('[data-qa-planet-skin-art]')?.getAttribute('src') || '', loaded: Boolean(document.querySelector('[data-qa-planet-skin-art]')?.complete && document.querySelector('[data-qa-planet-skin-art]')?.naturalWidth > 0) }))()`);
     if (!selectedSkin.loaded || !selectedSkin.src.endsWith('/skin-asterion-09.webp')) throw new Error(`${label}: selected planet art did not update ${JSON.stringify(selectedSkin)}`);
-    await win.webContents.executeJavaScript(`document.querySelector('.planet-editor-modal-v5 [data-asterion-close]')?.click()`);
-    await waitFor(win, `!document.querySelector('.planet-editor-modal-v5')`);
+    await win.webContents.executeJavaScript(`document.querySelector('.planet-editor-v6 [data-asterion-close]')?.click()`);
+    await waitFor(win, `!document.querySelector('.planet-editor-v6')`);
     await reload(win);
     await win.webContents.executeJavaScript(`document.querySelector('[data-qa-navigation="primary"] [data-qa-route="planet"]')?.click()`);
     await waitFor(win, `document.querySelector('[data-qa-planet-skin-art]')?.complete && document.querySelector('[data-qa-planet-skin-art]')?.naturalWidth > 0`);

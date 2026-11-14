@@ -97,10 +97,3 @@
   box-shadow: 0 0 5px var(--race-glow);
 }
 
-/* ---------- 13. Planet editor: the planet's current look ---------- */
-:root[data-faction] .skin-picker-grid button.active {
-  border-color: var(--race-accent);
-  background: linear-gradient(180deg, var(--race-fill), rgba(4, 30, 40, .82));
-  box-shadow: inset 0 0 0 1px var(--race-outline), 0 0 16px var(--race-glow);
-}
-:root[data-faction] .skin-picker-grid button.active small { color: var(--race-accent); }
