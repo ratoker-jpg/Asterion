@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
 
+import { planetLargeBox, planetLargeScale, usePlanetLargeArt } from '../../planet-skin-large.ts';
 import { ResourceIcon } from '../resources/ResourceIcon';
 
 export type PlanetOrbitZone = 'resource' | 'industry' | 'military';
@@ -18,12 +19,14 @@ const formatRate = (value: number) => `+${Math.round(value).toLocaleString('ru-R
  * shared build queue with hourly income in the bottom dock.
  */
 export function PlanetOrbitView({
-  name, kicker, subtitle, skinArt, vitals, worlds, zones, queue, queueCapacity, income, banner,
+  name, kicker, subtitle, skinId, skinArt, vitals, worlds, zones, queue, queueCapacity, income, banner,
   onSelectWorld, onEditWorld, onChooseZone, onColonize,
 }: {
   name: string;
   kicker: string;
   subtitle: string;
+  /** The look's id: its 1024 px picture is loaded for the big planet. */
+  skinId?: string;
   skinArt: string;
   vitals: readonly { label: string; value: string; tone?: 'ok' }[];
   worlds: readonly PlanetOrbitWorld[];
@@ -38,11 +41,15 @@ export function PlanetOrbitView({
   onColonize: () => void;
 }) {
   const freeSlots = Math.max(0, queueCapacity - queue.length);
+  const bigArt = usePlanetLargeArt(skinId, skinArt);
+  // The zone plates sit 16 px outside the planet's visible part (planet-screens.css, .planet-orbit--fit).
+  const box = planetLargeBox(skinId);
+  const fitStyle = box ? { '--planet-hw': box.hw, '--planet-hh': box.hh } as CSSProperties : undefined;
   return (
-    <div className="planet-page-v3 planet-orbit" data-qa-planet-orbit>
+    <div className={`planet-page-v3 planet-orbit${box ? ' planet-orbit--fit' : ''}`} style={fitStyle} data-qa-planet-orbit>
       <div className="planet-orbit__ring planet-orbit__ring--outer" aria-hidden="true" />
       <div className="planet-orbit__ring" aria-hidden="true" />
-      <img className="planet-image-v3 planet-orbit__planet" data-qa-planet-skin-art src={skinArt} alt={name} draggable={false} />
+      <img className="planet-image-v3 planet-orbit__planet" data-qa-planet-skin-art src={bigArt} alt={name} draggable={false} style={{ '--planet-scale': planetLargeScale(skinId) } as CSSProperties} />
 
       <div className="planet-orbit__side">
       <header className="planet-orbit__name scene-title">

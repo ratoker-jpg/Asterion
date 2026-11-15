@@ -484,6 +484,8 @@ function useStageScale() {
   useEffect(() => {
     // The long-page stage sits at the same letterbox offset as the centred fixed stage.
     document.documentElement.style.setProperty('--asterion-stage-top', `${Math.max(0, Math.round((window.innerHeight - 1080 * scale) / 2))}px`);
+    // Screen pixels per design pixel: the planet plates' 16 px gap is kept on screen (planet-screens.css).
+    document.documentElement.style.setProperty('--asterion-stage-zoom', String(scale));
   }, [scale]);
   useEffect(() => {
     const onResize = () => setScale(calc());
@@ -3722,6 +3724,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               name={currentPlanetName}
               kicker={`Обзор планеты · ${PLAYER_FACTION_LABELS[state.profile.factionId]}`}
               subtitle={`${currentPlanet.coords} · ${currentPlanet.status}`}
+              skinId={currentSkin.id}
               skinArt={currentSkin.art}
               vitals={[
                 { label: 'Население', value: `${planetPopulation} / ${fleetSummary.capacity}` },

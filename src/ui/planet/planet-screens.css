@@ -1071,7 +1071,9 @@
   width: var(--orbit-size);
   height: var(--orbit-size);
   object-fit: contain;
-  transform: translate(-50%, -50%);
+  /* Per look (planet-skin-large.generated.ts): keeps the planet as big on screen as before the 1024 px batch.
+     Inside transform, so the scale is about the centre (the `scale` property shifted the planet). */
+  transform: translate(-50%, -50%) scale(var(--planet-scale, 1));
   filter: drop-shadow(-34px -24px 60px rgba(0, 0, 0, .62)) drop-shadow(0 0 70px rgba(86, 217, 242, .18));
 }
 
@@ -1309,6 +1311,21 @@
 .planet-orbit .planet-orbit__zone--left-top::after,
 .planet-orbit .planet-orbit__zone--left-bottom::after { right: -26px; }
 .planet-orbit .planet-orbit__zone--right::after { left: -26px; }
+/* Looks with their own 1024 px picture (planet-skin-large.ts): plates sit 16 px outside the visible part
+   of the planet (--planet-hw, --planet-hh: half sizes of the visible box), never over the side columns. */
+.planet-page-v3.planet-orbit.planet-orbit--fit {
+  /* 16 screen px at any window size: the stage is scaled by --asterion-stage-zoom (App.tsx). */
+  --plate-gap: calc(16px / var(--asterion-stage-zoom, 1));
+}
+.planet-page-v3.planet-orbit.planet-orbit--fit .planet-orbit__zone--left-top,
+.planet-page-v3.planet-orbit.planet-orbit--fit .planet-orbit__zone--left-bottom {
+  right: calc(50% + var(--planet-hw) + var(--plate-gap));
+  max-width: min(290px, calc(50% - var(--planet-hw) - var(--orbit-side) - 78px));
+}
+.planet-page-v3.planet-orbit.planet-orbit--fit .planet-orbit__zone--right {
+  left: calc(50% + var(--planet-hw) + var(--plate-gap));
+  max-width: min(290px, calc(50% - var(--planet-hw) - var(--orbit-side) - 56px));
+}
 
 /* Bottom dock: queue and hourly income on one surface, no cards inside. */
 .planet-orbit .planet-orbit__dock {
