@@ -10,10 +10,16 @@ app.on('window-all-closed', () => {});
 
 const ROOT = path.join(__dirname, '..');
 const OUTPUT = process.env.ASTERION_QA_OUTPUT || path.join(ROOT, 'visual-qa');
+const FAST_TRADE = process.argv.includes('--fast-trade');
+const CAMPAIGN_SPEED = FAST_TRADE ? 'fast' : 'standard';
+const CAMPAIGN_REFILL_MS = 15 * 60 * 1000 / (FAST_TRADE ? 2 : 1);
+const CAMPAIGN_REFILL_LABEL = FAST_TRADE ? '7 мин 30 с' : '15 мин';
+const TEST_TIME_SCALE = FAST_TRADE ? 200 : 1;
+const CAPTURE_ROOT = FAST_TRADE ? path.join(OUTPUT, 'trade-fast') : OUTPUT;
 const SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const TEST_TIME_SCALE_KEY = 'asterion.test-time-scale.v1';
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
-const REFILL_MS = 15 * 60 * 1000;
+const REFILL_MS = CAMPAIGN_REFILL_MS;
 const CANONICAL_RESOURCE_POINTS = 20_716;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -100,6 +106,7 @@ async function seedTradeCenter(win) {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
     const planet = save?.planets?.['helion-01'];
     if (!planet?.buildings || !planet?.recycling) return false;
+    if (save?.worldConfig?.world) save.worldConfig.world.campaignSpeed = ${JSON.stringify(CAMPAIGN_SPEED)};
     planet.buildings['trade-center'] = 1;
     planet.buildings = { ...planet.buildings,
       'metal-production-1': 0, 'metal-production-2': 0, 'metal-production-3': 0,
@@ -116,7 +123,7 @@ async function seedTradeCenter(win) {
     save.resourceClock = { lastReconciledAt: Date.now() + 60_000, remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
     save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 7);
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
-    localStorage.setItem(${JSON.stringify(TEST_TIME_SCALE_KEY)}, '1');
+    localStorage.setItem(${JSON.stringify(TEST_TIME_SCALE_KEY)}, ${JSON.stringify(String(TEST_TIME_SCALE))});
   })()`, 'Could not seed Trade Center state');
 }
 
@@ -150,6 +157,8 @@ async function readScreen(win) {
       queueSegments: root.querySelectorAll('[data-qa-trade-refill-segment]').length,
       nextRefill: text('[data-qa-trade-next-refill]'),
       fullRefill: text('[data-qa-trade-full-refill]'),
+      refillIntervalMs: Number(attr('[data-qa-trade-refill-interval-ms]', 'data-qa-trade-refill-interval-ms')),
+      refillIntervalLabel: attr('[data-qa-trade-refill-interval-ms]', 'data-qa-trade-refill-interval-label'),
       allAvailable: Boolean(root.querySelector('[data-qa-trade-all-available]')),
       source: Array.from(root.querySelectorAll('[data-qa-trade-source]')).find((item) => item.getAttribute('data-qa-trade-selected') === 'true')?.getAttribute('data-qa-trade-source') ?? null,
       target: Array.from(root.querySelectorAll('[data-qa-trade-target]')).find((item) => item.getAttribute('data-qa-trade-selected') === 'true')?.getAttribute('data-qa-trade-target') ?? null,
@@ -322,7 +331,8 @@ async function verifyFlow(win, directory, label) {
   await activateIndustry(win);
   await openTradeCenter(win);
   let screen = await readScreen(win);
-  if (!screen || screen.level !== 1 || screen.limit !== CANONICAL_RESOURCE_POINTS * 10 || screen.rating !== CANONICAL_RESOURCE_POINTS || screen.slots !== '3/3' || !screen.allAvailable) throw new Error(`${label}: initial Trade Center state mismatch ${JSON.stringify(screen)}`);
+  if (!screen || screen.level !== 1 || screen.limit !== CANONICAL_RESOURCE_POINTS * 10 || screen.rating !== CANONICAL_RESOURCE_POINTS || screen.slots !== '3/3' || !screen.allAvailable
+    || screen.refillIntervalMs !== REFILL_MS || screen.refillIntervalLabel !== CAMPAIGN_REFILL_LABEL) throw new Error(`${label}: initial Trade Center state mismatch ${JSON.stringify(screen)}`);
   if (screen.source !== 'metal' || screen.target !== 'minerals' || !screen.metalTargetDisabled || screen.debrisTargetExists || screen.rate !== '1 : 1') throw new Error(`${label}: initial pair/target rules mismatch ${JSON.stringify(screen)}`);
   assertGeometry(await measure(win), label);
   await capture(win, directory, 'trade-standard');
@@ -455,7 +465,7 @@ app.whenReady().then(async () => {
 
     for (const [width, height] of VIEWPORTS) {
       const label = `${width}x${height}`;
-      const directory = path.join(OUTPUT, label);
+      const directory = path.join(CAPTURE_ROOT, label);
       fs.mkdirSync(directory, { recursive: true });
       await win.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride', {
         width,

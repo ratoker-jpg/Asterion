@@ -11,6 +11,7 @@ import {
   TRADE_REFILL_INTERVAL_MS,
   createDefaultTradeState,
   executeTrade,
+  getTradeRefillIntervalMsForCampaignSpeed,
   getTradeAmountLimit,
   getTradeMaxSlots,
   getTradeReceivedAmount,
@@ -74,6 +75,20 @@ test('trade amount limit is resource rating points × 10', () => {
   assert.equal(getTradeAmountLimit(855_880), 8_558_800);
   assert.equal(getTradeAmountLimit(0), 0);
   assert.equal(getTradeAmountLimit(-10), 0);
+});
+
+test('the trade interval follows saved universe speed and each completed deal uses that interval', () => {
+  assert.equal(getTradeRefillIntervalMsForCampaignSpeed('slow'), 30 * 60_000);
+  assert.equal(getTradeRefillIntervalMsForCampaignSpeed('standard'), 15 * 60_000);
+  assert.equal(getTradeRefillIntervalMsForCampaignSpeed('fast'), 7.5 * 60_000);
+  assert.equal(getTradeRefillIntervalMsForCampaignSpeed('superfast'), 3 * 60_000);
+
+  const now = 500_000;
+  const fast = state({ trade: createDefaultTradeState(getTradeRefillIntervalMsForCampaignSpeed('fast')) });
+  const result = executeTrade(fast, 1, 855_880, request({ amount: 1 }), now);
+  assert.equal(result.ok, true);
+  assert.equal(result.refillAt, now + 7.5 * 60_000);
+  assert.equal(result.state.trade.refillIntervalMs, 7.5 * 60_000);
 });
 
 test('base-resource pairs are 1:1 and debris exchanges are floor(amount × 0.6)', () => {
@@ -166,8 +181,8 @@ test('three spent slots refill sequentially at 15, 30 and 45 minutes without dou
 
 test('trade state migration is safe, removes matured entries and caps queue to current slots', () => {
   const now = 10_000;
-  assert.deepEqual(migrateTradeState(undefined, 2, now), { refillAtQueue: [] });
-  assert.deepEqual(migrateTradeState({ refillAtQueue: 'bad' }, 2, now), { refillAtQueue: [] });
+  assert.deepEqual(migrateTradeState(undefined, 2, now), { refillAtQueue: [], refillIntervalMs: TRADE_REFILL_INTERVAL_MS });
+  assert.deepEqual(migrateTradeState({ refillAtQueue: 'bad' }, 2, now), { refillAtQueue: [], refillIntervalMs: TRADE_REFILL_INTERVAL_MS });
 
   const migrated = migrateTradeState({
     refillAtQueue: [
@@ -185,4 +200,26 @@ test('trade state migration is safe, removes matured entries and caps queue to c
   assert.equal(migrated.refillAtQueue[0], now + 4_000);
   assert.equal(migrated.refillAtQueue[1], migrated.refillAtQueue[0] + TRADE_REFILL_INTERVAL_MS);
   assert.equal(migrated.refillAtQueue[2], migrated.refillAtQueue[1] + TRADE_REFILL_INTERVAL_MS);
+});
+
+test('retiming expires completed charges first, preserves in-progress fraction and remaining slot count once', () => {
+  const now = 2_000_000;
+  const fastInterval = 7.5 * 60_000;
+  const oldQueue = [
+    now - 1,
+    now + TRADE_REFILL_INTERVAL_MS * 0.25,
+    now + TRADE_REFILL_INTERVAL_MS * 1.25,
+    now + TRADE_REFILL_INTERVAL_MS * 2.25,
+  ];
+  const migrated = migrateTradeState({ refillAtQueue: oldQueue }, 2, now, fastInterval);
+  assert.equal(migrated.refillAtQueue.length, 3, 'one completed old deadline is dropped and every pending charge remains');
+  assert.deepEqual(migrated.refillAtQueue, [
+    now + fastInterval * 0.25,
+    now + fastInterval * 1.25,
+    now + fastInterval * 2.25,
+  ]);
+  assert.ok(migrated.refillAtQueue.every((timestamp, index, queue) => index === 0 || timestamp - queue[index - 1]! === fastInterval));
+
+  const loadedAgain = migrateTradeState(migrated, 2, now, fastInterval);
+  assert.deepEqual(loadedAgain, migrated, 'interval metadata prevents a second scaling pass');
 });

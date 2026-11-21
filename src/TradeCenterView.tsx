@@ -2,7 +2,6 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperti
 import { getBuildingDefinition } from './domain/buildings/resource-zone.ts';
 import type { BuildingFaction } from './domain/buildings/balance-v1.ts';
 import {
-  TRADE_REFILL_INTERVAL_MS,
   TRADE_RESOURCES,
   TRADE_TARGET_RESOURCES,
   getTradeAmountLimit,
@@ -57,10 +56,15 @@ const LONG_INPUT_DIGITS = 12;
 /** More digits than the game can count exactly are ignored while typing. */
 const MAX_AMOUNT_DIGITS = 15;
 
-const TRADE_SLOT_REFILL_MINUTES = TRADE_REFILL_INTERVAL_MS / 60_000;
-
 function formatNumber(value: number): string {
   return new Intl.NumberFormat('ru-RU').format(Math.max(0, Math.floor(value)));
+}
+
+function formatTradeInterval(ms: number): string {
+  const totalSeconds = Math.max(1, Math.round(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return seconds > 0 ? `${minutes} мин ${seconds} с` : `${minutes} мин`;
 }
 
 function formatDuration(ms: number): string {
@@ -229,7 +233,10 @@ export function TradeCenterView({
             {refill.missingSlots > 1 ? (
               <small>все через <span data-qa-trade-full-refill>{formatDuration(refill.fullRefillMs)}</span></small>
             ) : (
-              <small>3 сделки за уровень · новая за {TRADE_SLOT_REFILL_MINUTES} мин</small>
+              <small data-qa-trade-refill-interval-ms={refill.refillIntervalMs}
+                data-qa-trade-refill-interval-label={formatTradeInterval(refill.refillIntervalMs)}>
+                3 сделки за уровень · новая за {formatTradeInterval(refill.refillIntervalMs)}
+              </small>
             )}
           </div>
         </section>
