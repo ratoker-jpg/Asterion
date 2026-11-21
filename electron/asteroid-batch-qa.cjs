@@ -113,10 +113,6 @@ function coordinateMatches(text, coordinate) {
   return Boolean(match && match.slice(1).map(Number).every((value, index) => value === expected[index]));
 }
 
-function clone(value) {
-  return JSON.parse(JSON.stringify(value));
-}
-
 function seedSourcePlanet(save, basePlanet, source) {
   const planet = JSON.parse(JSON.stringify(basePlanet));
   planet.name = source.name;
@@ -393,6 +389,8 @@ async function checkGalaxyOnePlanning(win, preflight) {
   )), batchRecords);
   assert('batch dispatch request and flight IDs are unique', new Set(batchRecords.map((flight) => flight.id)).size === 2
     && new Set(batchRecords.map((flight) => flight.requestId)).size === 2, batchRecords);
+  assert('equal batches draw from two owned sources when the nearest source is exhausted',
+    new Set(batchRecords.map((flight) => flight.originPlanetId)).size === 2, batchRecords);
 
   const liveGas = finalSave.flights.records.filter((flight) => flight.missionId === 'gas'
     && ['outbound', 'arrived', 'returning'].includes(flight.phase)
@@ -416,6 +414,7 @@ async function checkOtherGalaxyScan(win) {
   const expected = FIXTURE.targets.filter((target) => target.coordinate.galaxy === 2 && target.coordinate.system === 8).map((target) => target.id);
   assert('galaxy selection and inclusive single-system scan', rows.length === 1 && rows[0].id === expected[0]
     && coordinateMatches(rows[0].coordinate, { galaxy: 2, system: 8, position: 24 }), { rows, expected });
+  assert('a full active-flight cap leaves later scanned targets unselected', rows[0].quantity === 0, rows[0]);
 }
 
 async function run() {
