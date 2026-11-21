@@ -15,6 +15,7 @@ app.on('window-all-closed', () => {});
 const ROOT = path.join(__dirname, '..');
 const OUTPUT = process.env.ASTERION_QA_OUTPUT || path.join(ROOT, 'visual-qa', 'quick-actions');
 const SAVE_KEY = 'asterion.vertical-slice.test.v1';
+const TEST_LAYOUT_SEED_KEY = 'asterion.test-universe-layout-seed.v1';
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
 const skipScreenshots = process.env.ASTERION_SKIP_SCREENSHOTS === '1';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -55,6 +56,21 @@ async function selectSystem(win, system) {
   })()`);
   await waitFor(win, `document.querySelector('[data-qa-universe]')?.getAttribute('data-qa-universe-system') === ${JSON.stringify(String(system))}`);
   await sleep(150);
+}
+
+/** Picks a reproducible Test Mode layout that has a live unique object. */
+async function selectUniqueSystem(win, label) {
+  for (let seed = 1; seed <= 16; seed += 1) {
+    await js(win, `localStorage.setItem(${JSON.stringify(TEST_LAYOUT_SEED_KEY)}, ${JSON.stringify(String(seed))})`);
+    // Start at 2 because the universe opens on system 1; visiting every system
+    // still forces a fresh map render after each change to the layout seed.
+    for (let offset = 1; offset <= 40; offset += 1) {
+      const system = offset === 40 ? 1 : offset + 1;
+      await selectSystem(win, system);
+      if (await js(win, `Boolean(document.querySelector('[data-qa-universe-kind="unique"]'))`)) return system;
+    }
+  }
+  throw new Error(`${label}: no unique object in 16 deterministic Test Mode layouts`);
 }
 
 /** Right mouse button on a map object, as the player does it. */
@@ -259,13 +275,8 @@ async function scenarios(win, directory, label) {
   await closeMenu(win);
 
   // 5. Unique object: probe and expedition (attack when occupied).
-  // Unique objects are timed: take the first one on the map now.
-  let uniqueSystem = 0;
-  for (let system = 1; system <= 40 && !uniqueSystem; system += 1) {
-    await selectSystem(win, system);
-    if (await js(win, `Boolean(document.querySelector('[data-qa-universe-kind="unique"]'))`)) uniqueSystem = system;
-  }
-  if (!uniqueSystem) throw new Error(`${label}: no unique object on the map`);
+  // These contacts are timed; the QA owns a Test Mode layout seed with one live.
+  await selectUniqueSystem(win, label);
   await rightClick(win, '[data-qa-universe-kind="unique"]');
   const unique = await menuSnapshot(win);
   if (unique.actions[0]?.id !== 'exploration-recon' || !['expedition', 'exploration-attack'].includes(unique.actions[1]?.id)) throw new Error(`${label}: unique actions ${JSON.stringify(unique.actions)}`);
