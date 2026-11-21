@@ -274,7 +274,6 @@ import { AidQuickSend } from './ui/command/AidQuickSend.tsx';
 import {
   DEFAULT_ASTEROID_GAS_BATCH_RECYCLERS,
   planAsteroidGasBatch,
-  scanAsteroidGasTargets,
   type AsteroidGasBatchOptions,
   type AsteroidGasBatchPlan,
   type AsteroidGasBatchRuntime,
@@ -3111,21 +3110,18 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   };
 
   const scanAsteroidGasBatch = () => {
-    if (!asteroidGasBatchDialog) return;
-    const liveState = stateRef.current;
+    const session = asteroidGasBatchDialog;
+    if (!session) return;
     const runtime: AsteroidGasBatchRuntime = { now: worldNow(), mode: RUNTIME_MODE, testTimeScale };
+    const allocation = planAsteroidGasBatch(stateRef.current, session.scan, {
+      quantityPerTarget: session.equalQuantity,
+    }, runtime);
     const selectedQuantities = Object.fromEntries(
-      scanAsteroidGasTargets(liveState, asteroidGasBatchDialog.scan, runtime)
-        .map((target) => [target.targetId, asteroidGasBatchDialog.equalQuantity]),
+      allocation.targets
+        .filter((target) => target.status === 'ready')
+        .map((target) => [target.targetId, session.equalQuantity]),
     );
-    const planned = planAsteroidGasBatchForDialog(liveState, asteroidGasBatchDialog.scan, selectedQuantities, runtime);
-    const status = asteroidGasBatchStatus(planned.plan);
-    setAsteroidGasBatchDialog({
-      ...asteroidGasBatchDialog,
-      options: { quantitiesById: planned.quantities },
-      plan: planned.plan,
-      ...status,
-    });
+    updateAsteroidGasBatchPlan(session, selectedQuantities);
   };
 
   const changeAsteroidGasBatchSelection = (selection: Partial<AsteroidGasBatchScan>) => {
@@ -3148,13 +3144,6 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       session.options.quantitiesById?.[target.targetId] ?? target.requestedQuantity ?? 0,
     ]));
     selectedQuantities[targetId] = quantity;
-    updateAsteroidGasBatchPlan(session, selectedQuantities);
-  };
-
-  const distributeAsteroidGasBatch = () => {
-    const session = asteroidGasBatchDialog;
-    if (!session?.plan) return;
-    const selectedQuantities = Object.fromEntries(session.plan.targets.map((target) => [target.targetId, session.equalQuantity]));
     updateAsteroidGasBatchPlan(session, selectedQuantities);
   };
 
@@ -4303,7 +4292,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               onGalaxyChange={(galaxy) => changeAsteroidGasBatchSelection({ galaxy })}
               onRangeChange={(range) => changeAsteroidGasBatchSelection({ fromSystem: range.from, toSystem: range.to })}
               onEqualQuantityChange={(equalQuantity) => setAsteroidGasBatchDialog((current) => current ? { ...current, equalQuantity } : current)}
-              onAutoDistribute={distributeAsteroidGasBatch}
+              onAutoDistribute={scanAsteroidGasBatch}
               onQuantityChange={changeAsteroidGasBatchQuantity}
               onScan={scanAsteroidGasBatch}
               onSend={sendAsteroidGasBatch}

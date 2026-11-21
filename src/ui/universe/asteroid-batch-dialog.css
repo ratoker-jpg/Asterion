@@ -97,7 +97,8 @@
 .abatch__quantity-field input[type="number"]:active:not(:disabled) { border-color: var(--ut-accent); }
 .abatch__field input[type="number"]:focus-visible,
 .abatch__quantity-field input[type="number"]:focus-visible { outline: var(--ut-focus); outline-offset: .125rem; }
-.abatch__field input[type="number"][aria-invalid="true"] { border-color: var(--ut-danger); }
+.abatch__field input[type="number"][aria-invalid="true"],
+.abatch__quantity-field input[type="number"][aria-invalid="true"] { border-color: var(--ut-danger); }
 .abatch__field input[type="number"]:disabled,
 .abatch__quantity-field input[type="number"]:disabled { opacity: .48; cursor: not-allowed; }
 .abatch__field input[type="number"]::placeholder { color: var(--oc-label); }
@@ -217,6 +218,7 @@
   background: var(--oc-tint);
 }
 .abatch__list > li.is-included { background: color-mix(in srgb, var(--ut-accent) 7%, var(--oc-tint)); }
+.abatch__list > li.is-over-cap { background: color-mix(in srgb, var(--ut-danger) 7%, var(--oc-tint)); }
 .abatch__target-main { min-width: 0; display: grid; gap: .125rem; }
 .abatch__target-main b {
   overflow: hidden;
@@ -238,6 +240,7 @@
 .abatch__source-name { min-width: 0; color: var(--oc-muted); font-size: calc(var(--ut-font-secondary, .6875rem) * var(--text-scale-secondary, 1)) !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .abatch__quantity-field { min-width: 0; }
 .abatch__quantity-field input { text-align: center; }
+.abatch__quantity-warning { display: block; color: var(--ut-danger); font-size: calc(var(--ut-font-helper, .6875rem) * var(--text-scale-helper, 1)) !important; font-weight: 700; line-height: 1.25; text-align: center; }
 .abatch__state { min-height: 8rem; display: grid; align-content: center; justify-items: center; gap: .5rem; padding: 1rem; text-align: center; }
 .abatch__state p { max-width: 48ch; color: var(--oc-text); font-size: calc(var(--ut-font-body, .75rem) * var(--text-scale-body, 1)) !important; font-weight: 700; line-height: 1.45; }
 .abatch__state small { color: var(--oc-muted); font-size: calc(var(--ut-font-helper, .6875rem) * var(--text-scale-helper, 1)) !important; line-height: 1.4; }

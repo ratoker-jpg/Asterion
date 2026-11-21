@@ -308,7 +308,8 @@ export function AsteroidBatchDialog({
                 {targets.map((target) => {
                   const blocked = target.flightState !== 'ready';
                   const cap = Math.max(0, Math.floor(target.maxQuantity));
-                  const quantity = Math.min(cap, Math.max(0, Math.floor(target.quantity)));
+                  const quantity = Math.max(0, Math.floor(target.quantity));
+                  const quantityOverCap = target.flightState === 'ready' && quantity > cap;
                   const manualRefusal = target.flightState === 'ready' && Boolean(target.flightReason);
                   const flightMessage = target.flightState === 'active'
                     ? 'Рейс уже в пути'
@@ -320,12 +321,13 @@ export function AsteroidBatchDialog({
                   return (
                     <li
                       key={target.id}
-                      className={quantity > 0 && !blocked ? 'is-included' : ''}
+                      className={[quantity > 0 && !blocked && !quantityOverCap ? 'is-included' : '', quantityOverCap ? 'is-over-cap' : ''].filter(Boolean).join(' ')}
                       data-qa-asteroid-batch-row={target.id}
                       data-qa-asteroid-batch-active={target.flightState === 'active' ? target.id : undefined}
                       data-qa-asteroid-batch-flight={target.flightState}
                       data-qa-asteroid-batch-refused={manualRefusal ? target.id : undefined}
-                      data-qa-asteroid-batch-selected={quantity > 0 && !blocked ? 'yes' : 'no'}
+                      data-qa-asteroid-batch-selected={quantity > 0 && !blocked && !quantityOverCap ? 'yes' : 'no'}
+                      data-qa-asteroid-batch-over-cap={quantityOverCap ? target.id : undefined}
                     >
                       <span className="abatch__target-main">
                         <b>{target.name}</b>
@@ -348,11 +350,16 @@ export function AsteroidBatchDialog({
                           step={1}
                           value={quantity}
                           aria-label={`Переработчики для астероида ${target.name}, ${target.coordinate}`}
-                          aria-describedby={flightMessage ? `abatch-flight-${target.id}` : undefined}
-                          disabled={blocked || isSending || cap === 0}
+                          aria-invalid={quantityOverCap}
+                          aria-describedby={[
+                            flightMessage ? `abatch-flight-${target.id}` : null,
+                            quantityOverCap ? `abatch-quantity-limit-${target.id}` : null,
+                          ].filter(Boolean).join(' ') || undefined}
+                          disabled={blocked || isSending}
                           data-qa-asteroid-batch-quantity={target.id}
                           onChange={(event) => updateQuantity(target, event)}
                         />
+                        {quantityOverCap ? <small className="abatch__quantity-warning" id={`abatch-quantity-limit-${target.id}`}>Лимит: {formatAmount(cap)}</small> : null}
                       </label>
                     </li>
                   );
