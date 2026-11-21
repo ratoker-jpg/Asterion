@@ -10,7 +10,7 @@ import { MAX_GALAXY_COUNT } from '../domain/universe/runtime.ts';
 import type { UniverseCoordinate } from '../domain/universe/types.ts';
 import type { SaveState } from './contracts.ts';
 
-export const DEFAULT_ASTEROID_GAS_BATCH_RECYCLERS = 10;
+export const DEFAULT_ASTEROID_GAS_BATCH_RECYCLERS = 20;
 
 export type AsteroidGasBatchScan = {
   galaxy: number;

@@ -103,7 +103,7 @@ test('scan uses inclusive system bounds, keeps the selected galaxy, and prioriti
   assert.deepEqual(scanAsteroidGasTargets(state, { galaxy: 2, fromSystem: 5, toSystem: 5 }, RUNTIME).map(({ spawnIndex }) => spawnIndex), [14]);
 });
 
-test('plan defaults to ten recyclers per target and limits aggregate flights without mutating live state', () => {
+test('plan defaults to twenty recyclers per target and limits aggregate flights without mutating live state', () => {
   const coordinates = [2, 3, 4, 5, 6].map((system, index) => ({
     spawnIndex: 20 + index,
     coordinate: { galaxy: 1, system, position: 1 },
@@ -115,12 +115,12 @@ test('plan defaults to ten recyclers per target and limits aggregate flights wit
   assert.equal(plan.targets.length, 5);
   assert.equal(plan.commands.length, 3);
   assert.deepEqual(plan.targets.slice(0, 3).map((row) => [row.status, row.requestedQuantity, row.acceptedQuantity]), [
-    ['ready', 10, 10], ['ready', 10, 10], ['ready', 10, 10],
+    ['ready', 20, 20], ['ready', 20, 20], ['ready', 20, 20],
   ]);
   assert.ok(plan.targets.slice(3).every((row) => row.status === 'blocked' && row.preview === null && row.error?.code === 'flight-limit-reached'));
   assert.equal(plan.sources[0]!.availableRecyclers, 100);
-  assert.equal(plan.sources[0]!.assignedRecyclers, 30);
-  assert.equal(plan.sources[0]!.remainingRecyclers, 70);
+  assert.equal(plan.sources[0]!.assignedRecyclers, 60);
+  assert.equal(plan.sources[0]!.remainingRecyclers, 40);
   assert.equal(getAvailableFleetForPlanet(state, state.currentPlanetId).ships.recycler, 100);
   assert.equal(state.flights.records.length, 0);
   assert.ok(plan.targets[0]!.preview?.ok);
