@@ -101,6 +101,7 @@ export function publishApplicationRuntimeSnapshot(
   state: SaveState,
   context: RuntimeApplicationContext,
   target: EventTarget,
+  currentPlayerAchievementPoints = 0,
 ): void {
   const scienceSnapshot = createScienceSnapshot(state, context);
   target.dispatchEvent(new CustomEvent(SCIENCE_RUNTIME_CHANGED_EVENT, { detail: scienceSnapshot }));
@@ -115,6 +116,7 @@ export function publishApplicationRuntimeSnapshot(
     get owners() { return cachedRatedOwners(state); },
     get alliances() { return cachedRatedAlliances(state); },
     currentPlayerId: state.profile.playerId,
+    currentPlayerAchievementPoints,
   });
   target.dispatchEvent(new CustomEvent(RUNTIME_STATE_CHANGED_EVENT, { detail: state }));
 }

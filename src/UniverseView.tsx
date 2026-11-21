@@ -138,6 +138,7 @@ type UniverseViewProps = {
   ownedPlanetName: string;
   profile: PlayerProfileState;
   ownerScores: Readonly<Record<string, OwnerScore>>;
+  currentPlayerAchievementPoints?: number;
   /** Planet shields by owner id; a shielded planet shows a mark and cannot be attacked. */
   shields?: Readonly<Record<string, import('./domain/shield/shield.ts').ShieldRecord>>;
   command: CommandState;
@@ -595,7 +596,7 @@ function MovingAsteroid({ node, underlyingKind, nowMs, hasDebris, occupiedNodes,
   </button>;
 }
 
-export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPlanetName, profile, ownerScores, shields, command, playerPlanets: playerPlanetsProp, spyTargets: spyTargetsProp, orbitalDebrisByCoordinate, asteroidDebrisPresenceBySpawnIndex, asteroidStates, pirateContactState, pirateContacts = [], pirateFocusTarget, mode, onColonize, onAsteroidRecycler, onExpedition, onExplorationRecon, onExplorationAttack, explorationEligibility = {}, explorationIntel = {}, onTransport, onSpy, onAttack, onPirateRecon, onPirateAttack, onPirateReport, onPirateSystemChange, focusTarget, onFocusHandled, onSunSelect, sunAlerts = [], gateBeacons = [], onSunDefend, sunRaidAccess, homeCoordinate, debrisOrigin, onQuickSend, onQuickDetails }: UniverseViewProps) {
+export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPlanetName, profile, ownerScores, currentPlayerAchievementPoints = 0, shields, command, playerPlanets: playerPlanetsProp, spyTargets: spyTargetsProp, orbitalDebrisByCoordinate, asteroidDebrisPresenceBySpawnIndex, asteroidStates, pirateContactState, pirateContacts = [], pirateFocusTarget, mode, onColonize, onAsteroidRecycler, onExpedition, onExplorationRecon, onExplorationAttack, explorationEligibility = {}, explorationIntel = {}, onTransport, onSpy, onAttack, onPirateRecon, onPirateAttack, onPirateReport, onPirateSystemChange, focusTarget, onFocusHandled, onSunSelect, sunAlerts = [], gateBeacons = [], onSunDefend, sunRaidAccess, homeCoordinate, debrisOrigin, onQuickSend, onQuickDetails }: UniverseViewProps) {
   const galaxyCount = getActiveGalaxyCount();
   const [galaxy, setGalaxy] = useState(homeCoordinate?.galaxy ?? GALAXY);
   const [system, setSystem] = useState(homeCoordinate?.system ?? 1);
@@ -655,9 +656,9 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
     displayName: profile.displayName,
     raceId: profile.factionId,
     alliance,
-    points: ownerPoints(ownerScores[profile.playerId]),
+    points: { ...ownerPoints(ownerScores[profile.playerId]), achievements: currentPlayerAchievementPoints },
     planetIds: playerPlanets.map((planet) => planet.id),
-  }), [alliance, ownerScores, playerPlanets, profile]);
+  }), [alliance, currentPlayerAchievementPoints, ownerScores, playerPlanets, profile]);
   const owners = useMemo(() => {
     const next = new Map<string, UniverseOwnerProfile>([[owner.id, owner]]);
     if (mode === 'test') {

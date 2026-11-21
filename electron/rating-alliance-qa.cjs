@@ -3,8 +3,8 @@
 // 8-character tag, an oversized alliance of 30 members, an alliance with no
 // deputy, a solo player with personal crystals. Checks: leader and deputy are
 // marked (leader first), alliance members show the alliance's crystals instead
-// of a personal 0, the Gate rule is stated, no «ДОСТИЖ.» dead column, nothing
-// overlaps or scrolls sideways; a roster name opens that player.
+// of a personal 0, the Gate rule is stated, the player achievement column stays
+// visible and sortable, nothing overlaps or scrolls sideways, and a roster name opens that player.
 // The standings come from a Test Mode QA fixture (UtilityScreensPortal reads
 // it in Test Mode only), rendered inside the real game shell.
 const { app, BrowserWindow } = require('electron');
@@ -19,7 +19,7 @@ const ROOT = path.join(__dirname, '..');
 const OUTPUT = process.env.ASTERION_QA_OUTPUT || path.join(ROOT, 'visual-qa', 'rating-alliance');
 const SKIP_SCREENSHOTS = process.env.ASTERION_SKIP_SCREENSHOTS === '1';
 const FIXTURE_KEY = 'asterion.qa.rating-fixture.v1';
-const VIEWPORTS = [[1920, 1080], [1280, 720]];
+const VIEWPORTS = [[1920, 1080], [1280, 720], [2560, 1080]];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const failures = [];
 const fail = (message, detail) => { failures.push({ message, detail }); console.error(`[rating-alliance-qa] ${message}`, JSON.stringify(detail ?? null)); };
@@ -75,7 +75,7 @@ function buildFixture() {
     'qa-no-deputy': { members: 6, wars: 2, crystals: 1 },
     'qa-small': { members: 3, wars: 0, crystals: 0 },
   };
-  return { ownerScores, owners, currentPlayerId: PLAYER_ID, alliances, allianceDetails, giantName };
+  return { ownerScores, owners, currentPlayerId: PLAYER_ID, currentPlayerAchievementPoints: 1_234_567, alliances, allianceDetails, giantName };
 }
 
 // ---------- helpers ----------
@@ -160,12 +160,14 @@ async function layout(win, where) {
       spill: spill.slice(0, 10),
       heads: [...document.querySelectorAll('.rating-head-v2 > *')].map((node) => node.textContent.trim()),
       tabs: [...document.querySelectorAll('.rating-mode-tabs-v2 button')].map((node) => node.textContent.trim()),
+      mode: document.querySelector('.rating-mode-tabs-v2 button.active')?.textContent.trim() || '',
     };
   })()`);
   check(facts.pageScrollX <= 1 && facts.viewScrollX <= 1, `${where}: sideways scroll`, facts);
   check(facts.overlaps.length === 0, `${where}: row cells overlap`, facts.overlaps);
   check(facts.spill.length === 0, `${where}: card content leaves the card`, facts.spill);
-  check(!facts.heads.some((head) => head.includes('ДОСТИЖ')), `${where}: dead «ДОСТИЖ.» column is back`, facts.heads);
+  if (facts.mode === 'ИГРОКИ') check(facts.heads.at(-1)?.includes('ДОСТИЖ'), `${where}: achievement column is missing or not last`, facts.heads);
+  else check(!facts.heads.some((head) => head.includes('ДОСТИЖ')), `${where}: achievement column leaked into alliance rating`, facts.heads);
   check(!facts.tabs.some((tab) => tab === 'ЧЕМПИОНАТЫ' || tab === 'ЗАЛ СЛАВЫ'), `${where}: dead tabs are back`, facts.tabs);
   return facts;
 }
@@ -182,6 +184,13 @@ async function runViewport(win, directory, fixture, label) {
   metrics.playerRows = await js(win, `document.querySelectorAll('[data-qa-rating-player-row]').length`);
   metrics.total = await text(win, '.rating-meta-v2 > span');
   check(metrics.total.includes('из 100'), `${label}: expected 100 players`, metrics.total);
+  const achievementCell = await text(win, `[data-qa-rating-achievement-points="${PLAYER_ID}"]`);
+  check(achievementCell.replace(/\D/g, '') === '1234567', `${label}: achievement points attached to the wrong player row`, achievementCell);
+  await click(win, '[data-qa-rating-sort="achievementPoints"]');
+  const firstAchievementPlayer = await js(win, `document.querySelector('[data-qa-rating-player-row]')?.getAttribute('data-qa-rating-player-row') || ''`);
+  check(firstAchievementPlayer === PLAYER_ID, `${label}: achievement sort did not rank the player with the earned total first`, firstAchievementPlayer);
+  await click(win, '[data-qa-rating-sort="achievementPoints"]');
+  await click(win, '[data-qa-rating-sort="totalPoints"]');
   const leaderRow = await text(win, '[data-qa-rating-player-row="npc-007"]');
   check(leaderRow.includes('[ABCDEFGH]') && /глава/i.test(leaderRow), `${label}: leader row lacks the tag or the role mark`, leaderRow);
   const deputyRow = await text(win, '[data-qa-rating-player-row="npc-012"]');
@@ -211,6 +220,10 @@ async function runViewport(win, directory, fixture, label) {
   await waitFor(win, `document.querySelector('[data-qa-rating-player-card="${PLAYER_ID}"] [data-qa-rating-player-crystals="solo"]')`);
   const soloCard = await text(win, `[data-qa-rating-player-card="${PLAYER_ID}"]`);
   check(soloCard.includes('3/4') && soloCard.includes('Без союза'), `${label}: solo card lacks personal crystals`, soloCard);
+  const soloAchievementPoints = await text(win, `[data-qa-rating-player-card="${PLAYER_ID}"] [data-qa-rating-player-achievements]`);
+  check(soloAchievementPoints.replace(/\D/g, '') === '1234567', `${label}: player card lost its earned achievement total`, soloAchievementPoints);
+  const selectedAchievementPoints = await text(win, '.rating-selection-v2');
+  check(selectedAchievementPoints.replace(/\s/g, '').includes('Достижения:1234567'), `${label}: selected player strip lost its earned achievement total`, selectedAchievementPoints);
   await scrollTo(win, `[data-qa-rating-player-card="${PLAYER_ID}"]`, 'center');
   metrics.soloCard = await layout(win, `${label} solo card`);
   await capture(win, directory, '04-player-card-solo');

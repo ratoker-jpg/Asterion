@@ -43,11 +43,83 @@ import { selectRecordedBattlePointAwards } from './domain/rating/scoring.ts';
 import { RUNTIME_RESET_EVENT, type RuntimeMode } from './domain/runtime/mode.ts';
 import type { SpyReportSnapshot, SpyTargetState } from './domain/espionage/types.ts';
 import { getCombatFactionName } from './domain/combat/factions.ts';
+import { ACHIEVEMENT_CATEGORIES } from './domain/achievements/catalog.ts';
+import type { AchievementProgressRow, AchievementRankProgress, EarnedAchievementRecord } from './domain/achievements/development.ts';
+import { AchievementsView, type AchievementRarityKey, type AchievementViewItem, type AchievementsViewProps } from './ui/messages/AchievementsView.tsx';
 import type { UniverseCoordinate } from './domain/universe/types.ts';
 import type { PirateReconReport } from './domain/pirates/recon-report.ts';
 import './ui/messages/messages.css';
+import industryAchievementIcon from './assets/ui/header-icons/zone-industry.webp';
+import planetAchievementIcon from './assets/ui/header-icons/planet.webp';
+import energyAchievementIcon from './assets/ui/header-icons/energy.webp';
+import colonizeAchievementIcon from './assets/ui/mission-icons/colonize.webp';
 
 const numberFormat = new Intl.NumberFormat('ru-RU');
+
+type AchievementScreenData = Readonly<{
+  entries: readonly AchievementProgressRow[];
+  earnedPoints: number;
+  rank: AchievementRankProgress;
+}>;
+
+const ACHIEVEMENT_RARITY: Readonly<Record<AchievementProgressRow['tier'], { key: AchievementRarityKey; label: string }>> = {
+  b: { key: 'bronze', label: 'Бронза' },
+  s: { key: 'silver', label: 'Серебро' },
+  g: { key: 'gold', label: 'Золото' },
+};
+
+const ACHIEVEMENT_ICONS: Readonly<Record<string, string>> = {
+  builder: industryAchievementIcon,
+  architect: industryAchievementIcon,
+  'empire-architect': planetAchievementIcon,
+  colonist: colonizeAchievementIcon,
+  'power-grid': energyAchievementIcon,
+};
+
+function earnedAchievementLabel(record: EarnedAchievementRecord | undefined): string | undefined {
+  if (!record) return undefined;
+  if (record.roundId) return `Раунд ${record.roundId}`;
+  if (!Number.isFinite(record.at)) return undefined;
+  return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(record.at));
+}
+
+function toAchievementViewProps(data: AchievementScreenData, earned: readonly EarnedAchievementRecord[]): AchievementsViewProps {
+  const earnedById = new Map(earned.map((record) => [record.id, record]));
+  const achievements: AchievementViewItem[] = data.entries.map((entry) => {
+    const category = ACHIEVEMENT_CATEGORIES.find(({ id }) => id === entry.cat);
+    const record = earnedById.get(entry.id);
+    const status = entry.earned ? 'earned' : entry.progress > 0 ? 'in-progress' : 'not-started';
+    return {
+      id: entry.id,
+      title: entry.name,
+      condition: entry.how,
+      group: { id: entry.cat, label: category?.name ?? 'Другие' },
+      typeLabel: entry.kind === 'milestone' ? 'Веха' : entry.kind,
+      status,
+      progress: {
+        current: entry.progress,
+        target: entry.goal,
+        currentLabel: numberFormat.format(entry.progress),
+        targetLabel: numberFormat.format(entry.goal),
+      },
+      points: entry.points,
+      rarity: ACHIEVEMENT_RARITY[entry.tier],
+      iconSrc: ACHIEVEMENT_ICONS[entry.id] ?? REPORT_ICONS.achievements,
+      earnedLabel: earnedAchievementLabel(record),
+    };
+  });
+  return {
+    summary: {
+      points: data.earnedPoints,
+      rank: {
+        name: data.rank.current.name,
+        thresholdStart: data.rank.current.at,
+        next: data.rank.next ? { name: data.rank.next.name, threshold: data.rank.next.at } : null,
+      },
+    },
+    achievements,
+  };
+}
 
 type MessageFolderId =
   | 'profile'
@@ -226,8 +298,8 @@ export type ProfileFacts = {
   allianceCrystals?: number;
 };
 
-function PlayerProfile({ profile, score, command, mode, recentItems, facts, onOpenCommand, onOpenItem }: { profile: PlayerProfileState; score: OwnerScore | null; command: CommandState; mode: RuntimeMode; recentItems: readonly ReportItem[]; facts: ProfileFacts; onOpenCommand: () => void; onOpenItem: (item: ReportItem) => void }) {
-  const metrics = selectPlayerProfileMetrics(profile, score, mode);
+function PlayerProfile({ profile, score, achievementPoints, command, mode, recentItems, facts, onOpenCommand, onOpenItem }: { profile: PlayerProfileState; score: OwnerScore | null; achievementPoints: number; command: CommandState; mode: RuntimeMode; recentItems: readonly ReportItem[]; facts: ProfileFacts; onOpenCommand: () => void; onOpenItem: (item: ReportItem) => void }) {
+  const metrics = selectPlayerProfileMetrics(profile, score, mode, achievementPoints);
   const membership = selectOwnerMembership(command, profile.playerId);
   const alliance = membership ? toAllianceIdentity(membership.alliance) : null;
   const role = membership ? selectRole(membership.alliance, profile.playerId) : null;
@@ -271,12 +343,12 @@ function PlayerProfile({ profile, score, command, mode, recentItems, facts, onOp
         </section>
       </div>
       {profile.protectionMode ? <div className="reports-profile-protection"><i aria-hidden="true" /> Защитный режим включён</div> : null}
-      {mode === 'test' ? <p className="reports-fixture-note">Профильная идентичность тестовая; очки рассчитаны по текущим активам владельца, достижения не начисляются.</p> : null}
+      {mode === 'test' ? <p className="reports-fixture-note">Профильная идентичность тестовая; очки достижений учитываются по летописи локального профиля и не входят в общие очки.</p> : null}
     </section>
   );
 }
 
-export function ReportsView({ ownFleetAttack, nearestFleet, onAttackPlanet, retentionCutoff, battleReports, planetNames, savedBattleReportIds, operations, command, espionage, pirateReconReports, pirateFlights, exploration, initialSelectedReportId, profile, score, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy, onOpenUniverseTarget, onOpenPirateUniverse, canRepeatFlight, onRepeatFlight, onCollectDebris, onAttackSpyTarget, profileFacts, npcStrategy, worldNow, onAnswerLetter }: {
+export function ReportsView({ ownFleetAttack, nearestFleet, onAttackPlanet, retentionCutoff, battleReports, planetNames, savedBattleReportIds, operations, command, espionage, pirateReconReports, pirateFlights, exploration, initialSelectedReportId, profile, score, achievementPoints = 0, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy, onOpenUniverseTarget, onOpenPirateUniverse, canRepeatFlight, onRepeatFlight, onCollectDebris, onAttackSpyTarget, profileFacts, npcStrategy, worldNow, onAnswerLetter, achievementScreenData, achievementEarnedRecords = [], achievementError }: {
   /** Letters older than this world time are gone (24-hour rule); absent in Test Mode. */
   retentionCutoff?: number;
   battleReports: readonly BattleReport[];
@@ -292,6 +364,8 @@ export function ReportsView({ ownFleetAttack, nearestFleet, onAttackPlanet, rete
   initialSelectedReportId?: string;
   profile: PlayerProfileState;
   score: OwnerScore | null;
+  /** Sum of unique known achievements in the profile-global chronicle. */
+  achievementPoints?: number;
   rating: RatingPrototypeState;
   mode: RuntimeMode;
   state: ReportsState;
@@ -315,6 +389,10 @@ export function ReportsView({ ownFleetAttack, nearestFleet, onAttackPlanet, rete
   worldNow?: number;
   /** «Принять» / «Отказаться» of a bot letter; returns why it could not be done, or null. */
   onAnswerLetter?: (ref: LetterRef, answer: 'accept' | 'decline') => string | null;
+  /** Development milestones derived from the active save and local profile chronicle. */
+  achievementScreenData?: AchievementScreenData | null;
+  achievementEarnedRecords?: readonly EarnedAchievementRecord[];
+  achievementError?: string | null;
   /** Attack of all the player's ships: the risk plaque of a spy report. */
   ownFleetAttack?: number;
   /** The player's fastest combat fleet to a coordinate: the plaque of a help request. */
@@ -350,6 +428,9 @@ export function ReportsView({ ownFleetAttack, nearestFleet, onAttackPlanet, rete
   const unreadCounts = useMemo(() => getReportUnreadCounts(items, state), [items, state]);
   const activeFolderMeta = MESSAGE_FOLDERS.find((folder) => folder.id === activeFolder) ?? MESSAGE_FOLDERS[0];
   const activeCategory = activeFolderMeta.category;
+  const achievementViewProps = useMemo(() => achievementScreenData
+    ? toAchievementViewProps(achievementScreenData, achievementEarnedRecords)
+    : null, [achievementEarnedRecords, achievementScreenData]);
   const folderItems = useMemo(() => activeCategory ? getVisibleReportItems(items, state).filter((item) => item.category === activeCategory) : [], [activeCategory, items, state]);
   const isRead = useMemo(() => reportReadCheck(state), [state]);
   const visibleItems = useMemo(() => activeCategory ? filterReportItems(items, state, { category: activeCategory, filter, search, keepId: selectedId || undefined }, savedBattleReportIds) : [], [activeCategory, items, state, filter, search, selectedId, savedBattleReportIds]);
@@ -532,8 +613,9 @@ export function ReportsView({ ownFleetAttack, nearestFleet, onAttackPlanet, rete
       />;
 
   // Sections with mail on top with counters; empty ones below, grey, under «ПУСТО» (owner, 12.11.2026).
-  const filledFolders = MESSAGE_FOLDERS.filter((folder) => folder.category && counts[folder.category] > 0);
-  const emptyFolders = MESSAGE_FOLDERS.filter((folder) => !folder.category || counts[folder.category] === 0);
+  const mailFolders = MESSAGE_FOLDERS.filter((folder) => folder.id !== 'achievements');
+  const filledFolders = mailFolders.filter((folder) => folder.category && counts[folder.category] > 0);
+  const emptyFolders = mailFolders.filter((folder) => !folder.category || counts[folder.category] === 0);
   const folderButton = (folder: MessageFolder, empty: boolean) => {
     const unread = folder.category ? unreadCounts[folder.category] : 0;
     const total = folder.category ? counts[folder.category] : 0;
@@ -560,13 +642,18 @@ export function ReportsView({ ownFleetAttack, nearestFleet, onAttackPlanet, rete
         <header><h1>Сообщения</h1></header>
         <button type="button" className={`reports-profile-nav ${activeFolder === 'profile' ? 'active' : ''}`} onClick={() => openFolder('profile')} data-message-profile aria-label="Открыть профиль" aria-current={activeFolder === 'profile' ? 'page' : undefined}><span className="reports-nav-art"><ProfileGlyph /></span><strong>Профиль</strong></button>
         <nav className="reports-message-nav" aria-label="Папки сообщений">
+          <button type="button" data-message-folder="achievements" data-message-achievements className={`reports-profile-nav ${activeFolder === 'achievements' ? 'active' : ''}`} onClick={() => openFolder('achievements')} aria-label="Открыть достижения" aria-current={activeFolder === 'achievements' ? 'page' : undefined}><span className="reports-nav-art"><ReportGlyph kind="achievements" /></span><strong>Достижения</strong></button>
           {filledFolders.map((folder) => folderButton(folder, false))}
           {emptyFolders.length ? <span className="reports-nav-empty-label" data-qa-empty-label>Пусто</span> : null}
           {emptyFolders.map((folder) => folderButton(folder, true))}
         </nav>
       </aside>
 
-      {activeFolder === 'profile' ? <PlayerProfile profile={profile} score={score} command={command} mode={mode} recentItems={recentProfileItems} facts={profileFacts ?? {}} onOpenCommand={onOpenCommand} onOpenItem={openFromProfile} /> : <section className={`reports-folder-workspace ${hasMail ? '' : 'reports-folder-workspace--empty'}`} data-qa-folder-view={activeFolder}>
+      {activeFolder === 'profile' ? <PlayerProfile profile={profile} score={score} achievementPoints={achievementPoints} command={command} mode={mode} recentItems={recentProfileItems} facts={profileFacts ?? {}} onOpenCommand={onOpenCommand} onOpenItem={openFromProfile} /> : activeFolder === 'achievements' ? <section className="reports-folder-workspace reports-folder-workspace--empty" data-qa-folder-view="achievements" aria-label="Достижения">
+        {achievementViewProps
+          ? <AchievementsView {...achievementViewProps} />
+          : <p className="reports-list-empty-status" role={achievementError ? 'alert' : 'status'} data-qa-achievement-store-error>{achievementError ?? 'Летопись достижений загружается…'}</p>}
+      </section> : <section className={`reports-folder-workspace ${hasMail ? '' : 'reports-folder-workspace--empty'}`} data-qa-folder-view={activeFolder}>
         {hasMail ? <section className="reports-feed" data-qa-message-folder-view={activeFolder}>
           <header className="reports-feed-head">
             <h2>{activeFolderMeta.label}</h2>

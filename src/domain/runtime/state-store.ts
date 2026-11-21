@@ -12,6 +12,8 @@ export type RuntimeStateSnapshot = {
   owners: Record<string, RatedOwnerIdentity>;
   alliances?: Record<string, RatedAllianceDetails>;
   currentPlayerId: string;
+  /** Profile-global achievement total for the local player; separate from gameplay rating totals. */
+  currentPlayerAchievementPoints: number;
 };
 
 export type RatedOwnerPlanet = { id: string; name: string; coordinate: { galaxy: number; system: number; position: number } };

@@ -101,3 +101,24 @@ test('profile metrics come from the rating selector and stay in sync with the cu
   assert.equal(entry?.id, current?.id);
   assert.deepEqual(metrics.map((metric) => metric.value), [0, 0, 0, 0]);
 });
+
+test('profile achievement points come from the chronicle total and stay separate from overall points', () => {
+  const profile = createDefaultPlayerProfileState();
+  const score: OwnerScore = {
+    ownerId: profile.playerId,
+    resourcePoints: 120,
+    battlePoints: 30,
+    totalPoints: 150,
+    achievementPoints: 0,
+  };
+  const entry = selectPlayerRatingEntry(score, profile.playerId, 'production', 75);
+  const metrics = selectPlayerProfileMetrics(profile, score, 'production', 75);
+
+  assert.deepEqual(metrics.map((metric) => [metric.key, metric.value]), [
+    ['resourcePoints', 120],
+    ['battlePoints', 30],
+    ['totalPoints', 150],
+    ['achievementPoints', 75],
+  ]);
+  assert.deepEqual([entry?.resourcePoints, entry?.battlePoints, entry?.totalPoints, entry?.achievementPoints], [120, 30, 150, 75]);
+});

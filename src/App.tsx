@@ -153,6 +153,25 @@ import {
   serializeSaveForStorageInSlices,
 } from './application/persistence.ts';
 import {
+  mergeAchievementChronicles,
+  readAchievementChronicle,
+  writeAchievementChronicle,
+} from './application/achievement-chronicle-store.ts';
+import type { AchievementChronicle } from './domain/achievements/chronicle.ts';
+import { createAchievementChronicle } from './domain/achievements/chronicle.ts';
+import {
+  DEVELOPMENT_ACHIEVEMENTS,
+  type DevelopmentAchievementId,
+} from './domain/achievements/catalog.ts';
+import {
+  reconcileDevelopmentAchievementChronicle,
+  earnedDevelopmentAchievementPoints,
+  selectAchievementScreenData,
+  type AchievementProgressSource,
+  type EarnedAchievementRecord,
+} from './domain/achievements/development.ts';
+import { COMMANDER_IDS, type CommanderId } from './domain/combat/commanders.ts';
+import {
   applyProductionBots as applyProductionBotsAction,
   cancelBuilding as cancelBuildingAction,
   collectRecycling as collectRecyclingAction,
@@ -246,7 +265,7 @@ import {
   isGameplayCommandRequestEvent,
   NPC_CATCHUP_COMMAND_BLOCKED_MESSAGE,
 } from './application/state.ts';
-import { getOwnerShipUpgradeLevels, getPlanetResources, type PlanetId, type SaveState } from './application/contracts.ts';
+import { getOwnerShipUpgradeLevel, getOwnerShipUpgradeLevels, getPlanetResources, type PlanetId, type SaveState } from './application/contracts.ts';
 import { selectOwnedPlanet } from './application/owned-planets.ts';
 import { sendQuickLegs, type QuickLegOutcome } from './application/quick-actions.ts';
 import { AidQuickSend } from './ui/command/AidQuickSend.tsx';
@@ -271,7 +290,7 @@ import {
 import { refreshSlotMeta } from './application/slots.ts';
 import { slotStorageKey } from './domain/session/slots.ts';
 import { gateProgressPercent, getHolderCrystals } from './domain/sun-raid/rules.ts';
-import { getCampaignTimeScale, setCampaignTimeScale, CAMPAIGN_SPEED_SCALE } from './domain/runtime/mode.ts';
+import { getCampaignTimeScale, setCampaignTimeScale, CAMPAIGN_SPEED_SCALE, RUNTIME_RESET_EVENT } from './domain/runtime/mode.ts';
 import { setActiveGalaxyCount, warmUniverseTimedSchedules } from './domain/universe/runtime.ts';
 import { SunRaidPanel, type SunSelection } from './ui/sun-raid/SunRaidPanel.tsx';
 import { GateDialog } from './ui/sun-raid/GateDialog.tsx';
@@ -279,7 +298,7 @@ import { SunDefenceDialog } from './ui/sun-raid/SunDefenceDialog.tsx';
 import { selectGateBeacons } from './application/sun-gate-watch.ts';
 import './ui/universe/gate-beacon.css';
 import { CampaignResultOverlay, PauseMenu } from './ui/menu/InGameOverlays.tsx';
-import { isSeriesCampaign, settleCampaign } from './application/npc-series.ts';
+import { campaignIdOf, isSeriesCampaign, settleCampaign } from './application/npc-series.ts';
 import { createDefaultNewGameConfig } from './domain/world/config.ts';
 import { readPersonaRegistry, writePersonaRegistry } from './application/persona-store.ts';
 import { reloadToMenu, requestSeriesRound, type ActiveSession } from './ui/menu/session.ts';
@@ -507,6 +526,81 @@ function applyCampaignRuntime(state: SaveState, mode: RuntimeMode) {
   publishSunBrightness(state, worldNow());
 }
 
+type AchievementObservedPlanet = NonNullable<AchievementProgressSource['planets'][string]>;
+
+type AchievementProgressObserver = {
+  planets: Map<string, {
+    buildings: AchievementObservedPlanet['buildings'];
+    highestBuildingLevel: number;
+    totalBuildingLevels: number;
+    energy: number;
+  }>;
+  scienceLevels: AchievementProgressSource['scienceLevels'] | null;
+  hasScienceLevels: boolean;
+  scienceKey: string;
+  commanderUpgradeLevels: AchievementProgressSource['commanderUpgradeLevels'] | null;
+  hasCommanderUpgradeLevels: boolean;
+  commanderUpgradeKey: string;
+};
+
+function developmentAchievementProgressKey(
+  source: AchievementProgressSource,
+  observed: AchievementProgressObserver,
+): string {
+  const parts: string[] = [];
+  for (const [planetId, planet] of Object.entries(source.planets)) {
+    if (!planet) continue;
+    const energy = Math.max(0, Math.floor(planet.availableEnergy ?? planet.energy ?? 0));
+    let previous = observed.planets.get(planetId);
+    if (!previous || previous.buildings !== planet.buildings) {
+      let highestBuildingLevel = 0;
+      let totalBuildingLevels = 0;
+      for (const level of Object.values(planet.buildings)) {
+        const normalized = Number.isFinite(level) ? Math.max(0, Math.floor(level)) : 0;
+        highestBuildingLevel = Math.max(highestBuildingLevel, normalized);
+        totalBuildingLevels += normalized;
+      }
+      previous = { buildings: planet.buildings, highestBuildingLevel, totalBuildingLevels, energy };
+      observed.planets.set(planetId, previous);
+    } else if (previous.energy !== energy) {
+      previous = { ...previous, energy };
+      observed.planets.set(planetId, previous);
+    }
+    parts.push(`${planetId}:h${previous.highestBuildingLevel}:t${previous.totalBuildingLevels}:e${energy}`);
+  }
+  if (!observed.hasScienceLevels || observed.scienceLevels !== source.scienceLevels) {
+    observed.hasScienceLevels = true;
+    observed.scienceLevels = source.scienceLevels ?? null;
+    observed.scienceKey = Object.entries(source.scienceLevels ?? {})
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([id, level]) => `${id}:${Number.isFinite(level) ? Math.max(0, Math.floor(level)) : 0}`)
+      .join(',');
+  }
+  if (!observed.hasCommanderUpgradeLevels || observed.commanderUpgradeLevels !== source.commanderUpgradeLevels) {
+    observed.hasCommanderUpgradeLevels = true;
+    observed.commanderUpgradeLevels = source.commanderUpgradeLevels ?? null;
+    observed.commanderUpgradeKey = Object.entries(source.commanderUpgradeLevels ?? {})
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([id, level]) => `${id}:${Number.isFinite(level) ? Math.max(0, Math.floor(level)) : 0}`)
+      .join(',');
+  }
+  parts.push(`science:${observed.scienceKey}`, `commanders:${observed.commanderUpgradeKey}`);
+  return parts.join('|');
+}
+
+function achievementNotice(records: readonly EarnedAchievementRecord[]): string {
+  const names = new Map<DevelopmentAchievementId, string>(DEVELOPMENT_ACHIEVEMENTS.map(({ id, name }) => [id, name]));
+  const labels = records.map(({ id }) => names.get(id as DevelopmentAchievementId)).filter((name): name is string => Boolean(name));
+  return labels.length === 1
+    ? `Получено достижение «${labels[0]}». Очки добавлены в летопись.`
+    : `Получено достижений: ${labels.length}. Очки добавлены в летопись.`;
+}
+
+type PendingAchievementChronicleWrite = Readonly<{
+  chronicle: AchievementChronicle;
+  newlyEarned: readonly EarnedAchievementRecord[];
+}>;
+
 const SPEED_SUFFIX: Record<string, string> = { slow: ' ×0.5', standard: '', fast: ' ×2' };
 
 export function App({ session = null }: { session?: ActiveSession | null } = {}) {
@@ -522,8 +616,43 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     applyCampaignRuntime(loaded, RUNTIME_MODE);
     return loaded;
   });
+  const [achievementChronicle, setAchievementChronicle] = useState<AchievementChronicle | null>(
+    () => RUNTIME_MODE === 'test' ? createAchievementChronicle() : null,
+  );
+  const [achievementChronicleReady, setAchievementChronicleReady] = useState(RUNTIME_MODE === 'test');
+  const [achievementChronicleError, setAchievementChronicleError] = useState<string | null>(null);
+  const [achievementStoreRetry, setAchievementStoreRetry] = useState(0);
+  const pendingAchievementChronicle = useRef<PendingAchievementChronicleWrite | null>(null);
+  const lastAchievementWriteRetry = useRef(0);
   const stateRef = useRef(state);
   stateRef.current = state;
+  const achievementCommanderUpgradeLevels = useMemo(
+    () => Object.fromEntries(COMMANDER_IDS.map((commanderId) => [commanderId, getOwnerShipUpgradeLevel(state, commanderId)])) as Partial<Record<CommanderId, number>>,
+    [state.planets, state.shipUpgradeLevels],
+  );
+  const achievementSource = {
+    planets: state.planets,
+    scienceLevels: state.science.levels,
+    commanderUpgradeLevels: achievementCommanderUpgradeLevels,
+  } satisfies AchievementProgressSource;
+  const achievementProgressObserver = useRef<AchievementProgressObserver>({
+    planets: new Map(), scienceLevels: null, hasScienceLevels: false, scienceKey: '',
+    commanderUpgradeLevels: null, hasCommanderUpgradeLevels: false, commanderUpgradeKey: '',
+  });
+  const achievementProgressKey = developmentAchievementProgressKey(achievementSource, achievementProgressObserver.current);
+  const achievementSourceCache = useRef<{ key: string; source: AchievementProgressSource } | null>(null);
+  if (!achievementSourceCache.current || achievementSourceCache.current.key !== achievementProgressKey) {
+    achievementSourceCache.current = { key: achievementProgressKey, source: achievementSource };
+  }
+  const observedAchievementSource = achievementSourceCache.current.source;
+  const achievementCampaignId = campaignIdOf(state);
+  const achievementScreenData = useMemo(() => achievementChronicle
+    ? selectAchievementScreenData(observedAchievementSource, achievementChronicle)
+    : null, [achievementChronicle, observedAchievementSource]);
+  const currentPlayerAchievementPoints = useMemo(
+    () => earnedDevelopmentAchievementPoints(achievementChronicle?.earned ?? []),
+    [achievementChronicle],
+  );
   // What React rendered (stateRef is also assigned by commands): lets a command notice that its result never reached React.
   const renderedStateRef = useRef(state);
   renderedStateRef.current = state;
@@ -596,6 +725,98 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       setToasts((current) => current.filter((toast) => toast.id !== id));
     }, TOAST_AUTO_CLOSE_MS);
   }, []);
+  useEffect(() => {
+    if (RUNTIME_MODE === 'test' || achievementChronicleReady) return;
+    const loaded = readAchievementChronicle();
+    if (loaded.status === 'ok') {
+      setAchievementChronicle(loaded.chronicle);
+      setAchievementChronicleReady(true);
+      setAchievementChronicleError(null);
+      if (loaded.recovered) setNotice('Летопись достижений восстановлена из резервной копии.', 'info');
+      return;
+    }
+    setAchievementChronicle(null);
+    setAchievementChronicleReady(false);
+    setAchievementChronicleError(loaded.status === 'unavailable'
+      ? 'Хранилище летописи достижений недоступно.'
+      : loaded.message);
+  }, [achievementChronicleReady, achievementStoreRetry, setNotice]);
+  useEffect(() => {
+    if (RUNTIME_MODE === 'test' || !achievementChronicleReady || achievementStoreRetry === 0) return;
+    const latest = readAchievementChronicle();
+    if (latest.status === 'ok') {
+      const pending = pendingAchievementChronicle.current;
+      if (pending) {
+        pendingAchievementChronicle.current = {
+          ...pending,
+          chronicle: mergeAchievementChronicles(pending.chronicle, latest.chronicle),
+        };
+      }
+      setAchievementChronicle((current) => current
+        ? mergeAchievementChronicles(current, latest.chronicle)
+        : latest.chronicle);
+      setAchievementChronicleError(null);
+      if (latest.recovered) setNotice('Летопись достижений восстановлена из резервной копии.', 'info');
+      return;
+    }
+    if (latest.status === 'unreadable') setAchievementChronicleError(latest.message);
+  }, [achievementChronicleReady, achievementStoreRetry, setNotice]);
+  useEffect(() => {
+    const retryOnFocus = () => setAchievementStoreRetry((retry) => retry + 1);
+    window.addEventListener('focus', retryOnFocus);
+    return () => window.removeEventListener('focus', retryOnFocus);
+  }, []);
+  useEffect(() => {
+    const resetTestChronicle = () => {
+      if (RUNTIME_MODE !== 'test') return;
+      pendingAchievementChronicle.current = null;
+      setAchievementChronicle(createAchievementChronicle());
+      setAchievementChronicleReady(true);
+      setAchievementChronicleError(null);
+    };
+    window.addEventListener(RUNTIME_RESET_EVENT, resetTestChronicle);
+    return () => window.removeEventListener(RUNTIME_RESET_EVENT, resetTestChronicle);
+  }, []);
+  useEffect(() => {
+    if (!achievementChronicleReady || !achievementChronicle) return;
+    const pending = pendingAchievementChronicle.current;
+    const baseChronicle = pending?.chronicle ?? achievementChronicle;
+    const reconciled = reconcileDevelopmentAchievementChronicle(observedAchievementSource, baseChronicle, {
+      at: worldNow(),
+      ...(achievementCampaignId ? { campaignId: achievementCampaignId } : {}),
+    });
+    if (RUNTIME_MODE === 'test') {
+      if (reconciled.newlyEarned.length) setAchievementChronicle(reconciled.chronicle);
+      return;
+    }
+
+    let writeCandidate: PendingAchievementChronicleWrite | null = pending;
+    if (reconciled.newlyEarned.length) {
+      const previousAwards = pending?.newlyEarned ?? [];
+      const awardsById = new Map(previousAwards.map((record) => [record.id, record]));
+      for (const record of reconciled.newlyEarned) if (!awardsById.has(record.id)) awardsById.set(record.id, record);
+      writeCandidate = { chronicle: reconciled.chronicle, newlyEarned: [...awardsById.values()] };
+      pendingAchievementChronicle.current = writeCandidate;
+    }
+    const retryRequested = lastAchievementWriteRetry.current !== achievementStoreRetry;
+    if (!writeCandidate || (!reconciled.newlyEarned.length && !retryRequested)) return;
+    lastAchievementWriteRetry.current = achievementStoreRetry;
+
+    const written = writeAchievementChronicle(writeCandidate.chronicle);
+    if (!written.ok) {
+      pendingAchievementChronicle.current = writeCandidate;
+      const message = `Не удалось сохранить летопись достижений. ${written.error}`;
+      console.error('Asterion: achievement chronicle write failed.', written.error);
+      setAchievementChronicleError(message);
+      setNotice('Не удалось сохранить летопись достижений. Новые награды пока не засчитаны.', 'error');
+      return;
+    }
+
+    pendingAchievementChronicle.current = null;
+    setAchievementChronicle(writeCandidate.chronicle);
+    setAchievementChronicleError(null);
+    setNotice(achievementNotice(writeCandidate.newlyEarned), 'success');
+  }, [achievementCampaignId, achievementChronicle, achievementChronicleReady, achievementProgressKey, achievementStoreRetry, observedAchievementSource, setNotice]);
   // A command never runs the replay itself: it reads replay metadata only. An
   // unreconciled gap (a save just loaded, or a long background throttle) is
   // frozen as the catch-up target right here, so the refusal holds from this
@@ -1300,8 +1521,9 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       state,
       { planetId: state.currentPlanetId, now, mode: RUNTIME_MODE, testTimeScale },
       window,
+      currentPlayerAchievementPoints,
     );
-  }, [now, state, testTimeScale]);
+  }, [currentPlayerAchievementPoints, now, state, testTimeScale]);
   /**
    * Reconciles to `at`. A pending NPC catch-up keeps taking bounded replay
    * chunks inside one task until `budgetMs` of compute is spent, then
@@ -3503,6 +3725,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               ownedPlanetName={currentPlanetName}
               profile={state.profile}
               ownerScores={selectOwnerScoresCached(state)}
+              currentPlayerAchievementPoints={currentPlayerAchievementPoints}
               command={state.command}
               playerPlanets={universePlayerPlanets}
               spyTargets={universeSpyTargets}
@@ -3637,9 +3860,13 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               espionage={state.espionage}
               profile={state.profile}
               score={selectOwnerScoresCached(state)[state.profile.playerId] ?? null}
+              achievementPoints={currentPlayerAchievementPoints}
               rating={state.rating}
               mode={RUNTIME_MODE}
               state={state.reports}
+              achievementScreenData={achievementScreenData}
+              achievementEarnedRecords={achievementChronicle?.earned ?? []}
+              achievementError={achievementChronicleError}
               onStateChange={(reports) => {
                 const nextState = { ...stateRef.current, reports };
                 stateRef.current = nextState;

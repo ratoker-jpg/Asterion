@@ -229,6 +229,7 @@ async function profileSnapshot(win) {
       alliance: profile?.querySelector('.reports-profile-alliance-link strong')?.textContent?.trim() ?? '',
       allianceTag: profile?.querySelector('.reports-profile-alliance-link small')?.textContent?.match(/\\[([^\\]]+)\\]/)?.[1] ?? '',
       metricValues,
+      metricKeys: Array.from(document.querySelectorAll('[data-qa-profile-metric]')).map((item) => item.getAttribute('data-qa-profile-metric') || ''),
       folderIds: Array.from(document.querySelectorAll('[data-message-folder]')).map((item) => item.getAttribute('data-message-folder') || ''),
       folderLabels: Array.from(document.querySelectorAll('[data-message-folder] strong')).map((item) => item.textContent?.trim() || ''),
       folderIcons: Array.from(document.querySelectorAll('.reports-message-nav .reports-glyph-image')).map((image) => ({
@@ -497,7 +498,7 @@ async function runViewport(win, width, height) {
     || profile.scoreIcons.some((icon, index) => !icon.loaded || !icon.decorative || !icon.src.endsWith(expectedScoreIconSuffixes[index]) || icon.cssWidth !== '96px' || icon.cssHeight !== '96px')) {
     throw new Error(`Reports/profile asset contract failed at ${label}: ${JSON.stringify({ folderIcons: profile.folderIcons, profileIcon: profile.profileIcon, scoreIcons: profile.scoreIcons })}`);
   }
-  if (profile.metricValues.length !== 4 || profile.focusableMetrics !== 4 || profile.horizontalOverflow || profile.bodyHorizontalOverflow) throw new Error(`Profile geometry/metrics contract failed at ${label}: ${JSON.stringify(profile)}`);
+  if (profile.metricValues.length !== 4 || !profile.metricKeys.includes('achievementPoints') || profile.focusableMetrics !== 4 || profile.horizontalOverflow || profile.bodyHorizontalOverflow) throw new Error(`Profile geometry/metrics contract failed at ${label}: ${JSON.stringify(profile)}`);
   const overlaps = (first, second) => Boolean(first && second && first.left < second.right - 0.25 && first.right > second.left + 0.25 && first.top < second.bottom - 0.25 && first.bottom > second.top + 0.25);
   const contains = (outer, inner) => Boolean(outer && inner && inner.left >= outer.left - 0.5 && inner.top >= outer.top - 0.5 && inner.right <= outer.right + 0.5 && inner.bottom <= outer.bottom + 0.5);
   if (profile.folderGeometry.length !== EXPECTED_FOLDER_IDS.length
@@ -515,7 +516,7 @@ async function runViewport(win, width, height) {
   await capture(win, directory, 'profile');
 
   await clickUtility(win, 'rating');
-  await waitFor(win, `document.querySelectorAll('.rating-table-v2--players .score-head-v2__icon').length === 3 && Array.from(document.querySelectorAll('.rating-table-v2--players .score-head-v2__icon')).every((image) => image.complete && image.naturalWidth > 0)`);
+  await waitFor(win, `document.querySelectorAll('.rating-table-v2--players .score-head-v2__icon').length === 4 && Array.from(document.querySelectorAll('.rating-table-v2--players .score-head-v2__icon')).every((image) => image.complete && image.naturalWidth > 0)`);
   const ratingScoreIcons = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('.rating-table-v2--players .score-head-v2__icon')).map((image) => ({ src: image.getAttribute('src') || '', loaded: Boolean(image.complete && image.naturalWidth > 0), decorative: image.alt === '' && image.getAttribute('aria-hidden') === 'true' }))`);
   if (ratingScoreIcons.some((icon, index) => !icon.loaded || !icon.decorative || !icon.src.endsWith(expectedScoreIconSuffixes[[2, 0, 1, 3][index]]))) throw new Error(`Rating score asset contract failed at ${label}: ${JSON.stringify(ratingScoreIcons)}`);
   await capture(win, directory, 'rating-score-icons');
