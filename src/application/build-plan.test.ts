@@ -275,6 +275,18 @@ test('a missing resource is exchanged from a surplus, without going below what t
   assert.deepEqual(runBuildPlans(tight, RUNTIME).started, []);
 });
 
+test('build-plan exchanges refill on the saved campaign interval', () => {
+  const baseConfig = createDefaultNewGameConfig({ seed: 'BUILD-PLAN-TRADE-FAST', playerName: 'Owner' });
+  const config = { ...baseConfig, world: { ...baseConfig.world, campaignSpeed: 'fast' as const } };
+  const built = withBuildings(createInitialSaveState('production', NOW, config), { construction: 13, 'trade-center': 2 });
+  const base = { ...built, fleetUi: { favoriteTargets: [], buildPlans: { [PLANET]: { targets: { construction: 14 } } } } };
+  const state = replacePlanetResources(base, PLANET, { metal: 77_000, minerals: 60_000, gas: 50_000 });
+  const run = runBuildPlans(state, RUNTIME);
+  assert.equal(run.exchanges.length, 1);
+  assert.equal(run.state.planets[PLANET]!.trade.refillIntervalMs, 7.5 * 60_000);
+  assert.equal(run.state.planets[PLANET]!.trade.refillAtQueue[0], NOW + 7.5 * 60_000);
+});
+
 test('no exchange without a trade centre, a free charge, or with the helper off', () => {
   const plan: BuildPlan = { targets: { construction: 14 } };
   const resources = { metal: 77_000, minerals: 60_000, gas: 50_000 };

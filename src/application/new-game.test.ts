@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { calculateFleetPopulation } from '../domain/fleet/runtime.ts';
+import { TRADE_REFILL_INTERVAL_MS } from '../domain/buildings/trade.ts';
 import { createDefaultNewGameConfig } from '../domain/world/config.ts';
 import { generateWorld, isGeneratedNpcOwnerId } from '../domain/world/generator.ts';
 import { createInitialSaveState, createPersistenceFacade, SAVE_SCHEMA_VERSION } from './persistence.ts';
@@ -40,6 +41,41 @@ test('the saved race survives save → load (it was forced back to Астеры 
     assert.equal(Object.keys(loaded.espionage?.targets ?? {}).length, Object.keys(state.espionage?.targets ?? {}).length);
     assert.equal(loaded.worldConfig?.seed, state.worldConfig?.seed);
   }
+});
+
+test('loading retimes legacy trade queues from the saved universe speed and keeps the converted interval', () => {
+  const storage = memoryStorage();
+  const facade = createPersistenceFacade({ mode: 'production', storage, now: () => NOW });
+  const baseConfig = createDefaultNewGameConfig({ seed: 'TRADE-SPEED', playerName: 'Owner' });
+  const config = { ...baseConfig, world: { ...baseConfig.world, campaignSpeed: 'fast' as const } };
+  const initial = createInitialSaveState('production', NOW, config);
+  const home = initial.planets['helion-01']!;
+  const legacyQueue = [NOW - 1, NOW + TRADE_REFILL_INTERVAL_MS * 0.25, NOW + TRADE_REFILL_INTERVAL_MS * 1.25, NOW + TRADE_REFILL_INTERVAL_MS * 2.25];
+  const oldTrade = { refillAtQueue: legacyQueue };
+  storage.setItem(facade.saveKey, JSON.stringify({
+    ...initial,
+    schemaVersion: 29,
+    planets: {
+      ...initial.planets,
+      'helion-01': {
+        ...home,
+        buildings: { ...home.buildings, 'trade-center': 1 },
+        trade: oldTrade,
+      },
+    },
+  }));
+
+  const loaded = facade.read();
+  const trade = loaded.planets['helion-01']!.trade;
+  assert.equal(loaded.worldConfig?.world.campaignSpeed, 'fast');
+  assert.equal(trade.refillIntervalMs, 7.5 * 60_000);
+  assert.deepEqual(trade.refillAtQueue, [
+    NOW + 7.5 * 60_000 * 0.25,
+    NOW + 7.5 * 60_000 * 1.25,
+    NOW + 7.5 * 60_000 * 2.25,
+  ]);
+  assert.equal(facade.write(loaded).ok, true);
+  assert.deepEqual(facade.read().planets['helion-01']!.trade, trade, 'serialized metadata prevents a second retiming pass');
 });
 
 test('a pre-wizard save loads into the legacy world without losing data', () => {

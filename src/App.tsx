@@ -132,6 +132,7 @@ import {
   type SpaceportUpgradeWallet,
 } from './domain/buildings/spaceport-upgrades.ts';
 import {
+  TRADE_REFILL_INTERVAL_MS,
   type TradeExecution,
   type TradeRequest,
   type TradeWallet,
@@ -1993,8 +1994,8 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       amountLimit: 0,
       received: 0,
       refill: { maxSlots: 0, availableSlots: 0, missingSlots: 0, refillAtQueue: [], nextRefillAt: null,
-        fullRefillAt: null, nextRefillMs: 0, fullRefillMs: 0 },
-      state: { wallet: { metal: 0, minerals: 0, gas: 0, debris: 0 }, trade: { refillAtQueue: [] } },
+        fullRefillAt: null, nextRefillMs: 0, fullRefillMs: 0, refillIntervalMs: TRADE_REFILL_INTERVAL_MS },
+      state: { wallet: { metal: 0, minerals: 0, gas: 0, debris: 0 }, trade: { refillAtQueue: [], refillIntervalMs: TRADE_REFILL_INTERVAL_MS } },
       refillAt: null,
     };
     const tradedAt = worldNow();

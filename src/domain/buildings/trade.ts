@@ -1,5 +1,6 @@
 import { TRADE_CENTER_MAX_LEVEL } from './resource-zone.ts';
 import { creditResources, type ResourceCapacitiesInput, type ResourceCreditResult } from '../resources/credit.ts';
+import { CAMPAIGN_SPEED_SCALE, type CampaignSpeed } from '../runtime/mode.ts';
 
 export const TRADE_REFILL_INTERVAL_MS = 15 * 60 * 1000;
 export const TRADE_RESOURCES = ['metal', 'minerals', 'gas', 'debris'] as const;
@@ -17,6 +18,8 @@ export type TradeWallet = {
 
 export type TradeState = {
   refillAtQueue: number[];
+  /** Real-time interval for this campaign's trade charges; absent in saves from before speed-aware trade. */
+  refillIntervalMs?: number;
 };
 
 export type TradeRequest = {
@@ -40,6 +43,7 @@ export type TradeRefillInfo = {
   fullRefillAt: number | null;
   nextRefillMs: number;
   fullRefillMs: number;
+  refillIntervalMs: number;
 };
 
 export type TradeValidation = {
@@ -67,6 +71,17 @@ function toSafeTimestamp(value: unknown): number | null {
   return Math.floor(value);
 }
 
+function toSafeRefillInterval(value: unknown, fallback = TRADE_REFILL_INTERVAL_MS): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return fallback;
+  return Math.max(1, Math.floor(value));
+}
+
+/** The player's 15-minute trade interval follows the saved universe speed only. */
+export function getTradeRefillIntervalMsForCampaignSpeed(speed: CampaignSpeed): number {
+  const multiplier = CAMPAIGN_SPEED_SCALE[speed] ?? 1;
+  return Math.max(1, Math.round(TRADE_REFILL_INTERVAL_MS / multiplier));
+}
+
 function sameQueue(a: readonly number[], b: readonly number[]): boolean {
   return a.length === b.length && a.every((value, index) => value === b[index]);
 }
@@ -79,8 +94,8 @@ export function isTradeTargetResource(value: unknown): value is TradeTargetResou
   return typeof value === 'string' && (TRADE_TARGET_RESOURCES as readonly string[]).includes(value);
 }
 
-export function createDefaultTradeState(): TradeState {
-  return { refillAtQueue: [] };
+export function createDefaultTradeState(refillIntervalMs = TRADE_REFILL_INTERVAL_MS): TradeState {
+  return { refillAtQueue: [], refillIntervalMs: toSafeRefillInterval(refillIntervalMs) };
 }
 
 export function getTradeMaxSlots(level: number): number {
@@ -92,7 +107,7 @@ export function getTradeAmountLimit(resourceRatingPoints: number): number {
   return toNonNegativeInteger(resourceRatingPoints) * 10;
 }
 
-function normalizeFutureQueue(value: unknown, maxSlots: number, now: number): number[] {
+function normalizeFutureQueue(value: unknown, maxSlots: number, now: number, intervalMs: number): number[] {
   if (!Array.isArray(value) || maxSlots <= 0) return [];
   const candidates = value
     .map(toSafeTimestamp)
@@ -106,30 +121,51 @@ function normalizeFutureQueue(value: unknown, maxSlots: number, now: number): nu
       normalized.push(timestamp);
       continue;
     }
-    normalized.push(Math.max(timestamp, normalized[normalized.length - 1] + TRADE_REFILL_INTERVAL_MS));
+    normalized.push(Math.max(timestamp, normalized[normalized.length - 1] + intervalMs));
   }
   return normalized;
 }
 
-export function migrateTradeState(value: unknown, tradeCenterLevel: number, now = Date.now()): TradeState {
-  const source = value && typeof value === 'object' ? value as { refillAtQueue?: unknown } : null;
-  return {
-    refillAtQueue: normalizeFutureQueue(source?.refillAtQueue, getTradeMaxSlots(tradeCenterLevel), now),
-  };
+export function migrateTradeState(
+  value: unknown,
+  tradeCenterLevel: number,
+  now = Date.now(),
+  desiredRefillIntervalMs = TRADE_REFILL_INTERVAL_MS,
+): TradeState {
+  const source = value && typeof value === 'object' ? value as { refillAtQueue?: unknown; refillIntervalMs?: unknown } : null;
+  const oldInterval = toSafeRefillInterval(source?.refillIntervalMs);
+  const refillIntervalMs = toSafeRefillInterval(desiredRefillIntervalMs);
+  const maxSlots = getTradeMaxSlots(tradeCenterLevel);
+  // Expire charges using the old cadence before scaling anything that remains.
+  const previousQueue = normalizeFutureQueue(source?.refillAtQueue, maxSlots, now, oldInterval);
+  // Scale each remaining offset from now so the first charge keeps its partial
+  // progress and later charges keep their sequential spacing. Persisting the
+  // new interval makes subsequent loads idempotent.
+  const refillAtQueue = oldInterval === refillIntervalMs
+    ? previousQueue
+    : normalizeFutureQueue(
+      previousQueue.map((timestamp) => now + Math.max(1, Math.round((timestamp - now) * refillIntervalMs / oldInterval))),
+      maxSlots,
+      now,
+      refillIntervalMs,
+    );
+  return { refillAtQueue, refillIntervalMs };
 }
 
 export function reconcileTradeState(state: TradeState, tradeCenterLevel: number, now: number): { state: TradeState; changed: boolean } {
-  const refillAtQueue = normalizeFutureQueue(state.refillAtQueue, getTradeMaxSlots(tradeCenterLevel), now);
-  const changed = !sameQueue(refillAtQueue, state.refillAtQueue);
+  const refillIntervalMs = toSafeRefillInterval(state.refillIntervalMs);
+  const refillAtQueue = normalizeFutureQueue(state.refillAtQueue, getTradeMaxSlots(tradeCenterLevel), now, refillIntervalMs);
+  const changed = !sameQueue(refillAtQueue, state.refillAtQueue) || state.refillIntervalMs !== refillIntervalMs;
   return {
-    state: changed ? { refillAtQueue } : state,
+    state: changed ? { ...state, refillAtQueue, refillIntervalMs } : state,
     changed,
   };
 }
 
 export function getTradeRefillInfo(state: TradeState, tradeCenterLevel: number, now: number): TradeRefillInfo {
   const maxSlots = getTradeMaxSlots(tradeCenterLevel);
-  const refillAtQueue = reconcileTradeState(state, tradeCenterLevel, now).state.refillAtQueue;
+  const reconciled = reconcileTradeState(state, tradeCenterLevel, now).state;
+  const refillAtQueue = reconciled.refillAtQueue;
   const missingSlots = Math.min(maxSlots, refillAtQueue.length);
   const availableSlots = Math.max(0, maxSlots - missingSlots);
   const nextRefillAt = refillAtQueue[0] ?? null;
@@ -143,6 +179,7 @@ export function getTradeRefillInfo(state: TradeState, tradeCenterLevel: number, 
     fullRefillAt,
     nextRefillMs: nextRefillAt == null ? 0 : Math.max(0, nextRefillAt - now),
     fullRefillMs: fullRefillAt == null ? 0 : Math.max(0, fullRefillAt - now),
+    refillIntervalMs: reconciled.refillIntervalMs ?? TRADE_REFILL_INTERVAL_MS,
   };
 }
 
@@ -207,7 +244,8 @@ export function executeTrade(
 
   const reconciled = reconcileTradeState(state.trade, tradeCenterLevel, now).state;
   const previousRefillAt = reconciled.refillAtQueue[reconciled.refillAtQueue.length - 1] ?? now;
-  const refillAt = Math.max(now, previousRefillAt) + TRADE_REFILL_INTERVAL_MS;
+  const refillIntervalMs = reconciled.refillIntervalMs ?? TRADE_REFILL_INTERVAL_MS;
+  const refillAt = Math.max(now, previousRefillAt) + refillIntervalMs;
   const walletAfterSpend: TradeWallet = { ...state.wallet };
   walletAfterSpend[request.source] -= request.amount;
   const unlimitedCapacities = { metal: Number.MAX_SAFE_INTEGER, minerals: Number.MAX_SAFE_INTEGER, gas: Number.MAX_SAFE_INTEGER };
@@ -229,7 +267,7 @@ export function executeTrade(
     refillAt,
     state: {
       wallet,
-      trade: { refillAtQueue: [...reconciled.refillAtQueue, refillAt] },
+      trade: { ...reconciled, refillAtQueue: [...reconciled.refillAtQueue, refillAt] },
     },
     credit,
   };

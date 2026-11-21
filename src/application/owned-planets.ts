@@ -3,7 +3,7 @@ import { createEmptyBotAssignment } from '../domain/buildings/production-bots.ts
 import { createDefaultFleetProductionState, createEmptyDefenseState } from '../domain/fleet/production.ts';
 import { createEmptyFleetState } from '../domain/fleet/runtime.ts';
 import { createDefaultSpaceportUpgradeState } from '../domain/buildings/spaceport-upgrades.ts';
-import { createDefaultTradeState } from '../domain/buildings/trade.ts';
+import { createDefaultTradeState, getTradeRefillIntervalMsForCampaignSpeed } from '../domain/buildings/trade.ts';
 import { createDefaultRepairWorkshopState } from '../domain/repair/workshop.ts';
 import { addDebris } from '../domain/flights/cargo.ts';
 import { discardScienceTasksForPlanet } from '../domain/science/runtime.ts';
@@ -39,7 +39,7 @@ export function createColonyPlanetRuntime(state: SaveState, coordinate: Universe
     buildings: createDefaultBuildingLevels(),
     productionBots: createEmptyBotAssignment(),
     recycling: { availableDebris: 0, jobs: [] },
-    trade: createDefaultTradeState(),
+    trade: createDefaultTradeState(getTradeRefillIntervalMsForCampaignSpeed(state.worldConfig?.world.campaignSpeed ?? 'standard')),
     spaceportUpgrades: { ...createDefaultSpaceportUpgradeState(), shipLevels: {} },
     stability: 100,
     resources: { metal: 500, minerals: 500, gas: 500 },
