@@ -5,6 +5,9 @@ export type PlayerScoreKey = 'achievementPoints' | 'totalPoints' | 'resourcePoin
 export type AllianceScoreKey = 'totalPoints' | 'resourcePoints' | 'battlePoints';
 export type SortDirection = 'desc' | 'asc';
 
+/** Achievement totals keyed by the canonical owner id used by rating and map surfaces. */
+export type AchievementPointsByOwner = Readonly<Record<string, number>>;
+
 export type OwnerScore = {
   ownerId: string;
   resourcePoints: number;

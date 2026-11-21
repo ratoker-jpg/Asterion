@@ -113,6 +113,10 @@ export type NpcEventCursor = Readonly<{
 
 export type NpcProfile = Readonly<{
   ownerId: string;
+  /** Achievements actually earned by this owner in this campaign/round. */
+  earnedAchievementIds?: readonly string[];
+  /** Marks the one-time snapshot reconciliation for legacy/current owners. */
+  achievementsReconciled?: boolean;
   /** Salted owner-specific stream; independent of public display names and list order. */
   privateSeed: string;
   traits: NpcTraits;

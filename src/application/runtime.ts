@@ -13,6 +13,7 @@ import { SCIENCE_RUNTIME_CHANGED_EVENT } from '../domain/science/runtime.ts';
 import { createScienceSnapshot } from './science.ts';
 import type { PlanetId, SaveState } from './contracts.ts';
 import { selectOwnerScoresCached } from '../domain/rating/scoring.ts';
+import type { AchievementPointsByOwner } from '../domain/rating/types.ts';
 
 export type RuntimeApplicationContext = {
   planetId: PlanetId;
@@ -102,6 +103,7 @@ export function publishApplicationRuntimeSnapshot(
   context: RuntimeApplicationContext,
   target: EventTarget,
   currentPlayerAchievementPoints = 0,
+  achievementPointsByOwner: AchievementPointsByOwner = {},
 ): void {
   const scienceSnapshot = createScienceSnapshot(state, context);
   target.dispatchEvent(new CustomEvent(SCIENCE_RUNTIME_CHANGED_EVENT, { detail: scienceSnapshot }));
@@ -117,6 +119,7 @@ export function publishApplicationRuntimeSnapshot(
     get alliances() { return cachedRatedAlliances(state); },
     currentPlayerId: state.profile.playerId,
     currentPlayerAchievementPoints,
+    achievementPointsByOwner,
   });
   target.dispatchEvent(new CustomEvent(RUNTIME_STATE_CHANGED_EVENT, { detail: state }));
 }

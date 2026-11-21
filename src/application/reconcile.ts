@@ -48,6 +48,8 @@ import type { WorldCatchupSummary } from '../domain/npc/world-catchup-summary.ts
 import { CAMPAIGN_SPEED_SCALE } from '../domain/runtime/mode.ts';
 import { LEADER_ABSENCE_MS } from '../domain/command/catalog.ts';
 import { settleLeadership } from '../domain/command/membership.ts';
+import { recordPlayerAchievementProof } from '../domain/achievements/development.ts';
+import { NPC_FIRST_STONE_ACHIEVEMENT_ID, reconcileNpcAchievementProgressForOwners, reconcileUninitializedNpcAchievements, recordNpcAchievement } from './npc-achievements.ts';
 
 /**
  * One owner's NPC events in one aligned generation step, keyed by the frozen
@@ -159,7 +161,7 @@ const fullySettledTargets = new WeakMap<object, { at: number; owners: string }>(
 
 export type RuntimeReconcileEvent =
   | { kind: 'npc-economy'; events: readonly NpcReplayEmission[] }
-  | { kind: 'npc-building'; planetId: string; assetRole: BuildingRole; at: number }
+  | { kind: 'npc-building'; ownerId: string; planetId: string; assetRole: BuildingRole; at: number }
   | { kind: 'npc-science'; ownerId: string; scienceId: ScienceId; at: number }
   | { kind: 'npc-fleet-production'; ownerId: string; planetId: string; at: number; completed: FleetProductionCompletion[] }
   | { kind: 'science'; scienceIds: ScienceId[] }
@@ -245,6 +247,7 @@ function reconcileRuntimeSlice(
 ): RuntimeReconcileResult {
   // Aid flights whose sender, recipient or request no longer stand turn back before anything else settles.
   let next = projectNpcScienceLedger(reconcileAidMembership(state, context.now));
+  if (replay) next = reconcileUninitializedNpcAchievements(next);
   const events: RuntimeReconcileEvent[] = [];
   const timeScale = CAMPAIGN_SPEED_SCALE[state.worldConfig?.world.campaignSpeed ?? 'standard'];
   const replayOwners = new Set(replay?.owners);
@@ -297,12 +300,19 @@ function reconcileRuntimeSlice(
   let economicIndex = 0;
   let processedGroups = 0;
   let visitMoved = false;
+  const reconcileNpcAchievements = (owners: ReadonlySet<string>, index?: TargetOwnerIndex) => {
+    if (!replay || owners.size === 0 || !next.espionage?.targets) return;
+    const byOwner = (index ?? targetOwnerIndex(next.espionage.targets)).byOwner;
+    next = reconcileNpcAchievementProgressForOwners(next, [...owners], (ownerId) => byOwner.get(ownerId) ?? []);
+  };
   const settleNpcEconomies = (at: number, ownerIds?: ReadonlySet<string>) => {
-    if (!replay || !next.espionage?.targets) return;
-    const before = next.espionage.targets;
+    const espionage = next.espionage;
+    if (!replay || !espionage?.targets) return;
+    const before = espionage.targets;
     const index = targetOwnerIndex(before);
     const targets = { ...before };
     const settled = new Set<string>();
+    const achievementOwners = new Set<string>();
     let changed = false;
     // Planets in save order, as a scan of every target would visit them.
     const ids: string[] = [];
@@ -325,20 +335,31 @@ function reconcileRuntimeSlice(
       // `completed` lists whole orders only; single units of a running order
       // land in the fleet too, so any production change re-settles.
       targets[id] = production.changed ? settleNpcPlanet(production.target, at, { timeScale }).target : production.target;
-      changed ||= targets[id] !== target;
-      for (const assetRole of result.completedRoles) events.push({ kind: 'npc-building', planetId: id, assetRole, at });
+      const updatedTarget = targets[id]!;
+      changed ||= updatedTarget !== target;
+      if (updatedTarget.buildings !== target.buildings
+        || updatedTarget.ownerProfile?.commanderLevels !== target.ownerProfile?.commanderLevels
+        || updatedTarget.energyLedger?.availableEnergy !== target.energyLedger?.availableEnergy) {
+        achievementOwners.add(target.ownerId);
+      }
+      if (result.completedRoles.length) next = recordNpcAchievement(next, target.ownerId, NPC_FIRST_STONE_ACHIEVEMENT_ID);
+      for (const assetRole of result.completedRoles) {
+        events.push({ kind: 'npc-building', ownerId: target.ownerId, planetId: id, assetRole, at });
+      }
     }
     // Upgrade levels are owner-wide: a finished upgrade reaches all of the owner's planets now.
     if (syncNpcOwnerShipLevels(targets, settled, (ownerId) => index.byOwner.get(ownerId) ?? [])) changed = true;
-    if (changed) next = { ...next, espionage: { ...next.espionage, targets } };
+    if (changed) next = { ...next, espionage: { ...espionage, targets } };
     const science = pauseNpcScienceForSettlement(next.npcScience, before, settled, at, targets);
     if (science !== next.npcScience) next = { ...next, npcScience: science };
+    reconcileNpcAchievements(achievementOwners, index);
     if (!ownerIds && next.espionage?.targets) fullySettledTargets.set(next.espionage.targets, { at, owners: replayOwnersKey });
   };
   const completeNpcScience = (at: number, ownerIds?: ReadonlySet<string>) => {
     const result = reconcileNpcScienceAt(next, at, ownerIds);
     next = result.state;
     for (const completion of result.completed) events.push({ kind: 'npc-science', ...completion });
+    if (result.completed.length) reconcileNpcAchievements(new Set(result.completed.map(({ ownerId }) => ownerId)));
   };
   /**
    * Settles the given owners at `at` unless already settled there.
@@ -518,6 +539,10 @@ function reconcileRuntimeSlice(
       const building = completeBuilding(next, planetContext);
       if (building.changed && building.completedRole) {
         next = building.state;
+        if (finishing && Number.isSafeInteger(finishing.finishAt) && finishing.finishAt >= 0) {
+          const playerAchievementProofs = recordPlayerAchievementProof(next.playerAchievementProofs, 'first-stone', finishing.finishAt);
+          if (playerAchievementProofs !== next.playerAchievementProofs) next = { ...next, playerAchievementProofs };
+        }
         events.push({ kind: 'building', planetId, assetRole: building.completedRole, ...(finishing?.durationMs != null ? { durationMs: finishing.durationMs } : {}) });
       }
 
@@ -706,6 +731,11 @@ function reconcileRuntimeSlice(
     if (flights.changed) {
       next = flights.state;
       if (flights.events.length > 0) events.push({ kind: 'flight', events: flights.events });
+      const colonists = new Set<string>();
+      for (const { flight, status } of flights.events) {
+        if (status === 'colonized' && flight.ownerSide === 'npc' && flight.ownerId) colonists.add(flight.ownerId);
+      }
+      reconcileNpcAchievements(colonists);
     }
     // Sun raids run after ordinary arrivals: a Bot 01 assault resolved at this
     // checkpoint can already destroy a Gate, and Sun battles see the same clock.

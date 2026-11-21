@@ -31,7 +31,7 @@ function presetForDisplayState(state: DesktopDisplayState, fallback: UiPreferenc
  * worst cases inside the real shell. Production never reads it.
  */
 const RATING_QA_FIXTURE_KEY = 'asterion.qa.rating-fixture.v1';
-type RatingQaFixture = Pick<RuntimeStateSnapshot, 'ownerScores' | 'owners' | 'currentPlayerId' | 'currentPlayerAchievementPoints'> & {
+type RatingQaFixture = Pick<RuntimeStateSnapshot, 'ownerScores' | 'owners' | 'currentPlayerId' | 'currentPlayerAchievementPoints' | 'achievementPointsByOwner'> & {
   alliances: RuntimeStateSnapshot['command']['alliances'];
   allianceDetails: NonNullable<RuntimeStateSnapshot['alliances']>;
 };
@@ -49,6 +49,7 @@ function snapshotsEqual(a: RuntimeStateSnapshot, b: RuntimeStateSnapshot): boole
   return a.mode === b.mode
     && a.currentPlayerId === b.currentPlayerId
     && a.currentPlayerAchievementPoints === b.currentPlayerAchievementPoints
+    && propValuesEqual(a.achievementPointsByOwner, b.achievementPointsByOwner)
     && a.command === b.command
     && propValuesEqual(a.ownerScores, b.ownerScores)
     && propValuesEqual(a.owners, b.owners)
@@ -82,6 +83,7 @@ function RatingHost() {
       currentPlayerScore={fixture.ownerScores[fixture.currentPlayerId]}
       currentPlayerId={fixture.currentPlayerId}
       currentPlayerAchievementPoints={fixture.currentPlayerAchievementPoints}
+      achievementPointsByOwner={fixture.achievementPointsByOwner}
       owners={fixture.owners}
       allianceDetails={fixture.allianceDetails}
     />
@@ -93,6 +95,7 @@ function RatingHost() {
       currentPlayerScore={live.ownerScores[live.currentPlayerId]}
       currentPlayerId={live.currentPlayerId}
       currentPlayerAchievementPoints={live.currentPlayerAchievementPoints}
+      achievementPointsByOwner={live.achievementPointsByOwner}
       owners={live.owners}
       allianceDetails={live.alliances}
     />

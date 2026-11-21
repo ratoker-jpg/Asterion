@@ -122,3 +122,19 @@ test('profile achievement points come from the chronicle total and stay separate
   ]);
   assert.deepEqual([entry?.resourcePoints, entry?.battlePoints, entry?.totalPoints, entry?.achievementPoints], [120, 30, 150, 75]);
 });
+
+test('profile uses its owner achievement-map entry and keeps the legacy scalar as a fallback', () => {
+  const profile = createDefaultPlayerProfileState();
+  const score: OwnerScore = {
+    ownerId: profile.playerId,
+    resourcePoints: 120,
+    battlePoints: 30,
+    totalPoints: 150,
+    achievementPoints: 0,
+  };
+  const mapped = selectPlayerProfileMetrics(profile, score, 'production', 75, { [profile.playerId]: 42, 'another-owner': 90 });
+  const legacy = selectPlayerProfileMetrics(profile, score, 'production', 75);
+
+  assert.deepEqual(mapped.map((metric) => metric.value), [120, 30, 150, 42]);
+  assert.deepEqual(legacy.map((metric) => metric.value), [120, 30, 150, 75]);
+});

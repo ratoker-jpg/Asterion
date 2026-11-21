@@ -21,6 +21,7 @@ import { MAX_ALLIANCE_MEMBERS } from './domain/command/catalog.ts';
 import type { AllianceRole, CommandState } from './domain/command/types.ts';
 import type { RuntimeMode } from './domain/runtime/mode.ts';
 import {
+  achievementPointsForOwner,
   filterAlliances,
   filterPlayers,
   pageForEntry,
@@ -29,6 +30,7 @@ import {
   sortPlayers,
 } from './domain/rating/selectors.ts';
 import type {
+  AchievementPointsByOwner,
   AllianceRatingEntry,
   AllianceScoreKey,
   OwnerScore,
@@ -47,6 +49,7 @@ export function RatingView({
   ownerScores = {},
   currentPlayerScore,
   currentPlayerAchievementPoints = 0,
+  achievementPointsByOwner,
   currentPlayerId = CURRENT_PLAYER_ID,
   owners,
   allianceDetails,
@@ -56,6 +59,7 @@ export function RatingView({
   ownerScores?: Readonly<Record<string, OwnerScore>>;
   currentPlayerScore?: OwnerScore;
   currentPlayerAchievementPoints?: number;
+  achievementPointsByOwner?: AchievementPointsByOwner;
   currentPlayerId?: string;
   owners?: Readonly<Record<string, RatedOwnerIdentity>>;
   allianceDetails?: Readonly<Record<string, RatedAllianceDetails>>;
@@ -95,11 +99,11 @@ export function RatingView({
   const currentAlliance = useMemo(() => selectOwnerAlliance(command, currentPlayerId), [command, currentPlayerId]);
   const players = useMemo(
     () => (runtimeMode === 'production' && owners
-      ? createOwnerRatingEntries(ownerScores, owners, currentPlayerId, currentPlayerAchievementPoints)
+      ? createOwnerRatingEntries(ownerScores, owners, currentPlayerId, currentPlayerAchievementPoints, achievementPointsByOwner)
         .map((entry) => ({ ...entry, allianceTag: selectOwnerAlliance(command, entry.id)?.tag ?? null }))
-      : createPlayerRatingEntries(currentPlayerScore, runtimeMode, currentPlayerId, currentPlayerAchievementPoints)
+      : createPlayerRatingEntries(currentPlayerScore, runtimeMode, currentPlayerId, achievementPointsForOwner(achievementPointsByOwner, currentPlayerId, currentPlayerAchievementPoints))
         .map((entry) => entry.isCurrentPlayer ? { ...entry, allianceTag: currentAlliance?.tag ?? null } : entry)),
-    [currentPlayerScore, currentPlayerAchievementPoints, currentPlayerId, currentAlliance, runtimeMode, owners, ownerScores, command],
+    [currentPlayerScore, currentPlayerAchievementPoints, achievementPointsByOwner, currentPlayerId, currentAlliance, runtimeMode, owners, ownerScores, command],
   );
   const scoresWithFixtures = useMemo(() => withTestOwnerScoreFixtures(ownerScores, runtimeMode), [ownerScores, runtimeMode]);
   const alliances = useMemo(

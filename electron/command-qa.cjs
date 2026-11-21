@@ -57,6 +57,17 @@ async function openCommand(win) {
   await sleep(120);
 }
 
+async function openAchievements(win) {
+  await click(win, '[data-qa-navigation="primary"] [data-qa-route="reports"]');
+  await waitFor(win, `document.querySelector('[data-message-folder="achievements"]')`);
+  await click(win, '[data-message-folder="achievements"]');
+  await waitFor(win, `document.querySelector('[data-qa-achievements-view]') && document.querySelector('[data-qa-achievement-summary]')`);
+  await click(win, '[data-qa-achievement-group-filter="all"]');
+  await waitFor(win, `document.querySelector('[data-qa-achievement-group-filter="all"]')?.getAttribute('aria-pressed') === 'true'`);
+  await click(win, '[data-qa-achievement-status-filter="all"]');
+  await waitFor(win, `document.querySelector('[data-qa-achievement-status-filter="all"]')?.getAttribute('aria-pressed') === 'true'`);
+}
+
 async function capture(win, label, name) {
   if (skipScreenshots) return;
   const directory = path.join(OUTPUT, label);
@@ -162,10 +173,26 @@ async function productionScenario(win, label) {
   await win.webContents.executeJavaScript(`(async () => { for (let i = 0; i < 3 && document.querySelector('[data-qa-founding-next]'); i += 1) { document.querySelector('[data-qa-founding-next]').click(); await new Promise((resolve) => setTimeout(resolve, 150)); } })()`);
   await click(win, '[data-qa-alliance-submit]');
   await waitFor(win, `document.querySelector('.command-view')?.getAttribute('data-qa-command-state') === 'leader'`);
+  await waitFor(win, `(() => {
+    const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(PRODUCTION_KEY)}) || '{}');
+    const proof = save.playerAchievementProofs?.founder;
+    return typeof proof === 'number' && Number.isFinite(proof);
+  })()`);
+  const founderProofAt = (await readSave(win, PRODUCTION_KEY)).playerAchievementProofs?.founder;
+  assert(typeof founderProofAt === 'number' && Number.isFinite(founderProofAt), `${label}: actual alliance creation persists the founder proof`, founderProofAt);
   view = await snapshot(win);
   assert(view.headline === 'Дозор QA [QA]' && view.tabs.includes('overview') && view.tabs.includes('applications'), `${label}: founder is the leader`, view);
   assert(!/ONLINE|НЕ В СЕТИ|АКТИВЕН/.test(view.text), `${label}: no online/activity indicators`, view.text);
   await capture(win, label, 'production-leader');
+
+  await openAchievements(win);
+  await waitFor(win, `document.querySelector('[data-qa-achievement-row="founder"]')?.getAttribute('data-achievement-status') === 'earned'`);
+  const founderAchievement = await run(win, `(() => {
+    const row = document.querySelector('[data-qa-achievement-row="founder"]');
+    return row ? { status: row.getAttribute('data-achievement-status'), text: (row.innerText || row.textContent || '').replace(/\\s+/g, ' ').trim() } : null;
+  })()`);
+  assert(founderAchievement?.status === 'earned' && founderAchievement.text.includes('Получено'), `${label}: Founder achievement appears earned after the alliance creation UI action`, founderAchievement);
+  await openCommand(win);
 
   await click(win, '[data-qa-edit-alliance]');
   await waitFor(win, `document.querySelector('.command-editor-form')`);
@@ -180,6 +207,7 @@ async function productionScenario(win, label) {
   assert(view.headline === 'Дозор QA Два [QA]', `${label}: alliance survives reload`, view);
   const saved = await readSave(win, PRODUCTION_KEY);
   assert(saved.command.version === 3 && saved.command.alliances.length === 1 && saved.command.alliances[0].members.length === 1, `${label}: persisted registry shape`, saved.command);
+  assert(saved.playerAchievementProofs?.founder === founderProofAt, `${label}: founder proof survives reload without duplication`, { beforeReload: founderProofAt, afterReload: saved.playerAchievementProofs?.founder });
   const allianceId = saved.command.alliances[0].id;
   assert(/^alliance-\d+$/.test(allianceId) && saved.profile.allianceId === allianceId, `${label}: stable id mirrored into the profile`, { allianceId, profile: saved.profile.allianceId });
 
