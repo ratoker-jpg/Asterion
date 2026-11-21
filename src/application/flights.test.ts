@@ -1,6 +1,6 @@
 import { kickMember, leaveAlliance } from '../domain/command/membership.ts';
 import assert from 'node:assert/strict';
-import { COLONY_TOTAL_POINT_THRESHOLDS, nextColonyPointThreshold } from '../domain/universe/runtime.ts';
+import { COLONY_TOTAL_POINT_THRESHOLDS, POSITION_COUNT, SYSTEM_COUNT, nextColonyPointThreshold } from '../domain/universe/runtime.ts';
 import test from 'node:test';
 
 import { createInitialSaveState, createPersistenceFacade } from './persistence.ts';
@@ -44,6 +44,8 @@ import {
 } from '../domain/universe/runtime.ts';
 import { advanceUniverseAsteroidSimulationAt, findUniverseAsteroidAtCoordinate } from '../domain/universe/asteroid-simulation.ts';
 import { advanceAsteroidGasAt } from '../domain/universe/asteroid-gas.ts';
+import { forecastAsteroidAt } from './asteroid-gas-collection.ts';
+import { createDefaultNewGameConfig } from '../domain/world/config.ts';
 
 const origin = { galaxy: 1, system: 1, position: 1 };
 
@@ -1332,6 +1334,66 @@ test('gas arrival resolves a hit, a moved-away miss with explicit zero cargo, an
   assert.equal(movedHit.state.asteroidSimulation?.asteroids.find((asteroid) => asteroid.spawnIndex === 82)?.coordinate.position, arrivedCoordinate.position);
   assert.equal(movedHitFlight.cargo?.gas, 10_000);
   assert.equal(movedHit.state.reports.gasExtractionArrivalReports?.find((report) => report.flightId === movedHitFlight.id)?.outcome, 'found');
+});
+
+test('multi-galaxy gas forecast matches reconciliation when an asteroid crosses into galaxy 2', () => {
+  const departedAt = 1_000;
+  const arrivalAt = 3_000;
+  const destination = { galaxy: 2, system: 1, position: 1 };
+  const config = createDefaultNewGameConfig({ seed: 'ASTEROIDGAS2', playerName: 'Test' });
+  config.world = { ...config.world, galaxyCount: 2, npcCount: 0, randomPlayerStart: false };
+  const initialState = withRecyclers(
+    colonyReady(createInitialSaveState('production', departedAt, config)),
+    1,
+  );
+  const simulation: UniverseAsteroidSimulationState = {
+    version: 1,
+    processedThroughAt: arrivalAt - 1,
+    nextSpawnIndex: 10_000,
+    asteroids: [{
+      spawnIndex: 80,
+      spawnedAt: departedAt,
+      movementIndex: 0,
+      previousMoveAt: departedAt,
+      nextMoveAt: arrivalAt,
+      gasYield: 50_000,
+      gasRatePerHour: 25_000,
+      gasUpdatedAt: arrivalAt,
+      gasRemainder: 0,
+      coordinate: { galaxy: 1, system: SYSTEM_COUNT, position: POSITION_COUNT },
+    }],
+  };
+  const initial = {
+    ...initialState,
+    asteroidSimulation: simulation,
+    asteroidDebrisBySpawnIndex: { '80': 40_000 },
+  };
+
+  assert.deepEqual(forecastAsteroidAt(simulation, destination, arrivalAt, 2), {
+    spawnIndex: 80,
+    gasYield: 50_000,
+  });
+  assert.equal(forecastAsteroidAt(simulation, destination, arrivalAt, 1), null);
+
+  const sent = withGasArrivalAt(initial, 'gas-cross-galaxy', destination, arrivalAt);
+  assert.ok(sent);
+  if (!sent) return;
+
+  const arrived = reconcileRuntime(sent.state, {
+    planetId: 'helion-01', now: arrivalAt, mode: 'production', testTimeScale: 10,
+  });
+  const asteroid = arrived.state.asteroidSimulation?.asteroids.find((item) => item.spawnIndex === 80);
+  const flight = arrived.state.flights.records.find((item) => item.id === sent.flight.id)!;
+  const report = arrived.state.reports.gasExtractionArrivalReports?.find((item) => item.flightId === sent.flight.id);
+
+  assert.deepEqual(asteroid?.coordinate, destination);
+  assert.equal(asteroid?.gasYield, 25_000);
+  assert.equal(flight.cargo?.gas, 25_000);
+  assert.equal(flight.cargo?.debris, 15_000);
+  assert.equal(arrived.state.asteroidDebrisBySpawnIndex?.['80'], 25_000);
+  assert.equal(report?.outcome, 'found');
+  assert.equal(report?.gasCollected, 25_000);
+  assert.equal(report?.scrapCollected, 15_000);
 });
 
 test('asteroid movement wins an exact-millisecond tie with gas arrival', () => {

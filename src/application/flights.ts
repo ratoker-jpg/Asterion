@@ -687,7 +687,7 @@ function universeNodeAtCoordinate(
     galaxy: coordinate.galaxy,
     system: coordinate.system,
     nowMs,
-    galaxyCount: 1,
+    galaxyCount: state.worldConfig?.world.galaxyCount ?? 1,
     playerPlanets: persistedPlayerPlanets(state),
     registeredPlanets: registeredUniverseTargets(state),
   });

@@ -340,10 +340,11 @@ function gasAsteroidPreviewAtArrival(
   simulation: UniverseAsteroidSimulationState | undefined,
   targetCoordinate: UniverseCoordinate,
   arrivalAt: number,
+  galaxyCount = 1,
 ): GasAsteroidArrivalPreview {
   if (!simulation) return { asteroidCoordinate: null, targetCoordinate, hit: false, unavailable: true };
 
-  const arrivalSimulation = advanceUniverseAsteroidSimulationAt(simulation, arrivalAt, 1).state;
+  const arrivalSimulation = advanceUniverseAsteroidSimulationAt(simulation, arrivalAt, galaxyCount).state;
   const asteroidAtCoordinate = findUniverseAsteroidAtCoordinate(arrivalSimulation.asteroids, targetCoordinate);
   return {
     asteroidCoordinate: asteroidAtCoordinate?.coordinate ?? null,
@@ -1318,6 +1319,7 @@ function FleetWorkspace({
         runtimeState.asteroidSimulation,
         destination.coordinate,
         currentCandidate.flight.arrivalAt,
+        runtimeState.worldConfig?.world.galaxyCount ?? 1,
       );
       const candidateExpired = gasPreviewFlight.arrivalAt <= departedAt
         || departedAt - gasPreviewFlight.departedAt > GAS_PREVIEW_FRESHNESS_WINDOW_MS;
@@ -1476,8 +1478,9 @@ function FleetWorkspace({
       previewRuntimeState?.asteroidSimulation,
       previewCoordinate,
       previewFlightRecord.arrivalAt,
+      previewRuntimeState?.worldConfig?.world.galaxyCount ?? 1,
     );
-  }, [missionId, previewCoordinate, previewFlightRecord, previewRuntimeState?.asteroidSimulation]);
+  }, [missionId, previewCoordinate, previewFlightRecord, previewRuntimeState?.asteroidSimulation, previewRuntimeState?.worldConfig?.world.galaxyCount]);
   const aidOptions = missionId === 'aid' && previewRuntimeState
     ? selectFulfillableRequests(previewRuntimeState.command, previewRuntimeState.profile.playerId)
     : [];
