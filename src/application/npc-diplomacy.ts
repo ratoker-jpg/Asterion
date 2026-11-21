@@ -49,6 +49,7 @@ import {
   selectNpcDefection,
 } from './npc-alliance-choice.ts';
 import { npcGroupRegard, npcRegard } from './npc-relations.ts';
+import { NPC_FOUNDER_ACHIEVEMENT_ID, recordNpcAchievement } from './npc-achievements.ts';
 
 export type NpcDiplomacyPayload = Readonly<Record<string, string | number | boolean | null>>;
 export type NpcDiplomacyCandidate = Readonly<{
@@ -330,5 +331,9 @@ export function applyNpcDiplomacyAction(
   if (!result.ok || result.state === command) return { state: nextState, ok: false, reason: result.code ?? 'no_change' };
   // A new alliance, a war or a truce is a reason for the leadership to redraw its crest.
   const crested = state.npc ? applyNpcAllianceHeraldry(nextState.command, ownerId, state.npc.profiles) : nextState.command;
-  return { state: crested === nextState.command ? nextState : { ...nextState, command: crested }, ok: true, reason: 'applied' };
+  const finalState = crested === nextState.command ? nextState : { ...nextState, command: crested };
+  const awardedState = candidate.kind === 'create-alliance'
+    ? recordNpcAchievement(finalState, ownerId, NPC_FOUNDER_ACHIEVEMENT_ID)
+    : finalState;
+  return { state: awardedState, ok: true, reason: 'applied' };
 }

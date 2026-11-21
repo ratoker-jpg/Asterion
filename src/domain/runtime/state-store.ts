@@ -1,6 +1,6 @@
 import type { CommandState } from '../command/types.ts';
 import type { RatingPrototypeState } from '../rating/fixtures.ts';
-import type { OwnerScore } from '../rating/types.ts';
+import type { AchievementPointsByOwner, OwnerScore } from '../rating/types.ts';
 import type { RuntimeMode } from './mode.ts';
 
 export type RuntimeStateSnapshot = {
@@ -14,6 +14,8 @@ export type RuntimeStateSnapshot = {
   currentPlayerId: string;
   /** Profile-global achievement total for the local player; separate from gameplay rating totals. */
   currentPlayerAchievementPoints: number;
+  /** Achievement totals by rated owner; missing ids have no achievement award. */
+  achievementPointsByOwner?: AchievementPointsByOwner;
 };
 
 export type RatedOwnerPlanet = { id: string; name: string; coordinate: { galaxy: number; system: number; position: number } };

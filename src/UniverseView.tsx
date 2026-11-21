@@ -65,7 +65,8 @@ import { selectOwnerAlliance } from './domain/command/selectors.ts';
 import type { CommandState } from './domain/command/types.ts';
 import { playerFactionLabel } from './domain/profile/repository.ts';
 import type { PlayerProfileState } from './domain/profile/types.ts';
-import type { OwnerScore } from './domain/rating/types.ts';
+import type { AchievementPointsByOwner, OwnerScore } from './domain/rating/types.ts';
+import { achievementPointsForOwner, hasAchievementPointsForOwner } from './domain/rating/selectors.ts';
 import type { RuntimeMode } from './domain/runtime/mode.ts';
 import {
   GALAXY,
@@ -139,6 +140,7 @@ type UniverseViewProps = {
   profile: PlayerProfileState;
   ownerScores: Readonly<Record<string, OwnerScore>>;
   currentPlayerAchievementPoints?: number;
+  achievementPointsByOwner?: AchievementPointsByOwner;
   /** Planet shields by owner id; a shielded planet shows a mark and cannot be attacked. */
   shields?: Readonly<Record<string, import('./domain/shield/shield.ts').ShieldRecord>>;
   command: CommandState;
@@ -244,12 +246,12 @@ function MapMark({ tone, blocked = false }: { tone: MapTone; blocked?: boolean }
   );
 }
 
-function ownerPoints(score: OwnerScore | undefined): UniverseOwnerPoints {
+function ownerPoints(score: OwnerScore | undefined, achievementPoints: number = score?.achievementPoints ?? 0): UniverseOwnerPoints {
   return {
     resource: score?.resourcePoints ?? 0,
     battle: score?.battlePoints ?? 0,
     total: score?.totalPoints ?? 0,
-    achievements: score?.achievementPoints ?? 0,
+    achievements: achievementPoints,
   };
 }
 
@@ -596,7 +598,7 @@ function MovingAsteroid({ node, underlyingKind, nowMs, hasDebris, occupiedNodes,
   </button>;
 }
 
-export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPlanetName, profile, ownerScores, currentPlayerAchievementPoints = 0, shields, command, playerPlanets: playerPlanetsProp, spyTargets: spyTargetsProp, orbitalDebrisByCoordinate, asteroidDebrisPresenceBySpawnIndex, asteroidStates, pirateContactState, pirateContacts = [], pirateFocusTarget, mode, onColonize, onAsteroidRecycler, onExpedition, onExplorationRecon, onExplorationAttack, explorationEligibility = {}, explorationIntel = {}, onTransport, onSpy, onAttack, onPirateRecon, onPirateAttack, onPirateReport, onPirateSystemChange, focusTarget, onFocusHandled, onSunSelect, sunAlerts = [], gateBeacons = [], onSunDefend, sunRaidAccess, homeCoordinate, debrisOrigin, onQuickSend, onQuickDetails }: UniverseViewProps) {
+export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPlanetName, profile, ownerScores, currentPlayerAchievementPoints = 0, achievementPointsByOwner, shields, command, playerPlanets: playerPlanetsProp, spyTargets: spyTargetsProp, orbitalDebrisByCoordinate, asteroidDebrisPresenceBySpawnIndex, asteroidStates, pirateContactState, pirateContacts = [], pirateFocusTarget, mode, onColonize, onAsteroidRecycler, onExpedition, onExplorationRecon, onExplorationAttack, explorationEligibility = {}, explorationIntel = {}, onTransport, onSpy, onAttack, onPirateRecon, onPirateAttack, onPirateReport, onPirateSystemChange, focusTarget, onFocusHandled, onSunSelect, sunAlerts = [], gateBeacons = [], onSunDefend, sunRaidAccess, homeCoordinate, debrisOrigin, onQuickSend, onQuickDetails }: UniverseViewProps) {
   const galaxyCount = getActiveGalaxyCount();
   const [galaxy, setGalaxy] = useState(homeCoordinate?.galaxy ?? GALAXY);
   const [system, setSystem] = useState(homeCoordinate?.system ?? 1);
@@ -656,16 +658,17 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
     displayName: profile.displayName,
     raceId: profile.factionId,
     alliance,
-    points: { ...ownerPoints(ownerScores[profile.playerId]), achievements: currentPlayerAchievementPoints },
+    points: ownerPoints(ownerScores[profile.playerId], achievementPointsForOwner(achievementPointsByOwner, profile.playerId, currentPlayerAchievementPoints)),
     planetIds: playerPlanets.map((planet) => planet.id),
-  }), [alliance, currentPlayerAchievementPoints, ownerScores, playerPlanets, profile]);
+  }), [alliance, currentPlayerAchievementPoints, achievementPointsByOwner, ownerScores, playerPlanets, profile]);
   const owners = useMemo(() => {
     const next = new Map<string, UniverseOwnerProfile>([[owner.id, owner]]);
     if (mode === 'test') {
       const registeredBotPlanetIds = spyTargets
         .filter((target) => target.ownerId === UNIVERSE_NPC_OWNER_ID)
         .map((target) => target.id);
-      const npc = createUniverseNpcOwnerProfile(ownerPoints(ownerScores[UNIVERSE_NPC_OWNER_ID]), registeredBotPlanetIds);
+      const npcId = UNIVERSE_NPC_OWNER_ID;
+      const npc = createUniverseNpcOwnerProfile(ownerPoints(ownerScores[npcId], achievementPointsForOwner(achievementPointsByOwner, npcId, ownerScores[npcId]?.achievementPoints ?? 0)), registeredBotPlanetIds);
       next.set(npc.id, npc);
       next.set(TEST_MODE_ALLY_PLANET_FIXTURE.owner.id, normalizeUniverseOwnerProfile({
         ...TEST_MODE_ALLY_PLANET_FIXTURE.owner,
@@ -675,18 +678,22 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
     }
     for (const target of spyTargets) {
       const previous = next.get(target.ownerId);
+      const score = ownerScores[target.ownerId];
+      const hasAwardEntry = hasAchievementPointsForOwner(achievementPointsByOwner, target.ownerId);
       next.set(target.ownerId, normalizeUniverseOwnerProfile({
         ...(previous ?? {}),
         id: target.ownerId,
         displayName: target.ownerName,
         raceId: target.raceId,
         alliance: selectOwnerAlliance(command, target.ownerId),
-        points: ownerScores[target.ownerId] ? ownerPoints(ownerScores[target.ownerId]) : previous?.points,
+        points: score || hasAwardEntry
+          ? ownerPoints(score, achievementPointsForOwner(achievementPointsByOwner, target.ownerId, score?.achievementPoints ?? previous?.points?.achievements ?? 0))
+          : previous?.points,
         planetIds: [...new Set([...(previous?.planetIds ?? []), target.id])],
       }));
     }
     return next;
-  }, [command, mode, owner, ownerScores, spyTargets]);
+  }, [achievementPointsByOwner, command, mode, owner, ownerScores, spyTargets]);
   const mapOptions = useMemo(() => ({
     currentOwnerId: owner.id,
     currentPlanetName: ownedPlanetName,

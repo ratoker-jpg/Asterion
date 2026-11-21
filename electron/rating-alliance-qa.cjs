@@ -75,7 +75,8 @@ function buildFixture() {
     'qa-no-deputy': { members: 6, wars: 2, crystals: 1 },
     'qa-small': { members: 3, wars: 0, crystals: 0 },
   };
-  return { ownerScores, owners, currentPlayerId: PLAYER_ID, currentPlayerAchievementPoints: 1_234_567, alliances, allianceDetails, giantName };
+  return { ownerScores, owners, currentPlayerId: PLAYER_ID, currentPlayerAchievementPoints: 1_234_567,
+    achievementPointsByOwner: { 'npc-007': 35 }, alliances, allianceDetails, giantName };
 }
 
 // ---------- helpers ----------
@@ -189,6 +190,8 @@ async function runViewport(win, directory, fixture, label) {
   await click(win, '[data-qa-rating-sort="achievementPoints"]');
   const firstAchievementPlayer = await js(win, `document.querySelector('[data-qa-rating-player-row]')?.getAttribute('data-qa-rating-player-row') || ''`);
   check(firstAchievementPlayer === PLAYER_ID, `${label}: achievement sort did not rank the player with the earned total first`, firstAchievementPlayer);
+  const npcAchievementPoints = await text(win, '[data-qa-rating-achievement-points="npc-007"]');
+  check(npcAchievementPoints.replace(/\D/g, '') === '35', `${label}: NPC row lost its earned achievement points`, npcAchievementPoints);
   await click(win, '[data-qa-rating-sort="achievementPoints"]');
   await click(win, '[data-qa-rating-sort="totalPoints"]');
   const leaderRow = await text(win, '[data-qa-rating-player-row="npc-007"]');
@@ -201,6 +204,8 @@ async function runViewport(win, directory, fixture, label) {
   await click(win, '[data-qa-rating-player-row="npc-007"]');
   await waitFor(win, `document.querySelector('[data-qa-rating-player-card="npc-007"]')`);
   const leaderCard = await text(win, '[data-qa-rating-player-card="npc-007"]');
+  const npcCardPoints = await text(win, '[data-qa-rating-player-card="npc-007"] [data-qa-rating-player-achievements]');
+  check(npcCardPoints.replace(/\D/g, '') === '35', `${label}: NPC card lost its earned achievement points`, npcCardPoints);
   check(await js(win, `Boolean(document.querySelector('[data-qa-rating-player-card="npc-007"] [data-qa-rating-player-crystals="alliance"]'))`), `${label}: member card shows personal crystals`, leaderCard);
   check(leaderCard.includes('4/4') && /Как глава/.test(leaderCard), `${label}: leader card lacks alliance crystals or the Gate role`, leaderCard);
   await scrollTo(win, '[data-qa-rating-player-row="npc-007"]', 'center');

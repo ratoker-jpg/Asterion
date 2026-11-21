@@ -8,7 +8,7 @@ import {
   createPlayerRatingEntries,
   migrateRatingPrototypeState,
 } from './fixtures.ts';
-import { clampPage, filterAlliances, filterPlayers, pageForEntry, paginate, sortAlliances, sortPlayers } from './selectors.ts';
+import { achievementPointsForOwner, clampPage, filterAlliances, filterPlayers, pageForEntry, paginate, sortAlliances, sortPlayers } from './selectors.ts';
 import { createAllianceRatingEntries, selectAllianceRoster } from './alliances.ts';
 import { createDefaultCommandState } from '../command/repository.ts';
 import { createAlliance } from '../command/membership.ts';
@@ -76,6 +76,34 @@ test('profile-global achievement points attach only to the current player and ne
     ['player-current', 75, 150], ['npc-a', 0, 90],
   ]);
   assert.equal(sortPlayers(standings, 'achievementPoints')[0]?.id, 'player-current');
+});
+
+test('owner achievement map attaches only to supplied real owners and leaves gameplay totals unchanged', () => {
+  const ownerScores = {
+    'player-current': { resourcePoints: 120, battlePoints: 30 },
+    'npc-a': { resourcePoints: 80, battlePoints: 10 },
+  };
+  const owners = {
+    'player-current': { name: 'Pilot', factionId: 'aegis' },
+    'npc-a': { name: 'NPC A', factionId: 'synod' },
+  };
+  const awards = { 'player-current': 75.9, 'npc-a': 35.2, 'unknown-fixture': 900 };
+  const standings = createOwnerRatingEntries(ownerScores, owners, 'player-current', 8, awards);
+
+  assert.deepEqual(standings.map(({ id, achievementPoints, totalPoints }) => [id, achievementPoints, totalPoints]), [
+    ['player-current', 75, 150], ['npc-a', 35, 90],
+  ]);
+  assert.equal(standings.some((entry) => entry.id === 'unknown-fixture'), false);
+  assert.deepEqual(createOwnerRatingEntries(ownerScores, owners, 'player-current', 8).map((entry) => entry.achievementPoints), [8, 0]);
+});
+
+test('owner achievement selector distinguishes absent owners and sanitizes mapped values', () => {
+  const awards = { explicitZero: 0, partial: 3.9, invalid: Number.NaN, negative: -5 };
+  assert.equal(achievementPointsForOwner(awards, 'absent', 14), 14);
+  assert.equal(achievementPointsForOwner(awards, 'explicitZero', 14), 0);
+  assert.equal(achievementPointsForOwner(awards, 'partial', 14), 3);
+  assert.equal(achievementPointsForOwner(awards, 'invalid', 14), 0);
+  assert.equal(achievementPointsForOwner(awards, 'negative', 14), 0);
 });
 
 test('search is case-insensitive and score sorting works', () => {

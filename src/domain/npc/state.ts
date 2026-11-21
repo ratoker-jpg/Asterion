@@ -135,6 +135,10 @@ export function validateNpcState(value: unknown): value is NpcStateV1 {
 export function isNpcProfile(value: unknown): value is NpcProfile {
   if (!isRecord(value) || typeof value.ownerId !== 'string' || value.ownerId.length === 0
     || typeof value.privateSeed !== 'string' || value.privateSeed.length === 0) return false;
+  if ((value.earnedAchievementIds !== undefined && (!Array.isArray(value.earnedAchievementIds)
+      || !value.earnedAchievementIds.every((id) => typeof id === 'string' && id.length > 0)
+      || new Set(value.earnedAchievementIds).size !== value.earnedAchievementIds.length))
+    || (value.achievementsReconciled !== undefined && typeof value.achievementsReconciled !== 'boolean')) return false;
   const traits = value.traits;
   if (!isRecord(traits) || !NPC_TRAIT_NAMES.every((trait) => inUnitRange(traits[trait]))
     || !isKnowledge(value.knowledge) || !isPlanning(value.planning) || !Array.isArray(value.memory)

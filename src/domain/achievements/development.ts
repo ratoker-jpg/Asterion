@@ -1,6 +1,8 @@
 import {
   ACHIEVEMENT_RANKS,
   DEVELOPMENT_ACHIEVEMENTS,
+  type PlayerAchievementProofs,
+  type PlayerEventAchievementId,
   type DevelopmentAchievementId,
 } from './catalog.ts';
 import type { AchievementChronicle } from './chronicle.ts';
@@ -19,6 +21,8 @@ export type AchievementProgressSource = Readonly<{
   scienceLevels?: Partial<Record<ScienceId, number>>;
   /** Completed player commander levels from the owner-upgrade selector, including legacy fallback. */
   commanderUpgradeLevels?: Partial<Record<CommanderId, number>>;
+  /** Proven player actions copied with the campaign; absent on saves from before the event. */
+  playerAchievementProofs?: PlayerAchievementProofs;
 }>;
 
 /** Persistent earned-record fields used by the chronicle and by saved copies. */
@@ -98,6 +102,15 @@ function highestCommanderUpgradeLevel(source: AchievementProgressSource): number
   return highest;
 }
 
+function playerAchievementProofAt(
+  source: AchievementProgressSource,
+  id: DevelopmentAchievementId,
+): number | undefined {
+  if (id !== 'first-stone' && id !== 'founder') return undefined;
+  const at = source.playerAchievementProofs?.[id];
+  return Number.isSafeInteger(at) && Number(at) >= 0 ? Number(at) : undefined;
+}
+
 function rawProgress(source: AchievementProgressSource, id: DevelopmentAchievementId): number {
   switch (id) {
     case 'bridge':
@@ -113,7 +126,21 @@ function rawProgress(source: AchievementProgressSource, id: DevelopmentAchieveme
       return ownedPlanets(source).length;
     case 'power-grid':
       return highestPlanetEnergyBalance(source);
+    case 'first-stone':
+    case 'founder':
+      return playerAchievementProofAt(source, id) === undefined ? 0 : 1;
   }
+}
+
+/** Records the first authoritative proof for an action without changing a prior timestamp. */
+export function recordPlayerAchievementProof(
+  current: PlayerAchievementProofs | undefined,
+  id: PlayerEventAchievementId,
+  at: number,
+): PlayerAchievementProofs | undefined {
+  if (!Number.isSafeInteger(at) || at < 0) return current;
+  if (current?.[id] !== undefined) return current;
+  return { ...current, [id]: at };
 }
 
 /** Returns live development progress from the current owned-planet state. */
@@ -147,7 +174,7 @@ export function reconcileDevelopmentAchievementAwards(
     .filter((row) => row.met && !earnedIds.has(row.id))
     .map((row): EarnedAchievementRecord => ({
       id: row.id,
-      at: context.at,
+      at: playerAchievementProofAt(source, row.id) ?? context.at,
       ...(context.campaignId ? { campaignId: context.campaignId } : {}),
       ...(context.roundId ? { roundId: context.roundId } : {}),
     }));

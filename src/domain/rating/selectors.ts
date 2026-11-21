@@ -1,10 +1,25 @@
 import type {
+  AchievementPointsByOwner,
   AllianceRatingEntry,
   AllianceScoreKey,
   PlayerRatingEntry,
   PlayerScoreKey,
   SortDirection,
 } from './types.ts';
+
+/** Returns a safe non-negative achievement total, falling back only when no owner entry exists. */
+export function achievementPointsForOwner(
+  values: AchievementPointsByOwner | undefined,
+  ownerId: string,
+  fallback = 0,
+): number {
+  const value = values && Object.prototype.hasOwnProperty.call(values, ownerId) ? values[ownerId] : fallback;
+  return Math.max(0, Math.floor(typeof value === 'number' && Number.isFinite(value) ? value : 0));
+}
+
+export function hasAchievementPointsForOwner(values: AchievementPointsByOwner | undefined, ownerId: string): boolean {
+  return Boolean(values && Object.prototype.hasOwnProperty.call(values, ownerId));
+}
 
 function normalizeQuery(query: string) {
   return query.trim().toLocaleLowerCase('ru-RU');

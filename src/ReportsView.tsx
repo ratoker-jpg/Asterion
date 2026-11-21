@@ -37,7 +37,7 @@ import type { NpcStrategyState } from './domain/npc/strategy.ts';
 import type { PlayerProfileState } from './domain/profile/types.ts';
 import { selectPlayerProfileMetrics } from './domain/profile/selectors.ts';
 import type { PlayerProfileMetricKey } from './domain/profile/selectors.ts';
-import type { OwnerScore } from './domain/rating/types.ts';
+import type { AchievementPointsByOwner, OwnerScore } from './domain/rating/types.ts';
 import type { RatingPrototypeState } from './domain/rating/fixtures.ts';
 import { selectRecordedBattlePointAwards } from './domain/rating/scoring.ts';
 import { RUNTIME_RESET_EVENT, type RuntimeMode } from './domain/runtime/mode.ts';
@@ -298,8 +298,8 @@ export type ProfileFacts = {
   allianceCrystals?: number;
 };
 
-function PlayerProfile({ profile, score, achievementPoints, command, mode, recentItems, facts, onOpenCommand, onOpenItem }: { profile: PlayerProfileState; score: OwnerScore | null; achievementPoints: number; command: CommandState; mode: RuntimeMode; recentItems: readonly ReportItem[]; facts: ProfileFacts; onOpenCommand: () => void; onOpenItem: (item: ReportItem) => void }) {
-  const metrics = selectPlayerProfileMetrics(profile, score, mode, achievementPoints);
+function PlayerProfile({ profile, score, achievementPoints, achievementPointsByOwner, command, mode, recentItems, facts, onOpenCommand, onOpenItem }: { profile: PlayerProfileState; score: OwnerScore | null; achievementPoints: number; achievementPointsByOwner?: AchievementPointsByOwner; command: CommandState; mode: RuntimeMode; recentItems: readonly ReportItem[]; facts: ProfileFacts; onOpenCommand: () => void; onOpenItem: (item: ReportItem) => void }) {
+  const metrics = selectPlayerProfileMetrics(profile, score, mode, achievementPoints, achievementPointsByOwner);
   const membership = selectOwnerMembership(command, profile.playerId);
   const alliance = membership ? toAllianceIdentity(membership.alliance) : null;
   const role = membership ? selectRole(membership.alliance, profile.playerId) : null;
@@ -348,7 +348,7 @@ function PlayerProfile({ profile, score, achievementPoints, command, mode, recen
   );
 }
 
-export function ReportsView({ ownFleetAttack, nearestFleet, onAttackPlanet, retentionCutoff, battleReports, planetNames, savedBattleReportIds, operations, command, espionage, pirateReconReports, pirateFlights, exploration, initialSelectedReportId, profile, score, achievementPoints = 0, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy, onOpenUniverseTarget, onOpenPirateUniverse, canRepeatFlight, onRepeatFlight, onCollectDebris, onAttackSpyTarget, profileFacts, npcStrategy, worldNow, onAnswerLetter, achievementScreenData, achievementEarnedRecords = [], achievementError }: {
+export function ReportsView({ ownFleetAttack, nearestFleet, onAttackPlanet, retentionCutoff, battleReports, planetNames, savedBattleReportIds, operations, command, espionage, pirateReconReports, pirateFlights, exploration, initialSelectedReportId, profile, score, achievementPoints = 0, achievementPointsByOwner, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy, onOpenUniverseTarget, onOpenPirateUniverse, canRepeatFlight, onRepeatFlight, onCollectDebris, onAttackSpyTarget, profileFacts, npcStrategy, worldNow, onAnswerLetter, achievementScreenData, achievementEarnedRecords = [], achievementError }: {
   /** Letters older than this world time are gone (24-hour rule); absent in Test Mode. */
   retentionCutoff?: number;
   battleReports: readonly BattleReport[];
@@ -366,6 +366,8 @@ export function ReportsView({ ownFleetAttack, nearestFleet, onAttackPlanet, rete
   score: OwnerScore | null;
   /** Sum of unique known achievements in the profile-global chronicle. */
   achievementPoints?: number;
+  /** Per-owner achievement totals; the profile uses the entry for its owner id when present. */
+  achievementPointsByOwner?: AchievementPointsByOwner;
   rating: RatingPrototypeState;
   mode: RuntimeMode;
   state: ReportsState;
@@ -649,7 +651,7 @@ export function ReportsView({ ownFleetAttack, nearestFleet, onAttackPlanet, rete
         </nav>
       </aside>
 
-      {activeFolder === 'profile' ? <PlayerProfile profile={profile} score={score} achievementPoints={achievementPoints} command={command} mode={mode} recentItems={recentProfileItems} facts={profileFacts ?? {}} onOpenCommand={onOpenCommand} onOpenItem={openFromProfile} /> : activeFolder === 'achievements' ? <section className="reports-folder-workspace reports-folder-workspace--empty" data-qa-folder-view="achievements" aria-label="Достижения">
+      {activeFolder === 'profile' ? <PlayerProfile profile={profile} score={score} achievementPoints={achievementPoints} achievementPointsByOwner={achievementPointsByOwner} command={command} mode={mode} recentItems={recentProfileItems} facts={profileFacts ?? {}} onOpenCommand={onOpenCommand} onOpenItem={openFromProfile} /> : activeFolder === 'achievements' ? <section className="reports-folder-workspace reports-folder-workspace--empty" data-qa-folder-view="achievements" aria-label="Достижения">
         {achievementViewProps
           ? <AchievementsView {...achievementViewProps} />
           : <p className="reports-list-empty-status" role={achievementError ? 'alert' : 'status'} data-qa-achievement-store-error>{achievementError ?? 'Летопись достижений загружается…'}</p>}

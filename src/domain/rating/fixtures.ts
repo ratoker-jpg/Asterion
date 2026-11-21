@@ -1,6 +1,7 @@
-import type { OwnerScore, PlayerRatingEntry } from './types.ts';
+import type { AchievementPointsByOwner, OwnerScore, PlayerRatingEntry } from './types.ts';
 import { TEST_ALLY_OWNER_ID } from '../command/catalog.ts';
 import type { RuntimeMode } from '../runtime/mode.ts';
+import { achievementPointsForOwner } from './selectors.ts';
 
 const CALLSIGNS = ['Vega', 'Orion', 'Helios', 'Nyx', 'Astra', 'Kepler', 'Titan', 'Nova', 'Cygnus', 'Draco', 'Altair', 'Rigel'];
 const ALLIANCE_TAGS = ['ARC', 'NEX', 'VOID', 'AUR', 'ION', 'HEX', 'SOL', 'DRK'];
@@ -74,6 +75,7 @@ export function createOwnerRatingEntries(
   owners: Readonly<Record<string, { name: string; factionId: string }>>,
   currentPlayerId: string,
   currentPlayerAchievementPoints = 0,
+  achievementPointsByOwner?: AchievementPointsByOwner,
 ): PlayerRatingEntry[] {
   const safe = (value: number | undefined) => Math.max(0, Math.floor(Number.isFinite(value) ? value! : 0));
   return Object.entries(owners)
@@ -82,7 +84,7 @@ export function createOwnerRatingEntries(
       const battlePoints = safe(ownerScores[id]?.battlePoints);
       return {
         id, rank: 0, name: owner.name, race: RATING_RACE_BY_FACTION[owner.factionId] ?? 'aster', allianceTag: null,
-        achievementPoints: id === currentPlayerId ? safe(currentPlayerAchievementPoints) : 0,
+        achievementPoints: achievementPointsForOwner(achievementPointsByOwner, id, id === currentPlayerId ? currentPlayerAchievementPoints : 0),
         resourcePoints, battlePoints, totalPoints: resourcePoints + battlePoints,
         isCurrentPlayer: id === currentPlayerId,
       };
