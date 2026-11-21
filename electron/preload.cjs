@@ -61,6 +61,18 @@ contextBridge.exposeInMainWorld('asterionDesktop', {
       if (!result || !result.ok) throw new Error(result && result.error || 'Persona registry write failed.');
     },
   },
+  // Profile-global achievement chronicle, independent from campaign saves.
+  achievements: {
+    read: () => {
+      const result = ipcRenderer.sendSync('asterion:achievements:read');
+      if (!result || !result.ok) throw new Error(result && result.error || 'Achievement chronicle read failed.');
+      return { text: result.text, backup: result.backup };
+    },
+    write: (text) => {
+      const result = ipcRenderer.sendSync('asterion:achievements:write', text);
+      if (!result || !result.ok) throw new Error(result && result.error || 'Achievement chronicle write failed.');
+    },
+  },
   // Game updates (electron/updater.cjs). `install` only after the saves are flushed.
   updates: {
     get: () => ipcRenderer.invoke('asterion:update:get'),
