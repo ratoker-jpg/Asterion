@@ -87,7 +87,7 @@ export function planNpcGasMission(state: SaveState, context: NpcUtilityContext, 
     }
     if (!best) continue;
     // The game's own model confirms the asteroid will be there and how much gas it will hold.
-    const forecast = forecastAsteroidAt(simulation, best.coordinate, best.arrivalAt);
+    const forecast = forecastAsteroidAt(simulation, best.coordinate, best.arrivalAt, state.worldConfig?.world.galaxyCount ?? 1);
     if (!forecast) continue;
     const trialCapacity = dispatchNpcGas(state, { requestId: `npc-gas-trial:${planet.id}`, ownerId, originPlanetId: planet.id,
       coordinate: best.coordinate, selectedShips: ships }, context.at, timeScale).flight?.gasCapacity ?? 0;

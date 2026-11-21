@@ -8,6 +8,8 @@ import type {
 import {
   ASTEROID_SCHEDULE_EPOCH_MS,
   ASTEROID_SPAWN_INTERVAL_MS,
+  POSITION_COUNT,
+  SYSTEM_COUNT,
   getUniverseAsteroidDwellMs,
   getUniverseAsteroidState,
   resolveUniverseAsteroidCollisions,
@@ -72,6 +74,47 @@ test('a chronological asteroid spawn initializes its gas clock at the spawn time
   assert.equal(asteroid.gasRatePerHour, getAsteroidGasRatePerHour(asteroid.spawnIndex));
   assert.equal(asteroid.gasUpdatedAt, ASTEROID_SCHEDULE_EPOCH_MS);
   assert.equal(asteroid.gasRemainder, 0);
+});
+
+test('an old one-galaxy route cache advances into the next campaign galaxy without changing the asteroid ledger', () => {
+  const atMs = ASTEROID_SCHEDULE_EPOCH_MS + 10_000;
+  const source = { galaxy: 1, system: SYSTEM_COUNT, position: POSITION_COUNT };
+  const state = customState(atMs, [{
+    ...asteroid(7, 15, 1, atMs),
+    coordinate: source,
+    // This is the route cache after migration to the two-galaxy campaign.
+    nextCoordinate: { galaxy: 2, system: 1, position: 1 },
+    gasYield: 48_000,
+    gasRatePerHour: 25_000,
+    gasUpdatedAt: atMs - 5_000,
+    gasRemainder: 123,
+  }]);
+
+  const result = advanceUniverseAsteroidSimulationAt(state, atMs, 2);
+  const moved = result.state.asteroids.find((item) => item.spawnIndex === 7);
+
+  assert.deepEqual(moved?.coordinate, { galaxy: 2, system: 1, position: 1 });
+  assert.deepEqual(result.transitions.map(({ spawnIndex, fromCoordinate }) => ({ spawnIndex, fromCoordinate })), [
+    { spawnIndex: 7, fromCoordinate: source },
+  ]);
+  assert.equal(moved?.gasYield, 48_000);
+  assert.equal(moved?.gasRatePerHour, 25_000);
+  assert.equal(moved?.gasUpdatedAt, atMs - 5_000);
+  assert.equal(moved?.gasRemainder, 123);
+  assert.equal(moved?.movementIndex, 1);
+  assert.equal(result.state.nextSpawnIndex, state.nextSpawnIndex);
+});
+
+test('the same terminal route still exits in a single-galaxy campaign', () => {
+  const atMs = ASTEROID_SCHEDULE_EPOCH_MS + 10_000;
+  const source = { galaxy: 1, system: SYSTEM_COUNT, position: POSITION_COUNT };
+  const state = customState(atMs, [{ ...asteroid(7, POSITION_COUNT, 1, atMs), coordinate: source, nextCoordinate: undefined }]);
+
+  const result = advanceUniverseAsteroidSimulationAt(state, atMs, 1);
+
+  assert.deepEqual(result.transitions.map(({ spawnIndex }) => spawnIndex), [7]);
+  assert.equal(result.state.asteroids.some((item) => item.spawnIndex === 7), false);
+  assert.equal(result.state.nextSpawnIndex, state.nextSpawnIndex);
 });
 
 test('a multi-event advance matches chronological single-event advances', () => {

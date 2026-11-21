@@ -648,7 +648,7 @@ function reconcileRuntimeSlice(
   const applyAsteroidTransitionsAt = (at: number) => {
     const simulation = next.asteroidSimulation;
     if (!simulation) return;
-    const advanced = advanceUniverseAsteroidSimulationAt(simulation, at, 1);
+    const advanced = advanceUniverseAsteroidSimulationAt(simulation, at, next.worldConfig?.world.galaxyCount ?? 1);
     next = { ...next, asteroidSimulation: advanced.state };
     for (const transition of advanced.transitions) {
       const key = String(transition.spawnIndex);

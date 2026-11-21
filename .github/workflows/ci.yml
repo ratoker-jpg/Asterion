@@ -167,7 +167,7 @@ jobs:
           - shard: electron-3
             suites: "test:new-game-ui:skip test:test-mode-ui:skip test:operations-screens-ui test:command-aid-ui:skip test:fleet-repeat-ui test:catchup-summary-ui:skip test:save-store-ui"
           - shard: electron-4
-            suites: "test:fleet-planner-ui test:reports-format-ui test:messages-screens-ui test:flights-board-ui test:save-safety-ui:skip test:battle-reports-ui:skip"
+            suites: "test:fleet-planner-ui test:reports-format-ui test:messages-screens-ui test:flights-board-ui test:save-safety-ui:skip test:battle-reports-ui:skip test:asteroid-batch-ui:skip"
           - shard: electron-5
             suites: "test:science-ui:skip test:fleet-ui:skip test:command-journal-ui:skip test:whats-new-ui test:building-actions-ui test:quick-send-cargo-ui"
           - shard: electron-6

@@ -186,8 +186,11 @@ function processTimestamp(
     const current = asteroids.get(asteroid.spawnIndex);
     if (!current || current.nextMoveAt !== atMs) continue;
     transitions.push({ spawnIndex: current.spawnIndex, atMs, fromCoordinate: { ...current.coordinate } });
-    const destination = current.nextCoordinate
-      ?? advanceUniverseAsteroidCoordinate(current.coordinate, 1, galaxyCount);
+    const cachedDestination = current.nextCoordinate;
+    const destination = cachedDestination
+      && advanceUniverseAsteroidCoordinate(cachedDestination, 0, galaxyCount)
+      ? cachedDestination
+      : advanceUniverseAsteroidCoordinate(current.coordinate, 1, galaxyCount);
     if (!destination) {
       asteroids.delete(current.spawnIndex);
       continue;

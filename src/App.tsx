@@ -29,7 +29,7 @@ import { fleetPlanReport } from './ui/fleet-plan/fleet-plan-text.ts';
 import { FleetPlannerDialog } from './ui/fleet-plan/FleetPlannerDialog.tsx';
 import { OperationsView } from './OperationsView';
 import type { createOperationsVariantAQaFixture as CreateOperationsVariantAQaFixture } from './operations-variant-a-qa-fixture.ts';
-import { createUniverseNpcOwnerProfile, rerollTestUniverseLayout, TEST_MODE_ALLY_PLANET_FIXTURE, UNIVERSE_NPC_OWNER_ID } from './domain/universe/runtime.ts';
+import { createUniverseNpcOwnerProfile, formatUniverseCoordinate, rerollTestUniverseLayout, SYSTEM_COUNT, TEST_MODE_ALLY_PLANET_FIXTURE, UNIVERSE_NPC_OWNER_ID } from './domain/universe/runtime.ts';
 import { CommandView, type CommandActionResult, type CommandActions, type FoundingContext } from './CommandView';
 import { ReportsView } from './ReportsView';
 import { buildReportsFeed, dropExpiredReportItems, getReportUnreadCounts } from './domain/reports/adapters.ts';
@@ -271,6 +271,20 @@ import { getOwnerShipUpgradeLevel, getOwnerShipUpgradeLevels, getPlanetResources
 import { selectOwnedPlanet } from './application/owned-planets.ts';
 import { sendQuickLegs, type QuickLegOutcome } from './application/quick-actions.ts';
 import { AidQuickSend } from './ui/command/AidQuickSend.tsx';
+import {
+  DEFAULT_ASTEROID_GAS_BATCH_RECYCLERS,
+  planAsteroidGasBatch,
+  type AsteroidGasBatchOptions,
+  type AsteroidGasBatchPlan,
+  type AsteroidGasBatchRuntime,
+  type AsteroidGasBatchScan,
+} from './application/asteroid-gas-batch.ts';
+import {
+  AsteroidBatchDialog,
+  type AsteroidBatchScanState,
+  type AsteroidBatchSource,
+  type AsteroidBatchTarget,
+} from './ui/universe/AsteroidBatchDialog.tsx';
 import type { TargetRelation } from './domain/flights/types.ts';
 import { materializePirateProfiles, pirateContactOperation, pirateOperationId, selectOwnedPiratePresentations, selectOwnedPirateTargets, selectPirateContacts } from './application/pirate-presentation.ts';
 import type { ExplorationIntel } from './ui/universe/object-card-model.ts';
@@ -321,6 +335,16 @@ type UniverseFocusTarget = {
   ownerId?: string;
   /** 'inspect' opens the owner inspector; 'highlight' only pulses the planet; 'quick' its quick actions; 'sun' the Sun's. */
   mode?: 'inspect' | 'highlight' | 'quick' | 'sun';
+};
+
+type AsteroidGasBatchDialogSession = {
+  scan: AsteroidGasBatchScan;
+  options: AsteroidGasBatchOptions;
+  plan: AsteroidGasBatchPlan | null;
+  equalQuantity: number;
+  scanState: AsteroidBatchScanState;
+  validationMessage?: string;
+  statusMessage?: string;
 };
 
 /** Runtime toasts replace the legacy single status strip. */
@@ -498,6 +522,97 @@ const PLANET_ZONE_EMBLEM_ROLE = { resource: 'metal-production-1', industry: 'con
 function formatCountdown(ms: number) {
   const total = Math.max(0, Math.ceil(ms / 1000));
   return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
+function planAsteroidGasBatchForDialog(
+  state: SaveState,
+  scan: AsteroidGasBatchScan,
+  selectedQuantities: Readonly<Record<string, number>>,
+  runtime: AsteroidGasBatchRuntime,
+): { plan: AsteroidGasBatchPlan; quantities: Readonly<Record<string, number>> } {
+  const quantities = { ...selectedQuantities };
+  return { plan: planAsteroidGasBatch(state, scan, { quantitiesById: quantities }, runtime), quantities };
+}
+
+function asteroidGasBatchView(plan: AsteroidGasBatchPlan, now: number): {
+  availableTotal: number;
+  equalQuantityMax: number;
+  sources: AsteroidBatchSource[];
+  targets: AsteroidBatchTarget[];
+} {
+  const sourceById = new Map(plan.sources.map((source) => [source.planetId, source]));
+  const remaining = new Map(plan.sources.map((source) => [source.planetId, source.availableRecyclers]));
+  const sources = plan.sources.map((source) => ({
+    id: source.planetId,
+    name: source.name,
+    coordinate: formatUniverseCoordinate(source.coordinate),
+    availableCount: source.availableRecyclers,
+  }));
+  const targets = plan.targets.map((target): AsteroidBatchTarget => {
+    const maxQuantity = Math.max(0, ...remaining.values());
+    const source = target.originPlanetId ? sourceById.get(target.originPlanetId) : undefined;
+    const status = target.status;
+    const flightState: AsteroidBatchTarget['flightState'] = status === 'active'
+      ? 'active'
+      : status === 'ready' || status === 'unselected'
+        ? 'ready'
+        : status === 'blocked' && (target.blockReason === 'flight-refused' || (target.blockReason === 'no-source' && maxQuantity > 0))
+          ? 'ready'
+          : 'blocked';
+    const flightReason = target.error?.message
+      ?? (target.blockReason === 'no-source' ? 'Нет доступного источника для выбранного количества.'
+        : target.blockReason === 'request-already-used' ? 'Запрос рейса уже использован. Повторно просканируйте диапазон.'
+          : target.blockReason === 'invalid-quantity' ? 'Укажите допустимое количество переработчиков.'
+            : target.blockReason === 'conflicting-quantity-options' ? 'Пересоберите распределение рейсов.'
+              : undefined);
+    if (status === 'ready' && target.originPlanetId) {
+      remaining.set(target.originPlanetId, Math.max(0,
+        (remaining.get(target.originPlanetId) ?? 0) - (target.acceptedQuantity ?? 0)));
+    }
+    return {
+      id: target.targetId,
+      name: target.name,
+      coordinate: formatUniverseCoordinate(target.coordinate),
+      debrisAvailable: target.hasDebris,
+      quantity: Math.max(0, target.requestedQuantity ?? 0),
+      maxQuantity,
+      etaLabel: target.preview?.ok ? formatCountdown(target.preview.flight.arrivalAt - now) : null,
+      flightState,
+      ...(flightReason ? { flightReason } : {}),
+      ...(source ? { assignedSourceName: source.name } : {}),
+    };
+  });
+  return {
+    availableTotal: plan.sources.reduce((total, source) => total + source.availableRecyclers, 0),
+    equalQuantityMax: Math.max(0, ...plan.sources.map((source) => source.availableRecyclers)),
+    sources,
+    targets,
+  };
+}
+
+function asteroidGasBatchStatus(plan: AsteroidGasBatchPlan, sendMessage?: string): { scanState: AsteroidBatchScanState; statusMessage?: string; validationMessage?: string } {
+  if (plan.scanError) {
+    const validationMessage = plan.scanError === 'invalid-galaxy' ? 'Выберите галактику из текущей кампании.'
+      : plan.scanError === 'invalid-system-range' ? 'Укажите корректный включительный диапазон систем.'
+        : plan.scanError === 'simulation-ahead-of-runtime' ? 'Состояние астероидов ещё обновляется. Просканируйте диапазон ещё раз.'
+          : 'Не удалось определить время сканирования. Повторите попытку.';
+    return { scanState: 'empty', validationMessage };
+  }
+  if (sendMessage) return { scanState: 'partial', statusMessage: sendMessage };
+  if (!plan.targets.length) return { scanState: 'empty' };
+  const blocked = plan.targets.filter((target) => target.status === 'blocked');
+  const active = plan.targets.filter((target) => target.status === 'active');
+  if (blocked.length) {
+    const firstReason = blocked.find((target) => target.error)?.error?.message;
+    return {
+      scanState: 'partial',
+      statusMessage: `${blocked.length} из ${plan.targets.length} астероидов пока недоступны.${firstReason ? ` ${firstReason}` : ''}`,
+    };
+  }
+  if (active.length === plan.targets.length) {
+    return { scanState: 'ready' };
+  }
+  return { scanState: 'ready' };
 }
 
 function useStageScale() {
@@ -681,6 +796,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     flushSync(work);
   }, []);
   const [testTimeScale, setTestTimeScale] = useState<TestTimeScale>(() => resolveTestTimeScale());
+  const [asteroidGasBatchDialog, setAsteroidGasBatchDialog] = useState<AsteroidGasBatchDialogSession | null>(null);
   const [toasts, setToasts] = useState<RuntimeToast[]>([]);
   // Toasts take the first spot that covers no control or screen title (toast-placement.ts).
   const toastStackRef = useRef<HTMLDivElement>(null);
@@ -2966,6 +3082,122 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     }, 40);
   };
 
+  const openAsteroidGasBatch = (selection: { galaxy: number; system: number }) => {
+    setAsteroidGasBatchDialog({
+      scan: { galaxy: selection.galaxy, fromSystem: selection.system, toSystem: selection.system },
+      options: {},
+      plan: null,
+      equalQuantity: DEFAULT_ASTEROID_GAS_BATCH_RECYCLERS,
+      scanState: 'idle',
+    });
+  };
+
+  const updateAsteroidGasBatchPlan = (
+    session: AsteroidGasBatchDialogSession,
+    selectedQuantities: Readonly<Record<string, number>>,
+    statusMessage?: string,
+    runtime: AsteroidGasBatchRuntime = { now: worldNow(), mode: RUNTIME_MODE, testTimeScale },
+  ) => {
+    const planned = planAsteroidGasBatchForDialog(stateRef.current, session.scan, selectedQuantities, runtime);
+    const status = asteroidGasBatchStatus(planned.plan, statusMessage);
+    setAsteroidGasBatchDialog({
+      ...session,
+      options: { quantitiesById: planned.quantities },
+      plan: planned.plan,
+      ...status,
+    });
+    return planned;
+  };
+
+  const scanAsteroidGasBatch = () => {
+    const session = asteroidGasBatchDialog;
+    if (!session) return;
+    const runtime: AsteroidGasBatchRuntime = { now: worldNow(), mode: RUNTIME_MODE, testTimeScale };
+    const allocation = planAsteroidGasBatch(stateRef.current, session.scan, {
+      quantityPerTarget: session.equalQuantity,
+    }, runtime);
+    const selectedQuantities = Object.fromEntries(
+      allocation.targets
+        .filter((target) => target.status === 'ready')
+        .map((target) => [target.targetId, session.equalQuantity]),
+    );
+    const movingTargets = allocation.targets.filter((target) => target.blockReason === 'target-moves-before-arrival').length;
+    const statusMessage = movingTargets > 0
+      ? `Не включено целей: ${movingTargets}. Эти астероиды покинут позицию до прибытия флота.`
+      : undefined;
+    updateAsteroidGasBatchPlan(session, selectedQuantities, statusMessage, runtime);
+  };
+
+  const changeAsteroidGasBatchSelection = (selection: Partial<AsteroidGasBatchScan>) => {
+    setAsteroidGasBatchDialog((current) => current ? {
+      ...current,
+      scan: { ...current.scan, ...selection },
+      options: {},
+      plan: null,
+      scanState: 'idle',
+      validationMessage: undefined,
+      statusMessage: undefined,
+    } : current);
+  };
+
+  const changeAsteroidGasBatchQuantity = (targetId: string, quantity: number) => {
+    const session = asteroidGasBatchDialog;
+    if (!session?.plan) return;
+    const selectedQuantities = Object.fromEntries(session.plan.targets.map((target) => [
+      target.targetId,
+      session.options.quantitiesById?.[target.targetId] ?? target.requestedQuantity ?? 0,
+    ]));
+    selectedQuantities[targetId] = quantity;
+    updateAsteroidGasBatchPlan(session, selectedQuantities);
+  };
+
+  const sendAsteroidGasBatch = () => {
+    const session = asteroidGasBatchDialog;
+    if (!session?.plan) return;
+    const liveState = stateRef.current;
+    const runtime: AsteroidGasBatchRuntime = { now: worldNow(), mode: RUNTIME_MODE, testTimeScale };
+    const selectedQuantities = session.options.quantitiesById ?? Object.fromEntries(session.plan.targets
+      .filter((target) => target.requestedQuantity !== null)
+      .map((target) => [target.targetId, target.requestedQuantity ?? 0]));
+    const fresh = planAsteroidGasBatchForDialog(liveState, session.scan, selectedQuantities, runtime);
+    const freshPlan = fresh.plan;
+    const selectedTargetIds = new Set(Object.entries(fresh.quantities).filter(([, quantity]) => quantity > 0).map(([id]) => id));
+    const activeTargetIds = new Set(freshPlan.targets.filter((target) => target.status === 'active').map((target) => target.targetId));
+    const selectedPendingCount = [...selectedTargetIds].filter((id) => !activeTargetIds.has(id)).length;
+    if (freshPlan.commands.length === 0) {
+      const status = asteroidGasBatchStatus(freshPlan);
+      setAsteroidGasBatchDialog({
+        ...session,
+        options: { quantitiesById: fresh.quantities },
+        plan: freshPlan,
+        scanState: status.scanState,
+        validationMessage: status.validationMessage,
+        statusMessage: status.statusMessage ?? (selectedPendingCount > 0 ? 'Пока нет рейсов, которые можно отправить. Измените количество или просканируйте диапазон ещё раз.' : undefined),
+      });
+      return;
+    }
+
+    const outcomes = sendQuickFlights(freshPlan.commands);
+    const sentCount = outcomes.filter((outcome) => outcome.result.ok).length;
+    const failedCount = Math.max(0, selectedPendingCount - sentCount);
+    const firstDispatchFailure = outcomes.find((outcome) => !outcome.result.ok);
+    const dispatchFailureMessage = firstDispatchFailure && !firstDispatchFailure.result.ok
+      ? firstDispatchFailure.result.error.message
+      : freshPlan.targets.find((target) => target.status === 'blocked' && target.error)?.error?.message;
+    const sendMessage = failedCount > 0
+      ? `Отправлено ${sentCount} из ${selectedPendingCount} выбранных рейсов. Не отправлено: ${failedCount}.${dispatchFailureMessage ? ` ${dispatchFailureMessage}` : ''}${freshPlan.missingTargetIds.length ? ` ${freshPlan.missingTargetIds.length} астероидов вышли за выбранный диапазон и пропущены.` : ''}`
+      : undefined;
+    const refreshedRuntime: AsteroidGasBatchRuntime = { ...runtime, now: worldNow() };
+    const refreshed = planAsteroidGasBatchForDialog(stateRef.current, session.scan, fresh.quantities, refreshedRuntime);
+    const status = asteroidGasBatchStatus(refreshed.plan, sendMessage);
+    setAsteroidGasBatchDialog({
+      ...session,
+      options: { quantitiesById: refreshed.quantities },
+      plan: refreshed.plan,
+      ...status,
+    });
+  };
+
   /** Map quick panel: every leg goes through dispatchFlight, as from the fleet screen. */
   const sendQuickFlights = (commands: DispatchFlightCommand[]): QuickLegOutcome[] => {
     if (rejectNpcCatchupCommand()) {
@@ -3779,6 +4011,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
                   position: state.planets[state.currentPlanetId]!.universePosition ?? 1,
                 },
               } : null}
+              onAsteroidGasOpen={openAsteroidGasBatch}
               onQuickSend={sendQuickFlights}
               onQuickDetails={openQuickDetails}
               focusTarget={universeFocusTarget}
@@ -4040,6 +4273,38 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
             </>
           ) : null}
         </section>
+
+        {asteroidGasBatchDialog ? (() => {
+          const view = asteroidGasBatchDialog.plan ? asteroidGasBatchView(asteroidGasBatchDialog.plan, worldNow()) : null;
+          const sendDisabledReason = asteroidGasBatchDialog.plan && asteroidGasBatchDialog.plan.commands.length === 0
+            ? 'Нет рейсов, которые можно отправить сейчас. Измените количество или повторите сканирование.'
+            : undefined;
+          return createPortal(
+            <AsteroidBatchDialog
+              galaxy={asteroidGasBatchDialog.scan.galaxy}
+              galaxyCount={galaxyCount}
+              range={{ from: asteroidGasBatchDialog.scan.fromSystem, to: asteroidGasBatchDialog.scan.toSystem, min: 1, max: SYSTEM_COUNT }}
+              availableTotal={view?.availableTotal ?? 0}
+              sources={view?.sources ?? []}
+              targets={view?.targets ?? []}
+              equalQuantity={asteroidGasBatchDialog.equalQuantity}
+              equalQuantityMax={view?.equalQuantityMax}
+              scanState={asteroidGasBatchDialog.scanState}
+              validationMessage={asteroidGasBatchDialog.validationMessage}
+              statusMessage={asteroidGasBatchDialog.statusMessage}
+              sendDisabledReason={sendDisabledReason}
+              onGalaxyChange={(galaxy) => changeAsteroidGasBatchSelection({ galaxy })}
+              onRangeChange={(range) => changeAsteroidGasBatchSelection({ fromSystem: range.from, toSystem: range.to })}
+              onEqualQuantityChange={(equalQuantity) => setAsteroidGasBatchDialog((current) => current ? { ...current, equalQuantity } : current)}
+              onAutoDistribute={scanAsteroidGasBatch}
+              onQuantityChange={changeAsteroidGasBatchQuantity}
+              onScan={scanAsteroidGasBatch}
+              onSend={sendAsteroidGasBatch}
+              onClose={() => setAsteroidGasBatchDialog(null)}
+            />,
+            document.body,
+          );
+        })() : null}
 
         {foreignWriterAt ? (
           <div className="save-conflict-banner" role="alert" data-qa-save-conflict>

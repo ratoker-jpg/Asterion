@@ -42,12 +42,12 @@ export function collectAsteroidGas(state: SaveState, coordinate: UniverseCoordin
  * Where an asteroid will be at `arrivalAt`, by the same chronological model
  * the game advances (and the player's flight form previews): the asteroid at
  * `coordinate` at that moment and the gas it will hold, or null when the
- * coordinate will be empty. Asteroids live in galaxy 1 of the simulation.
+ * coordinate will be empty.
  */
 export function forecastAsteroidAt(simulation: UniverseAsteroidSimulationState | undefined, coordinate: UniverseCoordinate,
-  arrivalAt: number): { spawnIndex: number; gasYield: number } | null {
+  arrivalAt: number, galaxyCount = 1): { spawnIndex: number; gasYield: number } | null {
   if (!simulation) return null;
-  const advanced = advanceUniverseAsteroidSimulationAt(simulation, arrivalAt, 1).state;
+  const advanced = advanceUniverseAsteroidSimulationAt(simulation, arrivalAt, galaxyCount).state;
   const asteroid = findUniverseAsteroidAtCoordinate(advanced.asteroids, coordinate);
   if (!asteroid) return null;
   return { spawnIndex: asteroid.spawnIndex, gasYield: Math.max(0, Math.floor(advanceAsteroidGasAt(asteroid, arrivalAt).gasYield)) };

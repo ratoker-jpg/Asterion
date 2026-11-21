@@ -172,6 +172,8 @@ type UniverseViewProps = {
   focusTarget?: { coordinate: UniverseCoordinate; planetId?: string; ownerId?: string; mode?: 'inspect' | 'highlight' | 'quick' | 'sun' } | null;
   /** «Найти обломки» scans the systems around this planet (the one selected in the header). */
   debrisOrigin?: { planetName: string; coordinate: UniverseCoordinate } | null;
+  /** Opens the batch asteroid gas collection dialog at the visible map location. */
+  onAsteroidGasOpen?: (selection: { galaxy: number; system: number }) => void;
   /** «Отправить»: opens «Флоты → Переработка» aimed at the coordinate (position 0 = the Sun). */
   onFocusHandled?: () => void;
   /** Click on the system's Sun: opens «Командование → Операции» for it. */
@@ -598,7 +600,7 @@ function MovingAsteroid({ node, underlyingKind, nowMs, hasDebris, occupiedNodes,
   </button>;
 }
 
-export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPlanetName, profile, ownerScores, currentPlayerAchievementPoints = 0, achievementPointsByOwner, shields, command, playerPlanets: playerPlanetsProp, spyTargets: spyTargetsProp, orbitalDebrisByCoordinate, asteroidDebrisPresenceBySpawnIndex, asteroidStates, pirateContactState, pirateContacts = [], pirateFocusTarget, mode, onColonize, onAsteroidRecycler, onExpedition, onExplorationRecon, onExplorationAttack, explorationEligibility = {}, explorationIntel = {}, onTransport, onSpy, onAttack, onPirateRecon, onPirateAttack, onPirateReport, onPirateSystemChange, focusTarget, onFocusHandled, onSunSelect, sunAlerts = [], gateBeacons = [], onSunDefend, sunRaidAccess, homeCoordinate, debrisOrigin, onQuickSend, onQuickDetails }: UniverseViewProps) {
+export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPlanetName, profile, ownerScores, currentPlayerAchievementPoints = 0, achievementPointsByOwner, shields, command, playerPlanets: playerPlanetsProp, spyTargets: spyTargetsProp, orbitalDebrisByCoordinate, asteroidDebrisPresenceBySpawnIndex, asteroidStates, pirateContactState, pirateContacts = [], pirateFocusTarget, mode, onColonize, onAsteroidRecycler, onExpedition, onExplorationRecon, onExplorationAttack, explorationEligibility = {}, explorationIntel = {}, onTransport, onSpy, onAttack, onPirateRecon, onPirateAttack, onPirateReport, onPirateSystemChange, focusTarget, onFocusHandled, onSunSelect, sunAlerts = [], gateBeacons = [], onSunDefend, sunRaidAccess, homeCoordinate, debrisOrigin, onAsteroidGasOpen, onQuickSend, onQuickDetails }: UniverseViewProps) {
   const galaxyCount = getActiveGalaxyCount();
   const [galaxy, setGalaxy] = useState(homeCoordinate?.galaxy ?? GALAXY);
   const [system, setSystem] = useState(homeCoordinate?.system ?? 1);
@@ -1214,6 +1216,10 @@ export function UniverseView({ onNotice, ownerPresence, ownedPlanetArt, ownedPla
           <button type="button" className="universe-radar__home universe-radar__debris" data-qa-universe-find-debris
             data-tip={`Свободные обломки в ${NEARBY_DEBRIS_SYSTEM_SPAN} системах вокруг ${debrisOrigin.planetName} ${formatUniverseCoordinate(debrisOrigin.coordinate)}`}
             onClick={openDebrisSearch}><img className="universe-radar__debris-icon" src={DEBRIS_FINDER_ICON} alt="" draggable={false} />Найти обломки</button>
+        ) : null}
+        {onAsteroidGasOpen ? (
+          <button type="button" className="universe-radar__home universe-radar__debris" data-qa-universe-find-asteroid-gas
+            onClick={() => { setDebrisQuick(null); setDebrisSearch(null); onAsteroidGasOpen({ galaxy, system }); }}><img className="universe-radar__debris-icon" src={DEBRIS_FINDER_ICON} alt="" draggable={false} />Добыча газа</button>
         ) : null}
       </div>
 

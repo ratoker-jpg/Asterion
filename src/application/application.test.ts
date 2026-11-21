@@ -52,6 +52,8 @@ import {
   withPlanetEnergyLedger,
 } from './energy.ts';
 import { createEnergyLedger } from '../domain/energy/runtime.ts';
+import { createDefaultNewGameConfig } from '../domain/world/config.ts';
+import { POSITION_COUNT, SYSTEM_COUNT } from '../domain/universe/runtime.ts';
 import { reconcileRuntime } from './reconcile.ts';
 import { getEffectiveResourceIncomePerHour, reconcileResourceIncome } from './resource-clock.ts';
 import { dispatchFlight, reconcileFlights } from './flights.ts';
@@ -422,6 +424,73 @@ test('schema 18 asteroid migration preserves timeline and scrap while starting g
   assert.equal(migrated.asteroidSimulation?.processedThroughAt, loadAt - 10_000);
   assert.equal(migrated.asteroidSimulation?.nextSpawnIndex, 43);
   assert.deepEqual(migrated.asteroidDebrisBySpawnIndex, { '42': 777 });
+});
+
+test('loading a multi-galaxy campaign migrates only the asteroid route cache', () => {
+  const storage = new MemoryStorage();
+  const loadAt = 1_800_000_150_000;
+  const config = createDefaultNewGameConfig({ seed: 'GASGALAXY', playerName: 'Test' });
+  config.world = { ...config.world, galaxyCount: 2, npcCount: 0, randomPlayerStart: false };
+  const initial = createInitialSaveState('production', loadAt, config);
+  const legacyAsteroid = {
+    spawnIndex: 42,
+    spawnedAt: loadAt - 60_000,
+    movementIndex: 3,
+    previousMoveAt: loadAt - 20_000,
+    nextMoveAt: loadAt + 40_000,
+    nextCoordinate: { galaxy: 1, system: 1, position: 1 },
+    gasYield: 80_000,
+    gasRatePerHour: 25_000,
+    gasUpdatedAt: loadAt - 10_000,
+    gasRemainder: 1_234,
+    coordinate: { galaxy: 1, system: SYSTEM_COUNT, position: POSITION_COUNT },
+  };
+  const persistence = createPersistenceFacade({ mode: 'production', storage, now: () => loadAt });
+  storage.values.set(persistence.saveKey, JSON.stringify({
+    ...initial,
+    schemaVersion: SAVE_SCHEMA_VERSION,
+    worldConfig: config,
+    asteroidSimulation: {
+      version: 1,
+      processedThroughAt: loadAt - 10_000,
+      nextSpawnIndex: 43,
+      asteroids: [legacyAsteroid],
+    },
+    asteroidDebrisBySpawnIndex: { '42': 777 },
+  }));
+
+  const migrated = persistence.read();
+  const asteroid = migrated.asteroidSimulation?.asteroids[0];
+
+  assert.deepEqual(asteroid, {
+    ...legacyAsteroid,
+    nextCoordinate: { galaxy: 2, system: 1, position: 1 },
+  });
+  assert.equal(migrated.asteroidSimulation?.processedThroughAt, loadAt - 10_000);
+  assert.equal(migrated.asteroidSimulation?.nextSpawnIndex, 43);
+  assert.deepEqual(migrated.asteroidDebrisBySpawnIndex, { '42': 777 });
+
+  const { nextCoordinate: _legacyRoute, ...legacyAsteroidWithoutRoute } = legacyAsteroid;
+  storage.values.set(persistence.saveKey, JSON.stringify({
+    ...initial,
+    schemaVersion: SAVE_SCHEMA_VERSION,
+    worldConfig: config,
+    asteroidSimulation: {
+      version: 1,
+      processedThroughAt: loadAt - 10_000,
+      nextSpawnIndex: 43,
+      asteroids: [legacyAsteroidWithoutRoute],
+    },
+    asteroidDebrisBySpawnIndex: { '42': 777 },
+  }));
+  const migratedWithoutRoute = persistence.read();
+  assert.deepEqual(migratedWithoutRoute.asteroidSimulation?.asteroids[0], {
+    ...legacyAsteroidWithoutRoute,
+    nextCoordinate: { galaxy: 2, system: 1, position: 1 },
+  });
+  assert.equal(migratedWithoutRoute.asteroidSimulation?.processedThroughAt, loadAt - 10_000);
+  assert.equal(migratedWithoutRoute.asteroidSimulation?.nextSpawnIndex, 43);
+  assert.deepEqual(migratedWithoutRoute.asteroidDebrisBySpawnIndex, { '42': 777 });
 });
 
 test('schema 21 asteroid gas rates migrate once while preserving stock and gas clock progress', () => {

@@ -132,7 +132,7 @@ import type { UniverseObjectKind } from '../domain/universe/types.ts';
 import type { UniverseAsteroidSimulationState, UniverseAsteroidRuntimeState, UniverseCoordinate } from '../domain/universe/types.ts';
 import { createUniverseAsteroidSimulationState } from '../domain/universe/asteroid-simulation.ts';
 import { initializeAsteroidGasState } from '../domain/universe/asteroid-gas.ts';
-import { POSITION_COUNT, SYSTEM_COUNT, TEST_MODE_ALLY_PLANET_FIXTURE, UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
+import { advanceUniverseAsteroidCoordinate, POSITION_COUNT, SYSTEM_COUNT, TEST_MODE_ALLY_PLANET_FIXTURE, UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 import { migrateEspionageState } from '../domain/espionage/repository.ts';
 import { createDefaultEspionageState } from '../domain/espionage/runtime.ts';
 import { createDefaultTestEspionageState } from '../domain/espionage/fixtures.ts';
@@ -418,9 +418,9 @@ function persistedCoordinate(value: unknown, minPosition = 1): UniverseCoordinat
   return { galaxy: galaxy as number, system: system as number, position: position as number };
 }
 
-function createAsteroidSimulationMigrationBaseline(now: number): UniverseAsteroidSimulationState {
+function createAsteroidSimulationMigrationBaseline(now: number, galaxyCount: number): UniverseAsteroidSimulationState {
   const timestamp = Number.isSafeInteger(now) && now >= 0 ? now : Date.now();
-  const baseline = createUniverseAsteroidSimulationState(timestamp);
+  const baseline = createUniverseAsteroidSimulationState(timestamp, galaxyCount);
   return {
     ...baseline,
     asteroids: baseline.asteroids.map((asteroid) => initializeAsteroidGasState({
@@ -443,13 +443,14 @@ function migrateAsteroidSimulation(
   value: unknown,
   now: number,
   migrateLegacyGasRates: boolean,
+  galaxyCount: number,
 ): UniverseAsteroidSimulationState {
   const source = objectRecord(value);
   if (!source || source.version !== 1
     || typeof source.processedThroughAt !== 'number' || !Number.isSafeInteger(source.processedThroughAt) || source.processedThroughAt < 0
     || typeof source.nextSpawnIndex !== 'number' || !Number.isSafeInteger(source.nextSpawnIndex) || source.nextSpawnIndex < 0
     || !Array.isArray(source.asteroids)) {
-    return createAsteroidSimulationMigrationBaseline(now);
+    return createAsteroidSimulationMigrationBaseline(now, galaxyCount);
   }
   const seenSpawnIndices = new Set<number>();
   const asteroids: UniverseAsteroidRuntimeState[] = source.asteroids.flatMap((candidate) => {
@@ -462,8 +463,9 @@ function migrateAsteroidSimulation(
     if (!coordinate || !counters.every((item) => typeof item === 'number' && Number.isSafeInteger(item) && item >= 0)
       || (asteroid.movementIndex as number) < 0
       || (asteroid.nextMoveAt as number) < (asteroid.previousMoveAt as number)) return [];
-    const nextCoordinate = asteroid.nextCoordinate === undefined ? undefined : persistedCoordinate(asteroid.nextCoordinate);
-    if (asteroid.nextCoordinate !== undefined && !nextCoordinate) return [];
+    const savedNextCoordinate = asteroid.nextCoordinate === undefined ? undefined : persistedCoordinate(asteroid.nextCoordinate);
+    if (asteroid.nextCoordinate !== undefined && !savedNextCoordinate) return [];
+    const nextCoordinate = advanceUniverseAsteroidCoordinate(coordinate, 1, galaxyCount) ?? undefined;
     seenSpawnIndices.add(asteroid.spawnIndex);
     return [initializeAsteroidGasState({
       spawnIndex: asteroid.spawnIndex,
@@ -1404,7 +1406,7 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
           buildings.hangar,
       },
     },
-    asteroidSimulation: createUniverseAsteroidSimulationState(now),
+    asteroidSimulation: createUniverseAsteroidSimulationState(now, worldConfig.world.galaxyCount),
     asteroidDebrisBySpawnIndex: {},
     espionage,
     alliedPlanets: mode === 'test'
@@ -1799,6 +1801,7 @@ function migrateParsedSave(
     parsed.asteroidSimulation,
     timestamp,
     numberOr(parsed.schemaVersion, 0) < ASTEROID_GAS_RATE_MIGRATION_SCHEMA_VERSION,
+    worldConfig.world.galaxyCount,
   );
   const activeAsteroidSpawnIndices = new Set(asteroidSimulation.asteroids.map((asteroid) => asteroid.spawnIndex));
   const ownerUpgradeLevels = migrateSpaceportUpgradeState({ shipLevels: parsed.shipUpgradeLevels }).shipLevels;
