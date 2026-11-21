@@ -166,6 +166,29 @@ test('selected-row quantities are honored and the nearest source needs enough fr
   assert.equal(plan.sources.find((source) => source.planetId === colonyId)?.remainingRecyclers, 2);
 });
 
+test('batch refuses a scanned asteroid if another spawn occupies its coordinate by arrival', () => {
+  const coordinate = { galaxy: 1, system: 3, position: 1 };
+  const source = stateWithRecyclers(10);
+  const stationary = withAsteroids(source, [asteroid(61, coordinate)]);
+  const flight = previewFlight(stationary, gasCommand('arrival-forecast', source.currentPlanetId, coordinate), RUNTIME);
+  assert.equal(flight.ok, true);
+  if (!flight.ok) return;
+
+  const moveAt = flight.flight.arrivalAt - 1;
+  const state = withAsteroids(source, [
+    { ...asteroid(61, coordinate), nextMoveAt: moveAt, nextCoordinate: { galaxy: 1, system: 3, position: 2 } },
+    { ...asteroid(62, { galaxy: 1, system: 3, position: 4 }), nextMoveAt: moveAt, nextCoordinate: coordinate },
+  ]);
+
+  const plan = planAsteroidGasBatch(state, SCAN, { quantitiesById: { 'asteroid:61': 10 } }, RUNTIME);
+
+  assert.equal(plan.commands.length, 0);
+  assert.equal(plan.targets[0]!.status, 'blocked');
+  assert.equal(plan.targets[0]!.blockReason, 'target-moves-before-arrival');
+  assert.equal(plan.targets[0]!.error?.code, 'target-not-available');
+  assert.match(plan.targets[0]!.error?.message ?? '', /покинет выбранные координаты до прибытия/);
+});
+
 test('active player gas flights block their destination and stale selected IDs are reported on replan', () => {
   const coordinate = { galaxy: 1, system: 3, position: 1 };
   const initial = withAsteroids(stateWithRecyclers(20), [asteroid(41, coordinate)]);

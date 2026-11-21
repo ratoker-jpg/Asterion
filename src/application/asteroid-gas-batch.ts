@@ -1,6 +1,7 @@
 import { calculateRouteDistance } from '../domain/flights/distance.ts';
 import type { FlightRuntimeOptions, FlightCommandResult, DispatchFlightCommand, FlightError } from './flights.ts';
 import { dispatchFlight, getAvailableFleetForPlanet, getPlayerFlightSlotUsage, isRecyclerShip, previewFlight } from './flights.ts';
+import { forecastAsteroidAt } from './asteroid-gas-collection.ts';
 import type { ShipId } from '../domain/combat/ids.ts';
 import type { RuntimeMode, TestTimeScale } from '../domain/runtime/mode.ts';
 import { advanceUniverseAsteroidSimulationAt } from '../domain/universe/asteroid-simulation.ts';
@@ -44,6 +45,7 @@ export type AsteroidGasBatchScanTarget = {
 export type AsteroidGasBatchBlockReason =
   | 'invalid-quantity'
   | 'no-source'
+  | 'target-moves-before-arrival'
   | 'active-flight'
   | 'flight-refused'
   | 'request-already-used'
@@ -373,6 +375,10 @@ export function planAsteroidGasBatch(
       .sort()
     : [];
   const plannedAssignments = new Map(sources.map((source) => [source.planetId, 0]));
+  // Several candidate sources can have the same ETA. Forecast each target/ETA
+  // only once while keeping the canonical asteroid simulation as the source
+  // of truth.
+  const arrivalForecasts = new Map<string, number | null>();
   const commands: DispatchFlightCommand[] = [];
   const rows: AsteroidGasBatchTarget[] = [];
   let projectedState = state;
@@ -417,6 +423,7 @@ export function planAsteroidGasBatch(
     const orderedSources = candidatesByRoute(projectedState, sources, target.coordinate);
     let attemptedSource = false;
     let firstFailure: FlightCommandResult | null = null;
+    let missedTargetAtArrival = false;
     let accepted: { command: DispatchFlightCommand; preview: FlightCommandResult; source: AsteroidGasBatchSource; distance: number } | null = null;
     for (const candidate of orderedSources) {
       const available = countRecyclers(projectedState, candidate.source.planetId);
@@ -438,6 +445,21 @@ export function planAsteroidGasBatch(
       if (!preview.ok) {
         firstFailure ??= preview;
         if (preview.error.code === 'flight-limit-reached') break;
+        continue;
+      }
+      const forecastKey = `${target.spawnIndex}:${preview.flight.arrivalAt}`;
+      if (!arrivalForecasts.has(forecastKey)) {
+        arrivalForecasts.set(forecastKey, forecastAsteroidAt(
+          state.asteroidSimulation,
+          target.coordinate,
+          preview.flight.arrivalAt,
+          configuredGalaxyCount(state),
+        )?.spawnIndex ?? null);
+      }
+      if (arrivalForecasts.get(forecastKey) !== target.spawnIndex) {
+        // Another viable source may have a different ETA that still intersects
+        // this selected asteroid at the scanned coordinate.
+        missedTargetAtArrival = true;
         continue;
       }
       const applied = dispatchFlight(projectedState, command, flightOptions(runtime));
@@ -477,6 +499,16 @@ export function planAsteroidGasBatch(
         status: 'blocked',
         blockReason: 'no-source',
         error: { code: 'insufficient-ships', message: 'Недостаточно свободных переработчиков на ваших планетах.' },
+      });
+    } else if (missedTargetAtArrival && !firstFailure) {
+      rows.push({
+        ...base,
+        status: 'blocked',
+        blockReason: 'target-moves-before-arrival',
+        error: {
+          code: 'target-not-available',
+          message: `${target.name} покинет выбранные координаты до прибытия переработчиков. Повторно просканируйте диапазон.`,
+        },
       });
     } else {
       const failure = firstFailure;

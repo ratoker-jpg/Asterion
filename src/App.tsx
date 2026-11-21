@@ -3095,11 +3095,11 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const updateAsteroidGasBatchPlan = (
     session: AsteroidGasBatchDialogSession,
     selectedQuantities: Readonly<Record<string, number>>,
-    sendMessage?: string,
+    statusMessage?: string,
+    runtime: AsteroidGasBatchRuntime = { now: worldNow(), mode: RUNTIME_MODE, testTimeScale },
   ) => {
-    const runtime: AsteroidGasBatchRuntime = { now: worldNow(), mode: RUNTIME_MODE, testTimeScale };
     const planned = planAsteroidGasBatchForDialog(stateRef.current, session.scan, selectedQuantities, runtime);
-    const status = asteroidGasBatchStatus(planned.plan, sendMessage);
+    const status = asteroidGasBatchStatus(planned.plan, statusMessage);
     setAsteroidGasBatchDialog({
       ...session,
       options: { quantitiesById: planned.quantities },
@@ -3121,7 +3121,11 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
         .filter((target) => target.status === 'ready')
         .map((target) => [target.targetId, session.equalQuantity]),
     );
-    updateAsteroidGasBatchPlan(session, selectedQuantities);
+    const movingTargets = allocation.targets.filter((target) => target.blockReason === 'target-moves-before-arrival').length;
+    const statusMessage = movingTargets > 0
+      ? `Не включено целей: ${movingTargets}. Эти астероиды покинут позицию до прибытия флота.`
+      : undefined;
+    updateAsteroidGasBatchPlan(session, selectedQuantities, statusMessage, runtime);
   };
 
   const changeAsteroidGasBatchSelection = (selection: Partial<AsteroidGasBatchScan>) => {
