@@ -14,8 +14,7 @@ const ROOT = path.join(__dirname, '..');
 const TEST_KEY = 'asterion.vertical-slice.test.v1';
 const OUTPUT = process.env.ASTERION_QA_OUTPUT || fs.mkdtempSync(path.join(os.tmpdir(), 'asterion-asteroid-batch-qa-'));
 const skipScreenshots = process.env.ASTERION_SKIP_SCREENSHOTS === '1';
-const WIDTH = 1440;
-const HEIGHT = 960;
+const [WIDTH, HEIGHT] = (process.env.ASTERION_QA_VIEWPORT || '1440x960').split('x').map(Number);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const FIXTURE = {
@@ -26,11 +25,16 @@ const FIXTURE = {
     { id: 'asteroid:71004', coordinate: { galaxy: 1, system: 7, position: 24 }, debris: false },
     { id: 'asteroid:71005', coordinate: { galaxy: 1, system: 8, position: 24 }, debris: true },
     { id: 'asteroid:71006', coordinate: { galaxy: 2, system: 8, position: 24 }, debris: true },
+    ...Array.from({ length: 8 }, (_, index) => ({
+      id: `asteroid:${71007 + index}`,
+      coordinate: { galaxy: 1, system: 7, position: 2 + index },
+      debris: false,
+    })),
   ],
   sources: [
-    { id: 'helion-01', name: 'Домашняя планета', coordinate: { galaxy: 1, system: 1, position: 1 }, recyclers: 20 },
-    { id: 'qa-batch-source-a', name: 'Источник QA A', coordinate: { galaxy: 1, system: 5, position: 1 }, recyclers: 10 },
-    { id: 'qa-batch-source-b', name: 'Источник QA B', coordinate: { galaxy: 2, system: 8, position: 1 }, recyclers: 10 },
+    { id: 'helion-01', name: 'Домашняя планета', coordinate: { galaxy: 1, system: 1, position: 1 }, recyclers: 40 },
+    { id: 'qa-batch-source-a', name: 'Источник QA A', coordinate: { galaxy: 1, system: 5, position: 1 }, recyclers: 20 },
+    { id: 'qa-batch-source-b', name: 'Источник QA B', coordinate: { galaxy: 2, system: 8, position: 1 }, recyclers: 20 },
   ],
 };
 
@@ -336,7 +340,9 @@ async function checkGalaxyOnePlanning(win, preflight) {
   await openBatchDialog(win);
   await scanRange(win, 1, 4, 7);
   const rows = await readBatchRows(win);
-  const expectedIds = FIXTURE.targets.slice(0, 4).map((target) => target.id).sort();
+  const expectedIds = FIXTURE.targets.filter(({ coordinate }) => (
+    coordinate.galaxy === 1 && coordinate.system >= 4 && coordinate.system <= 7
+  )).map((target) => target.id).sort();
   const actualIds = rows.map((row) => row.id).sort();
   assert('inclusive range and selected galaxy', JSON.stringify(actualIds) === JSON.stringify(expectedIds), { actualIds, expectedIds, rows });
   assert('no duplicate target rows', new Set(rows.map((row) => row.id)).size === rows.length
@@ -358,17 +364,17 @@ async function checkGalaxyOnePlanning(win, preflight) {
   })()`);
   const expectedSources = FIXTURE.sources.map((source) => source.id).sort();
   assert('all owned recycler sources are included', expectedSources.every((id) => fixtureState.sources.includes(id))
-    && fixtureState.total === 39, { fixtureState, expectedSources });
-  assert('default allocation is ten recyclers per target', fixtureState.equal === '10', fixtureState);
+    && fixtureState.total === 79, { fixtureState, expectedSources });
+  assert('default allocation is twenty recyclers per target', fixtureState.equal === '20', fixtureState);
 
   await capture(win, 'asteroid-batch-galaxy-1-results');
   await click(win, '[data-qa-asteroid-batch-distribute]');
-  await waitFor(win, `Number(document.querySelector('[data-qa-asteroid-batch-quantity="${FIXTURE.targets[1].id}"]')?.value || 0) === 10`);
+  await waitFor(win, `Number(document.querySelector('[data-qa-asteroid-batch-quantity="${FIXTURE.targets[1].id}"]')?.value || 0) === 20`);
   const distributed = await readBatchRows(win);
   const byId = new Map(distributed.map((row) => [row.id, row]));
   const selectedDebris = [FIXTURE.targets[1].id, FIXTURE.targets[2].id].map((id) => byId.get(id));
   const cappedPlain = byId.get(FIXTURE.targets[3].id);
-  assert('equal distribution allocates ten recyclers to the first two debris targets', selectedDebris.every((row) => row?.debris === 'yes' && row.quantity === 10 && !row.refused), { distributed });
+  assert('equal distribution allocates twenty recyclers to the first two debris targets', selectedDebris.every((row) => row?.debris === 'yes' && row.quantity === 20 && !row.refused), { distributed });
   assert('canonical active-flight cap leaves the later no-debris target unselected', cappedPlain?.quantity === 0, cappedPlain);
 
   await capture(win, 'asteroid-batch-equal-allocation');
@@ -384,7 +390,7 @@ async function checkGalaxyOnePlanning(win, preflight) {
   assert('batch dispatch writes two real gas flights to the accepted debris targets', JSON.stringify(actualKeys) === JSON.stringify(expectedKeys), { actualKeys, expectedKeys, batchRecords });
   assert('batch dispatch records use the requested recycler quantity and asteroid target kind', batchRecords.every((flight) => (
     flight.targetKind === 'asteroid' && flight.phase === 'outbound'
-      && JSON.stringify(flight.selectedShips) === JSON.stringify({ recycler: 10 })
+      && JSON.stringify(flight.selectedShips) === JSON.stringify({ recycler: 20 })
       && FIXTURE.sources.some((source) => source.id === flight.originPlanetId)
   )), batchRecords);
   assert('batch dispatch request and flight IDs are unique', new Set(batchRecords.map((flight) => flight.id)).size === 2
@@ -446,6 +452,10 @@ async function run() {
     await win.loadFile(path.join(ROOT, 'dist', 'index.html'), { search: '?mode=test' });
     await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`, 60_000);
     await waitFor(win, `localStorage.getItem(${JSON.stringify(TEST_KEY)})`, 30_000);
+    if (!skipScreenshots) {
+      await openBatchDialog(win);
+      await capture(win, 'asteroid-batch-before-scan');
+    }
     await seedFixture(win);
 
     const preflight = await launchExistingGasFlight(win, FIXTURE.targets[0]);
