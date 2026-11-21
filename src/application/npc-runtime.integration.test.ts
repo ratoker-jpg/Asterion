@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { CAMPAIGN_SPEED_SCALE } from '../domain/runtime/mode.ts';
 import { getNpcBuildingCandidates, settleNpcPlanet, startNpcBuilding } from './npc-economy.ts';
+import { selectNpcAchievementPointsByOwner } from './npc-achievements.ts';
 import { isNpcCatchupPending } from './npc-catchup.ts';
 import { reconcileRuntime } from './reconcile.ts';
 import { createPersistenceFacade } from './persistence.ts';
@@ -157,6 +158,7 @@ test('legacy NPC queue and energy ledger survive schema migration and complete t
   assert.deepEqual(migrated.buildingQueue, expectedTarget.buildingQueue);
   assert.deepEqual(migrated.energyLedger, expectedTarget.energyLedger);
   assert.deepEqual(migrated.resources, expectedTarget.resources);
+  assert.equal(loaded.state.npc?.profiles[target.ownerId]?.earnedAchievementIds?.includes('first-stone') ?? false, false);
 
   const finishAt = migrated.buildingQueue![0]!.finishAt;
   const completed = advanceTo(loaded.state, finishAt, [finishAt]);
@@ -165,5 +167,12 @@ test('legacy NPC queue and energy ledger survive schema migration and complete t
   assert.equal(after.buildingQueue!.some((item) => item.id === expectedTarget.buildingQueue![0]!.id), false);
   assert.ok(after.energyLedger);
   assert.ok(after.energyLedger.availableEnergy >= migrated.energyLedger!.availableEnergy);
+  const owner = completed.state.npc!.profiles[target.ownerId]!;
+  assert.equal(owner.earnedAchievementIds?.filter((id) => id === 'first-stone').length, 1);
+  assert.ok(selectNpcAchievementPointsByOwner(completed.state)[target.ownerId]! >= 5);
+  assert.equal(createPersistenceFacade({ mode: 'production', storage, saveKey, now: () => finishAt }).write(completed.state).ok, true);
+  const reloaded = createPersistenceFacade({ mode: 'production', storage, saveKey, now: () => finishAt }).load();
+  assert.equal(reloaded.status, 'loaded');
+  assert.deepEqual(reloaded.state.npc?.profiles[target.ownerId]?.earnedAchievementIds, owner.earnedAchievementIds);
 });
 

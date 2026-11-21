@@ -165,6 +165,7 @@ import {
 } from './domain/achievements/catalog.ts';
 import {
   reconcileDevelopmentAchievementChronicle,
+  recordPlayerAchievementProof,
   earnedDevelopmentAchievementPoints,
   selectAchievementScreenData,
   type AchievementProgressSource,
@@ -221,6 +222,7 @@ import { getPlanetOverpopulationSummary } from './application/overpopulation.ts'
 import { energySummaryForPlanet, getPlanetEnergyCoordinates } from './application/energy.ts';
 import { getEffectiveResourceIncomePerHour } from './application/resource-clock.ts';
 import { publishApplicationRuntimeSnapshot, selectRatedAlliances, selectRatedOwners, setLiveSaveState } from './application/runtime.ts';
+import { selectNpcAchievementPointsByOwner } from './application/npc-achievements.ts';
 import { reconcileRuntime, type RuntimeReconcileEvent } from './application/reconcile.ts';
 import { freezeNpcCatchupTarget, isNpcCatchupPending, needsNpcCatchupBefore } from './application/npc-catchup.ts';
 import { NpcCatchupBanner } from './NpcCatchupBanner.tsx';
@@ -684,6 +686,10 @@ function developmentAchievementProgressKey(
     }
     parts.push(`${planetId}:h${previous.highestBuildingLevel}:t${previous.totalBuildingLevels}:e${energy}`);
   }
+  parts.push(`player-proofs:${Object.entries(source.playerAchievementProofs ?? {})
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([id, at]) => `${id}:${Number.isSafeInteger(at) ? Math.max(0, Math.floor(at)) : 0}`)
+    .join(',')}`);
   if (!observed.hasScienceLevels || observed.scienceLevels !== source.scienceLevels) {
     observed.hasScienceLevels = true;
     observed.scienceLevels = source.scienceLevels ?? null;
@@ -750,6 +756,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     planets: state.planets,
     scienceLevels: state.science.levels,
     commanderUpgradeLevels: achievementCommanderUpgradeLevels,
+    playerAchievementProofs: state.playerAchievementProofs,
   } satisfies AchievementProgressSource;
   const achievementProgressObserver = useRef<AchievementProgressObserver>({
     planets: new Map(), scienceLevels: null, hasScienceLevels: false, scienceKey: '',
@@ -768,6 +775,10 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const currentPlayerAchievementPoints = useMemo(
     () => earnedDevelopmentAchievementPoints(achievementChronicle?.earned ?? []),
     [achievementChronicle],
+  );
+  const achievementPointsByOwner = useMemo(
+    () => selectNpcAchievementPointsByOwner(state),
+    [state.espionage?.targets, state.npc, state.profile.playerId],
   );
   // What React rendered (stateRef is also assigned by commands): lets a command notice that its result never reached React.
   const renderedStateRef = useRef(state);
@@ -1639,8 +1650,9 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       { planetId: state.currentPlanetId, now, mode: RUNTIME_MODE, testTimeScale },
       window,
       currentPlayerAchievementPoints,
+      achievementPointsByOwner,
     );
-  }, [currentPlayerAchievementPoints, now, state, testTimeScale]);
+  }, [achievementPointsByOwner, currentPlayerAchievementPoints, now, state, testTimeScale]);
   /**
    * Reconciles to `at`. A pending NPC catch-up keeps taking bounded replay
    * chunks inside one task until `budgetMs` of compute is spent, then
@@ -2752,6 +2764,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const runCommandAction = (
     action: (command: CommandState, at: number, ownerId: string, ownerName: string) => CommandResult<object>,
     success?: string,
+    onSuccessfulState?: (state: SaveState, at: number) => SaveState,
   ): CommandActionResult => {
     if (rejectNpcCatchupCommand()) return { ok: false, message: NPC_CATCHUP_COMMAND_BLOCKED_MESSAGE };
     const current = stateRef.current;
@@ -2761,11 +2774,12 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     const at = worldNow();
     const result = action(current.command, at, current.profile.playerId, current.profile.displayName);
     if (result.state !== current.command) {
-      const applied = {
+      let applied: SaveState = {
         ...current,
         command: result.state,
         profile: syncPlayerProfileWithCommand(current.profile, result.state),
       };
+      if (result.ok && onSuccessfulState) applied = onSuccessfulState(applied, at);
       // A membership change turns back any aid fleet that lost its sender, recipient or request at once,
       // and a new member's charge clock is pointed at the current Hall right away.
       const nextState = syncAidState(reconcileAidMembership(applied, at), { now: at, mode: RUNTIME_MODE, testTimeScale });
@@ -2869,6 +2883,13 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     createAlliance: (settings: AllianceSettingsInput) => runCommandAction(
       // No toast: the first screen of the alliance opens at once and says it was founded.
       (command, at, ownerId, ownerName) => createAlliance(command, { ownerId, displayName: ownerName, settings }, { now: at }),
+      undefined,
+      (state, at) => {
+        const playerAchievementProofs = recordPlayerAchievementProof(state.playerAchievementProofs, 'founder', at);
+        return playerAchievementProofs === state.playerAchievementProofs
+          ? state
+          : { ...state, playerAchievementProofs };
+      },
     ),
     inviteProspect: (npcOwnerId: string): CommandActionResult => {
       if (rejectNpcCatchupCommand()) return { ok: false, message: NPC_CATCHUP_COMMAND_BLOCKED_MESSAGE };
@@ -3965,6 +3986,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               profile={state.profile}
               ownerScores={selectOwnerScoresCached(state)}
               currentPlayerAchievementPoints={currentPlayerAchievementPoints}
+              achievementPointsByOwner={achievementPointsByOwner}
               command={state.command}
               playerPlanets={universePlayerPlanets}
               spyTargets={universeSpyTargets}
@@ -4101,6 +4123,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               profile={state.profile}
               score={selectOwnerScoresCached(state)[state.profile.playerId] ?? null}
               achievementPoints={currentPlayerAchievementPoints}
+              achievementPointsByOwner={achievementPointsByOwner}
               rating={state.rating}
               mode={RUNTIME_MODE}
               state={state.reports}

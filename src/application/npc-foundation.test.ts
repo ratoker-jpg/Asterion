@@ -6,6 +6,7 @@ import { createNpcState, validateNpcState } from '../domain/npc/state.ts';
 import { createExplorationState } from '../domain/exploration/ledger.ts';
 import { createDefaultPirateState } from '../domain/pirates/mission.ts';
 import { reconcileRuntime } from './reconcile.ts';
+import { reconcileUninitializedNpcAchievements } from './npc-achievements.ts';
 import { createSpyTargetOwnerProfile } from './espionage-targets.ts';
 import { createInitialSaveState, createPersistenceFacade, SAVE_SCHEMA_VERSION } from './persistence.ts';
 import { buildPirateBattleAnalysisExport } from './pirate-battle-export.ts';
@@ -176,7 +177,7 @@ test('schema 24 Production and Test saves migrate deterministically without losi
 });
 
 test('NPCs without online sessions issue no new commands across elapsed time', () => {
-  const initial = createInitialSaveState('production', NOW, config('NPCNOAUTO1', 12));
+  const initial = reconcileUninitializedNpcAchievements(createInitialSaveState('production', NOW, config('NPCNOAUTO1', 12)));
   const state: SaveState = {
     ...initial,
     npc: { ...initial.npc!, profiles: Object.fromEntries(Object.entries(initial.npc!.profiles).map(([id, profile]) =>

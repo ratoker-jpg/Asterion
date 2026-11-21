@@ -36,6 +36,7 @@ import type { UniverseOwnerAlliance } from '../domain/universe/types.ts';
 import type { OverpopulationState } from '../domain/fleet/overpopulation.ts';
 import type { PirateState } from '../domain/pirates/mission.ts';
 import type { ShieldRecord } from '../domain/shield/shield.ts';
+import type { PlayerAchievementProofs } from '../domain/achievements/catalog.ts';
 
 /** Planet ids are stable save keys; the legacy homeworld remains `helion-01`. */
 export type PlanetId = string;
@@ -119,6 +120,8 @@ export type PlanetStateRecord = Record<PlanetId, PlanetRuntime>;
 export type PlanetQueueRecord = Record<PlanetId, BuildingQueueItem[]>;
 
 export type SaveState = {
+  /** Actual player actions pending award replay; absent on legacy saves. */
+  playerAchievementProofs?: PlayerAchievementProofs;
   /** Private, versioned NPC foundation; absent only in pre-PR1 saves/fixtures. */
   npc?: NpcStateV1;
   /** Committed chronological prefix; an unfinished target survives reload. */

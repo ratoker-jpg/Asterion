@@ -160,7 +160,16 @@ async function readConstructionState(win) {
     return {
       level: save.planets?.[${JSON.stringify(HOME)}]?.buildings?.[${JSON.stringify(BUILDING)}] ?? null,
       queue: queue.map(({ id, assetRole, targetLevel, enqueuedAt, startedAt, finishAt, durationMs }) => ({ id, assetRole, targetLevel, enqueuedAt, startedAt, finishAt, durationMs })),
+      playerAchievementProofs: { ...(save.playerAchievementProofs || {}) },
     };
+  })()`);
+}
+
+async function readPlayerAchievementProofs(win) {
+  return win.webContents.executeJavaScript(`(() => {
+    const PARSE_SAVE = ${PARSE_SAVE};
+    const save = PARSE_SAVE(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+    return { ...(save.playerAchievementProofs || {}) };
   })()`);
 }
 
@@ -180,9 +189,11 @@ async function runRealConstructionCompletion() {
 
     await prepareRealConstructionFixture(win);
     await openAchievements(win);
-    const before = { state: await readConstructionState(win), builder: await rowState(win, 'builder'), summary: await achievementSummary(win) };
+    const before = { state: await readConstructionState(win), builder: await rowState(win, 'builder'), firstStone: await rowState(win, 'first-stone'), summary: await achievementSummary(win) };
     assert(before.state.level === 14 && before.state.queue.length === 0, 'Real construction fixture is not a clean level-14 save', before.state);
     assert(before.builder?.status === 'in-progress' && hasProgress(before.builder.progress, 14, 15), 'Builder is not in progress before the real construction action', before.builder);
+    assert(before.firstStone?.status !== 'earned', 'Fixture-only level-14 progress backfilled First Stone before a real construction action', before.firstStone);
+    assert(before.state.playerAchievementProofs['first-stone'] === undefined, 'Fresh real-construction fixture already has a First Stone proof', before.state.playerAchievementProofs);
 
     await clickSelector(win, '[data-qa-navigation="primary"] [data-qa-route="planet"]');
     await waitFor(win, `document.querySelector('[data-qa-zone="resource"]')`);
@@ -212,18 +223,38 @@ async function runRealConstructionCompletion() {
     await patchSaveIdle(win, SAVE_KEY, makeDueSource, { label: 'advance UI-created construction to due time', held: completedHeld });
     const after = await readConstructionState(win);
     assert(after.level === 15 && after.queue.length === 0, 'Runtime did not complete the due UI-created building queue item', after);
+    const firstStoneReceipt = after.playerAchievementProofs['first-stone'];
+    assert(typeof firstStoneReceipt === 'number' && Number.isFinite(firstStoneReceipt), 'Actual construction completion did not persist the First Stone proof timestamp', after.playerAchievementProofs);
 
     await openAchievements(win);
-    await clickFilter(win, '[data-qa-achievement-group-filter="growth"]');
+    await clickFilter(win, '[data-qa-achievement-group-filter="all"]');
     await waitFor(win, `document.querySelector('[data-qa-achievement-row="builder"]')?.getAttribute('data-achievement-status') === 'earned'`);
+    await waitFor(win, `document.querySelector('[data-qa-achievement-row="first-stone"]')?.getAttribute('data-achievement-status') === 'earned'`);
     const builder = await rowState(win, 'builder');
+    const firstStone = await rowState(win, 'first-stone');
     const summary = await achievementSummary(win);
     assert(builder?.status === 'earned' && builder.text.includes('Получено'), 'Normal queue completion did not grant Builder', builder);
-    assert(summary?.points - before.summary.points >= 10, 'Builder completion did not increase the achievement score by at least 10 points', { before: before.summary, after: summary });
+    assert(firstStone?.status === 'earned' && firstStone.text.includes('Получено'), 'Normal queue completion did not grant First Stone', firstStone);
+    assert(summary?.points - before.summary.points === 15, 'Real construction completion did not grant exactly 15 points for Builder and First Stone', { before: before.summary, after: summary });
     await clickSelector(win, '[data-qa-achievement-row="builder"]');
     await waitFor(win, `document.querySelector('[data-qa-achievement-detail][data-qa-achievement-selected="builder"]')`);
-    await capture(win, directory, 'real-construction-builder-earned');
-    return { fixture: before, uiBuildButton: buildButton, queued, forcedDueAt: completedAt, completed: after, builder, summary, pointsDelta: summary.points - before.summary.points, screenshot: 'real-construction-builder-earned.png' };
+    await capture(win, directory, 'real-construction-builder-first-stone-earned');
+
+    await win.webContents.reload();
+    await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+    await openAchievements(win);
+    await clickFilter(win, '[data-qa-achievement-group-filter="all"]');
+    await waitFor(win, `document.querySelector('[data-qa-achievement-row="builder"]')?.getAttribute('data-achievement-status') === 'earned' && document.querySelector('[data-qa-achievement-row="first-stone"]')?.getAttribute('data-achievement-status') === 'earned'`);
+    const afterReload = {
+      builder: await rowState(win, 'builder'),
+      firstStone: await rowState(win, 'first-stone'),
+      summary: await achievementSummary(win),
+      state: await readConstructionState(win),
+    };
+    assert(afterReload.builder?.status === 'earned' && afterReload.firstStone?.status === 'earned', 'Construction achievements did not survive reload', afterReload);
+    assert(afterReload.summary?.points === summary.points, 'Reload duplicated or removed an achievement receipt', { beforeReload: summary, afterReload: afterReload.summary });
+    assert(afterReload.state.playerAchievementProofs['first-stone'] === firstStoneReceipt, 'Reload changed or duplicated the persisted First Stone proof', { beforeReload: firstStoneReceipt, afterReload: afterReload.state.playerAchievementProofs });
+    return { fixture: before, uiBuildButton: buildButton, queued, forcedDueAt: completedAt, completed: after, builder, firstStone, summary, pointsDelta: summary.points - before.summary.points, afterReload, screenshot: 'real-construction-builder-first-stone-earned.png' };
   } finally {
     try { if (win.webContents.debugger.isAttached()) win.webContents.debugger.detach(); } catch {}
     win.destroy();
@@ -306,9 +337,11 @@ async function runViewport(width, height) {
 
     // «Строитель» is in progress at 14; 15 earns it while «Зодчий» continues; 25 earns both.
     await patchBuildingLevel(win, 14);
+    const fixtureProofs14 = await readPlayerAchievementProofs(win);
+    assert(fixtureProofs14['first-stone'] === undefined, 'Fixture-only level-14 edit created a First Stone proof', fixtureProofs14);
     await openAchievements(win);
-    await clickFilter(win, '[data-qa-achievement-group-filter="growth"]');
-    await clickFilter(win, '[data-qa-achievement-status-filter="not-started"]');
+    await clickFilter(win, '[data-qa-achievement-group-filter="ally"]');
+    await clickFilter(win, '[data-qa-achievement-status-filter="earned"]');
     await waitFor(win, `document.querySelector('[data-qa-achievement-empty] [data-qa-achievement-filter-reset]')`);
     await clickSelector(win, '[data-qa-achievement-filter-reset]');
     await waitFor(win, `document.querySelector('[data-qa-achievement-group-filter="all"][aria-pressed="true"]')`);
@@ -318,8 +351,10 @@ async function runViewport(width, height) {
     const earned14 = {
       builder: await rowState(win, 'builder'), architect: await rowState(win, 'architect'),
       scholar: await rowState(win, 'scholar'), bridge: await rowState(win, 'bridge'), powerGrid: await rowState(win, 'power-grid'),
+      firstStone: await rowState(win, 'first-stone'),
     };
     assert(!earned14.builder && !earned14.architect && !earned14.scholar && !earned14.bridge, 'Unfinished growth milestones appeared in the earned filter', earned14);
+    assert(!earned14.firstStone, 'Setting fixture progress to level 14 granted First Stone without a real completion event', earned14.firstStone);
     await pressEnter(win, '[data-qa-achievement-status-filter="in-progress"]');
     const builder14 = await rowState(win, 'builder');
     const architect14 = await rowState(win, 'architect');
@@ -344,6 +379,8 @@ async function runViewport(width, height) {
     if (await capture(win, directory, '14-builder-in-progress-detail')) results.screenshots.push('14-builder-in-progress-detail.png');
 
     await patchBuildingLevel(win, 15);
+    const fixtureProofs15 = await readPlayerAchievementProofs(win);
+    assert(fixtureProofs15['first-stone'] === undefined, 'Fixture-only level-15 edit created a First Stone proof', fixtureProofs15);
     await openAchievements(win);
     await clickFilter(win, '[data-qa-achievement-group-filter="growth"]');
     await clickFilter(win, '[data-qa-achievement-status-filter="in-progress"]');
@@ -355,9 +392,11 @@ async function runViewport(width, height) {
     const builder15 = await rowState(win, 'builder');
     assert(builder15?.status === 'earned' && builder15.text.includes('Получено'), 'Builder was not earned at level 15', builder15);
     assert(!await rowState(win, 'scholar') && !await rowState(win, 'bridge'), 'Scholar or Bridge appeared in the earned filter before meeting its goal', { scholar: await rowState(win, 'scholar'), bridge: await rowState(win, 'bridge') });
+    const firstStone15 = await rowState(win, 'first-stone');
+    assert(!firstStone15, 'Setting fixture progress to level 15 granted First Stone without a real completion event', firstStone15);
     const points15 = await achievementSummary(win);
-    assert(points15?.points - points14.points === 10, 'Builder score delta is not 10 points', { before: points14.points, after: points15?.points });
-    results.levels['15'] = { points: points15.points, builder: builder15, architectInProgress: architect15 };
+    assert(points15?.points - points14.points === 10, 'Fixture level edit did not grant only Builder’s 10 points', { before: points14.points, after: points15?.points });
+    results.levels['15'] = { points: points15.points, builder: builder15, architectInProgress: architect15, firstStone: firstStone15 };
     await clickSelector(win, '[data-qa-achievement-row="builder"]');
     await waitFor(win, `document.querySelector('[data-qa-achievement-detail][data-qa-achievement-selected="builder"]')`);
     const layout15 = await layout(win);
@@ -368,6 +407,8 @@ async function runViewport(width, height) {
     if (await capture(win, directory, '15-builder-earned')) results.screenshots.push('15-builder-earned.png');
 
     await patchBuildingLevel(win, 25);
+    const fixtureProofs25 = await readPlayerAchievementProofs(win);
+    assert(fixtureProofs25['first-stone'] === undefined, 'Fixture-only level-25 edit created a First Stone proof', fixtureProofs25);
     await openAchievements(win);
     await clickFilter(win, '[data-qa-achievement-group-filter="growth"]');
     await clickFilter(win, '[data-qa-achievement-status-filter="earned"]');
@@ -375,12 +416,14 @@ async function runViewport(width, height) {
     const architect25 = await rowState(win, 'architect');
     const scholar25 = await rowState(win, 'scholar');
     const bridge25 = await rowState(win, 'bridge');
+    const firstStone25 = await rowState(win, 'first-stone');
     assert(builder25?.status === 'earned' && builder25.text.includes('Получено'), 'Builder is not earned at level 25', builder25);
     assert(architect25?.status === 'earned' && architect25.text.includes('Получено'), 'Architect was not earned at level 25', architect25);
     assert(!scholar25 && !bridge25, 'Scholar or Bridge appeared in the earned filter below its goal', { scholar25, bridge25 });
+    assert(!firstStone25, 'Setting fixture progress to level 25 granted First Stone without a real completion event', firstStone25);
     const points25 = await achievementSummary(win);
     assert(points25?.points - points15.points === 25, 'Architect score delta is not 25 points', { before: points15.points, after: points25?.points });
-    results.levels['25'] = { points: points25.points, builder: builder25, architect: architect25 };
+    results.levels['25'] = { points: points25.points, builder: builder25, architect: architect25, firstStone: firstStone25 };
     await clickSelector(win, '[data-qa-achievement-row="architect"]');
     await waitFor(win, `document.querySelector('[data-qa-achievement-detail][data-qa-achievement-selected="architect"]')`);
     const layout25 = await layout(win);

@@ -148,6 +148,30 @@ test('production and test persistence seeds stay isolated at every fixture bound
   assert.equal(createAllianceRatingEntries(testMode.command, {}, testMode.profile.playerId).length, 2);
 });
 
+test('player achievement action proofs round-trip and legacy state never infers them from snapshots', () => {
+  const now = 1_800_000_000_000;
+  const storage = new MemoryStorage();
+  const initial = createInitialSaveState('test', now);
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => now });
+  storage.values.set(persistence.saveKey, JSON.stringify(initial));
+
+  const legacy = persistence.read();
+  assert.equal(legacy.command.alliances.length > 0, true, 'Test Mode starts with fixture alliances');
+  assert.equal(legacy.playerAchievementProofs, undefined, 'existing alliances and buildings do not prove player actions');
+
+  const validAt = now - 90_000;
+  const founderAt = now - 60_000;
+  storage.values.set(persistence.saveKey, JSON.stringify({
+    ...initial,
+    playerAchievementProofs: { 'first-stone': validAt, founder: founderAt, unexpected: now },
+  }));
+  const migrated = persistence.read();
+  assert.deepEqual(migrated.playerAchievementProofs, { 'first-stone': validAt, founder: founderAt });
+
+  assert.equal(persistence.write(migrated).ok, true);
+  assert.deepEqual(persistence.read().playerAchievementProofs, { 'first-stone': validAt, founder: founderAt });
+});
+
 test('legacy fake rating migration resets battle accumulation and preserves campaign state', () => {
   const now = 1_000;
   const initial = createInitialSaveState('test', now);

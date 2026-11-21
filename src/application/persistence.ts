@@ -158,6 +158,7 @@ import { migrateNpcSelfChosenIdentity } from './npc-identity.ts';
 import { assignNpcDisplayNames, createNpcPersonaSalt, deriveLegacyNpcSalt, getNpcOwnerIds } from './npc-foundation.ts';
 import { isNpcReplayMetadata } from './npc-catchup.ts';
 import type { NpcReplayState } from '../domain/npc/replay-state.ts';
+import { PLAYER_EVENT_ACHIEVEMENT_IDS, type PlayerAchievementProofs, type PlayerEventAchievementId } from '../domain/achievements/catalog.ts';
 import { normalizeWorldCatchupSummary } from '../domain/npc/world-catchup-summary.ts';
 import { CANONICAL_STARTING_WALLET } from '../domain/world/start.ts';
 import { migrateFleetUiState } from '../domain/flights/fleet-ui.ts';
@@ -238,6 +239,7 @@ type StoredPlanetRuntime = {
 };
 
 type StoredSave = {
+  playerAchievementProofs?: unknown;
   npcReplay?: unknown;
   npc?: unknown;
   npcScience?: unknown;
@@ -329,6 +331,17 @@ function objectRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
     : undefined;
+}
+
+function migratePlayerAchievementProofs(value: unknown): PlayerAchievementProofs | undefined {
+  const source = objectRecord(value);
+  if (!source) return undefined;
+  const proofs: Partial<Record<PlayerEventAchievementId, number>> = {};
+  for (const id of PLAYER_EVENT_ACHIEVEMENT_IDS) {
+    const at = source[id];
+    if (typeof at === 'number' && Number.isSafeInteger(at) && at >= 0) proofs[id] = at;
+  }
+  return Object.keys(proofs).length > 0 ? proofs : undefined;
 }
 
 function migrateOverpopulationEpisodeReports(value: unknown): OverpopulationEpisodeReport[] {
@@ -1519,6 +1532,7 @@ function migrateParsedSave(
     objectRecord(parsed.reports)?.gasExtractionArrivalReports,
   );
   const pirate = normalizePirateState(parsed.pirate);
+  const playerAchievementProofs = migratePlayerAchievementProofs(parsed.playerAchievementProofs);
   const migratedFlights = migrateFlightState(parsed.flights, mode);
   const reportIds = buildReportsFeed(
     combat.reports,
@@ -1837,6 +1851,7 @@ function migrateParsedSave(
 
   const migratedState: SaveState = {
     schemaVersion: SAVE_SCHEMA_VERSION,
+    ...(playerAchievementProofs ? { playerAchievementProofs } : {}),
     npc: migrateNpcState(parsed.npc, getNpcOwnerIds(espionage.targets, profile.playerId),
       parsed.npc === undefined ? deriveLegacyNpcSalt(parsed) : '',
       resourceClockStart),

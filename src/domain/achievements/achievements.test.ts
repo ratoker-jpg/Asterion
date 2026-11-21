@@ -7,6 +7,7 @@ import { createAchievementChronicle, parseAchievementChronicle } from './chronic
 import { ACHIEVEMENT_RANKS, DEVELOPMENT_ACHIEVEMENTS } from './catalog.ts';
 import {
   earnedDevelopmentAchievementPoints,
+  recordPlayerAchievementProof,
   reconcileDevelopmentAchievementAwards,
   reconcileDevelopmentAchievementChronicle,
   selectAchievementRankProgress,
@@ -41,6 +42,7 @@ function achievementSourceFromSave(state: ReturnType<typeof createInitialSaveSta
 
 test('active catalogue uses approved growth achievement values and ranks', () => {
   assert.deepEqual(DEVELOPMENT_ACHIEVEMENTS.map(({ id, points, goal }) => [id, points, goal]), [
+    ['first-stone', 5, 1],
     ['builder', 10, 15],
     ['architect', 25, 25],
     ['scholar', 10, 10],
@@ -48,6 +50,7 @@ test('active catalogue uses approved growth achievement values and ranks', () =>
     ['empire-architect', 50, 300],
     ['colonist', 10, 2],
     ['power-grid', 15, 10_000],
+    ['founder', 10, 1],
   ]);
   assert.deepEqual(ACHIEVEMENT_RANKS.map(({ at }) => at), [0, 100, 250, 500, 800, 1_200, 1_800, 2_600]);
 });
@@ -58,6 +61,7 @@ test('fresh production save reports real starting progress without minting award
   const screen = selectAchievementScreenData(achievementSourceFromSave(initial), chronicle);
 
   assert.deepEqual(screen.entries.map(({ id, progress, goal, met }) => [id, progress, goal, met]), [
+    ['first-stone', 0, 1, false],
     ['builder', 1, 15, false],
     ['architect', 1, 25, false],
     ['scholar', 0, 10, false],
@@ -65,10 +69,40 @@ test('fresh production save reports real starting progress without minting award
     ['empire-architect', 5, 300, false],
     ['colonist', 1, 2, false],
     ['power-grid', Math.min(initial.planets['helion-01']!.availableEnergy ?? initial.planets['helion-01']!.energy, 10_000), 10_000, false],
+    ['founder', 0, 1, false],
   ]);
   assert.equal(screen.earnedPoints, 0);
   assert.equal(screen.rank.current.name, 'Новобранец');
   assert.equal(screen.rank.pointsToNext, 100);
+});
+
+test('first stone and founder require saved action proof and award once across reloads and copied saves', () => {
+  const initial = createInitialSaveState('production', NOW);
+  const firstProof = recordPlayerAchievementProof(undefined, 'first-stone', NOW + 30_000);
+  const bothProofs = recordPlayerAchievementProof(firstProof, 'founder', NOW + 60_000);
+  assert.deepEqual(bothProofs, { 'first-stone': NOW + 30_000, founder: NOW + 60_000 });
+  assert.equal(recordPlayerAchievementProof(bothProofs, 'first-stone', NOW + 90_000), bothProofs);
+  assert.equal(recordPlayerAchievementProof(undefined, 'founder', Number.NaN), undefined);
+
+  const source = { ...achievementSourceFromSave(initial), playerAchievementProofs: bothProofs };
+  const first = reconcileDevelopmentAchievementChronicle(source, createAchievementChronicle(), {
+    at: NOW + 120_000,
+    campaignId: 'campaign-stable-1',
+  });
+  assert.deepEqual(first.newlyEarned.map(({ id, at }) => [id, at]), [
+    ['first-stone', NOW + 30_000],
+    ['founder', NOW + 60_000],
+  ]);
+  assert.equal(earnedDevelopmentAchievementPoints(first.chronicle.earned), 15);
+
+  const copiedChronicle = JSON.parse(JSON.stringify(first.chronicle)) as typeof first.chronicle;
+  const reload = reconcileDevelopmentAchievementChronicle(source, copiedChronicle, { at: NOW + 300_000 });
+  assert.deepEqual(reload.newlyEarned, []);
+  assert.equal(reload.chronicle, copiedChronicle);
+
+  // High current buildings and membership-free legacy snapshots do not prove these past actions.
+  const legacy = reconcileDevelopmentAchievementChronicle(advancedDevelopmentState(), createAchievementChronicle(), { at: NOW });
+  assert.deepEqual(legacy.newlyEarned.filter(({ id }) => id === 'first-stone' || id === 'founder'), []);
 });
 
 test('bridge counts the highest completed player commander level and preserves the legacy fallback', () => {
