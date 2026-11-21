@@ -98,6 +98,8 @@ export function AsteroidBatchDialog({
 }: AsteroidBatchDialogProps) {
   const titleId = useId();
   const rangeHintId = useId();
+  const rangeErrorId = useId();
+  const distributionHintId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const onCloseRef = useRef(onClose);
@@ -157,9 +159,11 @@ export function AsteroidBatchDialog({
     return quantity > 0 && quantity <= Math.max(0, Math.floor(target.maxQuantity));
   });
   const scanValidation = rangeProblem ?? validationMessage;
+  const rangeDescription = scanValidation ? `${rangeHintId} ${rangeErrorId}` : rangeHintId;
   const hasOverCapQuantity = assignableTargets.some((target) => quantityFor(target) > Math.max(0, Math.floor(target.maxQuantity)));
   const quantityValidation = hasOverCapQuantity ? 'Уменьшите количество до доступного лимита или установите 0.' : undefined;
   const validation = scanValidation ?? quantityValidation;
+  const hasScanData = hasResults || (scanState === 'empty' && !validationMessage);
   const canSend = hasResults && selectedTargets.length > 0 && !isSending && !sendDisabledReason && !validation;
   const controlsDisabled = scanState === 'pending' || isSending;
   const galaxyOptions = Array.from({ length: Math.max(0, galaxyCount) }, (_, index) => ({
@@ -193,7 +197,7 @@ export function AsteroidBatchDialog({
     <div className="universe-modal-backdrop universe-object-backdrop abatch-backdrop" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section
         ref={dialogRef}
-        className="universe-object-card abatch"
+        className={`universe-object-card abatch${hasResults ? ' abatch--results' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -205,102 +209,126 @@ export function AsteroidBatchDialog({
         </button>
 
         <header className="abatch__head">
-          <img className="abatch__icon" src={DEBRIS_FINDER_ICON} alt="" draggable={false} />
-          <div className="abatch__heading">
-            <h2 id={titleId}>Сбор газа с астероидов</h2>
-            <p>Галактика {pad2(galaxy)} <span aria-hidden="true">·</span> системы {pad2(range.from)}–{pad2(range.to)}</p>
-          </div>
-          <div className="abatch__total" data-qa-asteroid-batch-total={availableTotal}>
-            <small>Свободных переработчиков</small>
-            <b>{formatAmount(availableTotal)}</b>
-          </div>
+          <span className="abatch__icon"><img src={DEBRIS_FINDER_ICON} alt="" draggable={false} /></span>
+          <h2 id={titleId}>Сбор газа с астероидов</h2>
         </header>
 
-        <div className="abatch__config">
-          <div className="abatch__controls">
-            <div className="abatch__field abatch__field--galaxy">
-              <span>Галактика</span>
-              <GameSelect
-                className="abatch__galaxy"
-                label="Галактика для поиска астероидов"
-                value={String(galaxy)}
-                options={galaxyOptions}
-                placeholder="Выберите галактику"
-                disabled={controlsDisabled}
-                onChange={(next) => onGalaxyChange(Number(next))}
-                selectProps={{ 'data-qa-asteroid-batch-galaxy': true }}
-              />
-            </div>
-            <fieldset className="abatch__range" aria-describedby={rangeProblem ? `${rangeHintId} abatch-range-error` : rangeHintId}>
-              <legend>Диапазон систем</legend>
-              <label className="abatch__field">
-                <span>От</span>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  required
-                  min={range.min}
-                  max={range.max}
-                  step={1}
-                  value={fromText}
+        <div className="abatch__body">
+          <div className="abatch__config">
+            <div className="abatch__controls">
+              <div className="abatch__field abatch__field--galaxy">
+                <span>Галактика</span>
+                <GameSelect
+                  className="abatch__galaxy"
+                  label="Галактика для поиска астероидов"
+                  value={String(galaxy)}
+                  options={galaxyOptions}
+                  placeholder="Выберите галактику"
                   disabled={controlsDisabled}
-                  aria-label="Начальная система"
-                  aria-invalid={Boolean(rangeProblem)}
-                  data-qa-asteroid-batch-range-from
-                  onChange={(event) => updateRange('from', event.currentTarget.value)}
+                  onChange={(next) => onGalaxyChange(Number(next))}
+                  selectProps={{ 'data-qa-asteroid-batch-galaxy': true }}
                 />
-              </label>
-              <span className="abatch__range-divider" aria-hidden="true">–</span>
-              <label className="abatch__field">
-                <span>До</span>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  required
-                  min={range.min}
-                  max={range.max}
-                  step={1}
-                  value={toText}
-                  disabled={controlsDisabled}
-                  aria-label="Конечная система"
-                  aria-invalid={Boolean(rangeProblem)}
-                  data-qa-asteroid-batch-range-to
-                  onChange={(event) => updateRange('to', event.currentTarget.value)}
-                />
-              </label>
+              </div>
+              <fieldset className="abatch__range">
+                <legend className="abatch__sr-only">Диапазон систем</legend>
+                <label className="abatch__field">
+                  <span>Система от</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    required
+                    min={range.min}
+                    max={range.max}
+                    step={1}
+                    value={fromText}
+                    disabled={controlsDisabled}
+                    aria-invalid={Boolean(rangeProblem)}
+                    aria-describedby={rangeDescription}
+                    data-qa-asteroid-batch-range-from
+                    onChange={(event) => updateRange('from', event.currentTarget.value)}
+                  />
+                </label>
+                <label className="abatch__field">
+                  <span>Система до</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    required
+                    min={range.min}
+                    max={range.max}
+                    step={1}
+                    value={toText}
+                    disabled={controlsDisabled}
+                    aria-invalid={Boolean(rangeProblem)}
+                    aria-describedby={rangeDescription}
+                    data-qa-asteroid-batch-range-to
+                    onChange={(event) => updateRange('to', event.currentTarget.value)}
+                  />
+                </label>
+              </fieldset>
               {hasResults ? (
-                <button
-                  type="button"
-                  className="oc-btn abatch__rescan"
-                  disabled={Boolean(scanValidation) || isSending}
-                  data-qa-asteroid-batch-scan
-                  onClick={onScan}
-                >
+                <button type="button" className="oc-btn abatch__rescan" disabled={Boolean(scanValidation) || isSending} data-qa-asteroid-batch-scan onClick={onScan}>
                   Сканировать снова
                 </button>
               ) : null}
-              <p className="abatch__range-note" id={rangeHintId}>Обе границы диапазона включены.</p>
-            </fieldset>
+            </div>
+            <p className={hasResults ? 'abatch__sr-only' : 'abatch__range-note'} id={rangeHintId} data-qa-asteroid-batch-idle={scanState === 'idle' ? true : undefined}>Обе границы диапазона включены.</p>
+            {scanValidation ? <p id={rangeErrorId} className="abatch__validation" role="alert">{scanValidation}</p> : null}
           </div>
 
-          <details className="abatch__sources" data-qa-asteroid-batch-sources>
-            <summary>Источники рейсов <span>{sources.length}</span></summary>
-            {sources.length ? (
-              <ul className="abatch__source-list">
-                {sources.map((source) => (
-                  <li key={source.id} data-qa-asteroid-batch-source={source.id}>
-                    <span><b>{source.name}</b><small>{source.coordinate}</small></span>
-                    <span>{formatAmount(source.availableCount)} переработчиков</span>
-                  </li>
-                ))}
-              </ul>
-            ) : <p className="abatch__source-empty">Доступных источников пока нет.</p>}
-          </details>
-        </div>
+          {hasScanData ? (
+            <div className="abatch__fleet">
+              <p className="abatch__total" data-qa-asteroid-batch-total={availableTotal}>
+                <span>Свободных переработчиков</span>
+                <b>{formatAmount(availableTotal)}</b>
+              </p>
+              {sources.length ? (
+                <details className="abatch__sources" data-qa-asteroid-batch-sources>
+                  <summary>
+                    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 4 4 4-4 4" /></svg>
+                    Источники рейсов <b>{sources.length}</b>
+                  </summary>
+                  <ul className="abatch__source-list">
+                    {sources.map((source) => (
+                      <li key={source.id} data-qa-asteroid-batch-source={source.id}>
+                        <span><b>{source.name}</b><small>{source.coordinate}</small></span>
+                        <span>{formatAmount(source.availableCount)} переработчиков</span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              ) : <p className="abatch__source-empty" data-qa-asteroid-batch-sources>Нет доступных источников рейсов.</p>}
+            </div>
+          ) : null}
 
-        <section className="abatch__results" aria-label="Результаты сканирования" aria-busy={scanState === 'pending'}>
           {hasResults ? (
-            <>
+            <section className="abatch__results" aria-label="Результаты сканирования">
+              <div className="abatch__results-head">
+                <h3>Астероиды <b>{formatAmount(targets.length)}</b></h3>
+                {scanState === 'partial' ? <p className="abatch__status is-partial" role="status">{statusMessage ?? 'Сканирование завершено частично.'}</p> : null}
+              </div>
+              <div className="abatch__distribution">
+                <label className="abatch__field abatch__equal-field">
+                  <span>Переработчиков на цель</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    max={equalQuantityMax}
+                    step={1}
+                    value={equalQuantity}
+                    aria-describedby={distributionHintId}
+                    disabled={isSending}
+                    data-qa-asteroid-batch-equal
+                    onChange={(event) => {
+                      const value = event.currentTarget.valueAsNumber;
+                      if (Number.isFinite(value)) onEqualQuantityChange(Math.min(equalQuantityMax ?? Number.MAX_SAFE_INTEGER, Math.max(0, Math.floor(value))));
+                    }}
+                  />
+                </label>
+                <button type="button" className="oc-btn abatch__distribute" disabled={isSending || assignableTargets.length === 0} data-qa-asteroid-batch-distribute onClick={onAutoDistribute}>Распределить</button>
+                <small id={distributionHintId}>0 исключает цель.</small>
+              </div>
               <div className="abatch__columns" aria-hidden="true">
                 <span>Астероид</span><span>Обломки</span><span>Полёт</span><span>Источник</span><span>Переработчики</span>
               </div>
@@ -337,10 +365,10 @@ export function AsteroidBatchDialog({
                         {target.debrisAvailable ? <><ResourceIcon kind="debris" />Есть</> : 'Нет'}
                       </span>
                       <span className="abatch__flight">
-                        <span className="abatch__eta">{target.etaLabel ?? '—'}</span>
-                        {flightMessage ? <small className={blocked || manualRefusal ? 'is-warning' : ''} id={`abatch-flight-${target.id}`}>{flightMessage}</small> : null}
+                        {target.etaLabel || !flightMessage ? <span className="abatch__eta">{target.etaLabel ?? '—'}</span> : null}
+                        {flightMessage ? <small id={`abatch-flight-${target.id}`}>{flightMessage}</small> : null}
                       </span>
-                      <span className="abatch__source-name">{target.assignedSourceName ?? '—'}</span>
+                      <span className="abatch__source-name" title={target.assignedSourceName}>{target.assignedSourceName ?? '—'}</span>
                       <label className="abatch__quantity-field">
                         <input
                           type="number"
@@ -365,65 +393,37 @@ export function AsteroidBatchDialog({
                   );
                 })}
               </ul>
-              {scanState === 'partial' ? <p className="abatch__status is-partial" role="status">{statusMessage ?? 'Сканирование завершено частично.'}</p> : null}
-            </>
+            </section>
           ) : scanState === 'pending' ? (
             <div className="abatch__state is-pending" role="status" data-qa-asteroid-batch-pending>
               <span className="abatch__spinner" aria-hidden="true" />
               <p>Сканируем астероиды в выбранном диапазоне…</p>
             </div>
-          ) : scanState === 'empty' ? (
+          ) : scanState === 'empty' && !validationMessage ? (
             <div className="abatch__state" data-qa-asteroid-batch-empty>
               <p>В этом диапазоне нет астероидов с доступным газом.</p>
-              <small>Измените галактику или диапазон систем и повторите поиск.</small>
+              <small>Измените диапазон или выберите другую галактику.</small>
             </div>
-          ) : (
-            <div className="abatch__state" data-qa-asteroid-batch-idle>
-              <p>Выберите галактику и диапазон систем, чтобы найти доступные астероиды.</p>
-            </div>
-          )}
-        </section>
+          ) : null}
+        </div>
 
         <footer className="abatch__footer">
-          {hasResults ? (
-            <div className="abatch__distribution">
-              <label className="abatch__field abatch__equal-field">
-                <span>Переработчиков на цель</span>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  min={0}
-                  max={equalQuantityMax}
-                  step={1}
-                  value={equalQuantity}
-                  aria-label="Количество на каждый выбранный астероид"
-                  data-qa-asteroid-batch-equal
-                  onChange={(event) => {
-                    const value = event.currentTarget.valueAsNumber;
-                    if (Number.isFinite(value)) onEqualQuantityChange(Math.min(equalQuantityMax ?? Number.MAX_SAFE_INTEGER, Math.max(0, Math.floor(value))));
-                  }}
-                />
-              </label>
-              <button type="button" className="oc-btn abatch__distribute" disabled={isSending || assignableTargets.length === 0} data-qa-asteroid-batch-distribute onClick={onAutoDistribute}>Распределить</button>
-              <small>0 исключает цель. Распределение учитывает доступных переработчиков.</small>
-            </div>
-          ) : <p className="abatch__footer-note">Все доступные источники рейсов учитываются автоматически.</p>}
-
-          <div className="abatch__action-area">
-            {validation ? <p id="abatch-range-error" className="abatch__validation" role="alert">{validation}</p> : null}
-            {hasResults && !canSend && !validation ? <p className="abatch__validation" data-qa-asteroid-batch-send-reason>{sendDisabledReason ?? (selectedTargets.length === 0 ? 'Укажите количество хотя бы для одной доступной цели.' : null)}</p> : null}
+          <div className="abatch__footer-context">
+            {quantityValidation && !scanValidation ? <p className="abatch__validation" role="alert">{quantityValidation}</p> : null}
+            {hasResults && !canSend && !validation && !isSending ? <p className="abatch__status" data-qa-asteroid-batch-send-reason>{sendDisabledReason ?? 'Укажите количество хотя бы для одной доступной цели.'}</p> : null}
             {isSending ? <p className="abatch__status" role="status">Отправляем рейсы…</p> : null}
-            <button
-              type="button"
-              className="oc-btn primary abatch__primary"
-              disabled={hasResults ? !canSend : Boolean(scanValidation) || scanState === 'pending'}
-              data-qa-asteroid-batch-scan={hasResults ? undefined : true}
-              data-qa-asteroid-batch-send={hasResults ? true : undefined}
-              onClick={submit}
-            >
-              {hasResults ? (isSending ? 'Отправка…' : 'Отправить выбранные рейсы') : scanState === 'empty' ? 'Сканировать снова' : scanState === 'pending' ? 'Сканирование…' : 'Сканировать астероиды'}
-            </button>
+            {canSend ? <p className="abatch__status">Выбрано рейсов: <b>{formatAmount(selectedTargets.length)}</b></p> : null}
           </div>
+          <button
+            type="button"
+            className="oc-btn primary abatch__primary"
+            disabled={hasResults ? !canSend : Boolean(scanValidation) || scanState === 'pending'}
+            data-qa-asteroid-batch-scan={hasResults ? undefined : true}
+            data-qa-asteroid-batch-send={hasResults ? true : undefined}
+            onClick={submit}
+          >
+            {hasResults ? (isSending ? 'Отправка…' : 'Отправить выбранные рейсы') : scanState === 'empty' ? 'Сканировать снова' : scanState === 'pending' ? 'Сканирование…' : 'Сканировать астероиды'}
+          </button>
         </footer>
       </section>
     </div>
