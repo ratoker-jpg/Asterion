@@ -102,6 +102,7 @@ import {
 } from '../domain/buildings/spaceport-upgrades.ts';
 import {
   createDefaultTradeState,
+  getTradeRefillIntervalMsForCampaignSpeed,
   migrateTradeState,
 } from '../domain/buildings/trade.ts';
 import {
@@ -175,6 +176,8 @@ export const NPC_AUTONOMY_SCHEMA_VERSION = 28;
  * "newer" instead of misreading them; this build reads both forms.
  */
 export const COMPACT_ARCHIVES_SCHEMA_VERSION = 29;
+/** Schema 30: trade refill queues carry their universe-speed interval and migrated deadlines. */
+export const TRADE_SPEED_SCHEMA_VERSION = 30;
 
 export const SAVE_SCHEMA_VERSION = Math.max(
   NPC_FOUNDATION_SCHEMA_VERSION,
@@ -182,6 +185,7 @@ export const SAVE_SCHEMA_VERSION = Math.max(
   NPC_SCIENCE_SCHEMA_VERSION,
   NPC_AUTONOMY_SCHEMA_VERSION,
   COMPACT_ARCHIVES_SCHEMA_VERSION,
+  TRADE_SPEED_SCHEMA_VERSION,
   WORLD_CONFIG_SCHEMA_VERSION,
   COMBAT_SAVE_SCHEMA_VERSION,
   SCIENCE_SAVE_SCHEMA_VERSION,
@@ -1298,6 +1302,7 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
   const worldConfig = setup && mode === 'production'
     ? setup
     : createLegacyWorldConfig(setup?.factionId ?? baseProfile.factionId, setup?.playerName ?? baseProfile.displayName);
+  const tradeRefillIntervalMs = getTradeRefillIntervalMsForCampaignSpeed(worldConfig.world.campaignSpeed);
   const defaultProfile = {
     ...baseProfile,
     factionId: worldConfig.factionId,
@@ -1347,7 +1352,7 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
     buildings,
     productionBots: createEmptyBotAssignment(),
     recycling: createDefaultRecyclingState({ mode, fixture: resolveRecyclingFixture(mode) }),
-    trade: createDefaultTradeState(),
+    trade: createDefaultTradeState(tradeRefillIntervalMs),
     spaceportUpgrades: { ...initialSpaceportUpgrades, shipLevels: {} },
     repair: mode === 'test' ? createTestRepairWorkshopState() : createDefaultRepairWorkshopState(),
     stability: 100,
@@ -1499,6 +1504,9 @@ function migrateParsedSave(
     now: timestamp,
   });
   const profile = syncPlayerProfileWithCommand(storedProfile, command);
+  // Resolve the saved universe speed before normalizing any player's trade queue.
+  const worldConfig = normalizeNewGameConfig(parsed.worldConfig, createLegacyWorldConfig(profile.factionId, profile.displayName));
+  const tradeRefillIntervalMs = getTradeRefillIntervalMsForCampaignSpeed(worldConfig.world.campaignSpeed);
   const overpopulationReports = migrateOverpopulationEpisodeReports(
     objectRecord(parsed.reports)?.overpopulationReports,
   );
@@ -1633,7 +1641,7 @@ function migrateParsedSave(
       timestamp,
       { mode, fixture: resolveRecyclingFixture(mode) },
     ),
-    trade: migrateTradeState(savedHomeworld?.trade, buildings['trade-center'], timestamp),
+    trade: migrateTradeState(savedHomeworld?.trade, buildings['trade-center'], timestamp, tradeRefillIntervalMs),
     spaceportUpgrades,
     stability: numberOr(savedHomeworld?.stability, initialState.planets['helion-01'].stability),
     resources: homeworldResources,
@@ -1710,7 +1718,7 @@ function migrateParsedSave(
         timestamp,
         { mode, fixture: resolveRecyclingFixture(mode) },
       ),
-      trade: migrateTradeState(raw.trade, planetBuildings['trade-center'], timestamp),
+      trade: migrateTradeState(raw.trade, planetBuildings['trade-center'], timestamp, tradeRefillIntervalMs),
       spaceportUpgrades: planetOverpopulation
         ? migrateSpaceportUpgradeState(raw.spaceportUpgrades)
         : reconcileSpaceportUpgradeState(migrateSpaceportUpgradeState(raw.spaceportUpgrades), timestamp).state,
@@ -1865,7 +1873,7 @@ function migrateParsedSave(
     asteroidDebrisBySpawnIndex: migrateAsteroidDebris(parsed.asteroidDebrisBySpawnIndex, activeAsteroidSpawnIndices),
     espionage,
     alliedPlanets,
-    worldConfig: normalizeNewGameConfig(parsed.worldConfig, createLegacyWorldConfig(profile.factionId, profile.displayName)),
+    worldConfig,
     sunRaid: migrateSunRaidState(parsed.sunRaid),
     playTimeMs: Math.max(0, numberOr(parsed.playTimeMs, 0)),
     ...(migrateFleetUiState(parsed.fleetUi) ? { fleetUi: migrateFleetUiState(parsed.fleetUi) } : {}),
