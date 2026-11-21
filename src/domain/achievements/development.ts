@@ -4,6 +4,9 @@ import {
   type DevelopmentAchievementId,
 } from './catalog.ts';
 import type { AchievementChronicle } from './chronicle.ts';
+import { SCIENCE_CATALOG } from '../science/catalog.ts';
+import type { ScienceId } from '../science/types.ts';
+import { COMMANDER_IDS, type CommanderId } from '../combat/commanders.ts';
 
 /** The progression fields required by the development achievements. */
 export type AchievementProgressSource = Readonly<{
@@ -12,6 +15,10 @@ export type AchievementProgressSource = Readonly<{
     energy?: number;
     availableEnergy?: number;
   }> | undefined>>;
+  /** Completed levels from `SaveState.science.levels`; queued work is excluded. */
+  scienceLevels?: Partial<Record<ScienceId, number>>;
+  /** Completed player commander levels from the owner-upgrade selector, including legacy fallback. */
+  commanderUpgradeLevels?: Partial<Record<CommanderId, number>>;
 }>;
 
 /** Persistent earned-record fields used by the chronicle and by saved copies. */
@@ -76,8 +83,27 @@ function highestPlanetEnergyBalance(source: AchievementProgressSource): number {
   return highest;
 }
 
+function completedResearchLevels(source: AchievementProgressSource): number {
+  return SCIENCE_CATALOG.reduce((total, science) => {
+    const level = finiteProgress(source.scienceLevels?.[science.id] ?? 0);
+    return total + Math.min(level, science.maxLevel);
+  }, 0);
+}
+
+function highestCommanderUpgradeLevel(source: AchievementProgressSource): number {
+  let highest = 0;
+  for (const commanderId of COMMANDER_IDS) {
+    highest = Math.max(highest, finiteProgress(source.commanderUpgradeLevels?.[commanderId] ?? 0));
+  }
+  return highest;
+}
+
 function rawProgress(source: AchievementProgressSource, id: DevelopmentAchievementId): number {
   switch (id) {
+    case 'bridge':
+      return highestCommanderUpgradeLevel(source);
+    case 'scholar':
+      return completedResearchLevels(source);
     case 'builder':
     case 'architect':
       return highestBuildingLevel(source);

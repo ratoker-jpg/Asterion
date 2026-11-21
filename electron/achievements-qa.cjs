@@ -17,6 +17,7 @@ const ROOT = path.join(__dirname, '..');
 const SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const HOME = 'helion-01';
 const BUILDING = 'metal-production-1';
+const COMMANDERS = ['corsair', 'hunter', 'executioner', 'juggernaut', 'typhoon', 'viper', 'phantom', 'scorpion', 'annihilator', 'reanimator', 'argo', 'judge', 'polias'];
 const VIEWPORTS = [[1280, 720], [2560, 1080]];
 const OUTPUT = process.env.ASTERION_QA_OUTPUT || path.join(os.tmpdir(), `asterion-achievements-${Date.now()}`);
 const SKIP_SCREENSHOTS = process.env.ASTERION_SKIP_SCREENSHOTS === '1';
@@ -108,6 +109,13 @@ async function patchBuildingLevel(win, level) {
       }
     }
     home.buildings[${JSON.stringify(BUILDING)}] = ${level};
+    save.science = { ...(save.science || {}), levels: { 1: 1 }, queue: [] };
+    const commanderLevels = Object.fromEntries(${JSON.stringify(COMMANDERS)}.map((id) => [id, id === 'corsair' ? 1 : 0]));
+    save.shipUpgradeLevels = { ...(save.shipUpgradeLevels || {}), ...commanderLevels };
+    for (const planet of Object.values(save.planets || {})) {
+      if (!planet?.spaceportUpgrades) continue;
+      planet.spaceportUpgrades = { ...planet.spaceportUpgrades, shipLevels: { ...(planet.spaceportUpgrades.shipLevels || {}), ...commanderLevels }, commanderQueue: [] };
+    }
   }`;
   const held = `(() => { const PARSE_SAVE = ${PARSE_SAVE}; const save = PARSE_SAVE(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}'); return save.planets?.[${JSON.stringify(HOME)}]?.buildings?.[${JSON.stringify(BUILDING)}] === ${level}; })()`;
   await patchSaveIdle(win, SAVE_KEY, source, { label: `achievement fixture level ${level}`, held });
@@ -131,6 +139,13 @@ async function prepareRealConstructionFixture(win) {
     save.minerals = 999999999;
     save.gas = 999999999;
     save.queues = { ...(save.queues || {}), [${JSON.stringify(HOME)}]: [] };
+    save.science = { ...(save.science || {}), levels: { 1: 1 }, queue: [] };
+    const commanderLevels = Object.fromEntries(${JSON.stringify(COMMANDERS)}.map((id) => [id, id === 'corsair' ? 1 : 0]));
+    save.shipUpgradeLevels = { ...(save.shipUpgradeLevels || {}), ...commanderLevels };
+    for (const planet of Object.values(save.planets || {})) {
+      if (!planet?.spaceportUpgrades) continue;
+      planet.spaceportUpgrades = { ...planet.spaceportUpgrades, shipLevels: { ...(planet.spaceportUpgrades.shipLevels || {}), ...commanderLevels }, commanderQueue: [] };
+    }
     localStorage.setItem('asterion.test-time-scale.v1', '1');
   }`;
   const held = `(() => { const PARSE_SAVE = ${PARSE_SAVE}; const save = PARSE_SAVE(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}'); return save.planets?.[${JSON.stringify(HOME)}]?.buildings?.[${JSON.stringify(BUILDING)}] === 14 && (save.queues?.[${JSON.stringify(HOME)}] ?? []).length === 0; })()`;
@@ -300,16 +315,23 @@ async function runViewport(width, height) {
     await waitFor(win, `document.querySelector('[data-qa-achievement-status-filter="all"][aria-pressed="true"]')`);
     await clickFilter(win, '[data-qa-achievement-group-filter="growth"]');
     await clickFilter(win, '[data-qa-achievement-status-filter="earned"]');
-    const earned14 = { builder: await rowState(win, 'builder'), architect: await rowState(win, 'architect'), powerGrid: await rowState(win, 'power-grid') };
-    assert(!earned14.builder && !earned14.architect, 'Unfinished building milestones appeared in the earned filter', earned14);
+    const earned14 = {
+      builder: await rowState(win, 'builder'), architect: await rowState(win, 'architect'),
+      scholar: await rowState(win, 'scholar'), bridge: await rowState(win, 'bridge'), powerGrid: await rowState(win, 'power-grid'),
+    };
+    assert(!earned14.builder && !earned14.architect && !earned14.scholar && !earned14.bridge, 'Unfinished growth milestones appeared in the earned filter', earned14);
     await pressEnter(win, '[data-qa-achievement-status-filter="in-progress"]');
     const builder14 = await rowState(win, 'builder');
     const architect14 = await rowState(win, 'architect');
+    const scholar14 = await rowState(win, 'scholar');
+    const bridge14 = await rowState(win, 'bridge');
     assert(builder14?.status === 'in-progress' && hasProgress(builder14.progress, 14, 15), 'Builder progress at level 14 is not visible', builder14);
     assert(architect14?.status === 'in-progress' && hasProgress(architect14.progress, 14, 25), 'Architect progress at level 14 is not visible', architect14);
+    assert(scholar14?.status === 'in-progress' && hasProgress(scholar14.progress, 1, 10), 'Scholar does not show the one completed research level', scholar14);
+    assert(bridge14?.status === 'in-progress' && hasProgress(bridge14.progress, 1, 10), 'Bridge does not show the one completed commander level', bridge14);
     const points14 = await achievementSummary(win);
     assert(points14, 'Achievement points summary is missing at level 14');
-    results.levels['14'] = { points: points14.points, builder: builder14, architect: architect14, earnedFilter: earned14 };
+    results.levels['14'] = { points: points14.points, builder: builder14, architect: architect14, scholar: scholar14, bridge: bridge14, earnedFilter: earned14 };
     await clickSelector(win, '[data-qa-achievement-row="builder"]');
     await waitFor(win, `document.querySelector('[data-qa-achievement-detail][data-qa-achievement-selected="builder"]')`);
     const detailProgress14 = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-achievement-detail-progress]')?.getAttribute('aria-valuetext') || ''`);
@@ -332,6 +354,7 @@ async function runViewport(width, height) {
     await clickFilter(win, '[data-qa-achievement-status-filter="earned"]');
     const builder15 = await rowState(win, 'builder');
     assert(builder15?.status === 'earned' && builder15.text.includes('Получено'), 'Builder was not earned at level 15', builder15);
+    assert(!await rowState(win, 'scholar') && !await rowState(win, 'bridge'), 'Scholar or Bridge appeared in the earned filter before meeting its goal', { scholar: await rowState(win, 'scholar'), bridge: await rowState(win, 'bridge') });
     const points15 = await achievementSummary(win);
     assert(points15?.points - points14.points === 10, 'Builder score delta is not 10 points', { before: points14.points, after: points15?.points });
     results.levels['15'] = { points: points15.points, builder: builder15, architectInProgress: architect15 };
@@ -350,8 +373,11 @@ async function runViewport(width, height) {
     await clickFilter(win, '[data-qa-achievement-status-filter="earned"]');
     const builder25 = await rowState(win, 'builder');
     const architect25 = await rowState(win, 'architect');
+    const scholar25 = await rowState(win, 'scholar');
+    const bridge25 = await rowState(win, 'bridge');
     assert(builder25?.status === 'earned' && builder25.text.includes('Получено'), 'Builder is not earned at level 25', builder25);
     assert(architect25?.status === 'earned' && architect25.text.includes('Получено'), 'Architect was not earned at level 25', architect25);
+    assert(!scholar25 && !bridge25, 'Scholar or Bridge appeared in the earned filter below its goal', { scholar25, bridge25 });
     const points25 = await achievementSummary(win);
     assert(points25?.points - points15.points === 25, 'Architect score delta is not 25 points', { before: points15.points, after: points25?.points });
     results.levels['25'] = { points: points25.points, builder: builder25, architect: architect25 };

@@ -19,17 +19,19 @@ export function selectPlayerRatingEntry(
   score: OwnerScore | null | undefined,
   playerId = CURRENT_PLAYER_ID,
   mode: RuntimeMode = 'test',
+  achievementPoints = 0,
 ): PlayerRatingEntry | null {
   if (!score) return null;
-  return createPlayerRatingEntries(score, mode, score.ownerId).find((entry) => entry.id === playerId) ?? null;
+  return createPlayerRatingEntries(score, mode, score.ownerId, achievementPoints).find((entry) => entry.id === playerId) ?? null;
 }
 
 export function selectPlayerProfileMetrics(
   profile: PlayerProfileState,
   score: OwnerScore | null | undefined,
   mode: RuntimeMode = 'test',
+  achievementPoints = 0,
 ): PlayerProfileMetric[] {
-  const entry = selectPlayerRatingEntry(score, profile.playerId, mode);
+  const entry = selectPlayerRatingEntry(score, profile.playerId, mode, achievementPoints);
   return [
     { key: 'resourcePoints', label: 'Ресурсные очки', description: 'Очки развития ресурсной экономики игрока.', value: entry?.resourcePoints ?? null },
     { key: 'battlePoints', label: 'Боевые очки', description: 'Очки боевого рейтинга игрока.', value: entry?.battlePoints ?? null },

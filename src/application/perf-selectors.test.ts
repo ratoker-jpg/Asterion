@@ -37,7 +37,7 @@ test('cached owner scores equal selectOwnerScores and are reused for the same wo
 test('the published snapshot reads the same scores, owners and alliances as the selectors, lazily', () => {
   const state = world();
   const target = new EventTarget();
-  publishApplicationRuntimeSnapshot(state, { planetId: state.currentPlanetId, now: START, mode: 'production', testTimeScale: 1 }, target);
+  publishApplicationRuntimeSnapshot(state, { planetId: state.currentPlanetId, now: START, mode: 'production', testTimeScale: 1 }, target, 145);
   const snapshot = getRuntimeStateSnapshot();
   assert.ok(snapshot);
   assert.deepEqual(snapshot.ownerScores, selectOwnerScores(state));
@@ -45,6 +45,7 @@ test('the published snapshot reads the same scores, owners and alliances as the 
   assert.deepEqual(snapshot.alliances, selectRatedAlliances(state));
   assert.equal(snapshot.ownerScores, snapshot.ownerScores, 'one object per world, so the rating screen props stay stable');
   assert.equal(snapshot.currentPlayerId, state.profile.playerId);
+  assert.equal(snapshot.currentPlayerAchievementPoints, 145);
 });
 
 function hostile(id: string, overrides: Partial<FlightRecord>): FlightRecord {

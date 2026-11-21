@@ -39,12 +39,14 @@ import type {
 } from './domain/rating/types.ts';
 
 const PAGE_SIZE = 12;
+const RATING_NUMBER_FORMAT = new Intl.NumberFormat('ru-RU');
 
 export function RatingView({
   mode: runtimeMode = 'test',
   command,
   ownerScores = {},
   currentPlayerScore,
+  currentPlayerAchievementPoints = 0,
   currentPlayerId = CURRENT_PLAYER_ID,
   owners,
   allianceDetails,
@@ -53,6 +55,7 @@ export function RatingView({
   command: CommandState;
   ownerScores?: Readonly<Record<string, OwnerScore>>;
   currentPlayerScore?: OwnerScore;
+  currentPlayerAchievementPoints?: number;
   currentPlayerId?: string;
   owners?: Readonly<Record<string, RatedOwnerIdentity>>;
   allianceDetails?: Readonly<Record<string, RatedAllianceDetails>>;
@@ -92,11 +95,11 @@ export function RatingView({
   const currentAlliance = useMemo(() => selectOwnerAlliance(command, currentPlayerId), [command, currentPlayerId]);
   const players = useMemo(
     () => (runtimeMode === 'production' && owners
-      ? createOwnerRatingEntries(ownerScores, owners, currentPlayerId)
+      ? createOwnerRatingEntries(ownerScores, owners, currentPlayerId, currentPlayerAchievementPoints)
         .map((entry) => ({ ...entry, allianceTag: selectOwnerAlliance(command, entry.id)?.tag ?? null }))
-      : createPlayerRatingEntries(currentPlayerScore, runtimeMode, currentPlayerId)
+      : createPlayerRatingEntries(currentPlayerScore, runtimeMode, currentPlayerId, currentPlayerAchievementPoints)
         .map((entry) => entry.isCurrentPlayer ? { ...entry, allianceTag: currentAlliance?.tag ?? null } : entry)),
-    [currentPlayerScore, currentPlayerId, currentAlliance, runtimeMode, owners, ownerScores, command],
+    [currentPlayerScore, currentPlayerAchievementPoints, currentPlayerId, currentAlliance, runtimeMode, owners, ownerScores, command],
   );
   const scoresWithFixtures = useMemo(() => withTestOwnerScoreFixtures(ownerScores, runtimeMode), [ownerScores, runtimeMode]);
   const alliances = useMemo(
@@ -303,6 +306,7 @@ function PlayerTable({
         <ScoreHead label="ОБЩИЕ" iconPath={SCORE_ICONS.totalPoints} scoreKey="totalPoints" selected={sortKey === 'totalPoints'} direction={direction} onSort={onSort} />
         <ScoreHead label="РЕСУРС." iconPath={SCORE_ICONS.resourcePoints} scoreKey="resourcePoints" selected={sortKey === 'resourcePoints'} direction={direction} onSort={onSort} />
         <ScoreHead label="БОЕВЫЕ" iconPath={SCORE_ICONS.battlePoints} scoreKey="battlePoints" selected={sortKey === 'battlePoints'} direction={direction} onSort={onSort} />
+        <ScoreHead label="ДОСТИЖ." iconPath={SCORE_ICONS.achievementPoints} scoreKey="achievementPoints" selected={sortKey === 'achievementPoints'} direction={direction} onSort={onSort} />
       </div>
       {entries.map((entry) => (
         <Fragment key={entry.id}>
@@ -362,6 +366,7 @@ function PlayerRow({
       <Value value={entry.totalPoints} lead />
       <Value value={entry.resourcePoints} />
       <Value value={entry.battlePoints} />
+      <Value value={entry.achievementPoints} achievementOwnerId={entry.id} />
     </button>
   );
 }
@@ -455,11 +460,11 @@ function ScoreHead<K extends string>({
   direction: SortDirection;
   onSort: (key: K) => void;
 }) {
-  return <button type="button" className={`utility-control score-head-v2 ${selected ? 'selected' : ''}`} onClick={() => onSort(scoreKey)}><span>{label}</span>{iconPath ? <img className="score-head-v2__icon" src={iconPath} alt="" aria-hidden="true" draggable={false} /> : null}{selected ? <b>{direction === 'desc' ? '▼' : '▲'}</b> : null}</button>;
+  return <button type="button" className={`utility-control score-head-v2 ${selected ? 'selected' : ''}`} onClick={() => onSort(scoreKey)} data-qa-rating-sort={scoreKey}><span>{label}</span>{iconPath ? <img className="score-head-v2__icon" src={iconPath} alt="" aria-hidden="true" draggable={false} /> : null}{selected ? <b>{direction === 'desc' ? '▼' : '▲'}</b> : null}</button>;
 }
 
-function Value({ value, lead = false }: { value: number; lead?: boolean }) {
-  return <span className={`utility-data-text score-value-v2${lead ? ' is-lead' : ''}`}>{new Intl.NumberFormat('ru-RU').format(value)}</span>;
+function Value({ value, lead = false, achievementOwnerId }: { value: number; lead?: boolean; achievementOwnerId?: string }) {
+  return <span className={`utility-data-text score-value-v2${lead ? ' is-lead' : ''}`} data-qa-rating-achievement-points={achievementOwnerId}>{RATING_NUMBER_FORMAT.format(value)}</span>;
 }
 
 const RACE_LABELS: Record<PlayerRatingEntry['race'], string> = { aster: 'Астеры', cyber: 'Илары', xeno: 'Рой' };
@@ -488,6 +493,7 @@ function PlayerCard({ entry, owner, alliance, role, allianceDetails, exactPresen
       <div className="rating-card-v2__who">
         <strong className="ut-selectable">{entry.name}</strong>
         <span>{RACE_LABELS[entry.race]}</span>
+        <span className="rating-card-v2__achievement" data-qa-rating-player-achievements><img src={SCORE_ICONS.achievementPoints} alt="" aria-hidden="true" draggable={false} />Очки достижений · <b>{RATING_NUMBER_FORMAT.format(entry.achievementPoints)}</b></span>
         <em className={`rating-presence-v2 is-${presence.tone}`}><i aria-hidden="true" />{presence.text}</em>
         {alliance ? (
           <span className="rating-card-v2__membership">
@@ -586,7 +592,7 @@ function AllianceCard({ entry, details, roster, listedPlayerIds, onOpenPlayer }:
             <li key={member.ownerId} className={`is-${member.role}${member.isCurrentPlayer ? ' is-current' : ''}`} data-qa-rating-roster-member={member.role}>
               {member.role === 'member' ? <span aria-hidden="true" /> : <RoleBadge role={member.role} compact />}
               <RosterName member={member} listed={listedPlayerIds.has(member.ownerId)} onOpenPlayer={onOpenPlayer} />
-              <b className="utility-data-text">{new Intl.NumberFormat('ru-RU').format(member.totalPoints)}</b>
+              <b className="utility-data-text">{RATING_NUMBER_FORMAT.format(member.totalPoints)}</b>
             </li>
           ))}
         </ol>
@@ -619,8 +625,9 @@ function SelectionStrip({ selected }: { selected: PlayerRatingEntry | AllianceRa
       <div className="rating-selection-v2">
         <strong className="utility-section-title">{selected.name}</strong>
         <span className="utility-secondary">#{selected.rank}</span>
-        <span className="utility-data-text">Общие: {new Intl.NumberFormat('ru-RU').format(selected.totalPoints)}</span>
-        <span className="utility-data-text">Боевые: {new Intl.NumberFormat('ru-RU').format(selected.battlePoints)}</span>
+        <span className="utility-data-text">Общие: {RATING_NUMBER_FORMAT.format(selected.totalPoints)}</span>
+        <span className="utility-data-text">Боевые: {RATING_NUMBER_FORMAT.format(selected.battlePoints)}</span>
+        <span className="utility-data-text">Достижения: {RATING_NUMBER_FORMAT.format(selected.achievementPoints)}</span>
       </div>
     );
   }
@@ -628,7 +635,7 @@ function SelectionStrip({ selected }: { selected: PlayerRatingEntry | AllianceRa
     <div className="rating-selection-v2">
       <strong className="utility-section-title">{selected.name}</strong>
       <span className="utility-secondary">[{selected.tag}] · #{selected.rank}</span>
-      <span className="utility-data-text">Средние общие очки: {new Intl.NumberFormat('ru-RU').format(selected.totalPoints)}</span>
+      <span className="utility-data-text">Средние общие очки: {RATING_NUMBER_FORMAT.format(selected.totalPoints)}</span>
     </div>
   );
 }

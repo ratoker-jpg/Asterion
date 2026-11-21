@@ -157,7 +157,7 @@ html body .rating-view-v2 .rating-row-v2 {
   text-align: left;
 }
 .rating-table-v2--players .rating-row-v2 {
-  grid-template-columns: 88px minmax(250px, 1.7fr) 104px minmax(190px, 1fr) repeat(3, minmax(130px, .85fr));
+  grid-template-columns: 88px minmax(250px, 1.7fr) 104px minmax(190px, 1fr) repeat(4, minmax(130px, .85fr));
 }
 .rating-table-v2--alliances .rating-row-v2 {
   grid-template-columns: 88px minmax(420px, 2.6fr) 130px 120px repeat(3, minmax(150px, 1fr));
@@ -281,6 +281,9 @@ html body .rating-view-v2 .identity-v2 strong { min-width: 0; overflow: hidden; 
 .rating-card-v2__who { display: grid; gap: 4px; min-width: 0; }
 .rating-card-v2__who strong { color: #f2fdff; font-size: 16px; font-weight: 800; overflow-wrap: anywhere; }
 .rating-card-v2__who > span { color: #8fb4bf; font-size: var(--ut-font-data); }
+.rating-card-v2__who > .rating-card-v2__achievement { display: inline-flex; align-items: center; gap: 5px; color: #b9d9e0; line-height: 1.35; }
+.rating-card-v2__achievement img { width: 14px; height: 14px; flex: 0 0 14px; object-fit: contain; }
+.rating-card-v2__achievement b { color: #f2fdff; font-weight: 800; }
 .rating-card-v2__link { justify-self: start; padding: 0; border: 0; background: none; color: var(--ut-accent); font-size: var(--ut-font-data); font-weight: 700; text-align: left; cursor: pointer; }
 .rating-card-v2__link:hover { color: #fff; }
 .rating-presence-v2 { display: inline-flex; align-items: center; gap: 6px; color: #8fb4bf; font-size: var(--ut-font-data); font-style: normal; font-weight: 700; }

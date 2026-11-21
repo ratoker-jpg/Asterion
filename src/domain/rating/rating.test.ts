@@ -62,6 +62,22 @@ test('achievement points remain zero and a new current player score defaults to 
   assert.equal(rows.every((entry) => entry.achievementPoints === 0), true);
 });
 
+test('profile-global achievement points attach only to the current player and never change gameplay totals', () => {
+  const productionRow = createPlayerRatingEntries({ resourcePoints: 120, battlePoints: 30 }, 'production', 'player-current', 75)[0]!;
+  assert.deepEqual([productionRow.achievementPoints, productionRow.resourcePoints, productionRow.battlePoints, productionRow.totalPoints], [75, 120, 30, 150]);
+
+  const standings = createOwnerRatingEntries(
+    { 'player-current': { resourcePoints: 120, battlePoints: 30 }, 'npc-a': { resourcePoints: 80, battlePoints: 10 } },
+    { 'player-current': { name: 'Pilot', factionId: 'aegis' }, 'npc-a': { name: 'NPC', factionId: 'synod' } },
+    'player-current',
+    75,
+  );
+  assert.deepEqual(standings.map(({ id, achievementPoints, totalPoints }) => [id, achievementPoints, totalPoints]), [
+    ['player-current', 75, 150], ['npc-a', 0, 90],
+  ]);
+  assert.equal(sortPlayers(standings, 'achievementPoints')[0]?.id, 'player-current');
+});
+
 test('search is case-insensitive and score sorting works', () => {
   const entries = createPlayerRatingEntries();
   const match = filterPlayers(entries, 'vEgA-01');

@@ -298,8 +298,8 @@ export type ProfileFacts = {
   allianceCrystals?: number;
 };
 
-function PlayerProfile({ profile, score, command, mode, recentItems, facts, onOpenCommand, onOpenItem }: { profile: PlayerProfileState; score: OwnerScore | null; command: CommandState; mode: RuntimeMode; recentItems: readonly ReportItem[]; facts: ProfileFacts; onOpenCommand: () => void; onOpenItem: (item: ReportItem) => void }) {
-  const metrics = selectPlayerProfileMetrics(profile, score, mode);
+function PlayerProfile({ profile, score, achievementPoints, command, mode, recentItems, facts, onOpenCommand, onOpenItem }: { profile: PlayerProfileState; score: OwnerScore | null; achievementPoints: number; command: CommandState; mode: RuntimeMode; recentItems: readonly ReportItem[]; facts: ProfileFacts; onOpenCommand: () => void; onOpenItem: (item: ReportItem) => void }) {
+  const metrics = selectPlayerProfileMetrics(profile, score, mode, achievementPoints);
   const membership = selectOwnerMembership(command, profile.playerId);
   const alliance = membership ? toAllianceIdentity(membership.alliance) : null;
   const role = membership ? selectRole(membership.alliance, profile.playerId) : null;
@@ -343,12 +343,12 @@ function PlayerProfile({ profile, score, command, mode, recentItems, facts, onOp
         </section>
       </div>
       {profile.protectionMode ? <div className="reports-profile-protection"><i aria-hidden="true" /> Защитный режим включён</div> : null}
-      {mode === 'test' ? <p className="reports-fixture-note">Профильная идентичность тестовая; очки рассчитаны по текущим активам владельца, достижения не начисляются.</p> : null}
+      {mode === 'test' ? <p className="reports-fixture-note">Профильная идентичность тестовая; очки достижений учитываются по летописи локального профиля и не входят в общие очки.</p> : null}
     </section>
   );
 }
 
-export function ReportsView({ ownFleetAttack, nearestFleet, onAttackPlanet, retentionCutoff, battleReports, planetNames, savedBattleReportIds, operations, command, espionage, pirateReconReports, pirateFlights, exploration, initialSelectedReportId, profile, score, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy, onOpenUniverseTarget, onOpenPirateUniverse, canRepeatFlight, onRepeatFlight, onCollectDebris, onAttackSpyTarget, profileFacts, npcStrategy, worldNow, onAnswerLetter, achievementScreenData, achievementEarnedRecords = [], achievementError }: {
+export function ReportsView({ ownFleetAttack, nearestFleet, onAttackPlanet, retentionCutoff, battleReports, planetNames, savedBattleReportIds, operations, command, espionage, pirateReconReports, pirateFlights, exploration, initialSelectedReportId, profile, score, achievementPoints = 0, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy, onOpenUniverseTarget, onOpenPirateUniverse, canRepeatFlight, onRepeatFlight, onCollectDebris, onAttackSpyTarget, profileFacts, npcStrategy, worldNow, onAnswerLetter, achievementScreenData, achievementEarnedRecords = [], achievementError }: {
   /** Letters older than this world time are gone (24-hour rule); absent in Test Mode. */
   retentionCutoff?: number;
   battleReports: readonly BattleReport[];
@@ -364,6 +364,8 @@ export function ReportsView({ ownFleetAttack, nearestFleet, onAttackPlanet, rete
   initialSelectedReportId?: string;
   profile: PlayerProfileState;
   score: OwnerScore | null;
+  /** Sum of unique known achievements in the profile-global chronicle. */
+  achievementPoints?: number;
   rating: RatingPrototypeState;
   mode: RuntimeMode;
   state: ReportsState;
@@ -647,7 +649,7 @@ export function ReportsView({ ownFleetAttack, nearestFleet, onAttackPlanet, rete
         </nav>
       </aside>
 
-      {activeFolder === 'profile' ? <PlayerProfile profile={profile} score={score} command={command} mode={mode} recentItems={recentProfileItems} facts={profileFacts ?? {}} onOpenCommand={onOpenCommand} onOpenItem={openFromProfile} /> : activeFolder === 'achievements' ? <section className="reports-folder-workspace reports-folder-workspace--empty" data-qa-folder-view="achievements" aria-label="Достижения">
+      {activeFolder === 'profile' ? <PlayerProfile profile={profile} score={score} achievementPoints={achievementPoints} command={command} mode={mode} recentItems={recentProfileItems} facts={profileFacts ?? {}} onOpenCommand={onOpenCommand} onOpenItem={openFromProfile} /> : activeFolder === 'achievements' ? <section className="reports-folder-workspace reports-folder-workspace--empty" data-qa-folder-view="achievements" aria-label="Достижения">
         {achievementViewProps
           ? <AchievementsView {...achievementViewProps} />
           : <p className="reports-list-empty-status" role={achievementError ? 'alert' : 'status'} data-qa-achievement-store-error>{achievementError ?? 'Летопись достижений загружается…'}</p>}

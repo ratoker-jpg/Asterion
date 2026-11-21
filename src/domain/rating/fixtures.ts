@@ -73,6 +73,7 @@ export function createOwnerRatingEntries(
   ownerScores: Readonly<Record<string, { resourcePoints: number; battlePoints: number }>>,
   owners: Readonly<Record<string, { name: string; factionId: string }>>,
   currentPlayerId: string,
+  currentPlayerAchievementPoints = 0,
 ): PlayerRatingEntry[] {
   const safe = (value: number | undefined) => Math.max(0, Math.floor(Number.isFinite(value) ? value! : 0));
   return Object.entries(owners)
@@ -81,7 +82,8 @@ export function createOwnerRatingEntries(
       const battlePoints = safe(ownerScores[id]?.battlePoints);
       return {
         id, rank: 0, name: owner.name, race: RATING_RACE_BY_FACTION[owner.factionId] ?? 'aster', allianceTag: null,
-        achievementPoints: 0, resourcePoints, battlePoints, totalPoints: resourcePoints + battlePoints,
+        achievementPoints: id === currentPlayerId ? safe(currentPlayerAchievementPoints) : 0,
+        resourcePoints, battlePoints, totalPoints: resourcePoints + battlePoints,
         isCurrentPlayer: id === currentPlayerId,
       };
     })
@@ -93,11 +95,13 @@ export function createPlayerRatingEntries(
   currentPlayerScore: number | { resourcePoints: number; battlePoints: number } = 0,
   mode: RuntimeMode = 'test',
   currentPlayerId = CURRENT_PLAYER_ID,
+  currentPlayerAchievementPoints = 0,
 ): PlayerRatingEntry[] {
   const currentResourcePoints = typeof currentPlayerScore === 'number' ? currentPlayerScore : currentPlayerScore.resourcePoints;
   const currentBattlePoints = typeof currentPlayerScore === 'number' ? 0 : currentPlayerScore.battlePoints;
   const safeCurrentResourcePoints = Math.max(0, Math.floor(Number.isFinite(currentResourcePoints) ? currentResourcePoints : 0));
   const safeCurrentBattlePoints = Math.max(0, Math.floor(Number.isFinite(currentBattlePoints) ? currentBattlePoints : 0));
+  const safeCurrentAchievementPoints = Math.max(0, Math.floor(Number.isFinite(currentPlayerAchievementPoints) ? currentPlayerAchievementPoints : 0));
   if (mode === 'production') {
     return [{
       id: currentPlayerId,
@@ -105,7 +109,7 @@ export function createPlayerRatingEntries(
       name: CURRENT_PLAYER_DISPLAY_NAME,
       race: 'aster',
       allianceTag: null,
-      achievementPoints: 0,
+      achievementPoints: safeCurrentAchievementPoints,
       resourcePoints: safeCurrentResourcePoints,
       battlePoints: safeCurrentBattlePoints,
       totalPoints: safeCurrentResourcePoints + safeCurrentBattlePoints,
@@ -125,7 +129,7 @@ export function createPlayerRatingEntries(
       name: isCurrentPlayer ? CURRENT_PLAYER_DISPLAY_NAME : `${CALLSIGNS[index % CALLSIGNS.length]}-${String(standing).padStart(2, '0')}`,
       race: (['aster', 'cyber', 'xeno'] as const)[index % 3],
       allianceTag: standing % 7 === 0 ? null : ALLIANCE_TAGS[index % ALLIANCE_TAGS.length],
-      achievementPoints: 0,
+      achievementPoints: isCurrentPlayer ? safeCurrentAchievementPoints : 0,
       resourcePoints,
       battlePoints: isCurrentPlayer ? safeCurrentBattlePoints : battlePoints,
       totalPoints: resourcePoints + (isCurrentPlayer ? safeCurrentBattlePoints : battlePoints),

@@ -164,10 +164,12 @@ import {
 } from './domain/achievements/catalog.ts';
 import {
   reconcileDevelopmentAchievementChronicle,
+  earnedDevelopmentAchievementPoints,
   selectAchievementScreenData,
   type AchievementProgressSource,
   type EarnedAchievementRecord,
 } from './domain/achievements/development.ts';
+import { COMMANDER_IDS, type CommanderId } from './domain/combat/commanders.ts';
 import {
   applyProductionBots as applyProductionBotsAction,
   cancelBuilding as cancelBuildingAction,
@@ -262,7 +264,7 @@ import {
   isGameplayCommandRequestEvent,
   NPC_CATCHUP_COMMAND_BLOCKED_MESSAGE,
 } from './application/state.ts';
-import { getOwnerShipUpgradeLevels, getPlanetResources, type PlanetId, type SaveState } from './application/contracts.ts';
+import { getOwnerShipUpgradeLevel, getOwnerShipUpgradeLevels, getPlanetResources, type PlanetId, type SaveState } from './application/contracts.ts';
 import { selectOwnedPlanet } from './application/owned-planets.ts';
 import { sendQuickLegs, type QuickLegOutcome } from './application/quick-actions.ts';
 import { AidQuickSend } from './ui/command/AidQuickSend.tsx';
@@ -525,12 +527,20 @@ function applyCampaignRuntime(state: SaveState, mode: RuntimeMode) {
 
 type AchievementObservedPlanet = NonNullable<AchievementProgressSource['planets'][string]>;
 
-type AchievementProgressObserver = Map<string, {
-  buildings: AchievementObservedPlanet['buildings'];
-  highestBuildingLevel: number;
-  totalBuildingLevels: number;
-  energy: number;
-}>;
+type AchievementProgressObserver = {
+  planets: Map<string, {
+    buildings: AchievementObservedPlanet['buildings'];
+    highestBuildingLevel: number;
+    totalBuildingLevels: number;
+    energy: number;
+  }>;
+  scienceLevels: AchievementProgressSource['scienceLevels'] | null;
+  hasScienceLevels: boolean;
+  scienceKey: string;
+  commanderUpgradeLevels: AchievementProgressSource['commanderUpgradeLevels'] | null;
+  hasCommanderUpgradeLevels: boolean;
+  commanderUpgradeKey: string;
+};
 
 function developmentAchievementProgressKey(
   source: AchievementProgressSource,
@@ -540,7 +550,7 @@ function developmentAchievementProgressKey(
   for (const [planetId, planet] of Object.entries(source.planets)) {
     if (!planet) continue;
     const energy = Math.max(0, Math.floor(planet.availableEnergy ?? planet.energy ?? 0));
-    let previous = observed.get(planetId);
+    let previous = observed.planets.get(planetId);
     if (!previous || previous.buildings !== planet.buildings) {
       let highestBuildingLevel = 0;
       let totalBuildingLevels = 0;
@@ -550,13 +560,30 @@ function developmentAchievementProgressKey(
         totalBuildingLevels += normalized;
       }
       previous = { buildings: planet.buildings, highestBuildingLevel, totalBuildingLevels, energy };
-      observed.set(planetId, previous);
+      observed.planets.set(planetId, previous);
     } else if (previous.energy !== energy) {
       previous = { ...previous, energy };
-      observed.set(planetId, previous);
+      observed.planets.set(planetId, previous);
     }
     parts.push(`${planetId}:h${previous.highestBuildingLevel}:t${previous.totalBuildingLevels}:e${energy}`);
   }
+  if (!observed.hasScienceLevels || observed.scienceLevels !== source.scienceLevels) {
+    observed.hasScienceLevels = true;
+    observed.scienceLevels = source.scienceLevels ?? null;
+    observed.scienceKey = Object.entries(source.scienceLevels ?? {})
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([id, level]) => `${id}:${Number.isFinite(level) ? Math.max(0, Math.floor(level)) : 0}`)
+      .join(',');
+  }
+  if (!observed.hasCommanderUpgradeLevels || observed.commanderUpgradeLevels !== source.commanderUpgradeLevels) {
+    observed.hasCommanderUpgradeLevels = true;
+    observed.commanderUpgradeLevels = source.commanderUpgradeLevels ?? null;
+    observed.commanderUpgradeKey = Object.entries(source.commanderUpgradeLevels ?? {})
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([id, level]) => `${id}:${Number.isFinite(level) ? Math.max(0, Math.floor(level)) : 0}`)
+      .join(',');
+  }
+  parts.push(`science:${observed.scienceKey}`, `commanders:${observed.commanderUpgradeKey}`);
   return parts.join('|');
 }
 
@@ -598,8 +625,19 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const lastAchievementWriteRetry = useRef(0);
   const stateRef = useRef(state);
   stateRef.current = state;
-  const achievementSource = { planets: state.planets } satisfies AchievementProgressSource;
-  const achievementProgressObserver = useRef<AchievementProgressObserver>(new Map());
+  const achievementCommanderUpgradeLevels = useMemo(
+    () => Object.fromEntries(COMMANDER_IDS.map((commanderId) => [commanderId, getOwnerShipUpgradeLevel(state, commanderId)])) as Partial<Record<CommanderId, number>>,
+    [state.planets, state.shipUpgradeLevels],
+  );
+  const achievementSource = {
+    planets: state.planets,
+    scienceLevels: state.science.levels,
+    commanderUpgradeLevels: achievementCommanderUpgradeLevels,
+  } satisfies AchievementProgressSource;
+  const achievementProgressObserver = useRef<AchievementProgressObserver>({
+    planets: new Map(), scienceLevels: null, hasScienceLevels: false, scienceKey: '',
+    commanderUpgradeLevels: null, hasCommanderUpgradeLevels: false, commanderUpgradeKey: '',
+  });
   const achievementProgressKey = developmentAchievementProgressKey(achievementSource, achievementProgressObserver.current);
   const achievementSourceCache = useRef<{ key: string; source: AchievementProgressSource } | null>(null);
   if (!achievementSourceCache.current || achievementSourceCache.current.key !== achievementProgressKey) {
@@ -610,6 +648,10 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   const achievementScreenData = useMemo(() => achievementChronicle
     ? selectAchievementScreenData(observedAchievementSource, achievementChronicle)
     : null, [achievementChronicle, observedAchievementSource]);
+  const currentPlayerAchievementPoints = useMemo(
+    () => earnedDevelopmentAchievementPoints(achievementChronicle?.earned ?? []),
+    [achievementChronicle],
+  );
   // What React rendered (stateRef is also assigned by commands): lets a command notice that its result never reached React.
   const renderedStateRef = useRef(state);
   renderedStateRef.current = state;
@@ -1478,8 +1520,9 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
       state,
       { planetId: state.currentPlanetId, now, mode: RUNTIME_MODE, testTimeScale },
       window,
+      currentPlayerAchievementPoints,
     );
-  }, [now, state, testTimeScale]);
+  }, [currentPlayerAchievementPoints, now, state, testTimeScale]);
   /**
    * Reconciles to `at`. A pending NPC catch-up keeps taking bounded replay
    * chunks inside one task until `budgetMs` of compute is spent, then
@@ -3681,6 +3724,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               ownedPlanetName={currentPlanetName}
               profile={state.profile}
               ownerScores={selectOwnerScoresCached(state)}
+              currentPlayerAchievementPoints={currentPlayerAchievementPoints}
               command={state.command}
               playerPlanets={universePlayerPlanets}
               spyTargets={universeSpyTargets}
@@ -3815,6 +3859,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               espionage={state.espionage}
               profile={state.profile}
               score={selectOwnerScoresCached(state)[state.profile.playerId] ?? null}
+              achievementPoints={currentPlayerAchievementPoints}
               rating={state.rating}
               mode={RUNTIME_MODE}
               state={state.reports}

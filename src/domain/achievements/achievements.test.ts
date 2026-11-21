@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { getOwnerShipUpgradeLevel } from '../../application/contracts.ts';
 import { createInitialSaveState } from '../../application/persistence.ts';
+import { COMMANDER_IDS, type CommanderId } from '../combat/commanders.ts';
 import { createAchievementChronicle, parseAchievementChronicle } from './chronicle.ts';
 import { ACHIEVEMENT_RANKS, DEVELOPMENT_ACHIEVEMENTS } from './catalog.ts';
 import {
   earnedDevelopmentAchievementPoints,
+  reconcileDevelopmentAchievementAwards,
   reconcileDevelopmentAchievementChronicle,
   selectAchievementRankProgress,
   selectAchievementScreenData,
@@ -26,10 +29,22 @@ function advancedDevelopmentState(): AchievementProgressSource {
   };
 }
 
+function achievementSourceFromSave(state: ReturnType<typeof createInitialSaveState>): AchievementProgressSource {
+  return {
+    planets: state.planets,
+    scienceLevels: state.science.levels,
+    commanderUpgradeLevels: Object.fromEntries(
+      COMMANDER_IDS.map((commanderId) => [commanderId, getOwnerShipUpgradeLevel(state, commanderId)]),
+    ) as Partial<Record<CommanderId, number>>,
+  };
+}
+
 test('active catalogue uses approved growth achievement values and ranks', () => {
   assert.deepEqual(DEVELOPMENT_ACHIEVEMENTS.map(({ id, points, goal }) => [id, points, goal]), [
     ['builder', 10, 15],
     ['architect', 25, 25],
+    ['scholar', 10, 10],
+    ['bridge', 20, 10],
     ['empire-architect', 50, 300],
     ['colonist', 10, 2],
     ['power-grid', 15, 10_000],
@@ -40,11 +55,13 @@ test('active catalogue uses approved growth achievement values and ranks', () =>
 test('fresh production save reports real starting progress without minting awards', () => {
   const initial = createInitialSaveState('production', NOW);
   const chronicle = createAchievementChronicle();
-  const screen = selectAchievementScreenData(initial, chronicle);
+  const screen = selectAchievementScreenData(achievementSourceFromSave(initial), chronicle);
 
   assert.deepEqual(screen.entries.map(({ id, progress, goal, met }) => [id, progress, goal, met]), [
     ['builder', 1, 15, false],
     ['architect', 1, 25, false],
+    ['scholar', 0, 10, false],
+    ['bridge', 0, 10, false],
     ['empire-architect', 5, 300, false],
     ['colonist', 1, 2, false],
     ['power-grid', Math.min(initial.planets['helion-01']!.availableEnergy ?? initial.planets['helion-01']!.energy, 10_000), 10_000, false],
@@ -52,6 +69,94 @@ test('fresh production save reports real starting progress without minting award
   assert.equal(screen.earnedPoints, 0);
   assert.equal(screen.rank.current.name, 'Новобранец');
   assert.equal(screen.rank.pointsToNext, 100);
+});
+
+test('bridge counts the highest completed player commander level and preserves the legacy fallback', () => {
+  const initial = createInitialSaveState('production', NOW);
+  const home = initial.planets['helion-01']!;
+  const legacySave = {
+    ...initial,
+    shipUpgradeLevels: undefined,
+    planets: {
+      ...initial.planets,
+      'helion-01': {
+        ...home,
+        spaceportUpgrades: {
+          ...home.spaceportUpgrades,
+          shipLevels: { ...home.spaceportUpgrades.shipLevels, corsair: 9 },
+          commanderQueue: [{
+            id: 'queued-corsair-level-10',
+            track: 'commanders' as const,
+            shipId: 'corsair',
+            fromLevel: 9,
+            toLevel: 10,
+            startedAt: NOW,
+            finishAt: NOW + 60_000,
+            spaceportLevelAtStart: 1,
+            effectiveDurationMs: 60_000,
+            cost: { metal: 1, minerals: 0, gas: 0 },
+            costSource: 'commander-ability-upgrades' as const,
+          }],
+        },
+      },
+    },
+  };
+  const legacy = selectAchievementScreenData(achievementSourceFromSave(legacySave), createAchievementChronicle());
+  const currentSave = { ...legacySave, shipUpgradeLevels: { corsair: 10 } };
+  const atTen = selectAchievementScreenData(achievementSourceFromSave(currentSave), createAchievementChronicle());
+  const bridgeProgress = (screen: ReturnType<typeof selectAchievementScreenData>) => screen.entries.find(({ id }) => id === 'bridge');
+
+  assert.equal(getOwnerShipUpgradeLevel(legacySave, 'corsair'), 9);
+  assert.deepEqual([bridgeProgress(legacy)?.progress, bridgeProgress(legacy)?.met], [9, false]);
+  assert.deepEqual([bridgeProgress(atTen)?.progress, bridgeProgress(atTen)?.met], [10, true]);
+
+  const unrelatedLevels = {
+    planets: {},
+    commanderUpgradeLevels: {},
+    npcCommanderLevels: { corsair: 40 },
+    combatSimulator: { commanderUpgradeLevels: { corsair: 40 } },
+  };
+  const unrelated = selectAchievementScreenData(unrelatedLevels, createAchievementChronicle());
+  assert.deepEqual([bridgeProgress(unrelated)?.progress, bridgeProgress(unrelated)?.met], [0, false]);
+
+  const award = reconcileDevelopmentAchievementAwards({ planets: {}, commanderUpgradeLevels: { corsair: 10 } }, [], { at: NOW });
+  assert.deepEqual(award.newlyEarned.map(({ id }) => id), ['bridge']);
+  assert.equal(earnedDevelopmentAchievementPoints(award.earned), 20);
+});
+
+test('scholar counts saved completed research levels, ignores queued levels, and tolerates old saves', () => {
+  const initial = createInitialSaveState('production', NOW);
+  const planets = advancedDevelopmentState().planets;
+  const queuedSave = {
+    ...initial,
+    science: {
+      ...initial.science,
+      queue: [{
+        id: 'pending-science',
+        scienceId: 1,
+        fromLevel: 0,
+        toLevel: 1,
+        startedAt: NOW,
+        finishAt: NOW + 60_000,
+        durationMs: 60_000,
+        cost: { metal: 1, minerals: 0, gas: 0, energy: 0 },
+      }],
+    },
+  };
+  const noScienceProgress = selectAchievementScreenData({ planets, scienceLevels: queuedSave.science.levels }, createAchievementChronicle());
+  const oldSave = selectAchievementScreenData({ planets }, createAchievementChronicle());
+  const atNine = selectAchievementScreenData({ planets, scienceLevels: { 1: 5, 2: 4 } }, createAchievementChronicle());
+  const atTen = selectAchievementScreenData({ planets, scienceLevels: { 1: 5, 2: 5 } }, createAchievementChronicle());
+  const scholarProgress = (screen: ReturnType<typeof selectAchievementScreenData>) => screen.entries.find(({ id }) => id === 'scholar');
+
+  assert.deepEqual([scholarProgress(noScienceProgress)?.progress, scholarProgress(noScienceProgress)?.met], [0, false]);
+  assert.deepEqual([scholarProgress(oldSave)?.progress, scholarProgress(oldSave)?.met], [0, false]);
+  assert.deepEqual([scholarProgress(atNine)?.progress, scholarProgress(atNine)?.met], [9, false]);
+  assert.deepEqual([scholarProgress(atTen)?.progress, scholarProgress(atTen)?.met], [10, true]);
+
+  const award = reconcileDevelopmentAchievementAwards({ planets: {}, scienceLevels: { 1: 5, 2: 5 } }, [], { at: NOW });
+  assert.deepEqual(award.newlyEarned.map(({ id }) => id), ['scholar']);
+  assert.equal(earnedDevelopmentAchievementPoints(award.earned), 10);
 });
 
 test('loaded state backfills eligible milestones and repeated loads or copies award no more points', () => {
