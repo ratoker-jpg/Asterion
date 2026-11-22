@@ -211,6 +211,23 @@ async function productionScenario(win, label) {
   const allianceId = saved.command.alliances[0].id;
   assert(/^alliance-\d+$/.test(allianceId) && saved.profile.allianceId === allianceId, `${label}: stable id mirrored into the profile`, { allianceId, profile: saved.profile.allianceId });
 
+  // Cross the activity write interval while the game stays open and records play time.
+  await patchAndReload(win, PRODUCTION_KEY, 'production', `(save) => {
+    const member = save.command.alliances[0].members[0];
+    member.lastActiveAt = Date.now() - 9.5 * 60_000;
+    member.joinedAt = Math.min(member.joinedAt, member.lastActiveAt);
+  }`, `(save) => Date.now() - save.command.alliances[0].members[0].lastActiveAt > 9 * 60_000`);
+  const beforePresence = await readSave(win, PRODUCTION_KEY);
+  await run(win, `(() => {
+    const realNow = Date.now;
+    Date.now = () => realNow() + 60_000;
+  })()`);
+  await waitFor(win, `(() => {
+    const save = ${PARSE_SAVE}(localStorage.getItem(${JSON.stringify(PRODUCTION_KEY)}) || '{}');
+    return save.playTimeMs > ${beforePresence.playTimeMs ?? 0}
+      && save.command.alliances[0].members[0].lastActiveAt > ${beforePresence.command.alliances[0].members[0].lastActiveAt};
+  })()`, 15_000);
+
   // 5. Losing the last Hall locks the screen without touching the alliance.
   await patchAndReload(win, PRODUCTION_KEY, 'production', `(save) => { for (const planet of Object.values(save.planets)) planet.buildings['planetary-government'] = 0; }`,
     `(save) => Object.values(save.planets).every((planet) => planet.buildings['planetary-government'] === 0)`);

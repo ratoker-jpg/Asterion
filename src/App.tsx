@@ -1477,16 +1477,6 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     onNotice: setNotice,
   }), [rejectNpcCatchupCommand]);
   const presenceMinute = Math.floor(now / 60_000);
-  useEffect(() => {
-    setState((current) => {
-      const at = worldNow();
-      const playerId = current.profile.playerId;
-      if (needsNpcCatchupBefore(current, at)) return current;
-      const command = refreshPresence(current.command, playerId, at, current.profile.displayName);
-      if (command === current.command) return current;
-      return { ...current, command, profile: syncPlayerProfileWithCommand(current.profile, command) };
-    });
-  }, [presenceMinute]);
   // Another window of the game writes the same save on every tick. A save written by this build
   // carries a writer marker (see `isCurrentBuildSave`): such a write is adopted and not written
   // back. A write without it comes from an older build still open on the same origin (e.g. another
@@ -3651,21 +3641,35 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   // Play time of the campaign and the slot card (production slots only).
   const lastPlayTickRef = useRef(worldNow());
   /** Adds the time since the last tick (at most 2 min: a sleeping laptop is not play time). */
-  const foldPlayTime = useCallback((commit: boolean) => {
-    if (RUNTIME_MODE !== 'production') return stateRef.current;
-    const at = worldNow();
+  const takePlayTimeElapsed = useCallback((at: number) => {
+    if (RUNTIME_MODE !== 'production') return 0;
     const elapsed = Math.min(120_000, Math.max(0, at - lastPlayTickRef.current));
     lastPlayTickRef.current = at;
+    return elapsed;
+  }, []);
+  const foldPlayTime = useCallback((commit: boolean) => {
+    const elapsed = takePlayTimeElapsed(worldNow());
     if (elapsed <= 0) return stateRef.current;
     const next = { ...stateRef.current, playTimeMs: (stateRef.current.playTimeMs ?? 0) + elapsed };
     stateRef.current = next;
     if (commit) setState(next);
     return next;
-  }, []);
+  }, [takePlayTimeElapsed]);
   useEffect(() => {
-    foldPlayTime(true);
+    const at = worldNow();
+    const elapsed = takePlayTimeElapsed(at);
+    setState((current) => {
+      const withPlayTime = elapsed > 0 ? { ...current, playTimeMs: (current.playTimeMs ?? 0) + elapsed } : current;
+      if (needsNpcCatchupBefore(current, at)) return withPlayTime;
+      const { playerId, displayName } = current.profile;
+      const command = refreshPresence(current.command, playerId, at, displayName);
+      if (command === current.command) return withPlayTime;
+      return { ...withPlayTime, command, profile: syncPlayerProfileWithCommand(current.profile, command) };
+    });
+  }, [presenceMinute, session, takePlayTimeElapsed]);
+  useEffect(() => {
     if (session) refreshSlotMeta(session.slotId, stateRef.current);
-  }, [foldPlayTime, presenceMinute, session]);
+  }, [session, state.playTimeMs]);
   useEffect(() => {
     if (!session) return;
     // Only the play time is added on exit, onto the save as stored: the game state is
